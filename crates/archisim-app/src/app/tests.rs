@@ -523,3 +523,211 @@ fn the_3d_view_shows_the_model_and_selects_by_clicking() {
     assert_eq!(h.app.mode, ViewMode::Plan);
     assert_eq!(h.app.tool, Tool::Wall);
 }
+
+/// Presses the left button at `from`, moves to `to` in a few steps (so it
+/// counts as a drag) and leaves the button down.
+fn press_and_move(h: &mut Harness, from: Point2, to: Point2) {
+    h.move_to(from);
+    h.button(PointerButton::Primary, true);
+    for i in 1..=4 {
+        let t = i as f64 / 4.0;
+        h.move_to(from + (to - from) * t);
+    }
+}
+
+#[test]
+fn moves_copies_and_stretches_with_the_mouse() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let walls: Vec<_> = h.model().walls().map(|w| w.id).collect();
+    let (west, north, east) = (walls[0], walls[1], walls[2]);
+    let close = |a: Point2, b: Point2| a.distance(b) < 1e-6;
+
+    // Select the north façade and drag it 1000 mm north, typed, with Shift
+    // for a straight move.
+    h.click_at(p(6.0, 8.87));
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Wall(north)]
+    );
+    h.set_modifiers(Modifiers::SHIFT);
+    press_and_move(&mut h, p(6.0, 8.87), p(6.05, 9.6));
+    assert!(h.app.drag.is_some(), "dragging the selected wall");
+    h.type_text("1000");
+    h.key(Key::Enter);
+    h.button(PointerButton::Primary, false);
+    h.set_modifiers(Modifiers::NONE);
+    let m = h.model();
+    assert!(
+        close(m.wall(north).unwrap().start, p(0.0, 10.0)),
+        "{:?} {:?}",
+        m.wall(north).unwrap(),
+        h.app.message
+    );
+    // The west and east façades followed: the corners are still closed.
+    assert!(close(m.wall(west).unwrap().end, p(0.0, 10.0)));
+    assert!(close(m.wall(east).unwrap().start, p(12.0, 10.0)));
+    // The window went with its wall.
+    assert_eq!(h.app.ed.undo_label(), Some("Mover"));
+    assert_eq!(h.app.ed.selection.len(), 1);
+
+    // Ctrl + drag copies it (with its window) 3000 mm further north.
+    let (walls_before, openings_before) = (m.walls().count(), m.openings().count());
+    h.set_modifiers(Modifiers::COMMAND | Modifiers::SHIFT);
+    press_and_move(&mut h, p(6.0, 9.87), p(6.0, 11.0));
+    h.type_text("3000");
+    h.key(Key::Enter);
+    h.button(PointerButton::Primary, false);
+    h.set_modifiers(Modifiers::NONE);
+    let m = h.model();
+    assert_eq!(m.walls().count(), walls_before + 1, "{:?}", h.app.message);
+    assert_eq!(m.openings().count(), openings_before + 1);
+    assert_eq!(h.app.ed.undo_label(), Some("Copiar"));
+    // The copy is selected and lies 3 m north of the original.
+    let copy = match h
+        .app
+        .ed
+        .selection
+        .iter()
+        .find(|e| matches!(e, Element::Wall(_)))
+    {
+        Some(Element::Wall(id)) => *id,
+        _ => panic!("the copy is selected"),
+    };
+    assert!(close(m.wall(copy).unwrap().start, p(0.0, 13.0)));
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+
+    // Stretch: select the east façade and pull its north end (the corner
+    // at (12, 10)) 2000 mm east. The north wall stretches with it.
+    h.key(Key::Escape);
+    h.click_at(p(11.87, 5.0));
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Wall(east)]
+    );
+    h.set_modifiers(Modifiers::SHIFT);
+    press_and_move(&mut h, p(12.0, 10.0), p(13.0, 10.02));
+    assert!(
+        matches!(
+            h.app.drag.as_ref().map(|d| d.grip),
+            Some(Grip::WallEnd { .. })
+        ),
+        "grabbed by the end"
+    );
+    h.type_text("2000");
+    h.key(Key::Enter);
+    h.button(PointerButton::Primary, false);
+    h.set_modifiers(Modifiers::NONE);
+    let m = h.model();
+    assert!(
+        close(m.wall(east).unwrap().start, p(14.0, 10.0)),
+        "{:?}",
+        h.app.message
+    );
+    assert!(close(m.wall(north).unwrap().end, p(14.0, 10.0)));
+    assert_eq!(h.app.ed.undo_label(), Some("Estirar muro"));
+
+    // Escape cancels a drag: nothing changes.
+    let before = h.model().clone();
+    press_and_move(&mut h, p(14.0, 10.0), p(15.0, 11.0));
+    assert!(h.app.drag.is_some());
+    h.key(Key::Escape);
+    h.button(PointerButton::Primary, false);
+    assert_eq!(h.model(), &before);
+
+    // Slab: select it by its edge and move the south edge 500 mm south by
+    // dragging the diamond in its middle.
+    h.key(Key::Escape);
+    let slab = h.model().slabs().next().unwrap().id;
+    h.app.ed.selection = [Element::Slab(slab)].into_iter().collect();
+    h.frame();
+    h.set_modifiers(Modifiers::SHIFT);
+    press_and_move(&mut h, p(6.0, 0.0), p(6.0, -0.3));
+    assert!(matches!(
+        h.app.drag.as_ref().map(|d| d.grip),
+        Some(Grip::SlabEdge { .. })
+    ));
+    h.type_text("500");
+    h.key(Key::Enter);
+    h.button(PointerButton::Primary, false);
+    h.set_modifiers(Modifiers::NONE);
+    let s = h.model().slab(slab).unwrap();
+    assert!(
+        s.outline
+            .iter()
+            .filter(|q| (q.y + 0.5).abs() < 1e-6)
+            .count()
+            == 2,
+        "{:?} {:?}",
+        s.outline,
+        h.app.message
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Desplazar arista de forjado"));
+
+    // A drag outside the selection is still a selection window.
+    h.app.ed.selection.clear();
+    h.drag(p(-1.0, -1.0), p(1.0, 11.0));
+    assert!(h.app.drag.is_none());
+    assert_eq!(h.app.ed.selection.len(), 1, "the west wall");
+
+    // The edited house still exports; with `ARCHISIM_TEST_OUT` set it is
+    // left there as `edicion.ifc` for IfcOpenShell to validate.
+    let dir = match std::env::var_os("ARCHISIM_TEST_OUT") {
+        Some(d) => PathBuf::from(d),
+        None => std::env::temp_dir().join(format!("archisim-drag-{}", std::process::id())),
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    h.app.ed.export_ifc(&dir.join("edicion.ifc")).unwrap();
+    let ifc = std::fs::read_to_string(dir.join("edicion.ifc")).unwrap();
+    assert_eq!(ifc.matches("IFCWALL(").count(), 4);
+    assert_eq!(ifc.matches("IFCWINDOW(").count(), 1);
+}
+
+#[test]
+fn magic_wand_slabs() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("f");
+    assert_eq!(h.app.tool, Tool::Slab);
+    // The whole building at its exterior faces.
+    h.app.slab_settings.wand = true;
+    h.app.slab_settings.contour = Contour::ExteriorFace;
+    h.click_at(p(6.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
+    assert!((m.slabs().last().unwrap().area() - 108.0).abs() < 1e-9);
+    assert!(h.app.message.as_ref().unwrap().text.contains("varita"));
+    // The room inside the 26,5 cm façades.
+    h.app.slab_settings.contour = Contour::InteriorFace;
+    h.click_at(p(6.0, 4.5));
+    let inner = (12.0 - 0.53) * (9.0 - 0.53);
+    assert!((h.model().slabs().last().unwrap().area() - inner).abs() < 1e-6);
+    // Clicking on a wall explains why not.
+    let count = h.model().slabs().count();
+    h.click_at(p(0.1, 4.5));
+    assert_eq!(h.model().slabs().count(), count);
+    assert!(h.app.message.as_ref().unwrap().error);
+    // In polygon mode, Space + click uses the wand too.
+    h.app.slab_settings.wand = false;
+    h.app.slab_settings.contour = Contour::WallAxis;
+    h.events.push(Event::Key {
+        key: Key::Space,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.frame();
+    h.click_at(p(6.0, 4.5));
+    h.key(Key::Space);
+    let axis = (12.0 - 0.265) * (9.0 - 0.265);
+    assert_eq!(h.model().slabs().count(), count + 1, "{:?}", h.app.message);
+    assert!((h.model().slabs().last().unwrap().area() - axis).abs() < 1e-6);
+    assert!(!h.app.slab_tool.is_drawing());
+}

@@ -14,6 +14,7 @@
 //! the wall, the faces of their frame and their height. [`clip_span`] cuts a
 //! wall (or one of its layers) into the solid pieces between openings.
 
+pub mod room;
 pub mod solid;
 
 use archisim_core::{
@@ -45,6 +46,7 @@ impl Line {
 }
 
 pub use archisim_core::signed_area;
+pub use room::{room_outline, Contour, RoomError};
 
 /// Returns the polygon in counter-clockwise order.
 pub fn ensure_ccw(mut poly: Vec<Point2>) -> Vec<Point2> {

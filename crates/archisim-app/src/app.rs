@@ -2,26 +2,28 @@
 //! status bar, laid out like ArchiCAD (tools on the left, settings of the
 //! active tool on top) with Revit's properties palette on the right.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use archisim_core::{
     Hand, LevelId, Model, OpeningKind, OpeningTypeId, Point2, ReferenceLine, SlabFunction,
     SlabTypeId, WallFunction, WallSide, WallTypeId,
 };
-use archisim_geom::opening_geometry;
+use archisim_geom::{opening_geometry, room_outline, Contour};
 use eframe::egui::{
     self, Align2, Color32, ComboBox, CornerRadius, CursorIcon, FontId, Id, Key, KeyboardShortcut,
     Modifiers, PointerButton, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, TextEdit,
     TextureHandle, TextureOptions, Ui, Vec2,
 };
 
+use crate::drag::{grip_at, hotspots, Drag, Grip};
 use crate::editor::{Editor, WallSettings};
 use crate::opening_tool::{placement, OpeningSettings, Placement};
 use crate::pick::{in_window, outline, pick, Element};
 use crate::plan_image::{rasterize, PlanKey};
 use crate::slab_tool::{Outcome as SlabOutcome, SlabTool};
-use crate::snap::{constrain, snap, track, Snap, SnapKind};
-use crate::units::{fmt_angle, fmt_area, fmt_m, fmt_mm, parse_length};
+use crate::snap::{constrain, snap, snap_except, track, Snap, SnapKind};
+use crate::units::{explain_room, fmt_angle, fmt_area, fmt_m, fmt_mm, parse_length};
 use crate::view::View;
 use crate::wall_tool::{Escape, Outcome, WallTool};
 
@@ -58,6 +60,39 @@ pub struct SlabSettings {
     pub slab_type: SlabTypeId,
     /// Height of the top face above the level.
     pub top_offset: f64,
+    /// Magic wand: a click inside a room makes the slab (also with Space
+    /// held while drawing by corners).
+    pub wand: bool,
+    /// Which outline of the room the magic wand takes.
+    pub contour: Contour,
+}
+
+/// Outlines a drag would give, or why it cannot be done.
+type Outlines = Result<Vec<Vec<Point2>>, String>;
+/// The room the magic wand finds, or why there is none.
+type RoomFound = Result<Vec<Point2>, String>;
+
+/// A drag of the selection in progress, with the arrow tool.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DragState {
+    pub grip: Grip,
+    /// The point the selection was grabbed by.
+    pub from: Point2,
+    /// Distance typed while dragging, in the interface's units.
+    pub typed: String,
+    /// Elements that move: snapping ignores them.
+    skip: BTreeSet<Element>,
+}
+
+impl DragState {
+    /// The point the grip goes to: the typed distance towards the cursor,
+    /// or the cursor itself.
+    pub fn target(&self, cursor: Point2) -> Point2 {
+        match (parse_length(&self.typed), (cursor - self.from).normalized()) {
+            (Some(len), Some(dir)) if !self.typed.is_empty() => self.from + dir * len,
+            _ => cursor,
+        }
+    }
 }
 
 /// Something that would throw away unsaved changes, waiting for an answer.
@@ -93,6 +128,17 @@ pub struct ArchiSimApp {
     /// Snapped point under the cursor, in model metres.
     cursor: Option<Snap>,
     hover: Option<Element>,
+    /// The handle of the selection under the cursor, if any.
+    hover_grip: Option<Grip>,
+    /// Moving, copying or stretching the selection with the mouse.
+    pub drag: Option<DragState>,
+    /// What the drag would give at the last cursor position: the outlines
+    /// that change, or why it cannot be done.
+    drag_preview: Option<(Point2, bool, Outlines)>,
+    /// Space is held down (magic wand while drawing slabs by corners).
+    space_held: bool,
+    /// The room the magic wand would take under the cursor.
+    wand_preview: Option<(u64, Point2, Contour, RoomFound)>,
     /// Corner where a selection window started.
     window_start: Option<Point2>,
     plan: Option<(PlanKey, TextureHandle)>,
@@ -136,6 +182,11 @@ impl ArchiSimApp {
             message: None,
             cursor: None,
             hover: None,
+            hover_grip: None,
+            drag: None,
+            drag_preview: None,
+            wand_preview: None,
+            space_held: false,
             window_start: None,
             plan: None,
             pending: None,
@@ -181,6 +232,7 @@ impl ArchiSimApp {
             self.slab_tool.finish();
             self.placement = None;
             self.window_start = None;
+            self.drag = None;
             self.tool = tool;
         }
         // Drawing happens in plan.
@@ -195,6 +247,7 @@ impl ArchiSimApp {
         self.door_settings = default_opening_settings(ed.model(), true);
         self.window_settings = default_opening_settings(ed.model(), false);
         self.ed = ed;
+        self.drag = None;
         self.wall_tool.finish();
         self.slab_tool.finish();
         self.plan = None;
@@ -379,6 +432,7 @@ impl ArchiSimApp {
     // ---- Commands ------------------------------------------------------------
 
     fn undo(&mut self) {
+        self.drag = None;
         self.wall_tool.finish();
         self.slab_tool.finish();
         match self.ed.undo() {
@@ -388,6 +442,7 @@ impl ArchiSimApp {
     }
 
     fn redo(&mut self) {
+        self.drag = None;
         self.wall_tool.finish();
         self.slab_tool.finish();
         match self.ed.redo() {
@@ -435,6 +490,47 @@ impl ArchiSimApp {
                 self.say(format!("Forjado de {} creado.", fmt_area(area)));
             }
             Err(e) => self.complain(format!("No se puede crear el forjado: {e}.")),
+        }
+    }
+
+    /// Builds the slab of the room around `p` (magic wand).
+    fn build_slab_in_room(&mut self, p: Point2) {
+        let s = self.slab_settings;
+        match self
+            .ed
+            .add_slab_in_room(s.slab_type, p, s.contour, s.top_offset)
+        {
+            Ok(id) => {
+                let area = self.ed.model().slab(id).map_or(0.0, |s| s.area());
+                self.say(format!(
+                    "Forjado de {} creado con la varita mágica.",
+                    fmt_area(area)
+                ));
+            }
+            Err(e) => self.complain(format!("No se puede crear el forjado: {e}.")),
+        }
+    }
+
+    /// Drops the dragged selection at `cursor` (or at the typed distance).
+    fn finish_drag(&mut self, cursor: Point2, variant: bool) {
+        let Some(d) = self.drag.take() else {
+            return;
+        };
+        self.drag_preview = None;
+        let to = d.target(cursor);
+        if to.approx_eq(d.from) {
+            return;
+        }
+        let drag = Drag {
+            grip: d.grip,
+            from: d.from,
+            to,
+            variant,
+        };
+        let dist = fmt_mm(d.from.distance(to));
+        match self.ed.drag(&drag) {
+            Ok(label) => self.say(format!("{label}: {dist} mm.")),
+            Err(e) => self.complain(format!("No se puede: {e}.")),
         }
     }
 
@@ -797,7 +893,7 @@ impl ArchiSimApp {
             match self.tool {
                 Tool::Arrow => {
                     ui.strong("Flecha");
-                    ui.label("Clic: seleccionar · Mayús+clic: añadir o quitar · arrastrar: ventana de selección");
+                    ui.label("Clic: seleccionar · Mayús+clic: añadir o quitar · arrastrar lo seleccionado: mover (Ctrl: copiar) · arrastrar en vacío: ventana de selección");
                 }
                 Tool::Wall => {
                     ui.strong("Muro");
@@ -882,6 +978,41 @@ impl ArchiSimApp {
     }
 
     fn slab_settings_ui(&mut self, ui: &mut Ui) {
+        ui.label("Método:").on_hover_text(
+            "Polígono: esquina a esquina. Varita mágica: clic dentro de un recinto de muros (también con Espacio + clic)",
+        );
+        ComboBox::from_id_salt("tool-slab-method")
+            .selected_text(if self.slab_settings.wand {
+                "Varita mágica"
+            } else {
+                "Polígono"
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.slab_settings.wand, false, "Polígono");
+                ui.selectable_value(&mut self.slab_settings.wand, true, "Varita mágica");
+            });
+        ui.label("Contorno:").on_hover_text(
+            "Hasta dónde llega el forjado de la varita mágica: la cara de los muros del recinto, su eje, o la cara exterior de todo el edificio",
+        );
+        ComboBox::from_id_salt("tool-slab-contour")
+            .selected_text(contour_name(self.slab_settings.contour))
+            .show_ui(ui, |ui| {
+                for (c, hint) in [
+                    (
+                        Contour::InteriorFace,
+                        "El recinto hasta la cara de sus muros",
+                    ),
+                    (Contour::WallAxis, "El recinto hasta el eje de sus muros"),
+                    (
+                        Contour::ExteriorFace,
+                        "Todo el edificio hasta la cara exterior de sus muros",
+                    ),
+                ] {
+                    ui.selectable_value(&mut self.slab_settings.contour, c, contour_name(c))
+                        .on_hover_text(hint);
+                }
+            });
+        ui.separator();
         let types: Vec<(SlabTypeId, String, f64)> = self
             .ed
             .model()
@@ -892,7 +1023,7 @@ impl ArchiSimApp {
         ui.label("Tipo:");
         let mut chosen = self.slab_settings.slab_type;
         ComboBox::from_id_salt("tool-slab-type")
-            .width(260.0)
+            .width(220.0)
             .selected_text(current.map_or("—".into(), |t| t.1.clone()))
             .show_ui(ui, |ui| {
                 for (id, name, thickness) in &types {
@@ -907,8 +1038,9 @@ impl ArchiSimApp {
         if let Some(t) = current {
             ui.label(format!("Canto {} mm", fmt_mm(t.2)));
         }
-        ui.label("Cara superior sobre la planta:")
-            .on_hover_text("Referencia en la cara superior, como en ArchiCAD y Revit; las capas cuelgan hacia abajo");
+        ui.label("Cara superior:").on_hover_text(
+            "Altura de la cara superior sobre la planta. Referencia en la cara superior, como en ArchiCAD y Revit; las capas cuelgan hacia abajo",
+        );
         if let Some(v) = length_field(
             ui,
             Id::unique("tool-slab-top"),
@@ -1050,10 +1182,13 @@ impl ArchiSimApp {
                 "Arrastrar: girar · rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · clic: seleccionar · Inicio: ajustar · F2: planta"
             } else {
                 match self.tool {
-                Tool::Arrow => "Rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · Inicio: ajustar",
+                Tool::Arrow if self.drag.is_some() => "Suelta para terminar · Ctrl: copiar (o, en un extremo de muro, soltarlo de la esquina; en una arista, nueva esquina) · Mayús: ángulos de 45° · distancia en mm + Intro · Esc: cancelar",
+                Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar lo seleccionado: mover (Ctrl: copiar) · arrastrar un extremo o esquina: estirar · un rombo: mover la arista · Rueda: zoom · Inicio: ajustar",
+                Tool::Arrow => "Clic: seleccionar · arrastrar: ventana de selección · Rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · Inicio: ajustar",
                 Tool::Wall if !self.wall_tool.is_drawing() => "Clic: inicio del muro",
                 Tool::Wall => "Clic: siguiente punto · escribe la longitud en mm + Intro · Mayús: ángulos de 45° · Intro/Esc/botón derecho: terminar",
-                Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina del forjado",
+                Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Varita mágica: clic dentro de un recinto de muros",
+                Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina del forjado · Espacio + clic dentro de un recinto: varita mágica",
                 Tool::Slab => "Clic: siguiente esquina · clic en la primera o Intro: cerrar · longitud en mm + Intro · Esc: quitar la última esquina",
                 Tool::Door | Tool::Window => "Clic sobre un muro: se coloca centrada en el cursor y abre hacia el lado del muro donde está el cursor · Esc: flecha",
                 }
@@ -1116,9 +1251,12 @@ impl ArchiSimApp {
         self.draw_plan(&ctx, &painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
+        self.draw_hotspots(&painter, rect);
         self.draw_wall_preview(&painter, rect);
         self.draw_slab_preview(&painter, rect);
         self.draw_opening_preview(&painter, rect);
+        self.draw_wand_preview(&painter, rect);
+        self.draw_drag_preview(&painter, rect);
         self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
             let r = Rect::from_two_pos(
@@ -1136,6 +1274,9 @@ impl ArchiSimApp {
 
         let icon = match self.tool {
             Tool::Wall | Tool::Slab | Tool::Door | Tool::Window => CursorIcon::Crosshair,
+            Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
+            Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
+            Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
             Tool::Arrow if self.hover.is_some() => CursorIcon::PointingHand,
             Tool::Arrow => CursorIcon::Default,
         };
@@ -1168,6 +1309,7 @@ impl ArchiSimApp {
             self.hover = None;
             return;
         };
+        self.space_held = ctx.input(|i| i.key_down(Key::Space));
         let raw = self.view.to_model(rect, pos);
         let reach = self.view.to_metres(REACH);
         let model = self.ed.model();
@@ -1183,6 +1325,25 @@ impl ArchiSimApp {
                 }
                 self.cursor = Some(s);
                 self.hover = None;
+            }
+            Tool::Slab if self.wand_active(ctx) => {
+                let p = crate::snap::round_point(raw);
+                self.cursor = Some(Snap {
+                    point: p,
+                    kind: SnapKind::Free,
+                });
+                self.hover = None;
+                let contour = self.slab_settings.contour;
+                let key = (self.ed.revision(), p, contour);
+                let fresh = self
+                    .wand_preview
+                    .as_ref()
+                    .is_some_and(|w| (w.0, w.1, w.2) == key);
+                if !fresh {
+                    let found = room_outline(model, self.ed.level, p, contour)
+                        .map_err(|e| explain_room(&e));
+                    self.wand_preview = Some((key.0, key.1, key.2, found));
+                }
             }
             Tool::Slab => {
                 let mut s = snap(model, self.ed.level, raw, reach, self.slab_tool.corners());
@@ -1209,11 +1370,47 @@ impl ArchiSimApp {
                 });
                 self.hover = None;
             }
+            Tool::Arrow if self.drag.is_some() => {
+                let Some(d) = &self.drag else {
+                    return;
+                };
+                let mut s = snap_except(model, self.ed.level, raw, reach, &[], &d.skip);
+                if ctx.input(|i| i.modifiers.shift) {
+                    s = constrain(d.from, s);
+                } else {
+                    s = track(d.from, s, self.view.to_metres(TRACK_REACH));
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+                self.hover_grip = None;
+                let variant = ctx.input(|i| i.modifiers.command);
+                let to = d.target(s.point);
+                let fresh = self
+                    .drag_preview
+                    .as_ref()
+                    .is_some_and(|p| p.0 == to && p.1 == variant);
+                if !fresh {
+                    let drag = Drag {
+                        grip: d.grip,
+                        from: d.from,
+                        to,
+                        variant,
+                    };
+                    let ghost = crate::drag::preview(model, &self.ed.selection, &drag)
+                        .map_err(|e| crate::units::explain(&e));
+                    self.drag_preview = Some((to, variant, ghost));
+                }
+            }
             Tool::Arrow => {
                 self.cursor = Some(Snap {
                     point: crate::snap::round_point(raw),
                     kind: SnapKind::Free,
                 });
+                self.hover_grip = if self.window_start.is_some() {
+                    None
+                } else {
+                    grip_at(model, &self.ed.selection, raw, reach).map(|g| g.0)
+                };
                 self.hover = if self.window_start.is_some() {
                     None
                 } else {
@@ -1233,6 +1430,10 @@ impl ArchiSimApp {
                 i.key_pressed(Key::Delete),
             )
         });
+        if self.drag.is_some() {
+            self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
+            return;
+        }
         let drawing = self.wall_tool.is_drawing() || self.slab_tool.is_drawing();
         let mut used_text = false;
         for e in &events {
@@ -1311,6 +1512,51 @@ impl ArchiSimApp {
         }
     }
 
+    /// While dragging: a typed distance and Enter drop the selection that
+    /// far towards the cursor; Esc cancels.
+    fn keyboard_while_dragging(
+        &mut self,
+        ctx: &egui::Context,
+        events: &[egui::Event],
+        enter: bool,
+        escape: bool,
+        backspace: bool,
+    ) {
+        if escape {
+            self.drag = None;
+            self.drag_preview = None;
+            self.say("Cancelado.");
+            return;
+        }
+        if let Some(d) = &mut self.drag {
+            for e in events {
+                if let egui::Event::Text(t) = e {
+                    for c in t.chars() {
+                        if c.is_ascii_digit() || matches!(c, ',' | '.' | 'm' | 'c' | 'M' | 'C') {
+                            d.typed.push(c);
+                        }
+                    }
+                }
+            }
+            if backspace {
+                d.typed.pop();
+            }
+        }
+        if enter {
+            if let Some(c) = self.cursor {
+                let variant = ctx.input(|i| i.modifiers.command);
+                self.finish_drag(c.point, variant);
+            }
+        }
+    }
+
+    /// Whether a click with the slab tool uses the magic wand: the wand is
+    /// chosen, or Space is held, and no outline is being drawn.
+    fn wand_active(&self, ctx: &egui::Context) -> bool {
+        !self.slab_tool.is_drawing()
+            && (self.slab_settings.wand || ctx.input(|i| i.key_down(Key::Space)))
+    }
+
     fn clicks(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
         let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
         match self.tool {
@@ -1326,6 +1572,13 @@ impl ArchiSimApp {
                     || response.clicked_by(PointerButton::Secondary)
                 {
                     self.wall_tool.finish();
+                }
+            }
+            Tool::Slab if self.wand_active(ctx) => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.build_slab_in_room(c.point);
+                    }
                 }
             }
             Tool::Slab => {
@@ -1367,8 +1620,44 @@ impl ArchiSimApp {
                     }
                 }
                 if response.drag_started_by(PointerButton::Primary) {
-                    let origin = ctx.input(|i| i.pointer.press_origin());
-                    self.window_start = origin.map(|p| self.view.to_model(rect, p));
+                    let origin = ctx
+                        .input(|i| i.pointer.press_origin())
+                        .map(|p| self.view.to_model(rect, p));
+                    let reach = self.view.to_metres(REACH);
+                    let grip =
+                        origin.and_then(|o| grip_at(self.ed.model(), &self.ed.selection, o, reach));
+                    match grip {
+                        Some((grip, from)) => {
+                            // The selection is grabbed by the nearest
+                            // special point, so it can be dropped exactly on
+                            // another one.
+                            let from = if grip == Grip::Body {
+                                snap(self.ed.model(), self.ed.level, from, reach, &[]).point
+                            } else {
+                                from
+                            };
+                            let skip =
+                                crate::drag::moving(self.ed.model(), &self.ed.selection, grip);
+                            self.drag = Some(DragState {
+                                grip,
+                                from,
+                                typed: String::new(),
+                                skip,
+                            });
+                            self.drag_preview = None;
+                        }
+                        None => self.window_start = origin,
+                    }
+                }
+                if response.drag_stopped() && self.drag.is_some() {
+                    match self.cursor {
+                        Some(c) => {
+                            let variant = ctx.input(|i| i.modifiers.command);
+                            self.finish_drag(c.point, variant);
+                        }
+                        None => self.say("Cancelado: se ha soltado fuera de la planta."),
+                    }
+                    self.drag = None;
                 }
                 if response.drag_stopped() {
                     if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
@@ -1487,16 +1776,12 @@ impl ArchiSimApp {
             };
             let pts = self.polygon(rect, &poly);
             painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.0, ACCENT)));
-            // Hotspots: the ends of a wall's drawn line, a slab's corners.
+            // A door or window is dragged by its body; mark its middle.
             let spots: Vec<Point2> = match e {
-                Element::Wall(id) => model
-                    .wall(*id)
-                    .map(|w| vec![w.start, w.end])
-                    .unwrap_or_default(),
-                Element::Slab(_) => poly.clone(),
                 Element::Opening(id) => opening_geometry(model, *id)
                     .map(|g| vec![g.point((g.t0 + g.t1) / 2.0, g.exterior_offset)])
                     .unwrap_or_default(),
+                _ => Vec::new(),
             };
             for p in spots {
                 let c = self.view.to_screen(rect, p);
@@ -1522,6 +1807,127 @@ impl ArchiSimApp {
                     );
                 }
             }
+        }
+    }
+
+    /// Handles of the selection: wall ends and slab corners (black
+    /// squares, to stretch) and slab edges (white diamonds, to move the
+    /// edge); the one under the cursor is highlighted.
+    fn draw_hotspots(&self, painter: &egui::Painter, rect: Rect) {
+        for h in hotspots(self.ed.model(), &self.ed.selection) {
+            let c = self.view.to_screen(rect, h.point);
+            let hot = self.hover_grip == Some(h.grip)
+                || self.drag.as_ref().is_some_and(|d| d.grip == h.grip);
+            let fill = if hot { ACCENT } else { Color32::BLACK };
+            match h.grip {
+                Grip::SlabEdge { .. } => {
+                    let r = if hot { 6.0 } else { 4.5 };
+                    let pts = vec![
+                        c + Vec2::new(0.0, -r),
+                        c + Vec2::new(r, 0.0),
+                        c + Vec2::new(0.0, r),
+                        c + Vec2::new(-r, 0.0),
+                    ];
+                    let inside = if hot { ACCENT } else { Color32::WHITE };
+                    painter.add(Shape::convex_polygon(
+                        pts,
+                        inside,
+                        Stroke::new(1.0, Color32::BLACK),
+                    ));
+                }
+                _ => {
+                    let size = Vec2::splat(if hot { 9.0 } else { 7.0 });
+                    painter.rect_filled(Rect::from_center_size(c, size), CornerRadius::ZERO, fill);
+                    painter.rect_stroke(
+                        Rect::from_center_size(c, size),
+                        CornerRadius::ZERO,
+                        Stroke::new(1.0, Color32::WHITE),
+                        StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+    }
+
+    /// The selection being dragged: the outlines it would have, the line
+    /// from where it was grabbed to the cursor, and the distance.
+    fn draw_drag_preview(&self, painter: &egui::Painter, rect: Rect) {
+        let (Some(d), Some(c)) = (&self.drag, self.cursor) else {
+            return;
+        };
+        let to = d.target(c.point);
+        let (a, b) = (
+            self.view.to_screen(rect, d.from),
+            self.view.to_screen(rect, to),
+        );
+        dashed(painter, a, b, Color32::from_gray(60));
+        let variant = self.drag_preview.as_ref().is_some_and(|p| p.1);
+        let mut problem = None;
+        if let Some((_, _, ghost)) = &self.drag_preview {
+            match ghost {
+                Ok(polys) => {
+                    for poly in polys {
+                        let pts = self.polygon(rect, poly);
+                        painter.add(Shape::closed_line(pts, Stroke::new(1.5, ACCENT)));
+                    }
+                }
+                Err(e) => problem = Some(e.clone()),
+            }
+        }
+        let action = match (d.grip, variant) {
+            (Grip::Body, true) => "Copiar",
+            (Grip::Body, false) => "Mover",
+            (Grip::WallEnd { .. }, false) => "Estirar",
+            (Grip::WallEnd { .. }, true) => "Estirar solo este muro",
+            (Grip::SlabCorner { .. }, _) => "Esquina",
+            (Grip::SlabEdge { .. }, false) => "Arista",
+            (Grip::SlabEdge { .. }, true) => "Nueva esquina",
+        };
+        let delta = to - d.from;
+        let mut text = if d.typed.is_empty() {
+            format!(
+                "{action}  {} mm   {}",
+                fmt_mm(delta.length()),
+                fmt_angle(delta.y.atan2(delta.x))
+            )
+        } else {
+            format!(
+                "{action}  {}▏   {}",
+                d.typed,
+                fmt_angle(delta.y.atan2(delta.x))
+            )
+        };
+        if let Some(p) = problem {
+            text.push_str(&format!("\nNo se puede: {p}"));
+        }
+        self.draw_label(painter, rect, c.point, text);
+    }
+
+    /// The room the magic wand would turn into a slab.
+    fn draw_wand_preview(&self, painter: &egui::Painter, rect: Rect) {
+        let (Tool::Slab, Some(c), Some((_, _, _, found))) =
+            (self.tool, self.cursor, &self.wand_preview)
+        else {
+            return;
+        };
+        if self.slab_tool.is_drawing() || !(self.slab_settings.wand || self.space_held) {
+            return;
+        }
+        match found {
+            Ok(poly) => {
+                let pts = self.polygon(rect, poly);
+                painter.add(Shape::closed_line(pts, Stroke::new(2.0, ACCENT)));
+                self.draw_label(
+                    painter,
+                    rect,
+                    c.point,
+                    format!(
+                        "Varita mágica   S {}",
+                        fmt_area(archisim_core::signed_area(poly).abs())
+                    ),
+                );
+            }
+            Err(e) => self.draw_label(painter, rect, c.point, format!("Varita mágica: {e}")),
         }
     }
 
@@ -1768,7 +2174,9 @@ impl ArchiSimApp {
     }
 
     fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
-        let (true, Some(c)) = (self.tool.draws_points(), self.cursor) else {
+        let points =
+            self.tool.draws_points() && !(self.tool == Tool::Slab && self.slab_settings.wand);
+        let (true, Some(c)) = (points || self.drag.is_some(), self.cursor) else {
             return;
         };
         let p = self.view.to_screen(rect, c.point);
@@ -2404,6 +2812,8 @@ pub fn default_slab_settings(model: &Model) -> SlabSettings {
     SlabSettings {
         slab_type: t.map_or(SlabTypeId(0), |t| t.id),
         top_offset: 0.0,
+        wand: false,
+        contour: Contour::InteriorFace,
     }
 }
 
@@ -2424,6 +2834,14 @@ fn fmt_level(elevation: f64) -> String {
         "±0,00".into()
     } else {
         format!("{:+.2}", elevation).replace('.', ",")
+    }
+}
+
+fn contour_name(c: Contour) -> &'static str {
+    match c {
+        Contour::InteriorFace => "Cara interior",
+        Contour::WallAxis => "Eje de muros",
+        Contour::ExteriorFace => "Cara exterior",
     }
 }
 

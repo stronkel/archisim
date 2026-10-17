@@ -380,6 +380,32 @@ impl Editor {
         })
     }
 
+    /// Moves, copies or stretches the selection as dragged with the mouse,
+    /// in one step. After a copy the copies are selected.
+    pub fn drag(&mut self, drag: &crate::drag::Drag) -> EditResult<&'static str> {
+        let label = crate::drag::label(self.model(), drag);
+        let selection = self.selection.clone();
+        let new_selection = self.transact(label, |m| crate::drag::apply(m, &selection, drag))?;
+        if let Some(s) = new_selection {
+            self.selection = s;
+        }
+        Ok(label)
+    }
+
+    /// Draws a slab on the active level from the room around `p`, as the
+    /// magic wand does.
+    pub fn add_slab_in_room(
+        &mut self,
+        slab_type: SlabTypeId,
+        p: Point2,
+        contour: archisim_geom::Contour,
+        top_offset: f64,
+    ) -> EditResult<SlabId> {
+        let outline = archisim_geom::room_outline(self.model(), self.level, p, contour)
+            .map_err(|e| crate::units::explain_room(&e))?;
+        self.add_slab(slab_type, outline, top_offset)
+    }
+
     pub fn rename_project(&mut self, name: &str) -> EditResult {
         let name = name.trim().to_string();
         if name.is_empty() {

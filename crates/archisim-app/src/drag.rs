@@ -1,0 +1,827 @@
+//! Moving, copying and stretching the selection with the mouse, without
+//! any user interface: which handle is under the cursor, and what dragging
+//! it from one point to another does to the model.
+//!
+//! As in ArchiCAD, only selected elements can be dragged; dragging anywhere
+//! else draws a selection window. Every drag is one undoable step.
+//!
+//! - **Body** (anywhere on a selected element): moves the whole selection.
+//!   Walls joined to a moved wall but not selected stretch to keep the
+//!   corner closed (as Revit does). A door or window selected without its
+//!   wall slides along the wall. With Ctrl the selection is copied instead,
+//!   doors and windows of copied walls included.
+//! - **Wall end**: stretches the wall, and every wall joined at that corner
+//!   with it, so the corner stays closed. With Ctrl only this wall moves
+//!   (it comes off the corner). Doors and windows stay where they are.
+//! - **Slab corner**: moves that corner; dropped on a neighbouring corner
+//!   it removes it.
+//! - **Slab edge** (handle at its middle): moves the edge parallel to
+//!   itself; with Ctrl it adds a new corner there instead.
+
+use std::collections::BTreeSet;
+
+use crate::pick::{contains, distance_to_outline, outline, Element};
+use archisim_core::{Model, ModelError, NewOpening, NewSlab, NewWall, Point2, SlabId, WallId};
+
+/// The part of the selection being dragged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Grip {
+    /// The whole selection.
+    Body,
+    /// One end of a wall's drawn line.
+    WallEnd { wall: WallId, start: bool },
+    /// A corner of a slab, by its index in the outline.
+    SlabCorner { slab: SlabId, index: usize },
+    /// The edge of a slab from corner `index` to the next one.
+    SlabEdge { slab: SlabId, index: usize },
+}
+
+/// A handle drawn on the selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hotspot {
+    pub grip: Grip,
+    pub point: Point2,
+}
+
+/// A finished drag: from where to where, and whether Ctrl was held.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Drag {
+    pub grip: Grip,
+    pub from: Point2,
+    pub to: Point2,
+    /// Ctrl: copy (body), leave the corner (wall end), add a corner (edge).
+    pub variant: bool,
+}
+
+/// Handles of the selected walls and slabs.
+pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
+    let mut v = Vec::new();
+    for e in selection {
+        match e {
+            Element::Wall(id) => {
+                if let Some(w) = model.wall(*id) {
+                    v.push(Hotspot {
+                        grip: Grip::WallEnd {
+                            wall: *id,
+                            start: true,
+                        },
+                        point: w.start,
+                    });
+                    v.push(Hotspot {
+                        grip: Grip::WallEnd {
+                            wall: *id,
+                            start: false,
+                        },
+                        point: w.end,
+                    });
+                }
+            }
+            Element::Slab(id) => {
+                if let Some(s) = model.slab(*id) {
+                    let n = s.outline.len();
+                    for (i, p) in s.outline.iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::SlabCorner {
+                                slab: *id,
+                                index: i,
+                            },
+                            point: *p,
+                        });
+                        v.push(Hotspot {
+                            grip: Grip::SlabEdge {
+                                slab: *id,
+                                index: i,
+                            },
+                            point: (*p + s.outline[(i + 1) % n]) * 0.5,
+                        });
+                    }
+                }
+            }
+            Element::Opening(_) => {}
+        }
+    }
+    v
+}
+
+/// What dragging from `p` would grab: the nearest handle within
+/// `tolerance`, or the selection itself when `p` is on a selected element.
+/// Returns the grip and the point it is grabbed by.
+pub fn grip_at(
+    model: &Model,
+    selection: &BTreeSet<Element>,
+    p: Point2,
+    tolerance: f64,
+) -> Option<(Grip, Point2)> {
+    let spot = hotspots(model, selection)
+        .into_iter()
+        .map(|h| (h.point.distance(p), h))
+        .filter(|(d, _)| *d <= tolerance)
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    if let Some((_, h)) = spot {
+        return Some((h.grip, h.point));
+    }
+    let on_selection = selection.iter().any(|e| {
+        outline(model, *e)
+            .is_some_and(|poly| contains(&poly, p) || distance_to_outline(&poly, p) <= tolerance)
+    });
+    on_selection.then_some((Grip::Body, p))
+}
+
+/// Walls and slabs whose geometry the drag changes, so snapping ignores
+/// them (a point does not snap to itself).
+pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTreeSet<Element> {
+    match grip {
+        Grip::Body => selection.clone(),
+        Grip::WallEnd { wall, start } => joined_at(model, wall, start)
+            .into_iter()
+            .map(|(w, _)| Element::Wall(w))
+            .collect(),
+        Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
+            [Element::Slab(slab)].into_iter().collect()
+        }
+    }
+}
+
+/// The walls with an end at the same point as the given end of `wall`
+/// (itself included), and which of their ends it is.
+fn joined_at(model: &Model, wall: WallId, start: bool) -> Vec<(WallId, bool)> {
+    let Some(w) = model.wall(wall) else {
+        return Vec::new();
+    };
+    let p = if start { w.start } else { w.end };
+    let mut v = vec![(wall, start)];
+    for o in model.walls_on_level(w.level) {
+        if o.id == wall {
+            continue;
+        }
+        if o.start.approx_eq(p) {
+            v.push((o.id, true));
+        } else if o.end.approx_eq(p) {
+            v.push((o.id, false));
+        }
+    }
+    v
+}
+
+/// Name of the step in the Edit menu.
+pub fn label(model: &Model, drag: &Drag) -> &'static str {
+    match drag.grip {
+        Grip::Body if drag.variant => "Copiar",
+        Grip::Body => "Mover",
+        Grip::WallEnd { .. } => "Estirar muro",
+        Grip::SlabCorner { slab, index } => {
+            if merges_corner(model, slab, index, drag.to) {
+                "Quitar esquina de forjado"
+            } else {
+                "Mover esquina de forjado"
+            }
+        }
+        Grip::SlabEdge { .. } if drag.variant => "Añadir esquina de forjado",
+        Grip::SlabEdge { .. } => "Desplazar arista de forjado",
+    }
+}
+
+/// Whether moving a slab corner to `to` drops it on one of its neighbours.
+fn merges_corner(model: &Model, slab: SlabId, index: usize, to: Point2) -> bool {
+    let Some(s) = model.slab(slab) else {
+        return false;
+    };
+    let n = s.outline.len();
+    n > 3
+        && (s.outline[(index + 1) % n].approx_eq(to)
+            || s.outline[(index + n - 1) % n].approx_eq(to))
+}
+
+/// Applies a drag to the model. Returns the new selection when it changes
+/// (after a copy, the copies are selected, as in Revit).
+pub fn apply(
+    model: &mut Model,
+    selection: &BTreeSet<Element>,
+    drag: &Drag,
+) -> Result<Option<BTreeSet<Element>>, ModelError> {
+    let d = drag.to - drag.from;
+    match drag.grip {
+        Grip::Body if drag.variant => copy(model, selection, d).map(Some),
+        Grip::Body => move_selection(model, selection, d).map(|_| None),
+        Grip::WallEnd { wall, start } => {
+            let ends = if drag.variant {
+                vec![(wall, start)]
+            } else {
+                joined_at(model, wall, start)
+            };
+            for (w, at_start) in ends {
+                let wall = model.wall(w).ok_or(ModelError::UnknownWall(w))?;
+                let (s, e) = if at_start {
+                    (drag.to, wall.end)
+                } else {
+                    (wall.start, drag.to)
+                };
+                model.stretch_wall(w, s, e)?;
+            }
+            Ok(None)
+        }
+        Grip::SlabCorner { slab, index } => {
+            let merge = merges_corner(model, slab, index, drag.to);
+            let s = model.slab(slab).ok_or(ModelError::UnknownSlab(slab))?;
+            let mut outline = s.outline.clone();
+            if merge {
+                outline.remove(index);
+            } else {
+                outline[index] = drag.to;
+            }
+            model.set_slab_outline(slab, outline).map(|_| None)
+        }
+        Grip::SlabEdge { slab, index } => {
+            let s = model.slab(slab).ok_or(ModelError::UnknownSlab(slab))?;
+            let mut outline = s.outline.clone();
+            let n = outline.len();
+            let (a, b) = (outline[index], outline[(index + 1) % n]);
+            if drag.variant {
+                outline.insert(index + 1, drag.to);
+            } else {
+                let normal = (b - a)
+                    .normalized()
+                    .ok_or(ModelError::InvalidOutline)?
+                    .perp_left();
+                let shift = normal * d.dot(normal);
+                outline[index] = a + shift;
+                outline[(index + 1) % n] = b + shift;
+            }
+            model.set_slab_outline(slab, outline).map(|_| None)
+        }
+    }
+}
+
+/// Moves the selection by `d`.
+fn move_selection(
+    model: &mut Model,
+    selection: &BTreeSet<Element>,
+    d: Point2,
+) -> Result<(), ModelError> {
+    let walls: Vec<WallId> = selection
+        .iter()
+        .filter_map(|e| match e {
+            Element::Wall(id) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let followers = followers(model, &walls, d);
+    for id in &walls {
+        let w = model.wall(*id).ok_or(ModelError::UnknownWall(*id))?;
+        let (s, e) = (w.start + d, w.end + d);
+        model.move_wall(*id, s, e)?;
+    }
+    for (id, s, e) in followers {
+        model.stretch_wall(id, s, e)?;
+    }
+    for e in selection {
+        if let Element::Slab(id) = e {
+            let s = model.slab(*id).ok_or(ModelError::UnknownSlab(*id))?;
+            let outline = s.outline.iter().map(|p| *p + d).collect();
+            model.set_slab_outline(*id, outline)?;
+        }
+    }
+    // Doors and windows whose wall stays: they slide along it. The ones in
+    // front go first so they never bump into the ones behind.
+    let mut alone: Vec<(archisim_core::OpeningId, f64, f64)> = Vec::new();
+    for e in selection {
+        if let Element::Opening(id) = e {
+            let o = model.opening(*id).ok_or(ModelError::UnknownOpening(*id))?;
+            if walls.contains(&o.wall) {
+                continue;
+            }
+            let w = model.wall(o.wall).ok_or(ModelError::UnknownWall(o.wall))?;
+            let u = (w.end - w.start)
+                .normalized()
+                .ok_or(ModelError::ZeroLengthWall)?;
+            alone.push((*id, o.along + d.dot(u), d.dot(u)));
+        }
+    }
+    let front = |a: &(archisim_core::OpeningId, f64, f64)| a.1 * a.2.signum();
+    alone.sort_by(|a, b| front(b).total_cmp(&front(a)));
+    for (id, along, _) in alone {
+        let sill = model
+            .opening(id)
+            .ok_or(ModelError::UnknownOpening(id))?
+            .sill;
+        model.move_opening(id, along, sill)?;
+    }
+    Ok(())
+}
+
+/// Walls that are not moved but touch the moved ones, and where their ends
+/// go: an end joined at the end of a moved wall moves with it (the corner
+/// stays closed); an end butting against a face of a moved wall slides
+/// along its own axis to stay against that face (a partition stays
+/// against the wall it meets).
+fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2, Point2)> {
+    use archisim_geom::Line;
+    let mut ends: Vec<Point2> = Vec::new();
+    // Face lines of the moved walls: (start, end) of each face segment.
+    let mut faces: Vec<(Point2, Point2)> = Vec::new();
+    let mut level = None;
+    for id in moved {
+        let Some(w) = model.wall(*id) else { continue };
+        ends.push(w.start);
+        ends.push(w.end);
+        level = Some(w.level);
+        let Some(t) = model.wall_type(w.wall_type).map(|t| t.thickness()) else {
+            continue;
+        };
+        let Some(n) = (w.end - w.start).normalized().map(Point2::perp_left) else {
+            continue;
+        };
+        let (ext, int) = w.face_offsets(t);
+        for off in [ext, int] {
+            faces.push((w.start + n * off, w.end + n * off));
+        }
+    }
+    let Some(level) = level else {
+        return Vec::new();
+    };
+    let follow = |p: Point2, axis: Point2| -> Option<Point2> {
+        if ends.iter().any(|e| e.approx_eq(p)) {
+            return Some(p + d);
+        }
+        faces.iter().find_map(|(a, b)| {
+            let on = crate::pick::nearest_on_segment(*a, *b, p).distance(p) < 1e-5;
+            if !on {
+                return None;
+            }
+            Line::new(p, axis).intersect(&Line::new(*a + d, *b - *a))
+        })
+    };
+    model
+        .walls_on_level(level)
+        .filter(|w| !moved.contains(&w.id))
+        .filter_map(|w| {
+            let axis = w.end - w.start;
+            let s = follow(w.start, axis);
+            let e = follow(w.end, axis);
+            (s.is_some() || e.is_some()).then(|| (w.id, s.unwrap_or(w.start), e.unwrap_or(w.end)))
+        })
+        .collect()
+}
+
+/// Copies the selection by `d` and returns the copies.
+fn copy(
+    model: &mut Model,
+    selection: &BTreeSet<Element>,
+    d: Point2,
+) -> Result<BTreeSet<Element>, ModelError> {
+    let mut copies = BTreeSet::new();
+    let copied_walls: Vec<WallId> = selection
+        .iter()
+        .filter_map(|e| match e {
+            Element::Wall(id) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    for e in selection {
+        match e {
+            Element::Wall(id) => {
+                let w = model.wall(*id).ok_or(ModelError::UnknownWall(*id))?.clone();
+                let hosted: Vec<NewOpening> = model
+                    .openings_in_wall(*id)
+                    .map(|o| NewOpening {
+                        opening_type: o.opening_type,
+                        wall: *id,
+                        along: o.along,
+                        sill: o.sill,
+                        opens_to: o.opens_to,
+                        hand: o.hand,
+                        setback: o.setback,
+                    })
+                    .collect();
+                let new = model.add_wall(NewWall {
+                    wall_type: w.wall_type,
+                    level: w.level,
+                    start: w.start + d,
+                    end: w.end + d,
+                    reference: w.reference,
+                    height: w.height,
+                    base_offset: w.base_offset,
+                })?;
+                copies.insert(Element::Wall(new));
+                for mut spec in hosted {
+                    spec.wall = new;
+                    copies.insert(Element::Opening(model.add_opening(spec)?));
+                }
+            }
+            Element::Slab(id) => {
+                let s = model.slab(*id).ok_or(ModelError::UnknownSlab(*id))?.clone();
+                let new = model.add_slab(NewSlab {
+                    slab_type: s.slab_type,
+                    level: s.level,
+                    outline: s.outline.iter().map(|p| *p + d).collect(),
+                    top_offset: s.top_offset,
+                })?;
+                copies.insert(Element::Slab(new));
+            }
+            Element::Opening(id) => {
+                let o = model
+                    .opening(*id)
+                    .ok_or(ModelError::UnknownOpening(*id))?
+                    .clone();
+                if copied_walls.contains(&o.wall) {
+                    continue;
+                }
+                let w = model.wall(o.wall).ok_or(ModelError::UnknownWall(o.wall))?;
+                let u = (w.end - w.start)
+                    .normalized()
+                    .ok_or(ModelError::ZeroLengthWall)?;
+                let new = model.add_opening(NewOpening {
+                    opening_type: o.opening_type,
+                    wall: o.wall,
+                    along: o.along + d.dot(u),
+                    sill: o.sill,
+                    opens_to: o.opens_to,
+                    hand: o.hand,
+                    setback: o.setback,
+                })?;
+                copies.insert(Element::Opening(new));
+            }
+        }
+    }
+    Ok(copies)
+}
+
+/// Outlines that a drag would change or create, to draw them as it
+/// follows the cursor: the model after the drag compared with before.
+pub fn preview(
+    model: &Model,
+    selection: &BTreeSet<Element>,
+    drag: &Drag,
+) -> Result<Vec<Vec<Point2>>, ModelError> {
+    let mut after = model.clone();
+    apply(&mut after, selection, drag)?;
+    let Some(level) = level_of(model, selection, drag.grip) else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for e in crate::pick::elements_on_level(&after, level) {
+        let new = outline(&after, e);
+        let old = outline(model, e);
+        if let Some(poly) = new {
+            if old.as_ref() != Some(&poly) {
+                out.push(poly);
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn level_of(
+    model: &Model,
+    selection: &BTreeSet<Element>,
+    grip: Grip,
+) -> Option<archisim_core::LevelId> {
+    let wall_level = |id: WallId| model.wall(id).map(|w| w.level);
+    match grip {
+        Grip::WallEnd { wall, .. } => wall_level(wall),
+        Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
+            model.slab(slab).map(|s| s.level)
+        }
+        Grip::Body => selection.iter().find_map(|e| match e {
+            Element::Wall(id) => wall_level(*id),
+            Element::Slab(id) => model.slab(*id).map(|s| s.level),
+            Element::Opening(id) => model.opening(*id).and_then(|o| wall_level(o.wall)),
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pick::tests::room;
+
+    fn sel(items: &[Element]) -> BTreeSet<Element> {
+        items.iter().copied().collect()
+    }
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+
+    /// Walls of the test room in drawing order: west, north, east, south.
+    fn walls(m: &Model) -> Vec<WallId> {
+        m.walls().map(|w| w.id).collect()
+    }
+
+    #[test]
+    fn handles_and_grips() {
+        let (m, _, _) = room();
+        let w = walls(&m);
+        let slab = m.slabs().next().unwrap().id;
+        let s = sel(&[Element::Wall(w[0]), Element::Slab(slab)]);
+        // 2 wall ends + 4 corners + 4 edge middles.
+        assert_eq!(hotspots(&m, &s).len(), 10);
+        // On the end of the west wall at (0, 4).
+        assert_eq!(
+            grip_at(&m, &s, p(0.02, 3.99), 0.1),
+            Some((
+                Grip::WallEnd {
+                    wall: w[0],
+                    start: false
+                },
+                p(0.0, 4.0)
+            ))
+        );
+        // On the middle of the slab's south edge.
+        let (g, at) = grip_at(&m, &s, p(3.0, 0.05), 0.1).unwrap();
+        assert!(matches!(g, Grip::SlabEdge { .. }));
+        assert_eq!(at, p(3.0, 0.0));
+        // In the middle of the selected wall: the whole selection.
+        assert_eq!(
+            grip_at(&m, &s, p(0.1, 1.0), 0.05),
+            Some((Grip::Body, p(0.1, 1.0)))
+        );
+        // Nothing selected there.
+        assert_eq!(grip_at(&m, &sel(&[]), p(0.1, 1.0), 0.05), None);
+    }
+
+    #[test]
+    fn moving_a_wall_drags_the_joined_corners() {
+        let (mut m, _, _) = room();
+        let w = walls(&m);
+        let guid = m.wall(w[1]).unwrap().guid.clone();
+        // The north wall 1 m north: west and east walls stretch with it.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, 4.0),
+            to: p(3.0, 5.0),
+            variant: false,
+        };
+        assert_eq!(label(&m, &drag), "Mover");
+        apply(&mut m, &sel(&[Element::Wall(w[1])]), &drag).unwrap();
+        assert_eq!(m.wall(w[1]).unwrap().start, p(0.0, 5.0));
+        assert_eq!(m.wall(w[1]).unwrap().guid, guid);
+        assert_eq!(m.wall(w[0]).unwrap().end, p(0.0, 5.0));
+        assert_eq!(m.wall(w[2]).unwrap().start, p(6.0, 5.0));
+        // The south wall and its door did not move.
+        let door = m.openings().next().unwrap();
+        assert_eq!(door.along, 3.0);
+        assert_eq!(m.wall(w[3]).unwrap().start, p(6.0, 0.0));
+    }
+
+    #[test]
+    fn partitions_butting_against_a_moved_wall_follow_it() {
+        let (mut m, lvl, lib) = room();
+        let w = walls(&m);
+        // A partition from the inner face of the west wall (x = 0.265) to
+        // the east one (x = 5.735), and another from the south wall's inner
+        // face up to the first one.
+        let add = |m: &mut Model, a: Point2, b: Point2| {
+            m.add_wall(NewWall {
+                wall_type: lib.partition,
+                level: lvl,
+                start: a,
+                end: b,
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+            })
+            .unwrap()
+        };
+        let across = add(&mut m, p(0.265, 2.0), p(5.735, 2.0));
+        let below = add(&mut m, p(3.0, 0.265), p(3.0, 1.95));
+        // Move the east façade 1 m east: the partition stretches to its new
+        // inner face; the one below does not touch it and stays.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(6.0, 2.0),
+            to: p(7.0, 2.0),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[2])]), &drag).unwrap();
+        assert!(m.wall(across).unwrap().end.approx_eq(p(6.735, 2.0)));
+        assert_eq!(m.wall(across).unwrap().start, p(0.265, 2.0));
+        assert_eq!(m.wall(below).unwrap().end, p(3.0, 1.95));
+        // Move the partition across 0.5 m north: the one below follows its
+        // south face.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, 2.0),
+            to: p(3.0, 2.5),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(across)]), &drag).unwrap();
+        assert!(m.wall(below).unwrap().end.approx_eq(p(3.0, 2.45)));
+        assert_eq!(m.wall(below).unwrap().start, p(3.0, 0.265));
+    }
+
+    #[test]
+    fn moving_the_south_wall_takes_its_door() {
+        let (mut m, _, _) = room();
+        let w = walls(&m);
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, 0.0),
+            to: p(3.0, -1.0),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[3])]), &drag).unwrap();
+        // Same distance from the start: it moved with the wall.
+        assert_eq!(m.openings().next().unwrap().along, 3.0);
+        assert_eq!(m.wall(w[0]).unwrap().start, p(0.0, -1.0));
+    }
+
+    #[test]
+    fn a_door_alone_slides_along_its_wall() {
+        let (mut m, _, _) = room();
+        let door = m.openings().next().unwrap().id;
+        // The south wall runs east → west: 1 m west is 1 m further along.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, 0.1),
+            to: p(2.0, 0.6),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Opening(door)]), &drag).unwrap();
+        assert!((m.opening(door).unwrap().along - 4.0).abs() < 1e-12);
+        // Too far: it would leave the wall, and nothing changes.
+        let too_far = Drag {
+            to: p(-3.0, 0.1),
+            ..drag
+        };
+        assert_eq!(
+            apply(&mut m, &sel(&[Element::Opening(door)]), &too_far),
+            Err(ModelError::OpeningOutsideWall)
+        );
+    }
+
+    #[test]
+    fn copying_walls_takes_their_doors_and_selects_the_copies() {
+        let (mut m, _, _) = room();
+        let w = walls(&m);
+        let before = (m.walls().count(), m.openings().count());
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(0.0, 0.0),
+            to: p(10.0, 0.0),
+            variant: true,
+        };
+        assert_eq!(label(&m, &drag), "Copiar");
+        let all = sel(&w.iter().map(|id| Element::Wall(*id)).collect::<Vec<_>>());
+        let copies = apply(&mut m, &all, &drag).unwrap().unwrap();
+        assert_eq!(m.walls().count(), before.0 + 4);
+        assert_eq!(m.openings().count(), before.1 + 1);
+        assert_eq!(copies.len(), 5);
+        // The originals did not move; the copies are joined among themselves.
+        assert_eq!(m.wall(w[0]).unwrap().start, p(0.0, 0.0));
+        for c in &copies {
+            if let Element::Wall(id) = c {
+                let g = archisim_geom::wall_geometry(&m, *id).unwrap();
+                assert!(matches!(g.start_cut, archisim_geom::EndCut::Along(_)));
+            }
+        }
+    }
+
+    #[test]
+    fn stretching_a_corner_moves_both_walls_unless_ctrl() {
+        let (mut m, _, _) = room();
+        let w = walls(&m);
+        // The north-east corner (6, 4) pulled to (7, 5).
+        let drag = Drag {
+            grip: Grip::WallEnd {
+                wall: w[1],
+                start: false,
+            },
+            from: p(6.0, 4.0),
+            to: p(7.0, 5.0),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[1])]), &drag).unwrap();
+        assert_eq!(m.wall(w[1]).unwrap().end, p(7.0, 5.0));
+        assert_eq!(m.wall(w[2]).unwrap().start, p(7.0, 5.0));
+        // With Ctrl only the selected wall's end moves.
+        let detach = Drag {
+            from: p(7.0, 5.0),
+            to: p(7.0, 6.0),
+            variant: true,
+            ..drag
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[1])]), &detach).unwrap();
+        assert_eq!(m.wall(w[1]).unwrap().end, p(7.0, 6.0));
+        assert_eq!(m.wall(w[2]).unwrap().start, p(7.0, 5.0));
+    }
+
+    #[test]
+    fn stretching_the_south_wall_keeps_the_door_in_place() {
+        let (mut m, _, _) = room();
+        let w = walls(&m);
+        let door = m.openings().next().unwrap().id;
+        // South wall: (6, 0) → (0, 0); door 3 m from the start, at x = 3.
+        // Pull the south-east corner 2 m east.
+        let drag = Drag {
+            grip: Grip::WallEnd {
+                wall: w[3],
+                start: true,
+            },
+            from: p(6.0, 0.0),
+            to: p(8.0, 0.0),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[3])]), &drag).unwrap();
+        // Still at x = 3, now 5 m from the new start.
+        assert!((m.opening(door).unwrap().along - 5.0).abs() < 1e-12);
+        // The east wall now leans from (8, 0) to (6, 4).
+        assert_eq!(m.wall(w[2]).unwrap().end, p(8.0, 0.0));
+    }
+
+    #[test]
+    fn slab_corners_and_edges() {
+        let (mut m, _, _) = room();
+        let slab = m.slabs().next().unwrap().id;
+        let s = sel(&[Element::Slab(slab)]);
+        let corner = |m: &Model, i| m.slab(slab).unwrap().outline[i];
+        let index = |m: &Model, q: Point2| {
+            m.slab(slab)
+                .unwrap()
+                .outline
+                .iter()
+                .position(|c| c.approx_eq(q))
+                .unwrap()
+        };
+        // Move the north-east corner.
+        let ne = index(&m, p(6.0, 4.0));
+        let d = Drag {
+            grip: Grip::SlabCorner { slab, index: ne },
+            from: p(6.0, 4.0),
+            to: p(7.0, 4.0),
+            variant: false,
+        };
+        assert_eq!(label(&m, &d), "Mover esquina de forjado");
+        apply(&mut m, &s, &d).unwrap();
+        assert_eq!(corner(&m, ne), p(7.0, 4.0));
+        // Offset the south edge 0.5 m south, whatever the sideways movement
+        // of the cursor. Counter-clockwise, it runs from (0, 0) to (6, 0).
+        let sw = index(&m, p(0.0, 0.0));
+        let e = Drag {
+            grip: Grip::SlabEdge { slab, index: sw },
+            from: p(3.0, 0.0),
+            to: p(3.7, -0.5),
+            variant: false,
+        };
+        apply(&mut m, &s, &e).unwrap();
+        assert_eq!(corner(&m, sw), p(0.0, -0.5));
+        assert_eq!(corner(&m, (sw + 1) % 4), p(6.0, -0.5));
+        // Ctrl on the west edge, from (0, 4) down to (0, -0.5): a new corner.
+        let nw = index(&m, p(0.0, 4.0));
+        let add = Drag {
+            grip: Grip::SlabEdge { slab, index: nw },
+            from: p(0.0, 1.75),
+            to: p(-1.0, 1.75),
+            variant: true,
+        };
+        assert_eq!(label(&m, &add), "Añadir esquina de forjado");
+        apply(&mut m, &s, &add).unwrap();
+        assert_eq!(m.slab(slab).unwrap().outline.len(), 5);
+        // Dropping that corner on its neighbour removes it.
+        let new_index = m
+            .slab(slab)
+            .unwrap()
+            .outline
+            .iter()
+            .position(|q| *q == p(-1.0, 1.75))
+            .unwrap();
+        let next = m.slab(slab).unwrap().outline[(new_index + 1) % 5];
+        let drop = Drag {
+            grip: Grip::SlabCorner {
+                slab,
+                index: new_index,
+            },
+            from: p(-1.0, 1.75),
+            to: next,
+            variant: false,
+        };
+        assert_eq!(label(&m, &drop), "Quitar esquina de forjado");
+        apply(&mut m, &s, &drop).unwrap();
+        assert_eq!(m.slab(slab).unwrap().outline.len(), 4);
+        // A corner that would make the outline cross itself is refused.
+        let cross = Drag {
+            grip: Grip::SlabCorner { slab, index: 0 },
+            from: corner(&m, 0),
+            to: p(3.0, 8.0),
+            variant: false,
+        };
+        assert_eq!(apply(&mut m, &s, &cross), Err(ModelError::InvalidOutline));
+    }
+
+    #[test]
+    fn preview_shows_only_what_changes() {
+        let (m, _, _) = room();
+        let w = walls(&m);
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, 4.0),
+            to: p(3.0, 5.0),
+            variant: false,
+        };
+        // North wall plus the west and east walls that follow it.
+        let ghost = preview(&m, &sel(&[Element::Wall(w[1])]), &drag).unwrap();
+        assert_eq!(ghost.len(), 3);
+        // The model itself is untouched.
+        assert_eq!(m.wall(w[1]).unwrap().start, p(0.0, 4.0));
+    }
+}

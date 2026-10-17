@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Cierre de fase 1, bloque 8 — Mover, copiar y estirar; varita mágica; vértices de forjado
+
+**Hecho**
+- **Mover con el ratón** (herramienta Flecha): se arrastra lo seleccionado, como en ArchiCAD (arrastrar en vacío sigue siendo ventana de selección). Mientras se arrastra se ve en azul cómo quedará, una línea desde el punto agarrado y la distancia; Mayús fuerza ángulos de 45°, se puede teclear la distancia (mm) + Intro, y Esc cancela. Se agarra por el punto especial más cercano (extremo, esquina, cara…) y se suelta con los mismos forzados que al dibujar, sin forzar a lo que se está moviendo.
+  - Los muros unidos por sus extremos a uno que se mueve se **estiran** para que la esquina siga cerrada, y los tabiques que **acometen a la cara** de un muro movido se alargan o acortan por su eje para seguir contra esa cara (como Revit).
+  - Las puertas y ventanas van con su muro; seleccionadas solas, **se deslizan a lo largo del muro**.
+- **Copiar**: Ctrl al soltar. Copia muros con sus puertas y ventanas, forjados y huecos; quedan seleccionadas las copias (como Revit), con `GlobalId` nuevos.
+- **Estirar**: los muros seleccionados muestran sus extremos; arrastrar uno mueve esa esquina y la de los muros unidos en ella. Con Ctrl, solo ese muro (sale de la esquina). Las puertas y ventanas se quedan en su sitio en planta (su distancia al inicio se recalcula).
+- **Vértices de forjado** (punto 1.3 de la hoja de ruta): arrastrar una esquina la mueve; soltarla sobre la esquina vecina la quita; los rombos blancos del centro de cada arista desplazan la arista paralela a sí misma; con Ctrl, añaden una esquina.
+- Lo que no cabe se rechaza entero con el motivo en la barra de estado (p. ej. mover un tabique de forma que otro tabique acometido se acorta y su puerta se saldría).
+- **Varita mágica** para forjados (herramienta Forjado → Método: «Varita mágica», o **Espacio + clic** en modo polígono, como ArchiCAD): un clic dentro de un recinto de muros crea el forjado. Contorno: **cara interior** del recinto, **eje de muros** o **cara exterior** de todo el edificio (para la solera o la cubierta de la casa entera, con un solo clic en cualquier habitación). Vista previa del contorno y su superficie al pasar el cursor. Reconoce tabiques acometidos (T), ignora muros sueltos dentro del recinto y avisa si el clic cae en un muro o los muros no cierran.
+- Pruebas: núcleo (estirar con huecos), geometría (recintos con tabiques, en L con encuentro en T, abiertos, con muro suelto, a eje y a cara exterior; los cuatro recintos de la vivienda de prueba), arrastres (mover, seguir esquinas y caras, copiar, estirar con y sin Ctrl, huecos que se deslizan o se salen, esquinas y aristas de forjado, vista previa) y la app con clics y teclas simulados (mover 1000 mm tecleados, copiar con Ctrl, estirar una esquina, cancelar con Esc, desplazar una arista de forjado, varita mágica en los tres contornos y con Espacio). La casa editada se exporta y valida con IfcOpenShell (`out/app/edicion.ifc`). Probada la ventana real con capturas (mover un tabique con sus acometidos, mover una fachada, varita mágica).
+- La prueba de dibujo 3D se salta (con aviso) en adaptadores gráficos que no admiten vistas de textura en otro formato (algunos OpenGL por software), en vez de fallar.
+- Versión 0.9.0. Sin cambios en el formato `.archisim` ni en el IFC exportado.
+
+**Pendiente / limitaciones conocidas**
+- Los forjados no siguen a los muros al moverlos (no hay asociación muro–forjado; ArchiCAD tampoco la tiene).
+- La varita mágica no hace huecos en el forjado para muros sueltos ni patinillos (llegará con los huecos en forjados, 2.7).
+- Sin «multiplicar» (copias en serie), girar ni simetría; sin arrastrar puertas y ventanas a otro muro.
+- Soltar fuera de la planta cancela el arrastre.
+
+**Antonio debe probar**
+1. Descarga la nueva versión (GitHub → **Actions** → última ejecución en verde → **Artifacts** → **ArchiSim-Windows**) y abre `demo.archisim`.
+2. **Mover**: clic en el tabique vertical del centro; arrástralo 30 cm a la derecha y suelta. Los dos tabiques que acometen a él deben seguirle (uno se alarga, otro se acorta). Prueba a arrastrarlo más (1,3 m): debe negarse porque la puerta del tabique de la derecha se saldría. Ctrl+Z.
+3. **Distancia exacta**: selecciona la fachada oeste, empieza a arrastrarla, mantén **Mayús**, teclea `1000` e Intro sin soltar el ratón. La casa se ensancha 1 m: fachadas norte y sur estiradas, esquinas a inglete cerradas.
+4. **Copiar**: selecciona la puerta de entrada (fachada oeste), arrástrala 1,5 m a lo largo del muro con **Ctrl** pulsado al soltar: aparece una segunda puerta. Selecciona un tabique y cópialo con Ctrl: la copia queda seleccionada.
+5. **Estirar**: selecciona la fachada este y arrastra su cuadrado negro de la esquina noreste hacia fuera: la fachada norte la acompaña. Repite con **Ctrl**: solo se mueve la fachada este.
+6. **Forjado**: selecciona la solera; arrastra un rombo blanco de una arista hacia fuera (la arista se desplaza paralela), arrastra una esquina, añade una esquina con Ctrl en un rombo y quítala soltándola sobre la vecina.
+7. **Varita mágica**: tecla **F**, Método «Varita mágica», pasa el cursor por las habitaciones (se ve el contorno y la superficie) y haz clic. Prueba los tres contornos: cara interior, eje y cara exterior (esta última da toda la casa). También en modo Polígono con **Espacio + clic**.
+8. Exporta el IFC tras editar y ábrelo en ArchiCAD/Revit: los muros movidos y estirados conservan su `GlobalId` (compara con el IFC anterior), las copias tienen uno nuevo.
+9. Cuéntame si el comportamiento al mover (tabiques que siguen a la cara, esquinas que se estiran) es el que esperas o prefieres el de ArchiCAD (la esquina se rompe al mover un solo muro).
+
+---
+
 ## 2026-10-17 · Fase 1, bloque 7 — Importación IFC (MVP terminado) y hoja de ruta
 
 **Hecho**

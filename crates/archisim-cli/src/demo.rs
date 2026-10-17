@@ -166,4 +166,27 @@ mod tests {
         let level = m.level(roof.level).unwrap().elevation;
         assert!((level + roof.top_offset - thickness - super::WALL_HEIGHT).abs() < 1e-9);
     }
+
+    /// The magic wand finds the four rooms of the demo house (doors in the
+    /// walls do not open them) and the whole building outline.
+    #[test]
+    fn magic_wand_finds_every_room() {
+        use archisim_core::Point2;
+        use archisim_geom::{room_outline, signed_area, Contour};
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let ground = m.walls().next().unwrap().level;
+        let mut total = 0.0;
+        for p in [(3.0, 2.0), (3.0, 6.0), (9.0, 2.0), (9.0, 7.0)] {
+            let room = room_outline(m, ground, Point2::new(p.0, p.1), Contour::InteriorFace)
+                .unwrap_or_else(|e| panic!("{p:?}: {e}"));
+            assert_eq!(room.len(), 4, "{p:?}: {room:?}");
+            total += signed_area(&room);
+        }
+        let building =
+            room_outline(m, ground, Point2::new(3.0, 2.0), Contour::ExteriorFace).unwrap();
+        assert!((signed_area(&building) - 108.0).abs() < 1e-9);
+        // The rooms fill the building but for the walls.
+        assert!(total > 90.0 && total < 108.0, "{total}");
+    }
 }

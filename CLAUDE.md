@@ -52,10 +52,10 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 - `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
 - `crates/archisim-library` — plantilla de inicio: materiales y tipos con los que empieza un proyecto nuevo (y la demo).
 - `crates/archisim-cli` — comandos de línea.
-- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición, cámara 3D, selección por rayo) está separada de la interfaz y tiene pruebas propias. La vista 3D (`view3d`) dibuja con wgpu en una textura propia; su prueba de dibujo usa cualquier adaptador gráfico disponible (vale uno por software) y se salta si no hay ninguno.
+- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición, arrastres de mover/copiar/estirar en `drag`, cámara 3D, selección por rayo) está separada de la interfaz y tiene pruebas propias. La vista 3D (`view3d`) dibuja con wgpu en una textura propia; su prueba de dibujo usa cualquier adaptador gráfico disponible (vale uno por software) y se salta si no hay ninguno.
 
 Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUNDACIONAL.md` §3.
 
 ## Prioridades actuales
 
-MVP (fase 1) terminado en v0.8. La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Propuesta: mover/copiar/estirar con el ratón y varita mágica; después cotas y gestión de plantas; después uniones en T. Antonio decide el orden (ver la bitácora).
+MVP (fase 1) terminado en v0.8; v0.9 añade mover/copiar/estirar con el ratón, varita mágica y edición de vértices de forjado. La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Siguiente propuesto: cotas y gestión de plantas; después uniones en T. Antonio decide el orden (ver la bitácora).

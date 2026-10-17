@@ -42,13 +42,13 @@ Crates actuales (`crates/`):
 | Crate | Responsabilidad |
 |---|---|
 | `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer |
-| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos; sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
+| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas. Lector STEP e importador IFC2X3/IFC4 de plantas, muros con capas, forjados, puertas y ventanas, con informe de lo que queda fuera |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta; `importar` convierte un IFC en proyecto |
-| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado, puerta y ventana, selección y propiedades, deshacer, abrir/guardar `.archisim`, importar IFC, exportar IFC, planta e imagen 3D |
+| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado (por polígono o varita mágica), puerta y ventana, selección y propiedades, mover, copiar y estirar con el ratón, deshacer, abrir/guardar `.archisim`, importar IFC, exportar IFC, planta e imagen 3D |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
@@ -88,7 +88,17 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 - Las capas del tipo se ordenan de **arriba abajo** (pavimento → estructura → acabado inferior).
 - Función del tipo: forjado de planta (`FLOOR`), solera (`BASESLAB`) o cubierta plana (`ROOF`). Solera y cubierta se marcan como exteriores (`IsExternal`).
 - En planta se dibujan según el plano de corte (1,10 m por defecto): por debajo, con trama de cubrición y línea fina de proyección; cortados, con poché de su capa estructural y línea gruesa; por encima, discontinuos.
+- **Varita mágica**: un clic dentro de un recinto de muros crea el forjado con su contorno, hasta la cara interior de los muros, hasta su eje, o por la cara exterior de todo el edificio. Los muros acometidos a la cara de otro (tabiques) cierran recintos; un muro suelto dentro de un recinto se ignora (no hay huecos en forjados todavía).
 - Pendiente: huecos en forjado (escaleras, patinillos), forjados inclinados, y recorte con muros (fase 2).
+
+### Edición con el ratón
+
+- Solo se arrastra lo seleccionado (como ArchiCAD); arrastrar en vacío dibuja una ventana de selección. Cada arrastre es un paso de deshacer, con los mismos forzados que al dibujar (sin forzar a lo que se mueve), Mayús para ángulos de 45° y la distancia tecleada + Intro.
+- **Mover** (arrastrar el cuerpo de lo seleccionado): los muros no seleccionados unidos por sus extremos se estiran para que la esquina siga cerrada, y los que acometen a una cara de un muro movido se alargan o acortan por su eje para seguir contra esa cara (como Revit). Las puertas y ventanas van con su muro; seleccionadas solas, se deslizan a lo largo de él.
+- **Copiar** (Ctrl al soltar): copia muros (con sus puertas y ventanas), forjados y huecos; quedan seleccionadas las copias. Los `GlobalId` son nuevos.
+- **Estirar** (arrastrar un extremo de muro): mueve ese extremo y los de los muros unidos en esa esquina; con Ctrl, solo el muro seleccionado (sale de la esquina). Las puertas y ventanas se quedan donde estaban en planta.
+- **Vértices de forjado**: arrastrar una esquina la mueve (soltada sobre la esquina vecina, la quita); arrastrar el rombo del centro de una arista la desplaza paralela a sí misma; con Ctrl, añade una esquina.
+- Lo que no cabe se rechaza entero, explicando el motivo (por ejemplo, una puerta que quedaría fuera de un tabique que se acorta).
 
 ### Puertas y ventanas
 

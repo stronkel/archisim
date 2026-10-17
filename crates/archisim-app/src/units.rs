@@ -122,6 +122,18 @@ pub fn explain(e: &ModelError) -> String {
     }
 }
 
+/// Why the magic wand found no room, in Spanish.
+pub fn explain_room(e: &archisim_geom::RoomError) -> String {
+    match e {
+        archisim_geom::RoomError::InsideWall => {
+            "has hecho clic dentro de un muro: haz clic dentro de un recinto".into()
+        }
+        archisim_geom::RoomError::NotEnclosed => {
+            "los muros no cierran un recinto alrededor de ese punto".into()
+        }
+    }
+}
+
 /// Spanish name of the quantity named in a [`ModelError`].
 fn es_what(what: &str) -> String {
     match what {

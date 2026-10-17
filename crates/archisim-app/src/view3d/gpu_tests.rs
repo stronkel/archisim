@@ -19,6 +19,13 @@ fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
         ..Default::default()
     }))
     .ok()?;
+    // The 3D view needs a texture readable in two formats; some software
+    // adapters (OpenGL) cannot do it.
+    let flags = adapter.get_downlevel_capabilities().flags;
+    if !flags.contains(wgpu::DownlevelFlags::VIEW_FORMATS) {
+        eprintln!("The graphics adapter cannot view textures in other formats.");
+        return None;
+    }
     pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
 }
 

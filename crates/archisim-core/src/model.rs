@@ -776,6 +776,50 @@ impl Model {
         Ok(())
     }
 
+    /// Moves a wall's end points keeping its doors and windows where they
+    /// are in the plan: each one is re-measured from the new start by
+    /// projecting its old centre onto the new drawn line. This is what
+    /// stretching a wall by one end does (ArchiCAD and Revit leave the
+    /// openings in place). Rejected if any of them would no longer fit.
+    pub fn stretch_wall(
+        &mut self,
+        id: WallId,
+        start: Point2,
+        end: Point2,
+    ) -> Result<(), ModelError> {
+        finite_point(start, "wall start")?;
+        finite_point(end, "wall end")?;
+        let wall = self.walls.get(&id).ok_or(ModelError::UnknownWall(id))?;
+        let dir_old = (wall.end - wall.start)
+            .normalized()
+            .ok_or(ModelError::ZeroLengthWall)?;
+        let dir_new = (end - start)
+            .normalized()
+            .ok_or(ModelError::ZeroLengthWall)?;
+        let old_start = wall.start;
+        let previous: Vec<(OpeningId, f64)> = self
+            .openings
+            .values()
+            .filter(|o| o.wall == id)
+            .map(|o| (o.id, o.along))
+            .collect();
+        for (oid, along) in &previous {
+            let centre = old_start + dir_old * *along;
+            if let Some(o) = self.openings.get_mut(oid) {
+                o.along = (centre - start).dot(dir_new);
+            }
+        }
+        if let Err(e) = self.move_wall(id, start, end) {
+            for (oid, along) in previous {
+                if let Some(o) = self.openings.get_mut(&oid) {
+                    o.along = along;
+                }
+            }
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// Swaps start and end, which moves the exterior face to the other side
     /// (ArchiCAD "Invertir"). The drawn line stays where it is, and so do its
     /// doors and windows: their position is measured from the new start.
@@ -1754,6 +1798,30 @@ mod tests {
         m.remove_wall(wall).unwrap();
         assert!(m.opening(o).is_none());
         assert_eq!(m.openings().count(), 0);
+    }
+
+    #[test]
+    fn stretching_a_wall_leaves_its_openings_in_place() {
+        // The sample wall runs from (0, 0) to (4, 0).
+        let (mut m, wall, door, _) = with_openings();
+        let o = m.add_opening(place(door, wall, 2.0, 0.0)).unwrap();
+        let guid = m.wall(wall).unwrap().guid.clone();
+        // Pulling the start 1 m back: the door stays at x = 2, now 3 m in.
+        m.stretch_wall(wall, Point2::new(-1.0, 0.0), Point2::new(4.0, 0.0))
+            .unwrap();
+        assert!((m.opening(o).unwrap().along - 3.0).abs() < 1e-12);
+        assert_eq!(m.wall(wall).unwrap().guid, guid);
+        // Pushing the start past the door is refused and changes nothing.
+        assert_eq!(
+            m.stretch_wall(wall, Point2::new(2.0, 0.0), Point2::new(4.0, 0.0)),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        assert_eq!(m.wall(wall).unwrap().start, Point2::new(-1.0, 0.0));
+        assert!((m.opening(o).unwrap().along - 3.0).abs() < 1e-12);
+        assert_eq!(
+            m.stretch_wall(wall, Point2::new(4.0, 0.0), Point2::new(4.0, 0.0)),
+            Err(ModelError::ZeroLengthWall)
+        );
     }
 
     #[test]

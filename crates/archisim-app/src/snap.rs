@@ -7,7 +7,9 @@
 use archisim_core::{LevelId, Model, Point2};
 use archisim_geom::wall_geometry;
 
-use crate::pick::nearest_on_segment;
+use std::collections::BTreeSet;
+
+use crate::pick::{nearest_on_segment, Element};
 
 /// Free points and typed lengths are rounded to 1 cm.
 pub const FREE_STEP: f64 = 0.01;
@@ -69,10 +71,26 @@ pub fn snap(
     tolerance: f64,
     extra: &[Point2],
 ) -> Snap {
+    snap_except(model, level, cursor, tolerance, extra, &BTreeSet::new())
+}
+
+/// [`snap`], ignoring some walls and slabs (the ones being dragged, so a
+/// point does not snap to where it already is).
+pub fn snap_except(
+    model: &Model,
+    level: LevelId,
+    cursor: Point2,
+    tolerance: f64,
+    extra: &[Point2],
+    skip: &BTreeSet<Element>,
+) -> Snap {
     let mut points: Vec<(Point2, SnapKind)> =
         extra.iter().map(|p| (*p, SnapKind::Endpoint)).collect();
     let mut edges: Vec<(Point2, Point2)> = Vec::new();
     for w in model.walls_on_level(level) {
+        if skip.contains(&Element::Wall(w.id)) {
+            continue;
+        }
         points.push((w.start, SnapKind::Endpoint));
         points.push((w.end, SnapKind::Endpoint));
         points.push(((w.start + w.end) * 0.5, SnapKind::Midpoint));
@@ -85,6 +103,9 @@ pub fn snap(
         }
     }
     for s in model.slabs_on_level(level) {
+        if skip.contains(&Element::Slab(s.id)) {
+            continue;
+        }
         let n = s.outline.len();
         for i in 0..n {
             points.push((s.outline[i], SnapKind::Corner));
