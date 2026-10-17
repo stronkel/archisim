@@ -26,7 +26,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{
     CutPattern, DoorOperation, LayerFunction, LevelId, Model, OpeningKind, Point2, Slab,
-    WindowOperation, EPSILON,
+    WallFunction, WindowOperation, EPSILON,
 };
 use archisim_geom::{
     clip_span, openings_in_wall, wall_geometries, wall_pieces, EndCut, OpeningGeometry,
@@ -147,11 +147,12 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
 
     s.push_str("<g id=\"poche\">\n");
     for (gi, g) in geos.iter().enumerate() {
-        draw_layers(&mut s, model, g, gi, &pieces[gi], k);
-    }
-    s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
-    for (g, p) in geos.iter().zip(&pieces) {
-        draw_cut_lines(&mut s, g, p, k);
+        let cut: Vec<OpeningGeometry> = openings[gi]
+            .iter()
+            .filter(|o| opening_view(o, options.cut_plane) == OpeningView::Cut)
+            .cloned()
+            .collect();
+        draw_layers(&mut s, model, g, gi, &pieces[gi], &cut, k);
     }
     s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
     for o in openings.iter().flatten() {
@@ -160,6 +161,11 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
             OpeningView::Above => draw_opening_above(&mut s, o, k),
             OpeningView::Below => {}
         }
+    }
+    // Cut lines go last so frames and sill boards never cover the jambs.
+    s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
+    for (g, p) in geos.iter().zip(&pieces) {
+        draw_cut_lines(&mut s, g, p, k);
     }
     s.push_str("</g>\n");
 
@@ -196,15 +202,93 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     s
 }
 
+/// How the layers of a wall type are finished at the jambs of a door or
+/// window, as usually built in a Spanish double-leaf façade.
+#[derive(Debug, Clone, PartialEq)]
+struct JambDetail {
+    /// The outer leaf that turns at the jamb to close the cavity, and the
+    /// cavity layers it closes (they stop short of the jamb).
+    turn: Option<(usize, std::ops::Range<usize>)>,
+    /// The exterior finish (render) that wraps the reveal up to the frame.
+    wrap: Option<usize>,
+}
+
+impl JambDetail {
+    fn for_type(wtype: &archisim_core::WallType) -> Self {
+        use LayerFunction::*;
+        let layers = &wtype.layers;
+        let is_cavity = |f: LayerFunction| matches!(f, Insulation | AirGap | Membrane);
+        // The first leaf (from outside) followed by a cavity with something
+        // behind it: that leaf returns across the cavity.
+        let turn = (0..layers.len()).find_map(|i| {
+            if !matches!(layers[i].function, Structure | Substrate) {
+                return None;
+            }
+            let start = i + 1;
+            let mut end = start;
+            while end < layers.len() && is_cavity(layers[end].function) {
+                end += 1;
+            }
+            (end > start && end < layers.len()).then_some((i, start..end))
+        });
+        let wrap = (wtype.function == WallFunction::Exterior
+            && layers.len() > 1
+            && layers[0].function == Finish)
+            .then_some(0);
+        Self { turn, wrap }
+    }
+
+    fn cut_back(&self, layer: usize) -> bool {
+        self.turn
+            .as_ref()
+            .is_some_and(|(_, cavity)| cavity.contains(&layer))
+    }
+}
+
+/// Fills a cut polygon with its material colour and hatch.
+fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], clip: &str, k: f64) {
+    let d = path(polygon);
+    let [r, gg, bb] = mat.cut_color;
+    // A hairline in the fill colour hides anti-aliasing seams at mitres.
+    let _ = writeln!(
+        s,
+        r#"<path d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
+        num(HATCH_LINE * k)
+    );
+    // Hatching is real geometry clipped to the layer (not SVG patterns),
+    // so it prints identically everywhere and carries over to PDF/DXF.
+    let _ = writeln!(s, r#"<clipPath id="{clip}"><path d="{d}"/></clipPath>"#);
+    let sp = HATCH_SPACING * k;
+    let hatch = match mat.cut_pattern {
+        CutPattern::Diagonal => hatch_lines(polygon, &[45.0], sp),
+        CutPattern::Cross => hatch_lines(polygon, &[45.0, 135.0], sp),
+        _ => String::new(),
+    };
+    if !hatch.is_empty() {
+        let _ = writeln!(
+            s,
+            r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}" clip-path="url(#{clip})"/>"#,
+            num(HATCH_LINE * k)
+        );
+    }
+    if mat.cut_pattern == CutPattern::Dots {
+        let dots = hatch_dots(polygon, sp, HATCH_LINE * k * 1.2);
+        let _ = writeln!(
+            s,
+            r#"<path d="{dots}" fill="{INK}" clip-path="url(#{clip})"/>"#
+        );
+    }
+}
+
 fn draw_layers(
     s: &mut String,
     model: &Model,
     g: &WallGeometry,
     gi: usize,
     pieces: &[WallPiece],
+    cut: &[OpeningGeometry],
     k: f64,
 ) {
-    let mut high = g.exterior_offset;
     let (a, b) = g.axis;
     let dir = b - a;
     let len = dir.length();
@@ -219,51 +303,47 @@ fn draw_layers(
     else {
         return;
     };
+    let jamb = JambDetail::for_type(wtype);
+    let turn_width = jamb
+        .turn
+        .as_ref()
+        .map_or(0.0, |(i, _)| wtype.layers[*i].thickness);
+
+    // Each layer clipped to a piece, stopping short of the jambs if it is
+    // inside the cavity that the outer leaf closes.
+    let layer_piece = |li: usize, piece: &WallPiece| -> Vec<Point2> {
+        let back = if jamb.cut_back(li) { turn_width } else { 0.0 };
+        clip_span(
+            &g.layers[li].polygon,
+            a,
+            u,
+            piece.from.map(|f| f + back),
+            piece.to.map(|t| t - back),
+        )
+    };
+
+    // Offsets of each layer's exterior face.
+    let mut tops = Vec::with_capacity(wtype.layers.len() + 1);
+    let mut high = g.exterior_offset;
+    for layer in &wtype.layers {
+        tops.push(high);
+        high -= layer.thickness;
+    }
+    tops.push(high);
 
     for ((li, band), layer) in g.layers.iter().enumerate().zip(&wtype.layers) {
         let Some(mat) = model.material(band.material) else {
             continue;
         };
         let thickness = layer.thickness;
-        let low = high - thickness;
+        let (high, low) = (tops[li], tops[li + 1]);
         for (pi, piece) in pieces.iter().enumerate() {
-            let polygon = clip_span(&band.polygon, a, u, piece.from, piece.to);
+            let polygon = layer_piece(li, piece);
             if polygon.is_empty() {
                 continue;
             }
-            let d = path(&polygon);
-            let [r, gg, bb] = mat.cut_color;
-            // A hairline in the fill colour hides anti-aliasing seams at mitres.
-            let _ = writeln!(
-                s,
-                r#"<path d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
-                num(HATCH_LINE * k)
-            );
-
-            // Hatching is real geometry clipped to the layer (not SVG patterns),
-            // so it prints identically everywhere and carries over to PDF/DXF.
             let clip = format!("clip-{gi}-{li}-{pi}");
-            let _ = writeln!(s, r#"<clipPath id="{clip}"><path d="{d}"/></clipPath>"#);
-            let sp = HATCH_SPACING * k;
-            let hatch = match mat.cut_pattern {
-                CutPattern::Diagonal => hatch_lines(&polygon, &[45.0], sp),
-                CutPattern::Cross => hatch_lines(&polygon, &[45.0, 135.0], sp),
-                _ => String::new(),
-            };
-            if !hatch.is_empty() {
-                let _ = writeln!(
-                    s,
-                    r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}" clip-path="url(#{clip})"/>"#,
-                    num(HATCH_LINE * k)
-                );
-            }
-            if mat.cut_pattern == CutPattern::Dots {
-                let dots = hatch_dots(&polygon, sp, HATCH_LINE * k * 1.2);
-                let _ = writeln!(
-                    s,
-                    r#"<path d="{dots}" fill="{INK}" clip-path="url(#{clip})"/>"#
-                );
-            }
+            fill_cut(s, mat, &polygon, &clip, k);
 
             if mat.cut_pattern == CutPattern::Insulation
                 || band.function == LayerFunction::Insulation
@@ -290,29 +370,75 @@ fn draw_layers(
                 );
             }
         }
-        high = low;
     }
 
-    // Thin boundaries between layers, along the faces only: the edge of each
-    // band (except the last) that lies on its interior side.
-    let mut off = g.exterior_offset;
-    for (band, layer) in g
-        .layers
-        .iter()
-        .zip(&wtype.layers)
-        .take(g.layers.len().saturating_sub(1))
-    {
-        off -= layer.thickness;
+    // Thin boundaries between layers, along the faces only. Where a cavity
+    // layer stops short of a jamb, the boundary stops with it.
+    for li in 0..wtype.layers.len().saturating_sub(1) {
+        let owner = if jamb.cut_back(li + 1) { li + 1 } else { li };
         for piece in pieces {
-            let polygon = clip_span(&band.polygon, a, u, piece.from, piece.to);
-            if let Some((p, q)) = face_edge_at(&polygon, a, n, off) {
-                let _ = writeln!(
+            let polygon = layer_piece(owner, piece);
+            if let Some((p, q)) = face_edge_at(&polygon, a, n, tops[li + 1]) {
+                line(s, p, q, LAYER_LINE, k);
+            }
+        }
+    }
+
+    // Jamb details: (jamb position, +1 if the wall continues towards
+    // growing t, the opening whose jamb it is).
+    let mut jambs = Vec::new();
+    for piece in pieces {
+        if let Some(t) = piece.from {
+            if let Some(o) = cut.iter().find(|o| (o.t1 - t).abs() < 1e-9) {
+                jambs.push((t, 1.0, o));
+            }
+        }
+        if let Some(t) = piece.to {
+            if let Some(o) = cut.iter().find(|o| (o.t0 - t).abs() < 1e-9) {
+                jambs.push((t, -1.0, o));
+            }
+        }
+    }
+    let local = |t: f64, off: f64| a + u * t + n * off;
+    let rect = |t0: f64, t1: f64, y0: f64, y1: f64| {
+        vec![local(t0, y0), local(t1, y0), local(t1, y1), local(t0, y1)]
+    };
+    for (ji, &(t, side, o)) in jambs.iter().enumerate() {
+        // The outer leaf turns across the cavity, as wide as it is thick.
+        if let Some((leaf, cavity)) = &jamb.turn {
+            if let Some(mat) = model.material(wtype.layers[*leaf].material) {
+                let (y_out, y_in) = (tops[*leaf + 1], tops[cavity.end]);
+                let back = t + side * turn_width;
+                fill_cut(
                     s,
-                    r#"<path d="M{} L{}" stroke="{INK}" stroke-width="{}" fill="none"/>"#,
-                    pt(p),
-                    pt(q),
-                    num(LAYER_LINE * k)
+                    mat,
+                    &rect(t, back, y_in, y_out),
+                    &format!("clip-{gi}-turn-{ji}"),
+                    k,
                 );
+                // Against the cavity and against the inner leaf.
+                line(s, local(back, y_out), local(back, y_in), LAYER_LINE, k);
+                line(s, local(t, y_in), local(back, y_in), LAYER_LINE, k);
+            }
+        }
+        // The render wraps the reveal from the façade to the frame.
+        if let Some(fin) = jamb.wrap {
+            let f = wtype.layers[fin].thickness;
+            let (y_out, y_in) = (tops[fin + 1], o.frame_exterior);
+            if let (Some(mat), true) = (
+                model.material(wtype.layers[fin].material),
+                y_in < y_out - EPSILON,
+            ) {
+                let back = t + side * f;
+                fill_cut(
+                    s,
+                    mat,
+                    &rect(t, back, y_in, y_out),
+                    &format!("clip-{gi}-wrap-{ji}"),
+                    k,
+                );
+                line(s, local(back, y_out), local(back, y_in), LAYER_LINE, k);
+                line(s, local(t, y_in), local(back, y_in), LAYER_LINE, k);
             }
         }
     }
@@ -603,12 +729,12 @@ fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
                     } else {
                         (c1, -1.0)
                     };
-                    draw_leaf(s, o, hinge, dir, c1 - c0, k);
+                    draw_leaf(s, o, hinge, dir, c1 - c0, Leaf::Door, k);
                 }
                 DoorOperation::DoubleSwing => {
                     let w = (c1 - c0) / 2.0;
-                    draw_leaf(s, o, c0, 1.0, w, k);
-                    draw_leaf(s, o, c1, -1.0, w, k);
+                    draw_leaf(s, o, c0, 1.0, w, Leaf::Door, k);
+                    draw_leaf(s, o, c1, -1.0, w, Leaf::Door, k);
                 }
                 DoorOperation::Sliding => draw_sliding_leaf(s, o, c0, c1, k),
             }
@@ -616,9 +742,28 @@ fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
         OpeningKind::Window(op) => {
             let mid = (fe + fi) / 2.0;
             // Sill wall seen below the cut: sill board outside, edge inside.
+            // The board runs from the frame to past the façade, and only
+            // beyond the façade does it reach past the jambs (behind them
+            // it is hidden by the cut wall).
             if o.sill > EPSILON {
-                let out = o.exterior_offset + SILL_PROJECTION;
-                quad(s, rect(o, o.t0 - 0.02, o.t1 + 0.02, fe, out), LAYER_LINE, k);
+                let (ext, out, lap) =
+                    (o.exterior_offset, o.exterior_offset + SILL_PROJECTION, 0.02);
+                let board = [
+                    o.point(o.t0, fe),
+                    o.point(o.t1, fe),
+                    o.point(o.t1, ext),
+                    o.point(o.t1 + lap, ext),
+                    o.point(o.t1 + lap, out),
+                    o.point(o.t0 - lap, out),
+                    o.point(o.t0 - lap, ext),
+                    o.point(o.t0, ext),
+                ];
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&board),
+                    num(LAYER_LINE * k)
+                );
                 line(
                     s,
                     o.point(o.t0, o.interior_offset),
@@ -630,13 +775,25 @@ fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
             quad(s, rect(o, o.t0, o.t1, fi, fe), FRAME_LINE, k);
             let (c0, c1) = (o.t0 + fw, o.t1 - fw);
             match op {
-                WindowOperation::Fixed | WindowOperation::SingleCasement => {
+                WindowOperation::Fixed => {
                     line(s, o.point(c0, mid), o.point(c1, mid), LAYER_LINE, k);
+                }
+                WindowOperation::SingleCasement => {
+                    line(s, o.point(c0, mid), o.point(c1, mid), LAYER_LINE, k);
+                    let (hinge, dir) = if o.hinge_at_start() {
+                        (c0, 1.0)
+                    } else {
+                        (c1, -1.0)
+                    };
+                    draw_leaf(s, o, hinge, dir, c1 - c0, Leaf::Window, k);
                 }
                 WindowOperation::DoubleCasement => {
                     let tm = (o.t0 + o.t1) / 2.0;
                     line(s, o.point(c0, mid), o.point(c1, mid), LAYER_LINE, k);
                     line(s, o.point(tm, fi), o.point(tm, fe), FRAME_LINE, k);
+                    // Each leaf reaches the centre of the mullion.
+                    draw_leaf(s, o, c0, 1.0, tm - c0, Leaf::Window, k);
+                    draw_leaf(s, o, c1, -1.0, c1 - tm, Leaf::Window, k);
                 }
                 WindowOperation::Sliding => {
                     // Two leaves on separate tracks, overlapping at the centre.
@@ -651,21 +808,43 @@ fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
     }
 }
 
+/// How an open leaf is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Leaf {
+    /// A door leaf: a rectangle as thick as the leaf, medium line.
+    Door,
+    /// A window leaf: a single thin line.
+    Window,
+}
+
 /// A hinged leaf drawn open at 90°, with its swing. `dir` is +1 when the
 /// leaf closes towards growing `t` from its hinge, −1 otherwise.
-fn draw_leaf(s: &mut String, o: &OpeningGeometry, hinge_t: f64, dir: f64, width: f64, k: f64) {
+fn draw_leaf(
+    s: &mut String,
+    o: &OpeningGeometry,
+    hinge_t: f64,
+    dir: f64,
+    width: f64,
+    leaf: Leaf,
+    k: f64,
+) {
     let h = o.point(hinge_t, o.swing_frame_face());
     let out = o.swing_dir();
     let along = o.u * dir;
-    let lt = LEAF_THICKNESS.min(width / 4.0);
     let tip_open = h + out * width;
     let tip_closed = h + along * width;
-    quad(
-        s,
-        [h, tip_open, tip_open + along * lt, h + along * lt],
-        FRAME_LINE,
-        k,
-    );
+    match leaf {
+        Leaf::Door => {
+            let lt = LEAF_THICKNESS.min(width / 4.0);
+            quad(
+                s,
+                [h, tip_open, tip_open + along * lt, h + along * lt],
+                FRAME_LINE,
+                k,
+            );
+        }
+        Leaf::Window => line(s, h, tip_open, LAYER_LINE, k),
+    }
     // Model counter-clockwise is screen counter-clockwise (sweep 0).
     let sweep = if out.cross(along) > 0.0 { 0 } else { 1 };
     let _ = writeln!(
@@ -865,6 +1044,95 @@ mod tests {
         assert!(svg.contains("clip-0-1-1"));
         assert!(!svg.contains("clip-0-1-2"));
         assert_eq!(svg.matches("stroke-dasharray").count(), 2);
+    }
+
+    #[test]
+    fn facade_jambs_return_and_casements_swing() {
+        let mut m = Model::new("Jambas");
+        let lvl = m.add_level("PB", 0.0);
+        let mat = |m: &mut Model, name: &str, pattern| {
+            m.add_material(name, "x", [200, 200, 200], pattern)
+        };
+        let render = mat(&mut m, "Monocapa", CutPattern::Dots);
+        let brick = mat(&mut m, "Ladrillo", CutPattern::Diagonal);
+        let wool = mat(&mut m, "Lana", CutPattern::Insulation);
+        let inner = mat(&mut m, "LHD", CutPattern::Diagonal);
+        let glass = mat(&mut m, "Vidrio", CutPattern::Solid);
+        let layer = |material, thickness, function| Layer {
+            material,
+            thickness,
+            function,
+        };
+        let facade = m
+            .add_wall_type(
+                "Fachada",
+                WallFunction::Exterior,
+                vec![
+                    layer(render, 0.015, LayerFunction::Finish),
+                    layer(brick, 0.115, LayerFunction::Structure),
+                    layer(wool, 0.05, LayerFunction::Insulation),
+                    layer(inner, 0.07, LayerFunction::Substrate),
+                ],
+            )
+            .unwrap();
+        let partition = m
+            .add_wall_type(
+                "Tabique",
+                WallFunction::Interior,
+                vec![layer(inner, 0.07, LayerFunction::Substrate)],
+            )
+            .unwrap();
+        let detail = JambDetail::for_type(m.wall_type(facade).unwrap());
+        assert_eq!(detail.turn, Some((1, 2..3)));
+        assert_eq!(detail.wrap, Some(0));
+        let none = JambDetail::for_type(m.wall_type(partition).unwrap());
+        assert_eq!(
+            none,
+            JambDetail {
+                turn: None,
+                wrap: None
+            }
+        );
+
+        let wall = m
+            .add_wall(NewWall {
+                wall_type: facade,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(5.0, 0.0),
+                reference: ReferenceLine::ExteriorFace,
+                height: 3.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let window = m
+            .add_opening_type(archisim_core::NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.2,
+                height: 1.2,
+                frame_width: 0.06,
+                frame_depth: 0.07,
+                frame_material: brick,
+                panel_material: glass,
+            })
+            .unwrap();
+        m.add_opening(archisim_core::NewOpening {
+            opening_type: window,
+            wall,
+            along: 2.5,
+            sill: 0.9,
+            opens_to: archisim_core::WallSide::Interior,
+            hand: archisim_core::Hand::Left,
+            setback: Some(0.13),
+        })
+        .unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        // The brick returns and the render wraps at both jambs.
+        assert_eq!(svg.matches("id=\"clip-0-turn-").count(), 2);
+        assert_eq!(svg.matches("id=\"clip-0-wrap-").count(), 2);
+        // Two leaves of (1.2 − 2 × 0.06) / 2 = 0.54 m swing into the room.
+        assert_eq!(svg.matches(" A0.54,0.54 ").count(), 2);
     }
 
     #[test]
