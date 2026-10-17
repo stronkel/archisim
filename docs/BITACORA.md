@@ -6,6 +6,39 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Fase 2, bloque 10 — Uniones en T y prioridades de intersección por capa
+
+**Hecho**
+- **Uniones en T** automáticas: un muro cuyo extremo cae dentro de otro (en su cara, en su eje o en cualquier punto de su espesor), lejos de sus esquinas y en ángulo de más de 15°, acomete a él. Da igual si lo dibujaste hasta la cara o hasta el eje: el resultado es el mismo.
+- **Prioridad de intersección por capa**, como en ArchiCAD: cada capa del muro que acomete entra en el otro atravesando sus capas de menor prioridad, desde la cara por la que llega, y se detiene en la primera de prioridad igual o mayor. Prioridades por función de capa: **estructura 4 > soporte/hoja interior 3 > aislamiento 2 > cámara y lámina 1 > acabado 0**.
+  - Tabique LHD contra fachada: el ladrillo hueco del tabique atraviesa el enlucido de la fachada y llega a su hoja interior de LHD; los enlucidos se detienen en la cara.
+  - Muro de carga contra fachada: su ladrillo perforado atraviesa enlucido, hoja interior y aislamiento hasta la hoja exterior.
+  - Tabique contra tabique: los dos tienen la misma prioridad, se detiene en la cara.
+  - Nunca atraviesa la última capa del otro muro; si el muro que acomete es más alto que el otro o llega muy cerca de una esquina, simplemente se detiene en la cara.
+- **Planta**: el muro que recibe pierde esa parte de sus capas; su línea de corte no se dibuja donde acomete el otro, y una línea fina marca dónde se detienen las capas que no entran. La hoja de LHD del tabique se ve continua con la de la fachada.
+- **3D y IFC**: el muro que recibe pierde esa parte solo en la altura del que acomete (un tabique de 2,70 bajo una fachada de 3,00 no le quita nada por encima de 2,70). En 3D cada muro sigue siendo una sola piel cerrada; en el IFC el muro se exporta como una extrusión por tramo de altura, y su volumen neto coincide con el sólido (validado con IfcOpenShell). La importación de lo exportado sigue dando el mismo proyecto.
+- **Vista 3D en equipos con OpenGL**: en tarjetas o controladores que no permiten ver una textura en otro formato (algunos OpenGL, máquinas virtuales) la pestaña 3D cerraba la aplicación. Ahora copia la imagen para mostrarla y funciona; la prueba de dibujo 3D vuelve a ejecutarse en esos equipos.
+- Pruebas: geometría de la T (alcance por capa, pérdida exacta del muro que recibe, trozos de capa, muro más alto o junto a una esquina que solo topa, dibujado hasta el eje), sólidos 3D cerrados con volúmenes que cuadran (T a 90° y a 45°, tabiques más bajos que la fachada), demo exportada y validada con IfcOpenShell (volúmenes incluidos), ida y vuelta IFC. Planta de la demo revisada con zoom en las tres T; ventana real y vista 3D probadas con capturas.
+- Versión 0.11.0. Sin cambios en el formato `.archisim`.
+
+**Pendiente / limitaciones conocidas**
+- Recorte de muros con forjados y cubiertas (siguiente parte del punto 2.3).
+- Prioridades por función de capa, no editables por material (llegará con el editor de materiales, 1.6).
+- Las esquinas en L siguen a inglete (sin envolver capas) y no hay cruces en X.
+- Las T con muros en ángulo junto a huecos de puertas o ventanas del muro que recibe pueden dar geometría 3D imperfecta (caso raro).
+- En 3D aparecen algunos puntos sueltos finos en la junta entre la coronación de una fachada y el canto del forjado de cubierta, donde el muro tiene aristas (jambas y ahora también las T) que el forjado no tiene. Es cosmético; se resolverá con el recorte muro–forjado.
+
+**Antonio debe probar**
+1. Descarga la nueva versión (GitHub → **Actions** → última ejecución en verde → **Artifacts** → **ArchiSim-Windows**) y abre `demo.archisim`.
+2. Haz zoom fuerte en planta en el encuentro del tabique central con la fachada sur, y en el del tabique este–oeste con la fachada este: el LHD del tabique debe llegar a la hoja interior de la fachada y los enlucidos detenerse. ¿Es así como lo dibujarías a 1:50 y 1:20?
+3. Cambia el tipo de un tabique a «Muro de carga ladrillo perforado 1 pie 27» (Propiedades): su ladrillo debe atravesar hasta la hoja exterior de la fachada.
+4. Dibuja un tabique hasta el **eje** de una fachada y otro hasta su **cara interior**: deben quedar iguales.
+5. Exporta el IFC y ábrelo en ArchiCAD y Revit: los muros deben seguir entrando como muros con sus capas; mira en 3D o en sección el encuentro y las cantidades (volumen) de la fachada.
+6. Si tu equipo tenía problemas con la pestaña 3D, vuelve a probarla.
+7. Dime si las prioridades por función de capa te sirven o necesitas fijarlas por material (como ArchiCAD).
+
+---
+
 ## 2026-10-17 · Cierre de fase 1, bloque 9 — Cotas, cotas de nivel y gestión de plantas
 
 **Hecho**

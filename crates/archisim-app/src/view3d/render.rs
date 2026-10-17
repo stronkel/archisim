@@ -49,6 +49,9 @@ struct Targets {
     normal_view: wgpu::TextureView,
     depth_view: wgpu::TextureView,
     edges_bind: wgpu::BindGroup,
+    /// A plain 8-bit copy of the picture for egui, on graphics cards that
+    /// cannot view the sRGB picture as plain values (some OpenGL drivers).
+    display: Option<wgpu::Texture>,
 }
 
 pub struct Renderer {
@@ -61,10 +64,13 @@ pub struct Renderer {
     targets: Option<Targets>,
     opaque: Option<(wgpu::Buffer, u32)>,
     glass: Option<(wgpu::Buffer, u32)>,
+    /// The device can view a texture in another format of the same bytes
+    /// (wgpu's `VIEW_FORMATS`); otherwise the picture is copied for display.
+    view_formats: bool,
 }
 
 impl Renderer {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device, view_formats: bool) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("archisim 3d"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders.wgsl").into()),
@@ -233,6 +239,7 @@ impl Renderer {
             targets: None,
             opaque: None,
             glass: None,
+            view_formats,
         }
     }
 
@@ -280,9 +287,22 @@ impl Renderer {
                 "3d colour",
                 COLOR_FORMAT,
                 attach | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
-                &[DISPLAY_FORMAT],
+                if self.view_formats {
+                    &[DISPLAY_FORMAT]
+                } else {
+                    &[]
+                },
                 1,
             );
+            let display = (!self.view_formats).then(|| {
+                texture(
+                    "3d display copy",
+                    DISPLAY_FORMAT,
+                    wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    &[],
+                    1,
+                )
+            });
             let color_ms = texture("3d colour samples", COLOR_FORMAT, attach, &[], SAMPLES);
             let normal = texture(
                 "3d normal and distance",
@@ -311,6 +331,7 @@ impl Renderer {
                 normal_view,
                 depth_view: depth.create_view(&Default::default()),
                 edges_bind,
+                display,
             });
         }
         self.targets.as_ref().expect("just created")
@@ -434,6 +455,13 @@ impl Renderer {
             pass.set_bind_group(1, &t.edges_bind, &[]);
             pass.draw(0..3, 0..1);
         }
+        if let Some(display) = &t.display {
+            encoder.copy_texture_to_texture(
+                t.color.as_image_copy(),
+                display.as_image_copy(),
+                t.color.size(),
+            );
+        }
         queue.submit([encoder.finish()]);
         &t.color
     }
@@ -441,6 +469,9 @@ impl Renderer {
     /// A view of the last picture for egui (gamma-encoded values).
     pub fn display_view(&self) -> Option<wgpu::TextureView> {
         let t = self.targets.as_ref()?;
+        if let Some(display) = &t.display {
+            return Some(display.create_view(&Default::default()));
+        }
         Some(t.color.create_view(&wgpu::TextureViewDescriptor {
             format: Some(DISPLAY_FORMAT),
             ..Default::default()

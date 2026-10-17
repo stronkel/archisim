@@ -42,7 +42,7 @@ Crates actuales (`crates/`):
 | Crate | Responsabilidad |
 |---|---|
 | `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer |
-| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
+| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete y uniones en T con prioridad por capa (`joins`), área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas. Lector STEP e importador IFC2X3/IFC4 de plantas, muros con capas, forjados, puertas y ventanas, con informe de lo que queda fuera |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación; cotas y cotas de nivel con rotulación técnica de trazo propia (`lettering`) |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
@@ -79,7 +79,10 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 - Definidos por un eje entre dos puntos, nivel base, altura y tipo.
 - La **línea de referencia** puede ir en el centro, en la cara exterior o en la interior (como en ArchiCAD y Revit).
 - Las capas se ordenan de **exterior a interior**; la cara exterior queda a la izquierda del eje, mirando de inicio a fin.
-- Las uniones en esquina se resuelven a inglete cuando dos muros comparten un extremo. Las uniones en T, las prioridades de intersección por capa y los recortes con forjados vienen en la fase 2.
+- Las uniones en esquina se resuelven a inglete cuando dos muros comparten un extremo.
+- **Uniones en T con prioridad de intersección por capa** (como ArchiCAD): un muro cuyo extremo cae dentro de otro (en su cara, en su eje o en su espesor), lejos de sus esquinas, acomete a él. Cada capa del muro que acomete entra en el otro atravesando sus capas de menor prioridad, desde la cara por la que llega, y se detiene en la primera de prioridad igual o mayor: la estructura atraviesa, los acabados se detienen. Prioridades por función de capa: estructura 4 > soporte (hoja interior) 3 > aislamiento 2 > cámara y lámina 1 > acabado 0. Así, la hoja de LHD de un tabique atraviesa el enlucido de la fachada hasta su hoja interior; un muro de carga atraviesa la hoja interior y el aislamiento hasta la hoja exterior. Nunca se atraviesa la última capa del otro muro, y solo se entra si el muro que acomete cabe en la altura del otro y está lejos de sus esquinas; si no, se detiene en su cara.
+- El muro que recibe pierde esa parte de sus capas solo en la altura del que acomete: en planta, en 3D (una sola piel cerrada por muro) y en el IFC (una extrusión por tramo de altura; el volumen neto sigue coincidiendo). En planta la cara del muro que recibe no se corta donde acomete el otro: una línea fina marca dónde se detienen sus capas.
+- Pendiente: recorte de muros con forjados y cubiertas, prioridades editables por material, uniones en L por capas y cruces en X (fase 2).
 
 ### Forjados
 
@@ -152,7 +155,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 La lista detallada, con tamaños, dependencias y decisiones pendientes, está en `docs/HOJA_DE_RUTA.md`.
 
 
-- **Fase 2:** sistema de familias paramétricas (lenguaje declarativo propio), librería inicial de puertas, ventanas, mobiliario y sanitarios; cubiertas, escaleras, secciones y alzados con líneas ocultas; uniones en T y prioridades de intersección.
+- **Fase 2:** sistema de familias paramétricas (lenguaje declarativo propio), librería inicial de puertas, ventanas, mobiliario y sanitarios; cubiertas, escaleras, secciones y alzados con líneas ocultas; recorte de muros con forjados.
 - **Fase 3:** planos y maquetación, acotación, etiquetas, tablas de planificación, impresión a PDF.
 - **Fase 4:** complemento puente para Revit, BCF, colaboración (modelo central), disciplinas de ingeniería.
 

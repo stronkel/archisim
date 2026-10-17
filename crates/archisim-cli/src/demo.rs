@@ -200,6 +200,36 @@ mod tests {
         assert!((level + roof.top_offset - thickness - super::WALL_HEIGHT).abs() < 1e-9);
     }
 
+    /// The partitions of the demo butt against the façades: their inner
+    /// leaf goes through the plaster; a load-bearing wall instead goes up
+    /// to the outer leaf. The IFC volumes still match (validated in CI).
+    #[test]
+    fn partitions_and_bearing_walls_butt_into_the_facade() {
+        use archisim_geom::{wall_geometry, EndCut};
+        let doc = super::build().unwrap();
+        let mut m = doc.model().clone();
+        let central = m.walls().nth(4).unwrap().id;
+        let g = wall_geometry(&m, central).unwrap();
+        let EndCut::Tee(t) = &g.start_cut else {
+            panic!("{:?}", g.start_cut)
+        };
+        // Plaster stops, LHD through the 15 mm of plaster.
+        assert!((t.reach[1] - 0.015).abs() < 1e-9, "{:?}", t.reach);
+        assert_eq!(t.reach[0], 0.0);
+        let bearing = m
+            .wall_types()
+            .find(|w| w.name.starts_with("Muro de carga"))
+            .unwrap()
+            .id;
+        m.set_wall_type(central, bearing).unwrap();
+        let g = wall_geometry(&m, central).unwrap();
+        let EndCut::Tee(t) = &g.start_cut else {
+            panic!()
+        };
+        // Plaster, inner leaf and insulation of the façade: 0.135 m.
+        assert!((t.reach[1] - 0.135).abs() < 1e-9, "{:?}", t.reach);
+    }
+
     /// The magic wand finds the four rooms of the demo house (doors in the
     /// walls do not open them) and the whole building outline.
     #[test]

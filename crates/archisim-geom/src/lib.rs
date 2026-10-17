@@ -8,12 +8,16 @@
 //! - Two walls sharing an end point on the same level meet with a mitre: the
 //!   exterior faces meet each other and so do the interior faces, and every
 //!   layer is cut by the line joining those two corners.
-//! - Any other end (free, T-junction, three or more walls) is cut square.
+//! - An end inside another wall butts against it (a T-junction): each layer
+//!   goes in through the other wall's layers of lower priority and stops at
+//!   its own line; the other wall loses that part (see [`joins`]).
+//! - Any other end (free, three or more walls) is cut square.
 //!
 //! Doors and windows are resolved by [`opening_geometry`]: their span along
 //! the wall, the faces of their frame and their height. [`clip_span`] cuts a
 //! wall (or one of its layers) into the solid pieces between openings.
 
+pub mod joins;
 pub mod room;
 pub mod solid;
 
@@ -46,6 +50,7 @@ impl Line {
 }
 
 pub use archisim_core::signed_area;
+pub use joins::{Notch, NotchRegion, TeeEnd};
 pub use room::{room_outline, Contour, RoomError};
 
 /// Returns the polygon in counter-clockwise order.
@@ -57,12 +62,31 @@ pub fn ensure_ccw(mut poly: Vec<Point2>) -> Vec<Point2> {
 }
 
 /// How one end of a wall is cut.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EndCut {
     /// Perpendicular to the axis, at the end point.
     Square,
     /// Along the given line (a mitre with a connected wall).
     Along(Line),
+    /// Butting against another wall (a T-junction): each layer stops at its
+    /// own line, parallel to the other wall (see [`joins`]).
+    Tee(TeeEnd),
+}
+
+impl EndCut {
+    /// The line where layer `layer` ends, if not square.
+    pub fn line(&self, layer: usize) -> Option<Line> {
+        match self {
+            EndCut::Square => None,
+            EndCut::Along(l) => Some(*l),
+            EndCut::Tee(t) => Some(t.layer_line(layer)),
+        }
+    }
+
+    /// Whether the end is closed by another wall (no end face of its own).
+    pub fn is_mitre(&self) -> bool {
+        matches!(self, EndCut::Along(_))
+    }
 }
 
 /// The cut polygon of one material layer.
@@ -71,6 +95,8 @@ pub struct LayerBand {
     pub material: MaterialId,
     pub function: LayerFunction,
     /// Closed polygon, counter-clockwise, without repeating the first point.
+    /// Parts taken by other walls butting against this one are not
+    /// removed here: see [`WallGeometry::layer_pieces`].
     pub polygon: Vec<Point2>,
 }
 
@@ -86,10 +112,59 @@ pub struct WallGeometry {
     pub interior_offset: f64,
     pub start_cut: EndCut,
     pub end_cut: EndCut,
-    /// Outline of the whole wall, counter-clockwise.
+    /// Outline of the whole wall, counter-clockwise, with the parts taken
+    /// by walls butting against it removed.
     pub outline: Vec<Point2>,
     /// One band per layer, from exterior to interior.
     pub layers: Vec<LayerBand>,
+    /// Where other walls butt into this one.
+    pub notches: Vec<Notch>,
+    /// The two ends as point lists from the exterior face to the interior
+    /// one (one point per layer boundary at a T-junction).
+    ends: (Vec<Point2>, Vec<Point2>),
+}
+
+impl WallGeometry {
+    /// The pieces of layer `li` left by the walls butting into this one at
+    /// height `z` above the level (`None`: wherever they are).
+    pub fn layer_pieces(&self, li: usize, z: Option<f64>) -> Vec<Vec<Point2>> {
+        let mut pieces = vec![self.layers[li].polygon.clone()];
+        for notch in self.notches.iter().filter(|n| notch_at(n, z)) {
+            for region in notch.regions.iter().filter(|r| r.layers.contains(&li)) {
+                let (f, lo, hi) = region.strip();
+                pieces = pieces
+                    .iter()
+                    .flat_map(|poly| {
+                        [
+                            clip_half_plane(poly, |p| lo - f(p)),
+                            clip_half_plane(poly, |p| f(p) - hi),
+                        ]
+                    })
+                    .filter(|p| p.len() >= 3 && signed_area(p).abs() > EPSILON * EPSILON)
+                    .collect();
+            }
+        }
+        pieces
+    }
+
+    /// The outline at height `z` above the level: only the walls butting in
+    /// at that height take their part.
+    pub fn outline_at(&self, z: Option<f64>) -> Vec<Point2> {
+        build_outline(self, z)
+    }
+
+    /// Heights above the level where the outline changes (the bottom and
+    /// top of the walls butting in), sorted.
+    pub fn notch_heights(&self) -> Vec<f64> {
+        let mut v: Vec<f64> = self.notches.iter().flat_map(|n| [n.z.0, n.z.1]).collect();
+        v.sort_by(f64::total_cmp);
+        v.dedup_by(|a, b| (*a - *b).abs() < EPSILON);
+        v
+    }
+}
+
+fn notch_at(n: &Notch, z: Option<f64>) -> bool {
+    z.is_none_or(|z| z > n.z.0 - EPSILON && z < n.z.1 + EPSILON)
 }
 
 /// Which end of a wall touches a junction.
@@ -118,50 +193,172 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
 
     let dir = wall.end - wall.start;
     let normal = dir.normalized()?.perp_left();
-    let point_at = |offset: f64, end: End| -> Point2 {
+    let point_at = |offset: f64, end: End, layer: usize| -> Point2 {
         let (base, cut) = match end {
-            End::Start => (wall.start, start_cut),
-            End::End => (wall.end, end_cut_),
+            End::Start => (wall.start, &start_cut),
+            End::End => (wall.end, &end_cut_),
         };
         let square = base + normal * offset;
-        match cut {
-            EndCut::Square => square,
-            EndCut::Along(line) => Line::new(wall.start + normal * offset, dir)
+        match cut.line(layer) {
+            None => square,
+            Some(line) => Line::new(wall.start + normal * offset, dir)
                 .intersect(&line)
                 .unwrap_or(square),
         }
     };
-    let band = |high: f64, low: f64| -> Vec<Point2> {
-        ensure_ccw(vec![
-            point_at(low, End::Start),
-            point_at(low, End::End),
-            point_at(high, End::End),
-            point_at(high, End::Start),
-        ])
+
+    let mut tops = vec![ext];
+    for layer in &wtype.layers {
+        let last = *tops.last()?;
+        tops.push(last - layer.thickness);
+    }
+    let layers: Vec<LayerBand> = wtype
+        .layers
+        .iter()
+        .enumerate()
+        .map(|(li, layer)| {
+            let (high, low) = (tops[li], tops[li + 1]);
+            LayerBand {
+                material: layer.material,
+                function: layer.function,
+                polygon: ensure_ccw(vec![
+                    point_at(low, End::Start, li),
+                    point_at(low, End::End, li),
+                    point_at(high, End::End, li),
+                    point_at(high, End::Start, li),
+                ]),
+            }
+        })
+        .collect();
+    let profile = |end: End| -> Vec<Point2> {
+        let tee = match end {
+            End::Start => matches!(start_cut, EndCut::Tee(_)),
+            End::End => matches!(end_cut_, EndCut::Tee(_)),
+        };
+        if !tee {
+            let last = wtype.layers.len().saturating_sub(1);
+            return vec![point_at(ext, end, 0), point_at(int, end, last)];
+        }
+        let mut v: Vec<Point2> = Vec::new();
+        for li in 0..wtype.layers.len() {
+            for off in [tops[li], tops[li + 1]] {
+                let p = point_at(off, end, li);
+                if v.last().is_none_or(|q| !q.approx_eq(p)) {
+                    v.push(p);
+                }
+            }
+        }
+        v
     };
 
-    let mut layers = Vec::with_capacity(wtype.layers.len());
-    let mut high = ext;
-    for layer in &wtype.layers {
-        let low = high - layer.thickness;
-        layers.push(LayerBand {
-            material: layer.material,
-            function: layer.function,
-            polygon: band(high, low),
-        });
-        high = low;
-    }
-
-    Some(WallGeometry {
+    let mut g = WallGeometry {
         wall: id,
         axis: (wall.start, wall.end),
         exterior_offset: ext,
         interior_offset: int,
+        ends: (profile(End::Start), profile(End::End)),
         start_cut,
         end_cut: end_cut_,
-        outline: band(ext, int),
+        outline: Vec::new(),
         layers,
-    })
+        notches: joins::notches(model, wall),
+    };
+    g.outline = build_outline(&g, None);
+    Some(g)
+}
+
+/// The outline: start end (exterior to interior), the interior face with
+/// the notches on it, the end (interior to exterior), the exterior face
+/// back with its notches.
+fn build_outline(g: &WallGeometry, z: Option<f64>) -> Vec<Point2> {
+    let (a, b) = g.axis;
+    let Some(u) = (b - a).normalized() else {
+        return Vec::new();
+    };
+    let n = u.perp_left();
+    let centre = (g.exterior_offset + g.interior_offset) / 2.0;
+    let on_face = |face: f64, ascending: bool| -> Vec<Point2> {
+        let mut found: Vec<(f64, Vec<Point2>)> = g
+            .notches
+            .iter()
+            .filter(|nt| notch_at(nt, z) && (nt.face_offset - face).abs() < 1e-9)
+            .map(|nt| {
+                let pts = notch_profile(nt, a, u, n, centre);
+                let t = pts.first().map_or(0.0, |p| (*p - a).dot(u));
+                (t, pts)
+            })
+            .collect();
+        found.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut pts: Vec<Point2> = found.into_iter().flat_map(|(_, p)| p).collect();
+        if !ascending {
+            pts.reverse();
+        }
+        pts
+    };
+    let mut ring: Vec<Point2> = Vec::new();
+    let mut push = |p: Point2| {
+        if ring.last().is_none_or(|q: &Point2| !q.approx_eq(p)) {
+            ring.push(p);
+        }
+    };
+    for p in &g.ends.0 {
+        push(*p);
+    }
+    for p in on_face(g.interior_offset, true) {
+        push(p);
+    }
+    for p in g.ends.1.iter().rev() {
+        push(*p);
+    }
+    for p in on_face(g.exterior_offset, false) {
+        push(p);
+    }
+    if ring.len() > 1 && ring[0].approx_eq(ring[ring.len() - 1]) {
+        ring.pop();
+    }
+    ensure_ccw(ring)
+}
+
+/// The notch as a path along the host's face, in increasing `t`: down each
+/// region's first side, along its bottom, and up its second side, joining
+/// neighbouring regions along their shared side.
+fn notch_profile(nt: &Notch, a: Point2, u: Vec2, n: Vec2, centre: f64) -> Vec<Point2> {
+    let face = Line::new(a + n * nt.face_offset, u);
+    let inward = if centre > nt.face_offset { n } else { -n };
+    let at = |side: Line, depth: f64| {
+        Line::new(face.p + inward * depth, face.d)
+            .intersect(&side)
+            .unwrap_or(side.p)
+    };
+    let t = |p: Point2| (p - a).dot(u);
+    let mut regions: Vec<(Line, Line, f64)> = nt
+        .regions
+        .iter()
+        .map(|r| {
+            let (s1, s2) = r.sides;
+            if t(at(s1, 0.0)) <= t(at(s2, 0.0)) {
+                (s1, s2, r.depth)
+            } else {
+                (s2, s1, r.depth)
+            }
+        })
+        .collect();
+    regions.sort_by(|x, y| t(at(x.0, 0.0)).total_cmp(&t(at(y.0, 0.0))));
+    let mut pts = Vec::new();
+    for (k, (s1, s2, depth)) in regions.iter().enumerate() {
+        let joined_before = k > 0 && at(regions[k - 1].1, 0.0).approx_eq(at(*s1, 0.0));
+        let joined_after =
+            k + 1 < regions.len() && at(*s2, 0.0).approx_eq(at(regions[k + 1].0, 0.0));
+        if !joined_before {
+            pts.push(at(*s1, 0.0));
+        }
+        pts.push(at(*s1, *depth));
+        pts.push(at(*s2, *depth));
+        if !joined_after {
+            pts.push(at(*s2, 0.0));
+        }
+    }
+    pts
 }
 
 /// The two face lines of a wall, as (left, right) when walking in direction
@@ -199,6 +396,10 @@ fn end_cut(model: &Model, wall: &Wall, end: End) -> EndCut {
     });
     let (other, other_end) = match (others.next(), others.next()) {
         (Some(one), None) => one,
+        (None, _) => {
+            return joins::tee_end(model, wall, end == End::Start)
+                .map_or(EndCut::Square, EndCut::Tee)
+        }
         _ => return EndCut::Square,
     };
     mitre(model, wall, end, other, other_end).unwrap_or(EndCut::Square)
@@ -606,11 +807,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn free_and_t_ends_are_square() {
-        let (mut m, lvl, _) = rectangle();
+    /// The rectangle with a wall of the same type (structure 0.2 + plaster
+    /// 0.1) starting at the inner face of the west wall (x = 0.3).
+    fn with_tee() -> (Model, Vec<WallId>, WallId) {
+        let (mut m, lvl, ids) = rectangle();
         let t = m.wall_types().next().unwrap().id;
-        // A partition starting at the inner face of the west wall (T-junction).
         let p = m
             .add_wall(NewWall {
                 wall_type: t,
@@ -622,10 +823,74 @@ mod tests {
                 base_offset: 0.0,
             })
             .unwrap();
+        (m, ids, p)
+    }
+
+    #[test]
+    fn t_junction_structure_goes_through_the_plaster() {
+        let (m, ids, p) = with_tee();
         let g = wall_geometry(&m, p).unwrap();
-        assert_eq!(g.start_cut, EndCut::Square);
+        // Its brick goes 0.1 m into the west wall, through its plaster, up
+        // to its brick; its plaster stops at the face. The other end is free.
+        let EndCut::Tee(tee) = &g.start_cut else {
+            panic!("{:?}", g.start_cut)
+        };
+        assert_eq!(tee.host, ids[0]);
+        assert!(approx(tee.reach[0], 0.1) && approx(tee.reach[1], 0.0));
         assert_eq!(g.end_cut, EndCut::Square);
-        assert!(approx(signed_area(&g.outline), 4.7 * 0.3));
+        assert!(approx(signed_area(&g.outline), 4.8 * 0.2 + 4.7 * 0.1));
+        let layers: f64 = g.layers.iter().map(|b| signed_area(&b.polygon)).sum();
+        assert!(approx(layers, signed_area(&g.outline)));
+
+        // The west wall loses that bit of its plaster, nothing else.
+        let west = wall_geometry(&m, ids[0]).unwrap();
+        assert_eq!(west.notches.len(), 1);
+        assert_eq!(west.notches[0].regions.len(), 1);
+        assert_eq!(west.notches[0].regions[0].layers, vec![1]);
+        let plain = {
+            let mut m2 = m.clone();
+            m2.remove_wall(p).unwrap();
+            wall_geometry(&m2, ids[0]).unwrap()
+        };
+        let lost = signed_area(&plain.outline) - signed_area(&west.outline);
+        assert!(approx(lost, 0.2 * 0.1), "{lost}");
+        let plaster = west.layer_pieces(1, Some(1.0));
+        assert_eq!(plaster.len(), 2);
+        let left: f64 = plaster.iter().map(|q| signed_area(q)).sum();
+        assert!(approx(left, signed_area(&plain.layers[1].polygon) - 0.02));
+        assert_eq!(west.layer_pieces(0, Some(1.0)).len(), 1);
+        // Above the butting wall nothing is taken (it is 3 m high too).
+        assert_eq!(west.layer_pieces(1, Some(3.5)).len(), 1);
+    }
+
+    #[test]
+    fn a_lower_or_cornered_wall_just_butts() {
+        let (mut m, ids, p) = with_tee();
+        // Taller than the host: it stops at the face.
+        m.set_wall_height(p, 3.5, 0.0).unwrap();
+        let g = wall_geometry(&m, p).unwrap();
+        let EndCut::Tee(tee) = &g.start_cut else {
+            panic!()
+        };
+        assert!(tee.reach.iter().all(|r| *r == 0.0));
+        let host = wall_geometry(&m, ids[0]).unwrap();
+        assert_eq!(host.notches.len(), 1);
+        assert!(host.notches[0].regions.is_empty(), "it takes nothing");
+        // Too close to a corner: also just butting.
+        m.set_wall_height(p, 3.0, 0.0).unwrap();
+        m.move_wall(p, Point2::new(0.3, 0.35), Point2::new(5.0, 0.35))
+            .unwrap();
+        let g = wall_geometry(&m, p).unwrap();
+        let EndCut::Tee(tee) = &g.start_cut else {
+            panic!()
+        };
+        assert!(tee.reach.iter().all(|r| *r == 0.0));
+        // Drawn up to the host's axis or exterior face, it still butts.
+        m.move_wall(p, Point2::new(0.1, 4.0), Point2::new(5.0, 4.0))
+            .unwrap();
+        let g = wall_geometry(&m, p).unwrap();
+        assert!(matches!(g.start_cut, EndCut::Tee(_)));
+        assert!(approx(signed_area(&g.outline), 4.8 * 0.2 + 4.7 * 0.1));
     }
 
     #[test]

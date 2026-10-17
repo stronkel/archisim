@@ -10,7 +10,7 @@ use super::render::Renderer;
 use super::scene::Scene;
 use crate::pick::tests::room;
 
-fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
+fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::LowPower,
@@ -19,19 +19,18 @@ fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
         ..Default::default()
     }))
     .ok()?;
-    // The 3D view needs a texture readable in two formats; some software
-    // adapters (OpenGL) cannot do it.
-    let flags = adapter.get_downlevel_capabilities().flags;
-    if !flags.contains(wgpu::DownlevelFlags::VIEW_FORMATS) {
-        eprintln!("The graphics adapter cannot view textures in other formats.");
-        return None;
-    }
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()
+    let view_formats = adapter
+        .get_downlevel_capabilities()
+        .flags
+        .contains(wgpu::DownlevelFlags::VIEW_FORMATS);
+    let (device, queue) =
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
+    Some((device, queue, view_formats))
 }
 
 /// Renders the test room and returns the picture.
 pub(crate) fn picture(size: [u32; 2]) -> Option<(u32, u32, Vec<u8>)> {
-    let Some((device, queue)) = gpu() else {
+    let Some((device, queue, view_formats)) = gpu() else {
         eprintln!("No graphics adapter: 3D drawing test skipped.");
         return None;
     };
@@ -39,7 +38,7 @@ pub(crate) fn picture(size: [u32; 2]) -> Option<(u32, u32, Vec<u8>)> {
     let scene = Scene::build(&m, &BTreeSet::new());
     let mut camera = Camera::default();
     camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
-    let mut r = Renderer::new(&device);
+    let mut r = Renderer::new(&device, view_formats);
     r.set_scene(&device, &scene);
     r.render(&device, &queue, &camera, size, 1);
     r.read_pixels(&device, &queue)

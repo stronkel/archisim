@@ -169,6 +169,7 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
     };
     let n = u.perp_left();
     let openings = openings_in_wall(model, id);
+    let layers = wtype.layers.len();
 
     // Layer boundaries across the wall, from the exterior face inwards.
     let mut offsets = vec![g.exterior_offset];
@@ -176,36 +177,63 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
         let last = *offsets.last().expect("not empty");
         offsets.push(last - layer.thickness);
     }
-    // Where each end cuts each layer boundary (mitres slant the ends).
-    let end_t = |cut: EndCut, base: f64, off: f64| -> f64 {
-        match cut {
-            EndCut::Square => base,
-            EndCut::Along(line) => Line::new(a + n * off, b - a)
-                .intersect(&line)
-                .map_or(base, |p| (p - a).dot(u)),
-        }
+    let along = |line: &Line, off: f64, fallback: f64| -> f64 {
+        Line::new(a + n * off, b - a)
+            .intersect(line)
+            .map_or(fallback, |p| (p - a).dot(u))
     };
-    // Columns: the wall ends and every jamb strictly inside them.
-    let mut inner: Vec<f64> = openings
+
+    // Columns: lines across the wall. The ends (a T-junction end has one
+    // line per layer), the face of the wall butted against, every jamb and
+    // every layer boundary of the walls butting into this one.
+    #[derive(Clone)]
+    enum Col {
+        Start,
+        End,
+        At(Line),
+    }
+    let mut inner: Vec<Line> = openings
         .iter()
         .flat_map(|o| [o.t0, o.t1])
         .filter(|t| *t > EPSILON && *t < len - EPSILON)
+        .map(|t| Line::new(a + u * t, n))
         .collect();
-    inner.sort_by(f64::total_cmp);
-    inner.dedup_by(|x, y| (*x - *y).abs() < EPSILON);
-    let cols = inner.len() + 2;
-    let col_t = |c: usize, off: f64| -> f64 {
-        if c == 0 {
-            end_t(g.start_cut, 0.0, off)
-        } else if c == cols - 1 {
-            end_t(g.end_cut, len, off)
-        } else {
-            inner[c - 1]
+    for notch in &g.notches {
+        inner.extend(notch.boundaries.iter().copied());
+    }
+    let mid = (offsets[0] + offsets[layers]) / 2.0;
+    let mut keyed: Vec<(f64, Line)> = inner
+        .into_iter()
+        .map(|l| (along(&l, mid, -1.0), l))
+        .filter(|(t, _)| *t > EPSILON && *t < len - EPSILON)
+        .collect();
+    keyed.sort_by(|x, y| x.0.total_cmp(&y.0));
+    keyed.dedup_by(|x, y| (x.0 - y.0).abs() < EPSILON);
+    // At a T-junction, the face of the other wall right after the end, so
+    // the layers that stop there and those that go in share it.
+    let mut cols: Vec<Col> = vec![Col::Start];
+    if let EndCut::Tee(t) = &g.start_cut {
+        cols.push(Col::At(t.face));
+    }
+    cols.extend(keyed.into_iter().map(|(_, l)| Col::At(l)));
+    if let EndCut::Tee(t) = &g.end_cut {
+        cols.push(Col::At(t.face));
+    }
+    cols.push(Col::End);
+    let ncols = cols.len();
+    // Position along the wall of column `c` on boundary offset `off`, for
+    // layer `k` (only the ends depend on the layer).
+    let col_t = |c: usize, off: f64, k: usize| -> f64 {
+        match &cols[c] {
+            Col::Start => g.start_cut.line(k).map_or(0.0, |l| along(&l, off, 0.0)),
+            Col::End => g.end_cut.line(k).map_or(len, |l| along(&l, off, len)),
+            Col::At(l) => along(l, off, 0.0),
         }
     };
+
     // Rows: base, top and every sill and head in between, also those of
-    // the walls joined at the ends, so both sides of a corner share their
-    // vertices and the corner edge has no gaps.
+    // the walls joined at the ends or butting into this one, so both sides
+    // of a junction share their vertices.
     let mut zs: Vec<f64> = vec![z_base, z_top];
     let mut heights: Vec<(f64, f64)> = openings.iter().map(|o| (o.sill, o.head)).collect();
     for other in model.walls_on_level(wall.level) {
@@ -223,6 +251,16 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
             }
         }
     }
+    for z in g.notch_heights() {
+        heights.push((z, z));
+    }
+    for cut in [&g.start_cut, &g.end_cut] {
+        if let EndCut::Tee(t) = cut {
+            if let Some(h) = model.wall(t.host) {
+                heights.push((h.base_offset, h.base_offset + h.height));
+            }
+        }
+    }
     for (sill, head) in heights {
         for z in [level + sill, level + head] {
             if z > z_base + EPSILON && z < z_top - EPSILON {
@@ -232,31 +270,50 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
     }
     zs.sort_by(f64::total_cmp);
     zs.dedup_by(|x, y| (*x - *y).abs() < EPSILON);
+    let rows = zs.len() - 1;
 
-    // A cell is solid unless it lies inside a door or window.
-    let mid_off = (offsets[0] + offsets[offsets.len() - 1]) / 2.0;
-    let solid = |c: usize, r: usize| -> bool {
-        if c + 1 >= cols || r + 1 >= zs.len() {
+    // A cell of one layer is solid unless it has no length, lies inside a
+    // door or window, or inside the part another wall takes.
+    let solid = |c: usize, r: usize, k: usize| -> bool {
+        if c + 1 >= ncols || r >= rows || k >= layers {
             return false;
         }
-        let t = (col_t(c, mid_off) + col_t(c + 1, mid_off)) / 2.0;
+        let off = (offsets[k] + offsets[k + 1]) / 2.0;
+        let (t0, t1) = (col_t(c, off, k), col_t(c + 1, off, k));
+        if t1 - t0 <= EPSILON {
+            return false;
+        }
+        let t = (t0 + t1) / 2.0;
         let z = (zs[r] + zs[r + 1]) / 2.0;
-        !openings
+        let in_opening = openings
             .iter()
-            .any(|o| t > o.t0 && t < o.t1 && z > level + o.sill && z < level + o.head)
+            .any(|o| t > o.t0 && t < o.t1 && z > level + o.sill && z < level + o.head);
+        let p = a + u * t + n * off;
+        let in_notch = g.notches.iter().any(|nt| {
+            z > level + nt.z.0 && z < level + nt.z.1 && {
+                nt.regions.iter().any(|reg| {
+                    let (f, lo, hi) = reg.strip();
+                    reg.layers.contains(&k) && f(p) > lo + EPSILON && f(p) < hi - EPSILON
+                })
+            }
+        });
+        !in_opening && !in_notch
     };
-    let v = |c: usize, r: usize, k: usize| -> P3 {
-        let off = offsets[k];
-        let p = a + u * col_t(c, off) + n * off;
-        [p.x, p.y, zs[r]]
+    let pt = |t: f64, off: f64, z: f64| -> P3 {
+        let p = a + u * t + n * off;
+        [p.x, p.y, z]
     };
-    // The centre of a cell's layer slice, to tell outside from inside.
+    // Corner `(c, r)` of layer `k` on boundary `bnd` (k or k + 1).
+    let v = |c: usize, r: usize, bnd: usize, k: usize| -> P3 {
+        let off = offsets[bnd];
+        pt(col_t(c, off, k), off, zs[r])
+    };
     let centre = |c: usize, r: usize, k: usize| -> P3 {
         let pts = [
-            v(c, r, k),
-            v(c + 1, r, k),
-            v(c, r + 1, k + 1),
-            v(c + 1, r + 1, k + 1),
+            v(c, r, k, k),
+            v(c + 1, r, k, k),
+            v(c, r + 1, k + 1, k),
+            v(c + 1, r + 1, k + 1, k),
         ];
         let mut m = [0.0; 3];
         for p in pts {
@@ -266,70 +323,84 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
         }
         m
     };
-    let joined_start = matches!(g.start_cut, EndCut::Along(_));
-    let joined_end = matches!(g.end_cut, EndCut::Along(_));
+    let joined_start = g.start_cut.is_mitre();
+    let joined_end = g.end_cut.is_mitre();
 
-    let layers = offsets.len() - 1;
     let mut tris: Vec<Vec<[P3; 3]>> = vec![Vec::new(); layers];
-    let rows = zs.len() - 1;
-    for c in 0..cols - 1 {
+    for c in 0..ncols - 1 {
         for r in 0..rows {
-            if !solid(c, r) {
-                continue;
-            }
-            // Exterior and interior faces.
-            let last = layers;
-            quad(
-                &mut tris[0],
-                [
-                    v(c, r, 0),
-                    v(c + 1, r, 0),
-                    v(c + 1, r + 1, 0),
-                    v(c, r + 1, 0),
-                ],
-                centre(c, r, 0),
-            );
-            quad(
-                &mut tris[layers - 1],
-                [
-                    v(c, r, last),
-                    v(c + 1, r, last),
-                    v(c + 1, r + 1, last),
-                    v(c, r + 1, last),
-                ],
-                centre(c, r, layers - 1),
-            );
-            for (k, layer_tris) in tris.iter_mut().enumerate() {
+            for (k, out) in tris.iter_mut().enumerate() {
+                if !solid(c, r, k) {
+                    continue;
+                }
                 let inside = centre(c, r, k);
+                // Towards the neighbouring layers (or the faces): the part
+                // of this cell's side the neighbour does not cover.
+                for (bnd, nb) in [(k, k.checked_sub(1)), (k + 1, Some(k + 1))] {
+                    let off = offsets[bnd];
+                    let own = (col_t(c, off, k), col_t(c + 1, off, k));
+                    let theirs = match nb {
+                        Some(j) if j < layers && solid(c, r, j) => {
+                            Some((col_t(c, off, j), col_t(c + 1, off, j)))
+                        }
+                        _ => None,
+                    };
+                    let exposed: Vec<(f64, f64)> = match theirs {
+                        None => vec![own],
+                        Some((t0, t1)) => {
+                            let mut v = Vec::new();
+                            if t0 > own.0 + EPSILON {
+                                v.push((own.0, t0.min(own.1)));
+                            }
+                            if t1 < own.1 - EPSILON {
+                                v.push((t1.max(own.0), own.1));
+                            }
+                            v
+                        }
+                    };
+                    for (t0, t1) in exposed {
+                        quad(
+                            out,
+                            [
+                                pt(t0, off, zs[r]),
+                                pt(t1, off, zs[r]),
+                                pt(t1, off, zs[r + 1]),
+                                pt(t0, off, zs[r + 1]),
+                            ],
+                            inside,
+                        );
+                    }
+                }
                 // Towards the previous and next column.
-                let open_before = c == 0 && !joined_start || c > 0 && !solid(c - 1, r);
-                let open_after = c + 2 == cols && !joined_end || c + 2 < cols && !solid(c + 1, r);
+                let open_before = c == 0 && !joined_start || c > 0 && !solid(c - 1, r, k);
+                let open_after =
+                    c + 2 == ncols && !joined_end || c + 2 < ncols && !solid(c + 1, r, k);
                 for (cc, open) in [(c, open_before), (c + 1, open_after)] {
                     if open {
                         quad(
-                            layer_tris,
+                            out,
                             [
-                                v(cc, r, k),
-                                v(cc, r, k + 1),
-                                v(cc, r + 1, k + 1),
-                                v(cc, r + 1, k),
+                                v(cc, r, k, k),
+                                v(cc, r, k + 1, k),
+                                v(cc, r + 1, k + 1, k),
+                                v(cc, r + 1, k, k),
                             ],
                             inside,
                         );
                     }
                 }
                 // Below and above.
-                let open_below = r == 0 || !solid(c, r - 1);
-                let open_above = r + 1 == rows || !solid(c, r + 1);
+                let open_below = r == 0 || !solid(c, r - 1, k);
+                let open_above = r + 1 == rows || !solid(c, r + 1, k);
                 for (rr, open) in [(r, open_below), (r + 1, open_above)] {
                     if open {
                         quad(
-                            layer_tris,
+                            out,
                             [
-                                v(c, rr, k),
-                                v(c + 1, rr, k),
-                                v(c + 1, rr, k + 1),
-                                v(c, rr, k + 1),
+                                v(c, rr, k, k),
+                                v(c + 1, rr, k, k),
+                                v(c + 1, rr, k + 1, k),
+                                v(c, rr, k + 1, k),
                             ],
                             inside,
                         );
@@ -763,6 +834,119 @@ mod tests {
             assert_eq!(*n, 1, "edge used twice in the same direction");
             assert_eq!(edges.get(&(*b, *a)), Some(&1), "edge without its twin");
         }
+    }
+
+    /// A façade (render, brick, insulation, inner leaf, plaster) and two
+    /// partitions (plaster, inner leaf, plaster) butting against its inner
+    /// face: one square, one at 45°, both lower than the façade.
+    fn tee_model() -> (Model, WallId, Vec<WallId>) {
+        let mut m = Model::new("T");
+        let lvl = m.add_level("P1", 0.0);
+        let mat = m.add_material("M", "brick", [200, 100, 80], CutPattern::Solid);
+        let l = |t, function| Layer {
+            material: mat,
+            thickness: t,
+            function,
+        };
+        use LayerFunction as F;
+        let facade = m
+            .add_wall_type(
+                "Fachada",
+                WallFunction::Exterior,
+                vec![
+                    l(0.015, F::Finish),
+                    l(0.115, F::Structure),
+                    l(0.05, F::Insulation),
+                    l(0.07, F::Substrate),
+                    l(0.015, F::Finish),
+                ],
+            )
+            .unwrap();
+        let partition = m
+            .add_wall_type(
+                "Tabique",
+                WallFunction::Interior,
+                vec![
+                    l(0.015, F::Finish),
+                    l(0.07, F::Substrate),
+                    l(0.015, F::Finish),
+                ],
+            )
+            .unwrap();
+        // The façade along y = 0, exterior face on it, interior towards +y.
+        let host = m
+            .add_wall(NewWall {
+                wall_type: facade,
+                level: lvl,
+                start: p(8.0, 0.0),
+                end: p(0.0, 0.0),
+                reference: ReferenceLine::ExteriorFace,
+                height: 3.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let mut parts = Vec::new();
+        for (start, end) in [(p(2.0, 0.265), p(2.0, 3.0)), (p(6.0, 0.265), p(4.0, 2.265))] {
+            parts.push(
+                m.add_wall(NewWall {
+                    wall_type: partition,
+                    level: lvl,
+                    start,
+                    end,
+                    reference: ReferenceLine::Center,
+                    height: 2.5,
+                    base_offset: 0.0,
+                })
+                .unwrap(),
+            );
+        }
+        (m, host, parts)
+    }
+
+    #[test]
+    fn t_junctions_are_closed_and_their_volumes_add_up() {
+        let (m, host, parts) = tee_model();
+        // The partitions' inner leaf goes through the façade's plaster.
+        let g = wall_geometry(&m, host).unwrap();
+        assert_eq!(g.notches.len(), 2);
+        // Host: its outline changes at the partitions' top (2.5 m).
+        let banded = |g: &crate::WallGeometry, h: f64| -> f64 {
+            let mut zs = vec![0.0, h];
+            zs.extend(g.notch_heights().into_iter().filter(|z| *z > 0.0 && *z < h));
+            zs.sort_by(f64::total_cmp);
+            zs.windows(2)
+                .map(|w| {
+                    crate::signed_area(&g.outline_at(Some((w[0] + w[1]) / 2.0))) * (w[1] - w[0])
+                })
+                .sum()
+        };
+        for (id, h) in [(host, 3.0), (parts[0], 2.5), (parts[1], 2.5)] {
+            let solids = wall_solids(&m, id);
+            assert_closed(&solids);
+            let vol: f64 = solids.iter().map(Solid::volume).sum();
+            let g = wall_geometry(&m, id).unwrap();
+            let want = banded(&g, h);
+            assert!((vol - want).abs() < 1e-9, "wall {id}: {vol} != {want}");
+        }
+        // Less than the plain façade by the two bits of plaster taken.
+        let plain = {
+            let mut m2 = m.clone();
+            for w in &parts {
+                m2.remove_wall(*w).unwrap();
+            }
+            wall_solids(&m2, host)
+                .iter()
+                .map(Solid::volume)
+                .sum::<f64>()
+        };
+        let host_vol: f64 = wall_solids(&m, host).iter().map(Solid::volume).sum();
+        let square = 0.07 * 0.015 * 2.5;
+        let slanted = 0.07 * std::f64::consts::SQRT_2 * 0.015 * 2.5;
+        assert!(
+            (plain - host_vol - square - slanted).abs() < 1e-9,
+            "{}",
+            plain - host_vol
+        );
     }
 
     #[test]

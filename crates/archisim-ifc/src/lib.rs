@@ -841,21 +841,48 @@ impl<'a> Exporter<'a> {
                 "IFCSHAPEREPRESENTATION({},'Axis','Curve2D',({axis_line}))",
                 self.axis_ctx
             ));
-            let local: Vec<Point2> = geo.outline.iter().map(|&p| to_local(p)).collect();
-            let outline = self.polyline(&local, true);
-            let profile = self
-                .w
-                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
-            let solid_pl = self
-                .w
-                .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
-            let solid = self.w.add(format!(
-                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
-                self.z,
-                real(wall.height)
-            ));
+            // Walls butting into this one take part of its layers over
+            // their own height only: one extrusion per height band.
+            let base = wall.base_offset;
+            let top = base + wall.height;
+            let mut zs = vec![base, top];
+            zs.extend(
+                geo.notch_heights()
+                    .into_iter()
+                    .filter(|z| *z > base + 1e-6 && *z < top - 1e-6),
+            );
+            zs.sort_by(f64::total_cmp);
+            let mut solids = Vec::new();
+            let mut volume = 0.0;
+            for band in zs.windows(2) {
+                let (z0, z1) = (band[0], band[1]);
+                let poly = geo.outline_at(Some((z0 + z1) / 2.0));
+                volume += signed_area(&poly) * (z1 - z0);
+                let local: Vec<Point2> = poly.iter().map(|&p| to_local(p)).collect();
+                let outline = self.polyline(&local, true);
+                let profile = self
+                    .w
+                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+                let solid_pl = if (z0 - base).abs() < 1e-9 {
+                    self.w
+                        .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin))
+                } else {
+                    let at = self.point3(0.0, 0.0, z0 - base);
+                    self.w.add(format!("IFCAXIS2PLACEMENT3D({at},$,$)"))
+                };
+                solids.push(self.w.add(format!(
+                    "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                    self.z,
+                    real(z1 - z0)
+                )));
+            }
+            let items = solids
+                .iter()
+                .map(|r| r.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
             let body_rep = self.w.add(format!(
-                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({items}))",
                 self.body_ctx
             ));
             let shape = self.w.add(format!(
@@ -918,9 +945,8 @@ impl<'a> Exporter<'a> {
                 openings_by_type.entry(otype.id).or_default().push(filling);
             }
 
-            let footprint = signed_area(&geo.outline);
+            let footprint = signed_area(&geo.outline_at(Some(base + 1e-6)));
             let side = length * wall.height;
-            let volume = footprint * wall.height;
             self.quantities(
                 w,
                 &wall.guid,

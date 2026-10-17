@@ -42,7 +42,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 |---|---|---|---|
 | 2.1 ★ | **Sistema de familias paramétricas**: lenguaje propio, parámetros de tipo y de ejemplar, geometría 3D y símbolo 2D en planta, niveles de detalle | L | D2 |
 | 2.2 | **Librería inicial propia**: puertas y ventanas paramétricas (con premarco, persiana y capialzado, vierteaguas), mobiliario, sanitarios, cocina | L | 2.1 |
-| 2.3 ★ | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD; recorte de muros con forjados | M | — |
+| 2.3 ◐ v0.11 | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD — hechas; falta el recorte de muros con forjados y las prioridades editables por material | M | — |
 | 2.4 | **Cubiertas inclinadas** por faldones (pendiente, aleros, limatesas y limahoyas) y recorte de muros bajo cubierta | L | 2.3 |
 | 2.5 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam` | M | — |
 | 2.6 | **Escaleras** por tramos y mesetas con comprobación de huella, tabica y anchura (CTE DB-SUA); **barandillas**; **rampas** | L | 2.1 |
@@ -89,5 +89,5 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 
 1. ~~Bloque 8: **mover / copiar / estirar** con el ratón y **varita mágica** (1.1 + 1.2)~~ — hecho en v0.9, con la edición de vértices (1.3).
 2. ~~Bloque 9: **cotas básicas** y **gestión de plantas** (1.4 + 1.5)~~ — hecho en v0.10.
-3. Bloque 10: **uniones en T y prioridades** (2.3), que mejora todo lo dibujado.
+3. ~~Bloque 10: **uniones en T y prioridades** (2.3)~~ — hecho en v0.11 (falta el recorte con forjados).
 4. Fase 2 con **familias** (2.1) en cuanto Antonio decida D2.

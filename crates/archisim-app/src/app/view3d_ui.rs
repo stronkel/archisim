@@ -108,7 +108,14 @@ impl View3dState {
     ) -> Option<egui::TextureId> {
         let state = gpu_state?;
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
-            renderer: Renderer::new(&state.device),
+            renderer: Renderer::new(
+                &state.device,
+                state
+                    .adapter
+                    .get_downlevel_capabilities()
+                    .flags
+                    .contains(wgpu::DownlevelFlags::VIEW_FORMATS),
+            ),
             state: state.clone(),
             texture: None,
             uploaded: 0,

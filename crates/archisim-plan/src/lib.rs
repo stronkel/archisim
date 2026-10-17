@@ -189,7 +189,16 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
             .filter(|o| opening_view(o, options.cut_plane) == OpeningView::Cut)
             .cloned()
             .collect();
-        draw_layers(&mut s, model, g, gi, &pieces[gi], &cut, k);
+        draw_layers(
+            &mut s,
+            model,
+            g,
+            gi,
+            &pieces[gi],
+            &cut,
+            options.cut_plane,
+            k,
+        );
     }
     s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
     for o in openings.iter().flatten() {
@@ -202,7 +211,7 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     // Cut lines go last so frames and sill boards never cover the jambs.
     s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
     for (g, p) in geos.iter().zip(&pieces) {
-        draw_cut_lines(&mut s, g, p, k);
+        draw_cut_lines(&mut s, g, p, options.cut_plane, k);
     }
     s.push_str("</g>\n");
 
@@ -328,6 +337,7 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], i
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_layers(
     s: &mut String,
     model: &Model,
@@ -335,6 +345,7 @@ fn draw_layers(
     gi: usize,
     pieces: &[WallPiece],
     cut: &[OpeningGeometry],
+    cut_plane: f64,
     k: f64,
 ) {
     let (a, b) = g.axis;
@@ -358,16 +369,26 @@ fn draw_layers(
         .map_or(0.0, |(i, _)| wtype.layers[*i].thickness);
 
     // Each layer clipped to a piece, stopping short of the jambs if it is
-    // inside the cavity that the outer leaf closes.
-    let layer_piece = |li: usize, piece: &WallPiece| -> Vec<Point2> {
+    // inside the cavity that the outer leaf closes. Walls butting into this
+    // one may take parts of a layer, leaving it in several bits.
+    let bits: Vec<Vec<Vec<Point2>>> = (0..g.layers.len())
+        .map(|li| g.layer_pieces(li, Some(cut_plane)))
+        .collect();
+    let layer_piece = |li: usize, piece: &WallPiece| -> Vec<Vec<Point2>> {
         let back = if jamb.cut_back(li) { turn_width } else { 0.0 };
-        clip_span(
-            &g.layers[li].polygon,
-            a,
-            u,
-            piece.from.map(|f| f + back),
-            piece.to.map(|t| t - back),
-        )
+        bits[li]
+            .iter()
+            .map(|poly| {
+                clip_span(
+                    poly,
+                    a,
+                    u,
+                    piece.from.map(|f| f + back),
+                    piece.to.map(|t| t - back),
+                )
+            })
+            .filter(|p| !p.is_empty())
+            .collect()
     };
 
     // Offsets of each layer's exterior face.
@@ -385,11 +406,8 @@ fn draw_layers(
         };
         let thickness = layer.thickness;
         let (high, low) = (tops[li], tops[li + 1]);
-        for (pi, piece) in pieces.iter().enumerate() {
-            let polygon = layer_piece(li, piece);
-            if polygon.is_empty() {
-                continue;
-            }
+        let polygons = pieces.iter().flat_map(|piece| layer_piece(li, piece));
+        for (pi, polygon) in polygons.enumerate() {
             fill_cut(s, mat, &polygon, &format!("cut-{gi}-{li}-{pi}"), k);
 
             if mat.cut_pattern == CutPattern::Insulation
@@ -421,13 +439,24 @@ fn draw_layers(
     }
 
     // Thin boundaries between layers, along the faces only. Where a cavity
-    // layer stops short of a jamb, the boundary stops with it.
+    // layer stops short of a jamb, the boundary stops with it. At a
+    // T-junction the layer that goes further into the other wall draws it.
+    let tee_end = matches!(g.start_cut, EndCut::Tee(_)) || matches!(g.end_cut, EndCut::Tee(_));
     for li in 0..wtype.layers.len().saturating_sub(1) {
-        let owner = if jamb.cut_back(li + 1) { li + 1 } else { li };
-        for piece in pieces {
-            let polygon = layer_piece(owner, piece);
-            if let Some((p, q)) = face_edge_at(&polygon, a, n, tops[li + 1]) {
-                line(s, p, q, LAYER_LINE, k);
+        let owners: &[usize] = if jamb.cut_back(li + 1) {
+            &[li + 1]
+        } else if tee_end {
+            &[li, li + 1]
+        } else {
+            &[li]
+        };
+        for &owner in owners {
+            for piece in pieces {
+                for polygon in layer_piece(owner, piece) {
+                    if let Some((p, q)) = face_edge_at(&polygon, a, n, tops[li + 1]) {
+                        line(s, p, q, LAYER_LINE, k);
+                    }
+                }
             }
         }
     }
@@ -746,20 +775,53 @@ fn face_edge_at(
     })
 }
 
-fn draw_cut_lines(s: &mut String, g: &WallGeometry, pieces: &[WallPiece], k: f64) {
+fn draw_cut_lines(s: &mut String, g: &WallGeometry, pieces: &[WallPiece], cut_plane: f64, k: f64) {
     let (a, b) = g.axis;
     let Some(u) = (b - a).normalized() else {
         return;
     };
     let n = u.perp_left();
-    let half = a.distance(b) / 2.0;
+    let len = a.distance(b);
     let t = |p: Point2| (p - a).dot(u);
     let off = |p: Point2| (p - a).dot(n);
     let near = |x: f64, y: f64| (x - y).abs() < 1e-6;
 
+    let outline = g.outline_at(Some(cut_plane));
+    // Stretches of each face where another wall butts in: the face is not
+    // cut there, the walls join. A thin line marks where the layers of the
+    // other wall stop at the face; where they go in, nothing.
+    type Butt = (f64, f64, f64, Vec<(f64, f64)>);
+    let butts: Vec<Butt> = g
+        .notches
+        .iter()
+        .filter(|nt| cut_plane > nt.z.0 && cut_plane < nt.z.1)
+        .filter_map(|nt| {
+            let face = archisim_geom::Line::new(a + n * nt.face_offset, u);
+            let at = |l: &archisim_geom::Line| face.intersect(l).map(t);
+            let ts: Vec<f64> = nt.boundaries.iter().filter_map(at).collect();
+            if ts.len() != nt.boundaries.len() || ts.len() < 2 {
+                return None;
+            }
+            let stops: Vec<(f64, f64)> = (0..ts.len() - 1)
+                .filter(|&j| {
+                    !nt.regions
+                        .iter()
+                        .any(|r| r.sides == (nt.boundaries[j], nt.boundaries[j + 1]))
+                })
+                .map(|j| (ts[j].min(ts[j + 1]), ts[j].max(ts[j + 1])))
+                .collect();
+            let (lo, hi) = ts
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), x| {
+                    (l.min(*x), h.max(*x))
+                });
+            Some((nt.face_offset, lo, hi, stops))
+        })
+        .collect();
+    let mut thin = String::new();
     let mut d = String::new();
     for piece in pieces {
-        let poly = clip_span(&g.outline, a, u, piece.from, piece.to);
+        let poly = clip_span(&outline, a, u, piece.from, piece.to);
         for i in 0..poly.len() {
             let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
             let on_face = [g.exterior_offset, g.interior_offset]
@@ -769,17 +831,69 @@ fn draw_cut_lines(s: &mut String, g: &WallGeometry, pieces: &[WallPiece], k: f64
                 .iter()
                 .flatten()
                 .any(|&j| near(t(p), j) && near(t(q), j));
+            // A free end is cut; a mitre or a T-junction joins another wall,
+            // and the bits other walls take out of this one are joins too.
+            let on_start = near(t(p), 0.0) && near(t(q), 0.0);
+            let on_end = near(t(p), len) && near(t(q), len);
             let heavy = on_face
                 || on_jamb
-                || if (t(p) + t(q)) / 2.0 < half {
-                    g.start_cut == EndCut::Square
+                || (on_start && g.start_cut == EndCut::Square)
+                || (on_end && g.end_cut == EndCut::Square);
+            if !heavy {
+                continue;
+            }
+            // Leave out where another wall butts against this face.
+            let mut spans = vec![(t(p).min(t(q)), t(p).max(t(q)))];
+            if on_face {
+                for (face, b0, b1, stops) in &butts {
+                    let (face, b0, b1) = (*face, *b0, *b1);
+                    if !near(off(p), face) {
+                        continue;
+                    }
+                    spans = spans
+                        .into_iter()
+                        .flat_map(|(s0, s1)| {
+                            if b1 <= s0 || b0 >= s1 {
+                                vec![(s0, s1)]
+                            } else {
+                                for (x0, x1) in stops {
+                                    let (x0, x1) = (x0.max(s0), x1.min(s1));
+                                    if x1 > x0 {
+                                        let _ = write!(
+                                            thin,
+                                            "M{} L{} ",
+                                            pt(a + u * x0 + n * face),
+                                            pt(a + u * x1 + n * face)
+                                        );
+                                    }
+                                }
+                                [(s0, b0), (b1, s1)]
+                                    .into_iter()
+                                    .filter(|(x, y)| y - x > 1e-6)
+                                    .collect()
+                            }
+                        })
+                        .collect();
+                }
+            }
+            let o = off(p);
+            for (s0, s1) in spans {
+                let (x, y) = if on_face {
+                    (a + u * s0 + n * o, a + u * s1 + n * o)
                 } else {
-                    g.end_cut == EndCut::Square
+                    (p, q)
                 };
-            if heavy {
-                let _ = write!(d, "M{} L{} ", pt(p), pt(q));
+                let _ = write!(d, "M{} L{} ", pt(x), pt(y));
             }
         }
+    }
+    if !thin.is_empty() {
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" stroke="{INK}" stroke-width="{}"/>"#,
+            thin.trim_end(),
+            num(LAYER_LINE * k)
+        );
     }
     let _ = writeln!(
         s,
