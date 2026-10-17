@@ -36,6 +36,8 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 - La vista no muestra todavía otras plantas en gris ni cotas; no hay crear/borrar plantas.
 - El aspecto (claro u oscuro) sigue al del sistema.
 
+**Validación de Antonio (17/10/2026):** probada en su Windows con la descarga de GitHub (*Actions → Artifacts → ArchiSim-Windows*): la demo funciona como se esperaba. Integrado en `main` (PR #1).
+
 **Antonio debe probar**
 1. Abrir la app con la vivienda de prueba:
    ```
