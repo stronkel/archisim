@@ -36,6 +36,8 @@ ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_t
 python3 scripts/validate_ifc.py out/app/sesion.ifc
 ```
 
+La integración continua usa el Rust estable más reciente, que puede traer avisos nuevos de clippy; si clippy falla solo allí, los avisos salen como anotaciones del job (`gh api repos/stronkel/archisim/check-runs/<id>/annotations`).
+
 Si cambias la aplicación, además de las pruebas (que la manejan con clics y teclas simulados, sin pantalla), ábrela de verdad (`cargo run --release -p archisim-app -- out/demo.archisim`; en un servidor sin pantalla, con Xvfb y capturas) y mira el resultado.
 
 Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin errores. Si cambias el modelo, el formato `.archisim` debe guardarlo entero: añade el campo al esquema y, si cambia la estructura del fichero, sube `CURRENT_VERSION` y escribe la migración en `archisim-file` (los proyectos antiguos tienen que seguir abriéndose). Si cambias la planta, mira el SVG resultante antes de entregarlo.

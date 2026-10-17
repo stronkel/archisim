@@ -139,8 +139,10 @@ impl Scene {
     pub fn pick(&self, ray: Ray) -> Option<Element> {
         let tris = self
             .opaque
-            .chunks_exact(3)
-            .chain(self.glass.chunks_exact(3));
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0);
         let mut best: Option<(f32, Element)> = None;
         for (i, t) in tris.enumerate() {
             let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos].map(Vec3::from_array);
