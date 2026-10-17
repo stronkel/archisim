@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-app"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
  "archisim-file",
@@ -219,14 +219,18 @@ dependencies = [
  "bytemuck",
  "eframe",
  "glam",
+ "objc2 0.5.3",
+ "objc2-app-kit 0.2.2",
+ "objc2-foundation 0.2.2",
  "pollster 0.4.0",
  "resvg",
  "rfd",
+ "winit",
 ]
 
 [[package]]
 name = "archisim-cli"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
  "archisim-file",
@@ -238,14 +242,14 @@ dependencies = [
 
 [[package]]
 name = "archisim-core"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "uuid",
 ]
 
 [[package]]
 name = "archisim-file"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
  "serde",
@@ -254,14 +258,14 @@ dependencies = [
 
 [[package]]
 name = "archisim-geom"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
 ]
 
 [[package]]
 name = "archisim-ifc"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",
@@ -270,14 +274,14 @@ dependencies = [
 
 [[package]]
 name = "archisim-library"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
 ]
 
 [[package]]
 name = "archisim-plan"
-version = "0.10.0"
+version = "0.13.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",

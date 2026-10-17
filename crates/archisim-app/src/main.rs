@@ -12,6 +12,7 @@ mod app;
 mod dim_tool;
 mod drag;
 mod editor;
+mod open_files;
 mod opening_tool;
 mod pick;
 mod plan_image;
@@ -41,12 +42,36 @@ fn main() -> eframe::Result {
             app.open_path(&path);
         }
     }
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("ArchiSim")
+        .with_inner_size([1280.0, 800.0])
+        .with_min_inner_size([800.0, 500.0]);
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")) {
+        viewport = viewport.with_icon(icon);
+    }
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("ArchiSim")
-            .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([800.0, 500.0]),
+        viewport,
         ..Default::default()
     };
-    eframe::run_native("ArchiSim", options, Box::new(|_cc| Ok(Box::new(app))))
+    // The event loop is created here, not by eframe, so that on macOS the
+    // delegate that receives files opened from the Finder is installed
+    // after the event loop exists and before it runs (see winit's
+    // `platform::macos`).
+    let event_loop = winit::event_loop::EventLoop::<eframe::UserEvent>::with_user_event()
+        .build()
+        .map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
+    #[cfg(target_os = "macos")]
+    open_files::macos::install();
+    let mut winit_app = eframe::create_native(
+        "ArchiSim",
+        options,
+        Box::new(|cc| {
+            open_files::set_context(&cc.egui_ctx);
+            Ok(Box::new(app))
+        }),
+        &event_loop,
+    );
+    event_loop
+        .run_app(&mut winit_app)
+        .map_err(|e| eframe::Error::AppCreation(Box::new(e)))
 }

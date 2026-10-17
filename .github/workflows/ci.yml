@@ -99,3 +99,28 @@ jobs:
         with:
           name: ArchiSim-Windows
           path: ArchiSim/
+
+  # The macOS application: universal (Apple chip and Intel), in a disk
+  # image with the demo house and the IFC examples.
+  macos-app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/macos_bundle.sh
+      # Opening a project from the Finder reaches the application.
+      - run: |
+          log="$PWD/dist/abiertos.txt"
+          open -n --env "ARCHISIM_OPENED_LOG=$log" -a "$PWD/dist/ArchiSim.app" "$PWD/dist/demo/demo.archisim"
+          for i in $(seq 90); do
+            grep -q demo.archisim "$log" 2>/dev/null && break
+            sleep 1
+          done
+          pkill -x ArchiSim || true
+          cat "$log"
+          grep -q demo.archisim "$log"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArchiSim-Mac
+          path: dist/ArchiSim-*.dmg

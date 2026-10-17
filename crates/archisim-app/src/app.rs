@@ -352,6 +352,56 @@ impl ArchiSimApp {
         }
     }
 
+    /// Files dropped on the window and, on macOS, opened from the Finder or
+    /// dropped on the Dock icon: a project is opened, an IFC imported, as
+    /// with the File menu (asking first if there are unsaved changes).
+    fn receive_files(&mut self, ctx: &egui::Context) {
+        let paths: Vec<PathBuf> = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .map(|f| f.path().to_path_buf())
+                .filter(|p| !p.as_os_str().is_empty())
+                .collect()
+        });
+        // Tests run in parallel and never read the operating system's queue.
+        #[cfg(not(test))]
+        let paths = [paths, crate::open_files::take()].concat();
+        self.open_files(paths);
+    }
+
+    /// Opens the first project or IFC file of a list (one at a time: a
+    /// project replaces the open one).
+    pub fn open_files(&mut self, paths: Vec<PathBuf>) {
+        if paths.is_empty() {
+            return;
+        }
+        let mut openable = paths.iter().filter(|p| crate::open_files::is_openable(p));
+        let Some(path) = openable.next().cloned() else {
+            self.complain("ArchiSim abre proyectos .archisim y ficheros .ifc.");
+            return;
+        };
+        let rest = openable.count();
+        let is_ifc = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
+        self.guarded(if is_ifc {
+            Pending::Import(Some(path))
+        } else {
+            Pending::Open(Some(path))
+        });
+        if rest > 0 && self.message.as_ref().is_some_and(|m| !m.error) {
+            let text = self
+                .message
+                .as_ref()
+                .map(|m| m.text.clone())
+                .unwrap_or_default();
+            self.say(format!(
+                "{text} Se abre un fichero cada vez: {rest} más sin abrir."
+            ));
+        }
+    }
+
     /// Imports an IFC file as a new project and shows what came in.
     pub fn import_path(&mut self, path: &Path) {
         match Editor::import(path) {
@@ -589,6 +639,7 @@ impl ArchiSimApp {
         let ctx = ui.ctx().clone();
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
+        self.receive_files(&ctx);
         self.update_title(&ctx);
 
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));

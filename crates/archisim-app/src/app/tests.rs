@@ -837,3 +837,58 @@ fn levels_are_managed_from_the_dialog() {
     assert!(ifc.contains("Planta 1"), "storey name");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A file dropped on the window, as the windowing system hands it over.
+#[derive(Debug)]
+struct TestDrop(PathBuf);
+
+impl egui::DroppedFile for TestDrop {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|e| e.to_string())
+    }
+}
+
+/// Files dropped on the window (and, on macOS, opened from the Finder) are
+/// opened like from the File menu: a project replaces the open one, an IFC
+/// is imported, anything else is refused, and unsaved changes ask first.
+#[test]
+fn opens_files_dropped_on_the_window() {
+    let dir = std::env::temp_dir().join(format!("archisim-drop-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut demo = Editor::new_project();
+    demo.rename_project("Soltado").unwrap();
+    let project = demo.save(Some(&dir.join("soltado.archisim"))).unwrap();
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../archisim-ifc/tests/fixtures/ifcopenshell_ifc2x3_mm.ifc");
+
+    let mut h = Harness::new(Editor::new_project());
+    let drop = |h: &mut Harness, path: PathBuf| {
+        let input = RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+            time: Some(h.time),
+            dropped_files: vec![std::sync::Arc::new(TestDrop(path))],
+            ..Default::default()
+        };
+        let app = &mut h.app;
+        let mut output = h.ctx.run_ui(input, |ui| app.show(ui));
+        output.textures_delta.clear();
+        h.time += 0.05;
+    };
+    drop(&mut h, project.clone());
+    assert_eq!(h.model().project_name, "Soltado");
+    drop(&mut h, fixture.clone());
+    assert!(h.app.import_report.is_some());
+    assert!(h.model().walls().count() > 0);
+    // A PDF is not opened.
+    drop(&mut h, dir.join("plano.pdf"));
+    assert!(h.app.message.as_ref().unwrap().error);
+    // With changes, it asks before replacing the project.
+    h.app.ed.rename_project("Con cambios").unwrap();
+    drop(&mut h, project);
+    assert!(h.app.pending.is_some());
+    assert_eq!(h.model().project_name, "Con cambios");
+    let _ = std::fs::remove_dir_all(dir);
+}
