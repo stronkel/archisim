@@ -14,6 +14,8 @@
 //! the wall, the faces of their frame and their height. [`clip_span`] cuts a
 //! wall (or one of its layers) into the solid pieces between openings.
 
+pub mod solid;
+
 use archisim_core::{
     Hand, LayerFunction, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, Vec2, Wall,
     WallId, WallSide, EPSILON,

@@ -17,6 +17,7 @@ mod slab_tool;
 mod snap;
 mod units;
 mod view;
+mod view3d;
 mod wall_tool;
 
 use app::ArchiSimApp;

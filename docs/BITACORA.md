@@ -6,6 +6,42 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Fase 1, bloque 6 — Vista 3D
+
+**Hecho**
+- **Vista 3D** del edificio entero (todas las plantas), en una pestaña junto a la planta: **F2** planta, **F3** 3D (como ArchiCAD), o con las pestañas «Planta · …» / «3D» encima del dibujo.
+- **Lo que se ve es lo que recibe el IFC**: muros con sus capas y los huecos de puertas y ventanas, forjados con sus capas colgando de la cara superior, y carpinterías con marco, hojas y vidrio. Comprobado: el volumen de cada muro en 3D coincide exactamente con el `NetVolume` que exporta el IFC.
+  - Colores de los materiales de corte, como en la exportación IFC; el vidrio, transparente.
+  - Las capas se ven en los cantos de forjado, en la coronación de los muros y en las mochetas; las láminas de 2–3 mm aparecen como una línea fina.
+  - Aristas de contorno en tinta (siluetas, cambios de plano y saltos de profundidad), como el sombreado con contornos de ArchiCAD.
+  - Cada muro y cada forjado es una sola piel cerrada: las capas y los tramos que se tocan dentro del elemento no tienen caras, y los muros unidos a inglete se cierran el uno al otro. Así no hay parpadeos ni puntos sueltos en las aristas.
+- **Navegación** (como Revit y ArchiCAD): arrastrar con el botón izquierdo (o Mayús + rueda) para girar alrededor del modelo; arrastrar con la rueda o el botón derecho para desplazar; rueda para acercar donde está el cursor; doble clic en la rueda o **Inicio** para ajustar. **Perspectiva** o **axonometría** (proyección paralela). Flecha de norte en la esquina, que gira con la vista.
+- **Selección en 3D**: clic sobre un elemento (Mayús+clic para añadir o quitar). Lo seleccionado se tiñe de azul y sus propiedades aparecen a la derecha, igual que en planta; Supr lo borra. Las teclas de herramienta (M, F, P, V) vuelven a la planta para dibujar.
+- **Guardar imagen 3D** en PNG (botón «Guardar imagen…» o *Archivo → Guardar imagen 3D*), a doble resolución de la pantalla.
+- Calidad de imagen: supermuestreo ×2 y multimuestreo ×4. Se dibuja solo cuando algo cambia (cámara, modelo, selección o tamaño).
+- Pruebas: cámara (encuadre, zoom en el cursor, rayos), selección por rayo, geometría (pieles cerradas, volúmenes, esquinas a inglete cerradas), y un dibujo real con la tarjeta gráfica (o una por software) que se comprueba píxel a píxel; en la integración continua se guarda como `vista3d.png`. Con clics simulados: F3, seleccionar un muro en 3D, girar, borrar y volver a planta. Probada la ventana real con capturas.
+- No cambia nada de lo exportado: IFC, plantas y `.archisim` siguen igual (validados con IfcOpenShell; ida y vuelta idéntica).
+- Versión 0.7.0.
+
+**Pendiente / limitaciones conocidas**
+- Sin terreno, sombras proyectadas ni texturas; sin secciones 3D ni recorte por plantas (se ve todo el edificio).
+- Las puertas se ven cerradas; las vueltas de mocheta y el premarco son de dibujo de planta y no aparecen en 3D (tampoco en el IFC).
+- Sin dibujar en 3D: las herramientas trabajan en planta.
+- En equipos sin tarjeta gráfica compatible (Vulkan, DirectX 12 o Metal) la pestaña 3D lo indica con un aviso.
+
+**Antonio debe probar**
+1. Descarga la nueva versión: GitHub → **Actions** → última ejecución en verde → **Artifacts** → **ArchiSim-Windows**. Arrastra `demo.archisim` sobre `ArchiSim.exe`.
+2. Pulsa **F3**. Gira con el botón izquierdo, desplaza con el derecho o la rueda pulsada, acerca con la rueda. Inicio para volver a encuadrar. ¿Se mueve con fluidez en tu equipo?
+3. Mira con zoom: esquinas a inglete, mochetas de puertas y ventanas (capas en la mocheta), cantos de la solera y de la cubierta con sus capas, vidrio transparente. ¿Los colores y las aristas se leen bien como maqueta?
+4. Cambia a **Axonometría** y compara con una axonometría tuya.
+5. Haz clic en una ventana en 3D, cambia su antepecho en Propiedades y comprueba que se mueve en 3D y en planta (F2). Prueba Supr y Ctrl+Z desde la vista 3D.
+6. Dibuja algo en planta (M, F, P, V) y vuelve a F3: aparece al momento.
+7. «Guardar imagen…» y abre el PNG.
+8. Abre `demo.ifc` en ArchiCAD o Revit y compara en 3D con lo que ves en ArchiSim: deberían coincidir.
+9. ¿Qué sigue: importar IFC (último punto del MVP), varita mágica para forjados, mover/estirar con el ratón o cotas?
+
+---
+
 ## 2026-10-17 · Fase 1, bloque 5 — Herramientas de forjado, puerta y ventana
 
 **Hecho**

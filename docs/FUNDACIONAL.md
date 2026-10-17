@@ -42,17 +42,19 @@ Crates actuales (`crates/`):
 | Crate | Responsabilidad |
 |---|---|
 | `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer |
-| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos |
+| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos; sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta |
-| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta, herramientas muro, forjado, puerta y ventana, selección y propiedades, deshacer, abrir/guardar `.archisim`, exportar IFC y planta |
+| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado, puerta y ventana, selección y propiedades, deshacer, abrir/guardar `.archisim`, exportar IFC, planta e imagen 3D |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
 La vista de planta de la aplicación **es** la planta 1:50 que se exporta: se dibuja el mismo SVG de la zona visible y se rasteriza a la resolución de pantalla (grosores de línea reales a 1:50, como la vista de «grosor de línea real» de ArchiCAD). Lo que se ve es lo que se exporta. Encima, en vectorial, van la selección, la vista previa del muro y los puntos de forzado.
+
+La vista 3D dibuja con la tarjeta gráfica (wgpu) los sólidos de `archisim-geom`, que son las mismas formas que recibe el IFC (el volumen de cada muro coincide con su `NetVolume`). Cada muro y cada forjado es una sola piel cerrada, con el color de cada capa en sus cantos y mochetas; las aristas de contorno salen de la propia imagen (cambios de orientación y de profundidad), el vidrio es transparente y la imagen se suaviza con supermuestreo ×2 y multimuestreo ×4. La selección es la misma que en planta.
 
 ## 4. Modelo de datos (equivalencias)
 
@@ -111,7 +113,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 | 6 | Puertas y ventanas como huecos en muro (`IfcOpeningElement`) | ✅ v0.3 |
 | 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ✅ v0.4 |
 | 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ✅ v0.5 |
-| 9 | Vista 3D | ⬜ |
+| 9 | Vista 3D | ✅ v0.7 |
 | 10 | Importación IFC básica | ⬜ |
 
 ## 6. Fases siguientes

@@ -1,0 +1,237 @@
+//! The 3D camera: an orbit around a target point, in perspective or
+//! axonometric (parallel) projection. Model coordinates: metres, Z up.
+
+use glam::camera::rh::{proj::directx, view::look_at_mat4};
+use glam::{Mat4, Vec2, Vec3};
+
+/// Vertical field of view in perspective, and the equivalent framing in
+/// axonometry, in radians.
+const FOV_Y: f32 = 0.70;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Camera {
+    /// The point the camera orbits around and looks at.
+    pub target: Vec3,
+    /// Direction the camera stands in, around the vertical, from +X (east)
+    /// counter-clockwise.
+    pub yaw: f32,
+    /// Height of the camera above the horizontal through the target.
+    pub pitch: f32,
+    pub distance: f32,
+    pub perspective: bool,
+}
+
+impl Default for Camera {
+    /// Seen from the south-east, from above, as ArchiCAD's default 3D.
+    fn default() -> Self {
+        Self {
+            target: Vec3::new(6.0, 4.5, 1.5),
+            yaw: (-55.0f32).to_radians(),
+            pitch: 30.0f32.to_radians(),
+            distance: 30.0,
+            perspective: true,
+        }
+    }
+}
+
+/// A ray from the eye into the scene.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Ray {
+    pub origin: Vec3,
+    pub dir: Vec3,
+}
+
+impl Camera {
+    /// Unit vector from the target towards the eye.
+    fn back(&self) -> Vec3 {
+        Vec3::new(
+            self.pitch.cos() * self.yaw.cos(),
+            self.pitch.cos() * self.yaw.sin(),
+            self.pitch.sin(),
+        )
+    }
+
+    pub fn eye(&self) -> Vec3 {
+        self.target + self.back() * self.distance
+    }
+
+    /// Screen-right and screen-up directions in the model.
+    fn basis(&self) -> (Vec3, Vec3, Vec3) {
+        let forward = -self.back();
+        let right = forward.cross(Vec3::Z).normalize_or(Vec3::X);
+        let up = right.cross(forward);
+        (forward, right, up)
+    }
+
+    /// Half the height of the view at the target, in metres.
+    fn half_height(&self) -> f32 {
+        self.distance * (FOV_Y / 2.0).tan()
+    }
+
+    pub fn view(&self) -> Mat4 {
+        look_at_mat4(self.eye(), self.target, Vec3::Z)
+    }
+
+    pub fn projection(&self, aspect: f32) -> Mat4 {
+        let near = (self.distance * 0.002).max(0.01);
+        let far = self.distance * 50.0 + 100.0;
+        if self.perspective {
+            directx::perspective(FOV_Y, aspect, near, far)
+        } else {
+            let h = self.half_height();
+            let w = h * aspect;
+            // Parallel projection: the near plane is pulled back so nothing
+            // between the eye and the target is clipped.
+            directx::orthographic(-w, w, -h, h, -far, far)
+        }
+    }
+
+    #[cfg(test)]
+    pub fn view_proj(&self, aspect: f32) -> Mat4 {
+        self.projection(aspect) * self.view()
+    }
+
+    /// Turns the camera around the target (dragging by screen points).
+    pub fn orbit(&mut self, delta: Vec2) {
+        self.yaw -= delta.x * 0.008;
+        self.pitch = (self.pitch + delta.y * 0.008).clamp(-1.5, 1.5);
+    }
+
+    /// Moves the target with the drawing (dragging by screen points), in a
+    /// view `height` points high.
+    pub fn pan(&mut self, delta: Vec2, height: f32) {
+        let (_, right, up) = self.basis();
+        let k = 2.0 * self.half_height() / height.max(1.0);
+        self.target += (-right * delta.x + up * delta.y) * k;
+    }
+
+    /// Ray through a point of the view, in points from its top-left corner.
+    pub fn ray(&self, pos: Vec2, size: Vec2) -> Ray {
+        let (forward, right, up) = self.basis();
+        let aspect = size.x / size.y.max(1.0);
+        // -1..1 across the view, Y up.
+        let ndc = Vec2::new(2.0 * pos.x / size.x - 1.0, 1.0 - 2.0 * pos.y / size.y);
+        let h = self.half_height();
+        let offset = right * ndc.x * h * aspect + up * ndc.y * h;
+        if self.perspective {
+            let through = self.target + offset;
+            let origin = self.eye();
+            Ray {
+                origin,
+                dir: (through - origin).normalize(),
+            }
+        } else {
+            Ray {
+                origin: self.eye() + offset - forward * self.distance * 50.0,
+                dir: forward,
+            }
+        }
+    }
+
+    /// Zooms by `factor` (< 1 closer) keeping the point under the cursor,
+    /// on the plane through the target, where it was.
+    pub fn zoom_at(&mut self, factor: f32, pos: Vec2, size: Vec2) {
+        let before = self.on_target_plane(pos, size);
+        self.distance = (self.distance * factor).clamp(0.5, 5000.0);
+        let after = self.on_target_plane(pos, size);
+        if let (Some(b), Some(a)) = (before, after) {
+            self.target += b - a;
+        }
+    }
+
+    fn on_target_plane(&self, pos: Vec2, size: Vec2) -> Option<Vec3> {
+        let r = self.ray(pos, size);
+        let n = -self.basis().0;
+        let den = r.dir.dot(n);
+        if den.abs() < 1e-6 {
+            return None;
+        }
+        let t = (self.target - r.origin).dot(n) / den;
+        Some(r.origin + r.dir * t)
+    }
+
+    /// Frames a bounding box in a view of the given aspect ratio.
+    pub fn fit(&mut self, lo: Vec3, hi: Vec3, aspect: f32) {
+        let center = (lo + hi) / 2.0;
+        let radius = ((hi - lo).length() / 2.0).max(1.0);
+        let half = (FOV_Y / 2.0).tan() * aspect.min(1.0);
+        self.target = center;
+        self.distance = radius / half.atan().sin() * 1.05;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_view_is_from_the_south_east_above() {
+        let c = Camera::default();
+        let e = c.eye() - c.target;
+        assert!(e.x > 0.0 && e.y < 0.0 && e.z > 0.0, "{e:?}");
+        // The target projects to the centre of the view.
+        let p = c.view_proj(1.5).project_point3(c.target);
+        assert!(p.x.abs() < 1e-5 && p.y.abs() < 1e-5);
+        assert!(p.z > 0.0 && p.z < 1.0, "inside the depth range: {}", p.z);
+    }
+
+    #[test]
+    fn rays_go_through_what_is_drawn_there() {
+        let size = Vec2::new(800.0, 600.0);
+        for perspective in [true, false] {
+            let c = Camera {
+                perspective,
+                ..Camera::default()
+            };
+            let vp = c.view_proj(size.x / size.y);
+            let point = Vec3::new(3.0, 2.0, 0.5);
+            let ndc = vp.project_point3(point);
+            let pos = Vec2::new((ndc.x + 1.0) / 2.0 * size.x, (1.0 - ndc.y) / 2.0 * size.y);
+            let r = c.ray(pos, size);
+            // Distance from the point to the ray.
+            let to = point - r.origin;
+            let off = (to - r.dir * to.dot(r.dir)).length();
+            assert!(off < 1e-3, "perspective {perspective}: {off}");
+        }
+    }
+
+    #[test]
+    fn zoom_keeps_the_point_under_the_cursor() {
+        let size = Vec2::new(800.0, 600.0);
+        for perspective in [true, false] {
+            let mut c = Camera {
+                perspective,
+                ..Camera::default()
+            };
+            let pos = Vec2::new(200.0, 150.0);
+            let before = c.on_target_plane(pos, size).unwrap();
+            c.zoom_at(0.5, pos, size);
+            assert!((c.distance - 15.0).abs() < 1e-4);
+            let after = c.on_target_plane(pos, size).unwrap();
+            assert!((after - before).length() < 1e-3, "{before:?} {after:?}");
+        }
+    }
+
+    #[test]
+    fn orbit_pan_and_fit() {
+        let mut c = Camera::default();
+        c.orbit(Vec2::new(0.0, 10_000.0));
+        assert!(c.pitch <= 1.5, "never upside down");
+        let t = c.target;
+        c.pan(Vec2::new(100.0, 0.0), 600.0);
+        assert!((c.target - t).length() > 0.0);
+        assert!((c.target - t).z.abs() < 1e-3 || c.pitch.abs() > 0.1);
+        c.fit(Vec3::ZERO, Vec3::new(12.0, 9.0, 3.5), 1.6);
+        assert_eq!(c.target, Vec3::new(6.0, 4.5, 1.75));
+        // The whole box is in front of the camera and inside the view.
+        let vp = c.view_proj(1.6);
+        for x in [0.0, 12.0] {
+            for y in [0.0, 9.0] {
+                for z in [0.0, 3.5] {
+                    let p = vp.project_point3(Vec3::new(x, y, z));
+                    assert!(p.x.abs() <= 1.0 && p.y.abs() <= 1.0, "{p:?}");
+                }
+            }
+        }
+    }
+}

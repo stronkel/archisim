@@ -32,7 +32,7 @@ cargo test --workspace
 cargo run -p archisim-cli -- demo out/   # genera out/demo.archisim, out/demo.ifc y una planta SVG por nivel
 python3 scripts/validate_ifc.py out/demo.ifc   # requiere: pip install ifcopenshell
 cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto   # ida y vuelta: IFC idéntico salvo la fecha
-ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app drawn_project   # casa dibujada con la app (clics simulados)
+ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_tests   # casa dibujada con la app (clics simulados) y out/app/vista3d.png
 python3 scripts/validate_ifc.py out/app/sesion.ifc
 ```
 
@@ -43,16 +43,16 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 ## Estructura
 
 - `crates/archisim-core` — documento, elementos, tipos, transacciones. Sin dependencias internas.
-- `crates/archisim-geom` — geometría 2D y contornos de muros.
+- `crates/archisim-geom` — geometría 2D, contornos de muros y sólidos 3D (`solid`): las mismas formas que el IFC, una piel cerrada por elemento, sin caras ocultas de contacto.
 - `crates/archisim-ifc` — escritor IFC4 STEP.
 - `crates/archisim-plan` — planta en SVG.
 - `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
 - `crates/archisim-library` — plantilla de inicio: materiales y tipos con los que empieza un proyecto nuevo (y la demo).
 - `crates/archisim-cli` — comandos de línea.
-- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición) está separada de la interfaz y tiene pruebas propias.
+- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición, cámara 3D, selección por rayo) está separada de la interfaz y tiene pruebas propias. La vista 3D (`view3d`) dibuja con wgpu en una textura propia; su prueba de dibujo usa cualquier adaptador gráfico disponible (vale uno por software) y se salta si no hay ninguno.
 
 Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUNDACIONAL.md` §3.
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): vista 3D en la aplicación (wgpu), y después importación IFC básica. Pendiente en la app: forjado por varita mágica, mover/estirar con el ratón y cotas (Antonio decide el orden; ver la bitácora).
+Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): importación IFC básica. Pendiente en la app: forjado por varita mágica, mover/estirar con el ratón y cotas (Antonio decide el orden; ver la bitácora).

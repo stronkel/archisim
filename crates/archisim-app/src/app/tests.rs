@@ -434,3 +434,48 @@ fn length_fields_commit_on_enter_and_cancel_on_escape() {
     ]);
     assert!(got.iter().all(Option::is_none), "{got:?}");
 }
+
+#[test]
+fn the_3d_view_shows_the_model_and_selects_by_clicking() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::F3);
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    h.frame();
+    h.frame();
+    let v = &h.app.v3d;
+    assert!(!v.fit_requested, "framed on first sight");
+    // Click on the top of the north wall, seen from the default view.
+    let size = v.canvas.size();
+    let vp = v.camera.view_proj(size.x / size.y);
+    let target = glam::Vec3::new(6.0, 9.0 - 0.13, 3.0);
+    let ndc = vp.project_point3(target);
+    let pos = v.canvas.min + Vec2::new((ndc.x + 1.0) / 2.0 * size.x, (1.0 - ndc.y) / 2.0 * size.y);
+    let north = h.model().walls().nth(1).unwrap().id;
+    h.pos = pos;
+    h.events.push(Event::PointerMoved(pos));
+    h.frame();
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Wall(north)]
+    );
+    // Dragging orbits the camera; the selection stays.
+    let yaw = h.app.v3d.camera.yaw;
+    h.button(PointerButton::Primary, true);
+    for i in 1..=5 {
+        h.pos = pos + Vec2::new(20.0 * i as f32, 0.0);
+        h.events.push(Event::PointerMoved(h.pos));
+        h.frame();
+    }
+    h.button(PointerButton::Primary, false);
+    assert!(h.app.v3d.camera.yaw < yaw, "turned");
+    assert_eq!(h.app.ed.selection.len(), 1);
+    // Supr deletes from the 3D view too; a tool key goes back to the plan.
+    h.key(Key::Delete);
+    assert!(h.model().wall(north).is_none());
+    h.type_text("m");
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert_eq!(h.app.tool, Tool::Wall);
+}

@@ -44,9 +44,16 @@ jobs:
       - run: diff <(grep -v FILE_NAME out/demo.ifc) <(grep -v FILE_NAME out/reabierto/demo.ifc)
         shell: bash
       - run: python scripts/validate_ifc.py out/reabierto/demo.ifc
-      # A house drawn through the application with simulated clicks and keys.
-      - run: ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app drawn_project
+      # A house drawn through the application with simulated clicks and keys,
+      # and a 3D picture drawn with a software graphics adapter.
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      - run: ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_tests
       - run: python scripts/validate_ifc.py out/app/sesion.ifc
+      - run: test -f out/app/vista3d.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sesion-y-vista3d
+          path: out/app/
 
   # A ready-to-run Windows build of the application with the demo house, to
   # download from the run's artifacts.

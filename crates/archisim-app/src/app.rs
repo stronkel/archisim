@@ -105,6 +105,11 @@ pub struct ArchiSimApp {
     pub last_plan_ms: f64,
     /// Screen area of the plan view in the last frame.
     pub canvas: Rect,
+    /// Plan or 3D in the central area.
+    pub mode: ViewMode,
+    pub v3d: View3dState,
+    /// The graphics card, when the window has one (never in tests).
+    gpu: Option<eframe::egui_wgpu::RenderState>,
 }
 
 impl ArchiSimApp {
@@ -138,6 +143,9 @@ impl ArchiSimApp {
             show_about: false,
             last_plan_ms: 0.0,
             canvas: Rect::NOTHING,
+            mode: ViewMode::Plan,
+            v3d: View3dState::default(),
+            gpu: None,
         }
     }
 
@@ -171,6 +179,10 @@ impl ArchiSimApp {
             self.window_start = None;
             self.tool = tool;
         }
+        // Drawing happens in plan.
+        if tool != Tool::Arrow {
+            self.mode = ViewMode::Plan;
+        }
     }
 
     fn replace_editor(&mut self, ed: Editor) {
@@ -183,6 +195,7 @@ impl ArchiSimApp {
         self.slab_tool.finish();
         self.plan = None;
         self.fit_requested = true;
+        self.v3d.reset();
     }
 
     // ---- Files -------------------------------------------------------------
@@ -415,6 +428,7 @@ impl ArchiSimApp {
 
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::top("info").show(ui, |ui| self.info_box(ui));
+        egui::Panel::top("views").show(ui, |ui| self.view_tabs(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("tools")
             .resizable(false)
@@ -428,7 +442,10 @@ impl ArchiSimApp {
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.properties(ui))
             });
-        egui::CentralPanel::no_frame().show(ui, |ui| self.plan_view(ui));
+        egui::CentralPanel::no_frame().show(ui, |ui| match self.mode {
+            ViewMode::Plan => self.plan_view(ui),
+            ViewMode::ThreeD => self.view_3d(ui),
+        });
 
         if let Some(text) = ctx.data_mut(|d| d.remove_temp::<String>(Id::unique("length-error"))) {
             self.complain(format!(
@@ -483,7 +500,116 @@ impl ArchiSimApp {
             self.select_all();
         }
         if consume(Modifiers::NONE, Key::Home) {
-            self.fit_requested = true;
+            match self.mode {
+                ViewMode::Plan => self.fit_requested = true,
+                ViewMode::ThreeD => self.v3d.fit_requested = true,
+            }
+        }
+        if consume(Modifiers::NONE, Key::F2) {
+            self.set_mode(ViewMode::Plan);
+        }
+        if consume(Modifiers::NONE, Key::F3) {
+            self.set_mode(ViewMode::ThreeD);
+        }
+        if self.mode == ViewMode::ThreeD {
+            self.keyboard_in_3d(ctx);
+        }
+    }
+
+    /// Keys while the 3D view is shown: Esc, Supr, and the tool keys,
+    /// which go back to the plan to draw.
+    fn keyboard_in_3d(&mut self, ctx: &egui::Context) {
+        let (events, escape, delete) = ctx.input(|i| {
+            (
+                i.events.clone(),
+                i.key_pressed(Key::Escape),
+                i.key_pressed(Key::Delete) || i.key_pressed(Key::Backspace),
+            )
+        });
+        if escape {
+            self.ed.selection.clear();
+        }
+        if delete {
+            self.delete();
+        }
+        for e in &events {
+            if let egui::Event::Text(t) = e {
+                let tool = match t.to_lowercase().as_str() {
+                    "m" => Some(Tool::Wall),
+                    "f" => Some(Tool::Slab),
+                    "p" => Some(Tool::Door),
+                    "v" => Some(Tool::Window),
+                    _ => None,
+                };
+                if let Some(tool) = tool {
+                    self.set_tool(tool);
+                }
+            }
+        }
+    }
+
+    /// Tabs to switch between the plan and the 3D view, with the 3D view's
+    /// own settings.
+    fn view_tabs(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            let level = self
+                .ed
+                .model()
+                .level(self.ed.level)
+                .map(|l| l.name.clone())
+                .unwrap_or_default();
+            if ui
+                .selectable_label(self.mode == ViewMode::Plan, format!("Planta · {level}"))
+                .on_hover_text("F2")
+                .clicked()
+            {
+                self.set_mode(ViewMode::Plan);
+            }
+            if ui
+                .selectable_label(self.mode == ViewMode::ThreeD, "3D")
+                .on_hover_text("F3")
+                .clicked()
+            {
+                self.set_mode(ViewMode::ThreeD);
+            }
+            if self.mode == ViewMode::ThreeD {
+                ui.separator();
+                ui.radio_value(&mut self.v3d.camera.perspective, true, "Perspectiva");
+                ui.radio_value(&mut self.v3d.camera.perspective, false, "Axonometría");
+                ui.separator();
+                if ui.button("Ajustar").on_hover_text("Inicio").clicked() {
+                    self.v3d.fit_requested = true;
+                }
+                if ui.button("Guardar imagen…").clicked() {
+                    self.export_3d_picture();
+                }
+            }
+        });
+    }
+
+    fn export_3d_picture(&mut self) {
+        let Some((w, h, px)) = self.v3d.picture() else {
+            self.complain(
+                "No hay imagen 3D que guardar (la vista 3D necesita la tarjeta gráfica).",
+            );
+            return;
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title("Guardar imagen 3D")
+            .add_filter("PNG", &["png"])
+            .set_file_name(format!("{} - 3D.png", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let saved = resvg::tiny_skia::IntSize::from_wh(w, h)
+            .and_then(|size| resvg::tiny_skia::Pixmap::from_vec(px, size))
+            .map(|pixmap| pixmap.save_png(&path));
+        match saved {
+            Some(Ok(())) => self.say(format!("Imagen 3D guardada en {}.", path.display())),
+            _ => self.complain("No se pudo guardar la imagen 3D."),
         }
     }
 
@@ -525,6 +651,15 @@ impl ArchiSimApp {
                 }
                 if ui.button("Exportar planta 1:50 (SVG)…").clicked() {
                     self.export_plan();
+                }
+                if ui
+                    .add_enabled(
+                        self.mode == ViewMode::ThreeD,
+                        egui::Button::new("Guardar imagen 3D (PNG)…"),
+                    )
+                    .clicked()
+                {
+                    self.export_3d_picture();
                 }
                 ui.separator();
                 if ui.button("Salir").clicked() {
@@ -580,11 +715,22 @@ impl ArchiSimApp {
                 }
             });
             ui.menu_button("Vista", |ui| {
+                if ui.add(shortcut_button("Planta", "F2")).clicked() {
+                    self.set_mode(ViewMode::Plan);
+                }
+                if ui.add(shortcut_button("3D", "F3")).clicked() {
+                    self.set_mode(ViewMode::ThreeD);
+                }
+                ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
+                ui.separator();
                 if ui
                     .add(shortcut_button("Ajustar a la ventana", "Inicio"))
                     .clicked()
                 {
-                    self.fit_requested = true;
+                    match self.mode {
+                        ViewMode::Plan => self.fit_requested = true,
+                        ViewMode::ThreeD => self.v3d.fit_requested = true,
+                    }
                 }
                 ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
             });
@@ -855,17 +1001,21 @@ impl ArchiSimApp {
 
     fn status_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            let hint = match self.tool {
+            let hint = if self.mode == ViewMode::ThreeD {
+                "Arrastrar: girar · rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · clic: seleccionar · Inicio: ajustar · F2: planta"
+            } else {
+                match self.tool {
                 Tool::Arrow => "Rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · Inicio: ajustar",
                 Tool::Wall if !self.wall_tool.is_drawing() => "Clic: inicio del muro",
                 Tool::Wall => "Clic: siguiente punto · escribe la longitud en mm + Intro · Mayús: ángulos de 45° · Intro/Esc/botón derecho: terminar",
                 Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina del forjado",
                 Tool::Slab => "Clic: siguiente esquina · clic en la primera o Intro: cerrar · longitud en mm + Intro · Esc: quitar la última esquina",
                 Tool::Door | Tool::Window => "Clic sobre un muro: se coloca centrada en el cursor y abre hacia el lado del muro donde está el cursor · Esc: flecha",
+                }
             };
             ui.label(egui::RichText::new(hint).weak());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if let Some(c) = self.cursor {
+                if let (Some(c), ViewMode::Plan) = (self.cursor, self.mode) {
                     ui.monospace(format!(
                         "X {}  Y {} m  ·  {}",
                         fmt_m(c.point.x),
@@ -2116,12 +2266,21 @@ impl ArchiSimApp {
 }
 
 impl eframe::App for ArchiSimApp {
-    fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
+        if self.gpu.is_none() {
+            self.gpu = frame.wgpu_render_state().cloned();
+        }
         self.show(ui);
     }
 }
 
 const SHORTCUTS: &[(&str, &str)] = &[
+    ("F2 · F3", "Planta · 3D"),
+    (
+        "3D: arrastrar (o Mayús + rueda)",
+        "Girar alrededor del modelo",
+    ),
+    ("3D: clic", "Seleccionar (también Mayús+clic)"),
     ("Rueda", "Zoom en el cursor"),
     ("Arrastrar rueda / botón derecho", "Encuadre"),
     ("Doble clic rueda · Inicio", "Ajustar a la ventana"),
@@ -2288,6 +2447,9 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
         None
     }
 }
+
+mod view3d_ui;
+pub use view3d_ui::{View3dState, ViewMode};
 
 #[cfg(test)]
 mod tests;
