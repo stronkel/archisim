@@ -6,11 +6,13 @@ members = [
     "crates/archisim-ifc",
     "crates/archisim-plan",
     "crates/archisim-file",
+    "crates/archisim-library",
     "crates/archisim-cli",
+    "crates/archisim-app",
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
@@ -22,3 +24,15 @@ archisim-geom = { path = "crates/archisim-geom" }
 archisim-ifc = { path = "crates/archisim-ifc" }
 archisim-plan = { path = "crates/archisim-plan" }
 archisim-file = { path = "crates/archisim-file" }
+archisim-library = { path = "crates/archisim-library" }
+
+# The plan view rasterises the 1:50 drawing on every change; keep the SVG
+# renderer fast even in debug builds.
+[profile.dev.package.tiny-skia]
+opt-level = 3
+[profile.dev.package.tiny-skia-path]
+opt-level = 3
+[profile.dev.package.resvg]
+opt-level = 3
+[profile.dev.package.usvg]
+opt-level = 3

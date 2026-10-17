@@ -2,11 +2,15 @@
 
 Herramienta BIM de autoría, multiplataforma y escrita en Rust: la facilidad de ArchiCAD con la organización estándar de Revit, sobre IFC 4.3 como modelo de datos. Nombre provisional.
 
-Estado: **v0.4, fase de cimientos.** Todavía no hay ventana de aplicación; hay un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, los guarda como proyecto `.archisim` y los exporta a IFC4 y a plantas 1:50 en SVG.
+Estado: **v0.5, fase 1 (MVP).** Primera ventana de aplicación: vista de planta, herramienta muro y selección con propiedades. Debajo, un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, los guarda como proyecto `.archisim` y los exporta a IFC4 y a plantas 1:50 en SVG.
 
 Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectura y el plan.
 
-## Probarlo
+## Probarlo en Windows sin instalar nada
+
+Cada cambio en GitHub genera la aplicación lista para usar. En la pestaña **Actions** del repositorio, abre la última ejecución en verde, baja hasta **Artifacts** y descarga **ArchiSim-Windows**. Descomprime el zip y abre `ArchiSim.exe` (la primera vez Windows avisa porque el programa no está firmado: *Más información → Ejecutar de todas formas*). La vivienda de prueba `demo.archisim` viene en la misma carpeta: ábrela con *Archivo → Abrir*, o arrastra el fichero sobre `ArchiSim.exe`.
+
+## Probarlo compilando
 
 1. Instala Rust (una sola vez): <https://rustup.rs>. En Windows acepta instalar las herramientas de compilación de Visual Studio que te propone.
 2. En una terminal, dentro de esta carpeta:
@@ -21,7 +25,15 @@ Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectur
    - `out/demo.svg` — planta baja a escala 1:50 (ábrela con el navegador).
    - `out/demo-cubierta.svg` — planta de cubierta a escala 1:50.
 
-3. Para exportar un proyecto `.archisim` (por ejemplo, después de editarlo):
+3. La aplicación, abriendo la vivienda de prueba:
+
+   ```bash
+   cargo run --release -p archisim-app -- out/demo.archisim
+   ```
+
+   Sin el nombre del proyecto empieza uno nuevo con la plantilla. `--release` tarda más en compilar la primera vez, pero la vista va mucho más fluida. Ratón y teclado: menú *Ayuda → Ratón y teclado*.
+
+4. Para exportar un proyecto `.archisim` desde la línea de comandos (por ejemplo, después de editarlo a mano):
 
    ```bash
    cargo run -p archisim-cli -- exportar out/demo.archisim

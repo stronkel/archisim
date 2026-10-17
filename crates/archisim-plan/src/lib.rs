@@ -10,7 +10,8 @@
 //! - wall faces and free ends are drawn with the heavy cut line;
 //! - layer boundaries are thin; mitred joins draw no line, so the poché of
 //!   connected walls reads as continuous;
-//! - insulation is drawn with the usual zigzag, clipped to its layer;
+//! - insulation is drawn with the usual zigzag, cut to its layer; all
+//!   hatching is real geometry cut to each layer (no SVG clip paths);
 //! - slabs are drawn under the walls according to the cut plane: below it
 //!   (the usual case: the floor you stand on) with a light cover fill and a
 //!   thin projection line; crossing it as a cut, with the heavy line and the
@@ -44,6 +45,10 @@ pub struct PlanOptions {
     pub show_reference_lines: bool,
     /// Height of the horizontal cut plane above the level, in metres.
     pub cut_plane: f64,
+    /// Draw exactly this region of the plan (lower-left and upper-right
+    /// corners, in model metres) instead of fitting the drawing to the
+    /// elements. Used by on-screen views: no margin, title or background.
+    pub viewport: Option<(Point2, Point2)>,
 }
 
 impl Default for PlanOptions {
@@ -53,6 +58,7 @@ impl Default for PlanOptions {
             margin_mm: 15.0,
             show_reference_lines: false,
             cut_plane: 1.1,
+            viewport: None,
         }
     }
 }
@@ -94,13 +100,26 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         min = Point2::new(0.0, 0.0);
         max = Point2::new(1.0, 1.0);
     }
+    let (vb_x, vb_y, vb_w, vb_h) = match options.viewport {
+        Some((lo, hi)) => (
+            lo.x,
+            -hi.y,
+            (hi.x - lo.x).max(EPSILON),
+            (hi.y - lo.y).max(EPSILON),
+        ),
+        None => {
+            let margin = options.margin_mm * k;
+            let title_space = 4.0 * TEXT_SIZE * k;
+            // SVG y grows downwards: plot (x, -y).
+            (
+                min.x - margin,
+                -max.y - margin,
+                (max.x - min.x) + 2.0 * margin,
+                (max.y - min.y) + 2.0 * margin + title_space,
+            )
+        }
+    };
     let margin = options.margin_mm * k;
-    let title_space = 4.0 * TEXT_SIZE * k;
-    // SVG y grows downwards: plot (x, -y).
-    let vb_x = min.x - margin;
-    let vb_y = -max.y - margin;
-    let vb_w = (max.x - min.x) + 2.0 * margin;
-    let vb_h = (max.y - min.y) + 2.0 * margin + title_space;
 
     let mut s = String::new();
     let _ = writeln!(
@@ -113,14 +132,16 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         num(vb_w),
         num(vb_h)
     );
-    let _ = writeln!(
-        s,
-        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="white"/>"#,
-        num(vb_x),
-        num(vb_y),
-        num(vb_w),
-        num(vb_h)
-    );
+    if options.viewport.is_none() {
+        let _ = writeln!(
+            s,
+            r#"<rect x="{}" y="{}" width="{}" height="{}" fill="white"/>"#,
+            num(vb_x),
+            num(vb_y),
+            num(vb_w),
+            num(vb_h)
+        );
+    }
 
     s.push_str("<g id=\"slabs\">\n");
     for (si, slab) in slabs.iter().enumerate() {
@@ -184,20 +205,22 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         s.push_str("</g>\n");
     }
 
-    // Title.
-    let level_name = model.level(level).map(|l| l.name.as_str()).unwrap_or("");
-    let tx = min.x;
-    let ty = -min.y + margin * 0.6;
-    let _ = writeln!(
-        s,
-        r#"<text x="{}" y="{}" font-family="Helvetica, Arial, sans-serif" font-size="{}" fill="{INK}"><tspan font-weight="bold">{}</tspan> · {} · E 1:{}</text>"#,
-        num(tx),
-        num(ty + TEXT_SIZE * k),
-        num(TEXT_SIZE * k),
-        escape(&model.project_name),
-        escape(level_name),
-        options.scale
-    );
+    if options.viewport.is_none() {
+        // Title.
+        let level_name = model.level(level).map(|l| l.name.as_str()).unwrap_or("");
+        let tx = min.x;
+        let ty = -min.y + margin * 0.6;
+        let _ = writeln!(
+            s,
+            r#"<text x="{}" y="{}" font-family="Helvetica, Arial, sans-serif" font-size="{}" fill="{INK}"><tspan font-weight="bold">{}</tspan> · {} · E 1:{}</text>"#,
+            num(tx),
+            num(ty + TEXT_SIZE * k),
+            num(TEXT_SIZE * k),
+            escape(&model.project_name),
+            escape(level_name),
+            options.scale
+        );
+    }
     s.push_str("</svg>\n");
     s
 }
@@ -245,19 +268,20 @@ impl JambDetail {
     }
 }
 
-/// Fills a cut polygon with its material colour and hatch.
-fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], clip: &str, k: f64) {
+/// Fills a cut polygon with its material colour and hatch. `id` names the
+/// fill so each cut piece can be found in the drawing.
+fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], id: &str, k: f64) {
     let d = path(polygon);
     let [r, gg, bb] = mat.cut_color;
     // A hairline in the fill colour hides anti-aliasing seams at mitres.
     let _ = writeln!(
         s,
-        r#"<path d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
+        r#"<path id="{id}" d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
         num(HATCH_LINE * k)
     );
-    // Hatching is real geometry clipped to the layer (not SVG patterns),
-    // so it prints identically everywhere and carries over to PDF/DXF.
-    let _ = writeln!(s, r#"<clipPath id="{clip}"><path d="{d}"/></clipPath>"#);
+    // Hatching is real geometry cut to the layer (not SVG patterns or clip
+    // paths), so it prints identically everywhere, carries over to PDF/DXF
+    // and draws fast on screen.
     let sp = HATCH_SPACING * k;
     let hatch = match mat.cut_pattern {
         CutPattern::Diagonal => hatch_lines(polygon, &[45.0], sp),
@@ -267,16 +291,15 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], c
     if !hatch.is_empty() {
         let _ = writeln!(
             s,
-            r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}" clip-path="url(#{clip})"/>"#,
+            r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
             num(HATCH_LINE * k)
         );
     }
     if mat.cut_pattern == CutPattern::Dots {
         let dots = hatch_dots(polygon, sp, HATCH_LINE * k * 1.2);
-        let _ = writeln!(
-            s,
-            r#"<path d="{dots}" fill="{INK}" clip-path="url(#{clip})"/>"#
-        );
+        if !dots.is_empty() {
+            let _ = writeln!(s, r#"<path d="{dots}" fill="{INK}"/>"#);
+        }
     }
 }
 
@@ -342,32 +365,32 @@ fn draw_layers(
             if polygon.is_empty() {
                 continue;
             }
-            let clip = format!("clip-{gi}-{li}-{pi}");
-            fill_cut(s, mat, &polygon, &clip, k);
+            fill_cut(s, mat, &polygon, &format!("cut-{gi}-{li}-{pi}"), k);
 
             if mat.cut_pattern == CutPattern::Insulation
                 || band.function == LayerFunction::Insulation
             {
-                // Zigzag along the layer, overshooting the ends and clipped to it.
+                // Zigzag along the layer, overshooting the ends and cut to it.
                 let mid = (high + low) / 2.0;
                 let amp = thickness / 2.0;
                 let step = thickness.max(0.01);
-                let mut zz = String::new();
+                let mut zigzag = Vec::new();
                 let mut t = -wall_t * 2.0;
                 let mut up = true;
                 while t <= len + wall_t * 2.0 {
                     let off = mid + if up { amp } else { -amp };
-                    let p = a + u * t + n * off;
-                    let _ = write!(zz, "{}{} ", if zz.is_empty() { "M" } else { "L" }, pt(p));
+                    zigzag.push(a + u * t + n * off);
                     t += step / 2.0;
                     up = !up;
                 }
-                let _ = writeln!(
-                    s,
-                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" clip-path="url(#{clip})"/>"#,
-                    zz.trim_end(),
-                    num(HATCH_LINE * k)
-                );
+                let zz = clip_polyline(&zigzag, &polygon);
+                if !zz.is_empty() {
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                        num(HATCH_LINE * k)
+                    );
+                }
             }
         }
     }
@@ -413,7 +436,7 @@ fn draw_layers(
                     s,
                     mat,
                     &rect(t, back, y_in, y_out),
-                    &format!("clip-{gi}-turn-{ji}"),
+                    &format!("cut-{gi}-turn-{ji}"),
                     k,
                 );
                 // Against the cavity and against the inner leaf.
@@ -434,7 +457,7 @@ fn draw_layers(
                     s,
                     mat,
                     &rect(t, back, y_in, y_out),
-                    &format!("clip-{gi}-wrap-{ji}"),
+                    &format!("cut-{gi}-wrap-{ji}"),
                     k,
                 );
                 line(s, local(back, y_out), local(back, y_in), LAYER_LINE, k);
@@ -502,19 +525,20 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
                 (m.cut_color, m.cut_pattern)
             });
             let [r, g, b] = fill;
-            let _ = writeln!(s, r#"<path d="{d}" fill="rgb({r},{g},{b})"/>"#);
+            let _ = writeln!(
+                s,
+                r#"<path id="cut-slab-{si}" d="{d}" fill="rgb({r},{g},{b})"/>"#
+            );
             let angles: &[f64] = match pattern {
                 CutPattern::Diagonal => &[45.0],
                 CutPattern::Cross => &[45.0, 135.0],
                 _ => &[],
             };
-            if !angles.is_empty() {
-                let clip = format!("clip-slab-{si}");
-                let _ = writeln!(s, r#"<clipPath id="{clip}"><path d="{d}"/></clipPath>"#);
+            let hatch = hatch_lines(&slab.outline, angles, HATCH_SPACING * k);
+            if !hatch.is_empty() {
                 let _ = writeln!(
                     s,
-                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" clip-path="url(#{clip})"/>"#,
-                    hatch_lines(&slab.outline, angles, HATCH_SPACING * k),
+                    r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
                     num(HATCH_LINE * k)
                 );
             }
@@ -527,9 +551,9 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
     }
 }
 
-/// Parallel hatch lines covering a polygon's bounding box, anchored to the
-/// project origin so that hatching continues seamlessly across elements.
-/// Angles are in degrees, measured counter-clockwise from the X axis.
+/// Parallel hatch lines cut to a polygon, anchored to the project origin so
+/// that hatching continues seamlessly across elements. Angles are in
+/// degrees, measured counter-clockwise from the X axis.
 fn hatch_lines(poly: &[Point2], angles: &[f64], spacing: f64) -> String {
     let mut d = String::new();
     for &deg in angles {
@@ -548,9 +572,11 @@ fn hatch_lines(poly: &[Point2], angles: &[f64], spacing: f64) -> String {
         let last = (hi / spacing).floor() as i64;
         for i in first..=last {
             let c = i as f64 * spacing;
-            let p = m * c + dir * t0;
-            let q = m * c + dir * t1;
-            let _ = write!(d, "M{} L{} ", pt(p), pt(q));
+            let p = m * c + dir * (t0 - spacing);
+            let q = m * c + dir * (t1 + spacing);
+            for (a, b) in clip_segment(p, q, poly) {
+                let _ = write!(d, "M{} L{} ", pt(a), pt(b));
+            }
         }
     }
     d.trim_end().to_string()
@@ -580,7 +606,8 @@ fn hatch_dots(poly: &[Point2], spacing: f64, radius: f64) -> String {
             // Stagger alternate rows for a more even texture.
             let x = (i as f64 + if j % 2 == 0 { 0.0 } else { 0.5 }) * spacing;
             let c = Point2::new(x, j as f64 * spacing);
-            if contains(poly, c) {
+            // Only whole dots: none sticks out of the layer.
+            if contains(poly, c) && distance_to_outline(poly, c) >= radius {
                 let _ = write!(
                     d,
                     "M{} a{r},{r} 0 1,0 {dd},0 a{r},{r} 0 1,0 -{dd},0 ",
@@ -592,6 +619,79 @@ fn hatch_dots(poly: &[Point2], spacing: f64, radius: f64) -> String {
         }
     }
     d.trim_end().to_string()
+}
+
+/// The parts of segment `p`–`q` inside a simple polygon (any shape).
+fn clip_segment(p: Point2, q: Point2, poly: &[Point2]) -> Vec<(Point2, Point2)> {
+    let d = q - p;
+    let n = poly.len();
+    let mut ts = vec![0.0, 1.0];
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        let e = b - a;
+        let den = d.cross(e);
+        if den.abs() < 1e-15 {
+            continue;
+        }
+        let t = (a - p).cross(e) / den;
+        let s = (a - p).cross(d) / den;
+        if (-1e-12..=1.0 + 1e-12).contains(&s) && t > 0.0 && t < 1.0 {
+            ts.push(t);
+        }
+    }
+    ts.sort_by(f64::total_cmp);
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    for w in ts.windows(2) {
+        let (t0, t1) = (w[0], w[1]);
+        if (t1 - t0) * d.length() < 1e-9 || !contains(poly, p + d * ((t0 + t1) / 2.0)) {
+            continue;
+        }
+        match out.last_mut() {
+            Some(last) if (last.1 - t0).abs() < 1e-12 => last.1 = t1,
+            _ => out.push((t0, t1)),
+        }
+    }
+    out.into_iter()
+        .map(|(a, b)| (p + d * a, p + d * b))
+        .collect()
+}
+
+/// A polyline cut to a polygon, as SVG path data: each run inside the
+/// polygon stays one continuous line so its corners keep their joins.
+fn clip_polyline(points: &[Point2], poly: &[Point2]) -> String {
+    let mut d = String::new();
+    let mut pen: Option<Point2> = None;
+    for w in points.windows(2) {
+        for (a, b) in clip_segment(w[0], w[1], poly) {
+            match pen {
+                Some(at) if at.approx_eq(a) => {}
+                _ => {
+                    let _ = write!(d, "M{} ", pt(a));
+                }
+            }
+            let _ = write!(d, "L{} ", pt(b));
+            pen = Some(b);
+        }
+    }
+    d.trim_end().to_string()
+}
+
+/// Distance from a point to the outline of a polygon.
+fn distance_to_outline(poly: &[Point2], p: Point2) -> f64 {
+    let n = poly.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            let e = b - a;
+            let len2 = e.dot(e);
+            let t = if len2 < 1e-18 {
+                0.0
+            } else {
+                ((p - a).dot(e) / len2).clamp(0.0, 1.0)
+            };
+            (a + e * t).distance(p)
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 /// Point-in-polygon test (even-odd rule).
@@ -956,6 +1056,53 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hatching_is_cut_to_any_polygon() {
+        let p = |x, y| Point2::new(x, y);
+        // An L: the line y = 1 crosses the lower leg, the gap and nothing else.
+        let l = [
+            p(0.0, 0.0),
+            p(4.0, 0.0),
+            p(4.0, 2.0),
+            p(2.0, 2.0),
+            p(2.0, 4.0),
+            p(0.0, 4.0),
+        ];
+        assert_eq!(
+            clip_segment(p(-1.0, 1.0), p(5.0, 1.0), &l),
+            vec![(p(0.0, 1.0), p(4.0, 1.0))]
+        );
+        // The line y = 3 crosses the upper leg only.
+        assert_eq!(
+            clip_segment(p(-1.0, 3.0), p(5.0, 3.0), &l),
+            vec![(p(0.0, 3.0), p(2.0, 3.0))]
+        );
+        // Through the notch of a U: two pieces.
+        let u = [
+            p(0.0, 0.0),
+            p(6.0, 0.0),
+            p(6.0, 4.0),
+            p(4.0, 4.0),
+            p(4.0, 2.0),
+            p(2.0, 2.0),
+            p(2.0, 4.0),
+            p(0.0, 4.0),
+        ];
+        assert_eq!(clip_segment(p(-1.0, 3.0), p(7.0, 3.0), &u).len(), 2);
+        // A zigzag cut to a band stays one continuous line inside it.
+        let band = [p(0.0, 0.0), p(2.0, 0.0), p(2.0, 1.0), p(0.0, 1.0)];
+        let zz = [
+            p(-1.0, 0.2),
+            p(0.5, 0.8),
+            p(1.0, 0.2),
+            p(1.5, 0.8),
+            p(3.0, 0.2),
+        ];
+        let d = clip_polyline(&zz, &band);
+        assert_eq!(d.matches('M').count(), 1, "{d}");
+        assert!(hatch_lines(&band, &[45.0], 0.3).split('M').count() > 3);
+    }
     use archisim_core::{Layer, NewSlab, NewWall, ReferenceLine, SlabFunction, WallFunction};
 
     #[test]
@@ -999,12 +1146,32 @@ mod tests {
         .unwrap();
         let svg = render_plan(&m, lvl, &PlanOptions::default());
         assert!(svg.starts_with("<svg"));
-        assert!(svg.contains("clip-path=\"url(#clip-0-0-0)\""));
-        assert!(svg.contains("clip-path="));
+        assert!(svg.contains("id=\"cut-0-0-0\""));
+        assert!(!svg.contains("clip-path="), "hatching is real geometry");
         assert!(svg.contains("Casa &lt;A&amp;B&gt;"));
         assert!(!svg.contains(" A0.8"), "no door yet");
         // 5 m at 1:50 = 100 mm plus two 15 mm margins.
         assert!(svg.contains("width=\"130.00mm\""), "{}", &svg[..200]);
+
+        // An on-screen view draws exactly the requested region, with no
+        // title or paper background, and the same poché.
+        let screen = render_plan(
+            &m,
+            lvl,
+            &PlanOptions {
+                viewport: Some((Point2::new(-1.0, -2.0), Point2::new(3.0, 1.0))),
+                ..PlanOptions::default()
+            },
+        );
+        assert!(
+            screen.contains("viewBox=\"-1 -1 4 3\""),
+            "{}",
+            &screen[..200]
+        );
+        assert!(screen.contains("width=\"80.00mm\" height=\"60.00mm\""));
+        assert!(!screen.contains("<text"));
+        assert!(!screen.contains("fill=\"white\""));
+        assert!(screen.contains("id=\"cut-0-0-0\""));
 
         // A door cuts the wall in two pieces and draws its swing; a high
         // window above the cut plane is dashed and does not cut the wall.
@@ -1041,8 +1208,8 @@ mod tests {
         // Leaf width 0.9 − 2 × 0.05 = 0.8: one swing arc of that radius.
         assert_eq!(svg.matches(" A0.8,0.8 ").count(), 1);
         // Two pieces per layer instead of one.
-        assert!(svg.contains("clip-0-1-1"));
-        assert!(!svg.contains("clip-0-1-2"));
+        assert!(svg.contains("cut-0-1-1"));
+        assert!(!svg.contains("cut-0-1-2"));
         assert_eq!(svg.matches("stroke-dasharray").count(), 2);
     }
 
@@ -1129,8 +1296,8 @@ mod tests {
         .unwrap();
         let svg = render_plan(&m, lvl, &PlanOptions::default());
         // The brick returns and the render wraps at both jambs.
-        assert_eq!(svg.matches("id=\"clip-0-turn-").count(), 2);
-        assert_eq!(svg.matches("id=\"clip-0-wrap-").count(), 2);
+        assert_eq!(svg.matches("id=\"cut-0-turn-").count(), 2);
+        assert_eq!(svg.matches("id=\"cut-0-wrap-").count(), 2);
         // Two leaves of (1.2 − 2 × 0.06) / 2 = 0.54 m swing into the room.
         assert_eq!(svg.matches(" A0.54,0.54 ").count(), 2);
     }
@@ -1172,7 +1339,7 @@ mod tests {
         // Below: cover fill. Cut: structural fill with cross hatch. Above: dashed.
         assert!(svg.contains(SLAB_COVER));
         assert!(svg.contains("fill=\"rgb(200,200,200)\""));
-        assert!(svg.contains("clip-slab-1"));
+        assert!(svg.contains("cut-slab-1"));
         assert!(svg.contains("stroke-dasharray"));
         // The drawing spans the three slabs: 14 m at 1:50 + margins.
         assert!(svg.contains("width=\"310.00mm\""), "{}", &svg[..200]);

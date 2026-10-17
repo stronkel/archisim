@@ -453,6 +453,8 @@ pub enum ModelError {
     EmptyType,
     /// The element is still used by others and cannot be removed.
     InUse(String),
+    /// A door cannot become a window, or the other way round.
+    CategoryMismatch,
 }
 
 impl fmt::Display for ModelError {
@@ -494,6 +496,12 @@ impl fmt::Display for ModelError {
             }
             ModelError::EmptyType => write!(f, "a type needs at least one layer"),
             ModelError::InUse(what) => write!(f, "still in use: {what}"),
+            ModelError::CategoryMismatch => {
+                write!(
+                    f,
+                    "a door can only become another door, and a window another window"
+                )
+            }
         }
     }
 }
@@ -781,6 +789,64 @@ impl Model {
         Ok(())
     }
 
+    /// Applies an edit to a copy of a wall and keeps it only if the wall is
+    /// still valid and every door and window it hosts still fits.
+    fn edit_wall(&mut self, id: WallId, edit: impl FnOnce(&mut Wall)) -> Result<(), ModelError> {
+        let previous = self
+            .walls
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownWall(id))?;
+        let mut wall = previous.clone();
+        edit(&mut wall);
+        self.validate_wall(&NewWall {
+            wall_type: wall.wall_type,
+            level: wall.level,
+            start: wall.start,
+            end: wall.end,
+            reference: wall.reference,
+            height: wall.height,
+            base_offset: wall.base_offset,
+        })?;
+        self.walls.insert(id, wall);
+        if let Err(e) = self.check_hosted_openings(id) {
+            self.walls.insert(id, previous);
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Changes a wall's type (Revit "Type Selector"). The drawn line stays
+    /// where it is; the doors and windows must still fit in the new
+    /// thickness.
+    pub fn set_wall_type(&mut self, id: WallId, wall_type: WallTypeId) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| w.wall_type = wall_type)
+    }
+
+    /// Changes a wall's height and the offset of its base above the level.
+    pub fn set_wall_height(
+        &mut self,
+        id: WallId,
+        height: f64,
+        base_offset: f64,
+    ) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| {
+            w.height = height;
+            w.base_offset = base_offset;
+        })
+    }
+
+    /// Changes which line of the wall is the drawn one. The drawn line stays
+    /// where it is and the wall body moves around it, so walls joined at
+    /// their end points stay joined.
+    pub fn set_wall_reference(
+        &mut self,
+        id: WallId,
+        reference: ReferenceLine,
+    ) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| w.reference = reference)
+    }
+
     /// Removes a wall together with the doors and windows it hosts, as Revit
     /// and ArchiCAD do.
     pub fn remove_wall(&mut self, id: WallId) -> Result<Wall, ModelError> {
@@ -915,6 +981,24 @@ impl Model {
         let outline = Self::normalized_outline(outline)?;
         let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
         slab.outline = outline;
+        Ok(())
+    }
+
+    /// Changes a slab's type; the top face stays where it is.
+    pub fn set_slab_type(&mut self, id: SlabId, slab_type: SlabTypeId) -> Result<(), ModelError> {
+        if !self.slab_types.contains_key(&slab_type) {
+            return Err(ModelError::UnknownSlabType(slab_type));
+        }
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        slab.slab_type = slab_type;
+        Ok(())
+    }
+
+    /// Changes the height of a slab's top face above its level.
+    pub fn set_slab_offset(&mut self, id: SlabId, top_offset: f64) -> Result<(), ModelError> {
+        finite(top_offset, "slab top offset")?;
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        slab.top_offset = top_offset;
         Ok(())
     }
 
@@ -1133,6 +1217,46 @@ impl Model {
             .ok_or(ModelError::UnknownOpening(id))?;
         o.opens_to = opens_to;
         o.hand = hand;
+        Ok(())
+    }
+
+    /// Swaps a door or window for another type of the same category (a door
+    /// for a door, a window for a window), keeping its position and GUID.
+    pub fn set_opening_type(
+        &mut self,
+        id: OpeningId,
+        opening_type: OpeningTypeId,
+    ) -> Result<(), ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let new_type = self
+            .opening_types
+            .get(&opening_type)
+            .ok_or(ModelError::UnknownOpeningType(opening_type))?;
+        let old_type = self
+            .opening_types
+            .get(&o.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(o.opening_type))?;
+        if new_type.is_door() != old_type.is_door() {
+            return Err(ModelError::CategoryMismatch);
+        }
+        let spec = NewOpening {
+            opening_type,
+            wall: o.wall,
+            along: o.along,
+            sill: o.sill,
+            opens_to: o.opens_to,
+            hand: o.hand,
+            setback: o.setback,
+        };
+        self.validate_opening(&spec, Some(id))?;
+        let o = self
+            .openings
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        o.opening_type = opening_type;
         Ok(())
     }
 
@@ -1630,6 +1754,130 @@ mod tests {
         m.remove_wall(wall).unwrap();
         assert!(m.opening(o).is_none());
         assert_eq!(m.openings().count(), 0);
+    }
+
+    #[test]
+    fn wall_properties_keep_guid_and_protect_openings() {
+        let (mut m, wall, door, window) = with_openings();
+        let guid = m.wall(wall).unwrap().guid.clone();
+        m.add_opening(place(window, wall, 2.5, 0.9)).unwrap();
+
+        // Lowering the 2.7 m wall below the window head (2.1 m) is refused
+        // and leaves it untouched.
+        assert_eq!(
+            m.set_wall_height(wall, 2.0, 0.0),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        assert_eq!(m.wall(wall).unwrap().height, 2.7);
+        assert!(matches!(
+            m.set_wall_height(wall, 0.0, 0.0),
+            Err(ModelError::NonPositive(_))
+        ));
+        m.set_wall_height(wall, 3.0, 0.0).unwrap();
+
+        // A thinner type than the 7 cm frame is refused; a thicker one is fine.
+        let brick = m.materials().next().unwrap().id;
+        let layer = |thickness| Layer {
+            material: brick,
+            thickness,
+            function: LayerFunction::Structure,
+        };
+        let thin = m
+            .add_wall_type("Tabicón 5", WallFunction::Interior, vec![layer(0.05)])
+            .unwrap();
+        let thick = m
+            .add_wall_type("Muro 25", WallFunction::Exterior, vec![layer(0.25)])
+            .unwrap();
+        assert_eq!(m.set_wall_type(wall, thin), Err(ModelError::FrameTooDeep));
+        m.set_wall_type(wall, thick).unwrap();
+        assert!(matches!(
+            m.set_wall_type(wall, WallTypeId(999)),
+            Err(ModelError::UnknownWallType(_))
+        ));
+
+        // The drawn line stays put when its position in the wall changes.
+        let (start, end) = (m.wall(wall).unwrap().start, m.wall(wall).unwrap().end);
+        m.set_wall_reference(wall, ReferenceLine::InteriorFace)
+            .unwrap();
+        let w = m.wall(wall).unwrap();
+        assert_eq!(
+            (w.start, w.end, w.reference),
+            (start, end, ReferenceLine::InteriorFace)
+        );
+        assert_eq!(w.guid, guid);
+        assert_eq!(w.wall_type, thick);
+
+        // A door can be swapped for another door, not for a window.
+        let o = m.add_opening(place(door, wall, 0.5, 0.0)).unwrap();
+        assert_eq!(
+            m.set_opening_type(o, window),
+            Err(ModelError::CategoryMismatch)
+        );
+        let wood = m.opening_type(door).unwrap().frame_material;
+        let wide = m
+            .add_opening_type(NewOpeningType {
+                name: "P 120".into(),
+                kind: OpeningKind::Door(DoorOperation::DoubleSwing),
+                width: 1.2,
+                height: 2.05,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: wood,
+                panel_material: wood,
+            })
+            .unwrap();
+        // 1.2 m wide centred at 0.5 m would stick out of the wall start.
+        assert_eq!(
+            m.set_opening_type(o, wide),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        m.move_opening(o, 0.8, 0.0).unwrap();
+        let oguid = m.opening(o).unwrap().guid.clone();
+        m.set_opening_type(o, wide).unwrap();
+        assert_eq!(m.opening(o).unwrap().opening_type, wide);
+        assert_eq!(m.opening(o).unwrap().guid, oguid);
+    }
+
+    #[test]
+    fn slab_type_and_offset() {
+        let (mut m, lvl, _) = sample();
+        let st = slab_type(&mut m);
+        let concrete = m.materials().find(|x| x.name == "Hormigón").unwrap().id;
+        let other = m
+            .add_slab_type(
+                "Losa 25",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: concrete,
+                    thickness: 0.25,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let id = m
+            .add_slab(NewSlab {
+                slab_type: st,
+                level: lvl,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(4.0, 0.0),
+                    Point2::new(4.0, 4.0),
+                ],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        m.set_slab_type(id, other).unwrap();
+        m.set_slab_offset(id, -0.05).unwrap();
+        assert_eq!(m.slab(id).unwrap().slab_type, other);
+        assert_eq!(m.slab(id).unwrap().top_offset, -0.05);
+        assert!(matches!(
+            m.set_slab_offset(id, f64::NAN),
+            Err(ModelError::NotFinite(_))
+        ));
+        assert!(matches!(
+            m.set_slab_type(id, SlabTypeId(999)),
+            Err(ModelError::UnknownSlabType(_))
+        ));
     }
 
     #[test]

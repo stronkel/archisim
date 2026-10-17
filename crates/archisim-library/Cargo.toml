@@ -1,0 +1,10 @@
+[package]
+name = "archisim-library"
+description = "Starter library: materials, wall, slab, door and window types"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[dependencies]
+archisim-core.workspace = true

@@ -1,0 +1,350 @@
+//! Starter library: the materials and types a new project begins with.
+//!
+//! This is ArchiSim's own "plantilla" (ArchiCAD template, Revit project
+//! template): typical Spanish construction, written from scratch. Every new
+//! project created in the application starts from [`new_project`], and the
+//! demo house is built on the same library so both stay in step.
+
+use archisim_core::{
+    CutPattern, DoorOperation, Layer, LayerFunction, MaterialId, Model, ModelError, NewOpeningType,
+    OpeningKind, OpeningTypeId, SlabFunction, SlabTypeId, WallFunction, WallTypeId,
+    WindowOperation,
+};
+
+/// Ids of the types added by [`add_library`], to place elements in code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Library {
+    /// Double-leaf façade, 26.5 cm.
+    pub facade: WallTypeId,
+    /// Hollow-brick partition, 10 cm.
+    pub partition: WallTypeId,
+    /// One-foot load-bearing brick wall, 27 cm.
+    pub bearing_wall: WallTypeId,
+    pub ground_slab: SlabTypeId,
+    pub floor_slab: SlabTypeId,
+    pub flat_roof: SlabTypeId,
+    pub entrance_door: OpeningTypeId,
+    pub interior_door: OpeningTypeId,
+    pub double_door: OpeningTypeId,
+    pub sliding_door: OpeningTypeId,
+    pub window_two_leaves: OpeningTypeId,
+    pub window_one_leaf: OpeningTypeId,
+    pub balcony_door: OpeningTypeId,
+    pub fixed_window: OpeningTypeId,
+}
+
+/// A new, empty project: one level at ±0.00 ("Planta baja") and the
+/// starter library.
+pub fn new_project(name: impl Into<String>) -> Model {
+    let mut model = Model::new(name);
+    model.add_level("Planta baja", 0.0);
+    add_library(&mut model).expect("the starter library is always valid");
+    model
+}
+
+/// Adds the starter materials and types to a model.
+pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
+    let mut mat = |name: &str, category: &str, color: [u8; 3], pattern| -> MaterialId {
+        m.add_material(name, category, color, pattern)
+    };
+    let monocapa = mat(
+        "Mortero monocapa",
+        "plaster",
+        [236, 232, 222],
+        CutPattern::Dots,
+    );
+    let perforado = mat(
+        "Ladrillo perforado",
+        "brick",
+        [232, 196, 178],
+        CutPattern::Diagonal,
+    );
+    let lana = mat(
+        "Lana mineral",
+        "insulation",
+        [250, 243, 205],
+        CutPattern::Insulation,
+    );
+    let lhd = mat(
+        "Ladrillo hueco doble",
+        "brick",
+        [240, 214, 200],
+        CutPattern::Diagonal,
+    );
+    let yeso = mat(
+        "Enlucido de yeso",
+        "plaster",
+        [245, 245, 245],
+        CutPattern::Solid,
+    );
+    let baldosa = mat(
+        "Baldosa cerámica",
+        "ceramic",
+        [214, 206, 190],
+        CutPattern::Solid,
+    );
+    let mortero = mat(
+        "Mortero de cemento",
+        "mortar",
+        [222, 222, 214],
+        CutPattern::Dots,
+    );
+    let hormigon = mat(
+        "Hormigón armado",
+        "concrete",
+        [205, 205, 205],
+        CutPattern::Cross,
+    );
+    let lamina = mat(
+        "Lámina impermeabilizante",
+        "membrane",
+        [70, 70, 70],
+        CutPattern::Solid,
+    );
+    let grava = mat("Grava", "gravel", [210, 204, 190], CutPattern::Dots);
+    let xps = mat(
+        "Poliestireno extruido (XPS)",
+        "insulation",
+        [214, 236, 214],
+        CutPattern::Insulation,
+    );
+    let celular = mat(
+        "Hormigón celular",
+        "concrete",
+        [228, 224, 214],
+        CutPattern::Dots,
+    );
+    let madera = mat("Madera de pino", "wood", [196, 160, 112], CutPattern::Solid);
+    let aluminio = mat(
+        "Aluminio lacado",
+        "aluminium",
+        [120, 124, 128],
+        CutPattern::Solid,
+    );
+    let vidrio = mat("Vidrio doble", "glass", [190, 222, 236], CutPattern::Solid);
+
+    let layer = |material, thickness, function| Layer {
+        material,
+        thickness,
+        function,
+    };
+
+    let facade = m.add_wall_type(
+        "Fachada doble hoja 26,5",
+        WallFunction::Exterior,
+        vec![
+            layer(monocapa, 0.015, LayerFunction::Finish),
+            layer(perforado, 0.115, LayerFunction::Structure),
+            layer(lana, 0.050, LayerFunction::Insulation),
+            layer(lhd, 0.070, LayerFunction::Substrate),
+            layer(yeso, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+    let partition = m.add_wall_type(
+        "Tabique LHD 10",
+        WallFunction::Interior,
+        vec![
+            layer(yeso, 0.015, LayerFunction::Finish),
+            layer(lhd, 0.070, LayerFunction::Substrate),
+            layer(yeso, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+    let bearing_wall = m.add_wall_type(
+        "Muro de carga ladrillo perforado 1 pie 27",
+        WallFunction::Interior,
+        vec![
+            layer(yeso, 0.015, LayerFunction::Finish),
+            layer(perforado, 0.240, LayerFunction::Structure),
+            layer(yeso, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+
+    let ground_slab = m.add_slab_type(
+        "Solera HA 15 con encachado",
+        SlabFunction::BaseSlab,
+        vec![
+            layer(baldosa, 0.015, LayerFunction::Finish),
+            layer(mortero, 0.030, LayerFunction::Substrate),
+            layer(hormigon, 0.150, LayerFunction::Structure),
+            layer(lamina, 0.002, LayerFunction::Membrane),
+            layer(grava, 0.150, LayerFunction::Substrate),
+        ],
+    )?;
+    let floor_slab = m.add_slab_type(
+        "Forjado de planta HA 30",
+        SlabFunction::Floor,
+        vec![
+            layer(baldosa, 0.015, LayerFunction::Finish),
+            layer(mortero, 0.030, LayerFunction::Substrate),
+            layer(hormigon, 0.300, LayerFunction::Structure),
+            layer(yeso, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+    let flat_roof = m.add_slab_type(
+        "Cubierta plana invertida con grava",
+        SlabFunction::Roof,
+        vec![
+            layer(grava, 0.050, LayerFunction::Finish),
+            layer(xps, 0.080, LayerFunction::Insulation),
+            layer(lamina, 0.003, LayerFunction::Membrane),
+            layer(celular, 0.100, LayerFunction::Substrate),
+            layer(hormigon, 0.300, LayerFunction::Structure),
+            layer(yeso, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+
+    #[allow(clippy::too_many_arguments)]
+    fn opening(
+        m: &mut Model,
+        name: &str,
+        kind: OpeningKind,
+        width: f64,
+        height: f64,
+        frame_width: f64,
+        frame_depth: f64,
+        frame_material: MaterialId,
+        panel_material: MaterialId,
+    ) -> Result<OpeningTypeId, ModelError> {
+        m.add_opening_type(NewOpeningType {
+            name: name.into(),
+            kind,
+            width,
+            height,
+            frame_width,
+            frame_depth,
+            frame_material,
+            panel_material,
+        })
+    }
+    use DoorOperation as D;
+    use OpeningKind::{Door, Window};
+    use WindowOperation as W;
+    let entrance_door = opening(
+        m,
+        "Puerta de entrada 1 hoja 100×215",
+        Door(D::SingleSwing),
+        1.00,
+        2.15,
+        0.07,
+        0.10,
+        madera,
+        madera,
+    )?;
+    let interior_door = opening(
+        m,
+        "Puerta de paso 1 hoja 80×205",
+        Door(D::SingleSwing),
+        0.80,
+        2.05,
+        0.05,
+        0.07,
+        madera,
+        madera,
+    )?;
+    let double_door = opening(
+        m,
+        "Puerta de paso 2 hojas 140×205",
+        Door(D::DoubleSwing),
+        1.40,
+        2.05,
+        0.05,
+        0.07,
+        madera,
+        madera,
+    )?;
+    let sliding_door = opening(
+        m,
+        "Puerta corredera 1 hoja 90×205",
+        Door(D::Sliding),
+        0.90,
+        2.05,
+        0.05,
+        0.07,
+        madera,
+        madera,
+    )?;
+    let window_two_leaves = opening(
+        m,
+        "Ventana practicable 2 hojas 180×130",
+        Window(W::DoubleCasement),
+        1.80,
+        1.30,
+        0.06,
+        0.07,
+        aluminio,
+        vidrio,
+    )?;
+    let window_one_leaf = opening(
+        m,
+        "Ventana practicable 1 hoja 100×120",
+        Window(W::SingleCasement),
+        1.00,
+        1.20,
+        0.06,
+        0.07,
+        aluminio,
+        vidrio,
+    )?;
+    let balcony_door = opening(
+        m,
+        "Balconera corredera 2 hojas 240×220",
+        Window(W::Sliding),
+        2.40,
+        2.20,
+        0.06,
+        0.07,
+        aluminio,
+        vidrio,
+    )?;
+    let fixed_window = opening(
+        m,
+        "Ventana fija 60×60",
+        Window(W::Fixed),
+        0.60,
+        0.60,
+        0.05,
+        0.07,
+        aluminio,
+        vidrio,
+    )?;
+
+    Ok(Library {
+        facade,
+        partition,
+        bearing_wall,
+        ground_slab,
+        floor_slab,
+        flat_roof,
+        entrance_door,
+        interior_door,
+        double_door,
+        sliding_door,
+        window_two_leaves,
+        window_one_leaf,
+        balcony_door,
+        fixed_window,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_project_has_a_level_and_the_library() {
+        let m = new_project("Casa");
+        assert_eq!(m.project_name, "Casa");
+        assert_eq!(m.levels().len(), 1);
+        assert_eq!(m.levels()[0].elevation, 0.0);
+        assert_eq!(m.wall_types().count(), 3);
+        assert_eq!(m.slab_types().count(), 3);
+        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 4);
+        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 4);
+        let facade = m
+            .wall_types()
+            .find(|t| t.name.starts_with("Fachada"))
+            .unwrap();
+        assert!((facade.thickness() - 0.265).abs() < 1e-12);
+        assert_eq!(facade.function, WallFunction::Exterior);
+    }
+}
