@@ -46,9 +46,13 @@ Crates actuales (`crates/`):
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
+| `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta |
+| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta, herramienta muro, selección y propiedades, deshacer, abrir/guardar `.archisim`, exportar IFC y planta |
 
-Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
+Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
+
+La vista de planta de la aplicación **es** la planta 1:50 que se exporta: se dibuja el mismo SVG de la zona visible y se rasteriza a la resolución de pantalla (grosores de línea reales a 1:50, como la vista de «grosor de línea real» de ArchiCAD). Lo que se ve es lo que se exporta. Encima, en vectorial, van la selección, la vista previa del muro y los puntos de forzado.
 
 ## 4. Modelo de datos (equivalencias)
 
@@ -106,7 +110,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 | 5 | Forjados (`IfcSlab`) por contorno | ✅ v0.2 |
 | 6 | Puertas y ventanas como huecos en muro (`IfcOpeningElement`) | ✅ v0.3 |
 | 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ✅ v0.4 |
-| 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ⬜ |
+| 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ✅ v0.5 |
 | 9 | Vista 3D | ⬜ |
 | 10 | Importación IFC básica | ⬜ |
 

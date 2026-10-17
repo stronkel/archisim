@@ -44,3 +44,6 @@ jobs:
       - run: diff <(grep -v FILE_NAME out/demo.ifc) <(grep -v FILE_NAME out/reabierto/demo.ifc)
         shell: bash
       - run: python scripts/validate_ifc.py out/reabierto/demo.ifc
+      # A house drawn through the application with simulated clicks and keys.
+      - run: ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app drawn_project
+      - run: python scripts/validate_ifc.py out/app/sesion.ifc

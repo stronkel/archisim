@@ -32,7 +32,11 @@ cargo test --workspace
 cargo run -p archisim-cli -- demo out/   # genera out/demo.archisim, out/demo.ifc y una planta SVG por nivel
 python3 scripts/validate_ifc.py out/demo.ifc   # requiere: pip install ifcopenshell
 cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto   # ida y vuelta: IFC idéntico salvo la fecha
+ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app drawn_project   # casa dibujada con la app (clics simulados)
+python3 scripts/validate_ifc.py out/app/sesion.ifc
 ```
+
+Si cambias la aplicación, además de las pruebas (que la manejan con clics y teclas simulados, sin pantalla), ábrela de verdad (`cargo run --release -p archisim-app -- out/demo.archisim`; en un servidor sin pantalla, con Xvfb y capturas) y mira el resultado.
 
 Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin errores. Si cambias el modelo, el formato `.archisim` debe guardarlo entero: añade el campo al esquema y, si cambia la estructura del fichero, sube `CURRENT_VERSION` y escribe la migración en `archisim-file` (los proyectos antiguos tienen que seguir abriéndose). Si cambias la planta, mira el SVG resultante antes de entregarlo.
 
@@ -43,10 +47,12 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 - `crates/archisim-ifc` — escritor IFC4 STEP.
 - `crates/archisim-plan` — planta en SVG.
 - `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
+- `crates/archisim-library` — plantilla de inicio: materiales y tipos con los que empieza un proyecto nuevo (y la demo).
 - `crates/archisim-cli` — comandos de línea.
+- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición) está separada de la interfaz y tiene pruebas propias.
 
 Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUNDACIONAL.md` §3.
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): ventana de la aplicación (vista de planta, herramienta muro, selección), que abre y guarda `.archisim`.
+Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): vista 3D en la aplicación (wgpu), y después importación IFC básica. Pendiente en la app según el feedback de Antonio: herramientas de forjado, puerta y ventana, y mover/estirar con el ratón.

@@ -16,3 +16,4 @@ archisim-geom.workspace = true
 archisim-ifc.workspace = true
 archisim-plan.workspace = true
 archisim-file.workspace = true
+archisim-library.workspace = true
