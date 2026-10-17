@@ -6,7 +6,11 @@ Estado: **v0.5, fase 1 (MVP).** Primera ventana de aplicación: vista de planta,
 
 Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectura y el plan.
 
-## Probarlo
+## Probarlo en Windows sin instalar nada
+
+Cada cambio en GitHub genera la aplicación lista para usar. En la pestaña **Actions** del repositorio, abre la última ejecución en verde, baja hasta **Artifacts** y descarga **ArchiSim-Windows**. Descomprime el zip y abre `ArchiSim.exe` (la primera vez Windows avisa porque el programa no está firmado: *Más información → Ejecutar de todas formas*). La vivienda de prueba `demo.archisim` viene en la misma carpeta: ábrela con *Archivo → Abrir*, o arrastra el fichero sobre `ArchiSim.exe`.
+
+## Probarlo compilando
 
 1. Instala Rust (una sola vez): <https://rustup.rs>. En Windows acepta instalar las herramientas de compilación de Visual Studio que te propone.
 2. En una terminal, dentro de esta carpeta:
