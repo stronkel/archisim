@@ -47,3 +47,20 @@ jobs:
       # A house drawn through the application with simulated clicks and keys.
       - run: ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app drawn_project
       - run: python scripts/validate_ifc.py out/app/sesion.ifc
+
+  # A ready-to-run Windows build of the application with the demo house, to
+  # download from the run's artifacts.
+  windows-app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p archisim-app -p archisim-cli
+      - run: cargo run --release -p archisim-cli -- demo ArchiSim
+      - run: copy target\release\archisim-app.exe ArchiSim\ArchiSim.exe
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArchiSim-Windows
+          path: ArchiSim/
