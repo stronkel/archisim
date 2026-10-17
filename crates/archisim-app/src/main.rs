@@ -54,14 +54,13 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     // The event loop is created here, not by eframe, so that on macOS the
-    // delegate that receives files opened from the Finder is installed
-    // after the event loop exists and before it runs (see winit's
-    // `platform::macos`).
+    // method that receives files opened from the Finder is added to winit's
+    // application delegate after the event loop exists and before it runs.
     let event_loop = winit::event_loop::EventLoop::<eframe::UserEvent>::with_user_event()
         .build()
         .map_err(|e| eframe::Error::AppCreation(Box::new(e)))?;
     #[cfg(target_os = "macos")]
-    open_files::macos::install();
+    let _ = open_files::macos::install();
     let mut winit_app = eframe::create_native(
         "ArchiSim",
         options,

@@ -28,11 +28,11 @@ bytemuck = { version = "1", features = ["derive"] }
 winit = "0.30"
 
 # macOS: receive the files opened from the Finder or dropped on the Dock
-# icon (`application:openURLs:`). Same versions as winit's.
+# icon (`application:openURLs:`, added to winit's application delegate).
+# Same versions as winit's.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5.2"
-objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSString", "NSURL", "NSThread"] }
-objc2-app-kit = { version = "0.2.2", features = ["NSApplication", "NSResponder"] }
+objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSString", "NSURL"] }
 
 [dev-dependencies]
 pollster = "0.4"

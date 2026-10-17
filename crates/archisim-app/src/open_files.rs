@@ -47,65 +47,66 @@ pub fn is_openable(path: &std::path::Path) -> bool {
 
 #[cfg(target_os = "macos")]
 pub mod macos {
-    //! The application delegate that receives the files opened from the
-    //! Finder (`application:openURLs:`). winit installs no delegate of its
-    //! own, so ArchiSim can (see winit's `platform::macos` documentation).
+    //! Receiving the files opened from the Finder (`application:openURLs:`).
+    //!
+    //! winit 0.30 registers its own application delegate (the class
+    //! `WinitApplicationDelegate`) and expects it to stay the delegate, so
+    //! ArchiSim cannot install one of its own. Instead it adds the
+    //! `application:openURLs:` method to winit's delegate class, once the
+    //! event loop exists and before it runs.
 
-    use objc2::rc::Retained;
-    use objc2::runtime::ProtocolObject;
-    use objc2::{declare_class, msg_send_id, mutability, ClassType, DeclaredClass};
-    use objc2_app_kit::{NSApplication, NSApplicationDelegate};
-    use objc2_foundation::{MainThreadMarker, NSArray, NSObject, NSObjectProtocol, NSURL};
+    use objc2::ffi;
+    use objc2::runtime::{AnyClass, AnyObject, Sel};
+    use objc2::sel;
+    use objc2_foundation::{NSArray, NSURL};
 
-    declare_class!(
-        struct AppDelegate;
-
-        unsafe impl ClassType for AppDelegate {
-            type Super = NSObject;
-            type Mutability = mutability::MainThreadOnly;
-            const NAME: &'static str = "ArchiSimAppDelegate";
-        }
-
-        impl DeclaredClass for AppDelegate {}
-
-        unsafe impl NSObjectProtocol for AppDelegate {}
-
-        unsafe impl NSApplicationDelegate for AppDelegate {
-            #[method(application:openURLs:)]
-            fn application_open_urls(&self, _application: &NSApplication, urls: &NSArray<NSURL>) {
-                for url in urls.iter() {
-                    // SAFETY: plain getters of an NSURL handed to us by AppKit.
-                    if !unsafe { url.isFileURL() } {
-                        continue;
-                    }
-                    // SAFETY: as above.
-                    if let Some(path) = unsafe { url.path() } {
-                        let path = std::path::PathBuf::from(path.to_string());
-                        report(&path);
-                        super::push(path);
-                    }
-                }
+    /// `- (void)application:(NSApplication *)app openURLs:(NSArray<NSURL *> *)urls`
+    extern "C" fn open_urls(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        _application: *mut AnyObject,
+        urls: *mut NSArray<NSURL>,
+    ) {
+        // SAFETY: AppKit passes a valid array of URLs for the duration of
+        // the call; only plain getters are used. Nothing here panics.
+        let Some(urls) = (unsafe { urls.as_ref() }) else {
+            return;
+        };
+        for url in urls.iter() {
+            // SAFETY: as above.
+            if !unsafe { url.isFileURL() } {
+                continue;
             }
-        }
-    );
-
-    impl AppDelegate {
-        fn new(mtm: MainThreadMarker) -> Retained<Self> {
-            unsafe { msg_send_id![super(mtm.alloc().set_ivars(())), init] }
+            // SAFETY: as above.
+            if let Some(path) = unsafe { url.path() } {
+                let path = std::path::PathBuf::from(path.to_string());
+                report(&path);
+                super::push(path);
+            }
         }
     }
 
-    /// Installs the delegate. Call after the event loop is created and
-    /// before it runs, on the main thread.
-    pub fn install() {
-        let Some(mtm) = MainThreadMarker::new() else {
-            return;
+    /// Adds the method to winit's delegate. Call after the event loop is
+    /// created (winit registers the class and sets the delegate then) and
+    /// before it runs. Returns whether it was added.
+    pub fn install() -> bool {
+        let Some(class) = AnyClass::get("WinitApplicationDelegate") else {
+            eprintln!("ArchiSim: no se encuentra el delegado de winit; los ficheros del Finder no se abrirán");
+            return false;
         };
-        let delegate = AppDelegate::new(mtm);
-        let app = NSApplication::sharedApplication(mtm);
-        app.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
-        // AppKit keeps only a weak reference to its delegate.
-        std::mem::forget(delegate);
+        let f: extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut NSArray<NSURL>) = open_urls;
+        // SAFETY: an IMP is any C function pointer whose signature matches
+        // the type encoding given: void return, self, _cmd and two objects.
+        let imp: ffi::IMP = Some(unsafe { std::mem::transmute::<_, unsafe extern "C" fn()>(f) });
+        let added = unsafe {
+            ffi::class_addMethod(
+                class as *const AnyClass as *mut ffi::objc_class,
+                sel!(application:openURLs:).as_ptr(),
+                imp,
+                c"v@:@@".as_ptr(),
+            )
+        };
+        added != ffi::NO
     }
 
     /// For the packaging check in continuous integration: with
