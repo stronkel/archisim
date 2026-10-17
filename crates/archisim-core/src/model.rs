@@ -248,6 +248,162 @@ pub struct NewSlab {
     pub top_offset: f64,
 }
 
+/// How a door opens. IFC: `IfcDoorTypeOperationEnum`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoorOperation {
+    /// One hinged leaf ("abatible de una hoja").
+    SingleSwing,
+    /// Two hinged leaves meeting in the middle ("abatible de dos hojas").
+    DoubleSwing,
+    /// One leaf sliding along the face of the wall ("corredera").
+    Sliding,
+}
+
+/// How a window opens. IFC: `IfcWindowTypePartitioningEnum` plus the
+/// operation of its panels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowOperation {
+    /// A single fixed pane ("fija").
+    Fixed,
+    /// One side-hung leaf ("practicable de una hoja").
+    SingleCasement,
+    /// Two side-hung leaves ("practicable de dos hojas").
+    DoubleCasement,
+    /// Two horizontally sliding leaves ("corredera de dos hojas").
+    Sliding,
+}
+
+impl WindowOperation {
+    /// Number of glazed panels across the width.
+    pub fn panels(self) -> usize {
+        match self {
+            WindowOperation::Fixed | WindowOperation::SingleCasement => 1,
+            WindowOperation::DoubleCasement | WindowOperation::Sliding => 2,
+        }
+    }
+}
+
+/// Whether an opening type is a door or a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpeningKind {
+    Door(DoorOperation),
+    Window(WindowOperation),
+}
+
+/// A door or window type: a Revit door/window family type, an ArchiCAD
+/// door/window object with its settings. IFC: `IfcDoorType` or
+/// `IfcWindowType`.
+///
+/// `width` and `height` are the rough opening ("hueco de obra"): the size of
+/// the hole in the wall, which the frame fills completely.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OpeningType {
+    pub id: OpeningTypeId,
+    pub guid: GlobalId,
+    pub name: String,
+    pub kind: OpeningKind,
+    /// Rough opening width, in metres.
+    pub width: f64,
+    /// Rough opening height, in metres.
+    pub height: f64,
+    /// Visible width of the frame profile (jambs and head), in metres.
+    pub frame_width: f64,
+    /// Depth of the frame across the wall, in metres.
+    pub frame_depth: f64,
+    /// Material of the frame ("carpintería", "cerco").
+    pub frame_material: MaterialId,
+    /// Material of the infill: the door leaf or the glazing.
+    pub panel_material: MaterialId,
+}
+
+impl OpeningType {
+    pub fn is_door(&self) -> bool {
+        matches!(self.kind, OpeningKind::Door(_))
+    }
+
+    pub fn is_window(&self) -> bool {
+        matches!(self.kind, OpeningKind::Window(_))
+    }
+}
+
+/// Data needed to create an opening type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewOpeningType {
+    pub name: String,
+    pub kind: OpeningKind,
+    pub width: f64,
+    pub height: f64,
+    pub frame_width: f64,
+    pub frame_depth: f64,
+    pub frame_material: MaterialId,
+    pub panel_material: MaterialId,
+}
+
+/// One of the two faces of a wall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WallSide {
+    Exterior,
+    Interior,
+}
+
+/// Handing of a door, following UNE-EN 12519: standing on the side the leaf
+/// opens towards (where the hinges are seen), the hinges are on the left or
+/// on the right. For a sliding door, the side the leaf slides to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hand {
+    Left,
+    Right,
+}
+
+/// A door or window placed in a wall. IFC: an `IfcOpeningElement` that
+/// voids the wall, filled by an `IfcDoor` or `IfcWindow`.
+///
+/// The position is measured along the wall's drawn line, from its start to
+/// the centre of the opening (Revit places hosted elements by their centre).
+/// The sill height is measured from the level, as Revit's "Sill Height".
+#[derive(Debug, Clone, PartialEq)]
+pub struct Opening {
+    pub id: OpeningId,
+    pub guid: GlobalId,
+    pub opening_type: OpeningTypeId,
+    /// The host wall. The opening is on the wall's level.
+    pub wall: WallId,
+    /// Distance from the wall start to the centre of the opening, in metres.
+    pub along: f64,
+    /// Height of the bottom of the opening above the level, in metres.
+    pub sill: f64,
+    /// Side the leaves open towards (Revit "facing"). Usually the interior.
+    pub opens_to: WallSide,
+    pub hand: Hand,
+    /// Distance from the wall's exterior face to the exterior face of the
+    /// frame ("retranqueo"). `None` centres the frame in the wall.
+    pub setback: Option<f64>,
+}
+
+impl Opening {
+    /// Start and end of the opening along the wall's drawn line.
+    pub fn span(&self, width: f64) -> (f64, f64) {
+        (self.along - width / 2.0, self.along + width / 2.0)
+    }
+
+    /// Distance from the wall's exterior face to the frame's exterior face.
+    pub fn frame_setback(&self, wall_thickness: f64, frame_depth: f64) -> f64 {
+        self.setback.unwrap_or((wall_thickness - frame_depth) / 2.0)
+    }
+}
+
+/// Data needed to place a door or window.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewOpening {
+    pub opening_type: OpeningTypeId,
+    pub wall: WallId,
+    pub along: f64,
+    pub sill: f64,
+    pub opens_to: WallSide,
+    pub hand: Hand,
+    pub setback: Option<f64>,
+}
+
 /// Data needed to create a wall; ids and GUIDs are assigned by the model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewWall {
@@ -269,6 +425,15 @@ pub enum ModelError {
     UnknownWall(WallId),
     UnknownSlabType(SlabTypeId),
     UnknownSlab(SlabId),
+    UnknownOpeningType(OpeningTypeId),
+    UnknownOpening(OpeningId),
+    /// A door or window does not fit inside its wall (along the wall or
+    /// between its base and top).
+    OpeningOutsideWall,
+    /// Two doors or windows in the same wall overlap.
+    OverlappingOpenings,
+    /// The frame of a door or window is deeper than the wall allows.
+    FrameTooDeep,
     /// A slab outline needs at least three points, a non-zero area and no
     /// crossing or touching edges.
     InvalidOutline,
@@ -291,6 +456,22 @@ impl fmt::Display for ModelError {
             ModelError::UnknownWall(id) => write!(f, "wall {id} does not exist"),
             ModelError::UnknownSlabType(id) => write!(f, "slab type {id} does not exist"),
             ModelError::UnknownSlab(id) => write!(f, "slab {id} does not exist"),
+            ModelError::UnknownOpeningType(id) => {
+                write!(f, "door or window type {id} does not exist")
+            }
+            ModelError::UnknownOpening(id) => write!(f, "door or window {id} does not exist"),
+            ModelError::OpeningOutsideWall => {
+                write!(f, "the door or window does not fit inside its wall")
+            }
+            ModelError::OverlappingOpenings => {
+                write!(
+                    f,
+                    "the door or window overlaps another one in the same wall"
+                )
+            }
+            ModelError::FrameTooDeep => {
+                write!(f, "the frame does not fit in the wall thickness")
+            }
             ModelError::InvalidOutline => write!(
                 f,
                 "a slab outline needs at least three points and must not cross itself"
@@ -319,6 +500,8 @@ pub struct Model {
     walls: BTreeMap<WallId, Wall>,
     slab_types: BTreeMap<SlabTypeId, SlabType>,
     slabs: BTreeMap<SlabId, Slab>,
+    opening_types: BTreeMap<OpeningTypeId, OpeningType>,
+    openings: BTreeMap<OpeningId, Opening>,
 }
 
 impl Model {
@@ -335,6 +518,8 @@ impl Model {
             walls: BTreeMap::new(),
             slab_types: BTreeMap::new(),
             slabs: BTreeMap::new(),
+            opening_types: BTreeMap::new(),
+            openings: BTreeMap::new(),
         }
     }
 
@@ -484,27 +669,61 @@ impl Model {
         Ok(())
     }
 
-    /// Moves a wall's end points, keeping its identity and GUID.
+    /// Moves a wall's end points, keeping its identity and GUID. Its doors
+    /// and windows keep their distance from the wall start; the move is
+    /// rejected if any of them would no longer fit.
     pub fn move_wall(&mut self, id: WallId, start: Point2, end: Point2) -> Result<(), ModelError> {
         if start.approx_eq(end) {
             return Err(ModelError::ZeroLengthWall);
         }
         let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
+        let previous = (wall.start, wall.end);
         wall.start = start;
         wall.end = end;
+        if let Err(e) = self.check_hosted_openings(id) {
+            let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
+            (wall.start, wall.end) = previous;
+            return Err(e);
+        }
         Ok(())
     }
 
     /// Swaps start and end, which moves the exterior face to the other side
-    /// (ArchiCAD "Invertir"). The drawn line stays where it is.
+    /// (ArchiCAD "Invertir"). The drawn line stays where it is, and so do its
+    /// doors and windows: their position is measured from the new start.
     pub fn flip_wall(&mut self, id: WallId) -> Result<(), ModelError> {
         let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
         std::mem::swap(&mut wall.start, &mut wall.end);
+        let length = wall.length();
+        for opening in self.openings.values_mut().filter(|o| o.wall == id) {
+            opening.along = length - opening.along;
+        }
         Ok(())
     }
 
+    /// Removes a wall together with the doors and windows it hosts, as Revit
+    /// and ArchiCAD do.
     pub fn remove_wall(&mut self, id: WallId) -> Result<Wall, ModelError> {
-        self.walls.remove(&id).ok_or(ModelError::UnknownWall(id))
+        let wall = self.walls.remove(&id).ok_or(ModelError::UnknownWall(id))?;
+        self.openings.retain(|_, o| o.wall != id);
+        Ok(wall)
+    }
+
+    /// Checks that every door and window in a wall still fits.
+    fn check_hosted_openings(&self, wall: WallId) -> Result<(), ModelError> {
+        for o in self.openings.values().filter(|o| o.wall == wall) {
+            let spec = NewOpening {
+                opening_type: o.opening_type,
+                wall: o.wall,
+                along: o.along,
+                sill: o.sill,
+                opens_to: o.opens_to,
+                hand: o.hand,
+                setback: o.setback,
+            };
+            self.validate_opening(&spec, Some(o.id))?;
+        }
+        Ok(())
     }
 
     pub fn remove_wall_type(&mut self, id: WallTypeId) -> Result<WallType, ModelError> {
@@ -629,6 +848,216 @@ impl Model {
 
     pub fn slabs_on_level(&self, level: LevelId) -> impl Iterator<Item = &Slab> {
         self.slabs.values().filter(move |s| s.level == level)
+    }
+
+    // ---- Door and window types -----------------------------------------
+
+    pub fn add_opening_type(&mut self, spec: NewOpeningType) -> Result<OpeningTypeId, ModelError> {
+        for m in [spec.frame_material, spec.panel_material] {
+            if !self.materials.contains_key(&m) {
+                return Err(ModelError::UnknownMaterial(m));
+            }
+        }
+        for (value, what) in [
+            (spec.width, "opening width"),
+            (spec.height, "opening height"),
+            (spec.frame_width, "frame width"),
+            (spec.frame_depth, "frame depth"),
+        ] {
+            if value <= EPSILON {
+                return Err(ModelError::NonPositive(what));
+            }
+        }
+        // The frame must leave room for the leaf or the glass.
+        if 2.0 * spec.frame_width >= spec.width || 2.0 * spec.frame_width >= spec.height {
+            return Err(ModelError::NonPositive("clear opening inside the frame"));
+        }
+        let id = OpeningTypeId(self.take_id());
+        self.opening_types.insert(
+            id,
+            OpeningType {
+                id,
+                guid: GlobalId::new(),
+                name: spec.name,
+                kind: spec.kind,
+                width: spec.width,
+                height: spec.height,
+                frame_width: spec.frame_width,
+                frame_depth: spec.frame_depth,
+                frame_material: spec.frame_material,
+                panel_material: spec.panel_material,
+            },
+        );
+        Ok(id)
+    }
+
+    pub fn opening_type(&self, id: OpeningTypeId) -> Option<&OpeningType> {
+        self.opening_types.get(&id)
+    }
+
+    pub fn opening_types(&self) -> impl Iterator<Item = &OpeningType> {
+        self.opening_types.values()
+    }
+
+    pub fn remove_opening_type(&mut self, id: OpeningTypeId) -> Result<OpeningType, ModelError> {
+        let users = self
+            .openings
+            .values()
+            .filter(|o| o.opening_type == id)
+            .count();
+        if users > 0 {
+            return Err(ModelError::InUse(format!(
+                "{users} door(s) or window(s) use this type"
+            )));
+        }
+        self.opening_types
+            .remove(&id)
+            .ok_or(ModelError::UnknownOpeningType(id))
+    }
+
+    // ---- Doors and windows ----------------------------------------------
+
+    /// Checks that a door or window fits in its wall: inside its length and
+    /// height, with a frame no deeper than the wall, and clear of the other
+    /// doors and windows in the same wall (except `ignore`, when moving one).
+    fn validate_opening(
+        &self,
+        spec: &NewOpening,
+        ignore: Option<OpeningId>,
+    ) -> Result<(), ModelError> {
+        let otype = self
+            .opening_types
+            .get(&spec.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(spec.opening_type))?;
+        let wall = self
+            .walls
+            .get(&spec.wall)
+            .ok_or(ModelError::UnknownWall(spec.wall))?;
+        let thickness = self
+            .wall_types
+            .get(&wall.wall_type)
+            .ok_or(ModelError::UnknownWallType(wall.wall_type))?
+            .thickness();
+
+        let (a, b) = (
+            spec.along - otype.width / 2.0,
+            spec.along + otype.width / 2.0,
+        );
+        let (bottom, top) = (spec.sill, spec.sill + otype.height);
+        let wall_top = wall.base_offset + wall.height;
+        if a < -EPSILON
+            || b > wall.length() + EPSILON
+            || bottom < wall.base_offset - EPSILON
+            || top > wall_top + EPSILON
+        {
+            return Err(ModelError::OpeningOutsideWall);
+        }
+        let setback = spec
+            .setback
+            .unwrap_or((thickness - otype.frame_depth) / 2.0);
+        if setback < -EPSILON || setback + otype.frame_depth > thickness + EPSILON {
+            return Err(ModelError::FrameTooDeep);
+        }
+
+        for other in self.openings.values() {
+            if other.wall != spec.wall || Some(other.id) == ignore {
+                continue;
+            }
+            let Some(ot) = self.opening_types.get(&other.opening_type) else {
+                continue;
+            };
+            let (oa, ob) = other.span(ot.width);
+            let (obot, otop) = (other.sill, other.sill + ot.height);
+            let overlap_along = a.max(oa) < b.min(ob) - EPSILON;
+            let overlap_height = bottom.max(obot) < top.min(otop) - EPSILON;
+            if overlap_along && overlap_height {
+                return Err(ModelError::OverlappingOpenings);
+            }
+        }
+        Ok(())
+    }
+
+    /// Places a door or window in a wall.
+    pub fn add_opening(&mut self, spec: NewOpening) -> Result<OpeningId, ModelError> {
+        self.validate_opening(&spec, None)?;
+        let id = OpeningId(self.take_id());
+        self.openings.insert(
+            id,
+            Opening {
+                id,
+                guid: GlobalId::new(),
+                opening_type: spec.opening_type,
+                wall: spec.wall,
+                along: spec.along,
+                sill: spec.sill,
+                opens_to: spec.opens_to,
+                hand: spec.hand,
+                setback: spec.setback,
+            },
+        );
+        Ok(id)
+    }
+
+    /// Moves a door or window along its wall and changes its sill height,
+    /// keeping its identity and GUID.
+    pub fn move_opening(&mut self, id: OpeningId, along: f64, sill: f64) -> Result<(), ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let spec = NewOpening {
+            opening_type: o.opening_type,
+            wall: o.wall,
+            along,
+            sill,
+            opens_to: o.opens_to,
+            hand: o.hand,
+            setback: o.setback,
+        };
+        self.validate_opening(&spec, Some(id))?;
+        let o = self
+            .openings
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        o.along = along;
+        o.sill = sill;
+        Ok(())
+    }
+
+    /// Changes which way a door or window opens (Revit's "flip facing" and
+    /// "flip hand" arrows).
+    pub fn set_opening_handing(
+        &mut self,
+        id: OpeningId,
+        opens_to: WallSide,
+        hand: Hand,
+    ) -> Result<(), ModelError> {
+        let o = self
+            .openings
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        o.opens_to = opens_to;
+        o.hand = hand;
+        Ok(())
+    }
+
+    pub fn remove_opening(&mut self, id: OpeningId) -> Result<Opening, ModelError> {
+        self.openings
+            .remove(&id)
+            .ok_or(ModelError::UnknownOpening(id))
+    }
+
+    pub fn opening(&self, id: OpeningId) -> Option<&Opening> {
+        self.openings.get(&id)
+    }
+
+    pub fn openings(&self) -> impl Iterator<Item = &Opening> {
+        self.openings.values()
+    }
+
+    /// Doors and windows hosted by a wall.
+    pub fn openings_in_wall(&self, wall: WallId) -> impl Iterator<Item = &Opening> {
+        self.openings.values().filter(move |o| o.wall == wall)
     }
 }
 
@@ -814,6 +1243,143 @@ mod tests {
         assert!(matches!(m.remove_slab_type(st), Err(ModelError::InUse(_))));
         m.remove_slab(id).unwrap();
         assert!(m.remove_slab_type(st).is_ok());
+    }
+
+    /// A 4 m long, 0.1 m thick, 2.7 m high wall with a 0.8 × 2.05 door type
+    /// and a 1.2 × 1.2 window type.
+    fn with_openings() -> (Model, WallId, OpeningTypeId, OpeningTypeId) {
+        let (mut m, lvl, t) = sample();
+        let wall = m.add_wall(spec(lvl, t)).unwrap();
+        let wood = m.add_material("Madera", "wood", [180, 140, 90], CutPattern::Solid);
+        let glass = m.add_material("Vidrio", "glass", [200, 230, 240], CutPattern::Solid);
+        let door = m
+            .add_opening_type(NewOpeningType {
+                name: "P 80".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 0.8,
+                height: 2.05,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: wood,
+                panel_material: wood,
+            })
+            .unwrap();
+        let window = m
+            .add_opening_type(NewOpeningType {
+                name: "V 120".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.2,
+                height: 1.2,
+                frame_width: 0.06,
+                frame_depth: 0.07,
+                frame_material: wood,
+                panel_material: glass,
+            })
+            .unwrap();
+        (m, wall, door, window)
+    }
+
+    fn place(opening_type: OpeningTypeId, wall: WallId, along: f64, sill: f64) -> NewOpening {
+        NewOpening {
+            opening_type,
+            wall,
+            along,
+            sill,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        }
+    }
+
+    #[test]
+    fn openings_must_fit_in_their_wall() {
+        let (mut m, wall, door, window) = with_openings();
+        // Past either end of the 4 m wall.
+        assert_eq!(
+            m.add_opening(place(door, wall, 0.3, 0.0)),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        assert_eq!(
+            m.add_opening(place(door, wall, 3.7, 0.0)),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        // Above the 2.7 m wall top: 1.6 + 1.2 = 2.8.
+        assert_eq!(
+            m.add_opening(place(window, wall, 2.0, 1.6)),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        // Touching the ends exactly is fine.
+        let d = m.add_opening(place(door, wall, 0.4, 0.0)).unwrap();
+        // Overlapping the door.
+        assert_eq!(
+            m.add_opening(place(window, wall, 1.2, 0.9)),
+            Err(ModelError::OverlappingOpenings)
+        );
+        // Side by side, sharing a jamb, is allowed.
+        let w = m.add_opening(place(window, wall, 1.4, 0.9)).unwrap();
+        assert_eq!(m.openings_in_wall(wall).count(), 2);
+        // A frame deeper than the 0.1 m wall.
+        let mut deep = place(window, wall, 3.0, 0.9);
+        deep.setback = Some(0.05);
+        assert_eq!(m.add_opening(deep), Err(ModelError::FrameTooDeep));
+        // Moving keeps the GUID and is checked against the others.
+        let guid = m.opening(w).unwrap().guid.clone();
+        assert_eq!(
+            m.move_opening(w, 1.0, 0.9),
+            Err(ModelError::OverlappingOpenings)
+        );
+        m.move_opening(w, 3.0, 1.0).unwrap();
+        assert_eq!(m.opening(w).unwrap().guid, guid);
+        assert_eq!(m.opening(w).unwrap().along, 3.0);
+        assert!(m.opening(d).is_some());
+    }
+
+    #[test]
+    fn opening_types_are_checked_and_protected() {
+        let (mut m, wall, door, _) = with_openings();
+        let wood = m.opening_type(door).unwrap().frame_material;
+        let bad = NewOpeningType {
+            name: "Mal".into(),
+            kind: OpeningKind::Door(DoorOperation::SingleSwing),
+            width: 0.08,
+            height: 2.0,
+            frame_width: 0.05,
+            frame_depth: 0.07,
+            frame_material: wood,
+            panel_material: wood,
+        };
+        assert!(matches!(
+            m.add_opening_type(bad),
+            Err(ModelError::NonPositive(_))
+        ));
+        let o = m.add_opening(place(door, wall, 2.0, 0.0)).unwrap();
+        assert!(matches!(
+            m.remove_opening_type(door),
+            Err(ModelError::InUse(_))
+        ));
+        m.remove_opening(o).unwrap();
+        assert!(m.remove_opening_type(door).is_ok());
+    }
+
+    #[test]
+    fn walls_carry_their_openings() {
+        let (mut m, wall, door, _) = with_openings();
+        let o = m.add_opening(place(door, wall, 1.0, 0.0)).unwrap();
+        // Flipping keeps the door where it physically is.
+        m.flip_wall(wall).unwrap();
+        assert!((m.opening(o).unwrap().along - 3.0).abs() < 1e-12);
+        // Shortening the wall so the door falls off is rejected, untouched.
+        assert_eq!(
+            m.move_wall(wall, Point2::new(4.0, 0.0), Point2::new(2.0, 0.0)),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        assert_eq!(m.wall(wall).unwrap().end, Point2::new(0.0, 0.0));
+        m.move_wall(wall, Point2::new(5.0, 0.0), Point2::new(0.0, 0.0))
+            .unwrap();
+        // Deleting the wall deletes its door.
+        m.remove_wall(wall).unwrap();
+        assert!(m.opening(o).is_none());
+        assert_eq!(m.openings().count(), 0);
     }
 
     #[test]

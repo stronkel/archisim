@@ -41,10 +41,10 @@ Crates actuales (`crates/`):
 
 | Crate | Responsabilidad |
 |---|---|
-| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, deshacer/rehacer |
-| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos |
-| `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados |
-| `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, ejes, rotulación |
+| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer |
+| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos |
+| `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas |
+| `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba y la exporta |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; la interfaz depende de todo y nada depende de la interfaz.
@@ -60,6 +60,8 @@ Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de 
 | `SlabType` (capas) | Tipo de suelo / cubierta (estructura compuesta) | Multicapa de forjado | `IfcSlabType` + `IfcMaterialLayerSet` |
 | `Slab` | Suelo / Cubierta por contorno | Forjado | `IfcSlab` + `IfcMaterialLayerSetUsage` (`AXIS3`) |
 | Línea de referencia | Línea de ubicación | Línea de referencia | Eje + `OffsetFromReferenceLine` |
+| `OpeningType` | Tipo de familia de puerta / ventana | Objeto puerta / ventana | `IfcDoorType` / `IfcWindowType` + `IfcMaterialConstituentSet` |
+| `Opening` | Ejemplar de puerta / ventana (alojado en muro) | Puerta / ventana | `IfcOpeningElement` (vacía el muro) + `IfcDoor` / `IfcWindow` (lo rellena) |
 | Familia (futuro) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría paramétrica |
 | Parámetro compartido | Parámetro compartido | Propiedad | `IfcPropertySet` |
 
@@ -81,6 +83,15 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 - En planta se dibujan según el plano de corte (1,10 m por defecto): por debajo, con trama de cubrición y línea fina de proyección; cortados, con poché de su capa estructural y línea gruesa; por encima, discontinuos.
 - Pendiente: huecos en forjado (escaleras, patinillos), forjados inclinados, y recorte con muros (fase 2).
 
+### Puertas y ventanas
+
+- Un **tipo** de puerta o ventana fija el funcionamiento (puerta abatible de una o dos hojas o corredera; ventana fija, practicable de una o dos hojas o corredera), el **hueco de obra** (ancho × alto), el perfil del marco (anchura vista y fondo) y dos materiales: marco y hoja/vidrio.
+- Cada **ejemplar** vive en un muro: posición del centro medida sobre la línea de referencia desde el inicio del muro (como Revit), altura de antepecho desde el nivel, lado hacia el que abre (cara interior o exterior) y mano según UNE-EN 12519 (mirando desde el lado hacia el que abre la hoja, bisagras a izquierda o derecha). El retranqueo de la carpintería se mide desde la cara exterior del muro; si no se indica, se centra.
+- Se rechaza lo que no cabe: fuera del largo o de la altura del muro, solapado con otro hueco del mismo muro, o con un marco más profundo que el muro. Borrar el muro borra sus huecos; acortarlo de forma que un hueco se salga se rechaza; invertirlo deja los huecos en su sitio.
+- En planta, los huecos que corta el plano de corte interrumpen el muro y todas sus capas; las mochetas se cierran con línea de corte. Puertas: cerco, hoja abierta a 90° y arco de giro (correderas: hoja sobre la cara y flecha). Ventanas: marco, línea de vidrio, montante central en las de dos hojas, hojas desfasadas en las correderas, vierteaguas al exterior y borde del antepecho al interior. Las ventanas que quedan enteras por encima del plano de corte se dibujan discontinuas sin interrumpir el muro.
+- En IFC el hueco atraviesa el muro (`IfcRelVoidsElement`) y la puerta o ventana lo rellena (`IfcRelFillsElement`). Su geometría 3D es sencilla (marco, hojas y vidrios cerrados) y lleva `Pset_DoorCommon` / `Pset_WindowCommon` y cantidades. El muro añade superficie lateral y volumen netos.
+- Pendiente: mochetas y premarcos detallados, persianas y capialzados, dinteles, huecos sin carpintería, puertas y ventanas paramétricas en la librería de familias (fase 2).
+
 ## 5. MVP (fase 1)
 
 Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta, obtiene su planta en PDF/SVG legible y exporta un IFC que **Revit y ArchiCAD abren con muros reconocibles, tipos y capas correctos**.
@@ -92,7 +103,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 | 3 | Exportación IFC4 con capas, tipos y Psets | ✅ v0.1 |
 | 4 | Planta SVG con poché por capa | ✅ v0.1 |
 | 5 | Forjados (`IfcSlab`) por contorno | ✅ v0.2 |
-| 6 | Puertas y ventanas como huecos en muro (`IfcOpeningElement`) | ⬜ |
+| 6 | Puertas y ventanas como huecos en muro (`IfcOpeningElement`) | ✅ v0.3 |
 | 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ⬜ |
 | 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ⬜ |
 | 9 | Vista 3D | ⬜ |

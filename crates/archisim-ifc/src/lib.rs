@@ -9,7 +9,14 @@
 //!   `Qto_WallBaseQuantities`;
 //! - slab types (`IfcSlabType`) and slabs (`IfcSlab`) extruded from their
 //!   outline, with a material layer set usage, `Pset_SlabCommon` and
-//!   `Qto_SlabBaseQuantities`.
+//!   `Qto_SlabBaseQuantities`;
+//! - doors and windows: an `IfcOpeningElement` voiding the host wall
+//!   (`IfcRelVoidsElement`), filled (`IfcRelFillsElement`) by an `IfcDoor`
+//!   or `IfcWindow` with its type (`IfcDoorType` / `IfcWindowType`), a
+//!   material constituent set (frame + leaf or glazing), a simple 3D body
+//!   (frame, leaves and panes in their closed position), `Pset_DoorCommon` /
+//!   `Pset_WindowCommon` and base quantities. Walls carry net side area and
+//!   net volume once their openings are cut.
 //!
 //! Layer set orientation: walls are placed with local X along the drawn line
 //! and local Y to its left (the exterior side). The layer set usage is
@@ -17,6 +24,12 @@
 //! written from interior to exterior. Slabs are placed at their soffit and
 //! extruded upwards; their usage is `AXIS3 / POSITIVE` from the soffit, so
 //! slab layer sets are written from bottom to top.
+//!
+//! Door and window placement: each one is placed relative to its opening,
+//! which is placed relative to the wall. Its local Y axis points to the side
+//! the leaves open towards, as IFC expects for `OperationType`; left and
+//! right in IFC are seen looking along +Y, the opposite of the UNE-EN 12519
+//! handing used in ArchiSim, so they swap on export.
 //!
 //! Relationship GUIDs are derived from element GUIDs, so exporting the same
 //! model twice gives the same file apart from the header timestamp.
@@ -26,10 +39,11 @@ pub mod step;
 use std::collections::BTreeMap;
 
 use archisim_core::{
-    perimeter, GlobalId, Layer, LayerFunction, LevelId, MaterialId, Model, Point2, SlabTypeId,
-    WallFunction, WallTypeId,
+    perimeter, DoorOperation, GlobalId, Hand, Layer, LayerFunction, LevelId, MaterialId, Model,
+    OpeningKind, OpeningType, OpeningTypeId, Point2, SlabTypeId, WallFunction, WallTypeId,
+    WindowOperation, EPSILON,
 };
-use archisim_geom::{signed_area, wall_geometry};
+use archisim_geom::{openings_in_wall, removed_area, signed_area, wall_geometry, OpeningGeometry};
 use step::{boolean, list, real, string, Ref, StepWriter};
 
 /// Header information for the exported file.
@@ -92,6 +106,8 @@ struct Exporter<'a> {
     z: Ref,
     body_ctx: Ref,
     axis_ctx: Ref,
+    /// Surface style of each material, reused on door and window solids.
+    styles: BTreeMap<MaterialId, Ref>,
 }
 
 impl<'a> Exporter<'a> {
@@ -106,6 +122,7 @@ impl<'a> Exporter<'a> {
             z,
             body_ctx: Ref(0),
             axis_ctx: Ref(0),
+            styles: BTreeMap::new(),
         }
     }
 
@@ -238,6 +255,340 @@ impl<'a> Exporter<'a> {
         self.attach_set(element, guid, qto, qto_name);
     }
 
+    /// A property set from already written `IfcPropertySingleValue`s.
+    fn pset(&mut self, element: Ref, guid: &GlobalId, name: &str, props: &[Ref]) {
+        let pset = self.w.add(format!(
+            "IFCPROPERTYSET({},$,{},$,{})",
+            string(derived_guid(guid, name).as_str()),
+            string(name),
+            list(props)
+        ));
+        self.attach_set(element, guid, pset, name);
+    }
+
+    /// A planar extrusion: `profile` is drawn in the local XZ plane (x along
+    /// the wall, y up) and extruded `depth` across the wall, centred on the
+    /// local XZ plane. The solid gets the surface style of `material`.
+    fn vertical_solid(&mut self, profile: Ref, depth: f64, material: MaterialId) -> Ref {
+        let at = self.point3(0.0, depth / 2.0, 0.0);
+        let axis = self.w.add("IFCDIRECTION((0.,-1.,0.))");
+        let xdir = self.w.add("IFCDIRECTION((1.,0.,0.))");
+        let pl = self
+            .w
+            .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+        let solid = self.w.add(format!(
+            "IFCEXTRUDEDAREASOLID({profile},{pl},{},{})",
+            self.z,
+            real(depth)
+        ));
+        if let Some(&style) = self.styles.get(&material) {
+            self.w.add(format!("IFCSTYLEDITEM({solid},({style}),$)"));
+        }
+        solid
+    }
+
+    fn rect_profile(&mut self, x0: f64, x1: f64, y0: f64, y1: f64) -> Ref {
+        let pts = [
+            Point2::new(x0, y0),
+            Point2::new(x1, y0),
+            Point2::new(x1, y1),
+            Point2::new(x0, y1),
+        ];
+        let curve = self.polyline(&pts, true);
+        self.w
+            .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{curve})"))
+    }
+
+    /// `IfcDoorType` or `IfcWindowType` with its material constituents.
+    fn opening_type(&mut self, materials: &BTreeMap<MaterialId, Ref>, t: &OpeningType) -> Ref {
+        let (ty, constituents) = match t.kind {
+            OpeningKind::Door(op) => (
+                self.w.add(format!(
+                    "IFCDOORTYPE({},$,{},$,$,$,$,$,$,.DOOR.,.{}.,.F.,$)",
+                    string(t.guid.as_str()),
+                    string(&t.name),
+                    door_operation(op, Hand::Right)
+                )),
+                [("Lining", t.frame_material), ("Panel", t.panel_material)],
+            ),
+            OpeningKind::Window(op) => (
+                self.w.add(format!(
+                    "IFCWINDOWTYPE({},$,{},$,$,$,$,$,$,.WINDOW.,.{}.,.F.,$)",
+                    string(t.guid.as_str()),
+                    string(&t.name),
+                    window_partitioning(op)
+                )),
+                [("Framing", t.frame_material), ("Glazing", t.panel_material)],
+            ),
+        };
+        let refs: Vec<Ref> = constituents
+            .iter()
+            .map(|(name, m)| {
+                self.w.add(format!(
+                    "IFCMATERIALCONSTITUENT({},$,{},$,$)",
+                    string(name),
+                    materials[m]
+                ))
+            })
+            .collect();
+        let set = self.w.add(format!(
+            "IFCMATERIALCONSTITUENTSET({},$,{})",
+            string(&t.name),
+            list(&refs)
+        ));
+        self.w.add(format!(
+            "IFCRELASSOCIATESMATERIAL({},$,$,$,({ty}),{set})",
+            string(derived_guid(&t.guid, "material").as_str())
+        ));
+        ty
+    }
+
+    /// Writes the opening that voids `wall` and the door or window filling
+    /// it. Returns the door or window.
+    #[allow(clippy::too_many_arguments)]
+    fn opening(
+        &mut self,
+        wall: Ref,
+        wall_pl: Ref,
+        og: &OpeningGeometry,
+        guid: &GlobalId,
+        t: &OpeningType,
+        wall_base: f64,
+        wall_top: f64,
+        is_external: bool,
+        tag: u64,
+    ) -> Ref {
+        let (w, h) = (og.width(), og.height());
+        let mid = (og.t0 + og.t1) / 2.0;
+
+        // The void: the rough opening through the whole wall thickness. It
+        // overshoots the faces, and the base or top when it reaches them, so
+        // the boolean cut is clean.
+        let m = 0.05;
+        let below = if (og.sill - wall_base).abs() < EPSILON {
+            m
+        } else {
+            0.0
+        };
+        let above = if (og.head - wall_top).abs() < EPSILON {
+            m
+        } else {
+            0.0
+        };
+        let void_guid = derived_guid(guid, "opening");
+        let loc = self.point3(mid, 0.0, og.sill - wall_base);
+        let void_pl = self.placement(Some(wall_pl), loc, None);
+        let outline = self.polyline(
+            &[
+                Point2::new(-w / 2.0, og.interior_offset - m),
+                Point2::new(w / 2.0, og.interior_offset - m),
+                Point2::new(w / 2.0, og.exterior_offset + m),
+                Point2::new(-w / 2.0, og.exterior_offset + m),
+            ],
+            true,
+        );
+        let profile = self
+            .w
+            .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+        let at = self.point3(0.0, 0.0, -below);
+        let solid_pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({at},$,$)"));
+        let solid = self.w.add(format!(
+            "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+            self.z,
+            real(h + below + above)
+        ));
+        let rep = self.w.add(format!(
+            "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+            self.body_ctx
+        ));
+        let shape = self
+            .w
+            .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+        let void = self.w.add(format!(
+            "IFCOPENINGELEMENT({},$,{},$,$,{void_pl},{shape},$,.OPENING.)",
+            string(void_guid.as_str()),
+            string(&format!("Hueco {}", t.name))
+        ));
+        self.w.add(format!(
+            "IFCRELVOIDSELEMENT({},$,$,$,{wall},{void})",
+            string(derived_guid(guid, "voids").as_str())
+        ));
+        self.quantities(
+            void,
+            &void_guid,
+            "Qto_OpeningElementBaseQuantities",
+            &[
+                ("Width", "IFCQUANTITYLENGTH", w),
+                ("Height", "IFCQUANTITYLENGTH", h),
+                (
+                    "Depth",
+                    "IFCQUANTITYLENGTH",
+                    og.exterior_offset - og.interior_offset,
+                ),
+            ],
+        );
+
+        // The door or window, in the frame plane, its Y axis towards the
+        // side it opens to.
+        let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
+        let facing = og.swing_dir().dot(og.n);
+        let loc = self.point3(0.0, y_mid, 0.0);
+        let xdir = self
+            .w
+            .add(format!("IFCDIRECTION(({},0.,0.))", real(facing.signum())));
+        let pl = self.placement(Some(void_pl), loc, Some(xdir));
+
+        let f = t.frame_width;
+        let depth = t.frame_depth;
+        let (x0, x1) = (-w / 2.0, w / 2.0);
+        let mut solids = Vec::new();
+        let is_door = match t.kind {
+            OpeningKind::Door(op) => {
+                // Lining: two jambs and the head, open at the floor.
+                let lining = self.polyline(
+                    &[
+                        Point2::new(x0, 0.0),
+                        Point2::new(x0 + f, 0.0),
+                        Point2::new(x0 + f, h - f),
+                        Point2::new(x1 - f, h - f),
+                        Point2::new(x1 - f, 0.0),
+                        Point2::new(x1, 0.0),
+                        Point2::new(x1, h),
+                        Point2::new(x0, h),
+                    ],
+                    true,
+                );
+                let lining = self
+                    .w
+                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{lining})"));
+                solids.push(self.vertical_solid(lining, depth, t.frame_material));
+                let leaf = 0.04_f64.min(depth);
+                let leaves: Vec<(f64, f64)> = match op {
+                    DoorOperation::DoubleSwing => vec![(x0 + f, 0.0), (0.0, x1 - f)],
+                    _ => vec![(x0 + f, x1 - f)],
+                };
+                for (a, b) in leaves {
+                    let p = self.rect_profile(a, b, 0.0, h - f);
+                    solids.push(self.vertical_solid(p, leaf, t.panel_material));
+                }
+                true
+            }
+            OpeningKind::Window(op) => {
+                let n = op.panels();
+                let clear = (w - 2.0 * f - (n as f64 - 1.0) * f) / n as f64;
+                let panes: Vec<(f64, f64)> = (0..n)
+                    .map(|i| {
+                        let a = x0 + f + i as f64 * (clear + f);
+                        (a, a + clear)
+                    })
+                    .collect();
+                let outer = self.polyline(
+                    &[
+                        Point2::new(x0, 0.0),
+                        Point2::new(x1, 0.0),
+                        Point2::new(x1, h),
+                        Point2::new(x0, h),
+                    ],
+                    true,
+                );
+                let holes: Vec<Ref> = panes
+                    .iter()
+                    .map(|&(a, b)| {
+                        self.polyline(
+                            &[
+                                Point2::new(a, f),
+                                Point2::new(a, h - f),
+                                Point2::new(b, h - f),
+                                Point2::new(b, f),
+                            ],
+                            true,
+                        )
+                    })
+                    .collect();
+                let frame = self.w.add(format!(
+                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outer},{})",
+                    list(&holes)
+                ));
+                solids.push(self.vertical_solid(frame, depth, t.frame_material));
+                for (a, b) in panes {
+                    let p = self.rect_profile(a, b, f, h - f);
+                    solids.push(self.vertical_solid(p, 0.024_f64.min(depth), t.panel_material));
+                }
+                false
+            }
+        };
+        let rep = self.w.add(format!(
+            "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',{})",
+            self.body_ctx,
+            list(&solids)
+        ));
+        let shape = self
+            .w
+            .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+        let name = format!("{} {tag}", t.name);
+        let filling = if is_door {
+            let OpeningKind::Door(op) = t.kind else {
+                unreachable!()
+            };
+            self.w.add(format!(
+                "IFCDOOR({},$,{},$,{},{pl},{shape},{},{},{},.DOOR.,.{}.,$)",
+                string(guid.as_str()),
+                string(&name),
+                string(&t.name),
+                string(&tag.to_string()),
+                real(h),
+                real(w),
+                door_operation(op, og.hand)
+            ))
+        } else {
+            let OpeningKind::Window(op) = t.kind else {
+                unreachable!()
+            };
+            self.w.add(format!(
+                "IFCWINDOW({},$,{},$,{},{pl},{shape},{},{},{},.WINDOW.,.{}.,$)",
+                string(guid.as_str()),
+                string(&name),
+                string(&t.name),
+                string(&tag.to_string()),
+                real(h),
+                real(w),
+                window_partitioning(op)
+            ))
+        };
+        self.w.add(format!(
+            "IFCRELFILLSELEMENT({},$,$,$,{void},{filling})",
+            string(derived_guid(guid, "fills").as_str())
+        ));
+
+        let (pset_name, qto_name) = if is_door {
+            ("Pset_DoorCommon", "Qto_DoorBaseQuantities")
+        } else {
+            ("Pset_WindowCommon", "Qto_WindowBaseQuantities")
+        };
+        let props = [
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
+                string(&t.name)
+            )),
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({}),$)",
+                boolean(is_external)
+            )),
+        ];
+        self.pset(filling, guid, pset_name, &props);
+        self.quantities(
+            filling,
+            guid,
+            qto_name,
+            &[
+                ("Width", "IFCQUANTITYLENGTH", w),
+                ("Height", "IFCQUANTITYLENGTH", h),
+                ("Area", "IFCQUANTITYAREA", w * h),
+            ],
+        );
+        filling
+    }
+
     fn rel_aggregates(&mut self, guid: GlobalId, parent: Ref, children: &[Ref]) {
         self.w.add(format!(
             "IFCRELAGGREGATES({},$,$,$,{parent},{})",
@@ -334,11 +685,17 @@ impl<'a> Exporter<'a> {
                 real(cg),
                 real(cb)
             ));
-            let shading = self.w.add(format!("IFCSURFACESTYLESHADING({colour},0.)"));
+            // Glass is see-through in 3D viewers.
+            let transparency = if m.category == "glass" { 0.6 } else { 0.0 };
+            let shading = self.w.add(format!(
+                "IFCSURFACESTYLESHADING({colour},{})",
+                real(transparency)
+            ));
             let style = self.w.add(format!(
                 "IFCSURFACESTYLE({},.BOTH.,({shading}))",
                 string(&m.name)
             ));
+            self.styles.insert(m.id, style);
             let item = self.w.add(format!("IFCSTYLEDITEM($,({style}),$)"));
             let rep = self.w.add(format!(
                 "IFCSTYLEDREPRESENTATION({},'Style','Material',({item}))",
@@ -386,6 +743,14 @@ impl<'a> Exporter<'a> {
             slab_sets.insert(t.id, set);
             slab_type_refs.insert(t.id, ty);
         }
+
+        // Door and window types.
+        let mut opening_type_refs: BTreeMap<OpeningTypeId, Ref> = BTreeMap::new();
+        for t in model.opening_types() {
+            let ty = self.opening_type(&materials, t);
+            opening_type_refs.insert(t.id, ty);
+        }
+        let mut openings_by_type: BTreeMap<OpeningTypeId, Vec<Ref>> = BTreeMap::new();
 
         // Walls.
         let mut contained: BTreeMap<LevelId, Vec<Ref>> = BTreeMap::new();
@@ -466,7 +831,38 @@ impl<'a> Exporter<'a> {
                 wtype.function == WallFunction::Exterior,
                 wtype.is_load_bearing(),
             );
+            // Doors and windows: void the wall, then fill the void.
+            let mut cut_side = 0.0;
+            let mut cut_volume = 0.0;
+            for og in openings_in_wall(model, wall.id) {
+                let (Some(o), Some(otype)) = (
+                    model.opening(og.opening),
+                    model
+                        .opening(og.opening)
+                        .and_then(|o| model.opening_type(o.opening_type)),
+                ) else {
+                    continue;
+                };
+                cut_side += og.width() * og.height();
+                cut_volume += removed_area(&geo, &og) * og.height();
+                let filling = self.opening(
+                    w,
+                    pl,
+                    &og,
+                    &o.guid,
+                    otype,
+                    wall.base_offset,
+                    wall.base_offset + wall.height,
+                    wtype.function == WallFunction::Exterior,
+                    o.id.0,
+                );
+                contained.entry(wall.level).or_default().push(filling);
+                openings_by_type.entry(otype.id).or_default().push(filling);
+            }
+
             let footprint = signed_area(&geo.outline);
+            let side = length * wall.height;
+            let volume = footprint * wall.height;
             self.quantities(
                 w,
                 &wall.guid,
@@ -476,8 +872,10 @@ impl<'a> Exporter<'a> {
                     ("Width", "IFCQUANTITYLENGTH", wtype.thickness()),
                     ("Height", "IFCQUANTITYLENGTH", wall.height),
                     ("GrossFootprintArea", "IFCQUANTITYAREA", footprint),
-                    ("GrossSideArea", "IFCQUANTITYAREA", length * wall.height),
-                    ("GrossVolume", "IFCQUANTITYVOLUME", footprint * wall.height),
+                    ("GrossSideArea", "IFCQUANTITYAREA", side),
+                    ("NetSideArea", "IFCQUANTITYAREA", side - cut_side),
+                    ("GrossVolume", "IFCQUANTITYVOLUME", volume),
+                    ("NetVolume", "IFCQUANTITYVOLUME", volume - cut_volume),
                 ],
             );
 
@@ -586,6 +984,18 @@ impl<'a> Exporter<'a> {
                 type_refs[t]
             ));
         }
+        for (t, elements) in &openings_by_type {
+            let guid = model
+                .opening_type(*t)
+                .map(|t| t.guid.clone())
+                .unwrap_or_default();
+            self.w.add(format!(
+                "IFCRELDEFINESBYTYPE({},$,$,$,{},{})",
+                string(derived_guid(&guid, "type").as_str()),
+                list(elements),
+                opening_type_refs[t]
+            ));
+        }
         for (t, slabs) in &slabs_by_type {
             let guid = model
                 .slab_type(*t)
@@ -598,6 +1008,27 @@ impl<'a> Exporter<'a> {
                 slab_type_refs[t]
             ));
         }
+    }
+}
+
+/// `IfcDoorTypeOperationEnum` value. IFC reads left and right looking along
+/// the door's +Y axis (towards the side it opens to), so the UNE-EN 12519
+/// hand, seen from that side, swaps.
+fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
+    match (op, hand) {
+        (DoorOperation::SingleSwing, Hand::Left) => "SINGLE_SWING_RIGHT",
+        (DoorOperation::SingleSwing, Hand::Right) => "SINGLE_SWING_LEFT",
+        (DoorOperation::DoubleSwing, _) => "DOUBLE_DOOR_SINGLE_SWING",
+        (DoorOperation::Sliding, Hand::Left) => "SLIDING_TO_RIGHT",
+        (DoorOperation::Sliding, Hand::Right) => "SLIDING_TO_LEFT",
+    }
+}
+
+/// `IfcWindowTypePartitioningEnum` value.
+fn window_partitioning(op: WindowOperation) -> &'static str {
+    match op.panels() {
+        1 => "SINGLE_PANEL",
+        _ => "DOUBLE_PANEL_VERTICAL",
     }
 }
 
@@ -629,7 +1060,10 @@ fn utc_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use archisim_core::{CutPattern, NewSlab, NewWall, ReferenceLine, SlabFunction};
+    use archisim_core::{
+        CutPattern, NewOpening, NewOpeningType, NewSlab, NewWall, ReferenceLine, SlabFunction,
+        WallSide,
+    };
 
     fn model() -> Model {
         let mut m = Model::new("Casa de prueba");
@@ -651,14 +1085,37 @@ mod tests {
                 }],
             )
             .unwrap();
-        m.add_wall(NewWall {
-            wall_type: t,
-            level: lvl,
-            start: Point2::new(0.0, 0.0),
-            end: Point2::new(5.0, 0.0),
-            reference: ReferenceLine::Center,
-            height: 3.0,
-            base_offset: 0.0,
+        let wall = m
+            .add_wall(NewWall {
+                wall_type: t,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(5.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let door = m
+            .add_opening_type(NewOpeningType {
+                name: "Puerta 90".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 0.9,
+                height: 2.1,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: mat,
+                panel_material: mat,
+            })
+            .unwrap();
+        m.add_opening(NewOpening {
+            opening_type: door,
+            wall,
+            along: 2.0,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
         })
         .unwrap();
         let st = m
@@ -715,6 +1172,16 @@ mod tests {
             "'Pset_SlabCommon'",
             "'Qto_SlabBaseQuantities'",
             "IFCQUANTITYVOLUME('GrossVolume',$,$,3.,$)",
+            "IFCDOORTYPE(",
+            "IFCOPENINGELEMENT(",
+            "IFCRELVOIDSELEMENT(",
+            "IFCRELFILLSELEMENT(",
+            ".DOOR.,.SINGLE_SWING_RIGHT.,$)",
+            "'Pset_DoorCommon'",
+            "'Qto_DoorBaseQuantities'",
+            "IFCMATERIALCONSTITUENTSET(",
+            // 5 × 0.115 × 3 minus the 0.9 × 2.1 door.
+            "IFCQUANTITYVOLUME('NetVolume',$,$,1.50765,$)",
         ] {
             assert!(text.contains(needle), "missing {needle}");
         }

@@ -10,6 +10,11 @@ Checks:
      thickness.
   4. Every slab's layer set usage runs along Z (AXIS3) and its layers are
      ordered bottom to top, matching the extrusion.
+  5. Every opening voids a wall and is filled by exactly one door or window;
+     every door and window fills an opening, has a type, a material
+     constituent set, its common property set and quantities, and 3D
+     geometry. Wall volumes are compared with their net volume, after the
+     openings are cut.
 
 Usage:  python3 scripts/validate_ifc.py out/demo.ifc
 Needs:  pip install ifcopenshell
@@ -66,7 +71,8 @@ def main(path: str) -> int:
             try:
                 shp = geom.create_shape(settings, el)
                 vol = shape.get_volume(shp.geometry)
-                expected = psets[qto_name]["GrossVolume"]
+                qto = psets[qto_name]
+                expected = qto.get("NetVolume", qto["GrossVolume"])
                 if abs(vol - expected) > 1e-4:
                     errors.append(f"{name}: volume {vol:.4f} != {expected:.4f}")
             except Exception as exc:
@@ -95,9 +101,51 @@ def main(path: str) -> int:
         if type_obj is not None and type_obj.PredefinedType != s.PredefinedType:
             errors.append(f"{s.Name}: predefined type differs from its type")
 
+    openings = f.by_type("IfcOpeningElement")
+    for o in openings:
+        voids = o.VoidsElements
+        if len(voids) != 1 or not voids[0].RelatingBuildingElement.is_a("IfcWall"):
+            errors.append(f"{o.Name}: does not void exactly one wall")
+        if len(o.HasFillings) != 1:
+            errors.append(f"{o.Name}: has {len(o.HasFillings)} fillings, expected 1")
+
+    fillings = f.by_type("IfcDoor") + f.by_type("IfcWindow")
+    for el in fillings:
+        name = el.Name
+        door = el.is_a("IfcDoor")
+        if len(el.FillsVoids) != 1:
+            errors.append(f"{name}: does not fill exactly one opening")
+        type_obj = eu.get_type(el)
+        if type_obj is None:
+            errors.append(f"{name}: no type")
+        elif not type_obj.is_a("IfcDoorType" if door else "IfcWindowType"):
+            errors.append(f"{name}: wrong type class {type_obj.is_a()}")
+        mat = eu.get_material(el)
+        if mat is None or not mat.is_a("IfcMaterialConstituentSet"):
+            errors.append(f"{name}: no material constituent set")
+        psets = eu.get_psets(el)
+        kind = "Door" if door else "Window"
+        for required in (f"Pset_{kind}Common", f"Qto_{kind}BaseQuantities"):
+            if required not in psets:
+                errors.append(f"{name}: missing {required}")
+        if not el.OverallWidth or not el.OverallHeight:
+            errors.append(f"{name}: missing overall size")
+        if el.ContainedInStructure == ():
+            errors.append(f"{name}: not contained in a storey")
+        if geom_ok:
+            try:
+                shp = geom.create_shape(settings, el)
+                if shape.get_volume(shp.geometry) <= 0:
+                    errors.append(f"{name}: empty geometry")
+            except Exception as exc:
+                errors.append(f"{name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
-    types = len(f.by_type("IfcWallType")) + len(f.by_type("IfcSlabType"))
-    print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, {len(storeys)} plantas, "
+    types = sum(len(f.by_type(t)) for t in
+                ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType"))
+    print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
+          f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
+          f"{len(openings)} huecos, {len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:
         print(f"{len(errors)} error(es):")

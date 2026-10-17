@@ -19,6 +19,7 @@ Lee `docs/FUNDACIONAL.md` antes de cualquier trabajo: define visión, principios
 - Unidades internas: metros, `f64`. Ángulos en radianes.
 - Capas de muro de exterior a interior; la cara exterior a la izquierda del eje (inicio → fin).
 - Capas de forjado de arriba abajo; la referencia del forjado es su cara superior.
+- Puertas y ventanas: posición del centro sobre la línea de referencia desde el inicio del muro; antepecho desde el nivel; mano según UNE-EN 12519 (vista desde el lado hacia el que abre).
 - Cada elemento tiene un `GlobalId` IFC estable: nunca lo regeneres al exportar.
 - Sala limpia: nada de código, ficheros o contenido de Autodesk o Graphisoft.
 
@@ -46,4 +47,4 @@ Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUN
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): huecos de puertas y ventanas, después formato de proyecto propio.
+Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): formato de proyecto propio (`.archisim`), después la ventana de la aplicación.

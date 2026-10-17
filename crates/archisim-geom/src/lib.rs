@@ -9,9 +9,14 @@
 //!   exterior faces meet each other and so do the interior faces, and every
 //!   layer is cut by the line joining those two corners.
 //! - Any other end (free, T-junction, three or more walls) is cut square.
+//!
+//! Doors and windows are resolved by [`opening_geometry`]: their span along
+//! the wall, the faces of their frame and their height. [`clip_span`] cuts a
+//! wall (or one of its layers) into the solid pieces between openings.
 
 use archisim_core::{
-    LayerFunction, LevelId, MaterialId, Model, Point2, Vec2, Wall, WallId, EPSILON,
+    Hand, LayerFunction, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, Vec2, Wall,
+    WallId, WallSide, EPSILON,
 };
 
 /// An infinite line through `p` with direction `d` (not necessarily unit).
@@ -228,6 +233,232 @@ fn mitre(model: &Model, wall: &Wall, end: End, other: &Wall, other_end: End) -> 
     Some(EndCut::Along(Line::new(l, r - l)))
 }
 
+/// A door or window resolved against its host wall.
+///
+/// Positions across the wall are signed offsets from the wall's drawn line,
+/// positive towards the exterior face (the left of the axis), as in
+/// [`WallGeometry`]. Heights are measured from the level.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OpeningGeometry {
+    pub opening: OpeningId,
+    pub wall: WallId,
+    pub kind: OpeningKind,
+    /// Start of the wall's drawn line, origin of the `t` coordinates.
+    pub origin: Point2,
+    /// Unit vector along the wall, start → end.
+    pub u: Vec2,
+    /// Unit normal towards the exterior face.
+    pub n: Vec2,
+    /// Start and end of the opening along the drawn line.
+    pub t0: f64,
+    pub t1: f64,
+    pub exterior_offset: f64,
+    pub interior_offset: f64,
+    /// Offsets of the exterior and interior faces of the frame.
+    pub frame_exterior: f64,
+    pub frame_interior: f64,
+    /// Visible width of the frame profile.
+    pub frame_width: f64,
+    /// Bottom and top of the opening above the level.
+    pub sill: f64,
+    pub head: f64,
+    pub opens_to: WallSide,
+    pub hand: Hand,
+}
+
+impl OpeningGeometry {
+    pub fn width(&self) -> f64 {
+        self.t1 - self.t0
+    }
+
+    pub fn height(&self) -> f64 {
+        self.head - self.sill
+    }
+
+    /// The plan point at distance `t` along the wall and `offset` across it.
+    pub fn point(&self, t: f64, offset: f64) -> Point2 {
+        self.origin + self.u * t + self.n * offset
+    }
+
+    /// Offset of the wall face on the side the leaves open to.
+    pub fn swing_face(&self) -> f64 {
+        match self.opens_to {
+            WallSide::Exterior => self.exterior_offset,
+            WallSide::Interior => self.interior_offset,
+        }
+    }
+
+    /// Offset of the frame face on the side the leaves open to.
+    pub fn swing_frame_face(&self) -> f64 {
+        match self.opens_to {
+            WallSide::Exterior => self.frame_exterior,
+            WallSide::Interior => self.frame_interior,
+        }
+    }
+
+    /// Unit vector pointing out of the wall on the side the leaves open to.
+    pub fn swing_dir(&self) -> Vec2 {
+        match self.opens_to {
+            WallSide::Exterior => self.n,
+            WallSide::Interior => -self.n,
+        }
+    }
+
+    /// Whether the hinges (or the parked sliding leaf) are at `t0`.
+    ///
+    /// The hand is defined looking at the wall from the side the door opens
+    /// to; that viewer's left points along `perp_left(-swing_dir)`.
+    pub fn hinge_at_start(&self) -> bool {
+        let viewer_left = (-self.swing_dir()).perp_left();
+        let left_is_start = viewer_left.dot(self.u) < 0.0;
+        left_is_start == (self.hand == Hand::Left)
+    }
+
+    /// The rough opening in plan: the span of the opening across the whole
+    /// wall thickness, counter-clockwise.
+    pub fn footprint(&self) -> Vec<Point2> {
+        ensure_ccw(vec![
+            self.point(self.t0, self.interior_offset),
+            self.point(self.t1, self.interior_offset),
+            self.point(self.t1, self.exterior_offset),
+            self.point(self.t0, self.exterior_offset),
+        ])
+    }
+}
+
+/// Geometry of one door or window, or `None` if it or its wall is missing.
+pub fn opening_geometry(model: &Model, id: OpeningId) -> Option<OpeningGeometry> {
+    let o = model.opening(id)?;
+    let otype = model.opening_type(o.opening_type)?;
+    let wall = model.wall(o.wall)?;
+    let thickness = model.wall_type(wall.wall_type)?.thickness();
+    let (ext, int) = wall.face_offsets(thickness);
+    let u = (wall.end - wall.start).normalized()?;
+    let setback = o.frame_setback(thickness, otype.frame_depth);
+    let (t0, t1) = o.span(otype.width);
+    Some(OpeningGeometry {
+        opening: id,
+        wall: wall.id,
+        kind: otype.kind,
+        origin: wall.start,
+        u,
+        n: u.perp_left(),
+        t0,
+        t1,
+        exterior_offset: ext,
+        interior_offset: int,
+        frame_exterior: ext - setback,
+        frame_interior: ext - setback - otype.frame_depth,
+        frame_width: otype.frame_width,
+        sill: o.sill,
+        head: o.sill + otype.height,
+        opens_to: o.opens_to,
+        hand: o.hand,
+    })
+}
+
+/// Geometry of every door and window in a wall, sorted along it.
+pub fn openings_in_wall(model: &Model, wall: WallId) -> Vec<OpeningGeometry> {
+    let mut v: Vec<_> = model
+        .openings_in_wall(wall)
+        .filter_map(|o| opening_geometry(model, o.id))
+        .collect();
+    v.sort_by(|a, b| a.t0.total_cmp(&b.t0));
+    v
+}
+
+/// Clips a convex polygon to the part between `lo` and `hi` along the
+/// direction `u` from `origin` (either bound may be open). Returns an empty
+/// vector if nothing is left.
+pub fn clip_span(
+    poly: &[Point2],
+    origin: Point2,
+    u: Vec2,
+    lo: Option<f64>,
+    hi: Option<f64>,
+) -> Vec<Point2> {
+    let mut out = poly.to_vec();
+    if let Some(lo) = lo {
+        out = clip_half_plane(&out, |p| (p - origin).dot(u) - lo);
+    }
+    if let Some(hi) = hi {
+        out = clip_half_plane(&out, |p| hi - (p - origin).dot(u));
+    }
+    if out.len() < 3 || signed_area(&out).abs() < EPSILON * EPSILON {
+        Vec::new()
+    } else {
+        out
+    }
+}
+
+/// Sutherland–Hodgman: keeps the part of a polygon where `side(p) >= 0`.
+fn clip_half_plane(poly: &[Point2], side: impl Fn(Point2) -> f64) -> Vec<Point2> {
+    let mut out: Vec<Point2> = Vec::with_capacity(poly.len() + 2);
+    let mut push = |p: Point2| {
+        if out.last().is_none_or(|q: &Point2| !q.approx_eq(p)) {
+            out.push(p);
+        }
+    };
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        let (sa, sb) = (side(a), side(b));
+        if sa >= 0.0 {
+            push(a);
+        }
+        if (sa >= 0.0) != (sb >= 0.0) {
+            push(a + (b - a) * (sa / (sa - sb)));
+        }
+    }
+    if out.len() > 1 && out[0].approx_eq(out[out.len() - 1]) {
+        out.pop();
+    }
+    out
+}
+
+/// One solid stretch of a wall between openings (or the wall ends). `None`
+/// means the stretch reaches the wall end there.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WallPiece {
+    pub from: Option<f64>,
+    pub to: Option<f64>,
+}
+
+/// The solid pieces left after cutting the given spans out of a wall, in
+/// order along it. Spans may touch or overlap; they are merged first.
+pub fn wall_pieces(spans: &[(f64, f64)]) -> Vec<WallPiece> {
+    let mut sorted: Vec<(f64, f64)> = spans.to_vec();
+    sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut merged: Vec<(f64, f64)> = Vec::new();
+    for (a, b) in sorted {
+        match merged.last_mut() {
+            Some(last) if a <= last.1 + EPSILON => last.1 = last.1.max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    let mut pieces = Vec::with_capacity(merged.len() + 1);
+    let mut from = None;
+    for (a, b) in merged {
+        pieces.push(WallPiece { from, to: Some(a) });
+        from = Some(b);
+    }
+    pieces.push(WallPiece { from, to: None });
+    pieces
+}
+
+/// Plan area of the wall removed by an opening: the wall outline clipped to
+/// the opening's span. Times the opening height, it is the volume the
+/// opening takes out of the wall.
+pub fn removed_area(wall: &WallGeometry, opening: &OpeningGeometry) -> f64 {
+    let piece = clip_span(
+        &wall.outline,
+        opening.origin,
+        opening.u,
+        Some(opening.t0),
+        Some(opening.t1),
+    );
+    signed_area(&piece).abs()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,6 +572,94 @@ mod tests {
         assert_eq!(g.start_cut, EndCut::Square);
         assert_eq!(g.end_cut, EndCut::Square);
         assert!(approx(signed_area(&g.outline), 4.7 * 0.3));
+    }
+
+    #[test]
+    fn pieces_between_openings() {
+        let p = wall_pieces(&[(3.0, 4.0), (1.0, 2.0), (2.0, 2.5)]);
+        assert_eq!(
+            p,
+            vec![
+                WallPiece {
+                    from: None,
+                    to: Some(1.0)
+                },
+                WallPiece {
+                    from: Some(2.5),
+                    to: Some(3.0)
+                },
+                WallPiece {
+                    from: Some(4.0),
+                    to: None
+                },
+            ]
+        );
+        assert_eq!(wall_pieces(&[]).len(), 1);
+    }
+
+    #[test]
+    fn openings_cut_mitred_walls_exactly() {
+        use archisim_core::{
+            DoorOperation, Hand, NewOpening, NewOpeningType, OpeningKind, WallSide,
+        };
+        let (mut m, _, ids) = rectangle();
+        let mat = m.materials().next().unwrap().id;
+        let t = m
+            .add_opening_type(NewOpeningType {
+                name: "P".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 1.0,
+                height: 2.1,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: mat,
+                panel_material: mat,
+            })
+            .unwrap();
+        // West wall runs (0,0) → (0,8); exterior on its left (−x side).
+        let o = m
+            .add_opening(NewOpening {
+                opening_type: t,
+                wall: ids[0],
+                along: 4.0,
+                sill: 0.0,
+                opens_to: WallSide::Interior,
+                hand: Hand::Left,
+                setback: Some(0.1),
+            })
+            .unwrap();
+        let og = opening_geometry(&m, o).unwrap();
+        assert!(approx(og.width(), 1.0));
+        assert!(approx(og.frame_exterior, -0.1));
+        assert!(approx(og.frame_interior, -0.17));
+        // Seen from inside the room (x > 0) looking west, left is south,
+        // which is the wall start.
+        assert!(og.hinge_at_start());
+        let wg = wall_geometry(&m, ids[0]).unwrap();
+        assert!(approx(removed_area(&wg, &og), 0.3));
+        // An opening touching the mitred start only removes the trapezoid.
+        let o2 = m
+            .add_opening(NewOpening {
+                opening_type: t,
+                wall: ids[0],
+                along: 0.5,
+                sill: 0.0,
+                opens_to: WallSide::Interior,
+                hand: Hand::Right,
+                setback: None,
+            })
+            .unwrap();
+        let og2 = opening_geometry(&m, o2).unwrap();
+        assert!(!og2.hinge_at_start());
+        // Outer edge 1.0 m, inner edge 0.7 m (mitre), 0.3 m thick.
+        assert!(approx(removed_area(&wg, &og2), (1.0 + 0.7) / 2.0 * 0.3));
+        // The pieces left over add up to the rest of the wall.
+        let pieces: f64 = wall_pieces(&[(og2.t0, og2.t1), (og.t0, og.t1)])
+            .iter()
+            .map(|p| signed_area(&clip_span(&wg.outline, og.origin, og.u, p.from, p.to)))
+            .sum();
+        let total = signed_area(&wg.outline);
+        assert!(approx(pieces, total - 0.3 - 0.255), "{pieces} {total}");
     }
 
     #[test]

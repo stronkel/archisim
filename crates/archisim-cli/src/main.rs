@@ -70,11 +70,21 @@ fn run_demo(dir: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     );
     std::fs::write(&ifc_path, ifc)?;
 
+    let doors = model
+        .openings()
+        .filter(|o| {
+            model
+                .opening_type(o.opening_type)
+                .is_some_and(|t| t.is_door())
+        })
+        .count();
     println!(
-        "Proyecto «{}»: {} muros y {} forjados en {} planta(s).",
+        "Proyecto «{}»: {} muros, {} forjados, {} puertas y {} ventanas en {} planta(s).",
         model.project_name,
         model.walls().count(),
         model.slabs().count(),
+        doors,
+        model.openings().count() - doors,
         model.levels().len()
     );
     println!("  IFC4:   {}", ifc_path.display());

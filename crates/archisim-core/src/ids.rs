@@ -45,6 +45,14 @@ typed_id!(
     /// Identifies a [`crate::Slab`].
     SlabId
 );
+typed_id!(
+    /// Identifies an [`crate::OpeningType`] (a door or window type).
+    OpeningTypeId
+);
+typed_id!(
+    /// Identifies an [`crate::Opening`] (a door or window in a wall).
+    OpeningId
+);
 
 /// Alphabet used by IFC to compress a 128-bit GUID into 22 characters.
 const IFC_GUID_ALPHABET: &[u8; 64] =
