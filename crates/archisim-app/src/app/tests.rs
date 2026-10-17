@@ -3,6 +3,7 @@
 //! click.
 
 use super::*;
+use archisim_core::SlabFunction;
 use archisim_geom::{wall_geometry, EndCut};
 use eframe::egui::{Event, Modifiers, PointerButton, RawInput};
 
@@ -136,6 +137,97 @@ fn draw_outline(h: &mut Harness) {
     h.click_at(p(0.002, -0.003));
 }
 
+/// Inside the outline drawn by [`draw_outline`]: a ground slab by its four
+/// exterior corners, a door in the south façade and a window in the north
+/// one.
+fn furnish(h: &mut Harness) {
+    h.key(Key::Escape);
+    h.type_text("f");
+    assert_eq!(h.app.tool, Tool::Slab);
+    for c in [p(0.0, 0.0), p(0.0, 9.0), p(12.0, 9.0), p(12.0, 0.0)] {
+        // A little off: the corners snap.
+        h.click_at(c + Point2::new(0.03, -0.02));
+    }
+    h.click_at(p(0.02, 0.01));
+    assert!(!h.app.slab_tool.is_drawing(), "{:?}", h.app.message);
+
+    // Door: on the south façade (drawn east → west), cursor on the room side.
+    h.type_text("p");
+    assert_eq!(h.app.tool, Tool::Door);
+    h.click_at(p(3.0, 0.2));
+    // Window: on the north façade, 3 m from the west corner.
+    h.type_text("v");
+    assert_eq!(h.app.tool, Tool::Window);
+    h.click_at(p(3.0, 8.8));
+}
+
+#[test]
+fn slab_door_and_window_tools() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    let m = h.model();
+    let slab = m.slabs().next().expect("a slab");
+    assert_eq!(slab.area(), 108.0);
+    assert_eq!(
+        m.slab_type(slab.slab_type).unwrap().function,
+        SlabFunction::BaseSlab
+    );
+    let (doors, windows): (Vec<_>, Vec<_>) = m
+        .openings()
+        .partition(|o| m.opening_type(o.opening_type).unwrap().is_door());
+    assert_eq!((doors.len(), windows.len()), (1, 1), "{:?}", h.app.message);
+    let door = doors[0];
+    let south = m.walls().nth(3).unwrap();
+    assert_eq!(door.wall, south.id);
+    // The south wall runs from x = 12 to x = 0: 3 m from the west corner is
+    // 9 m from its start.
+    assert!((door.along - 9.0).abs() < 1e-9, "{}", door.along);
+    assert_eq!((door.sill, door.opens_to), (0.0, WallSide::Interior));
+    let window = windows[0];
+    assert_eq!(window.wall, m.walls().nth(1).unwrap().id);
+    assert!((window.along - 3.0).abs() < 1e-9);
+    assert_eq!(window.sill, 0.9);
+    assert_eq!(h.app.ed.undo_label(), Some("Colocar ventana"));
+
+    // A second window on top of the first is refused and explained.
+    let before = h.model().openings().count();
+    h.click_at(p(3.2, 8.8));
+    assert_eq!(h.model().openings().count(), before);
+    let msg = h.app.message.clone().unwrap();
+    assert!(msg.error && msg.text.contains("solaparía"), "{msg:?}");
+
+    // Escape goes back to the arrow.
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+}
+
+#[test]
+fn slab_outline_with_typed_lengths_and_escape() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("f");
+    h.click_at(p(0.0, 0.0));
+    h.set_modifiers(Modifiers::SHIFT);
+    h.move_to(p(2.0, 0.1));
+    h.type_text("4000");
+    h.key(Key::Enter);
+    h.move_to(p(4.1, 2.0));
+    h.type_text("3000");
+    h.key(Key::Enter);
+    h.set_modifiers(Modifiers::NONE);
+    assert_eq!(h.app.slab_tool.corners().len(), 3);
+    // A wrong corner, taken back with Escape.
+    h.click_at(p(7.0, 7.0));
+    h.key(Key::Escape);
+    assert_eq!(h.app.slab_tool.corners().len(), 3);
+    h.click_at(p(0.0, 3.0));
+    // Enter closes it.
+    h.key(Key::Enter);
+    let m = h.model();
+    assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
+    assert_eq!(m.slabs().next().unwrap().area(), 12.0);
+}
+
 #[test]
 fn draws_a_closed_outline_with_mitred_corners() {
     let mut h = Harness::new(Editor::new_project());
@@ -258,6 +350,7 @@ fn view_navigation_and_unsaved_changes() {
 fn drawn_project_saves_and_exports() {
     let mut h = Harness::new(Editor::new_project());
     draw_outline(&mut h);
+    furnish(&mut h);
     h.app.ed.rename_project("Sesión de prueba").unwrap();
     let dir = match std::env::var_os("ARCHISIM_TEST_OUT") {
         Some(d) => PathBuf::from(d),
@@ -270,6 +363,9 @@ fn drawn_project_saves_and_exports() {
     reopened.export_ifc(&dir.join("sesion.ifc")).unwrap();
     let ifc = std::fs::read_to_string(dir.join("sesion.ifc")).unwrap();
     assert_eq!(ifc.matches("IFCWALL(").count(), 4);
+    assert_eq!(ifc.matches("IFCSLAB(").count(), 1);
+    assert_eq!(ifc.matches("IFCDOOR(").count(), 1);
+    assert_eq!(ifc.matches("IFCWINDOW(").count(), 1);
     assert!(ifc.contains("Fachada doble hoja 26,5"));
     // The plan drawn on screen is up to date and not empty.
     h.frame();

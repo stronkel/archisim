@@ -2,7 +2,7 @@
 
 Herramienta BIM de autoría, multiplataforma y escrita en Rust: la facilidad de ArchiCAD con la organización estándar de Revit, sobre IFC 4.3 como modelo de datos. Nombre provisional.
 
-Estado: **v0.5, fase 1 (MVP).** Primera ventana de aplicación: vista de planta, herramienta muro y selección con propiedades. Debajo, un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, los guarda como proyecto `.archisim` y los exporta a IFC4 y a plantas 1:50 en SVG.
+Estado: **v0.6, fase 1 (MVP).** Aplicación con vista de planta, herramientas muro, forjado, puerta y ventana, y selección con propiedades. Debajo, un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, los guarda como proyecto `.archisim` y los exporta a IFC4 y a plantas 1:50 en SVG.
 
 Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectura y el plan.
 

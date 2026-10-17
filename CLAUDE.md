@@ -55,4 +55,4 @@ Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUN
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): vista 3D en la aplicación (wgpu), y después importación IFC básica. Pendiente en la app según el feedback de Antonio: herramientas de forjado, puerta y ventana, y mover/estirar con el ratón.
+Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): vista 3D en la aplicación (wgpu), y después importación IFC básica. Pendiente en la app: forjado por varita mágica, mover/estirar con el ratón y cotas (Antonio decide el orden; ver la bitácora).

@@ -5,7 +5,8 @@
 use std::path::{Path, PathBuf};
 
 use archisim_core::{
-    Hand, LevelId, Model, OpeningKind, Point2, ReferenceLine, WallFunction, WallSide, WallTypeId,
+    Hand, LevelId, Model, OpeningKind, OpeningTypeId, Point2, ReferenceLine, SlabFunction,
+    SlabTypeId, WallFunction, WallSide, WallTypeId,
 };
 use archisim_geom::opening_geometry;
 use eframe::egui::{
@@ -15,8 +16,10 @@ use eframe::egui::{
 };
 
 use crate::editor::{Editor, WallSettings};
+use crate::opening_tool::{placement, OpeningSettings, Placement};
 use crate::pick::{in_window, outline, pick, Element};
 use crate::plan_image::{rasterize, PlanKey};
+use crate::slab_tool::{Outcome as SlabOutcome, SlabTool};
 use crate::snap::{constrain, snap, track, Snap, SnapKind};
 use crate::units::{fmt_angle, fmt_area, fmt_m, fmt_mm, parse_length};
 use crate::view::View;
@@ -37,6 +40,24 @@ const TRACK_REACH: f32 = 6.0;
 pub enum Tool {
     Arrow,
     Wall,
+    Slab,
+    Door,
+    Window,
+}
+
+impl Tool {
+    /// Tools that draw by clicking points (snaps and the crosshair apply).
+    fn draws_points(self) -> bool {
+        matches!(self, Tool::Wall | Tool::Slab)
+    }
+}
+
+/// Settings of the slab tool.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SlabSettings {
+    pub slab_type: SlabTypeId,
+    /// Height of the top face above the level.
+    pub top_offset: f64,
 }
 
 /// Something that would throw away unsaved changes, waiting for an answer.
@@ -60,6 +81,12 @@ pub struct ArchiSimApp {
     pub tool: Tool,
     pub wall_tool: WallTool,
     pub wall_settings: WallSettings,
+    pub slab_tool: SlabTool,
+    pub slab_settings: SlabSettings,
+    pub door_settings: OpeningSettings,
+    pub window_settings: OpeningSettings,
+    /// Where the door or window tool would place its element now.
+    placement: Option<Placement>,
     pub show_reference_lines: bool,
     pub message: Option<Message>,
     /// Snapped point under the cursor, in model metres.
@@ -83,12 +110,20 @@ pub struct ArchiSimApp {
 impl ArchiSimApp {
     pub fn new(ed: Editor) -> Self {
         let wall_settings = default_wall_settings(ed.model());
+        let slab_settings = default_slab_settings(ed.model());
+        let door_settings = default_opening_settings(ed.model(), true);
+        let window_settings = default_opening_settings(ed.model(), false);
         Self {
             ed,
             view: View::default(),
             tool: Tool::Arrow,
             wall_tool: WallTool::default(),
             wall_settings,
+            slab_tool: SlabTool::default(),
+            slab_settings,
+            door_settings,
+            window_settings,
+            placement: None,
             show_reference_lines: false,
             message: None,
             cursor: None,
@@ -131,6 +166,8 @@ impl ArchiSimApp {
     fn set_tool(&mut self, tool: Tool) {
         if tool != self.tool {
             self.wall_tool.finish();
+            self.slab_tool.finish();
+            self.placement = None;
             self.window_start = None;
             self.tool = tool;
         }
@@ -138,8 +175,12 @@ impl ArchiSimApp {
 
     fn replace_editor(&mut self, ed: Editor) {
         self.wall_settings = default_wall_settings(ed.model());
+        self.slab_settings = default_slab_settings(ed.model());
+        self.door_settings = default_opening_settings(ed.model(), true);
+        self.window_settings = default_opening_settings(ed.model(), false);
         self.ed = ed;
         self.wall_tool.finish();
+        self.slab_tool.finish();
         self.plan = None;
         self.fit_requested = true;
     }
@@ -284,6 +325,7 @@ impl ArchiSimApp {
 
     fn undo(&mut self) {
         self.wall_tool.finish();
+        self.slab_tool.finish();
         match self.ed.undo() {
             Some(l) => self.say(format!("Deshecho: {l}.")),
             None => self.say("No hay nada que deshacer."),
@@ -292,6 +334,7 @@ impl ArchiSimApp {
 
     fn redo(&mut self) {
         self.wall_tool.finish();
+        self.slab_tool.finish();
         match self.ed.redo() {
             Some(l) => self.say(format!("Rehecho: {l}.")),
             None => self.say("No hay nada que rehacer."),
@@ -324,6 +367,40 @@ impl ArchiSimApp {
                 }
             }
             Err(e) => self.complain(format!("No se puede crear el muro: {e}.")),
+        }
+    }
+
+    /// Builds the slab closed by the slab tool.
+    fn build_slab(&mut self, outline: Vec<Point2>) {
+        let s = self.slab_settings;
+        match self.ed.add_slab(s.slab_type, outline, s.top_offset) {
+            Ok(id) => {
+                self.slab_tool.accept();
+                let area = self.ed.model().slab(id).map_or(0.0, |s| s.area());
+                self.say(format!("Forjado de {} creado.", fmt_area(area)));
+            }
+            Err(e) => self.complain(format!("No se puede crear el forjado: {e}.")),
+        }
+    }
+
+    /// Places the door or window shown under the cursor.
+    fn place_opening(&mut self) {
+        let Some(pl) = self.placement.clone() else {
+            self.complain("Haz clic sobre un muro para colocar la puerta o ventana.");
+            return;
+        };
+        if let Some(problem) = pl.problem {
+            self.complain(format!("No cabe ahí: {problem}."));
+            return;
+        }
+        let door = self.tool == Tool::Door;
+        match self.ed.add_opening(pl.spec) {
+            Ok(_) => self.say(if door {
+                "Puerta colocada."
+            } else {
+                "Ventana colocada."
+            }),
+            Err(e) => self.complain(format!("No se puede colocar: {e}.")),
         }
     }
 
@@ -535,6 +612,18 @@ impl ArchiSimApp {
                     ui.strong("Muro");
                     self.wall_settings_ui(ui);
                 }
+                Tool::Slab => {
+                    ui.strong("Forjado");
+                    self.slab_settings_ui(ui);
+                }
+                Tool::Door => {
+                    ui.strong("Puerta");
+                    self.opening_settings_ui(ui, true);
+                }
+                Tool::Window => {
+                    ui.strong("Ventana");
+                    self.opening_settings_ui(ui, false);
+                }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.level_picker(ui);
@@ -601,6 +690,119 @@ impl ArchiSimApp {
         }
     }
 
+    fn slab_settings_ui(&mut self, ui: &mut Ui) {
+        let types: Vec<(SlabTypeId, String, f64)> = self
+            .ed
+            .model()
+            .slab_types()
+            .map(|t| (t.id, t.name.clone(), t.thickness()))
+            .collect();
+        let current = types.iter().find(|t| t.0 == self.slab_settings.slab_type);
+        ui.label("Tipo:");
+        let mut chosen = self.slab_settings.slab_type;
+        ComboBox::from_id_salt("tool-slab-type")
+            .width(260.0)
+            .selected_text(current.map_or("—".into(), |t| t.1.clone()))
+            .show_ui(ui, |ui| {
+                for (id, name, thickness) in &types {
+                    ui.selectable_value(
+                        &mut chosen,
+                        *id,
+                        format!("{name} · {} mm", fmt_mm(*thickness)),
+                    );
+                }
+            });
+        self.slab_settings.slab_type = chosen;
+        if let Some(t) = current {
+            ui.label(format!("Canto {} mm", fmt_mm(t.2)));
+        }
+        ui.label("Cara superior sobre la planta:")
+            .on_hover_text("Referencia en la cara superior, como en ArchiCAD y Revit; las capas cuelgan hacia abajo");
+        if let Some(v) = length_field(
+            ui,
+            Id::unique("tool-slab-top"),
+            self.slab_settings.top_offset,
+            60.0,
+        ) {
+            self.slab_settings.top_offset = v;
+        }
+    }
+
+    fn opening_settings_ui(&mut self, ui: &mut Ui, door: bool) {
+        let types: Vec<(OpeningTypeId, String)> = self
+            .ed
+            .model()
+            .opening_types()
+            .filter(|t| t.is_door() == door)
+            .map(|t| (t.id, t.name.clone()))
+            .collect();
+        let settings = if door {
+            &mut self.door_settings
+        } else {
+            &mut self.window_settings
+        };
+        let current = types
+            .iter()
+            .find(|t| t.0 == settings.opening_type)
+            .map_or("—".to_string(), |t| t.1.clone());
+        ui.label("Tipo:");
+        ComboBox::from_id_salt(if door {
+            "tool-door-type"
+        } else {
+            "tool-window-type"
+        })
+        .width(250.0)
+        .selected_text(current)
+        .show_ui(ui, |ui| {
+            for (id, name) in &types {
+                ui.selectable_value(&mut settings.opening_type, *id, name);
+            }
+        });
+        ui.label("Mano:")
+            .on_hover_text("UNE-EN 12519: mirando desde el lado hacia el que abre, bisagras a la izquierda o a la derecha");
+        ComboBox::from_id_salt(if door {
+            "tool-door-hand"
+        } else {
+            "tool-window-hand"
+        })
+        .selected_text(hand_name(settings.hand))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut settings.hand, Hand::Left, hand_name(Hand::Left));
+            ui.selectable_value(&mut settings.hand, Hand::Right, hand_name(Hand::Right));
+        });
+        ui.label("Antepecho:");
+        let sill_id = Id::unique(if door {
+            "tool-door-sill"
+        } else {
+            "tool-window-sill"
+        });
+        if let Some(v) = length_field(ui, sill_id, settings.sill, 60.0) {
+            settings.sill = v;
+        }
+        ui.label("Retranqueo:").on_hover_text(
+            "Desde la cara exterior del muro hasta la cara exterior del marco. Vacío: centrado en el muro",
+        );
+        let setback_id = Id::unique(if door {
+            "tool-door-setback"
+        } else {
+            "tool-window-setback"
+        });
+        let shown = settings.setback.map(fmt_mm).unwrap_or_default();
+        if let Some(text) = text_edit_committed(ui, setback_id, &shown, 60.0) {
+            if text.trim().is_empty() {
+                settings.setback = None;
+            } else if let Some(v) = parse_length(&text) {
+                settings.setback = Some(v);
+            } else {
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(Id::unique("length-error"), text));
+            }
+        }
+        if settings.setback.is_none() {
+            ui.label(egui::RichText::new("(centrado)").weak());
+        }
+    }
+
     fn level_picker(&mut self, ui: &mut Ui) {
         let levels: Vec<(LevelId, String)> = self
             .ed
@@ -626,6 +828,7 @@ impl ArchiSimApp {
             self.ed.level = chosen;
             self.ed.selection.clear();
             self.wall_tool.finish();
+            self.slab_tool.finish();
         }
     }
 
@@ -637,6 +840,9 @@ impl ArchiSimApp {
         for (tool, label, key) in [
             (Tool::Arrow, "↖  Flecha", "Esc"),
             (Tool::Wall, "▭  Muro", "M"),
+            (Tool::Slab, "▱  Forjado", "F"),
+            (Tool::Door, "◜  Puerta", "P"),
+            (Tool::Window, "⊟  Ventana", "V"),
         ] {
             let r = ui
                 .add_sized(size, egui::Button::selectable(self.tool == tool, label))
@@ -645,20 +851,17 @@ impl ArchiSimApp {
                 self.set_tool(tool);
             }
         }
-        ui.add_space(12.0);
-        ui.label(
-            egui::RichText::new("Próximamente: forjado, puerta, ventana")
-                .small()
-                .weak(),
-        );
     }
 
     fn status_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            let hint = match (self.tool, self.wall_tool.is_drawing()) {
-                (Tool::Arrow, _) => "Rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · Inicio: ajustar",
-                (Tool::Wall, false) => "Clic: inicio del muro",
-                (Tool::Wall, true) => "Clic: siguiente punto · escribe la longitud en mm + Intro · Mayús: ángulos de 45° · Intro/Esc/botón derecho: terminar",
+            let hint = match self.tool {
+                Tool::Arrow => "Rueda: zoom · arrastrar con la rueda o el botón derecho: encuadre · Inicio: ajustar",
+                Tool::Wall if !self.wall_tool.is_drawing() => "Clic: inicio del muro",
+                Tool::Wall => "Clic: siguiente punto · escribe la longitud en mm + Intro · Mayús: ángulos de 45° · Intro/Esc/botón derecho: terminar",
+                Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina del forjado",
+                Tool::Slab => "Clic: siguiente esquina · clic en la primera o Intro: cerrar · longitud en mm + Intro · Esc: quitar la última esquina",
+                Tool::Door | Tool::Window => "Clic sobre un muro: se coloca centrada en el cursor y abre hacia el lado del muro donde está el cursor · Esc: flecha",
             };
             ui.label(egui::RichText::new(hint).weak());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -715,6 +918,8 @@ impl ArchiSimApp {
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_wall_preview(&painter, rect);
+        self.draw_slab_preview(&painter, rect);
+        self.draw_opening_preview(&painter, rect);
         self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
             let r = Rect::from_two_pos(
@@ -731,7 +936,7 @@ impl ArchiSimApp {
         }
 
         let icon = match self.tool {
-            Tool::Wall => CursorIcon::Crosshair,
+            Tool::Wall | Tool::Slab | Tool::Door | Tool::Window => CursorIcon::Crosshair,
             Tool::Arrow if self.hover.is_some() => CursorIcon::PointingHand,
             Tool::Arrow => CursorIcon::Default,
         };
@@ -780,6 +985,31 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Slab => {
+                let mut s = snap(model, self.ed.level, raw, reach, self.slab_tool.corners());
+                if let Some(a) = self.slab_tool.anchor() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = track(a, s, self.view.to_metres(TRACK_REACH));
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
+            Tool::Door | Tool::Window => {
+                let settings = if self.tool == Tool::Door {
+                    self.door_settings
+                } else {
+                    self.window_settings
+                };
+                self.placement = placement(model, self.ed.level, raw, reach, &settings);
+                self.cursor = Some(Snap {
+                    point: crate::snap::round_point(raw),
+                    kind: SnapKind::Free,
+                });
+                self.hover = None;
+            }
             Tool::Arrow => {
                 self.cursor = Some(Snap {
                     point: crate::snap::round_point(raw),
@@ -804,33 +1034,61 @@ impl ArchiSimApp {
                 i.key_pressed(Key::Delete),
             )
         });
+        let drawing = self.wall_tool.is_drawing() || self.slab_tool.is_drawing();
         let mut used_text = false;
-        if self.tool == Tool::Wall && self.wall_tool.is_drawing() {
+        for e in &events {
+            if let egui::Event::Text(t) = e {
+                for c in t.chars() {
+                    used_text |= match self.tool {
+                        Tool::Wall => self.wall_tool.type_char(c),
+                        Tool::Slab => self.slab_tool.type_char(c),
+                        _ => false,
+                    };
+                }
+            }
+        }
+        if !used_text && !drawing {
+            // Tool keys: M muro, F forjado, P puerta, V ventana.
             for e in &events {
                 if let egui::Event::Text(t) = e {
-                    for c in t.chars() {
-                        used_text |= self.wall_tool.type_char(c);
+                    let tool = match t.to_lowercase().as_str() {
+                        "m" => Some(Tool::Wall),
+                        "f" => Some(Tool::Slab),
+                        "p" => Some(Tool::Door),
+                        "v" => Some(Tool::Window),
+                        _ => None,
+                    };
+                    if let Some(tool) = tool {
+                        self.set_tool(tool);
                     }
                 }
             }
         }
-        if !used_text && !self.wall_tool.is_drawing() {
-            let typed_m = events
-                .iter()
-                .any(|e| matches!(e, egui::Event::Text(t) if t.eq_ignore_ascii_case("m")));
-            if typed_m {
-                self.set_tool(Tool::Wall);
-            }
-        }
-        if backspace && self.tool == Tool::Wall && self.wall_tool.backspace() {
-            // Edited the typed length.
-        } else if delete || backspace {
+        let edited_length = backspace
+            && match self.tool {
+                Tool::Wall => self.wall_tool.backspace(),
+                Tool::Slab => self.slab_tool.backspace(),
+                _ => false,
+            };
+        if !edited_length && (delete || backspace) && !drawing {
             self.delete();
         }
-        if enter && self.tool == Tool::Wall {
+        if enter {
             let towards = self.cursor.map(|c| c.point).unwrap_or_default();
-            if let Outcome::Build(a, b) = self.wall_tool.enter(towards) {
-                self.build_wall(a, b);
+            match self.tool {
+                Tool::Wall => {
+                    if let Outcome::Build(a, b) = self.wall_tool.enter(towards) {
+                        self.build_wall(a, b);
+                    }
+                }
+                Tool::Slab => match self.slab_tool.enter(towards) {
+                    SlabOutcome::Build(outline) => self.build_slab(outline),
+                    SlabOutcome::Invalid => self.complain(
+                        "El contorno necesita al menos tres esquinas y no puede cruzarse.",
+                    ),
+                    SlabOutcome::Nothing => {}
+                },
+                _ => {}
             }
         }
         if escape {
@@ -840,6 +1098,12 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Slab => {
+                    if !self.slab_tool.escape() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Door | Tool::Window => self.set_tool(Tool::Arrow),
                 Tool::Arrow => {
                     self.window_start = None;
                     self.ed.selection.clear();
@@ -863,6 +1127,27 @@ impl ArchiSimApp {
                     || response.clicked_by(PointerButton::Secondary)
                 {
                     self.wall_tool.finish();
+                }
+            }
+            Tool::Slab => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        match self.slab_tool.click(c.point) {
+                            SlabOutcome::Build(outline) => self.build_slab(outline),
+                            SlabOutcome::Invalid => self.complain(
+                                "El contorno no puede cruzarse: corrige la última esquina.",
+                            ),
+                            SlabOutcome::Nothing => {}
+                        }
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.slab_tool.finish();
+                }
+            }
+            Tool::Door | Tool::Window => {
+                if response.clicked_by(PointerButton::Primary) {
+                    self.place_opening();
                 }
             }
             Tool::Arrow => {
@@ -1122,17 +1407,21 @@ impl ArchiSimApp {
         } else {
             format!("L: {}▏   {}", self.wall_tool.typed, fmt_angle(angle))
         };
-        let cursor = self.view.to_screen(rect, c.point);
+        self.draw_label(painter, rect, c.point, text);
+    }
+
+    /// A small label beside the cursor, flipped near the view's edges.
+    fn draw_label(&self, painter: &egui::Painter, rect: Rect, at: Point2, text: String) {
+        let cursor = self.view.to_screen(rect, at);
         let galley = painter.layout_no_wrap(text, FontId::monospace(12.0), Color32::from_gray(20));
-        // Beside the cursor, flipped to the other side near the view's edges.
-        let mut at = cursor + Vec2::new(16.0, 18.0);
-        if at.x + galley.size().x + 8.0 > rect.right() {
-            at.x = cursor.x - 16.0 - galley.size().x;
+        let mut pos = cursor + Vec2::new(16.0, 18.0);
+        if pos.x + galley.size().x + 8.0 > rect.right() {
+            pos.x = cursor.x - 16.0 - galley.size().x;
         }
-        if at.y + galley.size().y + 8.0 > rect.bottom() {
-            at.y = cursor.y - 18.0 - galley.size().y;
+        if pos.y + galley.size().y + 8.0 > rect.bottom() {
+            pos.y = cursor.y - 18.0 - galley.size().y;
         }
-        let bg = Rect::from_min_size(at, galley.size()).expand(4.0);
+        let bg = Rect::from_min_size(pos, galley.size()).expand(4.0);
         painter.rect_filled(
             bg,
             CornerRadius::same(3),
@@ -1144,11 +1433,143 @@ impl ArchiSimApp {
             Stroke::new(1.0, Color32::from_gray(150)),
             StrokeKind::Inside,
         );
-        painter.galley(at, galley, Color32::BLACK);
+        painter.galley(pos, galley, Color32::BLACK);
+    }
+
+    /// The slab outline being drawn: placed corners, the edge to the cursor
+    /// and, dashed, the edge that will close it.
+    fn draw_slab_preview(&self, painter: &egui::Painter, rect: Rect) {
+        let (Tool::Slab, Some(c)) = (self.tool, self.cursor) else {
+            return;
+        };
+        let corners = self.slab_tool.corners();
+        let Some(&last) = corners.last() else {
+            return;
+        };
+        let next = self.slab_tool.typed_end(c.point).unwrap_or(c.point);
+        let mut pts: Vec<Point2> = corners.to_vec();
+        pts.push(next);
+        let screen = self.polygon(rect, &pts);
+        let ink = Stroke::new(1.5, ACCENT);
+        painter.add(Shape::line(screen.clone(), ink));
+        if pts.len() >= 3 {
+            dashed(painter, screen[screen.len() - 1], screen[0], ACCENT);
+        }
+        for p in &screen[..screen.len() - 1] {
+            painter.rect_filled(
+                Rect::from_center_size(*p, Vec2::splat(6.0)),
+                CornerRadius::ZERO,
+                ACCENT,
+            );
+        }
+        let len = last.distance(next);
+        let angle = (next - last).y.atan2((next - last).x);
+        let mut text = if self.slab_tool.typed.is_empty() {
+            format!("L {} mm   {}", fmt_mm(len), fmt_angle(angle))
+        } else {
+            format!("L: {}▏   {}", self.slab_tool.typed, fmt_angle(angle))
+        };
+        if pts.len() >= 3 {
+            text.push_str(&format!(
+                "   S {}",
+                fmt_area(archisim_core::signed_area(&pts).abs())
+            ));
+        }
+        self.draw_label(painter, rect, c.point, text);
+    }
+
+    /// Where the door or window would go: its rough opening across the
+    /// wall, the frame, and for doors the leaf and its swing.
+    fn draw_opening_preview(&self, painter: &egui::Painter, rect: Rect) {
+        if !matches!(self.tool, Tool::Door | Tool::Window) {
+            return;
+        }
+        let (Some(pl), Some(c)) = (&self.placement, self.cursor) else {
+            return;
+        };
+        let g = &pl.geometry;
+        let color = if pl.problem.is_some() {
+            Color32::from_rgb(210, 40, 40)
+        } else {
+            ACCENT
+        };
+        let to = |t: f64, off: f64| self.view.to_screen(rect, g.point(t, off));
+        let foot = self.polygon(rect, &g.footprint());
+        painter.add(Shape::convex_polygon(
+            foot,
+            color.gamma_multiply(0.18),
+            Stroke::new(1.5, color),
+        ));
+        // Frame faces.
+        let stroke = Stroke::new(1.0, color);
+        for off in [g.frame_exterior, g.frame_interior] {
+            painter.line_segment([to(g.t0, off), to(g.t1, off)], stroke);
+        }
+        match g.kind {
+            OpeningKind::Door(op) => {
+                use archisim_core::DoorOperation as D;
+                let face = g.swing_frame_face();
+                let out = g.swing_dir();
+                let mut leaves: Vec<(f64, f64)> = Vec::new(); // (hinge t, free t)
+                match op {
+                    D::SingleSwing => {
+                        if g.hinge_at_start() {
+                            leaves.push((g.t0, g.t1));
+                        } else {
+                            leaves.push((g.t1, g.t0));
+                        }
+                    }
+                    D::DoubleSwing => {
+                        let mid = (g.t0 + g.t1) / 2.0;
+                        leaves.push((g.t0, mid));
+                        leaves.push((g.t1, mid));
+                    }
+                    D::Sliding => {}
+                }
+                for (hinge, free) in leaves {
+                    let r = (free - hinge).abs();
+                    let h = g.point(hinge, face);
+                    let along = g.u * (free - hinge).signum();
+                    // Leaf open at 90°, and the arc its edge sweeps.
+                    painter.line_segment(
+                        [
+                            self.view.to_screen(rect, h),
+                            self.view.to_screen(rect, h + out * r),
+                        ],
+                        Stroke::new(2.0, color),
+                    );
+                    let arc: Vec<Pos2> = (0..=24)
+                        .map(|i| {
+                            let a = i as f64 / 24.0 * std::f64::consts::FRAC_PI_2;
+                            self.view
+                                .to_screen(rect, h + along * (r * a.cos()) + out * (r * a.sin()))
+                        })
+                        .collect();
+                    painter.add(Shape::line(arc, Stroke::new(1.0, color)));
+                }
+            }
+            OpeningKind::Window(_) => {
+                let mid = (g.frame_exterior + g.frame_interior) / 2.0;
+                painter.line_segment([to(g.t0, mid), to(g.t1, mid)], Stroke::new(2.0, color));
+            }
+        }
+        let side = match g.opens_to {
+            WallSide::Interior => "abre al interior",
+            WallSide::Exterior => "abre al exterior",
+        };
+        let text = match &pl.problem {
+            Some(p) => format!("No cabe: {p}"),
+            None => format!(
+                "{} mm ◂ ▸ {} mm   {side}",
+                fmt_mm(pl.before),
+                fmt_mm(pl.after)
+            ),
+        };
+        self.draw_label(painter, rect, c.point, text);
     }
 
     fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
-        let (Tool::Wall, Some(c)) = (self.tool, self.cursor) else {
+        let (true, Some(c)) = (self.tool.draws_points(), self.cursor) else {
             return;
         };
         let p = self.view.to_screen(rect, c.point);
@@ -1740,6 +2161,31 @@ pub fn default_wall_settings(model: &Model) -> WallSettings {
         reference: t.map_or(ReferenceLine::Center, |t| default_reference(t.function)),
         height: 3.0,
         base_offset: 0.0,
+    }
+}
+
+/// Slab tool settings for a model: its first type, top face on the level.
+pub fn default_slab_settings(model: &Model) -> SlabSettings {
+    // A new project starts on the ground floor: a ground-bearing slab.
+    let t = model
+        .slab_types()
+        .find(|t| t.function == SlabFunction::BaseSlab)
+        .or_else(|| model.slab_types().next());
+    SlabSettings {
+        slab_type: t.map_or(SlabTypeId(0), |t| t.id),
+        top_offset: 0.0,
+    }
+}
+
+/// Door or window tool settings: the first type of that kind; doors from
+/// the floor, windows with a 900 mm sill; frame centred in the wall.
+pub fn default_opening_settings(model: &Model, door: bool) -> OpeningSettings {
+    let t = model.opening_types().find(|t| t.is_door() == door);
+    OpeningSettings {
+        opening_type: t.map_or(OpeningTypeId(0), |t| t.id),
+        sill: if door { 0.0 } else { 0.9 },
+        hand: Hand::Left,
+        setback: None,
     }
 }
 

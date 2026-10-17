@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use archisim_core::{
-    Document, Hand, LevelId, Model, ModelError, NewWall, OpeningId, OpeningTypeId, Point2,
-    ReferenceLine, SlabId, SlabTypeId, WallId, WallSide, WallTypeId,
+    Document, Hand, LevelId, Model, ModelError, NewOpening, NewSlab, NewWall, OpeningId,
+    OpeningTypeId, Point2, ReferenceLine, SlabId, SlabTypeId, WallId, WallSide, WallTypeId,
 };
 use archisim_ifc::{export_ifc, ExportOptions};
 use archisim_plan::{render_plan, PlanOptions};
@@ -200,6 +200,33 @@ impl Editor {
                 base_offset: s.base_offset,
             })
         })
+    }
+
+    /// Draws a slab on the active level.
+    pub fn add_slab(
+        &mut self,
+        slab_type: SlabTypeId,
+        outline: Vec<Point2>,
+        top_offset: f64,
+    ) -> EditResult<SlabId> {
+        let level = self.level;
+        self.transact("Crear forjado", |m| {
+            m.add_slab(NewSlab {
+                slab_type,
+                level,
+                outline,
+                top_offset,
+            })
+        })
+    }
+
+    /// Places a door or window in a wall.
+    pub fn add_opening(&mut self, spec: NewOpening) -> EditResult<OpeningId> {
+        let label = match self.model().opening_type(spec.opening_type) {
+            Some(t) if t.is_door() => "Colocar puerta",
+            _ => "Colocar ventana",
+        };
+        self.transact(label, |m| m.add_opening(spec))
     }
 
     /// Deletes the selected elements in one step. A wall takes its doors and

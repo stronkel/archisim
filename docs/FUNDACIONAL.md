@@ -48,7 +48,7 @@ Crates actuales (`crates/`):
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta |
-| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta, herramienta muro, selección y propiedades, deshacer, abrir/guardar `.archisim`, exportar IFC y planta |
+| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta, herramientas muro, forjado, puerta y ventana, selección y propiedades, deshacer, abrir/guardar `.archisim`, exportar IFC y planta |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 

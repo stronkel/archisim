@@ -10,8 +10,10 @@
 
 mod app;
 mod editor;
+mod opening_tool;
 mod pick;
 mod plan_image;
+mod slab_tool;
 mod snap;
 mod units;
 mod view;
