@@ -74,6 +74,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - run: ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_tests
       - run: python scripts/validate_ifc.py out/app/sesion.ifc
+      - run: python scripts/validate_ifc.py out/app/tipos.ifc
       - run: test -f out/app/vista3d.png
       - uses: actions/upload-artifact@v4
         with:

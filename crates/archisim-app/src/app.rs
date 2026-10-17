@@ -143,6 +143,8 @@ pub struct ArchiSimApp {
     /// A level waiting for confirmation before being deleted with its
     /// contents.
     pub level_to_delete: Option<LevelId>,
+    /// The types and materials dialog.
+    pub types: TypesDialog,
     /// Where the door or window tool would place its element now.
     placement: Option<Placement>,
     pub show_reference_lines: bool,
@@ -203,6 +205,7 @@ impl ArchiSimApp {
             dim_settings: DimSettings::default(),
             show_levels: false,
             level_to_delete: None,
+            types: TypesDialog::default(),
             placement: None,
             show_reference_lines: false,
             message: None,
@@ -589,6 +592,7 @@ impl ArchiSimApp {
         let ctx = ui.ctx().clone();
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
+        self.keep_tool_types_valid();
         self.update_title(&ctx);
 
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
@@ -899,6 +903,9 @@ impl ArchiSimApp {
                 if ui.button("Plantas…").clicked() {
                     self.show_levels = true;
                 }
+                if ui.button("Tipos y materiales…").clicked() {
+                    self.types.open = true;
+                }
             });
             ui.menu_button("Ayuda", |ui| {
                 if ui.button("Ratón y teclado").clicked() {
@@ -942,6 +949,13 @@ impl ArchiSimApp {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .small_button("Tipos y materiales…")
+                    .on_hover_text("Multicapas de muro y forjado, tipos de puerta y ventana, materiales")
+                    .clicked()
+                {
+                    self.types.open = true;
+                }
                 if ui
                     .small_button("Plantas…")
                     .on_hover_text("Añadir, renombrar, cambiar la cota o borrar plantas")
@@ -2381,6 +2395,15 @@ impl ArchiSimApp {
                     self.report(r, "Tipo de muro cambiado.");
                 }
                 ui.end_row();
+                ui.label("");
+                if ui
+                    .small_button("✎ Editar tipo…")
+                    .on_hover_text("Capas, espesores y materiales del tipo; cambia todos los muros de este tipo")
+                    .clicked()
+                {
+                    self.edit_type(TypesTab::Walls, w.wall_type.0);
+                }
+                ui.end_row();
                 ui.label("Espesor");
                 ui.label(format!("{} mm", fmt_mm(thickness)));
                 ui.end_row();
@@ -2528,6 +2551,16 @@ impl ArchiSimApp {
                     self.report(r, "Tipo cambiado.");
                 }
                 ui.end_row();
+                ui.label("");
+                if ui
+                    .small_button("✎ Editar tipo…")
+                    .on_hover_text("Medidas, funcionamiento, marco y materiales; cambia todas las de este tipo")
+                    .clicked()
+                {
+                    let tab = if is_door { TypesTab::Doors } else { TypesTab::Windows };
+                    self.edit_type(tab, o.opening_type.0);
+                }
+                ui.end_row();
                 ui.label("Funcionamiento");
                 ui.label(operation);
                 ui.end_row();
@@ -2614,6 +2647,15 @@ impl ArchiSimApp {
                 if t != s.slab_type {
                     let r = self.ed.set_slab_type(id, t);
                     self.report(r, "Tipo de forjado cambiado.");
+                }
+                ui.end_row();
+                ui.label("");
+                if ui
+                    .small_button("✎ Editar tipo…")
+                    .on_hover_text("Capas, espesores y materiales del tipo; cambia todos los forjados de este tipo")
+                    .clicked()
+                {
+                    self.edit_type(TypesTab::Slabs, s.slab_type.0);
                 }
                 ui.end_row();
                 ui.label("Canto");
@@ -2817,6 +2859,7 @@ impl ArchiSimApp {
             }
         }
         self.levels_dialog(ctx);
+        self.types_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
                 .open(&mut self.show_about)
@@ -3028,7 +3071,9 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 
 mod annotation_ui;
 mod levels_ui;
+mod types_ui;
 mod view3d_ui;
+pub use types_ui::{TypesDialog, TypesTab};
 pub use view3d_ui::{View3dState, ViewMode};
 
 #[cfg(test)]

@@ -837,6 +837,66 @@ impl Model {
         self.materials.values()
     }
 
+    /// Changes a material's name, category and how it is drawn when cut.
+    /// Every layer, frame and leaf made of it changes with it.
+    pub fn set_material(
+        &mut self,
+        id: MaterialId,
+        name: impl Into<String>,
+        category: impl Into<String>,
+        cut_color: [u8; 3],
+        cut_pattern: CutPattern,
+    ) -> Result<(), ModelError> {
+        let m = self
+            .materials
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownMaterial(id))?;
+        m.name = name.into();
+        m.category = category.into();
+        m.cut_color = cut_color;
+        m.cut_pattern = cut_pattern;
+        Ok(())
+    }
+
+    /// Names of the wall, slab, door and window types that use a material,
+    /// in that order.
+    pub fn material_users(&self, id: MaterialId) -> Vec<String> {
+        let in_layers = |layers: &[Layer]| layers.iter().any(|l| l.material == id);
+        let walls = self
+            .wall_types
+            .values()
+            .filter(|t| in_layers(&t.layers))
+            .map(|t| t.name.clone());
+        let slabs = self
+            .slab_types
+            .values()
+            .filter(|t| in_layers(&t.layers))
+            .map(|t| t.name.clone());
+        let openings = self
+            .opening_types
+            .values()
+            .filter(|t| t.frame_material == id || t.panel_material == id)
+            .map(|t| t.name.clone());
+        walls.chain(slabs).chain(openings).collect()
+    }
+
+    /// Removes a material that no type uses.
+    pub fn remove_material(&mut self, id: MaterialId) -> Result<Material, ModelError> {
+        if !self.materials.contains_key(&id) {
+            return Err(ModelError::UnknownMaterial(id));
+        }
+        let users = self.material_users(id);
+        if !users.is_empty() {
+            return Err(ModelError::InUse(format!(
+                "{} type(s) use this material",
+                users.len()
+            )));
+        }
+        self.materials
+            .remove(&id)
+            .ok_or(ModelError::UnknownMaterial(id))
+    }
+
     // ---- Wall types ---------------------------------------------------
 
     pub fn add_wall_type(
@@ -1095,6 +1155,50 @@ impl Model {
             .ok_or(ModelError::UnknownWallType(id))
     }
 
+    /// Redefines a wall type (Revit "Edit Type", ArchiCAD composite
+    /// settings): name, function and layers. Every wall of the type changes
+    /// with it, keeping its drawn line where it is. Rejected if a door or
+    /// window in one of those walls would no longer fit, for example a frame
+    /// deeper than the new thickness.
+    pub fn edit_wall_type(
+        &mut self,
+        id: WallTypeId,
+        name: impl Into<String>,
+        function: WallFunction,
+        layers: Vec<Layer>,
+    ) -> Result<(), ModelError> {
+        self.validate_layers(&layers)?;
+        let previous = self
+            .wall_types
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownWallType(id))?;
+        let mut edited = previous.clone();
+        edited.name = name.into();
+        edited.function = function;
+        edited.layers = layers;
+        self.wall_types.insert(id, edited);
+        let walls: Vec<WallId> = self
+            .walls
+            .values()
+            .filter(|w| w.wall_type == id)
+            .map(|w| w.id)
+            .collect();
+        if let Err(e) = walls
+            .iter()
+            .try_for_each(|w| self.check_hosted_openings(*w))
+        {
+            self.wall_types.insert(id, previous);
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// How many walls use a wall type.
+    pub fn wall_type_users(&self, id: WallTypeId) -> usize {
+        self.walls.values().filter(|w| w.wall_type == id).count()
+    }
+
     pub fn wall(&self, id: WallId) -> Option<&Wall> {
         self.walls.get(&id)
     }
@@ -1146,6 +1250,31 @@ impl Model {
         self.slab_types
             .remove(&id)
             .ok_or(ModelError::UnknownSlabType(id))
+    }
+
+    /// Redefines a slab type: name, function and layers. Every slab of the
+    /// type keeps its top face where it is and its layers hang from it.
+    pub fn edit_slab_type(
+        &mut self,
+        id: SlabTypeId,
+        name: impl Into<String>,
+        function: SlabFunction,
+        layers: Vec<Layer>,
+    ) -> Result<(), ModelError> {
+        self.validate_layers(&layers)?;
+        let t = self
+            .slab_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownSlabType(id))?;
+        t.name = name.into();
+        t.function = function;
+        t.layers = layers;
+        Ok(())
+    }
+
+    /// How many slabs use a slab type.
+    pub fn slab_type_users(&self, id: SlabTypeId) -> usize {
+        self.slabs.values().filter(|s| s.slab_type == id).count()
     }
 
     // ---- Slabs --------------------------------------------------------
@@ -1300,6 +1429,70 @@ impl Model {
         self.opening_types
             .remove(&id)
             .ok_or(ModelError::UnknownOpeningType(id))
+    }
+
+    /// Redefines a door or window type: name, operation, rough opening,
+    /// frame and materials. Every door or window of the type changes with it,
+    /// keeping its centre and sill. A door type stays a door and a window
+    /// type a window. Rejected if one of them would no longer fit in its
+    /// wall (outside the wall, overlapping another opening, frame too deep).
+    pub fn edit_opening_type(
+        &mut self,
+        id: OpeningTypeId,
+        spec: NewOpeningType,
+    ) -> Result<(), ModelError> {
+        self.validate_opening_type(&spec)?;
+        let previous = self
+            .opening_types
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownOpeningType(id))?;
+        let was_door = previous.is_door();
+        let edited = OpeningType {
+            id,
+            guid: previous.guid.clone(),
+            name: spec.name,
+            kind: spec.kind,
+            width: spec.width,
+            height: spec.height,
+            frame_width: spec.frame_width,
+            frame_depth: spec.frame_depth,
+            frame_material: spec.frame_material,
+            panel_material: spec.panel_material,
+        };
+        if edited.is_door() != was_door {
+            return Err(ModelError::CategoryMismatch);
+        }
+        self.opening_types.insert(id, edited);
+        let check = self
+            .openings
+            .values()
+            .filter(|o| o.opening_type == id)
+            .try_for_each(|o| {
+                let spec = NewOpening {
+                    opening_type: o.opening_type,
+                    wall: o.wall,
+                    along: o.along,
+                    sill: o.sill,
+                    opens_to: o.opens_to,
+                    hand: o.hand,
+                    setback: o.setback,
+                };
+                self.validate_opening(&spec, Some(o.id))
+            });
+        if let Err(e) = check {
+            self.opening_types.insert(id, previous);
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// How many doors or windows use a type.
+    pub fn opening_type_users(&self, id: OpeningTypeId) -> usize {
+        self.openings
+            .values()
+            .filter(|o| o.opening_type == id)
+            .count()
     }
 
     // ---- Doors and windows ----------------------------------------------
@@ -2055,6 +2248,214 @@ mod tests {
             hand: Hand::Left,
             setback: None,
         }
+    }
+
+    #[test]
+    fn materials_can_be_edited_and_removed_when_unused() {
+        let (mut m, wall, door, _window) = with_openings();
+        let brick = m
+            .wall(wall)
+            .map(|w| m.wall_type(w.wall_type).unwrap().layers[0].material)
+            .unwrap();
+        m.set_material(
+            brick,
+            "Ladrillo macizo",
+            "brick",
+            [180, 80, 50],
+            CutPattern::Cross,
+        )
+        .unwrap();
+        let mat = m.material(brick).unwrap();
+        assert_eq!(
+            (mat.name.as_str(), mat.cut_pattern),
+            ("Ladrillo macizo", CutPattern::Cross)
+        );
+        assert_eq!(m.material_users(brick), vec!["Tabique".to_string()]);
+        assert!(matches!(
+            m.remove_material(brick),
+            Err(ModelError::InUse(_))
+        ));
+        let wood = m.opening_type(door).unwrap().frame_material;
+        assert_eq!(
+            m.material_users(wood),
+            vec!["P 80".to_string(), "V 120".to_string()]
+        );
+        let spare = m.add_material(
+            "Corcho",
+            "insulation",
+            [200, 170, 120],
+            CutPattern::Insulation,
+        );
+        assert!(m.material_users(spare).is_empty());
+        assert_eq!(m.remove_material(spare).unwrap().name, "Corcho");
+        assert_eq!(
+            m.remove_material(spare),
+            Err(ModelError::UnknownMaterial(spare))
+        );
+    }
+
+    #[test]
+    fn editing_a_wall_type_changes_its_walls_and_protects_frames() {
+        let (mut m, wall, door, _window) = with_openings();
+        let t = m.wall(wall).unwrap().wall_type;
+        let guid = m.wall_type(t).unwrap().guid.clone();
+        let brick = m.wall_type(t).unwrap().layers[0].material;
+        let plaster = m.add_material("Yeso", "plaster", [245, 245, 245], CutPattern::Solid);
+        m.add_opening(place(door, wall, 1.0, 0.0)).unwrap();
+        assert_eq!(m.wall_type_users(t), 1);
+        // Plaster both sides: 10 → 13 cm, same GUID, the wall follows.
+        let layers = vec![
+            Layer {
+                material: plaster,
+                thickness: 0.015,
+                function: LayerFunction::Finish,
+            },
+            Layer {
+                material: brick,
+                thickness: 0.1,
+                function: LayerFunction::Structure,
+            },
+            Layer {
+                material: plaster,
+                thickness: 0.015,
+                function: LayerFunction::Finish,
+            },
+        ];
+        m.edit_wall_type(t, "Tabique guarnecido", WallFunction::Interior, layers)
+            .unwrap();
+        let wt = m.wall_type(t).unwrap();
+        assert!((wt.thickness() - 0.13).abs() < 1e-12);
+        assert_eq!((wt.name.as_str(), &wt.guid), ("Tabique guarnecido", &guid));
+        // Thinner than the 7 cm door frame: rejected, nothing changes.
+        let thin = vec![Layer {
+            material: brick,
+            thickness: 0.05,
+            function: LayerFunction::Structure,
+        }];
+        assert_eq!(
+            m.edit_wall_type(t, "Fino", WallFunction::Interior, thin),
+            Err(ModelError::FrameTooDeep)
+        );
+        assert_eq!(m.wall_type(t).unwrap().name, "Tabique guarnecido");
+        assert_eq!(
+            m.edit_wall_type(t, "Vacío", WallFunction::Interior, vec![]),
+            Err(ModelError::EmptyType)
+        );
+        let zero = vec![Layer {
+            material: brick,
+            thickness: 0.0,
+            function: LayerFunction::Structure,
+        }];
+        assert!(matches!(
+            m.edit_wall_type(t, "Cero", WallFunction::Interior, zero),
+            Err(ModelError::NonPositive(_))
+        ));
+        let unknown = vec![Layer {
+            material: MaterialId(999),
+            thickness: 0.1,
+            function: LayerFunction::Structure,
+        }];
+        assert_eq!(
+            m.edit_wall_type(t, "?", WallFunction::Interior, unknown),
+            Err(ModelError::UnknownMaterial(MaterialId(999)))
+        );
+    }
+
+    #[test]
+    fn editing_a_slab_type_keeps_its_guid() {
+        let (mut m, lvl, _) = sample();
+        let st = slab_type(&mut m);
+        let guid = m.slab_type(st).unwrap().guid.clone();
+        let s = m
+            .add_slab(NewSlab {
+                slab_type: st,
+                level: lvl,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(4.0, 0.0),
+                    Point2::new(4.0, 3.0),
+                ],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        assert_eq!(m.slab_type_users(st), 1);
+        let mut layers = m.slab_type(st).unwrap().layers.clone();
+        layers.reverse();
+        m.edit_slab_type(st, "Cubierta", SlabFunction::Roof, layers.clone())
+            .unwrap();
+        let t = m.slab_type(st).unwrap();
+        assert_eq!(
+            (t.function, &t.guid, &t.layers),
+            (SlabFunction::Roof, &guid, &layers)
+        );
+        assert_eq!(m.slab(s).unwrap().top_offset, 0.0);
+        assert_eq!(
+            m.edit_slab_type(SlabTypeId(999), "x", SlabFunction::Floor, layers),
+            Err(ModelError::UnknownSlabType(SlabTypeId(999)))
+        );
+    }
+
+    #[test]
+    fn editing_a_door_type_checks_every_door() {
+        let (mut m, wall, door, window) = with_openings();
+        let d1 = m.add_opening(place(door, wall, 0.6, 0.0)).unwrap();
+        m.add_opening(place(window, wall, 2.2, 0.9)).unwrap();
+        let spec = |t: &OpeningType| NewOpeningType {
+            name: t.name.clone(),
+            kind: t.kind,
+            width: t.width,
+            height: t.height,
+            frame_width: t.frame_width,
+            frame_depth: t.frame_depth,
+            frame_material: t.frame_material,
+            panel_material: t.panel_material,
+        };
+        let base = spec(m.opening_type(door).unwrap());
+        let guid = m.opening_type(door).unwrap().guid.clone();
+        // 72.5 cm wide double door, same GUID, the door keeps its centre.
+        let mut ok = base.clone();
+        ok.width = 0.725;
+        ok.kind = OpeningKind::Door(DoorOperation::Sliding);
+        ok.name = "P 72,5".into();
+        m.edit_opening_type(door, ok).unwrap();
+        let t = m.opening_type(door).unwrap();
+        assert_eq!(
+            (t.width, t.kind, &t.guid),
+            (0.725, OpeningKind::Door(DoorOperation::Sliding), &guid)
+        );
+        assert_eq!(m.opening(d1).unwrap().along, 0.6);
+        // 1.4 m wide would leave the wall at its start (centre at 0.6 m).
+        let mut wide = base.clone();
+        wide.width = 1.4;
+        assert_eq!(
+            m.edit_opening_type(door, wide),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        let mut overlap = base.clone();
+        overlap.width = 1.3;
+        let mut m2 = m.clone();
+        m2.move_opening(d1, 1.0, 0.0).unwrap();
+        assert_eq!(
+            m2.edit_opening_type(door, overlap),
+            Err(ModelError::OverlappingOpenings)
+        );
+        // A frame deeper than the 10 cm wall.
+        let mut deep = base.clone();
+        deep.frame_depth = 0.12;
+        assert_eq!(
+            m.edit_opening_type(door, deep),
+            Err(ModelError::FrameTooDeep)
+        );
+        // A door cannot become a window.
+        let mut window_kind = base.clone();
+        window_kind.kind = OpeningKind::Window(WindowOperation::Fixed);
+        assert_eq!(
+            m.edit_opening_type(door, window_kind),
+            Err(ModelError::CategoryMismatch)
+        );
+        // Rejections leave the type as it was.
+        assert_eq!(m.opening_type(door).unwrap().width, 0.725);
+        assert_eq!(m.opening_type_users(door), 1);
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod pick;
 mod plan_image;
 mod slab_tool;
 mod snap;
+mod type_preview;
 mod units;
 mod view;
 mod view3d;

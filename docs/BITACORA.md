@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Cierre de fase 1, bloque 11 — Editor de tipos y materiales
+
+**Hecho**
+- Diálogo **Tipos y materiales**: *Vista → Tipos y materiales…*, botón «Tipos y materiales…» arriba a la derecha, o **✎ Editar tipo…** en las Propiedades de un muro, forjado, puerta o ventana (abre el diálogo en su tipo, como «Editar tipo» de Revit). Pestañas **Muros · Forjados · Puertas · Ventanas · Materiales**: a la izquierda la lista (con espesor y cuántos elementos lo usan), a la derecha sus datos.
+- **Multicapas** de muro y forjado: nombre, función (muro exterior/interior; forjado de planta, solera o cubierta plana) y tabla de capas — material, espesor (mm) y función de cada una (estructura, soporte, aislamiento, cámara de aire, lámina, acabado), botones para subir y bajar, duplicar y quitar capas. Espesor total al día.
+- **Puertas y ventanas**: nombre, funcionamiento (abatible, dos hojas, corredera; fija, practicable de 1 y 2 hojas, corredera), hueco de obra, anchura vista y fondo del marco, material del marco y de la hoja o vidrio.
+- **Materiales**: nombre, categoría IFC, color de corte (selector de color o tecleado `232, 196, 178`) y trama de corte (liso, rayado diagonal, rayado cruzado, zigzag de aislamiento, punteado, vacío). Se ve en qué tipos se usa.
+- **Vista previa a 1:20** con el mismo motor de dibujo que la planta (no es un dibujo aparte): un trozo de muro del tipo cortado en planta, exterior arriba; las capas del forjado como banda en sección (cara superior arriba); la puerta o ventana colocada en un muro del proyecto, con su mocheta y su giro; el material en un muro de 20 cm.
+- **Crear = Duplicar** (como Revit): copia con nombre «… (copia)» y `GlobalId` nuevo, y queda seleccionada para editarla. **Borrar** solo lo que no se usa, diciendo por qué no (p. ej. «lo usan 4 muros», o los tipos que usan un material); siempre queda al menos un tipo de cada clase.
+- Cada cambio es **un paso de deshacer** («Modificar tipo de muro», «Modificar material»…; arrastrar en el selector de color es un solo paso) y se aplica al momento a **todos los elementos del tipo**, en planta y en 3D: los muros conservan su línea de referencia y su `GlobalId`; las puertas y ventanas, su centro y antepecho. Lo que no cabe se rechaza entero con el motivo, en la barra de estado y en el propio diálogo (un muro más fino que el marco de sus puertas, una puerta que al ensancharse se sale del muro o pisa una ventana).
+- Nombres únicos por lista (vacío o repetido se rechaza): el IFC y la importación reconocen los materiales por su nombre.
+- Si se borra (o se deshace) el tipo que tenía una herramienta, la herramienta pasa a otro tipo existente.
+- Pruebas: núcleo (editar y borrar materiales, multicapas y tipos de puerta comprobando todos los elementos que los usan, con rechazo y sin cambios), editor (duplicar con nombre libre, nombres repetidos o vacíos, borrar en uso, deshacer, último tipo), vistas previas (todas las puertas y ventanas de la plantilla quedan cortadas por el plano de corte) y la app: casa dibujada con clics simulados, las cinco pestañas con su vista previa, fachada duplicada con 8 cm de aislamiento y un material nuevo, puerta ensanchada y marco demasiado profundo rechazado, deshacer y rehacer. Esa casa se guarda, se reabre igual, se exporta (`out/app/tipos.ifc`, validado con IfcOpenShell con reglas EXPRESS, también en la integración continua) y se reimporta idéntica. Ventana real probada con capturas.
+- Versión **0.12.0** (la 0.11 es la del PR #2, uniones en T, pendiente de revisión). Sin cambios en el formato `.archisim` ni en el IFC exportado.
+
+**Pendiente / limitaciones conocidas**
+- Sin prioridades de intersección editables por material (el PR #2 las deduce de la función de la capa; editarlas va con el punto 2.3).
+- Sin importar o exportar materiales y tipos entre proyectos (bibliotecas o plantillas propias) ni ordenar las listas a mano.
+- Los tipos de puerta y ventana siguen siendo los sencillos del MVP: premarco, persiana, capialzado y vierteaguas paramétricos llegarán con las familias (2.1, 2.2).
+- La vista previa del forjado es la banda de capas con las tramas de planta: la sección de verdad llega con 2.10.
+- Las categorías de material son una lista cerrada en el diálogo; las de otros programas importadas se ven como «Otra (…)» y se conservan.
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama: GitHub → **Actions** → la última ejecución en verde del pull request «Tipos: editor de tipos y materiales (v0.12)» (rama `bloque/tipos-y-materiales`) → **Artifacts** → **ArchiSim-Windows**. Abre `demo.archisim`.
+2. Selecciona la fachada sur → Propiedades → **✎ Editar tipo…**. Cambia la lana mineral de `50` a `80` + Intro: el espesor pasa a 295 mm y las cuatro fachadas engordan hacia dentro (la cara exterior se queda en su sitio). Ctrl+Z lo deshace.
+3. **⧉ Duplicar** la fachada, renómbrala, añade una capa con ⧉, cámbiale el material y súbela con ▲. Aplica el tipo nuevo a un muro desde Propiedades. Mira la vista previa: ¿se lee como tu multicapa a 1:20?
+4. Pestaña **Puertas** → «Puerta de entrada 1 hoja 100×215»: pon fondo de marco `400` → debe negarse («el marco no cabe en el espesor del muro»). Ancho `1100` → la puerta de la fachada oeste se ensancha sin moverse de su centro.
+5. Pestaña **Materiales** → «Ladrillo perforado»: cámbiale el color con el selector y la trama a «Rayado cruzado». La planta cambia al cerrar el selector. Intenta **Borrar**: dice qué tipos lo usan. Duplica un material y bórralo.
+6. Pestaña **Forjados** → cambia el canto del hormigón de la cubierta y mira en 3D (F3) que la cubierta cambia.
+7. Guarda, cierra, abre de nuevo: los cambios siguen ahí. Exporta el IFC y ábrelo en ArchiCAD y Revit: tipos con el nombre nuevo, capas con los espesores nuevos y el material con su nombre.
+8. Dime si echas en falta algo que uses a diario en ArchiCAD (por ejemplo, prioridades de intersección por material, o guardar tus multicapas para otros proyectos).
+
+---
+
 ## 2026-10-17 · Cierre de fase 1, bloque 9 — Cotas, cotas de nivel y gestión de plantas
 
 **Hecho**

@@ -41,14 +41,14 @@ Crates actuales (`crates/`):
 
 | Crate | Responsabilidad |
 |---|---|
-| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer |
+| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer; edición de materiales y tipos con comprobación de los elementos que los usan |
 | `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas. Lector STEP e importador IFC2X3/IFC4 de plantas, muros con capas, forjados, puertas y ventanas, con informe de lo que queda fuera |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación; cotas y cotas de nivel con rotulación técnica de trazo propia (`lettering`) |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta; `importar` convierte un IFC en proyecto |
-| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado (por polígono o varita mágica), puerta, ventana y cota, gestión de plantas, selección y propiedades, mover, copiar y estirar con el ratón, deshacer, abrir/guardar `.archisim`, importar IFC, exportar IFC, planta e imagen 3D |
+| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado (por polígono o varita mágica), puerta, ventana y cota, gestión de plantas, tipos y materiales (multicapas, puertas, ventanas y materiales, con vista previa), selección y propiedades, mover, copiar y estirar con el ratón, deshacer, abrir/guardar `.archisim`, importar IFC, exportar IFC, planta e imagen 3D |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
@@ -112,6 +112,17 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 ### Plantas
 
 - Diálogo **Plantas** (botón junto al selector de planta o *Vista → Plantas…*), como los ajustes de plantas de ArchiCAD: nombre, cota, altura hasta la planta de encima y contenido de cada una; añadir planta encima (con la misma altura de planta que la última) o debajo; borrar. Cambiar la cota de una planta mueve todo lo que contiene; borrarla borra su contenido, previa confirmación. La última planta no se puede borrar.
+
+### Tipos y materiales
+
+- Diálogo **Tipos y materiales** (*Vista → Tipos y materiales…*, botón en el cuadro de información, o **✎ Editar tipo…** en las Propiedades de un muro, forjado, puerta o ventana, como «Editar tipo» de Revit). Pestañas: muros, forjados, puertas, ventanas y materiales.
+- Como en Revit, los tipos nuevos se crean **duplicando** uno existente (nombre «… (copia)», `GlobalId` nuevo) y se modifican en el sitio. Los nombres son únicos dentro de cada lista (materiales, tipos de muro, de forjado, de puerta y ventana): el IFC y la importación identifican los materiales por su nombre.
+- **Multicapas** de muro (de exterior a interior) y de forjado (de cara superior a inferior): material, espesor y función de cada capa (estructura, soporte, aislamiento, cámara de aire, lámina, acabado), subir y bajar, duplicar y quitar capas; nombre y función del tipo. Vista previa: el corte en planta de un trozo de muro de ese tipo a 1:20, dibujado por el mismo motor que la planta; en forjados, las mismas capas como banda en sección.
+- **Puertas y ventanas**: funcionamiento (sin pasar de puerta a ventana), hueco de obra, anchura vista y fondo del marco, material del marco y de la hoja o vidrio. Vista previa en planta dentro de un muro del proyecto.
+- **Materiales**: nombre, categoría IFC (`IfcMaterial.Category`; los vidrios se ven transparentes), color y trama de corte. Se ve en qué tipos se usa.
+- Cada cambio es **un paso de deshacer** y se aplica al momento a **todos los elementos del tipo**, que conservan su `GlobalId`: los muros mantienen su línea de referencia y las puertas y ventanas su centro y antepecho. Se rechaza entero lo que no cabe (un muro más fino que el marco de una de sus puertas, una ventana que crece hasta salirse del muro o pisar otra), con el motivo.
+- Solo se borra lo que no se usa (dice cuántos elementos o qué tipos lo usan) y siempre queda al menos un tipo de muro, de forjado, de puerta y de ventana.
+- Sin cambios en el formato `.archisim` ni en el IFC: los tipos y materiales ya se guardaban y exportaban enteros.
 
 ### Puertas y ventanas
 
