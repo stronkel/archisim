@@ -3,6 +3,7 @@
 //! click.
 
 use super::*;
+use crate::dim_tool::DimMode;
 use archisim_core::SlabFunction;
 use archisim_geom::{wall_geometry, EndCut};
 use eframe::egui::{Event, Modifiers, PointerButton, RawInput};
@@ -730,4 +731,109 @@ fn magic_wand_slabs() {
     assert_eq!(h.model().slabs().count(), count + 1, "{:?}", h.app.message);
     assert!((h.model().slabs().last().unwrap().area() - axis).abs() < 1e-6);
     assert!(!h.app.slab_tool.is_drawing());
+}
+
+#[test]
+fn dimensions_and_level_marks_with_the_mouse() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    h.key(Key::Escape);
+    h.type_text("c");
+    assert_eq!(h.app.tool, Tool::Dimension);
+
+    // Linear chain along the south façade: three corners and points
+    // snapped, Enter, then the line 1 m below.
+    h.click_at(p(0.01, 0.02));
+    h.click_at(p(6.0, -0.02));
+    h.click_at(p(11.98, 0.01));
+    h.key(Key::Enter);
+    assert!(h.app.dim_tool.is_placing());
+    h.click_at(p(6.0, -1.0));
+    let m = h.model();
+    assert_eq!(m.dimensions().count(), 1, "{:?}", h.app.message);
+    let d = m.dimensions().next().unwrap().clone();
+    assert_eq!(d.direction, p(1.0, 0.0));
+    let total: f64 = d.values().iter().sum();
+    assert!((total - 12.0).abs() < 1e-9, "{:?}", d.values());
+    assert_eq!(h.app.ed.undo_label(), Some("Acotar"));
+
+    // The openings of the north façade, from outside.
+    h.app.dim_settings.mode = DimMode::WallOpenings;
+    h.click_at(p(6.0, 9.05));
+    assert!(h.app.dim_tool.is_placing(), "{:?}", h.app.message);
+    h.click_at(p(6.0, 10.0));
+    let chain = h.model().dimensions().last().unwrap().clone();
+    // Both ends of the façade and the jambs of the window.
+    assert_eq!(chain.points.len(), 4, "{:?}", chain.points);
+
+    // A level mark on the slab.
+    h.app.dim_settings.mode = DimMode::LevelMark;
+    h.click_at(p(4.0, 4.0));
+    assert_eq!(h.model().elevation_marks().count(), 1);
+    assert!(h.app.message.as_ref().unwrap().text.contains("±0,00"));
+
+    // The plan draws them.
+    let svg = archisim_plan::render_plan(h.model(), h.app.ed.level, &Default::default());
+    assert_eq!(svg.matches("class=\"dimension\"").count(), 2);
+    assert_eq!(svg.matches("class=\"level-mark\"").count(), 1);
+
+    // Select the first dimension by clicking on its line and move the line.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.click_at(p(3.0, -0.97));
+    let id = d.id;
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Dimension(id)]
+    );
+    h.set_modifiers(Modifiers::SHIFT);
+    press_and_move(&mut h, p(3.0, -0.97), p(3.0, -1.6));
+    h.type_text("500");
+    h.key(Key::Enter);
+    h.button(PointerButton::Primary, false);
+    h.set_modifiers(Modifiers::NONE);
+    let moved = h.model().dimension(id).unwrap();
+    assert!((moved.line_offset() - d.line_offset() + 0.5).abs() < 1e-6);
+    assert_eq!(moved.points, d.points);
+    // Delete it.
+    h.key(Key::Delete);
+    assert!(h.model().dimension(id).is_none());
+}
+
+#[test]
+fn levels_are_managed_from_the_dialog() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let ground = h.app.ed.level;
+    let before = h.model().levels().len();
+    // Add a floor above: it becomes the active level.
+    let first = h.app.ed.add_level("Planta primera", 3.2).unwrap();
+    assert_eq!(h.app.ed.level, first);
+    assert_eq!(h.model().levels().len(), before + 1);
+    h.app.show_levels = true;
+    h.frame();
+    h.app.ed.rename_level(first, "Planta 1ª").unwrap();
+    h.app.ed.set_level_elevation(first, 3.3).unwrap();
+    assert_eq!(h.model().level(first).unwrap().elevation, 3.3);
+    // Deleting the ground floor with walls asks first.
+    h.app.level_to_delete = Some(ground);
+    h.frame();
+    assert!(h.app.level_to_delete.is_some(), "waits for an answer");
+    h.app.level_to_delete = None;
+    h.app.ed.remove_level(ground).unwrap();
+    assert_eq!(h.model().walls().count(), 0);
+    assert_eq!(h.app.ed.undo_label(), Some("Borrar planta"));
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert_eq!(h.model().walls().count(), 4);
+    // The new floor still exports as a storey.
+    let dir = std::env::temp_dir().join(format!("archisim-levels-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    h.app.ed.export_ifc(&dir.join("plantas.ifc")).unwrap();
+    let ifc = std::fs::read_to_string(dir.join("plantas.ifc")).unwrap();
+    assert!(ifc.contains("Planta 1"), "storey name");
+    let _ = std::fs::remove_dir_all(dir);
 }

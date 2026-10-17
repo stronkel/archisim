@@ -404,6 +404,73 @@ pub struct NewOpening {
     pub setback: Option<f64>,
 }
 
+/// A linear dimension in plan ("cota"), single or chained: the distances
+/// between consecutive points measured along `direction`, drawn on a line
+/// parallel to it through `position`.
+///
+/// Dimensions are annotations of a level's plan, not building elements:
+/// they have no `GlobalId` and are not exported to IFC (Revit and ArchiCAD
+/// do not export them either).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dimension {
+    pub id: DimensionId,
+    pub level: LevelId,
+    /// The measured points (two or more), in any order.
+    pub points: Vec<Point2>,
+    /// Unit vector of the measuring direction.
+    pub direction: Point2,
+    /// A point the dimension line passes through.
+    pub position: Point2,
+}
+
+impl Dimension {
+    /// Positions of the points along the direction, sorted, without
+    /// repeats: the dimension line runs from the first to the last, and
+    /// every pair of neighbours is one measured segment.
+    pub fn stations(&self) -> Vec<f64> {
+        stations(&self.points, self.direction)
+    }
+
+    /// Lengths of the measured segments, in order.
+    pub fn values(&self) -> Vec<f64> {
+        self.stations().windows(2).map(|w| w[1] - w[0]).collect()
+    }
+
+    /// Signed distance of the dimension line from the origin along the
+    /// left normal of the direction.
+    pub fn line_offset(&self) -> f64 {
+        self.position.dot(self.direction.perp_left())
+    }
+}
+
+fn stations(points: &[Point2], direction: Point2) -> Vec<f64> {
+    let mut v: Vec<f64> = points.iter().map(|p| p.dot(direction)).collect();
+    v.sort_by(f64::total_cmp);
+    v.dedup_by(|a, b| (*a - *b).abs() <= EPSILON);
+    v
+}
+
+/// Data needed to create a dimension.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewDimension {
+    pub level: LevelId,
+    pub points: Vec<Point2>,
+    /// Measuring direction; any length, it is stored as a unit vector.
+    pub direction: Point2,
+    pub position: Point2,
+}
+
+/// A level mark in plan ("cota de nivel"): shows the elevation of the
+/// finished floor at its point, from project zero. The value is not stored:
+/// it is the top face of the highest slab of the level under the point, or
+/// the level's elevation if there is no slab there.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElevationMark {
+    pub id: ElevationMarkId,
+    pub level: LevelId,
+    pub point: Point2,
+}
+
 /// Data needed to create a wall; ids and GUIDs are assigned by the model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewWall {
@@ -455,6 +522,12 @@ pub enum ModelError {
     InUse(String),
     /// A door cannot become a window, or the other way round.
     CategoryMismatch,
+    UnknownDimension(DimensionId),
+    UnknownElevationMark(ElevationMarkId),
+    /// A dimension needs at least two points apart along its direction.
+    DegenerateDimension,
+    /// The project needs at least one level.
+    LastLevel,
 }
 
 impl fmt::Display for ModelError {
@@ -502,6 +575,15 @@ impl fmt::Display for ModelError {
                     "a door can only become another door, and a window another window"
                 )
             }
+            ModelError::UnknownDimension(id) => write!(f, "dimension {id} does not exist"),
+            ModelError::UnknownElevationMark(id) => {
+                write!(f, "level mark {id} does not exist")
+            }
+            ModelError::DegenerateDimension => write!(
+                f,
+                "a dimension needs at least two points apart along its direction"
+            ),
+            ModelError::LastLevel => write!(f, "the project needs at least one level"),
         }
     }
 }
@@ -510,6 +592,22 @@ impl std::error::Error for ModelError {}
 
 /// Largest internal id: integers up to 2^53 survive any JSON reader.
 pub const MAX_ID: u64 = 1 << 53;
+
+/// Whether a closed polygon contains a point (ray casting).
+fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
+    let mut inside = false;
+    let n = poly.len();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) {
+            let x = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x);
+            if p.x < x {
+                inside = !inside;
+            }
+        }
+    }
+    inside
+}
 
 /// Rejects NaN and infinite values.
 fn finite(value: f64, what: &'static str) -> Result<(), ModelError> {
@@ -544,6 +642,8 @@ pub struct ModelParts {
     pub slabs: Vec<Slab>,
     pub opening_types: Vec<OpeningType>,
     pub openings: Vec<Opening>,
+    pub dimensions: Vec<Dimension>,
+    pub elevation_marks: Vec<ElevationMark>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -583,6 +683,8 @@ pub struct Model {
     slabs: BTreeMap<SlabId, Slab>,
     opening_types: BTreeMap<OpeningTypeId, OpeningType>,
     openings: BTreeMap<OpeningId, Opening>,
+    dimensions: BTreeMap<DimensionId, Dimension>,
+    elevation_marks: BTreeMap<ElevationMarkId, ElevationMark>,
 }
 
 impl Model {
@@ -601,6 +703,8 @@ impl Model {
             slabs: BTreeMap::new(),
             opening_types: BTreeMap::new(),
             openings: BTreeMap::new(),
+            dimensions: BTreeMap::new(),
+            elevation_marks: BTreeMap::new(),
         }
     }
 
@@ -628,6 +732,71 @@ impl Model {
 
     pub fn level(&self, id: LevelId) -> Option<&Level> {
         self.levels.get(&id)
+    }
+
+    /// Renames a level.
+    pub fn rename_level(&mut self, id: LevelId, name: impl Into<String>) -> Result<(), ModelError> {
+        let level = self
+            .levels
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownLevel(id))?;
+        level.name = name.into();
+        Ok(())
+    }
+
+    /// Changes a level's elevation. Everything on it moves with it: walls,
+    /// slabs and doors are placed relative to their level.
+    pub fn set_level_elevation(&mut self, id: LevelId, elevation: f64) -> Result<(), ModelError> {
+        finite(elevation, "level elevation")?;
+        let level = self
+            .levels
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownLevel(id))?;
+        level.elevation = elevation;
+        Ok(())
+    }
+
+    /// Removes a level and everything on it (walls with their doors and
+    /// windows, slabs, dimensions and level marks). The last level cannot be
+    /// removed.
+    pub fn remove_level(&mut self, id: LevelId) -> Result<Level, ModelError> {
+        if !self.levels.contains_key(&id) {
+            return Err(ModelError::UnknownLevel(id));
+        }
+        if self.levels.len() == 1 {
+            return Err(ModelError::LastLevel);
+        }
+        let walls: Vec<WallId> = self.walls_on_level(id).map(|w| w.id).collect();
+        for w in walls {
+            self.remove_wall(w)?;
+        }
+        self.slabs.retain(|_, s| s.level != id);
+        self.dimensions.retain(|_, d| d.level != id);
+        self.elevation_marks.retain(|_, m| m.level != id);
+        self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
+    }
+
+    /// How many elements a level holds: walls, doors and windows, slabs and
+    /// annotations (dimensions and level marks).
+    pub fn level_contents(&self, id: LevelId) -> (usize, usize, usize, usize) {
+        let walls: Vec<WallId> = self.walls_on_level(id).map(|w| w.id).collect();
+        let openings = self
+            .openings
+            .values()
+            .filter(|o| walls.contains(&o.wall))
+            .count();
+        let annotations = self.dimensions.values().filter(|d| d.level == id).count()
+            + self
+                .elevation_marks
+                .values()
+                .filter(|m| m.level == id)
+                .count();
+        (
+            walls.len(),
+            openings,
+            self.slabs_on_level(id).count(),
+            annotations,
+        )
     }
 
     /// Levels sorted by elevation.
@@ -1323,6 +1492,155 @@ impl Model {
         self.openings.values().filter(move |o| o.wall == wall)
     }
 
+    // ---- Dimensions and level marks ---------------------------------------
+
+    fn validate_dimension(&self, spec: &NewDimension) -> Result<Point2, ModelError> {
+        if !self.levels.contains_key(&spec.level) {
+            return Err(ModelError::UnknownLevel(spec.level));
+        }
+        for p in &spec.points {
+            finite_point(*p, "dimension point")?;
+        }
+        finite_point(spec.direction, "dimension direction")?;
+        finite_point(spec.position, "dimension position")?;
+        let dir = spec
+            .direction
+            .normalized()
+            .ok_or(ModelError::DegenerateDimension)?;
+        if stations(&spec.points, dir).len() < 2 {
+            return Err(ModelError::DegenerateDimension);
+        }
+        Ok(dir)
+    }
+
+    pub fn add_dimension(&mut self, spec: NewDimension) -> Result<DimensionId, ModelError> {
+        let direction = self.validate_dimension(&spec)?;
+        let id = DimensionId(self.take_id());
+        self.dimensions.insert(
+            id,
+            Dimension {
+                id,
+                level: spec.level,
+                points: spec.points,
+                direction,
+                position: spec.position,
+            },
+        );
+        Ok(id)
+    }
+
+    /// Replaces a dimension's points, direction and line position.
+    pub fn set_dimension(
+        &mut self,
+        id: DimensionId,
+        points: Vec<Point2>,
+        position: Point2,
+    ) -> Result<(), ModelError> {
+        let d = self
+            .dimensions
+            .get(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        let spec = NewDimension {
+            level: d.level,
+            points,
+            direction: d.direction,
+            position,
+        };
+        self.validate_dimension(&spec)?;
+        let d = self
+            .dimensions
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        d.points = spec.points;
+        d.position = spec.position;
+        Ok(())
+    }
+
+    pub fn remove_dimension(&mut self, id: DimensionId) -> Result<Dimension, ModelError> {
+        self.dimensions
+            .remove(&id)
+            .ok_or(ModelError::UnknownDimension(id))
+    }
+
+    pub fn dimension(&self, id: DimensionId) -> Option<&Dimension> {
+        self.dimensions.get(&id)
+    }
+
+    pub fn dimensions(&self) -> impl Iterator<Item = &Dimension> {
+        self.dimensions.values()
+    }
+
+    pub fn dimensions_on_level(&self, level: LevelId) -> impl Iterator<Item = &Dimension> {
+        self.dimensions.values().filter(move |d| d.level == level)
+    }
+
+    pub fn add_elevation_mark(
+        &mut self,
+        level: LevelId,
+        point: Point2,
+    ) -> Result<ElevationMarkId, ModelError> {
+        if !self.levels.contains_key(&level) {
+            return Err(ModelError::UnknownLevel(level));
+        }
+        finite_point(point, "level mark point")?;
+        let id = ElevationMarkId(self.take_id());
+        self.elevation_marks
+            .insert(id, ElevationMark { id, level, point });
+        Ok(id)
+    }
+
+    pub fn move_elevation_mark(
+        &mut self,
+        id: ElevationMarkId,
+        point: Point2,
+    ) -> Result<(), ModelError> {
+        finite_point(point, "level mark point")?;
+        let m = self
+            .elevation_marks
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownElevationMark(id))?;
+        m.point = point;
+        Ok(())
+    }
+
+    pub fn remove_elevation_mark(
+        &mut self,
+        id: ElevationMarkId,
+    ) -> Result<ElevationMark, ModelError> {
+        self.elevation_marks
+            .remove(&id)
+            .ok_or(ModelError::UnknownElevationMark(id))
+    }
+
+    pub fn elevation_mark(&self, id: ElevationMarkId) -> Option<&ElevationMark> {
+        self.elevation_marks.get(&id)
+    }
+
+    pub fn elevation_marks(&self) -> impl Iterator<Item = &ElevationMark> {
+        self.elevation_marks.values()
+    }
+
+    pub fn elevation_marks_on_level(&self, level: LevelId) -> impl Iterator<Item = &ElevationMark> {
+        self.elevation_marks
+            .values()
+            .filter(move |m| m.level == level)
+    }
+
+    /// The finished floor elevation at a point of a level, from project
+    /// zero: the top face of the highest slab of the level whose outline
+    /// contains the point, or the level's elevation.
+    pub fn floor_elevation_at(&self, level: LevelId, p: Point2) -> Option<f64> {
+        let base = self.levels.get(&level)?.elevation;
+        let top = self
+            .slabs_on_level(level)
+            .filter(|s| polygon_contains(&s.outline, p))
+            .map(|s| s.top_offset)
+            .fold(None, |acc: Option<f64>, v| {
+                Some(acc.map_or(v, |a| a.max(v)))
+            });
+        Some(base + top.unwrap_or(0.0))
+    }
+
     // ---- Saving and opening ---------------------------------------------
 
     /// Every element of the model, each list ordered by id.
@@ -1340,6 +1658,8 @@ impl Model {
             slabs: self.slabs.values().cloned().collect(),
             opening_types: self.opening_types.values().cloned().collect(),
             openings: self.openings.values().cloned().collect(),
+            dimensions: self.dimensions.values().cloned().collect(),
+            elevation_marks: self.elevation_marks.values().cloned().collect(),
         }
     }
 
@@ -1472,6 +1792,34 @@ impl Model {
                 .and_then(|_| model.validate_opening(&spec, None))
                 .map_err(fail(name))?;
             model.openings.insert(o.id, o);
+        }
+
+        for d in parts.dimensions {
+            let name = format!("dimension {}", d.id.0);
+            let spec = NewDimension {
+                level: d.level,
+                points: d.points.clone(),
+                direction: d.direction,
+                position: d.position,
+            };
+            let mut d = d;
+            claim(d.id.0, None)
+                .and_then(|_| model.validate_dimension(&spec))
+                .map(|dir| d.direction = dir)
+                .map_err(fail(name))?;
+            model.dimensions.insert(d.id, d);
+        }
+        for m in parts.elevation_marks {
+            let name = format!("level mark {}", m.id.0);
+            claim(m.id.0, None)
+                .and_then(|_| {
+                    if !model.levels.contains_key(&m.level) {
+                        return Err(ModelError::UnknownLevel(m.level));
+                    }
+                    finite_point(m.point, "level mark point")
+                })
+                .map_err(fail(name))?;
+            model.elevation_marks.insert(m.id, m);
         }
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);
@@ -1798,6 +2146,116 @@ mod tests {
         m.remove_wall(wall).unwrap();
         assert!(m.opening(o).is_none());
         assert_eq!(m.openings().count(), 0);
+    }
+
+    #[test]
+    fn levels_can_be_renamed_moved_and_removed() {
+        let (mut m, wall, door, _) = with_openings();
+        let ground = m.wall(wall).unwrap().level;
+        m.add_opening(place(door, wall, 2.0, 0.0)).unwrap();
+        let first = m.add_level("Planta primera", 3.0);
+        m.rename_level(first, "Planta 1").unwrap();
+        m.set_level_elevation(first, 3.2).unwrap();
+        assert_eq!(m.level(first).unwrap().name, "Planta 1");
+        assert_eq!(m.level(first).unwrap().elevation, 3.2);
+        assert!(m.set_level_elevation(first, f64::NAN).is_err());
+        m.add_dimension(NewDimension {
+            level: ground,
+            points: vec![Point2::new(0.0, 0.0), Point2::new(4.0, 0.0)],
+            direction: Point2::new(1.0, 0.0),
+            position: Point2::new(0.0, -1.0),
+        })
+        .unwrap();
+        assert_eq!(m.level_contents(ground), (1, 1, 0, 1));
+        // Removing the ground floor takes its wall, door and dimension.
+        m.remove_level(ground).unwrap();
+        assert_eq!(m.walls().count(), 0);
+        assert_eq!(m.openings().count(), 0);
+        assert_eq!(m.dimensions().count(), 0);
+        // The last level stays.
+        assert_eq!(m.remove_level(first), Err(ModelError::LastLevel));
+    }
+
+    #[test]
+    fn dimensions_and_level_marks() {
+        let (mut m, lvl, _) = sample();
+        // A chain along x with an unordered, repeated point.
+        let d = m
+            .add_dimension(NewDimension {
+                level: lvl,
+                points: vec![
+                    Point2::new(4.0, 0.0),
+                    Point2::new(0.0, 0.0),
+                    Point2::new(1.5, 2.0),
+                    Point2::new(4.0, 1.0),
+                ],
+                direction: Point2::new(2.0, 0.0),
+                position: Point2::new(0.0, -0.8),
+            })
+            .unwrap();
+        let dim = m.dimension(d).unwrap();
+        assert_eq!(dim.direction, Point2::new(1.0, 0.0));
+        assert_eq!(dim.values(), vec![1.5, 2.5]);
+        assert_eq!(dim.line_offset(), -0.8);
+        // All points at the same place along the direction: refused.
+        assert_eq!(
+            m.add_dimension(NewDimension {
+                level: lvl,
+                points: vec![Point2::new(1.0, 0.0), Point2::new(1.0, 3.0)],
+                direction: Point2::new(1.0, 0.0),
+                position: Point2::default(),
+            }),
+            Err(ModelError::DegenerateDimension)
+        );
+        m.set_dimension(
+            d,
+            vec![Point2::new(0.0, 0.0), Point2::new(2.0, 0.0)],
+            Point2::new(0.0, 1.0),
+        )
+        .unwrap();
+        assert_eq!(m.dimension(d).unwrap().values(), vec![2.0]);
+
+        // A level mark reads the slab under it.
+        let mark = m.add_elevation_mark(lvl, Point2::new(1.0, 1.0)).unwrap();
+        assert_eq!(m.floor_elevation_at(lvl, Point2::new(1.0, 1.0)), Some(0.0));
+        let st = m.slab_types().next().map(|t| t.id);
+        let st = match st {
+            Some(t) => t,
+            None => {
+                let mat = m.materials().next().unwrap().id;
+                m.add_slab_type(
+                    "Solera",
+                    SlabFunction::BaseSlab,
+                    vec![Layer {
+                        material: mat,
+                        thickness: 0.2,
+                        function: LayerFunction::Structure,
+                    }],
+                )
+                .unwrap()
+            }
+        };
+        m.add_slab(NewSlab {
+            slab_type: st,
+            level: lvl,
+            outline: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(2.0, 0.0),
+                Point2::new(2.0, 2.0),
+                Point2::new(0.0, 2.0),
+            ],
+            top_offset: 0.05,
+        })
+        .unwrap();
+        assert_eq!(m.floor_elevation_at(lvl, Point2::new(1.0, 1.0)), Some(0.05));
+        assert_eq!(m.floor_elevation_at(lvl, Point2::new(5.0, 1.0)), Some(0.0));
+        m.move_elevation_mark(mark, Point2::new(5.0, 1.0)).unwrap();
+        // Saved and restored with everything else.
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back, m);
+        m.remove_elevation_mark(mark).unwrap();
+        m.remove_dimension(d).unwrap();
+        assert_eq!(m.elevation_marks().count() + m.dimensions().count(), 0);
     }
 
     #[test]

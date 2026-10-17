@@ -119,6 +119,12 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::CategoryMismatch => {
             "una puerta solo puede cambiarse por otra puerta, y una ventana por otra ventana".into()
         }
+        ModelError::UnknownDimension(_) => "la cota ya no existe".into(),
+        ModelError::UnknownElevationMark(_) => "la cota de nivel ya no existe".into(),
+        ModelError::DegenerateDimension => {
+            "una cota necesita al menos dos puntos separados en su dirección".into()
+        }
+        ModelError::LastLevel => "el proyecto necesita al menos una planta".into(),
     }
 }
 

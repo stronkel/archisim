@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 1,
+//!   "version": 2,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 1;
+pub const CURRENT_VERSION: u32 = 2;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -116,7 +116,7 @@ impl From<std::io::Error> for FileError {
 
 /// The project as `.archisim` text.
 pub fn to_string(model: &Model) -> String {
-    let file = schema::FileV1::from_model(model);
+    let file = schema::ProjectFile::from_model(model);
     let value = serde_json::to_value(&file).expect("the file schema always serialises");
     let mut out = String::new();
     write_pretty(&value, 0, &mut out);
@@ -152,7 +152,7 @@ pub fn from_str(text: &str) -> Result<Model, FileError> {
         return Err(FileError::UnknownVersion(version));
     }
 
-    let file: schema::FileV1 = if version == u64::from(CURRENT_VERSION) {
+    let file: schema::ProjectFile = if version == u64::from(CURRENT_VERSION) {
         // Parse the text directly so that errors point at a line and column.
         serde_json::from_str(text).map_err(FileError::Json)?
     } else {
@@ -167,10 +167,27 @@ pub fn from_str(text: &str) -> Result<Model, FileError> {
 /// Each future format change adds one step here (`1 → 2`, `2 → 3`…) that
 /// rewrites the JSON, so every old project keeps opening.
 pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
-    match from {
-        1 => Ok(value),
-        other => Err(FileError::UnknownVersion(other)),
+    let mut value = value;
+    let mut version = from;
+    while version < u64::from(CURRENT_VERSION) {
+        value = match version {
+            // 1 → 2: plan dimensions and level marks.
+            1 => {
+                let mut v = value;
+                if let Value::Object(map) = &mut v {
+                    map.insert("version".into(), Value::from(2));
+                    map.entry("dimensions")
+                        .or_insert_with(|| Value::Array(Vec::new()));
+                    map.entry("elevation_marks")
+                        .or_insert_with(|| Value::Array(Vec::new()));
+                }
+                v
+            }
+            other => return Err(FileError::UnknownVersion(other)),
+        };
+        version += 1;
     }
+    Ok(value)
 }
 
 /// Saves the project. The previous file, if any, is replaced only once the
@@ -365,7 +382,41 @@ mod tests {
             setback: Some(0.13),
         })
         .unwrap();
+        m.add_dimension(archisim_core::NewDimension {
+            level: pb,
+            points: vec![Point2::new(0.0, 0.0), Point2::new(0.0, 5.0)],
+            direction: Point2::new(0.0, 1.0),
+            position: Point2::new(-0.8, 0.0),
+        })
+        .unwrap();
+        m.add_elevation_mark(pb, Point2::new(2.0, 2.5)).unwrap();
         m
+    }
+
+    #[test]
+    fn version_1_files_still_open() {
+        // A project saved by ArchiSim 0.8 (file version 1): no dimensions
+        // nor level marks.
+        let mut m = sample();
+        let ids: Vec<_> = m.dimensions().map(|d| d.id).collect();
+        for d in ids {
+            m.remove_dimension(d).unwrap();
+        }
+        let ids: Vec<_> = m.elevation_marks().map(|e| e.id).collect();
+        for e in ids {
+            m.remove_elevation_mark(e).unwrap();
+        }
+        let mut v: Value = serde_json::from_str(&to_string(&m)).unwrap();
+        let map = v.as_object_mut().unwrap();
+        map.remove("dimensions");
+        map.remove("elevation_marks");
+        map.insert("version".into(), Value::from(1));
+        let old = serde_json::to_string_pretty(&v).unwrap();
+        assert!(old.contains("\"version\": 1"));
+        let opened = from_str(&old).unwrap();
+        assert_eq!(opened.to_parts(), m.to_parts());
+        // Saved again, it is a version 2 file.
+        assert!(to_string(&opened).contains("\"version\": 2"));
     }
 
     #[test]
@@ -386,7 +437,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 1,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 2,\n"));
         assert!(text.contains("\"units\": \"m\""));
         assert!(text.contains("\"start\": [0.0, 0.0]"));
         assert!(text.contains("\"cut_color\": \"#E8C4B2\""));
@@ -423,11 +474,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 1", "\"version\": 7"),
+            edited("\"version\": 2", "\"version\": 7"),
             Err(FileError::TooNew { version: 7 })
         ));
         assert!(matches!(
-            edited("\"version\": 1", "\"version\": 0"),
+            edited("\"version\": 2", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

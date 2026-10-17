@@ -54,6 +54,15 @@ typed_id!(
     OpeningId
 );
 
+typed_id!(
+    /// Identifies a [`crate::Dimension`] (a linear or chained dimension).
+    DimensionId
+);
+typed_id!(
+    /// Identifies an [`crate::ElevationMark`] (a level mark in plan).
+    ElevationMarkId
+);
+
 /// Alphabet used by IFC to compress a 128-bit GUID into 22 characters.
 const IFC_GUID_ALPHABET: &[u8; 64] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";

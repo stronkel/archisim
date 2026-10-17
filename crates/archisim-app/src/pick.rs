@@ -1,11 +1,17 @@
 //! Finding elements under the cursor or inside a selection window.
 
-use archisim_core::{LevelId, Model, OpeningId, Point2, SlabId, WallId};
+use archisim_core::{
+    DimensionId, ElevationMarkId, LevelId, Model, OpeningId, Point2, SlabId, WallId,
+};
 use archisim_geom::{opening_geometry, wall_geometry};
 
 /// A selectable element of the plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Element {
+    /// A dimension (annotation of the plan).
+    Dimension(DimensionId),
+    /// A level mark (annotation of the plan).
+    Mark(ElevationMarkId),
     Opening(OpeningId),
     Wall(WallId),
     Slab(SlabId),
@@ -53,13 +59,55 @@ pub fn outline(model: &Model, element: Element) -> Option<Vec<Point2>> {
         Element::Wall(id) => wall_geometry(model, id).map(|g| g.outline),
         Element::Opening(id) => opening_geometry(model, id).map(|g| g.footprint()),
         Element::Slab(id) => model.slab(id).map(|s| s.outline.clone()),
+        Element::Dimension(id) => model.dimension(id).map(dimension_outline),
+        Element::Mark(id) => model.elevation_mark(id).map(|m| mark_outline(model, m)),
     }
+}
+
+/// Paper millimetres in metres at 1:50, the scale of the plan view.
+const MM: f64 = 0.05;
+
+/// A thin band around the dimension line and its texts.
+fn dimension_outline(d: &archisim_core::Dimension) -> Vec<Point2> {
+    let g = archisim_plan::annotate::dimension_lines(d, MM);
+    let (a, b) = g.line;
+    let u = (b - a).normalized().unwrap_or(Point2::new(1.0, 0.0));
+    let n = u.perp_left();
+    let below = 1.0 * MM;
+    let above = (archisim_plan::annotate::TEXT_HEIGHT + 1.5) * MM;
+    vec![a - n * below, b - n * below, b + n * above, a + n * above]
+}
+
+/// The box of a level mark: its triangle and its text.
+fn mark_outline(model: &Model, m: &archisim_core::ElevationMark) -> Vec<Point2> {
+    let value = model.floor_elevation_at(m.level, m.point).unwrap_or(0.0);
+    let text = archisim_plan::annotate::format_elevation(value);
+    let w = archisim_plan::lettering::text_width(&text, archisim_plan::annotate::TEXT_HEIGHT * MM);
+    let p = m.point;
+    let (x0, x1) = (p.x - 1.6 * MM, p.x + 2.5 * MM + w);
+    let (y0, y1) = (p.y - 0.3 * MM, p.y + 6.0 * MM);
+    vec![
+        Point2::new(x0, y0),
+        Point2::new(x1, y0),
+        Point2::new(x1, y1),
+        Point2::new(x0, y1),
+    ]
 }
 
 /// Every selectable element on a level, in picking priority: doors and
 /// windows first (they sit inside walls), then walls, then slabs.
 pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     let mut v: Vec<Element> = Vec::new();
+    v.extend(
+        model
+            .elevation_marks_on_level(level)
+            .map(|m| Element::Mark(m.id)),
+    );
+    v.extend(
+        model
+            .dimensions_on_level(level)
+            .map(|d| Element::Dimension(d.id)),
+    );
     for w in model.walls_on_level(level) {
         v.extend(model.openings_in_wall(w.id).map(|o| Element::Opening(o.id)));
     }
@@ -74,9 +122,10 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
 /// elements of the same kind, the one whose outline is closest wins.
 pub fn pick(model: &Model, level: LevelId, p: Point2, tolerance: f64) -> Option<Element> {
     let rank = |e: &Element| match e {
-        Element::Opening(_) => 0,
-        Element::Wall(_) => 1,
-        Element::Slab(_) => 2,
+        Element::Dimension(_) | Element::Mark(_) => 0,
+        Element::Opening(_) => 1,
+        Element::Wall(_) => 2,
+        Element::Slab(_) => 3,
     };
     elements_on_level(model, level)
         .into_iter()

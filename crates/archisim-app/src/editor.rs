@@ -7,8 +7,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use archisim_core::{
-    Document, Hand, LevelId, Model, ModelError, NewOpening, NewSlab, NewWall, OpeningId,
-    OpeningTypeId, Point2, ReferenceLine, SlabId, SlabTypeId, WallId, WallSide, WallTypeId,
+    DimensionId, Document, ElevationMarkId, Hand, LevelId, Model, ModelError, NewDimension,
+    NewOpening, NewSlab, NewWall, OpeningId, OpeningTypeId, Point2, ReferenceLine, SlabId,
+    SlabTypeId, WallId, WallSide, WallTypeId,
 };
 use archisim_ifc::{export_ifc, import_ifc, ExportOptions, ImportReport};
 use archisim_plan::{render_plan, PlanOptions};
@@ -182,6 +183,8 @@ impl Editor {
             Element::Wall(id) => model.wall(*id).is_some(),
             Element::Opening(id) => model.opening(*id).is_some(),
             Element::Slab(id) => model.slab(*id).is_some(),
+            Element::Dimension(id) => model.dimension(*id).is_some(),
+            Element::Mark(id) => model.elevation_mark(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -288,6 +291,12 @@ impl Editor {
                     }
                     Element::Slab(id) => {
                         m.remove_slab(*id)?;
+                    }
+                    Element::Dimension(id) => {
+                        m.remove_dimension(*id)?;
+                    }
+                    Element::Mark(id) => {
+                        m.remove_elevation_mark(*id)?;
                     }
                     Element::Opening(_) => {}
                 }
@@ -406,6 +415,69 @@ impl Editor {
         self.add_slab(slab_type, outline, top_offset)
     }
 
+    /// Draws a dimension on the active level.
+    pub fn add_dimension(&mut self, mut spec: NewDimension) -> EditResult<DimensionId> {
+        spec.level = self.level;
+        self.transact("Acotar", |m| m.add_dimension(spec))
+    }
+
+    /// Places a level mark on the active level.
+    pub fn add_elevation_mark(&mut self, p: Point2) -> EditResult<ElevationMarkId> {
+        let level = self.level;
+        self.transact("Cota de nivel", |m| m.add_elevation_mark(level, p))
+    }
+
+    // ---- Levels -------------------------------------------------------------
+
+    /// Adds a level and makes it the active one.
+    pub fn add_level(&mut self, name: &str, elevation: f64) -> EditResult<LevelId> {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err("el nombre no puede quedar vacío".into());
+        }
+        if !elevation.is_finite() {
+            return Err("la cota no es un número válido".into());
+        }
+        let id = self.transact("Añadir planta", |m| Ok(m.add_level(name, elevation)))?;
+        self.level = id;
+        self.selection.clear();
+        Ok(id)
+    }
+
+    pub fn rename_level(&mut self, id: LevelId, name: &str) -> EditResult {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err("el nombre no puede quedar vacío".into());
+        }
+        self.transact("Renombrar planta", |m| m.rename_level(id, name))
+    }
+
+    pub fn set_level_elevation(&mut self, id: LevelId, elevation: f64) -> EditResult {
+        self.transact("Cambiar cota de planta", |m| {
+            m.set_level_elevation(id, elevation)
+        })
+    }
+
+    /// Removes a level with everything on it. If it was the active level,
+    /// the nearest remaining one becomes active.
+    pub fn remove_level(&mut self, id: LevelId) -> EditResult {
+        let elevation = self.model().level(id).map(|l| l.elevation);
+        self.transact("Borrar planta", |m| m.remove_level(id).map(|_| ()))?;
+        if self.level == id {
+            let e = elevation.unwrap_or(0.0);
+            if let Some(l) = self
+                .model()
+                .levels()
+                .into_iter()
+                .min_by(|a, b| (a.elevation - e).abs().total_cmp(&(b.elevation - e).abs()))
+            {
+                self.level = l.id;
+            }
+            self.selection.clear();
+        }
+        Ok(())
+    }
+
     pub fn rename_project(&mut self, name: &str) -> EditResult {
         let name = name.trim().to_string();
         if name.is_empty() {
@@ -423,11 +495,10 @@ impl Editor {
         let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
         let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
         let mut any = false;
-        let points = m
-            .walls_on_level(self.level)
-            .filter_map(|w| archisim_geom::wall_geometry(m, w.id))
-            .flat_map(|g| g.outline)
-            .chain(m.slabs_on_level(self.level).flat_map(|s| s.outline.clone()));
+        let points = crate::pick::elements_on_level(m, self.level)
+            .into_iter()
+            .filter_map(|e| crate::pick::outline(m, e))
+            .flatten();
         for p in points {
             any = true;
             lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));

@@ -16,6 +16,7 @@ use eframe::egui::{
     TextureHandle, TextureOptions, Ui, Vec2,
 };
 
+use crate::dim_tool::{DimSettings, DimTool};
 use crate::drag::{grip_at, hotspots, Drag, Grip};
 use crate::editor::{Editor, WallSettings};
 use crate::opening_tool::{placement, OpeningSettings, Placement};
@@ -45,12 +46,26 @@ pub enum Tool {
     Slab,
     Door,
     Window,
+    Dimension,
 }
 
 impl Tool {
     /// Tools that draw by clicking points (snaps and the crosshair apply).
     fn draws_points(self) -> bool {
-        matches!(self, Tool::Wall | Tool::Slab)
+        matches!(self, Tool::Wall | Tool::Slab | Tool::Dimension)
+    }
+
+    /// The tool a key selects: M muro, F forjado, P puerta, V ventana,
+    /// C cota.
+    fn from_key(text: &str) -> Option<Tool> {
+        match text.to_lowercase().as_str() {
+            "m" => Some(Tool::Wall),
+            "f" => Some(Tool::Slab),
+            "p" => Some(Tool::Door),
+            "v" => Some(Tool::Window),
+            "c" => Some(Tool::Dimension),
+            _ => None,
+        }
     }
 }
 
@@ -121,6 +136,13 @@ pub struct ArchiSimApp {
     pub slab_settings: SlabSettings,
     pub door_settings: OpeningSettings,
     pub window_settings: OpeningSettings,
+    pub dim_tool: DimTool,
+    pub dim_settings: DimSettings,
+    /// The levels dialog is open.
+    pub show_levels: bool,
+    /// A level waiting for confirmation before being deleted with its
+    /// contents.
+    pub level_to_delete: Option<LevelId>,
     /// Where the door or window tool would place its element now.
     placement: Option<Placement>,
     pub show_reference_lines: bool,
@@ -177,6 +199,10 @@ impl ArchiSimApp {
             slab_settings,
             door_settings,
             window_settings,
+            dim_tool: DimTool::default(),
+            dim_settings: DimSettings::default(),
+            show_levels: false,
+            level_to_delete: None,
             placement: None,
             show_reference_lines: false,
             message: None,
@@ -230,6 +256,7 @@ impl ArchiSimApp {
         if tool != self.tool {
             self.wall_tool.finish();
             self.slab_tool.finish();
+            self.dim_tool.finish();
             self.placement = None;
             self.window_start = None;
             self.drag = None;
@@ -672,13 +699,7 @@ impl ArchiSimApp {
         }
         for e in &events {
             if let egui::Event::Text(t) = e {
-                let tool = match t.to_lowercase().as_str() {
-                    "m" => Some(Tool::Wall),
-                    "f" => Some(Tool::Slab),
-                    "p" => Some(Tool::Door),
-                    "v" => Some(Tool::Window),
-                    _ => None,
-                };
+                let tool = Tool::from_key(t);
                 if let Some(tool) = tool {
                     self.set_tool(tool);
                 }
@@ -874,6 +895,10 @@ impl ArchiSimApp {
                     }
                 }
                 ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
+                ui.separator();
+                if ui.button("Plantas…").clicked() {
+                    self.show_levels = true;
+                }
             });
             ui.menu_button("Ayuda", |ui| {
                 if ui.button("Ratón y teclado").clicked() {
@@ -911,8 +936,19 @@ impl ArchiSimApp {
                     ui.strong("Ventana");
                     self.opening_settings_ui(ui, false);
                 }
+                Tool::Dimension => {
+                    ui.strong("Cota");
+                    self.dim_settings_ui(ui);
+                }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .small_button("Plantas…")
+                    .on_hover_text("Añadir, renombrar, cambiar la cota o borrar plantas")
+                    .clicked()
+                {
+                    self.show_levels = true;
+                }
                 self.level_picker(ui);
                 ui.label("Planta:");
             });
@@ -1152,6 +1188,7 @@ impl ArchiSimApp {
             self.ed.selection.clear();
             self.wall_tool.finish();
             self.slab_tool.finish();
+            self.dim_tool.finish();
         }
     }
 
@@ -1166,6 +1203,7 @@ impl ArchiSimApp {
             (Tool::Slab, "▱  Forjado", "F"),
             (Tool::Door, "◜  Puerta", "P"),
             (Tool::Window, "⊟  Ventana", "V"),
+            (Tool::Dimension, "↔  Cota", "C"),
         ] {
             let r = ui
                 .add_sized(size, egui::Button::selectable(self.tool == tool, label))
@@ -1191,6 +1229,7 @@ impl ArchiSimApp {
                 Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina del forjado · Espacio + clic dentro de un recinto: varita mágica",
                 Tool::Slab => "Clic: siguiente esquina · clic en la primera o Intro: cerrar · longitud en mm + Intro · Esc: quitar la última esquina",
                 Tool::Door | Tool::Window => "Clic sobre un muro: se coloca centrada en el cursor y abre hacia el lado del muro donde está el cursor · Esc: flecha",
+                Tool::Dimension => self.dim_hint(),
                 }
             };
             // Position and message on the right; the hint takes what is
@@ -1256,6 +1295,7 @@ impl ArchiSimApp {
         self.draw_slab_preview(&painter, rect);
         self.draw_opening_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
+        self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
         self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
@@ -1273,7 +1313,9 @@ impl ArchiSimApp {
         }
 
         let icon = match self.tool {
-            Tool::Wall | Tool::Slab | Tool::Door | Tool::Window => CursorIcon::Crosshair,
+            Tool::Wall | Tool::Slab | Tool::Door | Tool::Window | Tool::Dimension => {
+                CursorIcon::Crosshair
+            }
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -1357,6 +1399,20 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Dimension => {
+                let mut s = snap(model, self.ed.level, raw, reach, self.dim_tool.points());
+                if let (false, Some(a)) =
+                    (self.dim_tool.is_placing(), self.dim_tool.points().last())
+                {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(*a, s);
+                    } else {
+                        s = track(*a, s, self.view.to_metres(TRACK_REACH));
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::Door | Tool::Window => {
                 let settings = if self.tool == Tool::Door {
                     self.door_settings
@@ -1434,7 +1490,8 @@ impl ArchiSimApp {
             self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
             return;
         }
-        let drawing = self.wall_tool.is_drawing() || self.slab_tool.is_drawing();
+        let drawing =
+            self.wall_tool.is_drawing() || self.slab_tool.is_drawing() || self.dim_tool.is_active();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -1451,13 +1508,7 @@ impl ArchiSimApp {
             // Tool keys: M muro, F forjado, P puerta, V ventana.
             for e in &events {
                 if let egui::Event::Text(t) = e {
-                    let tool = match t.to_lowercase().as_str() {
-                        "m" => Some(Tool::Wall),
-                        "f" => Some(Tool::Slab),
-                        "p" => Some(Tool::Door),
-                        "v" => Some(Tool::Window),
-                        _ => None,
-                    };
+                    let tool = Tool::from_key(t);
                     if let Some(tool) = tool {
                         self.set_tool(tool);
                     }
@@ -1488,6 +1539,9 @@ impl ArchiSimApp {
                     ),
                     SlabOutcome::Nothing => {}
                 },
+                Tool::Dimension if !self.dim_tool.enough() => {
+                    self.complain("Marca al menos dos puntos para acotar.");
+                }
                 _ => {}
             }
         }
@@ -1504,6 +1558,11 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Door | Tool::Window => self.set_tool(Tool::Arrow),
+                Tool::Dimension => {
+                    if !self.dim_tool.escape() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Arrow => {
                     self.window_start = None;
                     self.ed.selection.clear();
@@ -1600,6 +1659,25 @@ impl ArchiSimApp {
             Tool::Door | Tool::Window => {
                 if response.clicked_by(PointerButton::Primary) {
                     self.place_opening();
+                }
+            }
+            Tool::Dimension => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.dim_tool.enough();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        let reach = self.view.to_metres(REACH);
+                        let out = self.dim_tool.click(
+                            self.ed.model(),
+                            self.ed.level,
+                            self.dim_settings,
+                            c.point,
+                            reach,
+                        );
+                        self.dim_outcome(out);
+                    }
                 }
             }
             Tool::Arrow => {
@@ -2221,6 +2299,8 @@ impl ArchiSimApp {
             [Element::Wall(id)] => self.wall_properties(ui, *id),
             [Element::Opening(id)] => self.opening_properties(ui, *id),
             [Element::Slab(id)] => self.slab_properties(ui, *id),
+            [Element::Dimension(id)] => self.dimension_properties(ui, *id),
+            [Element::Mark(id)] => self.mark_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -2577,12 +2657,17 @@ impl ArchiSimApp {
             .iter()
             .filter(|e| matches!(e, Element::Slab(_)))
             .count();
+        let annotations = many
+            .iter()
+            .filter(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)))
+            .count();
         ui.label(egui::RichText::new(format!("{} elementos seleccionados", many.len())).strong());
         ui.label(format!(
-            "{} muros · {} puertas y ventanas · {} forjados",
+            "{} muros · {} puertas y ventanas · {} forjados · {} cotas",
             walls.len(),
             openings,
-            slabs
+            slabs,
+            annotations
         ));
         ui.add_space(6.0);
         if walls.len() == many.len() {
@@ -2731,6 +2816,7 @@ impl ArchiSimApp {
                 self.import_report = None;
             }
         }
+        self.levels_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
                 .open(&mut self.show_about)
@@ -2763,7 +2849,10 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("Rueda", "Zoom en el cursor"),
     ("Arrastrar rueda / botón derecho", "Encuadre"),
     ("Doble clic rueda · Inicio", "Ajustar a la ventana"),
-    ("M", "Herramienta muro"),
+    (
+        "M · F · P · V · C",
+        "Muro · Forjado · Puerta · Ventana · Cota",
+    ),
     ("Esc", "Terminar / herramienta flecha / anular selección"),
     ("Mayús (dibujando)", "Ángulos múltiplos de 45°"),
     (
@@ -2937,6 +3026,8 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
     }
 }
 
+mod annotation_ui;
+mod levels_ui;
 mod view3d_ui;
 pub use view3d_ui::{View3dState, ViewMode};
 

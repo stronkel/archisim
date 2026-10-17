@@ -23,6 +23,9 @@
 //!   outside and the edge of the sill wall inside. Windows entirely above
 //!   the cut plane are drawn dashed and do not interrupt the wall.
 
+pub mod annotate;
+pub mod lettering;
+
 use std::fmt::Write as _;
 
 use archisim_core::{
@@ -92,11 +95,24 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         .iter()
         .flat_map(|g| g.outline.iter())
         .chain(slabs.iter().flat_map(|s| s.outline.iter()));
+    let dimensions: Vec<_> = model.dimensions_on_level(level).collect();
+    let marks: Vec<_> = model.elevation_marks_on_level(level).collect();
+    let annotation_points: Vec<Point2> = dimensions
+        .iter()
+        .flat_map(|d| {
+            let g = annotate::dimension_lines(d, k);
+            let mut v = vec![g.line.0, g.line.1];
+            v.extend(g.extensions.iter().map(|e| e.1));
+            v
+        })
+        .chain(marks.iter().map(|m| m.point))
+        .collect();
+    let all_points = all_points.chain(annotation_points.iter());
     for p in all_points {
         min = Point2::new(min.x.min(p.x), min.y.min(p.y));
         max = Point2::new(max.x.max(p.x), max.y.max(p.y));
     }
-    if geos.is_empty() && slabs.is_empty() {
+    if geos.is_empty() && slabs.is_empty() && annotation_points.is_empty() {
         min = Point2::new(0.0, 0.0);
         max = Point2::new(1.0, 1.0);
     }
@@ -187,6 +203,15 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
     for (g, p) in geos.iter().zip(&pieces) {
         draw_cut_lines(&mut s, g, p, k);
+    }
+    s.push_str("</g>\n");
+
+    s.push_str("<g id=\"annotations\">\n");
+    for d in &dimensions {
+        annotate::draw_dimension(&mut s, d, k);
+    }
+    for m in &marks {
+        annotate::draw_elevation_mark(&mut s, model, m, k);
     }
     s.push_str("</g>\n");
 

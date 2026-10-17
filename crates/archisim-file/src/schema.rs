@@ -1,4 +1,4 @@
-//! Version 1 of the `.archisim` file layout and its conversion to and from
+//! Version 2 of the `.archisim` file layout and its conversion to and from
 //! the core model.
 //!
 //! The structs here are the file format, not the model: they change only
@@ -18,7 +18,7 @@ type Xy = [f64; 2];
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct FileV1 {
+pub(crate) struct ProjectFile {
     pub format: String,
     pub version: u32,
     pub units: String,
@@ -32,6 +32,28 @@ pub(crate) struct FileV1 {
     pub slabs: Vec<Slab>,
     pub opening_types: Vec<OpeningType>,
     pub openings: Vec<Opening>,
+    /// Plan dimensions (version 2).
+    pub dimensions: Vec<Dimension>,
+    /// Level marks in plan (version 2).
+    pub elevation_marks: Vec<ElevationMark>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Dimension {
+    pub id: u64,
+    pub level: u64,
+    pub points: Vec<Xy>,
+    pub direction: Xy,
+    pub position: Xy,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ElevationMark {
+    pub id: u64,
+    pub level: u64,
+    pub point: Xy,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -257,12 +279,12 @@ fn layers_out(layers: &[core::Layer]) -> Vec<Layer> {
         .collect()
 }
 
-impl FileV1 {
+impl ProjectFile {
     pub fn from_model(model: &core::Model) -> Self {
         let p = model.to_parts();
-        FileV1 {
+        ProjectFile {
             format: crate::FORMAT.into(),
-            version: 1,
+            version: crate::CURRENT_VERSION,
             units: crate::UNITS.into(),
             generator: format!("ArchiSim {}", env!("CARGO_PKG_VERSION")),
             project: Project {
@@ -418,6 +440,26 @@ impl FileV1 {
                     setback: o.setback,
                 })
                 .collect(),
+            dimensions: p
+                .dimensions
+                .into_iter()
+                .map(|d| Dimension {
+                    id: d.id.0,
+                    level: d.level.0,
+                    points: d.points.into_iter().map(xy).collect(),
+                    direction: xy(d.direction),
+                    position: xy(d.position),
+                })
+                .collect(),
+            elevation_marks: p
+                .elevation_marks
+                .into_iter()
+                .map(|m| ElevationMark {
+                    id: m.id.0,
+                    level: m.level.0,
+                    point: xy(m.point),
+                })
+                .collect(),
         }
     }
 
@@ -449,6 +491,8 @@ impl FileV1 {
             slabs: Vec::new(),
             opening_types: Vec::new(),
             openings: Vec::new(),
+            dimensions: Vec::new(),
+            elevation_marks: Vec::new(),
         };
 
         for l in self.levels {
@@ -598,6 +642,22 @@ impl FileV1 {
             });
         }
 
+        for d in self.dimensions {
+            parts.dimensions.push(core::Dimension {
+                id: core::DimensionId(d.id),
+                level: core::LevelId(d.level),
+                points: d.points.into_iter().map(pt).collect(),
+                direction: pt(d.direction),
+                position: pt(d.position),
+            });
+        }
+        for m in self.elevation_marks {
+            parts.elevation_marks.push(core::ElevationMark {
+                id: core::ElevationMarkId(m.id),
+                level: core::LevelId(m.level),
+                point: pt(m.point),
+            });
+        }
         core::Model::from_parts(parts).map_err(FileError::Model)
     }
 }

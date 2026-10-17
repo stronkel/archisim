@@ -97,7 +97,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Opening(_) => {}
+            Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) => {}
         }
     }
     v
@@ -274,11 +274,40 @@ fn move_selection(
     for (id, s, e) in followers {
         model.stretch_wall(id, s, e)?;
     }
+    // Dimensions go with the building elements they are moved with; moved
+    // on their own, only their line moves (it is how they are tidied up).
+    let only_annotations = selection
+        .iter()
+        .all(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)));
     for e in selection {
-        if let Element::Slab(id) = e {
-            let s = model.slab(*id).ok_or(ModelError::UnknownSlab(*id))?;
-            let outline = s.outline.iter().map(|p| *p + d).collect();
-            model.set_slab_outline(*id, outline)?;
+        match e {
+            Element::Slab(id) => {
+                let s = model.slab(*id).ok_or(ModelError::UnknownSlab(*id))?;
+                let outline = s.outline.iter().map(|p| *p + d).collect();
+                model.set_slab_outline(*id, outline)?;
+            }
+            Element::Dimension(id) => {
+                let dim = model
+                    .dimension(*id)
+                    .ok_or(ModelError::UnknownDimension(*id))?;
+                if only_annotations {
+                    let n = dim.direction.perp_left();
+                    let (points, position) = (dim.points.clone(), dim.position + n * d.dot(n));
+                    model.set_dimension(*id, points, position)?;
+                } else {
+                    let points = dim.points.iter().map(|p| *p + d).collect();
+                    let position = dim.position + d;
+                    model.set_dimension(*id, points, position)?;
+                }
+            }
+            Element::Mark(id) => {
+                let p = model
+                    .elevation_mark(*id)
+                    .ok_or(ModelError::UnknownElevationMark(*id))?
+                    .point;
+                model.move_elevation_mark(*id, p + d)?;
+            }
+            _ => {}
         }
     }
     // Doors and windows whose wall stays: they slide along it. The ones in
@@ -379,6 +408,27 @@ fn copy(
         .collect();
     for e in selection {
         match e {
+            Element::Dimension(id) => {
+                let dim = model
+                    .dimension(*id)
+                    .ok_or(ModelError::UnknownDimension(*id))?
+                    .clone();
+                let new = model.add_dimension(archisim_core::NewDimension {
+                    level: dim.level,
+                    points: dim.points.iter().map(|p| *p + d).collect(),
+                    direction: dim.direction,
+                    position: dim.position + d,
+                })?;
+                copies.insert(Element::Dimension(new));
+            }
+            Element::Mark(id) => {
+                let m = model
+                    .elevation_mark(*id)
+                    .ok_or(ModelError::UnknownElevationMark(*id))?
+                    .clone();
+                let new = model.add_elevation_mark(m.level, m.point + d)?;
+                copies.insert(Element::Mark(new));
+            }
             Element::Wall(id) => {
                 let w = model.wall(*id).ok_or(ModelError::UnknownWall(*id))?.clone();
                 let hosted: Vec<NewOpening> = model
@@ -486,6 +536,8 @@ fn level_of(
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
             Element::Opening(id) => model.opening(*id).and_then(|o| wall_level(o.wall)),
+            Element::Dimension(id) => model.dimension(*id).map(|d| d.level),
+            Element::Mark(id) => model.elevation_mark(*id).map(|m| m.level),
         }),
     }
 }
@@ -608,6 +660,57 @@ mod tests {
         apply(&mut m, &sel(&[Element::Wall(across)]), &drag).unwrap();
         assert!(m.wall(below).unwrap().end.approx_eq(p(3.0, 2.45)));
         assert_eq!(m.wall(below).unwrap().start, p(3.0, 0.265));
+    }
+
+    #[test]
+    fn dimensions_move_their_line_alone_or_go_with_the_walls() {
+        let (mut m, lvl, _) = room();
+        let w = walls(&m);
+        let d = m
+            .add_dimension(archisim_core::NewDimension {
+                level: lvl,
+                points: vec![p(0.0, 0.0), p(6.0, 0.0)],
+                direction: p(1.0, 0.0),
+                position: p(0.0, -1.0),
+            })
+            .unwrap();
+        let mark = m.add_elevation_mark(lvl, p(3.0, 2.0)).unwrap();
+        // Alone: only the line moves, across the direction.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, -1.0),
+            to: p(4.0, -1.5),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Dimension(d)]), &drag).unwrap();
+        let dim = m.dimension(d).unwrap();
+        assert_eq!(dim.points[1], p(6.0, 0.0));
+        assert!((dim.line_offset() + 1.5).abs() < 1e-12);
+        // With the west wall: everything moves.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(0.0, 0.0),
+            to: p(-1.0, 0.0),
+            variant: false,
+        };
+        let s = sel(&[
+            Element::Wall(w[0]),
+            Element::Dimension(d),
+            Element::Mark(mark),
+        ]);
+        apply(&mut m, &s, &drag).unwrap();
+        assert_eq!(m.dimension(d).unwrap().points[0], p(-1.0, 0.0));
+        assert_eq!(m.elevation_mark(mark).unwrap().point, p(2.0, 2.0));
+        // Copied.
+        let copy = Drag {
+            variant: true,
+            ..drag
+        };
+        let copies = apply(&mut m, &sel(&[Element::Dimension(d)]), &copy)
+            .unwrap()
+            .unwrap();
+        assert_eq!(copies.len(), 1);
+        assert_eq!(m.dimensions().count(), 2);
     }
 
     #[test]

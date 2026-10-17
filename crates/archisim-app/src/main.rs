@@ -9,6 +9,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod dim_tool;
 mod drag;
 mod editor;
 mod opening_tool;

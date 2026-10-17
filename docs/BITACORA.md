@@ -6,6 +6,42 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Cierre de fase 1, bloque 9 — Cotas, cotas de nivel y gestión de plantas
+
+**Hecho**
+- **Herramienta Cota** (tecla **C**), con tres métodos en el cuadro de información:
+  - **Lineal**: clic en cada punto (con los forzados de siempre), Intro / doble clic / botón derecho, y clic donde va la línea. Dos puntos dan una cota simple; más, una **cadena**. Dirección automática (horizontal o vertical según dónde pongas la línea) o fija: horizontal, vertical o alineada. Vista previa en azul con el valor.
+  - **Huecos de muro**: clic en un muro del lado de la cara a acotar → cadena con los extremos de esa cara (esquinas a inglete incluidas) y las jambas de todas sus puertas y ventanas; segundo clic para la línea.
+  - **Cota de nivel**: clic → triángulo semirrelleno con la cota del suelo terminado respecto al ±0,00 (`+0,35`, `±0,00`, `-0,35`), leída del forjado más alto de la planta en ese punto. Si cambias el forjado o la cota de la planta, se actualiza sola.
+- **Dibujo de las cotas** (planta exportada y pantalla, idénticas): líneas finas, trazo oblicuo a 45°, línea que sobrepasa 2 mm los trazos extremos, líneas auxiliares separadas 1,5 mm del elemento, valor encima de la línea, legible desde abajo o desde la derecha, en **metros con dos decimales** (`3,45`), texto de 2,5 mm.
+- **Rotulación técnica propia**: los números se dibujan con trazos (estilo UNE-EN ISO 3098, diseño propio), no con una fuente del sistema: se ven igual en pantalla, en el SVG y se verán igual en PDF.
+- Las cotas y cotas de nivel **se seleccionan** (clic sobre la línea o el símbolo), se borran, se copian (Ctrl) y se mueven: arrastradas solas, se desplaza solo la línea de cota; junto con muros, van con ellos. Propiedades: tramos, total, dirección; en la cota de nivel, el valor y la planta.
+- La vivienda de prueba trae cotas de huecos y totales en las fachadas sur y oeste y dos cotas de nivel.
+- **Plantas** (botón «Plantas…» junto al selector, o *Vista → Plantas…*): lista de arriba abajo con nombre y cota editables, altura hasta la planta de encima y contenido; **añadir planta encima** (con la altura de la última planta) o **debajo**; **borrar** (si tiene elementos, pide confirmación y los borra con ella; la última planta no se puede borrar). Cambiar la cota mueve todo su contenido. Todo se deshace con Ctrl+Z. Las plantas nuevas salen en el IFC como `IfcBuildingStorey`.
+- **Formato `.archisim` versión 2** (cotas y cotas de nivel). Los proyectos de versión 1 se abren igual (prueba incluida) y se guardan ya en versión 2. De paso se corrige la lectura de decimales largos del fichero (p. ej. 3,9000000000000004), que podía cambiar en la última cifra al reabrir.
+- Al encuadrar (Inicio) se tienen en cuenta las cotas.
+- Pruebas: núcleo (cotas, cotas de nivel, plantas, ida y vuelta), fichero (versión 1 → 2), dibujo de cotas, herramienta de cota (cadena, dirección automática, huecos de muro por cada cara, cotas de nivel), arrastres de cotas y la app con clics simulados (acotar, seleccionar, mover la línea, borrar; añadir, renombrar, mover y borrar plantas con deshacer). Ventana real probada con capturas; planta de la demo revisada en SVG.
+- Versión 0.10.0. Sin cambios en el IFC exportado.
+
+**Pendiente / limitaciones conocidas**
+- Las cotas **no son asociativas**: si mueves un muro, su cota no le sigue (fase 3, punto 3.2). Al moverlas junto con los muros, sí van con ellos.
+- Sin estilos de cota por escala ni elección de unidades (m con 2 decimales fijo; decisión D5 pendiente), sin cotas de altura (sección) ni de superficie.
+- Las cotas no se exportan al IFC (como Revit y ArchiCAD).
+- No se ven otras plantas en gris debajo de la activa.
+
+**Antonio debe probar**
+1. Descarga la nueva versión (GitHub → **Actions** → última ejecución en verde → **Artifacts** → **ArchiSim-Windows**) y abre `demo.archisim`: cotas en las fachadas sur y oeste y dos cotas de nivel. Mira de cerca el trazo oblicuo, los números y su posición: ¿es como acotas en el estudio?
+2. Exporta la planta (SVG) y ábrela en el navegador con zoom: las cotas deben verse igual que en pantalla.
+3. Tecla **C** → Lineal: acota el ancho de una habitación de cara a cara (los forzados «Sobre arista» ayudan), Intro, y coloca la línea dentro. Prueba una cadena de 4 puntos y la dirección Alineada.
+4. Método **Huecos de muro**: clic por fuera de la fachada norte y otro clic más afuera para la línea. Repite por dentro: debe acotar la cara interior.
+5. Método **Cota de nivel** sobre la solera; cambia la cota de la solera en sus Propiedades (p. ej. 50) y comprueba que la cota de nivel pasa a `+0,05`.
+6. Selecciona una cota y arrástrala: se mueve solo la línea. Supr la borra; Ctrl+Z.
+7. **Plantas…**: añade una planta encima, renómbrala, cámbiale la cota, dibuja algo en ella y bórrala (debe avisar). Exporta el IFC y comprueba en ArchiCAD/Revit que aparecen las plantas con su cota.
+8. Abre un proyecto guardado con la versión anterior: debe abrirse sin problemas.
+9. Dime si prefieres las cotas en centímetros o con otro número de decimales (es la decisión D5).
+
+---
+
 ## 2026-10-17 · Cierre de fase 1, bloque 8 — Mover, copiar y estirar; varita mágica; vértices de forjado
 
 **Hecho**

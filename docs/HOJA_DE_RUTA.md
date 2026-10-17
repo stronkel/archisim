@@ -29,8 +29,8 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.1 ✅ v0.9 | **Mover, copiar y estirar con el ratón** (muros, forjados, huecos), con los mismos forzados que al dibujar; arrastrar un extremo de muro arrastra la esquina unida | M |
 | 1.2 ✅ v0.9 | **Forjado por varita mágica**: clic dentro de un recinto de muros (por la cara interior, exterior o eje) | S |
 | 1.3 ✅ v0.9 | **Edición de vértices** de forjados: mover, añadir y quitar esquinas | S |
-| 1.4 ★ | **Cotas básicas**: lineales y encadenadas, cota automática de huecos en un muro, cotas de nivel | M |
-| 1.5 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
+| 1.4 ✅ v0.10 | **Cotas básicas**: lineales y encadenadas, cota automática de huecos en un muro, cotas de nivel | M |
+| 1.5 ✅ v0.10 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
 | 1.6 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
 | 1.7 | **Importación IFC, segunda vuelta**: muros curvos y de varios tramos, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
 | 1.8 | **Instalación**: instalador de Windows con icono y asociación de `.archisim` e `.ifc`, compilaciones para macOS y Linux en la integración continua | S |
@@ -88,6 +88,6 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 ## Propuesta de orden
 
 1. ~~Bloque 8: **mover / copiar / estirar** con el ratón y **varita mágica** (1.1 + 1.2)~~ — hecho en v0.9, con la edición de vértices (1.3).
-2. Bloque 9: **cotas básicas** y **gestión de plantas** (1.4 + 1.5).
+2. ~~Bloque 9: **cotas básicas** y **gestión de plantas** (1.4 + 1.5)~~ — hecho en v0.10.
 3. Bloque 10: **uniones en T y prioridades** (2.3), que mejora todo lo dibujado.
 4. Fase 2 con **familias** (2.1) en cuanto Antonio decida D2.

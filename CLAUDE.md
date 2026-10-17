@@ -48,7 +48,7 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 - `crates/archisim-core` — documento, elementos, tipos, transacciones. Sin dependencias internas.
 - `crates/archisim-geom` — geometría 2D, contornos de muros y sólidos 3D (`solid`): las mismas formas que el IFC, una piel cerrada por elemento, sin caras ocultas de contacto.
 - `crates/archisim-ifc` — escritor IFC4 STEP; lector STEP (`step_read`) e importador IFC2X3/IFC4 (`import`). Ficheros de prueba de otro programa en `tests/fixtures/`, generados con `scripts/make_ifc_fixtures.py` (IfcOpenShell); no subas IFC de proyectos reales.
-- `crates/archisim-plan` — planta en SVG.
+- `crates/archisim-plan` — planta en SVG; cotas (`annotate`) y rotulación técnica de trazo (`lettering`), sin depender de fuentes.
 - `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
 - `crates/archisim-library` — plantilla de inicio: materiales y tipos con los que empieza un proyecto nuevo (y la demo).
 - `crates/archisim-cli` — comandos de línea.
@@ -58,4 +58,4 @@ Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUN
 
 ## Prioridades actuales
 
-MVP (fase 1) terminado en v0.8; v0.9 añade mover/copiar/estirar con el ratón, varita mágica y edición de vértices de forjado. La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Siguiente propuesto: cotas y gestión de plantas; después uniones en T. Antonio decide el orden (ver la bitácora).
+MVP (fase 1) terminado en v0.8; v0.9 añade mover/copiar/estirar con el ratón, varita mágica y edición de vértices de forjado; v0.10, cotas, cotas de nivel y gestión de plantas (formato `.archisim` versión 2). La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Siguiente: uniones en T y prioridades de intersección por capa (bloque 10, pedido por Antonio). Antonio decide el orden (ver la bitácora).

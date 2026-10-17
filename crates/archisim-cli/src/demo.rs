@@ -14,8 +14,8 @@
 //! to the south-east with a high fixed window above the cut plane.
 
 use archisim_core::{
-    Document, Hand, Model, ModelError, NewOpening, NewSlab, NewWall, Point2, ReferenceLine,
-    WallSide,
+    Document, Hand, Model, ModelError, NewDimension, NewOpening, NewSlab, NewWall, Point2,
+    ReferenceLine, WallSide,
 };
 use archisim_library::add_library;
 
@@ -141,6 +141,37 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Dimensions: the openings of the south and west façades, outside, the
+    // overall size beyond them, and level marks on the ground slab.
+    doc.transact("Cotas", |m| {
+        let walls: Vec<_> = m.walls_on_level(pb).map(|w| w.id).collect();
+        let (west, south) = (walls[0], walls[3]);
+        for (wall, overall_from, overall_to) in [
+            (south, Point2::new(0.0, 0.0), Point2::new(12.0, 0.0)),
+            (west, Point2::new(0.0, 0.0), Point2::new(0.0, 9.0)),
+        ] {
+            let Some(chain) = archisim_geom::wall_face_chain(m, wall, true) else {
+                continue;
+            };
+            let first = chain.points[0];
+            m.add_dimension(NewDimension {
+                level: pb,
+                points: chain.points.clone(),
+                direction: chain.direction,
+                position: first + chain.outward * 0.8,
+            })?;
+            m.add_dimension(NewDimension {
+                level: pb,
+                points: vec![overall_from, overall_to],
+                direction: chain.direction,
+                position: first + chain.outward * 1.4,
+            })?;
+        }
+        m.add_elevation_mark(pb, Point2::new(3.0, 6.5))?;
+        m.add_elevation_mark(pb, Point2::new(9.0, 2.5))?;
+        Ok(())
+    })?;
+
     Ok(doc)
 }
 
@@ -156,7 +187,9 @@ mod tests {
         assert_eq!(m.slabs().count(), 2);
         assert_eq!(m.openings().count(), 9);
         assert_eq!(m.opening_types().count(), 8);
-        assert_eq!(doc.undo_label(), Some("Forjados"));
+        assert_eq!(doc.undo_label(), Some("Cotas"));
+        assert_eq!(m.dimensions().count(), 4);
+        assert_eq!(m.elevation_marks().count(), 2);
         // The roof slab rests on the façade walls.
         let roof = m
             .slabs()

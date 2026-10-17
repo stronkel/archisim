@@ -330,6 +330,56 @@ impl OpeningGeometry {
     }
 }
 
+/// The points to dimension one face of a wall with its doors and windows
+/// (ArchiCAD's automatic dimensioning of a wall): the ends of that face
+/// (with the mitred corners) and the jambs of every opening, in order along
+/// the wall.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FaceChain {
+    pub points: Vec<Point2>,
+    /// Unit vector along the wall, start → end.
+    pub direction: Vec2,
+    /// Unit vector out of the wall through that face.
+    pub outward: Vec2,
+}
+
+/// [`FaceChain`] of the exterior (`true`) or interior face of a wall.
+pub fn wall_face_chain(model: &Model, wall: WallId, exterior: bool) -> Option<FaceChain> {
+    let g = wall_geometry(model, wall)?;
+    let (a, b) = g.axis;
+    let u = (b - a).normalized()?;
+    let n = u.perp_left();
+    let (face, other) = if exterior {
+        (g.exterior_offset, g.interior_offset)
+    } else {
+        (g.interior_offset, g.exterior_offset)
+    };
+    let outward = if face >= other { n } else { -n };
+    let on_face: Vec<f64> = g
+        .outline
+        .iter()
+        .filter(|p| ((**p - a).dot(n) - face).abs() < 1e-6)
+        .map(|p| (*p - a).dot(u))
+        .collect();
+    let lo = on_face.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = on_face.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !lo.is_finite() || !hi.is_finite() {
+        return None;
+    }
+    let mut ts = vec![lo, hi];
+    for o in openings_in_wall(model, wall) {
+        ts.push(o.t0);
+        ts.push(o.t1);
+    }
+    ts.sort_by(f64::total_cmp);
+    ts.dedup_by(|x, y| (*x - *y).abs() < EPSILON);
+    Some(FaceChain {
+        points: ts.iter().map(|t| a + u * *t + n * face).collect(),
+        direction: u,
+        outward,
+    })
+}
+
 /// Geometry of one door or window, or `None` if it or its wall is missing.
 pub fn opening_geometry(model: &Model, id: OpeningId) -> Option<OpeningGeometry> {
     let o = model.opening(id)?;
