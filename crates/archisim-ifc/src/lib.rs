@@ -6,12 +6,17 @@
 //! - wall types (`IfcWallType`) with their material layer sets;
 //! - walls (`IfcWall`) with an axis, a swept-solid body following the
 //!   resolved corners, a material layer set usage, `Pset_WallCommon` and
-//!   `Qto_WallBaseQuantities`.
+//!   `Qto_WallBaseQuantities`;
+//! - slab types (`IfcSlabType`) and slabs (`IfcSlab`) extruded from their
+//!   outline, with a material layer set usage, `Pset_SlabCommon` and
+//!   `Qto_SlabBaseQuantities`.
 //!
 //! Layer set orientation: walls are placed with local X along the drawn line
 //! and local Y to its left (the exterior side). The layer set usage is
-//! `AXIS2 / POSITIVE`, starting at the interior face, so layer sets are
-//! written from interior to exterior.
+//! `AXIS2 / POSITIVE`, starting at the interior face, so wall layer sets are
+//! written from interior to exterior. Slabs are placed at their soffit and
+//! extruded upwards; their usage is `AXIS3 / POSITIVE` from the soffit, so
+//! slab layer sets are written from bottom to top.
 //!
 //! Relationship GUIDs are derived from element GUIDs, so exporting the same
 //! model twice gives the same file apart from the header timestamp.
@@ -20,7 +25,10 @@ pub mod step;
 
 use std::collections::BTreeMap;
 
-use archisim_core::{GlobalId, LevelId, MaterialId, Model, Point2, WallFunction, WallTypeId};
+use archisim_core::{
+    perimeter, GlobalId, Layer, LayerFunction, LevelId, MaterialId, Model, Point2, SlabTypeId,
+    WallFunction, WallTypeId,
+};
 use archisim_geom::{signed_area, wall_geometry};
 use step::{boolean, list, real, string, Ref, StepWriter};
 
@@ -132,6 +140,102 @@ impl<'a> Exporter<'a> {
             refs.push(refs[0]);
         }
         self.w.add(format!("IFCPOLYLINE({})", list(&refs)))
+    }
+
+    /// An `IfcMaterialLayerSet` with the layers in the given order.
+    fn layer_set<'l>(
+        &mut self,
+        materials: &BTreeMap<MaterialId, Ref>,
+        layers: impl Iterator<Item = &'l Layer>,
+        name: &str,
+    ) -> Ref {
+        let model = self.model;
+        let refs: Vec<Ref> = layers
+            .map(|l| {
+                let mat_name = model
+                    .material(l.material)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_default();
+                self.w.add(format!(
+                    "IFCMATERIALLAYER({},{},{},{},$,{},$)",
+                    materials[&l.material],
+                    real(l.thickness),
+                    boolean(l.function == LayerFunction::AirGap),
+                    string(&mat_name),
+                    string(l.function.ifc_category())
+                ))
+            })
+            .collect();
+        self.w.add(format!(
+            "IFCMATERIALLAYERSET({},{},$)",
+            list(&refs),
+            string(name)
+        ))
+    }
+
+    /// A property set or quantity set attached to one element.
+    fn attach_set(&mut self, element: Ref, element_guid: &GlobalId, set: Ref, name: &str) {
+        self.w.add(format!(
+            "IFCRELDEFINESBYPROPERTIES({},$,$,$,({element}),{set})",
+            string(derived_guid(element_guid, &format!("rel {name}")).as_str())
+        ));
+    }
+
+    /// The common properties shared by walls and slabs.
+    fn common_pset(
+        &mut self,
+        element: Ref,
+        guid: &GlobalId,
+        pset_name: &str,
+        reference: &str,
+        is_external: bool,
+        load_bearing: bool,
+    ) {
+        let props = [
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
+                string(reference)
+            )),
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({}),$)",
+                boolean(is_external)
+            )),
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN({}),$)",
+                boolean(load_bearing)
+            )),
+        ];
+        let pset = self.w.add(format!(
+            "IFCPROPERTYSET({},$,{},$,{})",
+            string(derived_guid(guid, pset_name).as_str()),
+            string(pset_name),
+            list(&props)
+        ));
+        self.attach_set(element, guid, pset, pset_name);
+    }
+
+    /// A quantity set from `(name, entity, value)` triples.
+    fn quantities(
+        &mut self,
+        element: Ref,
+        guid: &GlobalId,
+        qto_name: &str,
+        values: &[(&str, &str, f64)],
+    ) {
+        let qs: Vec<Ref> = values
+            .iter()
+            .map(|(name, entity, value)| {
+                self.w
+                    .add(format!("{entity}('{name}',$,$,{},$)", real(*value)))
+            })
+            .collect();
+        let qto = self.w.add(format!(
+            "IFCELEMENTQUANTITY({},$,{},$,$,{})",
+            string(derived_guid(guid, qto_name).as_str()),
+            string(qto_name),
+            list(&qs)
+        ));
+        self.attach_set(element, guid, qto, qto_name);
     }
 
     fn rel_aggregates(&mut self, guid: GlobalId, parent: Ref, children: &[Ref]) {
@@ -250,30 +354,7 @@ impl<'a> Exporter<'a> {
         let mut layer_sets: BTreeMap<WallTypeId, Ref> = BTreeMap::new();
         let mut type_refs: BTreeMap<WallTypeId, Ref> = BTreeMap::new();
         for t in model.wall_types() {
-            let layers: Vec<Ref> = t
-                .layers
-                .iter()
-                .rev()
-                .map(|l| {
-                    let name = model
-                        .material(l.material)
-                        .map(|m| m.name.clone())
-                        .unwrap_or_default();
-                    self.w.add(format!(
-                        "IFCMATERIALLAYER({},{},{},{},$,{},$)",
-                        materials[&l.material],
-                        real(l.thickness),
-                        boolean(l.function == archisim_core::LayerFunction::AirGap),
-                        string(&name),
-                        string(l.function.ifc_category())
-                    ))
-                })
-                .collect();
-            let set = self.w.add(format!(
-                "IFCMATERIALLAYERSET({},{},$)",
-                list(&layers),
-                string(&t.name)
-            ));
+            let set = self.layer_set(&materials, t.layers.iter().rev(), &t.name);
             let ty = self.w.add(format!(
                 "IFCWALLTYPE({},$,{},$,$,$,$,$,$,.STANDARD.)",
                 string(t.guid.as_str()),
@@ -285,6 +366,25 @@ impl<'a> Exporter<'a> {
             ));
             layer_sets.insert(t.id, set);
             type_refs.insert(t.id, ty);
+        }
+
+        // Slab types and their layer sets (bottom → top, see module docs).
+        let mut slab_sets: BTreeMap<SlabTypeId, Ref> = BTreeMap::new();
+        let mut slab_type_refs: BTreeMap<SlabTypeId, Ref> = BTreeMap::new();
+        for t in model.slab_types() {
+            let set = self.layer_set(&materials, t.layers.iter().rev(), &t.name);
+            let ty = self.w.add(format!(
+                "IFCSLABTYPE({},$,{},$,$,$,$,$,$,.{}.)",
+                string(t.guid.as_str()),
+                string(&t.name),
+                t.function.ifc_predefined_type()
+            ));
+            self.w.add(format!(
+                "IFCRELASSOCIATESMATERIAL({},$,$,$,({ty}),{set})",
+                string(derived_guid(&t.guid, "material").as_str())
+            ));
+            slab_sets.insert(t.id, set);
+            slab_type_refs.insert(t.id, ty);
         }
 
         // Walls.
@@ -357,57 +457,109 @@ impl<'a> Exporter<'a> {
                 string(derived_guid(&wall.guid, "material").as_str())
             ));
 
-            // Properties.
-            let props = [
-                self.w.add(format!(
-                    "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
-                    string(&wtype.name)
-                )),
-                self.w.add(format!(
-                    "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({}),$)",
-                    boolean(wtype.function == WallFunction::Exterior)
-                )),
-                self.w.add(format!(
-                    "IFCPROPERTYSINGLEVALUE('LoadBearing',$,IFCBOOLEAN({}),$)",
-                    boolean(wtype.is_load_bearing())
-                )),
-            ];
-            let pset = self.w.add(format!(
-                "IFCPROPERTYSET({},$,'Pset_WallCommon',$,{})",
-                string(derived_guid(&wall.guid, "Pset_WallCommon").as_str()),
-                list(&props)
-            ));
-            self.w.add(format!(
-                "IFCRELDEFINESBYPROPERTIES({},$,$,$,({w}),{pset})",
-                string(derived_guid(&wall.guid, "rel Pset_WallCommon").as_str())
-            ));
-
-            // Quantities.
+            // Properties and quantities.
+            self.common_pset(
+                w,
+                &wall.guid,
+                "Pset_WallCommon",
+                &wtype.name,
+                wtype.function == WallFunction::Exterior,
+                wtype.is_load_bearing(),
+            );
             let footprint = signed_area(&geo.outline);
-            let qs = [
-                ("Length", "IFCQUANTITYLENGTH", length),
-                ("Width", "IFCQUANTITYLENGTH", wtype.thickness()),
-                ("Height", "IFCQUANTITYLENGTH", wall.height),
-                ("GrossFootprintArea", "IFCQUANTITYAREA", footprint),
-                ("GrossSideArea", "IFCQUANTITYAREA", length * wall.height),
-                ("GrossVolume", "IFCQUANTITYVOLUME", footprint * wall.height),
-            ]
-            .map(|(name, entity, value)| {
-                self.w
-                    .add(format!("{entity}('{name}',$,$,{},$)", real(value)))
-            });
-            let qto = self.w.add(format!(
-                "IFCELEMENTQUANTITY({},$,'Qto_WallBaseQuantities',$,$,{})",
-                string(derived_guid(&wall.guid, "Qto_WallBaseQuantities").as_str()),
-                list(&qs)
-            ));
-            self.w.add(format!(
-                "IFCRELDEFINESBYPROPERTIES({},$,$,$,({w}),{qto})",
-                string(derived_guid(&wall.guid, "rel Qto_WallBaseQuantities").as_str())
-            ));
+            self.quantities(
+                w,
+                &wall.guid,
+                "Qto_WallBaseQuantities",
+                &[
+                    ("Length", "IFCQUANTITYLENGTH", length),
+                    ("Width", "IFCQUANTITYLENGTH", wtype.thickness()),
+                    ("Height", "IFCQUANTITYLENGTH", wall.height),
+                    ("GrossFootprintArea", "IFCQUANTITYAREA", footprint),
+                    ("GrossSideArea", "IFCQUANTITYAREA", length * wall.height),
+                    ("GrossVolume", "IFCQUANTITYVOLUME", footprint * wall.height),
+                ],
+            );
 
             contained.entry(wall.level).or_default().push(w);
             by_type.entry(wall.wall_type).or_default().push(w);
+        }
+
+        // Slabs: placed at the soffit, extruded upwards by the type thickness.
+        let mut slabs_by_type: BTreeMap<SlabTypeId, Vec<Ref>> = BTreeMap::new();
+        for slab in model.slabs() {
+            let (Some(stype), Some(&(_, storey_pl))) =
+                (model.slab_type(slab.slab_type), storeys.get(&slab.level))
+            else {
+                continue;
+            };
+            let thickness = stype.thickness();
+            let loc = self.point3(0.0, 0.0, slab.top_offset - thickness);
+            let pl = self.placement(Some(storey_pl), loc, None);
+            let outline = self.polyline(&slab.outline, true);
+            let profile = self
+                .w
+                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+            let solid_pl = self
+                .w
+                .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
+            let solid = self.w.add(format!(
+                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                self.z,
+                real(thickness)
+            ));
+            let body_rep = self.w.add(format!(
+                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                self.body_ctx
+            ));
+            let shape = self
+                .w
+                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body_rep}))"));
+            let name = format!("{} {}", stype.name, slab.id.0);
+            let sl = self.w.add(format!(
+                "IFCSLAB({},$,{},$,{},{pl},{shape},{},.{}.)",
+                string(slab.guid.as_str()),
+                string(&name),
+                string(&stype.name),
+                string(&slab.id.0.to_string()),
+                stype.function.ifc_predefined_type()
+            ));
+
+            let usage = self.w.add(format!(
+                "IFCMATERIALLAYERSETUSAGE({},.AXIS3.,.POSITIVE.,0.,$)",
+                slab_sets[&slab.slab_type]
+            ));
+            self.w.add(format!(
+                "IFCRELASSOCIATESMATERIAL({},$,$,$,({sl}),{usage})",
+                string(derived_guid(&slab.guid, "material").as_str())
+            ));
+
+            self.common_pset(
+                sl,
+                &slab.guid,
+                "Pset_SlabCommon",
+                &stype.name,
+                stype.function.is_external(),
+                stype.is_load_bearing(),
+            );
+            let area = slab.area();
+            let perim = perimeter(&slab.outline);
+            self.quantities(
+                sl,
+                &slab.guid,
+                "Qto_SlabBaseQuantities",
+                &[
+                    ("Width", "IFCQUANTITYLENGTH", thickness),
+                    ("Perimeter", "IFCQUANTITYLENGTH", perim),
+                    ("GrossArea", "IFCQUANTITYAREA", area),
+                    ("NetArea", "IFCQUANTITYAREA", area),
+                    ("GrossVolume", "IFCQUANTITYVOLUME", area * thickness),
+                    ("NetVolume", "IFCQUANTITYVOLUME", area * thickness),
+                ],
+            );
+
+            contained.entry(slab.level).or_default().push(sl);
+            slabs_by_type.entry(slab.slab_type).or_default().push(sl);
         }
 
         for (level, elements) in &contained {
@@ -432,6 +584,18 @@ impl<'a> Exporter<'a> {
                 string(derived_guid(&guid, "type").as_str()),
                 list(walls),
                 type_refs[t]
+            ));
+        }
+        for (t, slabs) in &slabs_by_type {
+            let guid = model
+                .slab_type(*t)
+                .map(|t| t.guid.clone())
+                .unwrap_or_default();
+            self.w.add(format!(
+                "IFCRELDEFINESBYTYPE({},$,$,$,{},{})",
+                string(derived_guid(&guid, "type").as_str()),
+                list(slabs),
+                slab_type_refs[t]
             ));
         }
     }
@@ -465,7 +629,7 @@ fn utc_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use archisim_core::{CutPattern, Layer, LayerFunction, NewWall, ReferenceLine};
+    use archisim_core::{CutPattern, NewSlab, NewWall, ReferenceLine, SlabFunction};
 
     fn model() -> Model {
         let mut m = Model::new("Casa de prueba");
@@ -497,6 +661,29 @@ mod tests {
             base_offset: 0.0,
         })
         .unwrap();
+        let st = m
+            .add_slab_type(
+                "Solera 15",
+                SlabFunction::BaseSlab,
+                vec![Layer {
+                    material: mat,
+                    thickness: 0.15,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        m.add_slab(NewSlab {
+            slab_type: st,
+            level: lvl,
+            outline: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(5.0, 0.0),
+                Point2::new(5.0, 4.0),
+                Point2::new(0.0, 4.0),
+            ],
+            top_offset: 0.0,
+        })
+        .unwrap();
         m
     }
 
@@ -521,6 +708,13 @@ mod tests {
             "IFCRELDEFINESBYTYPE(",
             "IFCRELCONTAINEDINSPATIALSTRUCTURE(",
             "cer\\X2\\00E1\\X0\\mico",
+            "IFCSLABTYPE(",
+            ".BASESLAB.)",
+            "IFCMATERIALLAYERSETUSAGE(#",
+            ".AXIS3.,.POSITIVE.,0.,$)",
+            "'Pset_SlabCommon'",
+            "'Qto_SlabBaseQuantities'",
+            "IFCQUANTITYVOLUME('GrossVolume',$,$,3.,$)",
         ] {
             assert!(text.contains(needle), "missing {needle}");
         }

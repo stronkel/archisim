@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::ids::*;
-use crate::math::{Point2, EPSILON};
+use crate::math::{is_simple_polygon, signed_area, Point2, EPSILON};
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
 #[derive(Debug, Clone, PartialEq)]
@@ -163,6 +163,91 @@ impl Wall {
     }
 }
 
+/// What a slab is for. Revit "Function" / IFC `IfcSlabTypeEnum`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlabFunction {
+    /// Floor between storeys ("forjado de planta"). IFC `FLOOR`.
+    Floor,
+    /// Ground-bearing slab ("solera"). IFC `BASESLAB`.
+    BaseSlab,
+    /// Flat roof ("cubierta plana"). IFC `ROOF`.
+    Roof,
+}
+
+impl SlabFunction {
+    /// `IfcSlabTypeEnum` value.
+    pub fn ifc_predefined_type(self) -> &'static str {
+        match self {
+            SlabFunction::Floor => "FLOOR",
+            SlabFunction::BaseSlab => "BASESLAB",
+            SlabFunction::Roof => "ROOF",
+        }
+    }
+
+    /// Whether the slab separates inside from outside (or ground), which
+    /// is what `Pset_SlabCommon.IsExternal` means.
+    pub fn is_external(self) -> bool {
+        !matches!(self, SlabFunction::Floor)
+    }
+}
+
+/// A slab type. IFC: `IfcSlabType` + `IfcMaterialLayerSet`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlabType {
+    pub id: SlabTypeId,
+    pub guid: GlobalId,
+    pub name: String,
+    pub function: SlabFunction,
+    /// Layers ordered from the top face down to the soffit.
+    pub layers: Vec<Layer>,
+}
+
+impl SlabType {
+    pub fn thickness(&self) -> f64 {
+        self.layers.iter().map(|l| l.thickness).sum()
+    }
+
+    pub fn is_load_bearing(&self) -> bool {
+        self.layers
+            .iter()
+            .any(|l| l.function == LayerFunction::Structure)
+    }
+}
+
+/// A slab drawn by its outline. IFC: `IfcSlab` with an
+/// `IfcMaterialLayerSetUsage`.
+///
+/// As in ArchiCAD and Revit, the reference is the **top face**: it sits at
+/// the level elevation plus `top_offset`, and the layers hang downwards.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Slab {
+    pub id: SlabId,
+    pub guid: GlobalId,
+    pub slab_type: SlabTypeId,
+    pub level: LevelId,
+    /// Outline in plan, counter-clockwise, without repeating the first point.
+    pub outline: Vec<Point2>,
+    /// Height of the top face above the level, in metres (may be negative).
+    pub top_offset: f64,
+}
+
+impl Slab {
+    /// Plan area of the outline (gross area).
+    pub fn area(&self) -> f64 {
+        signed_area(&self.outline).abs()
+    }
+}
+
+/// Data needed to create a slab; ids and GUIDs are assigned by the model.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewSlab {
+    pub slab_type: SlabTypeId,
+    pub level: LevelId,
+    /// Outline in plan, in either direction; it is stored counter-clockwise.
+    pub outline: Vec<Point2>,
+    pub top_offset: f64,
+}
+
 /// Data needed to create a wall; ids and GUIDs are assigned by the model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewWall {
@@ -182,12 +267,17 @@ pub enum ModelError {
     UnknownMaterial(MaterialId),
     UnknownWallType(WallTypeId),
     UnknownWall(WallId),
+    UnknownSlabType(SlabTypeId),
+    UnknownSlab(SlabId),
+    /// A slab outline needs at least three points, a non-zero area and no
+    /// crossing or touching edges.
+    InvalidOutline,
     /// The wall's start and end are the same point.
     ZeroLengthWall,
     /// A dimension that must be positive is not.
     NonPositive(&'static str),
-    /// A wall type must have at least one layer.
-    EmptyWallType,
+    /// A wall or slab type must have at least one layer.
+    EmptyType,
     /// The element is still used by others and cannot be removed.
     InUse(String),
 }
@@ -199,9 +289,15 @@ impl fmt::Display for ModelError {
             ModelError::UnknownMaterial(id) => write!(f, "material {id} does not exist"),
             ModelError::UnknownWallType(id) => write!(f, "wall type {id} does not exist"),
             ModelError::UnknownWall(id) => write!(f, "wall {id} does not exist"),
+            ModelError::UnknownSlabType(id) => write!(f, "slab type {id} does not exist"),
+            ModelError::UnknownSlab(id) => write!(f, "slab {id} does not exist"),
+            ModelError::InvalidOutline => write!(
+                f,
+                "a slab outline needs at least three points and must not cross itself"
+            ),
             ModelError::ZeroLengthWall => write!(f, "a wall needs two different points"),
             ModelError::NonPositive(what) => write!(f, "{what} must be greater than zero"),
-            ModelError::EmptyWallType => write!(f, "a wall type needs at least one layer"),
+            ModelError::EmptyType => write!(f, "a type needs at least one layer"),
             ModelError::InUse(what) => write!(f, "still in use: {what}"),
         }
     }
@@ -221,6 +317,8 @@ pub struct Model {
     materials: BTreeMap<MaterialId, Material>,
     wall_types: BTreeMap<WallTypeId, WallType>,
     walls: BTreeMap<WallId, Wall>,
+    slab_types: BTreeMap<SlabTypeId, SlabType>,
+    slabs: BTreeMap<SlabId, Slab>,
 }
 
 impl Model {
@@ -235,6 +333,8 @@ impl Model {
             materials: BTreeMap::new(),
             wall_types: BTreeMap::new(),
             walls: BTreeMap::new(),
+            slab_types: BTreeMap::new(),
+            slabs: BTreeMap::new(),
         }
     }
 
@@ -327,7 +427,7 @@ impl Model {
 
     fn validate_layers(&self, layers: &[Layer]) -> Result<(), ModelError> {
         if layers.is_empty() {
-            return Err(ModelError::EmptyWallType);
+            return Err(ModelError::EmptyType);
         }
         for layer in layers {
             if !self.materials.contains_key(&layer.material) {
@@ -428,6 +528,108 @@ impl Model {
     pub fn walls_on_level(&self, level: LevelId) -> impl Iterator<Item = &Wall> {
         self.walls.values().filter(move |w| w.level == level)
     }
+
+    // ---- Slab types ---------------------------------------------------
+
+    pub fn add_slab_type(
+        &mut self,
+        name: impl Into<String>,
+        function: SlabFunction,
+        layers: Vec<Layer>,
+    ) -> Result<SlabTypeId, ModelError> {
+        self.validate_layers(&layers)?;
+        let id = SlabTypeId(self.take_id());
+        self.slab_types.insert(
+            id,
+            SlabType {
+                id,
+                guid: GlobalId::new(),
+                name: name.into(),
+                function,
+                layers,
+            },
+        );
+        Ok(id)
+    }
+
+    pub fn slab_type(&self, id: SlabTypeId) -> Option<&SlabType> {
+        self.slab_types.get(&id)
+    }
+
+    pub fn slab_types(&self) -> impl Iterator<Item = &SlabType> {
+        self.slab_types.values()
+    }
+
+    pub fn remove_slab_type(&mut self, id: SlabTypeId) -> Result<SlabType, ModelError> {
+        let users = self.slabs.values().filter(|s| s.slab_type == id).count();
+        if users > 0 {
+            return Err(ModelError::InUse(format!("{users} slab(s) use this type")));
+        }
+        self.slab_types
+            .remove(&id)
+            .ok_or(ModelError::UnknownSlabType(id))
+    }
+
+    // ---- Slabs --------------------------------------------------------
+
+    /// Checks an outline and returns it counter-clockwise.
+    fn normalized_outline(outline: Vec<Point2>) -> Result<Vec<Point2>, ModelError> {
+        if !is_simple_polygon(&outline) || signed_area(&outline).abs() <= EPSILON {
+            return Err(ModelError::InvalidOutline);
+        }
+        let mut outline = outline;
+        if signed_area(&outline) < 0.0 {
+            outline.reverse();
+        }
+        Ok(outline)
+    }
+
+    pub fn add_slab(&mut self, spec: NewSlab) -> Result<SlabId, ModelError> {
+        if !self.levels.contains_key(&spec.level) {
+            return Err(ModelError::UnknownLevel(spec.level));
+        }
+        if !self.slab_types.contains_key(&spec.slab_type) {
+            return Err(ModelError::UnknownSlabType(spec.slab_type));
+        }
+        let outline = Self::normalized_outline(spec.outline)?;
+        let id = SlabId(self.take_id());
+        self.slabs.insert(
+            id,
+            Slab {
+                id,
+                guid: GlobalId::new(),
+                slab_type: spec.slab_type,
+                level: spec.level,
+                outline,
+                top_offset: spec.top_offset,
+            },
+        );
+        Ok(id)
+    }
+
+    /// Replaces a slab's outline, keeping its identity and GUID.
+    pub fn set_slab_outline(&mut self, id: SlabId, outline: Vec<Point2>) -> Result<(), ModelError> {
+        let outline = Self::normalized_outline(outline)?;
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        slab.outline = outline;
+        Ok(())
+    }
+
+    pub fn remove_slab(&mut self, id: SlabId) -> Result<Slab, ModelError> {
+        self.slabs.remove(&id).ok_or(ModelError::UnknownSlab(id))
+    }
+
+    pub fn slab(&self, id: SlabId) -> Option<&Slab> {
+        self.slabs.get(&id)
+    }
+
+    pub fn slabs(&self) -> impl Iterator<Item = &Slab> {
+        self.slabs.values()
+    }
+
+    pub fn slabs_on_level(&self, level: LevelId) -> impl Iterator<Item = &Slab> {
+        self.slabs.values().filter(move |s| s.level == level)
+    }
 }
 
 #[cfg(test)]
@@ -495,6 +697,123 @@ mod tests {
         let w = m.wall(id).unwrap();
         let (e, i) = w.face_offsets(0.3);
         assert_eq!((e, i), (0.0, -0.3));
+    }
+
+    fn slab_type(m: &mut Model) -> SlabTypeId {
+        let concrete = m.add_material("Hormigón", "concrete", [200, 200, 200], CutPattern::Cross);
+        let tile = m.add_material("Baldosa", "ceramic", [220, 220, 210], CutPattern::Solid);
+        m.add_slab_type(
+            "Forjado 30",
+            SlabFunction::Floor,
+            vec![
+                Layer {
+                    material: tile,
+                    thickness: 0.02,
+                    function: LayerFunction::Finish,
+                },
+                Layer {
+                    material: concrete,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                },
+            ],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn slab_outline_is_stored_counter_clockwise() {
+        let (mut m, lvl, _) = sample();
+        let st = slab_type(&mut m);
+        assert!((m.slab_type(st).unwrap().thickness() - 0.32).abs() < 1e-12);
+        // Drawn clockwise.
+        let id = m
+            .add_slab(NewSlab {
+                slab_type: st,
+                level: lvl,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(0.0, 5.0),
+                    Point2::new(4.0, 5.0),
+                    Point2::new(4.0, 0.0),
+                ],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        let s = m.slab(id).unwrap();
+        assert!(signed_area(&s.outline) > 0.0);
+        assert_eq!(s.area(), 20.0);
+        assert_eq!(m.slabs_on_level(lvl).count(), 1);
+    }
+
+    #[test]
+    fn rejects_invalid_slabs() {
+        let (mut m, lvl, _) = sample();
+        let st = slab_type(&mut m);
+        let spec = |outline: Vec<Point2>| NewSlab {
+            slab_type: st,
+            level: lvl,
+            outline,
+            top_offset: 0.0,
+        };
+        let bow = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 2.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(0.0, 2.0),
+        ];
+        assert_eq!(m.add_slab(spec(bow)), Err(ModelError::InvalidOutline));
+        let line = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(2.0, 0.0),
+        ];
+        assert_eq!(m.add_slab(spec(line)), Err(ModelError::InvalidOutline));
+        let mut s = spec(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(1.0, 1.0),
+        ]);
+        s.slab_type = SlabTypeId(999);
+        assert!(matches!(m.add_slab(s), Err(ModelError::UnknownSlabType(_))));
+        assert_eq!(
+            m.add_slab_type("Vacío", SlabFunction::Roof, vec![]),
+            Err(ModelError::EmptyType)
+        );
+    }
+
+    #[test]
+    fn slab_edits_keep_guid_and_protect_types() {
+        let (mut m, lvl, _) = sample();
+        let st = slab_type(&mut m);
+        let id = m
+            .add_slab(NewSlab {
+                slab_type: st,
+                level: lvl,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(4.0, 0.0),
+                    Point2::new(4.0, 4.0),
+                ],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        let guid = m.slab(id).unwrap().guid.clone();
+        m.set_slab_outline(
+            id,
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(6.0, 0.0),
+                Point2::new(6.0, 6.0),
+                Point2::new(0.0, 6.0),
+            ],
+        )
+        .unwrap();
+        assert_eq!(m.slab(id).unwrap().guid, guid);
+        assert_eq!(m.slab(id).unwrap().area(), 36.0);
+        assert!(matches!(m.remove_slab_type(st), Err(ModelError::InUse(_))));
+        m.remove_slab(id).unwrap();
+        assert!(m.remove_slab_type(st).is_ok());
     }
 
     #[test]

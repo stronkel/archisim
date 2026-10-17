@@ -10,11 +10,15 @@
 //! - wall faces and free ends are drawn with the heavy cut line;
 //! - layer boundaries are thin; mitred joins draw no line, so the poché of
 //!   connected walls reads as continuous;
-//! - insulation is drawn with the usual zigzag, clipped to its layer.
+//! - insulation is drawn with the usual zigzag, clipped to its layer;
+//! - slabs are drawn under the walls according to the cut plane: below it
+//!   (the usual case: the floor you stand on) with a light cover fill and a
+//!   thin projection line; crossing it as a cut, with the heavy line and the
+//!   fill of its structural layer; above it with a thin dashed line.
 
 use std::fmt::Write as _;
 
-use archisim_core::{CutPattern, LayerFunction, LevelId, Model, Point2};
+use archisim_core::{CutPattern, LayerFunction, LevelId, Model, Point2, Slab};
 use archisim_geom::{wall_geometries, EndCut, WallGeometry};
 
 /// Options for a plan view.
@@ -26,6 +30,8 @@ pub struct PlanOptions {
     pub margin_mm: f64,
     /// Draw the walls' reference lines (dashed).
     pub show_reference_lines: bool,
+    /// Height of the horizontal cut plane above the level, in metres.
+    pub cut_plane: f64,
 }
 
 impl Default for PlanOptions {
@@ -34,6 +40,7 @@ impl Default for PlanOptions {
             scale: 50.0,
             margin_mm: 15.0,
             show_reference_lines: false,
+            cut_plane: 1.1,
         }
     }
 }
@@ -43,6 +50,8 @@ const CUT_LINE: f64 = 0.5;
 const LAYER_LINE: f64 = 0.13;
 const HATCH_LINE: f64 = 0.09;
 const REF_LINE: f64 = 0.13;
+const VIEW_LINE: f64 = 0.18;
+const SLAB_COVER: &str = "#f1f1ee";
 const HATCH_SPACING: f64 = 1.5;
 const TEXT_SIZE: f64 = 3.0;
 const INK: &str = "#1a1a1a";
@@ -52,14 +61,19 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     // Paper millimetres → model metres.
     let k = options.scale / 1000.0;
     let geos = wall_geometries(model, level);
+    let slabs: Vec<&Slab> = model.slabs_on_level(level).collect();
 
     let mut min = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut max = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for p in geos.iter().flat_map(|g| g.outline.iter()) {
+    let all_points = geos
+        .iter()
+        .flat_map(|g| g.outline.iter())
+        .chain(slabs.iter().flat_map(|s| s.outline.iter()));
+    for p in all_points {
         min = Point2::new(min.x.min(p.x), min.y.min(p.y));
         max = Point2::new(max.x.max(p.x), max.y.max(p.y));
     }
-    if geos.is_empty() {
+    if geos.is_empty() && slabs.is_empty() {
         min = Point2::new(0.0, 0.0);
         max = Point2::new(1.0, 1.0);
     }
@@ -90,6 +104,12 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         num(vb_w),
         num(vb_h)
     );
+
+    s.push_str("<g id=\"slabs\">\n");
+    for (si, slab) in slabs.iter().enumerate() {
+        draw_slab(&mut s, model, slab, si, options.cut_plane, k);
+    }
+    s.push_str("</g>\n");
 
     s.push_str("<g id=\"poche\">\n");
     for (gi, g) in geos.iter().enumerate() {
@@ -233,6 +253,89 @@ fn draw_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize, k: f6
                 pt(p),
                 pt(q),
                 num(LAYER_LINE * k)
+            );
+        }
+    }
+}
+
+/// How a slab relates to the cut plane of the view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SlabView {
+    Below,
+    Cut,
+    Above,
+}
+
+fn slab_view(model: &Model, slab: &Slab, cut_plane: f64) -> SlabView {
+    let thickness = model
+        .slab_type(slab.slab_type)
+        .map_or(0.0, |t| t.thickness());
+    let (bottom, top) = (slab.top_offset - thickness, slab.top_offset);
+    if top <= cut_plane {
+        SlabView::Below
+    } else if bottom < cut_plane {
+        SlabView::Cut
+    } else {
+        SlabView::Above
+    }
+}
+
+fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f64, k: f64) {
+    let d = path(&slab.outline);
+    match slab_view(model, slab, cut_plane) {
+        SlabView::Below => {
+            let _ = writeln!(
+                s,
+                r#"<path d="{d}" fill="{SLAB_COVER}" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
+                num(VIEW_LINE * k)
+            );
+        }
+        SlabView::Above => {
+            let _ = writeln!(
+                s,
+                r#"<path d="{d}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
+                num(VIEW_LINE * k),
+                num(3.0 * k),
+                num(1.5 * k)
+            );
+        }
+        SlabView::Cut => {
+            // Filled with the structural layer (or the thickest one).
+            let mat = model.slab_type(slab.slab_type).and_then(|t| {
+                t.layers
+                    .iter()
+                    .find(|l| l.function == LayerFunction::Structure)
+                    .or_else(|| {
+                        t.layers
+                            .iter()
+                            .max_by(|a, b| a.thickness.total_cmp(&b.thickness))
+                    })
+                    .and_then(|l| model.material(l.material))
+            });
+            let (fill, pattern) = mat.map_or(([255, 255, 255], CutPattern::Solid), |m| {
+                (m.cut_color, m.cut_pattern)
+            });
+            let [r, g, b] = fill;
+            let _ = writeln!(s, r#"<path d="{d}" fill="rgb({r},{g},{b})"/>"#);
+            let angles: &[f64] = match pattern {
+                CutPattern::Diagonal => &[45.0],
+                CutPattern::Cross => &[45.0, 135.0],
+                _ => &[],
+            };
+            if !angles.is_empty() {
+                let clip = format!("clip-slab-{si}");
+                let _ = writeln!(s, r#"<clipPath id="{clip}"><path d="{d}"/></clipPath>"#);
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" clip-path="url(#{clip})"/>"#,
+                    hatch_lines(&slab.outline, angles, HATCH_SPACING * k),
+                    num(HATCH_LINE * k)
+                );
+            }
+            let _ = writeln!(
+                s,
+                r#"<path d="{d}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                num(CUT_LINE * k)
             );
         }
     }
@@ -390,7 +493,7 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use archisim_core::{Layer, NewWall, ReferenceLine, WallFunction};
+    use archisim_core::{Layer, NewSlab, NewWall, ReferenceLine, SlabFunction, WallFunction};
 
     #[test]
     fn renders_scaled_svg() {
@@ -438,5 +541,48 @@ mod tests {
         assert!(svg.contains("Casa &lt;A&amp;B&gt;"));
         // 5 m at 1:50 = 100 mm plus two 15 mm margins.
         assert!(svg.contains("width=\"130.00mm\""), "{}", &svg[..200]);
+    }
+
+    #[test]
+    fn slabs_follow_the_cut_plane() {
+        let mut m = Model::new("Forjados");
+        let lvl = m.add_level("Planta baja", 0.0);
+        let hormigon = m.add_material("Hormigón", "concrete", [200, 200, 200], CutPattern::Cross);
+        let st = m
+            .add_slab_type(
+                "Losa 20",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: hormigon,
+                    thickness: 0.2,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let square = |x: f64| {
+            vec![
+                Point2::new(x, 0.0),
+                Point2::new(x + 4.0, 0.0),
+                Point2::new(x + 4.0, 4.0),
+                Point2::new(x, 4.0),
+            ]
+        };
+        for (x, top) in [(0.0, 0.0), (5.0, 1.2), (10.0, 2.5)] {
+            m.add_slab(NewSlab {
+                slab_type: st,
+                level: lvl,
+                outline: square(x),
+                top_offset: top,
+            })
+            .unwrap();
+        }
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        // Below: cover fill. Cut: structural fill with cross hatch. Above: dashed.
+        assert!(svg.contains(SLAB_COVER));
+        assert!(svg.contains("fill=\"rgb(200,200,200)\""));
+        assert!(svg.contains("clip-slab-1"));
+        assert!(svg.contains("stroke-dasharray"));
+        // The drawing spans the three slabs: 14 m at 1:50 + margins.
+        assert!(svg.contains("width=\"310.00mm\""), "{}", &svg[..200]);
     }
 }

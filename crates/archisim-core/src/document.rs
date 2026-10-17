@@ -93,7 +93,7 @@ mod tests {
         // A failing edit leaves no trace, even if it changed things first.
         let err = doc.transact("Fallo", |m| {
             m.add_level("Temporal", 3.0);
-            Err::<(), _>(ModelError::EmptyWallType)
+            Err::<(), _>(ModelError::EmptyType)
         });
         assert!(err.is_err());
         assert_eq!(doc.model().levels().len(), 1);

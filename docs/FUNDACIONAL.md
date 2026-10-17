@@ -41,10 +41,10 @@ Crates actuales (`crates/`):
 
 | Crate | Responsabilidad |
 |---|---|
-| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro multicapa, muros, deshacer/rehacer |
+| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, deshacer/rehacer |
 | `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos |
-| `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets |
-| `archisim-plan` | Planta en SVG: poché por capa, ejes, rotulación |
+| `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados |
+| `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, ejes, rotulación |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba y la exporta |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; la interfaz depende de todo y nada depende de la interfaz.
@@ -57,6 +57,8 @@ Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de 
 | `Material` | Material | Material de construcción | `IfcMaterial` |
 | `WallType` (capas) | Tipo de muro (estructura compuesta) | Multicapa | `IfcWallType` + `IfcMaterialLayerSet` |
 | `Wall` | Ejemplar de muro | Muro | `IfcWall` + `IfcMaterialLayerSetUsage` |
+| `SlabType` (capas) | Tipo de suelo / cubierta (estructura compuesta) | Multicapa de forjado | `IfcSlabType` + `IfcMaterialLayerSet` |
+| `Slab` | Suelo / Cubierta por contorno | Forjado | `IfcSlab` + `IfcMaterialLayerSetUsage` (`AXIS3`) |
 | Línea de referencia | Línea de ubicación | Línea de referencia | Eje + `OffsetFromReferenceLine` |
 | Familia (futuro) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría paramétrica |
 | Parámetro compartido | Parámetro compartido | Propiedad | `IfcPropertySet` |
@@ -70,6 +72,15 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 - Las capas se ordenan de **exterior a interior**; la cara exterior queda a la izquierda del eje, mirando de inicio a fin.
 - Las uniones en esquina se resuelven a inglete cuando dos muros comparten un extremo. Las uniones en T, las prioridades de intersección por capa y los recortes con forjados vienen en la fase 2.
 
+### Forjados
+
+- Definidos por un contorno poligonal cerrado (cualquier forma sin cruces: rectángulo, L, U…), un nivel, un tipo y un desfase.
+- La referencia es la **cara superior**, como en ArchiCAD y Revit: queda a la cota del nivel más el desfase, y las capas cuelgan hacia abajo.
+- Las capas del tipo se ordenan de **arriba abajo** (pavimento → estructura → acabado inferior).
+- Función del tipo: forjado de planta (`FLOOR`), solera (`BASESLAB`) o cubierta plana (`ROOF`). Solera y cubierta se marcan como exteriores (`IsExternal`).
+- En planta se dibujan según el plano de corte (1,10 m por defecto): por debajo, con trama de cubrición y línea fina de proyección; cortados, con poché de su capa estructural y línea gruesa; por encima, discontinuos.
+- Pendiente: huecos en forjado (escaleras, patinillos), forjados inclinados, y recorte con muros (fase 2).
+
 ## 5. MVP (fase 1)
 
 Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta, obtiene su planta en PDF/SVG legible y exporta un IFC que **Revit y ArchiCAD abren con muros reconocibles, tipos y capas correctos**.
@@ -80,7 +91,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 | 2 | Uniones de muros en L | ✅ v0.1 |
 | 3 | Exportación IFC4 con capas, tipos y Psets | ✅ v0.1 |
 | 4 | Planta SVG con poché por capa | ✅ v0.1 |
-| 5 | Forjados (`IfcSlab`) por contorno | ⬜ |
+| 5 | Forjados (`IfcSlab`) por contorno | ✅ v0.2 |
 | 6 | Puertas y ventanas como huecos en muro (`IfcOpeningElement`) | ⬜ |
 | 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ⬜ |
 | 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ⬜ |

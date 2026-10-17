@@ -80,3 +80,111 @@ impl Neg for Point2 {
         Self::new(-self.x, -self.y)
     }
 }
+
+/// Signed area of a polygon (positive when counter-clockwise).
+pub fn signed_area(poly: &[Point2]) -> f64 {
+    let n = poly.len();
+    (0..n)
+        .map(|i| poly[i].cross(poly[(i + 1) % n]))
+        .sum::<f64>()
+        / 2.0
+}
+
+/// Perimeter of a closed polygon.
+pub fn perimeter(poly: &[Point2]) -> f64 {
+    let n = poly.len();
+    (0..n).map(|i| poly[i].distance(poly[(i + 1) % n])).sum()
+}
+
+/// Whether two closed segments `a1-a2` and `b1-b2` touch or cross.
+fn segments_touch(a1: Point2, a2: Point2, b1: Point2, b2: Point2) -> bool {
+    let side = |p: Point2, q: Point2, r: Point2| (q - p).cross(r - p);
+    let on_segment = |p: Point2, q: Point2, r: Point2| {
+        r.x >= p.x.min(q.x) - EPSILON
+            && r.x <= p.x.max(q.x) + EPSILON
+            && r.y >= p.y.min(q.y) - EPSILON
+            && r.y <= p.y.max(q.y) + EPSILON
+    };
+    let d1 = side(b1, b2, a1);
+    let d2 = side(b1, b2, a2);
+    let d3 = side(a1, a2, b1);
+    let d4 = side(a1, a2, b2);
+    let eps = EPSILON * EPSILON;
+    if ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps))
+        && ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
+    {
+        return true;
+    }
+    (d1.abs() <= eps && on_segment(b1, b2, a1))
+        || (d2.abs() <= eps && on_segment(b1, b2, a2))
+        || (d3.abs() <= eps && on_segment(a1, a2, b1))
+        || (d4.abs() <= eps && on_segment(a1, a2, b2))
+}
+
+/// Whether a closed polygon is simple: no repeated points and no edge
+/// touching or crossing a non-adjacent edge.
+pub fn is_simple_polygon(poly: &[Point2]) -> bool {
+    let n = poly.len();
+    if n < 3 {
+        return false;
+    }
+    for i in 0..n {
+        if poly[i].approx_eq(poly[(i + 1) % n]) {
+            return false;
+        }
+    }
+    for i in 0..n {
+        let (a1, a2) = (poly[i], poly[(i + 1) % n]);
+        for j in (i + 1)..n {
+            // Skip the edge itself and its neighbours (they share a vertex).
+            if j == i || (j + 1) % n == i || (i + 1) % n == j {
+                continue;
+            }
+            let (b1, b2) = (poly[j], poly[(j + 1) % n]);
+            if segments_touch(a1, a2, b1, b2) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+
+    #[test]
+    fn area_and_perimeter() {
+        let sq = [p(0.0, 0.0), p(4.0, 0.0), p(4.0, 3.0), p(0.0, 3.0)];
+        assert_eq!(signed_area(&sq), 12.0);
+        assert_eq!(perimeter(&sq), 14.0);
+        let mut cw = sq;
+        cw.reverse();
+        assert_eq!(signed_area(&cw), -12.0);
+    }
+
+    #[test]
+    fn simple_polygons() {
+        let l_shape = [
+            p(0.0, 0.0),
+            p(6.0, 0.0),
+            p(6.0, 3.0),
+            p(3.0, 3.0),
+            p(3.0, 6.0),
+            p(0.0, 6.0),
+        ];
+        assert!(is_simple_polygon(&l_shape));
+        // A bow tie crosses itself.
+        let bow = [p(0.0, 0.0), p(2.0, 2.0), p(2.0, 0.0), p(0.0, 2.0)];
+        assert!(!is_simple_polygon(&bow));
+        // A spike that folds back onto an earlier edge.
+        let folded = [p(0.0, 0.0), p(4.0, 0.0), p(4.0, 2.0), p(2.0, 0.0)];
+        assert!(!is_simple_polygon(&folded));
+        assert!(!is_simple_polygon(&[p(0.0, 0.0), p(1.0, 0.0)]));
+        assert!(!is_simple_polygon(&[p(0.0, 0.0), p(0.0, 0.0), p(1.0, 1.0)]));
+    }
+}

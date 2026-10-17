@@ -37,14 +37,7 @@ impl Line {
     }
 }
 
-/// Signed area of a polygon (positive when counter-clockwise).
-pub fn signed_area(poly: &[Point2]) -> f64 {
-    let n = poly.len();
-    (0..n)
-        .map(|i| poly[i].cross(poly[(i + 1) % n]))
-        .sum::<f64>()
-        / 2.0
-}
+pub use archisim_core::signed_area;
 
 /// Returns the polygon in counter-clockwise order.
 pub fn ensure_ccw(mut poly: Vec<Point2>) -> Vec<Point2> {

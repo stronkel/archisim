@@ -18,6 +18,7 @@ Lee `docs/FUNDACIONAL.md` antes de cualquier trabajo: define visión, principios
 - Código, identificadores y comentarios en inglés (el proyecto será open source). Documentación para Antonio en español.
 - Unidades internas: metros, `f64`. Ángulos en radianes.
 - Capas de muro de exterior a interior; la cara exterior a la izquierda del eje (inicio → fin).
+- Capas de forjado de arriba abajo; la referencia del forjado es su cara superior.
 - Cada elemento tiene un `GlobalId` IFC estable: nunca lo regeneres al exportar.
 - Sala limpia: nada de código, ficheros o contenido de Autodesk o Graphisoft.
 
@@ -27,7 +28,7 @@ Lee `docs/FUNDACIONAL.md` antes de cualquier trabajo: define visión, principios
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run -p archisim-cli -- demo out/   # genera out/demo.ifc y out/demo.svg
+cargo run -p archisim-cli -- demo out/   # genera out/demo.ifc y una planta SVG por nivel
 python3 scripts/validate_ifc.py out/demo.ifc   # requiere: pip install ifcopenshell
 ```
 
@@ -45,4 +46,4 @@ Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUN
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): forjados, después huecos de puertas y ventanas, después formato de proyecto propio.
+Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): huecos de puertas y ventanas, después formato de proyecto propio.

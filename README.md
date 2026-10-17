@@ -2,7 +2,7 @@
 
 Herramienta BIM de autoría, multiplataforma y escrita en Rust: la facilidad de ArchiCAD con la organización estándar de Revit, sobre IFC 4.3 como modelo de datos. Nombre provisional.
 
-Estado: **v0.1, fase de cimientos.** Todavía no hay ventana de aplicación; hay un núcleo que modela niveles, materiales, tipos de muro multicapa y muros, y los exporta a IFC4 y a una planta 1:50 en SVG.
+Estado: **v0.1, fase de cimientos.** Todavía no hay ventana de aplicación; hay un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros y forjados, y los exporta a IFC4 y a plantas 1:50 en SVG.
 
 Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectura y el plan.
 
@@ -16,8 +16,9 @@ Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectur
    ```
 
    La primera vez tarda un par de minutos en compilar. Genera:
-   - `out/demo.ifc` — vivienda de prueba de 12 × 9 m con fachada de doble hoja y tabiquería.
-   - `out/demo.svg` — su planta a escala 1:50 (ábrela con el navegador).
+   - `out/demo.ifc` — vivienda de prueba de 12 × 9 m con fachada de doble hoja, tabiquería, solera y cubierta plana.
+   - `out/demo.svg` — planta baja a escala 1:50 (ábrela con el navegador).
+   - `out/demo-cubierta.svg` — planta de cubierta a escala 1:50.
 
 ### Qué mirar al abrir el IFC en ArchiCAD o Revit
 
@@ -26,6 +27,7 @@ Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectur
 - ¿Las capas salen en orden correcto, con el monocapa hacia fuera y el yeso hacia dentro?
 - ¿Las esquinas cierran limpias?
 - ¿Aparecen las propiedades `IsExternal`, `LoadBearing` y las cantidades (longitud, superficie, volumen)?
+- ¿La solera y la cubierta entran como forjados (losas) con sus tipos, capas en orden (acabado arriba) y cantidades?
 
 Apunta lo que veas (con capturas) en un *issue* de GitHub.
 

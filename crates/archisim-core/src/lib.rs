@@ -10,5 +10,5 @@ pub mod model;
 
 pub use document::Document;
 pub use ids::*;
-pub use math::{Point2, Vec2, EPSILON};
+pub use math::{is_simple_polygon, perimeter, signed_area, Point2, Vec2, EPSILON};
 pub use model::*;
