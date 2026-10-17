@@ -45,9 +45,10 @@ Crates actuales (`crates/`):
 | `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación |
-| `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba y la exporta |
+| `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
+| `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta |
 
-Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; la interfaz depende de todo y nada depende de la interfaz.
+Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
 ## 4. Modelo de datos (equivalencias)
 
@@ -104,7 +105,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 | 4 | Planta SVG con poché por capa | ✅ v0.1 |
 | 5 | Forjados (`IfcSlab`) por contorno | ✅ v0.2 |
 | 6 | Puertas y ventanas como huecos en muro (`IfcOpeningElement`) | ✅ v0.3 |
-| 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ⬜ |
+| 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ✅ v0.4 |
 | 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ⬜ |
 | 9 | Vista 3D | ⬜ |
 | 10 | Importación IFC básica | ⬜ |

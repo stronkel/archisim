@@ -29,11 +29,12 @@ Lee `docs/FUNDACIONAL.md` antes de cualquier trabajo: define visión, principios
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run -p archisim-cli -- demo out/   # genera out/demo.ifc y una planta SVG por nivel
+cargo run -p archisim-cli -- demo out/   # genera out/demo.archisim, out/demo.ifc y una planta SVG por nivel
 python3 scripts/validate_ifc.py out/demo.ifc   # requiere: pip install ifcopenshell
+cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto   # ida y vuelta: IFC idéntico salvo la fecha
 ```
 
-Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin errores. Si cambias la planta, mira el SVG resultante antes de entregarlo.
+Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin errores. Si cambias el modelo, el formato `.archisim` debe guardarlo entero: añade el campo al esquema y, si cambia la estructura del fichero, sube `CURRENT_VERSION` y escribe la migración en `archisim-file` (los proyectos antiguos tienen que seguir abriéndose). Si cambias la planta, mira el SVG resultante antes de entregarlo.
 
 ## Estructura
 
@@ -41,10 +42,11 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 - `crates/archisim-geom` — geometría 2D y contornos de muros.
 - `crates/archisim-ifc` — escritor IFC4 STEP.
 - `crates/archisim-plan` — planta en SVG.
+- `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
 - `crates/archisim-cli` — comandos de línea.
 
 Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUNDACIONAL.md` §3.
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): formato de proyecto propio (`.archisim`), después la ventana de la aplicación.
+Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): ventana de la aplicación (vista de planta, herramienta muro, selección), que abre y guarda `.archisim`.

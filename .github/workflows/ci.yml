@@ -21,6 +21,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: cargo run -p archisim-cli -- demo out
+      - run: cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto
       - uses: actions/upload-artifact@v4
         with:
           name: demo-${{ matrix.os }}
@@ -38,3 +39,8 @@ jobs:
       - run: pip install ifcopenshell pytest
       - run: cargo run -p archisim-cli -- demo out
       - run: python scripts/validate_ifc.py out/demo.ifc
+      # Save → open → export must give the same IFC (only the date may change).
+      - run: cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto
+      - run: diff <(grep -v FILE_NAME out/demo.ifc) <(grep -v FILE_NAME out/reabierto/demo.ifc)
+        shell: bash
+      - run: python scripts/validate_ifc.py out/reabierto/demo.ifc

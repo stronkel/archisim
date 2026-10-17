@@ -2,7 +2,7 @@
 
 Herramienta BIM de autoría, multiplataforma y escrita en Rust: la facilidad de ArchiCAD con la organización estándar de Revit, sobre IFC 4.3 como modelo de datos. Nombre provisional.
 
-Estado: **v0.3, fase de cimientos.** Todavía no hay ventana de aplicación; hay un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, y los exporta a IFC4 y a plantas 1:50 en SVG.
+Estado: **v0.4, fase de cimientos.** Todavía no hay ventana de aplicación; hay un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, los guarda como proyecto `.archisim` y los exporta a IFC4 y a plantas 1:50 en SVG.
 
 Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectura y el plan.
 
@@ -16,9 +16,18 @@ Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectur
    ```
 
    La primera vez tarda un par de minutos en compilar. Genera:
+   - `out/demo.archisim` — el proyecto, en texto legible ([formato](docs/FORMATO_ARCHISIM.md)).
    - `out/demo.ifc` — vivienda de prueba de 12 × 9 m con fachada de doble hoja, tabiquería, solera, cubierta plana, cuatro puertas y cinco ventanas.
    - `out/demo.svg` — planta baja a escala 1:50 (ábrela con el navegador).
    - `out/demo-cubierta.svg` — planta de cubierta a escala 1:50.
+
+3. Para exportar un proyecto `.archisim` (por ejemplo, después de editarlo):
+
+   ```bash
+   cargo run -p archisim-cli -- exportar out/demo.archisim
+   ```
+
+   Genera `demo.ifc` y las plantas junto al proyecto.
 
 ### Qué mirar al abrir el IFC en ArchiCAD o Revit
 

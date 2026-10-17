@@ -5,11 +5,12 @@ members = [
     "crates/archisim-geom",
     "crates/archisim-ifc",
     "crates/archisim-plan",
+    "crates/archisim-file",
     "crates/archisim-cli",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
@@ -20,3 +21,4 @@ archisim-core = { path = "crates/archisim-core" }
 archisim-geom = { path = "crates/archisim-geom" }
 archisim-ifc = { path = "crates/archisim-ifc" }
 archisim-plan = { path = "crates/archisim-plan" }
+archisim-file = { path = "crates/archisim-file" }

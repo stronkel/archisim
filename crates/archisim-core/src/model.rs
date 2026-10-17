@@ -441,6 +441,14 @@ pub enum ModelError {
     ZeroLengthWall,
     /// A dimension that must be positive is not.
     NonPositive(&'static str),
+    /// A coordinate or dimension is not a finite number (NaN or infinite).
+    NotFinite(&'static str),
+    /// Two elements share an internal id.
+    DuplicateId(u64),
+    /// An internal id is zero or too large to be stored safely.
+    InvalidId(u64),
+    /// Two elements share an IFC `GlobalId`.
+    DuplicateGuid(String),
     /// A wall or slab type must have at least one layer.
     EmptyType,
     /// The element is still used by others and cannot be removed.
@@ -478,6 +486,12 @@ impl fmt::Display for ModelError {
             ),
             ModelError::ZeroLengthWall => write!(f, "a wall needs two different points"),
             ModelError::NonPositive(what) => write!(f, "{what} must be greater than zero"),
+            ModelError::NotFinite(what) => write!(f, "{what} is not a valid number"),
+            ModelError::DuplicateId(id) => write!(f, "id {id} is used by more than one element"),
+            ModelError::InvalidId(id) => write!(f, "id {id} must be between 1 and {MAX_ID}"),
+            ModelError::DuplicateGuid(guid) => {
+                write!(f, "GlobalId {guid} is used by more than one element")
+            }
             ModelError::EmptyType => write!(f, "a type needs at least one layer"),
             ModelError::InUse(what) => write!(f, "still in use: {what}"),
         }
@@ -485,6 +499,65 @@ impl fmt::Display for ModelError {
 }
 
 impl std::error::Error for ModelError {}
+
+/// Largest internal id: integers up to 2^53 survive any JSON reader.
+pub const MAX_ID: u64 = 1 << 53;
+
+/// Rejects NaN and infinite values.
+fn finite(value: f64, what: &'static str) -> Result<(), ModelError> {
+    if value.is_finite() {
+        Ok(())
+    } else {
+        Err(ModelError::NotFinite(what))
+    }
+}
+
+fn finite_point(p: Point2, what: &'static str) -> Result<(), ModelError> {
+    finite(p.x, what)?;
+    finite(p.y, what)
+}
+
+/// Every element of a model laid out flat, as stored in a project file.
+///
+/// [`Model::to_parts`] produces it and [`Model::from_parts`] rebuilds a model
+/// from it, checking everything an interactive edit would check. Ids and
+/// GUIDs are kept exactly as given.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelParts {
+    pub project_name: String,
+    pub project_guid: GlobalId,
+    pub site_guid: GlobalId,
+    pub building_guid: GlobalId,
+    pub levels: Vec<Level>,
+    pub materials: Vec<Material>,
+    pub wall_types: Vec<WallType>,
+    pub walls: Vec<Wall>,
+    pub slab_types: Vec<SlabType>,
+    pub slabs: Vec<Slab>,
+    pub opening_types: Vec<OpeningType>,
+    pub openings: Vec<Opening>,
+}
+
+/// Why a model could not be rebuilt from its parts: which element failed and
+/// why.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RestoreError {
+    /// Human-readable element reference, e.g. `wall 12 (2N1qQ…)`.
+    pub element: String,
+    pub error: ModelError,
+}
+
+impl fmt::Display for RestoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.element, self.error)
+    }
+}
+
+impl std::error::Error for RestoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
 
 /// The building model: every element of a project, without undo history.
 #[derive(Debug, Clone, PartialEq)]
@@ -618,6 +691,7 @@ impl Model {
             if !self.materials.contains_key(&layer.material) {
                 return Err(ModelError::UnknownMaterial(layer.material));
             }
+            finite(layer.thickness, "layer thickness")?;
             if layer.thickness <= EPSILON {
                 return Err(ModelError::NonPositive("layer thickness"));
             }
@@ -660,6 +734,10 @@ impl Model {
         if !self.wall_types.contains_key(&spec.wall_type) {
             return Err(ModelError::UnknownWallType(spec.wall_type));
         }
+        finite_point(spec.start, "wall start")?;
+        finite_point(spec.end, "wall end")?;
+        finite(spec.height, "wall height")?;
+        finite(spec.base_offset, "wall base offset")?;
         if spec.start.approx_eq(spec.end) {
             return Err(ModelError::ZeroLengthWall);
         }
@@ -673,6 +751,8 @@ impl Model {
     /// and windows keep their distance from the wall start; the move is
     /// rejected if any of them would no longer fit.
     pub fn move_wall(&mut self, id: WallId, start: Point2, end: Point2) -> Result<(), ModelError> {
+        finite_point(start, "wall start")?;
+        finite_point(end, "wall end")?;
         if start.approx_eq(end) {
             return Err(ModelError::ZeroLengthWall);
         }
@@ -793,6 +873,9 @@ impl Model {
 
     /// Checks an outline and returns it counter-clockwise.
     fn normalized_outline(outline: Vec<Point2>) -> Result<Vec<Point2>, ModelError> {
+        for p in &outline {
+            finite_point(*p, "slab outline point")?;
+        }
         if !is_simple_polygon(&outline) || signed_area(&outline).abs() <= EPSILON {
             return Err(ModelError::InvalidOutline);
         }
@@ -810,6 +893,7 @@ impl Model {
         if !self.slab_types.contains_key(&spec.slab_type) {
             return Err(ModelError::UnknownSlabType(spec.slab_type));
         }
+        finite(spec.top_offset, "slab top offset")?;
         let outline = Self::normalized_outline(spec.outline)?;
         let id = SlabId(self.take_id());
         self.slabs.insert(
@@ -852,7 +936,7 @@ impl Model {
 
     // ---- Door and window types -----------------------------------------
 
-    pub fn add_opening_type(&mut self, spec: NewOpeningType) -> Result<OpeningTypeId, ModelError> {
+    fn validate_opening_type(&self, spec: &NewOpeningType) -> Result<(), ModelError> {
         for m in [spec.frame_material, spec.panel_material] {
             if !self.materials.contains_key(&m) {
                 return Err(ModelError::UnknownMaterial(m));
@@ -864,6 +948,7 @@ impl Model {
             (spec.frame_width, "frame width"),
             (spec.frame_depth, "frame depth"),
         ] {
+            finite(value, what)?;
             if value <= EPSILON {
                 return Err(ModelError::NonPositive(what));
             }
@@ -872,6 +957,11 @@ impl Model {
         if 2.0 * spec.frame_width >= spec.width || 2.0 * spec.frame_width >= spec.height {
             return Err(ModelError::NonPositive("clear opening inside the frame"));
         }
+        Ok(())
+    }
+
+    pub fn add_opening_type(&mut self, spec: NewOpeningType) -> Result<OpeningTypeId, ModelError> {
+        self.validate_opening_type(&spec)?;
         let id = OpeningTypeId(self.take_id());
         self.opening_types.insert(
             id,
@@ -938,6 +1028,11 @@ impl Model {
             .get(&wall.wall_type)
             .ok_or(ModelError::UnknownWallType(wall.wall_type))?
             .thickness();
+        finite(spec.along, "opening position")?;
+        finite(spec.sill, "sill height")?;
+        if let Some(s) = spec.setback {
+            finite(s, "frame setback")?;
+        }
 
         let (a, b) = (
             spec.along - otype.width / 2.0,
@@ -1058,6 +1153,161 @@ impl Model {
     /// Doors and windows hosted by a wall.
     pub fn openings_in_wall(&self, wall: WallId) -> impl Iterator<Item = &Opening> {
         self.openings.values().filter(move |o| o.wall == wall)
+    }
+
+    // ---- Saving and opening ---------------------------------------------
+
+    /// Every element of the model, each list ordered by id.
+    pub fn to_parts(&self) -> ModelParts {
+        ModelParts {
+            project_name: self.project_name.clone(),
+            project_guid: self.project_guid.clone(),
+            site_guid: self.site_guid.clone(),
+            building_guid: self.building_guid.clone(),
+            levels: self.levels.values().cloned().collect(),
+            materials: self.materials.values().cloned().collect(),
+            wall_types: self.wall_types.values().cloned().collect(),
+            walls: self.walls.values().cloned().collect(),
+            slab_types: self.slab_types.values().cloned().collect(),
+            slabs: self.slabs.values().cloned().collect(),
+            opening_types: self.opening_types.values().cloned().collect(),
+            openings: self.openings.values().cloned().collect(),
+        }
+    }
+
+    /// Rebuilds a model from its parts, keeping every id and GUID.
+    ///
+    /// Everything is checked as if the elements were being drawn again:
+    /// references must exist, ids and GUIDs must be unique, numbers must be
+    /// finite, outlines valid and doors and windows must fit in their walls
+    /// without overlapping. The first problem found is reported.
+    pub fn from_parts(parts: ModelParts) -> Result<Self, RestoreError> {
+        let fail = |element: String| move |error: ModelError| RestoreError { element, error };
+
+        let mut model = Model::new(parts.project_name);
+        model.project_guid = parts.project_guid;
+        model.site_guid = parts.site_guid;
+        model.building_guid = parts.building_guid;
+
+        let mut ids = std::collections::HashSet::new();
+        let mut guids = std::collections::HashSet::new();
+        for guid in [&model.project_guid, &model.site_guid, &model.building_guid] {
+            if !guids.insert(guid.clone()) {
+                return Err(fail("project".into())(ModelError::DuplicateGuid(
+                    guid.to_string(),
+                )));
+            }
+        }
+        let mut claim = |id: u64, guid: Option<&GlobalId>| -> Result<(), ModelError> {
+            if id == 0 || id > MAX_ID {
+                return Err(ModelError::InvalidId(id));
+            }
+            if !ids.insert(id) {
+                return Err(ModelError::DuplicateId(id));
+            }
+            if let Some(g) = guid {
+                if !guids.insert(g.clone()) {
+                    return Err(ModelError::DuplicateGuid(g.to_string()));
+                }
+            }
+            Ok(())
+        };
+
+        for level in parts.levels {
+            let name = format!("level {} «{}»", level.id.0, level.name);
+            claim(level.id.0, Some(&level.guid))
+                .and_then(|_| finite(level.elevation, "level elevation"))
+                .map_err(fail(name))?;
+            model.levels.insert(level.id, level);
+        }
+        for material in parts.materials {
+            let name = format!("material {} «{}»", material.id.0, material.name);
+            claim(material.id.0, None).map_err(fail(name))?;
+            model.materials.insert(material.id, material);
+        }
+        for wt in parts.wall_types {
+            let name = format!("wall type {} «{}»", wt.id.0, wt.name);
+            claim(wt.id.0, Some(&wt.guid))
+                .and_then(|_| model.validate_layers(&wt.layers))
+                .map_err(fail(name))?;
+            model.wall_types.insert(wt.id, wt);
+        }
+        for wall in parts.walls {
+            let name = format!("wall {} ({})", wall.id.0, wall.guid);
+            let spec = NewWall {
+                wall_type: wall.wall_type,
+                level: wall.level,
+                start: wall.start,
+                end: wall.end,
+                reference: wall.reference,
+                height: wall.height,
+                base_offset: wall.base_offset,
+            };
+            claim(wall.id.0, Some(&wall.guid))
+                .and_then(|_| model.validate_wall(&spec))
+                .map_err(fail(name))?;
+            model.walls.insert(wall.id, wall);
+        }
+        for st in parts.slab_types {
+            let name = format!("slab type {} «{}»", st.id.0, st.name);
+            claim(st.id.0, Some(&st.guid))
+                .and_then(|_| model.validate_layers(&st.layers))
+                .map_err(fail(name))?;
+            model.slab_types.insert(st.id, st);
+        }
+        for mut slab in parts.slabs {
+            let name = format!("slab {} ({})", slab.id.0, slab.guid);
+            claim(slab.id.0, Some(&slab.guid))
+                .and_then(|_| {
+                    if !model.levels.contains_key(&slab.level) {
+                        return Err(ModelError::UnknownLevel(slab.level));
+                    }
+                    if !model.slab_types.contains_key(&slab.slab_type) {
+                        return Err(ModelError::UnknownSlabType(slab.slab_type));
+                    }
+                    finite(slab.top_offset, "slab top offset")?;
+                    slab.outline = Self::normalized_outline(std::mem::take(&mut slab.outline))?;
+                    Ok(())
+                })
+                .map_err(fail(name))?;
+            model.slabs.insert(slab.id, slab);
+        }
+        for ot in parts.opening_types {
+            let name = format!("door or window type {} «{}»", ot.id.0, ot.name);
+            let spec = NewOpeningType {
+                name: ot.name.clone(),
+                kind: ot.kind,
+                width: ot.width,
+                height: ot.height,
+                frame_width: ot.frame_width,
+                frame_depth: ot.frame_depth,
+                frame_material: ot.frame_material,
+                panel_material: ot.panel_material,
+            };
+            claim(ot.id.0, Some(&ot.guid))
+                .and_then(|_| model.validate_opening_type(&spec))
+                .map_err(fail(name))?;
+            model.opening_types.insert(ot.id, ot);
+        }
+        for o in parts.openings {
+            let name = format!("door or window {} ({})", o.id.0, o.guid);
+            let spec = NewOpening {
+                opening_type: o.opening_type,
+                wall: o.wall,
+                along: o.along,
+                sill: o.sill,
+                opens_to: o.opens_to,
+                hand: o.hand,
+                setback: o.setback,
+            };
+            claim(o.id.0, Some(&o.guid))
+                .and_then(|_| model.validate_opening(&spec, None))
+                .map_err(fail(name))?;
+            model.openings.insert(o.id, o);
+        }
+
+        model.next_id = ids.iter().max().map_or(1, |m| m + 1);
+        Ok(model)
     }
 }
 
@@ -1391,5 +1641,103 @@ mod tests {
         let w = m.wall(id).unwrap();
         assert_eq!(w.guid, guid);
         assert_eq!(w.start, Point2::new(4.0, 0.0));
+    }
+
+    #[test]
+    fn parts_round_trip_keeps_everything() {
+        let (mut m, wall, door, window) = with_openings();
+        m.add_opening(place(door, wall, 0.6, 0.0)).unwrap();
+        m.add_opening(place(window, wall, 2.5, 0.9)).unwrap();
+        let st = slab_type(&mut m);
+        let lvl = m.levels()[0].id;
+        m.add_slab(NewSlab {
+            slab_type: st,
+            level: lvl,
+            outline: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(4.0, 0.0),
+                Point2::new(4.0, 3.0),
+            ],
+            top_offset: -0.05,
+        })
+        .unwrap();
+        let restored = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(restored, m);
+        // New elements keep getting fresh ids.
+        let mut restored = restored;
+        let new = restored.add_level("Planta 1", 3.0);
+        assert!(m.to_parts().levels.iter().all(|l| l.id != new));
+    }
+
+    fn restore_error(parts: ModelParts) -> ModelError {
+        Model::from_parts(parts).unwrap_err().error
+    }
+
+    #[test]
+    fn restoring_rejects_inconsistent_parts() {
+        let (mut m, wall, door, window) = with_openings();
+        m.add_opening(place(door, wall, 0.6, 0.0)).unwrap();
+        let good = m.to_parts();
+
+        let mut p = good.clone();
+        p.walls[0].guid = p.levels[0].guid.clone();
+        assert!(matches!(restore_error(p), ModelError::DuplicateGuid(_)));
+
+        let mut p = good.clone();
+        p.building_guid = p.project_guid.clone();
+        assert!(matches!(restore_error(p), ModelError::DuplicateGuid(_)));
+
+        let mut p = good.clone();
+        p.materials[0].id = MaterialId(p.levels[0].id.0);
+        assert!(matches!(restore_error(p), ModelError::DuplicateId(_)));
+
+        let mut p = good.clone();
+        p.walls[0].level = LevelId(999);
+        assert_eq!(restore_error(p), ModelError::UnknownLevel(LevelId(999)));
+
+        let mut p = good.clone();
+        p.walls[0].height = f64::NAN;
+        assert!(matches!(restore_error(p), ModelError::NotFinite(_)));
+
+        let mut p = good.clone();
+        p.levels[0].elevation = f64::INFINITY;
+        assert!(matches!(restore_error(p), ModelError::NotFinite(_)));
+
+        let mut p = good.clone();
+        p.levels[0].id = LevelId(0);
+        assert_eq!(restore_error(p), ModelError::InvalidId(0));
+
+        // A window moved by hand on top of the door.
+        let mut p = good.clone();
+        let mut extra = p.openings[0].clone();
+        extra.id = OpeningId(500);
+        extra.guid = GlobalId::new();
+        extra.opening_type = window;
+        extra.along = 1.0;
+        extra.sill = 0.9;
+        p.openings.push(extra);
+        let err = Model::from_parts(p).unwrap_err();
+        assert_eq!(err.error, ModelError::OverlappingOpenings);
+        assert!(err.to_string().starts_with("door or window 500"));
+
+        let mut p = good;
+        p.opening_types[0].frame_material = MaterialId(777);
+        assert_eq!(
+            restore_error(p),
+            ModelError::UnknownMaterial(MaterialId(777))
+        );
+    }
+
+    #[test]
+    fn edits_reject_non_finite_numbers() {
+        let (mut m, lvl, t) = sample();
+        let mut s = spec(lvl, t);
+        s.end = Point2::new(f64::NAN, 0.0);
+        assert!(matches!(m.add_wall(s), Err(ModelError::NotFinite(_))));
+        let w = m.add_wall(spec(lvl, t)).unwrap();
+        assert!(matches!(
+            m.move_wall(w, Point2::new(0.0, 0.0), Point2::new(f64::INFINITY, 0.0)),
+            Err(ModelError::NotFinite(_))
+        ));
     }
 }
