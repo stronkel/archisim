@@ -1,6 +1,12 @@
 # Instrucciones para Claude Code
 
-Lee `docs/FUNDACIONAL.md` antes de cualquier trabajo: define visión, principios y alcance.
+Lee `docs/FUNDACIONAL.md` antes de cualquier trabajo: define visión, principios y alcance. Lee después `docs/BITACORA.md` para saber en qué punto está el proyecto y qué feedback hay pendiente.
+
+## Al cerrar cada sesión de trabajo
+
+1. Añade una entrada al principio de `docs/BITACORA.md`: qué se hizo, qué quedó pendiente y qué debe probar Antonio.
+2. Actualiza la tabla del MVP en `docs/FUNDACIONAL.md` §5 si cambió algún estado.
+3. Commit en español, en imperativo y con el bloque al principio (p. ej. `Forjados: exportar IfcSlab con capas`), y push a `main`. Si el cambio es grande o arriesgado, usa una rama `bloque/<nombre>` y abre un pull request para que Antonio lo revise.
 
 ## Quién es quién
 
