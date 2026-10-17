@@ -10,7 +10,7 @@ use archisim_core::{
     Document, Hand, LevelId, Model, ModelError, NewOpening, NewSlab, NewWall, OpeningId,
     OpeningTypeId, Point2, ReferenceLine, SlabId, SlabTypeId, WallId, WallSide, WallTypeId,
 };
-use archisim_ifc::{export_ifc, ExportOptions};
+use archisim_ifc::{export_ifc, import_ifc, ExportOptions, ImportReport};
 use archisim_plan::{render_plan, PlanOptions};
 
 use crate::pick::Element;
@@ -29,6 +29,9 @@ pub struct Editor {
     doc: Document,
     /// Where the project was opened from or last saved to.
     pub path: Option<PathBuf>,
+    /// The IFC file the project was imported from, until it is saved: it
+    /// suggests the folder and name to save it with.
+    pub imported_from: Option<PathBuf>,
     /// The model as last saved (or opened), to know if there are changes.
     saved: Model,
     /// Grows with every change to the model, so views know when to redraw.
@@ -58,6 +61,7 @@ impl Editor {
             saved: model.clone(),
             doc: Document::new(model),
             path,
+            imported_from: None,
             revision: 0,
             level,
             selection: BTreeSet::new(),
@@ -68,6 +72,30 @@ impl Editor {
     pub fn open(path: &Path) -> EditResult<Self> {
         let model = archisim_file::open(path).map_err(|e| explain_file(&e))?;
         Ok(Self::with_model(model, Some(path.to_path_buf())))
+    }
+
+    /// Imports an IFC file as a new, unsaved project. When the file brings
+    /// no wall, slab, door or window types of some kind, the ArchiSim
+    /// starter library is added so every tool has something to draw with.
+    /// Returns the report of what was imported and whether the library was
+    /// added.
+    pub fn import(path: &Path) -> EditResult<(Self, ImportReport, bool)> {
+        let bytes = std::fs::read(path).map_err(|e| format!("no se puede leer el fichero: {e}"))?;
+        let text = String::from_utf8_lossy(&bytes);
+        let imported = import_ifc(&text).map_err(|e| e.to_string())?;
+        let mut model = imported.model;
+        let lacks_types = model.wall_types().next().is_none()
+            || model.slab_types().next().is_none()
+            || !model.opening_types().any(|t| t.is_door())
+            || !model.opening_types().any(|t| t.is_window());
+        if lacks_types {
+            archisim_library::add_library(&mut model).map_err(|e| explain(&e))?;
+        }
+        let mut ed = Self::with_model(model, None);
+        // Not saved anywhere yet: closing asks first.
+        ed.saved = Model::new("");
+        ed.imported_from = Some(path.to_path_buf());
+        Ok((ed, imported.report, lacks_types))
     }
 
     pub fn model(&self) -> &Model {
@@ -89,6 +117,12 @@ impl Editor {
             .as_ref()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
+            .or_else(|| {
+                self.imported_from
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .map(|n| format!("{} (importado)", n.to_string_lossy()))
+            })
             .unwrap_or_else(|| "Sin título".into())
     }
 
@@ -104,6 +138,7 @@ impl Editor {
         archisim_file::save(self.model(), &target).map_err(|e| explain_file(&e))?;
         self.saved = self.model().clone();
         self.path = Some(target.clone());
+        self.imported_from = None;
         Ok(target)
     }
 

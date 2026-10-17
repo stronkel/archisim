@@ -65,6 +65,7 @@ pub struct SlabSettings {
 enum Pending {
     New,
     Open(Option<PathBuf>),
+    Import(Option<PathBuf>),
     Quit,
 }
 
@@ -101,6 +102,8 @@ pub struct ArchiSimApp {
     title: String,
     show_shortcuts: bool,
     show_about: bool,
+    /// What the last IFC import brought in and left out, until closed.
+    pub import_report: Option<String>,
     /// Last time the plan picture took to draw, in milliseconds.
     pub last_plan_ms: f64,
     /// Screen area of the plan view in the last frame.
@@ -141,6 +144,7 @@ impl ArchiSimApp {
             title: String::new(),
             show_shortcuts: false,
             show_about: false,
+            import_report: None,
             last_plan_ms: 0.0,
             canvas: Rect::NOTHING,
             mode: ViewMode::Plan,
@@ -204,6 +208,7 @@ impl ArchiSimApp {
         self.ed
             .path
             .as_ref()
+            .or(self.ed.imported_from.as_ref())
             .and_then(|p| p.parent())
             .map(Path::to_path_buf)
     }
@@ -212,6 +217,7 @@ impl ArchiSimApp {
         self.ed
             .path
             .as_ref()
+            .or(self.ed.imported_from.as_ref())
             .and_then(|p| p.file_stem())
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "proyecto".into())
@@ -246,9 +252,45 @@ impl ArchiSimApp {
                     self.open_path(&path);
                 }
             }
+            Pending::Import(path) => {
+                let path = path.or_else(|| {
+                    let mut d = rfd::FileDialog::new()
+                        .set_title("Importar IFC")
+                        .add_filter("IFC", &["ifc", "IFC"]);
+                    if let Some(dir) = self.start_dir() {
+                        d = d.set_directory(dir);
+                    }
+                    d.pick_file()
+                });
+                if let Some(path) = path {
+                    self.import_path(&path);
+                }
+            }
             Pending::Quit => {
                 self.allow_close = true;
             }
+        }
+    }
+
+    /// Imports an IFC file as a new project and shows what came in.
+    pub fn import_path(&mut self, path: &Path) {
+        match Editor::import(path) {
+            Ok((ed, report, library)) => {
+                self.replace_editor(ed);
+                let mut text = report.to_string();
+                if library {
+                    text.push_str(
+                        "\nSe ha añadido la plantilla de ArchiSim porque el fichero no trae tipos de todas las herramientas.\n",
+                    );
+                }
+                self.import_report = Some(text);
+                let name = path.file_name().map_or_else(
+                    || path.display().to_string(),
+                    |n| n.to_string_lossy().into_owned(),
+                );
+                self.say(format!("Importado {name}: {}.", report.summary()));
+            }
+            Err(e) => self.complain(format!("No se puede importar {}: {e}.", path.display())),
         }
     }
 
@@ -646,6 +688,9 @@ impl ArchiSimApp {
                     self.save(true);
                 }
                 ui.separator();
+                if ui.button("Importar IFC…").clicked() {
+                    self.guarded(Pending::Import(None));
+                }
                 if ui.button("Exportar IFC4…").clicked() {
                     self.export_ifc();
                 }
@@ -1013,7 +1058,8 @@ impl ArchiSimApp {
                 Tool::Door | Tool::Window => "Clic sobre un muro: se coloca centrada en el cursor y abre hacia el lado del muro donde está el cursor · Esc: flecha",
                 }
             };
-            ui.label(egui::RichText::new(hint).weak());
+            // Position and message on the right; the hint takes what is
+            // left and is cut short rather than overlapping them.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let (Some(c), ViewMode::Plan) = (self.cursor, self.mode) {
                     ui.monospace(format!(
@@ -1032,6 +1078,9 @@ impl ArchiSimApp {
                     ui.separator();
                     ui.colored_label(color, &m.text);
                 }
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(hint).weak()).truncate());
+                });
             });
         });
     }
@@ -2251,6 +2300,28 @@ impl ArchiSimApp {
                             }
                         });
                 });
+        }
+        if let Some(text) = &self.import_report {
+            let mut open = true;
+            let mut close = false;
+            egui::Window::new("Informe de importación")
+                .open(&mut open)
+                .default_width(520.0)
+                .resizable(true)
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical()
+                        .max_height(420.0)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(text.as_str()).monospace());
+                        });
+                    ui.add_space(6.0);
+                    if ui.button("Cerrar").clicked() {
+                        close = true;
+                    }
+                });
+            if !open || close {
+                self.import_report = None;
+            }
         }
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")

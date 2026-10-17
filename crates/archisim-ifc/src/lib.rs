@@ -34,7 +34,11 @@
 //! Relationship GUIDs are derived from element GUIDs, so exporting the same
 //! model twice gives the same file apart from the header timestamp.
 
+pub mod import;
 pub mod step;
+pub mod step_read;
+
+pub use import::{differences, import_ifc, ImportError, ImportReport, Imported};
 
 use std::collections::BTreeMap;
 
@@ -301,10 +305,46 @@ impl<'a> Exporter<'a> {
 
     /// `IfcDoorType` or `IfcWindowType` with its material constituents.
     fn opening_type(&mut self, materials: &BTreeMap<MaterialId, Ref>, t: &OpeningType) -> Ref {
+        // Frame sizes and, for windows, how each leaf opens, so they survive
+        // a round trip and other programs can redraw them.
+        let lining_guid = derived_guid(&t.guid, "lining");
+        let (depth, width) = (real(t.frame_depth), real(t.frame_width));
+        let mut props = vec![match t.kind {
+            OpeningKind::Door(_) => self.w.add(format!(
+                "IFCDOORLININGPROPERTIES({},$,'Marco',$,{depth},{width},$,$,$,$,$,$,$,$,$,$,$)",
+                string(lining_guid.as_str())
+            )),
+            OpeningKind::Window(_) => self.w.add(format!(
+                "IFCWINDOWLININGPROPERTIES({},$,'Marco',$,{depth},{width},$,$,$,$,$,$,$,$,$,$)",
+                string(lining_guid.as_str())
+            )),
+        }];
+        if let OpeningKind::Window(op) = t.kind {
+            let panels: &[(&str, &str)] = match op {
+                WindowOperation::Fixed => &[("FIXEDCASEMENT", "MIDDLE")],
+                WindowOperation::SingleCasement => &[("SIDEHUNGLEFTHAND", "MIDDLE")],
+                WindowOperation::DoubleCasement => {
+                    &[("SIDEHUNGLEFTHAND", "LEFT"), ("SIDEHUNGRIGHTHAND", "RIGHT")]
+                }
+                WindowOperation::Sliding => &[
+                    ("SLIDINGHORIZONTAL", "LEFT"),
+                    ("SLIDINGHORIZONTAL", "RIGHT"),
+                ],
+            };
+            for (i, (operation, position)) in panels.iter().enumerate() {
+                let guid = derived_guid(&t.guid, &format!("panel {i}"));
+                props.push(self.w.add(format!(
+                    "IFCWINDOWPANELPROPERTIES({},$,'Hoja {}',$,.{operation}.,.{position}.,{depth},{width},$)",
+                    string(guid.as_str()),
+                    i + 1
+                )));
+            }
+        }
+        let props = list(&props);
         let (ty, constituents) = match t.kind {
             OpeningKind::Door(op) => (
                 self.w.add(format!(
-                    "IFCDOORTYPE({},$,{},$,$,$,$,$,$,.DOOR.,.{}.,.F.,$)",
+                    "IFCDOORTYPE({},$,{},$,$,{props},$,$,$,.DOOR.,.{}.,.F.,$)",
                     string(t.guid.as_str()),
                     string(&t.name),
                     door_operation(op, Hand::Right)
@@ -313,7 +353,7 @@ impl<'a> Exporter<'a> {
             ),
             OpeningKind::Window(op) => (
                 self.w.add(format!(
-                    "IFCWINDOWTYPE({},$,{},$,$,$,$,$,$,.WINDOW.,.{}.,.F.,$)",
+                    "IFCWINDOWTYPE({},$,{},$,$,{props},$,$,$,.WINDOW.,.{}.,.F.,$)",
                     string(t.guid.as_str()),
                     string(&t.name),
                     window_partitioning(op)
@@ -576,6 +616,16 @@ impl<'a> Exporter<'a> {
             )),
         ];
         self.pset(filling, guid, pset_name, &props);
+        // ArchiSim's own data: the hand (UNE-EN 12519), which IFC only
+        // records for doors.
+        let hand = self.w.add(format!(
+            "IFCPROPERTYSINGLEVALUE('Hand',$,IFCLABEL({}),$)",
+            string(match og.hand {
+                Hand::Left => "Left",
+                Hand::Right => "Right",
+            })
+        ));
+        self.pset(filling, guid, "ArchiSim_Opening", &[hand]);
         self.quantities(
             filling,
             guid,
@@ -703,6 +753,14 @@ impl<'a> Exporter<'a> {
             ));
             self.w.add(format!(
                 "IFCMATERIALDEFINITIONREPRESENTATION($,$,({rep}),{r})"
+            ));
+            // ArchiSim's own data: how the material is hatched when cut.
+            let pattern = self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('CutPattern',$,IFCLABEL({}),$)",
+                string(import::pattern_name(m.cut_pattern))
+            ));
+            self.w.add(format!(
+                "IFCMATERIALPROPERTIES('ArchiSim_Material',$,({pattern}),{r})"
             ));
             materials.insert(m.id, r);
         }

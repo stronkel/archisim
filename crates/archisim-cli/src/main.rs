@@ -3,6 +3,7 @@
 //! ```text
 //! archisim demo [carpeta]                    vivienda de prueba: .archisim, IFC y plantas
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
+//! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
 //! archisim --version
 //! ```
 
@@ -12,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use archisim_core::Model;
-use archisim_ifc::{export_ifc, ExportOptions};
+use archisim_ifc::{export_ifc, import_ifc, ExportOptions};
 use archisim_plan::{render_plan, PlanOptions};
 
 const HELP: &str = "\
@@ -29,6 +30,13 @@ Uso:
       Abre un proyecto y lo exporta a IFC4 y a plantas 1:50 con el mismo
       nombre (casa.archisim → casa.ifc, casa.svg…). Por defecto, en la
       misma carpeta del proyecto.
+
+  archisim importar <fichero.ifc> [proyecto.archisim]
+      Lee un IFC (IFC2X3 o IFC4, de ArchiCAD, Revit u otro programa) y lo
+      guarda como proyecto de ArchiSim: plantas, muros con sus capas,
+      forjados, puertas y ventanas, con sus GlobalId. Explica qué ha
+      quedado fuera. Por defecto, casa.ifc → casa.archisim en la misma
+      carpeta.
 
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
@@ -52,6 +60,20 @@ fn main() -> ExitCode {
             }
             None => {
                 eprintln!("Falta el proyecto: archisim exportar <proyecto.archisim> [carpeta]");
+                ExitCode::FAILURE
+            }
+        },
+        Some("importar") | Some("import") => match args.get(1) {
+            Some(ifc) => {
+                let ifc = PathBuf::from(ifc);
+                let project = match args.get(2) {
+                    Some(p) => PathBuf::from(p),
+                    None => ifc.with_extension(archisim_file::EXTENSION),
+                };
+                report(run_import(&ifc, &project))
+            }
+            None => {
+                eprintln!("Falta el fichero: archisim importar <fichero.ifc> [proyecto.archisim]");
                 ExitCode::FAILURE
             }
         },
@@ -104,6 +126,21 @@ fn run_export(project: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Erro
     }
     summary(&model);
     export_all(&model, dir, &stem)
+}
+
+fn run_import(ifc: &Path, project: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes =
+        std::fs::read(ifc).map_err(|e| format!("no se puede leer {}: {e}", ifc.display()))?;
+    let text = String::from_utf8_lossy(&bytes);
+    let imported = import_ifc(&text).map_err(|e| format!("{}: {e}", ifc.display()))?;
+    print!("{}", imported.report);
+    if let Some(dir) = project.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    archisim_file::save(&imported.model, project)?;
+    summary(&imported.model);
+    println!("  Proyecto: {}", project.display());
+    Ok(())
 }
 
 fn summary(model: &Model) {
@@ -218,6 +255,23 @@ mod tests {
             );
         }
         assert_eq!(archisim_file::to_string(&reopened), text);
+    }
+
+    /// The demo exported to IFC and imported again is the same building,
+    /// with the same GlobalIds, and exports to an equivalent IFC.
+    #[test]
+    fn demo_survives_ifc_round_trip() {
+        let original = demo::build().unwrap().model().clone();
+        let ifc = ifc_text(&original, "demo", None);
+        let imported = import_ifc(&ifc).unwrap();
+        let diffs = archisim_ifc::differences(&original, &imported.model);
+        assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+        assert!(imported.report.skipped.is_empty(), "{}", imported.report);
+        assert!(imported.report.warnings.is_empty(), "{}", imported.report);
+        // Saved as a project and opened again, still the same.
+        let text = archisim_file::to_string(&imported.model);
+        let reopened = archisim_file::from_str(&text).unwrap();
+        assert!(archisim_ifc::differences(&original, &reopened).is_empty());
     }
 
     #[test]

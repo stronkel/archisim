@@ -32,6 +32,7 @@ cargo test --workspace
 cargo run -p archisim-cli -- demo out/   # genera out/demo.archisim, out/demo.ifc y una planta SVG por nivel
 python3 scripts/validate_ifc.py out/demo.ifc   # requiere: pip install ifcopenshell
 cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto   # ida y vuelta: IFC idéntico salvo la fecha
+cargo run -p archisim-cli -- importar out/demo.ifc out/importado/demo.archisim   # IFC → proyecto (informe de lo importado)
 ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_tests   # casa dibujada con la app (clics simulados) y out/app/vista3d.png
 python3 scripts/validate_ifc.py out/app/sesion.ifc
 ```
@@ -46,7 +47,7 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 
 - `crates/archisim-core` — documento, elementos, tipos, transacciones. Sin dependencias internas.
 - `crates/archisim-geom` — geometría 2D, contornos de muros y sólidos 3D (`solid`): las mismas formas que el IFC, una piel cerrada por elemento, sin caras ocultas de contacto.
-- `crates/archisim-ifc` — escritor IFC4 STEP.
+- `crates/archisim-ifc` — escritor IFC4 STEP; lector STEP (`step_read`) e importador IFC2X3/IFC4 (`import`). Ficheros de prueba de otro programa en `tests/fixtures/`, generados con `scripts/make_ifc_fixtures.py` (IfcOpenShell); no subas IFC de proyectos reales.
 - `crates/archisim-plan` — planta en SVG.
 - `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
 - `crates/archisim-library` — plantilla de inicio: materiales y tipos con los que empieza un proyecto nuevo (y la demo).
@@ -57,4 +58,4 @@ Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUN
 
 ## Prioridades actuales
 
-Siguiente en la lista del MVP (`docs/FUNDACIONAL.md` §5): importación IFC básica. Pendiente en la app: forjado por varita mágica, mover/estirar con el ratón y cotas (Antonio decide el orden; ver la bitácora).
+MVP (fase 1) terminado en v0.8. La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Propuesta: mover/copiar/estirar con el ratón y varita mágica; después cotas y gestión de plantas; después uniones en T. Antonio decide el orden (ver la bitácora).

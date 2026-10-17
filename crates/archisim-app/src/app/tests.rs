@@ -370,6 +370,50 @@ fn drawn_project_saves_and_exports() {
     // The plan drawn on screen is up to date and not empty.
     h.frame();
     assert!(h.app.plan.is_some());
+
+    // Importing that IFC gives back the same building, as a new project
+    // that still has to be saved.
+    let mut h2 = Harness::new(Editor::new_project());
+    h2.app.import_path(&dir.join("sesion.ifc"));
+    h2.frame();
+    let diffs = archisim_ifc::differences(reopened.model(), h2.model());
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    assert!(h2.app.ed.is_modified());
+    assert_eq!(h2.app.ed.display_name(), "sesion.ifc (importado)");
+    assert!(h2.app.import_report.is_some());
+    assert!(!h2.app.message.as_ref().unwrap().error);
+}
+
+/// An IFC written by another program, imported from the File menu path:
+/// the report window opens, and the tools get the ArchiSim types when the
+/// file has none of some kind.
+#[test]
+fn imports_an_ifc_file_from_another_program() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../archisim-ifc/tests/fixtures/ifcopenshell_ifc2x3_mm.ifc");
+    let mut h = Harness::new(Editor::new_project());
+    h.app.import_path(&fixture);
+    h.frame();
+    assert_eq!(h.model().walls().count(), 5);
+    assert_eq!(h.model().project_name, "Casa de prueba");
+    let report = h.app.import_report.clone().unwrap();
+    assert!(report.contains("pilares"), "{report}");
+    // The file brings door, window, wall and slab types: no template.
+    assert!(!report.contains("plantilla"), "{report}");
+    assert!(h
+        .model()
+        .wall_types()
+        .all(|t| !t.name.starts_with("Fachada doble")));
+    // Closing the report.
+    h.app.import_report = None;
+    h.frame();
+    // A file that is not IFC is refused with a message.
+    let bad = std::env::temp_dir().join(format!("archisim-no-ifc-{}.ifc", std::process::id()));
+    std::fs::write(&bad, "esto no es un IFC").unwrap();
+    h.app.import_path(&bad);
+    assert!(h.app.message.as_ref().unwrap().error);
+    assert_eq!(h.model().walls().count(), 5, "the project stays as it was");
+    let _ = std::fs::remove_file(bad);
 }
 
 /// Runs `length_field` alone through a few frames of keyboard input and

@@ -1,0 +1,93 @@
+# ArchiSim — Hoja de ruta después del MVP
+
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado.
+> Lista de todo lo que hay que preparar a continuación, ordenada por fases.
+> Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
+> propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
+> **M** (un bloque), **L** (varios bloques).
+
+## 0. Decisiones que tiene que tomar Antonio
+
+Sin código: son decisiones de producto que condicionan lo demás.
+
+| # | Decisión | Por qué importa ahora |
+|---|---|---|
+| D1 | **Orden de los próximos bloques** (ver §1) | Edición con ratón, cotas o fase 2 directamente |
+| D2 | **Lenguaje de familias**: cómo se describe una familia paramétrica (fichero declarativo legible tipo «receta» frente a editor gráfico tipo editor de familias de Revit) | Es la pieza central de la fase 2: puertas, ventanas, mobiliario y sanitarios dependen de ella |
+| D3 | **IFC de salida por defecto**: IFC4 (lo que mejor abren hoy Revit y ArchiCAD) o IFC 4.3 (lo que dice el principio 1) | Afecta a la validación y a lo que prueban los ingenieros |
+| D4 | **Licencia** (MPL-2.0 o GPL-3.0) y **nombre definitivo** | Necesario antes de abrir el repositorio |
+| D5 | **Normas de dibujo de referencia**: tramas, grosores y rotulación (UNE-EN ISO 128, UNE 1-027 para plegado, criterio propio de AD5) | Fija cómo se ven plantas, secciones y planos |
+| D6 | **Plantilla al importar**: añadir siempre la plantilla de ArchiSim a un proyecto importado o solo cuando faltan tipos (hoy: solo cuando faltan) | Comodidad frente a limpieza del proyecto |
+| D7 | **Ficheros reales de prueba**: IFC exportados por Antonio desde sus propios proyectos de ArchiCAD y Revit, para probar la importación (se usan en local, no se suben al repositorio) | La importación solo se ha probado con ficheros sintéticos y de IfcOpenShell/SketchUp |
+
+## 1. Cierre de la fase 1 (deudas del MVP)
+
+Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
+
+| # | Tarea | Tamaño |
+|---|---|---|
+| 1.1 ★ | **Mover, copiar y estirar con el ratón** (muros, forjados, huecos), con los mismos forzados que al dibujar; arrastrar un extremo de muro arrastra la esquina unida | M |
+| 1.2 ★ | **Forjado por varita mágica**: clic dentro de un recinto de muros (por la cara interior, exterior o eje) | S |
+| 1.3 | **Edición de vértices** de forjados: mover, añadir y quitar esquinas | S |
+| 1.4 ★ | **Cotas básicas**: lineales y encadenadas, cota automática de huecos en un muro, cotas de nivel | M |
+| 1.5 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
+| 1.6 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
+| 1.7 | **Importación IFC, segunda vuelta**: muros curvos y de varios tramos, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
+| 1.8 | **Instalación**: instalador de Windows con icono y asociación de `.archisim` e `.ifc`, compilaciones para macOS y Linux en la integración continua | S |
+| 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
+
+## 2. Fase 2 — Modelado completo
+
+| # | Tarea | Tamaño | Depende de |
+|---|---|---|---|
+| 2.1 ★ | **Sistema de familias paramétricas**: lenguaje propio, parámetros de tipo y de ejemplar, geometría 3D y símbolo 2D en planta, niveles de detalle | L | D2 |
+| 2.2 | **Librería inicial propia**: puertas y ventanas paramétricas (con premarco, persiana y capialzado, vierteaguas), mobiliario, sanitarios, cocina | L | 2.1 |
+| 2.3 ★ | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD; recorte de muros con forjados | M | — |
+| 2.4 | **Cubiertas inclinadas** por faldones (pendiente, aleros, limatesas y limahoyas) y recorte de muros bajo cubierta | L | 2.3 |
+| 2.5 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam` | M | — |
+| 2.6 | **Escaleras** por tramos y mesetas con comprobación de huella, tabica y anchura (CTE DB-SUA); **barandillas**; **rampas** | L | 2.1 |
+| 2.7 | **Huecos en forjados** (escaleras, patinillos) y **forjados inclinados** | S | — |
+| 2.8 | **Muros curvos, muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |
+| 2.9 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso | M | 1.2 |
+| 2.10 | **Secciones y alzados** con líneas ocultas, profundidad de vista y poché por capa | L | 2.3 |
+| 2.11 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo | M | — |
+| 2.12 | **Terreno** sencillo (curvas de nivel o puntos), emplazamiento y orientación real del norte | M | — |
+
+## 3. Fase 3 — Documentación
+
+| # | Tarea | Tamaño | Depende de |
+|---|---|---|---|
+| 3.1 | **Plantillas de vista y estilos gráficos**: qué se ve, con qué grosores y tramas, por escala (1:100, 1:50, 1:20); capas de dibujo | M | D5 |
+| 3.2 | **Acotación completa**: cotas asociativas que se actualizan al mover, cotas de altura en sección, cotas de superficie | M | 1.4, 2.10 |
+| 3.3 | **Etiquetas**: de puertas y ventanas (tipo, medida), de locales (nombre, superficie), de muros (tipo) | S | 2.9 |
+| 3.4 | **Textos, líneas, tramas y detalles 2D** sobre las vistas | M | — |
+| 3.5 | **Planos y maquetación**: hojas con cajetín propio, varias vistas por hoja a distintas escalas, numeración | L | 3.1 |
+| 3.6 | **Salida PDF vectorial** e impresión; exportación **DXF** | M | 3.5 |
+| 3.7 | **Tablas de planificación**: carpinterías, superficies de locales, mediciones de muros y forjados por capa | M | 2.9 |
+| 3.8 | **Mediciones para presupuesto** en formato **FIEBDC-3 (BC3)** | M | 3.7 |
+
+## 4. Fase 4 — Colaboración e ingenierías
+
+| # | Tarea | Tamaño | Depende de |
+|---|---|---|---|
+| 4.1 | **Vínculo de modelos IFC** de estructuras e instalaciones como referencia (sin importarlos), con control de versiones por `GlobalId` | M | — |
+| 4.2 | **Detección de interferencias** entre el modelo y los vinculados | M | 4.1 |
+| 4.3 | **BCF**: incidencias con vista guardada, intercambiables con Revit, ArchiCAD, Solibri o BIMcollab | M | — |
+| 4.4 | **IDS**: comprobar el modelo contra los requisitos de información del cliente; **bSDD** para clasificaciones | M | — |
+| 4.5 | **Complemento puente para Revit** (C#, API oficial de Revit): llevar tipos y elementos nativos en ambos sentidos | L | — |
+| 4.6 | **Trabajo en equipo**: modelo central, reservas de elementos o zonas, historial | L | — |
+| 4.7 | **Comprobaciones normativas** del CTE: evacuación (DB-SI), accesibilidad (DB-SUA), superficies útiles | L | 2.9 |
+
+## 5. Transversal (cuando toque)
+
+- **Formato `.archisim`**: migraciones probadas con proyectos de cada versión; guardado más rápido para proyectos grandes.
+- **Manual de usuario** en español y lista de atajos; **traducción al inglés** de la interfaz antes de abrir el código.
+- **Informes de fallo** con el proyecto adjunto (sin telemetría).
+- **Validación continua**: además de IfcOpenShell, abrir los IFC de cada versión en ArchiCAD y Revit (Antonio) y guardar capturas de referencia.
+
+## Propuesta de orden
+
+1. Bloque 8: **mover / copiar / estirar** con el ratón y **varita mágica** (1.1 + 1.2).
+2. Bloque 9: **cotas básicas** y **gestión de plantas** (1.4 + 1.5).
+3. Bloque 10: **uniones en T y prioridades** (2.3), que mejora todo lo dibujado.
+4. Fase 2 con **familias** (2.1) en cuanto Antonio decida D2.

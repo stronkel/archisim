@@ -43,12 +43,12 @@ Crates actuales (`crates/`):
 |---|---|
 | `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer |
 | `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete, área de polígonos, posición de huecos y recorte de muros en tramos; sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
-| `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas |
+| `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas. Lector STEP e importador IFC2X3/IFC4 de plantas, muros con capas, forjados, puertas y ventanas, con informe de lo que queda fuera |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
-| `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta |
-| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado, puerta y ventana, selección y propiedades, deshacer, abrir/guardar `.archisim`, exportar IFC, planta e imagen 3D |
+| `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta; `importar` convierte un IFC en proyecto |
+| `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado, puerta y ventana, selección y propiedades, deshacer, abrir/guardar `.archisim`, importar IFC, exportar IFC, planta e imagen 3D |
 
 Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
@@ -99,6 +99,14 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 - En IFC el hueco atraviesa el muro (`IfcRelVoidsElement`) y la puerta o ventana lo rellena (`IfcRelFillsElement`). Su geometría 3D es sencilla (marco, hojas y vidrios cerrados) y lleva `Pset_DoorCommon` / `Pset_WindowCommon` y cantidades. El muro añade superficie lateral y volumen netos.
 - Pendiente: premarcos, vuelta del revestimiento interior, persianas y capialzados, dinteles, huecos sin carpintería, puertas y ventanas paramétricas en la librería de familias (fase 2).
 
+### Importación IFC
+
+- Lee IFC2X3 e IFC4 (y sus variantes, también IFC 4.3) de cualquier programa, en metros, milímetros, pies o pulgadas.
+- Trae plantas, muros (por su eje o, si no lo tienen, por su colocación y su sólido), sus capas y su línea de referencia (de `IfcMaterialLayerSetUsage`), forjados (por el contorno de su extrusión o por la cara superior de su sólido), y puertas y ventanas alojadas en muros (hueco de obra desde el `IfcOpeningElement`, funcionamiento y mano, marco desde las propiedades de cerco). Se conservan todos los `GlobalId`.
+- La cara exterior de un muro en IFC no está definida: en los muros marcados como exteriores (`IsExternal`), se toma como exterior el lado opuesto al centro de los muros de su planta, y el muro se gira si hace falta para que quede a la izquierda, como en ArchiSim.
+- Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, muros curvos, huecos sin carpintería…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
+- Lo que exporta ArchiSim se importa idéntico (ida y vuelta comprobada en pruebas): para ello el IFC lleva, además, el cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de corte de cada material (`ArchiSim_Material`).
+
 ## 5. MVP (fase 1)
 
 Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta, obtiene su planta en PDF/SVG legible y exporta un IFC que **Revit y ArchiCAD abren con muros reconocibles, tipos y capas correctos**.
@@ -114,9 +122,12 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 | 7 | Formato de proyecto propio (`.archisim`, JSON versionado) | ✅ v0.4 |
 | 8 | Ventana de la aplicación: vista de planta, herramienta muro, selección | ✅ v0.5 |
 | 9 | Vista 3D | ✅ v0.7 |
-| 10 | Importación IFC básica | ⬜ |
+| 10 | Importación IFC básica | ✅ v0.8 |
 
 ## 6. Fases siguientes
+
+La lista detallada, con tamaños, dependencias y decisiones pendientes, está en `docs/HOJA_DE_RUTA.md`.
+
 
 - **Fase 2:** sistema de familias paramétricas (lenguaje declarativo propio), librería inicial de puertas, ventanas, mobiliario y sanitarios; cubiertas, escaleras, secciones y alzados con líneas ocultas; uniones en T y prioridades de intersección.
 - **Fase 3:** planos y maquetación, acotación, etiquetas, tablas de planificación, impresión a PDF.

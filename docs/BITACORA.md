@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Fase 1, bloque 7 — Importación IFC (MVP terminado) y hoja de ruta
+
+**Hecho**
+- **Importar IFC** (*Archivo → Importar IFC…*, o arrastrando un `.ifc` sobre `ArchiSim.exe`, o `archisim importar casa.ifc` en la línea de comandos). Lee **IFC2X3 e IFC4** (también IFC 4.3) de cualquier programa, en metros, milímetros, pies o pulgadas, con un lector STEP propio escrito desde cero.
+  - **Plantas** con su nombre y cota.
+  - **Muros** por su eje (o, si no lo tienen, por su colocación y su sólido), altura y cota de base desde el sólido, **capas** y **línea de referencia** desde el `IfcMaterialLayerSetUsage` (lado, orden y desfase). Las capas de espesor cero (membranas de Revit) se omiten con aviso. Los muros sin capas entran con una capa de su espesor.
+  - **Lado exterior**: en IFC no existe; en los muros marcados como exteriores se toma como exterior el lado contrario al centro de los muros de la planta, y se giran para que la cara exterior quede a la izquierda, como en ArchiSim (un contorno dibujado al revés vuelve con las capas bien puestas).
+  - **Forjados** por el contorno de su extrusión o por la cara superior de su sólido (también mallas trianguladas), con su cara superior como referencia, capas de arriba abajo y función (forjado, solera, cubierta).
+  - **Puertas y ventanas** alojadas en muros: hueco de obra desde el `IfcOpeningElement`, posición sobre la línea de referencia, antepecho, lado hacia el que abren, mano UNE-EN 12519 (traducida desde la convención IFC), funcionamiento (abatible, dos hojas, corredera; ventana fija, practicable de una o dos hojas, corredera), marco desde las propiedades de cerco y materiales de marco y hoja/vidrio.
+  - Se conservan **todos los `GlobalId`** (proyecto, plantas, tipos, muros, forjados, huecos), para poder comparar versiones con los ingenieros.
+  - **Informe de importación** en una ventana: qué ha entrado y qué no (pilares, vigas, escaleras, espacios, cubiertas inclinadas, muros curvos, huecos sin carpintería…), con el motivo, y las aproximaciones hechas.
+  - Si el fichero no trae tipos de muro, forjado, puerta o ventana, se añade la plantilla de ArchiSim para que todas las herramientas tengan con qué dibujar. El proyecto importado queda «sin guardar» con el nombre del IFC.
+- **Ida y vuelta exacta**: lo que exporta ArchiSim se importa idéntico (muros, capas, materiales con color y trama, forjados, huecos con mano, retranqueo y marco, `GlobalId`). Para ello el IFC exportado lleva además las propiedades de cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de cada material (`ArchiSim_Material`). Sigue validando con IfcOpenShell.
+- Pruebas: ida y vuelta con un modelo que usa todas las opciones y con la vivienda de prueba; un fichero tipo Revit en IFC2X3 y milímetros escrito a mano (muros dibujados al revés, capas desde el exterior a la derecha, membrana sin espesor, puerta con `IfcDoorStyle`, forjado con capas de arriba abajo, un pilar); dos ficheros generados con **IfcOpenShell** (otro programa, no ArchiSim) en IFC4/metros e IFC2X3/milímetros, que también se incluyen para que los pruebes; y la importación desde la aplicación con el informe. Probado además con los ficheros de ejemplo de buildingSMART (SketchUp, IFC2X3, IFC4 e IFC 4.3). Ventana real probada con capturas (informe, planta y 3D).
+- Barra de estado: los mensajes largos ya no se montan sobre la ayuda.
+- **Hoja de ruta** después del MVP en `docs/HOJA_DE_RUTA.md`: decisiones pendientes, deudas de la fase 1 y fases 2, 3 y 4 con tamaños y dependencias.
+- Versión 0.8.0. **MVP terminado**: los 10 puntos de la fase 1 están hechos.
+
+**Pendiente / limitaciones conocidas**
+- No se importan: muros curvos o de varios tramos, forjados inclinados (se avisan), huecos en forjados (se cierran, con aviso), huecos sin carpintería, puertas y ventanas en muros cortina, y ninguna otra clase (pilares, vigas, escaleras, cubiertas, mobiliario, espacios…). Todo queda contado en el informe.
+- Los muros recortados por una cubierta entran rectos con su altura máxima (aviso).
+- Las capas se ordenan por el lado exterior deducido; en muros interiores de otros programas el orden de las caras puede salir al revés (no cambia nada del dibujo, solo qué cara se llama «exterior»).
+- Probado con ficheros sintéticos, de IfcOpenShell y de SketchUp; falta probar con exportaciones reales de ArchiCAD y Revit (punto D7 de la hoja de ruta).
+
+**Antonio debe probar**
+1. Descarga la nueva versión: GitHub → **Actions** → última ejecución en verde → **Artifacts** → **ArchiSim-Windows**. Ahora trae una carpeta `ejemplos-ifc` con dos IFC escritos por IfcOpenShell.
+2. Abre `ArchiSim.exe` → *Archivo → Importar IFC…* → `ejemplos-ifc/ifcopenshell_ifc2x3_mm.ifc`. Lee el informe: 5 muros, 1 forjado, 2 puertas, 1 ventana; un pilar y un hueco vacío sin importar. Mira la planta (F2) y el 3D (F3): las fachadas deben tener el monocapa por fuera aunque el fichero las dibuja al revés.
+3. Selecciona un muro de fachada y mira sus Propiedades: tipo «Fachada 4 capas», línea de referencia en la cara exterior. Selecciona la puerta de entrada: mano y lado de apertura.
+4. **Ida y vuelta**: abre `demo.archisim`, *Exportar IFC4…*, después *Importar IFC…* ese mismo fichero: debe salir la misma casa.
+5. **Lo importante**: exporta un IFC de un proyecto tuyo sencillo desde **ArchiCAD** y otro desde **Revit** (IFC2X3 o IFC4, como lo hagas normalmente) e impórtalos. Mándame el informe (captura) y lo que veas mal: muros girados, capas en el lado equivocado, puertas con la mano cambiada, forjados que faltan. Los ficheros no se suben al repositorio.
+6. Lee `docs/HOJA_DE_RUTA.md` y decide: el orden de los próximos bloques (propongo mover/estirar + varita mágica) y, cuando puedas, las decisiones D2 a D5 (lenguaje de familias, IFC4 o IFC 4.3, licencia y nombre, normas de dibujo).
+
+---
+
 ## 2026-10-17 · Fase 1, bloque 6 — Vista 3D
 
 **Hecho**

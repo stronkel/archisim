@@ -24,21 +24,20 @@ use app::ArchiSimApp;
 use editor::Editor;
 
 fn main() -> eframe::Result {
-    let mut ed = Editor::new_project();
-    let mut open_error = None;
+    let ed = Editor::new_project();
+    let mut app = ArchiSimApp::new(ed);
+    // A project or an IFC file given on the command line (or by opening a
+    // file with the application).
     if let Some(path) = std::env::args_os().nth(1) {
         let path = std::path::PathBuf::from(path);
-        match Editor::open(&path) {
-            Ok(e) => ed = e,
-            Err(e) => open_error = Some(format!("No se puede abrir {}: {e}.", path.display())),
+        let is_ifc = path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
+        if is_ifc {
+            app.import_path(&path);
+        } else {
+            app.open_path(&path);
         }
-    }
-    let mut app = ArchiSimApp::new(ed);
-    if let Some(e) = open_error {
-        app.message = Some(app::Message {
-            text: e,
-            error: true,
-        });
     }
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

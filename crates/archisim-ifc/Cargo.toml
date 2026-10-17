@@ -9,3 +9,6 @@ authors.workspace = true
 [dependencies]
 archisim-core.workspace = true
 archisim-geom.workspace = true
+
+[dev-dependencies]
+archisim-library.workspace = true

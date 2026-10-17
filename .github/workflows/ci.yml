@@ -56,6 +56,19 @@ jobs:
       - run: diff <(grep -v FILE_NAME out/demo.ifc) <(grep -v FILE_NAME out/reabierto/demo.ifc)
         shell: bash
       - run: python scripts/validate_ifc.py out/reabierto/demo.ifc
+      # IFC → project → IFC: the demo imported again exports a valid file,
+      # and so do the files written by IfcOpenShell.
+      - run: cargo run -p archisim-cli -- importar out/demo.ifc out/importado/demo.archisim
+      - run: cargo run -p archisim-cli -- exportar out/importado/demo.archisim out/importado
+      - run: python scripts/validate_ifc.py out/importado/demo.ifc
+      - run: |
+          for f in crates/archisim-ifc/tests/fixtures/*.ifc; do
+            name=$(basename "$f" .ifc)
+            cargo run -p archisim-cli -- importar "$f" "out/fixtures/$name.archisim"
+            cargo run -p archisim-cli -- exportar "out/fixtures/$name.archisim" out/fixtures
+            python scripts/validate_ifc.py "out/fixtures/$name.ifc"
+          done
+        shell: bash
       # A house drawn through the application with simulated clicks and keys,
       # and a 3D picture drawn with a software graphics adapter.
       - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
@@ -78,6 +91,9 @@ jobs:
       - run: cargo build --release -p archisim-app -p archisim-cli
       - run: cargo run --release -p archisim-cli -- demo ArchiSim
       - run: copy target\release\archisim-app.exe ArchiSim\ArchiSim.exe
+        shell: cmd
+      # IFC files written by another program, to try "Importar IFC…".
+      - run: mkdir ArchiSim\ejemplos-ifc && copy crates\archisim-ifc\tests\fixtures\*.ifc ArchiSim\ejemplos-ifc\
         shell: cmd
       - uses: actions/upload-artifact@v4
         with:
