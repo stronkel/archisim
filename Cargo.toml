@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/archisim-core",
+    "crates/archisim-geom",
+    "crates/archisim-ifc",
+    "crates/archisim-plan",
+    "crates/archisim-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
+
+[workspace.dependencies]
+uuid = { version = "1", features = ["v4"] }
+archisim-core = { path = "crates/archisim-core" }
+archisim-geom = { path = "crates/archisim-geom" }
+archisim-ifc = { path = "crates/archisim-ifc" }
+archisim-plan = { path = "crates/archisim-plan" }

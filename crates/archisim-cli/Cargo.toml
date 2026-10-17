@@ -1,0 +1,17 @@
+[package]
+name = "archisim-cli"
+description = "ArchiSim command line"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "archisim"
+path = "src/main.rs"
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true
+archisim-ifc.workspace = true
+archisim-plan.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "archisim-plan"
+description = "Floor plan views rendered to SVG"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true

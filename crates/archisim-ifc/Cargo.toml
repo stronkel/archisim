@@ -1,0 +1,11 @@
+[package]
+name = "archisim-ifc"
+description = "IFC4 STEP export"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true

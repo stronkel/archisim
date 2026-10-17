@@ -1,0 +1,10 @@
+[package]
+name = "archisim-core"
+description = "Project document, elements, types and transactions"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+
+[dependencies]
+uuid.workspace = true
