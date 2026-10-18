@@ -33,8 +33,8 @@ use archisim_core::{
     WallSide, EPSILON,
 };
 use archisim_geom::{
-    clip_span, openings_in_wall, wall_geometries, wall_geometry, wall_pieces, EndCut,
-    OpeningGeometry, WallGeometry, WallPiece,
+    clip_span, openings_in_wall, wall_geometry_in, wall_pieces, EndCut, OpeningGeometry,
+    WallGeometry, WallIndex, WallPiece,
 };
 
 /// Options for a plan view.
@@ -56,6 +56,11 @@ pub struct PlanOptions {
     /// (ArchiCAD's "Calco", Revit's "Calco subyacente"), usually the one
     /// below. Its walls cut by this plan's cut plane are drawn cut anyway.
     pub reference_level: Option<LevelId>,
+    /// Screen pixels per paper millimetre, for on-screen views: details
+    /// smaller than the screen can show (hatches, the insulation zigzag,
+    /// the symbols of tiny openings) are left out when zoomed out, so a
+    /// large model stays quick. `None` (exports): everything.
+    pub px_per_mm: Option<f64>,
 }
 
 impl Default for PlanOptions {
@@ -67,9 +72,52 @@ impl Default for PlanOptions {
             cut_plane: 1.1,
             viewport: None,
             reference_level: None,
+            px_per_mm: None,
         }
     }
 }
+
+thread_local! {
+    /// Whether the plan being drawn leaves out hatches and zigzags (set by
+    /// [`render_plan`] from [`PlanOptions::px_per_mm`]).
+    static COARSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Screen pixels per paper millimetre of the plan being drawn, if it is
+    /// for the screen.
+    static PX_PER_MM: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
+}
+
+fn coarse() -> bool {
+    COARSE.with(|c| c.get())
+}
+
+/// Openings narrower than this on screen, in pixels, are drawn as the gap
+/// in the wall only, without their symbol.
+const MIN_SYMBOL_PX: f64 = 8.0;
+
+/// Walls thinner than this on screen, in pixels, are drawn as one band.
+const MIN_LAYERS_PX: f64 = 4.0;
+
+/// The colour of a wall drawn as one band.
+const FAR_POCHE: &str = "rgb(150,146,138)";
+
+/// Whether a wall this thick in paper millimetres is too thin on screen to
+/// draw its layers.
+fn too_small_for_layers(paper_mm: f64) -> bool {
+    PX_PER_MM
+        .with(|c| c.get())
+        .is_some_and(|px| paper_mm * px < MIN_LAYERS_PX)
+}
+
+/// Whether a length in paper millimetres is too small on screen for the
+/// symbol of a door or window.
+fn too_small_for_symbol(paper_mm: f64) -> bool {
+    PX_PER_MM
+        .with(|c| c.get())
+        .is_some_and(|px| paper_mm * px < MIN_SYMBOL_PX)
+}
+
+/// Hatches closer than this on screen, in pixels, are not drawn.
+const MIN_HATCH_PX: f64 = 2.5;
 
 /// Line weights in paper millimetres.
 const CUT_LINE: f64 = 0.5;
@@ -148,15 +196,50 @@ pub fn level_below(model: &Model, level: LevelId) -> Option<LevelId> {
 
 /// Renders the plan of one level as an SVG document.
 pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> String {
+    let coarse = options
+        .px_per_mm
+        .is_some_and(|px| px * HATCH_SPACING < MIN_HATCH_PX);
+    COARSE.with(|c| c.set(coarse));
+    PX_PER_MM.with(|c| c.set(options.px_per_mm));
+    let svg = render_plan_inner(model, level, options);
+    COARSE.with(|c| c.set(false));
+    PX_PER_MM.with(|c| c.set(None));
+    svg
+}
+
+fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> String {
     // Paper millimetres → model metres.
     let k = options.scale / 1000.0;
     let others = other_level_walls(model, level, options.cut_plane, options.reference_level);
+    // On screen only what the view shows (with a margin, so nothing pops
+    // in at the edges), found through an index: large models stay fast.
+    let idx = WallIndex::new(model);
+    let visible = |lo: Point2, hi: Point2| match options.viewport {
+        Some((a, b)) => {
+            let m = 1.0;
+            lo.x <= b.x + m && hi.x >= a.x - m && lo.y <= b.y + m && hi.y >= a.y - m
+        }
+        None => true,
+    };
+    let wall_visible = |id: WallId| {
+        model.wall(id).is_some_and(|w| {
+            let (lo, hi) = archisim_geom::index::bounds(model, w);
+            visible(lo, hi)
+        })
+    };
     // Walls of this level, then those of other levels it cuts, each with
     // the height of the cut above its own level.
-    let mut geos = wall_geometries(model, level);
+    let mut geos: Vec<WallGeometry> = model
+        .walls_on_level(level)
+        .filter(|w| wall_visible(w.id))
+        .filter_map(|w| wall_geometry_in(&idx, w.id))
+        .collect();
     let mut cuts = vec![options.cut_plane; geos.len()];
     for (id, z) in &others.cut {
-        if let Some(g) = wall_geometry(model, *id) {
+        if !wall_visible(*id) {
+            continue;
+        }
+        if let Some(g) = wall_geometry_in(&idx, *id) {
             geos.push(g);
             cuts.push(*z);
         }
@@ -164,9 +247,27 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     let reference: Vec<WallGeometry> = others
         .reference
         .iter()
-        .filter_map(|id| wall_geometry(model, *id))
+        .filter(|id| wall_visible(**id))
+        .filter_map(|id| wall_geometry_in(&idx, *id))
         .collect();
-    let slabs: Vec<&Slab> = model.slabs_on_level(level).collect();
+    let slabs: Vec<&Slab> = model
+        .slabs_on_level(level)
+        .filter(|s| {
+            let lo = s
+                .outline
+                .iter()
+                .fold(Point2::new(f64::INFINITY, f64::INFINITY), |a, p| {
+                    Point2::new(a.x.min(p.x), a.y.min(p.y))
+                });
+            let hi = s
+                .outline
+                .iter()
+                .fold(Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY), |a, p| {
+                    Point2::new(a.x.max(p.x), a.y.max(p.y))
+                });
+            visible(lo, hi)
+        })
+        .collect();
 
     let mut min = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut max = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -248,10 +349,8 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     }
 
     // Openings of each wall, and the solid pieces left by those that are cut.
-    let openings: Vec<Vec<OpeningGeometry>> = geos
-        .iter()
-        .map(|g| openings_in_wall(model, g.wall))
-        .collect();
+    let openings: Vec<Vec<OpeningGeometry>> =
+        geos.iter().map(|g| idx.openings_in_wall(g.wall)).collect();
     let pieces: Vec<Vec<WallPiece>> = openings
         .iter()
         .zip(cuts.iter().copied())
@@ -496,6 +595,17 @@ fn draw_layers(
     else {
         return;
     };
+    if too_small_for_layers(wall_t / k) {
+        // Zoomed far out the layers cannot be told apart: the wall is one
+        // grey band (its cut lines are still drawn).
+        for piece in pieces {
+            let poly = clip_span(&g.outline, a, u, piece.from, piece.to);
+            if poly.len() >= 3 {
+                let _ = writeln!(s, r#"<path d="{}" fill="{FAR_POCHE}"/>"#, path(&poly));
+            }
+        }
+        return;
+    }
     let jamb = JambDetail::for_type(wtype);
     let turn_width = jamb
         .turn
@@ -787,6 +897,9 @@ fn bounds(pts: &[Point2]) -> (Point2, Point2) {
 /// that hatching continues seamlessly across elements. Angles are in
 /// degrees, measured counter-clockwise from the X axis.
 fn hatch_lines(poly: &[Point2], angles: &[f64], spacing: f64) -> String {
+    if coarse() {
+        return String::new();
+    }
     let mut d = String::new();
     for &deg in angles {
         let rad = deg.to_radians();
@@ -816,6 +929,9 @@ fn hatch_lines(poly: &[Point2], angles: &[f64], spacing: f64) -> String {
 
 /// A grid of small dots inside a polygon, anchored to the project origin.
 fn hatch_dots(poly: &[Point2], spacing: f64, radius: f64) -> String {
+    if coarse() {
+        return String::new();
+    }
     let (mut min, mut max) = (
         Point2::new(f64::INFINITY, f64::INFINITY),
         Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
@@ -891,6 +1007,9 @@ fn clip_segment(p: Point2, q: Point2, poly: &[Point2]) -> Vec<(Point2, Point2)> 
 /// A polyline cut to a polygon, as SVG path data: each run inside the
 /// polygon stays one continuous line so its corners keep their joins.
 fn clip_polyline(points: &[Point2], poly: &[Point2]) -> String {
+    if coarse() {
+        return String::new();
+    }
     let mut d = String::new();
     let mut pen: Option<Point2> = None;
     for w in points.windows(2) {
@@ -1120,6 +1239,10 @@ fn line(s: &mut String, p: Point2, q: Point2, weight: f64, k: f64) {
 /// the opening, to the right seen from the side the leaves open to; `y`
 /// across the wall from the middle of the frame, towards that side.
 fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, k: f64) {
+    if too_small_for_symbol((o.t1 - o.t0) * 1000.0 / scale) {
+        // Zoomed far out: the gap in the wall says enough.
+        return;
+    }
     let mid = (o.t0 + o.t1) / 2.0;
     let y_mid = (o.frame_exterior + o.frame_interior) / 2.0;
     // The normal `n` points to the exterior. Seen from the exterior, the
@@ -1233,13 +1356,51 @@ fn draw_opening_above(s: &mut String, o: &OpeningGeometry, k: f64) {
     );
 }
 
+/// A number for the SVG, to the micrometre and without trailing zeros
+/// (`1.5`, `-0.25`, `3`): the same text as Rust's shortest form of the
+/// rounded value, written without going through floating point formatting
+/// (a plan has millions of them).
 fn num(v: f64) -> String {
-    let v = (v * 1e6).round() / 1e6;
-    if v == 0.0 {
-        "0".into()
-    } else {
-        format!("{v}")
+    let n = (v * 1e6).round();
+    if n == 0.0 || !n.is_finite() {
+        return "0".into();
     }
+    if n.abs() >= 1e15 {
+        return format!("{}", n / 1e6);
+    }
+    let neg = n < 0.0;
+    let n = n.abs() as u64;
+    let (mut int, mut frac) = (n / 1_000_000, n % 1_000_000);
+    // Digits from the right into a small buffer.
+    let mut buf = [0u8; 32];
+    let mut i = buf.len();
+    if frac > 0 {
+        let mut digits = 6;
+        while frac % 10 == 0 {
+            frac /= 10;
+            digits -= 1;
+        }
+        for _ in 0..digits {
+            i -= 1;
+            buf[i] = b'0' + (frac % 10) as u8;
+            frac /= 10;
+        }
+        i -= 1;
+        buf[i] = b'.';
+    }
+    loop {
+        i -= 1;
+        buf[i] = b'0' + (int % 10) as u8;
+        int /= 10;
+        if int == 0 {
+            break;
+        }
+    }
+    if neg {
+        i -= 1;
+        buf[i] = b'-';
+    }
+    String::from_utf8_lossy(&buf[i..]).into_owned()
 }
 
 /// Runs of consecutive edges of a closed polygon whose two ends satisfy
@@ -1707,6 +1868,35 @@ mod tests {
         assert!(svg.contains("cut-0-1-1"));
         assert!(!svg.contains("cut-0-1-2"));
         assert_eq!(svg.matches("stroke-dasharray").count(), 2);
+
+        // On screen, zoomed far out: the wall is one grey band per piece,
+        // without layers, hatches or the door's symbol; close up, as on
+        // paper.
+        let view = Some((Point2::new(-1.0, -2.0), Point2::new(6.0, 1.0)));
+        let far = render_plan(
+            &m,
+            lvl,
+            &PlanOptions {
+                viewport: view,
+                px_per_mm: Some(0.2),
+                ..PlanOptions::default()
+            },
+        );
+        assert_eq!(far.matches(FAR_POCHE).count(), 2);
+        assert!(!far.contains("cut-0-0-0"));
+        assert_eq!(far.matches(" A0.8,0.8 ").count(), 0);
+        let near = |px| {
+            render_plan(
+                &m,
+                lvl,
+                &PlanOptions {
+                    viewport: view,
+                    px_per_mm: px,
+                    ..PlanOptions::default()
+                },
+            )
+        };
+        assert_eq!(near(Some(20.0)), near(None));
     }
 
     #[test]
@@ -1988,5 +2178,41 @@ mod tests {
             "{what}: {} pixels, worst {worst}:\nold {old}\nnew {new}",
             diffs.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod num_tests {
+    /// The fast number writer gives the same text as the shortest form.
+    #[test]
+    fn numbers_as_before() {
+        for v in [
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            0.1,
+            0.3,
+            1.5,
+            -0.25,
+            12.000001,
+            1.234_567_89,
+            1e-7,
+            -1e-7,
+            123456.789012,
+            0.05,
+            1234.5,
+            -987.654321,
+            0.000_001,
+            99_999.999_999_9,
+        ] {
+            let r = (v * 1e6_f64).round() / 1e6;
+            let old = if r == 0.0 {
+                "0".to_string()
+            } else {
+                format!("{r}")
+            };
+            assert_eq!(super::num(v), old, "{v}");
+        }
     }
 }

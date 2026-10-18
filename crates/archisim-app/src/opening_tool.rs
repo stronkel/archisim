@@ -6,8 +6,9 @@
 //! for the opening side. The hand (UNE-EN 12519), sill and frame setback
 //! come from the tool settings.
 
-use archisim_core::{Hand, LevelId, Model, NewOpening, OpeningTypeId, Point2, WallId, WallSide};
-use archisim_geom::{wall_geometry, OpeningGeometry};
+use crate::geo::Geo;
+use archisim_core::{Hand, LevelId, NewOpening, OpeningTypeId, Point2, WallId, WallSide};
+use archisim_geom::OpeningGeometry;
 
 use crate::pick::{contains, distance_to_outline};
 use crate::snap::FREE_STEP;
@@ -39,11 +40,17 @@ pub struct Placement {
 }
 
 /// The wall under `cursor` (inside it or within `tolerance` metres).
-pub fn wall_at(model: &Model, level: LevelId, cursor: Point2, tolerance: f64) -> Option<WallId> {
+pub fn wall_at<G: Geo + ?Sized>(
+    geo: &G,
+    level: LevelId,
+    cursor: Point2,
+    tolerance: f64,
+) -> Option<WallId> {
+    let model = geo.model();
     model
         .walls_on_level(level)
         .filter_map(|w| {
-            let g = wall_geometry(model, w.id)?;
+            let g = geo.wall_geometry(w.id)?;
             let d = if contains(&g.outline, cursor) {
                 0.0
             } else {
@@ -56,14 +63,15 @@ pub fn wall_at(model: &Model, level: LevelId, cursor: Point2, tolerance: f64) ->
 }
 
 /// Where a door or window of the given settings would go for this cursor.
-pub fn placement(
-    model: &Model,
+pub fn placement<G: Geo + ?Sized>(
+    geo: &G,
     level: LevelId,
     cursor: Point2,
     tolerance: f64,
     s: &OpeningSettings,
 ) -> Option<Placement> {
-    let wall_id = wall_at(model, level, cursor, tolerance)?;
+    let model = geo.model();
+    let wall_id = wall_at(geo, level, cursor, tolerance)?;
     let wall = model.wall(wall_id)?;
     if wall.is_curved() {
         // Not yet: the application says so on the click.

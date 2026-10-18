@@ -50,9 +50,7 @@ use archisim_core::{
     perimeter, DoorOperation, GlobalId, Hand, Layer, LayerFunction, LevelId, MaterialId, Model,
     OpeningKind, OpeningType, OpeningTypeId, Point2, SlabTypeId, WallFunction, WallTypeId, EPSILON,
 };
-use archisim_geom::{
-    openings_in_wall, path_area, removed_area, signed_area, wall_geometry, OpeningGeometry, PathSeg,
-};
+use archisim_geom::{path_area, removed_area, signed_area, OpeningGeometry, PathSeg};
 use step::{boolean, list, real, string, Ref, StepWriter};
 
 /// Header information for the exported file.
@@ -904,10 +902,11 @@ impl<'a> Exporter<'a> {
         // Walls.
         let mut contained: BTreeMap<LevelId, Vec<Ref>> = BTreeMap::new();
         let mut by_type: BTreeMap<WallTypeId, Vec<Ref>> = BTreeMap::new();
+        let idx = archisim_geom::WallIndex::new(model);
         for wall in model.walls() {
             let (Some(wtype), Some(geo), Some(&(_, storey_pl))) = (
                 model.wall_type(wall.wall_type),
-                wall_geometry(model, wall.id),
+                archisim_geom::wall_geometry_in(&idx, wall.id),
                 storeys.get(&wall.level),
             ) else {
                 continue;
@@ -1034,7 +1033,7 @@ impl<'a> Exporter<'a> {
             // Doors and windows: void the wall, then fill the void.
             let mut cut_side = 0.0;
             let mut cut_volume = 0.0;
-            for og in openings_in_wall(model, wall.id) {
+            for og in idx.openings_in_wall(wall.id) {
                 let (Some(o), Some(otype)) = (
                     model.opening(og.opening),
                     model

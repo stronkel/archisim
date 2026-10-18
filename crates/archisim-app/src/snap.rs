@@ -4,8 +4,8 @@
 //! the nearest point on a wall face or slab edge. Anything else is rounded
 //! to [`FREE_STEP`] so free coordinates stay readable.
 
-use archisim_core::{LevelId, Model, Point2, WallId};
-use archisim_geom::wall_geometry;
+use crate::geo::Geo;
+use archisim_core::{LevelId, Point2, WallId};
 
 use std::collections::BTreeSet;
 
@@ -86,14 +86,14 @@ pub fn round_point(p: Point2) -> Point2 {
 
 /// Snaps `cursor` to the elements of `level` within `tolerance` metres.
 /// `extra` are additional end points (the chain being drawn).
-pub fn snap(
-    model: &Model,
+pub fn snap<G: Geo + ?Sized>(
+    geo: &G,
     level: LevelId,
     cursor: Point2,
     tolerance: f64,
     extra: &[Point2],
 ) -> Snap {
-    snap_except(model, level, cursor, tolerance, extra, &BTreeSet::new())
+    snap_except(geo, level, cursor, tolerance, extra, &BTreeSet::new())
 }
 
 /// Which object snaps are on (the toggles of the bottom bar). Points that
@@ -135,8 +135,8 @@ impl SnapFilter {
 
 /// [`snap`], ignoring some walls and slabs (the ones being dragged, so a
 /// point does not snap to where it already is).
-pub fn snap_except(
-    model: &Model,
+pub fn snap_except<G: Geo + ?Sized>(
+    geo: &G,
     level: LevelId,
     cursor: Point2,
     tolerance: f64,
@@ -144,7 +144,7 @@ pub fn snap_except(
     skip: &BTreeSet<Element>,
 ) -> Snap {
     snap_filtered(
-        model,
+        geo,
         level,
         cursor,
         tolerance,
@@ -178,8 +178,8 @@ fn outline_snaps(
 /// reference of the level below): they snap too, so new walls can be drawn
 /// on top of them.
 #[allow(clippy::too_many_arguments)]
-pub fn snap_filtered(
-    model: &Model,
+pub fn snap_filtered<G: Geo + ?Sized>(
+    geo: &G,
     level: LevelId,
     cursor: Point2,
     tolerance: f64,
@@ -188,6 +188,7 @@ pub fn snap_filtered(
     filter: SnapFilter,
     others: &[WallId],
 ) -> Snap {
+    let model = geo.model();
     let mut points: Vec<(Point2, SnapKind)> =
         extra.iter().map(|p| (*p, SnapKind::Endpoint)).collect();
     let mut edges: Vec<(Point2, Point2)> = Vec::new();
@@ -205,7 +206,7 @@ pub fn snap_filtered(
         points.push((w.start, SnapKind::Endpoint));
         points.push((w.end, SnapKind::Endpoint));
         points.push((w.midpoint(), SnapKind::Midpoint));
-        let Some(g) = wall_geometry(model, id) else {
+        let Some(g) = geo.wall_geometry(id) else {
             continue;
         };
         match &g.arc {
@@ -431,7 +432,7 @@ mod tests {
         let (m, lvl, _) = room();
         // The interior face of the west wall runs between the inner corners
         // of the room: its middle is at mid-height of the room.
-        let g = wall_geometry(&m, m.walls_on_level(lvl).next().unwrap().id).unwrap();
+        let g = archisim_geom::wall_geometry(&m, m.walls_on_level(lvl).next().unwrap().id).unwrap();
         let face: Vec<Point2> = g
             .outline
             .iter()

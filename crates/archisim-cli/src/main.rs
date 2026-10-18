@@ -4,10 +4,12 @@
 //! archisim demo [carpeta]                    vivienda de prueba: .archisim, IFC y plantas
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
+//! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
 //! archisim --version
 //! ```
 
 mod demo;
+mod grande;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -39,6 +41,12 @@ Uso:
       forjados, puertas y ventanas, con sus GlobalId. Explica qué ha
       quedado fuera. Por defecto, casa.ifc → casa.archisim en la misma
       carpeta.
+
+  archisim medir [n] [carpeta]
+      Repite la vivienda de prueba en una rejilla de n × n (20 por defecto:
+      400 viviendas, 2800 muros) y mide cuánto tarda cada trabajo: planta,
+      3D, varita mágica, guardar y abrir, exportar e importar el IFC. Deja
+      grande.archisim y grande.ifc en la carpeta (./out por defecto).
 
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
@@ -79,6 +87,15 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("medir") => {
+            let n = args.get(1).and_then(|a| a.parse().ok()).unwrap_or(20);
+            let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+            report(
+                std::fs::create_dir_all(&dir)
+                    .map_err(Into::into)
+                    .and_then(|()| grande::measure(n, &dir)),
+            )
+        }
         Some("--version") | Some("-V") => {
             println!("archisim {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS

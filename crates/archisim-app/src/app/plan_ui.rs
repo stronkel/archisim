@@ -125,7 +125,7 @@ impl ArchiSimApp {
     /// The snapped point near `raw`, with the snaps of the bottom bar.
     fn snap_at(&self, raw: Point2, reach: f64, extra: &[Point2], skip: &BTreeSet<Element>) -> Snap {
         snap_filtered(
-            self.ed.model(),
+            &self.ed,
             self.ed.level,
             raw,
             reach,
@@ -216,7 +216,7 @@ impl ArchiSimApp {
                 } else {
                     self.window_settings
                 };
-                self.placement = placement(model, self.ed.level, raw, reach, &settings);
+                self.placement = placement(&self.ed, self.ed.level, raw, reach, &settings);
                 self.cursor = Some(Snap::at(crate::snap::round_point(raw), SnapKind::Free));
                 self.hover = None;
             }
@@ -246,7 +246,7 @@ impl ArchiSimApp {
                         to,
                         variant,
                     };
-                    let ghost = crate::drag::preview(model, &self.ed.selection, &drag)
+                    let ghost = crate::drag::preview(&self.ed, &self.ed.selection, &drag)
                         .map_err(|e| crate::units::explain(&e));
                     self.drag_preview = Some((to, variant, ghost));
                 }
@@ -256,12 +256,12 @@ impl ArchiSimApp {
                 self.hover_grip = if self.window_start.is_some() {
                     None
                 } else {
-                    grip_at(model, &self.ed.selection, raw, reach).map(|g| g.0)
+                    grip_at(&self.ed, &self.ed.selection, raw, reach).map(|g| g.0)
                 };
                 self.hover = if self.window_start.is_some() {
                     None
                 } else {
-                    pick(model, self.ed.level, raw, reach)
+                    pick(&self.ed, self.ed.level, raw, reach)
                 };
             }
         }
@@ -494,7 +494,7 @@ impl ArchiSimApp {
                     if let Some(c) = self.cursor {
                         let reach = self.view.to_metres(REACH);
                         let out = self.dim_tool.click(
-                            self.ed.model(),
+                            &self.ed,
                             self.ed.level,
                             self.dim_settings,
                             c.point,
@@ -526,15 +526,14 @@ impl ArchiSimApp {
                         .input(|i| i.pointer.press_origin())
                         .map(|p| self.view.to_model(rect, p));
                     let reach = self.view.to_metres(REACH);
-                    let grip =
-                        origin.and_then(|o| grip_at(self.ed.model(), &self.ed.selection, o, reach));
+                    let grip = origin.and_then(|o| grip_at(&self.ed, &self.ed.selection, o, reach));
                     match grip {
                         Some((grip, from)) => {
                             // The selection is grabbed by the nearest
                             // special point, so it can be dropped exactly on
                             // another one.
                             let from = if grip == Grip::Body {
-                                snap(self.ed.model(), self.ed.level, from, reach, &[]).point
+                                snap(&self.ed, self.ed.level, from, reach, &[]).point
                             } else {
                                 from
                             };
@@ -563,7 +562,7 @@ impl ArchiSimApp {
                 }
                 if response.drag_stopped() {
                     if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
-                        let found = in_window(self.ed.model(), self.ed.level, a, c.point);
+                        let found = in_window(&self.ed, self.ed.level, a, c.point);
                         if !shift {
                             self.ed.selection.clear();
                         }
@@ -672,7 +671,7 @@ impl ArchiSimApp {
         let model = self.ed.model();
         if let Some(h) = self.hover {
             if !self.ed.selection.contains(&h) {
-                if let Some(poly) = outline(model, h) {
+                if let Some(poly) = outline(&self.ed, h) {
                     painter.add(Shape::closed_line(
                         self.polygon(rect, &poly),
                         Stroke::new(2.0, ACCENT.gamma_multiply(0.5)),
@@ -681,7 +680,7 @@ impl ArchiSimApp {
             }
         }
         for e in &self.ed.selection {
-            let Some(poly) = outline(model, *e) else {
+            let Some(poly) = outline(&self.ed, *e) else {
                 continue;
             };
             let pts = self.polygon(rect, &poly);

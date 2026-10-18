@@ -12,7 +12,7 @@
 //!   click); a second click places the line.
 //! - **Cota de nivel**: a click places a level mark.
 
-use archisim_core::{LevelId, Model, NewDimension, Point2};
+use archisim_core::{LevelId, NewDimension, Point2};
 use archisim_geom::wall_face_chain;
 
 use crate::pick::{pick, Element};
@@ -82,14 +82,15 @@ impl DimTool {
     }
 
     /// A click at `p` (snapped).
-    pub fn click(
+    pub fn click<G: crate::geo::Geo + ?Sized>(
         &mut self,
-        model: &Model,
+        geo: &G,
         level: LevelId,
         settings: DimSettings,
         p: Point2,
         reach: f64,
     ) -> Outcome {
+        let model = geo.model();
         if self.placing {
             let out = match self.build(level, settings, p) {
                 Some(d) => Outcome::Dimension(d),
@@ -107,7 +108,7 @@ impl DimTool {
                 Outcome::Nothing
             }
             DimMode::WallOpenings => {
-                let wall = match pick(model, level, p, reach) {
+                let wall = match pick(geo, level, p, reach) {
                     Some(Element::Wall(w)) => Some(w),
                     Some(Element::Opening(o)) => model.opening(o).map(|o| o.wall),
                     _ => None,

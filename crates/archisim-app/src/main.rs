@@ -13,6 +13,7 @@ mod dim_tool;
 mod drag;
 mod editor;
 mod flip;
+mod geo;
 mod open_files;
 mod opening_tool;
 mod pick;

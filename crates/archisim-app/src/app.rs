@@ -750,7 +750,7 @@ impl ArchiSimApp {
         let Some(pl) = self.placement.clone() else {
             let reach = self.view.to_metres(REACH);
             let curved = self.cursor.and_then(|c| {
-                crate::opening_tool::wall_at(self.ed.model(), self.ed.level, c.point, reach)
+                crate::opening_tool::wall_at(&self.ed, self.ed.level, c.point, reach)
             });
             if curved.is_some_and(|w| self.ed.model().wall(w).is_some_and(|w| w.is_curved())) {
                 self.complain("Los muros curvos aún no admiten puertas ni ventanas.");

@@ -24,6 +24,7 @@
 //! the wall, the faces of their frame and their height. [`clip_span`] cuts a
 //! wall (or one of its layers) into the solid pieces between openings.
 
+pub mod index;
 pub mod joins;
 pub mod room;
 pub mod solid;
@@ -216,6 +217,7 @@ fn arc_points(arc: &Arc, nseg: usize, from: Point2, to: Point2, offset: f64) -> 
 }
 
 pub use archisim_core::signed_area;
+pub use index::WallIndex;
 pub use joins::{Notch, NotchRegion, TeeEnd};
 pub use room::{room_outline, Contour, RoomError};
 
@@ -401,20 +403,28 @@ enum End {
 
 /// Geometry of every wall on a level.
 pub fn wall_geometries(model: &Model, level: LevelId) -> Vec<WallGeometry> {
+    let idx = WallIndex::new(model);
     model
         .walls_on_level(level)
-        .filter_map(|w| wall_geometry(model, w.id))
+        .filter_map(|w| wall_geometry_in(&idx, w.id))
         .collect()
 }
 
 /// Geometry of one wall, with joins against walls on the same level.
 pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
+    wall_geometry_in(&WallIndex::new(model), id)
+}
+
+/// [`wall_geometry`] with the walls around found through an index (build
+/// one for many walls).
+pub fn wall_geometry_in(idx: &WallIndex, id: WallId) -> Option<WallGeometry> {
+    let model = idx.model;
     let wall = model.wall(id)?;
     let wtype = model.wall_type(wall.wall_type)?;
     let (ext, int) = wall.face_offsets(wtype.thickness());
 
-    let start_cut = end_cut(model, wall, End::Start);
-    let end_cut_ = end_cut(model, wall, End::End);
+    let start_cut = end_cut(idx, wall, End::Start);
+    let end_cut_ = end_cut(idx, wall, End::End);
 
     (wall.end - wall.start).normalized()?;
     let arc = wall.arc();
@@ -492,7 +502,7 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
         end_cut: end_cut_,
         outline: Vec::new(),
         layers,
-        notches: joins::notches(model, wall),
+        notches: joins::notches_in(idx, wall),
     };
     g.outline = build_outline(&g, None);
     Some(g)
@@ -632,12 +642,14 @@ fn faces(model: &Model, wall: &Wall, forward: bool) -> Option<(Line, Line)> {
     })
 }
 
-fn end_cut(model: &Model, wall: &Wall, end: End) -> EndCut {
+fn end_cut(idx: &WallIndex, wall: &Wall, end: End) -> EndCut {
+    let model = idx.model;
     let p = match end {
         End::Start => wall.start,
         End::End => wall.end,
     };
-    let mut others = model.walls_on_level(wall.level).filter_map(|o| {
+    let near = idx.at_end(wall.level, p);
+    let mut others = near.into_iter().filter_map(|o| {
         if o.id == wall.id {
             None
         } else if o.start.approx_eq(p) {
@@ -651,9 +663,9 @@ fn end_cut(model: &Model, wall: &Wall, end: End) -> EndCut {
     let (other, other_end) = match (others.next(), others.next()) {
         (Some(one), None) => one,
         (None, _) => {
-            return joins::tee_end(model, wall, end == End::Start)
+            return joins::tee_end_in(idx, wall, end == End::Start)
                 .map(EndCut::Tee)
-                .or_else(|| face_stop(model, wall, end).map(EndCut::Face))
+                .or_else(|| face_stop(idx, wall, end).map(EndCut::Face))
                 .unwrap_or(EndCut::Square)
         }
         _ => return EndCut::Square,
@@ -665,13 +677,14 @@ fn end_cut(model: &Model, wall: &Wall, end: End) -> EndCut {
 /// wall is involved (straight walls butt with [`joins::tee_end`]): the end
 /// lies inside the other wall, away from its ends, and comes in at a clear
 /// angle.
-fn face_stop(model: &Model, wall: &Wall, end: End) -> Option<Curve> {
+fn face_stop(idx: &WallIndex, wall: &Wall, end: End) -> Option<Curve> {
+    let model = idx.model;
     let p = end_point(wall, end, 0.0);
     let t = end_tangent(wall, end)?;
     // Into the wall, away from the end.
     let away = if end == End::Start { t } else { -t };
-    model
-        .walls_on_level(wall.level)
+    idx.near(wall.level, p, 0.0)
+        .into_iter()
         .filter(|h| h.id != wall.id && (h.is_curved() || wall.is_curved()))
         .find_map(|h| {
             let th = model.wall_type(h.wall_type)?.thickness();

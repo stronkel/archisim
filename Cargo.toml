@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.21.0"
+version = "0.22.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
@@ -38,3 +38,8 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.usvg]
 opt-level = 3
+
+# `cargo build --profile perfil`: optimised, with symbols, to profile.
+[profile.perfil]
+inherits = "release"
+debug = true

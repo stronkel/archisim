@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida).
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -35,7 +35,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.6 ✅ v0.12 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
 | 1.7 ✅ v0.20 | **Importación IFC, segunda vuelta**: muros curvos (v0.19), muros de varios tramos y circulares cerrados, forjados con huecos (también dibujarlos), huecos sin carpintería (familia Hueco). Pasan a la fase 2, porque necesitan elementos que aún no existen: forjados inclinados (2.7), pilares y vigas (2.5) y locales `IfcSpace` (2.9) | M |
 | 1.8 ✅ v0.21 | **Instalación**: aplicación de Mac universal en `.dmg` (v0.13) e **instalador de Windows** (v0.21) con icono, menú Inicio, ejemplos, asociación de `.archisim` y «Abrir con» de `.ifc` | S |
-| 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
+| 1.9 ✅ v0.22 | **Rendimiento** con modelos grandes: medido con `archisim medir` (hasta 6300 muros, 9000 huecos y un IFC de 56 MB) y optimizado en uniones, planta en pantalla, forzados y selección, 3D, exportación e importación | M |
 
 ## 2. Fase 2 — Modelado completo
 
@@ -101,3 +101,4 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 4. ~~Bloque 11: **editor de tipos y materiales** (1.6)~~ — hecho en v0.12.
 5. ~~Bloque 12: **aplicación de Mac** (parte de 1.8)~~ — hecho en v0.13.
 6. Fase 2 con **familias** (2.1): D2 decidida el 18/10/2026. Bloques 13 a 17 = A a E de `docs/FAMILIAS.md`; después la librería (2.2). Bloque 13 (A, núcleo) hecho en v0.14; bloque 14 (B, planta y hojas configurables) en v0.15.
+7. ~~Bloques 19 a 22: **cierre de la fase 1** (1.7, 1.8 y 1.9) con modos de construcción y muros curvos~~ — hechos en v0.19 a v0.22. La §1 queda completa.

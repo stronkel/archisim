@@ -84,7 +84,14 @@ pub fn rasterize_with(
     options: &PlanOptions,
 ) -> ColorImage {
     let [w, h] = [size[0].max(1), size[1].max(1)];
-    let svg = render_plan(model, level, options);
+    // How many pixels a paper millimetre takes: zoomed far out, details
+    // smaller than a pixel or two are left out.
+    let mut options = options.clone();
+    if let (None, Some((lo, hi))) = (options.px_per_mm, options.viewport) {
+        let px_per_m = w as f64 / (hi.x - lo.x).max(1e-9);
+        options.px_per_mm = Some(px_per_m * options.scale / 1000.0);
+    }
+    let svg = render_plan(model, level, &options);
     let mut pixmap = tiny_skia::Pixmap::new(w as u32, h as u32).expect("non-empty image");
     match usvg::Tree::from_str(&svg, &usvg::Options::default()) {
         Ok(tree) => {

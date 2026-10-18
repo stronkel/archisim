@@ -16,10 +16,11 @@
 //! Nothing here knows about the screen: [`temp_dims`] says what to measure
 //! and [`edit`] turns a typed value into the drag that does it.
 
+use crate::geo::Geo;
 use std::collections::BTreeSet;
 
 use archisim_core::{Model, OpeningId, Point2, WallId, WallSide};
-use archisim_geom::{openings_in_wall, wall_geometry};
+use archisim_geom::openings_in_wall;
 
 use crate::drag::{Drag, Grip};
 use crate::pick::Element;
@@ -56,12 +57,13 @@ const EPS: f64 = 1e-6;
 
 /// The temporary dimensions of a selection: only for a single wall or a
 /// single door or window, as in Revit.
-pub fn temp_dims(model: &Model, selection: &BTreeSet<Element>) -> Vec<TempDim> {
+pub fn temp_dims<G: Geo + ?Sized>(geo: &G, selection: &BTreeSet<Element>) -> Vec<TempDim> {
+    let model = geo.model();
     if selection.len() != 1 {
         return Vec::new();
     }
     match selection.iter().next() {
-        Some(Element::Opening(id)) => opening_dims(model, *id),
+        Some(Element::Opening(id)) => opening_dims(geo, *id),
         Some(Element::Wall(id)) => wall_dims(model, *id),
         _ => Vec::new(),
     }
@@ -81,7 +83,8 @@ fn cross_line(p: Point2, u: Point2, a: Point2, b: Point2) -> Option<f64> {
     (-EPS..=1.0 + EPS).contains(&s).then_some(t)
 }
 
-fn opening_dims(model: &Model, id: OpeningId) -> Vec<TempDim> {
+fn opening_dims<G: Geo + ?Sized>(geo: &G, id: OpeningId) -> Vec<TempDim> {
+    let model = geo.model();
     let Some(o) = model.opening(id) else {
         return Vec::new();
     };
@@ -103,12 +106,12 @@ fn opening_dims(model: &Model, id: OpeningId) -> Vec<TempDim> {
     let mut refs: Vec<f64> = Vec::new();
     // The ends of this wall's face, and where other walls meet or cross it.
     let mut outlines: Vec<Vec<Point2>> = Vec::new();
-    if let Some(hg) = wall_geometry(model, host.id) {
+    if let Some(hg) = geo.wall_geometry(host.id) {
         outlines.push(hg.outline_at(None));
     }
     for w in model.walls_on_level(host.level).filter(|w| w.id != host.id) {
-        if let Some(wg) = wall_geometry(model, w.id) {
-            outlines.push(wg.outline);
+        if let Some(wg) = geo.wall_geometry(w.id) {
+            outlines.push(wg.outline.clone());
         }
     }
     let length = host.length();
