@@ -123,6 +123,10 @@ ArchiSim para Mac (Apple M1 y posteriores, e Intel)
    (la aplicación no está firmada con una cuenta de Apple). Pulsa
    «Hecho», abre Ajustes del Sistema → Privacidad y seguridad, baja
    hasta «ArchiSim» y pulsa «Abrir igualmente». Solo hace falta una vez.
+   Si después de «Abrir igualmente» vuelve a pedirlo una y otra vez
+   (pasa en macOS Sequoia), abre Terminal (Aplicaciones → Utilidades),
+   pega esta línea y pulsa Intro; luego ábrela con doble clic:
+       xattr -dr com.apple.quarantine /Applications/ArchiSim.app
 3. Doble clic en demo.archisim (o arrástralo sobre el icono del Dock)
    para abrir la vivienda de prueba. Los .ifc se abren con
    clic derecho → Abrir con → ArchiSim.
