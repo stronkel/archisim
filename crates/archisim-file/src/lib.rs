@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 4,
+//!   "version": 5,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 4;
+pub const CURRENT_VERSION: u32 = 5;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -192,6 +192,15 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(4));
+                }
+                v
+            }
+            // 4 → 5: walls may be curved (`bulge`); a wall without it is
+            // straight, as all walls of older files are.
+            4 => {
+                let mut v = value;
+                if let Value::Object(map) = &mut v {
+                    map.insert("version".into(), Value::from(5));
                 }
                 v
             }
@@ -449,6 +458,7 @@ mod tests {
             reference: ReferenceLine::ExteriorFace,
             height: 3.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         };
         let w = m
@@ -559,8 +569,8 @@ mod tests {
         assert!(old.contains("\"version\": 1"));
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
-        // Saved again, it is a version 4 file.
-        assert!(to_string(&opened).contains("\"version\": 4"));
+        // Saved again, it is a version 5 file.
+        assert!(to_string(&opened).contains("\"version\": 5"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -726,7 +736,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 4", "\"version\": 3", 1)
+            .replacen("\"version\": 5", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -734,10 +744,45 @@ mod tests {
         assert_eq!(w.height, tied.height);
     }
 
+    /// Curved walls (version 5) keep their bulge; straight walls write
+    /// none, so version 4 files are read as they are.
+    #[test]
+    fn curved_walls_and_version_4_files() {
+        let mut m = sample();
+        let straight = m.walls().next().unwrap().clone();
+        let curved = m
+            .add_wall(NewWall {
+                wall_type: straight.wall_type,
+                level: straight.level,
+                start: Point2::new(4.2, 0.0),
+                end: Point2::new(4.2, 5.0),
+                bulge: -0.4,
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let text = to_string(&m);
+        assert_eq!(text.matches("\"bulge\":").count(), 1);
+        assert!(text.contains("\"bulge\": -0.4,"));
+        let back = from_str(&text).unwrap();
+        assert_same_project(&back, &m);
+        assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
+        // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
+        let v4 = to_string(&sample()).replacen("\"version\": 5", "\"version\": 4", 1);
+        let opened = from_str(&v4).unwrap();
+        assert!(opened.walls().all(|w| w.bulge == 0.0));
+        // A bend tighter than the wall is thick is refused on opening.
+        let tight = text.replace("\"bulge\": -0.4,", "\"bulge\": 30.0,");
+        let err = from_str(&tight).unwrap_err();
+        assert!(err.to_string().contains("bends too much"), "{err}");
+    }
+
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 4,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 5,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -783,11 +828,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 4", "\"version\": 7"),
+            edited("\"version\": 5", "\"version\": 7"),
             Err(FileError::TooNew { version: 7 })
         ));
         assert!(matches!(
-            edited("\"version\": 4", "\"version\": 0"),
+            edited("\"version\": 5", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

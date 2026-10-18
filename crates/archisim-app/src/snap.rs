@@ -22,6 +22,8 @@ pub enum SnapKind {
     Corner,
     /// Middle of a wall's drawn line.
     Midpoint,
+    /// Centre of a curved wall.
+    Centre,
     /// Somewhere on a wall face or slab edge.
     OnEdge,
     /// Along the constrained direction (Shift).
@@ -39,6 +41,7 @@ impl SnapKind {
             SnapKind::Endpoint => "Extremo",
             SnapKind::Corner => "Esquina",
             SnapKind::Midpoint => "Punto medio",
+            SnapKind::Centre => "Centro",
             SnapKind::OnEdge => "Sobre arista",
             SnapKind::Constrained => "Ángulo forzado",
             SnapKind::Tracked => "Alineado",
@@ -122,7 +125,7 @@ impl Default for SnapFilter {
 impl SnapFilter {
     fn allows(self, kind: SnapKind) -> bool {
         match kind {
-            SnapKind::Endpoint | SnapKind::Corner => self.points,
+            SnapKind::Endpoint | SnapKind::Corner | SnapKind::Centre => self.points,
             SnapKind::Midpoint => self.midpoints,
             SnapKind::OnEdge => self.edges,
             SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => true,
@@ -201,9 +204,31 @@ pub fn snap_filtered(
         };
         points.push((w.start, SnapKind::Endpoint));
         points.push((w.end, SnapKind::Endpoint));
-        points.push(((w.start + w.end) * 0.5, SnapKind::Midpoint));
-        if let Some(g) = wall_geometry(model, id) {
-            outline_snaps(&g.outline, &mut points, &mut edges);
+        points.push((w.midpoint(), SnapKind::Midpoint));
+        let Some(g) = wall_geometry(model, id) else {
+            continue;
+        };
+        match &g.arc {
+            Some(arc) => {
+                // A curve: its centre, the corners at its ends and the
+                // middle of each face; anywhere along the faces.
+                points.push((arc.centre, SnapKind::Centre));
+                let (s, e) = g.end_points();
+                for p in s.iter().chain(e) {
+                    points.push((*p, SnapKind::Corner));
+                }
+                for off in [g.exterior_offset, g.interior_offset] {
+                    points.push((arc.point(0.5, off), SnapKind::Midpoint));
+                }
+                let n = g.outline.len();
+                for i in 0..n {
+                    let (a, b) = (g.outline[i], g.outline[(i + 1) % n]);
+                    if a.distance(b) > 1e-6 {
+                        edges.push((a, b));
+                    }
+                }
+            }
+            None => outline_snaps(&g.outline, &mut points, &mut edges),
         }
     }
     for s in model.slabs_on_level(level) {

@@ -33,11 +33,13 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.4 ✅ v0.10 | **Cotas básicas**: lineales y encadenadas, cota automática de huecos en un muro, cotas de nivel | M |
 | 1.5 ✅ v0.10 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
 | 1.6 ✅ v0.12 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
-| 1.7 | **Importación IFC, segunda vuelta**: muros curvos y de varios tramos, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
+| 1.7 ◐ v0.19 | **Importación IFC, segunda vuelta** — hechos los muros curvos de un arco (eje `IfcTrimmedCurve` sobre `IfcCircle` o `IfcIndexedPolyCurve` con `IfcArcIndex`) —; faltan los muros de varios tramos y los circulares cerrados, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
 | 1.8 ◐ v0.13 | **Instalación**: hecha la aplicación de Mac universal en `.dmg` con icono y asociación de ficheros; falta el instalador de Windows con icono y asociación de `.archisim` e `.ifc` | S |
 | 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
 
 ## 2. Fase 2 — Modelado completo
+
+**Modos de construcción y muros curvos** ✅ v0.19 (pedidos por Antonio el 18/10/2026, junto a 1.7): métodos de la herramienta Muro (recto, cadena, rectángulo por dos esquinas, arco por inicio, fin y punto de paso, círculo por centro y punto) y de la herramienta Forjado (polígono, rectángulo por dos esquinas, varita mágica); muros curvos de punta a punta (planta con capas, 3D, ingletes con muros rectos y curvos, IFC exacto con arcos, `.archisim` versión 5), curvar con el ratón y radio en Propiedades. Falta: puertas y ventanas en muros curvos, uniones en T por capas contra muros curvos (de momento el muro que acomete se detiene en la cara), forjados con bordes curvos o circulares, rectángulo girado, arco tangente.
 
 **Ayudas al dibujo** ✅ v0.18 (pedidas por Antonio el 18/10/2026, antes del bloque C): cotas temporales azules editables, forzado a puntos medios de caras y aristas, muros ortogonales por defecto con línea de rastreo, Espacio y flechas para girar puertas y ventanas, cambiar de planta muros y forjados, muros de otras plantas cortados por el plano de corte y calco de la planta inferior. Falta: cotas temporales de forjados y cotas a ejes o a núcleo (como opción de Revit), seleccionar en una planta los muros de otra que se ven cortados, copiar a otra planta.
 
@@ -52,7 +54,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 2.5 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam` | M | — |
 | 2.6 | **Escaleras** por tramos y mesetas con comprobación de huella, tabica y anchura (CTE DB-SUA); **barandillas**; **rampas** | L | 2.1 |
 | 2.7 | **Huecos en forjados** (escaleras, patinillos) y **forjados inclinados** | S | — |
-| 2.8 | **Muros curvos, muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |
+| 2.8 ◐ v0.19 | **Muros curvos** (hechos, sin huecos todavía), **muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |
 | 2.9 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso | M | 1.2 |
 | 2.10 | **Secciones y alzados** con líneas ocultas, profundidad de vista y poché por capa | L | 2.3 |
 | 2.11 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo | M | — |

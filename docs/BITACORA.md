@@ -6,6 +6,47 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Bloque 19 — Modos de construcción y muros curvos
+
+**Hecho** (petición de Antonio al revisar 1.7: «otras formas de modelar muros, no solo de punto a punto: curvos, un cuadrado cerrado o un círculo; y forjados rectangulares por dos esquinas»)
+- **Método de la herramienta Muro** (Propiedades → «Método», con iconos, como el método geométrico de ArchiCAD):
+  - **Recto**: un muro por cada dos clics. **Cadena**: como hasta ahora (por defecto).
+  - **Rectángulo**: dos esquinas opuestas → cuatro muros en sentido horario (la cara exterior queda fuera), unidos a inglete. También primera esquina + `6000x4000` + Intro (hacia el cuadrante del cursor).
+  - **Arco**: inicio, fin y un punto por el que pasa (como «inicio-fin-radio» de Revit). En el tercer paso se puede teclear el **radio** (hacia el lado del cursor). Los arcos se encadenan; Esc quita el final del arco, otra vez Esc termina.
+  - **Círculo**: centro y un punto de la línea de referencia (o radio tecleado): dos medias circunferencias en sentido horario.
+  - Un rectángulo o un círculo es **un solo paso de deshacer** («Crear muros»).
+- **Método de la herramienta Forjado**: Polígono · **Rectángulo** (dos esquinas, o `6000x4000`) · Varita mágica.
+- **Muros curvos de punta a punta**:
+  - Planta: capas, tramas y zigzag del aislamiento siguen el arco; caras con línea de corte; línea de referencia curva.
+  - Uniones: inglete con muros rectos o curvos que comparten extremo (tangentes: corte radial, por ejemplo las dos mitades de un círculo); un tabique que acomete a un muro curvo se detiene en su cara (y un muro curvo que acaba dentro de otro, también). Aún no entran por capas.
+  - 3D: una piel cerrada por muro, sin caras entre capas. Varita mágica dentro de un recinto curvo (cara interior, eje y cara exterior).
+  - Forzado: **centro** (nuevo, círculo verde), extremos, esquinas, punto medio del arco y de cada cara, cualquier punto de las caras.
+  - Edición: mover, copiar y estirar conservan la curvatura; un **círculo blanco** en el punto medio del muro seleccionado lo **curva** arrastrándolo (en línea con los extremos queda recto). Propiedades: **Radio** editable (los extremos no se mueven), ángulo y **Enderezar**. Longitud editable (la curva se escala).
+  - Se rechaza un arco más cerrado que el espesor del muro, y un tipo que al engordar lo dejaría así.
+  - **IFC**: eje `IfcTrimmedCurve` sobre `IfcCircle`; cuerpo extruido de un `IfcIndexedPolyCurve` con **arcos exactos** (`IfcArcIndex`); longitud, superficie y volumen del arco exacto. El validador afina el mallado de IfcOpenShell para comparar volúmenes de curvas.
+  - **Importación** (parte de 1.7): muros curvos de un arco desde ArchiSim, ArchiCAD o Revit (`IfcTrimmedCurve`/`IfcCircle` o `IfcIndexedPolyCurve` con arco), con capas medidas en radial. Ida y vuelta idéntica comprobada.
+  - **Formato `.archisim` versión 5**: campo `bulge` en los muros curvos (los rectos no lo escriben); los ficheros de la versión 4 se abren tal cual.
+- Pruebas nuevas: arcos en el núcleo (comba, radio mínimo, curvar, puertas rechazadas), geometría (habitación redonda: áreas, capas, arcos exactos, volúmenes, varita; tabique contra cara curva; inglete recto-curvo y tangente), planta curva, IFC de ida y vuelta, herramienta Muro por modos, forjado rectangular y la ventana manejada con clics (rectángulo, círculo, arco, rectángulo tecleado, forjado rectangular, curvar con el ratón, puerta rechazada, guardar/exportar/importar). **Ventana real** revisada con capturas (Xvfb): selector de método, vista previa del arco con radio y longitud, círculo con radio tecleado, Propiedades de un muro curvo y curvarlo arrastrando.
+- La demo da **el mismo IFC y las mismas plantas SVG** que la v0.18 (muros rectos sin cambios). IFC validados con IfcOpenShell (demo, sesiones de la app y `modos.ifc` con curvos).
+- Versión 0.19.0.
+
+**Pendiente / limitaciones conocidas**
+- Puertas y ventanas en muros curvos (y su símbolo curvo); cotas temporales de muros curvos.
+- Uniones en T por capas contra muros curvos (ahora el que acomete se detiene en la cara); tabiques que siguen a un muro curvo al moverlo (sí, por su cara); un muro curvo no «resbala» como seguidor.
+- Forjados con bordes curvos o circulares (la varita da un polígono fino que sigue la curva); rectángulo girado, arco tangente, polígono regular.
+- Resto de 1.7: muros de varios tramos, forjados inclinados y con huecos, huecos sin carpintería, `IfcSpace`.
+
+**Antonio debe probar**
+1. Descarga la versión del pull request «Modos de construcción…» (rama `bloque/modos-construccion`) → **Actions** → última ejecución en verde → **Artifacts** → ArchiSim-Windows o ArchiSim-Mac. Proyecto nuevo.
+2. **M** → Propiedades → Método **Rectángulo**: clic en una esquina y en la opuesta. Cuatro muros cerrados; Ctrl+Z los quita de una vez. Repite con la primera esquina y escribe `8000x6000` + Intro.
+3. Método **Círculo**: clic en el centro, escribe `3000` + Intro (radio de la línea de referencia). Mira la planta a 1:50 y en 3D (F3).
+4. Método **Arco**: clic en el inicio, clic en el final y mueve el ratón: verás radio y longitud; clic para fijarlo (o escribe un radio + Intro).
+5. **F** → Método **Rectángulo**: forjado por dos esquinas. Prueba también la varita dentro del círculo.
+6. Selecciona un muro curvo: arrastra el **círculo blanco** del centro para curvarlo más o menos; en Propiedades cambia el **Radio** y prueba **Enderezar**.
+7. Dibuja un tabique recto desde dentro del círculo hasta su cara: debe acabar contra la cara interior.
+8. Exporta el IFC y ábrelo en **ArchiCAD y Revit**: ¿los reconocen como muros curvos (con su multicapa) o como objetos? Es lo que más me interesa saber de esta versión.
+9. Dime qué método echas en falta (rectángulo girado, arco tangente, polígono regular, forjado circular) y si quieres puertas en muros curvos antes del bloque C.
+
 ## 2026-10-18 · Bloque 17 — Ayudas al dibujo (cotas temporales, rastreo, giros, otras plantas)
 
 **Hecho** (petición de Antonio: «funciones de calidad de vida antes de las herramientas del bloque 2»; las seis, en este orden)

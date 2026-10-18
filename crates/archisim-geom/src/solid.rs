@@ -16,7 +16,10 @@ use archisim_core::{
     LevelId, MaterialId, Model, OpeningId, Point2, SlabId, WallId, WallSide, EPSILON,
 };
 
-use crate::{ensure_ccw, opening_geometry, openings_in_wall, wall_geometry, EndCut, Line};
+use crate::{
+    ensure_ccw, opening_geometry, openings_in_wall, wall_geometry, Curve, EndCut, Line,
+    WallGeometry,
+};
 
 /// A point in model space: metres, Z up.
 pub type P3 = [f64; 3];
@@ -161,6 +164,9 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
     let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
     let z_base = level + wall.base_offset;
     let z_top = z_base + wall.height;
+    if g.arc.is_some() {
+        return curved_wall_solids(&g, &offsets_of(&g, wtype), wtype, z_base, z_top);
+    }
     let (a, b) = g.axis;
     let len = a.distance(b);
     let Some(u) = (b - a).normalized() else {
@@ -176,9 +182,9 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
         let last = *offsets.last().expect("not empty");
         offsets.push(last - layer.thickness);
     }
-    let along = |line: &Line, off: f64, fallback: f64| -> f64 {
-        Line::new(a + n * off, b - a)
-            .intersect(line)
+    let along = |cut: &Curve, off: f64, fallback: f64| -> f64 {
+        Curve::Line(Line::new(a + n * off, b - a))
+            .intersect_near(cut, a + n * off + u * fallback)
             .map_or(fallback, |p| (p - a).dot(u))
     };
 
@@ -203,7 +209,7 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
     let mid = (offsets[0] + offsets[layers]) / 2.0;
     let mut keyed: Vec<(f64, Line)> = inner
         .into_iter()
-        .map(|l| (along(&l, mid, -1.0), l))
+        .map(|l| (along(&Curve::Line(l), mid, -1.0), l))
         .filter(|(t, _)| *t > EPSILON && *t < len - EPSILON)
         .collect();
     keyed.sort_by(|x, y| x.0.total_cmp(&y.0));
@@ -224,9 +230,9 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
     // layer `k` (only the ends depend on the layer).
     let col_t = |c: usize, off: f64, k: usize| -> f64 {
         match &cols[c] {
-            Col::Start => g.start_cut.line(k).map_or(0.0, |l| along(&l, off, 0.0)),
-            Col::End => g.end_cut.line(k).map_or(len, |l| along(&l, off, len)),
-            Col::At(l) => along(l, off, 0.0),
+            Col::Start => g.start_cut.curve(k).map_or(0.0, |c| along(&c, off, 0.0)),
+            Col::End => g.end_cut.curve(k).map_or(len, |c| along(&c, off, len)),
+            Col::At(l) => along(&Curve::Line(*l), off, 0.0),
         }
     };
 
@@ -416,6 +422,76 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
             owner: SolidOwner::Wall(id),
             material: layer.material,
             triangles,
+        })
+        .collect()
+}
+
+/// Offsets of every layer boundary of a wall, from the exterior face in.
+fn offsets_of(g: &WallGeometry, wtype: &archisim_core::WallType) -> Vec<f64> {
+    let mut offsets = vec![g.exterior_offset];
+    for layer in &wtype.layers {
+        let last = *offsets.last().expect("not empty");
+        offsets.push(last - layer.thickness);
+    }
+    offsets
+}
+
+/// Solids of a curved wall (no doors, windows or walls butting in): each
+/// layer is its plan band extruded, with no faces where layers touch or
+/// where a mitred end meets the next wall.
+fn curved_wall_solids(
+    g: &WallGeometry,
+    offsets: &[f64],
+    wtype: &archisim_core::WallType,
+    z0: f64,
+    z1: f64,
+) -> Vec<Solid> {
+    let Some(arc) = &g.arc else {
+        return Vec::new();
+    };
+    let (outer_a, outer_b) = (offsets[0], offsets[offsets.len() - 1]);
+    let at = |p: Point2, z: f64| [p.x, p.y, z];
+    wtype
+        .layers
+        .iter()
+        .zip(&g.layers)
+        .map(|(layer, band)| {
+            let poly = &band.polygon;
+            let n = poly.len();
+            let mut tris = Vec::new();
+            for [a, b, c] in triangulate(poly) {
+                tris.push([at(poly[a], z1), at(poly[b], z1), at(poly[c], z1)]);
+                tris.push([at(poly[a], z0), at(poly[c], z0), at(poly[b], z0)]);
+            }
+            for i in 0..n {
+                let (p, q) = (poly[i], poly[(i + 1) % n]);
+                if p.approx_eq(q) {
+                    continue;
+                }
+                let (fp, op) = arc.project(p);
+                let (fq, oq) = arc.project(q);
+                let exposed = if (op - oq).abs() < 1e-6 {
+                    // Along a face or a layer boundary: only the faces.
+                    (op - outer_a).abs() < 1e-6 || (op - outer_b).abs() < 1e-6
+                } else {
+                    // Across an end: open unless another wall closes it.
+                    let cut = if fp + fq < 1.0 {
+                        &g.start_cut
+                    } else {
+                        &g.end_cut
+                    };
+                    !cut.is_mitre()
+                };
+                if exposed {
+                    tris.push([at(p, z0), at(q, z0), at(q, z1)]);
+                    tris.push([at(p, z0), at(q, z1), at(p, z1)]);
+                }
+            }
+            Solid {
+                owner: SolidOwner::Wall(g.wall),
+                material: layer.material,
+                triangles: tris,
+            }
         })
         .collect()
 }
@@ -775,6 +851,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -949,6 +1026,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -963,6 +1041,7 @@ mod tests {
                     reference: ReferenceLine::Center,
                     height: 2.5,
                     base_offset: 0.0,
+                    bulge: 0.0,
                     top: archisim_core::WallTop::Unconnected,
                 })
                 .unwrap(),
@@ -1037,6 +1116,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -1101,6 +1181,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.1,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();

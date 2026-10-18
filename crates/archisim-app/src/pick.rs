@@ -206,6 +206,7 @@ pub(crate) mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -301,6 +302,7 @@ pub(crate) mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();

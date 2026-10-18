@@ -31,6 +31,10 @@
 //! right in IFC are seen looking along +Y, the opposite of the UNE-EN 12519
 //! handing used in ArchiSim, so they swap on export.
 //!
+//! Curved walls: the axis is an `IfcTrimmedCurve` on an `IfcCircle`, and the
+//! body one extrusion of an `IfcIndexedPolyCurve` with exact arcs
+//! (`IfcArcIndex`); their quantities are those of the exact arcs.
+//!
 //! Relationship GUIDs are derived from element GUIDs, so exporting the same
 //! model twice gives the same file apart from the header timestamp.
 
@@ -46,7 +50,9 @@ use archisim_core::{
     perimeter, DoorOperation, GlobalId, Hand, Layer, LayerFunction, LevelId, MaterialId, Model,
     OpeningKind, OpeningType, OpeningTypeId, Point2, SlabTypeId, WallFunction, WallTypeId, EPSILON,
 };
-use archisim_geom::{openings_in_wall, removed_area, signed_area, wall_geometry, OpeningGeometry};
+use archisim_geom::{
+    openings_in_wall, path_area, removed_area, signed_area, wall_geometry, OpeningGeometry, PathSeg,
+};
 use step::{boolean, list, real, string, Ref, StepWriter};
 
 /// Header information for the exported file.
@@ -160,6 +166,46 @@ impl<'a> Exporter<'a> {
             refs.push(refs[0]);
         }
         self.w.add(format!("IFCPOLYLINE({})", list(&refs)))
+    }
+
+    /// A closed `IfcIndexedPolyCurve` of straight pieces and exact arcs.
+    fn indexed_curve(&mut self, path: &[PathSeg], to_local: &dyn Fn(Point2) -> Point2) -> Ref {
+        let mut pts: Vec<Point2> = Vec::new();
+        let index = |p: Point2, pts: &mut Vec<Point2>| -> usize {
+            match pts.iter().position(|q| q.approx_eq(p)) {
+                Some(i) => i + 1,
+                None => {
+                    pts.push(p);
+                    pts.len()
+                }
+            }
+        };
+        let mut segs = Vec::new();
+        for seg in path {
+            match *seg {
+                PathSeg::Line(a, b) => {
+                    let (i, j) = (index(a, &mut pts), index(b, &mut pts));
+                    segs.push(format!("IFCLINEINDEX(({i},{j}))"));
+                }
+                PathSeg::Arc(a, b, c) => {
+                    let (i, j, k) = (index(a, &mut pts), index(b, &mut pts), index(c, &mut pts));
+                    segs.push(format!("IFCARCINDEX(({i},{j},{k}))"));
+                }
+            }
+        }
+        let coords = pts
+            .iter()
+            .map(|p| {
+                let l = to_local(*p);
+                format!("({},{})", real(l.x), real(l.y))
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let list = self.w.add(format!("IFCCARTESIANPOINTLIST2D(({coords}),$)"));
+        self.w.add(format!(
+            "IFCINDEXEDPOLYCURVE({list},({}),.F.)",
+            segs.join(",")
+        ))
     }
 
     /// An `IfcMaterialLayerSet` with the layers in the given order.
@@ -818,7 +864,8 @@ impl<'a> Exporter<'a> {
                 continue;
             };
             let length = wall.length();
-            let u = (wall.end - wall.start) * (1.0 / length);
+            let chord = wall.start.distance(wall.end);
+            let u = (wall.end - wall.start) * (1.0 / chord);
             let n = u.perp_left();
             let to_local = |p: Point2| {
                 let d = p - wall.start;
@@ -831,8 +878,22 @@ impl<'a> Exporter<'a> {
                 .add(format!("IFCDIRECTION(({},{},0.))", real(u.x), real(u.y)));
             let pl = self.placement(Some(storey_pl), loc, Some(xdir));
 
-            let axis_line =
-                self.polyline(&[Point2::new(0.0, 0.0), Point2::new(length, 0.0)], false);
+            let axis_line = match wall.arc() {
+                Some(arc) => {
+                    // A circle around the centre, trimmed at both ends,
+                    // counter-clockwise or not as the wall turns.
+                    let c = self.point2(to_local(arc.centre));
+                    let ap = self.w.add(format!("IFCAXIS2PLACEMENT2D({c},$)"));
+                    let circle = self.w.add(format!("IFCCIRCLE({ap},{})", real(arc.radius)));
+                    let p0 = self.point2(Point2::new(0.0, 0.0));
+                    let p1 = self.point2(Point2::new(chord, 0.0));
+                    self.w.add(format!(
+                        "IFCTRIMMEDCURVE({circle},({p0}),({p1}),{},.CARTESIAN.)",
+                        boolean(arc.sweep > 0.0)
+                    ))
+                }
+                None => self.polyline(&[Point2::new(0.0, 0.0), Point2::new(length, 0.0)], false),
+            };
             let axis_rep = self.w.add(format!(
                 "IFCSHAPEREPRESENTATION({},'Axis','Curve2D',({axis_line}))",
                 self.axis_ctx
@@ -850,12 +911,21 @@ impl<'a> Exporter<'a> {
             zs.sort_by(f64::total_cmp);
             let mut solids = Vec::new();
             let mut volume = 0.0;
+            let path = geo.outline_path();
             for band in zs.windows(2) {
                 let (z0, z1) = (band[0], band[1]);
-                let poly = geo.outline_at(Some((z0 + z1) / 2.0));
-                volume += signed_area(&poly) * (z1 - z0);
-                let local: Vec<Point2> = poly.iter().map(|&p| to_local(p)).collect();
-                let outline = self.polyline(&local, true);
+                let outline = match &path {
+                    Some(path) => {
+                        volume += path_area(path).abs() * (z1 - z0);
+                        self.indexed_curve(path, &to_local)
+                    }
+                    None => {
+                        let poly = geo.outline_at(Some((z0 + z1) / 2.0));
+                        volume += signed_area(&poly) * (z1 - z0);
+                        let local: Vec<Point2> = poly.iter().map(|&p| to_local(p)).collect();
+                        self.polyline(&local, true)
+                    }
+                };
                 let profile = self
                     .w
                     .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
@@ -941,7 +1011,10 @@ impl<'a> Exporter<'a> {
                 openings_by_type.entry(otype.id).or_default().push(filling);
             }
 
-            let footprint = signed_area(&geo.outline_at(Some(base + 1e-6)));
+            let footprint = match &path {
+                Some(path) => path_area(path).abs(),
+                None => signed_area(&geo.outline_at(Some(base + 1e-6))),
+            };
             let side = length * wall.height;
             self.quantities(
                 w,
@@ -1176,6 +1249,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();

@@ -17,5 +17,8 @@ pub use family::{
     Values,
 };
 pub use ids::*;
-pub use math::{is_simple_polygon, perimeter, signed_area, Point2, Vec2, EPSILON};
+pub use math::{
+    is_simple_polygon, perimeter, signed_area, Arc, Point2, Vec2, CURVE_TOLERANCE, EPSILON,
+    MIN_BULGE,
+};
 pub use model::*;

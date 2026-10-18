@@ -24,13 +24,13 @@ use crate::editor::{Editor, WallSettings};
 use crate::opening_tool::{placement, OpeningSettings, Placement};
 use crate::pick::{in_window, outline, pick, Element};
 use crate::plan_image::{rasterize_with, PlanKey};
-use crate::slab_tool::{Outcome as SlabOutcome, SlabTool};
+use crate::slab_tool::{Outcome as SlabOutcome, SlabMode, SlabTool};
 use crate::snap::{
     constrain, is_tracking_line, snap, snap_filtered, track, Snap, SnapFilter, SnapKind,
 };
 use crate::units::{explain_room, fmt_angle, fmt_area, fmt_m, fmt_mm, parse_length};
 use crate::view::View;
-use crate::wall_tool::{Escape, Outcome, WallTool};
+use crate::wall_tool::{Escape, Outcome, Piece, WallMode, WallTool};
 
 const ACCENT: Color32 = theme::ACCENT;
 const PAPER: Color32 = Color32::WHITE;
@@ -639,17 +639,37 @@ impl ArchiSimApp {
             .collect();
     }
 
-    /// Builds a wall asked for by the wall tool.
-    fn build_wall(&mut self, start: Point2, end: Point2) {
-        match self.ed.add_wall(&self.wall_settings, start, end) {
-            Ok(id) => {
-                self.wall_tool.accept(end);
-                // The last wall drawn stays selected, with its temporary
+    /// Builds the walls asked for by the wall tool.
+    fn build_walls(&mut self, pieces: Vec<Piece>) {
+        match self.ed.add_walls(&self.wall_settings, &pieces) {
+            Ok(ids) => {
+                self.wall_tool.accept(&pieces);
+                // The last walls drawn stay selected, with their temporary
                 // dimensions once the chain ends (as Revit does).
-                self.ed.selection = [Element::Wall(id)].into_iter().collect();
-                let len = start.distance(end);
-                self.say(format!("Muro de {} mm creado.", fmt_mm(len)));
-                if !self.wall_tool.is_drawing() {
+                self.ed.selection = ids.iter().map(|id| Element::Wall(*id)).collect();
+                let message = match (self.wall_tool.mode, pieces.as_slice()) {
+                    (WallMode::Rectangle, [a, b, ..]) => format!(
+                        "4 muros creados ({} × {} mm).",
+                        fmt_mm(a.length()),
+                        fmt_mm(b.length())
+                    ),
+                    (WallMode::Circle, [a, ..]) => format!(
+                        "Muro circular de radio {} mm creado (dos medios círculos).",
+                        fmt_mm(a.arc().map_or(0.0, |c| c.radius))
+                    ),
+                    (_, [w]) => match w.arc() {
+                        Some(arc) => format!(
+                            "Muro curvo de {} mm (radio {} mm) creado.",
+                            fmt_mm(w.length()),
+                            fmt_mm(arc.radius)
+                        ),
+                        None => format!("Muro de {} mm creado.", fmt_mm(w.length())),
+                    },
+                    _ => format!("{} muros creados.", pieces.len()),
+                };
+                self.say(message);
+                let chains = matches!(self.wall_tool.mode, WallMode::Chain | WallMode::Arc);
+                if chains && !self.wall_tool.is_drawing() {
                     self.say("Contorno cerrado.");
                 }
             }
@@ -714,7 +734,15 @@ impl ArchiSimApp {
     /// Places the door or window shown under the cursor.
     fn place_opening(&mut self) {
         let Some(pl) = self.placement.clone() else {
-            self.complain("Haz clic sobre un muro para colocar la puerta o ventana.");
+            let reach = self.view.to_metres(REACH);
+            let curved = self.cursor.and_then(|c| {
+                crate::opening_tool::wall_at(self.ed.model(), self.ed.level, c.point, reach)
+            });
+            if curved.is_some_and(|w| self.ed.model().wall(w).is_some_and(|w| w.is_curved())) {
+                self.complain("Los muros curvos aún no admiten puertas ni ventanas.");
+            } else {
+                self.complain("Haz clic sobre un muro para colocar la puerta o ventana.");
+            }
             return;
         };
         if let Some(problem) = pl.problem {
@@ -1088,6 +1116,22 @@ const SHORTCUTS: &[(&str, &str)] = &[
         "Terminar la cadena de muros",
     ),
     (
+        "Método (Propiedades del muro)",
+        "Recto · Cadena · Rectángulo (dos esquinas) · Arco (inicio, fin y punto de paso) · Círculo (centro y punto)",
+    ),
+    (
+        "Números + Intro (arco o círculo)",
+        "Radio en mm; en un rectángulo, ancho x fondo (6000x4000)",
+    ),
+    (
+        "Método (Propiedades del forjado)",
+        "Polígono · Rectángulo (dos esquinas) · Varita mágica",
+    ),
+    (
+        "Círculo blanco (muro curvo)",
+        "Arrastrar: curvarlo por ese punto; en línea con sus extremos, queda recto",
+    ),
+    (
         "Clic en una cota azul",
         "Escribir la medida exacta (muro, puerta o ventana seleccionados)",
     ),
@@ -1175,12 +1219,13 @@ fn guid_label(ui: &mut Ui, guid: &str) {
 }
 
 fn dashed(painter: &egui::Painter, a: Pos2, b: Pos2, color: Color32) {
-    painter.extend(Shape::dashed_line(
-        &[a, b],
-        Stroke::new(1.0, color),
-        8.0,
-        4.0,
-    ));
+    dashed_path(painter, &[a, b], color);
+}
+
+/// A dashed polyline (the drawn line of a curved wall), with the dashes
+/// running on from one piece to the next.
+fn dashed_path(painter: &egui::Painter, pts: &[Pos2], color: Color32) {
+    painter.extend(Shape::dashed_line(pts, Stroke::new(1.0, color), 8.0, 4.0));
 }
 
 /// A text field that edits a length in millimetres and only reports a value

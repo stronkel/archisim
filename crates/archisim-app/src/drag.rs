@@ -13,6 +13,9 @@
 //! - **Wall end**: stretches the wall, and every wall joined at that corner
 //!   with it, so the corner stays closed. With Ctrl only this wall moves
 //!   (it comes off the corner). Doors and windows stay where they are.
+//! - **Bend** (handle at the middle of a curved wall): the wall passes
+//!   through the point it is dropped on, its ends staying put; dropped in
+//!   line with them, it straightens.
 //! - **Slab corner**: moves that corner; dropped on a neighbouring corner
 //!   it removes it.
 //! - **Slab edge** (handle at its middle): moves the edge parallel to
@@ -30,6 +33,8 @@ pub enum Grip {
     Body,
     /// One end of a wall's drawn line.
     WallEnd { wall: WallId, start: bool },
+    /// The middle of a curved wall's drawn line: bends it.
+    WallBend { wall: WallId },
     /// A corner of a slab, by its index in the outline.
     SlabCorner { slab: SlabId, index: usize },
     /// The edge of a slab from corner `index` to the next one.
@@ -74,6 +79,12 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                         },
                         point: w.end,
                     });
+                    if w.is_curved() {
+                        v.push(Hotspot {
+                            grip: Grip::WallBend { wall: *id },
+                            point: w.midpoint(),
+                        });
+                    }
                 }
             }
             Element::Slab(id) => {
@@ -136,6 +147,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
             .into_iter()
             .map(|(w, _)| Element::Wall(w))
             .collect(),
+        Grip::WallBend { wall } => [Element::Wall(wall)].into_iter().collect(),
         Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
             [Element::Slab(slab)].into_iter().collect()
         }
@@ -169,6 +181,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::Body if drag.variant => "Copiar",
         Grip::Body => "Mover",
         Grip::WallEnd { .. } => "Estirar muro",
+        Grip::WallBend { .. } => "Curvar muro",
         Grip::SlabCorner { slab, index } => {
             if merges_corner(model, slab, index, drag.to) {
                 "Quitar esquina de forjado"
@@ -219,6 +232,11 @@ pub fn apply(
                 model.stretch_wall(w, s, e)?;
             }
             Ok(None)
+        }
+        Grip::WallBend { wall } => {
+            let w = model.wall(wall).ok_or(ModelError::UnknownWall(wall))?;
+            let bulge = archisim_core::Arc::bulge_through(w.start, drag.to, w.end).unwrap_or(0.0);
+            model.set_wall_bulge(wall, bulge).map(|_| None)
         }
         Grip::SlabCorner { slab, index } => {
             let merge = merges_corner(model, slab, index, drag.to);
@@ -344,10 +362,11 @@ fn move_selection(
 /// along its own axis to stay against that face (a partition stays
 /// against the wall it meets).
 fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2, Point2)> {
-    use archisim_geom::Line;
+    use archisim_geom::{wall_curve, Curve, Line};
     let mut ends: Vec<Point2> = Vec::new();
-    // Face lines of the moved walls: (start, end) of each face segment.
-    let mut faces: Vec<(Point2, Point2)> = Vec::new();
+    // Faces of the moved walls: the line or circle, and the wall it is a
+    // face of (to know whether a point lies on the face itself).
+    let mut faces: Vec<(Curve, &archisim_core::Wall)> = Vec::new();
     let mut level = None;
     for id in moved {
         let Some(w) = model.wall(*id) else { continue };
@@ -357,34 +376,57 @@ fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2,
         let Some(t) = model.wall_type(w.wall_type).map(|t| t.thickness()) else {
             continue;
         };
-        let Some(n) = (w.end - w.start).normalized().map(Point2::perp_left) else {
-            continue;
-        };
         let (ext, int) = w.face_offsets(t);
         for off in [ext, int] {
-            faces.push((w.start + n * off, w.end + n * off));
+            if let Some(c) = wall_curve(w, off) {
+                faces.push((c, w));
+            }
         }
     }
     let Some(level) = level else {
         return Vec::new();
     };
-    let follow = |p: Point2, axis: Point2| -> Option<Point2> {
+    let on_face = |c: &Curve, w: &archisim_core::Wall, p: Point2| match (c, w.arc()) {
+        (Curve::Circle { centre, radius }, Some(arc)) => {
+            let (f, _) = arc.project(p);
+            (p.distance(*centre) - radius).abs() < 1e-5 && f > 0.0 && f < 1.0
+        }
+        (Curve::Line(l), _) => {
+            let n = (w.end - w.start)
+                .normalized()
+                .map_or(Point2::default(), Point2::perp_left);
+            let off = (l.p - w.start).dot(n);
+            let (a, b) = (w.start + n * off, w.end + n * off);
+            crate::pick::nearest_on_segment(a, b, p).distance(p) < 1e-5
+        }
+        _ => false,
+    };
+    let follow = |p: Point2, axis: Option<Point2>| -> Option<Point2> {
         if ends.iter().any(|e| e.approx_eq(p)) {
             return Some(p + d);
         }
-        faces.iter().find_map(|(a, b)| {
-            let on = crate::pick::nearest_on_segment(*a, *b, p).distance(p) < 1e-5;
-            if !on {
+        let axis = axis?;
+        faces.iter().find_map(|(c, w)| {
+            if !on_face(c, w, p) {
                 return None;
             }
-            Line::new(p, axis).intersect(&Line::new(*a + d, *b - *a))
+            let moved = match c {
+                Curve::Line(l) => Curve::Line(Line::new(l.p + d, l.d)),
+                Curve::Circle { centre, radius } => Curve::Circle {
+                    centre: *centre + d,
+                    radius: *radius,
+                },
+            };
+            Curve::Line(Line::new(p, axis)).intersect_near(&moved, p + d)
         })
     };
     model
         .walls_on_level(level)
         .filter(|w| !moved.contains(&w.id))
         .filter_map(|w| {
-            let axis = w.end - w.start;
+            // A curved wall has no axis to slide along: only its joined
+            // ends follow.
+            let axis = (!w.is_curved()).then(|| w.end - w.start);
             let s = follow(w.start, axis);
             let e = follow(w.end, axis);
             (s.is_some() || e.is_some()).then(|| (w.id, s.unwrap_or(w.start), e.unwrap_or(w.end)))
@@ -451,6 +493,7 @@ fn copy(
                     reference: w.reference,
                     height: w.height,
                     base_offset: w.base_offset,
+                    bulge: w.bulge,
                     top: w.top,
                 })?;
                 copies.insert(Element::Wall(new));
@@ -529,7 +572,7 @@ fn level_of(
 ) -> Option<archisim_core::LevelId> {
     let wall_level = |id: WallId| model.wall(id).map(|w| w.level);
     match grip {
-        Grip::WallEnd { wall, .. } => wall_level(wall),
+        Grip::WallEnd { wall, .. } | Grip::WallBend { wall } => wall_level(wall),
         Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
             model.slab(slab).map(|s| s.level)
         }
@@ -633,6 +676,7 @@ mod tests {
                 reference: archisim_core::ReferenceLine::Center,
                 height: 2.5,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap()

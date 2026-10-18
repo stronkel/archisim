@@ -11,7 +11,7 @@ use crate::family::{
     self, Evaluation, Family, FamilyError, Mark, NotAnOpening, ParamKind, ParamScope, Value, Values,
 };
 use crate::ids::*;
-use crate::math::{is_simple_polygon, signed_area, Point2, EPSILON};
+use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
 #[derive(Debug, Clone, PartialEq)]
@@ -130,11 +130,15 @@ pub enum ReferenceLine {
     InteriorFace,
 }
 
-/// A straight wall. IFC: `IfcWall` with an `IfcMaterialLayerSetUsage`.
+/// A wall, straight or curved. IFC: `IfcWall` with an
+/// `IfcMaterialLayerSetUsage`.
 ///
 /// The exterior face is on the **left** of the axis when looking from `start`
 /// to `end`. Drawing a building outline clockwise therefore puts the exterior
 /// layers outside.
+///
+/// A curved wall's drawn line is a circular arc from `start` to `end`, given
+/// by its `bulge` (see [`Arc`]); 0 is a straight wall.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wall {
     pub id: WallId,
@@ -143,6 +147,9 @@ pub struct Wall {
     pub level: LevelId,
     pub start: Point2,
     pub end: Point2,
+    /// 0 for a straight wall; otherwise `tan(θ/4)` of the arc it follows
+    /// (positive: turning left, counter-clockwise).
+    pub bulge: f64,
     pub reference: ReferenceLine,
     /// Height above the base, in metres. With a top constraint it is
     /// worked out by the model from the levels and kept up to date.
@@ -166,8 +173,39 @@ pub enum WallTop {
 }
 
 impl Wall {
+    /// Length of the drawn line (along the arc for a curved wall).
     pub fn length(&self) -> f64 {
-        self.start.distance(self.end)
+        match self.arc() {
+            Some(a) => a.length(),
+            None => self.start.distance(self.end),
+        }
+    }
+
+    /// The arc of a curved wall, or `None` if it is straight.
+    pub fn arc(&self) -> Option<Arc> {
+        Arc::from_bulge(self.start, self.end, self.bulge)
+    }
+
+    pub fn is_curved(&self) -> bool {
+        self.arc().is_some()
+    }
+
+    /// The point of the drawn line at fraction `f` (0 = start, 1 = end),
+    /// moved `offset` to the left.
+    pub fn point_at(&self, f: f64, offset: f64) -> Point2 {
+        match self.arc() {
+            Some(a) => a.point(f, offset),
+            None => {
+                let d = self.end - self.start;
+                let n = d.normalized().map_or(Vec2::default(), |u| u.perp_left());
+                self.start + d * f + n * offset
+            }
+        }
+    }
+
+    /// The middle of the drawn line.
+    pub fn midpoint(&self) -> Point2 {
+        self.point_at(0.5, 0.0)
     }
 
     /// Signed offsets (left positive) of the exterior and interior faces from
@@ -526,6 +564,8 @@ pub struct NewWall {
     pub level: LevelId,
     pub start: Point2,
     pub end: Point2,
+    /// 0 for a straight wall; the arc's bulge for a curved one.
+    pub bulge: f64,
     pub reference: ReferenceLine,
     /// Height above the base; ignored when `top` is a level.
     pub height: f64,
@@ -558,6 +598,11 @@ pub enum ModelError {
     InvalidOutline,
     /// The wall's start and end are the same point.
     ZeroLengthWall,
+    /// A curved wall bends more than its thickness allows (its inner face
+    /// would have no radius left), or almost closes on itself.
+    ArcTooTight,
+    /// Doors and windows cannot be placed in curved walls yet.
+    OpeningInCurvedWall,
     /// A dimension that must be positive is not.
     NonPositive(&'static str),
     /// A coordinate or dimension is not a finite number (NaN or infinite).
@@ -624,6 +669,12 @@ impl fmt::Display for ModelError {
                 "a slab outline needs at least three points and must not cross itself"
             ),
             ModelError::ZeroLengthWall => write!(f, "a wall needs two different points"),
+            ModelError::ArcTooTight => {
+                write!(f, "the curved wall bends too much for its thickness")
+            }
+            ModelError::OpeningInCurvedWall => {
+                write!(f, "doors and windows cannot go in curved walls yet")
+            }
             ModelError::NonPositive(what) => write!(f, "{what} must be greater than zero"),
             ModelError::NotFinite(what) => write!(f, "{what} is not a valid number"),
             ModelError::DuplicateId(id) => write!(f, "id {id} is used by more than one element"),
@@ -665,6 +716,13 @@ impl std::error::Error for ModelError {}
 
 /// Largest internal id: integers up to 2^53 survive any JSON reader.
 pub const MAX_ID: u64 = 1 << 53;
+
+/// Largest bulge of a curved wall: an arc of 340°. A full circle is drawn
+/// as two half circles.
+pub const MAX_BULGE: f64 = 11.430052302761343;
+
+/// Smallest radius left for the inner face of a curved wall, in metres.
+pub const MIN_INNER_RADIUS: f64 = 0.05;
 
 /// Whether a closed polygon contains a point (ray casting).
 fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
@@ -1087,6 +1145,11 @@ impl Model {
             level: spec.level,
             start: spec.start,
             end: spec.end,
+            bulge: if spec.bulge.abs() < MIN_BULGE {
+                0.0
+            } else {
+                spec.bulge
+            },
             reference: spec.reference,
             height,
             base_offset: spec.base_offset,
@@ -1129,6 +1192,31 @@ impl Model {
         if spec.start.approx_eq(spec.end) {
             return Err(ModelError::ZeroLengthWall);
         }
+        finite(spec.bulge, "wall bulge")?;
+        if let Some(arc) = Arc::from_bulge(spec.start, spec.end, spec.bulge) {
+            let t = self
+                .wall_types
+                .get(&spec.wall_type)
+                .map_or(0.0, |t| t.thickness());
+            let probe = Wall {
+                id: WallId(0),
+                guid: GlobalId::default(),
+                wall_type: spec.wall_type,
+                level: spec.level,
+                start: spec.start,
+                end: spec.end,
+                bulge: spec.bulge,
+                reference: spec.reference,
+                height: spec.height,
+                base_offset: spec.base_offset,
+                top: spec.top,
+            };
+            let (ext, int) = probe.face_offsets(t);
+            let tight = arc.radius_at(ext).min(arc.radius_at(int)) < MIN_INNER_RADIUS;
+            if spec.bulge.abs() > MAX_BULGE || tight {
+                return Err(ModelError::ArcTooTight);
+            }
+        }
         if let WallTop::Level { level, offset } = spec.top {
             if !self.levels.contains_key(&level) {
                 return Err(ModelError::UnknownLevel(level));
@@ -1160,7 +1248,10 @@ impl Model {
         let previous = (wall.start, wall.end);
         wall.start = start;
         wall.end = end;
-        if let Err(e) = self.check_hosted_openings(id) {
+        let check = self
+            .check_arc(id)
+            .and_then(|()| self.check_hosted_openings(id));
+        if let Err(e) = check {
             let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
             (wall.start, wall.end) = previous;
             return Err(e);
@@ -1218,6 +1309,7 @@ impl Model {
     pub fn flip_wall(&mut self, id: WallId) -> Result<(), ModelError> {
         let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
         std::mem::swap(&mut wall.start, &mut wall.end);
+        wall.bulge = -wall.bulge;
         let length = wall.length();
         for opening in self.openings.values_mut().filter(|o| o.wall == id) {
             opening.along = length - opening.along;
@@ -1244,6 +1336,7 @@ impl Model {
                 reference: wall.reference,
                 height: wall.height,
                 base_offset: wall.base_offset,
+                bulge: wall.bulge,
                 top: wall.top,
             })
             .map_err(|e| match e {
@@ -1350,6 +1443,17 @@ impl Model {
         Ok(())
     }
 
+    /// Bends a wall (or straightens it, with 0): its ends stay where they
+    /// are and its line becomes the arc of that bulge (see [`Arc`]).
+    pub fn set_wall_bulge(&mut self, id: WallId, bulge: f64) -> Result<(), ModelError> {
+        if bulge.abs() >= MIN_BULGE && self.openings.values().any(|o| o.wall == id) {
+            return Err(ModelError::OpeningInCurvedWall);
+        }
+        self.edit_wall(id, |w| {
+            w.bulge = if bulge.abs() < MIN_BULGE { 0.0 } else { bulge };
+        })
+    }
+
     /// Changes which line of the wall is the drawn one. The drawn line stays
     /// where it is and the wall body moves around it, so walls joined at
     /// their end points stay joined.
@@ -1367,6 +1471,25 @@ impl Model {
         let wall = self.walls.remove(&id).ok_or(ModelError::UnknownWall(id))?;
         self.openings.retain(|_, o| o.wall != id);
         Ok(wall)
+    }
+
+    /// Whether a curved wall still has room for its inner face.
+    fn check_arc(&self, id: WallId) -> Result<(), ModelError> {
+        let w = self.walls.get(&id).ok_or(ModelError::UnknownWall(id))?;
+        let Some(arc) = w.arc() else {
+            return Ok(());
+        };
+        let t = self
+            .wall_types
+            .get(&w.wall_type)
+            .map_or(0.0, |t| t.thickness());
+        let (ext, int) = w.face_offsets(t);
+        if w.bulge.abs() > MAX_BULGE
+            || arc.radius_at(ext).min(arc.radius_at(int)) < MIN_INNER_RADIUS
+        {
+            return Err(ModelError::ArcTooTight);
+        }
+        Ok(())
     }
 
     /// Checks that every door and window in a wall still fits.
@@ -1425,10 +1548,10 @@ impl Model {
             .filter(|w| w.wall_type == id)
             .map(|w| w.id)
             .collect();
-        if let Err(e) = walls
-            .iter()
-            .try_for_each(|w| self.check_hosted_openings(*w))
-        {
+        if let Err(e) = walls.iter().try_for_each(|w| {
+            self.check_arc(*w)
+                .and_then(|()| self.check_hosted_openings(*w))
+        }) {
             self.wall_types.insert(id, previous);
             return Err(e);
         }
@@ -2170,6 +2293,9 @@ impl Model {
             .walls
             .get(&spec.wall)
             .ok_or(ModelError::UnknownWall(spec.wall))?;
+        if wall.is_curved() {
+            return Err(ModelError::OpeningInCurvedWall);
+        }
         let thickness = self
             .wall_types
             .get(&wall.wall_type)
@@ -2593,6 +2719,7 @@ impl Model {
                 reference: wall.reference,
                 height: wall.height,
                 base_offset: wall.base_offset,
+                bulge: wall.bulge,
                 top: wall.top,
             };
             let mut wall = wall;
@@ -2749,6 +2876,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 2.7,
             base_offset: 0.0,
+            bulge: 0.0,
             top: crate::WallTop::Unconnected,
         }
     }
@@ -2764,6 +2892,99 @@ mod tests {
         assert!(matches!(m.add_wall(s), Err(ModelError::NonPositive(_))));
         let s = spec(LevelId(999), t);
         assert!(matches!(m.add_wall(s), Err(ModelError::UnknownLevel(_))));
+    }
+
+    #[test]
+    fn curved_walls() {
+        let (mut m, lvl, t) = sample();
+        let brick = m.materials().next().unwrap().id;
+        // A half circle of radius 2 bending towards −y.
+        let mut s = spec(lvl, t);
+        s.bulge = 1.0;
+        let id = m.add_wall(s.clone()).unwrap();
+        let w = m.wall(id).unwrap();
+        assert!(w.is_curved());
+        assert!((w.length() - 2.0 * std::f64::consts::PI).abs() < 1e-9);
+        assert!(w.midpoint().approx_eq(Point2::new(2.0, -2.0)));
+        // Moving keeps the bend; stretching the chord keeps its shape.
+        m.move_wall(id, Point2::new(1.0, 0.0), Point2::new(5.0, 0.0))
+            .unwrap();
+        assert_eq!(m.wall(id).unwrap().bulge, 1.0);
+        // Flipping turns the other way round along the same arc.
+        let before = m.wall(id).unwrap().midpoint();
+        m.flip_wall(id).unwrap();
+        assert_eq!(m.wall(id).unwrap().bulge, -1.0);
+        assert!(m.wall(id).unwrap().midpoint().approx_eq(before));
+        // No doors or windows yet.
+        let otype = m
+            .add_opening_type(NewOpeningType {
+                name: "P".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 0.8,
+                height: 2.0,
+                frame_width: 0.05,
+                frame_depth: 0.08,
+                frame_material: brick,
+                panel_material: brick,
+            })
+            .unwrap();
+        let op = NewOpening {
+            opening_type: otype,
+            wall: id,
+            along: 2.0,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        };
+        assert_eq!(
+            m.add_opening(op.clone()),
+            Err(ModelError::OpeningInCurvedWall)
+        );
+        // Too tight: a 4 cm radius for a 10 cm wall.
+        let mut tight = spec(lvl, t);
+        tight.end = Point2::new(0.08, 0.0);
+        tight.bulge = 1.0;
+        assert_eq!(m.add_wall(tight), Err(ModelError::ArcTooTight));
+        // Shrinking a curved wall until it is too tight is refused whole.
+        let before = m.wall(id).unwrap().clone();
+        assert_eq!(
+            m.move_wall(id, Point2::new(0.0, 0.0), Point2::new(0.1, 0.0)),
+            Err(ModelError::ArcTooTight)
+        );
+        assert_eq!(m.wall(id).unwrap(), &before);
+        let mut closed = spec(lvl, t);
+        closed.bulge = 20.0;
+        assert_eq!(m.add_wall(closed), Err(ModelError::ArcTooTight));
+        // A bulge too small to see is a straight wall.
+        let mut flat = spec(lvl, t);
+        flat.bulge = 1e-9;
+        let f = m.add_wall(flat).unwrap();
+        assert_eq!(m.wall(f).unwrap().bulge, 0.0);
+        // Bending a wall keeps its ends; a wall with a door cannot bend.
+        m.set_wall_bulge(f, 0.5).unwrap();
+        assert!(m.wall(f).unwrap().is_curved());
+        m.set_wall_bulge(f, 0.0).unwrap();
+        let mut door = op;
+        door.wall = f;
+        m.add_opening(door).unwrap();
+        assert_eq!(
+            m.set_wall_bulge(f, 0.5),
+            Err(ModelError::OpeningInCurvedWall)
+        );
+        // A type thick enough to close the curve (radius 2) is refused.
+        let thick = m
+            .add_wall_type(
+                "Muro grueso",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 4.5,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        assert_eq!(m.set_wall_type(id, thick), Err(ModelError::ArcTooTight));
     }
 
     #[test]

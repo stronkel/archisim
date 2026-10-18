@@ -157,8 +157,8 @@ impl ArchiSimApp {
         let model = self.ed.model();
         match self.tool {
             Tool::Wall => {
-                let mut s = self.snap_at(raw, reach, self.wall_tool.chain(), &BTreeSet::new());
-                if let Some(a) = self.wall_tool.anchor() {
+                let mut s = self.snap_at(raw, reach, &self.wall_tool.chain(), &BTreeSet::new());
+                if let Some(a) = self.wall_tool.tracking_from() {
                     if ctx.input(|i| i.modifiers.shift) {
                         s = constrain(a, s);
                     } else {
@@ -343,8 +343,8 @@ impl ArchiSimApp {
             let towards = self.cursor.map(|c| c.point).unwrap_or_default();
             match self.tool {
                 Tool::Wall => {
-                    if let Outcome::Build(a, b) = self.wall_tool.enter(towards) {
-                        self.build_wall(a, b);
+                    if let Outcome::Build(pieces) = self.wall_tool.enter(towards) {
+                        self.build_walls(pieces);
                     }
                 }
                 Tool::Slab => match self.slab_tool.enter(towards) {
@@ -446,8 +446,8 @@ impl ArchiSimApp {
             Tool::Wall => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
-                        if let Outcome::Build(a, b) = self.wall_tool.click(c.point) {
-                            self.build_wall(a, b);
+                        if let Outcome::Build(pieces) = self.wall_tool.click(c.point) {
+                            self.build_walls(pieces);
                         }
                     }
                 }
@@ -709,12 +709,18 @@ impl ArchiSimApp {
             }
             if let Element::Wall(id) = e {
                 if let Some(w) = model.wall(*id) {
-                    dashed(
-                        painter,
-                        self.view.to_screen(rect, w.start),
-                        self.view.to_screen(rect, w.end),
-                        REF_LINE,
-                    );
+                    match w.arc() {
+                        Some(arc) => {
+                            let pts = self.polygon(rect, &arc.polyline(0.0, 0.01));
+                            dashed_path(painter, &pts, REF_LINE);
+                        }
+                        None => dashed(
+                            painter,
+                            self.view.to_screen(rect, w.start),
+                            self.view.to_screen(rect, w.end),
+                            REF_LINE,
+                        ),
+                    }
                 }
             }
         }
@@ -744,6 +750,11 @@ impl ArchiSimApp {
                         inside,
                         Stroke::new(1.0, Color32::BLACK),
                     ));
+                }
+                Grip::WallBend { .. } => {
+                    let r = if hot { 6.0 } else { 4.5 };
+                    let inside = if hot { ACCENT } else { Color32::WHITE };
+                    painter.circle(c, r, inside, Stroke::new(1.2, Color32::BLACK));
                 }
                 _ => {
                     let size = Vec2::splat(if hot { 9.0 } else { 7.0 });
@@ -792,6 +803,7 @@ impl ArchiSimApp {
             (Grip::SlabCorner { .. }, _) => "Esquina",
             (Grip::SlabEdge { .. }, false) => "Arista",
             (Grip::SlabEdge { .. }, true) => "Nueva esquina",
+            (Grip::WallBend { .. }, _) => "Curvar",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
@@ -841,87 +853,144 @@ impl ArchiSimApp {
         }
     }
 
-    /// The wall about to be built, with its layers, its drawn line and a
-    /// mark on its exterior side.
+    /// The walls about to be built, with their layers, their drawn lines
+    /// and a mark on the exterior side.
     fn draw_wall_preview(&self, painter: &egui::Painter, rect: Rect) {
         let (Tool::Wall, Some(a), Some(c)) = (self.tool, self.wall_tool.anchor(), self.cursor)
         else {
             return;
         };
-        let b = self.wall_tool.typed_end(c.point).unwrap_or(c.point);
         let model = self.ed.model();
         let Some(wtype) = model.wall_type(self.wall_settings.wall_type) else {
             return;
         };
-        let Some(u) = (b - a).normalized() else {
-            return;
-        };
-        let n = u.perp_left();
-        let probe = archisim_core::Wall {
-            id: archisim_core::WallId(0),
-            guid: archisim_core::GlobalId::new(),
-            wall_type: wtype.id,
-            level: self.ed.level,
-            start: a,
-            end: b,
-            reference: self.wall_settings.reference,
-            height: self.wall_settings.height,
-            base_offset: self.wall_settings.base_offset,
-            top: archisim_core::WallTop::Unconnected,
-        };
-        let (ext, int) = probe.face_offsets(wtype.thickness());
-        let band = |hi: f64, lo: f64| -> Vec<Pos2> {
-            [a + n * hi, b + n * hi, b + n * lo, a + n * lo]
-                .iter()
-                .map(|p| self.view.to_screen(rect, *p))
-                .collect()
-        };
-        let mut high = ext;
-        for layer in &wtype.layers {
-            let low = high - layer.thickness;
-            let [r, g, bl] = model
-                .material(layer.material)
-                .map_or([200, 200, 200], |m| m.cut_color);
-            painter.add(Shape::convex_polygon(
-                band(high, low),
-                Color32::from_rgba_unmultiplied(r, g, bl, 170),
-                Stroke::new(0.5, Color32::from_gray(90)),
-            ));
-            high = low;
+        let pieces = self.wall_tool.preview(c.point);
+        let mode = self.wall_tool.mode;
+        // Placed points: the centre of a circle, the ends of an arc.
+        let marks: Vec<Point2> = self.wall_tool.chain();
+        for p in marks.iter().skip(marks.len().saturating_sub(2)) {
+            let q = self.view.to_screen(rect, *p);
+            painter.circle_stroke(q, 4.0, Stroke::new(1.5, ACCENT));
         }
-        painter.add(Shape::closed_line(
-            band(ext, int),
-            Stroke::new(1.5, Color32::from_gray(30)),
-        ));
-        dashed(
-            painter,
-            self.view.to_screen(rect, a),
-            self.view.to_screen(rect, b),
-            REF_LINE,
-        );
-
-        // "ext." on the exterior side of façade walls, by the middle.
-        if wtype.function == WallFunction::Exterior {
-            let mid = (a + b) * 0.5;
-            let out =
-                (self.view.to_screen(rect, mid + n) - self.view.to_screen(rect, mid)).normalized();
-            let label_pos = self.view.to_screen(rect, mid + n * ext) + out * 14.0;
-            painter.text(
-                label_pos,
-                Align2::CENTER_CENTER,
-                "ext.",
-                FontId::proportional(11.0),
-                Color32::from_gray(90),
+        if mode == WallMode::Circle {
+            dashed(
+                painter,
+                self.view.to_screen(rect, a),
+                self.view.to_screen(rect, c.point),
+                ACCENT,
             );
         }
+        if pieces.is_empty() {
+            return;
+        }
+        for w in &pieces {
+            let probe = archisim_core::Wall {
+                id: archisim_core::WallId(0),
+                guid: archisim_core::GlobalId::new(),
+                wall_type: wtype.id,
+                level: self.ed.level,
+                start: w.start,
+                end: w.end,
+                bulge: w.bulge,
+                reference: self.wall_settings.reference,
+                height: self.wall_settings.height,
+                base_offset: self.wall_settings.base_offset,
+                top: archisim_core::WallTop::Unconnected,
+            };
+            let (ext, int) = probe.face_offsets(wtype.thickness());
+            // The curve (or line) of the wall cut into short straight
+            // pieces, each drawn as convex quads per layer.
+            let steps = probe
+                .arc()
+                .map_or(1, |arc| arc.segments(ext.max(int), 0.01).min(96));
+            let at = |f: f64, off: f64| self.view.to_screen(rect, probe.point_at(f, off));
+            let mut high = ext;
+            for layer in &wtype.layers {
+                let low = high - layer.thickness;
+                let [r, g, bl] = model
+                    .material(layer.material)
+                    .map_or([200, 200, 200], |m| m.cut_color);
+                let fill = Color32::from_rgba_unmultiplied(r, g, bl, 170);
+                for i in 0..steps {
+                    let (f0, f1) = (i as f64 / steps as f64, (i + 1) as f64 / steps as f64);
+                    painter.add(Shape::convex_polygon(
+                        vec![at(f0, high), at(f1, high), at(f1, low), at(f0, low)],
+                        fill,
+                        Stroke::NONE,
+                    ));
+                }
+                high = low;
+            }
+            let face = |off: f64| -> Vec<Pos2> {
+                (0..=steps)
+                    .map(|i| at(i as f64 / steps as f64, off))
+                    .collect()
+            };
+            let ink = Stroke::new(1.5, Color32::from_gray(30));
+            painter.add(Shape::line(face(ext), ink));
+            painter.add(Shape::line(face(int), ink));
+            painter.line_segment([at(0.0, ext), at(0.0, int)], ink);
+            painter.line_segment([at(1.0, ext), at(1.0, int)], ink);
+            dashed_path(painter, &face(0.0), REF_LINE);
+            // "ext." on the exterior side of façade walls, by the middle.
+            if wtype.function == WallFunction::Exterior {
+                let mid = probe.point_at(0.5, 0.0);
+                let out_pt = probe.point_at(0.5, 1.0);
+                let out = (self.view.to_screen(rect, out_pt) - self.view.to_screen(rect, mid))
+                    .normalized();
+                let label_pos = self.view.to_screen(rect, probe.point_at(0.5, ext)) + out * 14.0;
+                painter.text(
+                    label_pos,
+                    Align2::CENTER_CENTER,
+                    "ext.",
+                    FontId::proportional(11.0),
+                    Color32::from_gray(90),
+                );
+            }
+        }
 
-        // Length and angle by the cursor.
-        let len = a.distance(b);
-        let angle = (b - a).y.atan2((b - a).x);
-        let text = if self.wall_tool.typed.is_empty() {
-            format!("L {} mm   {}", fmt_mm(len), fmt_angle(angle))
-        } else {
-            format!("L: {}▏   {}", self.wall_tool.typed, fmt_angle(angle))
+        // Sizes by the cursor.
+        let typed = &self.wall_tool.typed;
+        let w = pieces[0];
+        let text = match (mode, w.arc()) {
+            (WallMode::Rectangle, _) => {
+                let (x, y) = (pieces[0].length(), pieces[1].length());
+                if typed.is_empty() {
+                    format!("{} × {} mm   S {}", fmt_mm(x), fmt_mm(y), fmt_area(x * y))
+                } else {
+                    format!("{typed}▏ (ancho x fondo)")
+                }
+            }
+            (WallMode::Circle, Some(arc)) if typed.is_empty() => {
+                format!("R {} mm", fmt_mm(arc.radius))
+            }
+            (WallMode::Circle, _) => format!("R: {typed}▏"),
+            (WallMode::Arc, Some(arc)) if self.wall_tool.arc_end().is_some() => {
+                if typed.is_empty() {
+                    format!(
+                        "R {} mm   L {} mm",
+                        fmt_mm(arc.radius),
+                        fmt_mm(arc.length())
+                    )
+                } else {
+                    format!("R: {typed}▏")
+                }
+            }
+            (WallMode::Arc, None) if self.wall_tool.arc_end().is_some() => {
+                if typed.is_empty() {
+                    "Recto (punto alineado)".to_string()
+                } else {
+                    format!("R: {typed}▏")
+                }
+            }
+            _ => {
+                let angle = (w.end - w.start).y.atan2((w.end - w.start).x);
+                if typed.is_empty() {
+                    format!("L {} mm   {}", fmt_mm(w.length()), fmt_angle(angle))
+                } else {
+                    format!("L: {typed}▏   {}", fmt_angle(angle))
+                }
+            }
         };
         self.draw_label(painter, rect, c.point, text);
     }
@@ -936,6 +1005,23 @@ impl ArchiSimApp {
         let Some(&last) = corners.last() else {
             return;
         };
+        if self.slab_tool.mode == SlabMode::Rectangle {
+            if let Some(outline) = self.slab_tool.rectangle_to(c.point) {
+                let screen = self.polygon(rect, &outline);
+                painter.add(Shape::closed_line(screen, Stroke::new(1.5, ACCENT)));
+                let (x, y) = (
+                    outline[0].distance(outline[1]),
+                    outline[1].distance(outline[2]),
+                );
+                let text = if self.slab_tool.typed.is_empty() {
+                    format!("{} × {} mm   S {}", fmt_mm(x), fmt_mm(y), fmt_area(x * y))
+                } else {
+                    format!("{}▏ (ancho x fondo)", self.slab_tool.typed)
+                };
+                self.draw_label(painter, rect, c.point, text);
+            }
+            return;
+        }
         let next = self.slab_tool.typed_end(c.point).unwrap_or(c.point);
         let mut pts: Vec<Point2> = corners.to_vec();
         pts.push(next);
@@ -1125,6 +1211,10 @@ impl ArchiSimApp {
                     p + Vec2::new(-6.5, 5.0),
                 ];
                 painter.add(Shape::closed_line(pts, stroke));
+            }
+            SnapKind::Centre => {
+                painter.circle_stroke(p, 6.0, stroke);
+                painter.circle_filled(p, 1.8, stroke.color);
             }
             SnapKind::OnEdge => {
                 painter.line_segment([p + Vec2::new(-5.0, -5.0), p + Vec2::new(5.0, 5.0)], stroke);

@@ -16,6 +16,7 @@ use archisim_plan::{render_plan, PlanOptions};
 
 use crate::pick::Element;
 use crate::units::{explain, explain_file};
+use crate::wall_tool::Piece;
 
 mod types;
 
@@ -271,20 +272,47 @@ impl Editor {
 
     // ---- Drawing and editing ------------------------------------------------
 
+    #[cfg(test)]
     pub fn add_wall(&mut self, s: &WallSettings, start: Point2, end: Point2) -> EditResult<WallId> {
+        let ids = self.add_walls(s, &[Piece::straight(start, end)])?;
+        Ok(ids[0])
+    }
+
+    /// Draws walls on the active level in one step (a rectangle, a circle):
+    /// all of them or none.
+    pub fn add_walls(&mut self, s: &WallSettings, pieces: &[Piece]) -> EditResult<Vec<WallId>> {
         let level = self.level;
         let top = s.top_on(self.model(), level);
-        self.transact("Crear muro", |m| {
-            m.add_wall(NewWall {
-                wall_type: s.wall_type,
-                level,
-                start,
-                end,
-                reference: s.reference,
-                height: s.height,
-                base_offset: s.base_offset,
-                top,
-            })
+        let label = if pieces.len() == 1 {
+            "Crear muro"
+        } else {
+            "Crear muros"
+        };
+        self.transact(label, |m| {
+            pieces
+                .iter()
+                .map(|w| {
+                    m.add_wall(NewWall {
+                        wall_type: s.wall_type,
+                        level,
+                        start: w.start,
+                        end: w.end,
+                        reference: s.reference,
+                        height: s.height,
+                        base_offset: s.base_offset,
+                        bulge: w.bulge,
+                        top,
+                    })
+                })
+                .collect()
+        })
+    }
+
+    /// Bends the selected walls (bulge 0 straightens them), keeping their
+    /// ends.
+    pub fn set_walls_bulge(&mut self, walls: &[WallId], bulge: f64) -> EditResult {
+        self.transact("Curvar muro", |m| {
+            walls.iter().try_for_each(|w| m.set_wall_bulge(*w, bulge))
         })
     }
 
@@ -402,12 +430,42 @@ impl Editor {
         }
         self.transact("Cambiar longitud de muro", |m| {
             let w = m.wall(wall).ok_or(ModelError::UnknownWall(wall))?;
+            let start = w.start;
+            if w.is_curved() {
+                // The same curve, longer or shorter: the bend stays.
+                let end = start + (w.end - w.start) * (length / w.length());
+                return m.move_wall(wall, start, end);
+            }
             let dir = (w.end - w.start)
                 .normalized()
                 .ok_or(ModelError::ZeroLengthWall)?;
-            let start = w.start;
             m.move_wall(wall, start, start + dir * length)
         })
+    }
+
+    /// Sets the radius of a curved wall, keeping its ends, the side it
+    /// bows out to and whether it sweeps more than half a turn.
+    pub fn set_wall_radius(&mut self, wall: WallId, radius: f64) -> EditResult {
+        let w = self
+            .model()
+            .wall(wall)
+            .ok_or_else(|| explain(&ModelError::UnknownWall(wall)))?;
+        let arc = w.arc().ok_or("el muro es recto")?;
+        let chord = w.start.distance(w.end);
+        if radius < chord / 2.0 - 1e-9 {
+            return Err(format!(
+                "el radio debe ser al menos la mitad de la distancia entre los extremos ({} mm)",
+                crate::units::fmt_mm(chord / 2.0)
+            ));
+        }
+        let minor = 2.0 * (chord / (2.0 * radius)).min(1.0).asin();
+        let sweep = if arc.sweep.abs() > std::f64::consts::PI + 1e-9 {
+            std::f64::consts::TAU - minor
+        } else {
+            minor
+        };
+        let bulge = (sweep / 4.0).tan() * arc.sweep.signum();
+        self.transact("Cambiar radio de muro", |m| m.set_wall_bulge(wall, bulge))
     }
 
     pub fn flip_walls(&mut self, walls: &[WallId]) -> EditResult {

@@ -11,7 +11,14 @@
 //! - An end inside another wall butts against it (a T-junction): each layer
 //!   goes in through the other wall's layers of lower priority and stops at
 //!   its own line; the other wall loses that part (see [`joins`]).
+//! - An end against a curved wall, or a curved wall's end inside another
+//!   wall, stops at that wall's face (no layer goes through).
 //! - Any other end (free, three or more walls) is cut square.
+//!
+//! Curved walls follow circular arcs ([`Curve`]): their faces and layer
+//! boundaries are drawn as polylines close enough to the arc
+//! ([`archisim_core::CURVE_TOLERANCE`]); [`WallGeometry::outline_path`]
+//! gives the exact arcs for the IFC.
 //!
 //! Doors and windows are resolved by [`opening_geometry`]: their span along
 //! the wall, the faces of their frame and their height. [`clip_span`] cuts a
@@ -22,8 +29,8 @@ pub mod room;
 pub mod solid;
 
 use archisim_core::{
-    Hand, LayerFunction, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, Vec2, Wall,
-    WallId, WallSide, EPSILON,
+    Arc, Hand, LayerFunction, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, Vec2,
+    Wall, WallId, WallSide, CURVE_TOLERANCE, EPSILON,
 };
 
 /// An infinite line through `p` with direction `d` (not necessarily unit).
@@ -49,6 +56,165 @@ impl Line {
     }
 }
 
+/// A wall face or layer boundary in plan: a straight line, or the circle
+/// a curved wall's face follows.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Curve {
+    Line(Line),
+    Circle { centre: Point2, radius: f64 },
+}
+
+/// How far apart a line and a circle (or two circles) may be and still be
+/// taken as touching, in metres.
+const TOUCH: f64 = 1e-4;
+
+impl Curve {
+    /// The intersection nearest to `near`, if they meet. Curves that just
+    /// touch (a straight wall running on tangent into a curved one) meet at
+    /// the point of contact.
+    pub fn intersect_near(&self, other: &Curve, near: Point2) -> Option<Point2> {
+        let found = match (self, other) {
+            (Curve::Line(a), Curve::Line(b)) => return a.intersect(b),
+            (Curve::Line(l), Curve::Circle { centre, radius })
+            | (Curve::Circle { centre, radius }, Curve::Line(l)) => {
+                line_circle(*l, *centre, *radius)
+            }
+            (
+                Curve::Circle {
+                    centre: c1,
+                    radius: r1,
+                },
+                Curve::Circle {
+                    centre: c2,
+                    radius: r2,
+                },
+            ) => circle_circle(*c1, *r1, *c2, *r2),
+        };
+        found
+            .into_iter()
+            .min_by(|a, b| a.distance(near).total_cmp(&b.distance(near)))
+    }
+}
+
+fn line_circle(l: Line, c: Point2, r: f64) -> Vec<Point2> {
+    let Some(u) = l.d.normalized() else {
+        return Vec::new();
+    };
+    let foot = l.p + u * (c - l.p).dot(u);
+    let d = foot.distance(c);
+    if d > r + TOUCH {
+        return Vec::new();
+    }
+    let h = (r * r - d * d).max(0.0).sqrt();
+    vec![foot + u * h, foot - u * h]
+}
+
+fn circle_circle(c1: Point2, r1: f64, c2: Point2, r2: f64) -> Vec<Point2> {
+    let d = c1.distance(c2);
+    if d < 1e-9 || d > r1 + r2 + TOUCH || d < (r1 - r2).abs() - TOUCH {
+        return Vec::new();
+    }
+    let a = (r1 * r1 - r2 * r2 + d * d) / (2.0 * d);
+    let h = (r1 * r1 - a * a).max(0.0).sqrt();
+    let u = (c2 - c1) * (1.0 / d);
+    let p = c1 + u * a;
+    vec![p + u.perp_left() * h, p - u.perp_left() * h]
+}
+
+/// The line or circle `offset` to the left of a wall's drawn line.
+pub fn wall_curve(wall: &Wall, offset: f64) -> Option<Curve> {
+    Some(match wall.arc() {
+        Some(a) => Curve::Circle {
+            centre: a.centre,
+            radius: a.radius_at(offset),
+        },
+        None => {
+            let dir = wall.end - wall.start;
+            let n = dir.normalized()?.perp_left();
+            Curve::Line(Line::new(wall.start + n * offset, dir))
+        }
+    })
+}
+
+/// Direction of travel (start → end) of a wall's drawn line at one end.
+fn end_tangent(wall: &Wall, end: End) -> Option<Vec2> {
+    match wall.arc() {
+        Some(a) => Some(a.tangent(if end == End::Start { 0.0 } else { 1.0 })),
+        None => (wall.end - wall.start).normalized(),
+    }
+}
+
+/// The point `offset` to the left of a wall's drawn line at one end.
+fn end_point(wall: &Wall, end: End, offset: f64) -> Point2 {
+    wall.point_at(if end == End::Start { 0.0 } else { 1.0 }, offset)
+}
+
+/// One piece of a wall's outline, for exporting it exactly.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PathSeg {
+    /// A straight piece from the first point to the second.
+    Line(Point2, Point2),
+    /// A circular arc from the first point through the second to the third.
+    Arc(Point2, Point2, Point2),
+}
+
+/// Signed area (counter-clockwise positive) of a closed outline made of
+/// straight pieces and arcs: exact, not that of the drawn polyline.
+pub fn path_area(path: &[PathSeg]) -> f64 {
+    let mut area = 0.0;
+    for seg in path {
+        match *seg {
+            PathSeg::Line(a, b) => area += a.cross(b) / 2.0,
+            PathSeg::Arc(a, b, c) => {
+                area += a.cross(c) / 2.0;
+                let chord = c - a;
+                let len = chord.length();
+                let (ba, bc) = (a - b, c - b);
+                let cross = ba.cross(bc);
+                if cross.abs() < 1e-15 || len < 1e-12 {
+                    continue;
+                }
+                // The angle at the middle point is half of what the rest
+                // of the circle sweeps (inscribed angle).
+                let beta = cross.abs().atan2(ba.dot(bc));
+                let phi = 2.0 * (std::f64::consts::PI - beta);
+                let r = len / (2.0 * beta.sin());
+                let segment = r * r / 2.0 * (phi - phi.sin());
+                // Bulging to the right of a → c adds to the area.
+                area += if chord.cross(b - a) < 0.0 {
+                    segment
+                } else {
+                    -segment
+                };
+            }
+        }
+    }
+    area
+}
+
+/// Number of straight pieces for every face and layer boundary of a
+/// curved wall: the same for all, so the layers share their vertices.
+fn arc_segments(arc: &Arc, ext: f64, int: f64) -> usize {
+    arc.segments(ext, CURVE_TOLERANCE)
+        .max(arc.segments(int, CURVE_TOLERANCE))
+}
+
+/// The points of the curve `offset` from the arc strictly between the
+/// points `from` and `to` (which lie on it), in that order.
+fn arc_points(arc: &Arc, nseg: usize, from: Point2, to: Point2, offset: f64) -> Vec<Point2> {
+    let (fa, fb) = (arc.project(from).0, arc.project(to).0);
+    let margin = 0.25 / nseg as f64;
+    let mut pts: Vec<Point2> = (1..nseg)
+        .map(|i| i as f64 / nseg as f64)
+        .filter(|f| *f > fa.min(fb) + margin && *f < fa.max(fb) - margin)
+        .map(|f| arc.point(f, offset))
+        .collect();
+    if fa > fb {
+        pts.reverse();
+    }
+    pts
+}
+
 pub use archisim_core::signed_area;
 pub use joins::{Notch, NotchRegion, TeeEnd};
 pub use room::{room_outline, Contour, RoomError};
@@ -71,6 +237,9 @@ pub enum EndCut {
     /// Butting against another wall (a T-junction): each layer stops at its
     /// own line, parallel to the other wall (see [`joins`]).
     Tee(TeeEnd),
+    /// Stopping at the face of another wall, every layer alike: a wall
+    /// butting against a curved one, or a curved wall's end inside another.
+    Face(Curve),
 }
 
 impl EndCut {
@@ -80,6 +249,18 @@ impl EndCut {
             EndCut::Square => None,
             EndCut::Along(l) => Some(*l),
             EndCut::Tee(t) => Some(t.layer_line(layer)),
+            EndCut::Face(Curve::Line(l)) => Some(*l),
+            EndCut::Face(Curve::Circle { .. }) => None,
+        }
+    }
+
+    /// The line or circle where layer `layer` ends, if not square.
+    pub fn curve(&self, layer: usize) -> Option<Curve> {
+        match self {
+            EndCut::Square => None,
+            EndCut::Along(l) => Some(Curve::Line(*l)),
+            EndCut::Tee(t) => Some(Curve::Line(t.layer_line(layer))),
+            EndCut::Face(c) => Some(*c),
         }
     }
 
@@ -104,8 +285,10 @@ pub struct LayerBand {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WallGeometry {
     pub wall: WallId,
-    /// The drawn line (reference line) of the wall.
+    /// The ends of the drawn line (reference line) of the wall.
     pub axis: (Point2, Point2),
+    /// The arc the drawn line follows, for a curved wall.
+    pub arc: Option<Arc>,
     /// Offset of the exterior face from the drawn line (left positive).
     pub exterior_offset: f64,
     /// Offset of the interior face from the drawn line (left positive).
@@ -153,6 +336,48 @@ impl WallGeometry {
         build_outline(self, z)
     }
 
+    /// The points of each end, from the exterior face to the interior one
+    /// (one per layer boundary at a T-junction): the corners of the wall.
+    pub fn end_points(&self) -> (&[Point2], &[Point2]) {
+        (&self.ends.0, &self.ends.1)
+    }
+
+    /// The outline of a curved wall as straight pieces and exact arcs
+    /// (`None` for a straight wall, whose outline is already exact).
+    pub fn outline_path(&self) -> Option<Vec<PathSeg>> {
+        let arc = self.arc.as_ref()?;
+        let (s, e) = (&self.ends.0, &self.ends.1);
+        let (s_ext, s_int) = (*s.first()?, *s.last()?);
+        let (e_ext, e_int) = (*e.first()?, *e.last()?);
+        let mid = |a: Point2, b: Point2, off: f64| {
+            let (fa, fb) = (arc.project(a).0, arc.project(b).0);
+            arc.point((fa + fb) / 2.0, off)
+        };
+        let mut path = Vec::new();
+        for w in s.windows(2) {
+            if !w[0].approx_eq(w[1]) {
+                path.push(PathSeg::Line(w[0], w[1]));
+            }
+        }
+        path.push(PathSeg::Arc(
+            s_int,
+            mid(s_int, e_int, self.interior_offset),
+            e_int,
+        ));
+        let back: Vec<Point2> = e.iter().rev().copied().collect();
+        for w in back.windows(2) {
+            if !w[0].approx_eq(w[1]) {
+                path.push(PathSeg::Line(w[0], w[1]));
+            }
+        }
+        path.push(PathSeg::Arc(
+            e_ext,
+            mid(e_ext, s_ext, self.exterior_offset),
+            s_ext,
+        ));
+        Some(path)
+    }
+
     /// Heights above the level where the outline changes (the bottom and
     /// top of the walls butting in), sorted.
     pub fn notch_heights(&self) -> Vec<f64> {
@@ -191,21 +416,20 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
     let start_cut = end_cut(model, wall, End::Start);
     let end_cut_ = end_cut(model, wall, End::End);
 
-    let dir = wall.end - wall.start;
-    let normal = dir.normalized()?.perp_left();
+    (wall.end - wall.start).normalized()?;
+    let arc = wall.arc();
     let point_at = |offset: f64, end: End, layer: usize| -> Point2 {
-        let (base, cut) = match end {
-            End::Start => (wall.start, &start_cut),
-            End::End => (wall.end, &end_cut_),
+        let cut = match end {
+            End::Start => &start_cut,
+            End::End => &end_cut_,
         };
-        let square = base + normal * offset;
-        match cut.line(layer) {
-            None => square,
-            Some(line) => Line::new(wall.start + normal * offset, dir)
-                .intersect(&line)
-                .unwrap_or(square),
+        let square = end_point(wall, end, offset);
+        match (cut.curve(layer), wall_curve(wall, offset)) {
+            (Some(c), Some(own)) => own.intersect_near(&c, square).unwrap_or(square),
+            _ => square,
         }
     };
+    let nseg = arc.map_or(0, |a| arc_segments(&a, ext, int));
 
     let mut tops = vec![ext];
     for layer in &wtype.layers {
@@ -218,15 +442,21 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
         .enumerate()
         .map(|(li, layer)| {
             let (high, low) = (tops[li], tops[li + 1]);
+            let (ls, le) = (point_at(low, End::Start, li), point_at(low, End::End, li));
+            let (hs, he) = (point_at(high, End::Start, li), point_at(high, End::End, li));
+            let mut polygon = vec![ls];
+            if let Some(a) = &arc {
+                polygon.extend(arc_points(a, nseg, ls, le, low));
+            }
+            polygon.extend([le, he]);
+            if let Some(a) = &arc {
+                polygon.extend(arc_points(a, nseg, he, hs, high));
+            }
+            polygon.push(hs);
             LayerBand {
                 material: layer.material,
                 function: layer.function,
-                polygon: ensure_ccw(vec![
-                    point_at(low, End::Start, li),
-                    point_at(low, End::End, li),
-                    point_at(high, End::End, li),
-                    point_at(high, End::Start, li),
-                ]),
+                polygon: ensure_ccw(polygon),
             }
         })
         .collect();
@@ -254,6 +484,7 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
     let mut g = WallGeometry {
         wall: id,
         axis: (wall.start, wall.end),
+        arc,
         exterior_offset: ext,
         interior_offset: int,
         ends: (profile(End::Start), profile(End::End)),
@@ -271,6 +502,22 @@ pub fn wall_geometry(model: &Model, id: WallId) -> Option<WallGeometry> {
 /// the notches on it, the end (interior to exterior), the exterior face
 /// back with its notches.
 fn build_outline(g: &WallGeometry, z: Option<f64>) -> Vec<Point2> {
+    if let Some(arc) = &g.arc {
+        // Curved walls take no notches: other walls stop at their faces.
+        let nseg = arc_segments(arc, g.exterior_offset, g.interior_offset);
+        let (s, e) = (&g.ends.0, &g.ends.1);
+        let (Some(s_int), Some(e_int), Some(s_ext), Some(e_ext)) =
+            (s.last(), e.last(), s.first(), e.first())
+        else {
+            return Vec::new();
+        };
+        let mut ring: Vec<Point2> = s.clone();
+        ring.extend(arc_points(arc, nseg, *s_int, *e_int, g.interior_offset));
+        ring.extend(e.iter().rev());
+        ring.extend(arc_points(arc, nseg, *e_ext, *s_ext, g.exterior_offset));
+        ring.dedup_by(|a, b| a.approx_eq(*b));
+        return ensure_ccw(ring);
+    }
     let (a, b) = g.axis;
     let Some(u) = (b - a).normalized() else {
         return Vec::new();
@@ -363,6 +610,13 @@ fn notch_profile(nt: &Notch, a: Point2, u: Vec2, n: Vec2, centre: f64) -> Vec<Po
 
 /// The two face lines of a wall, as (left, right) when walking in direction
 /// `towards`: `true` walks start → end, `false` walks end → start.
+fn face_curves(model: &Model, wall: &Wall, forward: bool) -> Option<(Curve, Curve)> {
+    let t = model.wall_type(wall.wall_type)?.thickness();
+    let (ext, int) = wall.face_offsets(t);
+    let (e, i) = (wall_curve(wall, ext)?, wall_curve(wall, int)?);
+    Some(if forward { (e, i) } else { (i, e) })
+}
+
 fn faces(model: &Model, wall: &Wall, forward: bool) -> Option<(Line, Line)> {
     let t = model.wall_type(wall.wall_type)?.thickness();
     let (ext, int) = wall.face_offsets(t);
@@ -398,15 +652,61 @@ fn end_cut(model: &Model, wall: &Wall, end: End) -> EndCut {
         (Some(one), None) => one,
         (None, _) => {
             return joins::tee_end(model, wall, end == End::Start)
-                .map_or(EndCut::Square, EndCut::Tee)
+                .map(EndCut::Tee)
+                .or_else(|| face_stop(model, wall, end).map(EndCut::Face))
+                .unwrap_or(EndCut::Square)
         }
         _ => return EndCut::Square,
     };
     mitre(model, wall, end, other, other_end).unwrap_or(EndCut::Square)
 }
 
+/// The face of another wall that an end of `wall` stops at, when a curved
+/// wall is involved (straight walls butt with [`joins::tee_end`]): the end
+/// lies inside the other wall, away from its ends, and comes in at a clear
+/// angle.
+fn face_stop(model: &Model, wall: &Wall, end: End) -> Option<Curve> {
+    let p = end_point(wall, end, 0.0);
+    let t = end_tangent(wall, end)?;
+    // Into the wall, away from the end.
+    let away = if end == End::Start { t } else { -t };
+    model
+        .walls_on_level(wall.level)
+        .filter(|h| h.id != wall.id && (h.is_curved() || wall.is_curved()))
+        .find_map(|h| {
+            let th = model.wall_type(h.wall_type)?.thickness();
+            let (ext, int) = h.face_offsets(th);
+            let (lo, hi) = (ext.min(int), ext.max(int));
+            let (inside, off, normal) = match h.arc() {
+                Some(a) => {
+                    let (f, off) = a.project(p);
+                    let s = f * a.length();
+                    let inside = s > EPSILON && s < a.length() - EPSILON;
+                    (inside, off, a.tangent(f).perp_left())
+                }
+                None => {
+                    let u = (h.end - h.start).normalized()?;
+                    let s = (p - h.start).dot(u);
+                    let inside = s > EPSILON && s < h.length() - EPSILON;
+                    (inside, (p - h.start).dot(u.perp_left()), u.perp_left())
+                }
+            };
+            if !inside || off < lo - 1e-6 || off > hi + 1e-6 {
+                return None;
+            }
+            let side = away.dot(normal);
+            if side.abs() < 0.26 {
+                return None;
+            }
+            wall_curve(h, if side > 0.0 { hi } else { lo })
+        })
+}
+
 /// Mitre between `wall` arriving at the junction and `other` leaving it.
 fn mitre(model: &Model, wall: &Wall, end: End, other: &Wall, other_end: End) -> Option<EndCut> {
+    if wall.is_curved() || other.is_curved() {
+        return curved_mitre(model, wall, end, other, other_end);
+    }
     // Walk `wall` towards the junction and `other` away from it: the left
     // faces of both then lie on the same side of the corner.
     let (w_left, w_right) = faces(model, wall, end == End::End)?;
@@ -434,6 +734,42 @@ fn mitre(model: &Model, wall: &Wall, end: End, other: &Wall, other_end: End) -> 
     }
     if (r - l).length() < EPSILON {
         return None;
+    }
+    Some(EndCut::Along(Line::new(l, r - l)))
+}
+
+/// [`mitre`] when one of the walls (or both) is curved: the faces meet as
+/// curves, and the cut is the straight line through both corners.
+fn curved_mitre(
+    model: &Model,
+    wall: &Wall,
+    end: End,
+    other: &Wall,
+    other_end: End,
+) -> Option<EndCut> {
+    let (w_left, w_right) = face_curves(model, wall, end == End::End)?;
+    let (o_left, o_right) = face_curves(model, other, other_end == End::Start)?;
+    let p = end_point(wall, end, 0.0);
+    let tw = model.wall_type(wall.wall_type)?.thickness();
+    let to = model.wall_type(other.wall_type)?.thickness();
+    let across = Line::new(p, end_tangent(wall, end)?.perp_left());
+    let (l, r) = match (
+        w_left.intersect_near(&o_left, p),
+        w_right.intersect_near(&o_right, p),
+    ) {
+        (Some(l), Some(r)) if !l.approx_eq(r) => (l, r),
+        // Running on smoothly (two halves of a circle, a straight wall on
+        // tangent): cut across at the junction.
+        _ => return Some(EndCut::Along(across)),
+    };
+    let limit = 4.0 * (tw + to);
+    if l.distance(p) > limit || r.distance(p) > limit {
+        // Tangent curves meet far away, or nowhere near: across if they
+        // run on smoothly, square otherwise.
+        let (ta, tb) = (end_tangent(wall, end)?, end_tangent(other, other_end)?);
+        let tb = if other_end == End::Start { tb } else { -tb };
+        let ta = if end == End::End { ta } else { -ta };
+        return (ta.dot(tb) > 0.999).then_some(EndCut::Along(across));
     }
     Some(EndCut::Along(Line::new(l, r - l)))
 }
@@ -547,6 +883,10 @@ pub struct FaceChain {
 /// [`FaceChain`] of the exterior (`true`) or interior face of a wall.
 pub fn wall_face_chain(model: &Model, wall: WallId, exterior: bool) -> Option<FaceChain> {
     let g = wall_geometry(model, wall)?;
+    if g.arc.is_some() {
+        // A curved face is not measured with straight dimensions.
+        return None;
+    }
     let (a, b) = g.axis;
     let u = (b - a).normalized()?;
     let n = u.perp_left();
@@ -764,6 +1104,7 @@ mod tests {
                     reference: ReferenceLine::ExteriorFace,
                     height: 3.0,
                     base_offset: 0.0,
+                    bulge: 0.0,
                     top: archisim_core::WallTop::Unconnected,
                 })
                 .unwrap()
@@ -822,6 +1163,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -998,6 +1340,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         };
         let w1 = m.add_wall(spec(0.0, 3.0)).unwrap();
@@ -1006,3 +1349,6 @@ mod tests {
         assert!(approx(signed_area(&g.outline), 3.0 * 0.3));
     }
 }
+
+#[cfg(test)]
+mod curved_tests;

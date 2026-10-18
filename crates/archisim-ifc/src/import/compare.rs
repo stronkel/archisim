@@ -86,7 +86,9 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         };
         let (ta, tb) = (a.wall_type(w.wall_type), b.wall_type(v.wall_type));
         let same_points = w.start.distance(v.start) <= TOL && w.end.distance(v.end) <= TOL;
+        let same_bend = (w.bulge - v.bulge).abs() <= 1e-6 * w.bulge.abs().max(1.0);
         if !same_points
+            || !same_bend
             || w.reference != v.reference
             || !close(w.height, v.height)
             || !close(w.base_offset, v.base_offset)

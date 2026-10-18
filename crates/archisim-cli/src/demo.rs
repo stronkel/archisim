@@ -58,6 +58,7 @@ pub fn build() -> Result<Document, ModelError> {
                 base_offset: 0.0,
                 // Up to the underside of the roof slab: the façade follows
                 // the roof level if it moves.
+                bulge: 0.0,
                 top: archisim_core::WallTop::Level {
                     level: cubierta,
                     offset: -roof_depth,
@@ -84,6 +85,7 @@ pub fn build() -> Result<Document, ModelError> {
                 reference: ReferenceLine::Center,
                 height: 2.7,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })?;
         }

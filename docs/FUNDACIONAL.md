@@ -92,7 +92,10 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 
 ### Muros
 
-- Definidos por un eje entre dos puntos, nivel base, altura y tipo.
+- Definidos por un eje entre dos puntos, nivel base, altura y tipo. El eje puede ser **recto o un arco de circunferencia** (v0.19): el arco se guarda por su comba (`bulge`, como las polilíneas DXF: `tan(θ/4)` del ángulo que barre; 1 = media circunferencia), que no cambia al mover, girar o escalar el muro, así que estirar un extremo conserva la forma.
+- **Métodos de la herramienta Muro** (v0.19, como el «método geométrico» de ArchiCAD), en Propiedades: **Recto** (un muro por cada dos clics), **Cadena** (por defecto), **Rectángulo** (dos esquinas opuestas, o la primera y `6000x4000` + Intro; cuatro muros en sentido horario, con la cara exterior fuera), **Arco** (inicio, fin y un punto por el que pasa, como «inicio-fin-radio» de Revit; o el radio tecleado, hacia el lado del cursor; se encadenan) y **Círculo** (centro y un punto de la línea de referencia, o el radio tecleado; dos medias circunferencias en sentido horario). Un rectángulo o un círculo es un solo paso de deshacer.
+- **Muros curvos**: en planta, sus capas, tramas (también el zigzag del aislamiento) y caras siguen el arco; se unen a inglete con muros rectos o curvos que comparten extremo (si continúan tangentes, el corte es radial); un muro que acomete a un muro curvo, o un muro curvo que acaba dentro de otro, se detiene en su cara, sin entrar por capas. Fuerzan su centro, sus extremos, las esquinas de sus extremos, el punto medio del arco y de cada cara, y cualquier punto de sus caras. Seleccionados, un **círculo blanco** en su punto medio los curva arrastrándolo (en línea con los extremos, quedan rectos); en Propiedades, **Radio** (editable, los extremos no se mueven), ángulo y **Enderezar**. Se rechaza un arco más cerrado que el espesor del muro. Aún no admiten puertas ni ventanas, ni cotas temporales.
+- En IFC el eje de un muro curvo es un `IfcTrimmedCurve` sobre `IfcCircle` y su cuerpo una extrusión de un `IfcIndexedPolyCurve` con arcos exactos (`IfcArcIndex`); longitud, superficie y volumen son los del arco exacto.
 - La **línea de referencia** puede ir en el centro, en la cara exterior o en la interior (como en ArchiCAD y Revit).
 - Las capas se ordenan de **exterior a interior**; la cara exterior queda a la izquierda del eje, mirando de inicio a fin.
 - Las uniones en esquina se resuelven a inglete cuando dos muros comparten un extremo.
@@ -104,6 +107,7 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 ### Forjados
 
 - Definidos por un contorno poligonal cerrado (cualquier forma sin cruces: rectángulo, L, U…), un nivel, un tipo y un desfase.
+- **Métodos de la herramienta Forjado** (v0.19), en Propiedades: **Polígono** (esquina a esquina), **Rectángulo** (dos esquinas opuestas, o la primera y `6000x4000` + Intro) y **Varita mágica**.
 - La referencia es la **cara superior**, como en ArchiCAD y Revit: queda a la cota del nivel más el desfase, y las capas cuelgan hacia abajo.
 - Las capas del tipo se ordenan de **arriba abajo** (pavimento → estructura → acabado inferior).
 - Función del tipo: forjado de planta (`FLOOR`), solera (`BASESLAB`) o cubierta plana (`ROOF`). Solera y cubierta se marcan como exteriores (`IsExternal`).
@@ -167,7 +171,8 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - Lee IFC2X3 e IFC4 (y sus variantes, también IFC 4.3) de cualquier programa, en metros, milímetros, pies o pulgadas.
 - Trae plantas, muros (por su eje o, si no lo tienen, por su colocación y su sólido), sus capas y su línea de referencia (de `IfcMaterialLayerSetUsage`), forjados (por el contorno de su extrusión o por la cara superior de su sólido), y puertas y ventanas alojadas en muros (hueco de obra desde el `IfcOpeningElement`, funcionamiento y mano, marco desde las propiedades de cerco). Se conservan todos los `GlobalId`.
 - La cara exterior de un muro en IFC no está definida: en los muros marcados como exteriores (`IsExternal`), se toma como exterior el lado opuesto al centro de los muros de su planta, y el muro se gira si hace falta para que quede a la izquierda, como en ArchiSim.
-- Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, muros curvos, huecos sin carpintería…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
+- Muros curvos de un solo arco (v0.19), con sus capas medidas en radial.
+- Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, muros de varios tramos o circulares cerrados, huecos sin carpintería…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
 - Lo que exporta ArchiSim se importa idéntico (ida y vuelta comprobada en pruebas): para ello el IFC lleva, además, el cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de corte de cada material (`ArchiSim_Material`).
 
 ## 5. MVP (fase 1)
