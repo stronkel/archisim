@@ -179,6 +179,12 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, forjados inclinados, locales…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
 - Lo que exporta ArchiSim se importa idéntico (ida y vuelta comprobada en pruebas): para ello el IFC lleva, además, el cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de corte de cada material (`ArchiSim_Material`).
 
+### Instalación
+
+- **Mac** (v0.13): aplicación universal (chip Apple e Intel) en un `.dmg`, con icono y tipos de documento: los `.archisim` se abren con ArchiSim y los `.ifc` lo ofrecen en «Abrir con». Firmada ad hoc (sin cuenta de desarrollador de Apple): la primera vez hay que confirmarla en Ajustes del Sistema → Privacidad y seguridad.
+- **Windows** (v0.21): instalador `ArchiSim-<versión>-Windows.exe` (Inno Setup, `scripts/windows_installer.iss`) para el usuario, sin pedir permisos de administrador (se puede elegir instalar para todos): el programa con su icono y su información de versión dentro del `.exe` (`crates/archisim-app/build.rs`), entrada en el menú Inicio, icono opcional en el escritorio, la vivienda de prueba y los IFC de ejemplo. Los `.archisim` se abren con ArchiSim con su icono; los `.ifc` lo ofrecen en «Abrir con» y, si se marca, se abren con él al hacer doble clic. El desinstalador lo quita todo y no toca los proyectos. Sin firma de código: Windows SmartScreen pide «Más información → Ejecutar de todas formas» la primera vez.
+- La integración continua monta los dos en cada pull request; el de Windows se instala y desinstala allí mismo para comprobar los tipos de fichero.
+
 ## 5. MVP (fase 1)
 
 Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta, obtiene su planta en PDF/SVG legible y exporta un IFC que **Revit y ArchiCAD abren con muros reconocibles, tipos y capas correctos**.
