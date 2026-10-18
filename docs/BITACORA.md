@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Repositorio público con licencia GPL-3.0
+
+**Hecho**
+- Antonio hace público el repositorio (los minutos de la integración continua del plan gratuito se habían agotado; en un repositorio público son gratis) y elige la licencia **GPL-3.0 o posterior** (D4, a falta del nombre definitivo).
+- Revisado antes todo el historial: sin claves, sin IFC de proyectos reales, sin contenido de Autodesk ni Graphisoft.
+- Fichero `LICENSE` (texto oficial de la GPL-3.0), licencia y repositorio en la descripción de cada paquete, `docs/FUNDACIONAL.md` §8 y hoja de ruta (D4).
+- README nuevo para la comunidad: qué hace hoy, cómo instalarlo y compilarlo, cómo colaborar (sala limpia incluida) y licencia.
+- Se hace directamente en `main`; los pull requests #13, #14 y #15 lo reciben sin conflictos (comprobado).
+
+**Pendiente**
+- Nombre definitivo (resto de D4) antes de anunciarlo.
+- Publicar versiones (*Releases* de GitHub) para que se pueda descargar sin cuenta.
+
+**Antonio debe probar**
+1. Abre la página del repositorio en GitHub: debe salir el README nuevo y, a la derecha, «GPL-3.0 license».
 ## 2026-10-18 · Bloque 22 — Rendimiento con modelos grandes (1.9); fase 1 cerrada
 
 **Hecho** (petición de Antonio: «termina todo lo que falta de la fase 1»)
