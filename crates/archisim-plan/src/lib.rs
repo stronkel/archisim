@@ -1172,6 +1172,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
         let svg = render_plan(&m, lvl, &PlanOptions::default());
@@ -1300,6 +1301,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         let window = m
@@ -1406,6 +1408,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         let kinds = [

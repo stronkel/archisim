@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use archisim_core::{
     DimensionId, Document, ElevationMarkId, Hand, LevelId, Model, ModelError, NewDimension,
     NewOpening, NewSlab, NewWall, OpeningId, OpeningTypeId, Point2, ReferenceLine, SlabId,
-    SlabTypeId, WallId, WallSide, WallTypeId,
+    SlabTypeId, WallId, WallSide, WallTop, WallTypeId,
 };
 use archisim_ifc::{export_ifc, import_ifc, ExportOptions, ImportReport};
 use archisim_plan::{render_plan, PlanOptions};
@@ -24,8 +24,55 @@ mod types;
 pub struct WallSettings {
     pub wall_type: WallTypeId,
     pub reference: ReferenceLine,
+    /// Height of walls without a top level (or with no level above).
     pub height: f64,
     pub base_offset: f64,
+    /// Where new walls end at the top.
+    pub top: TopChoice,
+    /// Offset from the top level (negative: below it).
+    pub top_offset: f64,
+}
+
+/// The top constraint of the wall tool: a level relative to the one being
+/// drawn on (ArchiCAD's "planta inicial + 1"), a given level, or none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TopChoice {
+    /// Own height (Revit's "Desconectada").
+    Unconnected,
+    /// The level right above the active one; with none above, the wall
+    /// gets its own height.
+    NextLevel,
+    /// A given level (it must be above the active one).
+    Level(LevelId),
+}
+
+impl WallSettings {
+    /// The constraint a new wall on `level` gets.
+    pub fn top_on(&self, model: &Model, level: LevelId) -> WallTop {
+        let target = match self.top {
+            TopChoice::Unconnected => None,
+            TopChoice::NextLevel => next_level_above(model, level),
+            TopChoice::Level(l) => Some(l),
+        };
+        match target {
+            Some(l) => WallTop::Level {
+                level: l,
+                offset: self.top_offset,
+            },
+            None => WallTop::Unconnected,
+        }
+    }
+}
+
+/// The lowest level above `level`, if any.
+pub fn next_level_above(model: &Model, level: LevelId) -> Option<LevelId> {
+    let base = model.level(level)?.elevation;
+    model
+        .levels()
+        .into_iter()
+        .filter(|l| l.elevation > base + 1e-9)
+        .map(|l| l.id)
+        .next()
 }
 
 pub struct Editor {
@@ -232,6 +279,7 @@ impl Editor {
 
     pub fn add_wall(&mut self, s: &WallSettings, start: Point2, end: Point2) -> EditResult<WallId> {
         let level = self.level;
+        let top = s.top_on(self.model(), level);
         self.transact("Crear muro", |m| {
             m.add_wall(NewWall {
                 wall_type: s.wall_type,
@@ -241,6 +289,7 @@ impl Editor {
                 reference: s.reference,
                 height: s.height,
                 base_offset: s.base_offset,
+                top,
             })
         })
     }
@@ -335,10 +384,20 @@ impl Editor {
 
     pub fn set_walls_base_offset(&mut self, walls: &[WallId], base: f64) -> EditResult {
         self.transact("Cambiar desfase de base", |m| {
-            walls.iter().try_for_each(|w| {
-                let height = m.wall(*w).map_or(0.0, |x| x.height);
-                m.set_wall_height(*w, height, base)
-            })
+            walls
+                .iter()
+                .try_for_each(|w| m.set_wall_base_offset(*w, base))
+        })
+    }
+
+    /// Ties walls to a top level, or frees them (they keep their height).
+    pub fn set_walls_top(&mut self, walls: &[WallId], top: WallTop) -> EditResult {
+        let label = match top {
+            WallTop::Unconnected => "Desconectar muro de la planta superior",
+            WallTop::Level { .. } => "Cambiar restricción superior",
+        };
+        self.transact(label, |m| {
+            walls.iter().try_for_each(|w| m.set_wall_top(*w, top))
         })
     }
 
@@ -524,6 +583,8 @@ mod tests {
             reference: ReferenceLine::ExteriorFace,
             height: 3.0,
             base_offset: 0.0,
+            top: TopChoice::NextLevel,
+            top_offset: 0.0,
         }
     }
 

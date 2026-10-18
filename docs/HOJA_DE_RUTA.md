@@ -18,6 +18,7 @@ Sin código: son decisiones de producto que condicionan lo demás.
 | D4 | **Licencia** (MPL-2.0 o GPL-3.0) y **nombre definitivo** | Necesario antes de abrir el repositorio |
 | D5 | **Normas de dibujo de referencia**: tramas, grosores y rotulación (UNE-EN ISO 128, UNE 1-027 para plegado, criterio propio de AD5) | Fija cómo se ven plantas, secciones y planos |
 | D6 | **Plantilla al importar**: añadir siempre la plantilla de ArchiSim a un proyecto importado o solo cuando faltan tipos (hoy: solo cuando faltan) | Comodidad frente a limpieza del proyecto |
+| D8–D12 | **Disciplinas y mediciones** (propuesta del 18/10/2026 en `docs/DISCIPLINAS.md`): un solo modelo con disciplina por elemento, IFC 4.3 para urbanismo, banco de precios de referencia (BCCA), criterio de deducción de huecos y orden de los bloques | Estructura, urbanismo y mediciones con bancos de precios dependen de ellas |
 | D7 | **Ficheros reales de prueba**: IFC exportados por Antonio desde sus propios proyectos de ArchiCAD y Revit, para probar la importación (se usan en local, no se suben al repositorio) | La importación solo se ha probado con ficheros sintéticos y de IfcOpenShell/SketchUp |
 
 ## 1. Cierre de la fase 1 (deudas del MVP)
@@ -37,6 +38,8 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
 
 ## 2. Fase 2 — Modelado completo
+
+**Restricción superior de muros** ✅ v0.17 (pedida por Antonio el 18/10/2026, antes del bloque C de familias): muros hasta una planta con desfase, que siguen los cambios de cota. Falta lo mismo para pilares cuando existan (2.5) y el recorte con forjados y cubiertas (2.3, 2.4).
 
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|

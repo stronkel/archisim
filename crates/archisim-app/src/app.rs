@@ -1082,6 +1082,10 @@ pub fn default_wall_settings(model: &Model) -> WallSettings {
         reference: t.map_or(ReferenceLine::Center, |t| default_reference(t.function)),
         height: 3.0,
         base_offset: 0.0,
+        // Up to the floor above, as walls usually are; free 3 m when the
+        // project has no level above.
+        top: crate::editor::TopChoice::NextLevel,
+        top_offset: 0.0,
     }
 }
 

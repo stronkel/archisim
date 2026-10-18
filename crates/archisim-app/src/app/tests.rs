@@ -1263,3 +1263,68 @@ fn properties_palette_shows_every_state() {
         4
     );
 }
+
+/// Walls drawn with "Planta superior" go up to the level above (free 3 m
+/// when there is none) and follow it when its elevation changes; the
+/// palette shows them; undo puts them back.
+#[test]
+fn walls_drawn_up_to_the_floor_above_follow_it() {
+    use archisim_core::WallTop;
+    let mut h = Harness::new(Editor::new_project());
+    // A single level: nothing above, the walls get their own 3 m.
+    draw_outline(&mut h);
+    assert!(h
+        .model()
+        .walls()
+        .all(|w| w.top == WallTop::Unconnected && w.height == 3.0));
+    let ground = h.app.ed.level;
+    let first = h.app.ed.add_level("Planta primera", 3.2).unwrap();
+    h.frame();
+    h.app.activate_tab(0);
+    h.frame();
+    assert_eq!(h.app.ed.level, ground);
+
+    // Up to the floor above, 30 cm under it (the slab).
+    h.app.wall_settings.top_offset = -0.3;
+    h.key(Key::Escape);
+    h.type_text("m");
+    h.frame();
+    h.click_at(p(3.0, 3.0));
+    h.click_at(p(3.0, 6.0));
+    h.key(Key::Escape);
+    let w = h.model().walls().last().unwrap().clone();
+    assert_eq!(
+        w.top,
+        WallTop::Level {
+            level: first,
+            offset: -0.3
+        }
+    );
+    assert!((w.height - 2.9).abs() < 1e-9, "{}", w.height);
+
+    // The floor above goes up 30 cm: the wall follows, the free ones not.
+    h.app.ed.set_level_elevation(first, 3.5).unwrap();
+    assert!((h.model().wall(w.id).unwrap().height - 3.2).abs() < 1e-9);
+    assert_eq!(
+        h.model().walls().filter(|x| x.height == 3.0).count(),
+        4,
+        "the outline keeps its own height"
+    );
+    // The palette shows the tied wall, alone and with the others.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Wall(w.id)].into_iter().collect();
+    h.frame();
+    h.app.ed.selection = h.model().walls().map(|w| Element::Wall(w.id)).collect();
+    h.frame();
+    // Freed, it keeps its height; undo ties it again.
+    h.app
+        .ed
+        .set_walls_top(&[w.id], WallTop::Unconnected)
+        .unwrap();
+    assert!((h.model().wall(w.id).unwrap().height - 3.2).abs() < 1e-9);
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert!((h.model().wall(w.id).unwrap().height - 2.9).abs() < 1e-9);
+}

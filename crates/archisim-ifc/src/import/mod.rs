@@ -1240,6 +1240,7 @@ impl<'a> Importer<'a> {
                 reference,
                 height: snap(c.top - c.base),
                 base_offset: snap(c.base - elevation),
+                top: archisim_core::WallTop::Unconnected,
             };
             match self.model.add_wall(spec) {
                 Ok(wid) => {

@@ -144,10 +144,25 @@ pub struct Wall {
     pub start: Point2,
     pub end: Point2,
     pub reference: ReferenceLine,
-    /// Height above the base, in metres.
+    /// Height above the base, in metres. With a top constraint it is
+    /// worked out by the model from the levels and kept up to date.
     pub height: f64,
     /// Offset of the base above the level, in metres.
     pub base_offset: f64,
+    /// Where the top of the wall is: a height of its own, or a level.
+    pub top: WallTop,
+}
+
+/// The top constraint of a wall (Revit's "Restricción superior",
+/// ArchiCAD's linked top storey).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum WallTop {
+    /// Its own height above the base (Revit's "Desconectada").
+    #[default]
+    Unconnected,
+    /// Up to a level, plus an offset (negative: below the level). The
+    /// wall follows when either level changes its elevation.
+    Level { level: LevelId, offset: f64 },
 }
 
 impl Wall {
@@ -512,8 +527,10 @@ pub struct NewWall {
     pub start: Point2,
     pub end: Point2,
     pub reference: ReferenceLine,
+    /// Height above the base; ignored when `top` is a level.
     pub height: f64,
     pub base_offset: f64,
+    pub top: WallTop,
 }
 
 /// Reasons an edit can be rejected.
@@ -534,6 +551,8 @@ pub enum ModelError {
     OverlappingOpenings,
     /// The frame of a door or window is deeper than the wall allows.
     FrameTooDeep,
+    /// A wall's top constraint would put its top at or below its base.
+    WallTopBelowBase(WallId),
     /// A slab outline needs at least three points, a non-zero area and no
     /// crossing or touching edges.
     InvalidOutline,
@@ -596,6 +615,9 @@ impl fmt::Display for ModelError {
             }
             ModelError::FrameTooDeep => {
                 write!(f, "the frame does not fit in the wall thickness")
+            }
+            ModelError::WallTopBelowBase(id) => {
+                write!(f, "the top constraint of wall {id} is not above its base")
             }
             ModelError::InvalidOutline => write!(
                 f,
@@ -836,7 +858,17 @@ impl Model {
             .levels
             .get_mut(&id)
             .ok_or(ModelError::UnknownLevel(id))?;
-        level.elevation = elevation;
+        let before = std::mem::replace(&mut level.elevation, elevation);
+        // Walls tied to a level up (or standing on this one) follow; if one
+        // cannot, nothing changes.
+        let walls = self.walls.clone();
+        if let Err(e) = self.refresh_wall_heights() {
+            self.walls = walls;
+            if let Some(l) = self.levels.get_mut(&id) {
+                l.elevation = before;
+            }
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -853,6 +885,12 @@ impl Model {
         let walls: Vec<WallId> = self.walls_on_level(id).map(|w| w.id).collect();
         for w in walls {
             self.remove_wall(w)?;
+        }
+        // Walls of other levels tied to this one keep their height, free.
+        for w in self.walls.values_mut() {
+            if matches!(w.top, WallTop::Level { level, .. } if level == id) {
+                w.top = WallTop::Unconnected;
+            }
         }
         self.slabs.retain(|_, s| s.level != id);
         self.dimensions.retain(|_, d| d.level != id);
@@ -1031,7 +1069,7 @@ impl Model {
     // ---- Walls --------------------------------------------------------
 
     pub fn add_wall(&mut self, spec: NewWall) -> Result<WallId, ModelError> {
-        self.validate_wall(&spec)?;
+        let height = self.validate_wall(&spec)?;
         let id = WallId(self.take_id());
         let wall = Wall {
             id,
@@ -1041,14 +1079,34 @@ impl Model {
             start: spec.start,
             end: spec.end,
             reference: spec.reference,
-            height: spec.height,
+            height,
             base_offset: spec.base_offset,
+            top: spec.top,
         };
         self.walls.insert(id, wall);
         Ok(id)
     }
 
-    fn validate_wall(&self, spec: &NewWall) -> Result<(), ModelError> {
+    /// The height a wall gets from its constraints: its own, or from its
+    /// base to its top level. `None` if a level does not exist.
+    fn resolved_height(
+        &self,
+        level: LevelId,
+        base_offset: f64,
+        top: WallTop,
+        height: f64,
+    ) -> Option<f64> {
+        match top {
+            WallTop::Unconnected => Some(height),
+            WallTop::Level { level: top, offset } => {
+                let base = self.levels.get(&level)?.elevation + base_offset;
+                Some(self.levels.get(&top)?.elevation + offset - base)
+            }
+        }
+    }
+
+    /// Checks a wall and returns the height it will have.
+    fn validate_wall(&self, spec: &NewWall) -> Result<f64, ModelError> {
         if !self.levels.contains_key(&spec.level) {
             return Err(ModelError::UnknownLevel(spec.level));
         }
@@ -1062,10 +1120,22 @@ impl Model {
         if spec.start.approx_eq(spec.end) {
             return Err(ModelError::ZeroLengthWall);
         }
-        if spec.height <= EPSILON {
-            return Err(ModelError::NonPositive("wall height"));
+        if let WallTop::Level { level, offset } = spec.top {
+            if !self.levels.contains_key(&level) {
+                return Err(ModelError::UnknownLevel(level));
+            }
+            finite(offset, "wall top offset")?;
         }
-        Ok(())
+        let height = self
+            .resolved_height(spec.level, spec.base_offset, spec.top, spec.height)
+            .ok_or(ModelError::UnknownLevel(spec.level))?;
+        if height <= EPSILON {
+            return Err(match spec.top {
+                WallTop::Unconnected => ModelError::NonPositive("wall height"),
+                WallTop::Level { .. } => ModelError::WallTopBelowBase(WallId(0)),
+            });
+        }
+        Ok(height)
     }
 
     /// Moves a wall's end points, keeping its identity and GUID. Its doors
@@ -1156,15 +1226,21 @@ impl Model {
             .ok_or(ModelError::UnknownWall(id))?;
         let mut wall = previous.clone();
         edit(&mut wall);
-        self.validate_wall(&NewWall {
-            wall_type: wall.wall_type,
-            level: wall.level,
-            start: wall.start,
-            end: wall.end,
-            reference: wall.reference,
-            height: wall.height,
-            base_offset: wall.base_offset,
-        })?;
+        wall.height = self
+            .validate_wall(&NewWall {
+                wall_type: wall.wall_type,
+                level: wall.level,
+                start: wall.start,
+                end: wall.end,
+                reference: wall.reference,
+                height: wall.height,
+                base_offset: wall.base_offset,
+                top: wall.top,
+            })
+            .map_err(|e| match e {
+                ModelError::WallTopBelowBase(_) => ModelError::WallTopBelowBase(id),
+                e => e,
+            })?;
         self.walls.insert(id, wall);
         if let Err(e) = self.check_hosted_openings(id) {
             self.walls.insert(id, previous);
@@ -1181,6 +1257,8 @@ impl Model {
     }
 
     /// Changes a wall's height and the offset of its base above the level.
+    /// A height typed by hand frees the wall from its top level, as
+    /// typing a height does in ArchiCAD.
     pub fn set_wall_height(
         &mut self,
         id: WallId,
@@ -1190,7 +1268,35 @@ impl Model {
         self.edit_wall(id, |w| {
             w.height = height;
             w.base_offset = base_offset;
+            w.top = WallTop::Unconnected;
         })
+    }
+
+    /// Changes the offset of a wall's base above its level. A wall tied to
+    /// a top level keeps its top where it is (it grows or shrinks).
+    pub fn set_wall_base_offset(&mut self, id: WallId, base_offset: f64) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| w.base_offset = base_offset)
+    }
+
+    /// Changes a wall's top constraint. Freed from its level, the wall
+    /// keeps the height it had.
+    pub fn set_wall_top(&mut self, id: WallId, top: WallTop) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| w.top = top)
+    }
+
+    /// Works out again the height of every wall tied to a top level (after
+    /// a level moved), refusing what no longer fits.
+    fn refresh_wall_heights(&mut self) -> Result<(), ModelError> {
+        let tied: Vec<WallId> = self
+            .walls
+            .values()
+            .filter(|w| matches!(w.top, WallTop::Level { .. }))
+            .map(|w| w.id)
+            .collect();
+        for id in tied {
+            self.edit_wall(id, |_| {})?;
+        }
+        Ok(())
     }
 
     /// Changes which line of the wall is the drawn one. The drawn line stays
@@ -2436,9 +2542,16 @@ impl Model {
                 reference: wall.reference,
                 height: wall.height,
                 base_offset: wall.base_offset,
+                top: wall.top,
             };
-            claim(wall.id.0, Some(&wall.guid))
+            let mut wall = wall;
+            // The levels decide the height of a wall tied to one.
+            wall.height = claim(wall.id.0, Some(&wall.guid))
                 .and_then(|_| model.validate_wall(&spec))
+                .map_err(|e| match e {
+                    ModelError::WallTopBelowBase(_) => ModelError::WallTopBelowBase(wall.id),
+                    e => e,
+                })
                 .map_err(fail(name))?;
             model.walls.insert(wall.id, wall);
         }
@@ -2585,6 +2698,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 2.7,
             base_offset: 0.0,
+            top: crate::WallTop::Unconnected,
         }
     }
 
@@ -2782,6 +2896,91 @@ mod tests {
             hand: Hand::Left,
             setback: None,
         }
+    }
+
+    /// A wall tied to the level above follows it: its height is worked out
+    /// from the levels, kept when either level moves, refused when its top
+    /// would fall to its base or its window would no longer fit, freed when
+    /// a height is typed or the level is removed, and restored from parts.
+    #[test]
+    fn walls_follow_their_top_level() {
+        let (mut m, wall, _, window) = with_openings();
+        let pb = m.levels()[0].id;
+        let p1 = m.add_level("Planta 1", 3.2);
+        let tied = WallTop::Level {
+            level: p1,
+            offset: -0.3,
+        };
+        m.set_wall_top(wall, tied).unwrap();
+        assert!((m.wall(wall).unwrap().height - 2.9).abs() < 1e-12);
+        m.add_opening(place(window, wall, 2.0, 0.9)).unwrap();
+
+        // The upper level goes up: the wall grows; the ground floor goes up:
+        // it shrinks (the top stays tied).
+        m.set_level_elevation(p1, 3.5).unwrap();
+        assert!((m.wall(wall).unwrap().height - 3.2).abs() < 1e-12);
+        m.set_level_elevation(pb, 0.4).unwrap();
+        assert!((m.wall(wall).unwrap().height - 2.8).abs() < 1e-12);
+        // A base offset keeps the top where it is.
+        m.set_wall_base_offset(wall, 0.1).unwrap();
+        assert!((m.wall(wall).unwrap().height - 2.7).abs() < 1e-12);
+        assert_eq!(m.wall(wall).unwrap().top, tied);
+
+        // Too low for the window (0.9 + 1.2 m above the base): refused, and
+        // nothing moved.
+        let before = m.clone();
+        assert_eq!(
+            m.set_level_elevation(p1, 2.4),
+            Err(ModelError::OpeningOutsideWall)
+        );
+        assert_eq!(m, before);
+        // At or below the base: refused, naming the wall.
+        assert_eq!(
+            m.set_level_elevation(p1, 0.7),
+            Err(ModelError::WallTopBelowBase(wall))
+        );
+        assert_eq!(m, before);
+        // A wall drawn up to a level below its base is refused too.
+        let mut low = spec(p1, m.wall(wall).unwrap().wall_type);
+        low.top = WallTop::Level {
+            level: pb,
+            offset: 0.0,
+        };
+        assert!(matches!(
+            m.add_wall(low),
+            Err(ModelError::WallTopBelowBase(_))
+        ));
+
+        // Saved and opened again: same wall, height from the levels.
+        let mut parts = m.to_parts();
+        assert_eq!(Model::from_parts(parts.clone()).unwrap(), m);
+        parts.walls[0].height = 99.0;
+        let restored = Model::from_parts(parts.clone()).unwrap();
+        assert!((restored.wall(wall).unwrap().height - 2.7).abs() < 1e-12);
+        parts.walls[0].top = WallTop::Level {
+            level: LevelId(9999),
+            offset: 0.0,
+        };
+        assert!(matches!(
+            restore_error(parts),
+            ModelError::UnknownLevel(LevelId(9999))
+        ));
+
+        // Typing a height frees it; freeing keeps the height.
+        let mut typed = m.clone();
+        typed.set_wall_height(wall, 2.5, 0.1).unwrap();
+        assert_eq!(typed.wall(wall).unwrap().top, WallTop::Unconnected);
+        m.set_wall_top(wall, WallTop::Unconnected).unwrap();
+        assert!((m.wall(wall).unwrap().height - 2.7).abs() < 1e-12);
+        m.set_level_elevation(p1, 6.0).unwrap();
+        assert!((m.wall(wall).unwrap().height - 2.7).abs() < 1e-12);
+
+        // Removing the top level frees the walls tied to it.
+        m.set_wall_top(wall, tied).unwrap();
+        let height = m.wall(wall).unwrap().height;
+        m.remove_level(p1).unwrap();
+        let w = m.wall(wall).unwrap();
+        assert_eq!((w.top, w.height), (WallTop::Unconnected, height));
     }
 
     #[test]

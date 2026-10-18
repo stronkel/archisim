@@ -18,7 +18,7 @@ pub const ROW: f32 = 26.0;
 
 /// Width of the names column for a palette `width` wide.
 pub fn label_width(width: f32) -> f32 {
-    (width * 0.44).clamp(96.0, 150.0)
+    (width * 0.5).clamp(100.0, 172.0)
 }
 
 /// A group of parameters with a header that folds it (remembered).
