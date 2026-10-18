@@ -27,6 +27,8 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 - Hojas de puerta desiguales, hoja activa, tarjas, corredera empotrada y la **puerta plegable** van en la librería (2.2).
 - Las hojas abatibles, proyectantes y basculantes no tienen símbolo en planta (se verán en alzado).
 
+**Validación de Antonio (18/10/2026):** probada la versión de los bloques A y B: «funciona todo perfecto». Integrados en `main` los PR #6 y #7.
+
 **Antonio debe probar**
 1. Descarga la versión de esta rama: GitHub → **Actions** → la última ejecución en verde del pull request «Familias: planta por escala…» (rama `bloque/familias-planta`) → **Artifacts** → **ArchiSim-Windows** o **ArchiSim-Mac**. Abre `demo.archisim` (o uno tuyo de antes): la planta debe verse exactamente igual.
 2. *Tipos y materiales* → **Ventanas** → «Ventana practicable 2 hojas 180×130»: pon **Nº de hojas = 3**, Hoja 1 **Fija**, Hoja 2 **Oscilobatiente**, Hoja 3 **Fija**. Cierra y mira la fachada sur en planta: dos fijos, montantes y la hoja central con su giro. Mira el 3D (tres paños). Ctrl+Z deshace cada paso.
