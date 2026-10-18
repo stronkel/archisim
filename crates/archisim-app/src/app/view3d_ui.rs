@@ -168,10 +168,10 @@ impl View3dState {
 impl ArchiSimApp {
     /// Switches between the plan and the 3D view.
     pub(super) fn set_mode(&mut self, mode: super::ViewMode) {
-        if mode == ViewMode::ThreeD {
-            self.set_tool(super::Tool::Arrow);
+        match mode {
+            ViewMode::Plan => self.show_plan(),
+            ViewMode::ThreeD => self.open_view(super::TabKind::ThreeD),
         }
-        self.mode = mode;
     }
 
     pub(super) fn view_3d(&mut self, ui: &mut Ui) {
@@ -267,6 +267,7 @@ impl ArchiSimApp {
             }
         }
         draw_north(&painter, rect, &v.camera);
+        self.draw_overlays(&ctx, &painter, rect);
 
         if response.hovered() {
             let icon = if response.dragged() {

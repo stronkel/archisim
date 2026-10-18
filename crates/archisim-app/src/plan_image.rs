@@ -17,9 +17,16 @@ pub struct PlanKey {
     pub hi: Point2,
     pub size: [usize; 2],
     pub show_reference_lines: bool,
+    /// Drawing scale denominator: line weights, hatches and the symbols
+    /// of doors and windows follow it (50 means 1:50).
+    pub scale: f64,
+    /// Height of the cut plane above the level, in metres.
+    pub cut_plane: f64,
 }
 
-/// Draws the region `lo`–`hi` of a level into an image of `size` pixels.
+/// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
+/// at 1:50 with the default cut plane.
+#[cfg(test)]
 /// Outside the drawing the image is transparent.
 pub fn rasterize(
     model: &Model,
@@ -29,9 +36,36 @@ pub fn rasterize(
     size: [usize; 2],
     show_reference_lines: bool,
 ) -> ColorImage {
+    let d = PlanOptions::default();
+    rasterize_at(
+        model,
+        level,
+        lo,
+        hi,
+        size,
+        show_reference_lines,
+        d.scale,
+        d.cut_plane,
+    )
+}
+
+/// [`rasterize`] at a drawing scale and with a cut plane height.
+#[allow(clippy::too_many_arguments)]
+pub fn rasterize_at(
+    model: &Model,
+    level: LevelId,
+    lo: Point2,
+    hi: Point2,
+    size: [usize; 2],
+    show_reference_lines: bool,
+    scale: f64,
+    cut_plane: f64,
+) -> ColorImage {
     let options = PlanOptions {
         viewport: Some((lo, hi)),
         show_reference_lines,
+        scale,
+        cut_plane,
         ..PlanOptions::default()
     };
     rasterize_with(model, level, size, &options)

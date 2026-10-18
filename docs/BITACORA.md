@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Bloque 15 — Interfaz rediseñada (ArchiCAD + propiedades de Revit)
+
+**Hecho** (petición de Antonio: interfaz moderna, minimalista y práctica, «como un juego», parecida a ArchiCAD con las propiedades de Revit)
+- **Barra superior** fina: menús, proyecto y fichero («sin guardar» si hay cambios), deshacer y rehacer, guardar, **Exportar IFC**, mostrar u ocultar la columna derecha, **tema claro u oscuro** (el dibujo sigue siendo papel blanco).
+- **Caja de herramientas** a la izquierda por secciones (Selección · Modelado · Documentación · Vistas), con iconos propios dibujados como líneas, nombre y tecla. **Cota de nivel** pasa a ser herramienta propia (tecla **N**). Las que aún no existen se ven apagadas y dicen con qué punto de la hoja de ruta llegan. Botón para dejarla solo con iconos.
+- **Pestañas de vistas** sobre el dibujo: cada planta y el 3D en su pestaña; cada planta recuerda su encuadre, su **escala** y su plano de corte. «+» abre vistas, × o clic con la rueda cierra, Ctrl+Tab pasa de una a otra, F2/F3 siguen funcionando. Una planta nueva se abre en su pestaña; borrarla la cierra.
+- **Navegador**: Vistas (plantas con su cota, 3D), Planos (fase 3) y Modelo, con cada tipo de muro, forjado, puerta y ventana y su **número de ejemplares**. Clic: selecciona los de esa planta; doble clic: Editar tipo.
+- **Propiedades al estilo Revit**: selector de tipo arriba (categoría, clase IFC, tipo con espesor o medidas, «✎ Editar tipo», «Seleccionar los N»), y grupos plegables Restricciones · Construcción · Dimensiones · Capas · Datos de identidad. Con una herramienta activa muestra lo que vas a dibujar (sustituye al antiguo cuadro de información de arriba); sin selección, la vista (escala, plano de corte, líneas de referencia, rejilla; nombre y cota de la planta) y el proyecto. El separador entre navegador y propiedades se arrastra.
+- **Barra inferior**: escala **1:20 · 1:50 · 1:100 · 1:200** (cambia de verdad grosores, tramas, textos y símbolos de puertas y ventanas en pantalla), zoom en % del papel real, acercar/alejar/ajustar, **forzados activables** (Extremos, Medios, Aristas, Rastreo), Rejilla y Líneas de referencia; a la derecha el punto forzado, X/Y y la planta. En 3D: Perspectiva/Axonometría, ajustar, guardar imagen.
+- **Sobre el dibujo**: las teclas del paso siguiente en una pastilla abajo y el resultado de cada acción como aviso que se desvanece arriba a la izquierda (los errores duran más).
+- Tipografía IBM Plex (licencia OFL, incluida). Código de la ventana repartido en módulos (`app/`: barras, caja, pestañas, navegador, propiedades, tema, iconos).
+- Pruebas nuevas: pestañas (nivel, encuadre y escala de cada una, F2/F3, Ctrl+Tab, cerrar, planta añadida y borrada), teclas y fichas de la caja, forzados de la barra inferior, la paleta de propiedades en todos sus estados y en los dos temas, elementos del mismo tipo. Todas las pruebas anteriores de la ventana pasan sin cambios. Ventana real revisada con capturas (planta, muro y ventana seleccionados, herramienta muro dibujando, 3D, tema oscuro, navegador, dos plantas a distinta escala, caja compacta, diálogos de tipos y plantas).
+- Versión 0.16.0. **Sin cambios** en el modelo, el formato `.archisim` ni el IFC (demo, ida y vuelta y sesiones de la app validadas con IfcOpenShell).
+
+**Pendiente / limitaciones conocidas**
+- La disposición, el tema y las pestañas abiertas no se recuerdan al cerrar (se empieza siempre con la planta más baja, tema claro).
+- Secciones, alzados y planos aparecen en el navegador como «llegan con…»: no existen todavía.
+- No hay todavía paleta de órdenes ni atajos configurables.
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama: GitHub → **Actions** → la última ejecución en verde del pull request «Interfaz: …» (rama `bloque/interfaz`) → **Artifacts** → **ArchiSim-Windows** o **ArchiSim-Mac**. Abre `demo.archisim`.
+2. **Caja de herramientas**: pulsa M, F, P, V, C y N y mira cómo se ilumina cada ficha; pasa el ratón por «Pilar» o «Escalera»: dicen cuándo llegan. Pulsa la flecha ‹ de arriba: queda solo con iconos.
+3. **Propiedades**: con la herramienta Muro activa, cambia el tipo en el selector grande y la altura; dibuja un muro. Selecciona un muro: «Seleccionar los 4» selecciona las fachadas; «✎ Editar tipo» abre su multicapa. Pliega y despliega los grupos.
+4. **Navegador**: Modelo → Muros → clic en «Tabique LHD 10» (se seleccionan los tabiques), doble clic (se abre su tipo). Clic en «Cubierta» en Vistas: se abre en otra pestaña.
+5. **Escala**: en la barra inferior pon **1:100** en la planta baja y luego vuelve a la pestaña de Cubierta y pon 1:20: cada pestaña conserva la suya. ¿Se ven bien los grosores y los símbolos a 1:100 y 1:20?
+6. **Forzados**: con la herramienta Muro, apaga «Extremos» y comprueba que ya no se engancha a las esquinas; apaga «Rastreo» y comprueba que ya no se bloquea en horizontal.
+7. **Tema oscuro**: botón ◐ arriba a la derecha.
+8. Dime qué cambiarías: tamaño de las fichas, qué herramientas futuras sobran o faltan en la caja, si prefieres el navegador a la izquierda (como el Navegador de proyectos de Revit) y si el cuadro de información de ArchiCAD arriba se echa de menos o está bien en Propiedades.
+
 ## 2026-10-18 · Fase 2, bloque 14 — Familias: planta por escala y hojas configurables (bloque B)
 
 **Hecho**
