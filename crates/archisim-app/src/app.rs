@@ -462,6 +462,8 @@ impl ArchiSimApp {
         #[cfg(not(test))]
         let paths = [paths, crate::open_files::take()].concat();
         self.open_files(paths);
+        #[cfg(all(target_os = "macos", not(test)))]
+        crate::open_files::macos::quit_for_check(ctx);
     }
 
     /// Opens the first project or IFC file of a list (one at a time: a

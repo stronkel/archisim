@@ -178,28 +178,33 @@ jobs:
           tail -n 15 out.txt | sed 's/^/::warning::salida: /'
           exit 1
       # The one-line installer of the published versions, from this image;
-      # then "Salir" (the same request as Cmd+Q) must end the installed
-      # application by itself: with no changes it does not ask.
+      # then the request to quit (the same as Cmd+Q) must end the installed
+      # application through its window.
       - run: |
           dmg=$(ls dist/ArchiSim-*.dmg | head -1)
           ARCHISIM_DMG="$dmg" ARCHISIM_DESTINO="$RUNNER_TEMP/Apps" scripts/instalar_mac.sh
           app="$RUNNER_TEMP/Apps/ArchiSim.app"
           test -x "$app/Contents/MacOS/ArchiSim"
           if xattr "$app" | grep -q quarantine; then echo "::error::la aplicación instalada sigue en cuarentena"; exit 1; fi
-          open -n -a "$app" "$PWD/dist/demo/demo.archisim"
-          for i in $(seq 60); do pgrep -xq ArchiSim && break; sleep 1; done
-          sleep 5
-          if ! osascript -e 'tell application id "es.ad5.archisim" to quit'; then
-            echo "::warning::osascript no pudo pedir salir (permisos del ejecutor); no se comprueba"
-            pkill -x ArchiSim || true
-            exit 0
-          fi
-          for i in $(seq 30); do pgrep -xq ArchiSim || break; sleep 1; done
-          if pgrep -xq ArchiSim; then
+          # Inside the application, after a few seconds, AppKit's
+          # terminate: (what Cmd+Q sends): it must reach the window, which
+          # ends the program by itself (the new project has no changes).
+          log="$RUNNER_TEMP/salir.txt"
+          ARCHISIM_OPENED_LOG="$log" ARCHISIM_PRUEBA_SALIR=1 "$app/Contents/MacOS/ArchiSim" > salida.txt 2>&1 &
+          pid=$!
+          for i in $(seq 60); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+          if kill -0 $pid 2>/dev/null; then
             echo "::error::ArchiSim no se cerró al pedirle salir"
-            pkill -x ArchiSim || true
+            tail -n 15 salida.txt | sed 's/^/::warning::salida: /'
+            kill $pid || true
             exit 1
           fi
+          code=0; wait $pid || code=$?
+          if ! grep -qx salir "$log" 2>/dev/null; then
+            echo "::error::la petición de salir no pasó por la ventana (Cmd+Q cerraría sin preguntar)"
+            exit 1
+          fi
+          if [ $code -ne 0 ]; then echo "::error::ArchiSim salió con código $code"; exit 1; fi
           echo "Instalada con el script y cerrada con «Salir»."
       - uses: actions/upload-artifact@v4
         with:

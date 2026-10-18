@@ -99,7 +99,7 @@ pub mod macos {
             // SAFETY: as above.
             if let Some(path) = unsafe { url.path() } {
                 let path = std::path::PathBuf::from(path.to_string());
-                report(&path);
+                report_line(&path.display().to_string());
                 super::push(path);
             }
         }
@@ -116,9 +116,33 @@ pub mod macos {
         _cmd: Sel,
         _application: *mut AnyObject,
     ) -> usize {
+        report_line("salir");
         super::request_quit();
         // NSTerminateCancel.
         0
+    }
+
+    /// For the packaging check in continuous integration: with
+    /// `ARCHISIM_PRUEBA_SALIR` set, once the window has been up for a few
+    /// seconds, asks AppKit to quit (`terminate:`, the same as Cmd+Q).
+    pub fn quit_for_check(ctx: &eframe::egui::Context) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SENT: AtomicBool = AtomicBool::new(false);
+        if std::env::var_os("ARCHISIM_PRUEBA_SALIR").is_none() || SENT.load(Ordering::SeqCst) {
+            return;
+        }
+        if ctx.input(|i| i.time) < 3.0 {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            return;
+        }
+        SENT.store(true, Ordering::SeqCst);
+        // SAFETY: on the main thread, during a frame; `sharedApplication`
+        // returns the running application and `terminate:` takes any sender.
+        unsafe {
+            let app: *mut AnyObject =
+                objc2::msg_send![objc2::class!(NSApplication), sharedApplication];
+            let _: () = objc2::msg_send![app, terminate: std::ptr::null::<AnyObject>()];
+        }
     }
 
     /// Adds the methods to winit's delegate. Call after the event loop is
@@ -165,9 +189,9 @@ pub mod macos {
     }
 
     /// For the packaging check in continuous integration: with
-    /// `ARCHISIM_OPENED_LOG` set, each file received from the Finder is
-    /// also written to that file.
-    fn report(path: &std::path::Path) {
+    /// `ARCHISIM_OPENED_LOG` set, each file received from the Finder (and
+    /// each request to quit, as «salir») is also written to that file.
+    fn report_line(line: &str) {
         if let Some(log) = std::env::var_os("ARCHISIM_OPENED_LOG") {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -175,7 +199,7 @@ pub mod macos {
                 .append(true)
                 .open(log)
             {
-                let _ = writeln!(f, "{}", path.display());
+                let _ = writeln!(f, "{line}");
             }
         }
     }
