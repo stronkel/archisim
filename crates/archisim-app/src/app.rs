@@ -882,6 +882,14 @@ impl ArchiSimApp {
             }
         }
         if self.allow_close && self.pending.is_none() {
+            // macOS: leave at once, with the window still open. Letting
+            // winit tear the window down crashes AppKit on Macs with a
+            // Touch Bar (its Touch Bar lookup removes an observer from the
+            // closed window and throws), and macOS then reports a crash.
+            // Nothing is lost: the project was saved or discarded above.
+            #[cfg(all(target_os = "macos", not(test)))]
+            std::process::exit(0);
+            #[allow(unreachable_code)]
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }

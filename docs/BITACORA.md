@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Mac: cierre sin aviso de fallo (v0.22.1)
+
+**Hecho**
+- Antonio informa de que, en su MacBook Pro con Touch Bar (Intel, macOS 15.8), cada vez que cierra ArchiSim macOS muestra el aviso de que la aplicación se ha cerrado inesperadamente. El informe de fallo lo sitúa en la Touch Bar: al destruir la ventana, AppKit intenta quitar un observador de la Touch Bar de una ventana ya cerrada y lanza una excepción. No pasa en Macs sin Touch Bar (por eso no salía en la integración continua) ni se pierde nada: ocurre después de guardar o descartar.
+- Arreglo: en macOS, cuando ya se puede cerrar (proyecto guardado o descartado), la aplicación termina en el acto sin desmontar la ventana, así que la Touch Bar no llega a hacer esa limpieza. Windows y Linux, sin cambios.
+- Versión 0.22.1. Sin cambios de formato ni de IFC (demo validada con IfcOpenShell).
+
+**Pendiente**
+- La cuarentena de macOS (`xattr` en cada versión): solo desaparece de verdad firmando y notarizando con una cuenta de desarrollador de Apple (99 USD al año); la alternativa gratuita es publicar versiones (*Releases*) e instalarlas con una sola orden que no deja cuarentena. Decide Antonio.
+- Comprobar en el Mac que Cmd+Q con cambios sin guardar pregunta antes de salir (el menú de aplicación de macOS podría cerrar sin preguntar).
+
+**Antonio debe probar** (en el MacBook)
+1. Instala la versión de esta rama (Actions → ArchiSim-Mac) como siempre, con el `xattr` de momento.
+2. Abre ArchiSim, dibuja un muro, guarda y ciérrala con el botón rojo: no debe salir ningún aviso de fallo.
+3. Ábrela otra vez, dibuja algo y ciérrala sin guardar: debe preguntar; elige «No guardar»: tampoco debe salir aviso.
+4. Repite el paso 3 con **Cmd+Q** y dime si pregunta antes de salir.
+
 ## 2026-10-18 · Bloque 22 — Rendimiento con modelos grandes (1.9); fase 1 cerrada
 
 **Hecho** (petición de Antonio: «termina todo lo que falta de la fase 1»)
