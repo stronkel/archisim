@@ -22,8 +22,10 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 - Windows sigue sin instalador, sin icono en el `.exe` y sin asociación de ficheros (resto del punto 1.8).
 - Un fichero cada vez: si sueltas varios, se abre el primero y se avisa de los demás.
 
+**Validación de Antonio (18/10/2026):** probada en su MacBook Pro Intel con macOS Sequoia la versión con los bloques 10, 11 y 12 juntos (tras salir del bucle de Gatekeeper con `xattr`): funciona. Integrados en `main` los PR #2, #3 y #4.
+
 **Antonio debe probar**
-1. En el MacBook: GitHub → **Actions** → la última ejecución en verde del pull request «Mac: aplicación universal en .dmg» → **Artifacts** → **ArchiSim-Mac**. Descomprime y abre el `.dmg`.
+1. En el MacBook: GitHub → **Actions** → la última ejecución en verde de `main` → **Artifacts** → **ArchiSim-Mac**. Descomprime y abre el `.dmg`.
 2. Arrastra **ArchiSim** a **Aplicaciones** y ábrela. Cuando macOS diga que no puede comprobar el desarrollador: *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*. En macOS Sequoia puede volver a pedirlo en bucle: entonces, en Terminal, `xattr -dr com.apple.quarantine /Applications/ArchiSim.app` y doble clic (comprobado por Antonio en un MacBook Pro Intel con Sequoia).
 3. Copia `demo.archisim` del `.dmg` a tu Mac y haz **doble clic**: debe abrirse en ArchiSim. Navega en planta y en 3D (F3) con el trackpad: ¿va fluido?
 4. Clic derecho en un `.ifc` → **Abrir con → ArchiSim**: debe importarse y salir el informe.

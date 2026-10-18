@@ -33,7 +33,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.5 ✅ v0.10 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
 | 1.6 ✅ v0.12 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
 | 1.7 | **Importación IFC, segunda vuelta**: muros curvos y de varios tramos, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
-| 1.8 ◐ v0.13 | **Instalación** (hecho: aplicación de Mac universal en `.dmg` con icono y asociación de ficheros; falta el instalador de Windows con icono y asociación): instalador de Windows con icono y asociación de `.archisim` e `.ifc`, compilaciones para macOS y Linux en la integración continua | S |
+| 1.8 ◐ v0.13 | **Instalación**: hecha la aplicación de Mac universal en `.dmg` con icono y asociación de ficheros; falta el instalador de Windows con icono y asociación de `.archisim` e `.ifc` | S |
 | 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
 
 ## 2. Fase 2 — Modelado completo
@@ -87,10 +87,9 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 
 ## Propuesta de orden
 
-- Bloque 11: **editor de tipos y materiales** (1.6) — hecho en v0.12, pedido por Antonio mientras el bloque 10 espera revisión (PR #2).
-
 1. ~~Bloque 8: **mover / copiar / estirar** con el ratón y **varita mágica** (1.1 + 1.2)~~ — hecho en v0.9, con la edición de vértices (1.3).
 2. ~~Bloque 9: **cotas básicas** y **gestión de plantas** (1.4 + 1.5)~~ — hecho en v0.10.
 3. ~~Bloque 10: **uniones en T y prioridades** (2.3)~~ — hecho en v0.11 (falta el recorte con forjados).
-4. Bloque 12: **aplicación de Mac** (parte de 1.8) — hecho en v0.13, pedido por Antonio.
-5. Fase 2 con **familias** (2.1) en cuanto Antonio decida D2.
+4. ~~Bloque 11: **editor de tipos y materiales** (1.6)~~ — hecho en v0.12.
+5. ~~Bloque 12: **aplicación de Mac** (parte de 1.8)~~ — hecho en v0.13.
+6. Fase 2 con **familias** (2.1) en cuanto Antonio decida D2.
