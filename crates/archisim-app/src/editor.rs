@@ -272,6 +272,16 @@ impl Editor {
     // ---- Drawing and editing ------------------------------------------------
 
     pub fn add_wall(&mut self, s: &WallSettings, start: Point2, end: Point2) -> EditResult<WallId> {
+        self.add_wall_with(s, start, end, None)
+    }
+
+    pub fn add_wall_with(
+        &mut self,
+        s: &WallSettings,
+        start: Point2,
+        end: Point2,
+        through: Option<Point2>,
+    ) -> EditResult<WallId> {
         let level = self.level;
         let top = s.top_on(self.model(), level);
         self.transact("Crear muro", |m| {
@@ -280,6 +290,7 @@ impl Editor {
                 level,
                 start,
                 end,
+                through,
                 reference: s.reference,
                 height: s.height,
                 base_offset: s.base_offset,

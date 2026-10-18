@@ -343,8 +343,12 @@ impl ArchiSimApp {
             let towards = self.cursor.map(|c| c.point).unwrap_or_default();
             match self.tool {
                 Tool::Wall => {
-                    if let Outcome::Build(a, b) = self.wall_tool.enter(towards) {
-                        self.build_wall(a, b);
+                    match self.wall_tool.enter(towards) {
+                        Outcome::Build(a, b) => self.build_wall(a, b),
+                        Outcome::BuildArc(a, b, through) => self.build_arc_wall(a, b, through),
+                        Outcome::BuildRectangle(a, b) => self.build_rectangle(a, b),
+                        Outcome::BuildCircle(c, p) => self.build_circle(c, p),
+                        Outcome::Nothing => {}
                     }
                 }
                 Tool::Slab => match self.slab_tool.enter(towards) {
@@ -446,8 +450,12 @@ impl ArchiSimApp {
             Tool::Wall => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
-                        if let Outcome::Build(a, b) = self.wall_tool.click(c.point) {
-                            self.build_wall(a, b);
+                        match self.wall_tool.click(c.point) {
+                            Outcome::Build(a, b) => self.build_wall(a, b),
+                            Outcome::BuildArc(a, b, through) => self.build_arc_wall(a, b, through),
+                            Outcome::BuildRectangle(a, b) => self.build_rectangle(a, b),
+                            Outcome::BuildCircle(c, p) => self.build_circle(c, p),
+                            Outcome::Nothing => {}
                         }
                     }
                 }
@@ -864,6 +872,7 @@ impl ArchiSimApp {
             level: self.ed.level,
             start: a,
             end: b,
+            through: None,
             reference: self.wall_settings.reference,
             height: self.wall_settings.height,
             base_offset: self.wall_settings.base_offset,

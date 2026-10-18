@@ -1237,6 +1237,7 @@ impl<'a> Importer<'a> {
                 level: c.level,
                 start: a,
                 end: b,
+                through: None,
                 reference,
                 height: snap(c.top - c.base),
                 base_offset: snap(c.base - elevation),

@@ -130,11 +130,15 @@ pub enum ReferenceLine {
     InteriorFace,
 }
 
-/// A straight wall. IFC: `IfcWall` with an `IfcMaterialLayerSetUsage`.
+/// A wall, straight or an arc. IFC: `IfcWall` with an `IfcMaterialLayerSetUsage`.
 ///
 /// The exterior face is on the **left** of the axis when looking from `start`
-/// to `end`. Drawing a building outline clockwise therefore puts the exterior
-/// layers outside.
+/// to `end` (or along the arc from start to end). Drawing a building outline
+/// clockwise therefore puts the exterior layers outside.
+///
+/// An arc is defined by `start`, `end` and a point it passes through
+/// (`through`). The length is the arc length. The inner radius of the wall
+/// must stay positive.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wall {
     pub id: WallId,
@@ -143,6 +147,8 @@ pub struct Wall {
     pub level: LevelId,
     pub start: Point2,
     pub end: Point2,
+    /// Point the arc passes through. `None` means a straight wall.
+    pub through: Option<Point2>,
     pub reference: ReferenceLine,
     /// Height above the base, in metres. With a top constraint it is
     /// worked out by the model from the levels and kept up to date.
@@ -166,8 +172,17 @@ pub enum WallTop {
 }
 
 impl Wall {
+    /// True when the wall is an arc.
+    pub fn is_arc(&self) -> bool {
+        self.through.is_some()
+    }
+
+    /// Length of the wall: chord for a straight wall, arc length for an arc.
     pub fn length(&self) -> f64 {
-        self.start.distance(self.end)
+        match self.through {
+            None => self.start.distance(self.end),
+            Some(through) => arc_length(self.start, self.end, through).unwrap_or(0.0),
+        }
     }
 
     /// Signed offsets (left positive) of the exterior and interior faces from
@@ -179,6 +194,70 @@ impl Wall {
             ReferenceLine::InteriorFace => (thickness, 0.0),
         }
     }
+}
+
+/// Length of the arc from `start` to `end` passing through `through`.
+/// Returns `None` when the three points are collinear or the radius would be infinite.
+fn arc_length(start: Point2, end: Point2, through: Point2) -> Option<f64> {
+    let (center, radius, angle) = arc_geometry(start, end, through)?;
+    let _ = center;
+    Some(radius * angle.abs())
+}
+
+/// Center, radius and signed swept angle (radians) of the arc.
+fn arc_geometry(start: Point2, end: Point2, through: Point2) -> Option<(Point2, f64, f64)> {
+    // Circumcenter of the three points.
+    let d = 2.0
+        * (start.x * (end.y - through.y)
+            + end.x * (through.y - start.y)
+            + through.x * (start.y - end.y));
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let ux = ((start.x * start.x + start.y * start.y) * (end.y - through.y)
+        + (end.x * end.x + end.y * end.y) * (through.y - start.y)
+        + (through.x * through.x + through.y * through.y) * (start.y - end.y))
+        / d;
+    let uy = ((start.x * start.x + start.y * start.y) * (through.x - end.x)
+        + (end.x * end.x + end.y * end.y) * (start.x - through.x)
+        + (through.x * through.x + through.y * through.y) * (end.x - start.x))
+        / d;
+    let center = Point2::new(ux, uy);
+    let radius = center.distance(start);
+    if radius < 1e-9 {
+        return None;
+    }
+    let angle_of = |p: Point2| (p.y - center.y).atan2(p.x - center.x);
+    let a0 = angle_of(start);
+    let a1 = angle_of(end);
+    let at = angle_of(through);
+    let mut sweep = a1 - a0;
+    // Choose the direction that passes through `through`.
+    let crosses = |from: f64, to: f64, mid: f64| {
+        let mut d = to - from;
+        if d > std::f64::consts::PI {
+            d -= 2.0 * std::f64::consts::PI;
+        }
+        if d < -std::f64::consts::PI {
+            d += 2.0 * std::f64::consts::PI;
+        }
+        let mut m = mid - from;
+        if m > std::f64::consts::PI {
+            m -= 2.0 * std::f64::consts::PI;
+        }
+        if m < -std::f64::consts::PI {
+            m += 2.0 * std::f64::consts::PI;
+        }
+        (d > 0.0 && m > 0.0 && m < d) || (d < 0.0 && m < 0.0 && m > d)
+    };
+    if !crosses(a0, a1, at) {
+        sweep = if sweep > 0.0 {
+            sweep - 2.0 * std::f64::consts::PI
+        } else {
+            sweep + 2.0 * std::f64::consts::PI
+        };
+    }
+    Some((center, radius, sweep))
 }
 
 /// What a slab is for. Revit "Function" / IFC `IfcSlabTypeEnum`.
@@ -526,6 +605,8 @@ pub struct NewWall {
     pub level: LevelId,
     pub start: Point2,
     pub end: Point2,
+    /// Point the arc passes through. `None` for a straight wall.
+    pub through: Option<Point2>,
     pub reference: ReferenceLine,
     /// Height above the base; ignored when `top` is a level.
     pub height: f64,
@@ -1087,6 +1168,7 @@ impl Model {
             level: spec.level,
             start: spec.start,
             end: spec.end,
+            through: spec.through,
             reference: spec.reference,
             height,
             base_offset: spec.base_offset,
@@ -1128,6 +1210,27 @@ impl Model {
         finite(spec.base_offset, "wall base offset")?;
         if spec.start.approx_eq(spec.end) {
             return Err(ModelError::ZeroLengthWall);
+        }
+        if let Some(through) = spec.through {
+            finite_point(through, "wall through point")?;
+            if arc_geometry(spec.start, spec.end, through).is_none() {
+                return Err(ModelError::ZeroLengthWall); // collinear: not a real arc
+            }
+            // Inner radius must stay positive.
+            if let Some((center, radius, _)) = arc_geometry(spec.start, spec.end, through) {
+                let thickness = self.wall_types[&spec.wall_type].thickness();
+                let (ext, int) = match spec.reference {
+                    ReferenceLine::Center => (thickness / 2.0, -thickness / 2.0),
+                    ReferenceLine::ExteriorFace => (0.0, -thickness),
+                    ReferenceLine::InteriorFace => (thickness, 0.0),
+                };
+                // The smaller absolute offset side must not cross the center.
+                let min_radius = radius - ext.max(-int).abs();
+                if min_radius <= EPSILON {
+                    return Err(ModelError::NonPositive("inner radius"));
+                }
+                let _ = center;
+            }
         }
         if let WallTop::Level { level, offset } = spec.top {
             if !self.levels.contains_key(&level) {
@@ -1241,6 +1344,7 @@ impl Model {
                 level: wall.level,
                 start: wall.start,
                 end: wall.end,
+                through: wall.through,
                 reference: wall.reference,
                 height: wall.height,
                 base_offset: wall.base_offset,
@@ -2590,6 +2694,7 @@ impl Model {
                 level: wall.level,
                 start: wall.start,
                 end: wall.end,
+                through: wall.through,
                 reference: wall.reference,
                 height: wall.height,
                 base_offset: wall.base_offset,
@@ -2746,6 +2851,7 @@ mod tests {
             level,
             start: Point2::new(0.0, 0.0),
             end: Point2::new(4.0, 0.0),
+            through: None,
             reference: ReferenceLine::Center,
             height: 2.7,
             base_offset: 0.0,

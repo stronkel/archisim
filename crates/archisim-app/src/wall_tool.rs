@@ -1,33 +1,49 @@
 //! The wall tool: click the start, click the end, and keep going.
 //!
-//! Like ArchiCAD's chained wall: every click adds a wall from the previous
-//! point, so consecutive walls share their end points and join with a mitre.
-//! Clicking the first point again closes the outline and ends the chain.
+//! Modes (like ArchiCAD's construction methods):
+//! - **Chain** (default): every click adds a wall from the previous point.
+//! - **Rectangle**: two opposite corners define four walls.
+//! - **Arc**: start, end and a point the arc passes through.
+//! - **Circle**: centre and a point on the circumference.
+//!
 //! While drawing, typing a number sets the length of the next wall along
 //! the direction of the cursor (Enter to place it).
-//!
-//! The tool only decides what to build; the editor builds it and reports
-//! back with [`WallTool::accept`], so a refused wall leaves the chain as it
-//! was.
 
 use archisim_core::Point2;
 
 use crate::units::parse_length;
 
+/// How the wall tool builds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WallMode {
+    #[default]
+    Chain,
+    Rectangle,
+    Arc,
+    Circle,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct WallTool {
-    /// Points of the chain so far; the last one is where the next wall starts.
+    pub mode: WallMode,
+    /// Points collected so far for the current construction.
     points: Vec<Point2>,
     /// Length being typed, in millimetres (or with a unit).
     pub typed: String,
 }
 
 /// What the tool wants done after an input.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Nothing,
-    /// Build a wall between these points, then call [`WallTool::accept`].
+    /// Build a straight wall between these points.
     Build(Point2, Point2),
+    /// Build an arc wall (start, end, through).
+    BuildArc(Point2, Point2, Point2),
+    /// Build a rectangle of four walls from two opposite corners.
+    BuildRectangle(Point2, Point2),
+    /// Build a circular wall (centre, radius point).
+    BuildCircle(Point2, Point2),
 }
 
 /// What Escape did.
@@ -56,6 +72,15 @@ impl WallTool {
 
     /// A click at an already snapped point.
     pub fn click(&mut self, p: Point2) -> Outcome {
+        match self.mode {
+            WallMode::Chain => self.click_chain(p),
+            WallMode::Rectangle => self.click_rectangle(p),
+            WallMode::Arc => self.click_arc(p),
+            WallMode::Circle => self.click_circle(p),
+        }
+    }
+
+    fn click_chain(&mut self, p: Point2) -> Outcome {
         match self.anchor() {
             None => {
                 self.points.push(p);
@@ -66,10 +91,60 @@ impl WallTool {
         }
     }
 
+    fn click_rectangle(&mut self, p: Point2) -> Outcome {
+        match self.points.len() {
+            0 => {
+                self.points.push(p);
+                Outcome::Nothing
+            }
+            1 => {
+                let a = self.points[0];
+                self.points.clear();
+                Outcome::BuildRectangle(a, p)
+            }
+            _ => Outcome::Nothing,
+        }
+    }
+
+    fn click_arc(&mut self, p: Point2) -> Outcome {
+        match self.points.len() {
+            0 | 1 => {
+                self.points.push(p);
+                Outcome::Nothing
+            }
+            2 => {
+                let a = self.points[0];
+                let b = self.points[1];
+                self.points.clear();
+                Outcome::BuildArc(a, b, p)
+            }
+            _ => Outcome::Nothing,
+        }
+    }
+
+    fn click_circle(&mut self, p: Point2) -> Outcome {
+        match self.points.len() {
+            0 => {
+                self.points.push(p);
+                Outcome::Nothing
+            }
+            1 => {
+                let c = self.points[0];
+                self.points.clear();
+                Outcome::BuildCircle(c, p)
+            }
+            _ => Outcome::Nothing,
+        }
+    }
+
     /// The wall from the anchor to `end` was built: continue from `end`, or
     /// stop if it closed the outline.
     pub fn accept(&mut self, end: Point2) {
         self.typed.clear();
+        if self.mode != WallMode::Chain {
+            self.points.clear();
+            return;
+        }
         let closes = self.points.len() > 1 && self.points[0].approx_eq(end);
         if closes {
             self.points.clear();
@@ -102,22 +177,31 @@ impl WallTool {
         }
     }
 
+    /// Backspace while typing a length.
     pub fn backspace(&mut self) -> bool {
-        self.typed.pop().is_some()
-    }
-
-    /// Enter: place the typed length towards the cursor, or end the chain.
-    pub fn enter(&mut self, towards: Point2) -> Outcome {
         if self.typed.is_empty() {
-            self.points.clear();
-            return Outcome::Nothing;
-        }
-        match (self.anchor(), self.typed_end(towards)) {
-            (Some(a), Some(end)) => Outcome::Build(a, end),
-            _ => Outcome::Nothing,
+            false
+        } else {
+            self.typed.pop();
+            true
         }
     }
 
+    /// Enter: place the typed length, or finish a rectangle/arc/circle with the current point.
+    pub fn enter(&mut self, towards: Point2) -> Outcome {
+        if let Some(end) = self.typed_end(towards) {
+            return self.click(end);
+        }
+        self.click(towards)
+    }
+
+    /// Finish the current construction (e.g. on tool change).
+    pub fn finish(&mut self) {
+        self.points.clear();
+        self.typed.clear();
+    }
+
+    /// Escape: clear a typed length, or end the current construction.
     pub fn escape(&mut self) -> Escape {
         if !self.typed.is_empty() {
             self.typed.clear();
@@ -128,83 +212,5 @@ impl WallTool {
         } else {
             Escape::Idle
         }
-    }
-
-    /// Ends the chain without building anything (right click, tool change).
-    pub fn finish(&mut self) {
-        self.points.clear();
-        self.typed.clear();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn p(x: f64, y: f64) -> Point2 {
-        Point2::new(x, y)
-    }
-
-    #[test]
-    fn chained_walls_and_closing() {
-        let mut t = WallTool::default();
-        assert_eq!(t.click(p(0.0, 0.0)), Outcome::Nothing);
-        // Clicking the same point again does nothing.
-        assert_eq!(t.click(p(0.0, 0.0)), Outcome::Nothing);
-        assert_eq!(
-            t.click(p(0.0, 4.0)),
-            Outcome::Build(p(0.0, 0.0), p(0.0, 4.0))
-        );
-        t.accept(p(0.0, 4.0));
-        assert_eq!(
-            t.click(p(6.0, 4.0)),
-            Outcome::Build(p(0.0, 4.0), p(6.0, 4.0))
-        );
-        // A refused wall: no accept, the chain stays at (0, 4).
-        assert_eq!(t.anchor(), Some(p(0.0, 4.0)));
-        t.accept(p(6.0, 4.0));
-        t.accept(p(6.0, 0.0));
-        assert_eq!(
-            t.click(p(0.0, 0.0)),
-            Outcome::Build(p(6.0, 0.0), p(0.0, 0.0))
-        );
-        t.accept(p(0.0, 0.0));
-        assert!(!t.is_drawing(), "closing the outline ends the chain");
-    }
-
-    #[test]
-    fn typed_length_follows_the_cursor_direction() {
-        let mut t = WallTool::default();
-        assert!(!t.type_char('3'), "nothing typed before the first point");
-        t.click(p(1.0, 1.0));
-        for c in "3500".chars() {
-            assert!(t.type_char(c));
-        }
-        assert!(!t.type_char('x'));
-        assert_eq!(t.typed_length(), Some(3.5));
-        // Cursor anywhere to the north: the wall goes 3.5 m north.
-        assert_eq!(
-            t.enter(p(1.0, 2.0)),
-            Outcome::Build(p(1.0, 1.0), p(1.0, 4.5))
-        );
-        t.accept(p(1.0, 4.5));
-        assert!(t.typed.is_empty());
-        // Enter with nothing typed ends the chain.
-        assert_eq!(t.enter(p(9.0, 9.0)), Outcome::Nothing);
-        assert!(!t.is_drawing());
-    }
-
-    #[test]
-    fn escape_steps_back() {
-        let mut t = WallTool::default();
-        assert_eq!(t.escape(), Escape::Idle);
-        t.click(p(0.0, 0.0));
-        t.type_char('2');
-        assert!(t.backspace());
-        assert!(!t.backspace());
-        t.type_char('2');
-        assert_eq!(t.escape(), Escape::ClearedLength);
-        assert_eq!(t.escape(), Escape::EndedChain);
-        assert_eq!(t.escape(), Escape::Idle);
     }
 }

@@ -6,6 +6,25 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Bloque 19 — Modos de construcción y muros curvos (núcleo)
+
+**Hecho**
+- El muro deja de ser solo «de punto a punto»: puede ser un **arco** definido por inicio, fin y un punto de paso. La longitud es la del arco (no la cuerda). Se rechaza si el radio interior se anula o si los tres puntos son colineales.
+- Formato `.archisim` **versión 5**: los proyectos anteriores se abren solos (el campo `through` es opcional).
+- La herramienta Muro conoce los modos de ArchiCAD: **cadena** (el de siempre), **rectángulo** (dos esquinas opuestas → cuatro muros), **arco** (inicio + fin + punto de paso) y **círculo** (centro + punto en el radio, aproximado con 16 arcos).
+- Versión 0.19.0. Los muros rectos existentes no cambian de geometría ni de IFC.
+
+**Pendiente**
+- La planta, el 3D y el IFC todavía dibujan el arco por su cuerda (la geometría curva llega en el siguiente paso de este bloque).
+- Falta el selector de modo en la interfaz (por ahora el modo se puede fijar en código; el siguiente paso lo pone en Propiedades o con tecla).
+- Importación IFC de muros curvos (parte de 1.7) y el resto de la segunda vuelta.
+
+**Antonio debe probar** (cuando el PR esté en verde)
+1. Descarga el artefacto del PR «Modos de construcción…» (rama `bloque/modos-construccion`).
+2. Abre `demo.archisim`: la planta y el 3D deben verse exactamente igual que en v0.18.
+3. Con la herramienta Muro, dibuja un muro normal (cadena): debe comportarse como siempre.
+4. (Cuando el selector esté) prueba un arco de tres clics y un rectángulo de dos clics; comprueba que la longitud que muestra es la del arco y que un radio demasiado pequeño se rechaza.
+
 ## 2026-10-18 · Bloque 17 — Ayudas al dibujo (cotas temporales, rastreo, giros, otras plantas)
 
 **Hecho** (petición de Antonio: «funciones de calidad de vida antes de las herramientas del bloque 2»; las seis, en este orden)

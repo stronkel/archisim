@@ -641,19 +641,80 @@ impl ArchiSimApp {
 
     /// Builds a wall asked for by the wall tool.
     fn build_wall(&mut self, start: Point2, end: Point2) {
-        match self.ed.add_wall(&self.wall_settings, start, end) {
+        self.build_wall_with(start, end, None);
+    }
+
+    fn build_arc_wall(&mut self, start: Point2, end: Point2, through: Point2) {
+        self.build_wall_with(start, end, Some(through));
+    }
+
+    fn build_wall_with(&mut self, start: Point2, end: Point2, through: Option<Point2>) {
+        match self.ed.add_wall_with(&self.wall_settings, start, end, through) {
             Ok(id) => {
                 self.wall_tool.accept(end);
-                // The last wall drawn stays selected, with its temporary
-                // dimensions once the chain ends (as Revit does).
                 self.ed.selection = [Element::Wall(id)].into_iter().collect();
-                let len = start.distance(end);
+                let len = self.ed.model().wall(id).map_or(0.0, |w| w.length());
                 self.say(format!("Muro de {} mm creado.", fmt_mm(len)));
                 if !self.wall_tool.is_drawing() {
                     self.say("Contorno cerrado.");
                 }
             }
             Err(e) => self.complain(format!("No se puede crear el muro: {e}.")),
+        }
+    }
+
+    fn build_rectangle(&mut self, a: Point2, b: Point2) {
+        let corners = [
+            Point2::new(a.x, a.y),
+            Point2::new(b.x, a.y),
+            Point2::new(b.x, b.y),
+            Point2::new(a.x, b.y),
+        ];
+        let mut last = None;
+        for i in 0..4 {
+            let s = corners[i];
+            let e = corners[(i + 1) % 4];
+            match self.ed.add_wall(&self.wall_settings, s, e) {
+                Ok(id) => last = Some(id),
+                Err(e) => {
+                    self.complain(format!("No se puede crear el rectángulo: {e}."));
+                    return;
+                }
+            }
+        }
+        if let Some(id) = last {
+            self.ed.selection = [Element::Wall(id)].into_iter().collect();
+            self.say("Rectángulo de muros creado.");
+        }
+    }
+
+    fn build_circle(&mut self, center: Point2, on: Point2) {
+        // Approximate a circle with 16 arc segments, each with a through point.
+        let r = center.distance(on);
+        if r < 0.05 {
+            self.complain("El radio es demasiado pequeño.");
+            return;
+        }
+        let n = 16;
+        let mut last = None;
+        for i in 0..n {
+            let a0 = (i as f64) * std::f64::consts::TAU / n as f64;
+            let a1 = ((i + 1) as f64) * std::f64::consts::TAU / n as f64;
+            let am = (a0 + a1) / 2.0;
+            let start = Point2::new(center.x + r * a0.cos(), center.y + r * a0.sin());
+            let end = Point2::new(center.x + r * a1.cos(), center.y + r * a1.sin());
+            let through = Point2::new(center.x + r * am.cos(), center.y + r * am.sin());
+            match self.ed.add_wall_with(&self.wall_settings, start, end, Some(through)) {
+                Ok(id) => last = Some(id),
+                Err(e) => {
+                    self.complain(format!("No se puede crear el círculo: {e}."));
+                    return;
+                }
+            }
+        }
+        if let Some(id) = last {
+            self.ed.selection = [Element::Wall(id)].into_iter().collect();
+            self.say(format!("Círculo de radio {} mm creado.", fmt_mm(r)));
         }
     }
 

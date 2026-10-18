@@ -153,6 +153,9 @@ pub(crate) struct Wall {
     pub level: u64,
     pub start: Xy,
     pub end: Xy,
+    /// Point the arc passes through (version 5). Absent: a straight wall.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub through: Option<Xy>,
     pub reference: ReferenceLine,
     pub height: f64,
     pub base_offset: f64,
@@ -355,6 +358,7 @@ impl ProjectFile {
                     level: w.level.0,
                     start: xy(w.start),
                     end: xy(w.end),
+                    through: w.through.map(xy),
                     reference: match w.reference {
                         core::ReferenceLine::Center => ReferenceLine::Center,
                         core::ReferenceLine::ExteriorFace => ReferenceLine::ExteriorFace,
@@ -547,6 +551,7 @@ impl ProjectFile {
                 level: core::LevelId(w.level),
                 start: pt(w.start),
                 end: pt(w.end),
+                through: w.through.map(pt),
                 reference: match w.reference {
                     ReferenceLine::Center => core::ReferenceLine::Center,
                     ReferenceLine::ExteriorFace => core::ReferenceLine::ExteriorFace,

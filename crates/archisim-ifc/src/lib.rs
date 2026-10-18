@@ -1173,6 +1173,7 @@ mod tests {
                 level: lvl,
                 start: Point2::new(0.0, 0.0),
                 end: Point2::new(5.0, 0.0),
+                through: None,
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
