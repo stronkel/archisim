@@ -921,6 +921,15 @@ impl Model {
         )
     }
 
+    /// The lowest level above `level`, if any.
+    pub fn level_above(&self, level: LevelId) -> Option<LevelId> {
+        let base = self.levels.get(&level)?.elevation;
+        self.levels()
+            .into_iter()
+            .find(|l| l.elevation > base + EPSILON)
+            .map(|l| l.id)
+    }
+
     /// Levels sorted by elevation.
     pub fn levels(&self) -> Vec<&Level> {
         let mut v: Vec<_> = self.levels.values().collect();
@@ -1276,6 +1285,48 @@ impl Model {
     /// a top level keeps its top where it is (it grows or shrinks).
     pub fn set_wall_base_offset(&mut self, id: WallId, base_offset: f64) -> Result<(), ModelError> {
         self.edit_wall(id, |w| w.base_offset = base_offset)
+    }
+
+    /// Moves a wall to another level (Revit's "Restricción de base",
+    /// ArchiCAD's home storey), with its doors and windows. It keeps its
+    /// offset from the level, so it goes up or down with it. A wall tied to
+    /// the level right above its old one is tied to the level right above
+    /// the new one (it stays a full storey high); with none above, it keeps
+    /// its height, free. Tied to another level, it keeps it, and the move
+    /// is refused if that level is not above the new base.
+    pub fn set_wall_level(&mut self, id: WallId, level: LevelId) -> Result<(), ModelError> {
+        if !self.levels.contains_key(&level) {
+            return Err(ModelError::UnknownLevel(level));
+        }
+        let wall = self.walls.get(&id).ok_or(ModelError::UnknownWall(id))?;
+        if wall.level == level {
+            return Ok(());
+        }
+        let next_above_old = self.level_above(wall.level);
+        let top = match wall.top {
+            WallTop::Level { level: top, offset } if Some(top) == next_above_old => {
+                match self.level_above(level) {
+                    Some(l) => WallTop::Level { level: l, offset },
+                    None => WallTop::Unconnected,
+                }
+            }
+            t => t,
+        };
+        self.edit_wall(id, |w| {
+            w.level = level;
+            w.top = top;
+        })
+    }
+
+    /// Moves a slab to another level, keeping the height of its top face
+    /// above the level.
+    pub fn set_slab_level(&mut self, id: SlabId, level: LevelId) -> Result<(), ModelError> {
+        if !self.levels.contains_key(&level) {
+            return Err(ModelError::UnknownLevel(level));
+        }
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        slab.level = level;
+        Ok(())
     }
 
     /// Changes a wall's top constraint. Freed from its level, the wall
@@ -2896,6 +2947,97 @@ mod tests {
             hand: Hand::Left,
             setback: None,
         }
+    }
+
+    /// Walls and slabs change level keeping their offsets; a wall a full
+    /// storey high stays a full storey high on its new level, and one
+    /// whose top level would not be above it is refused.
+    #[test]
+    fn walls_and_slabs_change_level() {
+        let (mut m, wall, _, window) = with_openings();
+        let pb = m.levels()[0].id;
+        let p1 = m.add_level("Planta 1", 3.0);
+        let p2 = m.add_level("Planta 2", 6.2);
+        assert_eq!(m.level_above(pb), Some(p1));
+        assert_eq!(m.level_above(p2), None);
+        m.set_wall_top(
+            wall,
+            WallTop::Level {
+                level: p1,
+                offset: -0.3,
+            },
+        )
+        .unwrap();
+        let w = m.add_opening(place(window, wall, 2.0, 0.9)).unwrap();
+
+        // Up one storey: tied to the next level up (3.2 m high now), the
+        // window goes with it.
+        m.set_wall_level(wall, p1).unwrap();
+        let moved = m.wall(wall).unwrap();
+        assert_eq!(moved.level, p1);
+        assert_eq!(
+            moved.top,
+            WallTop::Level {
+                level: p2,
+                offset: -0.3
+            }
+        );
+        assert!((moved.height - 2.9).abs() < 1e-12);
+        assert_eq!(m.opening(w).unwrap().wall, wall);
+        // Top storey: nothing above, it keeps its height, free.
+        m.set_wall_level(wall, p2).unwrap();
+        assert_eq!(m.wall(wall).unwrap().top, WallTop::Unconnected);
+        assert!((m.wall(wall).unwrap().height - 2.9).abs() < 1e-12);
+
+        // Tied to a level that is not the one right above: it keeps it, and
+        // cannot go to that level or above it.
+        m.set_wall_level(wall, pb).unwrap();
+        m.set_wall_top(
+            wall,
+            WallTop::Level {
+                level: p2,
+                offset: 0.0,
+            },
+        )
+        .unwrap();
+        let before = m.clone();
+        assert_eq!(
+            m.set_wall_level(wall, p2),
+            Err(ModelError::WallTopBelowBase(wall))
+        );
+        assert_eq!(m, before);
+        m.set_wall_level(wall, p1).unwrap();
+        assert!((m.wall(wall).unwrap().height - 3.2).abs() < 1e-12);
+
+        // Slabs keep their top offset.
+        let concrete = m.add_material("Hormigón", "concrete", [190, 190, 190], CutPattern::Solid);
+        let slab_type = m
+            .add_slab_type(
+                "Losa",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: concrete,
+                    thickness: 0.25,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let slab = m
+            .add_slab(NewSlab {
+                slab_type,
+                level: pb,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(4.0, 0.0),
+                    Point2::new(4.0, 3.0),
+                ],
+                top_offset: 0.05,
+            })
+            .unwrap();
+        m.set_slab_level(slab, p1).unwrap();
+        assert_eq!(m.slab(slab).unwrap().level, p1);
+        assert_eq!(m.slab(slab).unwrap().top_offset, 0.05);
+        assert!(m.set_slab_level(slab, LevelId(999)).is_err());
     }
 
     /// A wall tied to the level above follows it: its height is worked out

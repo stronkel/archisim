@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Bloque 17 — Ayudas al dibujo (cotas temporales, rastreo, giros, otras plantas)
+
+**Hecho** (petición de Antonio: «funciones de calidad de vida antes de las herramientas del bloque 2»; las seis, en este orden)
+1. **Cotas temporales azules** (como Revit). Al seleccionar un muro o una puerta o ventana —y también el último muro dibujado y la puerta o ventana recién colocada, que quedan seleccionados— aparecen cotas azules:
+   - **Puerta o ventana**: de cada jamba (hueco de obra) a la referencia más cercana de ese lado, medida en la cara hacia la que abre: la cara de un muro que la cruza o acomete (tabique), el final del muro (esquina interior) o la jamba del hueco vecino.
+   - **Muro**: su longitud (línea de referencia) y la **luz libre de cara a cara** hasta el muro paralelo más próximo a cada lado.
+   - **Clic en el número** → se escribe la medida (mm, o `1,2m`, `120cm`; el valor sale seleccionado y se sustituye al teclear) → **Intro**: el elemento se recoloca para que la cota sea exacta. La puerta se desliza por el muro; el muro se desplaza en perpendicular (los muros unidos le siguen, como al moverlo) o se alarga desde su final (la esquina le acompaña). Un paso de deshacer («Mover» / «Estirar»). **Esc** deja la cota como estaba. Lo que no cabe se rechaza con el motivo.
+   - Solo con la flecha o con la herramienta que acaba de dibujar el elemento (las demás herramientas conservan sus clics).
+2. **Puntos medios**: además del centro de la línea de referencia, ahora fuerzan el punto medio de **cada cara de muro** (también el centro del canto en los extremos) y de **cada arista de forjado**, con su triángulo verde.
+3. **Muros rectos por defecto**: dibujando (muros, forjados, cotas) o arrastrando, la línea queda **horizontal o vertical** mientras el cursor no se aparte más de **8°**, y una **línea azul discontinua** a lo ancho de la vista lo indica; cerca de 45° también se bloquea. Si el punto cae sobre una **cara**, se desliza por ella hasta quedar **en escuadra**: un tabique dibujado hasta una cara acaba recto aunque el clic no sea exacto. Para inclinar un muro basta apartar el cursor más de 8°; Mayús sigue forzando múltiplos de 45°.
+4. **Girar puertas y ventanas** (como Revit): con una seleccionada, **Espacio** recorre sus cuatro posiciones (bisagras a la otra jamba, luego la hoja al otro lado…). Dos **flechas azules** junto a ella (en el lado al que no abre): ⇅ la pasa **al otro lado del muro** con las bisagras en la misma jamba (la mano UNE cambia de nombre, porque se mira desde el otro lado) y ⇄ **cambia la mano**. Con la herramienta Puerta o Ventana, Espacio cambia la mano de la que vas a colocar. De regalo, como en Revit: Espacio con muros seleccionados los **invierte**.
+5. **Cambiar de planta**: en Propiedades, «**Restricción de base**» del muro y «**Planta**» del forjado son ahora una lista de plantas (también con varios elementos seleccionados). El elemento pasa a esa planta con sus desfases; las puertas y ventanas van con su muro (en sus Propiedades se ve en qué planta están). Un muro que llegaba **a la planta de encima** sigue llegando a la de encima de la nueva (en la última planta queda con su altura, desconectado); unido a otra planta, la conserva, y se rechaza si no queda por encima. Un paso de deshacer («Cambiar de planta»).
+6. **Otras plantas en planta**:
+   - Los **muros de otras plantas que atraviesa el plano de corte** se dibujan **cortados**, con sus capas, tramas y huecos (por ejemplo, un muro de la planta baja con un desfase superior de 2 m que sube por la primera), en pantalla y en la planta exportada, como el rango de vista de Revit. También fuerzan.
+   - **Calco de la planta inferior** (activado por defecto en pantalla; *Calco* en la barra inferior, en las propiedades de la vista o en *Vista*): contorno de los muros de la planta de debajo y sus huecos en gris azulado, finos. **Sus puntos fuerzan** (extremos, esquinas, puntos medios, caras), para dibujar encima. No se exporta en la planta SVG.
+- Ayudas en la pastilla de teclas y en *Ayuda → Ratón y teclado*.
+- Pruebas nuevas: forzado (puntos medios de caras y aristas, la cara que lleva el punto, rastreo por ángulo, deslizamiento hasta la escuadra sobre una cara), cotas temporales (puerta a las esquinas interiores, teclear y deslizar, rechazo, longitud y luz libre de un muro, mover y estirar), giros (las cuatro posiciones de Espacio, las flechas conservan jamba o lado), núcleo (cambiar de planta muros y forjados, restricción superior relativa, rechazo sin cambios), planta (muros de otra planta cortados, calco solo si se pide) y la ventana manejada con clics y teclas simulados (muros rectos por defecto, último muro seleccionado, clic en la cota de una puerta + `500` + Intro, Esc, Espacio cuatro veces, las dos flechas, Espacio en un muro, calco que fuerza, muro alto de la planta baja visto desde la primera, cambiar de planta tres muros y volverlos).
+- **IFC sin cambios**: la demo da el mismo IFC que la v0.17 (salvo los `GlobalId`, nuevos en cada demo), y las mismas plantas SVG byte a byte; validado con IfcOpenShell (reglas EXPRESS incluidas), también las sesiones de la app. Formato `.archisim` sin cambios (versión 4).
+- Versión 0.18.0.
+
+**Pendiente / limitaciones conocidas**
+- Cotas temporales de **forjados** y cotas a **ejes** o a **núcleo** (Revit permite elegirlo); de momento: jambas y caras.
+- Los muros de otra planta que se ven cortados **no se seleccionan** desde esta planta: se editan en la suya.
+- En el calco, los muros de la planta inferior no se unen con los de la activa (son dibujos superpuestos).
+- **Copiar a otra planta** (como «Pegar alineado» de Revit): no está; se puede cambiar de planta, no duplicar.
+- Las cotas temporales no siguen al cursor mientras se arrastra (aparecen al soltar).
+
+**Antonio debe probar**
+1. Descarga la versión del pull request «Ayudas al dibujo…» (rama `bloque/ayudas-dibujo`) → **Actions** → la última ejecución en verde → **Artifacts** → **ArchiSim-Windows** o **ArchiSim-Mac**. Abre `demo.archisim`.
+2. **Cotas temporales**: clic en la puerta de un dormitorio. Verás dos cotas azules de cada jamba a la cara del muro más cercano. Clic en un número, escribe `100` e Intro: la puerta queda a 10 cm exactos de esa cara (la mocheta habitual). Ctrl+Z. Prueba también `Esc` mientras escribes.
+3. Selecciona un **tabique**: cota de longitud y luz libre hasta los muros paralelos. Escribe una luz libre (por ejemplo `3000`): el tabique se desplaza y los que acometen a él le siguen.
+4. **Muros rectos**: tecla M y dibuja moviendo el ratón «a pulso»: deben salir rectos, con la línea azul. Aparta el cursor claramente para hacer un muro inclinado. Dibuja un tabique hasta la cara de una fachada haciendo el último clic un poco torcido: debe acabar en escuadra.
+5. **Puntos medios**: con M, acerca el cursor al centro de la cara interior de una fachada o de un lado de la solera: triángulo verde.
+6. **Girar**: selecciona una puerta y pulsa **Espacio** varias veces (cuatro posiciones); usa las dos flechas azules. Comprueba que la mano que dice Propiedades es la que esperas según UNE-EN 12519. Con la herramienta P, Espacio antes de colocarla.
+7. **Cambiar de planta**: selecciona un tabique → Propiedades → «Restricción de base» → Cubierta: desaparece de la planta baja (el aviso lo dice) y aparece en Cubierta. Ctrl+Z.
+8. **Otras plantas**: en una fachada de la planta baja pon «Desfase superior» `+2000` (o súbela de altura) y abre la planta **Cubierta**: esa fachada aparece **cortada**, y el resto de la planta baja en **gris** (calco). Dibuja un muro en Cubierta enganchando a las esquinas grises. Apaga *Calco* en la barra inferior.
+9. Exporta el IFC tras estos cambios y ábrelo en ArchiCAD/Revit: los muros cambiados de planta deben salir en su nueva planta (`IfcBuildingStorey`).
+10. Dime si las cotas de las puertas deben medir a la cara (como ahora) o al eje de los muros, y si echas en falta cotas temporales en algún otro elemento.
+
 ## 2026-10-18 · Bloque 16 — Restricción superior de muros
 
 **Hecho** (petición de Antonio: «restricciones superiores de muro, de Planta baja a Planta 1, que se ajusten si cambia la altura de planta»; decidido hacerlo antes del bloque C)

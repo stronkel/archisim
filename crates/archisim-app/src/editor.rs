@@ -66,13 +66,7 @@ impl WallSettings {
 
 /// The lowest level above `level`, if any.
 pub fn next_level_above(model: &Model, level: LevelId) -> Option<LevelId> {
-    let base = model.level(level)?.elevation;
-    model
-        .levels()
-        .into_iter()
-        .filter(|l| l.elevation > base + 1e-9)
-        .map(|l| l.id)
-        .next()
+    model.level_above(level)
 }
 
 pub struct Editor {
@@ -443,6 +437,47 @@ impl Editor {
         })
     }
 
+    /// Moves walls (with their doors and windows) and slabs to another
+    /// level, in one step, keeping their offsets from the level. Doors,
+    /// windows and annotations in `items` are left alone (doors and
+    /// windows go with their wall). Returns how many elements moved; those
+    /// that leave the active level leave the selection too.
+    pub fn set_elements_level(&mut self, items: &[Element], level: LevelId) -> EditResult<usize> {
+        let movable: Vec<Element> = items
+            .iter()
+            .copied()
+            .filter(|e| matches!(e, Element::Wall(_) | Element::Slab(_)))
+            .collect();
+        if movable.is_empty() {
+            return Ok(0);
+        }
+        self.transact("Cambiar de planta", |m| {
+            for e in &movable {
+                match e {
+                    Element::Wall(id) => m.set_wall_level(*id, level)?,
+                    Element::Slab(id) => m.set_slab_level(*id, level)?,
+                    _ => {}
+                }
+            }
+            Ok(())
+        })?;
+        if level != self.level {
+            for e in &movable {
+                self.selection.remove(e);
+            }
+            // Their doors and windows are no longer on this level either.
+            let model = self.doc.model();
+            self.selection.retain(|e| match e {
+                Element::Opening(o) => model
+                    .opening(*o)
+                    .and_then(|o| model.wall(o.wall))
+                    .is_some_and(|w| w.level == self.level),
+                _ => true,
+            });
+        }
+        Ok(movable.len())
+    }
+
     pub fn set_slab_type(&mut self, s: SlabId, t: SlabTypeId) -> EditResult {
         self.transact("Cambiar tipo de forjado", |m| m.set_slab_type(s, t))
     }
@@ -462,6 +497,18 @@ impl Editor {
         if let Some(s) = new_selection {
             self.selection = s;
         }
+        Ok(label)
+    }
+
+    /// A drag applied to given elements instead of the selection (a
+    /// temporary dimension typed in), in one step.
+    pub fn drag_elements(
+        &mut self,
+        elements: &BTreeSet<Element>,
+        drag: &crate::drag::Drag,
+    ) -> EditResult<&'static str> {
+        let label = crate::drag::label(self.model(), drag);
+        self.transact(label, |m| crate::drag::apply(m, elements, drag))?;
         Ok(label)
     }
 
