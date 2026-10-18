@@ -69,7 +69,7 @@ La vista 3D dibuja con la tarjeta gráfica (wgpu) los sólidos de `archisim-geom
 | Línea de referencia | Línea de ubicación | Línea de referencia | Eje + `OffsetFromReferenceLine` |
 | `OpeningType` | Tipo de familia de puerta / ventana | Objeto puerta / ventana | `IfcDoorType` / `IfcWindowType` + `IfcMaterialConstituentSet` |
 | `Opening` | Ejemplar de puerta / ventana (alojado en muro) | Puerta / ventana | `IfcOpeningElement` (vacía el muro) + `IfcDoor` / `IfcWindow` (lo rellena) |
-| Familia (futuro) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría paramétrica |
+| Familia (fase 2, `docs/FAMILIAS.md`) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría; parámetros en `ArchiSim_Family` |
 | Parámetro compartido | Parámetro compartido | Propiedad | `IfcPropertySet` |
 
 Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres que no cambia nunca, ni al copiar el proyecto ni al exportar varias veces. Así los ingenieros pueden federar modelos y comparar versiones.
@@ -166,7 +166,7 @@ Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta
 La lista detallada, con tamaños, dependencias y decisiones pendientes, está en `docs/HOJA_DE_RUTA.md`.
 
 
-- **Fase 2:** sistema de familias paramétricas (lenguaje declarativo propio), librería inicial de puertas, ventanas, mobiliario y sanitarios; cubiertas, escaleras, secciones y alzados con líneas ocultas; recorte de muros con forjados.
+- **Fase 2:** sistema de familias paramétricas (recetas de texto propias, diseño en `docs/FAMILIAS.md`), librería inicial de puertas, ventanas, mobiliario y sanitarios; cubiertas, escaleras, secciones y alzados con líneas ocultas; recorte de muros con forjados.
 - **Fase 3:** planos y maquetación, acotación, etiquetas, tablas de planificación, impresión a PDF.
 - **Fase 4:** complemento puente para Revit, BCF, colaboración (modelo central), disciplinas de ingeniería.
 

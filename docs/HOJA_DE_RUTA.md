@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado.
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -13,7 +13,7 @@ Sin código: son decisiones de producto que condicionan lo demás.
 | # | Decisión | Por qué importa ahora |
 |---|---|---|
 | D1 | **Orden de los próximos bloques** (ver §1) | Edición con ratón, cotas o fase 2 directamente |
-| D2 | **Lenguaje de familias**: cómo se describe una familia paramétrica (fichero declarativo legible tipo «receta» frente a editor gráfico tipo editor de familias de Revit) | Es la pieza central de la fase 2: puertas, ventanas, mobiliario y sanitarios dependen de ella |
+| D2 ✅ | **Lenguaje de familias** — decidido el 18/10/2026: **receta de texto**, copia de la familia dentro del proyecto, nivel de detalle por escala, empezando por puertas y ventanas (ver `docs/FAMILIAS.md`) | Es la pieza central de la fase 2: puertas, ventanas, mobiliario y sanitarios dependen de ella |
 | D3 | **IFC de salida por defecto**: IFC4 (lo que mejor abren hoy Revit y ArchiCAD) o IFC 4.3 (lo que dice el principio 1) | Afecta a la validación y a lo que prueban los ingenieros |
 | D4 | **Licencia** (MPL-2.0 o GPL-3.0) y **nombre definitivo** | Necesario antes de abrir el repositorio |
 | D5 | **Normas de dibujo de referencia**: tramas, grosores y rotulación (UNE-EN ISO 128, UNE 1-027 para plegado, criterio propio de AD5) | Fija cómo se ven plantas, secciones y planos |
@@ -40,7 +40,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
-| 2.1 ★ | **Sistema de familias paramétricas**: lenguaje propio, parámetros de tipo y de ejemplar, geometría 3D y símbolo 2D en planta, niveles de detalle | L | D2 |
+| 2.1 ★ | **Sistema de familias paramétricas** (diseño en `docs/FAMILIAS.md`), en cuatro bloques: **A** núcleo (recetas, parámetros, fórmulas, 3D; puertas y ventanas actuales convertidas en familias; formato v3), **B** símbolos de planta por escala, **C** IFC (tipos, Psets, `ArchiSim_Family`), **D** aplicación (diálogo de tipos por familia, cargar/actualizar familias, puntos de control, herramienta Objeto) | L | D2 ✅ |
 | 2.2 | **Librería inicial propia**: puertas y ventanas paramétricas (con premarco, persiana y capialzado, vierteaguas), mobiliario, sanitarios, cocina | L | 2.1 |
 | 2.3 ◐ v0.11 | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD — hechas; falta el recorte de muros con forjados y las prioridades editables por material | M | — |
 | 2.4 | **Cubiertas inclinadas** por faldones (pendiente, aleros, limatesas y limahoyas) y recorte de muros bajo cubierta | L | 2.3 |
@@ -92,4 +92,4 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 3. ~~Bloque 10: **uniones en T y prioridades** (2.3)~~ — hecho en v0.11 (falta el recorte con forjados).
 4. ~~Bloque 11: **editor de tipos y materiales** (1.6)~~ — hecho en v0.12.
 5. ~~Bloque 12: **aplicación de Mac** (parte de 1.8)~~ — hecho en v0.13.
-6. Fase 2 con **familias** (2.1) en cuanto Antonio decida D2.
+6. Fase 2 con **familias** (2.1): D2 decidida el 18/10/2026. Bloques 13 a 16 = A, B, C y D de `docs/FAMILIAS.md`; después la librería (2.2).

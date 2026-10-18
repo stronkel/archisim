@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Fase 2 — Diseño de las familias paramétricas (decisión D2)
+
+**Hecho**
+- Diseño del sistema de familias en `docs/FAMILIAS.md`: qué es una familia (parámetros de tipo y de ejemplar con fórmulas, geometría 3D, símbolo de planta por escala, comportamiento y puntos de control, salida IFC), un ejemplo de receta de una ventana practicable, las reglas del sistema y el plan en cuatro bloques con su criterio de hecho.
+- **Decisiones de Antonio**: D2 = **receta de texto** (editor gráfico más adelante sobre el mismo formato); familias **copiadas dentro del proyecto**, como Revit; nivel de detalle **por escala**, como ArchiCAD; se empieza por **puertas y ventanas**.
+- Hoja de ruta, fundacional y prioridades de `CLAUDE.md` actualizados. Sin código: ningún cambio en el programa, el formato `.archisim` ni el IFC.
+
+**Pendiente**
+- Bloque A (núcleo de familias). Criterio: la demo y los proyectos antiguos dan exactamente el mismo 3D e IFC que hoy, pero con las puertas y ventanas como familias.
+- Sigue abierto D5 (normas de dibujo): fija los grosores con los que se dibujarán los símbolos de las familias por escala.
+
+**Antonio debe probar**
+1. Lee `docs/FAMILIAS.md`, sobre todo el ejemplo de receta: ¿entiendes qué hace cada línea? ¿Te ves retocando una (cambiar un rango, añadir un parámetro)?
+2. Revisa la tabla de los cuatro bloques y la lista de cinco familias iniciales (puerta abatible 1/2 hojas, corredera; ventana fija, practicable 1/2 hojas, corredera): ¿falta o sobra alguna?
+3. Si tienes un objeto de ArchiCAD que uses mucho (ventana con persiana y capialzado, por ejemplo), descríbeme sus parámetros tal como los ves en su diálogo: será la primera de la librería (2.2).
+
 ## 2026-10-17 · Cierre de fase 1, bloque 12 — Aplicación de Mac
 
 **Hecho**
