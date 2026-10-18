@@ -231,7 +231,9 @@ fn wall_dims(model: &Model, id: WallId) -> Vec<TempDim> {
             continue;
         }
         if best[k].is_none_or(|(g, _)| gap < (g - mine).abs()) {
-            best[k] = Some((theirs, (lo + hi) / 2.0));
+            // A third of the way along the overlap, clear of the length
+            // label, which sits in the middle of the wall.
+            best[k] = Some((theirs, lo + (hi - lo) / 3.0));
         }
     }
     for (k, found) in best.iter().enumerate() {
