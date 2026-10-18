@@ -337,11 +337,13 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
 }
 
 /// Colour of the reference level drawn underneath.
-const REFERENCE_INK: &str = "#8fa3b8";
+const REFERENCE_INK: &str = "#6d8fb5";
+/// Fill of the walls of the reference level.
+const REFERENCE_FILL: &str = "#dce5ef";
 
-/// The walls of the reference level: their outline in a light grey-blue,
-/// thin, with the layer boundaries even thinner, so they read as a tracing
-/// underneath and never as walls of this level.
+/// The walls of the reference level: filled and outlined in a light
+/// grey-blue, with their doors and windows marked, so they read as a
+/// tracing underneath and never as walls of this level.
 fn draw_reference(s: &mut String, model: &Model, geos: &[WallGeometry], k: f64) {
     let _ = writeln!(
         s,
@@ -351,9 +353,9 @@ fn draw_reference(s: &mut String, model: &Model, geos: &[WallGeometry], k: f64) 
         let outline = g.outline_at(None);
         let _ = writeln!(
             s,
-            r#"<path d="{}" stroke-width="{}"/>"#,
+            r#"<path d="{}" fill="{REFERENCE_FILL}" stroke-width="{}"/>"#,
             path(&outline),
-            num(VIEW_LINE * k)
+            num(FRAME_LINE * k)
         );
         // Openings of the wall below: where its doors and windows are.
         for o in openings_in_wall(model, g.wall) {
@@ -372,7 +374,7 @@ fn draw_reference(s: &mut String, model: &Model, geos: &[WallGeometry], k: f64) 
                 pt(b),
                 pt(c),
                 pt(d),
-                num(HATCH_LINE * k)
+                num(VIEW_LINE * k)
             );
         }
     }

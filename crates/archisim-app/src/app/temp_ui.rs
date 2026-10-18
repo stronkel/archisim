@@ -19,7 +19,10 @@ pub struct TempEdit {
     pub text: String,
     /// Where the field is, on screen (the middle of the label).
     pub at: Pos2,
+    /// The field has had the keyboard focus.
     focused: bool,
+    /// Frames spent asking for the focus.
+    tries: u32,
 }
 
 /// The arrows beside a selected door or window.
@@ -213,6 +216,7 @@ impl ArchiSimApp {
                 text: fmt_mm(dim.value),
                 at: r.center(),
                 focused: false,
+                tries: 0,
             });
             return true;
         }
@@ -290,9 +294,14 @@ impl ArchiSimApp {
                                 .font(FontId::monospace(13.0))
                                 .text_color(TRACK_LINE),
                         );
-                        if !te.focused {
-                            // The value comes selected: typing replaces it.
-                            r.request_focus();
+                        // The field's own focus (`Response::has_focus` is also
+                        // false while the window is in the background).
+                        let has = ui.ctx().memory(|m| m.has_focus(id));
+                        if has && !te.focused {
+                            // Focus taken (a new field may need a frame or
+                            // two): the value comes selected, so typing
+                            // replaces it.
+                            te.focused = true;
                             if let Some(mut state) =
                                 egui::text_edit::TextEditState::load(ui.ctx(), id)
                             {
@@ -301,10 +310,16 @@ impl ArchiSimApp {
                                 ));
                                 state.store(ui.ctx(), id);
                             }
-                            te.focused = true;
+                        } else if !te.focused {
+                            r.request_focus();
+                            te.tries += 1;
+                            ui.ctx().request_repaint();
+                            if te.tries > 10 {
+                                done = Some(false);
+                            }
                         } else if r.lost_focus() {
                             done = Some(ui.input(|i| i.key_pressed(Key::Enter)));
-                        } else if !r.has_focus() {
+                        } else if !has {
                             done = Some(false);
                         }
                     });
