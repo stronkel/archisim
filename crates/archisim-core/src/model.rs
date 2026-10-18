@@ -2519,6 +2519,35 @@ impl Model {
         Ok(())
     }
 
+    /// Changes the instance parameters of a door or window (those of its
+    /// type's family that belong to each placed element).
+    pub fn set_opening_values(&mut self, id: OpeningId, values: Values) -> Result<(), ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let family = self
+            .opening_types
+            .get(&o.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(o.opening_type))?
+            .family;
+        self.families
+            .get(&family)
+            .ok_or(ModelError::UnknownFamily(family))?
+            .def()
+            .check_values(ParamScope::Instance, &values)
+            .map_err(ModelError::Family)?;
+        let previous = std::mem::replace(
+            &mut self.openings.get_mut(&id).expect("checked").values,
+            values,
+        );
+        if let Err(e) = self.evaluate_opening(id) {
+            self.openings.get_mut(&id).expect("checked").values = previous;
+            return Err(e);
+        }
+        Ok(())
+    }
+
     /// Changes which way a door or window opens (Revit's "flip facing" and
     /// "flip hand" arrows).
     pub fn set_opening_handing(

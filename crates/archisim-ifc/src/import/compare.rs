@@ -1,7 +1,7 @@
 //! Compares two models element by element, matching them by `GlobalId`:
 //! what a round trip through IFC must keep.
 
-use archisim_core::{Layer, Model};
+use archisim_core::{Layer, MaterialId, Model};
 
 /// Lengths closer than this are equal (0.001 mm).
 const TOL: f64 = 1e-6;
@@ -191,8 +191,42 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
                     || !close(x.frame_depth, y.frame_depth)
                     || mat(a, x.frame_material) != mat(b, y.frame_material)
                     || mat(a, x.panel_material) != mat(b, y.panel_material)
+                    || x.mark != y.mark
+                    || x.description != y.description
+                    || x.panels != y.panels
                 {
                     diff(format!("tipo de {}: {:?} / {:?}", o.guid, x, y));
+                }
+                // The same family (recipe) and values, materials by name.
+                let fam = |m: &Model, t: &archisim_core::OpeningType| {
+                    m.family(t.family).map(|f| f.source.clone())
+                };
+                if fam(a, x) != fam(b, y) {
+                    diff(format!("familia del tipo «{}» distinta", x.name));
+                }
+                let named = |m: &Model, v: &archisim_core::Values| -> Vec<(String, String)> {
+                    v.iter()
+                        .map(|(k, v)| {
+                            let text = match v {
+                                archisim_core::Value::Material(id) => m
+                                    .material(MaterialId(*id))
+                                    .map_or(String::new(), |m| m.name.clone()),
+                                other => format!("{other}"),
+                            };
+                            (k.clone(), text)
+                        })
+                        .collect()
+                };
+                if named(a, &x.values) != named(b, &y.values) {
+                    diff(format!(
+                        "valores del tipo «{}»: {:?} / {:?}",
+                        x.name,
+                        named(a, &x.values),
+                        named(b, &y.values)
+                    ));
+                }
+                if named(a, &o.values) != named(b, &p.values) {
+                    diff(format!("valores de ejemplar de {}", o.guid));
                 }
             }
             _ => diff(format!("tipo de {} falta", o.guid)),

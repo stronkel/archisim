@@ -792,3 +792,134 @@ fn curved_walls_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// A family of the user's own (not a system one), with an instance
+/// parameter, a type with a description and a hand-set mark: the IFC
+/// carries the recipe, the values and the mark, and they come back the same.
+/// The body written to IFC is the family's own pieces.
+#[test]
+fn any_family_survives_the_round_trip() {
+    let mut m = model();
+    let source = r#"family "Puerta de prueba"
+  category door
+  host wall
+  version 3
+  description "Puerta inventada para la prueba de ida y vuelta"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.82 range 0.40..3.00 label "Hueco de obra: ancho"
+    height length = 2.03 range 1.00..3.00 label "Hueco de obra: alto"
+  section "Hoja"
+    leaf_depth length = 0.035 range 0.02..0.06 label "Grueso de hoja"
+    glazed bool = yes label "Con mirilla"
+    finish choice("lacada", "barnizada") = "lacada" label "Acabado"
+  section "Materiales"
+    frame material = "Madera de pino" label "Cerco"
+    leaf material = "Madera de pino" label "Hoja"
+
+instance_params
+  kick_plate bool = no label "Zócalo protector"
+
+body
+  box (-width / 2, -0.035, 0) to (-width / 2 + 0.06, 0.035, height) material frame
+  box (width / 2 - 0.06, -0.035, 0) to (width / 2, 0.035, height) material frame
+  box (-width / 2 + 0.06, -0.035, height - 0.06) to (width / 2 - 0.06, 0.035, height) material frame
+  box (-width / 2 + 0.06, -leaf_depth / 2, 0) to (width / 2 - 0.06, leaf_depth / 2, height - 0.06) material leaf
+  if kick_plate
+    box (-width / 2 + 0.06, leaf_depth / 2, 0) to (width / 2 - 0.06, leaf_depth / 2 + 0.002, 0.3) material frame
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = 0.06
+  frame_depth = 0.07
+  frame_material = frame
+  panel_material = leaf
+  operation = "single_swing"
+"#;
+    let family = m.add_family(source).unwrap();
+    let mut values = m
+        .family_defaults(family, archisim_core::ParamScope::Type)
+        .unwrap();
+    values.insert("width".into(), archisim_core::Value::Number(0.925));
+    values.insert(
+        "finish".into(),
+        archisim_core::Value::Text("barnizada".into()),
+    );
+    values.insert("glazed".into(), archisim_core::Value::Bool(false));
+    let t = m
+        .add_family_type(archisim_core::NewFamilyType {
+            family,
+            name: "Puerta prueba 92,5".into(),
+            mark: Some("PX-7".into()),
+            description: "Aseos «planta baja»".into(),
+            values,
+        })
+        .unwrap();
+    let wall = m
+        .walls()
+        .find(|w| w.length() > 7.0 && m.openings_in_wall(w.id).count() == 0)
+        .map(|w| w.id);
+    let wall = wall.unwrap_or_else(|| {
+        let level = m.levels()[1].id;
+        let wt = m.wall_types().next().unwrap().id;
+        m.add_wall(NewWall {
+            wall_type: wt,
+            level,
+            start: Point2::new(20.0, 0.0),
+            end: Point2::new(28.0, 0.0),
+            reference: ReferenceLine::Center,
+            height: 3.0,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+        })
+        .unwrap()
+    });
+    let o = m
+        .add_opening(NewOpening {
+            opening_type: t,
+            wall,
+            along: 2.0,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Right,
+            setback: None,
+        })
+        .unwrap();
+    let mut inst = m.opening(o).unwrap().values.clone();
+    inst.insert("kick_plate".into(), archisim_core::Value::Bool(true));
+    m.set_opening_values(o, inst).unwrap();
+
+    let ifc = export(&m);
+    assert!(ifc.contains("'ArchiSim_Family'"));
+    assert!(
+        ifc.contains("'PX-7','Puerta de prueba'"),
+        "mark and family in the type"
+    );
+    assert!(ifc.contains("IFCPROPERTYSINGLEVALUE('kick_plate',$,IFCBOOLEAN(.T.),$)"));
+    // The body: five boxes (lining, leaf and kick plate) for that door.
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.warnings.is_empty(), "{report}");
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    let back = model.opening_types().find(|x| x.mark == "PX-7").unwrap();
+    assert_eq!(
+        model.family(back.family).unwrap().name(),
+        "Puerta de prueba"
+    );
+    assert_eq!(back.description, "Aseos «planta baja»");
+    let placed = model
+        .openings()
+        .find(|x| x.opening_type == back.id)
+        .unwrap();
+    assert_eq!(
+        placed.values["kick_plate"],
+        archisim_core::Value::Bool(true)
+    );
+    if let Ok(dir) = std::env::var("ARCHISIM_TEST_OUT") {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join("familia_propia.ifc"), &ifc).unwrap();
+    }
+}

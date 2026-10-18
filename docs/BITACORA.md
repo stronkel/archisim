@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 · Familias, bloque C — IFC desde las familias (v0.23)
+
+**Hecho**
+- **El cuerpo IFC de cada puerta y ventana son las piezas de su receta** (las mismas cajas que ve la vista 3D), cada una con el estilo de su material. Volúmenes comprobados con el motor de geometría de IfcOpenShell (puerta de paso 80×205: 0,0168 m³ de cerco + 0,056 m³ de hoja = 0,0728 m³, igual que en ArchiSim).
+- **Marca de tipo en el IFC**: en el atributo `Tag` del `IfcDoorType`/`IfcWindowType` y en la propiedad `Reference` de `Pset_DoorCommon`/`Pset_WindowCommon`, que es donde IFC pide la marca («A-1»). El tipo lleva también la **descripción** y el nombre de la **familia** (`ElementType`).
+- **Los parámetros viajan en el IFC**: el tipo lleva `ArchiSim_Family` (familia, versión y la receta entera) y `ArchiSim_FamilyValues` (cada parámetro con su valor: longitudes en metros, sí/no, opciones, materiales por su nombre). Los parámetros de ejemplar, si la familia los tiene, van en la propia puerta o ventana. Cualquier programa que lea IFC los ve como propiedades.
+- **Importación**: un IFC de ArchiSim rehace cada tipo con su familia (aunque sea una familia propia que el proyecto no tenía), sus valores, su marca y su descripción. Los IFC de otros programas se importan como antes, por medidas.
+- La comparación de ida y vuelta comprueba ahora también marcas, descripciones, recetas, valores de tipo y de ejemplar y el funcionamiento de cada hoja. Prueba nueva con una familia inventada («Puerta de prueba», con mirilla, acabado y un parámetro de ejemplar), marca puesta a mano y descripción con comillas: vuelve idéntica, y su IFC valida con IfcOpenShell.
+- Corregido de paso: importar un hueco sin carpintería creaba un material «Carpintería metálica» que no estaba en el fichero.
+- Versión 0.23.0. Sin cambios en el formato `.archisim`.
+
+**Pendiente / limitaciones conocidas**
+- La geometría va en cada puerta y ventana, no compartida por tipo (`RepresentationMaps`): se probará cuando Antonio confirme cómo lo leen ArchiCAD y Revit.
+- Un IFC de ArchiSim con otra versión de una familia que el proyecto ya tiene (al importar en un proyecto existente) se importa por medidas, con aviso.
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama (pull request «Familias: IFC desde las recetas…», *Artifacts*) o espera a que se publique.
+2. Abre `demo.archisim`, *Exportar IFC* y ábrelo en **ArchiCAD** y en **Revit**. Mira una puerta y una ventana: ¿se ven igual que antes (cerco, hoja, vidrio, montantes)? En sus propiedades de tipo: ¿aparece la **marca** (P-01, V-03…) donde la esperas? (En Revit suele salir como «Marca de tipo» o en `Reference`; en ArchiCAD, en la información IFC del tipo.)
+3. Busca en las propiedades IFC del tipo `ArchiSim_FamilyValues`: ancho, alto, hojas, marco, materiales.
+4. Cambia en ArchiSim la marca de un tipo a `P-10`, exporta, e *Importar IFC* ese mismo fichero: el tipo debe volver con `P-10` y la misma familia.
+
 ## 2026-10-18 · Mac: Cmd+Q pregunta antes de salir, y versiones publicadas (v0.22.2)
 
 **Hecho**

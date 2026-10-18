@@ -72,7 +72,7 @@ La vista 3D dibuja con la tarjeta gráfica (wgpu) los sólidos de `archisim-geom
 | Línea de referencia | Línea de ubicación | Línea de referencia | Eje + `OffsetFromReferenceLine` |
 | `OpeningType` (familia + valores + marca) | Tipo de familia de puerta / ventana | Objeto puerta / ventana con sus ajustes | `IfcDoorType` / `IfcWindowType` + `IfcMaterialConstituentSet` |
 | `Opening` | Ejemplar de puerta / ventana (alojado en muro) | Puerta / ventana | `IfcOpeningElement` (vacía el muro) + `IfcDoor` / `IfcWindow` (lo rellena) |
-| `Family` (receta `.asfam`, copia en el proyecto; `docs/FAMILIAS.md`) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría; parámetros en `ArchiSim_Family` (bloque C) |
+| `Family` (receta `.asfam`, copia en el proyecto; `docs/FAMILIAS.md`) | Familia .rfa | Objeto GDL | `IfcDoorType`/`IfcWindowType` (`ElementType` = familia, `Tag` = marca) con `ArchiSim_Family` (receta) y `ArchiSim_FamilyValues` (parámetros) |
 | Parámetro compartido | Parámetro compartido | Propiedad | `IfcPropertySet` |
 
 Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres que no cambia nunca, ni al copiar el proyecto ni al exportar varias veces. Así los ingenieros pueden federar modelos y comparar versiones.
