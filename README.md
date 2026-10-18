@@ -22,13 +22,20 @@ La visión, los principios y la arquitectura están en [`docs/FUNDACIONAL.md`](d
 
 ## Instalarlo
 
-Mientras no haya versiones publicadas, cada cambio genera los instaladores en GitHub. Necesitas una cuenta de GitHub (gratuita) para descargarlos:
+Las versiones se publican en [**Releases**](https://github.com/stronkel/archisim/releases/latest), sin necesidad de cuenta:
 
-1. Abre la pestaña **Actions** del repositorio y entra en la última ejecución en verde de la rama `main`.
-2. Baja hasta **Artifacts** y descarga:
-   - **ArchiSim-Windows-Instalador**: el instalador `ArchiSim-<versión>-Windows.exe`. Asocia los `.archisim` y ofrece ArchiSim en «Abrir con» para los `.ifc`. Como no está firmado, la primera vez Windows avisa: *Más información → Ejecutar de todas formas*. (**ArchiSim-Windows** es el mismo programa sin instalar: descomprime y abre `ArchiSim.exe`.)
-   - **ArchiSim-Mac**: un `.dmg` con la aplicación (chip Apple e Intel). La primera vez hay que permitirla en *Ajustes del Sistema → Privacidad y seguridad*.
-3. La vivienda de prueba `demo.archisim` viene con el programa (en Windows, en el menú Inicio → «Ejemplos de ArchiSim»).
+- **Mac** (chip Apple e Intel): abre Terminal (Aplicaciones → Utilidades), pega esta línea y pulsa Intro. Instala o actualiza ArchiSim en Aplicaciones; la misma línea sirve para cada versión nueva.
+
+  ```bash
+  curl -fsSL https://github.com/stronkel/archisim/releases/latest/download/instalar-mac.sh | bash
+  ```
+
+  Así macOS no la pone en cuarentena (la aplicación no está firmada con una cuenta de desarrollador de Apple). Si prefieres el `.dmg` (`ArchiSim-Mac.dmg`), la primera vez tendrás que permitirla en *Ajustes del Sistema → Privacidad y seguridad*.
+- **Windows**: descarga y ejecuta `ArchiSim-Windows.exe`. Asocia los `.archisim` y ofrece ArchiSim en «Abrir con» para los `.ifc`. Como no está firmado, la primera vez Windows avisa: *Más información → Ejecutar de todas formas*.
+
+La vivienda de prueba `demo.archisim` y unos IFC de ejemplo vienen en el `.dmg` y, en Windows, en el menú Inicio → «Ejemplos de ArchiSim».
+
+Para probar un cambio antes de que se publique: pestaña **Actions** → la ejecución en verde → **Artifacts** (hace falta una cuenta de GitHub).
 
 ## Compilarlo
 

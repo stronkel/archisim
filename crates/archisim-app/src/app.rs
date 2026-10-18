@@ -873,7 +873,10 @@ impl ArchiSimApp {
     }
 
     fn handle_close(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        // Cmd+Q, «Salir» and closing the session (macOS) are handled like
+        // the window's close button.
+        let quit = crate::open_files::take_quit();
+        if (quit || ctx.input(|i| i.viewport().close_requested())) && !self.allow_close {
             if self.ed.is_modified() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.pending = Some(Pending::Quit);

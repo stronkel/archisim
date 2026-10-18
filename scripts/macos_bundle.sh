@@ -118,6 +118,10 @@ cp crates/archisim-ifc/tests/fixtures/*.ifc "$stage/ejemplos-ifc/"
 cat > "$stage/LEEME.txt" <<'TXT'
 ArchiSim para Mac (Apple M1 y posteriores, e Intel)
 
+Más cómodo: en vez de este .dmg, instala y actualiza con una línea en
+Terminal (sin cuarentena, sin los pasos de abajo):
+    curl -fsSL https://github.com/stronkel/archisim/releases/latest/download/instalar-mac.sh | bash
+
 1. Arrastra ArchiSim a la carpeta Aplicaciones.
 2. La primera vez, macOS dirá que no puede comprobar el desarrollador
    (la aplicación no está firmada con una cuenta de Apple). Pulsa

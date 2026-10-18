@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Mac: Cmd+Q pregunta antes de salir, y versiones publicadas (v0.22.2)
+
+**Hecho**
+- Antonio comprueba la v0.22.1: ya cierra sin aviso de fallo, pero **Cmd+Q cerraba sin preguntar** aunque hubiera cambios sin guardar. El menú de aplicación de macOS («Salir», Cmd+Q, «Salir» del Dock, cerrar la sesión) terminaba el programa sin avisar a la ventana. Ahora esa petición se cancela y se pasa a la ventana, que hace lo mismo que con el botón rojo: pregunta si hay cambios y, si no, sale.
+- **Versiones publicadas en GitHub** (opción gratuita elegida por Antonio frente a la cuenta de desarrollador de Apple): al subir una etiqueta `vX.Y.Z` se publica la versión con `ArchiSim-Mac.dmg`, `ArchiSim-Windows.exe` e `instalar-mac.sh`. En el Mac se instala y actualiza con una línea en Terminal:
+  `curl -fsSL https://github.com/stronkel/archisim/releases/latest/download/instalar-mac.sh | bash`
+  Lo que baja `curl` no queda en cuarentena, así que ya no hace falta `xattr`. El script cierra ArchiSim si está abierto (preguntando si hay cambios) y sustituye la aplicación en Aplicaciones.
+- La integración continua del Mac instala ahora con ese script desde el `.dmg` recién hecho, comprueba que no queda en cuarentena y que «Salir» cierra la aplicación.
+- README y LÉEME del `.dmg` con la nueva forma de instalar. Versión 0.22.2. Sin cambios de formato ni de IFC.
+
+**Pendiente**
+- Publicar la primera versión: cuando Antonio fusione los pull requests #13 a #17 en `main`, etiquetar `v0.22.2` en `main`.
+- Cerrar la sesión de macOS con ArchiSim abierto se cancela una vez (ArchiSim sale, pero hay que volver a cerrar la sesión). Se puede afinar si molesta.
+
+**Antonio debe probar** (en el MacBook)
+1. Instala la versión de esta rama desde Actions (con el `xattr`, por última vez).
+2. Dibuja un muro y pulsa **Cmd+Q**: debe preguntar si guardas. Prueba «Cancelar» (sigue abierta) y luego «No guardar» (se cierra sin aviso de fallo).
+3. Sin cambios, Cmd+Q cierra directamente. Repite con clic derecho en el icono del Dock → Salir.
+4. Cuando esté publicada la versión, pega la línea de `curl` en Terminal y ábrela desde Aplicaciones: no debe pedir nada.
+
 ## 2026-10-18 · Mac: cierre sin aviso de fallo (v0.22.1)
 
 **Hecho**

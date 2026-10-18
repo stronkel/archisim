@@ -5,12 +5,14 @@
 //! its next frame.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use eframe::egui;
 
 static QUEUE: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 static CONTEXT: OnceLock<egui::Context> = OnceLock::new();
+static QUIT: AtomicBool = AtomicBool::new(false);
 
 /// Queues a file to open and wakes the window so it is opened at once.
 /// Only macOS hands files over this way (elsewhere they come as program
@@ -31,6 +33,23 @@ pub fn take() -> Vec<PathBuf> {
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
         .unwrap_or_default()
+}
+
+/// The system asks the application to quit (on macOS: Cmd+Q, «Salir» in
+/// the application menu or the Dock, closing the session). The window
+/// handles it on its next frame like its close button, asking to save
+/// first if the project has changes.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn request_quit() {
+    QUIT.store(true, Ordering::SeqCst);
+    if let Some(ctx) = CONTEXT.get() {
+        ctx.request_repaint();
+    }
+}
+
+/// Whether quitting was asked for since the last call.
+pub fn take_quit() -> bool {
+    QUIT.swap(false, Ordering::SeqCst)
 }
 
 /// The window's context, to wake it when a file arrives.
@@ -86,14 +105,48 @@ pub mod macos {
         }
     }
 
-    /// Adds the method to winit's delegate. Call after the event loop is
+    /// `- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender`
+    ///
+    /// Cmd+Q and «Salir» go through AppKit's `terminate:`, which would end
+    /// the program at once, without the window hearing of it and so without
+    /// asking to save. Instead the quit is cancelled here and handed to the
+    /// window, which asks if needed and then ends the program itself.
+    extern "C" fn should_terminate(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        _application: *mut AnyObject,
+    ) -> usize {
+        super::request_quit();
+        // NSTerminateCancel.
+        0
+    }
+
+    /// Adds the methods to winit's delegate. Call after the event loop is
     /// created (winit registers the class and sets the delegate then) and
-    /// before it runs. Returns whether it was added.
+    /// before it runs. Returns whether both were added.
     pub fn install() -> bool {
         let Some(class) = AnyClass::get("WinitApplicationDelegate") else {
             eprintln!("ArchiSim: no se encuentra el delegado de winit; los ficheros del Finder no se abrirán");
             return false;
         };
+        let class_ptr = class as *const AnyClass as *mut ffi::objc_class;
+        type ShouldTerminate = extern "C" fn(*mut AnyObject, Sel, *mut AnyObject) -> usize;
+        let f: ShouldTerminate = should_terminate;
+        // SAFETY: as below; the type encoding is an unsigned long return,
+        // self, _cmd and one object.
+        let imp: ffi::IMP =
+            Some(unsafe { std::mem::transmute::<ShouldTerminate, unsafe extern "C" fn()>(f) });
+        let quit_added = unsafe {
+            ffi::class_addMethod(
+                class_ptr,
+                sel!(applicationShouldTerminate:).as_ptr(),
+                imp,
+                c"Q@:@".as_ptr(),
+            )
+        } != ffi::NO;
+        if !quit_added {
+            eprintln!("ArchiSim: no se pudo añadir la petición de salir; Cmd+Q no preguntará antes de cerrar");
+        }
         type OpenUrls = extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut NSArray<NSURL>);
         let f: OpenUrls = open_urls;
         // SAFETY: an IMP is any C function pointer whose signature matches
@@ -102,13 +155,13 @@ pub mod macos {
             Some(unsafe { std::mem::transmute::<OpenUrls, unsafe extern "C" fn()>(f) });
         let added = unsafe {
             ffi::class_addMethod(
-                class as *const AnyClass as *mut ffi::objc_class,
+                class_ptr,
                 sel!(application:openURLs:).as_ptr(),
                 imp,
                 c"v@:@@".as_ptr(),
             )
         };
-        added != ffi::NO
+        added != ffi::NO && quit_added
     }
 
     /// For the packaging check in continuous integration: with
