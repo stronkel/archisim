@@ -6,6 +6,44 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Mac: Cmd+Q pregunta antes de salir, y versiones publicadas (v0.22.2)
+
+**Hecho**
+- Antonio comprueba la v0.22.1: ya cierra sin aviso de fallo, pero **Cmd+Q cerraba sin preguntar** aunque hubiera cambios sin guardar. El menú de aplicación de macOS («Salir», Cmd+Q, «Salir» del Dock, cerrar la sesión) terminaba el programa sin avisar a la ventana. Ahora esa petición se cancela y se pasa a la ventana, que hace lo mismo que con el botón rojo: pregunta si hay cambios y, si no, sale.
+- **Versiones publicadas en GitHub** (opción gratuita elegida por Antonio frente a la cuenta de desarrollador de Apple): al subir una etiqueta `vX.Y.Z` se publica la versión con `ArchiSim-Mac.dmg`, `ArchiSim-Windows.exe` e `instalar-mac.sh`. En el Mac se instala y actualiza con una línea en Terminal:
+  `curl -fsSL https://github.com/stronkel/archisim/releases/latest/download/instalar-mac.sh | bash`
+  Lo que baja `curl` no queda en cuarentena, así que ya no hace falta `xattr`. El script cierra ArchiSim si está abierto (preguntando si hay cambios) y sustituye la aplicación en Aplicaciones.
+- La integración continua del Mac instala ahora con ese script desde el `.dmg` recién hecho, comprueba que no queda en cuarentena y que «Salir» cierra la aplicación.
+- README y LÉEME del `.dmg` con la nueva forma de instalar. Versión 0.22.2. Sin cambios de formato ni de IFC.
+
+**Pendiente**
+- Publicar la primera versión: cuando Antonio fusione los pull requests #13 a #16 en `main`, etiquetar `v0.22.2` en `main`.
+- Cerrar la sesión de macOS con ArchiSim abierto se cancela una vez (ArchiSim sale, pero hay que volver a cerrar la sesión). Se puede afinar si molesta.
+
+**Antonio debe probar** (en el MacBook)
+1. Instala la versión de esta rama desde Actions (con el `xattr`, por última vez).
+2. Dibuja un muro y pulsa **Cmd+Q**: debe preguntar si guardas. Prueba «Cancelar» (sigue abierta) y luego «No guardar» (se cierra sin aviso de fallo).
+3. Sin cambios, Cmd+Q cierra directamente. Repite con clic derecho en el icono del Dock → Salir.
+4. Cuando esté publicada la versión, pega la línea de `curl` en Terminal y ábrela desde Aplicaciones: no debe pedir nada.
+
+## 2026-10-18 · Mac: cierre sin aviso de fallo (v0.22.1)
+
+**Hecho**
+- Antonio informa de que, en su MacBook Pro con Touch Bar (Intel, macOS 15.8), cada vez que cierra ArchiSim macOS muestra el aviso de que la aplicación se ha cerrado inesperadamente. El informe de fallo lo sitúa en la Touch Bar: al destruir la ventana, AppKit intenta quitar un observador de la Touch Bar de una ventana ya cerrada y lanza una excepción. No pasa en Macs sin Touch Bar (por eso no salía en la integración continua) ni se pierde nada: ocurre después de guardar o descartar.
+- Arreglo: en macOS, cuando ya se puede cerrar (proyecto guardado o descartado), la aplicación termina en el acto sin desmontar la ventana, así que la Touch Bar no llega a hacer esa limpieza. Windows y Linux, sin cambios.
+- Versión 0.22.1. Sin cambios de formato ni de IFC (demo validada con IfcOpenShell).
+- **Comprobado por Antonio** en su MacBook (18/10/2026, 22:15): ya cierra sin aviso de fallo.
+
+**Pendiente**
+- La cuarentena de macOS (`xattr` en cada versión): solo desaparece de verdad firmando y notarizando con una cuenta de desarrollador de Apple (99 USD al año); la alternativa gratuita es publicar versiones (*Releases*) e instalarlas con una sola orden que no deja cuarentena. Decide Antonio.
+- Comprobar en el Mac que Cmd+Q con cambios sin guardar pregunta antes de salir (el menú de aplicación de macOS podría cerrar sin preguntar).
+
+**Antonio debe probar** (en el MacBook)
+1. Instala la versión de esta rama (Actions → ArchiSim-Mac) como siempre, con el `xattr` de momento.
+2. Abre ArchiSim, dibuja un muro, guarda y ciérrala con el botón rojo: no debe salir ningún aviso de fallo.
+3. Ábrela otra vez, dibuja algo y ciérrala sin guardar: debe preguntar; elige «No guardar»: tampoco debe salir aviso.
+4. Repite el paso 3 con **Cmd+Q** y dime si pregunta antes de salir.
+
 ## 2026-10-18 · Repositorio público con licencia GPL-3.0
 
 **Hecho**
@@ -21,6 +59,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 **Antonio debe probar**
 1. Abre la página del repositorio en GitHub: debe salir el README nuevo y, a la derecha, «GPL-3.0 license».
+
 ## 2026-10-18 · Bloque 22 — Rendimiento con modelos grandes (1.9); fase 1 cerrada
 
 **Hecho** (petición de Antonio: «termina todo lo que falta de la fase 1»)

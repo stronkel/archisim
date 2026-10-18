@@ -462,6 +462,8 @@ impl ArchiSimApp {
         #[cfg(not(test))]
         let paths = [paths, crate::open_files::take()].concat();
         self.open_files(paths);
+        #[cfg(all(target_os = "macos", not(test)))]
+        crate::open_files::macos::quit_for_check(ctx);
     }
 
     /// Opens the first project or IFC file of a list (one at a time: a
@@ -873,7 +875,10 @@ impl ArchiSimApp {
     }
 
     fn handle_close(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+        // Cmd+Q, «Salir» and closing the session (macOS) are handled like
+        // the window's close button.
+        let quit = crate::open_files::take_quit();
+        if (quit || ctx.input(|i| i.viewport().close_requested())) && !self.allow_close {
             if self.ed.is_modified() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.pending = Some(Pending::Quit);
@@ -882,6 +887,14 @@ impl ArchiSimApp {
             }
         }
         if self.allow_close && self.pending.is_none() {
+            // macOS: leave at once, with the window still open. Letting
+            // winit tear the window down crashes AppKit on Macs with a
+            // Touch Bar (its Touch Bar lookup removes an observer from the
+            // closed window and throws), and macOS then reports a crash.
+            // Nothing is lost: the project was saved or discarded above.
+            #[cfg(all(target_os = "macos", not(test)))]
+            std::process::exit(0);
+            #[allow(unreachable_code)]
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }

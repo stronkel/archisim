@@ -5,12 +5,14 @@
 //! its next frame.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use eframe::egui;
 
 static QUEUE: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 static CONTEXT: OnceLock<egui::Context> = OnceLock::new();
+static QUIT: AtomicBool = AtomicBool::new(false);
 
 /// Queues a file to open and wakes the window so it is opened at once.
 /// Only macOS hands files over this way (elsewhere they come as program
@@ -31,6 +33,23 @@ pub fn take() -> Vec<PathBuf> {
         .lock()
         .map(|mut q| std::mem::take(&mut *q))
         .unwrap_or_default()
+}
+
+/// The system asks the application to quit (on macOS: Cmd+Q, «Salir» in
+/// the application menu or the Dock, closing the session). The window
+/// handles it on its next frame like its close button, asking to save
+/// first if the project has changes.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn request_quit() {
+    QUIT.store(true, Ordering::SeqCst);
+    if let Some(ctx) = CONTEXT.get() {
+        ctx.request_repaint();
+    }
+}
+
+/// Whether quitting was asked for since the last call.
+pub fn take_quit() -> bool {
+    QUIT.swap(false, Ordering::SeqCst)
 }
 
 /// The window's context, to wake it when a file arrives.
@@ -80,20 +99,79 @@ pub mod macos {
             // SAFETY: as above.
             if let Some(path) = unsafe { url.path() } {
                 let path = std::path::PathBuf::from(path.to_string());
-                report(&path);
+                report_line(&path.display().to_string());
                 super::push(path);
             }
         }
     }
 
-    /// Adds the method to winit's delegate. Call after the event loop is
+    /// `- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender`
+    ///
+    /// Cmd+Q and «Salir» go through AppKit's `terminate:`, which would end
+    /// the program at once, without the window hearing of it and so without
+    /// asking to save. Instead the quit is cancelled here and handed to the
+    /// window, which asks if needed and then ends the program itself.
+    extern "C" fn should_terminate(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        _application: *mut AnyObject,
+    ) -> usize {
+        report_line("salir");
+        super::request_quit();
+        // NSTerminateCancel.
+        0
+    }
+
+    /// For the packaging check in continuous integration: with
+    /// `ARCHISIM_PRUEBA_SALIR` set, once the window has been up for a few
+    /// seconds, asks AppKit to quit (`terminate:`, the same as Cmd+Q).
+    #[cfg_attr(test, allow(dead_code))]
+    pub fn quit_for_check(ctx: &eframe::egui::Context) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static SENT: AtomicBool = AtomicBool::new(false);
+        if std::env::var_os("ARCHISIM_PRUEBA_SALIR").is_none() || SENT.load(Ordering::SeqCst) {
+            return;
+        }
+        if ctx.input(|i| i.time) < 3.0 {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            return;
+        }
+        SENT.store(true, Ordering::SeqCst);
+        // SAFETY: on the main thread, during a frame; `sharedApplication`
+        // returns the running application and `terminate:` takes any sender.
+        unsafe {
+            let app: *mut AnyObject =
+                objc2::msg_send![objc2::class!(NSApplication), sharedApplication];
+            let _: () = objc2::msg_send![app, terminate: std::ptr::null::<AnyObject>()];
+        }
+    }
+
+    /// Adds the methods to winit's delegate. Call after the event loop is
     /// created (winit registers the class and sets the delegate then) and
-    /// before it runs. Returns whether it was added.
+    /// before it runs. Returns whether both were added.
     pub fn install() -> bool {
         let Some(class) = AnyClass::get("WinitApplicationDelegate") else {
             eprintln!("ArchiSim: no se encuentra el delegado de winit; los ficheros del Finder no se abrirán");
             return false;
         };
+        let class_ptr = class as *const AnyClass as *mut ffi::objc_class;
+        type ShouldTerminate = extern "C" fn(*mut AnyObject, Sel, *mut AnyObject) -> usize;
+        let f: ShouldTerminate = should_terminate;
+        // SAFETY: as below; the type encoding is an unsigned long return,
+        // self, _cmd and one object.
+        let imp: ffi::IMP =
+            Some(unsafe { std::mem::transmute::<ShouldTerminate, unsafe extern "C" fn()>(f) });
+        let quit_added = unsafe {
+            ffi::class_addMethod(
+                class_ptr,
+                sel!(applicationShouldTerminate:).as_ptr(),
+                imp,
+                c"Q@:@".as_ptr(),
+            )
+        } != ffi::NO;
+        if !quit_added {
+            eprintln!("ArchiSim: no se pudo añadir la petición de salir; Cmd+Q no preguntará antes de cerrar");
+        }
         type OpenUrls = extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut NSArray<NSURL>);
         let f: OpenUrls = open_urls;
         // SAFETY: an IMP is any C function pointer whose signature matches
@@ -102,19 +180,19 @@ pub mod macos {
             Some(unsafe { std::mem::transmute::<OpenUrls, unsafe extern "C" fn()>(f) });
         let added = unsafe {
             ffi::class_addMethod(
-                class as *const AnyClass as *mut ffi::objc_class,
+                class_ptr,
                 sel!(application:openURLs:).as_ptr(),
                 imp,
                 c"v@:@@".as_ptr(),
             )
         };
-        added != ffi::NO
+        added != ffi::NO && quit_added
     }
 
     /// For the packaging check in continuous integration: with
-    /// `ARCHISIM_OPENED_LOG` set, each file received from the Finder is
-    /// also written to that file.
-    fn report(path: &std::path::Path) {
+    /// `ARCHISIM_OPENED_LOG` set, each file received from the Finder (and
+    /// each request to quit, as «salir») is also written to that file.
+    fn report_line(line: &str) {
         if let Some(log) = std::env::var_os("ARCHISIM_OPENED_LOG") {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -122,7 +200,7 @@ pub mod macos {
                 .append(true)
                 .open(log)
             {
-                let _ = writeln!(f, "{}", path.display());
+                let _ = writeln!(f, "{line}");
             }
         }
     }
