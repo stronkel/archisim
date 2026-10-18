@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use archisim_core::{
     DimensionId, Document, ElevationMarkId, Hand, LevelId, Model, ModelError, NewDimension,
     NewOpening, NewSlab, NewWall, OpeningId, OpeningTypeId, Point2, ReferenceLine, SlabId,
-    SlabTypeId, WallId, WallSide, WallTypeId,
+    SlabTypeId, WallId, WallSide, WallTop, WallTypeId,
 };
 use archisim_ifc::{export_ifc, import_ifc, ExportOptions, ImportReport};
 use archisim_plan::{render_plan, PlanOptions};
@@ -24,8 +24,49 @@ mod types;
 pub struct WallSettings {
     pub wall_type: WallTypeId,
     pub reference: ReferenceLine,
+    /// Height of walls without a top level (or with no level above).
     pub height: f64,
     pub base_offset: f64,
+    /// Where new walls end at the top.
+    pub top: TopChoice,
+    /// Offset from the top level (negative: below it).
+    pub top_offset: f64,
+}
+
+/// The top constraint of the wall tool: a level relative to the one being
+/// drawn on (ArchiCAD's "planta inicial + 1"), a given level, or none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TopChoice {
+    /// Own height (Revit's "Desconectada").
+    Unconnected,
+    /// The level right above the active one; with none above, the wall
+    /// gets its own height.
+    NextLevel,
+    /// A given level (it must be above the active one).
+    Level(LevelId),
+}
+
+impl WallSettings {
+    /// The constraint a new wall on `level` gets.
+    pub fn top_on(&self, model: &Model, level: LevelId) -> WallTop {
+        let target = match self.top {
+            TopChoice::Unconnected => None,
+            TopChoice::NextLevel => next_level_above(model, level),
+            TopChoice::Level(l) => Some(l),
+        };
+        match target {
+            Some(l) => WallTop::Level {
+                level: l,
+                offset: self.top_offset,
+            },
+            None => WallTop::Unconnected,
+        }
+    }
+}
+
+/// The lowest level above `level`, if any.
+pub fn next_level_above(model: &Model, level: LevelId) -> Option<LevelId> {
+    model.level_above(level)
 }
 
 pub struct Editor {
@@ -232,6 +273,7 @@ impl Editor {
 
     pub fn add_wall(&mut self, s: &WallSettings, start: Point2, end: Point2) -> EditResult<WallId> {
         let level = self.level;
+        let top = s.top_on(self.model(), level);
         self.transact("Crear muro", |m| {
             m.add_wall(NewWall {
                 wall_type: s.wall_type,
@@ -241,6 +283,7 @@ impl Editor {
                 reference: s.reference,
                 height: s.height,
                 base_offset: s.base_offset,
+                top,
             })
         })
     }
@@ -335,10 +378,20 @@ impl Editor {
 
     pub fn set_walls_base_offset(&mut self, walls: &[WallId], base: f64) -> EditResult {
         self.transact("Cambiar desfase de base", |m| {
-            walls.iter().try_for_each(|w| {
-                let height = m.wall(*w).map_or(0.0, |x| x.height);
-                m.set_wall_height(*w, height, base)
-            })
+            walls
+                .iter()
+                .try_for_each(|w| m.set_wall_base_offset(*w, base))
+        })
+    }
+
+    /// Ties walls to a top level, or frees them (they keep their height).
+    pub fn set_walls_top(&mut self, walls: &[WallId], top: WallTop) -> EditResult {
+        let label = match top {
+            WallTop::Unconnected => "Desconectar muro de la planta superior",
+            WallTop::Level { .. } => "Cambiar restricción superior",
+        };
+        self.transact(label, |m| {
+            walls.iter().try_for_each(|w| m.set_wall_top(*w, top))
         })
     }
 
@@ -384,6 +437,47 @@ impl Editor {
         })
     }
 
+    /// Moves walls (with their doors and windows) and slabs to another
+    /// level, in one step, keeping their offsets from the level. Doors,
+    /// windows and annotations in `items` are left alone (doors and
+    /// windows go with their wall). Returns how many elements moved; those
+    /// that leave the active level leave the selection too.
+    pub fn set_elements_level(&mut self, items: &[Element], level: LevelId) -> EditResult<usize> {
+        let movable: Vec<Element> = items
+            .iter()
+            .copied()
+            .filter(|e| matches!(e, Element::Wall(_) | Element::Slab(_)))
+            .collect();
+        if movable.is_empty() {
+            return Ok(0);
+        }
+        self.transact("Cambiar de planta", |m| {
+            for e in &movable {
+                match e {
+                    Element::Wall(id) => m.set_wall_level(*id, level)?,
+                    Element::Slab(id) => m.set_slab_level(*id, level)?,
+                    _ => {}
+                }
+            }
+            Ok(())
+        })?;
+        if level != self.level {
+            for e in &movable {
+                self.selection.remove(e);
+            }
+            // Their doors and windows are no longer on this level either.
+            let model = self.doc.model();
+            self.selection.retain(|e| match e {
+                Element::Opening(o) => model
+                    .opening(*o)
+                    .and_then(|o| model.wall(o.wall))
+                    .is_some_and(|w| w.level == self.level),
+                _ => true,
+            });
+        }
+        Ok(movable.len())
+    }
+
     pub fn set_slab_type(&mut self, s: SlabId, t: SlabTypeId) -> EditResult {
         self.transact("Cambiar tipo de forjado", |m| m.set_slab_type(s, t))
     }
@@ -403,6 +497,18 @@ impl Editor {
         if let Some(s) = new_selection {
             self.selection = s;
         }
+        Ok(label)
+    }
+
+    /// A drag applied to given elements instead of the selection (a
+    /// temporary dimension typed in), in one step.
+    pub fn drag_elements(
+        &mut self,
+        elements: &BTreeSet<Element>,
+        drag: &crate::drag::Drag,
+    ) -> EditResult<&'static str> {
+        let label = crate::drag::label(self.model(), drag);
+        self.transact(label, |m| crate::drag::apply(m, elements, drag))?;
         Ok(label)
     }
 
@@ -524,6 +630,8 @@ mod tests {
             reference: ReferenceLine::ExteriorFace,
             height: 3.0,
             base_offset: 0.0,
+            top: TopChoice::NextLevel,
+            top_offset: 0.0,
         }
     }
 

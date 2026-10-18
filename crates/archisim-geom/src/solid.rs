@@ -775,6 +775,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         let mut kind = |kind, width, height| {
@@ -948,6 +949,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         let mut parts = Vec::new();
@@ -961,6 +963,7 @@ mod tests {
                     reference: ReferenceLine::Center,
                     height: 2.5,
                     base_offset: 0.0,
+                    top: archisim_core::WallTop::Unconnected,
                 })
                 .unwrap(),
             );
@@ -1034,6 +1037,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         // Together the two walls are closed: each leaves its mitre face to
@@ -1097,6 +1101,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.1,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         let kinds = [

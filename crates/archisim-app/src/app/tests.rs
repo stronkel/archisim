@@ -81,6 +81,17 @@ impl Harness {
         self.frame();
     }
 
+    /// A click at a point of the screen (a label, an arrow).
+    fn click_screen(&mut self, pos: Pos2) {
+        self.pos = pos;
+        self.events.push(Event::PointerMoved(pos));
+        self.frame();
+        self.button(PointerButton::Primary, true);
+        self.button(PointerButton::Primary, false);
+        self.time += 1.0;
+        self.frame();
+    }
+
     fn drag(&mut self, from: Point2, to: Point2) {
         self.move_to(from);
         self.button(PointerButton::Primary, true);
@@ -1262,4 +1273,265 @@ fn properties_palette_shows_every_state() {
         crate::pick::of_type_on_level(h.model(), h.app.ed.level, t).len(),
         4
     );
+}
+
+/// Walls drawn with "Planta superior" go up to the level above (free 3 m
+/// when there is none) and follow it when its elevation changes; the
+/// palette shows them; undo puts them back.
+#[test]
+fn walls_drawn_up_to_the_floor_above_follow_it() {
+    use archisim_core::WallTop;
+    let mut h = Harness::new(Editor::new_project());
+    // A single level: nothing above, the walls get their own 3 m.
+    draw_outline(&mut h);
+    assert!(h
+        .model()
+        .walls()
+        .all(|w| w.top == WallTop::Unconnected && w.height == 3.0));
+    let ground = h.app.ed.level;
+    let first = h.app.ed.add_level("Planta primera", 3.2).unwrap();
+    h.frame();
+    h.app.activate_tab(0);
+    h.frame();
+    assert_eq!(h.app.ed.level, ground);
+
+    // Up to the floor above, 30 cm under it (the slab).
+    h.app.wall_settings.top_offset = -0.3;
+    h.key(Key::Escape);
+    h.type_text("m");
+    h.frame();
+    h.click_at(p(3.0, 3.0));
+    h.click_at(p(3.0, 6.0));
+    h.key(Key::Escape);
+    let w = h.model().walls().last().unwrap().clone();
+    assert_eq!(
+        w.top,
+        WallTop::Level {
+            level: first,
+            offset: -0.3
+        }
+    );
+    assert!((w.height - 2.9).abs() < 1e-9, "{}", w.height);
+
+    // The floor above goes up 30 cm: the wall follows, the free ones not.
+    h.app.ed.set_level_elevation(first, 3.5).unwrap();
+    assert!((h.model().wall(w.id).unwrap().height - 3.2).abs() < 1e-9);
+    assert_eq!(
+        h.model().walls().filter(|x| x.height == 3.0).count(),
+        4,
+        "the outline keeps its own height"
+    );
+    // The palette shows the tied wall, alone and with the others.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Wall(w.id)].into_iter().collect();
+    h.frame();
+    h.app.ed.selection = h.model().walls().map(|w| Element::Wall(w.id)).collect();
+    h.frame();
+    // Freed, it keeps its height; undo ties it again.
+    h.app
+        .ed
+        .set_walls_top(&[w.id], WallTop::Unconnected)
+        .unwrap();
+    assert!((h.model().wall(w.id).unwrap().height - 3.2).abs() < 1e-9);
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert!((h.model().wall(w.id).unwrap().height - 2.9).abs() < 1e-9);
+}
+
+/// Walls come out square without Shift, unless the cursor leaves the axis
+/// clearly, and a partition drawn to a face ends square on it.
+#[test]
+fn walls_are_square_by_default() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    h.click_at(p(0.0, 0.0));
+    // 4° off the horizontal: straight.
+    h.move_to(p(4.0, 0.28));
+    assert_eq!(h.app.cursor.unwrap().kind, SnapKind::Tracked);
+    assert!(is_tracking_line(p(0.0, 0.0), h.app.cursor.unwrap().point));
+    h.click_at(p(4.0, 0.28));
+    // 2° off the vertical: straight.
+    h.click_at(p(4.1, 3.0));
+    // 37°: the wall follows the cursor (inclined on purpose).
+    h.click_at(p(6.0, 4.5));
+    h.key(Key::Escape);
+    let ends: Vec<(Point2, Point2)> = h.model().walls().map(|w| (w.start, w.end)).collect();
+    assert_eq!(
+        ends,
+        vec![
+            (p(0.0, 0.0), p(4.0, 0.0)),
+            (p(4.0, 0.0), p(4.0, 3.0)),
+            (p(4.0, 3.0), p(6.0, 4.5)),
+        ]
+    );
+    // The last wall drawn stays selected, with its temporary dimensions.
+    let last = h.model().walls().last().unwrap().id;
+    assert_eq!(
+        h.app.ed.selection,
+        [Element::Wall(last)].into_iter().collect()
+    );
+    assert!(!h.app.shown_temp_dims().is_empty());
+}
+
+/// Revit's temporary dimensions and flip controls on a door: click the
+/// blue value, type, Enter; Space and the arrows turn it.
+#[test]
+fn temporary_dimensions_place_and_turn_a_door() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    // The window just placed is selected, with its dimensions.
+    let window = h.model().openings().last().unwrap().id;
+    assert_eq!(
+        h.app.ed.selection,
+        [Element::Opening(window)].into_iter().collect()
+    );
+    assert_eq!(h.app.shown_temp_dims().len(), 2);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let door = h.model().openings().next().unwrap().id;
+    h.app.ed.selection = [Element::Opening(door)].into_iter().collect();
+    h.frame();
+    let dims = h.app.shown_temp_dims();
+    assert_eq!(dims.len(), 2, "{dims:?}");
+
+    // Click the value of the first one and type 500.
+    let label = h.app.temp_layout(h.app.canvas, &dims[0]).4;
+    h.click_screen(label.center());
+    assert!(h.app.temp_edit.is_some(), "{:?}", h.app.message);
+    h.frame();
+    h.type_text("500");
+    h.key(Key::Enter);
+    h.frame();
+    assert!(h.app.temp_edit.is_none());
+    let after = h.app.shown_temp_dims();
+    assert!(
+        after
+            .iter()
+            .any(|d| d.target == dims[0].target && (d.value - 0.5).abs() < 1e-9),
+        "{after:?} {:?}",
+        h.app.message
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Mover"));
+    // Esc while typing leaves it as it was.
+    let label = h.app.temp_layout(h.app.canvas, &after[1]).4;
+    let before = h.model().clone();
+    h.click_screen(label.center());
+    h.frame();
+    h.type_text("900");
+    h.key(Key::Escape);
+    h.frame();
+    assert!(h.app.temp_edit.is_none());
+    assert_eq!(h.model(), &before);
+    assert!(
+        h.app.ed.selection.contains(&Element::Opening(door)),
+        "Esc closes the field only"
+    );
+
+    // Space: the hinges go to the other jamb, then the leaf to the other
+    // side… four times round.
+    let o = h.model().opening(door).unwrap().clone();
+    h.key(Key::Space);
+    let turned = h.model().opening(door).unwrap().clone();
+    assert_eq!(
+        (turned.opens_to, turned.hand),
+        crate::flip::next(o.opens_to, o.hand)
+    );
+    for _ in 0..3 {
+        h.key(Key::Space);
+    }
+    let back = h.model().opening(door).unwrap();
+    assert_eq!((back.opens_to, back.hand), (o.opens_to, o.hand));
+
+    // The arrows: across the wall and along it.
+    let controls = h.app.flip_controls(h.app.canvas);
+    assert_eq!(controls.len(), 2);
+    let side = controls
+        .iter()
+        .find(|c| c.1 == temp_ui::FlipControl::Side)
+        .unwrap()
+        .0;
+    h.click_screen(side);
+    let flipped = h.model().opening(door).unwrap().clone();
+    assert_ne!(flipped.opens_to, o.opens_to, "{:?}", h.app.message);
+    assert_eq!(
+        crate::flip::hinge_at_start(flipped.opens_to, flipped.hand),
+        crate::flip::hinge_at_start(o.opens_to, o.hand),
+        "the hinges stay on their jamb"
+    );
+    // Still selected: the arrows act again.
+    assert!(h.app.ed.selection.contains(&Element::Opening(door)));
+    let hand = h
+        .app
+        .flip_controls(h.app.canvas)
+        .iter()
+        .find(|c| c.1 == temp_ui::FlipControl::Hand)
+        .unwrap()
+        .0;
+    h.click_screen(hand);
+    assert_ne!(h.model().opening(door).unwrap().hand, flipped.hand);
+
+    // A wall selected: Space flips it; its dimensions are its length and
+    // the clear distance to the façade opposite.
+    let west = h.model().walls().next().unwrap().clone();
+    h.app.ed.selection = [Element::Wall(west.id)].into_iter().collect();
+    h.frame();
+    let dims = h.app.shown_temp_dims();
+    assert!(
+        dims.iter().any(|d| (d.value - 9.0).abs() < 1e-9),
+        "{dims:?}"
+    );
+    h.key(Key::Space);
+    assert_eq!(h.model().wall(west.id).unwrap().start, west.end);
+}
+
+/// A wall or slab goes to another level from its properties; the plan of
+/// a level shows the walls of other levels its cut plane crosses, and the
+/// level below in grey, which snaps.
+#[test]
+fn elements_change_level_and_other_levels_show() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    let ground = h.app.ed.level;
+    let walls: Vec<_> = h.model().walls().map(|w| w.id).collect();
+    let first = h.app.ed.add_level("Planta primera", 3.0).unwrap();
+    h.frame();
+    assert_eq!(h.app.ed.level, first);
+    // The ground floor walls (3 m) end under the cut plane of the first
+    // floor: they show as its reference, and their corners snap.
+    assert_eq!(h.app.other_walls.len(), 4);
+    h.type_text("m");
+    h.move_to(p(0.03, 0.02));
+    assert_eq!(h.app.cursor.unwrap().point, p(0.0, 0.0));
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    // Without the reference, nothing of the ground floor.
+    h.app.show_underlay = false;
+    h.frame();
+    assert!(h.app.other_walls.is_empty());
+    // A ground-floor wall 5 m high is cut by the first floor's plane: it is
+    // shown (and snaps) anyway.
+    h.app.ed.set_walls_height(&walls[..1], 5.0).unwrap();
+    h.frame();
+    assert_eq!(h.app.other_walls, vec![walls[0]]);
+    let svg = archisim_plan::render_plan(h.model(), first, &archisim_plan::PlanOptions::default());
+    assert!(svg.contains("<path"), "the cut wall is drawn");
+
+    // Move the other three walls up to the first floor in one step.
+    let three: Vec<Element> = walls[1..].iter().map(|w| Element::Wall(*w)).collect();
+    h.app.ed.set_elements_level(&three, first).unwrap();
+    assert_eq!(h.app.ed.undo_label(), Some("Cambiar de planta"));
+    assert!(walls[1..]
+        .iter()
+        .all(|w| h.model().wall(*w).unwrap().level == first));
+    assert_eq!(h.model().wall(walls[0]).unwrap().level, ground);
+    // From the first floor, back down: they leave the selection.
+    h.app.ed.selection = three.iter().copied().collect();
+    let n = h.app.ed.set_elements_level(&three, ground).unwrap();
+    assert_eq!(n, 3);
+    assert!(h.app.ed.selection.is_empty());
+    h.frame();
 }

@@ -764,6 +764,7 @@ mod tests {
                     reference: ReferenceLine::ExteriorFace,
                     height: 3.0,
                     base_offset: 0.0,
+                    top: archisim_core::WallTop::Unconnected,
                 })
                 .unwrap()
             })
@@ -821,6 +822,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         (m, ids, p)
@@ -996,6 +998,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         };
         let w1 = m.add_wall(spec(0.0, 3.0)).unwrap();
         m.add_wall(spec(3.0, 6.0)).unwrap();

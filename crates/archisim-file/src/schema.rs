@@ -156,6 +156,18 @@ pub(crate) struct Wall {
     pub reference: ReferenceLine,
     pub height: f64,
     pub base_offset: f64,
+    /// Top constraint (version 4): up to a level. Absent: the wall has its
+    /// own height.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<WallTop>,
+}
+
+/// A wall's top level and the offset from it (version 4).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WallTop {
+    pub level: u64,
+    pub offset: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -350,6 +362,13 @@ impl ProjectFile {
                     },
                     height: w.height,
                     base_offset: w.base_offset,
+                    top: match w.top {
+                        core::WallTop::Unconnected => None,
+                        core::WallTop::Level { level, offset } => Some(WallTop {
+                            level: level.0,
+                            offset,
+                        }),
+                    },
                 })
                 .collect(),
             slab_types: p
@@ -535,6 +554,13 @@ impl ProjectFile {
                 },
                 height: w.height,
                 base_offset: w.base_offset,
+                top: match w.top {
+                    None => core::WallTop::Unconnected,
+                    Some(t) => core::WallTop::Level {
+                        level: core::LevelId(t.level),
+                        offset: t.offset,
+                    },
+                },
             });
         }
         for t in self.slab_types {

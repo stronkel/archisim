@@ -260,6 +260,7 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
             ui.checkbox(&mut self.show_grid, "Rejilla");
+            ui.checkbox(&mut self.show_underlay, "Calco de la planta inferior");
             ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.separator();
             ui.checkbox(&mut self.show_properties, "Propiedades");
@@ -378,7 +379,7 @@ impl ArchiSimApp {
                         ui,
                         &mut f.tracking,
                         "Rastreo",
-                        "Bloquear en horizontal, vertical y 45° al acercarse (Mayús: siempre)",
+                        "Muros rectos por defecto: bloquea en horizontal y vertical (a menos de 8°) y en 45° al acercarse, con una línea azul. Mayús: siempre múltiplos de 45°",
                     );
                     ui.separator();
                     chip(
@@ -392,6 +393,12 @@ impl ArchiSimApp {
                         &mut self.show_reference_lines,
                         "Líneas ref.",
                         "Líneas de referencia de los muros (discontinuas)",
+                    );
+                    chip(
+                        ui,
+                        &mut self.show_underlay,
+                        "Calco",
+                        "La planta de debajo en gris, como referencia para dibujar encima (sus puntos también fuerzan). Los muros de otras plantas que atraviesa el plano de corte se ven siempre cortados",
                     );
                 }
                 ViewMode::ThreeD => {
@@ -466,16 +473,29 @@ impl ArchiSimApp {
         }
         match self.tool {
             Tool::Arrow if self.drag.is_some() => "Soltar: terminar · Ctrl: copiar · Mayús: 45° · Distancia + Intro: exacto · Esc: cancelar",
+            Tool::Arrow if self.temp_edit.is_some() => "Escribe la medida (mm, o 1,2m · 120cm) · Intro: aplicar · Esc: dejarla",
+            Tool::Arrow if self.single_opening_selected() => "Clic en una cota azul: medida exacta · Espacio o flechas azules: girar · Arrastrar: deslizar por el muro · Supr: borrar",
+            Tool::Arrow if self.single_wall_selected() => "Clic en una cota azul: medida exacta · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Supr: borrar",
             Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar: mover · Ctrl: copiar · Extremo o esquina: estirar · Rombo: mover la arista · Supr: borrar · Esc: anular",
             Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C: herramientas",
             Tool::Wall if !self.wall_tool.is_drawing() => "Clic: inicio del muro · Esc: flecha",
-            Tool::Wall => "Clic: siguiente punto · Longitud + Intro: exacto · Mayús: 45° · Intro/Esc: terminar",
+            Tool::Wall => "Clic: siguiente punto · Recto por defecto (sal más de 8° para inclinarlo) · Longitud + Intro: exacto · Mayús: 45° · Intro/Esc: terminar",
             Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Clic: dentro de un recinto de muros · Esc: flecha",
             Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina · Espacio + clic: varita mágica · Esc: flecha",
             Tool::Slab => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Longitud + Intro: exacto · Esc: quitar la última",
-            Tool::Door | Tool::Window => "Clic sobre un muro: colocar, centrada en el cursor, abriendo hacia ese lado · Esc: flecha",
+            Tool::Door | Tool::Window => "Clic sobre un muro: colocar, centrada en el cursor, abriendo hacia ese lado · Espacio: cambiar la mano · Esc: flecha",
             Tool::Dimension => self.dim_hint(),
         }
+    }
+
+    fn single_opening_selected(&self) -> bool {
+        self.ed.selection.len() == 1
+            && matches!(self.ed.selection.iter().next(), Some(Element::Opening(_)))
+    }
+
+    fn single_wall_selected(&self) -> bool {
+        self.ed.selection.len() == 1
+            && matches!(self.ed.selection.iter().next(), Some(Element::Wall(_)))
     }
 
     /// Records when the current message appeared.

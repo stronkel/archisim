@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 2,
+//!   "version": 4,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 3;
+pub const CURRENT_VERSION: u32 = 4;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -185,6 +185,16 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             }
             // 2 → 3: door and window types become types of families.
             2 => to_families(value)?,
+            // 3 → 4: walls may be tied to a top level (`top`); the walls
+            // of older files keep their own height, which is what a wall
+            // without `top` means.
+            3 => {
+                let mut v = value;
+                if let Value::Object(map) = &mut v {
+                    map.insert("version".into(), Value::from(4));
+                }
+                v
+            }
             other => return Err(FileError::UnknownVersion(other)),
         };
         version += 1;
@@ -405,7 +415,7 @@ mod tests {
     fn sample() -> Model {
         let mut m = Model::new("Casa «Prueba» \"1\"");
         let pb = m.add_level("Planta baja", 0.0);
-        m.add_level("Cubierta", 3.25);
+        let cubierta = m.add_level("Cubierta", 3.25);
         let brick = m.add_material("Ladrillo", "brick", [232, 196, 178], CutPattern::Diagonal);
         let wool = m.add_material(
             "Lana",
@@ -439,6 +449,7 @@ mod tests {
             reference: ReferenceLine::ExteriorFace,
             height: 3.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         };
         let w = m
             .add_wall(wall(Point2::new(0.0, 0.0), Point2::new(0.0, 5.0)))
@@ -446,6 +457,11 @@ mod tests {
         let mut second = wall(Point2::new(0.0, 5.0), Point2::new(4.2, 5.0));
         second.reference = ReferenceLine::Center;
         second.base_offset = -0.1;
+        // Tied to the roof level, 25 cm under it (version 4).
+        second.top = archisim_core::WallTop::Level {
+            level: cubierta,
+            offset: -0.25,
+        };
         m.add_wall(second).unwrap();
         let st = m
             .add_slab_type(
@@ -543,8 +559,8 @@ mod tests {
         assert!(old.contains("\"version\": 1"));
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
-        // Saved again, it is a version 3 file.
-        assert!(to_string(&opened).contains("\"version\": 3"));
+        // Saved again, it is a version 4 file.
+        assert!(to_string(&opened).contains("\"version\": 4"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -691,10 +707,42 @@ mod tests {
         assert_eq!(back.level(third).unwrap().elevation, 0.1 + 0.2);
     }
 
+    /// Version 3 files (ArchiSim 0.14 to 0.16) have no `top`: their walls
+    /// open with their own height; a tied wall saved by version 4 follows
+    /// its level when the file says it moved.
+    #[test]
+    fn walls_tied_to_a_level_and_older_files() {
+        let m = sample();
+        let text = to_string(&m);
+        let tied = m
+            .walls()
+            .find(|w| w.top != archisim_core::WallTop::Unconnected)
+            .unwrap();
+        assert!((tied.height - (3.25 - 0.25 + 0.1)).abs() < 1e-12);
+        // The roof level moved by hand in the file: the wall follows.
+        let moved = from_str(&text.replacen("3.25", "3.5", 1)).unwrap();
+        assert!((moved.wall(tied.id).unwrap().height - 3.35).abs() < 1e-12);
+        // An older file: no `top`, version 3.
+        let start = text.find("      \"top\": {").unwrap();
+        let end = start + text[start..].find("}\n").unwrap() + 2;
+        let old = format!("{}{}", &text[..start], &text[end..])
+            .replacen("\"version\": 4", "\"version\": 3", 1)
+            .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
+        let opened = from_str(&old).unwrap();
+        let w = opened.wall(tied.id).unwrap();
+        assert_eq!(w.top, archisim_core::WallTop::Unconnected);
+        assert_eq!(w.height, tied.height);
+    }
+
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 3,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 4,\n"));
+        // A wall tied to a level says which, and how far from it; a free
+        // wall has no `top`.
+        assert!(text.contains("\"top\": {\n        \"level\": "));
+        assert!(text.contains("\"offset\": -0.25"));
+        assert_eq!(text.matches("\"top\":").count(), 1);
         // Families are written one recipe line per item, readable.
         assert!(text.contains("      \"source\": [\n        \"family \\\"Puerta abatible\\\"\",\n"));
         assert!(text.contains("\"mark\": \"P-01\""));
@@ -735,11 +783,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 3", "\"version\": 7"),
+            edited("\"version\": 4", "\"version\": 7"),
             Err(FileError::TooNew { version: 7 })
         ));
         assert!(matches!(
-            edited("\"version\": 3", "\"version\": 0"),
+            edited("\"version\": 4", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

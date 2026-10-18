@@ -7,7 +7,7 @@
 //! - with nothing selected, the active view and the project.
 
 use archisim_core::{
-    DimensionId, ElevationMarkId, Hand, OpeningId, OpeningKind, SlabId, WallId, WallSide,
+    DimensionId, ElevationMarkId, Hand, OpeningId, OpeningKind, SlabId, WallId, WallSide, WallTop,
     WallTypeId,
 };
 use archisim_geom::Contour;
@@ -20,6 +20,7 @@ use super::tabs::SCALES;
 use super::widgets::segmented;
 use super::*;
 use crate::dim_tool::{DimDirection, DimMode};
+use crate::editor::TopChoice;
 
 const REFERENCES: [(ReferenceLine, &str); 3] = [
     (ReferenceLine::ExteriorFace, "Cara exterior"),
@@ -215,25 +216,24 @@ impl ArchiSimApp {
         if card.edit {
             self.edit_type(TypesTab::Walls, self.wall_settings.wall_type.0);
         }
+        let base_name = self
+            .ed
+            .model()
+            .level(self.ed.level)
+            .map(|l| l.name.clone())
+            .unwrap_or_default();
+        let above = self.levels_above(self.ed.level);
+        let next = crate::editor::next_level_above(self.ed.model(), self.ed.level);
+        let next_name = next
+            .and_then(|l| self.ed.model().level(l))
+            .map(|l| l.name.clone());
+        let resolved = self.wall_settings.top_on(self.ed.model(), self.ed.level);
         group(ui, "tool-wall-constraints", "Restricciones", |ui| {
-            row(
+            text_row(
                 ui,
-                "Altura (mm)",
-                "Altura del muro desde su base",
-                |ui, w| {
-                    if let Some(v) = length_field(
-                        ui,
-                        Id::unique("tool-wall-height"),
-                        self.wall_settings.height,
-                        w - 8.0,
-                    ) {
-                        if v > 0.0 {
-                            self.wall_settings.height = v;
-                        } else {
-                            self.complain("La altura debe ser mayor que cero.");
-                        }
-                    }
-                },
+                "Restricción de base",
+                "La planta en la que dibujas",
+                &base_name,
             );
             row(
                 ui,
@@ -250,6 +250,76 @@ impl ArchiSimApp {
                     }
                 },
             );
+            let next_label = match &next_name {
+                Some(n) => format!("Planta superior ({n})"),
+                None => "Planta superior (no hay)".to_string(),
+            };
+            let mut options: Vec<(TopChoice, String)> = vec![
+                (TopChoice::Unconnected, "Desconectada".into()),
+                (TopChoice::NextLevel, next_label),
+            ];
+            options.extend(
+                above
+                    .iter()
+                    .map(|(id, name)| (TopChoice::Level(*id), format!("Hasta {name}"))),
+            );
+            row(
+                ui,
+                "Restricción superior",
+                "Hasta dónde llega el muro: una planta (sigue sus cambios de cota) o una altura propia (desconectada). «Planta superior» es siempre la de encima de la que dibujas",
+                |ui, w| {
+                    let opts: Vec<(TopChoice, &str)> =
+                        options.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                    self.wall_settings.top =
+                        choice(ui, "tool-wall-top", w, self.wall_settings.top, &opts);
+                },
+            );
+            match resolved {
+                WallTop::Level { .. } => {
+                    row(
+                        ui,
+                        "Desfase superior (mm)",
+                        "Distancia de la coronación a la planta superior: negativo, por debajo (por ejemplo, el canto del forjado)",
+                        |ui, w| {
+                            if let Some(v) = length_field(
+                                ui,
+                                Id::unique("tool-wall-top-offset"),
+                                self.wall_settings.top_offset,
+                                w - 8.0,
+                            ) {
+                                self.wall_settings.top_offset = v;
+                            }
+                        },
+                    );
+                }
+                WallTop::Unconnected => {
+                    row(
+                        ui,
+                        "Altura desconectada (mm)",
+                        "Altura del muro desde su base",
+                        |ui, w| {
+                            if let Some(v) = length_field(
+                                ui,
+                                Id::unique("tool-wall-height"),
+                                self.wall_settings.height,
+                                w - 8.0,
+                            ) {
+                                if v > 0.0 {
+                                    self.wall_settings.height = v;
+                                } else {
+                                    self.complain("La altura debe ser mayor que cero.");
+                                }
+                            }
+                        },
+                    );
+                    if self.wall_settings.top == TopChoice::NextLevel {
+                        props::note(
+                            ui,
+                            "No hay planta encima de esta: el muro tendrá su propia altura. Añade una planta para unirlo a ella.",
+                        );
+                    }
+                }
+            }
         });
         group(ui, "tool-wall-construction", "Construcción", |ui| {
             row(
@@ -584,6 +654,14 @@ impl ArchiSimApp {
             row(ui, "Rejilla", "Cuadrícula de 1 m y 5 m", |ui, _| {
                 ui.checkbox(&mut self.show_grid, "");
             });
+            row(
+                ui,
+                "Calco",
+                "La planta de debajo en gris, para dibujar encima",
+                |ui, _| {
+                    ui.checkbox(&mut self.show_underlay, "");
+                },
+            );
         });
         if let Some(l) = level {
             group(ui, "view-level", "Planta", |ui| {
@@ -714,6 +792,176 @@ impl ArchiSimApp {
         });
     }
 
+    /// The levels above `base`, bottom to top, with their names.
+    fn levels_above(&self, base: LevelId) -> Vec<(LevelId, String)> {
+        let m = self.ed.model();
+        let z = m.level(base).map_or(0.0, |l| l.elevation);
+        m.levels()
+            .into_iter()
+            .filter(|l| l.elevation > z + 1e-9)
+            .map(|l| (l.id, l.name.clone()))
+            .collect()
+    }
+
+    /// The level of walls and slabs (Revit's "Restricción de base",
+    /// ArchiCAD's home storey), as a list of every level: choosing another
+    /// moves them there with their doors and windows. `current` is `None`
+    /// when they are on different levels.
+    fn level_row(
+        &mut self,
+        ui: &mut Ui,
+        salt: impl std::hash::Hash + std::fmt::Debug,
+        label: &str,
+        current: Option<LevelId>,
+        items: &[Element],
+    ) {
+        let options: Vec<(Option<LevelId>, String)> = self
+            .ed
+            .model()
+            .levels()
+            .into_iter()
+            .map(|l| {
+                (
+                    Some(l.id),
+                    format!("{} ({})", l.name, fmt_level(l.elevation)),
+                )
+            })
+            .collect();
+        let picked = row(
+            ui,
+            label,
+            "Cambia de planta conservando los desfases; las puertas y ventanas van con su muro. Un muro que llegaba a la planta de encima sigue llegando a la de encima de la nueva",
+            |ui, w| {
+                let mut opts: Vec<(Option<LevelId>, &str)> =
+                    options.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                if current.is_none() {
+                    opts.insert(0, (None, "Varias"));
+                }
+                choice(ui, salt, w, current, &opts)
+            },
+        );
+        if let (Some(level), true) = (picked, picked != current) {
+            let name = self
+                .ed
+                .model()
+                .level(level)
+                .map(|l| l.name.clone())
+                .unwrap_or_default();
+            match self.ed.set_elements_level(items, level) {
+                Ok(n) if level != self.ed.level => self.say(format!(
+                    "{n} elemento(s) pasan a «{name}»: ábrela en el navegador para verlos."
+                )),
+                Ok(_) => self.say(format!("Ahora en «{name}».")),
+                Err(e) => self.complain(format!("No se puede cambiar de planta: {e}.")),
+            }
+        }
+    }
+
+    /// "Restricción superior" of selected walls: free, or up to a level
+    /// above their base (keeping the offset they had).
+    fn top_row(
+        &mut self,
+        ui: &mut Ui,
+        salt: impl std::hash::Hash + std::fmt::Debug,
+        walls: &[WallId],
+        current: WallTop,
+        above: &[(LevelId, String)],
+    ) -> Option<WallTop> {
+        let shown = match current {
+            WallTop::Unconnected => None,
+            WallTop::Level { level, .. } => Some(level),
+        };
+        let mut options: Vec<(Option<LevelId>, String)> = vec![(None, "Desconectada".to_string())];
+        options.extend(
+            above
+                .iter()
+                .map(|(id, n)| (Some(*id), format!("Hasta {n}"))),
+        );
+        if let (Some(l), false) = (shown, above.iter().any(|a| Some(a.0) == shown)) {
+            // Tied to a level that is no longer above (shown anyway).
+            let name = self
+                .ed
+                .model()
+                .level(l)
+                .map_or(String::new(), |l| l.name.clone());
+            options.push((Some(l), format!("Hasta {name}")));
+        }
+        let picked = row(
+            ui,
+            "Restricción superior",
+            "Hasta una planta (la coronación sigue sus cambios de cota) o desconectada (altura propia)",
+            |ui, w| {
+                let opts: Vec<(Option<LevelId>, &str)> =
+                    options.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                choice(ui, salt, w, shown, &opts)
+            },
+        );
+        if picked == shown {
+            return None;
+        }
+        let offset = match current {
+            WallTop::Level { offset, .. } => offset,
+            WallTop::Unconnected => 0.0,
+        };
+        let top = match picked {
+            None => WallTop::Unconnected,
+            Some(level) => WallTop::Level { level, offset },
+        };
+        let r = self.ed.set_walls_top(walls, top);
+        self.report(
+            r,
+            match top {
+                WallTop::Unconnected => "Muro desconectado: conserva su altura.",
+                WallTop::Level { .. } => {
+                    "Restricción superior cambiada: la altura sale de las plantas."
+                }
+            },
+        );
+        Some(top)
+    }
+
+    fn top_row_many(
+        &mut self,
+        ui: &mut Ui,
+        walls: &[WallId],
+        current: Option<WallTop>,
+        above: &[(LevelId, String)],
+    ) {
+        match current {
+            Some(t) => {
+                self.top_row(ui, "walls-top", walls, t, above);
+            }
+            None => {
+                // Mixed: offer the choices without a current one.
+                let mut options: Vec<(Option<Option<LevelId>>, String)> = vec![
+                    (None, "(varias)".to_string()),
+                    (Some(None), "Desconectada".into()),
+                ];
+                options.extend(
+                    above
+                        .iter()
+                        .map(|(id, n)| (Some(Some(*id)), format!("Hasta {n}"))),
+                );
+                let picked = row(ui, "Restricción superior", "", |ui, w| {
+                    let opts: Vec<(Option<Option<LevelId>>, &str)> =
+                        options.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                    choice(ui, "walls-top-mixed", w, None, &opts)
+                });
+                if let Some(p) = picked {
+                    let top = match p {
+                        None => WallTop::Unconnected,
+                        Some(level) => WallTop::Level { level, offset: 0.0 },
+                    };
+                    let r = self.ed.set_walls_top(walls, top);
+                    self.report(
+                        r,
+                        "Restricción superior cambiada en los muros seleccionados.",
+                    );
+                }
+            }
+        }
+    }
+
     fn wall_properties(&mut self, ui: &mut Ui, id: WallId) {
         let model = self.ed.model();
         let Some(w) = model.wall(id).cloned() else {
@@ -721,10 +969,6 @@ impl ArchiSimApp {
         };
         let thickness = model.wall_type(w.wall_type).map_or(0.0, |t| t.thickness());
         let openings = model.openings_in_wall(id).count();
-        let level = model
-            .level(w.level)
-            .map(|l| l.name.clone())
-            .unwrap_or_default();
         let same_type = self.same_type(Element::Wall(id));
         props::title(ui, "Muro · 1 seleccionado");
         let items = self.wall_type_items(ui.ctx());
@@ -751,8 +995,15 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, "muros");
         }
+        let above = self.levels_above(w.level);
         group(ui, "wall-constraints", "Restricciones", |ui| {
-            text_row(ui, "Planta", "", &level);
+            self.level_row(
+                ui,
+                ("wall-level", id),
+                "Restricción de base",
+                Some(w.level),
+                &[Element::Wall(id)],
+            );
             row(ui, "Desfase de base (mm)", "", |ui, wd| {
                 if let Some(v) =
                     length_field(ui, Id::unique(("wall-b", id)), w.base_offset, wd - 8.0)
@@ -761,12 +1012,42 @@ impl ArchiSimApp {
                     self.report(r, "Desfase de base cambiado.");
                 }
             });
-            row(ui, "Altura (mm)", "", |ui, wd| {
-                if let Some(v) = length_field(ui, Id::unique(("wall-h", id)), w.height, wd - 8.0) {
-                    let r = self.ed.set_walls_height(&walls, v);
-                    self.report(r, "Altura cambiada.");
+            self.top_row(ui, ("wall-top", id), &walls, w.top, &above);
+            match w.top {
+                WallTop::Level { level, offset } => {
+                    row(
+                        ui,
+                        "Desfase superior (mm)",
+                        "Negativo: la coronación queda por debajo de la planta",
+                        |ui, wd| {
+                            if let Some(v) =
+                                length_field(ui, Id::unique(("wall-to", id)), offset, wd - 8.0)
+                            {
+                                let r = self
+                                    .ed
+                                    .set_walls_top(&walls, WallTop::Level { level, offset: v });
+                                self.report(r, "Desfase superior cambiado.");
+                            }
+                        },
+                    );
+                    text_row(
+                        ui,
+                        "Altura (mm)",
+                        "Sale de las plantas: cambia sola si cambian sus cotas. Para escribirla, desconecta el muro",
+                        &format!("{} · de las plantas", fmt_mm(w.height)),
+                    );
                 }
-            });
+                WallTop::Unconnected => {
+                    row(ui, "Altura desconectada (mm)", "", |ui, wd| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("wall-h", id)), w.height, wd - 8.0)
+                        {
+                            let r = self.ed.set_walls_height(&walls, v);
+                            self.report(r, "Altura cambiada.");
+                        }
+                    });
+                }
+            }
         });
         group(ui, "wall-construction", "Construcción", |ui| {
             row(ui, "Línea de referencia", "", |ui, wd| {
@@ -896,7 +1177,19 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, if door { "puertas" } else { "ventanas" });
         }
+        let model = self.ed.model();
+        let level = model
+            .wall(o.wall)
+            .and_then(|w| model.level(w.level))
+            .map(|l| l.name.clone())
+            .unwrap_or_default();
         group(ui, "opening-constraints", "Restricciones", |ui| {
+            text_row(
+                ui,
+                "Planta",
+                "La de su muro: cambia de planta con él",
+                &level,
+            );
             row(ui, "Antepecho (mm)", "Desde la planta", |ui, w| {
                 if let Some(v) = length_field(ui, Id::unique(("op-sill", id)), o.sill, w - 8.0) {
                     let r = self.ed.move_opening(id, o.along, v);
@@ -960,10 +1253,6 @@ impl ArchiSimApp {
             return;
         };
         let thickness = model.slab_type(s.slab_type).map_or(0.0, |t| t.thickness());
-        let level = model
-            .level(s.level)
-            .map(|l| l.name.clone())
-            .unwrap_or_default();
         let same_type = self.same_type(Element::Slab(id));
         props::title(ui, "Forjado · 1 seleccionado");
         let items = self.slab_type_items(ui.ctx());
@@ -990,7 +1279,13 @@ impl ArchiSimApp {
             self.select_instances(same_type, "forjados");
         }
         group(ui, "slab-constraints", "Restricciones", |ui| {
-            text_row(ui, "Planta", "", &level);
+            self.level_row(
+                ui,
+                ("slab-level", id),
+                "Planta",
+                Some(s.level),
+                &[Element::Slab(id)],
+            );
             row(
                 ui,
                 "Cara superior (mm)",
@@ -1040,6 +1335,28 @@ impl ArchiSimApp {
                 }
             }
         });
+        let movable: Vec<Element> = many
+            .iter()
+            .copied()
+            .filter(|e| matches!(e, Element::Wall(_) | Element::Slab(_)))
+            .collect();
+        if !movable.is_empty() {
+            let model = self.ed.model();
+            let levels: BTreeSet<LevelId> = movable
+                .iter()
+                .filter_map(|e| match e {
+                    Element::Wall(id) => model.wall(*id).map(|w| w.level),
+                    Element::Slab(id) => model.slab(*id).map(|s| s.level),
+                    _ => None,
+                })
+                .collect();
+            let current = (levels.len() == 1)
+                .then(|| levels.iter().next().copied())
+                .flatten();
+            group(ui, "many-level", "Planta", |ui| {
+                self.level_row(ui, "many-level-row", "Planta", current, &movable);
+            });
+        }
         if !walls.is_empty() && walls.len() == many.len() {
             let model = self.ed.model();
             let types: BTreeSet<WallTypeId> = walls
@@ -1077,7 +1394,29 @@ impl ArchiSimApp {
                     self.edit_type(TypesTab::Walls, t.0);
                 }
             }
+            let model = self.ed.model();
+            let tops: Vec<WallTop> = walls
+                .iter()
+                .filter_map(|w| model.wall(*w))
+                .map(|w| w.top)
+                .collect();
+            let bases: BTreeSet<LevelId> = walls
+                .iter()
+                .filter_map(|w| model.wall(*w))
+                .map(|w| w.level)
+                .collect();
+            let same_top = tops.windows(2).all(|p| p[0] == p[1]);
+            let base = bases.iter().next().copied().unwrap_or(self.ed.level);
+            let above = self.levels_above(base);
             group(ui, "walls-constraints", "Restricciones", |ui| {
+                if bases.len() == 1 {
+                    let shown = if same_top {
+                        tops.first().copied()
+                    } else {
+                        None
+                    };
+                    self.top_row_many(ui, &walls, shown, &above);
+                }
                 row(
                     ui,
                     if same_height {

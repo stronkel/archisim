@@ -23,9 +23,11 @@ use crate::drag::{grip_at, hotspots, Drag, Grip};
 use crate::editor::{Editor, WallSettings};
 use crate::opening_tool::{placement, OpeningSettings, Placement};
 use crate::pick::{in_window, outline, pick, Element};
-use crate::plan_image::{rasterize_at, PlanKey};
+use crate::plan_image::{rasterize_with, PlanKey};
 use crate::slab_tool::{Outcome as SlabOutcome, SlabTool};
-use crate::snap::{constrain, snap, snap_filtered, track, Snap, SnapFilter, SnapKind};
+use crate::snap::{
+    constrain, is_tracking_line, snap, snap_filtered, track, Snap, SnapFilter, SnapKind,
+};
 use crate::units::{explain_room, fmt_angle, fmt_area, fmt_m, fmt_mm, parse_length};
 use crate::view::View;
 use crate::wall_tool::{Escape, Outcome, WallTool};
@@ -35,10 +37,13 @@ const PAPER: Color32 = Color32::WHITE;
 const GRID_MINOR: Color32 = Color32::from_rgb(236, 238, 242);
 const GRID_MAJOR: Color32 = Color32::from_rgb(214, 218, 226);
 const REF_LINE: Color32 = Color32::from_rgb(192, 57, 43);
+/// Tracking lines and temporary dimensions (Revit's blue).
+const TRACK_LINE: Color32 = Color32::from_rgb(30, 110, 230);
 /// Snapping and picking reach, in screen points.
 const REACH: f32 = 10.0;
-/// How close to a horizontal, vertical or 45° direction the cursor must be
-/// for the wall to lock onto it, in screen points.
+/// How close to a 45° line the cursor must be for the wall to lock onto it,
+/// in screen points (horizontal and vertical lock by angle, see
+/// [`crate::snap::ORTHO_LOCK`]).
 const TRACK_REACH: f32 = 6.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,6 +172,8 @@ pub struct ArchiSimApp {
     wand_preview: Option<(u64, Point2, Contour, RoomFound)>,
     /// Corner where a selection window started.
     window_start: Option<Point2>,
+    /// A temporary dimension being typed.
+    temp_edit: Option<temp_ui::TempEdit>,
     plan: Option<(PlanKey, TextureHandle)>,
     pending: Option<Pending>,
     allow_close: bool,
@@ -193,6 +200,11 @@ pub struct ArchiSimApp {
     /// Cut plane of the active plan above its level, in metres.
     pub cut_plane: f64,
     pub show_grid: bool,
+    /// The level below is drawn in grey under the active plan (and snaps).
+    pub show_underlay: bool,
+    /// Walls of other levels shown in the active plan (cut by its cut plane,
+    /// or of the level below as a reference): they snap too.
+    other_walls: Vec<archisim_core::WallId>,
     /// Which snaps are on (bottom bar).
     pub snap_filter: SnapFilter,
     /// Dark theme for the window (the drawing stays white paper).
@@ -249,6 +261,7 @@ impl ArchiSimApp {
             wand_preview: None,
             space_held: false,
             window_start: None,
+            temp_edit: None,
             plan: None,
             pending: None,
             allow_close: false,
@@ -266,6 +279,8 @@ impl ArchiSimApp {
             plan_scale: archisim_plan::PlanOptions::default().scale,
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             show_grid: true,
+            show_underlay: true,
+            other_walls: Vec::new(),
             snap_filter: SnapFilter::default(),
             dark: false,
             show_properties: true,
@@ -312,6 +327,7 @@ impl ArchiSimApp {
             self.placement = None;
             self.window_start = None;
             self.drag = None;
+            self.temp_edit = None;
             self.tool = tool;
         }
         // Drawing happens in plan.
@@ -589,6 +605,7 @@ impl ArchiSimApp {
 
     fn undo(&mut self) {
         self.drag = None;
+        self.temp_edit = None;
         self.wall_tool.finish();
         self.slab_tool.finish();
         match self.ed.undo() {
@@ -599,6 +616,7 @@ impl ArchiSimApp {
 
     fn redo(&mut self) {
         self.drag = None;
+        self.temp_edit = None;
         self.wall_tool.finish();
         self.slab_tool.finish();
         match self.ed.redo() {
@@ -624,8 +642,11 @@ impl ArchiSimApp {
     /// Builds a wall asked for by the wall tool.
     fn build_wall(&mut self, start: Point2, end: Point2) {
         match self.ed.add_wall(&self.wall_settings, start, end) {
-            Ok(_) => {
+            Ok(id) => {
                 self.wall_tool.accept(end);
+                // The last wall drawn stays selected, with its temporary
+                // dimensions once the chain ends (as Revit does).
+                self.ed.selection = [Element::Wall(id)].into_iter().collect();
                 let len = start.distance(end);
                 self.say(format!("Muro de {} mm creado.", fmt_mm(len)));
                 if !self.wall_tool.is_drawing() {
@@ -702,11 +723,16 @@ impl ArchiSimApp {
         }
         let door = self.tool == Tool::Door;
         match self.ed.add_opening(pl.spec) {
-            Ok(_) => self.say(if door {
-                "Puerta colocada."
-            } else {
-                "Ventana colocada."
-            }),
+            Ok(id) => {
+                // Selected, with its temporary dimensions and arrows, to
+                // place it exactly.
+                self.ed.selection = [Element::Opening(id)].into_iter().collect();
+                self.say(if door {
+                    "Puerta colocada: clic en una cota azul para ajustarla; Espacio la gira."
+                } else {
+                    "Ventana colocada: clic en una cota azul para ajustarla; Espacio la gira."
+                })
+            }
             Err(e) => self.complain(format!("No se puede colocar: {e}.")),
         }
     }
@@ -821,7 +847,7 @@ impl ArchiSimApp {
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-        let typing = ctx.memory(|m| m.focused().is_some());
+        let typing = ctx.memory(|m| m.focused().is_some()) || self.temp_edit.is_some();
         let consume = |m: Modifiers, k: Key| {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
@@ -1048,6 +1074,10 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("Ctrl+Tab", "Siguiente pestaña de vista"),
     ("Clic con la rueda en una pestaña", "Cerrar la vista"),
     ("Esc", "Terminar / herramienta flecha / anular selección"),
+    (
+        "Dibujando",
+        "Muros rectos por defecto (línea azul); sal del eje más de 8° para inclinarlo",
+    ),
     ("Mayús (dibujando)", "Ángulos múltiplos de 45°"),
     (
         "Números + Intro (dibujando)",
@@ -1056,6 +1086,18 @@ const SHORTCUTS: &[(&str, &str)] = &[
     (
         "Intro / doble clic / botón derecho",
         "Terminar la cadena de muros",
+    ),
+    (
+        "Clic en una cota azul",
+        "Escribir la medida exacta (muro, puerta o ventana seleccionados)",
+    ),
+    (
+        "Espacio (puerta o ventana)",
+        "Girarla: otra jamba, otro lado… (también las flechas azules)",
+    ),
+    (
+        "Espacio (muro seleccionado)",
+        "Invertir: la cara exterior al otro lado",
     ),
     ("Mayús+clic", "Añadir o quitar de la selección"),
     ("Supr", "Borrar la selección"),
@@ -1082,6 +1124,10 @@ pub fn default_wall_settings(model: &Model) -> WallSettings {
         reference: t.map_or(ReferenceLine::Center, |t| default_reference(t.function)),
         height: 3.0,
         base_offset: 0.0,
+        // Up to the floor above, as walls usually are; free 3 m when the
+        // project has no level above.
+        top: crate::editor::TopChoice::NextLevel,
+        top_offset: 0.0,
     }
 }
 
@@ -1198,6 +1244,7 @@ mod plan_ui;
 mod properties;
 mod props;
 mod tabs;
+mod temp_ui;
 pub mod theme;
 mod thumbs;
 mod toolbox;

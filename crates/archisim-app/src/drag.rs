@@ -451,6 +451,7 @@ fn copy(
                     reference: w.reference,
                     height: w.height,
                     base_offset: w.base_offset,
+                    top: w.top,
                 })?;
                 copies.insert(Element::Wall(new));
                 for mut spec in hosted {
@@ -632,6 +633,7 @@ mod tests {
                 reference: archisim_core::ReferenceLine::Center,
                 height: 2.5,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap()
         };
