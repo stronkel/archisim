@@ -5,16 +5,15 @@
 //! - walls: their layers between base and top, with the rough openings of
 //!   their doors and windows taken out, as one skin per wall;
 //! - slabs: their layers hanging down from the top face, as one skin;
-//! - doors: lining (two jambs and the head) and the leaves, closed;
-//! - windows: frame, mullions and glazing.
+//! - doors and windows: the 3D body of their family (for the system
+//!   families: lining or frame, closed leaves, mullions and glazing).
 //!
 //! Triangles are wound counter-clockwise seen from outside, so normals
 //! point out. The solids of one element together enclose its volume (walls
 //! joined at a mitre leave the shared corner face to each other).
 
 use archisim_core::{
-    DoorOperation, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, SlabId, WallId,
-    EPSILON,
+    LevelId, MaterialId, Model, OpeningId, Point2, SlabId, WallId, WallSide, EPSILON,
 };
 
 use crate::{ensure_ccw, opening_geometry, openings_in_wall, wall_geometry, EndCut, Line};
@@ -503,12 +502,18 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
         .collect()
 }
 
-/// Solids of a door or window: frame (or lining) and leaves or glazing.
+/// Solids of a door or window: the 3D body of its family, one solid per
+/// material (frame or lining, leaves or glazing…).
+///
+/// The family works in its own axes: `x` along the wall from the centre of
+/// the opening, to the right seen from the side the leaves open to; `y`
+/// across the wall from the middle of the frame, towards that side; `z` up
+/// from the sill.
 pub fn opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
     let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
         return Vec::new();
     };
-    let Some(t) = model.opening_type(o.opening_type) else {
+    let Ok(ev) = model.evaluate_opening(id) else {
         return Vec::new();
     };
     let Some(wall) = model.wall(o.wall) else {
@@ -516,73 +521,49 @@ pub fn opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
     };
     let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
     let z_sill = level + og.sill;
-    let (w, h) = (og.width(), og.height());
     let mid = (og.t0 + og.t1) / 2.0;
     let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
-    let f = t.frame_width;
-    let (x0, x1) = (-w / 2.0, w / 2.0);
-
-    // A box in the frame's own coordinates: along the wall from the centre
-    // of the opening, across the wall from the middle of the frame, and up
-    // from the sill.
-    let block = |xa: f64, xb: f64, depth: f64, za: f64, zb: f64| -> Vec<[P3; 3]> {
-        let (ya, yb) = (y_mid - depth / 2.0, y_mid + depth / 2.0);
-        let rect = [
-            og.point(mid + xa, ya),
-            og.point(mid + xb, ya),
-            og.point(mid + xb, yb),
-            og.point(mid + xa, yb),
-        ];
-        prism(&rect, z_sill + za, z_sill + zb)
+    // The normal `n` points to the exterior. Seen from the exterior, the
+    // wall's direction runs to the left; seen from the interior, to the
+    // right.
+    let (sx, sy) = match og.opens_to {
+        WallSide::Exterior => (-1.0, 1.0),
+        WallSide::Interior => (1.0, -1.0),
     };
 
-    let mut frame = Vec::new();
-    let mut panels = Vec::new();
-    match t.kind {
-        OpeningKind::Door(op) => {
-            let d = t.frame_depth;
-            frame.extend(block(x0, x0 + f, d, 0.0, h));
-            frame.extend(block(x1 - f, x1, d, 0.0, h));
-            frame.extend(block(x0 + f, x1 - f, d, h - f, h));
-            let leaf = 0.04_f64.min(d);
-            let leaves: Vec<(f64, f64)> = match op {
-                DoorOperation::DoubleSwing => vec![(x0 + f, 0.0), (0.0, x1 - f)],
-                _ => vec![(x0 + f, x1 - f)],
-            };
-            for (a, b) in leaves {
-                panels.extend(block(a, b, leaf, 0.0, h - f));
-            }
-        }
-        OpeningKind::Window(op) => {
-            let d = t.frame_depth;
-            let n = op.panels();
-            let clear = (w - 2.0 * f - (n as f64 - 1.0) * f) / n as f64;
-            frame.extend(block(x0, x0 + f, d, 0.0, h));
-            frame.extend(block(x1 - f, x1, d, 0.0, h));
-            frame.extend(block(x0 + f, x1 - f, d, 0.0, f));
-            frame.extend(block(x0 + f, x1 - f, d, h - f, h));
-            for i in 0..n {
-                let a = x0 + f + i as f64 * (clear + f);
-                if i > 0 {
-                    // Mullion between panes.
-                    frame.extend(block(a - f, a, d, f, h - f));
-                }
-                panels.extend(block(a, a + clear, 0.024_f64.min(d), f, h - f));
-            }
+    let mut by_material: Vec<(MaterialId, Vec<[P3; 3]>)> = Vec::new();
+    for part in &ev.parts {
+        let (ta, tb) = sorted(mid + sx * part.min[0], mid + sx * part.max[0]);
+        let (ya, yb) = sorted(y_mid + sy * part.min[1], y_mid + sy * part.max[1]);
+        let rect = [
+            og.point(ta, ya),
+            og.point(tb, ya),
+            og.point(tb, yb),
+            og.point(ta, yb),
+        ];
+        let tris = prism(&rect, z_sill + part.min[2], z_sill + part.max[2]);
+        let material = MaterialId(part.material);
+        match by_material.iter_mut().find(|(m, _)| *m == material) {
+            Some((_, list)) => list.extend(tris),
+            None => by_material.push((material, tris)),
         }
     }
-    vec![
-        Solid {
+    by_material
+        .into_iter()
+        .map(|(material, triangles)| Solid {
             owner: SolidOwner::Opening(id),
-            material: t.frame_material,
-            triangles: frame,
-        },
-        Solid {
-            owner: SolidOwner::Opening(id),
-            material: t.panel_material,
-            triangles: panels,
-        },
-    ]
+            material,
+            triangles,
+        })
+        .collect()
+}
+
+fn sorted(a: f64, b: f64) -> (f64, f64) {
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 /// Every solid of the model, on every level.
@@ -620,10 +601,94 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The door and window solids as ArchiSim built them before families,
+    /// kept to check that the system families reproduce them exactly.
+    pub(crate) fn legacy_opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
+        let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
+            return Vec::new();
+        };
+        let Some(t) = model.opening_type(o.opening_type) else {
+            return Vec::new();
+        };
+        let Some(wall) = model.wall(o.wall) else {
+            return Vec::new();
+        };
+        let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
+        let z_sill = level + og.sill;
+        let (w, h) = (og.width(), og.height());
+        let mid = (og.t0 + og.t1) / 2.0;
+        let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
+        let f = t.frame_width;
+        let (x0, x1) = (-w / 2.0, w / 2.0);
+
+        // A box in the frame's own coordinates: along the wall from the centre
+        // of the opening, across the wall from the middle of the frame, and up
+        // from the sill.
+        let block = |xa: f64, xb: f64, depth: f64, za: f64, zb: f64| -> Vec<[P3; 3]> {
+            let (ya, yb) = (y_mid - depth / 2.0, y_mid + depth / 2.0);
+            let rect = [
+                og.point(mid + xa, ya),
+                og.point(mid + xb, ya),
+                og.point(mid + xb, yb),
+                og.point(mid + xa, yb),
+            ];
+            prism(&rect, z_sill + za, z_sill + zb)
+        };
+
+        let mut frame = Vec::new();
+        let mut panels = Vec::new();
+        match t.kind {
+            OpeningKind::Door(op) => {
+                let d = t.frame_depth;
+                frame.extend(block(x0, x0 + f, d, 0.0, h));
+                frame.extend(block(x1 - f, x1, d, 0.0, h));
+                frame.extend(block(x0 + f, x1 - f, d, h - f, h));
+                let leaf = 0.04_f64.min(d);
+                let leaves: Vec<(f64, f64)> = match op {
+                    DoorOperation::DoubleSwing => vec![(x0 + f, 0.0), (0.0, x1 - f)],
+                    _ => vec![(x0 + f, x1 - f)],
+                };
+                for (a, b) in leaves {
+                    panels.extend(block(a, b, leaf, 0.0, h - f));
+                }
+            }
+            OpeningKind::Window(op) => {
+                let d = t.frame_depth;
+                let n = op.panels();
+                let clear = (w - 2.0 * f - (n as f64 - 1.0) * f) / n as f64;
+                frame.extend(block(x0, x0 + f, d, 0.0, h));
+                frame.extend(block(x1 - f, x1, d, 0.0, h));
+                frame.extend(block(x0 + f, x1 - f, d, 0.0, f));
+                frame.extend(block(x0 + f, x1 - f, d, h - f, h));
+                for i in 0..n {
+                    let a = x0 + f + i as f64 * (clear + f);
+                    if i > 0 {
+                        // Mullion between panes.
+                        frame.extend(block(a - f, a, d, f, h - f));
+                    }
+                    panels.extend(block(a, a + clear, 0.024_f64.min(d), f, h - f));
+                }
+            }
+        }
+        vec![
+            Solid {
+                owner: SolidOwner::Opening(id),
+                material: t.frame_material,
+                triangles: frame,
+            },
+            Solid {
+                owner: SolidOwner::Opening(id),
+                material: t.panel_material,
+                triangles: panels,
+            },
+        ]
+    }
+
     use crate::removed_area;
     use archisim_core::{
-        CutPattern, Hand, Layer, LayerFunction, NewOpening, NewOpeningType, NewSlab, NewWall,
-        ReferenceLine, SlabFunction, WallFunction, WallSide, WindowOperation,
+        CutPattern, DoorOperation, Hand, Layer, LayerFunction, NewOpening, NewOpeningType, NewSlab,
+        NewWall, OpeningKind, ReferenceLine, SlabFunction, WallFunction, WallSide, WindowOperation,
     };
 
     fn p(x: f64, y: f64) -> Point2 {
@@ -997,5 +1062,147 @@ mod tests {
         // The whole model: 2 wall layers, 2 slab layers, 2 × 2 opening parts.
         assert_eq!(model_solids(&m).len(), 8);
         assert_eq!(level_solids(&m, m.levels()[0].id).len(), 8);
+    }
+
+    /// The system families build the same doors and windows ArchiSim built
+    /// before families: every operation, several sizes, both sides and both
+    /// hands, in a wall at an odd angle. The triangles may differ in the
+    /// last digit (around 1e-15 m): the old code measured the opening back
+    /// from its jambs and head instead of using the type's exact size, and
+    /// a family opening to the exterior is mirrored.
+    #[test]
+    fn system_families_reproduce_the_previous_doors_and_windows() {
+        let mut m = Model::new("Regresión");
+        let lvl = m.add_level("P1", 0.35);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let wood = m.add_material("Madera", "wood", [190, 150, 100], CutPattern::Solid);
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], CutPattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "M",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.31,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: p(1.3, 2.7),
+                end: p(1.3 + 300.0 * 0.6, 2.7 + 300.0 * 0.8 + 0.123),
+                reference: ReferenceLine::ExteriorFace,
+                height: 3.1,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let kinds = [
+            OpeningKind::Door(DoorOperation::SingleSwing),
+            OpeningKind::Door(DoorOperation::DoubleSwing),
+            OpeningKind::Door(DoorOperation::Sliding),
+            OpeningKind::Window(WindowOperation::Fixed),
+            OpeningKind::Window(WindowOperation::SingleCasement),
+            OpeningKind::Window(WindowOperation::DoubleCasement),
+            OpeningKind::Window(WindowOperation::Sliding),
+        ];
+        let sizes = [(0.83, 2.07, 0.053, 0.071), (1.457, 1.913, 0.067, 0.031)];
+        let mut along = 1.0;
+        let mut count = 0;
+        for kind in kinds {
+            for (size, (width, height, fw, fd)) in sizes.into_iter().enumerate() {
+                // Same material for frame and leaf in half of them.
+                let panel = if size == 0 { wood } else { glass };
+                let t = m
+                    .add_opening_type(NewOpeningType {
+                        name: format!("{kind:?} {size}"),
+                        kind,
+                        width,
+                        height,
+                        frame_width: fw,
+                        frame_depth: fd,
+                        frame_material: wood,
+                        panel_material: panel,
+                    })
+                    .unwrap();
+                for opens_to in [WallSide::Interior, WallSide::Exterior] {
+                    for hand in [Hand::Left, Hand::Right] {
+                        for setback in [None, Some(0.05)] {
+                            let o = m
+                                .add_opening(NewOpening {
+                                    opening_type: t,
+                                    wall: w,
+                                    along,
+                                    sill: 0.21,
+                                    opens_to,
+                                    hand,
+                                    setback,
+                                })
+                                .unwrap();
+                            along += 2.0;
+                            count += 1;
+                            compare(&m, o);
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(count, 7 * 2 * 8);
+    }
+
+    fn compare(m: &Model, id: OpeningId) {
+        let old = legacy_opening_solids(m, id);
+        let new = opening_solids(m, id);
+        let materials: Vec<MaterialId> = new.iter().map(|s| s.material).collect();
+        let mut expected_materials: Vec<MaterialId> = Vec::new();
+        for s in &old {
+            if !expected_materials.contains(&s.material) {
+                expected_materials.push(s.material);
+            }
+        }
+        assert_eq!(materials, expected_materials, "same materials, frame first");
+        for s in &new {
+            let want: Vec<[P3; 3]> = old
+                .iter()
+                .filter(|o| o.material == s.material)
+                .flat_map(|o| o.triangles.iter().copied())
+                .collect();
+            let (a, b) = (sorted_tris(&s.triangles), sorted_tris(&want));
+            assert_eq!(a.len(), b.len());
+            for (x, y) in a.iter().zip(&b) {
+                for k in 0..9 {
+                    assert!((x[k] - y[k]).abs() < 1e-12, "opening {id}");
+                }
+            }
+            assert!((s.volume() - want_volume(&want)).abs() < 1e-9);
+        }
+    }
+
+    fn want_volume(tris: &[[P3; 3]]) -> f64 {
+        Solid {
+            owner: SolidOwner::Opening(OpeningId(0)),
+            material: MaterialId(0),
+            triangles: tris.to_vec(),
+        }
+        .volume()
+    }
+
+    fn sorted_tris(tris: &[[P3; 3]]) -> Vec<[f64; 9]> {
+        let mut v: Vec<[f64; 9]> = tris
+            .iter()
+            .map(|t| {
+                let mut a = [0.0; 9];
+                for (i, p3) in t.iter().enumerate() {
+                    a[3 * i..3 * i + 3].copy_from_slice(p3);
+                }
+                a
+            })
+            .collect();
+        // Sort on rounded keys so that last-digit differences keep the order.
+        let key = |a: &[f64; 9]| a.map(|x| (x * 1e6).round() as i64);
+        v.sort_by_key(key);
+        v
     }
 }

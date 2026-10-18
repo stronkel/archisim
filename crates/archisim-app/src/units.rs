@@ -125,6 +125,71 @@ pub fn explain(e: &ModelError) -> String {
             "una cota necesita al menos dos puntos separados en su dirección".into()
         }
         ModelError::LastLevel => "el proyecto necesita al menos una planta".into(),
+        ModelError::UnknownFamily(_) => "la familia no existe".into(),
+        ModelError::Family(e) => explain_family(e),
+        ModelError::DuplicateFamily(name) => format!("ya hay una familia llamada «{name}»"),
+        ModelError::DuplicateMark(mark) => format!("la marca «{mark}» ya la tiene otro tipo"),
+        ModelError::NotAnOpening(e) => {
+            format!(
+                "la familia «{}» no sirve para puertas ni ventanas",
+                e.family
+            )
+        }
+    }
+}
+
+/// Why a family refused some values (or its recipe is wrong), in Spanish,
+/// with the parameter names the recipe shows to the user.
+pub fn explain_family(e: &archisim_core::FamilyError) -> String {
+    use archisim_core::FamilyError as F;
+    let num = |x: f64| {
+        let t = format!("{x}");
+        t.replace('.', ",")
+    };
+    match e {
+        F::Syntax { line, message } => {
+            format!("la receta de la familia tiene un error en la línea {line} ({message})")
+        }
+        F::MissingValue { param } => format!("falta el valor de «{param}»"),
+        F::UnknownParam { param } => format!("la familia no tiene el parámetro «{param}»"),
+        F::WrongKind {
+            label, expected, ..
+        } => {
+            let kind = match *expected {
+                "length" => "una longitud",
+                "angle" => "un ángulo",
+                "number" | "integer" => "un número",
+                "bool" => "sí o no",
+                "material" => "un material",
+                "choice" => "una de sus opciones",
+                _ => "un texto",
+            };
+            format!("«{label}» debe ser {kind}")
+        }
+        F::OutOfRange {
+            label,
+            value,
+            min,
+            max,
+            ..
+        } => format!(
+            "«{label}» = {} está fuera de su rango ({} a {})",
+            num(*value),
+            num(*min),
+            num(*max)
+        ),
+        F::NotInteger { label, .. } => format!("«{label}» debe ser un número entero"),
+        F::UnknownOption { label, value, .. } => {
+            format!("«{value}» no es una opción de «{label}»")
+        }
+        F::Requirement { message, .. } => message.clone(),
+        F::NegativeSize { .. } => {
+            "con esas medidas una pieza de la familia no cabe (quedaría con medida negativa)".into()
+        }
+        F::Eval { line, message } => {
+            format!("la receta de la familia falla en la línea {line} ({message})")
+        }
+        F::TooComplex { .. } => "la familia generaría demasiada geometría".into(),
     }
 }
 

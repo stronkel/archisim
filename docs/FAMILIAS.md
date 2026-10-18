@@ -1,6 +1,6 @@
 # Familias paramétricas — diseño (fase 2, punto 2.1)
 
-> 18 de octubre de 2026 · diseño aprobado por Antonio, todavía sin código.
+> 18 de octubre de 2026 · diseño aprobado por Antonio. **Bloque A hecho (v0.14):** el lenguaje, las cinco familias de sistema y los tipos por familia con marca. Planta, IFC, configurador y biblioteca siguen en los bloques B a E.
 > Equivale a las familias de Revit (`.rfa`) y a los objetos GDL de ArchiCAD,
 > con formato y contenido propios (sala limpia: nada de GDL ni de `.rfa`).
 
@@ -61,66 +61,72 @@ Una familia es un fichero `.asfam` con estas partes:
 5. **IFC.** Clase (`IfcDoor`, `IfcWindow`, `IfcFurniture`, `IfcSanitaryTerminal`…), tipo predefinido, particiones y funcionamiento de hojas, y qué parámetros salen en qué property set.
 6. **Catálogo de tipos** (opcional): los tipos guardados de esa familia.
 
-Ejes locales: **x** a lo largo del muro (o hacia la derecha del objeto), **y** a través del muro desde la cara exterior hacia la interior (o hacia el frente del objeto), **z** hacia arriba desde la base (el antepecho en ventanas). Metros.
+Ejes de las familias alojadas en muro (metros): origen en el **centro del hueco de obra**, a la altura del **antepecho** (el suelo en las puertas) y en el **plano medio del marco**; **x** a lo largo del muro, hacia la derecha vista desde el lado al que abren las hojas; **y** a través del muro, hacia ese lado; **z** hacia arriba. Así la familia no necesita saber el espesor ni la orientación del muro, y la mano y el lado de apertura la reflejan solos.
 
-## Ejemplo orientativo de receta
+## El lenguaje (como está en el bloque A)
 
-La sintaxis exacta se fija en el bloque A. Las palabras clave van en inglés, como IFC, porque el código será abierto; lo que ve el usuario (nombres, secciones, opciones) va en español.
+Palabras clave en inglés, como IFC, porque el código será abierto; lo que ve el usuario (nombres, secciones, opciones, mensajes) va en español. La indentación (con espacios) marca qué va dentro de qué. `#` empieza un comentario.
 
 ```
 family "Ventana practicable"
-  category window              # IfcWindow
-  host wall                    # va en un muro y le abre el hueco de obra
+  category window              # door, window, furniture, sanitary…
+  host wall                    # va en un muro y le abre el hueco de obra (o none)
   version 1
+  description "Ventana practicable de una o dos hojas"
+
+include "piezas"               # piezas comunes; se copian dentro al cargar la familia
 
 type_params
   section "Dimensiones"
-    width      length   1.20  range 0.40..3.00  label "Hueco de obra: ancho"
-    height     length   1.20  range 0.40..3.00  label "Hueco de obra: alto"
+    width  length = 1.20 range 0.10..20.00 label "Hueco de obra: ancho"
+    height length = 1.20 range 0.10..20.00 label "Hueco de obra: alto"
   section "Hojas"
-    leaves     integer  2     range 1..3        label "Nº de hojas"
-    tilt_turn  bool     yes                     label "Oscilobatiente"
+    leaves integer = 2 range 1..2 label "Nº de hojas"
   section "Marco"
-    frame_w    length   0.06                    label "Anchura vista"
-    frame_d    length   0.07                    label "Fondo"
+    frame_width length = 0.06 range 0.001..2.00 label "Marco: anchura vista"
+    frame_depth length = 0.07 range 0.001..2.00 label "Marco: fondo"
   section "Persiana"
-    shutter    bool     no                      label "Persiana y capialzado"
-    box_h      length   0.25  visible_if shutter label "Altura del capialzado"
+    shutter bool = no label "Persiana y capialzado"
+    box_h   length = 0.25 visible_if shutter label "Altura del capialzado"
   section "Materiales"
-    frame_mat  material "Aluminio lacado"       label "Marco"
-    glass_mat  material "Vidrio"                label "Vidrio"
+    frame_material material = "Aluminio lacado" label "Marco"
+    panel_material material = "Vidrio doble" label "Vidrio"
 
 instance_params
-  opens_to   choice [interior, exterior] = interior  label "Abre hacia"
-  hand       choice [izquierda, derecha] = izquierda label "Mano (UNE-EN 12519)"
+  finish choice("lacado", "anodizado") = "lacado" label "Acabado"
 
-let leaf_w = (width - 2 * frame_w) / leaves
+let f = frame_width
+require (leaves + 1) * f < width else "El marco y el montante no dejan hueco para el vidrio"
+
+component shutter_box(w, h, d, box_h, mat)       # una pieza propia, con sus argumentos
+  use block(-w / 2, w / 2, d, h, h + box_h, mat)   # «block» viene de las piezas comunes
 
 body
-  use frame(width, height, frame_w, frame_d, frame_mat)        # pieza común
+  use window_frame(width, height, f, frame_depth, frame_material)
+  let clear = (width - 2 * f - (leaves - 1) * f) / leaves
   repeat i in 0..leaves
-    use casement_leaf(at: frame_w + i * leaf_w, width: leaf_w, glass: glass_mat)
+    let a = -width / 2 + f + i * (clear + f)
+    use block(a, a + clear, min(0.024, frame_depth), f, height - f, panel_material)
   if shutter
-    use roller_shutter(width, box_h)                            # pieza común
+    use shutter_box(width, height, frame_depth, box_h, frame_material)
 
-plan 1:50
-  use frame_plan(width, frame_w, frame_d)
-  repeat i in 0..leaves
-    swing leaf i to opens_to
+outputs                        # lo que lee el resto del programa
+  opening_width = width
+  operation = if leaves == 2 then "double_casement" else "single_casement"
 
-plan 1:100
-  line (0, frame_d / 2) to (width, frame_d / 2)
-
-hotspot width  at (width, 0)          # estirar el ancho con el ratón
-
-ifc
-  predefined_type WINDOW
-  partitioning = if leaves == 1 then SINGLE_PANEL else DOUBLE_PANEL_VERTICAL
-
-types                                  # catálogo de tipos guardados
-  "V-01 Practicable 2 hojas 120×120"  width 1.20 height 1.20 leaves 2
-  "V-02 Balconera 2 hojas 140×220"    width 1.40 height 2.20 leaves 2 shutter yes
+ifc                            # datos IFC (los usará el bloque C)
+  predefined_type = "WINDOW"
 ```
+
+- **Parámetros**: `nombre clase = valor`, con `range`, `label` y `visible_if` opcionales. Clases: `length`, `angle` (radianes), `number`, `integer`, `bool` (`yes`/`no`), `material` (por defecto, el nombre de un material; ArchiSim busca el del proyecto), `text` y `choice("a", "b", …)`.
+- **Fórmulas**: `+ - * /`, comparaciones (`== != < <= > >=`), `and`, `or`, `not`, `if … then … else …` y las funciones `min`, `max`, `abs`, `sqrt`, `floor`, `ceil`, `round`, `sin`, `cos`, `tan`.
+- **Geometría**: `box (x, y, z) to (x, y, z) material m`; `use pieza(…)`; `repeat i in a..b` (b excluido); `if` / `else if` / `else`; `let`. Una pieza común solo ve sus propios argumentos.
+- **Reglas**: `require condición else "mensaje"`; si no se cumple, el cambio se rechaza con ese mensaje.
+- **Lo que pone el programa**: `opens_to` (`"interior"` / `"exterior"`) y `hand` (`"left"` / `"right"`, UNE-EN 12519) en las familias alojadas en muro.
+- **Salidas que lee ArchiSim** de una familia de puerta o ventana: `opening_width`, `opening_height`, `frame_width`, `frame_depth`, `frame_material`, `panel_material` y `operation` (`single_swing`, `double_swing`, `sliding`; `fixed`, `single_casement`, `double_casement`, `sliding`). La planta y el IFC las usan hasta los bloques B y C.
+- **Límites de seguridad**: sin acceso a ficheros ni red; como mucho 1 000 vueltas por `repeat`, 20 000 piezas y 32 piezas anidadas.
+
+Las recetas de las cinco familias de sistema están en `crates/archisim-core/families/` (`puerta_abatible.asfam`, `puerta_corredera.asfam`, `ventana_fija.asfam`, `ventana_practicable.asfam`, `ventana_corredera.asfam`), con sus piezas comunes en `piezas.asfam`. Sirven de ejemplo.
 
 ## Reglas del sistema
 
@@ -136,7 +142,7 @@ types                                  # catálogo de tipos guardados
 
 | Bloque | Qué | Criterio de hecho |
 |---|---|---|
-| **A · Núcleo** | Lector de recetas: parámetros con secciones y visibilidad, fórmulas, condiciones, repeticiones, piezas comunes, geometría 3D. Tipos con nombre, marca y familia. Los tipos actuales pasan a las cinco familias (abatible, corredera; practicable, corredera, fija). Formato `.archisim` **versión 3** con migración | La demo y los proyectos v1/v2 se abren y dan **el mismo 3D y el mismo IFC** que hoy (volúmenes y `GlobalId` incluidos), validado con IfcOpenShell |
+| **A · Núcleo** ✅ v0.14 | Lector de recetas: parámetros con secciones y visibilidad, fórmulas, condiciones, repeticiones, piezas comunes, geometría 3D. Tipos con nombre, marca y familia. Los tipos actuales pasan a las cinco familias (abatible, corredera; practicable, corredera, fija). Formato `.archisim` **versión 3** con migración | La demo y los proyectos v1/v2 se abren y dan **el mismo 3D y el mismo IFC** que hoy (volúmenes y `GlobalId` incluidos), validado con IfcOpenShell |
 | **B · Planta** | Símbolos 2D por nivel de detalle y alzado; el dibujo fijo de puertas y ventanas de `archisim-plan` se sustituye por el de las familias | La planta 1:50 de la demo sale igual que hoy (comparada en imagen); nuevas plantas 1:100 y 1:20 para revisar |
 | **C · IFC** | Tipos con nombre y marca, Psets desde los parámetros, `ArchiSim_Family`, importación de lo exportado | Ida y vuelta idéntica; IFC abierto en ArchiCAD y Revit (Antonio) |
 | **D · Configurador** | El diálogo de tipos generado desde la receta, por secciones, con vista previa en planta, alzado y 3D en tiempo real; puntos de control en planta | Probado con clics simulados y en la ventana real; las opciones de una familia se recorren todas |

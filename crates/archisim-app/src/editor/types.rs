@@ -229,17 +229,30 @@ impl Editor {
         } else {
             "Duplicar tipo de ventana"
         };
+        self.transact(label, |m| m.duplicate_opening_type(id, name))
+    }
+
+    /// Changes the type mark ("P-03") and description of a door or window
+    /// type. Marks are unique; an empty mark is allowed.
+    pub fn set_opening_type_info(
+        &mut self,
+        id: OpeningTypeId,
+        mark: &str,
+        description: &str,
+    ) -> EditResult {
+        let current = self
+            .model()
+            .opening_type(id)
+            .ok_or("el tipo de puerta o ventana no existe")?;
+        let (name, door) = (current.name.clone(), current.is_door());
+        let label = if door {
+            "Modificar tipo de puerta"
+        } else {
+            "Modificar tipo de ventana"
+        };
+        let (mark, description) = (mark.trim().to_string(), description.trim().to_string());
         self.transact(label, |m| {
-            m.add_opening_type(NewOpeningType {
-                name,
-                kind: src.kind,
-                width: src.width,
-                height: src.height,
-                frame_width: src.frame_width,
-                frame_depth: src.frame_depth,
-                frame_material: src.frame_material,
-                panel_material: src.panel_material,
-            })
+            m.set_opening_type_info(id, name, mark, description)
         })
     }
 
@@ -331,6 +344,60 @@ mod tests {
         );
         let many: Vec<String> = (1..=7).map(|i| i.to_string()).collect();
         assert_eq!(quoted_list(&many), "«1», «2», «3», «4», «5» y 2 más");
+    }
+
+    #[test]
+    fn door_and_window_types_have_marks_and_a_family() {
+        let mut ed = Editor::new_project();
+        let door = ed
+            .model()
+            .opening_types()
+            .find(|t| t.is_door())
+            .unwrap()
+            .clone();
+        assert_eq!(door.mark, "P-01");
+        assert_eq!(
+            ed.model().family(door.family).unwrap().name(),
+            "Puerta abatible"
+        );
+        let copy = ed.duplicate_opening_type(door.id).unwrap();
+        let c = ed.model().opening_type(copy).unwrap().clone();
+        assert_eq!(c.family, door.family);
+        assert_eq!(c.values, door.values);
+        // The template has four door types: the copy takes the next mark.
+        assert_eq!(c.mark, "P-05");
+
+        ed.set_opening_type_info(copy, " P-10 ", "Baños").unwrap();
+        assert_eq!(ed.undo_label(), Some("Modificar tipo de puerta"));
+        let c = ed.model().opening_type(copy).unwrap();
+        assert_eq!((c.mark.as_str(), c.description.as_str()), ("P-10", "Baños"));
+        let err = ed.set_opening_type_info(door.id, "P-10", "").unwrap_err();
+        assert_eq!(err, "la marca «P-10» ya la tiene otro tipo");
+        ed.undo();
+        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-05");
+
+        // The family's own rule, in its own words: two jambs and the
+        // mullion of 620 mm do not fit in 1800 mm.
+        let window = ed
+            .model()
+            .opening_types()
+            .find(|t| t.name.starts_with("Ventana practicable 2 hojas"))
+            .unwrap()
+            .clone();
+        let mut spec = NewOpeningType {
+            name: window.name.clone(),
+            kind: window.kind,
+            width: window.width,
+            height: window.height,
+            frame_width: 0.62,
+            frame_depth: window.frame_depth,
+            frame_material: window.frame_material,
+            panel_material: window.panel_material,
+        };
+        let err = ed.edit_opening_type(window.id, spec.clone()).unwrap_err();
+        assert_eq!(err, "El marco y el montante no dejan hueco para el vidrio");
+        spec.frame_width = 0.06;
+        ed.edit_opening_type(window.id, spec).unwrap();
     }
 
     #[test]

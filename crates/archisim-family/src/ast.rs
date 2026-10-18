@@ -1,0 +1,209 @@
+//! The parsed form of a family recipe.
+
+use std::collections::BTreeMap;
+
+use crate::Value;
+
+/// A parsed family recipe.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FamilyDef {
+    /// Name shown to the user, e.g. "Puerta abatible".
+    pub name: String,
+    /// What the element is: `door`, `window`, `furniture`, `sanitary`…
+    pub category: String,
+    pub host: Host,
+    /// Version of the recipe, raised by its author on every change.
+    pub version: u32,
+    pub description: String,
+    /// Type parameters first, then instance parameters, each in the order
+    /// written.
+    pub params: Vec<Param>,
+    /// Top-level `let` and `require` lines, evaluated in order before the
+    /// body and the outputs.
+    pub prelude: Vec<Stmt>,
+    /// Shared pieces ("piezas comunes"), by name.
+    pub components: BTreeMap<String, Component>,
+    /// The 3D body.
+    pub body: Vec<Stmt>,
+    /// Values read by the rest of the program (rough opening, frame…).
+    pub outputs: Vec<Output>,
+    /// IFC data (class, predefined type…).
+    pub ifc: Vec<Output>,
+}
+
+impl FamilyDef {
+    pub fn param(&self, name: &str) -> Option<&Param> {
+        self.params.iter().find(|p| p.name == name)
+    }
+
+    /// Parameters of one scope, in order.
+    pub fn params_of(&self, scope: ParamScope) -> impl Iterator<Item = &Param> {
+        self.params.iter().filter(move |p| p.scope == scope)
+    }
+}
+
+/// Where an element can be placed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Host {
+    /// Placed freely on a level (furniture).
+    None,
+    /// Placed in a wall, cutting its rough opening (doors and windows).
+    Wall,
+}
+
+/// Whether a parameter belongs to the type or to each placed element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamScope {
+    Type,
+    Instance,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParamKind {
+    /// Metres.
+    Length,
+    /// Radians.
+    Angle,
+    Number,
+    Integer,
+    Bool,
+    Material,
+    Text,
+    /// One of a list of options.
+    Choice(Vec<String>),
+}
+
+impl ParamKind {
+    pub fn name(&self) -> &'static str {
+        match self {
+            ParamKind::Length => "length",
+            ParamKind::Angle => "angle",
+            ParamKind::Number => "number",
+            ParamKind::Integer => "integer",
+            ParamKind::Bool => "bool",
+            ParamKind::Material => "material",
+            ParamKind::Text => "text",
+            ParamKind::Choice(_) => "choice",
+        }
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        matches!(
+            self,
+            ParamKind::Length | ParamKind::Angle | ParamKind::Number | ParamKind::Integer
+        )
+    }
+}
+
+/// A parameter declaration.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    /// Name used in formulas (English, no spaces), e.g. `frame_width`.
+    pub name: String,
+    pub scope: ParamScope,
+    pub kind: ParamKind,
+    /// Default value. For materials, the material's name as
+    /// [`Value::Text`]; the caller resolves it.
+    pub default: Value,
+    /// Allowed range of a numeric parameter, both ends included.
+    pub range: Option<(f64, f64)>,
+    /// Name shown to the user, e.g. "Hueco de obra: ancho".
+    pub label: String,
+    /// Section of the settings dialog, e.g. "Dimensiones".
+    pub section: Option<String>,
+    /// Shown in the settings dialog only when this is true.
+    pub visible_if: Option<Expr>,
+    pub line: usize,
+}
+
+/// A shared piece: a named block of geometry with arguments.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Component {
+    pub name: String,
+    pub args: Vec<String>,
+    pub body: Vec<Stmt>,
+    pub line: usize,
+}
+
+/// One value the family gives to the rest of the program.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Output {
+    pub name: String,
+    pub expr: Expr,
+    pub line: usize,
+}
+
+/// A rule the parameter values must satisfy, with the message shown when
+/// they do not.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Require {
+    pub cond: Expr,
+    pub message: String,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    /// A box between two corners, in the family's own axes.
+    Box {
+        min: [Expr; 3],
+        max: [Expr; 3],
+        material: Expr,
+        line: usize,
+    },
+    /// Places a shared piece.
+    Use {
+        name: String,
+        args: Vec<Expr>,
+        line: usize,
+    },
+    /// Repeats a block for `var` from `from` up to `to` (excluded).
+    Repeat {
+        var: String,
+        from: Expr,
+        to: Expr,
+        body: Vec<Stmt>,
+        line: usize,
+    },
+    If {
+        cond: Expr,
+        then: Vec<Stmt>,
+        otherwise: Vec<Stmt>,
+        line: usize,
+    },
+    Let {
+        name: String,
+        expr: Expr,
+        line: usize,
+    },
+    Require(Require),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expr {
+    Num(f64),
+    Str(String),
+    Bool(bool),
+    Var(String),
+    Neg(Box<Expr>),
+    Not(Box<Expr>),
+    Bin(BinOp, Box<Expr>, Box<Expr>),
+    Call(String, Vec<Expr>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
+}

@@ -7,4 +7,5 @@ publish.workspace = true
 authors.workspace = true
 
 [dependencies]
+archisim-family.workspace = true
 uuid.workspace = true

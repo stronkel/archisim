@@ -1,0 +1,39 @@
+family "Puerta abatible"
+  category door
+  host wall
+  version 1
+  description "Puerta abatible de una o dos hojas iguales, con cerco y hojas ciegas"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.80 range 0.10..20.00 label "Hueco de obra: ancho"
+    height length = 2.05 range 0.10..20.00 label "Hueco de obra: alto"
+  section "Hojas"
+    leaves integer = 1 range 1..2 label "Nº de hojas"
+  section "Cerco"
+    frame_width length = 0.05 range 0.001..2.00 label "Cerco: anchura vista"
+    frame_depth length = 0.07 range 0.001..2.00 label "Cerco: fondo"
+  section "Materiales"
+    frame_material material = "Madera de pino" label "Cerco"
+    panel_material material = "Madera de pino" label "Hoja"
+
+require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para la hoja"
+
+body
+  use door_lining(width, height, frame_width, frame_depth, frame_material)
+  if leaves == 2
+    use door_leaf(-width / 2 + frame_width, 0, height, frame_width, frame_depth, panel_material)
+    use door_leaf(0, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+  else
+    use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  operation = if leaves == 2 then "double_swing" else "single_swing"

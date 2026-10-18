@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/archisim-family",
     "crates/archisim-core",
     "crates/archisim-geom",
     "crates/archisim-ifc",
@@ -12,13 +13,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
 
 [workspace.dependencies]
 uuid = { version = "1", features = ["v4"] }
+archisim-family = { path = "crates/archisim-family" }
 archisim-core = { path = "crates/archisim-core" }
 archisim-geom = { path = "crates/archisim-geom" }
 archisim-ifc = { path = "crates/archisim-ifc" }
