@@ -33,7 +33,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.4 ✅ v0.10 | **Cotas básicas**: lineales y encadenadas, cota automática de huecos en un muro, cotas de nivel | M |
 | 1.5 ✅ v0.10 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
 | 1.6 ✅ v0.12 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
-| 1.7 ◐ v0.19 | **Importación IFC, segunda vuelta** — hechos los muros curvos de un arco (eje `IfcTrimmedCurve` sobre `IfcCircle` o `IfcIndexedPolyCurve` con `IfcArcIndex`) —; faltan los muros de varios tramos y los circulares cerrados, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
+| 1.7 ✅ v0.20 | **Importación IFC, segunda vuelta**: muros curvos (v0.19), muros de varios tramos y circulares cerrados, forjados con huecos (también dibujarlos), huecos sin carpintería (familia Hueco). Pasan a la fase 2, porque necesitan elementos que aún no existen: forjados inclinados (2.7), pilares y vigas (2.5) y locales `IfcSpace` (2.9) | M |
 | 1.8 ◐ v0.13 | **Instalación**: hecha la aplicación de Mac universal en `.dmg` con icono y asociación de ficheros; falta el instalador de Windows con icono y asociación de `.archisim` e `.ifc` | S |
 | 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
 
@@ -51,11 +51,11 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 2.2 | **Librería inicial propia**: puertas y ventanas paramétricas (con premarco, persiana y capialzado, vierteaguas, tarjas, puerta de dos hojas desiguales y hoja activa, corredera empotrada en armazón, corredera de hasta 4 hojas, **puerta plegable**), mobiliario, sanitarios, cocina; plantilla con un catálogo de tipos habituales de AD5 | L | 2.1 |
 | 2.3 ◐ v0.11 | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD — hechas; falta el recorte de muros con forjados y las prioridades editables por material | M | — |
 | 2.4 | **Cubiertas inclinadas** por faldones (pendiente, aleros, limatesas y limahoyas) y recorte de muros bajo cubierta | L | 2.3 |
-| 2.5 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam` | M | — |
+| 2.5 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam`; también importarlos | M | — |
 | 2.6 | **Escaleras** por tramos y mesetas con comprobación de huella, tabica y anchura (CTE DB-SUA); **barandillas**; **rampas** | L | 2.1 |
-| 2.7 | **Huecos en forjados** (escaleras, patinillos) y **forjados inclinados** | S | — |
+| 2.7 ◐ v0.20 | **Huecos en forjados** (hechos) y **forjados inclinados** (también importarlos) | S | — |
 | 2.8 ◐ v0.19 | **Muros curvos** (hechos, sin huecos todavía), **muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |
-| 2.9 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso | M | 1.2 |
+| 2.9 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso; también importarlos | M | 1.2 |
 | 2.10 | **Secciones y alzados** con líneas ocultas, profundidad de vista y poché por capa | L | 2.3 |
 | 2.11 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo | M | — |
 | 2.12 | **Terreno** sencillo (curvas de nivel o puntos), emplazamiento y orientación real del norte | M | — |

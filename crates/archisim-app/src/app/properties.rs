@@ -429,6 +429,16 @@ impl ArchiSimApp {
                     Method::Wand => self.slab_tool.finish(),
                 }
             }
+            if !self.slab_settings.wand {
+                ui.add_space(2.0);
+                ui.checkbox(
+                    &mut self.slab_settings.hole,
+                    "Hueco en un forjado (escalera, patinillo)",
+                )
+                .on_hover_text(
+                    "El contorno que dibujes se recorta del forjado de esta planta que lo contiene",
+                );
+            }
             ui.add_space(2.0);
             row(
                 ui,
@@ -1221,6 +1231,7 @@ impl ArchiSimApp {
                     archisim_core::WindowOperation::DoubleCasement => "Practicable 2 hojas",
                     archisim_core::WindowOperation::Sliding => "Corredera 2 hojas",
                 },
+                OpeningKind::Void => "Hueco sin carpintería",
             }
             .to_string()
         });
@@ -1386,9 +1397,35 @@ impl ArchiSimApp {
         });
         group(ui, "slab-dimensions", "Dimensiones", |ui| {
             text_row(ui, "Canto (mm)", "Del tipo", &fmt_mm(thickness));
-            text_row(ui, "Superficie", "", &fmt_area(s.area()));
+            text_row(
+                ui,
+                "Superficie",
+                "Descontados los huecos",
+                &fmt_area(s.area()),
+            );
             text_row(ui, "Vértices", "", &s.outline.len().to_string());
         });
+        if !s.holes.is_empty() {
+            group(ui, "slab-holes", "Huecos", |ui| {
+                for (k, h) in s.holes.iter().enumerate() {
+                    let area = fmt_area(archisim_core::signed_area(h).abs());
+                    row(
+                        ui,
+                        &format!("Hueco {} · {area}", k + 1),
+                        "Escalera, patinillo…",
+                        |ui, w| {
+                            if ui
+                                .add_sized([w - 8.0, 22.0], egui::Button::new("Quitar"))
+                                .clicked()
+                            {
+                                let r = self.ed.remove_slab_hole(id, k);
+                                self.report(r, "Hueco cerrado.");
+                            }
+                        },
+                    );
+                }
+            });
+        }
         group(ui, "slab-identity", "Datos de identidad", |ui| {
             id_row(ui, "GlobalId", &s.guid.to_string());
         });

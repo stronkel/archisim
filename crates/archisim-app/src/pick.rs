@@ -158,7 +158,11 @@ pub fn pick(model: &Model, level: LevelId, p: Point2, tolerance: f64) -> Option<
         .into_iter()
         .filter_map(|e| {
             let poly = outline(model, e)?;
-            let inside = contains(&poly, p);
+            // A hole of a slab is not the slab.
+            let inside = match e {
+                Element::Slab(id) => model.slab(id).is_some_and(|s| s.covers(p)),
+                _ => contains(&poly, p),
+            };
             let d = distance_to_outline(&poly, p);
             (inside || d <= tolerance).then_some((rank(&e), if inside { 0.0 } else { d }, e))
         })

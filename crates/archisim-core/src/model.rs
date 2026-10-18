@@ -285,12 +285,21 @@ pub struct Slab {
     pub outline: Vec<Point2>,
     /// Height of the top face above the level, in metres (may be negative).
     pub top_offset: f64,
+    /// Holes through the slab (stairs, shafts), each a closed outline
+    /// inside `outline`, counter-clockwise. IFC: the voids of the profile.
+    pub holes: Vec<Vec<Point2>>,
 }
 
 impl Slab {
-    /// Plan area of the outline (gross area).
+    /// Plan area of the outline less its holes (net area).
     pub fn area(&self) -> f64 {
         signed_area(&self.outline).abs()
+            - self.holes.iter().map(|h| signed_area(h).abs()).sum::<f64>()
+    }
+
+    /// Whether a point is on the slab: inside its outline and not in a hole.
+    pub fn covers(&self, p: Point2) -> bool {
+        polygon_contains(&self.outline, p) && !self.holes.iter().any(|h| polygon_contains(h, p))
     }
 }
 
@@ -344,6 +353,8 @@ impl WindowOperation {
 pub enum OpeningKind {
     Door(DoorOperation),
     Window(WindowOperation),
+    /// A rough opening with nothing in it ("hueco", Revit's wall opening).
+    Void,
 }
 
 /// A door or window type: a type of a family ("Puerta abatible") with its
@@ -392,6 +403,11 @@ impl OpeningType {
 
     pub fn is_window(&self) -> bool {
         matches!(self.kind, OpeningKind::Window(_))
+    }
+
+    /// A rough opening with no door or window in it.
+    pub fn is_void(&self) -> bool {
+        self.kind == OpeningKind::Void
     }
 }
 
@@ -603,6 +619,9 @@ pub enum ModelError {
     ArcTooTight,
     /// Doors and windows cannot be placed in curved walls yet.
     OpeningInCurvedWall,
+    /// A hole of a slab crosses its outline or another hole, or is not a
+    /// valid outline itself.
+    InvalidHole,
     /// A dimension that must be positive is not.
     NonPositive(&'static str),
     /// A coordinate or dimension is not a finite number (NaN or infinite).
@@ -669,6 +688,10 @@ impl fmt::Display for ModelError {
                 "a slab outline needs at least three points and must not cross itself"
             ),
             ModelError::ZeroLengthWall => write!(f, "a wall needs two different points"),
+            ModelError::InvalidHole => write!(
+                f,
+                "a slab hole must lie inside the slab, clear of its other holes"
+            ),
             ModelError::ArcTooTight => {
                 write!(f, "the curved wall bends too much for its thickness")
             }
@@ -1677,16 +1700,102 @@ impl Model {
                 level: spec.level,
                 outline,
                 top_offset: spec.top_offset,
+                holes: Vec::new(),
             },
         );
         Ok(id)
     }
 
-    /// Replaces a slab's outline, keeping its identity and GUID.
+    /// Replaces a slab's outline, keeping its identity and GUID. Its holes
+    /// must still be inside.
     pub fn set_slab_outline(&mut self, id: SlabId, outline: Vec<Point2>) -> Result<(), ModelError> {
         let outline = Self::normalized_outline(outline)?;
         let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        Self::check_holes(&outline, &slab.holes)?;
         slab.outline = outline;
+        Ok(())
+    }
+
+    /// Moves a slab, with its holes, by `d`.
+    pub fn move_slab(&mut self, id: SlabId, d: Vec2) -> Result<(), ModelError> {
+        finite_point(d, "slab move")?;
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        for p in slab
+            .outline
+            .iter_mut()
+            .chain(slab.holes.iter_mut().flatten())
+        {
+            *p = *p + d;
+        }
+        Ok(())
+    }
+
+    /// Replaces a slab's holes (each checked and stored counter-clockwise).
+    pub fn set_slab_holes(
+        &mut self,
+        id: SlabId,
+        holes: Vec<Vec<Point2>>,
+    ) -> Result<(), ModelError> {
+        let holes = holes
+            .into_iter()
+            .map(|h| Self::normalized_outline(h).map_err(|_| ModelError::InvalidHole))
+            .collect::<Result<Vec<_>, _>>()?;
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        Self::check_holes(&slab.outline, &holes)?;
+        slab.holes = holes;
+        Ok(())
+    }
+
+    /// Cuts a hole through a slab; returns its index.
+    pub fn add_slab_hole(&mut self, id: SlabId, hole: Vec<Point2>) -> Result<usize, ModelError> {
+        let mut holes = self
+            .slabs
+            .get(&id)
+            .ok_or(ModelError::UnknownSlab(id))?
+            .holes
+            .clone();
+        holes.push(hole);
+        let n = holes.len() - 1;
+        self.set_slab_holes(id, holes)?;
+        Ok(n)
+    }
+
+    /// Fills a hole of a slab again.
+    pub fn remove_slab_hole(&mut self, id: SlabId, index: usize) -> Result<(), ModelError> {
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        if index >= slab.holes.len() {
+            return Err(ModelError::InvalidHole);
+        }
+        slab.holes.remove(index);
+        Ok(())
+    }
+
+    /// Every hole strictly inside the outline and clear of the others.
+    fn check_holes(outline: &[Point2], holes: &[Vec<Point2>]) -> Result<(), ModelError> {
+        let crosses = |a: &[Point2], b: &[Point2]| {
+            (0..a.len()).any(|i| {
+                (0..b.len()).any(|j| {
+                    crate::math::segments_touch(
+                        a[i],
+                        a[(i + 1) % a.len()],
+                        b[j],
+                        b[(j + 1) % b.len()],
+                    )
+                })
+            })
+        };
+        for (k, h) in holes.iter().enumerate() {
+            if !h.iter().all(|p| polygon_contains(outline, *p)) || crosses(h, outline) {
+                return Err(ModelError::InvalidHole);
+            }
+            for other in &holes[k + 1..] {
+                let inside = other.iter().any(|p| polygon_contains(h, *p))
+                    || h.iter().any(|p| polygon_contains(other, *p));
+                if inside || crosses(h, other) {
+                    return Err(ModelError::InvalidHole);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1803,6 +1912,7 @@ impl Model {
                 return Err(ModelError::UnknownMaterial(m));
             }
         }
+        let void = spec.kind == OpeningKind::Void;
         for (value, what) in [
             (spec.width, "opening width"),
             (spec.height, "opening height"),
@@ -1810,7 +1920,9 @@ impl Model {
             (spec.frame_depth, "frame depth"),
         ] {
             finite(value, what)?;
-            if value <= EPSILON {
+            // A void has no frame.
+            let frame = what.starts_with("frame");
+            if value <= EPSILON && !(void && frame) {
                 return Err(ModelError::NonPositive(what));
             }
         }
@@ -1842,22 +1954,20 @@ impl Model {
             Some(b) => b.values.clone(),
             None => self.families[&id].def().defaults(ParamScope::Type),
         };
+        // Only what the family has (a void has no frame).
+        let has = |k: &str| self.families[&id].def().param(k).is_some();
         for (k, v) in [
-            ("width", spec.width),
-            ("height", spec.height),
-            ("frame_width", spec.frame_width),
-            ("frame_depth", spec.frame_depth),
+            ("width", Value::Number(spec.width)),
+            ("height", Value::Number(spec.height)),
+            ("frame_width", Value::Number(spec.frame_width)),
+            ("frame_depth", Value::Number(spec.frame_depth)),
+            ("frame_material", Value::Material(spec.frame_material.0)),
+            ("panel_material", Value::Material(spec.panel_material.0)),
         ] {
-            values.insert(k.into(), Value::Number(v));
+            if has(k) {
+                values.insert(k.into(), v);
+            }
         }
-        values.insert(
-            "frame_material".into(),
-            Value::Material(spec.frame_material.0),
-        );
-        values.insert(
-            "panel_material".into(),
-            Value::Material(spec.panel_material.0),
-        );
         if !keep {
             for (k, v) in extras {
                 values.insert(k.into(), v);
@@ -1940,6 +2050,19 @@ impl Model {
             .ok_or_else(|| missing("operation"))?;
         let kind = family::operation_from_name(&fam.def().category, operation)
             .ok_or_else(|| not_opening(format!("unknown operation «{operation}»")))?;
+        // A void has no frame or leaves: any material stands in for theirs.
+        let any_material = || {
+            self.materials
+                .keys()
+                .next()
+                .copied()
+                .ok_or_else(|| not_opening("the project has no materials".into()))
+        };
+        let void = kind == OpeningKind::Void;
+        let material_or_any = |name: &str| match material(name) {
+            Err(_) if void => any_material(),
+            other => other,
+        };
         let spec = NewOpeningType {
             name: String::new(),
             kind,
@@ -1947,8 +2070,8 @@ impl Model {
             height: number("opening_height")?,
             frame_width: number("frame_width")?,
             frame_depth: number("frame_depth")?,
-            frame_material: material("frame_material")?,
-            panel_material: material("panel_material")?,
+            frame_material: material_or_any("frame_material")?,
+            panel_material: material_or_any("panel_material")?,
         };
         self.validate_opening_type(&spec)?;
         // How each window leaf opens, if the family says (its `ifc`
@@ -1996,6 +2119,7 @@ impl Model {
         let prefix = match kind {
             OpeningKind::Door(_) => "P",
             OpeningKind::Window(_) => "V",
+            OpeningKind::Void => "H",
         };
         (1..)
             .map(|n| format!("{prefix}-{n:02}"))
@@ -2621,7 +2745,7 @@ impl Model {
         let base = self.levels.get(&level)?.elevation;
         let top = self
             .slabs_on_level(level)
-            .filter(|s| polygon_contains(&s.outline, p))
+            .filter(|s| s.covers(p))
             .map(|s| s.top_offset)
             .fold(None, |acc: Option<f64>, v| {
                 Some(acc.map_or(v, |a| a.max(v)))
@@ -2752,6 +2876,11 @@ impl Model {
                     }
                     finite(slab.top_offset, "slab top offset")?;
                     slab.outline = Self::normalized_outline(std::mem::take(&mut slab.outline))?;
+                    slab.holes = std::mem::take(&mut slab.holes)
+                        .into_iter()
+                        .map(|h| Self::normalized_outline(h).map_err(|_| ModelError::InvalidHole))
+                        .collect::<Result<_, _>>()?;
+                    Self::check_holes(&slab.outline, &slab.holes)?;
                     Ok(())
                 })
                 .map_err(fail(name))?;
@@ -2985,6 +3114,67 @@ mod tests {
             )
             .unwrap();
         assert_eq!(m.set_wall_type(id, thick), Err(ModelError::ArcTooTight));
+    }
+
+    #[test]
+    fn slab_holes() {
+        let (mut m, lvl, _) = sample();
+        let mat = m.materials().next().unwrap().id;
+        let st = m
+            .add_slab_type(
+                "Forjado",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: mat,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let p = |x, y| Point2::new(x, y);
+        let id = m
+            .add_slab(NewSlab {
+                slab_type: st,
+                level: lvl,
+                outline: vec![p(0.0, 0.0), p(10.0, 0.0), p(10.0, 8.0), p(0.0, 8.0)],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        // A stair hole, drawn clockwise: stored counter-clockwise.
+        let stair = vec![p(1.0, 1.0), p(1.0, 4.0), p(3.0, 4.0), p(3.0, 1.0)];
+        assert_eq!(m.add_slab_hole(id, stair), Ok(0));
+        let s = m.slab(id).unwrap();
+        assert!(signed_area(&s.holes[0]) > 0.0);
+        assert!((s.area() - 74.0).abs() < 1e-9);
+        assert!(!s.covers(p(2.0, 2.0)) && s.covers(p(5.0, 5.0)));
+        assert_eq!(m.floor_elevation_at(lvl, p(2.0, 2.0)), Some(0.0));
+        // Outside the slab, crossing its edge or overlapping another hole:
+        // refused.
+        for bad in [
+            vec![p(9.0, 1.0), p(11.0, 1.0), p(11.0, 2.0), p(9.0, 2.0)],
+            vec![p(2.0, 2.0), p(5.0, 2.0), p(5.0, 3.0), p(2.0, 3.0)],
+            vec![p(20.0, 1.0), p(21.0, 1.0), p(21.0, 2.0)],
+        ] {
+            assert_eq!(m.add_slab_hole(id, bad), Err(ModelError::InvalidHole));
+        }
+        m.add_slab_hole(id, vec![p(6.0, 6.0), p(7.0, 6.0), p(7.0, 7.0), p(6.0, 7.0)])
+            .unwrap();
+        // The outline cannot shrink past a hole.
+        assert_eq!(
+            m.set_slab_outline(id, vec![p(0.0, 0.0), p(5.0, 0.0), p(5.0, 8.0), p(0.0, 8.0)]),
+            Err(ModelError::InvalidHole)
+        );
+        m.remove_slab_hole(id, 1).unwrap();
+        m.set_slab_outline(id, vec![p(0.0, 0.0), p(5.0, 0.0), p(5.0, 8.0), p(0.0, 8.0)])
+            .unwrap();
+        // Saved and opened, the holes come back (and a bad one is refused).
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back.slab(id).unwrap().holes, m.slab(id).unwrap().holes);
+        let mut parts = m.to_parts();
+        parts.slabs[0]
+            .holes
+            .push(vec![p(-1.0, -1.0), p(0.5, -1.0), p(0.5, 0.5)]);
+        assert!(Model::from_parts(parts).is_err());
     }
 
     #[test]

@@ -16,6 +16,8 @@ pub struct ImportReport {
     pub slabs: usize,
     pub doors: usize,
     pub windows: usize,
+    /// Openings in walls with no door or window in them.
+    pub voids: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -46,6 +48,9 @@ impl ImportReport {
             "{} niveles, {} muros, {} forjados, {} puertas, {} ventanas",
             self.levels, self.walls, self.slabs, self.doors, self.windows
         );
+        if self.voids > 0 {
+            s.push_str(&format!(", {} huecos", self.voids));
+        }
         let n = self.skipped_count();
         if n > 0 {
             s.push_str(&format!("; {n} elementos sin importar"));
@@ -98,8 +103,13 @@ impl fmt::Display for ImportReport {
 
 impl ImportReport {
     fn summary_imported(&self) -> String {
+        let voids = if self.voids > 0 {
+            format!(", {} huecos sin carpintería", self.voids)
+        } else {
+            String::new()
+        };
         format!(
-            "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas",
+            "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}",
             self.levels, self.walls, self.slabs, self.doors, self.windows
         )
     }

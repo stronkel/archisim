@@ -58,7 +58,8 @@ impl Family {
 
     /// Whether it makes doors or windows hosted in walls.
     pub fn is_opening(&self) -> bool {
-        self.def.host == Host::Wall && matches!(self.def.category.as_str(), "door" | "window")
+        self.def.host == Host::Wall
+            && matches!(self.def.category.as_str(), "door" | "window" | "void")
     }
 }
 
@@ -84,17 +85,21 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 4] = [
+const SYSTEM_SOURCES: [&str; 5] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
+    include_str!("../families/hueco.asfam"),
 ];
 
 pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
+/// Opening with no door or window in it (IFC: an `IfcOpeningElement`
+/// alone).
+pub const VOID: &str = "Hueco";
 
 /// Expands the shared pieces of the system library in a recipe. Line ends
 /// come out as `\n` whatever the files had (a Windows checkout may give
@@ -159,6 +164,7 @@ pub fn legacy_family(kind: OpeningKind) -> (&'static str, Vec<(&'static str, Val
             ],
         ),
         OpeningKind::Window(WindowOperation::Sliding) => (SLIDING_WINDOW, vec![]),
+        OpeningKind::Void => (VOID, vec![]),
     }
 }
 
@@ -166,7 +172,7 @@ pub fn legacy_family(kind: OpeningKind) -> (&'static str, Vec<(&'static str, Val
 /// as ArchiSim exported them before families, for families that do not say.
 pub fn legacy_panels(kind: OpeningKind) -> Vec<String> {
     let list: &[&str] = match kind {
-        OpeningKind::Door(_) => &[],
+        OpeningKind::Door(_) | OpeningKind::Void => &[],
         OpeningKind::Window(WindowOperation::Fixed) => &["FIXEDCASEMENT"],
         OpeningKind::Window(WindowOperation::SingleCasement) => &["SIDEHUNGLEFTHAND"],
         OpeningKind::Window(WindowOperation::DoubleCasement) => {
@@ -207,6 +213,7 @@ pub fn operation_from_name(category: &str, name: &str) -> Option<OpeningKind> {
         ("window", "single_casement") => OpeningKind::Window(WindowOperation::SingleCasement),
         ("window", "double_casement") => OpeningKind::Window(WindowOperation::DoubleCasement),
         ("window", "sliding") => OpeningKind::Window(WindowOperation::Sliding),
+        ("void", "none") => OpeningKind::Void,
         _ => return None,
     })
 }
@@ -296,7 +303,13 @@ mod tests {
         let names: Vec<_> = fams.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(
             names,
-            [SWING_DOOR, SLIDING_DOOR, CASEMENT_WINDOW, SLIDING_WINDOW]
+            [
+                SWING_DOOR,
+                SLIDING_DOOR,
+                CASEMENT_WINDOW,
+                SLIDING_WINDOW,
+                VOID
+            ]
         );
         for (_, src) in &fams {
             let f = Family::new(crate::FamilyId(1), src.clone()).unwrap();
@@ -595,10 +608,17 @@ mod tests {
                                 let mut v = def.defaults(ParamScope::Type);
                                 v.insert("width".into(), Value::Number(w));
                                 v.insert("height".into(), Value::Number(h));
-                                v.insert("frame_width".into(), Value::Number(f));
-                                v.insert("frame_depth".into(), Value::Number(d));
-                                v.insert("frame_material".into(), Value::Material(1));
-                                v.insert("panel_material".into(), Value::Material(2));
+                                // Only the parameters the family has.
+                                for (k, x) in [
+                                    ("frame_width", Value::Number(f)),
+                                    ("frame_depth", Value::Number(d)),
+                                    ("frame_material", Value::Material(1)),
+                                    ("panel_material", Value::Material(2)),
+                                ] {
+                                    if def.param(k).is_some() {
+                                        v.insert(k.into(), x);
+                                    }
+                                }
                                 if n > 0.0 {
                                     v.insert("leaves".into(), Value::Number(n));
                                 }
@@ -615,7 +635,7 @@ mod tests {
                                             Err(e) => panic!("{} {v:?}: {e}", fam.name()),
                                         };
                                         checked += 1;
-                                        assert!(!ev.parts.is_empty());
+                                        assert!(ev.parts.is_empty() == (def.category == "void"));
                                         for p in &ev.parts {
                                             for k in 0..3 {
                                                 assert!(p.min[k] <= p.max[k]);
@@ -660,7 +680,7 @@ mod tests {
                                                 .unwrap_or_else(|e| {
                                                     panic!("{} plan: {e}", fam.name())
                                                 });
-                                            assert!(!marks.is_empty());
+                                            assert!(marks.is_empty() == (def.category == "void"));
                                             for p in mark_points(&marks) {
                                                 assert!(
                                                     p[0].abs() <= w + 0.1,

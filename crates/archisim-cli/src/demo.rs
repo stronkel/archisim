@@ -138,6 +138,11 @@ pub fn build() -> Result<Document, ModelError> {
         m.add_opening(inner(living_kitchen, 6.5 - 0.265, Hand::Left))?;
         m.add_opening(inner(bedroom_living, 4.8 - 0.265, Hand::Right))?;
         m.add_opening(inner(kitchen_room, 7.0 - 6.05, Hand::Left))?;
+        // A passage with no door into the room off the kitchen.
+        m.add_opening(NewOpening {
+            opening_type: lib.void,
+            ..inner(kitchen_room, 3.6, Hand::Left)
+        })?;
         Ok(())
     })?;
 
@@ -198,8 +203,8 @@ mod tests {
         let m = doc.model();
         assert_eq!(m.walls().count(), 7);
         assert_eq!(m.slabs().count(), 2);
-        assert_eq!(m.openings().count(), 9);
-        assert_eq!(m.opening_types().count(), 8);
+        assert_eq!(m.openings().count(), 10);
+        assert_eq!(m.opening_types().count(), 9);
         assert_eq!(doc.undo_label(), Some("Cotas"));
         assert_eq!(m.dimensions().count(), 4);
         assert_eq!(m.elevation_marks().count(), 2);

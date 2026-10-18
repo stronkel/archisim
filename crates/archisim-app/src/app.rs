@@ -87,6 +87,9 @@ pub struct SlabSettings {
     pub wand: bool,
     /// Which outline of the room the magic wand takes.
     pub contour: Contour,
+    /// The outline drawn is a hole through the slab it is drawn on, not a
+    /// new slab.
+    pub hole: bool,
 }
 
 /// Outlines a drag would give, or why it cannot be done.
@@ -680,6 +683,17 @@ impl ArchiSimApp {
     /// Builds the slab closed by the slab tool.
     fn build_slab(&mut self, outline: Vec<Point2>) {
         let s = self.slab_settings;
+        if s.hole {
+            let area = archisim_core::signed_area(&outline).abs();
+            match self.ed.add_slab_hole(outline) {
+                Ok(_) => {
+                    self.slab_tool.accept();
+                    self.say(format!("Hueco de {} en el forjado.", fmt_area(area)));
+                }
+                Err(e) => self.complain(format!("No se puede hacer el hueco: {e}.")),
+            }
+            return;
+        }
         match self.ed.add_slab(s.slab_type, outline, s.top_offset) {
             Ok(id) => {
                 self.slab_tool.accept();
@@ -1187,6 +1201,7 @@ pub fn default_slab_settings(model: &Model) -> SlabSettings {
         top_offset: 0.0,
         wand: false,
         contour: Contour::InteriorFace,
+        hole: false,
     }
 }
 

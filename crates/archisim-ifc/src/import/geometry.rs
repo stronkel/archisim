@@ -127,10 +127,23 @@ pub struct Body {
     pub clipped: bool,
 }
 
+/// A closed loop of plan points.
+pub type Ring = Vec<[f64; 2]>;
+
+/// A piece of a wall axis: a straight piece from `a` to `b`, or an arc
+/// through `mid`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AxisSeg {
+    pub a: P3,
+    pub mid: Option<P3>,
+    pub b: P3,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Extrusion {
     pub outline: Vec<[f64; 2]>,
-    pub holes: usize,
+    /// The voids of the profile, in plan.
+    pub holes: Vec<Vec<[f64; 2]>>,
     pub bottom: f64,
     pub top: f64,
 }
@@ -165,8 +178,8 @@ impl Body {
 
 /// The outline of the top of a body: the boundary of its horizontal faces
 /// looking up at its highest level (they may be split in triangles). The
-/// largest loop and how many other loops (holes) there are.
-pub fn top_outline(body: &Body, top: f64) -> Option<(Vec<[f64; 2]>, usize)> {
+/// largest loop and the other loops (holes).
+pub fn top_outline(body: &Body, top: f64) -> Option<(Ring, Vec<Ring>)> {
     use std::collections::HashMap;
     type Key = (i64, i64);
     let key = |p: P3| ((p[0] * 1e6).round() as i64, (p[1] * 1e6).round() as i64);
@@ -264,8 +277,8 @@ pub fn top_outline(body: &Body, top: f64) -> Option<(Vec<[f64; 2]>, usize)> {
             / 2.0
     };
     let best = (0..loops.len()).max_by(|&a, &b| area(&loops[a]).total_cmp(&area(&loops[b])))?;
-    let holes = loops.len() - 1;
-    Some((loops.swap_remove(best), holes))
+    let outer = loops.swap_remove(best);
+    Some((outer, loops))
 }
 
 impl<'a> Geo<'a> {
@@ -381,6 +394,141 @@ impl<'a> Geo<'a> {
             z: scale(z, s),
             origin,
         }
+    }
+
+    /// The pieces of a wall axis in its own coordinates: straight pieces
+    /// and circular arcs (with a point of each arc between its ends).
+    /// Polylines, indexed poly curves, trimmed lines and circles, whole
+    /// circles (as two halves) and composite curves of those. `None` for
+    /// other curves (ellipses, splines…).
+    pub fn axis_segments(&self, v: &Value) -> Option<Vec<AxisSeg>> {
+        self.axis_segments_depth(v, 0)
+    }
+
+    fn axis_segments_depth(&self, v: &Value, depth: usize) -> Option<Vec<AxisSeg>> {
+        if depth > 16 {
+            return None;
+        }
+        let e = self.ent(v)?;
+        let lines = |pts: &[P3]| -> Vec<AxisSeg> {
+            pts.windows(2)
+                .filter(|w| !same(w[0], w[1]))
+                .map(|w| AxisSeg {
+                    a: w[0],
+                    mid: None,
+                    b: w[1],
+                })
+                .collect()
+        };
+        // Arcs from points sampled along one circle (32 to a turn): split
+        // in two when it sweeps more than about 300° (a closed circle).
+        let arcs = |pts: &[P3]| -> Vec<AxisSeg> {
+            let n = pts.len();
+            if n < 3 {
+                return lines(pts);
+            }
+            let long = n > 28 || same(pts[0], pts[n - 1]);
+            let parts: Vec<(usize, usize)> = if long {
+                vec![(0, (n - 1) / 2), ((n - 1) / 2, n - 1)]
+            } else {
+                vec![(0, n - 1)]
+            };
+            parts
+                .into_iter()
+                .filter(|(i, j)| j > i)
+                .map(|(i, j)| AxisSeg {
+                    a: pts[i],
+                    mid: Some(pts[(i + j) / 2]),
+                    b: pts[j],
+                })
+                .collect()
+        };
+        Some(match e.kind.as_str() {
+            "IFCPOLYLINE" => {
+                let pts: Vec<P3> = e
+                    .arg(0)
+                    .as_list()
+                    .iter()
+                    .filter_map(|p| self.point(p))
+                    .collect();
+                lines(&pts)
+            }
+            "IFCINDEXEDPOLYCURVE" => {
+                let list = self.ent(e.arg(0))?;
+                let k = self.length;
+                let coords: Vec<P3> = list
+                    .arg(0)
+                    .as_list()
+                    .iter()
+                    .map(|c| {
+                        let n = c.numbers();
+                        [
+                            n.first().copied().unwrap_or(0.0) * k,
+                            n.get(1).copied().unwrap_or(0.0) * k,
+                            n.get(2).copied().unwrap_or(0.0) * k,
+                        ]
+                    })
+                    .collect();
+                let segments = e.arg(1).as_list();
+                if segments.is_empty() {
+                    return Some(lines(&coords));
+                }
+                let at = |i: f64| {
+                    let i = i as usize;
+                    (i >= 1 && i <= coords.len()).then(|| coords[i - 1])
+                };
+                let mut out = Vec::new();
+                for seg in segments {
+                    let Value::Typed(kind, inner) = seg else {
+                        return None;
+                    };
+                    let idx: Vec<P3> = inner.numbers().into_iter().filter_map(at).collect();
+                    match kind.as_str() {
+                        "IFCLINEINDEX" => out.extend(lines(&idx)),
+                        "IFCARCINDEX" if idx.len() == 3 => out.push(AxisSeg {
+                            a: idx[0],
+                            mid: Some(idx[1]),
+                            b: idx[2],
+                        }),
+                        _ => return None,
+                    }
+                }
+                out
+            }
+            "IFCCOMPOSITECURVE" | "IFCCOMPOSITECURVEONSURFACE" => {
+                let mut out = Vec::new();
+                for seg in e.arg(0).as_list() {
+                    let s = self.ent(seg)?;
+                    let same_sense = s.arg(1).as_bool().unwrap_or(true);
+                    let mut part = self.axis_segments_depth(s.arg(2), depth + 1)?;
+                    if !same_sense {
+                        part.reverse();
+                        for p in &mut part {
+                            std::mem::swap(&mut p.a, &mut p.b);
+                        }
+                    }
+                    out.extend(part);
+                }
+                out
+            }
+            "IFCTRIMMEDCURVE" => {
+                let basis = self.ent(e.arg(0))?;
+                let mut curved = false;
+                let pts = self.trimmed(e, &mut curved)?;
+                match basis.kind.as_str() {
+                    "IFCLINE" => lines(&[pts[0], pts[pts.len() - 1]]),
+                    "IFCCIRCLE" => arcs(&pts),
+                    _ => return None,
+                }
+            }
+            "IFCCIRCLE" => {
+                let mut curved = false;
+                let mut pts = self.curve(v, &mut curved)?;
+                pts.push(pts[0]);
+                arcs(&pts)
+            }
+            _ => return None,
+        })
     }
 
     /// Points of a curve in its own coordinates (polylines, indexed poly
@@ -667,7 +815,17 @@ impl<'a> Geo<'a> {
                     let z1 = top[0][2];
                     body.extrusions.push(Extrusion {
                         outline: base.iter().map(|p| [p[0], p[1]]).collect(),
-                        holes: holes.len(),
+                        holes: holes
+                            .iter()
+                            .map(|h| {
+                                h.iter()
+                                    .map(|&p| {
+                                        let q = pos.apply(p);
+                                        [q[0], q[1]]
+                                    })
+                                    .collect()
+                            })
+                            .collect(),
                         bottom: z0.min(z1),
                         top: z0.max(z1),
                     });

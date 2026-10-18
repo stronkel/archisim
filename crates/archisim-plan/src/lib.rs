@@ -678,14 +678,44 @@ fn slab_view(model: &Model, slab: &Slab, cut_plane: f64) -> SlabView {
 }
 
 fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f64, k: f64) {
-    let d = path(&slab.outline);
+    // The outline and, as more rings of the same path, its holes: filled
+    // even-odd, the holes stay empty.
+    let mut d = path(&slab.outline);
+    for h in &slab.holes {
+        d.push(' ');
+        d.push_str(&path(h));
+    }
+    // A cross in each hole (the usual mark of a hole through a floor).
+    let crosses = |s: &mut String, dashed: bool| {
+        for h in &slab.holes {
+            let (lo, hi) = bounds(h);
+            let mut x = String::new();
+            for (a, b) in [(lo, hi), (Point2::new(lo.x, hi.y), Point2::new(hi.x, lo.y))] {
+                for (p, q) in clip_segment(a, b, h) {
+                    let _ = write!(x, "M{} L{} ", pt(p), pt(q));
+                }
+            }
+            let dash = if dashed {
+                format!(r#" stroke-dasharray="{} {}""#, num(3.0 * k), num(1.5 * k))
+            } else {
+                String::new()
+            };
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"{dash}/>"#,
+                x.trim_end(),
+                num(HATCH_LINE * k)
+            );
+        }
+    };
     match slab_view(model, slab, cut_plane) {
         SlabView::Below => {
             let _ = writeln!(
                 s,
-                r#"<path d="{d}" fill="{SLAB_COVER}" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
+                r#"<path d="{d}" fill="{SLAB_COVER}" fill-rule="evenodd" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
                 num(VIEW_LINE * k)
             );
+            crosses(s, false);
         }
         SlabView::Above => {
             let _ = writeln!(
@@ -695,6 +725,7 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
                 num(3.0 * k),
                 num(1.5 * k)
             );
+            crosses(s, true);
         }
         SlabView::Cut => {
             // Filled with the structural layer (or the thickest one).
@@ -715,14 +746,15 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
             let [r, g, b] = fill;
             let _ = writeln!(
                 s,
-                r#"<path id="cut-slab-{si}" d="{d}" fill="rgb({r},{g},{b})"/>"#
+                r#"<path id="cut-slab-{si}" d="{d}" fill="rgb({r},{g},{b})" fill-rule="evenodd"/>"#
             );
             let angles: &[f64] = match pattern {
                 CutPattern::Diagonal => &[45.0],
                 CutPattern::Cross => &[45.0, 135.0],
                 _ => &[],
             };
-            let hatch = hatch_lines(&slab.outline, angles, HATCH_SPACING * k);
+            let area = archisim_geom::solid::with_holes(&slab.outline, &slab.holes);
+            let hatch = hatch_lines(&area, angles, HATCH_SPACING * k);
             if !hatch.is_empty() {
                 let _ = writeln!(
                     s,
@@ -735,8 +767,20 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
                 r#"<path d="{d}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
                 num(CUT_LINE * k)
             );
+            crosses(s, false);
         }
     }
+}
+
+/// Lowest and highest corner of the box around some points.
+fn bounds(pts: &[Point2]) -> (Point2, Point2) {
+    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
+    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for p in pts {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    (lo, hi)
 }
 
 /// Parallel hatch lines cut to a polygon, anchored to the project origin so

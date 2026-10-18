@@ -121,6 +121,9 @@ pub fn explain(e: &ModelError) -> String {
             "el contorno necesita al menos tres puntos y no puede cruzarse".into()
         }
         ModelError::ZeroLengthWall => "el muro necesita dos puntos distintos".into(),
+        ModelError::InvalidHole => {
+            "el hueco del forjado tiene que quedar dentro del forjado, sin cruzar su borde ni otros huecos".into()
+        }
         ModelError::ArcTooTight => {
             "el muro curvo se cierra demasiado para su espesor (su cara interior se quedaría sin radio)".into()
         }

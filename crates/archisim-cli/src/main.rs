@@ -146,21 +146,29 @@ fn run_import(ifc: &Path, project: &Path) -> Result<(), Box<dyn std::error::Erro
 }
 
 fn summary(model: &Model) {
-    let doors = model
-        .openings()
-        .filter(|o| {
-            model
-                .opening_type(o.opening_type)
-                .is_some_and(|t| t.is_door())
-        })
-        .count();
+    let count = |f: fn(&archisim_core::OpeningType) -> bool| {
+        model
+            .openings()
+            .filter(|o| model.opening_type(o.opening_type).is_some_and(f))
+            .count()
+    };
+    let (doors, windows, voids) = (
+        count(|t| t.is_door()),
+        count(|t| t.is_window()),
+        count(|t| t.is_void()),
+    );
+    let voids = if voids > 0 {
+        format!(", {voids} huecos")
+    } else {
+        String::new()
+    };
     println!(
-        "Proyecto «{}»: {} muros, {} forjados, {} puertas y {} ventanas en {} planta(s).",
+        "Proyecto «{}»: {} muros, {} forjados, {} puertas y {} ventanas{voids} en {} planta(s).",
         model.project_name,
         model.walls().count(),
         model.slabs().count(),
         doors,
-        model.openings().count() - doors,
+        windows,
         model.levels().len()
     );
 }

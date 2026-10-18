@@ -21,6 +21,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 **Antonio debe probar**
 1. Abre la página del repositorio en GitHub: debe salir el README nuevo y, a la derecha, «GPL-3.0 license».
+## 2026-10-18 · Bloque 20 — Importación IFC, segunda vuelta (1.7), huecos de forjado y huecos sin carpintería
+
+**Hecho** (petición de Antonio: «termina todo lo que falta de la fase 1»)
+- **Muros de varios tramos**: un `IfcWall` con eje en polilínea, o en curva compuesta de rectas y arcos, se importa como un muro por tramo, unidos en sus esquinas (un muro en L son dos muros a inglete). El primero conserva el `GlobalId`; los demás reciben uno derivado, el mismo en cada importación. Las puertas y ventanas van al tramo en el que están.
+- **Muros circulares cerrados** (eje `IfcCircle`, o un arco que da la vuelta entera): dos medias circunferencias.
+- **Muros curvos de otros programas**: también con el arco recortado por ángulos en grados (como Revit) y capas centradas en un eje que no pasa por el origen del muro (corregido de paso: el desfase de las capas se mide desde el eje, esté donde esté).
+- **Huecos de forjado** (escaleras, patinillos), nuevos en el modelo:
+  - Herramienta Forjado → «**Hueco en un forjado**» (con Polígono o Rectángulo): el contorno se recorta del forjado de la planta que lo contiene. Se rechaza lo que se sale del forjado o pisa otro hueco.
+  - Propiedades del forjado: lista de huecos con su superficie y «Quitar». La superficie descuenta los huecos. Mover y copiar el forjado lleva sus huecos. Un clic dentro del hueco no selecciona el forjado.
+  - Planta: el hueco vacío con su **aspa** (discontinua si el forjado queda por encima del plano de corte); trama recortada. 3D: el hueco atraviesa todas las capas con sus caras. IFC: huecos del perfil (`IfcArbitraryProfileDefWithVoids`), superficie y volumen brutos y netos.
+  - Importación: los huecos del perfil y los `IfcOpeningElement` que vacían el forjado (como exportan Revit y ArchiCAD).
+- **Huecos sin carpintería** («hueco», abertura de muro de Revit): familia de sistema **Hueco**, marca H-01…, solo con hueco de obra. Se coloca con la herramienta Ventana (la plantilla trae «Hueco de paso 90×210»). Vacía el muro con sus mochetas; nada dentro. IFC: el `IfcOpeningElement` solo, con su propio `GlobalId` y el tipo en `ArchiSim_Void`; se importa (de ArchiSim, como el mismo tipo; de otros programas, «Hueco 90×200» por tamaño). La vivienda de prueba tiene uno, entre la cocina y el dormitorio.
+- **Formato `.archisim` versión 6**: `holes` en los forjados; los ficheros de la versión 5 se abren tal cual.
+- **Fichero de prueba nuevo** de IfcOpenShell, `ifcopenshell_formas.ifc`, escrito entidad a entidad como lo hace Revit (IFC2X3, milímetros): muro en L, cuarto de círculo con ángulos en grados, muro redondo, forjado con escalera en el perfil y forjado con patinillo como `IfcOpeningElement`. Se importa sin nada fuera y vuelve igual.
+- El validador acepta huecos sin relleno marcados `ArchiSim_Void` (con sus cantidades).
+- Pruebas nuevas: núcleo (huecos de forjado: dentro, cruces, solapes, contorno que los deja fuera, guardar), 3D (forjado con dos huecos: volumen y piel cerrada), fichero (huecos y familia Hueco, versión 5), importación (formas de Revit, hueco sin carpintería de la casa de IfcOpenShell) y ventana con clics (hueco de forjado, rechazo, selección, mover, quitar; hueco de paso con la herramienta Ventana, ida y vuelta por IFC).
+- Pasan a la fase 2, porque necesitan elementos que aún no existen: **forjados inclinados** (2.7), **pilares y vigas** (2.5) y **locales** `IfcSpace` (2.9). Siguen en el informe de importación.
+- Versión 0.20.0.
+
+**Pendiente / limitaciones conocidas**
+- Los vértices de un hueco de forjado no se editan con el ratón: se quita y se vuelve a dibujar.
+- Los huecos sin carpintería salen en la galería y en el navegador junto a las ventanas.
+
+**Antonio debe probar**
+1. Descarga la versión del pull request «Importación IFC, segunda vuelta…» → **Artifacts** → ArchiSim-Windows o ArchiSim-Mac. Abre la vivienda de prueba: el **hueco de paso** entre la cocina y el dormitorio.
+2. **F** → Método Rectángulo → marca «Hueco en un forjado» y dibuja un rectángulo dentro de la solera: aspa en planta, agujero en 3D. Selecciona la solera: el hueco está en Propiedades con «Quitar».
+3. **V** → en la galería, «Hueco de paso 90×210», antepecho 0, clic en un tabique.
+4. Importa un IFC real de ArchiCAD o Revit con una **escalera o un patinillo** y algún **muro en L o curvo**: los huecos deben salir abiertos y los muros, partidos por tramos.
+5. Exporta y abre el IFC en ArchiCAD/Revit: el hueco de forjado y el hueco de paso deben verse abiertos.
 
 ## 2026-10-18 · Bloque 19 — Modos de construcción y muros curvos
 

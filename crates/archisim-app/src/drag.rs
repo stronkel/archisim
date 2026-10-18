@@ -300,9 +300,7 @@ fn move_selection(
     for e in selection {
         match e {
             Element::Slab(id) => {
-                let s = model.slab(*id).ok_or(ModelError::UnknownSlab(*id))?;
-                let outline = s.outline.iter().map(|p| *p + d).collect();
-                model.set_slab_outline(*id, outline)?;
+                model.move_slab(*id, d)?;
             }
             Element::Dimension(id) => {
                 let dim = model
@@ -510,6 +508,12 @@ fn copy(
                     outline: s.outline.iter().map(|p| *p + d).collect(),
                     top_offset: s.top_offset,
                 })?;
+                let holes = s
+                    .holes
+                    .iter()
+                    .map(|h| h.iter().map(|p| *p + d).collect())
+                    .collect();
+                model.set_slab_holes(new, holes)?;
                 copies.insert(Element::Slab(new));
             }
             Element::Opening(id) => {

@@ -31,6 +31,8 @@ pub struct Library {
     pub window_one_leaf: OpeningTypeId,
     pub balcony_door: OpeningTypeId,
     pub fixed_window: OpeningTypeId,
+    /// A passage with no door ("hueco"), 90 × 210.
+    pub void: OpeningTypeId,
 }
 
 /// A new, empty project: one level at ±0.00 ("Planta baja") and the
@@ -308,7 +310,20 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         vidrio,
     )?;
 
+    let void = opening(
+        m,
+        "Hueco de paso 90×210",
+        OpeningKind::Void,
+        0.90,
+        2.10,
+        0.0,
+        0.0,
+        madera,
+        madera,
+    )?;
+
     Ok(Library {
+        void,
         facade,
         partition,
         bearing_wall,

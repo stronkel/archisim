@@ -207,6 +207,9 @@ pub(crate) struct Slab {
     pub level: u64,
     pub outline: Vec<Xy>,
     pub top_offset: f64,
+    /// Holes through the slab (version 6), each an outline.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<Xy>>,
 }
 
 /// A family recipe, one text line per array item. `name` and `version`
@@ -405,6 +408,11 @@ impl ProjectFile {
                     level: s.level.0,
                     outline: s.outline.into_iter().map(xy).collect(),
                     top_offset: s.top_offset,
+                    holes: s
+                        .holes
+                        .into_iter()
+                        .map(|h| h.into_iter().map(xy).collect())
+                        .collect(),
                 })
                 .collect(),
             families: p
@@ -594,6 +602,11 @@ impl ProjectFile {
                 level: core::LevelId(s.level),
                 outline: s.outline.into_iter().map(pt).collect(),
                 top_offset: s.top_offset,
+                holes: s
+                    .holes
+                    .into_iter()
+                    .map(|h| h.into_iter().map(pt).collect())
+                    .collect(),
             });
         }
         for f in self.families {
