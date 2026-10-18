@@ -97,14 +97,17 @@ pub const FIXED_WINDOW: &str = "Ventana fija";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
 
-/// Expands the shared pieces of the system library in a recipe.
+/// Expands the shared pieces of the system library in a recipe. Line ends
+/// come out as `\n` whatever the files had (a Windows checkout may give
+/// CRLF).
 pub fn expand_shared_pieces(source: &str) -> Result<String, FamilyError> {
-    archisim_family::expand_includes(source, |name| {
+    let expanded = archisim_family::expand_includes(source, |name| {
         SHARED_PIECES
             .iter()
             .find(|(n, _)| *n == name)
             .map(|(_, text)| text.to_string())
-    })
+    })?;
+    Ok(expanded.replace('\r', ""))
 }
 
 /// The system families: `(name, recipe with its pieces expanded)`.
@@ -252,6 +255,8 @@ mod tests {
             let f = Family::new(crate::FamilyId(1), src.clone()).unwrap();
             assert!(f.is_opening(), "{}", f.name());
             assert!(!src.contains("\ninclude"));
+            // Same text on every system, whatever line ends the checkout has.
+            assert!(!src.contains('\r'));
             for p in f.def().params.iter() {
                 assert!(!p.label.is_empty() && p.section.is_some(), "{}", p.name);
             }
@@ -485,7 +490,8 @@ mod tests {
     /// The example in `docs/FAMILIAS.md` is a working recipe.
     #[test]
     fn the_documented_example_works() {
-        let doc = include_str!("../../../docs/FAMILIAS.md");
+        // Windows checkouts may turn the line ends into CRLF.
+        let doc = include_str!("../../../docs/FAMILIAS.md").replace("\r\n", "\n");
         let start = doc.find("## El lenguaje").unwrap();
         let block = &doc[start..];
         let code_start = block.find("```\n").unwrap() + 4;
