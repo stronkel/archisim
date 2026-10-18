@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 5,
+//!   "version": 6,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 5;
+pub const CURRENT_VERSION: u32 = 6;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -196,11 +196,13 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
                 v
             }
             // 4 → 5: walls may be curved (`bulge`); a wall without it is
-            // straight, as all walls of older files are.
-            4 => {
+            // straight, as all walls of older files are. 5 → 6: slabs may
+            // have holes (`holes`) and walls voids (the "Hueco" family);
+            // older files have neither.
+            4 | 5 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
-                    map.insert("version".into(), Value::from(5));
+                    map.insert("version".into(), Value::from(version + 1));
                 }
                 v
             }
@@ -315,6 +317,8 @@ fn to_families(mut value: Value) -> Result<Value, FileError> {
                     windows += 1;
                     format!("V-{windows:02}")
                 }
+                // Version 2 files had no voids.
+                OpeningKind::Void => format!("H-{:02}", doors + windows + 1),
             };
             obj.insert("mark".into(), Value::from(mark));
             obj.insert("description".into(), Value::from(""));
@@ -570,7 +574,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 5"));
+        assert!(to_string(&opened).contains("\"version\": 6"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -588,6 +592,7 @@ mod tests {
                 obj.remove(k);
             }
             let (category, operation) = match ty.kind {
+                OpeningKind::Void => unreachable!("version 2 had no voids"),
                 OpeningKind::Door(DoorOperation::SingleSwing) => ("door", "single_swing"),
                 OpeningKind::Door(DoorOperation::DoubleSwing) => ("door", "double_swing"),
                 OpeningKind::Door(DoorOperation::Sliding) => ("door", "sliding"),
@@ -736,12 +741,74 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 5", "\"version\": 3", 1)
+            .replacen("\"version\": 6", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
         assert_eq!(w.top, archisim_core::WallTop::Unconnected);
         assert_eq!(w.height, tied.height);
+    }
+
+    /// Slab holes and voids (version 6) are saved and come back; version 5
+    /// files, without either, open as they are.
+    #[test]
+    fn slab_holes_voids_and_version_5_files() {
+        let mut m = sample();
+        let slab = m.slabs().next().unwrap().clone();
+        let lo = slab
+            .outline
+            .iter()
+            .fold(Point2::new(f64::INFINITY, f64::INFINITY), |a, p| {
+                Point2::new(a.x.min(p.x), a.y.min(p.y))
+            });
+        let hole = vec![
+            lo + Point2::new(0.5, 0.5),
+            lo + Point2::new(1.5, 0.5),
+            lo + Point2::new(1.5, 1.5),
+            lo + Point2::new(0.5, 1.5),
+        ];
+        m.add_slab_hole(slab.id, hole).unwrap();
+        let free = m
+            .walls()
+            .find(|w| m.openings_in_wall(w.id).next().is_none() && w.length() > 1.0)
+            .unwrap();
+        let (wall, mid) = (free.id, free.length() / 2.0);
+        let void = m
+            .add_opening_type(archisim_core::NewOpeningType {
+                name: "Hueco 60×60".into(),
+                kind: archisim_core::OpeningKind::Void,
+                width: 0.6,
+                height: 0.6,
+                frame_width: 0.0,
+                frame_depth: 0.0,
+                frame_material: slab_material(&m),
+                panel_material: slab_material(&m),
+            })
+            .unwrap();
+        m.add_opening(archisim_core::NewOpening {
+            opening_type: void,
+            wall,
+            along: mid,
+            sill: 1.0,
+            opens_to: archisim_core::WallSide::Interior,
+            hand: archisim_core::Hand::Left,
+            setback: None,
+        })
+        .unwrap();
+        let text = to_string(&m);
+        assert!(text.contains("\"holes\""));
+        let back = from_str(&text).unwrap();
+        assert_same_project(&back, &m);
+        assert_eq!(back.slab(slab.id).unwrap().holes.len(), 1);
+        assert!(back.opening_type(void).unwrap().is_void());
+        assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
+        // Version 5 (ArchiSim 0.19): no holes, no voids.
+        let v5 = to_string(&sample()).replacen("\"version\": 6", "\"version\": 5", 1);
+        assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
+    }
+
+    fn slab_material(m: &Model) -> archisim_core::MaterialId {
+        m.materials().next().unwrap().id
     }
 
     /// Curved walls (version 5) keep their bulge; straight walls write
@@ -770,7 +837,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 5", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 6", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -782,7 +849,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 5,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 6,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -828,11 +895,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 5", "\"version\": 7"),
+            edited("\"version\": 6", "\"version\": 7"),
             Err(FileError::TooNew { version: 7 })
         ));
         assert!(matches!(
-            edited("\"version\": 5", "\"version\": 0"),
+            edited("\"version\": 6", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

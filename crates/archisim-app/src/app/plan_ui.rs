@@ -1082,6 +1082,7 @@ impl ArchiSimApp {
             painter.line_segment([to(g.t0, off), to(g.t1, off)], stroke);
         }
         match g.kind {
+            OpeningKind::Void => {}
             OpeningKind::Door(op) => {
                 use archisim_core::DoorOperation as D;
                 let face = g.swing_frame_face();

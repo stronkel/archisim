@@ -46,6 +46,7 @@ fn rect(o: &OpeningGeometry, t0: f64, t1: f64, y0: f64, y1: f64) -> [Point2; 4] 
 pub(super) fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
     let (fe, fi, fw) = (o.frame_exterior, o.frame_interior, o.frame_width);
     match o.kind {
+        OpeningKind::Void => {}
         OpeningKind::Door(op) => {
             // Jambs of the frame ("cerco").
             quad(s, rect(o, o.t0, o.t0 + fw, fi, fe), FRAME_LINE, k);

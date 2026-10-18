@@ -97,7 +97,7 @@ pub fn perimeter(poly: &[Point2]) -> f64 {
 }
 
 /// Whether two closed segments `a1-a2` and `b1-b2` touch or cross.
-fn segments_touch(a1: Point2, a2: Point2, b1: Point2, b2: Point2) -> bool {
+pub(crate) fn segments_touch(a1: Point2, a2: Point2, b1: Point2, b2: Point2) -> bool {
     let side = |p: Point2, q: Point2, r: Point2| (q - p).cross(r - p);
     let on_segment = |p: Point2, q: Point2, r: Point2| {
         r.x >= p.x.min(q.x) - EPSILON

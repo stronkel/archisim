@@ -108,12 +108,20 @@ fn check(name: &str) {
     assert_eq!(st.function, SlabFunction::BaseSlab);
     assert!(near(st.thickness(), 0.2));
 
-    // Left out: the column and the empty opening.
-    assert_eq!(report.skipped_count(), 2, "{r}");
-    assert!(
-        r.contains("pilares") && r.contains("hueco sin puerta"),
-        "{r}"
-    );
+    // The empty opening (a passage without a door): a void.
+    assert_eq!(report.voids, 1, "{r}");
+    let void = model
+        .openings()
+        .find(|o| model.opening_type(o.opening_type).unwrap().is_void())
+        .unwrap();
+    let vt = model.opening_type(void.opening_type).unwrap();
+    assert!(near(vt.width, 0.9) && near(vt.height, 2.0), "{vt:?}");
+    assert!(near(void.sill, 0.0));
+    assert_eq!(vt.mark, "H-01");
+
+    // Left out: the column.
+    assert_eq!(report.skipped_count(), 1, "{r}");
+    assert!(r.contains("pilares"), "{r}");
 
     // What was imported survives our own export.
     assert_round_trip(&model);
@@ -153,4 +161,61 @@ fn both_versions_give_the_same_building() {
             "{w:?}"
         );
     }
+}
+
+/// Walls and slabs of other shapes, written entity by entity as Revit does:
+/// an L-shaped wall comes in as two walls joined at the corner, a
+/// quarter-circle wall (angles in degrees) and a round wall (two halves) as
+/// curved walls, and the hole of a slab's profile and a shaft cut by an
+/// opening element as holes of their slabs.
+#[test]
+fn walls_and_slabs_of_other_shapes() {
+    let Imported { model, report } = import("ifcopenshell_formas.ifc");
+    let r = report.to_string();
+    assert_eq!(report.skipped_count(), 0, "{r}");
+    assert_eq!(report.walls, 5, "{r}");
+    assert!(r.contains("varios tramos"), "{r}");
+    let walls: Vec<_> = model.walls().collect();
+    // The L: two straight walls sharing the corner (6, 0), the first with
+    // the GlobalId of the IFC wall.
+    let l: Vec<_> = walls
+        .iter()
+        .filter(|w| !w.is_curved() && w.length() > 3.9)
+        .collect();
+    assert_eq!(l.len(), 2, "{walls:#?}");
+    let corner = Point2::new(6.0, 0.0);
+    assert!(l
+        .iter()
+        .all(|w| w.start.approx_eq(corner) || w.end.approx_eq(corner)));
+    assert_ne!(l[0].guid, l[1].guid);
+    let t = model.wall_type(l[0].wall_type).unwrap();
+    assert!(near(t.thickness(), 0.24));
+    // The quarter circle.
+    let q = walls
+        .iter()
+        .find(|w| w.arc().is_some_and(|a| (a.radius - 4.0).abs() < 1e-6))
+        .expect("the quarter circle");
+    let a = q.arc().unwrap();
+    assert!(a.centre.approx_eq(Point2::new(10.0, 0.0)));
+    assert!((a.sweep.abs() - std::f64::consts::FRAC_PI_2).abs() < 1e-6);
+    // The round wall: two halves of radius 1.5.
+    let round: Vec<_> = walls
+        .iter()
+        .filter(|w| w.arc().is_some_and(|a| (a.radius - 1.5).abs() < 1e-6))
+        .collect();
+    assert_eq!(round.len(), 2, "{walls:#?}");
+    assert!(near(
+        model.wall_type(round[0].wall_type).unwrap().thickness(),
+        0.2
+    ));
+    // The slabs, with their holes.
+    assert_eq!(report.slabs, 2, "{r}");
+    for s in model.slabs() {
+        assert_eq!(s.holes.len(), 1, "{s:?}");
+    }
+    let areas: Vec<f64> = model.slabs().map(|s| s.area()).collect();
+    assert!(areas.iter().any(|a| near(*a, 48.0 - 3.0)), "{areas:?}");
+    assert!(areas.iter().any(|a| near(*a, 30.0 - 0.48)), "{areas:?}");
+    // What was imported survives our own export.
+    assert_round_trip(&model);
 }

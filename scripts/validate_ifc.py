@@ -10,7 +10,8 @@ Checks:
      thickness.
   4. Every slab's layer set usage runs along Z (AXIS3) and its layers are
      ordered bottom to top, matching the extrusion.
-  5. Every opening voids a wall and is filled by exactly one door or window;
+  5. Every opening voids a wall and is filled by exactly one door or window
+     (a void, "hueco", marked with ArchiSim_Void, by none);
      every door and window fills an opening, has a type, a material
      constituent set, its common property set and quantities, and 3D
      geometry. Wall volumes are compared with their net volume, after the
@@ -113,8 +114,12 @@ def main(path: str) -> int:
         voids = o.VoidsElements
         if len(voids) != 1 or not voids[0].RelatingBuildingElement.is_a("IfcWall"):
             errors.append(f"{o.Name}: does not void exactly one wall")
-        if len(o.HasFillings) != 1:
-            errors.append(f"{o.Name}: has {len(o.HasFillings)} fillings, expected 1")
+        psets = eu.get_psets(o)
+        expected = 0 if "ArchiSim_Void" in psets else 1
+        if len(o.HasFillings) != expected:
+            errors.append(f"{o.Name}: has {len(o.HasFillings)} fillings, expected {expected}")
+        if expected == 0 and "Qto_OpeningElementBaseQuantities" not in psets:
+            errors.append(f"{o.Name}: void without its quantities")
 
     fillings = f.by_type("IfcDoor") + f.by_type("IfcWindow")
     for el in fillings:

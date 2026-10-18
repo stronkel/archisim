@@ -334,6 +334,33 @@ impl Editor {
         })
     }
 
+    /// Cuts a hole through the slab of the active level that holds the
+    /// outline (the topmost, if several do).
+    pub fn add_slab_hole(&mut self, outline: Vec<Point2>) -> EditResult<SlabId> {
+        let level = self.level;
+        let holds = |s: &archisim_core::Slab| {
+            outline
+                .iter()
+                .all(|p| crate::pick::contains(&s.outline, *p))
+        };
+        let slab = self
+            .model()
+            .slabs_on_level(level)
+            .filter(|s| holds(s))
+            .max_by(|a, b| a.top_offset.total_cmp(&b.top_offset))
+            .map(|s| s.id)
+            .ok_or("dibuja el hueco dentro de un forjado de esta planta")?;
+        self.transact("Hueco en forjado", |m| m.add_slab_hole(slab, outline))?;
+        Ok(slab)
+    }
+
+    /// Fills a hole of a slab again.
+    pub fn remove_slab_hole(&mut self, slab: SlabId, index: usize) -> EditResult {
+        self.transact("Quitar hueco de forjado", |m| {
+            m.remove_slab_hole(slab, index)
+        })
+    }
+
     /// Places a door or window in a wall.
     pub fn add_opening(&mut self, spec: NewOpening) -> EditResult<OpeningId> {
         let label = match self.model().opening_type(spec.opening_type) {

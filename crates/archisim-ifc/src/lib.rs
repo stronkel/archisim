@@ -355,7 +355,7 @@ impl<'a> Exporter<'a> {
         let lining_guid = derived_guid(&t.guid, "lining");
         let (depth, width) = (real(t.frame_depth), real(t.frame_width));
         let mut props = vec![match t.kind {
-            OpeningKind::Door(_) => self.w.add(format!(
+            OpeningKind::Door(_) | OpeningKind::Void => self.w.add(format!(
                 "IFCDOORLININGPROPERTIES({},$,'Marco',$,{depth},{width},$,$,$,$,$,$,$,$,$,$,$)",
                 string(lining_guid.as_str())
             )),
@@ -384,6 +384,7 @@ impl<'a> Exporter<'a> {
         }
         let props = list(&props);
         let (ty, constituents) = match t.kind {
+            OpeningKind::Void => unreachable!("voids have no IFC type"),
             OpeningKind::Door(op) => (
                 self.w.add(format!(
                     "IFCDOORTYPE({},$,{},$,$,{props},$,$,$,.DOOR.,.{}.,.F.,$)",
@@ -426,7 +427,9 @@ impl<'a> Exporter<'a> {
     }
 
     /// Writes the opening that voids `wall` and the door or window filling
-    /// it. Returns the door or window.
+    /// it. Returns the door or window; a void ("hueco", no door or window)
+    /// is the `IfcOpeningElement` alone, with the element's own GUID and
+    /// its type in `ArchiSim_Void`.
     #[allow(clippy::too_many_arguments)]
     fn opening(
         &mut self,
@@ -439,8 +442,9 @@ impl<'a> Exporter<'a> {
         wall_top: f64,
         is_external: bool,
         tag: u64,
-    ) -> Ref {
+    ) -> Option<Ref> {
         let (w, h) = (og.width(), og.height());
+        let is_void = t.is_void();
         let mid = (og.t0 + og.t1) / 2.0;
 
         // The void: the rough opening through the whole wall thickness. It
@@ -457,7 +461,11 @@ impl<'a> Exporter<'a> {
         } else {
             0.0
         };
-        let void_guid = derived_guid(guid, "opening");
+        let void_guid = if is_void {
+            guid.clone()
+        } else {
+            derived_guid(guid, "opening")
+        };
         let loc = self.point3(mid, 0.0, og.sill - wall_base);
         let void_pl = self.placement(Some(wall_pl), loc, None);
         let outline = self.polyline(
@@ -486,10 +494,25 @@ impl<'a> Exporter<'a> {
         let shape = self
             .w
             .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+        let void_name = if is_void {
+            format!("{} {tag}", t.name)
+        } else {
+            format!("Hueco {}", t.name)
+        };
         let void = self.w.add(format!(
-            "IFCOPENINGELEMENT({},$,{},$,$,{void_pl},{shape},$,.OPENING.)",
+            "IFCOPENINGELEMENT({},$,{},$,{},{void_pl},{shape},{},.OPENING.)",
             string(void_guid.as_str()),
-            string(&format!("Hueco {}", t.name))
+            string(&void_name),
+            if is_void {
+                string(&t.name)
+            } else {
+                "$".to_string()
+            },
+            if is_void {
+                string(&tag.to_string())
+            } else {
+                "$".to_string()
+            }
         ));
         self.w.add(format!(
             "IFCRELVOIDSELEMENT({},$,$,$,{wall},{void})",
@@ -509,6 +532,30 @@ impl<'a> Exporter<'a> {
                 ),
             ],
         );
+        if is_void {
+            // Nothing fills it. ArchiSim's own data: its type, so it comes
+            // back as the same type.
+            let props = [
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('TypeName',$,IFCLABEL({}),$)",
+                    string(&t.name)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('TypeGuid',$,IFCIDENTIFIER({}),$)",
+                    string(t.guid.as_str())
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Mark',$,IFCIDENTIFIER({}),$)",
+                    string(&t.mark)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({}),$)",
+                    boolean(is_external)
+                )),
+            ];
+            self.pset(void, &void_guid, "ArchiSim_Void", &props);
+            return None;
+        }
 
         // The door or window, in the frame plane, its Y axis towards the
         // side it opens to.
@@ -598,6 +645,7 @@ impl<'a> Exporter<'a> {
                 }
                 false
             }
+            OpeningKind::Void => unreachable!("a void returns before its filling"),
         };
         let rep = self.w.add(format!(
             "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',{})",
@@ -678,7 +726,7 @@ impl<'a> Exporter<'a> {
                 ("Area", "IFCQUANTITYAREA", w * h),
             ],
         );
-        filling
+        Some(filling)
     }
 
     fn rel_aggregates(&mut self, guid: GlobalId, parent: Ref, children: &[Ref]) {
@@ -846,7 +894,8 @@ impl<'a> Exporter<'a> {
 
         // Door and window types.
         let mut opening_type_refs: BTreeMap<OpeningTypeId, Ref> = BTreeMap::new();
-        for t in model.opening_types() {
+        // Voids have no IFC type: the opening element is all there is.
+        for t in model.opening_types().filter(|t| !t.is_void()) {
             let ty = self.opening_type(&materials, t);
             opening_type_refs.insert(t.id, ty);
         }
@@ -1007,8 +1056,10 @@ impl<'a> Exporter<'a> {
                     wtype.function == WallFunction::Exterior,
                     o.id.0,
                 );
-                contained.entry(wall.level).or_default().push(filling);
-                openings_by_type.entry(otype.id).or_default().push(filling);
+                if let Some(filling) = filling {
+                    contained.entry(wall.level).or_default().push(filling);
+                    openings_by_type.entry(otype.id).or_default().push(filling);
+                }
             }
 
             let footprint = match &path {
@@ -1048,9 +1099,17 @@ impl<'a> Exporter<'a> {
             let loc = self.point3(0.0, 0.0, slab.top_offset - thickness);
             let pl = self.placement(Some(storey_pl), loc, None);
             let outline = self.polyline(&slab.outline, true);
-            let profile = self
-                .w
-                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+            let profile = if slab.holes.is_empty() {
+                self.w
+                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"))
+            } else {
+                // Holes (stairs, shafts): the voids of the profile.
+                let inner: Vec<Ref> = slab.holes.iter().map(|h| self.polyline(h, true)).collect();
+                self.w.add(format!(
+                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outline},{})",
+                    list(&inner)
+                ))
+            };
             let solid_pl = self
                 .w
                 .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
@@ -1094,6 +1153,7 @@ impl<'a> Exporter<'a> {
                 stype.is_load_bearing(),
             );
             let area = slab.area();
+            let gross = signed_area(&slab.outline).abs();
             let perim = perimeter(&slab.outline);
             self.quantities(
                 sl,
@@ -1102,9 +1162,9 @@ impl<'a> Exporter<'a> {
                 &[
                     ("Width", "IFCQUANTITYLENGTH", thickness),
                     ("Perimeter", "IFCQUANTITYLENGTH", perim),
-                    ("GrossArea", "IFCQUANTITYAREA", area),
+                    ("GrossArea", "IFCQUANTITYAREA", gross),
                     ("NetArea", "IFCQUANTITYAREA", area),
-                    ("GrossVolume", "IFCQUANTITYVOLUME", area * thickness),
+                    ("GrossVolume", "IFCQUANTITYVOLUME", gross * thickness),
                     ("NetVolume", "IFCQUANTITYVOLUME", area * thickness),
                 ],
             );

@@ -1662,3 +1662,80 @@ fn construction_modes_by_clicks() {
     h.frame();
     assert!(h.app.plan.is_some());
 }
+
+/// A stair hole cut through a slab with the slab tool, the slab moved with
+/// its hole, the hole closed again from Properties; and a void ("hueco")
+/// placed with the window tool.
+#[test]
+fn slab_holes_and_voids_by_clicks() {
+    use crate::slab_tool::SlabMode;
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("f");
+    h.app.slab_tool.set_mode(SlabMode::Rectangle);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(12.0, 9.0));
+    let slab = h.model().slabs().next().unwrap().id;
+    // The hole: same tool, «Hueco» ticked.
+    h.app.slab_settings.hole = true;
+    h.click_at(p(2.0, 2.0));
+    h.click_at(p(3.0, 5.0));
+    let s = h.model().slab(slab).unwrap().clone();
+    assert_eq!(s.holes.len(), 1, "{:?}", h.app.message);
+    assert!((s.area() - (108.0 - 3.0)).abs() < 1e-9);
+    assert_eq!(h.app.ed.undo_label(), Some("Hueco en forjado"));
+    // Across the edge of the slab: refused.
+    h.click_at(p(11.5, 2.0));
+    h.click_at(p(12.5, 3.0));
+    let msg = h.app.message.clone().unwrap();
+    assert!(
+        msg.error && msg.text.contains("dentro de un forjado"),
+        "{msg:?}"
+    );
+    h.app.slab_settings.hole = false;
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    // A click in the hole selects nothing; on the slab, the slab.
+    h.click_at(p(2.5, 3.5));
+    assert!(!h.app.ed.selection.contains(&Element::Slab(slab)));
+    h.click_at(p(6.5, 7.0));
+    assert!(h.app.ed.selection.contains(&Element::Slab(slab)));
+    // Moving the slab takes its hole along.
+    h.drag(p(6.5, 7.0), p(6.5, 8.0));
+    let moved = h.model().slab(slab).unwrap().clone();
+    assert!(
+        (moved.holes[0][0].y - s.holes[0][0].y - 1.0).abs() < 1e-9,
+        "{:?}",
+        h.app.message
+    );
+    h.app.ed.undo();
+    // Closing it again.
+    h.app.ed.remove_slab_hole(slab, 0).unwrap();
+    assert!(h.model().slab(slab).unwrap().holes.is_empty());
+
+    // A void in the north façade, with the window tool.
+    let void = h
+        .model()
+        .opening_types()
+        .find(|t| t.is_void())
+        .expect("the template has a void")
+        .id;
+    h.type_text("v");
+    h.app.window_settings.opening_type = void;
+    h.app.window_settings.sill = 0.0;
+    h.click_at(p(6.0, 8.8));
+    let o = h
+        .model()
+        .openings()
+        .find(|o| o.opening_type == void)
+        .cloned()
+        .expect("a void");
+    assert!((o.along - 6.0).abs() < 1e-9 && o.sill == 0.0, "{o:?}");
+    // It exports as an opening alone, and comes back the same.
+    let ifc = archisim_ifc::export_ifc(h.model(), &Default::default());
+    assert!(ifc.contains("'ArchiSim_Void'"));
+    let back = archisim_ifc::import_ifc(&ifc).unwrap();
+    let diffs = archisim_ifc::differences(h.model(), &back.model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

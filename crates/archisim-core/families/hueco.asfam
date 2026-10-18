@@ -1,0 +1,25 @@
+family "Hueco"
+  category void
+  host wall
+  version 1
+  description "Hueco de obra sin carpintería (paso, ventanal sin cerrar, hueco de instalaciones): vacía el muro y no lo rellena"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.90 range 0.05..20.00 label "Hueco de obra: ancho"
+    height length = 2.10 range 0.05..20.00 label "Hueco de obra: alto"
+
+# Sin cerco ni hojas: el muro queda interrumpido con sus mochetas, y
+# nada dentro del hueco.
+plan 1:50
+  let nada = 0
+
+plan 1:100
+  let nada = 0
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = 0
+  frame_depth = 0
+  operation = "none"

@@ -45,7 +45,7 @@ use archisim_core::{
 
 use crate::step_read::{self, Entity, ParseError, StepFile, Value};
 pub use compare::differences;
-use geometry::{Body, Geo, Xf, P3};
+use geometry::{AxisSeg, Body, Geo, Xf, P3};
 pub use report::ImportReport;
 use report::{class_name, PART_CLASSES, UNSUPPORTED_CLASSES};
 
@@ -172,6 +172,7 @@ struct WallFrame {
     top: f64,
     exterior: f64,
     thickness: f64,
+    curved: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -217,7 +218,8 @@ struct Importer<'a> {
     type_names: HashSet<String>,
     /// GUIDs to restore once the model is built.
     guids: GuidPlan,
-    walls: HashMap<u64, WallFrame>,
+    /// The walls made from each IFC wall (one per piece of its axis).
+    walls: HashMap<u64, Vec<WallFrame>>,
 }
 
 #[derive(Default)]
@@ -962,9 +964,9 @@ impl<'a> Importer<'a> {
 
     // ---- Shapes -----------------------------------------------------
 
-    /// The axis curve (element coordinates) and the body (world) of a
-    /// product.
-    fn shape(&self, e: &Entity, xf: &Xf) -> (Option<(Vec<P3>, bool)>, Body) {
+    /// The axis (element coordinates: `Some(None)` if it is a curve
+    /// ArchiSim cannot read) and the body (world) of a product.
+    fn shape(&self, e: &Entity, xf: &Xf) -> (Option<Option<Vec<AxisSeg>>>, Body) {
         let mut body = Body::default();
         let mut axis = None;
         let Some(shape) = self.deref(e.arg(6)) else {
@@ -977,10 +979,7 @@ impl<'a> Importer<'a> {
             match id {
                 "Axis" => {
                     if let Some(item) = rep.arg(3).as_list().first() {
-                        let mut curved = false;
-                        if let Some(pts) = self.geo.curve(item, &mut curved) {
-                            axis = Some((pts, curved));
-                        }
+                        axis = Some(self.geo.axis_segments(item).filter(|s| !s.is_empty()));
                     }
                 }
                 "Body" | ""
@@ -1005,64 +1004,89 @@ impl<'a> Importer<'a> {
 
     // ---- Walls ------------------------------------------------------
 
-    fn read_wall(&mut self, id: u64) -> Result<WallCandidate, &'static str> {
+    /// The walls of an IFC wall: one per piece of its axis (a straight
+    /// line or a circular arc; a closed circle is two halves).
+    fn read_wall(&mut self, id: u64) -> Result<Vec<WallCandidate>, &'static str> {
         let e = self.ent(id).ok_or("no existe")?;
         let xf = self.geo.placement(e.arg(5));
         let (axis, body) = self.shape(e, &xf);
         if body.is_empty() {
             return Err("sin geometría que ArchiSim sepa leer");
         }
-        let (lo, hi) = body.bounds().ok_or("sin geometría")?;
-        let u_hint = Point2::new(xf.x[0], xf.x[1]);
-        let line_y; // local Y of the line a–b
-        let mut bulge = 0.0;
-        let (mut a, mut b) = match &axis {
-            Some((pts, true)) => {
-                // One arc: the circle through its ends and middle point,
-                // which every other point must follow.
-                let w: Vec<Point2> = pts.iter().map(|p| p2(xf.apply(*p))).collect();
-                let (pa, pb) = (w[0], w[w.len() - 1]);
-                if w.len() < 3 || pa.approx_eq(pb) {
-                    return Err("muro circular cerrado (aún no se importa)");
-                }
-                let mid = w[w.len() / 2];
-                let k = Arc::bulge_through(pa, mid, pb).ok_or("muro curvo sin arco")?;
-                let arc = Arc::from_bulge(pa, pb, k).ok_or("muro curvo sin arco")?;
-                let off_circle = w
-                    .iter()
-                    .any(|p| (p.distance(arc.centre) - arc.radius).abs() > 1e-3);
-                if off_circle {
-                    return Err("muro de varios tramos o curvas (aún no se importan)");
-                }
-                bulge = k;
-                line_y = pts[0][1];
-                (pa, pb)
-            }
-            Some((pts, false)) => {
-                let first = pts[0];
-                let last = pts[pts.len() - 1];
-                let (pa, pb) = (p2(xf.apply(first)), p2(xf.apply(last)));
-                let d = pb - pa;
-                let len = d.length();
-                for p in &pts[1..pts.len() - 1] {
-                    let q = p2(xf.apply(*p)) - pa;
-                    if len > 0.0 && (q.cross(d) / len).abs() > 1e-3 {
-                        return Err("muro de varios tramos (aún no se importan)");
+        // (start, end, bulge, local Y of the start), in plan.
+        let mut pieces: Vec<(Point2, Point2, f64, f64)> = Vec::new();
+        match axis {
+            Some(None) => return Err("eje de una curva que ArchiSim no sabe leer"),
+            Some(Some(segs)) => {
+                for s in segs {
+                    let (pa, pb) = (p2(xf.apply(s.a)), p2(xf.apply(s.b)));
+                    let bulge = s
+                        .mid
+                        .and_then(|m| Arc::bulge_through(pa, p2(xf.apply(m)), pb))
+                        .unwrap_or(0.0);
+                    // Straight pieces in line with the previous one join it.
+                    if let Some(last) = pieces.last_mut() {
+                        let d = last.1 - last.0;
+                        let in_line = bulge == 0.0
+                            && last.2 == 0.0
+                            && last.1.approx_eq(pa)
+                            && d.length() > 0.0
+                            && ((pb - last.0).cross(d) / d.length()).abs() <= 1e-3
+                            && (pb - last.0).dot(d) > 0.0;
+                        if in_line {
+                            last.1 = pb;
+                            continue;
+                        }
                     }
+                    pieces.push((pa, pb, bulge, s.a[1]));
                 }
-                line_y = first[1];
-                (pa, pb)
             }
             None => {
+                let u_hint = Point2::new(xf.x[0], xf.x[1]);
                 let u = u_hint.normalized().ok_or("muro sin dirección en planta")?;
                 let o = p2(xf.origin);
                 let ts: Vec<f64> = body.all_points().map(|p| (p2(p) - o).dot(u)).collect();
                 let t0 = ts.iter().copied().fold(f64::INFINITY, f64::min);
                 let t1 = ts.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                line_y = 0.0;
-                (o + u * t0, o + u * t1)
+                pieces.push((o + u * t0, o + u * t1, 0.0, 0.0));
             }
-        };
+        }
+        if pieces.is_empty() {
+            return Err("muro sin eje");
+        }
+        if pieces.len() > 1 {
+            self.report.warn(
+                "Muros de varios tramos (o circulares cerrados): se importan como un muro por tramo, unidos; el primero conserva el GlobalId.",
+            );
+        }
+        let n = pieces.len();
+        pieces
+            .into_iter()
+            .enumerate()
+            .map(|(k, (a, b, bulge, line_y))| {
+                self.wall_piece(id, &xf, &body, a, b, bulge, line_y, k, n)
+            })
+            .collect()
+    }
+
+    /// One wall from a piece of an IFC wall's axis: its layers from the
+    /// layer set (or the body), its type and level.
+    #[allow(clippy::too_many_arguments)]
+    fn wall_piece(
+        &mut self,
+        id: u64,
+        xf: &Xf,
+        body: &Body,
+        mut a: Point2,
+        mut b: Point2,
+        bulge: f64,
+        line_y: f64,
+        piece: usize,
+        pieces: usize,
+    ) -> Result<WallCandidate, &'static str> {
+        let e = self.ent(id).ok_or("no existe")?;
+        let xf = *xf;
+        let (lo, hi) = body.bounds().ok_or("sin geometría")?;
         a = snap2(a);
         b = snap2(b);
         let length = a.distance(b);
@@ -1081,15 +1105,26 @@ impl<'a> Importer<'a> {
                 "Muros recortados (por cubiertas u otros elementos): se importan rectos, con su altura máxima.",
             );
         }
-        // Across the axis, left positive (radially for a curved wall).
+        // Across the axis, left positive (radially for a curved wall), of
+        // the points of the body beside this piece.
         let arc = Arc::from_bulge(a, b, bulge);
-        let across: Vec<f64> = body
-            .all_points()
-            .map(|p| match &arc {
-                Some(arc) => arc.project(p2(p)).1,
-                None => (p2(p) - a).dot(n),
-            })
-            .collect();
+        let beside = |p: Point2| -> Option<f64> {
+            match &arc {
+                Some(arc) => {
+                    let (f, off) = arc.project(p);
+                    let inside = arc.point(f, off).distance(p) < 1e-6;
+                    (pieces == 1 || inside).then_some(off)
+                }
+                None => {
+                    let t = (p - a).dot(u);
+                    (pieces == 1 || (t > -1e-6 && t < length + 1e-6)).then_some((p - a).dot(n))
+                }
+            }
+        };
+        let across: Vec<f64> = body.all_points().filter_map(|p| beside(p2(p))).collect();
+        if across.is_empty() {
+            return Err("tramo de muro sin geometría junto a él");
+        }
         let s_lo = across.iter().copied().fold(f64::INFINITY, f64::min);
         let s_hi = across.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
@@ -1107,7 +1142,9 @@ impl<'a> Importer<'a> {
             let ly = Point2::new(xf.y[0], xf.y[1]);
             let sign = if ly.dot(n) < 0.0 { -1.0 } else { 1.0 };
             let (positive, offset) = match set.usage {
-                Some(u) => u,
+                // The offset is from the axis, wherever the axis lies in
+                // the element's coordinates.
+                Some((p, off)) => (p, off + line_y),
                 None => {
                     // No usage: fit the layers to the body.
                     let fit_lo = if (s_hi - s_lo - total).abs() < 0.005 {
@@ -1179,9 +1216,17 @@ impl<'a> Importer<'a> {
                 .unwrap_or_default();
         }
         let level = self.level_of(id, base);
+        // The first piece keeps the wall's GlobalId; the others get one made
+        // from it, the same on every import.
+        let base_guid = e.arg(0).as_str().unwrap_or("").to_string();
+        let guid = if piece == 0 {
+            base_guid
+        } else {
+            piece_guid(&base_guid, piece)
+        };
         Ok(WallCandidate {
             ifc: id,
-            guid: e.arg(0).as_str().unwrap_or("").to_string(),
+            guid,
             a,
             b,
             bulge,
@@ -1200,7 +1245,7 @@ impl<'a> Importer<'a> {
         for kind in ["IFCWALL", "IFCWALLSTANDARDCASE", "IFCWALLELEMENTEDCASE"] {
             for id in self.file.of_kind(kind) {
                 match self.read_wall(id) {
-                    Ok(c) => candidates.push(c),
+                    Ok(c) => candidates.extend(c),
                     Err(why) => self.report.skip("muros", why),
                 }
             }
@@ -1288,21 +1333,19 @@ impl<'a> Importer<'a> {
                     self.report.walls += 1;
                     self.guids.walls.push((wid, c.guid));
                     let length = a.distance(b);
-                    self.walls.insert(
-                        c.ifc,
-                        WallFrame {
-                            id: wid,
-                            level_elevation: elevation,
-                            origin: a,
-                            u: (b - a) * (1.0 / length),
-                            n,
-                            length,
-                            base: c.base,
-                            top: c.top,
-                            exterior: exterior_face,
-                            thickness,
-                        },
-                    );
+                    self.walls.entry(c.ifc).or_default().push(WallFrame {
+                        id: wid,
+                        level_elevation: elevation,
+                        origin: a,
+                        u: (b - a) * (1.0 / length),
+                        n,
+                        length,
+                        base: c.base,
+                        top: c.top,
+                        exterior: exterior_face,
+                        thickness,
+                        curved: c.bulge != 0.0,
+                    });
                 }
                 Err(e) => self.report.skip("muros", explain(&e)),
             }
@@ -1394,7 +1437,7 @@ impl<'a> Importer<'a> {
             .iter()
             .max_by(|a, b| area(&a.outline).total_cmp(&area(&b.outline)))
         {
-            (x.outline.clone(), x.holes, x.bottom, x.top)
+            (x.outline.clone(), x.holes.clone(), x.bottom, x.top)
         } else {
             let (lo, hi) = body.bounds().ok_or("sin geometría")?;
             match geometry::top_outline(&body, hi[2]) {
@@ -1408,10 +1451,21 @@ impl<'a> Importer<'a> {
                 }
             }
         };
-        if holes > 0 || self.ix.voids.contains_key(&id) {
-            self.report.warn(
-                "Huecos en forjados (patios, escaleras, instalaciones): se importan cerrados.",
-            );
+        // Holes: the voids of the profile, and the openings that void the
+        // slab (how Revit and ArchiCAD export shafts and stairs), by their
+        // outline in plan.
+        let mut hole_outlines: Vec<Vec<Point2>> = holes
+            .iter()
+            .map(|h| clean_outline(h))
+            .filter(|h| h.len() >= 3)
+            .collect();
+        for void in self.ix.voids.get(&id).cloned().unwrap_or_default() {
+            match self.void_outline(void) {
+                Some(h) => hole_outlines.push(h),
+                None => self.report.warn(
+                    "Huecos de forjado de forma que ArchiSim no sabe leer: se importan cerrados.",
+                ),
+            }
         }
         let outline = clean_outline(&outline);
         if outline.len() < 3 {
@@ -1523,11 +1577,57 @@ impl<'a> Importer<'a> {
                 top_offset: snap(top - elevation),
             })
             .map_err(|e| explain(&e))?;
+        if !hole_outlines.is_empty() {
+            // All at once if they fit; else one by one, keeping those that do.
+            if self
+                .model
+                .set_slab_holes(sid, hole_outlines.clone())
+                .is_err()
+            {
+                let mut dropped = 0;
+                for h in hole_outlines {
+                    if self.model.add_slab_hole(sid, h).is_err() {
+                        dropped += 1;
+                    }
+                }
+                if dropped > 0 {
+                    self.report.warn(
+                        "Huecos de forjado que se salen del forjado o se pisan con otros: se importan cerrados.",
+                    );
+                }
+            }
+        }
         self.report.slabs += 1;
         self.guids
             .slabs
             .push((sid, e.arg(0).as_str().unwrap_or("").to_string()));
         Ok(())
+    }
+
+    /// The outline in plan of an opening element that voids a slab: its
+    /// vertical extrusion, or the box of its body.
+    fn void_outline(&self, void: u64) -> Option<Vec<Point2>> {
+        let e = self.ent(void)?;
+        let xf = self.geo.placement(e.arg(5));
+        let (_, body) = self.shape(e, &xf);
+        if let Some(x) = body
+            .extrusions
+            .iter()
+            .max_by(|a, b| area(&a.outline).total_cmp(&area(&b.outline)))
+        {
+            let o = clean_outline(&x.outline);
+            return (o.len() >= 3).then_some(o);
+        }
+        let (lo, hi) = body.bounds()?;
+        if hi[0] - lo[0] < 1e-3 || hi[1] - lo[1] < 1e-3 {
+            return None;
+        }
+        Some(vec![
+            snap2(Point2::new(lo[0], lo[1])),
+            snap2(Point2::new(hi[0], lo[1])),
+            snap2(Point2::new(hi[0], hi[1])),
+            snap2(Point2::new(lo[0], hi[1])),
+        ])
     }
 
     fn slab_type(
@@ -1567,8 +1667,10 @@ impl<'a> Importer<'a> {
             let voids = self.ix.voids.get(&wall).cloned().unwrap_or_default();
             for void in voids {
                 let Some(&filling) = self.ix.fills.get(&void) else {
-                    self.report
-                        .skip("huecos", "hueco sin puerta ni ventana (aún no se importan)");
+                    // An opening with nothing in it: a void ("hueco").
+                    if let Err(why) = self.import_void(wall, void) {
+                        self.report.skip("huecos", why);
+                    }
                     continue;
                 };
                 placed.insert(filling);
@@ -1609,18 +1711,143 @@ impl<'a> Importer<'a> {
         }
     }
 
+    /// The wall (piece of an IFC wall) an opening's body lies in: the
+    /// straight one whose span holds its middle, nearest to its axis.
+    fn frame_of(&self, wall: u64, body: &Body) -> Option<&WallFrame> {
+        let frames = self.walls.get(&wall)?;
+        let pts: Vec<Point2> = body.all_points().map(p2).collect();
+        if pts.is_empty() {
+            return frames.first();
+        }
+        let c = pts.iter().fold(Point2::new(0.0, 0.0), |s, p| s + *p) * (1.0 / pts.len() as f64);
+        frames
+            .iter()
+            .filter(|f| !f.curved)
+            .filter(|f| {
+                let t = (c - f.origin).dot(f.u);
+                t > -1e-3 && t < f.length + 1e-3
+            })
+            .min_by(|a, b| {
+                let d = |f: &WallFrame| (c - f.origin).dot(f.n).abs();
+                d(a).total_cmp(&d(b))
+            })
+            .or_else(|| frames.first())
+    }
+
+    /// The rough opening of an opening element in wall coordinates:
+    /// along the wall and heights, clipped to the wall.
+    fn rough_opening(&self, wall: u64, body: &Body) -> Result<(f64, f64, f64, f64), String> {
+        let frame = self
+            .frame_of(wall, body)
+            .ok_or("su muro no se ha importado")?;
+        let (mut t0, mut t1, mut z0, mut z1) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
+        for p in body.all_points() {
+            let t = (p2(p) - frame.origin).dot(frame.u);
+            t0 = t0.min(t);
+            t1 = t1.max(t);
+            z0 = z0.min(p[2]);
+            z1 = z1.max(p[2]);
+        }
+        let (t0, t1) = (snap(t0.max(0.0)), snap(t1.min(frame.length)));
+        let (z0, z1) = (snap(z0.max(frame.base)), snap(z1.min(frame.top)));
+        if snap(t1 - t0) < 0.05 || snap(z1 - z0) < 0.05 {
+            return Err("hueco fuera del muro o demasiado pequeño".into());
+        }
+        Ok((t0, t1, z0, z1))
+    }
+
+    /// An opening element in a wall with no door or window in it: a void
+    /// of the "Hueco" family, of its size (or of the type ArchiSim wrote).
+    fn import_void(&mut self, wall: u64, void: u64) -> Result<(), String> {
+        let ve = self.ent(void).ok_or("hueco inexistente")?;
+        let (_, body) = self.shape(ve, &self.geo.placement(ve.arg(5)));
+        if body.is_empty() {
+            return Err("hueco sin geometría".into());
+        }
+        let (t0, t1, z0, z1) = self.rough_opening(wall, &body)?;
+        let (width, height) = (snap(t1 - t0), snap(z1 - z0));
+        let frame = self
+            .frame_of(wall, &body)
+            .ok_or("su muro no se ha importado")?;
+        let (wall_id, level_elevation) = (frame.id, frame.level_elevation);
+        let guid = ve.arg(0).as_str().unwrap_or("").to_string();
+        let own_name = self
+            .property(void, "ArchiSim_Void", "TypeName")
+            .and_then(Value::as_str)
+            .map(String::from);
+        let own_guid = self
+            .property(void, "ArchiSim_Void", "TypeGuid")
+            .and_then(Value::as_str)
+            .map(String::from);
+        let name = own_name
+            .clone()
+            .unwrap_or_else(|| format!("Hueco {:.0}×{:.0}", width * 100.0, height * 100.0));
+        let any = self.fallback_material("frame");
+        let key = (
+            None,
+            format!("void {:?}", own_guid),
+            [
+                (width * 1e6).round() as i64,
+                (height * 1e6).round() as i64,
+                0,
+                0,
+            ],
+            0,
+            0,
+        );
+        let opening_type = match self.opening_types.get(&key) {
+            Some(&t) => t,
+            None => {
+                let unique = self.unique_name(&name);
+                let t = self
+                    .model
+                    .add_opening_type(NewOpeningType {
+                        name: unique,
+                        kind: OpeningKind::Void,
+                        width,
+                        height,
+                        frame_width: 0.0,
+                        frame_depth: 0.0,
+                        frame_material: any,
+                        panel_material: any,
+                    })
+                    .map_err(|e| format!("tipo no válido ({})", explain(&e)))?;
+                if let Some(g) = own_guid {
+                    self.guids.opening_types.push((t, g));
+                }
+                self.opening_types.insert(key, t);
+                self.report.opening_types += 1;
+                t
+            }
+        };
+        let oid = self
+            .model
+            .add_opening(NewOpening {
+                opening_type,
+                wall: wall_id,
+                along: snap((t0 + t1) / 2.0),
+                sill: snap(z0 - level_elevation),
+                opens_to: WallSide::Interior,
+                hand: Hand::Left,
+                setback: None,
+            })
+            .map_err(|e| explain(&e))?;
+        self.report.voids += 1;
+        self.guids.openings.push((oid, guid));
+        Ok(())
+    }
+
     fn import_opening(&mut self, wall: u64, void: u64, filling: u64) -> Result<(), String> {
         let fe = self.ent(filling).ok_or("no existe")?;
         let is_door = fe.kind.starts_with("IFCDOOR");
         if !is_door && !fe.kind.starts_with("IFCWINDOW") {
             return Err("el hueco lo llena algo que no es puerta ni ventana".into());
         }
-        let frame = &self.walls[&wall];
-        let (origin, u, n) = (frame.origin, frame.u, frame.n);
-        let (wall_id, length, base, top) = (frame.id, frame.length, frame.base, frame.top);
-        let (exterior, thickness) = (frame.exterior, frame.thickness);
-        let level_elevation = frame.level_elevation;
-
         // The rough opening, from the opening element (else the door or
         // window itself), in wall coordinates.
         let ve = self.ent(void).ok_or("hueco inexistente")?;
@@ -1633,25 +1860,15 @@ impl<'a> Importer<'a> {
         if vbody.is_empty() {
             return Err("sin geometría para situarla".into());
         }
-        let (mut t0, mut t1, mut z0, mut z1) = (
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-            f64::INFINITY,
-            f64::NEG_INFINITY,
-        );
-        for p in vbody.all_points() {
-            let t = (p2(p) - origin).dot(u);
-            t0 = t0.min(t);
-            t1 = t1.max(t);
-            z0 = z0.min(p[2]);
-            z1 = z1.max(p[2]);
-        }
-        let (t0, t1) = (snap(t0.max(0.0)), snap(t1.min(length)));
-        let (z0, z1) = (snap(z0.max(base)), snap(z1.min(top)));
+        let frame = self
+            .frame_of(wall, &vbody)
+            .ok_or("su muro no se ha importado")?;
+        let (origin, n) = (frame.origin, frame.n);
+        let wall_id = frame.id;
+        let (exterior, thickness) = (frame.exterior, frame.thickness);
+        let level_elevation = frame.level_elevation;
+        let (t0, t1, z0, z1) = self.rough_opening(wall, &vbody)?;
         let (width, height) = (snap(t1 - t0), snap(z1 - z0));
-        if width < 0.05 || height < 0.05 {
-            return Err("hueco fuera del muro o demasiado pequeño".into());
-        }
 
         // Type, operation and hand.
         let ifc_type = self.ix.type_of.get(&filling).copied().filter(|t| {
@@ -2157,6 +2374,20 @@ fn area(poly: &[[f64; 2]]) -> f64 {
 
 /// Snaps an outline to the micrometre and drops repeated and collinear
 /// points.
+/// A GlobalId made from another one and a number, the same every time.
+fn piece_guid(guid: &str, piece: usize) -> String {
+    let mut h: u128 = 0x6c62272e07bb014262b821756295c58d;
+    for b in guid
+        .bytes()
+        .chain([0u8])
+        .chain(format!("tramo {piece}").bytes())
+    {
+        h ^= b as u128;
+        h = h.wrapping_mul(0x0000000001000000000000000000013B);
+    }
+    GlobalId::from_u128(h).to_string()
+}
+
 fn clean_outline(poly: &[[f64; 2]]) -> Vec<Point2> {
     let mut pts: Vec<Point2> = Vec::new();
     for p in poly {

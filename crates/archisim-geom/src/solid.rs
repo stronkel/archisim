@@ -119,6 +119,66 @@ pub fn triangulate(poly: &[Point2]) -> Vec<[usize; 3]> {
     out
 }
 
+/// One polygon from an outline and the holes inside it, for
+/// [`triangulate`]: each hole is joined to the outline by a cut going there
+/// and back (a "bridge") from its rightmost corner to a corner it can see.
+pub fn with_holes(outer: &[Point2], holes: &[Vec<Point2>]) -> Vec<Point2> {
+    let mut poly = ensure_ccw(outer.to_vec());
+    let mut holes: Vec<Vec<Point2>> = holes
+        .iter()
+        .map(|h| {
+            let mut h = ensure_ccw(h.clone());
+            h.reverse();
+            h
+        })
+        .collect();
+    // Rightmost holes first, so later bridges see the earlier ones.
+    let right = |h: &Vec<Point2>| h.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
+    holes.sort_by(|a, b| right(b).total_cmp(&right(a)));
+    for (k, hole) in holes.iter().enumerate() {
+        let Some(mi) = (0..hole.len()).max_by(|a, b| hole[*a].x.total_cmp(&hole[*b].x)) else {
+            continue;
+        };
+        let m = hole[mi];
+        let edges = |pts: &[Point2]| -> Vec<(Point2, Point2)> {
+            (0..pts.len())
+                .map(|i| (pts[i], pts[(i + 1) % pts.len()]))
+                .collect()
+        };
+        let mut all_edges = edges(&poly);
+        for h in &holes[k..] {
+            all_edges.extend(edges(h));
+        }
+        let crosses = |a: Point2, b: Point2| {
+            all_edges.iter().any(|(p, q)| {
+                let touches_end = |x: Point2| x.approx_eq(a) || x.approx_eq(b);
+                if touches_end(*p) || touches_end(*q) {
+                    return false;
+                }
+                let d1 = (b - a).cross(*p - a);
+                let d2 = (b - a).cross(*q - a);
+                let d3 = (*q - *p).cross(a - *p);
+                let d4 = (*q - *p).cross(b - *p);
+                d1 * d2 < 0.0 && d3 * d4 < 0.0
+            })
+        };
+        let mut candidates: Vec<usize> = (0..poly.len()).collect();
+        candidates.sort_by(|a, b| poly[*a].distance(m).total_cmp(&poly[*b].distance(m)));
+        let Some(pi) = candidates.into_iter().find(|&i| !crosses(m, poly[i])) else {
+            continue;
+        };
+        let mut joined = Vec::with_capacity(poly.len() + hole.len() + 2);
+        joined.extend_from_slice(&poly[..=pi]);
+        for j in 0..=hole.len() {
+            joined.push(hole[(mi + j) % hole.len()]);
+        }
+        joined.push(poly[pi]);
+        joined.extend_from_slice(&poly[pi + 1..]);
+        poly = joined;
+    }
+    poly
+}
+
 /// A vertical prism: a plan polygon (any direction) between two heights.
 pub fn prism(poly: &[Point2], z0: f64, z1: f64) -> Vec<[P3; 3]> {
     if poly.len() < 3 || z1 - z0 <= EPSILON {
@@ -537,7 +597,16 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
         return Vec::new();
     };
     let level = model.level(slab.level).map_or(0.0, |l| l.elevation);
-    let poly = ensure_ccw(slab.outline.clone());
+    let outer = ensure_ccw(slab.outline.clone());
+    // The faces round the outline and round each hole (walked clockwise,
+    // so they face into the hole).
+    let mut rings = vec![outer.clone()];
+    rings.extend(slab.holes.iter().map(|h| {
+        let mut h = ensure_ccw(h.clone());
+        h.reverse();
+        h
+    }));
+    let poly = with_holes(&outer, &slab.holes);
     let caps = triangulate(&poly);
     let at = |p: Point2, z: f64| [p.x, p.y, z];
     let mut top = level + slab.top_offset;
@@ -563,10 +632,12 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
                     ]);
                 }
             }
-            for k in 0..poly.len() {
-                let (p, q) = (poly[k], poly[(k + 1) % poly.len()]);
-                tris.push([at(p, bottom), at(q, bottom), at(q, top)]);
-                tris.push([at(p, bottom), at(q, top), at(p, top)]);
+            for ring in &rings {
+                for k in 0..ring.len() {
+                    let (p, q) = (ring[k], ring[(k + 1) % ring.len()]);
+                    tris.push([at(p, bottom), at(q, bottom), at(q, top)]);
+                    tris.push([at(p, bottom), at(q, top), at(p, top)]);
+                }
             }
             top = bottom;
             Solid {
@@ -715,6 +786,7 @@ mod tests {
         let mut frame = Vec::new();
         let mut panels = Vec::new();
         match t.kind {
+            OpeningKind::Void => {}
             OpeningKind::Door(op) => {
                 let d = t.frame_depth;
                 frame.extend(block(x0, x0 + f, d, 0.0, h));
@@ -912,6 +984,51 @@ mod tests {
         })
         .unwrap();
         (m, w)
+    }
+
+    /// Holes go through every layer of a slab, with faces round them.
+    #[test]
+    fn slab_holes_go_through() {
+        let (mut m, _) = model();
+        let slab = m.slabs().next().unwrap().id;
+        m.add_slab_hole(
+            slab,
+            vec![p(1.0, 1.0), p(2.0, 1.0), p(2.0, 3.0), p(1.0, 3.0)],
+        )
+        .unwrap();
+        m.add_slab_hole(slab, vec![p(4.0, 0.5), p(5.5, 0.5), p(5.5, 2.0)])
+            .unwrap();
+        let solids = slab_solids(&m, slab);
+        let volume: f64 = solids.iter().map(Solid::volume).sum();
+        let area = m.slab(slab).unwrap().area();
+        assert!((area - (24.0 - 2.0 - 1.125)).abs() < 1e-9);
+        assert!((volume - area * 0.3).abs() < 1e-9, "{volume}");
+        // A closed skin: every edge shared by two triangles.
+        use std::collections::HashMap;
+        let key = |a: P3| {
+            (
+                (a[0] * 1e6).round() as i64,
+                (a[1] * 1e6).round() as i64,
+                (a[2] * 1e6).round() as i64,
+            )
+        };
+        let mut edges: HashMap<_, i32> = HashMap::new();
+        for s in &solids {
+            for t in &s.triangles {
+                for i in 0..3 {
+                    let (a, b) = (key(t[i]), key(t[(i + 1) % 3]));
+                    *edges
+                        .entry(if a < b { (a, b) } else { (b, a) })
+                        .or_default() += 1;
+                }
+            }
+        }
+        // Edges between layers are shared by the two solids' side faces.
+        assert!(
+            edges.values().all(|n| n % 2 == 0),
+            "{:?}",
+            edges.values().filter(|n| *n % 2 != 0).count()
+        );
     }
 
     #[test]
