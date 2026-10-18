@@ -11,6 +11,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 **Hecho**
 - Diseño del sistema de familias en `docs/FAMILIAS.md`: qué es una familia (parámetros de tipo y de ejemplar con fórmulas, geometría 3D, símbolo de planta por escala, comportamiento y puntos de control, salida IFC), un ejemplo de receta de una ventana practicable, las reglas del sistema y el plan en cuatro bloques con su criterio de hecho.
 - **Decisiones de Antonio**: D2 = **receta de texto** (editor gráfico más adelante sobre el mismo formato); familias **copiadas dentro del proyecto**, como Revit; nivel de detalle **por escala**, como ArchiCAD; se empieza por **puertas y ventanas**.
+- **Afinado con Antonio** (misma mañana): el arquitecto crea tipos con un **configurador como el de ArchiCAD** (todas las opciones por secciones, vista previa en planta, alzado y 3D en directo); la receta es el motor de debajo. **Una familia por funcionamiento** (puerta abatible y corredera; ventana practicable, corredera y fija) con hojas, tarjas, subdivisiones, persiana… como opciones y **piezas comunes** compartidas. **Tipos con nombre, marca (P-03) y `GlobalId`**, todo lo que define el producto es del tipo, **guardables en ficheros de familia** con su catálogo para usarlos en otros proyectos, y **navegador de familias y tipos con su número de ejemplares** (el tipo es la unidad de medición). El plan pasa a cinco bloques (A–E).
 - Hoja de ruta, fundacional y prioridades de `CLAUDE.md` actualizados. Sin código: ningún cambio en el programa, el formato `.archisim` ni el IFC.
 
 **Pendiente**
@@ -19,7 +20,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 **Antonio debe probar**
 1. Lee `docs/FAMILIAS.md`, sobre todo el ejemplo de receta: ¿entiendes qué hace cada línea? ¿Te ves retocando una (cambiar un rango, añadir un parámetro)?
-2. Revisa la tabla de los cuatro bloques y la lista de cinco familias iniciales (puerta abatible 1/2 hojas, corredera; ventana fija, practicable 1/2 hojas, corredera): ¿falta o sobra alguna?
+2. Revisa la sección «Tipos: reutilizables y medibles» y la tabla de los cinco bloques: ¿es así como quieres trabajar con tus puertas y ventanas de AD5?
 3. Si tienes un objeto de ArchiCAD que uses mucho (ventana con persiana y capialzado, por ejemplo), descríbeme sus parámetros tal como los ves en su diálogo: será la primera de la librería (2.2).
 
 ## 2026-10-17 · Cierre de fase 1, bloque 12 — Aplicación de Mac
