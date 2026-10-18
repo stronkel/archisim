@@ -617,7 +617,9 @@ plan 1:50
     let styles: Vec<LineStyle> = marks
         .iter()
         .map(|m| match m {
-            Mark::Line { style, .. } | Mark::Polygon { style, .. } | Mark::Arc { style, .. } => *style,
+            Mark::Line { style, .. } | Mark::Polygon { style, .. } | Mark::Arc { style, .. } => {
+                *style
+            }
         })
         .collect();
     assert_eq!(

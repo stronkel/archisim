@@ -21,6 +21,7 @@ mod plan_image;
 mod slab_tool;
 mod snap;
 mod temp_dims;
+mod type_drawing;
 mod type_preview;
 mod units;
 mod view;

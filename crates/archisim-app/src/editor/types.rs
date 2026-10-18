@@ -284,17 +284,24 @@ impl Editor {
     /// The families that make doors (or windows): those in the project and
     /// the system ones, by name, in that order.
     pub fn opening_families(&self, doors: bool) -> Vec<String> {
-        let category = if doors { "door" } else { "window" };
+        // Voids are listed with windows, as in the window tool.
+        let fits = |c: &str| {
+            if doors {
+                c == "door"
+            } else {
+                c == "window" || c == "void"
+            }
+        };
         let mut names: Vec<String> = self
             .model()
             .families()
-            .filter(|f| f.is_opening() && f.def().category == category)
+            .filter(|f| f.is_opening() && fits(&f.def().category))
             .map(|f| f.name().to_string())
             .collect();
         for (name, source) in archisim_core::family::system_families() {
-            let fits = archisim_core::Family::new(archisim_core::FamilyId(1), source)
-                .is_ok_and(|f| f.def().category == category);
-            if fits && !names.contains(&name) {
+            let ok = archisim_core::Family::new(archisim_core::FamilyId(1), source)
+                .is_ok_and(|f| fits(&f.def().category));
+            if ok && !names.contains(&name) {
                 names.push(name);
             }
         }
@@ -472,6 +479,8 @@ mod tests {
             ed.opening_families(true),
             ["Puerta abatible", "Puerta corredera"]
         );
+        // Voids are offered with the windows.
+        assert!(ed.opening_families(false).contains(&"Hueco".to_string()));
         let n = ed.new_opening_type("Ventana practicable").unwrap();
         let t = ed.model().opening_type(n).unwrap();
         assert_eq!(

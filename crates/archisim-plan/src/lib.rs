@@ -30,8 +30,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{
     CutPattern, LayerFunction, LevelId, LineStyle, Mark, Model, Pen, Point2, Slab, WallFunction,
-    WallId,
-    WallSide, EPSILON,
+    WallId, WallSide, EPSILON,
 };
 use archisim_geom::{
     clip_span, openings_in_wall, wall_geometry_in, wall_pieces, EndCut, OpeningGeometry,
@@ -2314,6 +2313,10 @@ mod num_tests {
         );
         m.edit_family_type(t, ty.family, values).unwrap();
         let after = arcs(&m);
-        assert!(after[0].contains(r#"stroke-dasharray="0.1 0.05""#), "{}", after[0]);
+        assert!(
+            after[0].contains(r#"stroke-dasharray="0.1 0.05""#),
+            "{}",
+            after[0]
+        );
     }
 }

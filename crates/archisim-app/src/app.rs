@@ -1271,11 +1271,6 @@ fn fmt_level(elevation: f64) -> String {
 fn shortcut_button<'a>(text: &'a str, shortcut: &'a str) -> egui::Button<'a> {
     egui::Button::new(text).shortcut_text(shortcut)
 }
-
-fn guid_label(ui: &mut Ui, guid: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(guid).monospace().small()).selectable(true));
-}
-
 fn dashed(painter: &egui::Painter, a: Pos2, b: Pos2, color: Color32) {
     dashed_path(painter, &[a, b], color);
 }
@@ -1351,6 +1346,7 @@ mod temp_ui;
 pub mod theme;
 mod thumbs;
 mod toolbox;
+mod type_views;
 mod types_ui;
 mod view3d_ui;
 mod widgets;

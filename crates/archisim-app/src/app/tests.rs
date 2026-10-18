@@ -883,11 +883,23 @@ fn drawn_project_with_edited_types() {
         TypesTab::Materials,
     ] {
         h.app.types.tab = tab;
-        h.frame();
-        h.frame();
-        let key = &h.app.types.preview.as_ref().expect("a preview").0;
-        let opening = matches!(tab, TypesTab::Doors | TypesTab::Windows);
-        assert_eq!(key.starts_with("ot:"), opening, "preview of {tab:?}");
+        // Every preview the list offers is drawn: plan, section, elevation
+        // and 3D (without a graphics card, a notice in its place).
+        for (view, _, _) in super::types_ui::views(tab) {
+            h.app.types.view = *view;
+            h.frame();
+            h.frame();
+            let shown = h.app.types.shown.clone();
+            let prefix = match view {
+                super::types_ui::PreviewView::Plan => "plan:",
+                super::types_ui::PreviewView::Section => "section:",
+                super::types_ui::PreviewView::Elevation => "elevation:",
+                super::types_ui::PreviewView::ThreeD => "3d:",
+            };
+            assert!(shown.starts_with(prefix), "{tab:?} {view:?}: {shown}");
+            let opening = matches!(tab, TypesTab::Doors | TypesTab::Windows);
+            assert_eq!(shown.contains("ot:"), opening, "{tab:?} {view:?}");
+        }
     }
 
     // Duplicate the façade, thicken its insulation to 8 cm and use it.
