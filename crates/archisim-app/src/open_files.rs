@@ -94,10 +94,12 @@ pub mod macos {
             eprintln!("ArchiSim: no se encuentra el delegado de winit; los ficheros del Finder no se abrirán");
             return false;
         };
-        let f: extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut NSArray<NSURL>) = open_urls;
+        type OpenUrls = extern "C" fn(*mut AnyObject, Sel, *mut AnyObject, *mut NSArray<NSURL>);
+        let f: OpenUrls = open_urls;
         // SAFETY: an IMP is any C function pointer whose signature matches
         // the type encoding given: void return, self, _cmd and two objects.
-        let imp: ffi::IMP = Some(unsafe { std::mem::transmute::<_, unsafe extern "C" fn()>(f) });
+        let imp: ffi::IMP =
+            Some(unsafe { std::mem::transmute::<OpenUrls, unsafe extern "C" fn()>(f) });
         let added = unsafe {
             ffi::class_addMethod(
                 class as *const AnyClass as *mut ffi::objc_class,
