@@ -1,19 +1,53 @@
-# Publishes a version on GitHub (Releases) when a tag such as v0.22.1 is
-# pushed: the Mac disk image, the Windows installer and the one-line Mac
-# installer script, under fixed names so that
+# Publishes a version on GitHub (Releases): when main gets a version (in
+# Cargo.toml) that is not published yet, or when a tag such as v0.22.2 is
+# pushed. It carries the Mac disk image, the Windows installer and the
+# one-line Mac installer script, under fixed names so that
 #   https://github.com/stronkel/archisim/releases/latest/download/<name>
 # always gives the latest version.
 name: Versión
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
 
 permissions:
   contents: write
 
 jobs:
+  # Whether there is something to publish: a tag, or a version of main
+  # that has no release yet.
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.d.outputs.publish }}
+      tag: ${{ steps.d.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: d
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "$tag" ]; then
+              echo "::error::la etiqueta $GITHUB_REF_NAME no coincide con la versión $version de Cargo.toml"
+              exit 1
+            fi
+            publish=true
+          elif gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La versión $version ya está publicada."
+            publish=false
+          else
+            publish=true
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
   mac:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +65,8 @@ jobs:
           path: dist/ArchiSim-Mac.dmg
 
   windows:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +93,7 @@ jobs:
           path: dist/ArchiSim-Windows.exe
 
   publish:
-    needs: [mac, windows]
+    needs: [decide, mac, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,14 +104,9 @@ jobs:
       - name: Publicar
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.decide.outputs.tag }}
         run: |
-          # The tag must match the version of the program.
-          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-          if [ "v$version" != "$TAG" ]; then
-            echo "::error::la etiqueta $TAG no coincide con la versión $version de Cargo.toml"
-            exit 1
-          fi
+          version=${TAG#v}
           cp scripts/instalar_mac.sh dist/instalar-mac.sh
           cat > notas.md <<EOF
           **Mac** (Apple M1 y posteriores, e Intel). Abre Terminal (Aplicaciones → Utilidades), pega esta línea y pulsa Intro; instala o actualiza ArchiSim en Aplicaciones sin pasar por la cuarentena de macOS:
@@ -86,5 +117,5 @@ jobs:
 
           Qué cambia en esta versión: \`docs/BITACORA.md\`.
           EOF
-          gh release create "$TAG" --title "ArchiSim $version" --notes-file notas.md \
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "ArchiSim $version" --notes-file notas.md \
             dist/ArchiSim-Mac.dmg dist/ArchiSim-Windows.exe dist/instalar-mac.sh

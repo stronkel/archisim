@@ -17,7 +17,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 - README y LÉEME del `.dmg` con la nueva forma de instalar. Versión 0.22.2. Sin cambios de formato ni de IFC.
 
 **Pendiente**
-- Publicar la primera versión: cuando Antonio fusione los pull requests #13 a #16 en `main`, etiquetar `v0.22.2` en `main`.
+- Fusionados en `main` los pull requests #13 a #16 (18/10/2026, a petición de Antonio); cerrados sin fusionar #10 y #11, que ya estaban en `main` por el #12. **Publicación automática**: cada vez que llega a `main` una versión de `Cargo.toml` que no está publicada, se publica sola (también se puede con una etiqueta `vX.Y.Z`). La v0.22.2 se publica así.
 - Cerrar la sesión de macOS con ArchiSim abierto se cancela una vez (ArchiSim sale, pero hay que volver a cerrar la sesión). Se puede afinar si molesta.
 
 **Antonio debe probar** (en el MacBook)
