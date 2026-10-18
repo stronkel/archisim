@@ -197,12 +197,14 @@ pub struct ArchiSimApp {
     pub snap_filter: SnapFilter,
     /// Dark theme for the window (the drawing stays white paper).
     pub dark: bool,
-    /// The navigator and the properties palette are shown.
-    pub show_dock: bool,
+    /// The properties palette (left, beside the tools) is shown.
+    pub show_properties: bool,
+    /// The navigator (right) is shown.
+    pub show_navigator: bool,
+    /// Pictures of the types for the properties palette.
+    thumbs: thumbs::Thumbs,
     /// The toolbox shows icons only.
     pub compact_toolbox: bool,
-    /// Part of the right column taken by the navigator.
-    dock_split: f32,
     /// Counts messages, to know when the last one appeared.
     message_serial: u64,
     /// The message last aged and when it appeared (seconds).
@@ -266,9 +268,10 @@ impl ArchiSimApp {
             show_grid: true,
             snap_filter: SnapFilter::default(),
             dark: false,
-            show_dock: true,
+            show_properties: true,
+            show_navigator: true,
+            thumbs: thumbs::Thumbs::default(),
             compact_toolbox: false,
-            dock_split: 0.38,
             message_serial: 0,
             message_seen: (0, 0.0),
             styled: false,
@@ -749,19 +752,39 @@ impl ArchiSimApp {
                     .stroke(Stroke::new(1.0, p.line)),
             )
             .show(ui, |ui| self.toolbox(ui));
-        if self.show_dock {
-            egui::Panel::right("dock")
+        let column = || {
+            egui::Frame::new()
+                .fill(p.panel)
+                .inner_margin(egui::Margin::symmetric(10, 0))
+                .stroke(Stroke::new(1.0, p.line))
+        };
+        // Properties beside the tools, as Revit's palette: choosing a tool
+        // and its type is a short move of the mouse.
+        if self.show_properties {
+            egui::Panel::left("properties")
                 .resizable(true)
-                .default_size(340.0)
-                .min_size(290.0)
-                .max_size(560.0)
-                .frame(
-                    egui::Frame::new()
-                        .fill(p.panel)
-                        .inner_margin(egui::Margin::symmetric(10, 0))
-                        .stroke(Stroke::new(1.0, p.line)),
-                )
-                .show(ui, |ui| self.dock(ui));
+                .default_size(320.0)
+                .min_size(270.0)
+                .max_size(520.0)
+                .frame(column())
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("properties")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            self.properties(ui);
+                            ui.add_space(12.0);
+                        });
+                });
+        }
+        if self.show_navigator {
+            egui::Panel::right("navigator")
+                .resizable(true)
+                .default_size(270.0)
+                .min_size(220.0)
+                .max_size(480.0)
+                .frame(column())
+                .show(ui, |ui| self.navigator(ui));
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -778,45 +801,7 @@ impl ArchiSimApp {
             ));
         }
         self.dialogs(&ctx);
-    }
-
-    /// The right column: the navigator on top, the properties below, with
-    /// a handle between them to share the height.
-    fn dock(&mut self, ui: &mut Ui) {
-        let p = theme::Palette::current(ui.ctx());
-        let total = ui.available_height();
-        let top = (total * self.dock_split).clamp(120.0, (total - 200.0).max(120.0));
-        ui.allocate_ui(Vec2::new(ui.available_width(), top), |ui| {
-            ui.set_min_height(top);
-            self.navigator(ui);
-        });
-        let (handle, resp) =
-            ui.allocate_exact_size(Vec2::new(ui.available_width(), 9.0), Sense::drag());
-        let resp = resp.on_hover_cursor(CursorIcon::ResizeVertical);
-        if resp.dragged() && total > 0.0 {
-            self.dock_split = ((top + resp.drag_delta().y) / total).clamp(0.12, 0.8);
-        }
-        let color = if resp.hovered() || resp.dragged() {
-            p.accent
-        } else {
-            p.line
-        };
-        ui.painter().line_segment(
-            [handle.left_center(), handle.right_center()],
-            Stroke::new(1.0, color),
-        );
-        ui.painter().rect_filled(
-            Rect::from_center_size(handle.center(), Vec2::new(28.0, 3.0)),
-            CornerRadius::same(2),
-            color,
-        );
-        egui::ScrollArea::vertical()
-            .id_salt("properties")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                self.properties(ui);
-                ui.add_space(12.0);
-            });
+        self.thumbs.end_frame();
     }
 
     fn handle_close(&mut self, ctx: &egui::Context) {
@@ -1214,6 +1199,7 @@ mod properties;
 mod props;
 mod tabs;
 pub mod theme;
+mod thumbs;
 mod toolbox;
 mod types_ui;
 mod view3d_ui;

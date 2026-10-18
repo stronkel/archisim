@@ -85,13 +85,23 @@ impl ArchiSimApp {
                 }
                 if icon_button(
                     ui,
-                    Icon::Sidebar,
-                    "Mostrar u ocultar el navegador y las propiedades",
-                    self.show_dock,
+                    Icon::SidebarRight,
+                    "Mostrar u ocultar el navegador",
+                    self.show_navigator,
                 )
                 .clicked()
                 {
-                    self.show_dock = !self.show_dock;
+                    self.show_navigator = !self.show_navigator;
+                }
+                if icon_button(
+                    ui,
+                    Icon::Sidebar,
+                    "Mostrar u ocultar las propiedades",
+                    self.show_properties,
+                )
+                .clicked()
+                {
+                    self.show_properties = !self.show_properties;
                 }
                 ui.separator();
                 if ui
@@ -252,7 +262,8 @@ impl ArchiSimApp {
             ui.checkbox(&mut self.show_grid, "Rejilla");
             ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.separator();
-            ui.checkbox(&mut self.show_dock, "Navegador y propiedades");
+            ui.checkbox(&mut self.show_properties, "Propiedades");
+            ui.checkbox(&mut self.show_navigator, "Navegador");
             ui.checkbox(&mut self.compact_toolbox, "Herramientas solo con iconos");
             ui.separator();
             if ui.button("Plantas…").clicked() {

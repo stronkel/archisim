@@ -15,7 +15,7 @@ use archisim_plan::annotate::{format_dimension, format_elevation};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
-use super::props::{self, choice, group, id_row, row, text_row, type_card};
+use super::props::{self, choice, group, id_row, row, text_row, type_card, TypeItem};
 use super::tabs::SCALES;
 use super::widgets::segmented;
 use super::*;
@@ -66,31 +66,57 @@ impl ArchiSimApp {
         ));
     }
 
-    fn wall_type_items(&self) -> Vec<(WallTypeId, String, String)> {
-        self.ed
-            .model()
+    /// What the pictures of the types depend on besides the type itself:
+    /// the colours and hatches of the materials (and, for doors and
+    /// windows, the walls that host them in the picture).
+    fn picture_signature(&self, hosts: bool) -> String {
+        let m = self.ed.model();
+        let mats: Vec<_> = m
+            .materials()
+            .map(|x| (x.id, x.cut_color, x.cut_pattern))
+            .collect();
+        if hosts {
+            let walls: Vec<_> = m.wall_types().map(|t| (t.id, &t.layers)).collect();
+            format!("{mats:?}{walls:?}")
+        } else {
+            format!("{mats:?}")
+        }
+    }
+
+    fn wall_type_items(&mut self, ctx: &egui::Context) -> Vec<TypeItem<WallTypeId>> {
+        let sig = self.picture_signature(false);
+        let model = self.ed.model();
+        let thumbs = &mut self.thumbs;
+        model
             .wall_types()
             .map(|t| {
                 let f = match t.function {
                     WallFunction::Exterior => "exterior",
                     WallFunction::Interior => "interior",
                 };
-                (
-                    t.id,
-                    t.name.clone(),
-                    format!(
+                let thumb = thumbs.get(ctx, format!("wall:{:?}:{sig}", t.layers), || {
+                    crate::type_preview::layers_model(model, &t.layers, 0.6)
+                });
+                TypeItem {
+                    id: t.id,
+                    name: t.name.clone(),
+                    note: format!(
                         "{} mm · {f} · {} capas",
                         fmt_mm(t.thickness()),
                         t.layers.len()
                     ),
-                )
+                    thumb,
+                    caption: "Corte en planta 1:20 · exterior arriba",
+                }
             })
             .collect()
     }
 
-    fn slab_type_items(&self) -> Vec<(SlabTypeId, String, String)> {
-        self.ed
-            .model()
+    fn slab_type_items(&mut self, ctx: &egui::Context) -> Vec<TypeItem<SlabTypeId>> {
+        let sig = self.picture_signature(false);
+        let model = self.ed.model();
+        let thumbs = &mut self.thumbs;
+        model
             .slab_types()
             .map(|t| {
                 let f = match t.function {
@@ -98,17 +124,30 @@ impl ArchiSimApp {
                     SlabFunction::BaseSlab => "solera",
                     SlabFunction::Roof => "cubierta",
                 };
-                (
-                    t.id,
-                    t.name.clone(),
-                    format!("canto {} mm · {f}", fmt_mm(t.thickness())),
-                )
+                // The layers as a band, the top face up (as in the types
+                // dialog).
+                let thumb = thumbs.get(ctx, format!("slab:{:?}:{sig}", t.layers), || {
+                    crate::type_preview::layers_model(model, &t.layers, 0.6)
+                });
+                TypeItem {
+                    id: t.id,
+                    name: t.name.clone(),
+                    note: format!("canto {} mm · {f}", fmt_mm(t.thickness())),
+                    thumb,
+                    caption: "Capas 1:20 · cara superior arriba",
+                }
             })
             .collect()
     }
 
-    fn opening_type_items(&self, door: bool) -> Vec<(OpeningTypeId, String, String)> {
+    fn opening_type_items(
+        &mut self,
+        ctx: &egui::Context,
+        door: bool,
+    ) -> Vec<TypeItem<OpeningTypeId>> {
+        let sig = self.picture_signature(true);
         let model = self.ed.model();
+        let thumbs = &mut self.thumbs;
         model
             .opening_types()
             .filter(|t| t.is_door() == door)
@@ -118,16 +157,21 @@ impl ArchiSimApp {
                 } else {
                     format!("{}  {}", t.mark, t.name)
                 };
-                (
-                    t.id,
+                let thumb = thumbs.get(ctx, format!("opening:{t:?}:{sig}"), || {
+                    crate::type_preview::opening_model(model, t)
+                });
+                TypeItem {
+                    id: t.id,
                     name,
-                    format!(
+                    note: format!(
                         "{} × {} mm · {}",
                         fmt_mm(t.width),
                         fmt_mm(t.height),
                         types_ui::family_label(model, t.family)
                     ),
-                )
+                    thumb,
+                    caption: "Planta 1:20 · exterior arriba",
+                }
             })
             .collect()
     }
@@ -147,7 +191,7 @@ impl ArchiSimApp {
 
     fn wall_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Muro · lo que vas a dibujar");
-        let items = self.wall_type_items();
+        let items = self.wall_type_items(ui.ctx());
         let mut chosen = None;
         let card = type_card(
             ui,
@@ -232,7 +276,7 @@ impl ArchiSimApp {
 
     fn slab_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Forjado · lo que vas a dibujar");
-        let items = self.slab_type_items();
+        let items = self.slab_type_items(ui.ctx());
         let mut chosen = None;
         let card = type_card(
             ui,
@@ -314,7 +358,7 @@ impl ArchiSimApp {
                 "Herramienta Ventana · lo que vas a colocar"
             },
         );
-        let items = self.opening_type_items(door);
+        let items = self.opening_type_items(ui.ctx(), door);
         let current = if door {
             self.door_settings.opening_type
         } else {
@@ -683,7 +727,7 @@ impl ArchiSimApp {
             .unwrap_or_default();
         let same_type = self.same_type(Element::Wall(id));
         props::title(ui, "Muro · 1 seleccionado");
-        let items = self.wall_type_items();
+        let items = self.wall_type_items(ui.ctx());
         let mut chosen = None;
         let card = type_card(
             ui,
@@ -824,7 +868,7 @@ impl ArchiSimApp {
                 "Ventana · 1 seleccionada"
             },
         );
-        let items = self.opening_type_items(door);
+        let items = self.opening_type_items(ui.ctx(), door);
         let mut chosen = None;
         let card = type_card(
             ui,
@@ -922,7 +966,7 @@ impl ArchiSimApp {
             .unwrap_or_default();
         let same_type = self.same_type(Element::Slab(id));
         props::title(ui, "Forjado · 1 seleccionado");
-        let items = self.slab_type_items();
+        let items = self.slab_type_items(ui.ctx());
         let mut chosen = None;
         let card = type_card(
             ui,
@@ -1011,7 +1055,7 @@ impl ArchiSimApp {
             let same_height = heights.windows(2).all(|p| p[0] == p[1]);
             let current =
                 (types.len() == 1).then(|| *types.iter().next().unwrap_or(&WallTypeId(0)));
-            let items = self.wall_type_items();
+            let items = self.wall_type_items(ui.ctx());
             let mut chosen = None;
             let card = type_card(
                 ui,

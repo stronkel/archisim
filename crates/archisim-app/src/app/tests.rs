@@ -8,6 +8,10 @@ use archisim_core::SlabFunction;
 use archisim_geom::{wall_geometry, EndCut};
 use eframe::egui::{Event, Modifiers, PointerButton, RawInput};
 
+/// The test window: a common laptop screen, with room for the toolbox,
+/// the properties, the navigator and the drawing.
+const SCREEN: (f32, f32) = (1600.0, 1000.0);
+
 struct Harness {
     ctx: egui::Context,
     app: ArchiSimApp,
@@ -34,7 +38,10 @@ impl Harness {
 
     fn frame(&mut self) {
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(SCREEN.0, SCREEN.1),
+            )),
             time: Some(self.time),
             events: std::mem::take(&mut self.events),
             ..Default::default()
@@ -1019,7 +1026,10 @@ fn opens_files_dropped_on_the_window() {
     let mut h = Harness::new(Editor::new_project());
     let drop = |h: &mut Harness, path: PathBuf| {
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(SCREEN.0, SCREEN.1),
+            )),
             time: Some(h.time),
             dropped_files: vec![std::sync::Arc::new(TestDrop(path))],
             ..Default::default()
@@ -1161,7 +1171,8 @@ fn toolbox_keys_and_tools_to_come() {
     }
     // The compact box and the hidden dock still leave a working plan.
     h.app.compact_toolbox = true;
-    h.app.show_dock = false;
+    h.app.show_properties = false;
+    h.app.show_navigator = false;
     h.frame();
     h.frame();
     draw_outline(&mut h);
@@ -1217,6 +1228,12 @@ fn properties_palette_shows_every_state() {
             h.frame();
             h.key(Key::Escape);
         }
+        // The type pictures of walls, slabs, doors and windows were drawn
+        // (one per type of the template) and are kept.
+        let types = h.model().wall_types().count()
+            + h.model().slab_types().count()
+            + h.model().opening_types().count();
+        assert!(h.app.thumbs.count() >= types, "{}", h.app.thumbs.count());
         let m = h.model();
         let all: Vec<Element> = crate::pick::elements_on_level(m, h.app.ed.level);
         for e in &all {

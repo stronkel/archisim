@@ -31,6 +31,7 @@ pub enum Icon {
     Save,
     Export,
     Sidebar,
+    SidebarRight,
     Close,
     ChevronLeft,
     ChevronRight,
@@ -274,6 +275,10 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Sidebar => {
             rect_(3.0, 4.0, 21.0, 20.0, st);
             line(&[(9.0, 4.0), (9.0, 20.0)], st);
+        }
+        Icon::SidebarRight => {
+            rect_(3.0, 4.0, 21.0, 20.0, st);
+            line(&[(15.0, 4.0), (15.0, 20.0)], st);
         }
         Icon::Close => {
             line(&[(6.0, 6.0), (18.0, 18.0)], st);

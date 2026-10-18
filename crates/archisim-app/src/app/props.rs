@@ -10,6 +10,7 @@ use eframe::egui::{
 
 use super::icons::{self, Icon};
 use super::theme::Palette;
+use super::thumbs::Thumb;
 use super::widgets::strong_font;
 
 /// Height of a parameter row.
@@ -173,8 +174,20 @@ pub struct CardAction {
     pub select_all: bool,
 }
 
-/// Revit's type selector: the category, the type in a large list, and
-/// "Editar tipo". `items` are (type, name, note such as the thickness);
+/// One type offered by the type selector.
+pub struct TypeItem<T> {
+    pub id: T,
+    pub name: String,
+    /// Thickness, size or family, under the name.
+    pub note: String,
+    pub thumb: Option<Thumb>,
+    /// What the picture shows ("Corte en planta 1:20 · exterior arriba").
+    pub caption: &'static str,
+}
+
+/// Revit's type selector, with a picture: the type's plan cut (walls,
+/// slabs) or its door or window in plan, the category with its IFC class,
+/// and the type, chosen from a gallery of pictures with a search box.
 /// `current` is `None` when the selection mixes types. `instances`, when
 /// given, adds a button to select every element of the type on the level.
 #[allow(clippy::too_many_arguments)]
@@ -185,12 +198,13 @@ pub fn type_card<T: PartialEq + Copy>(
     category: &str,
     ifc: &str,
     current: Option<T>,
-    items: &[(T, String, String)],
+    items: &[TypeItem<T>],
     chosen: &mut Option<T>,
     instances: Option<usize>,
 ) -> CardAction {
     let p = Palette::current(ui.ctx());
     let mut action = CardAction::default();
+    let cur = current.and_then(|c| items.iter().find(|i| i.id == c));
     let frame = egui::Frame::new()
         .fill(p.raised)
         .stroke(Stroke::new(1.0, p.line))
@@ -198,55 +212,76 @@ pub fn type_card<T: PartialEq + Copy>(
         .inner_margin(egui::Margin::same(10));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
+        // The picture, on white paper.
+        if let Some(c) = cur {
+            if let Some(t) = c.thumb {
+                paper(ui, t, Vec2::new(ui.available_width(), 130.0));
+                ui.label(egui::RichText::new(c.caption).small().color(p.muted));
+                ui.add_space(6.0);
+            }
+        }
         ui.horizontal(|ui| {
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(40.0), Sense::hover());
-            ui.painter()
-                .rect_filled(r, CornerRadius::same(8), p.accent_soft);
-            icons::paint(ui.painter(), r.shrink(9.0), icon, p.accent);
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(category)
-                            .font(strong_font(13.5))
-                            .color(p.text),
-                    );
-                    if !ifc.is_empty() {
-                        chip_label(ui, ifc);
-                    }
-                });
-                let cur = current.and_then(|c| items.iter().find(|i| i.0 == c));
-                let shown = match cur {
-                    Some(i) => i.1.clone(),
-                    None => "(varios tipos)".into(),
-                };
-                let mut v = current;
-                ComboBox::from_id_salt(("type-card", salt))
-                    .width(ui.available_width() - 4.0)
-                    .truncate()
-                    .selected_text(egui::RichText::new(shown).font(strong_font(12.5)))
-                    .show_ui(ui, |ui| {
-                        for (id, name, note) in items {
-                            let text = if note.is_empty() {
-                                name.clone()
-                            } else {
-                                format!("{name}   · {note}")
-                            };
-                            if ui.selectable_label(v == Some(*id), text).clicked() {
-                                v = Some(*id);
-                            }
-                        }
-                    });
-                if v != current {
-                    *chosen = v;
-                }
-                if let Some(i) = cur {
-                    if !i.2.is_empty() {
-                        ui.label(egui::RichText::new(&i.2).small().color(p.muted));
-                    }
-                }
-            });
+            icons::paint(
+                ui.painter(),
+                Rect::from_min_size(ui.cursor().min + Vec2::new(0.0, 1.0), Vec2::splat(16.0)),
+                icon,
+                p.accent,
+            );
+            ui.add_space(22.0);
+            ui.label(
+                egui::RichText::new(category)
+                    .font(strong_font(13.5))
+                    .color(p.text),
+            );
+            if !ifc.is_empty() {
+                chip_label(ui, ifc);
+            }
         });
+        ui.add_space(4.0);
+        // The type: a large button that opens the gallery.
+        let shown = cur.map_or("(varios tipos)".to_string(), |c| c.name.clone());
+        let (rect, resp) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::click());
+        let resp = resp.on_hover_text("Elegir otro tipo");
+        ui.painter().rect(
+            rect,
+            CornerRadius::same(7),
+            p.panel,
+            Stroke::new(1.0, if resp.hovered() { p.accent } else { p.line }),
+            StrokeKind::Inside,
+        );
+        let job = egui::text::LayoutJob {
+            wrap: egui::text::TextWrapping::truncate_at_width(rect.width() - 40.0),
+            ..egui::text::LayoutJob::single_section(
+                shown,
+                egui::TextFormat::simple(strong_font(12.5), p.text),
+            )
+        };
+        let g = ui.painter().layout_job(job);
+        ui.painter().galley(
+            Pos2::new(rect.left() + 10.0, rect.center().y - g.size().y / 2.0),
+            g,
+            p.text,
+        );
+        icons::paint(
+            ui.painter(),
+            Rect::from_center_size(
+                Pos2::new(rect.right() - 16.0, rect.center().y),
+                Vec2::splat(12.0),
+            ),
+            Icon::ChevronDown,
+            p.muted,
+        );
+        if let Some(c) = cur {
+            if !c.note.is_empty() {
+                ui.label(egui::RichText::new(&c.note).small().color(p.muted));
+            }
+        }
+        if let Some(v) = gallery(ui, &resp, salt, current, items) {
+            if Some(v) != current {
+                *chosen = Some(v);
+            }
+        }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             if ui
@@ -270,6 +305,160 @@ pub fn type_card<T: PartialEq + Copy>(
         });
     });
     action
+}
+
+/// A type picture on white paper, fitted in `max`, centred.
+fn paper(ui: &mut Ui, t: Thumb, max: Vec2) {
+    let (outer, _) =
+        ui.allocate_exact_size(Vec2::new(max.x, max.y.min(t.size.y + 16.0)), Sense::hover());
+    ui.painter()
+        .rect_filled(outer, CornerRadius::same(6), egui::Color32::WHITE);
+    let size = t.fit(outer.size() - Vec2::splat(12.0));
+    let r = Rect::from_center_size(outer.center(), size);
+    ui.painter().image(
+        t.tex,
+        r,
+        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+        egui::Color32::WHITE,
+    );
+}
+
+/// The gallery of types under the type button: a search box and a tile
+/// per type with its picture. Returns the type clicked.
+fn gallery<T: PartialEq + Copy>(
+    ui: &mut Ui,
+    button: &egui::Response,
+    salt: &str,
+    current: Option<T>,
+    items: &[TypeItem<T>],
+) -> Option<T> {
+    let p = Palette::current(ui.ctx());
+    let search_id = ui.make_persistent_id(("type-search", salt));
+    let mut picked = None;
+    egui::Popup::menu(button)
+        .width(button.rect.width().max(320.0))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            let mut query: String = ui.ctx().data(|d| d.get_temp(search_id)).unwrap_or_default();
+            let edit = ui.add(
+                egui::TextEdit::singleline(&mut query)
+                    .hint_text("Buscar tipo…")
+                    .desired_width(f32::INFINITY),
+            );
+            if !edit.has_focus() && query.is_empty() {
+                edit.request_focus();
+            }
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(search_id, query.clone()));
+            let q = query.to_lowercase();
+            ui.add_space(4.0);
+            let shown: Vec<&TypeItem<T>> = items
+                .iter()
+                .filter(|i| {
+                    q.is_empty()
+                        || i.name.to_lowercase().contains(&q)
+                        || i.note.to_lowercase().contains(&q)
+                })
+                .collect();
+            if shown.is_empty() {
+                ui.label(
+                    egui::RichText::new("Ningún tipo coincide")
+                        .small()
+                        .color(p.muted),
+                );
+            }
+            egui::ScrollArea::vertical()
+                .max_height(420.0)
+                .show(ui, |ui| {
+                    let w = (ui.available_width() - 8.0) / 2.0;
+                    for pair in shown.chunks(2) {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            for item in pair {
+                                if tile(ui, w, item, current == Some(item.id)).clicked() {
+                                    picked = Some(item.id);
+                                }
+                            }
+                        });
+                        ui.add_space(2.0);
+                    }
+                });
+            if picked.is_some() {
+                ui.ctx().data_mut(|d| d.remove::<String>(search_id));
+                ui.close();
+            }
+        });
+    picked
+}
+
+/// A tile of the gallery: picture, name and note.
+fn tile<T>(ui: &mut Ui, width: f32, item: &TypeItem<T>, selected: bool) -> egui::Response {
+    let p = Palette::current(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 118.0), Sense::click());
+    let resp = resp.on_hover_text(format!("{}\n{}", item.name, item.note));
+    let fill = if selected {
+        p.accent_soft
+    } else if resp.hovered() {
+        p.raised
+    } else {
+        p.panel
+    };
+    let stroke = if selected || resp.hovered() {
+        p.accent
+    } else {
+        p.line
+    };
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(8),
+        fill,
+        Stroke::new(if selected { 1.5 } else { 1.0 }, stroke),
+        StrokeKind::Inside,
+    );
+    let pic = Rect::from_min_size(rect.min + Vec2::splat(6.0), Vec2::new(width - 12.0, 62.0));
+    ui.painter()
+        .rect_filled(pic, CornerRadius::same(5), egui::Color32::WHITE);
+    if let Some(t) = item.thumb {
+        let size = t.fit(pic.size() - Vec2::splat(8.0));
+        ui.painter().image(
+            t.tex,
+            Rect::from_center_size(pic.center(), size),
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+    }
+    let text = |s: &str, font: FontId, color, top: f32, rows: usize| {
+        let job = egui::text::LayoutJob {
+            wrap: egui::text::TextWrapping {
+                max_width: width - 14.0,
+                max_rows: rows,
+                break_anywhere: false,
+                overflow_character: Some('…'),
+            },
+            ..egui::text::LayoutJob::single_section(
+                s.to_owned(),
+                egui::TextFormat::simple(font, color),
+            )
+        };
+        let g = ui.painter().layout_job(job);
+        ui.painter()
+            .galley(Pos2::new(rect.left() + 7.0, top), g, color);
+    };
+    text(
+        &item.name,
+        strong_font(11.5),
+        if selected { p.accent } else { p.text },
+        pic.bottom() + 5.0,
+        2,
+    );
+    text(
+        &item.note,
+        FontId::proportional(10.5),
+        p.muted,
+        rect.bottom() - 17.0,
+        1,
+    );
+    resp
 }
 
 /// A small rounded label (the IFC class beside the category).
