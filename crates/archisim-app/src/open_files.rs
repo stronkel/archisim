@@ -125,6 +125,7 @@ pub mod macos {
     /// For the packaging check in continuous integration: with
     /// `ARCHISIM_PRUEBA_SALIR` set, once the window has been up for a few
     /// seconds, asks AppKit to quit (`terminate:`, the same as Cmd+Q).
+    #[cfg_attr(test, allow(dead_code))]
     pub fn quit_for_check(ctx: &eframe::egui::Context) {
         use std::sync::atomic::{AtomicBool, Ordering};
         static SENT: AtomicBool = AtomicBool::new(false);
