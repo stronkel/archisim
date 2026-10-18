@@ -74,6 +74,43 @@ pub fn snap(
     snap_except(model, level, cursor, tolerance, extra, &BTreeSet::new())
 }
 
+/// Which object snaps are on (the toggles of the bottom bar). Points that
+/// are switched off are not offered; the cursor then falls back to the
+/// next kind, or to a free point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapFilter {
+    /// Ends of walls and corners of walls and slabs.
+    pub points: bool,
+    /// Middles of walls.
+    pub midpoints: bool,
+    /// Anywhere on a wall face or slab edge.
+    pub edges: bool,
+    /// Polar tracking of horizontal, vertical and 45° lines.
+    pub tracking: bool,
+}
+
+impl Default for SnapFilter {
+    fn default() -> Self {
+        Self {
+            points: true,
+            midpoints: true,
+            edges: true,
+            tracking: true,
+        }
+    }
+}
+
+impl SnapFilter {
+    fn allows(self, kind: SnapKind) -> bool {
+        match kind {
+            SnapKind::Endpoint | SnapKind::Corner => self.points,
+            SnapKind::Midpoint => self.midpoints,
+            SnapKind::OnEdge => self.edges,
+            SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => true,
+        }
+    }
+}
+
 /// [`snap`], ignoring some walls and slabs (the ones being dragged, so a
 /// point does not snap to where it already is).
 pub fn snap_except(
@@ -83,6 +120,27 @@ pub fn snap_except(
     tolerance: f64,
     extra: &[Point2],
     skip: &BTreeSet<Element>,
+) -> Snap {
+    snap_filtered(
+        model,
+        level,
+        cursor,
+        tolerance,
+        extra,
+        skip,
+        SnapFilter::default(),
+    )
+}
+
+/// [`snap_except`] with only the snaps `filter` lets through.
+pub fn snap_filtered(
+    model: &Model,
+    level: LevelId,
+    cursor: Point2,
+    tolerance: f64,
+    extra: &[Point2],
+    skip: &BTreeSet<Element>,
+    filter: SnapFilter,
 ) -> Snap {
     let mut points: Vec<(Point2, SnapKind)> =
         extra.iter().map(|p| (*p, SnapKind::Endpoint)).collect();
@@ -117,6 +175,7 @@ pub fn snap_except(
     // first in `SnapKind`) wins, so a wall end beats the corner under it.
     let best_point = points
         .iter()
+        .filter(|(_, k)| filter.allows(*k))
         .map(|(p, k)| (p.distance(cursor), *k, *p))
         .filter(|(d, _, _)| *d <= tolerance)
         .min_by(|a, b| {
@@ -130,6 +189,7 @@ pub fn snap_except(
     if let Some((_, kind, point)) = best_point {
         return Snap { point, kind };
     }
+    let edges = if filter.edges { edges } else { Vec::new() };
     let best_edge = edges
         .iter()
         .map(|(a, b)| nearest_on_segment(*a, *b, cursor))
@@ -243,6 +303,38 @@ mod tests {
             &[Point2::new(10.0, 10.0)],
         );
         assert_eq!(s.point, Point2::new(10.0, 10.0));
+    }
+
+    #[test]
+    fn snaps_switched_off_are_not_offered() {
+        let (m, lvl, _) = room();
+        let skip = BTreeSet::new();
+        let at = |p: Point2, f: SnapFilter| snap_filtered(&m, lvl, p, 0.1, &[], &skip, f);
+        // Without points, the wall end falls back to the face under it.
+        let no_points = SnapFilter {
+            points: false,
+            ..SnapFilter::default()
+        };
+        assert_eq!(
+            at(Point2::new(0.03, 3.98), no_points).kind,
+            SnapKind::OnEdge
+        );
+        // Without midpoints, the middle of the west wall is a free point.
+        let no_mid = SnapFilter {
+            midpoints: false,
+            edges: false,
+            ..SnapFilter::default()
+        };
+        assert_eq!(at(Point2::new(0.05, 2.02), no_mid).kind, SnapKind::Free);
+        // Without edges, a point on a face is free (rounded).
+        let no_edges = SnapFilter {
+            edges: false,
+            ..SnapFilter::default()
+        };
+        assert_eq!(at(Point2::new(0.3, 1.2), no_edges).kind, SnapKind::Free);
+        // Everything on is plain snapping.
+        let p = Point2::new(0.05, 2.02);
+        assert_eq!(at(p, SnapFilter::default()), snap(&m, lvl, p, 0.1, &[]));
     }
 
     #[test]

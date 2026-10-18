@@ -45,7 +45,7 @@ fn main() -> eframe::Result {
     }
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_title("ArchiSim")
-        .with_inner_size([1280.0, 800.0])
+        .with_inner_size([1440.0, 900.0])
         .with_min_inner_size([800.0, 500.0]);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")) {
         viewport = viewport.with_icon(icon);

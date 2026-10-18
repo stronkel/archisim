@@ -116,6 +116,33 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v
 }
 
+/// What type an element is of, to find the others of the same type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeOf {
+    Wall(archisim_core::WallTypeId),
+    Slab(archisim_core::SlabTypeId),
+    Opening(archisim_core::OpeningTypeId),
+}
+
+/// The type of a wall, slab, door or window (annotations have none).
+pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
+    match e {
+        Element::Wall(id) => model.wall(id).map(|w| TypeOf::Wall(w.wall_type)),
+        Element::Slab(id) => model.slab(id).map(|s| TypeOf::Slab(s.slab_type)),
+        Element::Opening(id) => model.opening(id).map(|o| TypeOf::Opening(o.opening_type)),
+        Element::Dimension(_) | Element::Mark(_) => None,
+    }
+}
+
+/// The elements of a level of type `t` (Revit's "select all instances
+/// visible in view").
+pub fn of_type_on_level(model: &Model, level: LevelId, t: TypeOf) -> Vec<Element> {
+    elements_on_level(model, level)
+        .into_iter()
+        .filter(|e| type_of(model, *e) == Some(t))
+        .collect()
+}
+
 /// The element under `p`, within `tolerance` metres of its outline.
 ///
 /// Doors and windows win over their walls, and walls over slabs. Among
@@ -257,6 +284,44 @@ pub(crate) mod tests {
         assert_eq!(
             nearest_on_segment(sq[0], sq[1], Point2::new(5.0, 3.0)),
             Point2::new(2.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn elements_of_the_same_type() {
+        let (mut m, lvl, lib) = room();
+        // A partition across the room: another wall type.
+        let partition = m
+            .add_wall(NewWall {
+                wall_type: lib.partition,
+                level: lvl,
+                start: Point2::new(3.0, 0.265),
+                end: Point2::new(3.0, 3.735),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let west = m.walls().next().unwrap().id;
+        let facades = of_type_on_level(&m, lvl, type_of(&m, Element::Wall(west)).unwrap());
+        assert_eq!(facades.len(), 4);
+        assert!(!facades.contains(&Element::Wall(partition)));
+        assert_eq!(
+            of_type_on_level(&m, lvl, TypeOf::Wall(lib.partition)),
+            vec![Element::Wall(partition)]
+        );
+        let door = m.openings().next().unwrap().id;
+        assert_eq!(
+            of_type_on_level(&m, lvl, type_of(&m, Element::Opening(door)).unwrap()),
+            vec![Element::Opening(door)]
+        );
+        assert_eq!(
+            of_type_on_level(&m, lvl, TypeOf::Slab(lib.ground_slab)).len(),
+            1
+        );
+        assert_eq!(
+            type_of(&m, Element::Dimension(archisim_core::DimensionId(1))),
+            None
         );
     }
 }

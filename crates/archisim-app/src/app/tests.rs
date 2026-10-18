@@ -8,6 +8,10 @@ use archisim_core::SlabFunction;
 use archisim_geom::{wall_geometry, EndCut};
 use eframe::egui::{Event, Modifiers, PointerButton, RawInput};
 
+/// The test window: a common laptop screen, with room for the toolbox,
+/// the properties, the navigator and the drawing.
+const SCREEN: (f32, f32) = (1600.0, 1000.0);
+
 struct Harness {
     ctx: egui::Context,
     app: ArchiSimApp,
@@ -34,7 +38,10 @@ impl Harness {
 
     fn frame(&mut self) {
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(SCREEN.0, SCREEN.1),
+            )),
             time: Some(self.time),
             events: std::mem::take(&mut self.events),
             ..Default::default()
@@ -1019,7 +1026,10 @@ fn opens_files_dropped_on_the_window() {
     let mut h = Harness::new(Editor::new_project());
     let drop = |h: &mut Harness, path: PathBuf| {
         let input = RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+            screen_rect: Some(Rect::from_min_size(
+                Pos2::ZERO,
+                Vec2::new(SCREEN.0, SCREEN.1),
+            )),
             time: Some(h.time),
             dropped_files: vec![std::sync::Arc::new(TestDrop(path))],
             ..Default::default()
@@ -1043,4 +1053,213 @@ fn opens_files_dropped_on_the_window() {
     assert!(h.app.pending.is_some());
     assert_eq!(h.model().project_name, "Con cambios");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Views open in tabs, each with its own level, framing and scale; F2 and
+/// F3 go to the plan and the 3D view; a level added opens in a tab of its
+/// own and closes with it.
+#[test]
+fn view_tabs_keep_their_level_framing_and_scale() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let ground = h.app.ed.level;
+    assert_eq!(h.app.tabs.len(), 1);
+    // The plan is drawn at the scale of its tab.
+    h.frame();
+    assert_eq!(h.app.plan.as_ref().unwrap().0.scale, 50.0);
+    h.app.set_scale(100.0);
+    h.frame();
+    assert_eq!(h.app.plan.as_ref().unwrap().0.scale, 100.0);
+    assert_eq!(h.app.tabs[0].kind, TabKind::Plan(ground));
+
+    // A level added becomes current, in a new tab beside.
+    let first = h.app.ed.add_level("Planta primera", 3.0).unwrap();
+    h.frame();
+    assert_eq!(h.app.tabs.len(), 2);
+    assert_eq!(h.app.tabs[h.app.active_tab].kind, TabKind::Plan(first));
+    assert_eq!(h.app.ed.level, first);
+    assert_eq!(h.app.plan_scale, 50.0, "a new tab starts at 1:50");
+    h.app.view.center = Point2::new(40.0, 40.0);
+
+    // Back to the ground floor: its own framing and scale.
+    h.app.activate_tab(0);
+    h.frame();
+    assert_eq!(h.app.ed.level, ground);
+    assert_eq!(h.app.plan_scale, 100.0);
+    assert_ne!(h.app.view.center, Point2::new(40.0, 40.0));
+    h.app.activate_tab(1);
+    assert_eq!(h.app.view.center, Point2::new(40.0, 40.0));
+    assert_eq!(h.app.ed.level, first);
+
+    // F3 opens the 3D view in a tab; F2 goes back to the last plan.
+    h.key(Key::F3);
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    assert_eq!(h.app.tabs.len(), 3);
+    h.key(Key::F2);
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert_eq!(h.app.ed.level, first);
+    // A tool key from the 3D view draws in the last plan too.
+    h.key(Key::F3);
+    h.type_text("m");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::Plan, Tool::Wall));
+    h.key(Key::Escape);
+    // Ctrl+Tab goes round the tabs.
+    let before = h.app.active_tab;
+    h.set_modifiers(Modifiers::CTRL);
+    h.key(Key::Tab);
+    h.set_modifiers(Modifiers::NONE);
+    assert_eq!(h.app.active_tab, (before + 1) % 3);
+
+    // Closing the 3D tab; the last tab cannot be closed.
+    let three_d = h
+        .app
+        .tabs
+        .iter()
+        .position(|t| t.kind == TabKind::ThreeD)
+        .unwrap();
+    h.app.close_tab(three_d);
+    h.frame();
+    assert_eq!(h.app.tabs.len(), 2);
+    assert_eq!(h.app.mode, ViewMode::Plan);
+
+    // Deleting the first floor closes its tab and shows the ground floor.
+    h.app.activate_tab(
+        h.app
+            .tabs
+            .iter()
+            .position(|t| t.kind == TabKind::Plan(first))
+            .unwrap(),
+    );
+    h.app.ed.remove_level(first).unwrap();
+    h.frame();
+    assert_eq!(h.app.tabs.len(), 1);
+    assert_eq!(h.app.ed.level, ground);
+    assert_eq!(h.app.plan_scale, 100.0);
+    h.app.close_tab(0);
+    assert_eq!(h.app.tabs.len(), 1, "the last tab stays");
+    // Drawing still works where the canvas is now.
+    assert_eq!(h.model().walls().count(), 4);
+}
+
+/// Keys and tiles of the toolbox: N is the level mark, C the dimension;
+/// tools still to come say when they arrive and change nothing.
+#[test]
+fn toolbox_keys_and_tools_to_come() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("n");
+    assert_eq!(h.app.tool, Tool::Dimension);
+    assert_eq!(h.app.dim_settings.mode, DimMode::LevelMark);
+    h.key(Key::Escape);
+    h.type_text("c");
+    assert_eq!(h.app.tool, Tool::Dimension);
+    assert_eq!(h.app.dim_settings.mode, DimMode::Linear);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.app.pick(super::toolbox::Pick::Later("2.5"));
+    assert_eq!(h.app.tool, Tool::Arrow);
+    assert!(h.app.message.as_ref().unwrap().text.contains("2.5"));
+    // Every tile of the box has a name and a hint; tools have their key.
+    for (_, tiles) in super::toolbox::SECTIONS {
+        for t in *tiles {
+            assert!(!t.name.is_empty() && !t.hint.is_empty());
+            if let super::toolbox::Pick::Tool(tool) = t.pick {
+                if tool != Tool::Arrow {
+                    assert_eq!(Tool::from_key(t.key), Some(tool), "{}", t.name);
+                }
+            }
+        }
+    }
+    // The compact box and the hidden dock still leave a working plan.
+    h.app.compact_toolbox = true;
+    h.app.show_properties = false;
+    h.app.show_navigator = false;
+    h.frame();
+    h.frame();
+    draw_outline(&mut h);
+    assert_eq!(h.model().walls().count(), 4);
+}
+
+/// Snaps switched off in the bottom bar are not offered while drawing.
+#[test]
+fn snaps_follow_the_bottom_bar() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("m");
+    h.move_to(p(0.04, 8.97));
+    let kind = h.app.cursor.unwrap().kind;
+    assert!(
+        matches!(kind, SnapKind::Endpoint | SnapKind::Corner),
+        "{kind:?}"
+    );
+    h.app.snap_filter.points = false;
+    h.app.snap_filter.edges = false;
+    h.app.snap_filter.midpoints = false;
+    h.move_to(p(0.041, 8.971));
+    assert_eq!(h.app.cursor.unwrap().kind, SnapKind::Free);
+    // Without tracking, a point near the horizontal is not pulled onto it.
+    h.app.snap_filter = SnapFilter::default();
+    h.click_at(p(3.0, 3.0));
+    h.move_to(p(8.0, 3.05));
+    assert_eq!(h.app.cursor.unwrap().kind, SnapKind::Tracked);
+    h.app.snap_filter.tracking = false;
+    h.move_to(p(8.0, 3.051));
+    assert_ne!(h.app.cursor.unwrap().kind, SnapKind::Tracked);
+}
+
+/// The properties palette draws every state: a tool, each kind of
+/// element, several, nothing (the view, in plan and in 3D), in both
+/// themes, and the type selector changes the type of the selection.
+#[test]
+fn properties_palette_shows_every_state() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    h.key(Key::Escape);
+    // Annotations to show too.
+    h.type_text("n");
+    h.click_at(p(6.0, 4.0));
+    h.key(Key::Escape);
+    for dark in [false, true] {
+        h.app.dark = dark;
+        theme::apply(&h.ctx, dark);
+        for key in ["m", "f", "p", "v", "c", "n"] {
+            h.type_text(key);
+            h.frame();
+            h.key(Key::Escape);
+        }
+        // The type pictures of walls, slabs, doors and windows were drawn
+        // (one per type of the template) and are kept.
+        let types = h.model().wall_types().count()
+            + h.model().slab_types().count()
+            + h.model().opening_types().count();
+        assert!(h.app.thumbs.count() >= types, "{}", h.app.thumbs.count());
+        let m = h.model();
+        let all: Vec<Element> = crate::pick::elements_on_level(m, h.app.ed.level);
+        for e in &all {
+            h.app.ed.selection = [*e].into_iter().collect();
+            h.frame();
+        }
+        h.app.ed.selection = all.iter().copied().collect();
+        h.frame();
+        let walls: Vec<Element> = all
+            .iter()
+            .copied()
+            .filter(|e| matches!(e, Element::Wall(_)))
+            .collect();
+        h.app.ed.selection = walls.iter().copied().collect();
+        h.frame();
+        h.app.ed.selection.clear();
+        h.frame();
+        h.key(Key::F3);
+        h.frame();
+        h.key(Key::F2);
+    }
+    // Same-type selection from the palette's helper, as the button does.
+    let west = Element::Wall(h.model().walls().next().unwrap().id);
+    let t = crate::pick::type_of(h.model(), west).unwrap();
+    assert_eq!(
+        crate::pick::of_type_on_level(h.model(), h.app.ed.level, t).len(),
+        4
+    );
 }

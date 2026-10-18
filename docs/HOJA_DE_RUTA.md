@@ -81,6 +81,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 ## 5. Transversal (cuando toque)
 
 - **Formato `.archisim`**: migraciones probadas con proyectos de cada versión; guardado más rápido para proyectos grandes.
+- **Interfaz** ✅ v0.16: rediseñada como ArchiCAD con propiedades de Revit (caja de herramientas por secciones, pestañas de vistas con su escala, navegador de vistas, planos y tipos, barra inferior con escala y forzados, tema claro y oscuro). Pendiente: recordar la disposición y el tema entre sesiones, paleta de órdenes (buscar cualquier orden por su nombre), atajos configurables.
 - **Manual de usuario** en español y lista de atajos; **traducción al inglés** de la interfaz antes de abrir el código.
 - **Informes de fallo** con el proyecto adjunto (sin telemetría).
 - **Validación continua**: además de IfcOpenShell, abrir los IFC de cada versión en ArchiCAD y Revit (Antonio) y guardar capturas de referencia.
