@@ -2560,6 +2560,7 @@ impl ArchiSimApp {
             .wall(o.wall)
             .map(|w| w.guid.to_string())
             .unwrap_or_default();
+        let family = types_ui::family_label(model, ot.family);
         let operation = match ot.kind {
             OpeningKind::Door(d) => match d {
                 archisim_core::DoorOperation::SingleSwing => "Abatible 1 hoja",
@@ -2611,6 +2612,12 @@ impl ArchiSimApp {
                     let tab = if is_door { TypesTab::Doors } else { TypesTab::Windows };
                     self.edit_type(tab, o.opening_type.0);
                 }
+                ui.end_row();
+                ui.label("Marca de tipo");
+                ui.label(if ot.mark.is_empty() { "—" } else { ot.mark.as_str() });
+                ui.end_row();
+                ui.label("Familia");
+                ui.label(&family);
                 ui.end_row();
                 ui.label("Funcionamiento");
                 ui.label(operation);

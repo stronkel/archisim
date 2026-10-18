@@ -55,6 +55,11 @@ typed_id!(
 );
 
 typed_id!(
+    /// Identifies a [`crate::Family`] loaded in the project.
+    FamilyId
+);
+
+typed_id!(
     /// Identifies a [`crate::Dimension`] (a linear or chained dimension).
     DimensionId
 );

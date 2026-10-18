@@ -64,6 +64,8 @@ pub(super) enum Action {
     DuplicateOpening(OpeningTypeId),
     RemoveOpening(OpeningTypeId),
     EditOpening(OpeningTypeId, NewOpeningType),
+    /// Type mark and description.
+    EditOpeningInfo(OpeningTypeId, String, String),
 }
 
 /// IFC material categories offered (`IfcMaterial.Category`), in Spanish.
@@ -423,11 +425,16 @@ impl ArchiSimApp {
                 .filter(|t| t.is_door() == (tab == TypesTab::Doors))
                 .map(|t| {
                     let n = m.opening_type_users(t.id);
+                    let mark = if t.mark.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{} · ", t.mark)
+                    };
                     (
                         t.id.0,
                         t.name.clone(),
                         format!(
-                            "{} × {} · {n} colocada{}",
+                            "{mark}{} × {} · {n} colocada{}",
                             fmt_mm(t.width),
                             fmt_mm(t.height),
                             plural(n)
@@ -923,6 +930,7 @@ impl ArchiSimApp {
         let users = m.opening_type_users(id);
         let door = t.is_door();
         let base = spec_of(&t);
+        let mut info: Option<(String, String)> = None;
         let mut push = |spec: NewOpeningType| actions.push(Action::EditOpening(id, spec));
         ui.label(
             RichText::new(if door {
@@ -946,6 +954,27 @@ impl ArchiSimApp {
                         ..base.clone()
                     });
                 }
+                ui.end_row();
+                ui.label("Marca de tipo").on_hover_text(
+                    "Para etiquetas, tablas y mediciones (P-01, V-03…); única en el proyecto",
+                );
+                if let Some(new) =
+                    text_edit_committed(ui, Id::unique(("ot-mark", id.0)), &t.mark, 80.0)
+                {
+                    info = Some((new, t.description.clone()));
+                }
+                ui.end_row();
+                ui.label("Descripción");
+                if let Some(new) =
+                    text_edit_committed(ui, Id::unique(("ot-desc", id.0)), &t.description, 300.0)
+                {
+                    info = Some((t.mark.clone(), new));
+                }
+                ui.end_row();
+                ui.label("Familia");
+                ui.label(family_label(m, t.family)).on_hover_text(
+                    "La receta de la que sale este tipo; las medidas de abajo son sus parámetros",
+                );
                 ui.end_row();
                 ui.label("Funcionamiento");
                 let mut k = t.kind;
@@ -1057,6 +1086,9 @@ impl ArchiSimApp {
                 guid_label(ui, t.guid.as_str());
                 ui.end_row();
             });
+        if let Some((mark, description)) = info {
+            actions.push(Action::EditOpeningInfo(id, mark, description));
+        }
         ui.add_space(4.0);
         ui.label(
             RichText::new(
@@ -1221,9 +1253,19 @@ impl ArchiSimApp {
                 let r = self.ed.edit_opening_type(id, spec);
                 self.report(r, &format!("Tipo modificado ({n} colocada{}).", plural(n)));
             }
+            Action::EditOpeningInfo(id, mark, description) => {
+                let r = self.ed.set_opening_type_info(id, &mark, &description);
+                self.report(r, "Marca y descripción cambiadas.");
+            }
         }
         self.keep_tool_types_valid();
     }
+}
+
+/// "Puerta abatible (v1)": the family a type comes from.
+pub(super) fn family_label(m: &archisim_core::Model, id: archisim_core::FamilyId) -> String {
+    m.family(id)
+        .map_or("—".into(), |f| format!("{} (v{})", f.name(), f.version()))
 }
 
 fn plural(n: usize) -> &'static str {

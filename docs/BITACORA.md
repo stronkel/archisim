@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Fase 2, bloque 13 — Familias: núcleo (bloque A)
+
+**Hecho**
+- **Lenguaje de familias** (recetas `.asfam`, crate nuevo `archisim-family`): parámetros de tipo y de ejemplar por secciones, con rango, nombre en español y condición de visibilidad; fórmulas, condiciones (`if / else if / else`), repeticiones, **piezas comunes** reutilizables y reglas `require … else "mensaje"`. Es seguro: no toca ficheros ni red y no puede quedarse colgado (topes de repeticiones y de piezas). La sintaxis real, con un ejemplo que las pruebas comprueban, está en `docs/FAMILIAS.md`.
+- **Cinco familias de sistema** escritas como recetas, con sus piezas comunes (`piezas.asfam`: cerco, hoja, marco, acristalamiento con montantes): **Puerta abatible** (1 o 2 hojas), **Puerta corredera**, **Ventana fija**, **Ventana practicable** (1 o 2 hojas) y **Ventana corredera**. Se pueden leer en `crates/archisim-core/families/`.
+- **Los tipos de puerta y ventana son ahora tipos de familia**: familia + valores de sus parámetros + **marca de tipo** (P-01, P-02… para puertas, V-01… para ventanas, asignada sola y editable, única en el proyecto) + descripción. Duplicar un tipo copia familia y valores con marca nueva y `GlobalId` nuevo.
+- **El 3D de puertas y ventanas sale de las recetas.** La vista 3D de la vivienda de prueba es idéntica, píxel a píxel, a la de la versión anterior; una prueba compara además 112 puertas y ventanas (todos los funcionamientos, dos tamaños, los dos lados y las dos manos, en un muro inclinado) con el cálculo antiguo: coinciden a la billonésima de metro.
+- **Formato `.archisim` versión 3**: el proyecto guarda una copia de cada familia que usa (la receta, una línea por renglón, legible) y los tipos como familia + valores + marca. Los proyectos v1 y v2 se abren solos: cada tipo pasa a su familia de sistema con el mismo nombre, `GlobalId`, medidas y materiales, y recibe su marca. Comprobado con la vivienda guardada por la v0.13 (incluida como fichero de prueba): **mismo IFC, salvo la fecha, y mismas plantas byte a byte** que exportaba la v0.13.
+- **Aplicación**: en *Tipos y materiales* → Puertas / Ventanas aparecen **Marca de tipo** y **Descripción** (editables, con deshacer) y la **Familia** de la que sale el tipo; la lista muestra la marca delante de las medidas. En Propiedades de una puerta o ventana, su marca y su familia. Los errores de las familias se explican en español con el nombre del parámetro («Hueco de obra: ancho = 25 está fuera de su rango…») o con el mensaje de la propia receta («El marco y el montante no dejan hueco para el vidrio»).
+- Pruebas nuevas: lenguaje (12: lectura, fórmulas, piezas, condiciones, errores de sintaxis con su línea, valores fuera de rango, límites), núcleo (familias de sistema recorridas en **más de mil combinaciones** de opciones, medidas extremas, lados y manos: geometría válida y dentro del hueco; conversión exacta de los 7 funcionamientos antiguos; marcas; duplicar y editar), fichero (migración v1 y v2, la vivienda de la v0.13, errores de recetas y valores), editor (marca y deshacer) y la comparación del 3D con el cálculo anterior. Ventana real probada con capturas (Propiedades, diálogo de tipos, 3D). IFC de la demo y de las sesiones de la app validados con IfcOpenShell (reglas EXPRESS incluidas).
+- Versión 0.14.0.
+
+**Pendiente / limitaciones conocidas**
+- **Planta e IFC siguen dibujando puertas y ventanas como antes**, a partir de las medidas que da la familia (bloques B y C). Por eso, una familia nueva distinta de las cinco de sistema todavía no tendría símbolo en planta propio.
+- El diálogo de tipos sigue siendo el de la v0.12 (funcionamiento, medidas, marco, materiales); el configurador generado desde la receta, con vista previa en planta, alzado y 3D, es el bloque D. Cambiar el funcionamiento de abatible a corredera aún se permite desde ese diálogo (cambia de familia); en el configurador no se permitirá, como en ArchiCAD.
+- Aún no se pueden cargar familias propias ni guardar tipos en una biblioteca (bloque E). La marca no sale todavía en el IFC (bloque C).
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama: GitHub → **Actions** → la última ejecución en verde del pull request «Familias: núcleo…» (rama `bloque/familias-nucleo`) → **Artifacts** → **ArchiSim-Windows** (o **ArchiSim-Mac** en el MacBook).
+2. Abre un proyecto **guardado con la versión anterior** (por ejemplo tu `demo.archisim` de antes): debe abrirse igual, en planta y en 3D.
+3. Selecciona la puerta de entrada: en Propiedades verás **Marca de tipo P-01** y **Familia Puerta abatible (v1)**. Pulsa ✎ Editar tipo…: en la lista, cada tipo lleva su marca delante. Cambia la marca a `P-10` y escribe una descripción; Ctrl+Z lo deshace. Prueba a poner a otra puerta la misma marca: debe negarse («la marca «P-10» ya la tiene otro tipo»).
+4. **Duplicar** un tipo de ventana: la copia recibe la siguiente marca libre (V-05).
+5. Ventanas → «Ventana practicable 2 hojas 180×130»: pon «Marco: anchura vista» a `620` mm. Debe negarse con el mensaje de la propia receta: «El marco y el montante no dejan hueco para el vidrio» (dos jambas y el montante central suman 1860 mm, más que el hueco de 1800).
+6. Guarda, cierra y abre otra vez; exporta el IFC y ábrelo en ArchiCAD/Revit: puertas y ventanas iguales que con la versión anterior.
+7. Abre el `.archisim` guardado con un editor de texto y busca `"families"`: verás las recetas de las familias, línea a línea. Échales un vistazo (por ejemplo «Ventana practicable»): ¿se entiende qué hace cada parte?
+8. Dime qué prefieres después: **B** (símbolos de planta de las familias a 1:100, 1:50 y 1:20) o **C** (IFC desde las familias, con la marca y los parámetros).
+
 ## 2026-10-18 · Fase 2 — Diseño de las familias paramétricas (decisión D2)
 
 **Hecho**

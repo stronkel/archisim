@@ -1,0 +1,39 @@
+# Piezas comunes de puertas y ventanas de ArchiSim.
+#
+# Ejes de las familias alojadas en muro (metros):
+#   x  a lo largo del muro, desde el centro del hueco de obra;
+#   y  a través del muro, desde el plano medio del marco, positivo hacia el
+#      lado al que abren las hojas;
+#   z  hacia arriba, desde el antepecho (el suelo, en las puertas).
+
+# Pieza prismática centrada en el plano medio del marco, de fondo «depth».
+component block(xa, xb, depth, za, zb, mat)
+  box (xa, -depth / 2, za) to (xb, depth / 2, zb) material mat
+
+# Cerco de puerta: dos jambas y el cabecero, abierto en el suelo.
+component door_lining(w, h, f, d, mat)
+  use block(-w / 2, -w / 2 + f, d, 0, h, mat)
+  use block(w / 2 - f, w / 2, d, 0, h, mat)
+  use block(-w / 2 + f, w / 2 - f, d, h - f, h, mat)
+
+# Hoja ciega de puerta, de «xa» a «xb», del suelo al cabecero; 4 cm de
+# grueso como mucho (no más que el cerco).
+component door_leaf(xa, xb, h, f, d, mat)
+  use block(xa, xb, min(0.04, d), 0, h - f, mat)
+
+# Marco de ventana: dos jambas, travesaño inferior y superior.
+component window_frame(w, h, f, d, mat)
+  use block(-w / 2, -w / 2 + f, d, 0, h, mat)
+  use block(w / 2 - f, w / 2, d, 0, h, mat)
+  use block(-w / 2 + f, w / 2 - f, d, 0, f, mat)
+  use block(-w / 2 + f, w / 2 - f, d, h - f, h, mat)
+
+# «n» paños de vidrio iguales dentro del marco, separados por montantes del
+# ancho del marco; vidrio de 24 mm como mucho (no más que el marco).
+component glazing(w, h, f, d, n, frame_mat, glass_mat)
+  let clear = (w - 2 * f - (n - 1) * f) / n
+  repeat i in 0..n
+    let a = -w / 2 + f + i * (clear + f)
+    if i > 0
+      use block(a - f, a, d, f, h - f, frame_mat)
+    use block(a, a + clear, min(0.024, d), f, h - f, glass_mat)

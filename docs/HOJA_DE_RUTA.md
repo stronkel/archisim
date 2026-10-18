@@ -40,7 +40,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
-| 2.1 ★ | **Sistema de familias paramétricas** (diseño en `docs/FAMILIAS.md`), en cinco bloques: **A** núcleo (recetas, parámetros por secciones, fórmulas, piezas comunes, 3D; puertas y ventanas actuales convertidas en cinco familias; formato v3), **B** símbolos de planta por escala y alzado, **C** IFC (tipos con marca, Psets, `ArchiSim_Family`), **D** configurador con vista previa en directo y puntos de control, **E** navegador de familias y tipos con nº de ejemplares, biblioteca de tipos (`.asfam`) y herramienta Objeto | L | D2 ✅ |
+| 2.1 ★ ◐ v0.14 | **Sistema de familias paramétricas** — bloque A hecho; siguen B a E — (diseño en `docs/FAMILIAS.md`), en cinco bloques: **A** núcleo (recetas, parámetros por secciones, fórmulas, piezas comunes, 3D; puertas y ventanas actuales convertidas en cinco familias; formato v3), **B** símbolos de planta por escala y alzado, **C** IFC (tipos con marca, Psets, `ArchiSim_Family`), **D** configurador con vista previa en directo y puntos de control, **E** navegador de familias y tipos con nº de ejemplares, biblioteca de tipos (`.asfam`) y herramienta Objeto | L | D2 ✅ |
 | 2.2 | **Librería inicial propia**: puertas y ventanas paramétricas (con premarco, persiana y capialzado, vierteaguas), mobiliario, sanitarios, cocina | L | 2.1 |
 | 2.3 ◐ v0.11 | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD — hechas; falta el recorte de muros con forjados y las prioridades editables por material | M | — |
 | 2.4 | **Cubiertas inclinadas** por faldones (pendiente, aleros, limatesas y limahoyas) y recorte de muros bajo cubierta | L | 2.3 |
@@ -92,4 +92,4 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 3. ~~Bloque 10: **uniones en T y prioridades** (2.3)~~ — hecho en v0.11 (falta el recorte con forjados).
 4. ~~Bloque 11: **editor de tipos y materiales** (1.6)~~ — hecho en v0.12.
 5. ~~Bloque 12: **aplicación de Mac** (parte de 1.8)~~ — hecho en v0.13.
-6. Fase 2 con **familias** (2.1): D2 decidida el 18/10/2026. Bloques 13 a 17 = A a E de `docs/FAMILIAS.md`; después la librería (2.2).
+6. Fase 2 con **familias** (2.1): D2 decidida el 18/10/2026. Bloques 13 a 17 = A a E de `docs/FAMILIAS.md`; después la librería (2.2). Bloque 13 (A, núcleo) hecho en v0.14.

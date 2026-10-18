@@ -1,4 +1,4 @@
-//! Version 2 of the `.archisim` file layout and its conversion to and from
+//! Version 3 of the `.archisim` file layout and its conversion to and from
 //! the core model.
 //!
 //! The structs here are the file format, not the model: they change only
@@ -30,6 +30,8 @@ pub(crate) struct ProjectFile {
     pub walls: Vec<Wall>,
     pub slab_types: Vec<SlabType>,
     pub slabs: Vec<Slab>,
+    /// Family recipes used by the door and window types (version 3).
+    pub families: Vec<Family>,
     pub opening_types: Vec<OpeningType>,
     pub openings: Vec<Opening>,
     /// Plan dimensions (version 2).
@@ -187,23 +189,20 @@ pub(crate) struct Slab {
     pub top_offset: f64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum OpeningCategory {
-    Door,
-    Window,
+/// A family recipe, one text line per array item. `name` and `version`
+/// repeat what the recipe says, for whoever reads the file.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Family {
+    pub id: u64,
+    pub name: String,
+    pub version: u32,
+    pub source: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum Operation {
-    SingleSwing,
-    DoubleSwing,
-    Sliding,
-    Fixed,
-    SingleCasement,
-    DoubleCasement,
-}
+/// Parameter values by name: numbers (lengths in metres), `true`/`false`,
+/// texts, and materials by their `id`.
+pub(crate) type ParamValues = serde_json::Map<String, serde_json::Value>;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -211,14 +210,10 @@ pub(crate) struct OpeningType {
     pub id: u64,
     pub guid: String,
     pub name: String,
-    pub category: OpeningCategory,
-    pub operation: Operation,
-    pub width: f64,
-    pub height: f64,
-    pub frame_width: f64,
-    pub frame_depth: f64,
-    pub frame_material: u64,
-    pub panel_material: u64,
+    pub mark: String,
+    pub description: String,
+    pub family: u64,
+    pub values: ParamValues,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -249,6 +244,9 @@ pub(crate) struct Opening {
     pub hand: Hand,
     /// `null` centres the frame in the wall.
     pub setback: Option<f64>,
+    /// Instance parameters of the family, if it has any.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub values: ParamValues,
 }
 
 // ---- Model → file ------------------------------------------------------
@@ -381,42 +379,27 @@ impl ProjectFile {
                     top_offset: s.top_offset,
                 })
                 .collect(),
+            families: p
+                .families
+                .iter()
+                .map(|f| Family {
+                    id: f.id.0,
+                    name: f.name().to_string(),
+                    version: f.version(),
+                    source: f.source.lines().map(str::to_string).collect(),
+                })
+                .collect(),
             opening_types: p
                 .opening_types
                 .into_iter()
-                .map(|t| {
-                    let (category, operation) = match t.kind {
-                        core::OpeningKind::Door(op) => (
-                            OpeningCategory::Door,
-                            match op {
-                                core::DoorOperation::SingleSwing => Operation::SingleSwing,
-                                core::DoorOperation::DoubleSwing => Operation::DoubleSwing,
-                                core::DoorOperation::Sliding => Operation::Sliding,
-                            },
-                        ),
-                        core::OpeningKind::Window(op) => (
-                            OpeningCategory::Window,
-                            match op {
-                                core::WindowOperation::Fixed => Operation::Fixed,
-                                core::WindowOperation::SingleCasement => Operation::SingleCasement,
-                                core::WindowOperation::DoubleCasement => Operation::DoubleCasement,
-                                core::WindowOperation::Sliding => Operation::Sliding,
-                            },
-                        ),
-                    };
-                    OpeningType {
-                        id: t.id.0,
-                        guid: t.guid.to_string(),
-                        name: t.name,
-                        category,
-                        operation,
-                        width: t.width,
-                        height: t.height,
-                        frame_width: t.frame_width,
-                        frame_depth: t.frame_depth,
-                        frame_material: t.frame_material.0,
-                        panel_material: t.panel_material.0,
-                    }
+                .map(|t| OpeningType {
+                    id: t.id.0,
+                    guid: t.guid.to_string(),
+                    name: t.name,
+                    mark: t.mark,
+                    description: t.description,
+                    family: t.family.0,
+                    values: values_out(&t.values),
                 })
                 .collect(),
             openings: p
@@ -438,6 +421,7 @@ impl ProjectFile {
                         core::Hand::Right => Hand::Right,
                     },
                     setback: o.setback,
+                    values: values_out(&o.values),
                 })
                 .collect(),
             dimensions: p
@@ -489,6 +473,7 @@ impl ProjectFile {
             walls: Vec::new(),
             slab_types: Vec::new(),
             slabs: Vec::new(),
+            families: Vec::new(),
             opening_types: Vec::new(),
             openings: Vec::new(),
             dimensions: Vec::new(),
@@ -575,54 +560,55 @@ impl ProjectFile {
                 top_offset: s.top_offset,
             });
         }
+        for f in self.families {
+            let element = format!("family {} «{}»", f.id, f.name);
+            let mut text = f.source.join("\n");
+            text.push('\n');
+            let family =
+                core::Family::new(core::FamilyId(f.id), text).map_err(|e| FileError::Value {
+                    element: element.clone(),
+                    message: e.to_string(),
+                })?;
+            if family.name() != f.name || family.version() != f.version {
+                return Err(FileError::Value {
+                    element,
+                    message: format!(
+                        "the recipe is «{}» version {}: «name» and «version» must match it",
+                        family.name(),
+                        family.version()
+                    ),
+                });
+            }
+            parts.families.push(family);
+        }
+        let mut type_family = std::collections::HashMap::new();
         for t in self.opening_types {
-            let kind = match (t.category, t.operation) {
-                (OpeningCategory::Door, Operation::SingleSwing) => {
-                    core::OpeningKind::Door(core::DoorOperation::SingleSwing)
-                }
-                (OpeningCategory::Door, Operation::DoubleSwing) => {
-                    core::OpeningKind::Door(core::DoorOperation::DoubleSwing)
-                }
-                (OpeningCategory::Door, Operation::Sliding) => {
-                    core::OpeningKind::Door(core::DoorOperation::Sliding)
-                }
-                (OpeningCategory::Window, Operation::Fixed) => {
-                    core::OpeningKind::Window(core::WindowOperation::Fixed)
-                }
-                (OpeningCategory::Window, Operation::SingleCasement) => {
-                    core::OpeningKind::Window(core::WindowOperation::SingleCasement)
-                }
-                (OpeningCategory::Window, Operation::DoubleCasement) => {
-                    core::OpeningKind::Window(core::WindowOperation::DoubleCasement)
-                }
-                (OpeningCategory::Window, Operation::Sliding) => {
-                    core::OpeningKind::Window(core::WindowOperation::Sliding)
-                }
-                (category, operation) => {
-                    return Err(FileError::Value {
-                        element: format!("door or window type {}", t.id),
-                        message: format!(
-                            "a {} cannot have the operation «{}»",
-                            enum_name(&category),
-                            enum_name(&operation)
-                        ),
-                    })
-                }
-            };
+            let element = format!("door or window type {} «{}»", t.id, t.name);
+            let family = parts.families.iter().find(|f| f.id.0 == t.family);
+            let values = values_in(family, core::ParamScope::Type, t.values, &element)?;
+            type_family.insert(t.id, family);
             parts.opening_types.push(core::OpeningType {
                 id: core::OpeningTypeId(t.id),
-                guid: guid(&format!("door or window type {}", t.id), &t.guid)?,
+                guid: guid(&element, &t.guid)?,
                 name: t.name,
-                kind,
-                width: t.width,
-                height: t.height,
-                frame_width: t.frame_width,
-                frame_depth: t.frame_depth,
-                frame_material: core::MaterialId(t.frame_material),
-                panel_material: core::MaterialId(t.panel_material),
+                mark: t.mark,
+                description: t.description,
+                family: core::FamilyId(t.family),
+                values,
+                // Worked out again from the family when the model is built.
+                kind: core::OpeningKind::Door(core::DoorOperation::SingleSwing),
+                width: 0.0,
+                height: 0.0,
+                frame_width: 0.0,
+                frame_depth: 0.0,
+                frame_material: core::MaterialId(0),
+                panel_material: core::MaterialId(0),
             });
         }
         for o in self.openings {
+            let element = format!("door or window {}", o.id);
+            let family = type_family.get(&o.opening_type).copied().flatten();
+            let values = values_in(family, core::ParamScope::Instance, o.values, &element)?;
             parts.openings.push(core::Opening {
                 id: core::OpeningId(o.id),
                 guid: guid(&format!("door or window {}", o.id), &o.guid)?,
@@ -639,6 +625,7 @@ impl ProjectFile {
                     Hand::Right => core::Hand::Right,
                 },
                 setback: o.setback,
+                values,
             });
         }
 
@@ -660,6 +647,58 @@ impl ProjectFile {
         }
         core::Model::from_parts(parts).map_err(FileError::Model)
     }
+}
+
+/// Parameter values as written in the file: materials by their id.
+fn values_out(values: &core::Values) -> ParamValues {
+    values
+        .iter()
+        .map(|(k, v)| {
+            let json = match v {
+                core::Value::Number(n) => serde_json::Value::from(*n),
+                core::Value::Bool(b) => serde_json::Value::from(*b),
+                core::Value::Text(t) => serde_json::Value::from(t.clone()),
+                core::Value::Material(m) => serde_json::Value::from(*m),
+            };
+            (k.clone(), json)
+        })
+        .collect()
+}
+
+/// Parameter values read from the file, typed by the family's parameters.
+/// Values for parameters the family does not have are kept as they come,
+/// for the model to report.
+fn values_in(
+    family: Option<&core::Family>,
+    scope: core::ParamScope,
+    json: ParamValues,
+    element: &str,
+) -> Result<core::Values, FileError> {
+    let mut out = core::Values::new();
+    for (name, v) in json {
+        let kind = family
+            .and_then(|f| f.def().param(&name))
+            .filter(|p| p.scope == scope)
+            .map(|p| p.kind.clone());
+        let bad = |what: &str| FileError::Value {
+            element: element.to_string(),
+            message: format!("«{name}» must be {what}"),
+        };
+        let value = match (&kind, &v) {
+            (Some(core::ParamKind::Material), serde_json::Value::Number(n)) => {
+                core::Value::Material(n.as_u64().ok_or_else(|| bad("a material id"))?)
+            }
+            (Some(core::ParamKind::Material), _) => return Err(bad("a material id")),
+            (_, serde_json::Value::Number(n)) => {
+                core::Value::Number(n.as_f64().ok_or_else(|| bad("a number"))?)
+            }
+            (_, serde_json::Value::Bool(b)) => core::Value::Bool(*b),
+            (_, serde_json::Value::String(t)) => core::Value::Text(t.clone()),
+            _ => return Err(bad("a number, true/false or a text")),
+        };
+        out.insert(name, value);
+    }
+    Ok(out)
 }
 
 fn layers_in(layers: Vec<Layer>) -> Vec<core::Layer> {
@@ -688,14 +727,6 @@ fn parse_hex(text: &str) -> Option<[u8; 3]> {
     }
     let byte = |i: usize| u8::from_str_radix(&digits[i..i + 2], 16).ok();
     Some([byte(0)?, byte(2)?, byte(4)?])
-}
-
-/// The name an enum value has in the file, e.g. `single_swing`.
-fn enum_name<T: Serialize>(value: &T) -> String {
-    serde_json::to_value(value)
-        .ok()
-        .and_then(|v| v.as_str().map(str::to_string))
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

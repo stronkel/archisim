@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -183,10 +183,116 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
                 }
                 v
             }
+            // 2 → 3: door and window types become types of families.
+            2 => to_families(value)?,
             other => return Err(FileError::UnknownVersion(other)),
         };
         version += 1;
     }
+    Ok(value)
+}
+
+/// Version 2 → 3. Each door or window type, described by its category,
+/// operation and sizes, becomes a type of the matching system family
+/// ("Puerta abatible", "Ventana corredera"…), whose recipe is added to the
+/// file. Types get marks in file order (P-01, P-02… and V-01…). The
+/// families are numbered after the highest id in the file.
+fn to_families(mut value: Value) -> Result<Value, FileError> {
+    use archisim_core::family::{legacy_family, operation_from_name, system_family};
+    use archisim_core::OpeningKind;
+
+    let Value::Object(map) = &mut value else {
+        return Ok(value);
+    };
+    map.insert("version".into(), Value::from(3));
+    let mut next_id = 0;
+    for key in [
+        "levels",
+        "materials",
+        "wall_types",
+        "walls",
+        "slab_types",
+        "slabs",
+        "opening_types",
+        "openings",
+        "dimensions",
+        "elevation_marks",
+    ] {
+        if let Some(Value::Array(items)) = map.get(key) {
+            for id in items.iter().filter_map(|i| i.get("id")?.as_u64()) {
+                next_id = next_id.max(id);
+            }
+        }
+    }
+    let mut families: Vec<Value> = Vec::new();
+    let mut by_name: Vec<(&str, u64)> = Vec::new();
+    let (mut doors, mut windows) = (0, 0);
+    if let Some(Value::Array(types)) = map.get_mut("opening_types") {
+        for t in types.iter_mut() {
+            let Value::Object(obj) = t else {
+                continue;
+            };
+            let id = obj.get("id").cloned().unwrap_or(Value::Null);
+            let text = |v: Option<Value>| v.and_then(|v| v.as_str().map(str::to_string));
+            let category = text(obj.remove("category")).unwrap_or_default();
+            let operation = text(obj.remove("operation")).unwrap_or_default();
+            let kind =
+                operation_from_name(&category, &operation).ok_or_else(|| FileError::Value {
+                    element: format!("door or window type {id}"),
+                    message: format!("a {category} cannot have the operation «{operation}»"),
+                })?;
+            let (name, leaves) = legacy_family(kind);
+            let family = match by_name.iter().find(|(n, _)| *n == name) {
+                Some((_, fid)) => *fid,
+                None => {
+                    next_id += 1;
+                    let source = system_family(name).expect("system family");
+                    let parsed =
+                        archisim_core::Family::new(archisim_core::FamilyId(next_id), source)
+                            .expect("system families parse");
+                    families.push(serde_json::json!({
+                        "id": next_id,
+                        "name": parsed.name(),
+                        "version": parsed.version(),
+                        "source": parsed.source.lines().collect::<Vec<_>>(),
+                    }));
+                    by_name.push((name, next_id));
+                    next_id
+                }
+            };
+            let mut values = serde_json::Map::new();
+            for key in [
+                "width",
+                "height",
+                "frame_width",
+                "frame_depth",
+                "frame_material",
+                "panel_material",
+            ] {
+                if let Some(v) = obj.remove(key) {
+                    values.insert(key.into(), v);
+                }
+            }
+            if let Some(n) = leaves {
+                values.insert("leaves".into(), Value::from(n));
+            }
+            let mark = match kind {
+                OpeningKind::Door(_) => {
+                    doors += 1;
+                    format!("P-{doors:02}")
+                }
+                OpeningKind::Window(_) => {
+                    windows += 1;
+                    format!("V-{windows:02}")
+                }
+            };
+            obj.insert("mark".into(), Value::from(mark));
+            obj.insert("description".into(), Value::from(""));
+            obj.insert("family".into(), Value::from(family));
+            obj.insert("values".into(), Value::Object(values));
+        }
+    }
+    map.insert("families".into(), Value::Array(families));
     Ok(value)
 }
 
@@ -271,6 +377,7 @@ fn write_pretty(value: &Value, indent: usize, out: &mut String) {
 mod tests {
     use super::*;
     use archisim_core::*;
+    use serde_json::Value;
 
     /// A room with a door and a window, a slab and every kind of value the
     /// file has to carry (negative offsets, `null` setback, both sides…).
@@ -406,7 +513,7 @@ mod tests {
         for e in ids {
             m.remove_elevation_mark(e).unwrap();
         }
-        let mut v: Value = serde_json::from_str(&to_string(&m)).unwrap();
+        let mut v = as_version_2(&m);
         let map = v.as_object_mut().unwrap();
         map.remove("dimensions");
         map.remove("elevation_marks");
@@ -414,9 +521,138 @@ mod tests {
         let old = serde_json::to_string_pretty(&v).unwrap();
         assert!(old.contains("\"version\": 1"));
         let opened = from_str(&old).unwrap();
-        assert_eq!(opened.to_parts(), m.to_parts());
-        // Saved again, it is a version 2 file.
-        assert!(to_string(&opened).contains("\"version\": 2"));
+        assert_same_project(&opened, &m);
+        // Saved again, it is a version 3 file.
+        assert!(to_string(&opened).contains("\"version\": 3"));
+    }
+
+    /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
+    /// window types by category, operation and sizes, no families.
+    fn as_version_2(m: &Model) -> Value {
+        let mut v: Value = serde_json::from_str(&to_string(m)).unwrap();
+        let map = v.as_object_mut().unwrap();
+        map.insert("version".into(), Value::from(2));
+        map.remove("families");
+        for t in map["opening_types"].as_array_mut().unwrap() {
+            let obj = t.as_object_mut().unwrap();
+            let id = obj["id"].as_u64().unwrap();
+            let ty = m.opening_type(OpeningTypeId(id)).unwrap();
+            for k in ["mark", "description", "family", "values"] {
+                obj.remove(k);
+            }
+            let (category, operation) = match ty.kind {
+                OpeningKind::Door(DoorOperation::SingleSwing) => ("door", "single_swing"),
+                OpeningKind::Door(DoorOperation::DoubleSwing) => ("door", "double_swing"),
+                OpeningKind::Door(DoorOperation::Sliding) => ("door", "sliding"),
+                OpeningKind::Window(WindowOperation::Fixed) => ("window", "fixed"),
+                OpeningKind::Window(WindowOperation::SingleCasement) => {
+                    ("window", "single_casement")
+                }
+                OpeningKind::Window(WindowOperation::DoubleCasement) => {
+                    ("window", "double_casement")
+                }
+                OpeningKind::Window(WindowOperation::Sliding) => ("window", "sliding"),
+            };
+            obj.insert("category".into(), Value::from(category));
+            obj.insert("operation".into(), Value::from(operation));
+            for (k, x) in [
+                ("width", ty.width),
+                ("height", ty.height),
+                ("frame_width", ty.frame_width),
+                ("frame_depth", ty.frame_depth),
+            ] {
+                obj.insert(k.into(), Value::from(x));
+            }
+            obj.insert("frame_material".into(), Value::from(ty.frame_material.0));
+            obj.insert("panel_material".into(), Value::from(ty.panel_material.0));
+        }
+        for o in map["openings"].as_array_mut().unwrap() {
+            o.as_object_mut().unwrap().remove("values");
+        }
+        v
+    }
+
+    /// Same elements, ids, GUIDs and resolved door and window types; the
+    /// families may have other ids (they did not exist before version 3).
+    fn assert_same_project(opened: &Model, m: &Model) {
+        let (mut a, mut b) = (opened.to_parts(), m.to_parts());
+        assert_eq!(a.families.len(), b.families.len());
+        for p in [&mut a, &mut b] {
+            p.families.clear();
+            for t in &mut p.opening_types {
+                t.family = FamilyId(0);
+            }
+        }
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn version_2_types_become_types_of_the_system_families() {
+        let m = sample();
+        let old = serde_json::to_string_pretty(&as_version_2(&m)).unwrap();
+        let opened = from_str(&old).unwrap();
+        assert_same_project(&opened, &m);
+        for t in opened.opening_types() {
+            let fam = opened.family(t.family).unwrap();
+            assert_eq!(fam.name(), archisim_core::family::legacy_family(t.kind).0);
+        }
+        // The families are numbered after every other element.
+        let max = m
+            .to_parts()
+            .openings
+            .iter()
+            .map(|o| o.id.0)
+            .chain(m.to_parts().dimensions.iter().map(|d| d.id.0))
+            .max()
+            .unwrap();
+        assert!(opened.families().all(|f| f.id.0 > max));
+        // An impossible operation is still explained.
+        let broken = old.replacen("\"operation\": \"sliding\"", "\"operation\": \"fixed\"", 1);
+        let broken = broken.replacen("\"category\": \"window\"", "\"category\": \"door\"", 1);
+        let err = from_str(&broken).unwrap_err();
+        assert!(matches!(err, FileError::Value { .. }), "{err}");
+    }
+
+    /// The vivienda de prueba as saved by ArchiSim 0.13 (file version 2)
+    /// opens with the same doors and windows, now as family types.
+    #[test]
+    fn the_demo_saved_by_version_0_13_opens_the_same() {
+        let text = include_str!("../tests/fixtures/demo_v2.archisim");
+        let json: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(json["version"], 2);
+        let m = from_str(text).unwrap();
+        let types = json["opening_types"].as_array().unwrap();
+        assert_eq!(m.opening_types().count(), types.len());
+        for t in types {
+            let ty = m
+                .opening_type(OpeningTypeId(t["id"].as_u64().unwrap()))
+                .unwrap();
+            assert_eq!(ty.guid.as_str(), t["guid"].as_str().unwrap());
+            assert_eq!(ty.name, t["name"].as_str().unwrap());
+            for (k, x) in [
+                ("width", ty.width),
+                ("height", ty.height),
+                ("frame_width", ty.frame_width),
+                ("frame_depth", ty.frame_depth),
+            ] {
+                assert_eq!(x, t[k].as_f64().unwrap(), "{k}");
+            }
+            assert_eq!(ty.frame_material.0, t["frame_material"].as_u64().unwrap());
+            assert_eq!(ty.panel_material.0, t["panel_material"].as_u64().unwrap());
+            assert_eq!(ty.is_door(), t["category"] == "door");
+        }
+        let marks: Vec<_> = m.opening_types().map(|t| t.mark.as_str()).collect();
+        assert_eq!(
+            marks,
+            ["P-01", "P-02", "P-03", "P-04", "V-01", "V-02", "V-03", "V-04"]
+        );
+        assert_eq!(
+            m.openings().count(),
+            json["openings"].as_array().unwrap().len()
+        );
+        // Saved as version 3 and opened again: the same model.
+        let again = from_str(&to_string(&m)).unwrap();
+        assert_eq!(again, m);
     }
 
     #[test]
@@ -437,7 +673,11 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 2,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 3,\n"));
+        // Families are written one recipe line per item, readable.
+        assert!(text.contains("      \"source\": [\n        \"family \\\"Puerta abatible\\\"\",\n"));
+        assert!(text.contains("\"mark\": \"P-01\""));
+        assert!(text.contains("\"leaves\": 1.0"));
         assert!(text.contains("\"units\": \"m\""));
         assert!(text.contains("\"start\": [0.0, 0.0]"));
         assert!(text.contains("\"cut_color\": \"#E8C4B2\""));
@@ -474,11 +714,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 2", "\"version\": 7"),
+            edited("\"version\": 3", "\"version\": 7"),
             Err(FileError::TooNew { version: 7 })
         ));
         assert!(matches!(
-            edited("\"version\": 2", "\"version\": 0"),
+            edited("\"version\": 3", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(
@@ -493,13 +733,27 @@ mod tests {
         let err = edited("\"reference\": \"center\"", "\"reference\": \"middle\"").unwrap_err();
         assert!(err.to_string().contains("middle"), "{err}");
 
+        // A value outside the family's range, a broken recipe, a recipe
+        // that does not match its name, a material that is not an id.
+        let err = edited("\"leaves\": 1.0", "\"leaves\": 5.0").unwrap_err();
+        match err {
+            FileError::Model(e) => assert!(matches!(
+                e.error,
+                ModelError::Family(FamilyError::OutOfRange { .. })
+            )),
+            other => panic!("unexpected {other}"),
+        }
+        let err = edited("\"  category door\"", "\"  category\"").unwrap_err();
+        assert!(matches!(err, FileError::Value { .. }));
+        assert!(err.to_string().starts_with("family "), "{err}");
+        let err = edited("\"name\": \"Puerta abatible\"", "\"name\": \"Puerta\"").unwrap_err();
+        assert!(err.to_string().contains("must match"), "{err}");
         let err = edited(
-            "\"operation\": \"sliding\"",
-            "\"operation\": \"single_swing\"",
+            "\"frame_material\": ",
+            "\"frame_material\": \"Madera\", \"x\": ",
         )
         .unwrap_err();
-        assert!(matches!(err, FileError::Value { .. }));
-        assert!(err.to_string().contains("window"), "{err}");
+        assert!(err.to_string().contains("material id"), "{err}");
 
         let err = edited("\"cut_color\": \"#E8C4B2\"", "\"cut_color\": \"rojo\"").unwrap_err();
         assert!(matches!(err, FileError::Value { .. }));

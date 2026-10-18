@@ -41,8 +41,9 @@ Crates actuales (`crates/`):
 
 | Crate | Responsabilidad |
 |---|---|
-| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, tipos de puerta y ventana, huecos en muro, deshacer/rehacer; edición de materiales y tipos con comprobación de los elementos que los usan |
-| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete y uniones en T con prioridad por capa (`joins`), área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías, los mismos que exporta el IFC |
+| `archisim-family` | El lenguaje de las familias (recetas `.asfam`): lector, fórmulas, condiciones, repeticiones, piezas comunes y evaluación (geometría 3D y salidas). No sabe nada del modelo; ver `docs/FAMILIAS.md` |
+| `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, familias (copia de la receta en el proyecto y las cinco familias de sistema), tipos de puerta y ventana como tipos de familia con marca, huecos en muro, deshacer/rehacer; edición de materiales y tipos con comprobación de los elementos que los usan |
+| `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete y uniones en T con prioridad por capa (`joins`), área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías (el cuerpo 3D de su familia), los mismos que exporta el IFC |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas. Lector STEP e importador IFC2X3/IFC4 de plantas, muros con capas, forjados, puertas y ventanas, con informe de lo que queda fuera |
 | `archisim-plan` | Planta en SVG: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana, ejes, rotulación; cotas y cotas de nivel con rotulación técnica de trazo propia (`lettering`) |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
@@ -50,7 +51,7 @@ Crates actuales (`crates/`):
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta; `importar` convierte un IFC en proyecto |
 | `archisim-app` | La aplicación de escritorio (egui sobre wgpu): vista de planta y vista 3D, herramientas muro, forjado (por polígono o varita mágica), puerta, ventana y cota, gestión de plantas, tipos y materiales (multicapas, puertas, ventanas y materiales, con vista previa), selección y propiedades, mover, copiar y estirar con el ratón, deshacer, abrir/guardar `.archisim` (también soltando el fichero en la ventana o, en Mac, con doble clic en el Finder), importar IFC, exportar IFC, planta e imagen 3D |
 
-Reglas de dependencias: `core` no depende de nadie del proyecto; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
+Reglas de dependencias: `family` (el lenguaje) no depende de nadie; `core` solo de `family`; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
 La vista de planta de la aplicación **es** la planta 1:50 que se exporta: se dibuja el mismo SVG de la zona visible y se rasteriza a la resolución de pantalla (grosores de línea reales a 1:50, como la vista de «grosor de línea real» de ArchiCAD). Lo que se ve es lo que se exporta. Encima, en vectorial, van la selección, la vista previa del muro y los puntos de forzado.
 
@@ -67,9 +68,9 @@ La vista 3D dibuja con la tarjeta gráfica (wgpu) los sólidos de `archisim-geom
 | `SlabType` (capas) | Tipo de suelo / cubierta (estructura compuesta) | Multicapa de forjado | `IfcSlabType` + `IfcMaterialLayerSet` |
 | `Slab` | Suelo / Cubierta por contorno | Forjado | `IfcSlab` + `IfcMaterialLayerSetUsage` (`AXIS3`) |
 | Línea de referencia | Línea de ubicación | Línea de referencia | Eje + `OffsetFromReferenceLine` |
-| `OpeningType` | Tipo de familia de puerta / ventana | Objeto puerta / ventana | `IfcDoorType` / `IfcWindowType` + `IfcMaterialConstituentSet` |
+| `OpeningType` (familia + valores + marca) | Tipo de familia de puerta / ventana | Objeto puerta / ventana con sus ajustes | `IfcDoorType` / `IfcWindowType` + `IfcMaterialConstituentSet` |
 | `Opening` | Ejemplar de puerta / ventana (alojado en muro) | Puerta / ventana | `IfcOpeningElement` (vacía el muro) + `IfcDoor` / `IfcWindow` (lo rellena) |
-| Familia (fase 2, `docs/FAMILIAS.md`) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría; parámetros en `ArchiSim_Family` |
+| `Family` (receta `.asfam`, copia en el proyecto; `docs/FAMILIAS.md`) | Familia .rfa | Objeto GDL | `IfcTypeObject` + geometría; parámetros en `ArchiSim_Family` (bloque C) |
 | Parámetro compartido | Parámetro compartido | Propiedad | `IfcPropertySet` |
 
 Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres que no cambia nunca, ni al copiar el proyecto ni al exportar varias veces. Así los ingenieros pueden federar modelos y comparar versiones.
@@ -129,7 +130,7 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 
 ### Puertas y ventanas
 
-- Un **tipo** de puerta o ventana fija el funcionamiento (puerta abatible de una o dos hojas o corredera; ventana fija, practicable de una o dos hojas o corredera), el **hueco de obra** (ancho × alto), el perfil del marco (anchura vista y fondo) y dos materiales: marco y hoja/vidrio.
+- Un **tipo** de puerta o ventana es un tipo de una **familia** (`docs/FAMILIAS.md`) con sus parámetros de tipo fijados y una **marca de tipo** única (P-01, V-03) para etiquetas y mediciones. Las cinco familias de sistema (puerta abatible y corredera; ventana fija, practicable y corredera) fijan el funcionamiento (puerta abatible de una o dos hojas o corredera; ventana fija, practicable de una o dos hojas o corredera), el **hueco de obra** (ancho × alto), el perfil del marco (anchura vista y fondo) y dos materiales: marco y hoja/vidrio.
 - Cada **ejemplar** vive en un muro: posición del centro medida sobre la línea de referencia desde el inicio del muro (como Revit), altura de antepecho desde el nivel, lado hacia el que abre (cara interior o exterior) y mano según UNE-EN 12519 (mirando desde el lado hacia el que abre la hoja, bisagras a izquierda o derecha). El retranqueo de la carpintería se mide desde la cara exterior del muro; si no se indica, se centra.
 - Se rechaza lo que no cabe: fuera del largo o de la altura del muro, solapado con otro hueco del mismo muro, o con un marco más profundo que el muro. Borrar el muro borra sus huecos; acortarlo de forma que un hueco se salga se rechaza; invertirlo deja los huecos en su sitio.
 - En planta, los huecos que corta el plano de corte interrumpen el muro y todas sus capas; las mochetas se cierran con línea de corte. En fachadas de doble hoja, la hoja exterior **vuelve** en la mocheta cerrando la cámara (el aislamiento se detiene a un espesor de ladrillo de la jamba) y el revestimiento exterior (monocapa) **envuelve** la mocheta hasta la carpintería; tabiques y muros sin cámara se cortan rectos. Puertas: cerco, hoja abierta a 90° y arco de giro (correderas: hoja sobre la cara y flecha). Ventanas: marco, línea de vidrio, montante central en las de dos hojas, giro de las hojas practicables (línea fina y arco), hojas desfasadas en las correderas, vierteaguas al exterior y borde del antepecho al interior. Las ventanas que quedan enteras por encima del plano de corte se dibujan discontinuas sin interrumpir el muro.

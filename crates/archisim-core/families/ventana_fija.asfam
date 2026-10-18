@@ -1,0 +1,33 @@
+family "Ventana fija"
+  category window
+  host wall
+  version 1
+  description "Ventana fija de un paño, con marco"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.10..20.00 label "Hueco de obra: ancho"
+    height length = 0.60 range 0.10..20.00 label "Hueco de obra: alto"
+  section "Marco"
+    frame_width length = 0.06 range 0.001..2.00 label "Marco: anchura vista"
+    frame_depth length = 0.07 range 0.001..2.00 label "Marco: fondo"
+  section "Materiales"
+    frame_material material = "Aluminio lacado" label "Marco"
+    panel_material material = "Vidrio doble" label "Vidrio"
+
+require 2 * frame_width < width and 2 * frame_width < height else "El marco no deja hueco para el vidrio"
+
+body
+  use window_frame(width, height, frame_width, frame_depth, frame_material)
+  use glazing(width, height, frame_width, frame_depth, 1, frame_material, panel_material)
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  operation = "fixed"

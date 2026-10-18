@@ -1,0 +1,689 @@
+{
+  "format": "ArchiSim",
+  "version": 2,
+  "units": "m",
+  "generator": "ArchiSim 0.13.0",
+  "project": {
+    "name": "Vivienda de prueba",
+    "guid": "379NeCtFb7cBD9IGEkZ4mn",
+    "site_guid": "2lXjZJAN5BgQIbDxjtfK2E",
+    "building_guid": "09FTBfmh59fwDDKw5XnV4q"
+  },
+  "levels": [
+    {
+      "id": 1,
+      "guid": "0z8sv6wIn1vvulSGaXeWMG",
+      "name": "Planta baja",
+      "elevation": 0.0
+    },
+    {
+      "id": 31,
+      "guid": "0injbaOTTDvgX8VLXEIwiP",
+      "name": "Cubierta",
+      "elevation": 3.548
+    }
+  ],
+  "materials": [
+    {
+      "id": 2,
+      "name": "Mortero monocapa",
+      "category": "plaster",
+      "cut_color": "#ECE8DE",
+      "cut_pattern": "dots"
+    },
+    {
+      "id": 3,
+      "name": "Ladrillo perforado",
+      "category": "brick",
+      "cut_color": "#E8C4B2",
+      "cut_pattern": "diagonal"
+    },
+    {
+      "id": 4,
+      "name": "Lana mineral",
+      "category": "insulation",
+      "cut_color": "#FAF3CD",
+      "cut_pattern": "insulation"
+    },
+    {
+      "id": 5,
+      "name": "Ladrillo hueco doble",
+      "category": "brick",
+      "cut_color": "#F0D6C8",
+      "cut_pattern": "diagonal"
+    },
+    {
+      "id": 6,
+      "name": "Enlucido de yeso",
+      "category": "plaster",
+      "cut_color": "#F5F5F5",
+      "cut_pattern": "solid"
+    },
+    {
+      "id": 7,
+      "name": "Baldosa cerámica",
+      "category": "ceramic",
+      "cut_color": "#D6CEBE",
+      "cut_pattern": "solid"
+    },
+    {
+      "id": 8,
+      "name": "Mortero de cemento",
+      "category": "mortar",
+      "cut_color": "#DEDED6",
+      "cut_pattern": "dots"
+    },
+    {
+      "id": 9,
+      "name": "Hormigón armado",
+      "category": "concrete",
+      "cut_color": "#CDCDCD",
+      "cut_pattern": "cross"
+    },
+    {
+      "id": 10,
+      "name": "Lámina impermeabilizante",
+      "category": "membrane",
+      "cut_color": "#464646",
+      "cut_pattern": "solid"
+    },
+    {
+      "id": 11,
+      "name": "Grava",
+      "category": "gravel",
+      "cut_color": "#D2CCBE",
+      "cut_pattern": "dots"
+    },
+    {
+      "id": 12,
+      "name": "Poliestireno extruido (XPS)",
+      "category": "insulation",
+      "cut_color": "#D6ECD6",
+      "cut_pattern": "insulation"
+    },
+    {
+      "id": 13,
+      "name": "Hormigón celular",
+      "category": "concrete",
+      "cut_color": "#E4E0D6",
+      "cut_pattern": "dots"
+    },
+    {
+      "id": 14,
+      "name": "Madera de pino",
+      "category": "wood",
+      "cut_color": "#C4A070",
+      "cut_pattern": "solid"
+    },
+    {
+      "id": 15,
+      "name": "Aluminio lacado",
+      "category": "aluminium",
+      "cut_color": "#787C80",
+      "cut_pattern": "solid"
+    },
+    {
+      "id": 16,
+      "name": "Vidrio doble",
+      "category": "glass",
+      "cut_color": "#BEDEEC",
+      "cut_pattern": "solid"
+    }
+  ],
+  "wall_types": [
+    {
+      "id": 17,
+      "guid": "0qbOV4$CfFABZ3jkCoJDJt",
+      "name": "Fachada doble hoja 26,5",
+      "function": "exterior",
+      "layers": [
+        {
+          "material": 2,
+          "thickness": 0.015,
+          "function": "finish"
+        },
+        {
+          "material": 3,
+          "thickness": 0.115,
+          "function": "structure"
+        },
+        {
+          "material": 4,
+          "thickness": 0.05,
+          "function": "insulation"
+        },
+        {
+          "material": 5,
+          "thickness": 0.07,
+          "function": "substrate"
+        },
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "guid": "00C2A0ntfAPuAqjVsqlszD",
+      "name": "Tabique LHD 10",
+      "function": "interior",
+      "layers": [
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        },
+        {
+          "material": 5,
+          "thickness": 0.07,
+          "function": "substrate"
+        },
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "guid": "1sJBAfPmr8iey0tXSE6zS2",
+      "name": "Muro de carga ladrillo perforado 1 pie 27",
+      "function": "interior",
+      "layers": [
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        },
+        {
+          "material": 3,
+          "thickness": 0.24,
+          "function": "structure"
+        },
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        }
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "id": 32,
+      "guid": "2k3vHoR$XDJhLKvfhpmKLH",
+      "type": 17,
+      "level": 1,
+      "start": [0.0, 0.0],
+      "end": [0.0, 9.0],
+      "reference": "exterior_face",
+      "height": 3.0,
+      "base_offset": 0.0
+    },
+    {
+      "id": 33,
+      "guid": "2L36PXl6D0megvoMBvbDCo",
+      "type": 17,
+      "level": 1,
+      "start": [0.0, 9.0],
+      "end": [12.0, 9.0],
+      "reference": "exterior_face",
+      "height": 3.0,
+      "base_offset": 0.0
+    },
+    {
+      "id": 34,
+      "guid": "1Qowxmm_n9UwB8LnlNFziI",
+      "type": 17,
+      "level": 1,
+      "start": [12.0, 9.0],
+      "end": [12.0, 0.0],
+      "reference": "exterior_face",
+      "height": 3.0,
+      "base_offset": 0.0
+    },
+    {
+      "id": 35,
+      "guid": "30RGQFlVvB4BbXXb0TMaov",
+      "type": 17,
+      "level": 1,
+      "start": [12.0, 0.0],
+      "end": [0.0, 0.0],
+      "reference": "exterior_face",
+      "height": 3.0,
+      "base_offset": 0.0
+    },
+    {
+      "id": 36,
+      "guid": "0avLLjXH9EYBN4BUVL_6aq",
+      "type": 18,
+      "level": 1,
+      "start": [6.0, 0.265],
+      "end": [6.0, 8.735],
+      "reference": "center",
+      "height": 2.7,
+      "base_offset": 0.0
+    },
+    {
+      "id": 37,
+      "guid": "2kHk0tz$r82OoPYNqbw$1m",
+      "type": 18,
+      "level": 1,
+      "start": [6.05, 4.5],
+      "end": [11.735, 4.5],
+      "reference": "center",
+      "height": 2.7,
+      "base_offset": 0.0
+    },
+    {
+      "id": 38,
+      "guid": "2EUYjdAirDSwP9ZRb_i1Hs",
+      "type": 18,
+      "level": 1,
+      "start": [0.265, 3.5],
+      "end": [5.95, 3.5],
+      "reference": "center",
+      "height": 2.7,
+      "base_offset": 0.0
+    }
+  ],
+  "slab_types": [
+    {
+      "id": 20,
+      "guid": "0FjKeJjFL9OA_615BGwZHp",
+      "name": "Solera HA 15 con encachado",
+      "function": "base_slab",
+      "layers": [
+        {
+          "material": 7,
+          "thickness": 0.015,
+          "function": "finish"
+        },
+        {
+          "material": 8,
+          "thickness": 0.03,
+          "function": "substrate"
+        },
+        {
+          "material": 9,
+          "thickness": 0.15,
+          "function": "structure"
+        },
+        {
+          "material": 10,
+          "thickness": 0.002,
+          "function": "membrane"
+        },
+        {
+          "material": 11,
+          "thickness": 0.15,
+          "function": "substrate"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "guid": "1q_L3jjTDAIQMrcN002vCp",
+      "name": "Forjado de planta HA 30",
+      "function": "floor",
+      "layers": [
+        {
+          "material": 7,
+          "thickness": 0.015,
+          "function": "finish"
+        },
+        {
+          "material": 8,
+          "thickness": 0.03,
+          "function": "substrate"
+        },
+        {
+          "material": 9,
+          "thickness": 0.3,
+          "function": "structure"
+        },
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "guid": "0k0wybAdv3$AGNP8lJnIBg",
+      "name": "Cubierta plana invertida con grava",
+      "function": "roof",
+      "layers": [
+        {
+          "material": 11,
+          "thickness": 0.05,
+          "function": "finish"
+        },
+        {
+          "material": 12,
+          "thickness": 0.08,
+          "function": "insulation"
+        },
+        {
+          "material": 10,
+          "thickness": 0.003,
+          "function": "membrane"
+        },
+        {
+          "material": 13,
+          "thickness": 0.1,
+          "function": "substrate"
+        },
+        {
+          "material": 9,
+          "thickness": 0.3,
+          "function": "structure"
+        },
+        {
+          "material": 6,
+          "thickness": 0.015,
+          "function": "finish"
+        }
+      ]
+    }
+  ],
+  "slabs": [
+    {
+      "id": 48,
+      "guid": "3ODyiLarHBiwNmuJ4$jCAG",
+      "type": 20,
+      "level": 1,
+      "outline": [
+        [12.0, 0.0],
+        [12.0, 9.0],
+        [0.0, 9.0],
+        [0.0, 0.0]
+      ],
+      "top_offset": 0.0
+    },
+    {
+      "id": 49,
+      "guid": "2Da_IW5sf45uOriWUjQxW6",
+      "type": 22,
+      "level": 31,
+      "outline": [
+        [12.0, 0.0],
+        [12.0, 9.0],
+        [0.0, 9.0],
+        [0.0, 0.0]
+      ],
+      "top_offset": 0.0
+    }
+  ],
+  "opening_types": [
+    {
+      "id": 23,
+      "guid": "3TfsISk8HExOLS0nZypmrd",
+      "name": "Puerta de entrada 1 hoja 100×215",
+      "category": "door",
+      "operation": "single_swing",
+      "width": 1.0,
+      "height": 2.15,
+      "frame_width": 0.07,
+      "frame_depth": 0.1,
+      "frame_material": 14,
+      "panel_material": 14
+    },
+    {
+      "id": 24,
+      "guid": "2ZzJH53S57WhLCfcYAqXtq",
+      "name": "Puerta de paso 1 hoja 80×205",
+      "category": "door",
+      "operation": "single_swing",
+      "width": 0.8,
+      "height": 2.05,
+      "frame_width": 0.05,
+      "frame_depth": 0.07,
+      "frame_material": 14,
+      "panel_material": 14
+    },
+    {
+      "id": 25,
+      "guid": "0EJRd9m4D2Bv3uxBiAlYTq",
+      "name": "Puerta de paso 2 hojas 140×205",
+      "category": "door",
+      "operation": "double_swing",
+      "width": 1.4,
+      "height": 2.05,
+      "frame_width": 0.05,
+      "frame_depth": 0.07,
+      "frame_material": 14,
+      "panel_material": 14
+    },
+    {
+      "id": 26,
+      "guid": "3YPadi02f79AkEfkhLxoXx",
+      "name": "Puerta corredera 1 hoja 90×205",
+      "category": "door",
+      "operation": "sliding",
+      "width": 0.9,
+      "height": 2.05,
+      "frame_width": 0.05,
+      "frame_depth": 0.07,
+      "frame_material": 14,
+      "panel_material": 14
+    },
+    {
+      "id": 27,
+      "guid": "2jHhXcuUP3wBLRsKRASywN",
+      "name": "Ventana practicable 2 hojas 180×130",
+      "category": "window",
+      "operation": "double_casement",
+      "width": 1.8,
+      "height": 1.3,
+      "frame_width": 0.06,
+      "frame_depth": 0.07,
+      "frame_material": 15,
+      "panel_material": 16
+    },
+    {
+      "id": 28,
+      "guid": "0M3YWQwN58XQVTrC7S3q$3",
+      "name": "Ventana practicable 1 hoja 100×120",
+      "category": "window",
+      "operation": "single_casement",
+      "width": 1.0,
+      "height": 1.2,
+      "frame_width": 0.06,
+      "frame_depth": 0.07,
+      "frame_material": 15,
+      "panel_material": 16
+    },
+    {
+      "id": 29,
+      "guid": "2t$5ERm3D08BaFAUoWtjZQ",
+      "name": "Balconera corredera 2 hojas 240×220",
+      "category": "window",
+      "operation": "sliding",
+      "width": 2.4,
+      "height": 2.2,
+      "frame_width": 0.06,
+      "frame_depth": 0.07,
+      "frame_material": 15,
+      "panel_material": 16
+    },
+    {
+      "id": 30,
+      "guid": "0JiLDc0V92rfAULPlcOxjL",
+      "name": "Ventana fija 60×60",
+      "category": "window",
+      "operation": "fixed",
+      "width": 0.6,
+      "height": 0.6,
+      "frame_width": 0.05,
+      "frame_depth": 0.07,
+      "frame_material": 15,
+      "panel_material": 16
+    }
+  ],
+  "openings": [
+    {
+      "id": 39,
+      "guid": "3p5ryVg_bEr8DPwI_3yWJp",
+      "type": 23,
+      "wall": 32,
+      "along": 7.8,
+      "sill": 0.0,
+      "opens_to": "interior",
+      "hand": "right",
+      "setback": 0.13
+    },
+    {
+      "id": 40,
+      "guid": "3PbnQpY$vDpB7hAHgIYkxt",
+      "type": 29,
+      "wall": 33,
+      "along": 3.0,
+      "sill": 0.0,
+      "opens_to": "interior",
+      "hand": "left",
+      "setback": 0.13
+    },
+    {
+      "id": 41,
+      "guid": "0wuGYCa6fCCAbqMXCVIJzo",
+      "type": 28,
+      "wall": 33,
+      "along": 9.0,
+      "sill": 1.0,
+      "opens_to": "interior",
+      "hand": "left",
+      "setback": 0.13
+    },
+    {
+      "id": 42,
+      "guid": "0Mfi2rhyHByvuzjrB9w37U",
+      "type": 30,
+      "wall": 34,
+      "along": 6.75,
+      "sill": 1.6,
+      "opens_to": "interior",
+      "hand": "left",
+      "setback": 0.13
+    },
+    {
+      "id": 43,
+      "guid": "3ajRKoFA90VfmXEEUp45kl",
+      "type": 28,
+      "wall": 35,
+      "along": 3.0,
+      "sill": 1.0,
+      "opens_to": "interior",
+      "hand": "right",
+      "setback": 0.13
+    },
+    {
+      "id": 44,
+      "guid": "2StE2L0hz5hvC3II6rHhk6",
+      "type": 27,
+      "wall": 35,
+      "along": 9.0,
+      "sill": 0.9,
+      "opens_to": "interior",
+      "hand": "left",
+      "setback": 0.13
+    },
+    {
+      "id": 45,
+      "guid": "052X7kmgH8TBbRs4_Odrqp",
+      "type": 24,
+      "wall": 36,
+      "along": 6.235,
+      "sill": 0.0,
+      "opens_to": "interior",
+      "hand": "left",
+      "setback": null
+    },
+    {
+      "id": 46,
+      "guid": "1mEWl8RDf0TgRD8drNeRJ6",
+      "type": 24,
+      "wall": 38,
+      "along": 4.535,
+      "sill": 0.0,
+      "opens_to": "interior",
+      "hand": "right",
+      "setback": null
+    },
+    {
+      "id": 47,
+      "guid": "1SmD0kkrD5ohixvTOm8uoB",
+      "type": 24,
+      "wall": 37,
+      "along": 0.9500000000000002,
+      "sill": 0.0,
+      "opens_to": "interior",
+      "hand": "left",
+      "setback": null
+    }
+  ],
+  "dimensions": [
+    {
+      "id": 50,
+      "level": 1,
+      "points": [
+        [12.0, 0.0],
+        [9.5, 0.0],
+        [8.5, 0.0],
+        [3.9000000000000004, 0.0],
+        [2.0999999999999996, 0.0],
+        [0.0, 0.0]
+      ],
+      "direction": [-1.0, 0.0],
+      "position": [12.0, -0.8]
+    },
+    {
+      "id": 51,
+      "level": 1,
+      "points": [
+        [0.0, 0.0],
+        [12.0, 0.0]
+      ],
+      "direction": [-1.0, 0.0],
+      "position": [12.0, -1.4]
+    },
+    {
+      "id": 52,
+      "level": 1,
+      "points": [
+        [0.0, 0.0],
+        [0.0, 7.3],
+        [0.0, 8.3],
+        [0.0, 9.0]
+      ],
+      "direction": [0.0, 1.0],
+      "position": [-0.8, 0.0]
+    },
+    {
+      "id": 53,
+      "level": 1,
+      "points": [
+        [0.0, 0.0],
+        [0.0, 9.0]
+      ],
+      "direction": [0.0, 1.0],
+      "position": [-1.4, 0.0]
+    }
+  ],
+  "elevation_marks": [
+    {
+      "id": 54,
+      "level": 1,
+      "point": [3.0, 6.5]
+    },
+    {
+      "id": 55,
+      "level": 1,
+      "point": [9.0, 2.5]
+    }
+  ]
+}

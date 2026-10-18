@@ -7,6 +7,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::family::{
+    self, Evaluation, Family, FamilyError, NotAnOpening, ParamKind, ParamScope, Value, Values,
+};
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Point2, EPSILON};
 
@@ -290,17 +293,26 @@ pub enum OpeningKind {
     Window(WindowOperation),
 }
 
-/// A door or window type: a Revit door/window family type, an ArchiCAD
-/// door/window object with its settings. IFC: `IfcDoorType` or
+/// A door or window type: a type of a family ("Puerta abatible") with its
+/// type parameters set, like a Revit family type. IFC: `IfcDoorType` or
 /// `IfcWindowType`.
 ///
-/// `width` and `height` are the rough opening ("hueco de obra"): the size of
-/// the hole in the wall, which the frame fills completely.
+/// The family and its `values` are the definition. The fields from `kind`
+/// on are what the family gives the rest of the program (its outputs),
+/// worked out by the model whenever the type changes: never set them by
+/// hand. `width` and `height` are the rough opening ("hueco de obra"): the
+/// size of the hole in the wall, which the frame fills completely.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpeningType {
     pub id: OpeningTypeId,
     pub guid: GlobalId,
     pub name: String,
+    /// Type mark for tags and schedules ("P-03", "V-01"); unique, or empty.
+    pub mark: String,
+    pub description: String,
+    pub family: FamilyId,
+    /// Value of every type parameter of the family.
+    pub values: Values,
     pub kind: OpeningKind,
     /// Rough opening width, in metres.
     pub width: f64,
@@ -326,7 +338,21 @@ impl OpeningType {
     }
 }
 
-/// Data needed to create an opening type.
+/// Data needed to create a type of a door or window family.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewFamilyType {
+    pub family: FamilyId,
+    pub name: String,
+    /// `None` gives the next free mark ("P-04", "V-02"…).
+    pub mark: Option<String>,
+    pub description: String,
+    /// Value of every type parameter of the family.
+    pub values: Values,
+}
+
+/// Data needed to create an opening type the way ArchiSim did before
+/// families: by its operation and sizes. It becomes a type of the matching
+/// system family ("Puerta abatible", "Ventana corredera"…).
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewOpeningType {
     pub name: String,
@@ -378,6 +404,9 @@ pub struct Opening {
     /// Distance from the wall's exterior face to the exterior face of the
     /// frame ("retranqueo"). `None` centres the frame in the wall.
     pub setback: Option<f64>,
+    /// Value of every instance parameter of the type's family (none for
+    /// the system families: placement, side and hand are fields above).
+    pub values: Values,
 }
 
 impl Opening {
@@ -528,6 +557,15 @@ pub enum ModelError {
     DegenerateDimension,
     /// The project needs at least one level.
     LastLevel,
+    UnknownFamily(FamilyId),
+    /// A family recipe is wrong, or the values given to it are.
+    Family(FamilyError),
+    /// The project already has a family with that name.
+    DuplicateFamily(String),
+    /// Another door or window type already has that mark.
+    DuplicateMark(String),
+    /// The family cannot make door or window types.
+    NotAnOpening(NotAnOpening),
 }
 
 impl fmt::Display for ModelError {
@@ -584,6 +622,15 @@ impl fmt::Display for ModelError {
                 "a dimension needs at least two points apart along its direction"
             ),
             ModelError::LastLevel => write!(f, "the project needs at least one level"),
+            ModelError::UnknownFamily(id) => write!(f, "family {id} does not exist"),
+            ModelError::Family(e) => write!(f, "{e}"),
+            ModelError::DuplicateFamily(name) => {
+                write!(f, "the project already has a family called «{name}»")
+            }
+            ModelError::DuplicateMark(mark) => {
+                write!(f, "another type already has the mark «{mark}»")
+            }
+            ModelError::NotAnOpening(e) => write!(f, "{e}"),
         }
     }
 }
@@ -607,6 +654,23 @@ fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
         }
     }
     inside
+}
+
+/// The values the program gives every wall-hosted family: the side the
+/// leaves open to and the handing.
+pub fn opening_builtins(opens_to: WallSide, hand: Hand) -> Values {
+    let mut v = Values::new();
+    let side = match opens_to {
+        WallSide::Interior => "interior",
+        WallSide::Exterior => "exterior",
+    };
+    let hand = match hand {
+        Hand::Left => "left",
+        Hand::Right => "right",
+    };
+    v.insert("opens_to".into(), Value::Text(side.into()));
+    v.insert("hand".into(), Value::Text(hand.into()));
+    v
 }
 
 /// Rejects NaN and infinite values.
@@ -640,6 +704,10 @@ pub struct ModelParts {
     pub walls: Vec<Wall>,
     pub slab_types: Vec<SlabType>,
     pub slabs: Vec<Slab>,
+    /// Families, before the types that use them.
+    pub families: Vec<Family>,
+    /// Door and window types. Only the identity, family and values are
+    /// read back: the rest is worked out from the family.
     pub opening_types: Vec<OpeningType>,
     pub openings: Vec<Opening>,
     pub dimensions: Vec<Dimension>,
@@ -681,6 +749,7 @@ pub struct Model {
     walls: BTreeMap<WallId, Wall>,
     slab_types: BTreeMap<SlabTypeId, SlabType>,
     slabs: BTreeMap<SlabId, Slab>,
+    families: BTreeMap<FamilyId, Family>,
     opening_types: BTreeMap<OpeningTypeId, OpeningType>,
     openings: BTreeMap<OpeningId, Opening>,
     dimensions: BTreeMap<DimensionId, Dimension>,
@@ -701,6 +770,7 @@ impl Model {
             walls: BTreeMap::new(),
             slab_types: BTreeMap::new(),
             slabs: BTreeMap::new(),
+            families: BTreeMap::new(),
             opening_types: BTreeMap::new(),
             openings: BTreeMap::new(),
             dimensions: BTreeMap::new(),
@@ -875,7 +945,7 @@ impl Model {
         let openings = self
             .opening_types
             .values()
-            .filter(|t| t.frame_material == id || t.panel_material == id)
+            .filter(|t| t.values.values().any(|v| *v == Value::Material(id.0)))
             .map(|t| t.name.clone());
         walls.chain(slabs).chain(openings).collect()
     }
@@ -1360,6 +1430,77 @@ impl Model {
         self.slabs.values().filter(move |s| s.level == level)
     }
 
+    // ---- Families ---------------------------------------------------------
+
+    /// Loads a family recipe into the project (its shared pieces already
+    /// expanded). Family names are unique.
+    pub fn add_family(&mut self, source: &str) -> Result<FamilyId, ModelError> {
+        let id = FamilyId(self.next_id);
+        let family = Family::new(id, source).map_err(ModelError::Family)?;
+        if self.family_by_name(family.name()).is_some() {
+            return Err(ModelError::DuplicateFamily(family.name().to_string()));
+        }
+        self.take_id();
+        self.families.insert(id, family);
+        Ok(id)
+    }
+
+    pub fn family(&self, id: FamilyId) -> Option<&Family> {
+        self.families.get(&id)
+    }
+
+    pub fn families(&self) -> impl Iterator<Item = &Family> {
+        self.families.values()
+    }
+
+    pub fn family_by_name(&self, name: &str) -> Option<&Family> {
+        self.families.values().find(|f| f.name() == name)
+    }
+
+    /// The project's copy of a system family, loading it if needed.
+    pub fn system_family(&mut self, name: &str) -> Result<FamilyId, ModelError> {
+        if let Some(f) = self.family_by_name(name) {
+            return Ok(f.id);
+        }
+        let source = family::system_family(name).ok_or_else(|| {
+            ModelError::NotAnOpening(NotAnOpening {
+                family: name.to_string(),
+                reason: "there is no system family with that name".into(),
+            })
+        })?;
+        self.add_family(&source)
+    }
+
+    /// Default values of one scope of a family, with material names turned
+    /// into this project's materials (the first material when a name is not
+    /// in the project).
+    pub fn family_defaults(
+        &self,
+        family: FamilyId,
+        scope: ParamScope,
+    ) -> Result<Values, ModelError> {
+        let def = self
+            .families
+            .get(&family)
+            .ok_or(ModelError::UnknownFamily(family))?
+            .def();
+        let mut values = def.defaults(scope);
+        for p in def.params_of(scope) {
+            if p.kind != ParamKind::Material {
+                continue;
+            }
+            let wanted = p.default.as_text().unwrap_or_default();
+            let material = self
+                .materials
+                .values()
+                .find(|m| m.name == wanted)
+                .or_else(|| self.materials.values().next())
+                .ok_or(ModelError::UnknownMaterial(MaterialId(0)))?;
+            values.insert(p.name.clone(), Value::Material(material.id.0));
+        }
+        Ok(values)
+    }
+
     // ---- Door and window types -----------------------------------------
 
     fn validate_opening_type(&self, spec: &NewOpeningType) -> Result<(), ModelError> {
@@ -1386,8 +1527,156 @@ impl Model {
         Ok(())
     }
 
-    pub fn add_opening_type(&mut self, spec: NewOpeningType) -> Result<OpeningTypeId, ModelError> {
+    /// The system family and the values that make an opening type
+    /// described the pre-family way. Loads the family if needed.
+    fn legacy_values(&mut self, spec: &NewOpeningType) -> Result<(FamilyId, Values), ModelError> {
+        let (name, leaves) = family::legacy_family(spec.kind);
+        let id = self.system_family(name)?;
+        let mut values = Values::new();
+        for (k, v) in [
+            ("width", spec.width),
+            ("height", spec.height),
+            ("frame_width", spec.frame_width),
+            ("frame_depth", spec.frame_depth),
+        ] {
+            values.insert(k.into(), Value::Number(v));
+        }
+        values.insert(
+            "frame_material".into(),
+            Value::Material(spec.frame_material.0),
+        );
+        values.insert(
+            "panel_material".into(),
+            Value::Material(spec.panel_material.0),
+        );
+        if let Some(n) = leaves {
+            values.insert("leaves".into(), Value::Number(n));
+        }
+        Ok((id, values))
+    }
+
+    /// Runs a legacy edit, unloading a system family it loaded if it fails.
+    fn with_legacy_values<T>(
+        &mut self,
+        spec: &NewOpeningType,
+        edit: impl FnOnce(&mut Self, FamilyId, Values) -> Result<T, ModelError>,
+    ) -> Result<T, ModelError> {
+        self.validate_opening_type(spec)?;
+        let before: Vec<FamilyId> = self.families.keys().copied().collect();
+        let (family, values) = self.legacy_values(spec)?;
+        let result = edit(self, family, values);
+        if result.is_err() {
+            self.families.retain(|id, _| before.contains(id));
+        }
+        result
+    }
+
+    /// Works out what a family type gives the rest of the program (rough
+    /// opening, frame, materials, operation), checking that the family makes
+    /// doors or windows and that the values are valid for it.
+    fn resolve_opening_type(
+        &self,
+        family: FamilyId,
+        values: &Values,
+    ) -> Result<NewOpeningType, ModelError> {
+        let fam = self
+            .families
+            .get(&family)
+            .ok_or(ModelError::UnknownFamily(family))?;
+        let not_opening = |reason: String| {
+            ModelError::NotAnOpening(NotAnOpening {
+                family: fam.name().to_string(),
+                reason,
+            })
+        };
+        if !fam.is_opening() {
+            return Err(not_opening(
+                "it is not a door or window hosted in a wall".into(),
+            ));
+        }
+        for v in values.values() {
+            if let Value::Material(m) = v {
+                if !self.materials.contains_key(&MaterialId(*m)) {
+                    return Err(ModelError::UnknownMaterial(MaterialId(*m)));
+                }
+            }
+        }
+        let instance = self.family_defaults(family, ParamScope::Instance)?;
+        let builtins = opening_builtins(WallSide::Interior, Hand::Left);
+        let ev = fam
+            .def()
+            .evaluate(values, &instance, &builtins)
+            .map_err(ModelError::Family)?;
+        let missing = |name: &str| not_opening(format!("it gives no «{name}» output"));
+        let number = |name: &str| {
+            ev.outputs
+                .get(name)
+                .and_then(Value::as_number)
+                .ok_or_else(|| missing(name))
+        };
+        let material = |name: &str| {
+            ev.outputs
+                .get(name)
+                .and_then(Value::as_material)
+                .map(MaterialId)
+                .ok_or_else(|| missing(name))
+        };
+        let operation = ev
+            .outputs
+            .get("operation")
+            .and_then(Value::as_text)
+            .ok_or_else(|| missing("operation"))?;
+        let kind = family::operation_from_name(&fam.def().category, operation)
+            .ok_or_else(|| not_opening(format!("unknown operation «{operation}»")))?;
+        let spec = NewOpeningType {
+            name: String::new(),
+            kind,
+            width: number("opening_width")?,
+            height: number("opening_height")?,
+            frame_width: number("frame_width")?,
+            frame_depth: number("frame_depth")?,
+            frame_material: material("frame_material")?,
+            panel_material: material("panel_material")?,
+        };
         self.validate_opening_type(&spec)?;
+        Ok(spec)
+    }
+
+    fn check_mark(&self, mark: &str, except: Option<OpeningTypeId>) -> Result<(), ModelError> {
+        let taken = !mark.is_empty()
+            && self
+                .opening_types
+                .values()
+                .any(|t| Some(t.id) != except && t.mark == mark);
+        if taken {
+            Err(ModelError::DuplicateMark(mark.to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// The next free mark: "P-01", "P-02"… for doors, "V-01"… for windows.
+    pub fn next_mark(&self, kind: OpeningKind) -> String {
+        let prefix = match kind {
+            OpeningKind::Door(_) => "P",
+            OpeningKind::Window(_) => "V",
+        };
+        (1..)
+            .map(|n| format!("{prefix}-{n:02}"))
+            .find(|m| self.check_mark(m, None).is_ok())
+            .expect("there is always a free mark")
+    }
+
+    /// Creates a type of a door or window family.
+    pub fn add_family_type(&mut self, spec: NewFamilyType) -> Result<OpeningTypeId, ModelError> {
+        let r = self.resolve_opening_type(spec.family, &spec.values)?;
+        let mark = match spec.mark {
+            Some(m) => {
+                self.check_mark(&m, None)?;
+                m
+            }
+            None => self.next_mark(r.kind),
+        };
         let id = OpeningTypeId(self.take_id());
         self.opening_types.insert(
             id,
@@ -1395,16 +1684,56 @@ impl Model {
                 id,
                 guid: GlobalId::new(),
                 name: spec.name,
-                kind: spec.kind,
-                width: spec.width,
-                height: spec.height,
-                frame_width: spec.frame_width,
-                frame_depth: spec.frame_depth,
-                frame_material: spec.frame_material,
-                panel_material: spec.panel_material,
+                mark,
+                description: spec.description,
+                family: spec.family,
+                values: spec.values,
+                kind: r.kind,
+                width: r.width,
+                height: r.height,
+                frame_width: r.frame_width,
+                frame_depth: r.frame_depth,
+                frame_material: r.frame_material,
+                panel_material: r.panel_material,
             },
         );
         Ok(id)
+    }
+
+    /// Creates a door or window type from its operation and sizes, as a type
+    /// of the matching system family, with the next free mark.
+    pub fn add_opening_type(&mut self, spec: NewOpeningType) -> Result<OpeningTypeId, ModelError> {
+        let name = spec.name.clone();
+        self.with_legacy_values(&spec, |m, family, values| {
+            m.add_family_type(NewFamilyType {
+                family,
+                name,
+                mark: None,
+                description: String::new(),
+                values,
+            })
+        })
+    }
+
+    /// A copy of a type with a new name, GUID and mark (Revit's
+    /// "Duplicate…").
+    pub fn duplicate_opening_type(
+        &mut self,
+        id: OpeningTypeId,
+        name: impl Into<String>,
+    ) -> Result<OpeningTypeId, ModelError> {
+        let src = self
+            .opening_types
+            .get(&id)
+            .ok_or(ModelError::UnknownOpeningType(id))?
+            .clone();
+        self.add_family_type(NewFamilyType {
+            family: src.family,
+            name: name.into(),
+            mark: None,
+            description: src.description,
+            values: src.values,
+        })
     }
 
     pub fn opening_type(&self, id: OpeningTypeId) -> Option<&OpeningType> {
@@ -1431,60 +1760,121 @@ impl Model {
             .ok_or(ModelError::UnknownOpeningType(id))
     }
 
-    /// Redefines a door or window type: name, operation, rough opening,
-    /// frame and materials. Every door or window of the type changes with it,
-    /// keeping its centre and sill. A door type stays a door and a window
-    /// type a window. Rejected if one of them would no longer fit in its
-    /// wall (outside the wall, overlapping another opening, frame too deep).
-    pub fn edit_opening_type(
+    /// Changes the name, mark and description of a type.
+    pub fn set_opening_type_info(
         &mut self,
         id: OpeningTypeId,
-        spec: NewOpeningType,
+        name: impl Into<String>,
+        mark: impl Into<String>,
+        description: impl Into<String>,
     ) -> Result<(), ModelError> {
-        self.validate_opening_type(&spec)?;
+        let mark = mark.into();
+        self.check_mark(&mark, Some(id))?;
+        let t = self
+            .opening_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownOpeningType(id))?;
+        t.name = name.into();
+        t.mark = mark;
+        t.description = description.into();
+        Ok(())
+    }
+
+    /// Redefines a type with a family and its values. Every door or window
+    /// of the type changes with it, keeping its centre, sill and GUID. A
+    /// door type stays a door and a window type a window. Rejected if one
+    /// of them would no longer fit in its wall.
+    pub fn edit_family_type(
+        &mut self,
+        id: OpeningTypeId,
+        family: FamilyId,
+        values: Values,
+    ) -> Result<(), ModelError> {
+        let r = self.resolve_opening_type(family, &values)?;
         let previous = self
             .opening_types
             .get(&id)
             .cloned()
             .ok_or(ModelError::UnknownOpeningType(id))?;
-        let was_door = previous.is_door();
         let edited = OpeningType {
-            id,
-            guid: previous.guid.clone(),
-            name: spec.name,
-            kind: spec.kind,
-            width: spec.width,
-            height: spec.height,
-            frame_width: spec.frame_width,
-            frame_depth: spec.frame_depth,
-            frame_material: spec.frame_material,
-            panel_material: spec.panel_material,
+            family,
+            values,
+            kind: r.kind,
+            width: r.width,
+            height: r.height,
+            frame_width: r.frame_width,
+            frame_depth: r.frame_depth,
+            frame_material: r.frame_material,
+            panel_material: r.panel_material,
+            ..previous.clone()
         };
-        if edited.is_door() != was_door {
+        if edited.is_door() != previous.is_door() {
             return Err(ModelError::CategoryMismatch);
         }
+        let family_changed = previous.family != family;
         self.opening_types.insert(id, edited);
-        let check = self
+        let users: Vec<OpeningId> = self
             .openings
             .values()
             .filter(|o| o.opening_type == id)
-            .try_for_each(|o| {
-                let spec = NewOpening {
-                    opening_type: o.opening_type,
-                    wall: o.wall,
-                    along: o.along,
-                    sill: o.sill,
-                    opens_to: o.opens_to,
-                    hand: o.hand,
-                    setback: o.setback,
-                };
-                self.validate_opening(&spec, Some(o.id))
-            });
-        if let Err(e) = check {
-            self.opening_types.insert(id, previous);
-            return Err(e);
+            .map(|o| o.id)
+            .collect();
+        let instance = self.family_defaults(family, ParamScope::Instance);
+        let check = users.iter().try_for_each(|oid| {
+            let o = &self.openings[oid];
+            let spec = NewOpening {
+                opening_type: o.opening_type,
+                wall: o.wall,
+                along: o.along,
+                sill: o.sill,
+                opens_to: o.opens_to,
+                hand: o.hand,
+                setback: o.setback,
+            };
+            self.validate_opening(&spec, Some(o.id))
+        });
+        let check = check.and(instance);
+        match check {
+            Err(e) => {
+                self.opening_types.insert(id, previous);
+                Err(e)
+            }
+            Ok(instance) => {
+                if family_changed {
+                    // Another family has other instance parameters.
+                    for oid in users {
+                        if let Some(o) = self.openings.get_mut(&oid) {
+                            o.values = instance.clone();
+                        }
+                    }
+                }
+                Ok(())
+            }
         }
-        Ok(())
+    }
+
+    /// Redefines a door or window type from its operation and sizes (the
+    /// name included), as a type of the matching system family. Every door
+    /// or window of the type changes with it, keeping its centre and sill.
+    /// A door type stays a door and a window type a window. Rejected if one
+    /// of them would no longer fit in its wall (outside the wall,
+    /// overlapping another opening, frame too deep).
+    pub fn edit_opening_type(
+        &mut self,
+        id: OpeningTypeId,
+        spec: NewOpeningType,
+    ) -> Result<(), ModelError> {
+        if !self.opening_types.contains_key(&id) {
+            return Err(ModelError::UnknownOpeningType(id));
+        }
+        let name = spec.name.clone();
+        self.with_legacy_values(&spec, |m, family, values| {
+            m.edit_family_type(id, family, values)?;
+            if let Some(t) = m.opening_types.get_mut(&id) {
+                t.name = name;
+            }
+            Ok(())
+        })
     }
 
     /// How many doors or windows use a type.
@@ -1493,6 +1883,26 @@ impl Model {
             .values()
             .filter(|o| o.opening_type == id)
             .count()
+    }
+
+    /// Evaluates the family of a placed door or window: its 3D body (in the
+    /// family's own axes) and outputs.
+    pub fn evaluate_opening(&self, id: OpeningId) -> Result<Evaluation, ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let t = self
+            .opening_types
+            .get(&o.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(o.opening_type))?;
+        let fam = self
+            .families
+            .get(&t.family)
+            .ok_or(ModelError::UnknownFamily(t.family))?;
+        fam.def()
+            .evaluate(&t.values, &o.values, &opening_builtins(o.opens_to, o.hand))
+            .map_err(ModelError::Family)
     }
 
     // ---- Doors and windows ----------------------------------------------
@@ -1565,6 +1975,8 @@ impl Model {
     /// Places a door or window in a wall.
     pub fn add_opening(&mut self, spec: NewOpening) -> Result<OpeningId, ModelError> {
         self.validate_opening(&spec, None)?;
+        let family = self.opening_types[&spec.opening_type].family;
+        let values = self.family_defaults(family, ParamScope::Instance)?;
         let id = OpeningId(self.take_id());
         self.openings.insert(
             id,
@@ -1578,6 +1990,7 @@ impl Model {
                 opens_to: spec.opens_to,
                 hand: spec.hand,
                 setback: spec.setback,
+                values,
             },
         );
         Ok(id)
@@ -1648,6 +2061,11 @@ impl Model {
         if new_type.is_door() != old_type.is_door() {
             return Err(ModelError::CategoryMismatch);
         }
+        let new_values = if new_type.family == old_type.family {
+            None
+        } else {
+            Some(self.family_defaults(new_type.family, ParamScope::Instance)?)
+        };
         let spec = NewOpening {
             opening_type,
             wall: o.wall,
@@ -1663,6 +2081,10 @@ impl Model {
             .get_mut(&id)
             .ok_or(ModelError::UnknownOpening(id))?;
         o.opening_type = opening_type;
+        if let Some(values) = new_values {
+            // Another family has other instance parameters.
+            o.values = values;
+        }
         Ok(())
     }
 
@@ -1849,6 +2271,7 @@ impl Model {
             walls: self.walls.values().cloned().collect(),
             slab_types: self.slab_types.values().cloned().collect(),
             slabs: self.slabs.values().cloned().collect(),
+            families: self.families.values().cloned().collect(),
             opening_types: self.opening_types.values().cloned().collect(),
             openings: self.openings.values().cloned().collect(),
             dimensions: self.dimensions.values().cloned().collect(),
@@ -1953,22 +2376,35 @@ impl Model {
                 .map_err(fail(name))?;
             model.slabs.insert(slab.id, slab);
         }
+        for f in parts.families {
+            let name = format!("family {} «{}»", f.id.0, f.name());
+            claim(f.id.0, None)
+                .and_then(|_| match model.family_by_name(f.name()) {
+                    Some(_) => Err(ModelError::DuplicateFamily(f.name().to_string())),
+                    None => Ok(()),
+                })
+                .map_err(fail(name))?;
+            model.families.insert(f.id, f);
+        }
         for ot in parts.opening_types {
             let name = format!("door or window type {} «{}»", ot.id.0, ot.name);
-            let spec = NewOpeningType {
-                name: ot.name.clone(),
-                kind: ot.kind,
-                width: ot.width,
-                height: ot.height,
-                frame_width: ot.frame_width,
-                frame_depth: ot.frame_depth,
-                frame_material: ot.frame_material,
-                panel_material: ot.panel_material,
-            };
-            claim(ot.id.0, Some(&ot.guid))
-                .and_then(|_| model.validate_opening_type(&spec))
+            let resolved = claim(ot.id.0, Some(&ot.guid))
+                .and_then(|_| model.check_mark(&ot.mark, None))
+                .and_then(|_| model.resolve_opening_type(ot.family, &ot.values))
                 .map_err(fail(name))?;
-            model.opening_types.insert(ot.id, ot);
+            model.opening_types.insert(
+                ot.id,
+                OpeningType {
+                    kind: resolved.kind,
+                    width: resolved.width,
+                    height: resolved.height,
+                    frame_width: resolved.frame_width,
+                    frame_depth: resolved.frame_depth,
+                    frame_material: resolved.frame_material,
+                    panel_material: resolved.panel_material,
+                    ..ot
+                },
+            );
         }
         for o in parts.openings {
             let name = format!("door or window {} ({})", o.id.0, o.guid);
@@ -1983,6 +2419,13 @@ impl Model {
             };
             claim(o.id.0, Some(&o.guid))
                 .and_then(|_| model.validate_opening(&spec, None))
+                .and_then(|_| {
+                    let family = model.opening_types[&o.opening_type].family;
+                    model.families[&family]
+                        .def()
+                        .check_values(ParamScope::Instance, &o.values)
+                        .map_err(ModelError::Family)
+                })
                 .map_err(fail(name))?;
             model.openings.insert(o.id, o);
         }
@@ -2895,12 +3338,52 @@ mod tests {
         assert_eq!(err.error, ModelError::OverlappingOpenings);
         assert!(err.to_string().starts_with("door or window 500"));
 
-        let mut p = good;
-        p.opening_types[0].frame_material = MaterialId(777);
+        let mut p = good.clone();
+        p.opening_types[0]
+            .values
+            .insert("frame_material".into(), Value::Material(777));
         assert_eq!(
             restore_error(p),
             ModelError::UnknownMaterial(MaterialId(777))
         );
+
+        // The resolved fields are worked out again from the family: a
+        // hand-edited width there is ignored…
+        let mut p = good.clone();
+        p.opening_types[0].width = 3.0;
+        let restored = Model::from_parts(p).unwrap();
+        assert_eq!(restored.opening_type(door).unwrap().width, 0.8);
+        // …but a value of the family is checked.
+        let mut p = good.clone();
+        p.opening_types[0]
+            .values
+            .insert("leaves".into(), Value::Number(3.0));
+        assert!(matches!(
+            restore_error(p),
+            ModelError::Family(FamilyError::OutOfRange { .. })
+        ));
+
+        let mut p = good.clone();
+        p.opening_types[0].family = FamilyId(999);
+        assert_eq!(restore_error(p), ModelError::UnknownFamily(FamilyId(999)));
+
+        let mut p = good.clone();
+        p.opening_types[1].mark = p.opening_types[0].mark.clone();
+        assert_eq!(restore_error(p), ModelError::DuplicateMark("P-01".into()));
+
+        let mut p = good.clone();
+        let copy = Family::new(FamilyId(600), p.families[0].source.clone()).unwrap();
+        p.families.push(copy);
+        assert!(matches!(restore_error(p), ModelError::DuplicateFamily(_)));
+
+        let mut p = good;
+        p.openings[0]
+            .values
+            .insert("colour".into(), Value::Text("rojo".into()));
+        assert!(matches!(
+            restore_error(p),
+            ModelError::Family(FamilyError::UnknownParam { .. })
+        ));
     }
 
     #[test]
