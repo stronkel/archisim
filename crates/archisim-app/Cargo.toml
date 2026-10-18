@@ -36,5 +36,9 @@ winit = "0.30"
 objc2 = "0.5.2"
 objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSString", "NSURL"] }
 
+# Windows: the icon and version information inside the .exe (build.rs).
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
 [dev-dependencies]
 pollster = "0.4"

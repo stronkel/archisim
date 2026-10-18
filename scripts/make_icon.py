@@ -1,7 +1,10 @@
 """Draws ArchiSim's application icon (an original design): the plan of a
 wall corner with its layers — render, brick, insulation, inner leaf — and a
 door swing, on a dark blue tile. Writes crates/archisim-app/assets/icon.png
-(1024 × 1024), from which the macOS .icns and the window icon are made.
+(1024 × 1024), from which the macOS .icns and the window icon are made,
+and crates/archisim-app/assets/icon.ico (16 to 256 px) for Windows: the
+program's icon in Explorer, the taskbar and the installer, and the icon
+of .archisim files.
 
     python3 scripts/make_icon.py        # requires Pillow
 """
@@ -91,3 +94,6 @@ out = img.resize((1024, 1024), Image.LANCZOS)
 path = Path(__file__).resolve().parent.parent / "crates/archisim-app/assets/icon.png"
 out.save(path, optimize=True)
 print(path)
+ico = path.with_suffix(".ico")
+out.save(ico, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+print(ico)

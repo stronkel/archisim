@@ -34,7 +34,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.5 ✅ v0.10 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
 | 1.6 ✅ v0.12 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
 | 1.7 ✅ v0.20 | **Importación IFC, segunda vuelta**: muros curvos (v0.19), muros de varios tramos y circulares cerrados, forjados con huecos (también dibujarlos), huecos sin carpintería (familia Hueco). Pasan a la fase 2, porque necesitan elementos que aún no existen: forjados inclinados (2.7), pilares y vigas (2.5) y locales `IfcSpace` (2.9) | M |
-| 1.8 ◐ v0.13 | **Instalación**: hecha la aplicación de Mac universal en `.dmg` con icono y asociación de ficheros; falta el instalador de Windows con icono y asociación de `.archisim` e `.ifc` | S |
+| 1.8 ✅ v0.21 | **Instalación**: aplicación de Mac universal en `.dmg` (v0.13) e **instalador de Windows** (v0.21) con icono, menú Inicio, ejemplos, asociación de `.archisim` y «Abrir con» de `.ifc` | S |
 | 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
 
 ## 2. Fase 2 — Modelado completo

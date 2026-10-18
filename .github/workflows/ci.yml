@@ -100,6 +100,43 @@ jobs:
         with:
           name: ArchiSim-Windows
           path: ArchiSim/
+      # The installer (Inno Setup): program, Start menu, icons and the
+      # .archisim and .ifc file types. Installed and uninstalled here, in
+      # silence, to check that it does what it says.
+      - name: Instalador
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          & $iscc "/DVersion=$version" "/DSource=$PWD\ArchiSim" scripts\windows_installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = Get-ChildItem dist\ArchiSim-*-Windows.exe | Select-Object -First 1
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/VERYSILENT','/CURRENTUSER','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=desktopicon'
+          $app = "$env:LOCALAPPDATA\Programs\ArchiSim\ArchiSim.exe"
+          if (-not (Test-Path $app)) { Write-Output "::error::el instalador no dejó ArchiSim.exe en $app"; exit 1 }
+          if (-not (Test-Path "$env:LOCALAPPDATA\Programs\ArchiSim\ejemplos\demo.archisim")) { Write-Output "::error::faltan los ejemplos"; exit 1 }
+          $prog = (Get-ItemProperty 'HKCU:\Software\Classes\.archisim').'(default)'
+          $cmd = (Get-ItemProperty 'HKCU:\Software\Classes\ArchiSim.Proyecto\shell\open\command').'(default)'
+          $ifc = Get-ItemProperty 'HKCU:\Software\Classes\.ifc\OpenWithProgids'
+          Write-Output "Tipo .archisim: $prog · orden: $cmd"
+          if ($prog -ne 'ArchiSim.Proyecto' -or $cmd -notlike '*ArchiSim.exe*') { Write-Output "::error::.archisim no queda asociado"; exit 1 }
+          if ($null -eq $ifc.'ArchiSim.IFC') { Write-Output "::error::.ifc no ofrece ArchiSim en Abrir con"; exit 1 }
+          # The icon is in the program.
+          Add-Type -AssemblyName System.Drawing
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($app)
+          Write-Output "Icono: $($icon.Width)x$($icon.Height)"
+          # Uninstall: the program and the file types go.
+          $un = "$env:LOCALAPPDATA\Programs\ArchiSim\unins000.exe"
+          Start-Process -Wait -FilePath $un -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+          Start-Sleep -Seconds 3
+          if (Test-Path $app) { Write-Output "::error::el desinstalador dejó ArchiSim.exe"; exit 1 }
+          if (Test-Path 'HKCU:\Software\Classes\ArchiSim.Proyecto') { Write-Output "::error::el desinstalador dejó el tipo .archisim"; exit 1 }
+          Write-Output "Instalación y desinstalación correctas."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArchiSim-Windows-Instalador
+          path: dist/ArchiSim-*-Windows.exe
 
   # The macOS application: universal (Apple chip and Intel), in a disk
   # image with the demo house and the IFC examples.
