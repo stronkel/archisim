@@ -100,3 +100,47 @@ jobs:
         with:
           name: ArchiSim-Windows
           path: ArchiSim/
+
+  # The macOS application: universal (Apple chip and Intel), in a disk
+  # image with the demo house and the IFC examples.
+  macos-app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/macos_bundle.sh
+      # Opening a project from the Finder reaches the application. Apps
+      # started by `open` get their environment from launchd. What went
+      # wrong is reported as job annotations.
+      - run: |
+          log="$PWD/dist/abiertos.txt"
+          launchctl setenv ARCHISIM_OPENED_LOG "$log"
+          if ! open -n -a "$PWD/dist/ArchiSim.app" "$PWD/dist/demo/demo.archisim"; then
+            echo "::error::open no pudo lanzar ArchiSim.app"
+          fi
+          for i in $(seq 90); do
+            grep -q demo.archisim "$log" 2>/dev/null && break
+            sleep 1
+          done
+          launchctl unsetenv ARCHISIM_OPENED_LOG
+          if grep -q demo.archisim "$log" 2>/dev/null; then
+            echo "Recibido: $(cat "$log")"
+            pkill -x ArchiSim || true
+            exit 0
+          fi
+          echo "::error::ArchiSim no recibió demo.archisim en 90 s"
+          pgrep -lx ArchiSim | sed 's/^/::warning::proceso /' || echo "::warning::ArchiSim no está en marcha"
+          for f in $(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i archisim | head -2); do
+            head -c 1500 ~/Library/Logs/DiagnosticReports/"$f" | tr '\n' ' ' | sed 's/^/::warning::informe de fallo: /'; echo
+          done
+          pkill -x ArchiSim || true
+          # The program on its own, for its error output.
+          ARCHISIM_OPENED_LOG="$log" "$PWD/dist/ArchiSim.app/Contents/MacOS/ArchiSim" > out.txt 2>&1 &
+          sleep 15; kill %1 2>/dev/null || true
+          tail -n 15 out.txt | sed 's/^/::warning::salida: /'
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ArchiSim-Mac
+          path: dist/ArchiSim-*.dmg

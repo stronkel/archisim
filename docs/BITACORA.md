@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-17 · Cierre de fase 1, bloque 12 — Aplicación de Mac
+
+**Hecho**
+- **ArchiSim para Mac** en un `.dmg`: la integración continua compila la aplicación para chip Apple (M1 y posteriores) e Intel en un solo `ArchiSim.app` (universal) y la mete en una imagen de disco con un acceso a Aplicaciones, la vivienda de prueba (`demo.archisim`), los IFC de ejemplo y un `LEEME.txt` con cómo abrirla la primera vez. Se descarga igual que la de Windows: *Actions → Artifacts → **ArchiSim-Mac***.
+- **Doble clic** en un `.archisim` en el Finder abre ArchiSim con ese proyecto (los `.archisim` quedan asociados a ArchiSim, con su icono). Los `.ifc` aparecen en *Abrir con → ArchiSim* sin quitarle el doble clic a tu visor IFC habitual. También se puede soltar un fichero sobre el icono del Dock. Si hay cambios sin guardar, pregunta antes.
+- En **todos los sistemas**: soltar un `.archisim` o un `.ifc` sobre la ventana lo abre o lo importa; cualquier otro fichero se rechaza con un aviso.
+- **Icono** propio (provisional, hasta decidir nombre e imagen): la esquina de un muro de fachada en planta con sus capas y una puerta. También es el icono de la ventana en Windows y Linux.
+- La aplicación no está firmada con una cuenta de desarrollador de Apple (99 €/año): va firmada «ad hoc», que basta para usarla tras confirmarla una vez en *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*.
+- Pruebas: abrir ficheros soltados en la ventana (proyecto, IFC, fichero ajeno, con cambios sin guardar) con la app manejada sin pantalla. En la integración continua, en un Mac real: se monta el `.app`, se comprueba su firma y su `Info.plist`, se crea el `.dmg` y se abre `demo.archisim` «desde el Finder» (orden `open`) comprobando que llega a ArchiSim.
+- Versión 0.13.0 (la 0.11 y la 0.12 son las de los PR #2 y #3). Sin cambios en el formato `.archisim` ni en el IFC.
+
+**Pendiente / limitaciones conocidas**
+- Sin firma ni notarización de Apple: hace falta la cuenta de desarrollador cuando se distribuya a otros.
+- Windows sigue sin instalador, sin icono en el `.exe` y sin asociación de ficheros (resto del punto 1.8).
+- Un fichero cada vez: si sueltas varios, se abre el primero y se avisa de los demás.
+
+**Antonio debe probar**
+1. En el MacBook: GitHub → **Actions** → la última ejecución en verde del pull request «Mac: aplicación universal en .dmg» → **Artifacts** → **ArchiSim-Mac**. Descomprime y abre el `.dmg`.
+2. Arrastra **ArchiSim** a **Aplicaciones** y ábrela. Cuando macOS diga que no puede comprobar el desarrollador: *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*. En macOS Sequoia puede volver a pedirlo en bucle: entonces, en Terminal, `xattr -dr com.apple.quarantine /Applications/ArchiSim.app` y doble clic (comprobado por Antonio en un MacBook Pro Intel con Sequoia).
+3. Copia `demo.archisim` del `.dmg` a tu Mac y haz **doble clic**: debe abrirse en ArchiSim. Navega en planta y en 3D (F3) con el trackpad: ¿va fluido?
+4. Clic derecho en un `.ifc` → **Abrir con → ArchiSim**: debe importarse y salir el informe.
+5. En Windows y en Mac: arrastra un `.archisim` o un `.ifc` sobre la ventana de ArchiSim abierta.
+6. ¿Te vale el icono provisional o prefieres otra idea?
 ## 2026-10-17 · Cierre de fase 1, bloque 11 — Editor de tipos y materiales
 
 **Hecho**
