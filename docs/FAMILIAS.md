@@ -117,7 +117,7 @@ plan 1:50                      # símbolo en planta a 1:50 (y a 1:20, la más ce
   use frame_cut_plan(-width / 2, width / 2, frame_depth)     # marco cortado
   line (-width / 2 + f, 0) to (width / 2 - f, 0) pen thin     # vidrio
   if hand == "left"
-    use window_leaf_plan(-width / 2 + f, 1, width - 2 * f, frame_depth)
+    use window_leaf_plan(-width / 2 + f, 1, width - 2 * f, frame_depth, "dashed")
 
 plan 1:100                     # a 1:100, más sencillo
   use frame_cut_plan(-width / 2, width / 2, frame_depth)
@@ -132,10 +132,11 @@ ifc                            # datos IFC
   panel_2 = "SIDEHUNGRIGHTHAND"
 ```
 
-- **Parámetros**: `nombre clase = valor`, con `range`, `label` y `visible_if` opcionales. Clases: `length`, `angle` (radianes), `number`, `integer`, `bool` (`yes`/`no`), `material` (por defecto, el nombre de un material; ArchiSim busca el del proyecto), `text` y `choice("a", "b", …)`.
+- **Parámetros**: `nombre clase = valor`, con `range`, `label` y `visible_if` opcionales. Clases: `length`, `angle` (radianes), `number`, `integer`, `bool` (`yes`/`no`), `material` (por defecto, el nombre de un material; ArchiSim busca el del proyecto), `text`, `choice("a", "b", …)` y `linestyle` (tipo de línea, por su nombre en inglés: `"dashed"`).
 - **Fórmulas**: `+ - * /`, comparaciones (`== != < <= > >=`), `and`, `or`, `not`, `if … then … else …` y las funciones `min`, `max`, `abs`, `sqrt`, `floor`, `ceil`, `round`, `sin`, `cos`, `tan`.
 - **Geometría**: `box (x, y, z) to (x, y, z) material m`; `use pieza(…)`; `repeat i in a..b` (b excluido); `if` / `else if` / `else`; `let`. Una pieza común solo ve sus propios argumentos.
 - **Textos**: se unen con `+` (`"SIDEHUNG" + side + "HAND"`).
+- **Tipos de línea**: detrás de la pluma, `dashed`, `dotted`, `dashdot`, `dashdotdot` o `longdash` (continua si no se pone nada), o `style <valor>` con un parámetro de clase `linestyle` («Línea del giro» en las puertas y ventanas de sistema). En pantalla se eligen por su nombre: continua, discontinua, de puntos, trazo y punto, trazo y dos puntos, trazos largos. Los patrones van en milímetros de papel (UNE-EN ISO 128-2), así que se ven igual a cualquier escala.
 - **Símbolos de planta**: un bloque `plan 1:N` por escala; se dibuja el de la escala más cercana (1:20 usa el de 1:50 si no hay otro). Dentro, `line (x, y) to (x, y) pen P [dashed]`, `polygon (x, y) (x, y) (x, y)… pen P [filled]` (relleno blanco, tapa lo que hay debajo) y `arc center (x, y) from (x, y) to (x, y) pen P` (por el camino corto), además de `let`, `if`, `repeat` y piezas comunes. Plumas: `cut` (corte), `frame` (marcos y hojas), `view` (proyección), `thin` (vidrios, giros, cantos) y `hatch`; su grosor real lo pone la escala (D5), no la familia. Una caja no puede ir en planta ni una línea en el cuerpo 3D.
 - **Reglas**: `require condición else "mensaje"`; si no se cumple, el cambio se rechaza con ese mensaje.
 - **Lo que pone el programa**: `opens_to` (`"interior"` / `"exterior"`) y `hand` (`"left"` / `"right"`, UNE-EN 12519) en las familias alojadas en muro; en planta, además, `wall_ext` y `wall_int` (dónde están las caras exterior e interior del muro, en los ejes de la familia) y `sill_height` (antepecho).

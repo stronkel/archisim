@@ -13,8 +13,8 @@ pub mod model;
 
 pub use document::Document;
 pub use family::{
-    Evaluation, Family, FamilyDef, FamilyError, Mark, ParamKind, ParamScope, Part, Pen, Value,
-    Values,
+    Evaluation, Family, FamilyDef, FamilyError, LineStyle, Mark, ParamKind, ParamScope, Part, Pen,
+    Value, Values,
 };
 pub use ids::*;
 pub use math::{

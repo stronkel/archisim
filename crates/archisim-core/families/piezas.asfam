@@ -48,21 +48,23 @@ component frame_cut_plan(xa, xb, d)
   polygon (xa, -d / 2) (xb, -d / 2) (xb, d / 2) (xa, d / 2) pen frame filled
 
 # Hoja de puerta abierta a 90° (con su grueso) y su giro. «hx» es la
-# bisagra; «dir», 1 si la hoja cierra hacia +x y -1 si hacia -x.
-component door_leaf_plan(hx, dir, lw, d)
+# bisagra; «dir», 1 si la hoja cierra hacia +x y -1 si hacia -x; «st», el
+# tipo de línea del giro.
+component door_leaf_plan(hx, dir, lw, d, st)
   let lt = min(0.04, lw / 4)
   polygon (hx, d / 2) (hx, d / 2 + lw) (hx + dir * lt, d / 2 + lw) (hx + dir * lt, d / 2) pen frame filled
-  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin
+  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin style st
 
 # Hoja de puerta a 1:100: una línea y el giro.
-component door_leaf_plan_simple(hx, dir, lw, d)
+component door_leaf_plan_simple(hx, dir, lw, d, st)
   line (hx, d / 2) to (hx, d / 2 + lw) pen frame
-  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin
+  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin style st
 
-# Hoja de ventana abierta a 90° (línea fina) y su giro.
-component window_leaf_plan(hx, dir, lw, d)
-  line (hx, d / 2) to (hx, d / 2 + lw) pen thin
-  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin
+# Hoja de ventana abierta a 90° (línea fina) y su giro, con el tipo de
+# línea «st».
+component window_leaf_plan(hx, dir, lw, d, st)
+  line (hx, d / 2) to (hx, d / 2 + lw) pen thin style st
+  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin style st
 
 # Vierteaguas por fuera, del marco hasta 3 cm más allá de la fachada (solo
 # sobresale de las jambas fuera del muro), y canto del alféizar por dentro.

@@ -83,6 +83,8 @@ pub enum ParamKind {
     Text,
     /// One of a list of options.
     Choice(Vec<String>),
+    /// A line style for plan marks (its code: `"dashed"`…).
+    LineStyle,
 }
 
 impl ParamKind {
@@ -96,6 +98,7 @@ impl ParamKind {
             ParamKind::Material => "material",
             ParamKind::Text => "text",
             ParamKind::Choice(_) => "choice",
+            ParamKind::LineStyle => "linestyle",
         }
     }
 
@@ -162,6 +165,70 @@ pub enum Pen {
     Hatch,
 }
 
+/// How a plan line is drawn: continuous or with one of the usual dash
+/// patterns (UNE-EN ISO 128-2). Written in recipes by its English name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LineStyle {
+    Continuous,
+    Dashed,
+    Dotted,
+    DashDot,
+    DashDotDot,
+    LongDash,
+}
+
+impl LineStyle {
+    pub const ALL: [LineStyle; 6] = [
+        LineStyle::Continuous,
+        LineStyle::Dashed,
+        LineStyle::Dotted,
+        LineStyle::DashDot,
+        LineStyle::DashDotDot,
+        LineStyle::LongDash,
+    ];
+
+    /// The name used in recipes and in project files.
+    pub fn code(self) -> &'static str {
+        match self {
+            LineStyle::Continuous => "continuous",
+            LineStyle::Dashed => "dashed",
+            LineStyle::Dotted => "dotted",
+            LineStyle::DashDot => "dashdot",
+            LineStyle::DashDotDot => "dashdotdot",
+            LineStyle::LongDash => "longdash",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<LineStyle> {
+        LineStyle::ALL.into_iter().find(|s| s.code() == code)
+    }
+
+    /// The name shown to the user, in Spanish.
+    pub fn label(self) -> &'static str {
+        match self {
+            LineStyle::Continuous => "Continua",
+            LineStyle::Dashed => "Discontinua",
+            LineStyle::Dotted => "De puntos",
+            LineStyle::DashDot => "Trazo y punto",
+            LineStyle::DashDotDot => "Trazo y dos puntos",
+            LineStyle::LongDash => "Trazos largos",
+        }
+    }
+
+    /// Dash pattern in paper millimetres (dash, gap, dash, gap…); empty for
+    /// a continuous line.
+    pub fn pattern_mm(self) -> &'static [f64] {
+        match self {
+            LineStyle::Continuous => &[],
+            LineStyle::Dashed => &[2.0, 1.0],
+            LineStyle::Dotted => &[0.25, 0.75],
+            LineStyle::DashDot => &[4.0, 1.0, 0.25, 1.0],
+            LineStyle::DashDotDot => &[4.0, 1.0, 0.25, 1.0, 0.25, 1.0],
+            LineStyle::LongDash => &[6.0, 2.0],
+        }
+    }
+}
+
 /// One value the family gives to the rest of the program.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Output {
@@ -219,7 +286,7 @@ pub enum Stmt {
         from: [Expr; 2],
         to: [Expr; 2],
         pen: Pen,
-        dashed: bool,
+        style: Expr,
         line: usize,
     },
     /// A closed plan outline, filled white (it hides what is under it) or
@@ -227,6 +294,7 @@ pub enum Stmt {
     Polygon {
         points: Vec<[Expr; 2]>,
         pen: Pen,
+        style: Expr,
         filled: bool,
         line: usize,
     },
@@ -236,6 +304,7 @@ pub enum Stmt {
         from: [Expr; 2],
         to: [Expr; 2],
         pen: Pen,
+        style: Expr,
         line: usize,
     },
 }

@@ -41,7 +41,7 @@ pub fn tool_tile(
     } else {
         Sense::hover()
     };
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 50.0), sense);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 44.0), sense);
     let painter = ui.painter_at(rect.expand(1.0));
     let on = active == Some(true);
     let hovered = resp.hovered() && active.is_some();
@@ -58,15 +58,15 @@ pub fn tool_tile(
         stroke,
         StrokeKind::Inside,
     );
-    let icon_rect = Rect::from_center_size(rect.center() - Vec2::new(0.0, 7.0), Vec2::splat(20.0));
+    let icon_rect = Rect::from_center_size(rect.center() - Vec2::new(0.0, 6.0), Vec2::splat(18.0));
     icons::paint(&painter, icon_rect, icon, fg);
     let font = if on {
-        strong_font(11.5)
+        strong_font(10.5)
     } else {
-        FontId::proportional(11.5)
+        FontId::proportional(10.5)
     };
     painter.text(
-        Pos2::new(rect.center().x, rect.bottom() - 10.0),
+        Pos2::new(rect.center().x, rect.bottom() - 8.5),
         Align2::CENTER_CENTER,
         name,
         font,
@@ -74,10 +74,10 @@ pub fn tool_tile(
     );
     if !key.is_empty() {
         painter.text(
-            rect.right_top() + Vec2::new(-6.0, 4.0),
+            rect.right_top() + Vec2::new(-4.0, 3.0),
             Align2::RIGHT_TOP,
             key,
-            FontId::monospace(9.5),
+            FontId::monospace(8.5),
             if on { p.accent } else { p.muted },
         );
     }

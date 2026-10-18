@@ -18,7 +18,7 @@ pub const ROW: f32 = 26.0;
 
 /// Width of the names column for a palette `width` wide.
 pub fn label_width(width: f32) -> f32 {
-    (width * 0.5).clamp(100.0, 172.0)
+    (width * 0.56).clamp(96.0, 172.0)
 }
 
 /// A group of parameters with a header that folds it (remembered).
@@ -81,15 +81,15 @@ pub fn row<R>(ui: &mut Ui, name: &str, hint: &str, value: impl FnOnce(&mut Ui, f
         ui.spacing_mut().item_spacing.x = 6.0;
         let (r, resp) = ui.allocate_exact_size(Vec2::new(lw - 6.0, ROW), Sense::hover());
         let job = egui::text::LayoutJob {
-            wrap: egui::text::TextWrapping::truncate_at_width(lw - 14.0),
+            wrap: egui::text::TextWrapping::truncate_at_width(lw - 10.0),
             ..egui::text::LayoutJob::single_section(
                 name.to_owned(),
-                egui::TextFormat::simple(FontId::proportional(12.5), p.muted),
+                egui::TextFormat::simple(FontId::proportional(12.0), p.muted),
             )
         };
         let g = ui.painter().layout_job(job);
         ui.painter().galley(
-            Pos2::new(r.left() + 8.0, r.center().y - g.size().y / 2.0),
+            Pos2::new(r.left() + 4.0, r.center().y - g.size().y / 2.0),
             g,
             p.muted,
         );

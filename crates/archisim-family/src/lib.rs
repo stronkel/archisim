@@ -37,8 +37,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 pub use ast::{
-    BinOp, Component, Expr, FamilyDef, Host, Param, ParamKind, ParamScope, Pen, PlanSymbol,
-    Require, Stmt,
+    BinOp, Component, Expr, FamilyDef, Host, LineStyle, Param, ParamKind, ParamScope, Pen,
+    PlanSymbol, Require, Stmt,
 };
 pub use error::FamilyError;
 pub use eval::{Evaluation, Mark, Part, MAX_PARTS, MAX_REPEAT};

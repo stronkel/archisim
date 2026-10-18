@@ -1,7 +1,7 @@
 family "Ventana practicable"
   category window
   host wall
-  version 2
+  version 3
   description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante o basculante"
 
 include "piezas"
@@ -22,6 +22,8 @@ type_params
   section "Materiales"
     frame_material material = "Aluminio lacado" label "Marco"
     panel_material material = "Vidrio doble" label "Vidrio"
+  section "Representación"
+    swing_line linestyle = "continuous" label "Línea del giro"
 
 require 2 * frame_width < width and 2 * frame_width < height else "El marco no deja hueco para el vidrio"
 require (leaves + 1) * frame_width < width else "El marco y los montantes no dejan hueco para el vidrio"
@@ -61,9 +63,9 @@ plan 1:50
       let b = if i == leaves - 1 then c1 else c0 + (i + 1) * (clear + f) - f / 2
       let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
       if left
-        use window_leaf_plan(a, 1, b - a, frame_depth)
+        use window_leaf_plan(a, 1, b - a, frame_depth, swing_line)
       else
-        use window_leaf_plan(b, -1, b - a, frame_depth)
+        use window_leaf_plan(b, -1, b - a, frame_depth, swing_line)
 
 # A 1:100, el marco y el vidrio.
 plan 1:100

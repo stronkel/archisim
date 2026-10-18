@@ -258,6 +258,7 @@ fn params(
             "bool" => ParamKind::Bool,
             "material" => ParamKind::Material,
             "text" => ParamKind::Text,
+            "linestyle" => ParamKind::LineStyle,
             "choice" => {
                 c.sym("(")?;
                 let mut options = vec![c.string()?];
@@ -341,6 +342,10 @@ fn check_default(p: &Param) -> Result<(), FamilyError> {
             }
         }
         (ParamKind::Choice(_), _) => return bad("one of its options, in quotes"),
+        (ParamKind::LineStyle, Value::Text(t)) if LineStyle::from_code(t).is_some() => {}
+        (ParamKind::LineStyle, _) => {
+            return bad("a line style: \"continuous\", \"dashed\", \"dotted\", \"dashdot\", \"dashdotdot\" or \"longdash\"")
+        }
         _ => return bad("valid"),
     }
     if p.range.is_some() && !p.kind.is_numeric() {
@@ -508,15 +513,12 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
             c.keyword("to")?;
             let to = c.pair()?;
             let pen = c.pen()?;
-            let dashed = c.peek_ident("dashed");
-            if dashed {
-                c.ident()?;
-            }
+            let style = c.style()?;
             Stmt::Line {
                 from,
                 to,
                 pen,
-                dashed,
+                style,
                 line: no,
             }
         }
@@ -529,6 +531,7 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
                 return Err(syntax(no, "an outline needs at least three points"));
             }
             let pen = c.pen()?;
+            let style = c.style()?;
             let filled = c.peek_ident("filled");
             if filled {
                 c.ident()?;
@@ -536,6 +539,7 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
             Stmt::Polygon {
                 points,
                 pen,
+                style,
                 filled,
                 line: no,
             }
@@ -548,11 +552,13 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
             c.keyword("to")?;
             let to = c.pair()?;
             let pen = c.pen()?;
+            let style = c.style()?;
             Stmt::Arc {
                 center,
                 from,
                 to,
                 pen,
+                style,
                 line: no,
             }
         }
@@ -825,6 +831,24 @@ impl<'a> Cursor<'a> {
                 format!("unknown pen «{other}» (cut, frame, view, thin or hatch)"),
             )),
         }
+    }
+
+    /// Optional line style after a pen: `dashed` (and the other style
+    /// names) or `style <expression>` giving a style name, such as a
+    /// `linestyle` parameter. Continuous when absent.
+    fn style(&mut self) -> Result<Expr, FamilyError> {
+        if let Some(Tok::Ident(name)) = self.peek() {
+            if LineStyle::from_code(name).is_some() {
+                let name = name.clone();
+                self.pos += 1;
+                return Ok(Expr::Str(name));
+            }
+            if name == "style" {
+                self.pos += 1;
+                return self.atom();
+            }
+        }
+        Ok(Expr::Str(LineStyle::Continuous.code().into()))
     }
 
     fn triple(&mut self) -> Result<[Expr; 3], FamilyError> {
