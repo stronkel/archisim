@@ -39,6 +39,8 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 
 ## 2. Fase 2 — Modelado completo
 
+**Ayudas al dibujo** ✅ v0.18 (pedidas por Antonio el 18/10/2026, antes del bloque C): cotas temporales azules editables, forzado a puntos medios de caras y aristas, muros ortogonales por defecto con línea de rastreo, Espacio y flechas para girar puertas y ventanas, cambiar de planta muros y forjados, muros de otras plantas cortados por el plano de corte y calco de la planta inferior. Falta: cotas temporales de forjados y cotas a ejes o a núcleo (como opción de Revit), seleccionar en una planta los muros de otra que se ven cortados, copiar a otra planta.
+
 **Restricción superior de muros** ✅ v0.17 (pedida por Antonio el 18/10/2026, antes del bloque C de familias): muros hasta una planta con desfase, que siguen los cambios de cota. Falta lo mismo para pilares cuando existan (2.5) y el recorte con forjados y cubiertas (2.3, 2.4).
 
 | # | Tarea | Tamaño | Depende de |

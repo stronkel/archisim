@@ -21,8 +21,19 @@ impl ArchiSimApp {
         }
 
         self.navigate(&ctx, &response, rect);
+        let reference = self.reference_level();
+        self.other_walls = archisim_plan::other_level_walls(
+            self.ed.model(),
+            self.ed.level,
+            self.cut_plane,
+            reference,
+        )
+        .ids();
         self.track_cursor(&ctx, &response, rect);
-        if ctx.memory(|m| m.focused().is_none()) {
+        // Keys go to the plan unless a field is being typed in (a temporary
+        // dimension's too: egui lets go of the focus on Esc before the plan
+        // sees it).
+        if ctx.memory(|m| m.focused().is_none()) && self.temp_edit.is_none() {
             self.keyboard_in_view(&ctx);
         }
         self.clicks(&ctx, &response, rect);
@@ -35,6 +46,8 @@ impl ArchiSimApp {
         self.draw_plan(&ctx, &painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
+        self.draw_temp_dims(&painter, rect);
+        self.draw_flip_controls(&painter, rect);
         self.draw_hotspots(&painter, rect);
         self.draw_wall_preview(&painter, rect);
         self.draw_slab_preview(&painter, rect);
@@ -42,6 +55,7 @@ impl ArchiSimApp {
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
+        self.draw_tracking(&painter, rect);
         self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
             let r = Rect::from_two_pos(
@@ -58,6 +72,7 @@ impl ArchiSimApp {
         }
 
         self.draw_overlays(&ctx, &painter, rect);
+        self.temp_edit_ui(&ctx);
 
         let icon = match self.tool {
             Tool::Wall | Tool::Slab | Tool::Door | Tool::Window | Tool::Dimension => {
@@ -68,6 +83,12 @@ impl ArchiSimApp {
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
             Tool::Arrow if self.hover.is_some() => CursorIcon::PointingHand,
             Tool::Arrow => CursorIcon::Default,
+        };
+        let icon = match response.hover_pos() {
+            Some(pos) if self.drag.is_none() && self.over_temp_controls(rect, pos) => {
+                CursorIcon::PointingHand
+            }
+            _ => icon,
         };
         if response.hovered() {
             ctx.set_cursor_icon(icon);
@@ -92,6 +113,15 @@ impl ArchiSimApp {
         }
     }
 
+    /// The level drawn underneath the active plan, when the reference is on.
+    pub(super) fn reference_level(&self) -> Option<LevelId> {
+        if self.show_underlay {
+            archisim_plan::level_below(self.ed.model(), self.ed.level)
+        } else {
+            None
+        }
+    }
+
     /// The snapped point near `raw`, with the snaps of the bottom bar.
     fn snap_at(&self, raw: Point2, reach: f64, extra: &[Point2], skip: &BTreeSet<Element>) -> Snap {
         snap_filtered(
@@ -102,6 +132,7 @@ impl ArchiSimApp {
             extra,
             skip,
             self.snap_filter,
+            &self.other_walls,
         )
     }
 
@@ -139,10 +170,7 @@ impl ArchiSimApp {
             }
             Tool::Slab if self.wand_active(ctx) => {
                 let p = crate::snap::round_point(raw);
-                self.cursor = Some(Snap {
-                    point: p,
-                    kind: SnapKind::Free,
-                });
+                self.cursor = Some(Snap::at(p, SnapKind::Free));
                 self.hover = None;
                 let contour = self.slab_settings.contour;
                 let key = (self.ed.revision(), p, contour);
@@ -189,10 +217,7 @@ impl ArchiSimApp {
                     self.window_settings
                 };
                 self.placement = placement(model, self.ed.level, raw, reach, &settings);
-                self.cursor = Some(Snap {
-                    point: crate::snap::round_point(raw),
-                    kind: SnapKind::Free,
-                });
+                self.cursor = Some(Snap::at(crate::snap::round_point(raw), SnapKind::Free));
                 self.hover = None;
             }
             Tool::Arrow if self.drag.is_some() => {
@@ -227,10 +252,7 @@ impl ArchiSimApp {
                 }
             }
             Tool::Arrow => {
-                self.cursor = Some(Snap {
-                    point: crate::snap::round_point(raw),
-                    kind: SnapKind::Free,
-                });
+                self.cursor = Some(Snap::at(crate::snap::round_point(raw), SnapKind::Free));
                 self.hover_grip = if self.window_start.is_some() {
                     None
                 } else {
@@ -246,13 +268,14 @@ impl ArchiSimApp {
     }
 
     fn keyboard_in_view(&mut self, ctx: &egui::Context) {
-        let (events, enter, escape, backspace, delete) = ctx.input(|i| {
+        let (events, enter, escape, backspace, delete, space) = ctx.input(|i| {
             (
                 i.events.clone(),
                 i.key_pressed(Key::Enter),
                 i.key_pressed(Key::Escape),
                 i.key_pressed(Key::Backspace),
                 i.key_pressed(Key::Delete),
+                i.key_pressed(Key::Space),
             )
         });
         if self.drag.is_some() {
@@ -289,6 +312,32 @@ impl ArchiSimApp {
             };
         if !edited_length && (delete || backspace) && !drawing {
             self.delete();
+        }
+        // Space turns the selected door or window (or flips the selected
+        // walls); with the door or window tool, the one being placed.
+        if space && !drawing {
+            match self.tool {
+                Tool::Door | Tool::Window => {
+                    let s = if self.tool == Tool::Door {
+                        &mut self.door_settings
+                    } else {
+                        &mut self.window_settings
+                    };
+                    s.hand = match s.hand {
+                        Hand::Left => Hand::Right,
+                        Hand::Right => Hand::Left,
+                    };
+                    let hand = s.hand;
+                    self.say(match hand {
+                        Hand::Left => "Mano izquierda (Espacio para cambiarla).",
+                        Hand::Right => "Mano derecha (Espacio para cambiarla).",
+                    });
+                }
+                Tool::Arrow => {
+                    self.flip_selected(None);
+                }
+                _ => {}
+            }
         }
         if enter {
             let towards = self.cursor.map(|c| c.point).unwrap_or_default();
@@ -384,6 +433,15 @@ impl ArchiSimApp {
 
     fn clicks(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
         let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+        // The values of the temporary dimensions and the flip arrows come
+        // before the tool, as in Revit.
+        if response.clicked_by(PointerButton::Primary) {
+            if let Some(pos) = response.interact_pointer_pos() {
+                if self.click_temp_controls(rect, pos) {
+                    return;
+                }
+            }
+        }
         match self.tool {
             Tool::Wall => {
                 if response.clicked_by(PointerButton::Primary) {
@@ -559,18 +617,22 @@ impl ArchiSimApp {
             show_reference_lines: self.show_reference_lines,
             scale: self.plan_scale,
             cut_plane: self.cut_plane,
+            reference_level: self.reference_level(),
         };
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
-            let image = rasterize_at(
+            let image = rasterize_with(
                 self.ed.model(),
                 self.ed.level,
-                lo,
-                hi,
                 size,
-                self.show_reference_lines,
-                self.plan_scale,
-                self.cut_plane,
+                &archisim_plan::PlanOptions {
+                    viewport: Some((lo, hi)),
+                    show_reference_lines: self.show_reference_lines,
+                    scale: self.plan_scale,
+                    cut_plane: self.cut_plane,
+                    reference_level: key.reference_level,
+                    ..archisim_plan::PlanOptions::default()
+                },
             );
             self.last_plan_ms = started.elapsed().as_secs_f64() * 1000.0;
             match &mut self.plan {
@@ -994,6 +1056,49 @@ impl ArchiSimApp {
             ),
         };
         self.draw_label(painter, rect, c.point, text);
+    }
+
+    /// The point the line being drawn starts from: the last point of the
+    /// wall chain, slab outline or dimension, or where a drag started.
+    fn track_anchor(&self) -> Option<Point2> {
+        if let Some(d) = &self.drag {
+            return Some(d.from);
+        }
+        match self.tool {
+            Tool::Wall => self.wall_tool.anchor(),
+            Tool::Slab => self.slab_tool.anchor(),
+            Tool::Dimension if !self.dim_tool.is_placing() => {
+                self.dim_tool.points().last().copied()
+            }
+            _ => None,
+        }
+    }
+
+    /// The tracking line: when the line being drawn runs exactly
+    /// horizontal, vertical or at 45°, a blue line across the view through
+    /// its start says so (Revit's and ArchiCAD's tracking line).
+    fn draw_tracking(&self, painter: &egui::Painter, rect: Rect) {
+        let (Some(a), Some(c)) = (self.track_anchor(), self.cursor) else {
+            return;
+        };
+        if !is_tracking_line(a, c.point) {
+            return;
+        }
+        let Some(dir) = (c.point - a).normalized() else {
+            return;
+        };
+        // Long enough to cross the whole view in both directions.
+        let span = self.view.to_metres(rect.width() + rect.height());
+        let (p, q) = (
+            self.view.to_screen(rect, a - dir * span),
+            self.view.to_screen(rect, a + dir * span),
+        );
+        painter.extend(Shape::dashed_line(
+            &[p, q],
+            Stroke::new(1.0, TRACK_LINE),
+            6.0,
+            4.0,
+        ));
     }
 
     fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {

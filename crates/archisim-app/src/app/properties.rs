@@ -654,6 +654,14 @@ impl ArchiSimApp {
             row(ui, "Rejilla", "Cuadrícula de 1 m y 5 m", |ui, _| {
                 ui.checkbox(&mut self.show_grid, "");
             });
+            row(
+                ui,
+                "Calco",
+                "La planta de debajo en gris, para dibujar encima",
+                |ui, _| {
+                    ui.checkbox(&mut self.show_underlay, "");
+                },
+            );
         });
         if let Some(l) = level {
             group(ui, "view-level", "Planta", |ui| {
@@ -795,6 +803,60 @@ impl ArchiSimApp {
             .collect()
     }
 
+    /// The level of walls and slabs (Revit's "Restricción de base",
+    /// ArchiCAD's home storey), as a list of every level: choosing another
+    /// moves them there with their doors and windows. `current` is `None`
+    /// when they are on different levels.
+    fn level_row(
+        &mut self,
+        ui: &mut Ui,
+        salt: impl std::hash::Hash + std::fmt::Debug,
+        label: &str,
+        current: Option<LevelId>,
+        items: &[Element],
+    ) {
+        let options: Vec<(Option<LevelId>, String)> = self
+            .ed
+            .model()
+            .levels()
+            .into_iter()
+            .map(|l| {
+                (
+                    Some(l.id),
+                    format!("{} ({})", l.name, fmt_level(l.elevation)),
+                )
+            })
+            .collect();
+        let picked = row(
+            ui,
+            label,
+            "Cambia de planta conservando los desfases; las puertas y ventanas van con su muro. Un muro que llegaba a la planta de encima sigue llegando a la de encima de la nueva",
+            |ui, w| {
+                let mut opts: Vec<(Option<LevelId>, &str)> =
+                    options.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                if current.is_none() {
+                    opts.insert(0, (None, "Varias"));
+                }
+                choice(ui, salt, w, current, &opts)
+            },
+        );
+        if let (Some(level), true) = (picked, picked != current) {
+            let name = self
+                .ed
+                .model()
+                .level(level)
+                .map(|l| l.name.clone())
+                .unwrap_or_default();
+            match self.ed.set_elements_level(items, level) {
+                Ok(n) if level != self.ed.level => self.say(format!(
+                    "{n} elemento(s) pasan a «{name}»: ábrela en el navegador para verlos."
+                )),
+                Ok(_) => self.say(format!("Ahora en «{name}».")),
+                Err(e) => self.complain(format!("No se puede cambiar de planta: {e}.")),
+            }
+        }
+    }
+
     /// "Restricción superior" of selected walls: free, or up to a level
     /// above their base (keeping the offset they had).
     fn top_row(
@@ -907,10 +969,6 @@ impl ArchiSimApp {
         };
         let thickness = model.wall_type(w.wall_type).map_or(0.0, |t| t.thickness());
         let openings = model.openings_in_wall(id).count();
-        let level = model
-            .level(w.level)
-            .map(|l| l.name.clone())
-            .unwrap_or_default();
         let same_type = self.same_type(Element::Wall(id));
         props::title(ui, "Muro · 1 seleccionado");
         let items = self.wall_type_items(ui.ctx());
@@ -939,7 +997,13 @@ impl ArchiSimApp {
         }
         let above = self.levels_above(w.level);
         group(ui, "wall-constraints", "Restricciones", |ui| {
-            text_row(ui, "Restricción de base", "", &level);
+            self.level_row(
+                ui,
+                ("wall-level", id),
+                "Restricción de base",
+                Some(w.level),
+                &[Element::Wall(id)],
+            );
             row(ui, "Desfase de base (mm)", "", |ui, wd| {
                 if let Some(v) =
                     length_field(ui, Id::unique(("wall-b", id)), w.base_offset, wd - 8.0)
@@ -1113,7 +1177,19 @@ impl ArchiSimApp {
         if card.select_all {
             self.select_instances(same_type, if door { "puertas" } else { "ventanas" });
         }
+        let model = self.ed.model();
+        let level = model
+            .wall(o.wall)
+            .and_then(|w| model.level(w.level))
+            .map(|l| l.name.clone())
+            .unwrap_or_default();
         group(ui, "opening-constraints", "Restricciones", |ui| {
+            text_row(
+                ui,
+                "Planta",
+                "La de su muro: cambia de planta con él",
+                &level,
+            );
             row(ui, "Antepecho (mm)", "Desde la planta", |ui, w| {
                 if let Some(v) = length_field(ui, Id::unique(("op-sill", id)), o.sill, w - 8.0) {
                     let r = self.ed.move_opening(id, o.along, v);
@@ -1177,10 +1253,6 @@ impl ArchiSimApp {
             return;
         };
         let thickness = model.slab_type(s.slab_type).map_or(0.0, |t| t.thickness());
-        let level = model
-            .level(s.level)
-            .map(|l| l.name.clone())
-            .unwrap_or_default();
         let same_type = self.same_type(Element::Slab(id));
         props::title(ui, "Forjado · 1 seleccionado");
         let items = self.slab_type_items(ui.ctx());
@@ -1207,7 +1279,13 @@ impl ArchiSimApp {
             self.select_instances(same_type, "forjados");
         }
         group(ui, "slab-constraints", "Restricciones", |ui| {
-            text_row(ui, "Planta", "", &level);
+            self.level_row(
+                ui,
+                ("slab-level", id),
+                "Planta",
+                Some(s.level),
+                &[Element::Slab(id)],
+            );
             row(
                 ui,
                 "Cara superior (mm)",
@@ -1257,6 +1335,28 @@ impl ArchiSimApp {
                 }
             }
         });
+        let movable: Vec<Element> = many
+            .iter()
+            .copied()
+            .filter(|e| matches!(e, Element::Wall(_) | Element::Slab(_)))
+            .collect();
+        if !movable.is_empty() {
+            let model = self.ed.model();
+            let levels: BTreeSet<LevelId> = movable
+                .iter()
+                .filter_map(|e| match e {
+                    Element::Wall(id) => model.wall(*id).map(|w| w.level),
+                    Element::Slab(id) => model.slab(*id).map(|s| s.level),
+                    _ => None,
+                })
+                .collect();
+            let current = (levels.len() == 1)
+                .then(|| levels.iter().next().copied())
+                .flatten();
+            group(ui, "many-level", "Planta", |ui| {
+                self.level_row(ui, "many-level-row", "Planta", current, &movable);
+            });
+        }
         if !walls.is_empty() && walls.len() == many.len() {
             let model = self.ed.model();
             let types: BTreeSet<WallTypeId> = walls

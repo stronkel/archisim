@@ -22,6 +22,8 @@ pub struct PlanKey {
     pub scale: f64,
     /// Height of the cut plane above the level, in metres.
     pub cut_plane: f64,
+    /// The level drawn underneath in grey, if any.
+    pub reference_level: Option<LevelId>,
 }
 
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
@@ -50,6 +52,7 @@ pub fn rasterize(
 }
 
 /// [`rasterize`] at a drawing scale and with a cut plane height.
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub fn rasterize_at(
     model: &Model,

@@ -29,12 +29,12 @@ pub mod lettering;
 use std::fmt::Write as _;
 
 use archisim_core::{
-    CutPattern, LayerFunction, LevelId, Mark, Model, Pen, Point2, Slab, WallFunction, WallSide,
-    EPSILON,
+    CutPattern, LayerFunction, LevelId, Mark, Model, Pen, Point2, Slab, WallFunction, WallId,
+    WallSide, EPSILON,
 };
 use archisim_geom::{
-    clip_span, openings_in_wall, wall_geometries, wall_pieces, EndCut, OpeningGeometry,
-    WallGeometry, WallPiece,
+    clip_span, openings_in_wall, wall_geometries, wall_geometry, wall_pieces, EndCut,
+    OpeningGeometry, WallGeometry, WallPiece,
 };
 
 /// Options for a plan view.
@@ -52,6 +52,10 @@ pub struct PlanOptions {
     /// corners, in model metres) instead of fitting the drawing to the
     /// elements. Used by on-screen views: no margin, title or background.
     pub viewport: Option<(Point2, Point2)>,
+    /// Another level drawn underneath in grey as a reference to draw on
+    /// (ArchiCAD's "Calco", Revit's "Calco subyacente"), usually the one
+    /// below. Its walls cut by this plan's cut plane are drawn cut anyway.
+    pub reference_level: Option<LevelId>,
 }
 
 impl Default for PlanOptions {
@@ -62,6 +66,7 @@ impl Default for PlanOptions {
             show_reference_lines: false,
             cut_plane: 1.1,
             viewport: None,
+            reference_level: None,
         }
     }
 }
@@ -78,11 +83,89 @@ const HATCH_SPACING: f64 = 1.5;
 const TEXT_SIZE: f64 = 3.0;
 const INK: &str = "#1a1a1a";
 
+/// Walls of other levels that a plan shows.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OtherWalls {
+    /// Walls of other levels crossed by this plan's cut plane (a wall of
+    /// the floor below that rises through this one): drawn cut, as Revit
+    /// does with whatever its view range cuts. Each one with the height of
+    /// the cut above its own level.
+    pub cut: Vec<(WallId, f64)>,
+    /// Walls of the reference level not already cut: drawn in grey.
+    pub reference: Vec<WallId>,
+}
+
+impl OtherWalls {
+    /// Every wall listed, cut or reference.
+    pub fn ids(&self) -> Vec<WallId> {
+        self.cut
+            .iter()
+            .map(|c| c.0)
+            .chain(self.reference.iter().copied())
+            .collect()
+    }
+}
+
+/// The walls of other levels the plan of `level` shows, with its cut plane
+/// `cut_plane` metres above the level and `reference` drawn underneath.
+pub fn other_level_walls(
+    model: &Model,
+    level: LevelId,
+    cut_plane: f64,
+    reference: Option<LevelId>,
+) -> OtherWalls {
+    let elevation = |l: LevelId| model.level(l).map(|l| l.elevation);
+    let Some(here) = elevation(level) else {
+        return OtherWalls::default();
+    };
+    let cut_at = here + cut_plane;
+    let mut out = OtherWalls::default();
+    for w in model.walls().filter(|w| w.level != level) {
+        let Some(base_level) = elevation(w.level) else {
+            continue;
+        };
+        let base = base_level + w.base_offset;
+        let top = base + w.height;
+        if base < cut_at - EPSILON && top > cut_at + EPSILON {
+            out.cut.push((w.id, cut_at - base_level));
+        } else if Some(w.level) == reference {
+            out.reference.push(w.id);
+        }
+    }
+    out
+}
+
+/// The level right below `level`, if any.
+pub fn level_below(model: &Model, level: LevelId) -> Option<LevelId> {
+    let here = model.level(level)?.elevation;
+    model
+        .levels()
+        .into_iter()
+        .filter(|l| l.elevation < here - EPSILON)
+        .map(|l| l.id)
+        .next_back()
+}
+
 /// Renders the plan of one level as an SVG document.
 pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> String {
     // Paper millimetres → model metres.
     let k = options.scale / 1000.0;
-    let geos = wall_geometries(model, level);
+    let others = other_level_walls(model, level, options.cut_plane, options.reference_level);
+    // Walls of this level, then those of other levels it cuts, each with
+    // the height of the cut above its own level.
+    let mut geos = wall_geometries(model, level);
+    let mut cuts = vec![options.cut_plane; geos.len()];
+    for (id, z) in &others.cut {
+        if let Some(g) = wall_geometry(model, *id) {
+            geos.push(g);
+            cuts.push(*z);
+        }
+    }
+    let reference: Vec<WallGeometry> = others
+        .reference
+        .iter()
+        .filter_map(|id| wall_geometry(model, *id))
+        .collect();
     let slabs: Vec<&Slab> = model.slabs_on_level(level).collect();
 
     let mut min = Point2::new(f64::INFINITY, f64::INFINITY);
@@ -160,6 +243,9 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         draw_slab(&mut s, model, slab, si, options.cut_plane, k);
     }
     s.push_str("</g>\n");
+    if !reference.is_empty() {
+        draw_reference(&mut s, model, &reference, k);
+    }
 
     // Openings of each wall, and the solid pieces left by those that are cut.
     let openings: Vec<Vec<OpeningGeometry>> = geos
@@ -168,10 +254,12 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         .collect();
     let pieces: Vec<Vec<WallPiece>> = openings
         .iter()
+        .zip(cuts.iter().copied())
         .map(|ops| {
             let spans: Vec<(f64, f64)> = ops
+                .0
                 .iter()
-                .filter(|o| opening_view(o, options.cut_plane) == OpeningView::Cut)
+                .filter(|o| opening_view(o, ops.1) == OpeningView::Cut)
                 .map(|o| (o.t0, o.t1))
                 .collect();
             wall_pieces(&spans)
@@ -182,32 +270,25 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     for (gi, g) in geos.iter().enumerate() {
         let cut: Vec<OpeningGeometry> = openings[gi]
             .iter()
-            .filter(|o| opening_view(o, options.cut_plane) == OpeningView::Cut)
+            .filter(|o| opening_view(o, cuts[gi]) == OpeningView::Cut)
             .cloned()
             .collect();
-        draw_layers(
-            &mut s,
-            model,
-            g,
-            gi,
-            &pieces[gi],
-            &cut,
-            options.cut_plane,
-            k,
-        );
+        draw_layers(&mut s, model, g, gi, &pieces[gi], &cut, cuts[gi], k);
     }
     s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
-    for o in openings.iter().flatten() {
-        match opening_view(o, options.cut_plane) {
-            OpeningView::Cut => draw_opening(&mut s, model, o, options.scale, k),
-            OpeningView::Above => draw_opening_above(&mut s, o, k),
-            OpeningView::Below => {}
+    for (ops, cut) in openings.iter().zip(&cuts) {
+        for o in ops {
+            match opening_view(o, *cut) {
+                OpeningView::Cut => draw_opening(&mut s, model, o, options.scale, k),
+                OpeningView::Above => draw_opening_above(&mut s, o, k),
+                OpeningView::Below => {}
+            }
         }
     }
     // Cut lines go last so frames and sill boards never cover the jambs.
     s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
-    for (g, p) in geos.iter().zip(&pieces) {
-        draw_cut_lines(&mut s, g, p, options.cut_plane, k);
+    for ((g, p), cut) in geos.iter().zip(&pieces).zip(&cuts) {
+        draw_cut_lines(&mut s, g, p, *cut, k);
     }
     s.push_str("</g>\n");
 
@@ -253,6 +334,49 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     }
     s.push_str("</svg>\n");
     s
+}
+
+/// Colour of the reference level drawn underneath.
+const REFERENCE_INK: &str = "#8fa3b8";
+
+/// The walls of the reference level: their outline in a light grey-blue,
+/// thin, with the layer boundaries even thinner, so they read as a tracing
+/// underneath and never as walls of this level.
+fn draw_reference(s: &mut String, model: &Model, geos: &[WallGeometry], k: f64) {
+    let _ = writeln!(
+        s,
+        r#"<g id="reference" fill="none" stroke="{REFERENCE_INK}" stroke-linejoin="miter">"#
+    );
+    for g in geos {
+        let outline = g.outline_at(None);
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" stroke-width="{}"/>"#,
+            path(&outline),
+            num(VIEW_LINE * k)
+        );
+        // Openings of the wall below: where its doors and windows are.
+        for o in openings_in_wall(model, g.wall) {
+            let (a, b) = (
+                o.point(o.t0, g.exterior_offset),
+                o.point(o.t0, g.interior_offset),
+            );
+            let (c, d) = (
+                o.point(o.t1, g.exterior_offset),
+                o.point(o.t1, g.interior_offset),
+            );
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{} M{} L{}" stroke-width="{}"/>"#,
+                pt(a),
+                pt(b),
+                pt(c),
+                pt(d),
+                num(HATCH_LINE * k)
+            );
+        }
+    }
+    s.push_str("</g>\n");
 }
 
 /// How the layers of a wall type are finished at the jambs of a door or
@@ -1134,6 +1258,77 @@ mod tests {
         assert!(hatch_lines(&band, &[45.0], 0.3).split('M').count() > 3);
     }
     use archisim_core::{Layer, NewSlab, NewWall, ReferenceLine, SlabFunction, WallFunction};
+
+    /// The plan of a level shows the walls of other levels its cut plane
+    /// crosses, drawn cut, and the level below in grey when asked.
+    #[test]
+    fn other_levels_in_plan() {
+        let mut m = Model::new("Dos plantas");
+        let pb = m.add_level("Planta baja", 0.0);
+        let p1 = m.add_level("Planta primera", 3.0);
+        let mat = m.add_material("Ladrillo", "brick", [230, 200, 190], CutPattern::Diagonal);
+        let t = m
+            .add_wall_type(
+                "Muro",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: mat,
+                    thickness: 0.24,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let wall = |m: &mut Model, x: f64, height: f64| {
+            m.add_wall(NewWall {
+                wall_type: t,
+                level: pb,
+                start: Point2::new(x, 0.0),
+                end: Point2::new(x, 4.0),
+                reference: ReferenceLine::Center,
+                height,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap()
+        };
+        let low = wall(&mut m, 0.0, 3.0);
+        let tall = wall(&mut m, 5.0, 6.0);
+        assert_eq!(level_below(&m, p1), Some(pb));
+        assert_eq!(level_below(&m, pb), None);
+
+        // The tall wall crosses the first floor's plane (4.1 m), 4.1 m
+        // above its own level; the low one ends under it.
+        let o = other_level_walls(&m, p1, 1.1, None);
+        assert_eq!(o.cut, vec![(tall, 4.1)]);
+        assert!(o.reference.is_empty());
+        let o = other_level_walls(&m, p1, 1.1, Some(pb));
+        assert_eq!(o.reference, vec![low]);
+        assert_eq!(o.ids(), vec![tall, low]);
+        // Seen from the ground floor, the first floor has nothing.
+        assert_eq!(
+            other_level_walls(&m, pb, 1.1, Some(p1)),
+            OtherWalls::default()
+        );
+
+        // Drawn: the cut wall with its poché and cut lines, the low one only
+        // with the reference.
+        let plain = render_plan(&m, p1, &PlanOptions::default());
+        assert!(plain.contains("<g id=\"poche\">\n<path"), "{plain}");
+        assert!(!plain.contains("id=\"reference\""));
+        let traced = render_plan(
+            &m,
+            p1,
+            &PlanOptions {
+                reference_level: Some(pb),
+                ..PlanOptions::default()
+            },
+        );
+        assert!(traced.contains("id=\"reference\""));
+        assert!(traced.contains(REFERENCE_INK));
+        // The ground floor plan is as before: its two walls, no reference.
+        let ground = render_plan(&m, pb, &PlanOptions::default());
+        assert!(!ground.contains("id=\"reference\""));
+    }
 
     #[test]
     fn renders_scaled_svg() {

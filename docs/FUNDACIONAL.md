@@ -119,6 +119,13 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - **Estirar** (arrastrar un extremo de muro): mueve ese extremo y los de los muros unidos en esa esquina; con Ctrl, solo el muro seleccionado (sale de la esquina). Las puertas y ventanas se quedan donde estaban en planta.
 - **Vértices de forjado**: arrastrar una esquina la mueve (soltada sobre la esquina vecina, la quita); arrastrar el rombo del centro de una arista la desplaza paralela a sí misma; con Ctrl, añade una esquina.
 - Lo que no cabe se rechaza entero, explicando el motivo (por ejemplo, una puerta que quedaría fuera de un tabique que se acorta).
+- **Cotas temporales** (como Revit): con un muro o una puerta o ventana seleccionados (también el último muro dibujado y la puerta o ventana recién colocada) aparecen cotas azules a las referencias más cercanas. Puerta o ventana: de cada jamba (hueco de obra) a la referencia más próxima de ese lado, medida en la cara hacia la que abre: la cara de un muro que la cruza o acomete, el final del muro o la jamba del hueco vecino. Muro: la longitud de su línea de referencia y la luz libre de cara a cara hasta el muro paralelo más próximo a cada lado. Un clic en el valor permite escribirlo (mm, o con unidad) e Intro recoloca el elemento para que la cota sea exacta: la puerta se desliza por el muro; el muro se desplaza (los unidos le siguen, como al moverlo) o se alarga desde su final. Es un paso de deshacer; Esc deja la cota como estaba.
+- **Girar puertas y ventanas**: Espacio con una seleccionada recorre las cuatro posiciones (bisagras a la otra jamba, hoja al otro lado…); dos flechas azules junto a ella, en el lado contrario a la apertura, la pasan al otro lado del muro (bisagras en la misma jamba; la mano UNE cambia de nombre porque se lee desde el otro lado) o cambian la mano. Con la herramienta Puerta o Ventana, Espacio cambia la mano de la que se va a colocar. Con muros seleccionados, Espacio los invierte.
+
+### Ayudas al dibujo
+
+- **Forzados**: extremos y puntos medios de las líneas de referencia; esquinas y **puntos medios de cada cara de muro y arista de forjado**; cualquier punto de una cara o arista; rastreo.
+- **Rastreo ortogonal por defecto**: dibujando muros, forjados o cotas, o arrastrando, la línea queda horizontal o vertical mientras el cursor no se aparte más de 8° de esa dirección, y una **línea azul** discontinua lo indica; cerca de 45° también se bloquea. Si el punto cae sobre una cara, se desliza por ella hasta quedar en escuadra (un tabique dibujado hasta una cara acaba recto). Para inclinarlo basta apartar el cursor; Mayús fuerza siempre múltiplos de 45°. El rastreo se apaga en la barra inferior.
 
 ### Cotas (anotaciones de planta)
 
@@ -132,6 +139,8 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 ### Plantas
 
 - Diálogo **Plantas** (botón junto al selector de planta o *Vista → Plantas…*), como los ajustes de plantas de ArchiCAD: nombre, cota, altura hasta la planta de encima y contenido de cada una; añadir planta encima (con la misma altura de planta que la última) o debajo; borrar. Cambiar la cota de una planta mueve todo lo que contiene; borrarla borra su contenido, previa confirmación. La última planta no se puede borrar.
+- **Cambiar de planta**: en Propiedades, «Restricción de base» de un muro y «Planta» de un forjado (o de varios a la vez) llevan el elemento a otra planta conservando sus desfases; las puertas y ventanas van con su muro. Un muro que llegaba a la planta de encima sigue llegando a la de encima de la nueva (si no hay, queda con su altura, desconectado); unido a otra planta, la conserva, y se rechaza si no queda por encima.
+- **Otras plantas en planta**: los muros de otras plantas que atraviesa el plano de corte (un muro de la planta baja que sube más allá de la primera) se dibujan cortados, también en la planta exportada, como hace Revit con su rango de vista. El **calco** (activado por defecto en pantalla, *Calco* en la barra inferior o en las propiedades de la vista) dibuja en gris azulado el contorno de los muros de la planta inferior y sus huecos; sus puntos fuerzan, para dibujar encima. El calco no se exporta.
 
 ### Tipos y materiales
 
