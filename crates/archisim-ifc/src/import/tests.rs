@@ -27,6 +27,7 @@ fn model() -> Model {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap(),
         );
@@ -40,6 +41,7 @@ fn model() -> Model {
             reference: ReferenceLine::Center,
             height: 2.7,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
     let bearing = m
@@ -51,6 +53,7 @@ fn model() -> Model {
             reference: ReferenceLine::InteriorFace,
             height: 2.5,
             base_offset: 0.3,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
     let place = |opening_type, wall, along, sill, opens_to, hand, setback| NewOpening {
@@ -649,6 +652,7 @@ fn windows_with_several_leaves_keep_each_leaf() {
             reference: ReferenceLine::ExteriorFace,
             height: 3.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
     let family = m.family_by_name("Ventana practicable").unwrap().id;

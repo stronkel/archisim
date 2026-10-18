@@ -805,6 +805,7 @@ impl ArchiSimApp {
             reference: self.wall_settings.reference,
             height: self.wall_settings.height,
             base_offset: self.wall_settings.base_offset,
+            top: archisim_core::WallTop::Unconnected,
         };
         let (ext, int) = probe.face_offsets(wtype.thickness());
         let band = |hi: f64, lo: f64| -> Vec<Pos2> {

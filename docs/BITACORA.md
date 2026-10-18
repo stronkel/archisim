@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Bloque 16 — Restricción superior de muros
+
+**Hecho** (petición de Antonio: «restricciones superiores de muro, de Planta baja a Planta 1, que se ajusten si cambia la altura de planta»; decidido hacerlo antes del bloque C)
+- **Restricción superior**: un muro tiene altura desconectada (propia) o llega **hasta una planta** con un **desfase superior** (negativo: por debajo, por ejemplo el canto del forjado). Su altura la calcula el modelo y **cambia sola** al cambiar la cota de la planta superior o de la base, o el desfase de base.
+- Se rechaza entero, explicando el motivo, lo que no cabe: bajar una planta hasta dejar la coronación en la base, o hasta que una ventana se salga del muro. Escribir una altura desconecta el muro (como en ArchiCAD); desconectarlo conserva la altura; borrar la planta superior lo desconecta con la altura que tenía.
+- **Herramienta Muro**: en Propiedades, «Restricción de base», «Desfase de base», «Restricción superior» (Desconectada · **Planta superior** · Hasta cada planta de encima) y «Desfase superior» o «Altura desconectada». Por defecto dibuja **hasta la planta superior** (la de encima de la que dibujas, como «planta inicial + 1» de ArchiCAD); sin planta encima, 3 m propios, y lo avisa.
+- **Muro seleccionado** (y varios a la vez, si están en la misma planta): la misma restricción superior; con planta, la altura se ve como «3000 · de las plantas».
+- **Vivienda de prueba**: las fachadas llegan hasta la planta Cubierta menos el canto de la cubierta (los mismos 3 m de antes: el IFC sale idéntico). Sube la cota de Cubierta y las fachadas crecen con ella; los tabiques (2,70 m propios) no.
+- **Formato `.archisim` versión 4**: los muros unidos a una planta llevan `"top": {"level": …, "offset": …}`. Los proyectos de las versiones anteriores se abren igual (sus muros, con su altura propia). El IFC no cambia (lleva la altura resultante, como Revit).
+- **Propiedades a la izquierda** (bloque 15, segunda vuelta): ver la entrada anterior. Columna de nombres un poco más ancha.
+- **Propuesta de disciplinas y mediciones** en `docs/DISCIPLINAS.md`: estructura (pilar, viga, cimentación con zapatas aisladas y corridas, losa, vigas de atado), urbanismo (terreno, parcela, viales por sección tipo, paisajismo; IFC 4.3, fuera de las mediciones del edificio) y mediciones con bancos BC3 y presupuesto vivo, en cinco fases (M1–M5). Decisiones D8–D12 para Antonio.
+- Pruebas nuevas: núcleo (muro unido a la planta de arriba: sigue sus cotas y las de su base, rechaza lo que no cabe sin cambiar nada, se guarda y se reconstruye desde las cotas, se libera al escribir una altura o al borrar la planta), fichero (versión 4 con `top`, cota cambiada a mano en el fichero, fichero de versión 3 sin `top`) y ventana (dibujar hasta la planta superior, cambiar su cota, propiedades, desconectar y deshacer). Ventana real revisada con capturas.
+- Versión 0.17.0.
+
+**Pendiente / limitaciones conocidas**
+- La restricción superior no viaja en el IFC (ni Revit la exporta): al importar, los muros quedan con altura propia.
+- Los muros no se recortan todavía con el forjado de encima (por eso el desfase superior negativo).
+- Pilares con restricción superior, cuando existan (2.5).
+
+**Antonio debe probar**
+1. Descarga la versión del pull request «Muros: restricción superior…» (rama `bloque/restriccion-superior`) → **Artifacts** → **ArchiSim-Windows** o **ArchiSim-Mac**. Abre `demo.archisim` **nuevo** (el del paquete).
+2. Selecciona una fachada: «Restricción superior: Hasta Cubierta», «Desfase superior −548» (el canto de la cubierta) y «Altura 3000 · de las plantas».
+3. Navegador → **Plantas…** → cambia la cota de **Cubierta** de 3548 a 3848. Mira la fachada en 3D: ha crecido 30 cm; los tabiques no. Ctrl+Z lo deshace.
+4. Añade una «Planta primera» encima de la baja, vuelve a la planta baja y dibuja un muro: en Propiedades verás «Restricción superior: Planta superior (Planta primera)». Cambia la cota de la planta primera y comprueba que el muro la sigue.
+5. Escribe una altura a mano en un muro unido: pasa a «Desconectada». Vuelve a unirlo eligiendo una planta en la lista.
+6. Intenta bajar la Cubierta por debajo de la planta baja: debe negarse explicando por qué.
+7. Lee `docs/DISCIPLINAS.md` y contesta D8 a D12; si puedes, pásame un presupuesto BC3 de una vivienda de AD5 como referencia de capítulos y criterios.
+
 ## 2026-10-18 · Bloque 15 — Interfaz rediseñada (ArchiCAD + propiedades de Revit)
 
 **Hecho** (petición de Antonio: interfaz moderna, minimalista y práctica, «como un juego», parecida a ArchiCAD con las propiedades de Revit)

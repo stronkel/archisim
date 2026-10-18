@@ -105,6 +105,9 @@ pub fn explain(e: &ModelError) -> String {
             "la puerta o ventana se solaparía con otra del mismo muro".into()
         }
         ModelError::FrameTooDeep => "el marco no cabe en el espesor del muro".into(),
+        ModelError::WallTopBelowBase(_) => {
+            "un muro unido a una planta superior quedaría con su coronación en su base o por debajo (revisa las cotas de las plantas o el desfase superior)".into()
+        }
         ModelError::InvalidOutline => {
             "el contorno necesita al menos tres puntos y no puede cruzarse".into()
         }

@@ -588,6 +588,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
         }
@@ -599,6 +600,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
         (m, lvl)
@@ -684,6 +686,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 1.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
         let east = room_outline(&m, lvl, Point2::new(7.0, 4.0), Contour::InteriorFace).unwrap();
@@ -704,6 +707,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
         let ne = room_outline(&m, lvl, Point2::new(8.0, 7.0), Contour::InteriorFace).unwrap();
