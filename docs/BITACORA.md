@@ -17,7 +17,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 - README y LÉEME del `.dmg` con la nueva forma de instalar. Versión 0.22.2. Sin cambios de formato ni de IFC.
 
 **Pendiente**
-- Publicar la primera versión: cuando Antonio fusione los pull requests #13 a #17 en `main`, etiquetar `v0.22.2` en `main`.
+- Publicar la primera versión: cuando Antonio fusione los pull requests #13 a #16 en `main`, etiquetar `v0.22.2` en `main`.
 - Cerrar la sesión de macOS con ArchiSim abierto se cancela una vez (ArchiSim sale, pero hay que volver a cerrar la sesión). Se puede afinar si molesta.
 
 **Antonio debe probar** (en el MacBook)
