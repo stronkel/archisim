@@ -17,8 +17,7 @@ use archisim_core::{
 };
 
 use crate::{
-    ensure_ccw, opening_geometry, openings_in_wall, wall_geometry, Curve, EndCut, Line,
-    WallGeometry,
+    ensure_ccw, opening_geometry, wall_geometry_in, Curve, EndCut, Line, WallGeometry, WallIndex,
 };
 
 /// A point in model space: metres, Z up.
@@ -215,7 +214,13 @@ pub fn prism(poly: &[Point2], z0: f64, z1: f64) -> Vec<[P3; 3]> {
 /// Ends joined to another wall with a mitre have no end face either: the
 /// other wall closes the corner. A wall with free ends is a closed solid.
 pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
-    let (Some(wall), Some(g)) = (model.wall(id), wall_geometry(model, id)) else {
+    wall_solids_in(&WallIndex::new(model), id)
+}
+
+/// [`wall_solids`] with the walls around found through an index.
+pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
+    let model = idx.model;
+    let (Some(wall), Some(g)) = (model.wall(id), wall_geometry_in(idx, id)) else {
         return Vec::new();
     };
     let Some(wtype) = model.wall_type(wall.wall_type) else {
@@ -233,7 +238,7 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
         return Vec::new();
     };
     let n = u.perp_left();
-    let openings = openings_in_wall(model, id);
+    let openings = idx.openings_in_wall(id);
     let layers = wtype.layers.len();
 
     // Layer boundaries across the wall, from the exterior face inwards.
@@ -301,13 +306,14 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
     // of a junction share their vertices.
     let mut zs: Vec<f64> = vec![z_base, z_top];
     let mut heights: Vec<(f64, f64)> = openings.iter().map(|o| (o.sill, o.head)).collect();
-    for other in model.walls_on_level(wall.level) {
-        let touches = [other.start, other.end]
-            .iter()
-            .any(|p| p.approx_eq(wall.start) || p.approx_eq(wall.end));
-        if other.id != id && touches {
+    let mut joined = idx.at_end(wall.level, wall.start);
+    joined.extend(idx.at_end(wall.level, wall.end));
+    joined.sort_by_key(|w| w.id);
+    joined.dedup_by_key(|w| w.id);
+    for other in joined {
+        if other.id != id {
             heights.extend(
-                openings_in_wall(model, other.id)
+                idx.openings_in_wall(other.id)
                     .iter()
                     .map(|o| (o.sill, o.head)),
             );
@@ -716,8 +722,9 @@ fn sorted(a: f64, b: f64) -> (f64, f64) {
 /// Every solid of the model, on every level.
 pub fn model_solids(model: &Model) -> Vec<Solid> {
     let mut out = Vec::new();
+    let idx = WallIndex::new(model);
     for w in model.walls() {
-        out.extend(wall_solids(model, w.id));
+        out.extend(wall_solids_in(&idx, w.id));
     }
     for s in model.slabs() {
         out.extend(slab_solids(model, s.id));
@@ -748,6 +755,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wall_geometry;
 
     /// The door and window solids as ArchiSim built them before families,
     /// kept to check that the system families reproduce them exactly.
@@ -1040,7 +1048,7 @@ mod tests {
         // The same computation as Qto_WallBaseQuantities.NetVolume.
         let g = wall_geometry(&m, w).unwrap();
         let gross = crate::signed_area(&g.outline).abs() * 3.0;
-        let cut: f64 = openings_in_wall(&m, w)
+        let cut: f64 = crate::openings_in_wall(&m, w)
             .iter()
             .map(|o| removed_area(&g, o) * o.height())
             .sum();

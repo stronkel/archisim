@@ -1,9 +1,10 @@
 //! Finding elements under the cursor or inside a selection window.
 
+use crate::geo::Geo;
 use archisim_core::{
     DimensionId, ElevationMarkId, LevelId, Model, OpeningId, Point2, SlabId, WallId,
 };
-use archisim_geom::{opening_geometry, wall_geometry};
+use archisim_geom::opening_geometry;
 
 /// A selectable element of the plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -54,9 +55,10 @@ pub fn distance_to_outline(poly: &[Point2], p: Point2) -> f64 {
 
 /// Plan outline of an element, as drawn: walls with their joins, doors and
 /// windows by their rough opening, slabs by their contour.
-pub fn outline(model: &Model, element: Element) -> Option<Vec<Point2>> {
+pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>> {
+    let model = geo.model();
     match element {
-        Element::Wall(id) => wall_geometry(model, id).map(|g| g.outline),
+        Element::Wall(id) => geo.wall_geometry(id).map(|g| g.outline.clone()),
         Element::Opening(id) => opening_geometry(model, id).map(|g| g.footprint()),
         Element::Slab(id) => model.slab(id).map(|s| s.outline.clone()),
         Element::Dimension(id) => model.dimension(id).map(dimension_outline),
@@ -108,8 +110,17 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
             .dimensions_on_level(level)
             .map(|d| Element::Dimension(d.id)),
     );
+    // Doors and windows by wall (going through them once: there may be
+    // thousands).
+    let mut by_wall: std::collections::HashMap<WallId, Vec<Element>> = Default::default();
+    for o in model.openings() {
+        by_wall
+            .entry(o.wall)
+            .or_default()
+            .push(Element::Opening(o.id));
+    }
     for w in model.walls_on_level(level) {
-        v.extend(model.openings_in_wall(w.id).map(|o| Element::Opening(o.id)));
+        v.extend(by_wall.remove(&w.id).unwrap_or_default());
     }
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
@@ -147,7 +158,13 @@ pub fn of_type_on_level(model: &Model, level: LevelId, t: TypeOf) -> Vec<Element
 ///
 /// Doors and windows win over their walls, and walls over slabs. Among
 /// elements of the same kind, the one whose outline is closest wins.
-pub fn pick(model: &Model, level: LevelId, p: Point2, tolerance: f64) -> Option<Element> {
+pub fn pick<G: Geo + ?Sized>(
+    geo: &G,
+    level: LevelId,
+    p: Point2,
+    tolerance: f64,
+) -> Option<Element> {
+    let model = geo.model();
     let rank = |e: &Element| match e {
         Element::Dimension(_) | Element::Mark(_) => 0,
         Element::Opening(_) => 1,
@@ -157,7 +174,7 @@ pub fn pick(model: &Model, level: LevelId, p: Point2, tolerance: f64) -> Option<
     elements_on_level(model, level)
         .into_iter()
         .filter_map(|e| {
-            let poly = outline(model, e)?;
+            let poly = outline(geo, e)?;
             // A hole of a slab is not the slab.
             let inside = match e {
                 Element::Slab(id) => model.slab(id).is_some_and(|s| s.covers(p)),
@@ -171,7 +188,8 @@ pub fn pick(model: &Model, level: LevelId, p: Point2, tolerance: f64) -> Option<
 }
 
 /// Elements entirely inside the window `a`–`b` (any two opposite corners).
-pub fn in_window(model: &Model, level: LevelId, a: Point2, b: Point2) -> Vec<Element> {
+pub fn in_window<G: Geo + ?Sized>(geo: &G, level: LevelId, a: Point2, b: Point2) -> Vec<Element> {
+    let model = geo.model();
     let (lo, hi) = (
         Point2::new(a.x.min(b.x), a.y.min(b.y)),
         Point2::new(a.x.max(b.x), a.y.max(b.y)),
@@ -179,7 +197,7 @@ pub fn in_window(model: &Model, level: LevelId, a: Point2, b: Point2) -> Vec<Ele
     let inside = |p: &Point2| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
     elements_on_level(model, level)
         .into_iter()
-        .filter(|e| outline(model, *e).is_some_and(|poly| poly.iter().all(inside)))
+        .filter(|e| outline(geo, *e).is_some_and(|poly| poly.iter().all(inside)))
         .collect()
 }
 

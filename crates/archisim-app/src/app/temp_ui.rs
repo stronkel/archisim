@@ -62,7 +62,7 @@ impl ArchiSimApp {
         if busy || !fits {
             return Vec::new();
         }
-        temp_dims(model, &self.ed.selection)
+        temp_dims(&self.ed, &self.ed.selection)
     }
 
     /// Where a temporary dimension is drawn on screen: its two ends, the

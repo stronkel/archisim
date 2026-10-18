@@ -22,6 +22,7 @@
 
 use archisim_core::{LayerFunction, Model, Point2, Vec2, Wall, WallId, EPSILON};
 
+use crate::index::{bounds, WallIndex};
 use crate::Line;
 
 /// Intersection priority of a layer, by its function.
@@ -141,21 +142,24 @@ impl Frame {
 
 /// The T-junction at one end of a wall, if it butts against another wall.
 pub fn tee_end(model: &Model, wall: &Wall, at_start: bool) -> Option<TeeEnd> {
+    tee_end_in(&WallIndex::new(model), wall, at_start)
+}
+
+/// [`tee_end`] with the walls found through an index.
+pub fn tee_end_in(idx: &WallIndex, wall: &Wall, at_start: bool) -> Option<TeeEnd> {
     if wall.is_curved() {
         return None;
     }
     let p = if at_start { wall.start } else { wall.end };
     // Ends shared with another wall are corners, not T-junctions.
-    let shared = model
-        .walls_on_level(wall.level)
-        .any(|o| o.id != wall.id && (o.start.approx_eq(p) || o.end.approx_eq(p)));
+    let shared = idx.at_end(wall.level, p).iter().any(|o| o.id != wall.id);
     if shared {
         return None;
     }
-    model
-        .walls_on_level(wall.level)
+    idx.near(wall.level, p, 0.0)
+        .into_iter()
         .filter(|h| h.id != wall.id && !h.is_curved())
-        .find_map(|h| tee_with(model, wall, at_start, h))
+        .find_map(|h| tee_with(idx, wall, at_start, h))
 }
 
 /// Whether a point lies in a wall's band (between its faces, along it).
@@ -172,7 +176,8 @@ pub(crate) fn in_band(model: &Model, host: &Wall, p: Point2) -> bool {
 }
 
 /// The T-junction of one end of `wall` against `host`, if it butts there.
-fn tee_with(model: &Model, wall: &Wall, at_start: bool, host: &Wall) -> Option<TeeEnd> {
+fn tee_with(idx: &WallIndex, wall: &Wall, at_start: bool, host: &Wall) -> Option<TeeEnd> {
+    let model = idx.model;
     let (p, q) = if at_start {
         (wall.start, wall.end)
     } else {
@@ -228,7 +233,7 @@ fn tee_with(model: &Model, wall: &Wall, at_start: bool, host: &Wall) -> Option<T
         reach,
     };
     let deepest = tee.reach.iter().copied().fold(0.0, f64::max);
-    let margin = corner_margin(model, host);
+    let margin = corner_margin(idx, host);
     let clear = (0..w.tops.len()).all(|b| {
         let side_line = Line::new(w.start + w.n * w.tops[b], w.u);
         [0.0, deepest].iter().all(|d| {
@@ -248,12 +253,12 @@ fn tee_with(model: &Model, wall: &Wall, at_start: bool, host: &Wall) -> Option<T
 
 /// How far from each end of a wall its corners reach: the thickness of the
 /// thickest wall joined there (zero at a free end).
-fn corner_margin(model: &Model, w: &Wall) -> (f64, f64) {
+fn corner_margin(idx: &WallIndex, w: &Wall) -> (f64, f64) {
     let at = |p: Point2| {
-        model
-            .walls_on_level(w.level)
-            .filter(|o| o.id != w.id && (o.start.approx_eq(p) || o.end.approx_eq(p)))
-            .filter_map(|o| model.wall_type(o.wall_type).map(|t| t.thickness()))
+        idx.at_end(w.level, p)
+            .into_iter()
+            .filter(|o| o.id != w.id)
+            .filter_map(|o| idx.model.wall_type(o.wall_type).map(|t| t.thickness()))
             .fold(0.0, f64::max)
             + EPSILON
     };
@@ -262,6 +267,12 @@ fn corner_margin(model: &Model, w: &Wall) -> (f64, f64) {
 
 /// Where other walls go into `host`.
 pub fn notches(model: &Model, host: &Wall) -> Vec<Notch> {
+    notches_in(&WallIndex::new(model), host)
+}
+
+/// [`notches`] with the walls found through an index.
+pub fn notches_in(idx: &WallIndex, host: &Wall) -> Vec<Notch> {
+    let model = idx.model;
     if host.is_curved() {
         return Vec::new();
     }
@@ -269,7 +280,8 @@ pub fn notches(model: &Model, host: &Wall) -> Vec<Notch> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for w in model.walls_on_level(host.level) {
+    let (lo, hi) = bounds(model, host);
+    for w in idx.in_box(host.level, lo, hi) {
         if w.id == host.id {
             continue;
         }
@@ -278,7 +290,7 @@ pub fn notches(model: &Model, host: &Wall) -> Vec<Notch> {
             if !in_band(model, host, p) {
                 continue;
             }
-            let Some(tee) = tee_end(model, w, at_start) else {
+            let Some(tee) = tee_end_in(idx, w, at_start) else {
                 continue;
             };
             if tee.host != host.id {

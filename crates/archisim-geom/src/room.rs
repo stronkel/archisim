@@ -19,7 +19,7 @@
 
 use archisim_core::{LevelId, Model, Point2, Vec2, WallId};
 
-use crate::{wall_geometry, Line};
+use crate::Line;
 
 /// Which outline the magic wand returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -64,14 +64,63 @@ pub fn room_outline(
     p: Point2,
     contour: Contour,
 ) -> Result<Vec<Point2>, RoomError> {
-    let walls: Vec<(WallId, Vec<Point2>)> = model
-        .walls_on_level(level)
-        .filter_map(|w| wall_geometry(model, w.id).map(|g| (w.id, g.outline)))
-        .collect();
+    // Only the walls around the point: first those within 15 m, then twice
+    // as far, until the room found lies well inside the walls looked at
+    // (walls farther away cannot change it) or every wall is in. No room
+    // is wider than 400 m: past that, there is none (a click outside the
+    // buildings of a large model stays quick).
+    let idx = crate::WallIndex::new(model);
+    let all: Vec<&archisim_core::Wall> = model.walls_on_level(level).collect();
+    let (mut lo_all, mut hi_all) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for w in &all {
+        let (lo, hi) = crate::index::bounds(model, w);
+        lo_all = Point2::new(lo_all.x.min(lo.x), lo_all.y.min(lo.y));
+        hi_all = Point2::new(hi_all.x.max(hi.x), hi_all.y.max(hi.y));
+    }
+    let mut r = 15.0;
+    loop {
+        let (lo, hi) = (p - Point2::new(r, r), p + Point2::new(r, r));
+        let everything =
+            lo.x <= lo_all.x && lo.y <= lo_all.y && hi.x >= hi_all.x && hi.y >= hi_all.y;
+        let near = if everything {
+            all.clone()
+        } else {
+            idx.in_box(level, lo, hi)
+        };
+        let walls: Vec<(WallId, Vec<Point2>)> = near
+            .iter()
+            .filter_map(|w| crate::wall_geometry_in(&idx, w.id).map(|g| (w.id, g.outline)))
+            .collect();
+        let found = room_among(model, &walls, p, contour);
+        let well_inside = |poly: &[Point2]| {
+            let m = 1.0;
+            poly.iter()
+                .all(|q| q.x > lo.x + m && q.x < hi.x - m && q.y > lo.y + m && q.y < hi.y - m)
+        };
+        match &found {
+            _ if everything => return found,
+            Err(RoomError::InsideWall) => return found,
+            Ok(poly) if well_inside(poly) => return found,
+            _ if r >= 200.0 => return Err(RoomError::NotEnclosed),
+            _ => r *= 2.0,
+        }
+    }
+}
+
+/// [`room_outline`] among some walls only (their outlines).
+fn room_among(
+    model: &Model,
+    walls: &[(WallId, Vec<Point2>)],
+    p: Point2,
+    contour: Contour,
+) -> Result<Vec<Point2>, RoomError> {
     if walls.iter().any(|(_, o)| strictly_inside(o, p)) {
         return Err(RoomError::InsideWall);
     }
-    let arr = Arrangement::build(&walls);
+    let arr = Arrangement::build(walls);
     let crossings = arr.ray_crossings(p);
 
     // The first boundary met by the ray that goes around `p`

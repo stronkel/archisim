@@ -81,6 +81,8 @@ pub struct Editor {
     saved: Model,
     /// Grows with every change to the model, so views know when to redraw.
     revision: u64,
+    /// The plan geometry of every wall, for this revision.
+    geo: crate::geo::GeoCache,
     /// The level shown in the plan and where new elements go.
     pub level: LevelId,
     pub selection: BTreeSet<Element>,
@@ -108,6 +110,7 @@ impl Editor {
             path,
             imported_from: None,
             revision: 0,
+            geo: Default::default(),
             level,
             selection: BTreeSet::new(),
         }
@@ -693,7 +696,7 @@ impl Editor {
         let mut any = false;
         let points = crate::pick::elements_on_level(m, self.level)
             .into_iter()
-            .filter_map(|e| crate::pick::outline(m, e))
+            .filter_map(|e| crate::pick::outline(self, e))
             .flatten();
         for p in points {
             any = true;
@@ -701,6 +704,16 @@ impl Editor {
             hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
         }
         any.then_some((lo, hi))
+    }
+}
+
+impl crate::geo::Geo for Editor {
+    fn model(&self) -> &Model {
+        self.doc.model()
+    }
+
+    fn wall_geometry(&self, id: WallId) -> Option<std::rc::Rc<archisim_geom::WallGeometry>> {
+        self.geo.wall(self.doc.model(), self.revision, id)
     }
 }
 

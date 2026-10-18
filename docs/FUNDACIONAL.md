@@ -185,6 +185,14 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - **Windows** (v0.21): instalador `ArchiSim-<versión>-Windows.exe` (Inno Setup, `scripts/windows_installer.iss`) para el usuario, sin pedir permisos de administrador (se puede elegir instalar para todos): el programa con su icono y su información de versión dentro del `.exe` (`crates/archisim-app/build.rs`), entrada en el menú Inicio, icono opcional en el escritorio, la vivienda de prueba y los IFC de ejemplo. Los `.archisim` se abren con ArchiSim con su icono; los `.ifc` lo ofrecen en «Abrir con» y, si se marca, se abren con él al hacer doble clic. El desinstalador lo quita todo y no toca los proyectos. Sin firma de código: Windows SmartScreen pide «Más información → Ejecutar de todas formas» la primera vez.
 - La integración continua monta los dos en cada pull request; el de Windows se instala y desinstala allí mismo para comprobar los tipos de fichero.
 
+### Rendimiento
+
+- Medido con `archisim medir [n] [carpeta]` (v0.22): la vivienda de prueba repetida en una rejilla de n × n (20 × 20: 2800 muros, 4000 huecos, 800 forjados; 30 × 30: 6300 muros, 9000 huecos, 1800 forjados, IFC de 56 MB). Escribe `grande.archisim` y `grande.ifc` para abrirlos en la aplicación; con `ARCHISIM_MEDIR_IMAGENES=1`, también lo que se vería en pantalla.
+- Las uniones buscan los muros vecinos en una rejilla de celdas (`archisim_geom::WallIndex`), no entre todos: la geometría de cada muro cuesta lo mismo en una casa que en una urbanización.
+- La aplicación guarda la geometría de todos los muros mientras el modelo no cambia (`geo`): forzar, seleccionar, las cotas temporales y la vista previa de un arrastre (solo lo que está cerca de lo arrastrado) no rehacen uniones a cada movimiento del ratón.
+- La planta en pantalla dibuja solo la zona visible y, cuando se aleja mucho, lo que no se distinguiría: sin tramas ni zigzag (separación de trama < 2,5 px), muros como una banda gris sin capas (espesor < 4 px) y huecos sin símbolo (ancho < 8 px). Las plantas exportadas (SVG) se dibujan siempre completas.
+- Cifras de la 30 × 30 en el servidor de pruebas: planta en pantalla de una zona de 30 × 20 m, 0,07 s; toda la urbanización a la vista, 0,5 s; forzado o selección bajo el cursor, 10 ms; mover un muro, 0,1 s; 3D completo, 0,8 s; exportar el IFC, 0,9 s; importarlo, 3,8 s; abrir el proyecto, 0,2 s.
+
 ## 5. MVP (fase 1)
 
 Definición de "hecho": un arquitecto modela una vivienda sencilla de una planta, obtiene su planta en PDF/SVG legible y exporta un IFC que **Revit y ArchiCAD abren con muros reconocibles, tipos y capas correctos**.

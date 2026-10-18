@@ -21,6 +21,7 @@
 //! - **Slab edge** (handle at its middle): moves the edge parallel to
 //!   itself; with Ctrl it adds a new corner there instead.
 
+use crate::geo::Geo;
 use std::collections::BTreeSet;
 
 use crate::pick::{contains, distance_to_outline, outline, Element};
@@ -117,12 +118,13 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
 /// What dragging from `p` would grab: the nearest handle within
 /// `tolerance`, or the selection itself when `p` is on a selected element.
 /// Returns the grip and the point it is grabbed by.
-pub fn grip_at(
-    model: &Model,
+pub fn grip_at<G: Geo + ?Sized>(
+    geo: &G,
     selection: &BTreeSet<Element>,
     p: Point2,
     tolerance: f64,
 ) -> Option<(Grip, Point2)> {
+    let model = geo.model();
     let spot = hotspots(model, selection)
         .into_iter()
         .map(|h| (h.point.distance(p), h))
@@ -132,7 +134,7 @@ pub fn grip_at(
         return Some((h.grip, h.point));
     }
     let on_selection = selection.iter().any(|e| {
-        outline(model, *e)
+        outline(geo, *e)
             .is_some_and(|poly| contains(&poly, p) || distance_to_outline(&poly, p) <= tolerance)
     });
     on_selection.then_some((Grip::Body, p))
@@ -546,20 +548,57 @@ fn copy(
 
 /// Outlines that a drag would change or create, to draw them as it
 /// follows the cursor: the model after the drag compared with before.
-pub fn preview(
-    model: &Model,
+pub fn preview<G: Geo + ?Sized>(
+    geo: &G,
     selection: &BTreeSet<Element>,
     drag: &Drag,
 ) -> Result<Vec<Vec<Point2>>, ModelError> {
+    let model = geo.model();
     let mut after = model.clone();
     apply(&mut after, selection, drag)?;
     let Some(level) = level_of(model, selection, drag.grip) else {
         return Ok(Vec::new());
     };
+    let later = crate::geo::Indexed::new(&after);
+    // Only what is near the selection can change, where it was and where
+    // it goes (walls joined to it stretch), and what the drag creates.
+    let all = crate::pick::elements_on_level(&after, level);
+    let created = all.iter().filter(|e| !exists(model, **e));
+    let mut boxes: Vec<(Point2, Point2)> = Vec::new();
+    for e in selection {
+        boxes.extend(outline(geo, *e).and_then(|p| bounds(&p)));
+        boxes.extend(outline(&later, *e).and_then(|p| bounds(&p)));
+    }
+    for e in created {
+        boxes.extend(outline(&later, *e).and_then(|p| bounds(&p)));
+    }
+    let margin = Point2::new(1.0, 1.0);
+    let mut near: BTreeSet<WallId> = BTreeSet::new();
+    for (lo, hi) in boxes {
+        near.extend(
+            later
+                .0
+                .in_box(level, lo - margin, hi + margin)
+                .iter()
+                .map(|w| w.id),
+        );
+    }
     let mut out = Vec::new();
-    for e in crate::pick::elements_on_level(&after, level) {
-        let new = outline(&after, e);
-        let old = outline(model, e);
+    for e in all {
+        let candidate = match e {
+            Element::Wall(w) => near.contains(&w),
+            Element::Opening(o) => after.opening(o).is_some_and(|o| near.contains(&o.wall)),
+            _ => true,
+        };
+        if !candidate {
+            continue;
+        }
+        let new = outline(&later, e);
+        let old = if exists(model, e) {
+            outline(geo, e)
+        } else {
+            None
+        };
         if let Some(poly) = new {
             if old.as_ref() != Some(&poly) {
                 out.push(poly);
@@ -567,6 +606,28 @@ pub fn preview(
         }
     }
     Ok(out)
+}
+
+/// Whether the element is in the model.
+fn exists(model: &Model, e: Element) -> bool {
+    match e {
+        Element::Wall(id) => model.wall(id).is_some(),
+        Element::Opening(id) => model.opening(id).is_some(),
+        Element::Slab(id) => model.slab(id).is_some(),
+        Element::Dimension(id) => model.dimension(id).is_some(),
+        Element::Mark(id) => model.elevation_mark(id).is_some(),
+    }
+}
+
+/// The box around a polygon.
+fn bounds(poly: &[Point2]) -> Option<(Point2, Point2)> {
+    let first = *poly.first()?;
+    Some(poly.iter().fold((first, first), |(lo, hi), p| {
+        (
+            Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+            Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+        )
+    }))
 }
 
 fn level_of(

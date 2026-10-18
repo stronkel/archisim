@@ -21,6 +21,65 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 **Antonio debe probar**
 1. Abre la página del repositorio en GitHub: debe salir el README nuevo y, a la derecha, «GPL-3.0 license».
+## 2026-10-18 · Bloque 22 — Rendimiento con modelos grandes (1.9); fase 1 cerrada
+
+**Hecho** (petición de Antonio: «termina todo lo que falta de la fase 1»)
+- **Medir**: comando nuevo `archisim medir [n] [carpeta]`. Repite la vivienda de prueba en una rejilla de n × n y mide cada trabajo: planta entera, planta en pantalla (una zona y todo a la vista), 3D, geometría de un muro, varita mágica, guardar y abrir, exportar e importar el IFC. Deja `grande.archisim` y `grande.ifc` en la carpeta para abrirlos en la aplicación (con `ARCHISIM_MEDIR_IMAGENES=1`, también lo que se vería en pantalla). Una prueba aparte mide lo que hace la aplicación con el ratón sobre ese modelo.
+- **Uniones**: cada muro buscaba sus vecinos entre todos los muros del modelo (el coste crecía con el cuadrado del número de muros). Ahora se buscan en una rejilla de celdas de 4 m: la geometría de un muro cuesta lo mismo en una casa que en una urbanización. Lo usan la planta, el 3D, el IFC y la varita mágica (que ya no recorre todo el modelo: busca en un radio que crece hasta encontrar el recinto).
+- **Aplicación**: la geometría de todos los muros se calcula una vez por cambio del modelo y se reutiliza para forzar, seleccionar, el asa bajo el cursor, las cotas temporales y la vista previa de los arrastres (que solo compara lo que está cerca de lo arrastrado). Las puertas y ventanas de cada muro se buscan una sola vez.
+- **Planta en pantalla**: solo la zona visible; al alejarse mucho se deja fuera lo que no se distinguiría: tramas y zigzag del aislamiento, las capas (el muro se dibuja como una banda gris, con sus líneas de corte) y el símbolo de las puertas y ventanas pequeñas (queda el hueco en el muro). Al acercarse vuelve todo. **Las plantas exportadas en SVG no cambian** (comprobado: idénticas a las de la v0.21, y el IFC también, salvo los `GlobalId` nuevos de la demo).
+- Escritura de números del SVG más rápida (mismo resultado, con prueba).
+- Cifras (servidor de pruebas, versión optimizada), rejilla **30 × 30: 6300 muros, 9000 huecos, 1800 forjados**:
+
+  | Trabajo | Tiempo |
+  |---|---|
+  | Planta en pantalla, zona de 30 × 20 m | 0,07 s |
+  | Planta en pantalla, todo a la vista | 0,5 s |
+  | Forzado / elemento bajo el cursor | 10 ms / 8 ms |
+  | Vista previa de mover un muro | 15 ms |
+  | Mover un muro (con la geometría de todo rehecha) | 0,1 s |
+  | 3D de todo el modelo (2,8 millones de triángulos) | 0,8 s |
+  | Planta entera 1:50 exportada (SVG de 80 MB) | 1,5 s |
+  | Guardar / abrir el proyecto (4,3 MB) | 0,09 s / 0,2 s |
+  | Exportar el IFC (56 MB) / importarlo | 0,9 s / 3,8 s |
+
+  Antes, en la 20 × 20 (2800 muros), la geometría de un muro tardaba ~9 ms y cada movimiento del ratón la recalculaba para todos los muros de la planta (segundos); la planta con todo a la vista tardaba 1,5 s y ahora 0,4 s.
+- El IFC de 56 MB pasa la validación de IfcOpenShell.
+- Pruebas nuevas: la geometría guardada coincide con la calculada antes y después de mover y de deshacer; la planta muy alejada dibuja bandas sin capas ni símbolos, y de cerca es idéntica a la de papel.
+- Versión 0.22.0. **Con esto la fase 1 (§1 de la hoja de ruta) queda completa.**
+
+**Pendiente / limitaciones conocidas**
+- La **integración continua no se ha ejecutado** en los pull requests #13 y #14 (ni en este): GitHub no arranca los trabajos porque la cuenta tiene un **pago fallido o el límite de gasto agotado** (aviso en cada trabajo). Hasta que se resuelva en *Settings → Billing and plans* de GitHub no hay instaladores para descargar ni comprobación en Windows y Mac. Todo lo demás se ha comprobado aquí (Linux).
+- En el 3D, cada cambio rehace la escena entera (0,8 s con 6300 muros): suficiente por ahora; si molesta, se rehará solo lo que cambia.
+- Al alejarse mucho, todos los muros se ven del mismo gris (no por material).
+
+**Antonio debe probar**
+1. Resuelve el aviso de facturación de GitHub y vuelve a lanzar los trabajos de los pull requests (*Actions → Re-run all jobs*); descarga ArchiSim-Windows o ArchiSim-Mac de **Artifacts**.
+2. Genera el modelo grande: `archisim medir 20 carpeta` (o `cargo run --release -p archisim-cli -- medir 20 out/medir`) y abre `grande.archisim` con la aplicación.
+3. Aléjate del todo (botón de encuadre): debe verse la urbanización entera con muros grises, sin esperas largas. Acércate a una vivienda: capas, tramas y puertas como siempre.
+4. Con la flecha, pasa el ratón por encima de muros y puertas (resaltado al momento), selecciona un tabique y arrástralo: la vista previa debe seguir al cursor sin tirones. Dibuja un muro con forzados a otros muros.
+5. Exporta el IFC (unos 25 MB con la 20 × 20) y ábrelo en ArchiCAD o Revit; importa un IFC grande de un proyecto tuyo y dime cuánto tarda.
+
+## 2026-10-18 · Bloque 21 — Instalador de Windows (1.8)
+
+**Hecho**
+- **Icono e información de versión** dentro de `ArchiSim.exe` (icono `.ico` generado con el resto de iconos por `scripts/make_icon.py`).
+- **Instalador** `ArchiSim-<versión>-Windows.exe` (Inno Setup, `scripts/windows_installer.iss`): se instala para el usuario sin pedir permisos de administrador (se puede elegir instalar para todos); entrada en el menú Inicio, icono en el escritorio opcional, carpeta «Ejemplos de ArchiSim» con la vivienda de prueba y los IFC de ejemplo.
+- **Tipos de fichero**: los `.archisim` se abren con ArchiSim y llevan su icono; los `.ifc` lo ofrecen en «Abrir con» y, si se marca en el instalador, se abren con él al hacer doble clic.
+- El desinstalador quita el programa, los accesos y los tipos de fichero, y no toca los proyectos.
+- La integración continua monta el instalador, lo instala en silencio, comprueba los tipos de fichero y lo desinstala.
+- Versión 0.21.0.
+
+**Pendiente / limitaciones conocidas**
+- Sin firma de código: la primera vez, Windows SmartScreen pide «Más información → Ejecutar de todas formas».
+- Pendiente de la primera ejecución en la integración continua (ver bloque 22: la cuenta de GitHub no arranca los trabajos).
+
+**Antonio debe probar**
+1. En un Windows: descarga ArchiSim-Windows de **Artifacts** del pull request «Instalación: instalador de Windows…» y ejecuta el instalador.
+2. Menú Inicio → ArchiSim abre el programa; «Ejemplos de ArchiSim» tiene la vivienda de prueba.
+3. Doble clic en un `.archisim` lo abre en ArchiSim (con su icono); botón derecho en un `.ifc` → «Abrir con» → ArchiSim.
+4. Desinstala desde Configuración → Aplicaciones: desaparecen el programa y los accesos, y los proyectos siguen ahí.
+
 ## 2026-10-18 · Bloque 20 — Importación IFC, segunda vuelta (1.7), huecos de forjado y huecos sin carpintería
 
 **Hecho** (petición de Antonio: «termina todo lo que falta de la fase 1»)
