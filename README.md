@@ -1,68 +1,65 @@
 # ArchiSim
 
-Herramienta BIM de autoría, multiplataforma y escrita en Rust: la facilidad de ArchiCAD con la organización estándar de Revit, sobre IFC 4.3 como modelo de datos. Nombre provisional.
+Herramienta BIM de autoría, **libre** y multiplataforma (Windows, Mac y Linux), escrita en Rust. Combina la facilidad de modelado de ArchiCAD con la organización por familias y tipos de Revit, y usa IFC como lengua común. Nombre provisional.
 
-Estado: **v0.7, fase 1 (MVP).** Aplicación con vista de planta y vista 3D, herramientas muro, forjado, puerta y ventana, y selección con propiedades. Debajo, un núcleo que modela niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, puertas y ventanas, los guarda como proyecto `.archisim` y los exporta a IFC4 y a plantas 1:50 en SVG.
+*ArchiSim is a free (GPL-3.0) cross-platform BIM authoring tool written in Rust, with IFC as its data model. The code, identifiers and comments are in English; the user interface and the project documents are in Spanish for now. Contributions in English are welcome.*
 
-Lee [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) para la visión, la arquitectura y el plan.
+> **Estado: fase 1 completa, en desarrollo activo.** Sirve para modelar y probar, todavía no para un proyecto real de principio a fin. El formato de los proyectos puede cambiar; los ficheros antiguos se siguen abriendo.
 
-## Probarlo en Windows sin instalar nada
+## Qué hace hoy
 
-Cada cambio en GitHub genera la aplicación lista para usar. En la pestaña **Actions** del repositorio, abre la última ejecución en verde, baja hasta **Artifacts** y descarga **ArchiSim-Windows**. Descomprime el zip y abre `ArchiSim.exe` (la primera vez Windows avisa porque el programa no está firmado: *Más información → Ejecutar de todas formas*). La vivienda de prueba `demo.archisim` viene en la misma carpeta: ábrela con *Archivo → Abrir*, o arrastra el fichero sobre `ArchiSim.exe`.
+- **Muros multicapa** rectos y curvos, dibujados por cadena, rectángulo, arco o círculo; uniones en L y en T con prioridad por capa; restricción superior a una planta.
+- **Forjados** por contorno, rectángulo o varita mágica, con huecos (escaleras, patinillos).
+- **Puertas, ventanas y huecos** como familias paramétricas descritas en recetas de texto (`.asfam`), con símbolo de planta por escala (1:50 y 1:100).
+- **Planta** con tramas por material, cotas, cotas de nivel y calco de la planta inferior; **vista 3D**.
+- **Edición** con el ratón: mover, copiar, estirar, curvar; forzados, cotas temporales editables y líneas de rastreo.
+- **Tipos y materiales** editables en la aplicación.
+- **IFC4**: exportación con tipos, capas, propiedades y cantidades (validada con IfcOpenShell), e **importación** de IFC2X3 e IFC4 de otros programas.
+- Proyectos propios en **`.archisim`**, texto legible ([formato](docs/FORMATO_ARCHISIM.md)).
+- Modelos grandes: miles de muros con respuesta inmediata en planta (`archisim medir` lo comprueba).
 
-## Probarlo compilando
+La visión, los principios y la arquitectura están en [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md); lo que viene después, en [`docs/HOJA_DE_RUTA.md`](docs/HOJA_DE_RUTA.md); el día a día, en [`docs/BITACORA.md`](docs/BITACORA.md).
 
-1. Instala Rust (una sola vez): <https://rustup.rs>. En Windows acepta instalar las herramientas de compilación de Visual Studio que te propone.
+## Instalarlo
+
+Mientras no haya versiones publicadas, cada cambio genera los instaladores en GitHub. Necesitas una cuenta de GitHub (gratuita) para descargarlos:
+
+1. Abre la pestaña **Actions** del repositorio y entra en la última ejecución en verde de la rama `main`.
+2. Baja hasta **Artifacts** y descarga:
+   - **ArchiSim-Windows-Instalador**: el instalador `ArchiSim-<versión>-Windows.exe`. Asocia los `.archisim` y ofrece ArchiSim en «Abrir con» para los `.ifc`. Como no está firmado, la primera vez Windows avisa: *Más información → Ejecutar de todas formas*. (**ArchiSim-Windows** es el mismo programa sin instalar: descomprime y abre `ArchiSim.exe`.)
+   - **ArchiSim-Mac**: un `.dmg` con la aplicación (chip Apple e Intel). La primera vez hay que permitirla en *Ajustes del Sistema → Privacidad y seguridad*.
+3. La vivienda de prueba `demo.archisim` viene con el programa (en Windows, en el menú Inicio → «Ejemplos de ArchiSim»).
+
+## Compilarlo
+
+1. Instala Rust: <https://rustup.rs> (en Windows, acepta las herramientas de compilación de Visual Studio que propone).
 2. En una terminal, dentro de esta carpeta:
 
    ```bash
-   cargo run -p archisim-cli -- demo out
+   cargo run -p archisim-cli -- demo out            # vivienda de prueba: out/demo.archisim, out/demo.ifc y plantas SVG
+   cargo run --release -p archisim-app -- out/demo.archisim   # la aplicación
    ```
 
-   La primera vez tarda un par de minutos en compilar. Genera:
-   - `out/demo.archisim` — el proyecto, en texto legible ([formato](docs/FORMATO_ARCHISIM.md)).
-   - `out/demo.ifc` — vivienda de prueba de 12 × 9 m con fachada de doble hoja, tabiquería, solera, cubierta plana, cuatro puertas y cinco ventanas.
-   - `out/demo.svg` — planta baja a escala 1:50 (ábrela con el navegador).
-   - `out/demo-cubierta.svg` — planta de cubierta a escala 1:50.
+   Otros comandos: `exportar` (proyecto → IFC y plantas), `importar` (IFC → proyecto), `medir` (rendimiento con un modelo grande). `cargo run -p archisim-cli -- --help` los lista.
 
-3. La aplicación, abriendo la vivienda de prueba:
+## Colaborar
 
-   ```bash
-   cargo run --release -p archisim-app -- out/demo.archisim
-   ```
+- **Arquitectos y técnicos**: lo más útil es probarlo y contar qué falla o qué falta en un *issue*, con capturas. Si exportas un IFC a ArchiCAD, Revit u otro programa, di qué se ve bien y qué no.
+- **Programadores**: lee antes [`docs/FUNDACIONAL.md`](docs/FUNDACIONAL.md) y [`CLAUDE.md`](CLAUDE.md), que recoge las convenciones (unidades, orden de capas, identificadores IFC estables) y las comprobaciones que tiene que pasar cada cambio:
 
-   Sin el nombre del proyecto empieza uno nuevo con la plantilla. `--release` tarda más en compilar la primera vez, pero la vista va mucho más fluida. Ratón y teclado: menú *Ayuda → Ratón y teclado*.
+  ```bash
+  cargo fmt --all
+  cargo clippy --workspace --all-targets -- -D warnings
+  cargo test --workspace
+  python3 scripts/validate_ifc.py out/demo.ifc   # pip install ifcopenshell
+  ```
 
-4. Para exportar un proyecto `.archisim` desde la línea de comandos (por ejemplo, después de editarlo a mano):
-
-   ```bash
-   cargo run -p archisim-cli -- exportar out/demo.archisim
-   ```
-
-   Genera `demo.ifc` y las plantas junto al proyecto.
-
-### Qué mirar al abrir el IFC en ArchiCAD o Revit
-
-- ¿Los muros aparecen como muros (no como objetos genéricos)?
-- ¿Se reconocen los tipos «Fachada doble hoja 26,5» y «Tabique LHD 10»?
-- ¿Las capas salen en orden correcto, con el monocapa hacia fuera y el yeso hacia dentro?
-- ¿Las esquinas cierran limpias?
-- ¿Aparecen las propiedades `IsExternal`, `LoadBearing` y las cantidades (longitud, superficie, volumen)?
-- ¿La solera y la cubierta entran como forjados (losas) con sus tipos, capas en orden (acabado arriba) y cantidades?
-- ¿Las puertas y ventanas entran como puertas y ventanas (no como objetos genéricos), dentro de su hueco, con su tipo y sus materiales, y el muro aparece perforado?
-
-Apunta lo que veas (con capturas) en un *issue* de GitHub.
-
-## Para desarrollo
-
-```bash
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-python3 scripts/validate_ifc.py out/demo.ifc   # pip install ifcopenshell pytest
-```
-
-Las instrucciones para Claude Code están en [`CLAUDE.md`](CLAUDE.md).
+- **Sala limpia**: no se acepta código, ficheros, bibliotecas ni contenido de Autodesk o Graphisoft. Se replican comportamientos observables y estándares públicos (IFC, UNE), nunca su implementación. Tampoco se suben IFC de proyectos reales.
 
 ## Licencia
 
-Pendiente de decidir (ver `docs/FUNDACIONAL.md` §8). Mientras tanto, todos los derechos reservados.
+ArchiSim es software libre: puedes usarlo, estudiarlo, modificarlo y redistribuirlo según la **GNU General Public License, versión 3 o posterior** ([`LICENSE`](LICENSE)). Quien distribuya una versión modificada tiene que publicarla con la misma licencia. Se ofrece sin ninguna garantía.
+
+Las fuentes IBM Plex que usa la interfaz tienen su propia licencia, la SIL Open Font License 1.1 ([`OFL-IBM-Plex.txt`](crates/archisim-app/assets/fonts/OFL-IBM-Plex.txt)).
+
+Copyright © 2026 Antonio Fernández y colaboradores de ArchiSim.
