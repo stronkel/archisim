@@ -475,22 +475,50 @@ impl ArchiSimApp {
             Tool::Arrow if self.drag.is_some() => "Soltar: terminar · Ctrl: copiar · Mayús: 45° · Distancia + Intro: exacto · Esc: cancelar",
             Tool::Arrow if self.temp_edit.is_some() => "Escribe la medida (mm, o 1,2m · 120cm) · Intro: aplicar · Esc: dejarla",
             Tool::Arrow if self.single_opening_selected() => "Clic en una cota azul: medida exacta · Espacio o flechas azules: girar · Arrastrar: deslizar por el muro · Supr: borrar",
+            Tool::Arrow if self.single_curved_wall_selected() => "Círculo blanco: curvar · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Propiedades: radio · Supr: borrar",
             Tool::Arrow if self.single_wall_selected() => "Clic en una cota azul: medida exacta · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Supr: borrar",
             Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar: mover · Ctrl: copiar · Extremo o esquina: estirar · Rombo: mover la arista · Supr: borrar · Esc: anular",
             Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C: herramientas",
-            Tool::Wall if !self.wall_tool.is_drawing() => "Clic: inicio del muro · Esc: flecha",
-            Tool::Wall => "Clic: siguiente punto · Recto por defecto (sal más de 8° para inclinarlo) · Longitud + Intro: exacto · Mayús: 45° · Intro/Esc: terminar",
+            Tool::Wall => self.wall_hint(),
             Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Clic: dentro de un recinto de muros · Esc: flecha",
             Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina · Espacio + clic: varita mágica · Esc: flecha",
+            Tool::Slab if self.slab_tool.mode == SlabMode::Rectangle => "Clic: esquina opuesta · Ancho x fondo (6000x4000) + Intro: exacto · Esc: anular",
             Tool::Slab => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Longitud + Intro: exacto · Esc: quitar la última",
             Tool::Door | Tool::Window => "Clic sobre un muro: colocar, centrada en el cursor, abriendo hacia ese lado · Espacio: cambiar la mano · Esc: flecha",
             Tool::Dimension => self.dim_hint(),
         }
     }
 
+    fn wall_hint(&self) -> &'static str {
+        let t = &self.wall_tool;
+        if !t.is_drawing() {
+            return match t.mode {
+                WallMode::Rectangle => "Clic: primera esquina del rectángulo · Esc: flecha",
+                WallMode::Circle => "Clic: centro del círculo · Esc: flecha",
+                WallMode::Arc => "Clic: inicio del arco · Esc: flecha",
+                WallMode::Single | WallMode::Chain => "Clic: inicio del muro · Esc: flecha",
+            };
+        }
+        match t.mode {
+            WallMode::Rectangle => "Clic: esquina opuesta · Ancho x fondo (6000x4000) + Intro: exacto · Esc: anular",
+            WallMode::Circle => "Clic: un punto de la línea de referencia · Radio + Intro: exacto · Esc: anular",
+            WallMode::Arc if t.arc_end().is_some() => "Clic: punto por el que pasa el arco · Radio + Intro: exacto · Esc: otro final",
+            WallMode::Arc => "Clic: final del arco · Cuerda + Intro: exacta · Mayús: 45° · Intro/Esc: terminar",
+            WallMode::Single => "Clic: final del muro · Longitud + Intro: exacto · Mayús: 45° · Esc: anular",
+            WallMode::Chain => "Clic: siguiente punto · Recto por defecto (sal más de 8° para inclinarlo) · Longitud + Intro: exacto · Mayús: 45° · Intro/Esc: terminar",
+        }
+    }
+
     fn single_opening_selected(&self) -> bool {
         self.ed.selection.len() == 1
             && matches!(self.ed.selection.iter().next(), Some(Element::Opening(_)))
+    }
+
+    fn single_curved_wall_selected(&self) -> bool {
+        match (self.ed.selection.len(), self.ed.selection.iter().next()) {
+            (1, Some(Element::Wall(w))) => self.ed.model().wall(*w).is_some_and(|w| w.is_curved()),
+            _ => false,
+        }
     }
 
     fn single_wall_selected(&self) -> bool {

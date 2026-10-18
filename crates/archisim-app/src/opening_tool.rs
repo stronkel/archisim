@@ -65,6 +65,10 @@ pub fn placement(
 ) -> Option<Placement> {
     let wall_id = wall_at(model, level, cursor, tolerance)?;
     let wall = model.wall(wall_id)?;
+    if wall.is_curved() {
+        // Not yet: the application says so on the click.
+        return None;
+    }
     let otype = model.opening_type(s.opening_type)?;
     let width = otype.width;
     let thickness = model.wall_type(wall.wall_type)?.thickness();

@@ -149,12 +149,225 @@ pub fn is_simple_polygon(poly: &[Point2]) -> bool {
     true
 }
 
+/// A circular arc from `start` to `end`, the shape of a curved wall's
+/// drawn line.
+///
+/// It is described, as in DXF polylines, by its **bulge**: `tan(θ/4)`, where
+/// `θ` is the signed angle it sweeps (positive counter-clockwise: the
+/// centre is on the left of `start → end` and the arc bows out to the
+/// right, as when walking a room anticlockwise). A bulge of 1 is a
+/// half circle; 0 is a straight line. The bulge does not change when the
+/// arc is moved, turned or scaled, which is what keeps a curved wall's
+/// shape when one of its ends is stretched.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Arc {
+    pub start: Point2,
+    pub end: Point2,
+    pub centre: Point2,
+    pub radius: f64,
+    /// Angle of `start` seen from the centre, in radians.
+    pub start_angle: f64,
+    /// Signed sweep, positive counter-clockwise; never zero.
+    pub sweep: f64,
+}
+
+/// Bulges smaller than this are straight lines.
+pub const MIN_BULGE: f64 = 1e-6;
+
+impl Arc {
+    /// The arc with that bulge, or `None` for a straight line (or two
+    /// equal points).
+    pub fn from_bulge(start: Point2, end: Point2, bulge: f64) -> Option<Self> {
+        if !bulge.is_finite() || bulge.abs() < MIN_BULGE || start.approx_eq(end) {
+            return None;
+        }
+        let sweep = 4.0 * bulge.atan();
+        let chord = end - start;
+        let c = chord.length();
+        let radius = c / (2.0 * (sweep / 2.0).sin().abs());
+        // The centre is on the perpendicular bisector, on the left for a
+        // counter-clockwise sweep smaller than half a turn.
+        let mid = (start + end) * 0.5;
+        let n = chord.perp_left() * (1.0 / c);
+        let d = radius * (sweep / 2.0).cos() * sweep.signum();
+        let centre = mid + n * d;
+        let v = start - centre;
+        Some(Self {
+            start,
+            end,
+            centre,
+            radius,
+            start_angle: v.y.atan2(v.x),
+            sweep,
+        })
+    }
+
+    /// The arc from `start` through `through` to `end`, as a bulge, or
+    /// `None` if the three points are in line.
+    pub fn bulge_through(start: Point2, through: Point2, end: Point2) -> Option<f64> {
+        let a = through - start;
+        let b = end - through;
+        let cross = a.cross(b);
+        if cross.abs() < EPSILON * EPSILON || start.approx_eq(end) {
+            return None;
+        }
+        // Inscribed angles: the turn between the two chords at `through`
+        // is half the angle the arc sweeps.
+        let turn = cross.atan2(a.dot(b));
+        let sweep = 2.0 * turn;
+        Some((sweep / 4.0).tan())
+    }
+
+    /// Arc length.
+    pub fn length(&self) -> f64 {
+        self.radius * self.sweep.abs()
+    }
+
+    /// Angle (from the centre) of the point at fraction `f` of the arc.
+    pub fn angle_at(&self, f: f64) -> f64 {
+        self.start_angle + self.sweep * f
+    }
+
+    /// Unit vector from the centre towards angle `a`.
+    pub fn radial(a: f64) -> Vec2 {
+        Vec2::new(a.cos(), a.sin())
+    }
+
+    /// The point at fraction `f` of the arc (0 = start, 1 = end), moved
+    /// `offset` to the left of the direction of travel (as wall faces are).
+    pub fn point(&self, f: f64, offset: f64) -> Point2 {
+        self.centre + Self::radial(self.angle_at(f)) * self.radius_at(offset)
+    }
+
+    /// Radius of the curve `offset` to the left of the arc.
+    pub fn radius_at(&self, offset: f64) -> f64 {
+        // Turning left, the left side is towards the centre.
+        self.radius - offset * self.sweep.signum()
+    }
+
+    /// Unit tangent (direction of travel) at fraction `f`.
+    pub fn tangent(&self, f: f64) -> Vec2 {
+        let r = Self::radial(self.angle_at(f));
+        if self.sweep > 0.0 {
+            r.perp_left()
+        } else {
+            -r.perp_left()
+        }
+    }
+
+    /// The fraction of the arc nearest to `p` (clamped to the arc), and the
+    /// signed offset of `p` from it, left positive.
+    pub fn project(&self, p: Point2) -> (f64, f64) {
+        let v = p - self.centre;
+        let a = v.y.atan2(v.x);
+        let mut d = a - self.start_angle;
+        // Bring the angle into the sweep's turning direction.
+        let tau = std::f64::consts::TAU;
+        if self.sweep > 0.0 {
+            d = d.rem_euclid(tau);
+        } else {
+            d = -(-d).rem_euclid(tau);
+        }
+        let mut f = d / self.sweep;
+        if !(0.0..=1.0).contains(&f) {
+            // Outside the arc: the nearer end.
+            let gap_end = (f - 1.0).abs();
+            let other = (tau - d.abs()) / self.sweep.abs();
+            f = if gap_end <= other { 1.0 } else { 0.0 };
+        }
+        let r = v.length();
+        let offset = (self.radius - r) * self.sweep.signum();
+        (f, offset)
+    }
+
+    /// Number of straight pieces that follow the curve `offset` from the
+    /// arc to within `tolerance` metres.
+    pub fn segments(&self, offset: f64, tolerance: f64) -> usize {
+        let r = self.radius_at(offset).abs().max(EPSILON);
+        let tol = tolerance.clamp(1e-6, r);
+        // Sagitta of one piece: r(1 − cos(φ/2)) ≤ tol.
+        let step = 2.0 * (1.0 - tol / r).clamp(-1.0, 1.0).acos();
+        let n = (self.sweep.abs() / step.max(1e-3)).ceil() as usize;
+        n.clamp(2, 720)
+    }
+
+    /// Points along the curve `offset` from the arc, from start to end,
+    /// close enough to draw or extrude it.
+    pub fn polyline(&self, offset: f64, tolerance: f64) -> Vec<Point2> {
+        let n = self.segments(offset, tolerance);
+        (0..=n)
+            .map(|i| self.point(i as f64 / n as f64, offset))
+            .collect()
+    }
+}
+
+/// Tolerance for drawing curves with straight pieces: half a millimetre,
+/// below what any plan or 3D view shows.
+pub const CURVE_TOLERANCE: f64 = 0.0005;
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn p(x: f64, y: f64) -> Point2 {
         Point2::new(x, y)
+    }
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn half_circle_from_bulge() {
+        // Bulge 1 turning left: centre midway, radius 2, bending to +y.
+        let a = Arc::from_bulge(p(0.0, 0.0), p(4.0, 0.0), 1.0).unwrap();
+        assert!(a.centre.approx_eq(p(2.0, 0.0)));
+        assert!(close(a.radius, 2.0));
+        assert!(close(a.length(), 2.0 * std::f64::consts::PI));
+        // Counter-clockwise from (0,0) seen from (2,0) goes through (2,-2).
+        assert!(a.point(0.5, 0.0).approx_eq(p(2.0, -2.0)));
+        // Left of travel is towards the centre: a smaller radius.
+        assert!(a.point(0.5, 0.5).approx_eq(p(2.0, -1.5)));
+        assert!(a.end.approx_eq(a.point(1.0, 0.0)));
+        assert!(a.tangent(0.0).approx_eq(p(0.0, -1.0)));
+        // Bulge −1 is the mirror image.
+        let b = Arc::from_bulge(p(0.0, 0.0), p(4.0, 0.0), -1.0).unwrap();
+        assert!(b.point(0.5, 0.0).approx_eq(p(2.0, 2.0)));
+        assert!(b.point(0.5, 0.5).approx_eq(p(2.0, 2.5)));
+        assert!(Arc::from_bulge(p(0.0, 0.0), p(4.0, 0.0), 0.0).is_none());
+    }
+
+    #[test]
+    fn bulge_through_three_points() {
+        // A quarter circle of radius 1 around the origin.
+        let s = std::f64::consts::FRAC_1_SQRT_2;
+        let b = Arc::bulge_through(p(1.0, 0.0), p(s, s), p(0.0, 1.0)).unwrap();
+        let a = Arc::from_bulge(p(1.0, 0.0), p(0.0, 1.0), b).unwrap();
+        assert!(a.centre.approx_eq(p(0.0, 0.0)));
+        assert!(close(a.sweep, std::f64::consts::FRAC_PI_2));
+        // Three quarters, through the far side.
+        let b = Arc::bulge_through(p(1.0, 0.0), p(-1.0, 0.0), p(0.0, -1.0)).unwrap();
+        let a = Arc::from_bulge(p(1.0, 0.0), p(0.0, -1.0), b).unwrap();
+        assert!(a.centre.approx_eq(p(0.0, 0.0)));
+        assert!(close(a.sweep, 1.5 * std::f64::consts::PI));
+        assert!(Arc::bulge_through(p(0.0, 0.0), p(1.0, 0.0), p(2.0, 0.0)).is_none());
+    }
+
+    #[test]
+    fn project_onto_an_arc() {
+        let a = Arc::from_bulge(p(0.0, 0.0), p(4.0, 0.0), -1.0).unwrap();
+        let (f, off) = a.project(p(2.0, 3.0));
+        assert!(close(f, 0.5));
+        assert!(close(off, 1.0)); // outside a clockwise arc is on its left
+        let (f, _) = a.project(p(-1.0, -0.5));
+        assert!(close(f, 0.0));
+        let (f, _) = a.project(p(5.0, -0.5));
+        assert!(close(f, 1.0));
+        let pts = a.polyline(0.0, CURVE_TOLERANCE);
+        assert!(pts.len() > 20);
+        for q in &pts {
+            assert!(close(q.distance(a.centre), 2.0));
+        }
     }
 
     #[test]

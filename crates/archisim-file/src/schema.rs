@@ -143,6 +143,10 @@ pub(crate) enum ReferenceLine {
     InteriorFace,
 }
 
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Wall {
@@ -153,6 +157,10 @@ pub(crate) struct Wall {
     pub level: u64,
     pub start: Xy,
     pub end: Xy,
+    /// Curved walls (version 5): `tan(θ/4)` of the arc from `start` to
+    /// `end`, positive counter-clockwise. Absent: a straight wall.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub bulge: f64,
     pub reference: ReferenceLine,
     pub height: f64,
     pub base_offset: f64,
@@ -355,6 +363,7 @@ impl ProjectFile {
                     level: w.level.0,
                     start: xy(w.start),
                     end: xy(w.end),
+                    bulge: w.bulge,
                     reference: match w.reference {
                         core::ReferenceLine::Center => ReferenceLine::Center,
                         core::ReferenceLine::ExteriorFace => ReferenceLine::ExteriorFace,
@@ -547,6 +556,7 @@ impl ProjectFile {
                 level: core::LevelId(w.level),
                 start: pt(w.start),
                 end: pt(w.end),
+                bulge: w.bulge,
                 reference: match w.reference {
                     ReferenceLine::Center => core::ReferenceLine::Center,
                     ReferenceLine::ExteriorFace => core::ReferenceLine::ExteriorFace,

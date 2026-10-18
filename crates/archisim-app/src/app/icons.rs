@@ -40,6 +40,14 @@ pub enum Icon {
     Plus,
     Minus,
     Fit,
+    /// Geometry methods of the wall and slab tools.
+    GeoSingle,
+    GeoChain,
+    GeoRect,
+    GeoArc,
+    GeoCircle,
+    GeoPolygon,
+    GeoWand,
 }
 
 /// Draws `icon` in `rect` with lines of `color`.
@@ -307,6 +315,52 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(15.0, 4.0), (20.0, 4.0), (20.0, 9.0)], st);
             line(&[(20.0, 15.0), (20.0, 20.0), (15.0, 20.0)], st);
             line(&[(9.0, 20.0), (4.0, 20.0), (4.0, 15.0)], st);
+        }
+        Icon::GeoSingle => {
+            line(&[(4.0, 19.0), (20.0, 5.0)], st);
+            circle(4.0, 19.0, 1.6, st_thin);
+            circle(20.0, 5.0, 1.6, st_thin);
+        }
+        Icon::GeoChain => {
+            line(&[(3.0, 19.0), (9.0, 7.0), (15.0, 17.0), (21.0, 5.0)], st);
+            for (x, y) in [(3.0, 19.0), (9.0, 7.0), (15.0, 17.0), (21.0, 5.0)] {
+                circle(x, y, 1.4, st_thin);
+            }
+        }
+        Icon::GeoRect => {
+            rect_(4.0, 6.0, 20.0, 18.0, st);
+            circle(4.0, 18.0, 1.6, st_thin);
+            circle(20.0, 6.0, 1.6, st_thin);
+        }
+        Icon::GeoArc => {
+            arc(12.0, 19.0, 9.0, 180.0, 360.0, st);
+            circle(3.0, 19.0, 1.4, st_thin);
+            circle(21.0, 19.0, 1.4, st_thin);
+            circle(12.0, 10.0, 1.4, st_thin);
+        }
+        Icon::GeoCircle => {
+            circle(12.0, 12.0, 8.5, st);
+            circle(12.0, 12.0, 1.2, st_thin);
+            line(&[(12.0, 12.0), (20.5, 12.0)], st_thin);
+        }
+        Icon::GeoPolygon => {
+            closed(
+                &[
+                    (3.0, 18.0),
+                    (6.0, 5.0),
+                    (15.0, 9.0),
+                    (21.0, 4.0),
+                    (19.0, 19.0),
+                ],
+                st,
+            );
+        }
+        Icon::GeoWand => {
+            line(&[(4.0, 20.0), (15.0, 9.0)], st);
+            line(&[(17.0, 3.0), (17.0, 7.0)], st_thin);
+            line(&[(15.0, 5.0), (19.0, 5.0)], st_thin);
+            line(&[(20.0, 9.0), (22.0, 11.0)], st_thin);
+            line(&[(11.0, 4.0), (12.5, 5.5)], st_thin);
         }
     }
 }

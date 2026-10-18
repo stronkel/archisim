@@ -45,6 +45,13 @@ def main(path: str) -> int:
         geom = importlib.import_module("ifcopenshell.geom")
         shape = importlib.import_module("ifcopenshell.util.shape")
         settings = geom.settings()
+        # Fine enough for curved walls (exact arcs) to match their
+        # quantities, which are those of the exact arcs.
+        try:
+            settings.set("mesher-linear-deflection", 1e-5)
+            settings.set("mesher-angular-deflection", 0.01)
+        except Exception:
+            pass
         geom_ok = True
     except Exception as exc:  # geometry engine missing in some builds
         print(f"(geometry check skipped: {exc})")

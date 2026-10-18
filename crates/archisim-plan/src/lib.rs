@@ -311,7 +311,15 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         );
         for g in &geos {
             let (a, b) = g.axis;
-            let _ = writeln!(s, "<path d=\"M{} L{}\"/>", pt(a), pt(b));
+            match &g.arc {
+                Some(arc) => {
+                    let pts = arc.polyline(0.0, archisim_core::CURVE_TOLERANCE);
+                    let _ = writeln!(s, "<path d=\"{}\"/>", open_path(&pts));
+                }
+                None => {
+                    let _ = writeln!(s, "<path d=\"M{} L{}\"/>", pt(a), pt(b));
+                }
+            }
         }
         s.push_str("</g>\n");
     }
@@ -470,6 +478,10 @@ fn draw_layers(
     cut_plane: f64,
     k: f64,
 ) {
+    if g.arc.is_some() {
+        draw_curved_layers(s, model, g, gi, k);
+        return;
+    }
     let (a, b) = g.axis;
     let dir = b - a;
     let len = dir.length();
@@ -898,6 +910,10 @@ fn face_edge_at(
 }
 
 fn draw_cut_lines(s: &mut String, g: &WallGeometry, pieces: &[WallPiece], cut_plane: f64, k: f64) {
+    if let Some(arc) = &g.arc {
+        draw_curved_cut_lines(s, g, arc, k);
+        return;
+    }
     let (a, b) = g.axis;
     let Some(u) = (b - a).normalized() else {
         return;
@@ -1182,6 +1198,137 @@ fn num(v: f64) -> String {
     }
 }
 
+/// Runs of consecutive edges of a closed polygon whose two ends satisfy
+/// `on`, as open point chains.
+fn runs_on(poly: &[Point2], on: impl Fn(Point2) -> bool) -> Vec<Vec<Point2>> {
+    let n = poly.len();
+    let edge = |i: usize| on(poly[i]) && on(poly[(i + 1) % n]);
+    // Start after an edge that is not on it, so no run is split in two.
+    let Some(first) = (0..n).find(|&i| !edge(i)) else {
+        let mut all = poly.to_vec();
+        all.extend(poly.first().copied());
+        return vec![all];
+    };
+    let mut runs: Vec<Vec<Point2>> = Vec::new();
+    let mut current: Vec<Point2> = Vec::new();
+    for k in 1..=n {
+        let i = (first + k) % n;
+        if edge(i) {
+            if current.is_empty() {
+                current.push(poly[i]);
+            }
+            current.push(poly[(i + 1) % n]);
+        } else if !current.is_empty() {
+            runs.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        runs.push(current);
+    }
+    runs
+}
+
+/// The layers of a curved wall: each band filled with its material, the
+/// insulation zigzag along the curve and thin lines between layers.
+fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize, k: f64) {
+    let (Some(arc), Some(wtype)) = (
+        g.arc.as_ref(),
+        model
+            .wall(g.wall)
+            .and_then(|w| model.wall_type(w.wall_type)),
+    ) else {
+        return;
+    };
+    let mut tops = vec![g.exterior_offset];
+    for layer in &wtype.layers {
+        let last = tops[tops.len() - 1];
+        tops.push(last - layer.thickness);
+    }
+    for ((li, band), layer) in g.layers.iter().enumerate().zip(&wtype.layers) {
+        let Some(mat) = model.material(band.material) else {
+            continue;
+        };
+        fill_cut(s, mat, &band.polygon, &format!("cut-{gi}-{li}-0"), k);
+        if mat.cut_pattern == CutPattern::Insulation || band.function == LayerFunction::Insulation {
+            let t = layer.thickness;
+            let mid = (tops[li] + tops[li + 1]) / 2.0;
+            let len = arc.radius_at(mid).abs() * arc.sweep.abs();
+            let df = (t.max(0.01) / 2.0) / len.max(EPSILON);
+            let over = 2.0 * (g.exterior_offset - g.interior_offset).abs() / len.max(EPSILON);
+            let mut zigzag = Vec::new();
+            let mut f = -over;
+            let mut up = true;
+            while f <= 1.0 + over {
+                zigzag.push(arc.point(f, mid + if up { t / 2.0 } else { -t / 2.0 }));
+                f += df;
+                up = !up;
+            }
+            let zz = clip_polyline(&zigzag, &band.polygon);
+            if !zz.is_empty() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                    num(HATCH_LINE * k)
+                );
+            }
+        }
+    }
+    for li in 0..g.layers.len().saturating_sub(1) {
+        let off = tops[li + 1];
+        for run in runs_on(&g.layers[li].polygon, |p| {
+            (arc.project(p).1 - off).abs() < 1e-6
+        }) {
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                open_path(&run),
+                num(LAYER_LINE * k)
+            );
+        }
+    }
+}
+
+/// The cut lines of a curved wall: both faces, and the ends that are not
+/// joined to another wall.
+fn draw_curved_cut_lines(s: &mut String, g: &WallGeometry, arc: &archisim_core::Arc, k: f64) {
+    let mut d = String::new();
+    let off = |p: Point2| arc.project(p).1;
+    let near = |x: f64, y: f64| (x - y).abs() < 1e-6;
+    for face in [g.exterior_offset, g.interior_offset] {
+        for run in runs_on(&g.outline, |p| near(off(p), face)) {
+            d.push_str(&open_path(&run));
+            d.push(' ');
+        }
+    }
+    let ring = &g.outline;
+    for i in 0..ring.len() {
+        let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+        if near(off(p), off(q)) {
+            continue;
+        }
+        let at_start = arc.project(p).0 + arc.project(q).0 < 1.0;
+        let cut = if at_start { &g.start_cut } else { &g.end_cut };
+        if *cut == EndCut::Square {
+            let _ = write!(d, "M{} L{} ", pt(p), pt(q));
+        }
+    }
+    let _ = writeln!(
+        s,
+        r#"<path d="{}" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
+        d.trim_end(),
+        num(CUT_LINE * k)
+    );
+}
+
+/// An open polyline as SVG path data.
+fn open_path(pts: &[Point2]) -> String {
+    let mut d = String::new();
+    for (i, p) in pts.iter().enumerate() {
+        let _ = write!(d, "{}{} ", if i == 0 { "M" } else { "L" }, pt(*p));
+    }
+    d.trim_end().to_string()
+}
+
 fn pt(p: Point2) -> String {
     format!("{},{}", num(p.x), num(-p.y))
 }
@@ -1261,6 +1408,81 @@ mod tests {
     }
     use archisim_core::{Layer, NewSlab, NewWall, ReferenceLine, SlabFunction, WallFunction};
 
+    /// Curved walls: their layers follow the arc, the insulation zigzags
+    /// along it, the faces are cut lines and a partition stops at the
+    /// inner face.
+    #[test]
+    fn curved_walls_in_plan() {
+        let mut m = Model::new("Curvos");
+        let pb = m.add_level("Planta baja", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [230, 200, 190], CutPattern::Diagonal);
+        let wool = m.add_material(
+            "Lana",
+            "insulation",
+            [250, 250, 210],
+            CutPattern::Insulation,
+        );
+        let plaster = m.add_material("Yeso", "plaster", [240, 240, 240], CutPattern::Solid);
+        let layer = |material, thickness, function| Layer {
+            material,
+            thickness,
+            function,
+        };
+        let facade = m
+            .add_wall_type(
+                "Fachada",
+                WallFunction::Exterior,
+                vec![
+                    layer(brick, 0.115, LayerFunction::Structure),
+                    layer(wool, 0.05, LayerFunction::Insulation),
+                    layer(brick, 0.07, LayerFunction::Substrate),
+                    layer(plaster, 0.015, LayerFunction::Finish),
+                ],
+            )
+            .unwrap();
+        let partition = m
+            .add_wall_type(
+                "Tabique",
+                WallFunction::Interior,
+                vec![layer(brick, 0.07, LayerFunction::Structure)],
+            )
+            .unwrap();
+        let mut wall = |t, a: (f64, f64), b: (f64, f64), bulge| {
+            m.add_wall(NewWall {
+                wall_type: t,
+                level: pb,
+                start: Point2::new(a.0, a.1),
+                end: Point2::new(b.0, b.1),
+                reference: ReferenceLine::ExteriorFace,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap()
+        };
+        // A round room (two half circles, clockwise) and a partition across.
+        wall(facade, (3.0, 0.0), (-3.0, 0.0), -1.0);
+        wall(facade, (-3.0, 0.0), (3.0, 0.0), -1.0);
+        wall(partition, (-2.8, 0.5), (2.8, 0.5), 0.0);
+        let svg = render_plan(&m, pb, &PlanOptions::default());
+        if let Ok(dir) = std::env::var("ARCHISIM_TEST_OUT") {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(format!("{dir}/curvos.svg"), &svg);
+        }
+        // Four layers per half, filled, with the zigzag of the insulation.
+        assert_eq!(svg.matches("id=\"cut-").count() - 1, 9); // and the cut lines
+        assert!(svg.contains("stroke-linejoin=\"miter\""));
+        // The partition ends on the inner face (radius 2.765) of both
+        // halves: its cut corners are there.
+        let g = archisim_geom::wall_geometry(&m, m.walls().nth(2).unwrap().id).unwrap();
+        let r_in = 3.0 - 0.25;
+        for p in &g.outline {
+            let r = p.distance(Point2::new(0.0, 0.0));
+            assert!((r - r_in).abs() < 1e-9, "{r}");
+        }
+    }
+
     /// The plan of a level shows the walls of other levels its cut plane
     /// crosses, drawn cut, and the level below in grey when asked.
     #[test]
@@ -1289,6 +1511,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap()
@@ -1369,6 +1592,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
@@ -1498,6 +1722,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -1605,6 +1830,7 @@ mod tests {
                 reference: ReferenceLine::Center,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();

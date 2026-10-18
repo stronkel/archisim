@@ -55,6 +55,7 @@ pub fn layers_model(source: &Model, layers: &[Layer], length: f64) -> Option<(Mo
         reference: ReferenceLine::Center,
         height: 3.0,
         base_offset: 0.0,
+        bulge: 0.0,
         top: archisim_core::WallTop::Unconnected,
     })
     .ok()?;

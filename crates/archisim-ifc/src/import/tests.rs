@@ -27,6 +27,7 @@ fn model() -> Model {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap(),
@@ -41,6 +42,7 @@ fn model() -> Model {
             reference: ReferenceLine::Center,
             height: 2.7,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
@@ -53,6 +55,7 @@ fn model() -> Model {
             reference: ReferenceLine::InteriorFace,
             height: 2.5,
             base_offset: 0.3,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
@@ -652,6 +655,7 @@ fn windows_with_several_leaves_keep_each_leaf() {
             reference: ReferenceLine::ExteriorFace,
             height: 3.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
@@ -737,4 +741,54 @@ fn windows_with_several_leaves_keep_each_leaf() {
             );
         }
     }
+}
+
+/// Curved walls go out with a circular axis and exact arcs in their body,
+/// and come back the same; a partition that stops at a curved face too.
+#[test]
+fn curved_walls_round_trip() {
+    let mut m = Model::new("Curvos");
+    let pb = m.add_level("Planta baja", 0.0);
+    let lib = add_library(&mut m).unwrap();
+    let mut wall = |t, a: (f64, f64), b: (f64, f64), bulge: f64, reference| {
+        m.add_wall(NewWall {
+            wall_type: t,
+            level: pb,
+            start: Point2::new(a.0, a.1),
+            end: Point2::new(b.0, b.1),
+            reference,
+            height: 3.0,
+            base_offset: 0.0,
+            bulge,
+            top: archisim_core::WallTop::Unconnected,
+        })
+        .unwrap()
+    };
+    // A round room of 3 m radius, clockwise, and a bay: straight walls with
+    // a quarter circle between them.
+    let ext = ReferenceLine::ExteriorFace;
+    wall(lib.facade, (3.0, 0.0), (-3.0, 0.0), -1.0, ext);
+    wall(lib.facade, (-3.0, 0.0), (3.0, 0.0), -1.0, ext);
+    wall(
+        lib.partition,
+        (-2.9, 0.5),
+        (2.9, 0.5),
+        0.0,
+        ReferenceLine::Center,
+    );
+    let q = -(std::f64::consts::FRAC_PI_8).tan();
+    wall(lib.facade, (8.0, 0.0), (8.0, 4.0), 0.0, ext);
+    wall(lib.facade, (8.0, 4.0), (11.0, 7.0), q, ext);
+    wall(lib.facade, (11.0, 7.0), (14.0, 7.0), 0.0, ext);
+    let ifc = export(&m);
+    if let Ok(dir) = std::env::var("ARCHISIM_TEST_OUT") {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join("curvos.ifc"), &ifc).unwrap();
+    }
+    assert_eq!(ifc.matches("IFCTRIMMEDCURVE(").count(), 3);
+    assert_eq!(ifc.matches("IFCARCINDEX(").count(), 6);
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.skipped.is_empty(), "{report}");
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }

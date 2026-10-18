@@ -1535,3 +1535,130 @@ fn elements_change_level_and_other_levels_show() {
     assert!(h.app.ed.selection.is_empty());
     h.frame();
 }
+
+/// The geometry methods of the wall and slab tools, click by click: a
+/// rectangle of walls, a circle, an arc, a rectangle by its typed size and
+/// a rectangular slab; then a curved wall bent with its handle, and a door
+/// refused in a curved wall. With `ARCHISIM_TEST_OUT` set, leaves
+/// `modos.archisim` and `modos.ifc` there.
+#[test]
+fn construction_modes_by_clicks() {
+    use crate::slab_tool::SlabMode;
+    use crate::wall_tool::WallMode;
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    assert_eq!(h.app.tool, Tool::Wall);
+
+    // Rectangle: two opposite corners, four walls closed at the corners.
+    h.app.wall_tool.set_mode(WallMode::Rectangle);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(5.0, 4.0));
+    assert_eq!(h.model().walls().count(), 4, "{:?}", h.app.message);
+    assert_eq!(h.app.ed.undo_label(), Some("Crear muros"));
+    assert!(!h.app.wall_tool.is_drawing());
+    for w in h.model().walls() {
+        let g = wall_geometry(h.model(), w.id).unwrap();
+        assert!(g.start_cut.is_mitre() && g.end_cut.is_mitre());
+    }
+    let ring: Vec<Point2> = h.model().walls().map(|w| w.start).collect();
+    assert!(archisim_core::signed_area(&ring) < 0.0, "clockwise");
+
+    // Circle: centre and a point of the drawn line.
+    h.app.wall_tool.set_mode(WallMode::Circle);
+    h.click_at(p(9.0, 3.0));
+    h.click_at(p(11.0, 3.0));
+    let curved: Vec<archisim_core::Wall> = h
+        .model()
+        .walls()
+        .filter(|w| w.is_curved())
+        .cloned()
+        .collect();
+    assert_eq!(curved.len(), 2, "{:?}", h.app.message);
+    for w in &curved {
+        let a = w.arc().unwrap();
+        assert!(a.centre.approx_eq(p(9.0, 3.0)));
+        assert!((a.radius - 2.0).abs() < 1e-9);
+    }
+    let msg = h.app.message.clone().unwrap();
+    assert!(msg.text.contains("radio 2000"), "{msg:?}");
+
+    // Arc: start, end and a point it passes through; Escape ends it.
+    h.app.wall_tool.set_mode(WallMode::Arc);
+    h.click_at(p(0.0, 7.0));
+    h.click_at(p(5.0, 7.0));
+    h.click_at(p(2.5, 8.5));
+    h.key(Key::Escape);
+    let arc_wall = h
+        .model()
+        .walls()
+        .find(|w| w.is_curved() && w.start.approx_eq(p(0.0, 7.0)))
+        .cloned()
+        .expect("the arc");
+    assert!(arc_wall.midpoint().distance(p(2.5, 8.5)) < 1e-6);
+
+    // Rectangle by its typed size, towards the cursor.
+    h.app.wall_tool.set_mode(WallMode::Rectangle);
+    h.click_at(p(6.5, 6.5));
+    h.move_to(p(8.0, 8.0));
+    h.type_text("3000x2000");
+    h.key(Key::Enter);
+    assert_eq!(h.model().walls().count(), 11, "{:?}", h.app.message);
+    assert!(h
+        .model()
+        .walls()
+        .any(|w| w.end.approx_eq(p(9.5, 8.5)) || w.start.approx_eq(p(9.5, 8.5))));
+
+    // A rectangular slab on the first rectangle.
+    h.key(Key::Escape);
+    h.type_text("f");
+    h.app.slab_tool.set_mode(SlabMode::Rectangle);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(5.0, 4.0));
+    let slab = h.model().slabs().next().expect("a slab");
+    assert!((slab.area() - 20.0).abs() < 1e-9);
+
+    // Bending the arc with its handle at the middle.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.click_at(p(2.5, 8.5));
+    assert!(h.app.ed.selection.contains(&Element::Wall(arc_wall.id)));
+    h.drag(p(2.5, 8.5), p(2.5, 9.5));
+    let bent = h.model().wall(arc_wall.id).unwrap().clone();
+    assert!(
+        bent.midpoint().distance(p(2.5, 9.5)) < 0.02,
+        "{:?} {:?}",
+        bent.midpoint(),
+        h.app.message
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Curvar muro"));
+    assert_eq!((bent.start, bent.end), (arc_wall.start, arc_wall.end));
+
+    // No doors in curved walls yet: the click says why.
+    h.type_text("p");
+    let before = h.model().openings().count();
+    h.click_at(p(9.0, 5.0));
+    assert_eq!(h.model().openings().count(), before);
+    let msg = h.app.message.clone().unwrap();
+    assert!(msg.error && msg.text.contains("curvos"), "{msg:?}");
+    h.key(Key::Escape);
+
+    // Saved, opened and exported as it is; the IFC comes back the same.
+    let dir = match std::env::var_os("ARCHISIM_TEST_OUT") {
+        Some(d) => PathBuf::from(d),
+        None => std::env::temp_dir().join(format!("archisim-modos-{}", std::process::id())),
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = h.app.ed.save(Some(&dir.join("modos.archisim"))).unwrap();
+    let reopened = Editor::open(&path).unwrap();
+    assert_eq!(reopened.model(), h.model());
+    reopened.export_ifc(&dir.join("modos.ifc")).unwrap();
+    let ifc = std::fs::read_to_string(dir.join("modos.ifc")).unwrap();
+    assert_eq!(ifc.matches("IFCTRIMMEDCURVE(").count(), 3);
+    let back = archisim_ifc::import_ifc(&ifc).unwrap();
+    let diffs = archisim_ifc::differences(reopened.model(), &back.model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    // The plan draws.
+    h.frame();
+    assert!(h.app.plan.is_some());
+}

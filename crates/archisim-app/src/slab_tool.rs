@@ -4,16 +4,30 @@
 //! first corner again (or pressing Enter with three or more corners) closes
 //! the outline and asks for the slab to be built. While drawing, a typed
 //! length places the next corner along the direction of the cursor.
+//!
+//! In rectangle mode, two opposite corners make the slab (or the first one
+//! and a typed size, `6000x4000`). The magic wand is the third way, set in
+//! the application ([`crate::app::SlabSettings::wand`]).
 
 use archisim_core::{is_simple_polygon, Point2};
 
-use crate::units::parse_length;
+use crate::units::{parse_length, parse_size};
+use crate::wall_tool::{rectangle_corners, sized_corner};
+
+/// How the slab tool draws its outline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SlabMode {
+    #[default]
+    Polygon,
+    Rectangle,
+}
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SlabTool {
     points: Vec<Point2>,
-    /// Length being typed, in millimetres (or with a unit).
+    /// Length (or size) being typed, in millimetres (or with a unit).
     pub typed: String,
+    pub mode: SlabMode,
 }
 
 /// What the tool wants done after an input.
@@ -48,8 +62,34 @@ impl SlabTool {
         }
     }
 
+    pub fn set_mode(&mut self, mode: SlabMode) {
+        if mode != self.mode {
+            self.finish();
+            self.mode = mode;
+        }
+    }
+
+    /// Rectangle mode: the outline with its opposite corner at `p` (or at
+    /// the typed size towards `p`), if it has width and depth.
+    pub fn rectangle_to(&self, p: Point2) -> Option<Vec<Point2>> {
+        let a = *self.points.first()?;
+        let b = match parse_size(&self.typed) {
+            Some((w, d)) => sized_corner(a, p, w, d),
+            None => p,
+        };
+        if (a.x - b.x).abs() < 1e-6 || (a.y - b.y).abs() < 1e-6 {
+            return None;
+        }
+        Some(rectangle_corners(a, b).to_vec())
+    }
+
     /// A click at an already snapped point.
     pub fn click(&mut self, p: Point2) -> Outcome {
+        if self.mode == SlabMode::Rectangle && self.is_drawing() {
+            return self
+                .rectangle_to(p)
+                .map_or(Outcome::Nothing, Outcome::Build);
+        }
         if let Some(first) = self.points.first() {
             if self.points.len() >= 3 && first.approx_eq(p) {
                 return self.close();
@@ -78,7 +118,8 @@ impl SlabTool {
     }
 
     pub fn type_char(&mut self, c: char) -> bool {
-        let fits = c.is_ascii_digit() || matches!(c, ',' | '.' | 'm' | 'c' | 'M' | 'C');
+        let size = self.mode == SlabMode::Rectangle && matches!(c, 'x' | 'X' | '*' | ';');
+        let fits = c.is_ascii_digit() || matches!(c, ',' | '.' | 'm' | 'c' | 'M' | 'C') || size;
         if self.is_drawing() && fits {
             self.typed.push(c);
             true
@@ -93,6 +134,15 @@ impl SlabTool {
 
     /// Enter: place the typed corner, or close the outline.
     pub fn enter(&mut self, towards: Point2) -> Outcome {
+        if self.mode == SlabMode::Rectangle {
+            if self.typed.is_empty() {
+                self.finish();
+                return Outcome::Nothing;
+            }
+            return self
+                .rectangle_to(towards)
+                .map_or(Outcome::Nothing, Outcome::Build);
+        }
         if !self.typed.is_empty() {
             if let Some(p) = self.typed_end(towards) {
                 return self.click(p);
@@ -154,6 +204,28 @@ mod tests {
         assert_eq!(t.enter(p(9.0, 9.0)), Outcome::Invalid);
         t.click(p(1.0, 2.0));
         assert!(matches!(t.enter(p(9.0, 9.0)), Outcome::Build(v) if v.len() == 3));
+    }
+
+    #[test]
+    fn rectangles_by_two_corners_or_a_typed_size() {
+        let mut t = SlabTool::default();
+        t.set_mode(SlabMode::Rectangle);
+        t.click(p(1.0, 1.0));
+        assert_eq!(t.click(p(1.0, 5.0)), Outcome::Nothing, "no width");
+        let Outcome::Build(v) = t.click(p(5.0, 4.0)) else {
+            panic!()
+        };
+        assert_eq!(v.len(), 4);
+        assert!((archisim_core::signed_area(&v).abs() - 12.0).abs() < 1e-9);
+        t.accept();
+        t.click(p(0.0, 0.0));
+        for c in "6000x4000".chars() {
+            assert!(t.type_char(c));
+        }
+        let Outcome::Build(v) = t.enter(p(-1.0, 1.0)) else {
+            panic!()
+        };
+        assert!(v.contains(&p(-6.0, 4.0)));
     }
 
     #[test]

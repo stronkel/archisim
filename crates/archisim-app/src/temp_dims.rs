@@ -175,6 +175,10 @@ fn wall_dims(model: &Model, id: WallId) -> Vec<TempDim> {
     let Some(w) = model.wall(id) else {
         return Vec::new();
     };
+    // Curved walls are measured in Properties (length and radius).
+    if w.is_curved() {
+        return Vec::new();
+    }
     let Some(t) = model.wall_type(w.wall_type) else {
         return Vec::new();
     };
@@ -194,7 +198,10 @@ fn wall_dims(model: &Model, id: WallId) -> Vec<TempDim> {
     // The nearest parallel wall on each side, overlapping this one.
     // (signed offset of its facing face, middle of the overlap)
     let mut best: [Option<(f64, f64)>; 2] = [None, None];
-    for other in model.walls_on_level(w.level).filter(|o| o.id != id) {
+    for other in model
+        .walls_on_level(w.level)
+        .filter(|o| o.id != id && !o.is_curved())
+    {
         let Some(ou) = (other.end - other.start).normalized() else {
             continue;
         };

@@ -164,9 +164,23 @@ fn shift_to_axis(model: &Model, wall: WallId, side: Line) -> Option<f64> {
     let w = model.wall(wall)?;
     let t = model.wall_type(w.wall_type)?.thickness();
     let (ext, int) = w.face_offsets(t);
+    let dir = side.d.normalized()?;
+    if let Some(arc) = w.arc() {
+        // A piece of a curved face: moved radially to the axis.
+        let mid = side.p + side.d * 0.5;
+        let (f, offset) = arc.project(mid);
+        let n = arc.tangent(f).perp_left();
+        if dir.cross(arc.tangent(f)).abs() > 0.1 {
+            return None;
+        }
+        let on_face = [ext, int].iter().any(|f| (offset - f).abs() < 1e-3);
+        if !on_face {
+            return None;
+        }
+        return Some(((ext + int) / 2.0 - offset) * n.dot(dir.perp_left()));
+    }
     let u = (w.end - w.start).normalized()?;
     let n = u.perp_left();
-    let dir = side.d.normalized()?;
     if dir.cross(u).abs() > 1e-6 {
         return None;
     }
@@ -588,6 +602,7 @@ mod tests {
                 reference: ReferenceLine::ExteriorFace,
                 height: 3.0,
                 base_offset: 0.0,
+                bulge: 0.0,
                 top: archisim_core::WallTop::Unconnected,
             })
             .unwrap();
@@ -600,6 +615,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
@@ -686,6 +702,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 1.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();
@@ -707,6 +724,7 @@ mod tests {
             reference: ReferenceLine::Center,
             height: 3.0,
             base_offset: 0.0,
+            bulge: 0.0,
             top: archisim_core::WallTop::Unconnected,
         })
         .unwrap();

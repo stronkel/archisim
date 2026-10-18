@@ -71,6 +71,15 @@ pub fn parse_length(text: &str) -> Option<f64> {
     value.is_finite().then_some(value * factor)
 }
 
+/// Reads a size typed as two lengths, `6000x4000` (also with `*` or `;`),
+/// and returns both in metres, if both are positive.
+pub fn parse_size(text: &str) -> Option<(f64, f64)> {
+    let t = text.to_lowercase();
+    let (a, b) = t.split_once(['x', '*', ';'])?;
+    let (w, d) = (parse_length(a)?, parse_length(b)?);
+    (w > 0.0 && d > 0.0).then_some((w, d))
+}
+
 /// `1.200` or `12.345.678`: groups of three digits after each point.
 fn is_thousands(s: &str) -> bool {
     let s = s.strip_prefix('-').unwrap_or(s);
@@ -112,6 +121,12 @@ pub fn explain(e: &ModelError) -> String {
             "el contorno necesita al menos tres puntos y no puede cruzarse".into()
         }
         ModelError::ZeroLengthWall => "el muro necesita dos puntos distintos".into(),
+        ModelError::ArcTooTight => {
+            "el muro curvo se cierra demasiado para su espesor (su cara interior se quedaría sin radio)".into()
+        }
+        ModelError::OpeningInCurvedWall => {
+            "los muros curvos aún no admiten puertas ni ventanas".into()
+        }
         ModelError::NonPositive(what) => format!("{} debe ser mayor que cero", es_what(what)),
         ModelError::NotFinite(what) => format!("{} no es un número válido", es_what(what)),
         ModelError::DuplicateId(id) => format!("el id {id} está repetido"),

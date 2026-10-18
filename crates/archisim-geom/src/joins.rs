@@ -15,6 +15,10 @@
 //! face stays whole), and only goes in at all when it lies within the
 //! host's height and away from its corners; otherwise it just stops at the
 //! host's face.
+//!
+//! Curved walls neither butt into others nor take butting walls this way:
+//! a wall against a curved one just stops at its face (see
+//! [`crate::EndCut::Face`]).
 
 use archisim_core::{LayerFunction, Model, Point2, Vec2, Wall, WallId, EPSILON};
 
@@ -137,6 +141,9 @@ impl Frame {
 
 /// The T-junction at one end of a wall, if it butts against another wall.
 pub fn tee_end(model: &Model, wall: &Wall, at_start: bool) -> Option<TeeEnd> {
+    if wall.is_curved() {
+        return None;
+    }
     let p = if at_start { wall.start } else { wall.end };
     // Ends shared with another wall are corners, not T-junctions.
     let shared = model
@@ -147,12 +154,15 @@ pub fn tee_end(model: &Model, wall: &Wall, at_start: bool) -> Option<TeeEnd> {
     }
     model
         .walls_on_level(wall.level)
-        .filter(|h| h.id != wall.id)
+        .filter(|h| h.id != wall.id && !h.is_curved())
         .find_map(|h| tee_with(model, wall, at_start, h))
 }
 
 /// Whether a point lies in a wall's band (between its faces, along it).
 pub(crate) fn in_band(model: &Model, host: &Wall, p: Point2) -> bool {
+    if host.is_curved() {
+        return false;
+    }
     let Some(f) = Frame::of(model, host) else {
         return false;
     };
@@ -252,6 +262,9 @@ fn corner_margin(model: &Model, w: &Wall) -> (f64, f64) {
 
 /// Where other walls go into `host`.
 pub fn notches(model: &Model, host: &Wall) -> Vec<Notch> {
+    if host.is_curved() {
+        return Vec::new();
+    }
     let Some(h) = Frame::of(model, host) else {
         return Vec::new();
     };

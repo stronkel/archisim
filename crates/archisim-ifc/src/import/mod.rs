@@ -21,8 +21,12 @@
 //! away from the middle of the storey's walls is taken as the exterior
 //! (files written by ArchiSim keep their sides as written).
 //!
-//! What it leaves out (and counts in the report): curved and polygonal
-//! walls, sloped slabs, holes in slabs, empty openings, and every other
+//! Curved walls are read from an axis that is one circular arc (an
+//! `IfcTrimmedCurve` on an `IfcCircle`, or an `IfcIndexedPolyCurve` with
+//! one `IfcArcIndex`), with their layers measured radially.
+//!
+//! What it leaves out (and counts in the report): walls of several pieces
+//! or other curves, closed circular walls, sloped slabs, holes in slabs, empty openings, and every other
 //! class (columns, beams, stairs, roofs that are not slabs…).
 
 mod compare;
@@ -33,7 +37,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 
 use archisim_core::{
-    signed_area, CutPattern, DoorOperation, GlobalId, Hand, Layer, LayerFunction, LevelId,
+    signed_area, Arc, CutPattern, DoorOperation, GlobalId, Hand, Layer, LayerFunction, LevelId,
     MaterialId, Model, ModelError, NewOpening, NewOpeningType, NewSlab, NewWall, OpeningKind,
     OpeningTypeId, Point2, ReferenceLine, RestoreError, SlabFunction, SlabTypeId, WallFunction,
     WallId, WallSide, WallTypeId, WindowOperation,
@@ -143,6 +147,8 @@ struct WallCandidate {
     guid: String,
     a: Point2,
     b: Point2,
+    /// 0 for a straight wall; the bulge of its arc from a to b if curved.
+    bulge: f64,
     /// Layers with their position across the axis a→b (left positive):
     /// (low, high, layer).
     layers: Vec<(f64, f64, Layer)>,
@@ -1009,8 +1015,29 @@ impl<'a> Importer<'a> {
         let (lo, hi) = body.bounds().ok_or("sin geometría")?;
         let u_hint = Point2::new(xf.x[0], xf.x[1]);
         let line_y; // local Y of the line a–b
+        let mut bulge = 0.0;
         let (mut a, mut b) = match &axis {
-            Some((_, true)) => return Err("muro curvo (aún no se importan)"),
+            Some((pts, true)) => {
+                // One arc: the circle through its ends and middle point,
+                // which every other point must follow.
+                let w: Vec<Point2> = pts.iter().map(|p| p2(xf.apply(*p))).collect();
+                let (pa, pb) = (w[0], w[w.len() - 1]);
+                if w.len() < 3 || pa.approx_eq(pb) {
+                    return Err("muro circular cerrado (aún no se importa)");
+                }
+                let mid = w[w.len() / 2];
+                let k = Arc::bulge_through(pa, mid, pb).ok_or("muro curvo sin arco")?;
+                let arc = Arc::from_bulge(pa, pb, k).ok_or("muro curvo sin arco")?;
+                let off_circle = w
+                    .iter()
+                    .any(|p| (p.distance(arc.centre) - arc.radius).abs() > 1e-3);
+                if off_circle {
+                    return Err("muro de varios tramos o curvas (aún no se importan)");
+                }
+                bulge = k;
+                line_y = pts[0][1];
+                (pa, pb)
+            }
             Some((pts, false)) => {
                 let first = pts[0];
                 let last = pts[pts.len() - 1];
@@ -1054,8 +1081,15 @@ impl<'a> Importer<'a> {
                 "Muros recortados (por cubiertas u otros elementos): se importan rectos, con su altura máxima.",
             );
         }
-        // Across the axis, left positive.
-        let across: Vec<f64> = body.all_points().map(|p| (p2(p) - a).dot(n)).collect();
+        // Across the axis, left positive (radially for a curved wall).
+        let arc = Arc::from_bulge(a, b, bulge);
+        let across: Vec<f64> = body
+            .all_points()
+            .map(|p| match &arc {
+                Some(arc) => arc.project(p2(p)).1,
+                None => (p2(p) - a).dot(n),
+            })
+            .collect();
         let s_lo = across.iter().copied().fold(f64::INFINITY, f64::min);
         let s_hi = across.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
@@ -1150,6 +1184,7 @@ impl<'a> Importer<'a> {
             guid: e.arg(0).as_str().unwrap_or("").to_string(),
             a,
             b,
+            bulge,
             layers,
             base,
             top,
@@ -1193,6 +1228,7 @@ impl<'a> Importer<'a> {
                     let mid = (c.a + c.b) * 0.5;
                     if (centre - mid).dot(n) > 1e-6 {
                         std::mem::swap(&mut c.a, &mut c.b);
+                        c.bulge = -c.bulge;
                         n = -n;
                         for l in &mut c.layers {
                             let (lo, hi) = (l.0, l.1);
@@ -1216,7 +1252,11 @@ impl<'a> Importer<'a> {
             } else {
                 (ReferenceLine::Center, (exterior + interior) / 2.0)
             };
-            let (a, b) = (snap2(c.a + n * shift), snap2(c.b + n * shift));
+            let (a, b) = match Arc::from_bulge(c.a, c.b, c.bulge) {
+                // The same arc moved across: concentric, same sweep.
+                Some(arc) => (snap2(arc.point(0.0, shift)), snap2(arc.point(1.0, shift))),
+                None => (snap2(c.a + n * shift), snap2(c.b + n * shift)),
+            };
             let exterior_face = match reference {
                 ReferenceLine::ExteriorFace => 0.0,
                 ReferenceLine::InteriorFace => thickness,
@@ -1240,6 +1280,7 @@ impl<'a> Importer<'a> {
                 reference,
                 height: snap(c.top - c.base),
                 base_offset: snap(c.base - elevation),
+                bulge: c.bulge,
                 top: archisim_core::WallTop::Unconnected,
             };
             match self.model.add_wall(spec) {
@@ -2070,6 +2111,7 @@ fn explain(e: &ModelError) -> String {
         ModelError::FrameTooDeep => "el marco no cabe en el espesor del muro".into(),
         ModelError::InvalidOutline => "contorno que se corta a sí mismo o sin superficie".into(),
         ModelError::ZeroLengthWall => "muro de longitud nula".into(),
+        ModelError::ArcTooTight => "muro curvo de radio menor que su espesor".into(),
         ModelError::NonPositive(what) => format!("medida nula o negativa ({what})"),
         ModelError::NotFinite(what) => format!("número no válido ({what})"),
         ModelError::EmptyType => "tipo sin capas".into(),
