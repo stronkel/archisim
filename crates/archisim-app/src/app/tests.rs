@@ -837,3 +837,161 @@ fn levels_are_managed_from_the_dialog() {
     assert!(ifc.contains("Planta 1"), "storey name");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The types and materials dialog on the drawn house: every tab is drawn
+/// with its preview, types are duplicated and edited, the walls follow,
+/// what does not fit is refused, and the result saves and exports. Its IFC
+/// goes to `ARCHISIM_TEST_OUT` like the session of `drawn_project_saves_and_exports`.
+#[test]
+fn drawn_project_with_edited_types() {
+    use super::types_ui::Action;
+    use archisim_core::{CutPattern, LayerFunction};
+
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    h.key(Key::Escape);
+    let wall = h.model().walls().next().unwrap().clone();
+    let facade = h.model().wall_type(wall.wall_type).unwrap().clone();
+
+    // «Editar tipo…» from the wall's properties opens the dialog on it.
+    h.app.edit_type(TypesTab::Walls, facade.id.0);
+    assert!(h.app.types.open);
+    for tab in [
+        TypesTab::Walls,
+        TypesTab::Slabs,
+        TypesTab::Doors,
+        TypesTab::Windows,
+        TypesTab::Materials,
+    ] {
+        h.app.types.tab = tab;
+        h.frame();
+        h.frame();
+        let key = &h.app.types.preview.as_ref().expect("a preview").0;
+        let opening = matches!(tab, TypesTab::Doors | TypesTab::Windows);
+        assert_eq!(key.starts_with("ot:"), opening, "preview of {tab:?}");
+    }
+
+    // Duplicate the façade, thicken its insulation to 8 cm and use it.
+    h.app.apply_type_action(Action::DuplicateWall(facade.id));
+    let copy = h.app.types.wall.unwrap();
+    assert_ne!(copy, facade.id);
+    let mut layers = facade.layers.clone();
+    let insulation = layers
+        .iter()
+        .position(|l| l.function == LayerFunction::Insulation)
+        .unwrap();
+    layers[insulation].thickness = 0.08;
+    h.app.apply_type_action(Action::EditWall(
+        copy,
+        "Fachada doble hoja 29,5".into(),
+        facade.function,
+        layers,
+    ));
+    let walls: Vec<_> = h.model().walls().map(|w| w.id).collect();
+    h.app.ed.set_walls_type(&walls, copy).unwrap();
+    assert!((h.model().wall_type(copy).unwrap().thickness() - 0.295).abs() < 1e-9);
+    h.app.types.tab = TypesTab::Walls;
+    h.frame();
+
+    // A layer in a new material, hatched like concrete.
+    let brick = facade.layers[1].material;
+    h.app.apply_type_action(Action::DuplicateMaterial(brick));
+    let new_mat = h.app.types.material.unwrap();
+    h.app.apply_type_action(Action::EditMaterial(
+        new_mat,
+        "Bloque de hormigón".into(),
+        "block".into(),
+        [190, 190, 185],
+        CutPattern::Cross,
+    ));
+    let mut layers = h.model().wall_type(copy).unwrap().layers.clone();
+    layers[1].material = new_mat;
+    h.app.apply_type_action(Action::EditWall(
+        copy,
+        "Fachada doble hoja 29,5".into(),
+        facade.function,
+        layers,
+    ));
+    assert_eq!(
+        h.model().material_users(new_mat),
+        vec!["Fachada doble hoja 29,5".to_string()]
+    );
+    // In use: refused, and the dialog says why.
+    h.app.apply_type_action(Action::RemoveMaterial(new_mat));
+    assert!(h.app.message.as_ref().unwrap().error);
+    assert!(h.model().material(new_mat).is_some());
+
+    // The placed door's type: 10 cm wider fits; a 40 cm deep frame does not.
+    let door = h
+        .model()
+        .openings()
+        .find(|o| h.model().opening_type(o.opening_type).unwrap().is_door())
+        .unwrap()
+        .clone();
+    let dt = h.model().opening_type(door.opening_type).unwrap().clone();
+    let spec = |t: &archisim_core::OpeningType| archisim_core::NewOpeningType {
+        name: t.name.clone(),
+        kind: t.kind,
+        width: t.width,
+        height: t.height,
+        frame_width: t.frame_width,
+        frame_depth: t.frame_depth,
+        frame_material: t.frame_material,
+        panel_material: t.panel_material,
+    };
+    let mut wider = spec(&dt);
+    wider.width += 0.1;
+    h.app.apply_type_action(Action::EditOpening(dt.id, wider));
+    assert!(
+        !h.app.message.as_ref().unwrap().error,
+        "{:?}",
+        h.app.message
+    );
+    assert!((h.model().opening_type(dt.id).unwrap().width - dt.width - 0.1).abs() < 1e-9);
+    assert_eq!(h.model().opening(door.id).unwrap().along, door.along);
+    let mut deep = spec(h.model().opening_type(dt.id).unwrap());
+    deep.frame_depth = 0.4;
+    h.app.apply_type_action(Action::EditOpening(dt.id, deep));
+    assert!(h.app.message.as_ref().unwrap().text.contains("marco"));
+    assert_eq!(
+        h.model().opening_type(dt.id).unwrap().frame_depth,
+        dt.frame_depth
+    );
+
+    // The wall tool uses the copy; undoing back past the duplicate makes it
+    // fall back to an existing type.
+    h.app.wall_settings.wall_type = copy;
+    let saved_model = h.model().clone();
+    let mut redo = 0;
+    while h.model().wall_type(copy).is_some() {
+        h.app.ed.undo();
+        redo += 1;
+    }
+    h.frame();
+    assert!(h.model().wall_type(h.app.wall_settings.wall_type).is_some());
+    for _ in 0..redo {
+        h.app.ed.redo();
+    }
+    assert_eq!(h.model(), &saved_model);
+
+    // Save, reopen, export: the IFC carries the new type and material, and
+    // imports back the same.
+    let dir = match std::env::var_os("ARCHISIM_TEST_OUT") {
+        Some(d) => PathBuf::from(d),
+        None => std::env::temp_dir().join(format!("archisim-types-{}", std::process::id())),
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = h.app.ed.save(Some(&dir.join("tipos.archisim"))).unwrap();
+    let reopened = Editor::open(&path).unwrap();
+    assert_eq!(reopened.model(), h.model());
+    reopened.export_ifc(&dir.join("tipos.ifc")).unwrap();
+    let ifc = std::fs::read_to_string(dir.join("tipos.ifc")).unwrap();
+    assert!(ifc.contains("Fachada doble hoja 29,5"));
+    assert!(ifc.contains("Bloque de hormig"));
+    assert!(ifc.contains("0.295"), "wall width in the IFC");
+    let mut h2 = Harness::new(Editor::new_project());
+    h2.app.import_path(&dir.join("tipos.ifc"));
+    let diffs = archisim_ifc::differences(reopened.model(), h2.model());
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

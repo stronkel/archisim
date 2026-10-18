@@ -17,6 +17,8 @@ use archisim_plan::{render_plan, PlanOptions};
 use crate::pick::Element;
 use crate::units::{explain, explain_file};
 
+mod types;
+
 /// Settings of the wall tool (ArchiCAD "Cuadro de información").
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WallSettings {

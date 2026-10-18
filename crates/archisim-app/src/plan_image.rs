@@ -29,16 +29,25 @@ pub fn rasterize(
     size: [usize; 2],
     show_reference_lines: bool,
 ) -> ColorImage {
+    let options = PlanOptions {
+        viewport: Some((lo, hi)),
+        show_reference_lines,
+        ..PlanOptions::default()
+    };
+    rasterize_with(model, level, size, &options)
+}
+
+/// Draws a level with the given plan options (a viewport is required) into
+/// an image of `size` pixels. The scale only changes the line weights and
+/// hatch spacing, which are paper millimetres at that scale.
+pub fn rasterize_with(
+    model: &Model,
+    level: LevelId,
+    size: [usize; 2],
+    options: &PlanOptions,
+) -> ColorImage {
     let [w, h] = [size[0].max(1), size[1].max(1)];
-    let svg = render_plan(
-        model,
-        level,
-        &PlanOptions {
-            viewport: Some((lo, hi)),
-            show_reference_lines,
-            ..PlanOptions::default()
-        },
-    );
+    let svg = render_plan(model, level, options);
     let mut pixmap = tiny_skia::Pixmap::new(w as u32, h as u32).expect("non-empty image");
     match usvg::Tree::from_str(&svg, &usvg::Options::default()) {
         Ok(tree) => {

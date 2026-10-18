@@ -33,8 +33,9 @@ cargo run -p archisim-cli -- demo out/   # genera out/demo.archisim, out/demo.if
 python3 scripts/validate_ifc.py out/demo.ifc   # requiere: pip install ifcopenshell
 cargo run -p archisim-cli -- exportar out/demo.archisim out/reabierto   # ida y vuelta: IFC idéntico salvo la fecha
 cargo run -p archisim-cli -- importar out/demo.ifc out/importado/demo.archisim   # IFC → proyecto (informe de lo importado)
-ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_tests   # casa dibujada con la app (clics simulados) y out/app/vista3d.png
+ARCHISIM_TEST_OUT=$PWD/out/app cargo test -p archisim-app -- drawn_project gpu_tests   # casa dibujada con la app (clics simulados), tipos editados y out/app/vista3d.png
 python3 scripts/validate_ifc.py out/app/sesion.ifc
+python3 scripts/validate_ifc.py out/app/tipos.ifc   # la misma casa con tipos y materiales modificados
 ```
 
 La integración continua usa el Rust estable más reciente, que puede traer avisos nuevos de clippy; si clippy falla solo allí, los avisos salen como anotaciones del job (`gh api repos/stronkel/archisim/check-runs/<id>/annotations`).
@@ -52,10 +53,10 @@ Si cambias la exportación IFC, la validación con IfcOpenShell debe pasar sin e
 - `crates/archisim-file` — proyecto `.archisim` (JSON versionado). Formato descrito en `docs/FORMATO_ARCHISIM.md`.
 - `crates/archisim-library` — plantilla de inicio: materiales y tipos con los que empieza un proyecto nuevo (y la demo).
 - `crates/archisim-cli` — comandos de línea.
-- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición, arrastres de mover/copiar/estirar en `drag`, cámara 3D, selección por rayo) está separada de la interfaz y tiene pruebas propias. La vista 3D (`view3d`) dibuja con wgpu en una textura propia; su prueba de dibujo usa cualquier adaptador gráfico disponible (vale uno por software) y se salta si no hay ninguno.
+- `crates/archisim-app` — aplicación de escritorio (egui/eframe sobre wgpu). La vista de planta rasteriza el mismo SVG 1:50 de `archisim-plan` para la zona visible: no dupliques reglas de dibujo en la app. La lógica (vista, forzados, herramienta muro, selección, edición, arrastres de mover/copiar/estirar en `drag`, cámara 3D, selección por rayo) está separada de la interfaz y tiene pruebas propias. El diálogo «Tipos y materiales» (`app/types_ui`) edita a través de `Editor` (`editor/types`, nombres únicos por lista) y sus vistas previas (`type_preview`) son plantas de un modelo mínimo dibujadas por `archisim-plan` a 1:20: no dibujes multicapas a mano en la app. La vista 3D (`view3d`) dibuja con wgpu en una textura propia; su prueba de dibujo usa cualquier adaptador gráfico disponible (vale uno por software) y se salta si no hay ninguno.
 
 Al añadir un crate, respeta la dirección de dependencias descrita en `docs/FUNDACIONAL.md` §3.
 
 ## Prioridades actuales
 
-MVP (fase 1) terminado en v0.8; v0.9 añade mover/copiar/estirar con el ratón, varita mágica y edición de vértices de forjado; v0.10, cotas, cotas de nivel y gestión de plantas (formato `.archisim` versión 2); v0.11, uniones en T con prioridad de intersección por capa. La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Siguiente propuesto: fase 2 con familias en cuanto Antonio decida D2; mientras, el resto de pendientes de la fase 1 (editor de tipos y materiales, importación segunda vuelta, instalador, rendimiento) o el recorte muro–forjado. Antonio decide el orden (ver la bitácora).
+MVP (fase 1) terminado en v0.8; v0.9 añade mover/copiar/estirar con el ratón, varita mágica y edición de vértices de forjado; v0.10, cotas, cotas de nivel y gestión de plantas (formato `.archisim` versión 2); v0.11, uniones en T con prioridad de intersección por capa; v0.12, editor de tipos y materiales (sin cambios de formato). La lista de lo que sigue, con las decisiones pendientes de Antonio, está en `docs/HOJA_DE_RUTA.md`. Siguiente propuesto: fase 2 con familias en cuanto Antonio decida D2; mientras, el resto de pendientes de la fase 1 (importación segunda vuelta, instalador, rendimiento) o el recorte muro–forjado. Antonio decide el orden (ver la bitácora).

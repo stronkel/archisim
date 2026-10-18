@@ -31,7 +31,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 1.3 ✅ v0.9 | **Edición de vértices** de forjados: mover, añadir y quitar esquinas | S |
 | 1.4 ✅ v0.10 | **Cotas básicas**: lineales y encadenadas, cota automática de huecos en un muro, cotas de nivel | M |
 | 1.5 ✅ v0.10 | **Gestión de plantas**: añadir, renombrar, cambiar cota y borrar plantas desde la aplicación | S |
-| 1.6 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
+| 1.6 ✅ v0.12 | **Editor de tipos y materiales**: crear y modificar multicapas (capas, espesores, función), materiales (color, trama) y tipos de puerta y ventana | M |
 | 1.7 | **Importación IFC, segunda vuelta**: muros curvos y de varios tramos, forjados inclinados y con huecos, huecos sin carpintería, pilares y vigas como elementos propios en cuanto existan (§2), locales (`IfcSpace`) | M |
 | 1.8 | **Instalación**: instalador de Windows con icono y asociación de `.archisim` e `.ifc`, compilaciones para macOS y Linux en la integración continua | S |
 | 1.9 | **Rendimiento** con modelos grandes (miles de elementos, IFC de 50–100 MB): medir y optimizar planta, 3D e importación | M |
@@ -86,6 +86,8 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 - **Validación continua**: además de IfcOpenShell, abrir los IFC de cada versión en ArchiCAD y Revit (Antonio) y guardar capturas de referencia.
 
 ## Propuesta de orden
+
+- Bloque 11: **editor de tipos y materiales** (1.6) — hecho en v0.12, pedido por Antonio mientras el bloque 10 espera revisión (PR #2).
 
 1. ~~Bloque 8: **mover / copiar / estirar** con el ratón y **varita mágica** (1.1 + 1.2)~~ — hecho en v0.9, con la edición de vértices (1.3).
 2. ~~Bloque 9: **cotas básicas** y **gestión de plantas** (1.4 + 1.5)~~ — hecho en v0.10.
