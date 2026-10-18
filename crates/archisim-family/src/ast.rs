@@ -25,6 +25,8 @@ pub struct FamilyDef {
     pub components: BTreeMap<String, Component>,
     /// The 3D body.
     pub body: Vec<Stmt>,
+    /// Plan symbols, one per drawing scale (see [`FamilyDef::plan_for`]).
+    pub plans: Vec<PlanSymbol>,
     /// Values read by the rest of the program (rough opening, frame…).
     pub outputs: Vec<Output>,
     /// IFC data (class, predefined type…).
@@ -34,6 +36,16 @@ pub struct FamilyDef {
 impl FamilyDef {
     pub fn param(&self, name: &str) -> Option<&Param> {
         self.params.iter().find(|p| p.name == name)
+    }
+
+    /// The plan symbol to draw at a scale (denominator, 50 for 1:50): the
+    /// one written for the nearest scale, as ArchiCAD picks the detail level
+    /// by scale.
+    pub fn plan_for(&self, scale: f64) -> Option<&PlanSymbol> {
+        let distance = |p: &PlanSymbol| (scale.max(1.0) / p.scale).ln().abs();
+        self.plans
+            .iter()
+            .min_by(|a, b| distance(a).total_cmp(&distance(b)))
     }
 
     /// Parameters of one scope, in order.
@@ -125,6 +137,31 @@ pub struct Component {
     pub line: usize,
 }
 
+/// A plan symbol for one drawing scale.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanSymbol {
+    /// Scale denominator: 50 for `plan 1:50`.
+    pub scale: f64,
+    pub body: Vec<Stmt>,
+    pub line: usize,
+}
+
+/// Line weight of a plan mark. The real thickness depends on the scale and
+/// the drawing standard, not on the family.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pen {
+    /// Heavy line of cut elements.
+    Cut,
+    /// Medium line of frames and leaves.
+    Frame,
+    /// Line of things seen below the cut plane.
+    View,
+    /// Thin line: glazing, swings, edges.
+    Thin,
+    /// Hatching.
+    Hatch,
+}
+
 /// One value the family gives to the rest of the program.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Output {
@@ -177,6 +214,40 @@ pub enum Stmt {
         line: usize,
     },
     Require(Require),
+    /// A plan line.
+    Line {
+        from: [Expr; 2],
+        to: [Expr; 2],
+        pen: Pen,
+        dashed: bool,
+        line: usize,
+    },
+    /// A closed plan outline, filled white (it hides what is under it) or
+    /// not.
+    Polygon {
+        points: Vec<[Expr; 2]>,
+        pen: Pen,
+        filled: bool,
+        line: usize,
+    },
+    /// A plan arc around `center`, from one point to another, the short way.
+    Arc {
+        center: [Expr; 2],
+        from: [Expr; 2],
+        to: [Expr; 2],
+        pen: Pen,
+        line: usize,
+    },
+}
+
+impl Stmt {
+    /// Whether it draws in plan (it may not appear in the 3D body).
+    pub fn is_plan_mark(&self) -> bool {
+        matches!(
+            self,
+            Stmt::Line { .. } | Stmt::Polygon { .. } | Stmt::Arc { .. }
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

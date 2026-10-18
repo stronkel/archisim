@@ -12,6 +12,11 @@ use crate::Value;
 /// (`"left"` or `"right"`, UNE-EN 12519). A recipe cannot declare them.
 pub const BUILTINS: [&str; 2] = ["opens_to", "hand"];
 
+/// Names the program also provides to plan symbols of wall-hosted
+/// families, in the family's axes: where the wall's exterior and interior
+/// faces are (`y`, metres) and the sill height above the level.
+pub const PLAN_BUILTINS: [&str; 3] = ["wall_ext", "wall_int", "sill_height"];
+
 /// Reads a recipe. Every `include` must have been expanded first (see
 /// [`expand_includes`]).
 pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
@@ -26,6 +31,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
         prelude: Vec::new(),
         components: BTreeMap::new(),
         body: Vec::new(),
+        plans: Vec::new(),
         outputs: Vec::new(),
         ifc: Vec::new(),
     };
@@ -92,6 +98,31 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                     },
                 );
             }
+            "plan" => {
+                // `plan 1:50`
+                let one = c.number()?;
+                c.sym(":")?;
+                let scale = c.number()?;
+                c.end()?;
+                if one != 1.0 || scale < 1.0 {
+                    return Err(syntax(line.no, "write the scale as «plan 1:50»"));
+                }
+                if def.plans.iter().any(|p| p.scale == scale) {
+                    return Err(syntax(
+                        line.no,
+                        format!("there is already a plan 1:{scale}"),
+                    ));
+                }
+                let body = statements(&line.children)?;
+                if let Some(bad) = first_where(&body, &|s| matches!(s, Stmt::Box { .. })) {
+                    return Err(syntax(bad, "a plan symbol draws lines, not boxes"));
+                }
+                def.plans.push(PlanSymbol {
+                    scale,
+                    body,
+                    line: line.no,
+                });
+            }
             "body" => {
                 c.end()?;
                 if seen_body {
@@ -99,6 +130,9 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                 }
                 seen_body = true;
                 def.body = statements(&line.children)?;
+                if let Some(bad) = first_where(&def.body, &Stmt::is_plan_mark) {
+                    return Err(syntax(bad, "lines, outlines and arcs go in a «plan» block"));
+                }
             }
             "outputs" | "ifc" => {
                 c.end()?;
@@ -210,7 +244,7 @@ fn params(
         if def.params.iter().any(|p| p.name == name) {
             return Err(syntax(line.no, format!("parameter «{name}» is repeated")));
         }
-        if BUILTINS.contains(&name.as_str()) {
+        if BUILTINS.contains(&name.as_str()) || PLAN_BUILTINS.contains(&name.as_str()) {
             return Err(syntax(
                 line.no,
                 format!("«{name}» is provided by the program and cannot be declared"),
@@ -469,6 +503,59 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
                 line: no,
             }
         }
+        "line" => {
+            let from = c.pair()?;
+            c.keyword("to")?;
+            let to = c.pair()?;
+            let pen = c.pen()?;
+            let dashed = c.peek_ident("dashed");
+            if dashed {
+                c.ident()?;
+            }
+            Stmt::Line {
+                from,
+                to,
+                pen,
+                dashed,
+                line: no,
+            }
+        }
+        "polygon" => {
+            let mut points = vec![c.pair()?];
+            while c.peek_sym("(") {
+                points.push(c.pair()?);
+            }
+            if points.len() < 3 {
+                return Err(syntax(no, "an outline needs at least three points"));
+            }
+            let pen = c.pen()?;
+            let filled = c.peek_ident("filled");
+            if filled {
+                c.ident()?;
+            }
+            Stmt::Polygon {
+                points,
+                pen,
+                filled,
+                line: no,
+            }
+        }
+        "arc" => {
+            c.keyword("center")?;
+            let center = c.pair()?;
+            c.keyword("from")?;
+            let from = c.pair()?;
+            c.keyword("to")?;
+            let to = c.pair()?;
+            let pen = c.pen()?;
+            Stmt::Arc {
+                center,
+                from,
+                to,
+                pen,
+                line: no,
+            }
+        }
         "require" => {
             let cond = c.expr()?;
             c.keyword("else")?;
@@ -487,6 +574,40 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
     }
     c.end()?;
     Ok(stmt)
+}
+
+/// The line of the first statement (nested ones included) that matches.
+fn first_where(stmts: &[Stmt], pred: &dyn Fn(&Stmt) -> bool) -> Option<usize> {
+    for s in stmts {
+        if pred(s) {
+            return Some(stmt_line(s));
+        }
+        let inner = match s {
+            Stmt::Repeat { body, .. } => first_where(body, pred),
+            Stmt::If {
+                then, otherwise, ..
+            } => first_where(then, pred).or_else(|| first_where(otherwise, pred)),
+            _ => None,
+        };
+        if inner.is_some() {
+            return inner;
+        }
+    }
+    None
+}
+
+pub(crate) fn stmt_line(s: &Stmt) -> usize {
+    match s {
+        Stmt::Box { line, .. }
+        | Stmt::Use { line, .. }
+        | Stmt::Repeat { line, .. }
+        | Stmt::If { line, .. }
+        | Stmt::Let { line, .. }
+        | Stmt::Line { line, .. }
+        | Stmt::Polygon { line, .. }
+        | Stmt::Arc { line, .. } => *line,
+        Stmt::Require(r) => r.line,
+    }
 }
 
 fn no_children(line: &Line) -> Result<(), FamilyError> {
@@ -530,12 +651,20 @@ fn check_names(def: &FamilyDef) -> Result<(), FamilyError> {
                     walk(def, then, stack)?;
                     walk(def, otherwise, stack)?;
                 }
-                Stmt::Box { .. } | Stmt::Let { .. } | Stmt::Require(_) => {}
+                Stmt::Box { .. }
+                | Stmt::Let { .. }
+                | Stmt::Require(_)
+                | Stmt::Line { .. }
+                | Stmt::Polygon { .. }
+                | Stmt::Arc { .. } => {}
             }
         }
         Ok(())
     }
     walk(def, &def.body, &mut Vec::new())?;
+    for p in &def.plans {
+        walk(def, &p.body, &mut Vec::new())?;
+    }
     for comp in def.components.values() {
         walk(def, &comp.body, &mut vec![comp.name.clone()])?;
     }
@@ -665,6 +794,36 @@ impl<'a> Cursor<'a> {
                 Ok(Value::Bool(b))
             }
             _ => Ok(Value::Number(self.signed_number()?)),
+        }
+    }
+
+    fn peek_sym(&self, sym: &str) -> bool {
+        matches!(self.peek(), Some(Tok::Sym(s)) if *s == sym)
+    }
+
+    fn pair(&mut self) -> Result<[Expr; 2], FamilyError> {
+        self.sym("(")?;
+        let x = self.expr()?;
+        self.sym(",")?;
+        let y = self.expr()?;
+        self.sym(")")?;
+        Ok([x, y])
+    }
+
+    /// `pen cut|frame|view|thin|hatch`.
+    fn pen(&mut self) -> Result<Pen, FamilyError> {
+        self.keyword("pen")?;
+        let no = self.no;
+        match self.ident()?.as_str() {
+            "cut" => Ok(Pen::Cut),
+            "frame" => Ok(Pen::Frame),
+            "view" => Ok(Pen::View),
+            "thin" => Ok(Pen::Thin),
+            "hatch" => Ok(Pen::Hatch),
+            other => Err(syntax(
+                no,
+                format!("unknown pen «{other}» (cut, frame, view, thin or hatch)"),
+            )),
         }
     }
 

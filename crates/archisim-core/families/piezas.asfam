@@ -37,3 +37,38 @@ component glazing(w, h, f, d, n, frame_mat, glass_mat)
     if i > 0
       use block(a - f, a, d, f, h - f, frame_mat)
     use block(a, a + clear, min(0.024, d), f, h - f, glass_mat)
+
+# ---- Planta ---------------------------------------------------------------
+# En planta, «y» es el eje a través del muro hacia el lado al que abren las
+# hojas; wall_ext y wall_int (los pone el programa) son las caras del muro,
+# medidas desde el plano medio del marco.
+
+# Jamba o marco cortado: rectángulo del fondo del marco, que tapa el muro.
+component frame_cut_plan(xa, xb, d)
+  polygon (xa, -d / 2) (xb, -d / 2) (xb, d / 2) (xa, d / 2) pen frame filled
+
+# Hoja de puerta abierta a 90° (con su grueso) y su giro. «hx» es la
+# bisagra; «dir», 1 si la hoja cierra hacia +x y -1 si hacia -x.
+component door_leaf_plan(hx, dir, lw, d)
+  let lt = min(0.04, lw / 4)
+  polygon (hx, d / 2) (hx, d / 2 + lw) (hx + dir * lt, d / 2 + lw) (hx + dir * lt, d / 2) pen frame filled
+  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin
+
+# Hoja de puerta a 1:100: una línea y el giro.
+component door_leaf_plan_simple(hx, dir, lw, d)
+  line (hx, d / 2) to (hx, d / 2 + lw) pen frame
+  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin
+
+# Hoja de ventana abierta a 90° (línea fina) y su giro.
+component window_leaf_plan(hx, dir, lw, d)
+  line (hx, d / 2) to (hx, d / 2 + lw) pen thin
+  arc center (hx, d / 2) from (hx, d / 2 + lw) to (hx + dir * lw, d / 2) pen thin
+
+# Vierteaguas por fuera, del marco hasta 3 cm más allá de la fachada (solo
+# sobresale de las jambas fuera del muro), y canto del alféizar por dentro.
+component sill_plan(w, d, wall_e, wall_i)
+  let es = if wall_e > 0 then 1 else -1
+  let fe = es * d / 2
+  let out = wall_e + es * 0.03
+  polygon (-w / 2, fe) (w / 2, fe) (w / 2, wall_e) (w / 2 + 0.02, wall_e) (w / 2 + 0.02, out) (-w / 2 - 0.02, out) (-w / 2 - 0.02, wall_e) (-w / 2, wall_e) pen thin filled
+  line (-w / 2, wall_i) to (w / 2, wall_i) pen thin

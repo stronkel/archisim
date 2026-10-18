@@ -28,6 +28,32 @@ pub struct Part {
     pub line: usize,
 }
 
+/// One mark of a plan symbol, in the family's own axes (metres, `x` and
+/// `y` as for [`Part`]).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Mark {
+    Line {
+        from: [f64; 2],
+        to: [f64; 2],
+        pen: Pen,
+        dashed: bool,
+    },
+    /// Closed outline; `filled` hides what is drawn under it (white).
+    Polygon {
+        points: Vec<[f64; 2]>,
+        pen: Pen,
+        filled: bool,
+    },
+    /// Arc around `center` from `from` to `to`, the short way; the radius
+    /// is the distance from the centre to `from`.
+    Arc {
+        center: [f64; 2],
+        from: [f64; 2],
+        to: [f64; 2],
+        pen: Pen,
+    },
+}
+
 /// The result of evaluating a family.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Evaluation {
@@ -84,12 +110,7 @@ impl FamilyDef {
         for (k, v) in builtins.iter().chain(type_values).chain(instance_values) {
             base.insert(k.clone(), v.clone());
         }
-        let mut run = Run {
-            def: self,
-            parts: Vec::new(),
-            steps: 0,
-            depth: 0,
-        };
+        let mut run = Run::new(self, Mode::Body);
         let mut env = vec![base];
         run.exec(&self.prelude, &mut env)?;
         let outputs = run.assign(&self.outputs, &mut env)?;
@@ -101,6 +122,35 @@ impl FamilyDef {
             outputs,
             ifc,
         })
+    }
+
+    /// Draws the plan symbol for a scale (the nearest one written, see
+    /// [`FamilyDef::plan_for`]). `builtins` are those of
+    /// [`FamilyDef::evaluate`] plus, for wall-hosted families, the plan ones
+    /// (see [`crate::PLAN_BUILTINS`]). A family without plan symbols draws
+    /// nothing.
+    pub fn evaluate_plan(
+        &self,
+        type_values: &Values,
+        instance_values: &Values,
+        builtins: &Values,
+        scale: f64,
+    ) -> Result<Vec<Mark>, FamilyError> {
+        let Some(symbol) = self.plan_for(scale) else {
+            return Ok(Vec::new());
+        };
+        self.check_values(ParamScope::Type, type_values)?;
+        self.check_values(ParamScope::Instance, instance_values)?;
+        let mut base: HashMap<String, Value> = HashMap::new();
+        for (k, v) in builtins.iter().chain(type_values).chain(instance_values) {
+            base.insert(k.clone(), v.clone());
+        }
+        let mut run = Run::new(self, Mode::Plan);
+        let mut env = vec![base];
+        run.exec(&self.prelude, &mut env)?;
+        env.push(HashMap::new());
+        run.exec(&symbol.body, &mut env)?;
+        Ok(run.marks)
     }
 
     /// Whether a parameter is shown in the settings dialog for these values
@@ -119,12 +169,7 @@ impl FamilyDef {
             .map(|p| (p.name.clone(), p.default.clone()))
             .collect();
         base.extend(values.iter().map(|(k, v)| (k.clone(), v.clone())));
-        let mut run = Run {
-            def: self,
-            parts: Vec::new(),
-            steps: 0,
-            depth: 0,
-        };
+        let mut run = Run::new(self, Mode::Body);
         !matches!(run.eval(cond, &[base], p.line), Ok(Value::Bool(false)))
     }
 }
@@ -181,9 +226,18 @@ fn check_value(p: &Param, v: &Value) -> Result<(), FamilyError> {
 
 type Env = Vec<HashMap<String, Value>>;
 
+/// What is being evaluated: the 3D body or a plan symbol.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Body,
+    Plan,
+}
+
 struct Run<'a> {
     def: &'a FamilyDef,
+    mode: Mode,
     parts: Vec<Part>,
+    marks: Vec<Mark>,
     steps: usize,
     depth: usize,
 }
@@ -195,7 +249,44 @@ fn eval_err(line: usize, message: impl Into<String>) -> FamilyError {
     }
 }
 
-impl Run<'_> {
+impl<'a> Run<'a> {
+    fn new(def: &'a FamilyDef, mode: Mode) -> Self {
+        Self {
+            def,
+            mode,
+            parts: Vec::new(),
+            marks: Vec::new(),
+            steps: 0,
+            depth: 0,
+        }
+    }
+
+    fn point(
+        &mut self,
+        p: &[Expr; 2],
+        env: &[HashMap<String, Value>],
+        line: usize,
+    ) -> Result<[f64; 2], FamilyError> {
+        Ok([
+            self.number(&p[0], env, line)?,
+            self.number(&p[1], env, line)?,
+        ])
+    }
+
+    fn push_mark(&mut self, mark: Mark, line: usize) -> Result<(), FamilyError> {
+        if self.mode != Mode::Plan {
+            return Err(eval_err(
+                line,
+                "lines, outlines and arcs go in a «plan» block, not in the body",
+            ));
+        }
+        if self.marks.len() >= MAX_PARTS {
+            return Err(FamilyError::TooComplex { line });
+        }
+        self.marks.push(mark);
+        Ok(())
+    }
+
     fn tick(&mut self, line: usize) -> Result<(), FamilyError> {
         self.steps += 1;
         if self.steps > MAX_STEPS {
@@ -233,6 +324,56 @@ impl Run<'_> {
                         });
                     }
                 }
+                Stmt::Line {
+                    from,
+                    to,
+                    pen,
+                    dashed,
+                    line,
+                } => {
+                    self.tick(*line)?;
+                    let mark = Mark::Line {
+                        from: self.point(from, env, *line)?,
+                        to: self.point(to, env, *line)?,
+                        pen: *pen,
+                        dashed: *dashed,
+                    };
+                    self.push_mark(mark, *line)?;
+                }
+                Stmt::Polygon {
+                    points,
+                    pen,
+                    filled,
+                    line,
+                } => {
+                    self.tick(*line)?;
+                    let mut pts = Vec::with_capacity(points.len());
+                    for p in points {
+                        pts.push(self.point(p, env, *line)?);
+                    }
+                    let mark = Mark::Polygon {
+                        points: pts,
+                        pen: *pen,
+                        filled: *filled,
+                    };
+                    self.push_mark(mark, *line)?;
+                }
+                Stmt::Arc {
+                    center,
+                    from,
+                    to,
+                    pen,
+                    line,
+                } => {
+                    self.tick(*line)?;
+                    let mark = Mark::Arc {
+                        center: self.point(center, env, *line)?,
+                        from: self.point(from, env, *line)?,
+                        to: self.point(to, env, *line)?,
+                        pen: *pen,
+                    };
+                    self.push_mark(mark, *line)?;
+                }
                 Stmt::Box {
                     min,
                     max,
@@ -240,6 +381,9 @@ impl Run<'_> {
                     line,
                 } => {
                     self.tick(*line)?;
+                    if self.mode != Mode::Body {
+                        return Err(eval_err(*line, "a plan symbol draws lines, not boxes"));
+                    }
                     let mut a = [0.0; 3];
                     let mut b = [0.0; 3];
                     for k in 0..3 {
@@ -433,11 +577,21 @@ impl Run<'_> {
                     }
                     Ok(Value::Bool((x == y) == (*op == BinOp::Eq)))
                 }
+                BinOp::Add => {
+                    // Numbers add up; texts join ("SIDEHUNG" + "LEFT").
+                    match (self.eval(a, env, line)?, self.eval(b, env, line)?) {
+                        (Value::Number(x), Value::Number(y)) => finite(x + y),
+                        (Value::Text(x), Value::Text(y)) => Ok(Value::Text(x + &y)),
+                        (x, y) => Err(eval_err(
+                            line,
+                            format!("cannot add a {} and a {}", x.kind_name(), y.kind_name()),
+                        )),
+                    }
+                }
                 _ => {
                     let x = self.number(a, env, line)?;
                     let y = self.number(b, env, line)?;
                     match op {
-                        BinOp::Add => finite(x + y),
                         BinOp::Sub => finite(x - y),
                         BinOp::Mul => finite(x * y),
                         BinOp::Div => {

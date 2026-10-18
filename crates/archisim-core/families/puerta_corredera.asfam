@@ -1,7 +1,7 @@
 family "Puerta corredera"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta corredera de una hoja que desliza por la cara del muro, con cerco"
 
 include "piezas"
@@ -22,6 +22,30 @@ require 2 * frame_width < width and 2 * frame_width < height else "El cerco no d
 body
   use door_lining(width, height, frame_width, frame_depth, frame_material)
   use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+
+# Cerco cortado; la hoja, sobre la cara del muro del lado al que abre, a
+# medio abrir hacia el lado de la mano, con una flecha.
+plan 1:50
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  let s = if hand == "left" then -1 else 1
+  let shift = s * (c1 - c0) / 2
+  let face = max(wall_ext, wall_int)
+  polygon (c0 - 0.05 + shift, face + 0.01) (c1 + 0.05 + shift, face + 0.01) (c1 + 0.05 + shift, face + 0.05) (c0 - 0.05 + shift, face + 0.05) pen frame filled
+  let ya = face + 0.13
+  let tip = s * (c1 - c0) * 0.3
+  line (0, ya) to (tip, ya) pen thin
+  line (tip, ya) to (tip - s * 0.06, ya + 0.03) pen thin
+  line (tip, ya) to (tip - s * 0.06, ya - 0.03) pen thin
+
+plan 1:100
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let shift = (if hand == "left" then -1 else 1) * (c1 - c0) / 2
+  let face = max(wall_ext, wall_int)
+  line (c0 + shift, face + 0.03) to (c1 + shift, face + 0.03) pen frame
 
 outputs
   opening_width = width

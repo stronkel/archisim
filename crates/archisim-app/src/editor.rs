@@ -163,13 +163,16 @@ impl Editor {
         std::fs::write(path, text).map_err(|e| format!("no se pudo escribir el IFC: {e}"))
     }
 
-    /// Writes the 1:50 plan of the active level as SVG.
-    pub fn export_plan(&self, path: &Path, show_reference_lines: bool) -> EditResult {
+    /// Writes the plan of the active level as SVG at a scale (50 for
+    /// 1:50): line weights are paper weights, and doors and windows use the
+    /// plan symbol their family gives for that scale.
+    pub fn export_plan(&self, path: &Path, show_reference_lines: bool, scale: f64) -> EditResult {
         let svg = render_plan(
             self.model(),
             self.level,
             &PlanOptions {
                 show_reference_lines,
+                scale,
                 ..PlanOptions::default()
             },
         );
@@ -620,7 +623,7 @@ mod tests {
         let reopened = Editor::open(&path).unwrap();
         assert_eq!(reopened.model(), ed.model());
         ed.export_ifc(&dir.join("casa.ifc")).unwrap();
-        ed.export_plan(&dir.join("casa.svg"), false).unwrap();
+        ed.export_plan(&dir.join("casa.svg"), false, 50.0).unwrap();
         let ifc = std::fs::read_to_string(dir.join("casa.ifc")).unwrap();
         assert!(ifc.contains("IFCWALL("));
         std::fs::write(dir.join("roto.archisim"), "{").unwrap();

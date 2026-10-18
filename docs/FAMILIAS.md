@@ -1,6 +1,6 @@
 # Familias paramétricas — diseño (fase 2, punto 2.1)
 
-> 18 de octubre de 2026 · diseño aprobado por Antonio. **Bloque A hecho (v0.14):** el lenguaje, las cinco familias de sistema y los tipos por familia con marca. Planta, IFC, configurador y biblioteca siguen en los bloques B a E.
+> 18 de octubre de 2026 · diseño aprobado por Antonio. **Bloque A hecho (v0.14):** el lenguaje, las familias de sistema y los tipos por familia con marca. **Bloque B hecho (v0.15):** símbolos de planta por escala desde las recetas, ventana practicable de 1 a 4 hojas con funcionamiento por hoja (también en IFC), y el diálogo de tipos generado desde la receta. Siguen C (IFC desde las familias), D (configurador completo) y E (navegador y biblioteca).
 > Equivale a las familias de Revit (`.rfa`) y a los objetos GDL de ArchiCAD,
 > con formato y contenido propios (sala limpia: nada de GDL ni de `.rfa`).
 
@@ -15,6 +15,7 @@
 | — | Dónde viven las familias | **Copia dentro del proyecto** (como Revit): el `.archisim` se abre igual en cualquier equipo. La biblioteca en disco sirve para cargar y actualizar |
 | — | Nivel de detalle del símbolo en planta | **Por escala** (como ArchiCAD): 1:100 sencillo, 1:50 medio, 1:20 detallado, automático |
 | — | Por dónde empezar | **Puertas y ventanas**: las actuales se convierten en familias; mobiliario y sanitarios después |
+| — | Ventana fija (18/10, tras el bloque A) | **No es una familia aparte**: es una ventana practicable con hojas fijas. Cada hoja se configura por separado (fija, practicable, oscilobatiente, abatible, proyectante, basculante), como la carpintería real y como lo modela IFC |
 
 ## Dos niveles: configurador y receta
 
@@ -33,13 +34,13 @@ Familias iniciales:
 
 | Puertas | Ventanas |
 |---|---|
-| **Abatible**: 1 o 2 hojas (iguales o desiguales), con o sin tarjas | **Practicable / oscilobatiente**: 1 a 3 hojas, con fijos combinados |
-| **Corredera**: sobre muro, o dentro del tabique en armazón | **Corredera**: 2 a 4 hojas |
-| | **Fija** |
+| **Abatible**: 1 o 2 hojas (hoy iguales; desiguales, hoja activa y tarjas en la librería) | **Practicable**: 1 a 4 hojas, cada una fija, practicable, oscilobatiente, abatible, proyectante o basculante, con montantes |
+| **Corredera**: sobre muro (empotrada en armazón, en la librería) | **Corredera**: 2 hojas (hasta 4 y hojas fijas, en la librería) |
+| **Plegable** (en la librería): hojas que se pliegan de dos en dos sobre una guía. Es familia aparte porque su planta (el zigzag), su 3D y su funcionamiento IFC (`FOLDING_TO_LEFT`, `FOLDING_TO_RIGHT`, `DOUBLE_DOOR_FOLDING`) son otros | |
 
 La balconera es la ventana practicable con antepecho 0. Plegables, pivotantes, basculantes y puertas de garaje vienen después en la librería (2.2), con las mismas piezas.
 
-Los tipos actuales de la plantilla se convierten así: puerta de 1 y de 2 hojas → *Abatible*; puerta corredera → *Corredera*; ventana fija → *Fija*; practicable de 1 y de 2 hojas → *Practicable*; ventana corredera → *Corredera*.
+Los tipos anteriores a las familias se convierten así: puerta de 1 y de 2 hojas → *Abatible*; puerta corredera → *Corredera*; ventana fija → *Practicable* de 1 hoja fija; practicable de 1 y de 2 hojas → *Practicable* con sus hojas practicables; ventana corredera → *Corredera*.
 
 ## Tipos: reutilizables y medibles
 
@@ -63,7 +64,7 @@ Una familia es un fichero `.asfam` con estas partes:
 
 Ejes de las familias alojadas en muro (metros): origen en el **centro del hueco de obra**, a la altura del **antepecho** (el suelo en las puertas) y en el **plano medio del marco**; **x** a lo largo del muro, hacia la derecha vista desde el lado al que abren las hojas; **y** a través del muro, hacia ese lado; **z** hacia arriba. Así la familia no necesita saber el espesor ni la orientación del muro, y la mano y el lado de apertura la reflejan solos.
 
-## El lenguaje (como está en el bloque A)
+## El lenguaje (como está en el bloque B)
 
 Palabras clave en inglés, como IFC, porque el código será abierto; lo que ve el usuario (nombres, secciones, opciones, mensajes) va en español. La indentación (con espacios) marca qué va dentro de qué. `#` empieza un comentario.
 
@@ -110,23 +111,38 @@ body
   if shutter
     use shutter_box(width, height, frame_depth, box_h, frame_material)
 
+plan 1:50                      # símbolo en planta a 1:50 (y a 1:20, la más cercana)
+  if sill_height > 0
+    use sill_plan(width, frame_depth, wall_ext, wall_int)   # vierteaguas
+  use frame_cut_plan(-width / 2, width / 2, frame_depth)     # marco cortado
+  line (-width / 2 + f, 0) to (width / 2 - f, 0) pen thin     # vidrio
+  if hand == "left"
+    use window_leaf_plan(-width / 2 + f, 1, width - 2 * f, frame_depth)
+
+plan 1:100                     # a 1:100, más sencillo
+  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+
 outputs                        # lo que lee el resto del programa
   opening_width = width
   operation = if leaves == 2 then "double_casement" else "single_casement"
 
-ifc                            # datos IFC (los usará el bloque C)
-  predefined_type = "WINDOW"
+ifc                            # datos IFC
+  panel_count = leaves
+  panel_1 = "SIDEHUNG" + "LEFT" + "HAND"
+  panel_2 = "SIDEHUNGRIGHTHAND"
 ```
 
 - **Parámetros**: `nombre clase = valor`, con `range`, `label` y `visible_if` opcionales. Clases: `length`, `angle` (radianes), `number`, `integer`, `bool` (`yes`/`no`), `material` (por defecto, el nombre de un material; ArchiSim busca el del proyecto), `text` y `choice("a", "b", …)`.
 - **Fórmulas**: `+ - * /`, comparaciones (`== != < <= > >=`), `and`, `or`, `not`, `if … then … else …` y las funciones `min`, `max`, `abs`, `sqrt`, `floor`, `ceil`, `round`, `sin`, `cos`, `tan`.
 - **Geometría**: `box (x, y, z) to (x, y, z) material m`; `use pieza(…)`; `repeat i in a..b` (b excluido); `if` / `else if` / `else`; `let`. Una pieza común solo ve sus propios argumentos.
+- **Textos**: se unen con `+` (`"SIDEHUNG" + side + "HAND"`).
+- **Símbolos de planta**: un bloque `plan 1:N` por escala; se dibuja el de la escala más cercana (1:20 usa el de 1:50 si no hay otro). Dentro, `line (x, y) to (x, y) pen P [dashed]`, `polygon (x, y) (x, y) (x, y)… pen P [filled]` (relleno blanco, tapa lo que hay debajo) y `arc center (x, y) from (x, y) to (x, y) pen P` (por el camino corto), además de `let`, `if`, `repeat` y piezas comunes. Plumas: `cut` (corte), `frame` (marcos y hojas), `view` (proyección), `thin` (vidrios, giros, cantos) y `hatch`; su grosor real lo pone la escala (D5), no la familia. Una caja no puede ir en planta ni una línea en el cuerpo 3D.
 - **Reglas**: `require condición else "mensaje"`; si no se cumple, el cambio se rechaza con ese mensaje.
-- **Lo que pone el programa**: `opens_to` (`"interior"` / `"exterior"`) y `hand` (`"left"` / `"right"`, UNE-EN 12519) en las familias alojadas en muro.
-- **Salidas que lee ArchiSim** de una familia de puerta o ventana: `opening_width`, `opening_height`, `frame_width`, `frame_depth`, `frame_material`, `panel_material` y `operation` (`single_swing`, `double_swing`, `sliding`; `fixed`, `single_casement`, `double_casement`, `sliding`). La planta y el IFC las usan hasta los bloques B y C.
+- **Lo que pone el programa**: `opens_to` (`"interior"` / `"exterior"`) y `hand` (`"left"` / `"right"`, UNE-EN 12519) en las familias alojadas en muro; en planta, además, `wall_ext` y `wall_int` (dónde están las caras exterior e interior del muro, en los ejes de la familia) y `sill_height` (antepecho).
+- **Salidas que lee ArchiSim** de una familia de puerta o ventana: `opening_width`, `opening_height`, `frame_width`, `frame_depth`, `frame_material`, `panel_material` y `operation` (`single_swing`, `double_swing`, `sliding`; `fixed`, `single_casement`, `double_casement`, `sliding`); en `ifc`, para ventanas, `panel_count` y `panel_1`… con el funcionamiento IFC de cada hoja (`FIXEDCASEMENT`, `SIDEHUNGLEFTHAND`, `TILTANDTURNRIGHTHAND`, `TOPHUNG`…). El IFC sigue escribiendo el cuerpo y los datos del tipo como antes hasta el bloque C.
 - **Límites de seguridad**: sin acceso a ficheros ni red; como mucho 1 000 vueltas por `repeat`, 20 000 piezas y 32 piezas anidadas.
 
-Las recetas de las cinco familias de sistema están en `crates/archisim-core/families/` (`puerta_abatible.asfam`, `puerta_corredera.asfam`, `ventana_fija.asfam`, `ventana_practicable.asfam`, `ventana_corredera.asfam`), con sus piezas comunes en `piezas.asfam`. Sirven de ejemplo.
+Las recetas de las cuatro familias de sistema están en `crates/archisim-core/families/` (`puerta_abatible.asfam`, `puerta_corredera.asfam`, `ventana_practicable.asfam`, `ventana_corredera.asfam`), con sus piezas comunes de 3D y de planta en `piezas.asfam`. Sirven de ejemplo.
 
 ## Reglas del sistema
 
@@ -143,9 +159,9 @@ Las recetas de las cinco familias de sistema están en `crates/archisim-core/fam
 | Bloque | Qué | Criterio de hecho |
 |---|---|---|
 | **A · Núcleo** ✅ v0.14 | Lector de recetas: parámetros con secciones y visibilidad, fórmulas, condiciones, repeticiones, piezas comunes, geometría 3D. Tipos con nombre, marca y familia. Los tipos actuales pasan a las cinco familias (abatible, corredera; practicable, corredera, fija). Formato `.archisim` **versión 3** con migración | La demo y los proyectos v1/v2 se abren y dan **el mismo 3D y el mismo IFC** que hoy (volúmenes y `GlobalId` incluidos), validado con IfcOpenShell |
-| **B · Planta** | Símbolos 2D por nivel de detalle y alzado; el dibujo fijo de puertas y ventanas de `archisim-plan` se sustituye por el de las familias | La planta 1:50 de la demo sale igual que hoy (comparada en imagen); nuevas plantas 1:100 y 1:20 para revisar |
+| **B · Planta** ✅ v0.15 | Símbolos de planta por escala (1:50 y 1:100; el 1:20 y el alzado, con D); el dibujo fijo de puertas y ventanas de `archisim-plan` se sustituye por el de las familias. Además: la fija entra en la practicable, de 1 a 4 hojas con funcionamiento por hoja (también en el IFC y la importación); el diálogo de tipos muestra los parámetros de la receta por secciones; tipo nuevo de cualquier familia | La planta 1:50 de la demo sale igual que antes (comparada en imagen, 0 píxeles distintos) y 176 casos de prueba dibujan lo mismo; plantas 1:100 para revisar |
 | **C · IFC** | Tipos con nombre y marca, Psets desde los parámetros, `ArchiSim_Family`, importación de lo exportado | Ida y vuelta idéntica; IFC abierto en ArchiCAD y Revit (Antonio) |
-| **D · Configurador** | El diálogo de tipos generado desde la receta, por secciones, con vista previa en planta, alzado y 3D en tiempo real; puntos de control en planta | Probado con clics simulados y en la ventana real; las opciones de una familia se recorren todas |
+| **D · Configurador** | Lo que falta del diálogo generado desde la receta (hecho en B): vista previa en alzado y 3D en tiempo real junto a la de planta, símbolo 1:20 y alzado en las recetas; puntos de control en planta | Probado con clics simulados y en la ventana real; las opciones de una familia se recorren todas |
 | **E · Navegador y biblioteca** | Navegador de familias y tipos con nº de ejemplares; seleccionar ejemplares de un tipo; purgar; ficheros `.asfam` con catálogo de tipos; guardar tipo en biblioteca y cargar tipos en otro proyecto; herramienta **Objeto** para familias sueltas (mobiliario) | Un tipo creado en un proyecto se carga en otro y sale igual, con el mismo `GlobalId` |
 
 Después viene la **librería** (2.2): primero completar las cinco familias con todas sus opciones (premarco, tarjas, persiana y capialzado, vierteaguas, manillas, subdivisiones), luego mobiliario, sanitarios y cocina.

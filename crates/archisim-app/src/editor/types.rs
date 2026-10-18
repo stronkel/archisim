@@ -8,7 +8,7 @@
 //! import match materials by name, and the tool menus show types by name.
 
 use archisim_core::{
-    CutPattern, Layer, MaterialId, Model, NewOpeningType, OpeningTypeId, SlabFunction, SlabTypeId,
+    CutPattern, Layer, MaterialId, Model, OpeningTypeId, SlabFunction, SlabTypeId, Value,
     WallFunction, WallTypeId,
 };
 
@@ -232,19 +232,21 @@ impl Editor {
         self.transact(label, |m| m.duplicate_opening_type(id, name))
     }
 
-    /// Changes the type mark ("P-03") and description of a door or window
-    /// type. Marks are unique; an empty mark is allowed.
+    /// Changes the name, type mark ("P-03") and description of a door or
+    /// window type. Names and marks are unique; an empty mark is allowed.
     pub fn set_opening_type_info(
         &mut self,
         id: OpeningTypeId,
+        name: &str,
         mark: &str,
         description: &str,
     ) -> EditResult {
-        let current = self
-            .model()
+        let m = self.model();
+        let current = m
             .opening_type(id)
             .ok_or("el tipo de puerta o ventana no existe")?;
-        let (name, door) = (current.name.clone(), current.is_door());
+        let name = checked_name(m, Names::OpeningType, name, Some(&current.name))?;
+        let door = current.is_door();
         let label = if door {
             "Modificar tipo de puerta"
         } else {
@@ -256,20 +258,77 @@ impl Editor {
         })
     }
 
-    /// Redefines a door or window type; every one of the type changes with
-    /// it, keeping its centre and sill.
-    pub fn edit_opening_type(&mut self, id: OpeningTypeId, mut spec: NewOpeningType) -> EditResult {
-        let m = self.model();
-        let current = m
+    /// Changes one parameter of a door or window type's family; every one
+    /// of the type changes with it, keeping its centre and sill.
+    pub fn set_opening_type_value(
+        &mut self,
+        id: OpeningTypeId,
+        param: &str,
+        value: Value,
+    ) -> EditResult {
+        let current = self
+            .model()
             .opening_type(id)
-            .ok_or("el tipo de puerta o ventana no existe")?;
-        spec.name = checked_name(m, Names::OpeningType, &spec.name, Some(&current.name))?;
+            .ok_or("el tipo de puerta o ventana no existe")?
+            .clone();
         let label = if current.is_door() {
             "Modificar tipo de puerta"
         } else {
             "Modificar tipo de ventana"
         };
-        self.transact(label, |m| m.edit_opening_type(id, spec))
+        let mut values = current.values.clone();
+        values.insert(param.to_string(), value);
+        self.transact(label, |m| m.edit_family_type(id, current.family, values))
+    }
+
+    /// The families that make doors (or windows): those in the project and
+    /// the system ones, by name, in that order.
+    pub fn opening_families(&self, doors: bool) -> Vec<String> {
+        let category = if doors { "door" } else { "window" };
+        let mut names: Vec<String> = self
+            .model()
+            .families()
+            .filter(|f| f.is_opening() && f.def().category == category)
+            .map(|f| f.name().to_string())
+            .collect();
+        for (name, source) in archisim_core::family::system_families() {
+            let fits = archisim_core::Family::new(archisim_core::FamilyId(1), source)
+                .is_ok_and(|f| f.def().category == category);
+            if fits && !names.contains(&name) {
+                names.push(name);
+            }
+        }
+        names
+    }
+
+    /// A new type of a family, with the family's default values (loading a
+    /// system family into the project if needed). It gets a free name
+    /// ("Ventana practicable (nuevo)") and the next mark.
+    pub fn new_opening_type(&mut self, family_name: &str) -> EditResult<OpeningTypeId> {
+        let base = format!("{family_name} (nuevo)");
+        let taken = names(self.model(), Names::OpeningType);
+        let name = (1..)
+            .map(|n| match n {
+                1 => base.clone(),
+                n => format!("{family_name} (nuevo {n})"),
+            })
+            .find(|c| !taken.contains(c))
+            .unwrap_or(base);
+        let family_name = family_name.to_string();
+        self.transact("Nuevo tipo", move |m| {
+            let family = match m.family_by_name(&family_name) {
+                Some(f) => f.id,
+                None => m.system_family(&family_name)?,
+            };
+            let values = m.family_defaults(family, archisim_core::ParamScope::Type)?;
+            m.add_family_type(archisim_core::NewFamilyType {
+                family,
+                name,
+                mark: None,
+                description: String::new(),
+                values,
+            })
+        })
     }
 
     pub fn remove_opening_type(&mut self, id: OpeningTypeId) -> EditResult {
@@ -367,11 +426,15 @@ mod tests {
         // The template has four door types: the copy takes the next mark.
         assert_eq!(c.mark, "P-05");
 
-        ed.set_opening_type_info(copy, " P-10 ", "Baños").unwrap();
+        let copy_name = ed.model().opening_type(copy).unwrap().name.clone();
+        ed.set_opening_type_info(copy, &copy_name, " P-10 ", "Baños")
+            .unwrap();
         assert_eq!(ed.undo_label(), Some("Modificar tipo de puerta"));
         let c = ed.model().opening_type(copy).unwrap();
         assert_eq!((c.mark.as_str(), c.description.as_str()), ("P-10", "Baños"));
-        let err = ed.set_opening_type_info(door.id, "P-10", "").unwrap_err();
+        let err = ed
+            .set_opening_type_info(door.id, &door.name, "P-10", "")
+            .unwrap_err();
         assert_eq!(err, "la marca «P-10» ya la tiene otro tipo");
         ed.undo();
         assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-05");
@@ -384,20 +447,42 @@ mod tests {
             .find(|t| t.name.starts_with("Ventana practicable 2 hojas"))
             .unwrap()
             .clone();
-        let mut spec = NewOpeningType {
-            name: window.name.clone(),
-            kind: window.kind,
-            width: window.width,
-            height: window.height,
-            frame_width: 0.62,
-            frame_depth: window.frame_depth,
-            frame_material: window.frame_material,
-            panel_material: window.panel_material,
-        };
-        let err = ed.edit_opening_type(window.id, spec.clone()).unwrap_err();
-        assert_eq!(err, "El marco y el montante no dejan hueco para el vidrio");
-        spec.frame_width = 0.06;
-        ed.edit_opening_type(window.id, spec).unwrap();
+        let err = ed
+            .set_opening_type_value(window.id, "frame_width", Value::Number(0.62))
+            .unwrap_err();
+        assert_eq!(
+            err,
+            "El marco y los montantes no dejan hueco para el vidrio"
+        );
+        assert_eq!(
+            ed.model().opening_type(window.id).unwrap().frame_width,
+            window.frame_width
+        );
+        // One leaf fixed, the other tilt-and-turn: the IFC operations follow.
+        ed.set_opening_type_value(window.id, "leaf_1", Value::Text("fija".into()))
+            .unwrap();
+        ed.set_opening_type_value(window.id, "leaf_2", Value::Text("oscilobatiente".into()))
+            .unwrap();
+        assert_eq!(
+            ed.model().opening_type(window.id).unwrap().panels,
+            ["FIXEDCASEMENT", "TILTANDTURNRIGHTHAND"]
+        );
+        // A new type of a family the project does not have yet.
+        assert_eq!(
+            ed.opening_families(true),
+            ["Puerta abatible", "Puerta corredera"]
+        );
+        let n = ed.new_opening_type("Ventana practicable").unwrap();
+        let t = ed.model().opening_type(n).unwrap();
+        assert_eq!(
+            (t.name.as_str(), t.mark.as_str()),
+            ("Ventana practicable (nuevo)", "V-05")
+        );
+        let n2 = ed.new_opening_type("Ventana practicable").unwrap();
+        assert_eq!(
+            ed.model().opening_type(n2).unwrap().name,
+            "Ventana practicable (nuevo 2)"
+        );
     }
 
     #[test]

@@ -29,8 +29,8 @@ pub mod lettering;
 use std::fmt::Write as _;
 
 use archisim_core::{
-    CutPattern, DoorOperation, LayerFunction, LevelId, Model, OpeningKind, Point2, Slab,
-    WallFunction, WindowOperation, EPSILON,
+    CutPattern, LayerFunction, LevelId, Mark, Model, Pen, Point2, Slab, WallFunction, WallSide,
+    EPSILON,
 };
 use archisim_geom::{
     clip_span, openings_in_wall, wall_geometries, wall_pieces, EndCut, OpeningGeometry,
@@ -73,10 +73,6 @@ const HATCH_LINE: f64 = 0.09;
 const REF_LINE: f64 = 0.13;
 const VIEW_LINE: f64 = 0.18;
 const FRAME_LINE: f64 = 0.25;
-/// Thickness of a door leaf drawn in plan, in metres.
-const LEAF_THICKNESS: f64 = 0.04;
-/// How far the window sill board sticks out of the façade, in metres.
-const SILL_PROJECTION: f64 = 0.03;
 const SLAB_COVER: &str = "#f1f1ee";
 const HATCH_SPACING: f64 = 1.5;
 const TEXT_SIZE: f64 = 3.0;
@@ -203,7 +199,7 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
     for o in openings.iter().flatten() {
         match opening_view(o, options.cut_plane) {
-            OpeningView::Cut => draw_opening(&mut s, o, k),
+            OpeningView::Cut => draw_opening(&mut s, model, o, options.scale, k),
             OpeningView::Above => draw_opening_above(&mut s, o, k),
             OpeningView::Below => {}
         }
@@ -921,16 +917,6 @@ fn opening_view(o: &OpeningGeometry, cut_plane: f64) -> OpeningView {
     }
 }
 
-/// A closed rectangle from four corners, filled white.
-fn quad(s: &mut String, pts: [Point2; 4], weight: f64, k: f64) {
-    let _ = writeln!(
-        s,
-        r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
-        path(&pts),
-        num(weight * k)
-    );
-}
-
 fn line(s: &mut String, p: Point2, q: Point2, weight: f64, k: f64) {
     let _ = writeln!(
         s,
@@ -941,204 +927,102 @@ fn line(s: &mut String, p: Point2, q: Point2, weight: f64, k: f64) {
     );
 }
 
-/// A rectangle in the opening's own coordinates: `t` along the wall and
-/// offsets across it.
-fn rect(o: &OpeningGeometry, t0: f64, t1: f64, y0: f64, y1: f64) -> [Point2; 4] {
-    [
-        o.point(t0, y0),
-        o.point(t1, y0),
-        o.point(t1, y1),
-        o.point(t0, y1),
-    ]
-}
-
-/// A door or window crossed by the cut plane.
-fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
-    let (fe, fi, fw) = (o.frame_exterior, o.frame_interior, o.frame_width);
-    match o.kind {
-        OpeningKind::Door(op) => {
-            // Jambs of the frame ("cerco").
-            quad(s, rect(o, o.t0, o.t0 + fw, fi, fe), FRAME_LINE, k);
-            quad(s, rect(o, o.t1 - fw, o.t1, fi, fe), FRAME_LINE, k);
-            let (c0, c1) = (o.t0 + fw, o.t1 - fw);
-            match op {
-                DoorOperation::SingleSwing => {
-                    let (hinge, dir) = if o.hinge_at_start() {
-                        (c0, 1.0)
-                    } else {
-                        (c1, -1.0)
-                    };
-                    draw_leaf(s, o, hinge, dir, c1 - c0, Leaf::Door, k);
-                }
-                DoorOperation::DoubleSwing => {
-                    let w = (c1 - c0) / 2.0;
-                    draw_leaf(s, o, c0, 1.0, w, Leaf::Door, k);
-                    draw_leaf(s, o, c1, -1.0, w, Leaf::Door, k);
-                }
-                DoorOperation::Sliding => draw_sliding_leaf(s, o, c0, c1, k),
-            }
-        }
-        OpeningKind::Window(op) => {
-            let mid = (fe + fi) / 2.0;
-            // Sill wall seen below the cut: sill board outside, edge inside.
-            // The board runs from the frame to past the façade, and only
-            // beyond the façade does it reach past the jambs (behind them
-            // it is hidden by the cut wall).
-            if o.sill > EPSILON {
-                let (ext, out, lap) =
-                    (o.exterior_offset, o.exterior_offset + SILL_PROJECTION, 0.02);
-                let board = [
-                    o.point(o.t0, fe),
-                    o.point(o.t1, fe),
-                    o.point(o.t1, ext),
-                    o.point(o.t1 + lap, ext),
-                    o.point(o.t1 + lap, out),
-                    o.point(o.t0 - lap, out),
-                    o.point(o.t0 - lap, ext),
-                    o.point(o.t0, ext),
-                ];
+/// A door or window crossed by the cut plane: the plan symbol of its
+/// family for the drawing scale.
+///
+/// The family draws in its own axes: `x` along the wall from the centre of
+/// the opening, to the right seen from the side the leaves open to; `y`
+/// across the wall from the middle of the frame, towards that side.
+fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, k: f64) {
+    let mid = (o.t0 + o.t1) / 2.0;
+    let y_mid = (o.frame_exterior + o.frame_interior) / 2.0;
+    // The normal `n` points to the exterior. Seen from the exterior, the
+    // wall's direction runs to the left; seen from the interior, to the
+    // right.
+    let (sx, sy) = match o.opens_to {
+        WallSide::Exterior => (-1.0, 1.0),
+        WallSide::Interior => (1.0, -1.0),
+    };
+    let family_y = |offset: f64| sy * (offset - y_mid);
+    let Ok(marks) = model.opening_plan_symbol(
+        o.opening,
+        scale,
+        family_y(o.exterior_offset),
+        family_y(o.interior_offset),
+    ) else {
+        // A family that fails to draw (it should not: its values were
+        // checked) leaves the opening empty rather than the plan.
+        return;
+    };
+    let world = |p: [f64; 2]| o.point(mid + sx * p[0], y_mid + sy * p[1]);
+    for mark in marks {
+        match mark {
+            Mark::Line {
+                from,
+                to,
+                pen,
+                dashed,
+            } => {
+                let dash = if dashed {
+                    format!(r#" stroke-dasharray="{} {}""#, num(2.0 * k), num(1.0 * k))
+                } else {
+                    String::new()
+                };
                 let _ = writeln!(
                     s,
-                    r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
-                    path(&board),
-                    num(LAYER_LINE * k)
+                    r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"{dash}/>"#,
+                    pt(world(from)),
+                    pt(world(to)),
+                    num(pen_weight(pen) * k)
                 );
-                line(
+            }
+            Mark::Polygon {
+                points,
+                pen,
+                filled,
+            } => {
+                let pts: Vec<Point2> = points.into_iter().map(world).collect();
+                let _ = writeln!(
                     s,
-                    o.point(o.t0, o.interior_offset),
-                    o.point(o.t1, o.interior_offset),
-                    LAYER_LINE,
-                    k,
+                    r#"<path d="{}" fill="{}" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&pts),
+                    if filled { "white" } else { "none" },
+                    num(pen_weight(pen) * k)
                 );
             }
-            quad(s, rect(o, o.t0, o.t1, fi, fe), FRAME_LINE, k);
-            let (c0, c1) = (o.t0 + fw, o.t1 - fw);
-            match op {
-                WindowOperation::Fixed => {
-                    line(s, o.point(c0, mid), o.point(c1, mid), LAYER_LINE, k);
-                }
-                WindowOperation::SingleCasement => {
-                    line(s, o.point(c0, mid), o.point(c1, mid), LAYER_LINE, k);
-                    let (hinge, dir) = if o.hinge_at_start() {
-                        (c0, 1.0)
-                    } else {
-                        (c1, -1.0)
-                    };
-                    draw_leaf(s, o, hinge, dir, c1 - c0, Leaf::Window, k);
-                }
-                WindowOperation::DoubleCasement => {
-                    let tm = (o.t0 + o.t1) / 2.0;
-                    line(s, o.point(c0, mid), o.point(c1, mid), LAYER_LINE, k);
-                    line(s, o.point(tm, fi), o.point(tm, fe), FRAME_LINE, k);
-                    // Each leaf reaches the centre of the mullion.
-                    draw_leaf(s, o, c0, 1.0, tm - c0, Leaf::Window, k);
-                    draw_leaf(s, o, c1, -1.0, c1 - tm, Leaf::Window, k);
-                }
-                WindowOperation::Sliding => {
-                    // Two leaves on separate tracks, overlapping at the centre.
-                    let tm = (o.t0 + o.t1) / 2.0;
-                    let q = (fe - fi) / 4.0;
-                    let lap = fw / 2.0;
-                    quad(s, rect(o, c0, tm + lap, mid, mid + q), LAYER_LINE, k);
-                    quad(s, rect(o, tm - lap, c1, mid - q, mid), LAYER_LINE, k);
-                }
+            Mark::Arc {
+                center,
+                from,
+                to,
+                pen,
+            } => {
+                let (c, a, b) = (world(center), world(from), world(to));
+                let r = (a - c).length();
+                // Model counter-clockwise is screen counter-clockwise
+                // (sweep 0); always the short way round.
+                let sweep = if (a - c).cross(b - c) > 0.0 { 0 } else { 1 };
+                let _ = writeln!(
+                    s,
+                    r#"<path d="M{} A{r},{r} 0 0,{sweep} {}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    pt(a),
+                    pt(b),
+                    num(pen_weight(pen) * k),
+                    r = num(r)
+                );
             }
         }
     }
 }
 
-/// How an open leaf is drawn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Leaf {
-    /// A door leaf: a rectangle as thick as the leaf, medium line.
-    Door,
-    /// A window leaf: a single thin line.
-    Window,
-}
-
-/// A hinged leaf drawn open at 90°, with its swing. `dir` is +1 when the
-/// leaf closes towards growing `t` from its hinge, −1 otherwise.
-fn draw_leaf(
-    s: &mut String,
-    o: &OpeningGeometry,
-    hinge_t: f64,
-    dir: f64,
-    width: f64,
-    leaf: Leaf,
-    k: f64,
-) {
-    let h = o.point(hinge_t, o.swing_frame_face());
-    let out = o.swing_dir();
-    let along = o.u * dir;
-    let tip_open = h + out * width;
-    let tip_closed = h + along * width;
-    match leaf {
-        Leaf::Door => {
-            let lt = LEAF_THICKNESS.min(width / 4.0);
-            quad(
-                s,
-                [h, tip_open, tip_open + along * lt, h + along * lt],
-                FRAME_LINE,
-                k,
-            );
-        }
-        Leaf::Window => line(s, h, tip_open, LAYER_LINE, k),
+/// Paper line weight of a family pen, in millimetres.
+fn pen_weight(pen: Pen) -> f64 {
+    match pen {
+        Pen::Cut => CUT_LINE,
+        Pen::Frame => FRAME_LINE,
+        Pen::View => VIEW_LINE,
+        Pen::Thin => LAYER_LINE,
+        Pen::Hatch => HATCH_LINE,
     }
-    // Model counter-clockwise is screen counter-clockwise (sweep 0).
-    let sweep = if out.cross(along) > 0.0 { 0 } else { 1 };
-    let _ = writeln!(
-        s,
-        r#"<path d="M{} A{r},{r} 0 0,{sweep} {}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
-        pt(tip_open),
-        pt(tip_closed),
-        num(LAYER_LINE * k),
-        r = num(width)
-    );
-}
-
-/// A sliding leaf hung on the face of the wall, drawn half open towards the
-/// side it parks on, with an arrow.
-fn draw_sliding_leaf(s: &mut String, o: &OpeningGeometry, c0: f64, c1: f64, k: f64) {
-    let clear = c1 - c0;
-    let lap = 0.05;
-    let shift = if o.hinge_at_start() {
-        -clear / 2.0
-    } else {
-        clear / 2.0
-    };
-    let face = o.swing_face();
-    let sign = if o.swing_dir().dot(o.n) > 0.0 {
-        1.0
-    } else {
-        -1.0
-    };
-    let (y0, y1) = (face + sign * 0.01, face + sign * (0.01 + LEAF_THICKNESS));
-    quad(
-        s,
-        rect(o, c0 - lap + shift, c1 + lap + shift, y0, y1),
-        FRAME_LINE,
-        k,
-    );
-    // Arrow pointing where the leaf slides to open.
-    let ya = face + sign * (0.01 + LEAF_THICKNESS + 0.08);
-    let tm = (c0 + c1) / 2.0;
-    let tip = tm + shift.signum() * clear * 0.3;
-    let head = 0.06 * shift.signum();
-    line(s, o.point(tm, ya), o.point(tip, ya), LAYER_LINE, k);
-    line(
-        s,
-        o.point(tip, ya),
-        o.point(tip - head, ya + 0.03),
-        LAYER_LINE,
-        k,
-    );
-    line(
-        s,
-        o.point(tip, ya),
-        o.point(tip - head, ya - 0.03),
-        LAYER_LINE,
-        k,
-    );
 }
 
 /// A window above the cut plane: its outline, dashed, over the wall.
@@ -1193,8 +1077,15 @@ fn escape(text: &str) -> String {
 }
 
 #[cfg(test)]
+mod legacy_symbols;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use archisim_core::{
+        CutPattern as Pattern, DoorOperation, Hand, NewOpening, NewOpeningType, OpeningKind,
+        WindowOperation,
+    };
 
     #[test]
     fn hatching_is_cut_to_any_polygon() {
@@ -1482,5 +1373,150 @@ mod tests {
         assert!(svg.contains("stroke-dasharray"));
         // The drawing spans the three slabs: 14 m at 1:50 + margins.
         assert!(svg.contains("width=\"310.00mm\""), "{}", &svg[..200]);
+    }
+
+    /// The system families draw in plan what ArchiSim drew before families:
+    /// every operation, two sizes, both sides, both hands, with and without
+    /// sill, in a wall at an odd angle. Both drawings are rasterised and
+    /// compared pixel by pixel.
+    #[test]
+    fn system_families_draw_the_previous_plan_symbols() {
+        let mut m = Model::new("Regresión planta");
+        let lvl = m.add_level("P1", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], Pattern::Diagonal);
+        let wood = m.add_material("Madera", "wood", [190, 150, 100], Pattern::Solid);
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], Pattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "M",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.29,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: Point2::new(0.7, -1.3),
+                end: Point2::new(0.7 + 500.0 * 0.6, -1.3 + 500.0 * 0.8),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let kinds = [
+            OpeningKind::Door(DoorOperation::SingleSwing),
+            OpeningKind::Door(DoorOperation::DoubleSwing),
+            OpeningKind::Door(DoorOperation::Sliding),
+            OpeningKind::Window(WindowOperation::Fixed),
+            OpeningKind::Window(WindowOperation::SingleCasement),
+            OpeningKind::Window(WindowOperation::DoubleCasement),
+            OpeningKind::Window(WindowOperation::Sliding),
+        ];
+        let mut along = 1.0;
+        let mut compared = 0;
+        for kind in kinds {
+            for (width, fw, fd) in [(0.83, 0.053, 0.071), (1.457, 0.067, 0.12)] {
+                let t = m
+                    .add_opening_type(NewOpeningType {
+                        name: format!("{kind:?} {width}"),
+                        kind,
+                        width,
+                        height: 1.4,
+                        frame_width: fw,
+                        frame_depth: fd,
+                        frame_material: wood,
+                        panel_material: glass,
+                    })
+                    .unwrap();
+                let is_door = matches!(kind, OpeningKind::Door(_));
+                for opens_to in [WallSide::Interior, WallSide::Exterior] {
+                    for hand in [Hand::Left, Hand::Right] {
+                        for sill in if is_door { vec![0.0] } else { vec![0.0, 0.9] } {
+                            for setback in [None, Some(0.04)] {
+                                let id = m
+                                    .add_opening(NewOpening {
+                                        opening_type: t,
+                                        wall: w,
+                                        along,
+                                        sill,
+                                        opens_to,
+                                        hand,
+                                        setback,
+                                    })
+                                    .unwrap();
+                                along += 2.5;
+                                let o = archisim_geom::opening_geometry(&m, id).unwrap();
+                                let mut old = String::new();
+                                legacy_symbols::draw_opening(&mut old, &o, 0.05);
+                                let mut new = String::new();
+                                draw_opening(&mut new, &m, &o, 50.0, 0.05);
+                                assert_same_raster(
+                                    &old,
+                                    &new,
+                                    &o,
+                                    &format!(
+                                        "{kind:?} {opens_to:?} {hand:?} sill {sill} {setback:?}"
+                                    ),
+                                );
+                                compared += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(compared, 2 * 2 * 2 * 2 * (3 + 4 * 2));
+    }
+
+    /// Rasterises two symbol drawings around the opening and compares them.
+    fn assert_same_raster(old: &str, new: &str, o: &OpeningGeometry, what: &str) {
+        use resvg::{tiny_skia, usvg};
+        let c = o.point((o.t0 + o.t1) / 2.0, 0.0);
+        let half = 2.2;
+        let doc = |body: &str| {
+            format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="{} {} {} {}"><rect x="-1000" y="-1000" width="3000" height="3000" fill="white"/>{body}</svg>"#,
+                c.x - half,
+                -c.y - half,
+                2.0 * half,
+                2.0 * half
+            )
+        };
+        let raster = |svg: &str| {
+            let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap();
+            let mut pm = tiny_skia::Pixmap::new(400, 400).unwrap();
+            resvg::render(&tree, tiny_skia::Transform::identity(), &mut pm.as_mut());
+            pm
+        };
+        let (a, b) = (raster(&doc(old)), raster(&doc(new)));
+        let diffs: Vec<u8> = a
+            .data()
+            .chunks(4)
+            .zip(b.data().chunks(4))
+            .map(|(p, q)| {
+                p.iter()
+                    .zip(q.iter())
+                    .map(|(x, y)| x.abs_diff(*y))
+                    .max()
+                    .unwrap()
+            })
+            .filter(|d| *d > 2)
+            .collect();
+        let worst = diffs.iter().copied().max().unwrap_or(0);
+        assert!(!old.is_empty() && !new.is_empty(), "{what}");
+        // A mirrored family may draw the same outlines starting at another
+        // corner or in another order: that only leaves faint anti-aliasing
+        // noise (at most 15/255 here). A moved or missing line would differ
+        // by almost 255.
+        assert!(
+            worst <= 40,
+            "{what}: {} pixels, worst {worst}:\nold {old}\nnew {new}",
+            diffs.len()
+        );
     }
 }

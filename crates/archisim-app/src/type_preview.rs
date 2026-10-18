@@ -5,9 +5,8 @@
 //! preview shows is what the plan will show.
 
 use archisim_core::{
-    DoorOperation, Layer, LayerFunction, LevelId, MaterialId, Model, NewOpening, NewOpeningType,
-    NewWall, OpeningKind, OpeningType, Point2, ReferenceLine, WallFunction, WallSide,
-    WindowOperation,
+    DoorOperation, Layer, LayerFunction, LevelId, MaterialId, Model, NewOpening, NewWall,
+    OpeningKind, OpeningType, Point2, ReferenceLine, WallFunction, WallSide, WindowOperation,
 };
 use archisim_plan::PlanOptions;
 use eframe::egui::ColorImage;
@@ -85,22 +84,31 @@ pub fn opening_model(source: &Model, t: &OpeningType) -> Option<(Model, LevelId)
     };
     let length = t.width + 0.6;
     let (mut m, level) = layers_model(source, &layers, length)?;
-    let mut material = |id: MaterialId| -> Option<MaterialId> {
-        let mat = source.material(id)?.clone();
-        Some(m.add_material(mat.name, mat.category, mat.cut_color, mat.cut_pattern))
-    };
-    let frame_material = material(t.frame_material)?;
-    let panel_material = material(t.panel_material)?;
+    // The same family and values, with the materials copied over.
+    let mut copied: std::collections::HashMap<u64, MaterialId> = Default::default();
+    let mut values = t.values.clone();
+    for v in values.values_mut() {
+        if let archisim_core::Value::Material(id) = v {
+            let new = match copied.get(id) {
+                Some(n) => *n,
+                None => {
+                    let mat = source.material(MaterialId(*id))?.clone();
+                    let n = m.add_material(mat.name, mat.category, mat.cut_color, mat.cut_pattern);
+                    copied.insert(*id, n);
+                    n
+                }
+            };
+            *v = archisim_core::Value::Material(new.0);
+        }
+    }
+    let family = m.add_family(&source.family(t.family)?.source).ok()?;
     let ot = m
-        .add_opening_type(NewOpeningType {
+        .add_family_type(archisim_core::NewFamilyType {
+            family,
             name: t.name.clone(),
-            kind: t.kind,
-            width: t.width,
-            height: t.height,
-            frame_width: t.frame_width,
-            frame_depth: t.frame_depth,
-            frame_material,
-            panel_material,
+            mark: Some(t.mark.clone()),
+            description: String::new(),
+            values,
         })
         .ok()?;
     let wall = m.walls().next()?.id;

@@ -487,7 +487,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn export_plan(&mut self) {
+    fn export_plan(&mut self, scale: f64) {
         let level = self
             .ed
             .model()
@@ -495,14 +495,18 @@ impl ArchiSimApp {
             .map(|l| l.name.clone())
             .unwrap_or_default();
         let mut d = rfd::FileDialog::new()
-            .set_title("Exportar planta 1:50 (SVG)")
+            .set_title(format!("Exportar planta 1:{scale} (SVG)"))
             .add_filter("SVG", &["svg"])
-            .set_file_name(format!("{} - {}.svg", self.file_name_stem(), level));
+            .set_file_name(format!(
+                "{} - {} 1-{scale}.svg",
+                self.file_name_stem(),
+                level
+            ));
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
         }
         if let Some(path) = d.save_file() {
-            match self.ed.export_plan(&path, self.show_reference_lines) {
+            match self.ed.export_plan(&path, self.show_reference_lines, scale) {
                 Ok(()) => self.say(format!("Planta exportada en {}.", path.display())),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }
@@ -867,7 +871,10 @@ impl ArchiSimApp {
                     self.export_ifc();
                 }
                 if ui.button("Exportar planta 1:50 (SVG)…").clicked() {
-                    self.export_plan();
+                    self.export_plan(50.0);
+                }
+                if ui.button("Exportar planta 1:100 (SVG)…").clicked() {
+                    self.export_plan(100.0);
                 }
                 if ui
                     .add_enabled(
@@ -2561,6 +2568,7 @@ impl ArchiSimApp {
             .map(|w| w.guid.to_string())
             .unwrap_or_default();
         let family = types_ui::family_label(model, ot.family);
+        let leaves = leaves_summary(&ot);
         let operation = match ot.kind {
             OpeningKind::Door(d) => match d {
                 archisim_core::DoorOperation::SingleSwing => "Abatible 1 hoja",
@@ -2620,7 +2628,7 @@ impl ArchiSimApp {
                 ui.label(&family);
                 ui.end_row();
                 ui.label("Funcionamiento");
-                ui.label(operation);
+                ui.label(leaves.as_deref().unwrap_or(operation));
                 ui.end_row();
                 ui.label("Hueco de obra");
                 ui.label(format!("{} × {} mm", fmt_mm(ot.width), fmt_mm(ot.height)));
@@ -3091,6 +3099,23 @@ fn dashed(painter: &egui::Painter, a: Pos2, b: Pos2, color: Color32) {
 /// A text field that edits a length in millimetres and only reports a value
 /// when the user presses Enter or leaves the field (Escape cancels), so
 /// each change is one undo step.
+/// How each leaf of a window opens, for families with one setting per leaf
+/// ("3 hojas: fija · oscilobatiente · fija"); `None` for the others.
+fn leaves_summary(t: &archisim_core::OpeningType) -> Option<String> {
+    let n = t.values.get("leaves")?.as_number()? as usize;
+    let ops: Vec<&str> = (1..=n)
+        .map(|i| t.values.get(&format!("leaf_{i}"))?.as_text())
+        .collect::<Option<_>>()?;
+    Some(if n == 1 {
+        let mut c = ops[0].chars();
+        c.next()
+            .map(|f| f.to_uppercase().chain(c).collect())
+            .unwrap_or_default()
+    } else {
+        format!("{n} hojas: {}", ops.join(" · "))
+    })
+}
+
 pub fn length_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> {
     let text = text_edit_committed(ui, id, &fmt_mm(value), width)?;
     match parse_length(&text) {

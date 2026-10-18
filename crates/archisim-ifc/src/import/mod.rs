@@ -1638,6 +1638,8 @@ impl<'a> Importer<'a> {
         let lining_thickness = lining.and_then(|l| l.arg(5).as_f64()).map(|v| snap(v * k));
 
         let mut hand = None;
+        // How each window leaf opens, for the family's leaf settings.
+        let mut leaf_ops: Vec<String> = Vec::new();
         let kind = if is_door {
             let schema4 = self.report.schema.starts_with("IFC4");
             let own = if schema4 { fe.arg(11).as_enum() } else { None };
@@ -1680,15 +1682,22 @@ impl<'a> Importer<'a> {
                 .filter_map(|p| p.arg(4).as_enum())
                 .collect();
             let two = !matches!(partitioning, "SINGLE_PANEL" | "NOTDEFINED" | "USERDEFINED");
-            if partitioning.starts_with("TRIPLE") {
-                self.report
-                    .warn("Ventanas de tres hojas: se importan con dos.");
+            let sliding = panels.iter().any(|p| p.starts_with("SLIDING"));
+            if !sliding && (1..=4).contains(&panels.len()) {
+                leaf_ops = panels
+                    .iter()
+                    .map(|p| leaf_operation(p).to_string())
+                    .collect();
+            } else if partitioning.starts_with("TRIPLE") || panels.len() > 4 {
+                self.report.warn(
+                    "Ventanas de tres o más hojas sin el funcionamiento de cada hoja (o de más de cuatro): se importan con dos.",
+                );
             }
-            let op = if panels.iter().any(|p| p.starts_with("SLIDING")) {
+            let op = if sliding {
                 WindowOperation::Sliding
             } else if !panels.is_empty() && panels.iter().all(|p| *p == "FIXEDCASEMENT") {
                 WindowOperation::Fixed
-            } else if two {
+            } else if two || panels.len() > 1 {
                 WindowOperation::DoubleCasement
             } else {
                 WindowOperation::SingleCasement
@@ -1791,6 +1800,7 @@ impl<'a> Importer<'a> {
                     frame_material,
                     panel_material,
                 },
+                &leaf_ops,
             )
             .map_err(|e| format!("tipo no válido ({})", explain(&e)))?;
         let oid = self
@@ -1879,9 +1889,10 @@ impl<'a> Importer<'a> {
         ifc_type: Option<u64>,
         name: &str,
         spec: NewOpeningType,
+        leaf_ops: &[String],
     ) -> Result<OpeningTypeId, ModelError> {
         let micro = |v: f64| (v * 1e6).round() as i64;
-        let kind = format!("{:?}", spec.kind);
+        let kind = format!("{:?} {leaf_ops:?}", spec.kind);
         let key = (
             ifc_type,
             kind,
@@ -1901,6 +1912,31 @@ impl<'a> Importer<'a> {
         let id = self
             .model
             .add_opening_type(NewOpeningType { name, ..spec })?;
+        // A window family with one setting per leaf ("Ventana practicable"):
+        // as many leaves as the file has, each opening as it says.
+        if let Some(t) = self.model.opening_type(id).cloned() {
+            let per_leaf =
+                (1..=leaf_ops.len()).all(|i| t.values.contains_key(&format!("leaf_{i}")));
+            if !leaf_ops.is_empty() && per_leaf {
+                let mut values = t.values.clone();
+                values.insert(
+                    "leaves".into(),
+                    archisim_core::Value::Number(leaf_ops.len() as f64),
+                );
+                for (i, op) in leaf_ops.iter().enumerate() {
+                    values.insert(
+                        format!("leaf_{}", i + 1),
+                        archisim_core::Value::Text(op.clone()),
+                    );
+                }
+                // Too many leaves for the frame: keep what the file allows.
+                if self.model.edit_family_type(id, t.family, values).is_err() {
+                    self.report.warn(
+                        "Alguna ventana tiene más hojas de las que caben con su marco: se importa con menos.",
+                    );
+                }
+            }
+        }
         if let Some(g) = self.type_guid(ifc_type) {
             self.guids.opening_types.push((id, g));
         }
@@ -2111,3 +2147,16 @@ fn clean_outline(poly: &[[f64; 2]]) -> Vec<Point2> {
 
 #[cfg(test)]
 mod tests;
+
+/// The leaf setting of the "Ventana practicable" family for an IFC window
+/// panel operation (`IfcWindowPanelOperationEnum`).
+fn leaf_operation(op: &str) -> &'static str {
+    match op {
+        "FIXEDCASEMENT" => "fija",
+        "TILTANDTURNLEFTHAND" | "TILTANDTURNRIGHTHAND" => "oscilobatiente",
+        "BOTTOMHUNG" => "abatible",
+        "TOPHUNG" => "proyectante",
+        "PIVOTHORIZONTAL" => "basculante",
+        _ => "practicable",
+    }
+}

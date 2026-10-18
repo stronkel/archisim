@@ -6,9 +6,8 @@
 //! of the type, so the plan and the 3D view follow while editing.
 
 use archisim_core::{
-    CutPattern, DoorOperation, Layer, LayerFunction, MaterialId, Model, NewOpeningType,
-    OpeningKind, OpeningType, OpeningTypeId, SlabFunction, SlabTypeId, WallFunction, WallTypeId,
-    WindowOperation,
+    CutPattern, Layer, LayerFunction, MaterialId, Model, OpeningType, OpeningTypeId, SlabFunction,
+    SlabTypeId, WallFunction, WallTypeId,
 };
 use eframe::egui::{
     self, Color32, ComboBox, Id, RichText, TextureHandle, TextureOptions, Ui, Vec2,
@@ -63,9 +62,12 @@ pub(super) enum Action {
     EditSlab(SlabTypeId, String, SlabFunction, Vec<Layer>),
     DuplicateOpening(OpeningTypeId),
     RemoveOpening(OpeningTypeId),
-    EditOpening(OpeningTypeId, NewOpeningType),
-    /// Type mark and description.
-    EditOpeningInfo(OpeningTypeId, String, String),
+    /// One parameter of the type's family.
+    EditOpeningValue(OpeningTypeId, String, archisim_core::Value),
+    /// Name, type mark and description.
+    EditOpeningInfo(OpeningTypeId, String, String, String),
+    /// A new type of a family (by name): doors when true.
+    NewOpening(String, bool),
 }
 
 /// IFC material categories offered (`IfcMaterial.Category`), in Spanish.
@@ -149,43 +151,6 @@ fn wall_function_name(f: WallFunction) -> &'static str {
     match f {
         WallFunction::Exterior => "Exterior (fachada)",
         WallFunction::Interior => "Interior",
-    }
-}
-
-fn door_operation_name(d: DoorOperation) -> &'static str {
-    match d {
-        DoorOperation::SingleSwing => "Abatible 1 hoja",
-        DoorOperation::DoubleSwing => "Abatible 2 hojas",
-        DoorOperation::Sliding => "Corredera",
-    }
-}
-
-fn window_operation_name(w: WindowOperation) -> &'static str {
-    match w {
-        WindowOperation::Fixed => "Fija",
-        WindowOperation::SingleCasement => "Practicable 1 hoja",
-        WindowOperation::DoubleCasement => "Practicable 2 hojas",
-        WindowOperation::Sliding => "Corredera 2 hojas",
-    }
-}
-
-pub fn operation_name(k: OpeningKind) -> &'static str {
-    match k {
-        OpeningKind::Door(d) => door_operation_name(d),
-        OpeningKind::Window(w) => window_operation_name(w),
-    }
-}
-
-fn spec_of(t: &OpeningType) -> NewOpeningType {
-    NewOpeningType {
-        name: t.name.clone(),
-        kind: t.kind,
-        width: t.width,
-        height: t.height,
-        frame_width: t.frame_width,
-        frame_depth: t.frame_depth,
-        frame_material: t.frame_material,
-        panel_material: t.panel_material,
     }
 }
 
@@ -462,7 +427,25 @@ impl ArchiSimApp {
                 }
             });
         ui.add_space(6.0);
+        let doors = tab == TypesTab::Doors;
+        let families = match tab {
+            TypesTab::Doors | TypesTab::Windows => self.ed.opening_families(doors),
+            _ => Vec::new(),
+        };
         ui.horizontal(|ui| {
+            if !families.is_empty() {
+                ui.menu_button("＋ Nuevo…", |ui| {
+                    ui.label(RichText::new("Nuevo tipo de la familia:").weak());
+                    for f in &families {
+                        if ui.button(f).clicked() {
+                            actions.push(Action::NewOpening(f.clone(), doors));
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("Un tipo nuevo de una familia, con sus valores por defecto");
+            }
             let Some(id) = selected else { return };
             if ui
                 .button("⧉ Duplicar")
@@ -927,11 +910,11 @@ impl ArchiSimApp {
         let Some(t) = m.opening_type(id).cloned() else {
             return;
         };
+        let Some(family) = m.family(t.family).cloned() else {
+            return;
+        };
         let users = m.opening_type_users(id);
         let door = t.is_door();
-        let base = spec_of(&t);
-        let mut info: Option<(String, String)> = None;
-        let mut push = |spec: NewOpeningType| actions.push(Action::EditOpening(id, spec));
         ui.label(
             RichText::new(if door {
                 "Tipo de puerta · IfcDoorType"
@@ -941,140 +924,88 @@ impl ArchiSimApp {
             .strong(),
         );
         ui.add_space(4.0);
+        let mut info: Option<(String, String, String)> = None;
         egui::Grid::new(("ot-grid", id.0))
             .num_columns(2)
+            .min_col_width(OPENING_LABELS)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
                 ui.label("Nombre");
                 if let Some(new) =
                     text_edit_committed(ui, Id::unique(("ot-name", id.0)), &t.name, 300.0)
                 {
-                    push(NewOpeningType {
-                        name: new,
-                        ..base.clone()
-                    });
+                    info = Some((new, t.mark.clone(), t.description.clone()));
                 }
                 ui.end_row();
-                ui.label("Marca de tipo").on_hover_text(
-                    "Para etiquetas, tablas y mediciones (P-01, V-03…); única en el proyecto",
-                );
+                ui.label("Marca de tipo")
+                    .on_hover_text("Para etiquetas, tablas y mediciones (P-01, V-03…); única en el proyecto");
                 if let Some(new) =
                     text_edit_committed(ui, Id::unique(("ot-mark", id.0)), &t.mark, 80.0)
                 {
-                    info = Some((new, t.description.clone()));
+                    info = Some((t.name.clone(), new, t.description.clone()));
                 }
                 ui.end_row();
                 ui.label("Descripción");
                 if let Some(new) =
                     text_edit_committed(ui, Id::unique(("ot-desc", id.0)), &t.description, 300.0)
                 {
-                    info = Some((t.mark.clone(), new));
+                    info = Some((t.name.clone(), t.mark.clone(), new));
                 }
                 ui.end_row();
                 ui.label("Familia");
                 ui.label(family_label(m, t.family)).on_hover_text(
-                    "La receta de la que sale este tipo; las medidas de abajo son sus parámetros",
+                    "La receta de la que sale este tipo; abajo, sus parámetros. Una familia no se convierte en otra: para otro funcionamiento, crea un tipo nuevo de esa familia",
                 );
                 ui.end_row();
-                ui.label("Funcionamiento");
-                let mut k = t.kind;
-                ComboBox::from_id_salt(("ot-kind", id.0))
-                    .selected_text(operation_name(k))
-                    .show_ui(ui, |ui| {
-                        if door {
-                            for d in [
-                                DoorOperation::SingleSwing,
-                                DoorOperation::DoubleSwing,
-                                DoorOperation::Sliding,
-                            ] {
-                                ui.selectable_value(
-                                    &mut k,
-                                    OpeningKind::Door(d),
-                                    door_operation_name(d),
-                                );
-                            }
-                        } else {
-                            for w in [
-                                WindowOperation::Fixed,
-                                WindowOperation::SingleCasement,
-                                WindowOperation::DoubleCasement,
-                                WindowOperation::Sliding,
-                            ] {
-                                ui.selectable_value(
-                                    &mut k,
-                                    OpeningKind::Window(w),
-                                    window_operation_name(w),
-                                );
-                            }
-                        }
-                    });
-                if k != t.kind {
-                    push(NewOpeningType {
-                        kind: k,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
-                ui.label("Ancho de hueco de obra (mm)");
-                if let Some(v) = length_field(ui, Id::unique(("ot-w", id.0)), t.width, 80.0) {
-                    push(NewOpeningType {
-                        width: v,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
-                ui.label("Alto de hueco de obra (mm)");
-                if let Some(v) = length_field(ui, Id::unique(("ot-h", id.0)), t.height, 80.0) {
-                    push(NewOpeningType {
-                        height: v,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
-                ui.label("Marco: anchura vista (mm)")
-                    .on_hover_text("Anchura del perfil del marco en jambas y dintel");
-                if let Some(v) = length_field(ui, Id::unique(("ot-fw", id.0)), t.frame_width, 80.0)
-                {
-                    push(NewOpeningType {
-                        frame_width: v,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
-                ui.label("Marco: fondo (mm)")
-                    .on_hover_text("Profundidad del marco en el espesor del muro");
-                if let Some(v) = length_field(ui, Id::unique(("ot-fd", id.0)), t.frame_depth, 80.0)
-                {
-                    push(NewOpeningType {
-                        frame_depth: v,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
-                ui.label("Material del marco");
-                let mut fm = t.frame_material;
-                material_combo(ui, Id::unique(("ot-fm", id.0)), m, &mut fm, 220.0);
-                if fm != t.frame_material {
-                    push(NewOpeningType {
-                        frame_material: fm,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
-                ui.label(if door {
-                    "Material de la hoja"
-                } else {
-                    "Material del vidrio"
+            });
+        if let Some((name, mark, description)) = info {
+            actions.push(Action::EditOpeningInfo(id, name, mark, description));
+        }
+
+        // The family's type parameters, by section, as the recipe declares
+        // them; those that do not apply (a fourth leaf of a window with
+        // two) are hidden.
+        let def = family.def();
+        let mut section: Option<&str> = None;
+        let mut grid_rows: Vec<&archisim_core::family::Param> = Vec::new();
+        let flush = |ui: &mut Ui,
+                     title: Option<&str>,
+                     rows: &mut Vec<&archisim_core::family::Param>,
+                     actions: &mut Vec<Action>| {
+            if rows.is_empty() {
+                return;
+            }
+            ui.add_space(6.0);
+            ui.label(RichText::new(title.unwrap_or("Parámetros")).strong());
+            egui::Grid::new(("ot-params", id.0, title.unwrap_or("")))
+                .num_columns(2)
+                .min_col_width(OPENING_LABELS)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    for p in rows.drain(..) {
+                        param_row(ui, m, id, &t, p, actions);
+                        ui.end_row();
+                    }
                 });
-                let mut pm = t.panel_material;
-                material_combo(ui, Id::unique(("ot-pm", id.0)), m, &mut pm, 220.0);
-                if pm != t.panel_material {
-                    push(NewOpeningType {
-                        panel_material: pm,
-                        ..base.clone()
-                    });
-                }
-                ui.end_row();
+        };
+        for p in def.params_of(archisim_core::ParamScope::Type) {
+            if !def.is_visible(&p.name, &t.values) {
+                continue;
+            }
+            if p.section.as_deref() != section {
+                flush(ui, section, &mut grid_rows, actions);
+                section = p.section.as_deref();
+            }
+            grid_rows.push(p);
+        }
+        flush(ui, section, &mut grid_rows, actions);
+
+        ui.add_space(6.0);
+        egui::Grid::new(("ot-tail", id.0))
+            .num_columns(2)
+            .min_col_width(OPENING_LABELS)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
                 ui.label(if door {
                     "Puertas de este tipo"
                 } else {
@@ -1086,9 +1017,6 @@ impl ArchiSimApp {
                 guid_label(ui, t.guid.as_str());
                 ui.end_row();
             });
-        if let Some((mark, description)) = info {
-            actions.push(Action::EditOpeningInfo(id, mark, description));
-        }
         ui.add_space(4.0);
         ui.label(
             RichText::new(
@@ -1248,17 +1176,144 @@ impl ArchiSimApp {
                 let r = self.ed.remove_opening_type(id);
                 self.report(r, "Tipo borrado.");
             }
-            Action::EditOpening(id, spec) => {
+            Action::EditOpeningValue(id, param, value) => {
                 let n = self.ed.model().opening_type_users(id);
-                let r = self.ed.edit_opening_type(id, spec);
+                let r = self.ed.set_opening_type_value(id, &param, value);
                 self.report(r, &format!("Tipo modificado ({n} colocada{}).", plural(n)));
             }
-            Action::EditOpeningInfo(id, mark, description) => {
-                let r = self.ed.set_opening_type_info(id, &mark, &description);
-                self.report(r, "Marca y descripción cambiadas.");
+            Action::EditOpeningInfo(id, name, mark, description) => {
+                let r = self
+                    .ed
+                    .set_opening_type_info(id, &name, &mark, &description);
+                self.report(r, "Tipo modificado.");
             }
+            Action::NewOpening(family, door) => match self.ed.new_opening_type(&family) {
+                Ok(new) => {
+                    let tab = if door {
+                        TypesTab::Doors
+                    } else {
+                        TypesTab::Windows
+                    };
+                    self.types.tab = tab;
+                    self.select_type(tab, new.0);
+                    self.say(format!(
+                        "Nuevo tipo de «{family}»: configúralo a la derecha."
+                    ));
+                }
+                Err(e) => self.complain(format!("No se pudo crear: {e}.")),
+            },
         }
         self.keep_tool_types_valid();
+    }
+}
+
+/// One family parameter of a door or window type: its label and the field
+/// for its kind. A change becomes an [`Action::EditOpeningValue`].
+fn param_row(
+    ui: &mut Ui,
+    m: &Model,
+    id: OpeningTypeId,
+    t: &OpeningType,
+    p: &archisim_core::family::Param,
+    actions: &mut Vec<Action>,
+) {
+    use archisim_core::{ParamKind, Value};
+    let label = match (&p.kind, p.label.as_str()) {
+        (ParamKind::Length, l) => format!("{l} (mm)"),
+        (ParamKind::Angle, l) => format!("{l} (°)"),
+        (_, l) => l.to_string(),
+    };
+    ui.label(label);
+    let current = t.values.get(&p.name).cloned();
+    let field = Id::unique(("ot-param", id.0, p.name.as_str()));
+    let mut set = |v: Value| actions.push(Action::EditOpeningValue(id, p.name.clone(), v));
+    match (&p.kind, current) {
+        (ParamKind::Length, Some(Value::Number(v))) => {
+            if let Some(new) = length_field(ui, field, v, 80.0) {
+                set(Value::Number(new));
+            }
+        }
+        (ParamKind::Integer, Some(Value::Number(v)))
+            if p.range.is_some_and(|(lo, hi)| hi - lo <= 12.0) =>
+        {
+            let (lo, hi) = p.range.expect("checked");
+            let mut n = v as i64;
+            ComboBox::from_id_salt(field)
+                .width(80.0)
+                .selected_text(n.to_string())
+                .show_ui(ui, |ui| {
+                    for k in lo as i64..=hi as i64 {
+                        ui.selectable_value(&mut n, k, k.to_string());
+                    }
+                });
+            if n != v as i64 {
+                set(Value::Number(n as f64));
+            }
+        }
+        (ParamKind::Angle, Some(Value::Number(v))) => {
+            let shown = format!("{:.1}", v.to_degrees()).replace('.', ",");
+            if let Some(text) = text_edit_committed(ui, field, &shown, 80.0) {
+                if let Ok(deg) = text.trim().replace(',', ".").parse::<f64>() {
+                    set(Value::Number(deg.to_radians()));
+                }
+            }
+        }
+        (ParamKind::Number | ParamKind::Integer, Some(Value::Number(v))) => {
+            let shown = format!("{v}").replace('.', ",");
+            if let Some(text) = text_edit_committed(ui, field, &shown, 80.0) {
+                if let Ok(x) = text.trim().replace(',', ".").parse::<f64>() {
+                    set(Value::Number(x));
+                }
+            }
+        }
+        (ParamKind::Bool, Some(Value::Bool(b))) => {
+            let mut on = b;
+            if ui.checkbox(&mut on, "").changed() {
+                set(Value::Bool(on));
+            }
+        }
+        (ParamKind::Choice(options), Some(Value::Text(chosen))) => {
+            let mut c = chosen.clone();
+            ComboBox::from_id_salt(field)
+                .width(160.0)
+                .selected_text(capitalized(&c))
+                .show_ui(ui, |ui| {
+                    for o in options {
+                        ui.selectable_value(&mut c, o.clone(), capitalized(o));
+                    }
+                });
+            if c != chosen {
+                set(Value::Text(c));
+            }
+        }
+        (ParamKind::Material, Some(Value::Material(mid))) => {
+            let mut mat = MaterialId(mid);
+            material_combo(ui, field, m, &mut mat, 220.0);
+            if mat.0 != mid {
+                set(Value::Material(mat.0));
+            }
+        }
+        (ParamKind::Text, Some(Value::Text(text))) => {
+            if let Some(new) = text_edit_committed(ui, field, &text, 220.0) {
+                set(Value::Text(new));
+            }
+        }
+        _ => {
+            ui.label(RichText::new("—").weak());
+        }
+    }
+}
+
+/// Width of the label column of the door and window editor, so that its
+/// sections line up.
+const OPENING_LABELS: f32 = 190.0;
+
+/// "oscilobatiente" → "Oscilobatiente".
+fn capitalized(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => String::new(),
     }
 }
 

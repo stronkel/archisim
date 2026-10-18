@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-18 · Fase 2, bloque 14 — Familias: planta por escala y hojas configurables (bloque B)
+
+**Hecho**
+- **Las puertas y ventanas se dibujan en planta con el símbolo de su receta**, uno por escala (`plan 1:50`, `plan 1:100`), como ArchiCAD elige el nivel de detalle por escala. La planta ya no tiene dibujo de puertas y ventanas programado: cerco, hoja abierta a 90° y su giro, corredera con flecha, marco, vidrio, montantes, giro de cada hoja, vierteaguas y canto del alféizar salen de las recetas, con piezas comunes de planta (`piezas.asfam`).
+- **Misma planta que antes**: la vivienda guardada por la v0.13 da la planta 1:50 idéntica en imagen (0 píxeles distintos a 4 aumentos), el mismo IFC y el mismo 3D. Una prueba nueva dibuja 176 casos (todos los funcionamientos, dos tamaños, los dos lados, las dos manos, con y sin antepecho, con y sin retranqueo, en un muro inclinado) con el dibujo antiguo y con las recetas y compara las imágenes.
+- **Planta 1:100**: puertas con la hoja como una línea y su giro, sin cerco; ventanas con marco y vidrio. Se exporta desde *Archivo → Exportar planta 1:100 (SVG)…* y la línea de comandos la genera junto a la 1:50 (`demo-1a100.svg`).
+- **Ventana practicable de 1 a 4 hojas, cada una con su funcionamiento** (tu propuesta): fija, practicable, oscilobatiente, abatible, proyectante o basculante. La «Ventana fija» deja de ser familia: es una practicable de una hoja fija (los proyectos anteriores se convierten solos). En planta giran las practicables y oscilobatientes; las hojas de la mitad izquierda giran en su jamba izquierda y las de la derecha en la derecha; una hoja sola, o la central si son tres, según la mano. Montantes entre hojas en planta y en 3D.
+- **IFC por hoja**: el tipo de ventana lleva la partición (1, 2 o 3 hojas; 4 como «definida por el usuario») y el funcionamiento IFC de cada hoja (`FIXEDCASEMENT`, `TILTANDTURNLEFTHAND`, `TOPHUNG`…) con su posición. Validado con IfcOpenShell. **La importación lo lee**: una ventana de 3 o 4 hojas de otro programa entra con sus hojas y su funcionamiento (antes se importaba como de dos).
+- **Diálogo de tipos generado desde la receta**: en Puertas y Ventanas, debajo de nombre, marca, descripción y familia, aparecen los parámetros de la receta por secciones (Dimensiones, Hojas, Cerco/Marco, Materiales) con el control que toca a cada uno (medida en mm, número de hojas, lista de funcionamiento, material); solo se ven los que aplican (la hoja 3 aparece al elegir 3 hojas). Cada cambio es un paso de deshacer y se aplica a todas las del tipo; la vista previa en planta 1:20 se dibuja con la receta.
+- **＋ Nuevo…** en las pestañas de puertas y ventanas: un tipo nuevo de cualquier familia (las del proyecto y las de sistema) con sus valores por defecto. El funcionamiento ya no se cambia en un tipo existente (una corredera no se convierte en abatible): se crea un tipo de la otra familia.
+- En Propiedades, «Funcionamiento» dice cómo abre cada hoja («3 hojas: fija · oscilobatiente · fija»).
+- Lenguaje: bloques `plan 1:N` con líneas, contornos y arcos, plumas (corte, marco, vista, fina, rayado), nombres que da el programa en planta (`wall_ext`, `wall_int`, `sill_height`) y unión de textos con `+`.
+- Pruebas: lenguaje (15), núcleo (36, con las familias recorridas en todas sus opciones de hojas, medidas extremas, lados y manos, también en planta 1:50 y 1:100 y con su IFC por hoja), planta (comparación de imagen), IFC (ida y vuelta con ventanas de 3 y 4 hojas y una proyectante), editor (valores de la receta, hojas fija y oscilobatiente, tipo nuevo), y la ventana real con capturas (diálogo, planta y 3D de una ventana de tres hojas).
+- Versión 0.15.0. Sin cambios en la estructura del fichero `.archisim` (versión 3); las familias de sistema pasan a la versión 2 de su receta. Los proyectos guardados con la v0.14 conservan su copia de las familias antiguas y se siguen abriendo igual.
+
+**Pendiente / limitaciones conocidas**
+- El símbolo 1:20 y el alzado no están todavía en las recetas: a 1:20 se usa el de 1:50 (bloque D). Los muros a 1:100 se dibujan igual que a 1:50 (con capas y tramas): eso es de las normas de dibujo (D5) y las plantillas de vista (3.1).
+- El IFC sigue escribiendo el cuerpo de puertas y ventanas con el código anterior (ya con el número de hojas de la receta); que salga de la receta, con la marca y los parámetros en Psets, es el bloque C.
+- Hojas de puerta desiguales, hoja activa, tarjas, corredera empotrada y la **puerta plegable** van en la librería (2.2).
+- Las hojas abatibles, proyectantes y basculantes no tienen símbolo en planta (se verán en alzado).
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama: GitHub → **Actions** → la última ejecución en verde del pull request «Familias: planta por escala…» (rama `bloque/familias-planta`) → **Artifacts** → **ArchiSim-Windows** o **ArchiSim-Mac**. Abre `demo.archisim` (o uno tuyo de antes): la planta debe verse exactamente igual.
+2. *Tipos y materiales* → **Ventanas** → «Ventana practicable 2 hojas 180×130»: pon **Nº de hojas = 3**, Hoja 1 **Fija**, Hoja 2 **Oscilobatiente**, Hoja 3 **Fija**. Cierra y mira la fachada sur en planta: dos fijos, montantes y la hoja central con su giro. Mira el 3D (tres paños). Ctrl+Z deshace cada paso.
+3. Selecciona esa ventana: en Propiedades, «Funcionamiento: 3 hojas: fija · oscilobatiente · fija». Cambia su **Mano**: la hoja central gira hacia el otro lado.
+4. «Ventana fija 60×60»: verás que su familia es «Ventana practicable» con 1 hoja fija. Cámbiala a practicable y mira el giro.
+5. **＋ Nuevo…** → «Puerta corredera»: aparece «Puerta corredera (nuevo)» con la marca siguiente; colócala con la herramienta Puerta.
+6. *Archivo → Exportar planta 1:100 (SVG)…* y ábrela: ¿te vale como planta 1:100 de puertas y ventanas?
+7. Exporta el IFC y ábrelo en ArchiCAD y Revit: la ventana de 3 hojas debe verse con sus tres paños. Si tu programa muestra las propiedades de hoja del tipo (`IfcWindowPanelProperties`), deben decir fija, oscilobatiente y fija.
+8. Dime qué sigue: **C** (IFC desde las familias, con marca y parámetros) o **D** (configurador con vista previa en alzado y 3D).
+
 ## 2026-10-18 · Fase 2, bloque 13 — Familias: núcleo (bloque A)
 
 **Hecho**

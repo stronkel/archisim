@@ -627,3 +627,110 @@ ENDSEC;END-ISO-10303-21;";
     assert!((model.levels()[0].elevation - 3.048).abs() < 1e-9);
     assert!(report.to_string().contains("pies"), "{report}");
 }
+
+/// Windows with three and four leaves, each opening its own way, keep
+/// every leaf through IFC: partitioning, one panel operation per leaf, and
+/// back into the family's leaf settings.
+#[test]
+fn windows_with_several_leaves_keep_each_leaf() {
+    let mut m = model();
+    let p1 = m.levels()[1].id;
+    let facade = m
+        .wall_types()
+        .find(|t| t.name.starts_with("Fachada"))
+        .unwrap()
+        .id;
+    let wall = m
+        .add_wall(NewWall {
+            wall_type: facade,
+            level: p1,
+            start: Point2::new(0.0, 0.0),
+            end: Point2::new(0.0, 8.0),
+            reference: ReferenceLine::ExteriorFace,
+            height: 3.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    let family = m.family_by_name("Ventana practicable").unwrap().id;
+    let base = m
+        .opening_types()
+        .find(|t| t.family == family)
+        .unwrap()
+        .values
+        .clone();
+    let mut make = |name: &str, width: f64, leaves: &[&str]| {
+        let mut values = base.clone();
+        values.insert("width".into(), archisim_core::Value::Number(width));
+        values.insert(
+            "leaves".into(),
+            archisim_core::Value::Number(leaves.len() as f64),
+        );
+        for (i, op) in leaves.iter().enumerate() {
+            values.insert(
+                format!("leaf_{}", i + 1),
+                archisim_core::Value::Text(op.to_string()),
+            );
+        }
+        m.add_family_type(archisim_core::NewFamilyType {
+            family,
+            name: name.into(),
+            mark: None,
+            description: String::new(),
+            values,
+        })
+        .unwrap()
+    };
+    let three = make("Ventana 3 hojas", 2.1, &["fija", "oscilobatiente", "fija"]);
+    let four = make(
+        "Ventana 4 hojas",
+        2.6,
+        &["practicable", "fija", "fija", "practicable"],
+    );
+    let top = make("Ventana proyectante", 0.8, &["proyectante"]);
+    for (t, along) in [(three, 1.5), (four, 4.5), (top, 7.0)] {
+        m.add_opening(NewOpening {
+            opening_type: t,
+            wall,
+            along,
+            sill: 0.9,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })
+        .unwrap();
+    }
+    let ifc = export(&m);
+    if let Ok(dir) = std::env::var("ARCHISIM_TEST_OUT") {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(std::path::Path::new(&dir).join("ventanas_hojas.ifc"), &ifc).unwrap();
+    }
+    assert!(ifc.contains(".TRIPLE_PANEL_VERTICAL."));
+    assert!(ifc.contains("'Hoja 2',$,.TILTANDTURNLEFTHAND.,.MIDDLE."));
+    assert!(ifc.contains("'Hoja 4',$,.SIDEHUNGRIGHTHAND.,.RIGHT."));
+    assert!(ifc.contains(".TOPHUNG.,.MIDDLE."));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.warnings.is_empty(), "{report}");
+    for (name, leaves) in [
+        ("Ventana 3 hojas", vec!["fija", "oscilobatiente", "fija"]),
+        (
+            "Ventana 4 hojas",
+            vec!["practicable", "fija", "fija", "practicable"],
+        ),
+        ("Ventana proyectante", vec!["proyectante"]),
+    ] {
+        let t = model.opening_types().find(|t| t.name == name).unwrap();
+        assert_eq!(
+            t.values["leaves"],
+            archisim_core::Value::Number(leaves.len() as f64),
+            "{name}"
+        );
+        for (i, op) in leaves.iter().enumerate() {
+            assert_eq!(
+                t.values[&format!("leaf_{}", i + 1)],
+                archisim_core::Value::Text(op.to_string()),
+                "{name} leaf {}",
+                i + 1
+            );
+        }
+    }
+}

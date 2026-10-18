@@ -1,7 +1,7 @@
 family "Ventana corredera"
   category window
   host wall
-  version 1
+  version 2
   description "Ventana o balconera corredera de dos hojas, con marco"
 
 include "piezas"
@@ -24,6 +24,26 @@ body
   use window_frame(width, height, frame_width, frame_depth, frame_material)
   use glazing(width, height, frame_width, frame_depth, 2, frame_material, panel_material)
 
+# Marco cortado y las dos hojas en carriles distintos, solapadas en el
+# centro. La hoja del carril exterior queda en la misma mitad del hueco sea
+# cual sea el lado de apertura (en una corredera no cambia nada).
+plan 1:50
+  if sill_height > 0
+    use sill_plan(width, frame_depth, wall_ext, wall_int)
+  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let es = if wall_ext > 0 then 1 else -1
+  let q = frame_depth / 4
+  let lap = frame_width / 2
+  let k = if opens_to == "exterior" then -1 else 1
+  polygon (k * c0, 0) (k * lap, 0) (k * lap, es * q) (k * c0, es * q) pen thin filled
+  polygon (-k * lap, -es * q) (k * c1, -es * q) (k * c1, 0) (-k * lap, 0) pen thin filled
+
+plan 1:100
+  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+  line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
+
 outputs
   opening_width = width
   opening_height = height
@@ -32,3 +52,8 @@ outputs
   frame_material = frame_material
   panel_material = panel_material
   operation = "sliding"
+
+ifc
+  panel_count = 2
+  panel_1 = "SLIDINGHORIZONTAL"
+  panel_2 = "SLIDINGHORIZONTAL"
