@@ -44,8 +44,7 @@ use std::collections::BTreeMap;
 
 use archisim_core::{
     perimeter, DoorOperation, GlobalId, Hand, Layer, LayerFunction, LevelId, MaterialId, Model,
-    OpeningKind, OpeningType, OpeningTypeId, Point2, SlabTypeId, WallFunction, WallTypeId,
-    WindowOperation, EPSILON,
+    OpeningKind, OpeningType, OpeningTypeId, Point2, SlabTypeId, WallFunction, WallTypeId, EPSILON,
 };
 use archisim_geom::{openings_in_wall, removed_area, signed_area, wall_geometry, OpeningGeometry};
 use step::{boolean, list, real, string, Ref, StepWriter};
@@ -319,19 +318,16 @@ impl<'a> Exporter<'a> {
                 string(lining_guid.as_str())
             )),
         }];
-        if let OpeningKind::Window(op) = t.kind {
-            let panels: &[(&str, &str)] = match op {
-                WindowOperation::Fixed => &[("FIXEDCASEMENT", "MIDDLE")],
-                WindowOperation::SingleCasement => &[("SIDEHUNGLEFTHAND", "MIDDLE")],
-                WindowOperation::DoubleCasement => {
-                    &[("SIDEHUNGLEFTHAND", "LEFT"), ("SIDEHUNGRIGHTHAND", "RIGHT")]
-                }
-                WindowOperation::Sliding => &[
-                    ("SLIDINGHORIZONTAL", "LEFT"),
-                    ("SLIDINGHORIZONTAL", "RIGHT"),
-                ],
-            };
-            for (i, (operation, position)) in panels.iter().enumerate() {
+        if let OpeningKind::Window(_) = t.kind {
+            // How each leaf opens, from the family, left to right.
+            let n = t.panels.len();
+            for (i, operation) in t.panels.iter().enumerate() {
+                let position = match (i, n) {
+                    (_, 1) => "MIDDLE",
+                    (0, _) => "LEFT",
+                    (i, n) if i + 1 == n => "RIGHT",
+                    _ => "MIDDLE",
+                };
                 let guid = derived_guid(&t.guid, &format!("panel {i}"));
                 props.push(self.w.add(format!(
                     "IFCWINDOWPANELPROPERTIES({},$,'Hoja {}',$,.{operation}.,.{position}.,{depth},{width},$)",
@@ -351,12 +347,12 @@ impl<'a> Exporter<'a> {
                 )),
                 [("Lining", t.frame_material), ("Panel", t.panel_material)],
             ),
-            OpeningKind::Window(op) => (
+            OpeningKind::Window(_) => (
                 self.w.add(format!(
                     "IFCWINDOWTYPE({},$,{},$,$,{props},$,$,$,.WINDOW.,.{}.,.F.,$)",
                     string(t.guid.as_str()),
                     string(&t.name),
-                    window_partitioning(op)
+                    window_partitioning(t.panels.len())
                 )),
                 [("Framing", t.frame_material), ("Glazing", t.panel_material)],
             ),
@@ -513,8 +509,8 @@ impl<'a> Exporter<'a> {
                 }
                 true
             }
-            OpeningKind::Window(op) => {
-                let n = op.panels();
+            OpeningKind::Window(_) => {
+                let n = t.panels.len().max(1);
                 let clear = (w - 2.0 * f - (n as f64 - 1.0) * f) / n as f64;
                 let panes: Vec<(f64, f64)> = (0..n)
                     .map(|i| {
@@ -581,7 +577,7 @@ impl<'a> Exporter<'a> {
                 door_operation(op, og.hand)
             ))
         } else {
-            let OpeningKind::Window(op) = t.kind else {
+            let OpeningKind::Window(_) = t.kind else {
                 unreachable!()
             };
             self.w.add(format!(
@@ -592,7 +588,7 @@ impl<'a> Exporter<'a> {
                 string(&tag.to_string()),
                 real(h),
                 real(w),
-                window_partitioning(op)
+                window_partitioning(t.panels.len())
             ))
         };
         self.w.add(format!(
@@ -1108,11 +1104,13 @@ fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
     }
 }
 
-/// `IfcWindowTypePartitioningEnum` value.
-fn window_partitioning(op: WindowOperation) -> &'static str {
-    match op.panels() {
-        1 => "SINGLE_PANEL",
-        _ => "DOUBLE_PANEL_VERTICAL",
+/// `IfcWindowTypePartitioningEnum` value for leaves side by side.
+fn window_partitioning(leaves: usize) -> &'static str {
+    match leaves {
+        0 | 1 => "SINGLE_PANEL",
+        2 => "DOUBLE_PANEL_VERTICAL",
+        3 => "TRIPLE_PANEL_VERTICAL",
+        _ => "USERDEFINED",
     }
 }
 

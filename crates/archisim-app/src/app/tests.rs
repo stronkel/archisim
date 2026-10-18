@@ -930,19 +930,11 @@ fn drawn_project_with_edited_types() {
         .unwrap()
         .clone();
     let dt = h.model().opening_type(door.opening_type).unwrap().clone();
-    let spec = |t: &archisim_core::OpeningType| archisim_core::NewOpeningType {
-        name: t.name.clone(),
-        kind: t.kind,
-        width: t.width,
-        height: t.height,
-        frame_width: t.frame_width,
-        frame_depth: t.frame_depth,
-        frame_material: t.frame_material,
-        panel_material: t.panel_material,
-    };
-    let mut wider = spec(&dt);
-    wider.width += 0.1;
-    h.app.apply_type_action(Action::EditOpening(dt.id, wider));
+    h.app.apply_type_action(Action::EditOpeningValue(
+        dt.id,
+        "width".into(),
+        archisim_core::Value::Number(dt.width + 0.1),
+    ));
     assert!(
         !h.app.message.as_ref().unwrap().error,
         "{:?}",
@@ -950,9 +942,11 @@ fn drawn_project_with_edited_types() {
     );
     assert!((h.model().opening_type(dt.id).unwrap().width - dt.width - 0.1).abs() < 1e-9);
     assert_eq!(h.model().opening(door.id).unwrap().along, door.along);
-    let mut deep = spec(h.model().opening_type(dt.id).unwrap());
-    deep.frame_depth = 0.4;
-    h.app.apply_type_action(Action::EditOpening(dt.id, deep));
+    h.app.apply_type_action(Action::EditOpeningValue(
+        dt.id,
+        "frame_depth".into(),
+        archisim_core::Value::Number(0.4),
+    ));
     assert!(h.app.message.as_ref().unwrap().text.contains("marco"));
     assert_eq!(
         h.model().opening_type(dt.id).unwrap().frame_depth,

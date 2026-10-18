@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::family::{
-    self, Evaluation, Family, FamilyError, NotAnOpening, ParamKind, ParamScope, Value, Values,
+    self, Evaluation, Family, FamilyError, Mark, NotAnOpening, ParamKind, ParamScope, Value, Values,
 };
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Point2, EPSILON};
@@ -326,6 +326,10 @@ pub struct OpeningType {
     pub frame_material: MaterialId,
     /// Material of the infill: the door leaf or the glazing.
     pub panel_material: MaterialId,
+    /// For windows, how each leaf opens, as IFC names it
+    /// (`IfcWindowPanelOperationEnum`: `SIDEHUNGLEFTHAND`, `FIXEDCASEMENT`…),
+    /// from left to right. Empty for doors.
+    pub panels: Vec<String>,
 }
 
 impl OpeningType {
@@ -654,6 +658,16 @@ fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
         }
     }
     inside
+}
+
+/// What a door or window family type gives the rest of the program.
+struct Resolved {
+    spec: NewOpeningType,
+    panels: Vec<String>,
+}
+
+fn kind_is_window(kind: OpeningKind) -> bool {
+    matches!(kind, OpeningKind::Window(_))
 }
 
 /// The values the program gives every wall-hosted family: the side the
@@ -1528,11 +1542,26 @@ impl Model {
     }
 
     /// The system family and the values that make an opening type
-    /// described the pre-family way. Loads the family if needed.
-    fn legacy_values(&mut self, spec: &NewOpeningType) -> Result<(FamilyId, Values), ModelError> {
-        let (name, leaves) = family::legacy_family(spec.kind);
+    /// described the pre-family way. Loads the family if needed. When it
+    /// redefines `base`, a type of the same family, the family's other
+    /// settings (such as how each leaf of a window opens) are kept unless
+    /// the operation changes.
+    fn legacy_values(
+        &mut self,
+        spec: &NewOpeningType,
+        base: Option<OpeningTypeId>,
+    ) -> Result<(FamilyId, Values), ModelError> {
+        let (name, extras) = family::legacy_family(spec.kind);
         let id = self.system_family(name)?;
-        let mut values = Values::new();
+        let base = base
+            .and_then(|b| self.opening_types.get(&b))
+            .filter(|b| b.family == id)
+            .cloned();
+        let keep = base.as_ref().is_some_and(|b| b.kind == spec.kind);
+        let mut values = match &base {
+            Some(b) => b.values.clone(),
+            None => self.families[&id].def().defaults(ParamScope::Type),
+        };
         for (k, v) in [
             ("width", spec.width),
             ("height", spec.height),
@@ -1549,8 +1578,10 @@ impl Model {
             "panel_material".into(),
             Value::Material(spec.panel_material.0),
         );
-        if let Some(n) = leaves {
-            values.insert("leaves".into(), Value::Number(n));
+        if !keep {
+            for (k, v) in extras {
+                values.insert(k.into(), v);
+            }
         }
         Ok((id, values))
     }
@@ -1559,11 +1590,12 @@ impl Model {
     fn with_legacy_values<T>(
         &mut self,
         spec: &NewOpeningType,
+        base: Option<OpeningTypeId>,
         edit: impl FnOnce(&mut Self, FamilyId, Values) -> Result<T, ModelError>,
     ) -> Result<T, ModelError> {
         self.validate_opening_type(spec)?;
         let before: Vec<FamilyId> = self.families.keys().copied().collect();
-        let (family, values) = self.legacy_values(spec)?;
+        let (family, values) = self.legacy_values(spec, base)?;
         let result = edit(self, family, values);
         if result.is_err() {
             self.families.retain(|id, _| before.contains(id));
@@ -1578,7 +1610,7 @@ impl Model {
         &self,
         family: FamilyId,
         values: &Values,
-    ) -> Result<NewOpeningType, ModelError> {
+    ) -> Result<Resolved, ModelError> {
         let fam = self
             .families
             .get(&family)
@@ -1639,7 +1671,31 @@ impl Model {
             panel_material: material("panel_material")?,
         };
         self.validate_opening_type(&spec)?;
-        Ok(spec)
+        // How each window leaf opens, if the family says (its `ifc`
+        // section: `panel_count` and `panel_1`, `panel_2`…).
+        let panels = match ev.ifc.get("panel_count").and_then(Value::as_number) {
+            Some(n) if kind_is_window(kind) => {
+                let n = n as usize;
+                if !(1..=8).contains(&n) {
+                    return Err(not_opening(format!("{n} leaves cannot be exported")));
+                }
+                (1..=n)
+                    .map(|i| {
+                        let key = format!("panel_{i}");
+                        ev.ifc
+                            .get(&key)
+                            .and_then(Value::as_text)
+                            .filter(|op| family::PANEL_OPERATIONS.contains(op))
+                            .map(str::to_string)
+                            .ok_or_else(|| {
+                                not_opening(format!("«{key}» is not a window leaf operation"))
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            }
+            _ => family::legacy_panels(kind),
+        };
+        Ok(Resolved { spec, panels })
     }
 
     fn check_mark(&self, mark: &str, except: Option<OpeningTypeId>) -> Result<(), ModelError> {
@@ -1669,7 +1725,7 @@ impl Model {
 
     /// Creates a type of a door or window family.
     pub fn add_family_type(&mut self, spec: NewFamilyType) -> Result<OpeningTypeId, ModelError> {
-        let r = self.resolve_opening_type(spec.family, &spec.values)?;
+        let Resolved { spec: r, panels } = self.resolve_opening_type(spec.family, &spec.values)?;
         let mark = match spec.mark {
             Some(m) => {
                 self.check_mark(&m, None)?;
@@ -1695,6 +1751,7 @@ impl Model {
                 frame_depth: r.frame_depth,
                 frame_material: r.frame_material,
                 panel_material: r.panel_material,
+                panels,
             },
         );
         Ok(id)
@@ -1704,7 +1761,7 @@ impl Model {
     /// of the matching system family, with the next free mark.
     pub fn add_opening_type(&mut self, spec: NewOpeningType) -> Result<OpeningTypeId, ModelError> {
         let name = spec.name.clone();
-        self.with_legacy_values(&spec, |m, family, values| {
+        self.with_legacy_values(&spec, None, |m, family, values| {
             m.add_family_type(NewFamilyType {
                 family,
                 name,
@@ -1790,7 +1847,7 @@ impl Model {
         family: FamilyId,
         values: Values,
     ) -> Result<(), ModelError> {
-        let r = self.resolve_opening_type(family, &values)?;
+        let Resolved { spec: r, panels } = self.resolve_opening_type(family, &values)?;
         let previous = self
             .opening_types
             .get(&id)
@@ -1806,6 +1863,7 @@ impl Model {
             frame_depth: r.frame_depth,
             frame_material: r.frame_material,
             panel_material: r.panel_material,
+            panels,
             ..previous.clone()
         };
         if edited.is_door() != previous.is_door() {
@@ -1868,7 +1926,7 @@ impl Model {
             return Err(ModelError::UnknownOpeningType(id));
         }
         let name = spec.name.clone();
-        self.with_legacy_values(&spec, |m, family, values| {
+        self.with_legacy_values(&spec, Some(id), |m, family, values| {
             m.edit_family_type(id, family, values)?;
             if let Some(t) = m.opening_types.get_mut(&id) {
                 t.name = name;
@@ -1902,6 +1960,38 @@ impl Model {
             .ok_or(ModelError::UnknownFamily(t.family))?;
         fam.def()
             .evaluate(&t.values, &o.values, &opening_builtins(o.opens_to, o.hand))
+            .map_err(ModelError::Family)
+    }
+
+    /// The plan symbol of a placed door or window for a drawing scale
+    /// (denominator), in the family's own axes. `wall_ext` and `wall_int`
+    /// are where the wall's faces are in those axes (see
+    /// [`crate::family::PLAN_BUILTINS`]); the plan view works them out.
+    pub fn opening_plan_symbol(
+        &self,
+        id: OpeningId,
+        scale: f64,
+        wall_ext: f64,
+        wall_int: f64,
+    ) -> Result<Vec<Mark>, ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let t = self
+            .opening_types
+            .get(&o.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(o.opening_type))?;
+        let fam = self
+            .families
+            .get(&t.family)
+            .ok_or(ModelError::UnknownFamily(t.family))?;
+        let mut builtins = opening_builtins(o.opens_to, o.hand);
+        builtins.insert("wall_ext".into(), Value::Number(wall_ext));
+        builtins.insert("wall_int".into(), Value::Number(wall_int));
+        builtins.insert("sill_height".into(), Value::Number(o.sill));
+        fam.def()
+            .evaluate_plan(&t.values, &o.values, &builtins, scale)
             .map_err(ModelError::Family)
     }
 
@@ -2395,13 +2485,14 @@ impl Model {
             model.opening_types.insert(
                 ot.id,
                 OpeningType {
-                    kind: resolved.kind,
-                    width: resolved.width,
-                    height: resolved.height,
-                    frame_width: resolved.frame_width,
-                    frame_depth: resolved.frame_depth,
-                    frame_material: resolved.frame_material,
-                    panel_material: resolved.panel_material,
+                    kind: resolved.spec.kind,
+                    width: resolved.spec.width,
+                    height: resolved.spec.height,
+                    frame_width: resolved.spec.frame_width,
+                    frame_depth: resolved.spec.frame_depth,
+                    frame_material: resolved.spec.frame_material,
+                    panel_material: resolved.spec.panel_material,
+                    panels: resolved.panels,
                     ..ot
                 },
             );

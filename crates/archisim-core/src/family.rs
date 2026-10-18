@@ -12,7 +12,8 @@ use std::fmt;
 use std::sync::Arc;
 
 pub use archisim_family::{
-    Evaluation, FamilyDef, FamilyError, Host, Param, ParamKind, ParamScope, Part, Value, Values,
+    Evaluation, FamilyDef, FamilyError, Host, Mark, Param, ParamKind, ParamScope, Part, Pen, Value,
+    Values, PLAN_BUILTINS,
 };
 
 use crate::ids::FamilyId;
@@ -83,17 +84,15 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 5] = [
+const SYSTEM_SOURCES: [&str; 4] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
-    include_str!("../families/ventana_fija.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
 ];
 
 pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
-pub const FIXED_WINDOW: &str = "Ventana fija";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
 
@@ -132,19 +131,71 @@ pub fn system_family(name: &str) -> Option<String> {
         .map(|(_, s)| s)
 }
 
-/// The system family that makes a door or window of the given operation,
-/// and the number of leaves to set, if that family has the parameter.
-pub fn legacy_family(kind: OpeningKind) -> (&'static str, Option<f64>) {
+/// The system family that makes a door or window of the given operation
+/// (as ArchiSim described them before families), and the values that give
+/// that operation: number of leaves and how each leaf opens. A fixed window
+/// is a one-leaf "Ventana practicable" whose leaf is fixed.
+pub fn legacy_family(kind: OpeningKind) -> (&'static str, Vec<(&'static str, Value)>) {
+    let n = |x: f64| Value::Number(x);
+    let t = |s: &str| Value::Text(s.into());
     match kind {
-        OpeningKind::Door(DoorOperation::SingleSwing) => (SWING_DOOR, Some(1.0)),
-        OpeningKind::Door(DoorOperation::DoubleSwing) => (SWING_DOOR, Some(2.0)),
-        OpeningKind::Door(DoorOperation::Sliding) => (SLIDING_DOOR, None),
-        OpeningKind::Window(WindowOperation::Fixed) => (FIXED_WINDOW, None),
-        OpeningKind::Window(WindowOperation::SingleCasement) => (CASEMENT_WINDOW, Some(1.0)),
-        OpeningKind::Window(WindowOperation::DoubleCasement) => (CASEMENT_WINDOW, Some(2.0)),
-        OpeningKind::Window(WindowOperation::Sliding) => (SLIDING_WINDOW, None),
+        OpeningKind::Door(DoorOperation::SingleSwing) => (SWING_DOOR, vec![("leaves", n(1.0))]),
+        OpeningKind::Door(DoorOperation::DoubleSwing) => (SWING_DOOR, vec![("leaves", n(2.0))]),
+        OpeningKind::Door(DoorOperation::Sliding) => (SLIDING_DOOR, vec![]),
+        OpeningKind::Window(WindowOperation::Fixed) => (
+            CASEMENT_WINDOW,
+            vec![("leaves", n(1.0)), ("leaf_1", t("fija"))],
+        ),
+        OpeningKind::Window(WindowOperation::SingleCasement) => (
+            CASEMENT_WINDOW,
+            vec![("leaves", n(1.0)), ("leaf_1", t("practicable"))],
+        ),
+        OpeningKind::Window(WindowOperation::DoubleCasement) => (
+            CASEMENT_WINDOW,
+            vec![
+                ("leaves", n(2.0)),
+                ("leaf_1", t("practicable")),
+                ("leaf_2", t("practicable")),
+            ],
+        ),
+        OpeningKind::Window(WindowOperation::Sliding) => (SLIDING_WINDOW, vec![]),
     }
 }
+
+/// The IFC operation of each leaf of a window (`IfcWindowPanelOperationEnum`)
+/// as ArchiSim exported them before families, for families that do not say.
+pub fn legacy_panels(kind: OpeningKind) -> Vec<String> {
+    let list: &[&str] = match kind {
+        OpeningKind::Door(_) => &[],
+        OpeningKind::Window(WindowOperation::Fixed) => &["FIXEDCASEMENT"],
+        OpeningKind::Window(WindowOperation::SingleCasement) => &["SIDEHUNGLEFTHAND"],
+        OpeningKind::Window(WindowOperation::DoubleCasement) => {
+            &["SIDEHUNGLEFTHAND", "SIDEHUNGRIGHTHAND"]
+        }
+        OpeningKind::Window(WindowOperation::Sliding) => {
+            &["SLIDINGHORIZONTAL", "SLIDINGHORIZONTAL"]
+        }
+    };
+    list.iter().map(|s| s.to_string()).collect()
+}
+
+/// Values of `IfcWindowPanelOperationEnum` a family may give.
+pub const PANEL_OPERATIONS: [&str; 14] = [
+    "SIDEHUNGRIGHTHAND",
+    "SIDEHUNGLEFTHAND",
+    "TILTANDTURNRIGHTHAND",
+    "TILTANDTURNLEFTHAND",
+    "TOPHUNG",
+    "BOTTOMHUNG",
+    "PIVOTHORIZONTAL",
+    "PIVOTVERTICAL",
+    "SLIDINGHORIZONTAL",
+    "SLIDINGVERTICAL",
+    "REMOVABLECASEMENT",
+    "FIXEDCASEMENT",
+    "OTHEROPERATION",
+    "NOTDEFINED",
+];
 
 /// The operation named by a family's `operation` output.
 pub fn operation_from_name(category: &str, name: &str) -> Option<OpeningKind> {
@@ -243,13 +294,7 @@ mod tests {
         let names: Vec<_> = fams.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(
             names,
-            [
-                SWING_DOOR,
-                SLIDING_DOOR,
-                FIXED_WINDOW,
-                CASEMENT_WINDOW,
-                SLIDING_WINDOW
-            ]
+            [SWING_DOOR, SLIDING_DOOR, CASEMENT_WINDOW, SLIDING_WINDOW]
         );
         for (_, src) in &fams {
             let f = Family::new(crate::FamilyId(1), src.clone()).unwrap();
@@ -284,8 +329,9 @@ mod tests {
             );
             assert_eq!((t.frame_material, t.panel_material), (wood, glass));
         }
-        // One copy of each system family, loaded on first use.
-        assert_eq!(m.families().count(), 5);
+        // One copy of each system family, loaded on first use (a fixed
+        // window is a casement window whose only leaf is fixed).
+        assert_eq!(m.families().count(), 4);
         let marks: Vec<_> = m.opening_types().map(|t| t.mark.clone()).collect();
         assert_eq!(
             marks,
@@ -529,7 +575,17 @@ mod tests {
                 Some((lo, hi)) => (lo as i64..=hi as i64).map(|n| n as f64).collect(),
                 None => vec![0.0],
             };
-            for &n in &leaves {
+            // How the leaves open: every option on all leaves, and a mix.
+            let ops: Vec<Vec<String>> = match def.param("leaf_1").map(|p| &p.kind) {
+                Some(ParamKind::Choice(options)) => {
+                    let mut v: Vec<Vec<String>> =
+                        options.iter().map(|o| vec![o.clone(); 4]).collect();
+                    v.push(options.iter().take(4).cloned().collect());
+                    v
+                }
+                _ => vec![Vec::new()],
+            };
+            for (&n, op) in leaves.iter().flat_map(|n| ops.iter().map(move |o| (n, o))) {
                 for &w in &[0.3, 0.8, 1.6, 6.0, 20.0] {
                     for &h in &[0.3, 2.1, 20.0] {
                         for &f in &[0.001, 0.05, 0.09] {
@@ -543,6 +599,9 @@ mod tests {
                                 v.insert("panel_material".into(), Value::Material(2));
                                 if n > 0.0 {
                                     v.insert("leaves".into(), Value::Number(n));
+                                }
+                                for (i, o) in op.iter().enumerate() {
+                                    v.insert(format!("leaf_{}", i + 1), Value::Text(o.clone()));
                                 }
                                 for side in [WallSide::Interior, WallSide::Exterior] {
                                     for hand in [Hand::Left, Hand::Right] {
@@ -570,6 +629,49 @@ mod tests {
                                             ev.outputs["operation"].as_text().unwrap(),
                                         );
                                         assert!(kind.is_some());
+                                        // Every leaf of a window has a valid IFC operation.
+                                        if let Some(Value::Number(c)) = ev.ifc.get("panel_count") {
+                                            for i in 1..=(*c as usize) {
+                                                let p = ev.ifc[&format!("panel_{i}")].clone();
+                                                let p = p.as_text().unwrap().to_string();
+                                                assert!(
+                                                    PANEL_OPERATIONS.contains(&p.as_str()),
+                                                    "{p}"
+                                                );
+                                            }
+                                        }
+                                        // The plan symbols, on both kinds of wall and sill.
+                                        for (scale, sill) in
+                                            [(50.0, 0.0), (50.0, 0.9), (100.0, 0.9)]
+                                        {
+                                            let mut b = b.clone();
+                                            let ext = if side == WallSide::Exterior {
+                                                0.2
+                                            } else {
+                                                -0.1
+                                            };
+                                            b.insert("wall_ext".into(), Value::Number(ext));
+                                            b.insert("wall_int".into(), Value::Number(-ext / 2.0));
+                                            b.insert("sill_height".into(), Value::Number(sill));
+                                            let marks = def
+                                                .evaluate_plan(&v, &Values::new(), &b, scale)
+                                                .unwrap_or_else(|e| {
+                                                    panic!("{} plan: {e}", fam.name())
+                                                });
+                                            assert!(!marks.is_empty());
+                                            for p in mark_points(&marks) {
+                                                assert!(
+                                                    p[0].abs() <= w + 0.1,
+                                                    "{} {p:?}",
+                                                    fam.name()
+                                                );
+                                                assert!(
+                                                    p[1].abs() <= w + d + 0.5,
+                                                    "{} {p:?}",
+                                                    fam.name()
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -579,5 +681,18 @@ mod tests {
             }
         }
         assert!(checked > 1000, "{checked}");
+    }
+
+    fn mark_points(marks: &[Mark]) -> Vec<[f64; 2]> {
+        marks
+            .iter()
+            .flat_map(|m| match m {
+                Mark::Line { from, to, .. } => vec![*from, *to],
+                Mark::Polygon { points, .. } => points.clone(),
+                Mark::Arc {
+                    center, from, to, ..
+                } => vec![*center, *from, *to],
+            })
+            .collect()
     }
 }

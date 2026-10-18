@@ -13,7 +13,8 @@ pub mod model;
 
 pub use document::Document;
 pub use family::{
-    Evaluation, Family, FamilyDef, FamilyError, ParamKind, ParamScope, Part, Value, Values,
+    Evaluation, Family, FamilyDef, FamilyError, Mark, ParamKind, ParamScope, Part, Pen, Value,
+    Values,
 };
 pub use ids::*;
 pub use math::{is_simple_polygon, perimeter, signed_area, Point2, Vec2, EPSILON};

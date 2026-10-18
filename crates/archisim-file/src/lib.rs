@@ -225,7 +225,7 @@ fn to_families(mut value: Value) -> Result<Value, FileError> {
         }
     }
     let mut families: Vec<Value> = Vec::new();
-    let mut by_name: Vec<(&str, u64)> = Vec::new();
+    let mut by_name: Vec<(&str, u64, archisim_core::Values)> = Vec::new();
     let (mut doors, mut windows) = (0, 0);
     if let Some(Value::Array(types)) = map.get_mut("opening_types") {
         for t in types.iter_mut() {
@@ -241,9 +241,9 @@ fn to_families(mut value: Value) -> Result<Value, FileError> {
                     element: format!("door or window type {id}"),
                     message: format!("a {category} cannot have the operation «{operation}»"),
                 })?;
-            let (name, leaves) = legacy_family(kind);
-            let family = match by_name.iter().find(|(n, _)| *n == name) {
-                Some((_, fid)) => *fid,
+            let (name, extras) = legacy_family(kind);
+            let family = match by_name.iter().find(|(n, _, _)| *n == name) {
+                Some((_, fid, _)) => *fid,
                 None => {
                     next_id += 1;
                     let source = system_family(name).expect("system family");
@@ -256,11 +256,22 @@ fn to_families(mut value: Value) -> Result<Value, FileError> {
                         "version": parsed.version(),
                         "source": parsed.source.lines().collect::<Vec<_>>(),
                     }));
-                    by_name.push((name, next_id));
+                    let defaults = parsed.def().defaults(archisim_core::ParamScope::Type);
+                    by_name.push((name, next_id, defaults));
                     next_id
                 }
             };
+            // The family's defaults (for its other parameters, such as how
+            // the leaves it does not use open), then the type's own values.
+            let defaults = &by_name
+                .iter()
+                .find(|(n, _, _)| *n == name)
+                .expect("added")
+                .2;
             let mut values = serde_json::Map::new();
+            for (k, v) in defaults {
+                values.insert(k.clone(), json_value(v));
+            }
             for key in [
                 "width",
                 "height",
@@ -273,8 +284,8 @@ fn to_families(mut value: Value) -> Result<Value, FileError> {
                     values.insert(key.into(), v);
                 }
             }
-            if let Some(n) = leaves {
-                values.insert("leaves".into(), Value::from(n));
+            for (k, v) in extras {
+                values.insert(k.into(), json_value(&v));
             }
             let mark = match kind {
                 OpeningKind::Door(_) => {
@@ -294,6 +305,16 @@ fn to_families(mut value: Value) -> Result<Value, FileError> {
     }
     map.insert("families".into(), Value::Array(families));
     Ok(value)
+}
+
+/// A parameter value as written in the file.
+fn json_value(v: &archisim_core::Value) -> Value {
+    match v {
+        archisim_core::Value::Number(n) => Value::from(*n),
+        archisim_core::Value::Bool(b) => Value::from(*b),
+        archisim_core::Value::Text(t) => Value::from(t.clone()),
+        archisim_core::Value::Material(m) => Value::from(*m),
+    }
 }
 
 /// Saves the project. The previous file, if any, is replaced only once the

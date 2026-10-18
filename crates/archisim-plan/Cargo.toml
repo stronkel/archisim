@@ -9,3 +9,7 @@ authors.workspace = true
 [dependencies]
 archisim-core.workspace = true
 archisim-geom.workspace = true
+
+[dev-dependencies]
+# Rasterises plans in tests to compare drawings pixel by pixel.
+resvg = { version = "0.48", default-features = false }

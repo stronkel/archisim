@@ -410,6 +410,7 @@ fn runtime_errors_are_reported() {
         Err(FamilyError::TooComplex { .. })
     ));
     assert!(run("  let a = if 2 > 1 and not no then max(1, 4, 2) else 0\n").is_ok());
+    assert!(run("  let a = \"SIDE\" + \"HUNG\"\n  require a == \"SIDEHUNG\" else \"x\"\n").is_ok());
 }
 
 #[test]
@@ -449,4 +450,145 @@ fn numbers_and_ranges_are_read_correctly() {
         .unwrap();
     assert_eq!(ev.outputs["a"], Value::Number(-1.0 / 4.0 * 2.0 - 3.0));
     assert_eq!(ev.outputs["b"], Value::Number(-5.0));
+}
+
+const SYMBOL: &str = r#"
+family "Hueco con símbolo"
+  category window
+  host wall
+type_params
+  width length = 1.0
+  m material = "x"
+component jamb(x, d)
+  polygon (x, -d) (x + 0.05, -d) (x + 0.05, d) (x, d) pen frame filled
+body
+  box (0, 0, 0) to (1, 1, 1) material m
+plan 1:50
+  use jamb(-width / 2, 0.035)
+  line (-width / 2, 0) to (width / 2, 0) pen thin
+  if sill_height > 0
+    line (-width / 2, wall_ext) to (width / 2, wall_ext) pen view dashed
+  arc center (0, 0) from (0.5, 0) to (0, 0.5) pen thin
+plan 1:100
+  line (-width / 2, 0) to (width / 2, 0) pen cut
+"#;
+
+fn plan_builtins(sill: f64) -> Values {
+    values(&[
+        ("opens_to", Value::Text("interior".into())),
+        ("hand", Value::Text("left".into())),
+        ("wall_ext", Value::Number(-0.15)),
+        ("wall_int", Value::Number(0.15)),
+        ("sill_height", Value::Number(sill)),
+    ])
+}
+
+#[test]
+fn plan_symbols_are_chosen_by_the_nearest_scale() {
+    let def = parse(SYMBOL).unwrap();
+    assert_eq!(def.plans.len(), 2);
+    assert_eq!(def.plan_for(50.0).unwrap().scale, 50.0);
+    assert_eq!(def.plan_for(20.0).unwrap().scale, 50.0);
+    assert_eq!(def.plan_for(75.0).unwrap().scale, 100.0);
+    assert_eq!(def.plan_for(200.0).unwrap().scale, 100.0);
+    // Without plan symbols nothing is drawn.
+    let bare = parse("family \"x\"\n  category door\n").unwrap();
+    assert!(bare.plan_for(50.0).is_none());
+    assert_eq!(
+        bare.evaluate_plan(&Values::new(), &Values::new(), &Values::new(), 50.0),
+        Ok(Vec::new())
+    );
+}
+
+#[test]
+fn plan_symbols_draw_lines_outlines_and_arcs() {
+    let def = parse(SYMBOL).unwrap();
+    let t = values(&[("width", Value::Number(1.0)), ("m", Value::Material(1))]);
+    let marks = def
+        .evaluate_plan(&t, &Values::new(), &plan_builtins(0.9), 50.0)
+        .unwrap();
+    assert_eq!(marks.len(), 4);
+    assert_eq!(
+        marks[0],
+        Mark::Polygon {
+            points: vec![
+                [-0.5, -0.035],
+                [-0.45, -0.035],
+                [-0.45, 0.035],
+                [-0.5, 0.035]
+            ],
+            pen: Pen::Frame,
+            filled: true
+        }
+    );
+    assert_eq!(
+        marks[2],
+        Mark::Line {
+            from: [-0.5, -0.15],
+            to: [0.5, -0.15],
+            pen: Pen::View,
+            dashed: true
+        }
+    );
+    assert!(matches!(marks[3], Mark::Arc { pen: Pen::Thin, .. }));
+    // The condition on the sill.
+    let marks = def
+        .evaluate_plan(&t, &Values::new(), &plan_builtins(0.0), 50.0)
+        .unwrap();
+    assert_eq!(marks.len(), 3);
+    // At 1:100 the simple symbol.
+    let marks = def
+        .evaluate_plan(&t, &Values::new(), &plan_builtins(0.0), 100.0)
+        .unwrap();
+    assert!(matches!(
+        marks.as_slice(),
+        [Mark::Line { pen: Pen::Cut, .. }]
+    ));
+    // The 3D body is unaffected by the plan blocks.
+    let ev = def
+        .evaluate(&t, &Values::new(), &plan_builtins(0.0))
+        .unwrap();
+    assert_eq!(ev.parts.len(), 1);
+}
+
+#[test]
+fn plan_and_body_statements_stay_in_their_place() {
+    let head = "family \"x\"\n  category door\ntype_params\n  m material = \"x\"\n";
+    // A box in a plan, a line in the body: refused when reading.
+    let e = parse(&format!(
+        "{head}plan 1:50\n  box (0, 0, 0) to (1, 1, 1) material m\n"
+    ));
+    assert!(matches!(e, Err(FamilyError::Syntax { line: 6, .. })));
+    let e = parse(&format!(
+        "{head}body\n  if yes\n    line (0, 0) to (1, 0) pen thin\n"
+    ));
+    assert!(matches!(e, Err(FamilyError::Syntax { line: 7, .. })));
+    // Through a piece, when it runs.
+    let src =
+        format!("{head}component mark()\n  line (0, 0) to (1, 0) pen thin\nbody\n  use mark()\n");
+    let def = parse(&src).unwrap();
+    let t = values(&[("m", Value::Material(1))]);
+    assert!(matches!(
+        def.evaluate(&t, &Values::new(), &Values::new()),
+        Err(FamilyError::Eval { line: 6, .. })
+    ));
+    // Badly written marks.
+    for (body, line) in [
+        ("  line (0, 0) to (1, 0) pen gruesa\n", 6),
+        ("  line (0, 0) to (1, 0)\n", 6),
+        ("  polygon (0, 0) (1, 0) pen thin\n", 6),
+        ("  arc (0, 0) from (1, 0) to (0, 1) pen thin\n", 6),
+    ] {
+        let e = parse(&format!("{head}plan 1:50\n{body}"));
+        assert!(
+            matches!(e, Err(FamilyError::Syntax { line: l, .. }) if l == line),
+            "{body}: {e:?}"
+        );
+    }
+    for bad in ["plan 50\n", "plan 2:50\n", "plan 1:50\nplan 1:50\n"] {
+        assert!(parse(&format!("{head}{bad}")).is_err(), "{bad}");
+    }
+    // The plan names the program provides cannot be declared.
+    let e = parse("family \"x\"\n  category door\ntype_params\n  sill_height length = 1\n");
+    assert!(matches!(e, Err(FamilyError::Syntax { line: 4, .. })));
 }

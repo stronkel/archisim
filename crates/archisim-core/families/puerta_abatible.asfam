@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta abatible de una o dos hojas iguales, con cerco y hojas ciegas"
 
 include "piezas"
@@ -28,6 +28,33 @@ body
     use door_leaf(0, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
   else
     use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+
+# Cerco cortado y hoja abierta a 90° con su giro; con una hoja, las
+# bisagras van donde dice la mano (UNE-EN 12519).
+plan 1:50
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  if leaves == 2
+    use door_leaf_plan(c0, 1, (c1 - c0) / 2, frame_depth)
+    use door_leaf_plan(c1, -1, (c1 - c0) / 2, frame_depth)
+  else if hand == "left"
+    use door_leaf_plan(c0, 1, c1 - c0, frame_depth)
+  else
+    use door_leaf_plan(c1, -1, c1 - c0, frame_depth)
+
+# A 1:100, sin cerco y con la hoja como una línea.
+plan 1:100
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  if leaves == 2
+    use door_leaf_plan_simple(c0, 1, (c1 - c0) / 2, frame_depth)
+    use door_leaf_plan_simple(c1, -1, (c1 - c0) / 2, frame_depth)
+  else if hand == "left"
+    use door_leaf_plan_simple(c0, 1, c1 - c0, frame_depth)
+  else
+    use door_leaf_plan_simple(c1, -1, c1 - c0, frame_depth)
 
 outputs
   opening_width = width

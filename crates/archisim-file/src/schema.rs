@@ -603,6 +603,7 @@ impl ProjectFile {
                 frame_depth: 0.0,
                 frame_material: core::MaterialId(0),
                 panel_material: core::MaterialId(0),
+                panels: Vec::new(),
             });
         }
         for o in self.openings {
