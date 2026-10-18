@@ -17,6 +17,8 @@ version = "0.20.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/stronkel/archisim"
 
 [workspace.dependencies]
 uuid = { version = "1", features = ["v4"] }

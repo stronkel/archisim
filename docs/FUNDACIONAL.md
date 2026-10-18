@@ -214,4 +214,4 @@ La lista detallada, con tamaños, dependencias y decisiones pendientes, está en
 
 ## 8. Licencia
 
-Pendiente de decidir. El repositorio será privado hasta entonces. Candidatas para abrirlo: **MPL-2.0** (permite usarlo en productos cerrados pero obliga a publicar mejoras del propio código) o **GPL-3.0** (todo derivado debe ser libre). No se añade fichero de licencia hasta decidir.
+**GPL-3.0 o posterior** (`GPL-3.0-or-later`), decidida por Antonio el 18/10/2026 al abrir el repositorio: ArchiSim es software libre y cualquier versión modificada que se distribuya también tiene que serlo, para que siga siendo una alternativa libre a los programas de pago. Texto completo en `LICENSE`. Las fuentes IBM Plex van con su propia licencia (SIL Open Font License 1.1, `crates/archisim-app/assets/fonts/OFL-IBM-Plex.txt`).
