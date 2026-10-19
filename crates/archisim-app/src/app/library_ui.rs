@@ -1,0 +1,369 @@
+//! The library window: the folder of family files, the types in them to
+//! load into the project, the families of the project with a newer recipe,
+//! and purging the types no element uses.
+
+use archisim_core::{FamilyTypeRef, Loaded, OnConflict};
+use eframe::egui::{self, Ui};
+
+use super::*;
+use crate::editor::library::{self, FamilyUpdate, Library};
+
+/// The state of the library window.
+#[derive(Default)]
+pub struct LibraryWindow {
+    pub open: bool,
+    /// The folder as last read (read again with «Volver a leer»).
+    lib: Option<Library>,
+    filter: String,
+    /// A type whose GlobalId the project has with other values: file and
+    /// type index, waiting for the user to choose.
+    conflict: Option<(usize, usize)>,
+    /// The purge is waiting for confirmation: how many types would go.
+    purge: Option<usize>,
+}
+
+impl LibraryWindow {
+    fn library(&mut self) -> &Library {
+        self.lib
+            .get_or_insert_with(|| library::scan(&library::library_dir()))
+    }
+
+    /// Shows this library instead of the folder's (tests).
+    #[cfg(test)]
+    pub fn set(&mut self, lib: Library) {
+        self.lib = Some(lib);
+    }
+
+    #[cfg(test)]
+    pub fn conflict(&self) -> Option<(usize, usize)> {
+        self.conflict
+    }
+
+    /// Reads the folder again (after saving into it, or changing it).
+    pub fn refresh(&mut self) {
+        self.lib = None;
+    }
+}
+
+impl ArchiSimApp {
+    pub(super) fn library_dialog(&mut self, ctx: &egui::Context) {
+        if !self.library.open {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("Biblioteca")
+            .open(&mut open)
+            .default_width(560.0)
+            .default_height(520.0)
+            .show(ctx, |ui| self.library_contents(ui));
+        self.library.open = open;
+        self.library_conflict(ctx);
+        self.purge_confirmation(ctx);
+    }
+
+    fn library_contents(&mut self, ui: &mut Ui) {
+        let lib = self.library.library().clone();
+        ui.horizontal(|ui| {
+            ui.label("Carpeta:");
+            ui.label(egui::RichText::new(lib.dir.to_string_lossy()).monospace())
+                .on_hover_text("Los ficheros .asfam de esta carpeta y de sus subcarpetas");
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Cambiar carpeta…").clicked() {
+                if let Some(dir) = rfd::FileDialog::new().set_directory(&lib.dir).pick_folder() {
+                    match library::set_library_dir(&dir) {
+                        Ok(()) => self.say(format!("Biblioteca en {}.", dir.display())),
+                        Err(e) => self.complain(format!("No se puede recordar la carpeta: {e}.")),
+                    }
+                    self.library.lib = Some(library::scan(&dir));
+                }
+            }
+            if ui.button("Volver a leer").clicked() {
+                self.library.refresh();
+            }
+        });
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("Buscar");
+            ui.text_edit_singleline(&mut self.library.filter);
+        });
+        ui.separator();
+        let filter = self.library.filter.trim().to_lowercase();
+        let mut load: Option<(usize, usize)> = None;
+        let mut update: Option<FamilyUpdate> = None;
+        let mut purge = false;
+        let updates = library::family_updates(self.ed.model(), &lib);
+        let in_project: std::collections::BTreeMap<String, String> = self
+            .ed
+            .model()
+            .opening_types()
+            .map(|t| (t.guid.to_string(), t.name.clone()))
+            .chain(
+                self.ed
+                    .model()
+                    .object_types()
+                    .map(|t| (t.guid.to_string(), t.name.clone())),
+            )
+            .collect();
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .max_height(ui.available_height() - 40.0)
+            .show(ui, |ui| {
+                ui.strong("Tipos de la biblioteca");
+                if lib.files.is_empty() {
+                    ui.label(
+                        egui::RichText::new(
+                            "La carpeta no tiene familias todavía. Para llevar un tipo del proyecto a la biblioteca: Navegador → clic derecho sobre una puerta, ventana u objeto → «Guardar en la biblioteca».",
+                        )
+                        .weak(),
+                    );
+                }
+                for (fi, f) in lib.files.iter().enumerate() {
+                    let matches = |s: &str| filter.is_empty() || s.to_lowercase().contains(&filter);
+                    let shown: Vec<usize> = (0..f.types.len())
+                        .filter(|&i| matches(&f.family) || matches(&f.types[i].name))
+                        .collect();
+                    if shown.is_empty() && !(f.types.is_empty() && matches(&f.family)) {
+                        continue;
+                    }
+                    let title = format!("{} · v{} ({} tipos)", f.family, f.version, f.types.len());
+                    egui::CollapsingHeader::new(title)
+                        .id_salt(("lib-file", &f.path))
+                        .default_open(!filter.is_empty())
+                        .show(ui, |ui| {
+                            if f.types.is_empty() {
+                                ui.label(egui::RichText::new("Solo la familia, sin tipos").weak());
+                            }
+                            for &ti in &shown {
+                                let t = &f.types[ti];
+                                ui.horizontal(|ui| {
+                                    if !t.mark.is_empty() {
+                                        ui.label(egui::RichText::new(&t.mark).strong());
+                                    }
+                                    let r = ui.label(&t.name);
+                                    if !t.description.is_empty() {
+                                        r.on_hover_text(&t.description);
+                                    }
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui
+                                                .button("Cargar")
+                                                .on_hover_text("Añadir el tipo al proyecto, con su familia y sus materiales")
+                                                .clicked()
+                                            {
+                                                load = Some((fi, ti));
+                                            }
+                                            if in_project.contains_key(&t.guid) {
+                                                ui.label(egui::RichText::new("en el proyecto").weak());
+                                            }
+                                        },
+                                    );
+                                });
+                            }
+                        });
+                }
+                for (p, e) in &lib.errors {
+                    ui.colored_label(
+                        ui.visuals().warn_fg_color,
+                        format!(
+                            "{}: {e}",
+                            p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default()
+                        ),
+                    );
+                }
+                ui.add_space(8.0);
+                ui.strong("Familias del proyecto");
+                for f in self.ed.model().families() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{} · v{}", f.name(), f.version()));
+                        if let Some(u) = updates.iter().find(|u| u.family == f.id) {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui
+                                    .button(format!("Actualizar a v{}", u.to))
+                                    .on_hover_text(format!(
+                                        "De la versión {} a la {}, de {}. Los tipos conservan sus valores y toman los de los parámetros nuevos por defecto.",
+                                        u.from, u.to, u.source
+                                    ))
+                                    .clicked()
+                                {
+                                    update = Some(u.clone());
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        ui.separator();
+        ui.horizontal(|ui| {
+            if ui
+                .button("Purgar tipos sin usar…")
+                .on_hover_text("Quitar del proyecto los tipos que ningún elemento usa")
+                .clicked()
+            {
+                purge = true;
+            }
+        });
+        if let Some((fi, ti)) = load {
+            self.load_from_library(fi, ti, OnConflict::Ask);
+        }
+        if let Some(u) = update {
+            match self.ed.update_family(&u) {
+                Ok(n) => self.say(format!(
+                    "Familia «{}» actualizada a la versión {} ({n} tipos).",
+                    u.name, u.to
+                )),
+                Err(e) => self.complain(format!("No se puede actualizar «{}»: {e}.", u.name)),
+            }
+        }
+        if purge {
+            let mut probe = self.ed.model().clone();
+            self.library.purge = Some(probe.purge_unused_types());
+        }
+    }
+
+    pub(super) fn load_from_library(&mut self, fi: usize, ti: usize, on_conflict: OnConflict) {
+        let lib = self.library.library().clone();
+        let Some(file) = lib.files.get(fi) else {
+            return;
+        };
+        let name = file.types[ti].name.clone();
+        let guid = file.types[ti].guid.clone();
+        let had = self
+            .ed
+            .model()
+            .family_types()
+            .into_iter()
+            .any(|(t, _, _)| match t {
+                FamilyTypeRef::Opening(id) => self
+                    .ed
+                    .model()
+                    .opening_type(id)
+                    .is_some_and(|x| x.guid.to_string() == guid),
+                FamilyTypeRef::Object(id) => self
+                    .ed
+                    .model()
+                    .object_type(id)
+                    .is_some_and(|x| x.guid.to_string() == guid),
+            });
+        match self.ed.load_library_type(file, ti, on_conflict) {
+            Ok(Loaded::New(_)) => self.say(format!("Tipo «{name}» cargado en el proyecto.")),
+            Ok(Loaded::AlreadyThere(_)) => {
+                self.say(format!("El proyecto ya tiene el tipo «{name}», igual."))
+            }
+            Ok(Loaded::Replaced(_)) => self.say(format!(
+                "El tipo «{name}» del proyecto ha tomado los valores de la biblioteca."
+            )),
+            Err(_) if had && on_conflict == OnConflict::Ask => {
+                self.library.conflict = Some((fi, ti));
+            }
+            Err(e) => self.complain(format!("No se puede cargar «{name}»: {e}.")),
+        }
+    }
+
+    fn library_conflict(&mut self, ctx: &egui::Context) {
+        let Some((fi, ti)) = self.library.conflict else {
+            return;
+        };
+        let name = self
+            .library
+            .library()
+            .files
+            .get(fi)
+            .and_then(|f| f.types.get(ti))
+            .map(|t| t.name.clone())
+            .unwrap_or_default();
+        let mut choice = None;
+        egui::Window::new("El tipo ya está en el proyecto")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "El proyecto tiene el tipo «{name}» (el mismo, con el mismo GlobalId) pero con otros valores."
+                ));
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("Sustituir el del proyecto")
+                        .on_hover_text("Sus elementos cambian con él")
+                        .clicked()
+                    {
+                        choice = Some(Some(OnConflict::Replace));
+                    }
+                    if ui
+                        .button("Cargarlo como otro tipo")
+                        .on_hover_text("Con otro nombre y otro GlobalId")
+                        .clicked()
+                    {
+                        choice = Some(Some(OnConflict::Rename));
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        choice = Some(None);
+                    }
+                });
+            });
+        if let Some(c) = choice {
+            self.library.conflict = None;
+            if let Some(c) = c {
+                self.load_from_library(fi, ti, c);
+            }
+        }
+    }
+
+    fn purge_confirmation(&mut self, ctx: &egui::Context) {
+        let Some(n) = self.library.purge else {
+            return;
+        };
+        let mut done = None;
+        egui::Window::new("Purgar tipos sin usar")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                if n == 0 {
+                    ui.label("Todos los tipos del proyecto se usan.");
+                    if ui.button("Cerrar").clicked() {
+                        done = Some(false);
+                    }
+                } else {
+                    ui.label(format!(
+                        "Se quitarán {n} tipos que ningún elemento usa (puertas, ventanas, objetos, muros y forjados; siempre queda uno de muro y uno de forjado). Se puede deshacer."
+                    ));
+                    ui.horizontal(|ui| {
+                        if ui.button("Purgar").clicked() {
+                            done = Some(true);
+                        }
+                        if ui.button("Cancelar").clicked() {
+                            done = Some(false);
+                        }
+                    });
+                }
+            });
+        if let Some(go) = done {
+            self.library.purge = None;
+            if go {
+                match self.ed.purge_unused_types() {
+                    Ok(n) => self.say(format!("{n} tipos sin usar quitados del proyecto.")),
+                    Err(e) => self.complain(format!("No se puede purgar: {e}.")),
+                }
+            }
+        }
+    }
+
+    /// Saves a type of the project into the library folder.
+    pub(super) fn save_type_to_library(&mut self, t: FamilyTypeRef) {
+        let lib = library::scan(&library::library_dir());
+        let result = self.ed.catalog_entry(t).and_then(|(entry, version)| {
+            library::save_type(&lib, &entry, version).map(|p| (entry, p))
+        });
+        match result {
+            Ok((entry, path)) => self.say(format!(
+                "Tipo «{}» guardado en la biblioteca ({}).",
+                entry.entry.name,
+                path.file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default()
+            )),
+            Err(e) => self.complain(format!("No se puede guardar en la biblioteca: {e}.")),
+        }
+        self.library.refresh();
+    }
+}

@@ -206,6 +206,9 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownTable(_) => "la tabla ya no está en el plano".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),
         ModelError::DuplicateName(name) => format!("ya hay otro elemento llamado «{name}»"),
+        ModelError::TypeConflict(name) => {
+            format!("el proyecto ya tiene el tipo «{name}» con otros valores")
+        }
     }
 }
 

@@ -37,12 +37,12 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 pub use ast::{
-    BinOp, Component, Expr, FamilyDef, Host, LineStyle, Param, ParamKind, ParamScope, Pen,
-    PlanSymbol, Require, Stmt,
+    BinOp, Catalog, CatalogMaterial, CatalogType, Component, Expr, FamilyDef, Host, LineStyle,
+    Param, ParamKind, ParamScope, Pen, PlanSymbol, Require, Stmt,
 };
 pub use error::FamilyError;
 pub use eval::{Evaluation, Mark, Part, MAX_PARTS, MAX_REPEAT};
-pub use parser::{expand_includes, parse, BUILTINS, PLAN_BUILTINS};
+pub use parser::{catalog_text, expand_includes, parse, without_catalog, BUILTINS, PLAN_BUILTINS};
 
 /// A parameter or expression value.
 #[derive(Debug, Clone, PartialEq)]

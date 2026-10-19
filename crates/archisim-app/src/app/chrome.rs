@@ -338,6 +338,15 @@ impl ArchiSimApp {
             if ui.button("Tipos de muro cortina…").clicked() {
                 self.open_curtain_types(None, None);
             }
+            if ui
+                .button("Biblioteca…")
+                .on_hover_text(
+                    "Cargar tipos de la biblioteca, actualizar familias, purgar tipos sin usar",
+                )
+                .clicked()
+            {
+                self.library.open = true;
+            }
         });
         self.coord_menu(ui);
         ui.menu_button("Ayuda", |ui| {

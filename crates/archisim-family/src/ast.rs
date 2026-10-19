@@ -34,6 +34,37 @@ pub struct FamilyDef {
     pub outputs: Vec<Output>,
     /// IFC data (class, predefined type…).
     pub ifc: Vec<Output>,
+    /// Types kept with the recipe in a library file (`catalog`), like the
+    /// types of a Revit family file.
+    pub catalog: Catalog,
+}
+
+/// The types saved with a family in a library file, and the materials they
+/// use (so another project can make them as they were).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Catalog {
+    pub materials: Vec<CatalogMaterial>,
+    pub types: Vec<CatalogType>,
+}
+
+/// A material a catalogue type uses, by name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogMaterial {
+    pub name: String,
+    pub category: String,
+    /// sRGB.
+    pub color: [u8; 3],
+}
+
+/// A type of the family: its name, mark, `GlobalId` and description, and
+/// the values of its type parameters (materials by name).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogType {
+    pub name: String,
+    pub mark: String,
+    pub guid: String,
+    pub description: String,
+    pub values: Vec<(String, Value)>,
 }
 
 impl FamilyDef {

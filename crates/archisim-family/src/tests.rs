@@ -654,3 +654,40 @@ plan 1:50
         assert_eq!(s.pattern_mm().is_empty(), s == LineStyle::Continuous);
     }
 }
+
+/// A library file keeps types with the recipe: written and read back the
+/// same, and taken off again for the project's copy.
+#[test]
+fn catalogue_round_trip() {
+    use crate::{catalog_text, parse, without_catalog, Catalog, CatalogMaterial, CatalogType};
+    let recipe = "family \"Mesa\"\n  category furniture\n  host none\n\ntype_params\n  width length = 1.60 label \"Largo\"\n  top material = \"Roble\" label \"Tablero\"\n  round bool = no label \"Redonda\"\n\nbody\n  box (0, 0, 0) to (width, 0.9, 0.75) material top\n";
+    let cat = Catalog {
+        materials: vec![CatalogMaterial {
+            name: "Roble \"natural\"".into(),
+            category: "wood".into(),
+            color: [180, 140, 90],
+        }],
+        types: vec![CatalogType {
+            name: "Mesa 180".into(),
+            mark: "M-01".into(),
+            guid: "2K$S4$YmH0mRk6amryew4Z".into(),
+            description: "Comedor\nseis plazas".into(),
+            values: vec![
+                ("width".into(), Value::Number(1.8)),
+                ("top".into(), Value::Text("Roble \"natural\"".into())),
+                ("round".into(), Value::Bool(true)),
+                ("tiny".into(), Value::Number(0.000_001)),
+                ("negative".into(), Value::Number(-2.5)),
+            ],
+        }],
+    };
+    let file = format!("{recipe}\n{}", catalog_text(&cat));
+    let def = parse(&file).unwrap();
+    assert_eq!(def.catalog, cat);
+    // A comment does not start a catalogue; the project's copy has none.
+    let copy = without_catalog(&file);
+    assert!(!copy.contains("catalog"));
+    assert_eq!(parse(&copy).unwrap().catalog, Catalog::default());
+    assert_eq!(parse(&copy).unwrap().params, def.params);
+    assert!(parse(&format!("{recipe}\ncatalog\n  shelf \"x\"\n")).is_err());
+}
