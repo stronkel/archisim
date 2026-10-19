@@ -621,6 +621,23 @@ impl<'a> Importer<'a> {
         None
     }
 
+    /// A single property value from the element's own property sets only.
+    fn property_own(&self, element: u64, pset: &str, name: &str) -> Option<&'a Value> {
+        for s in self.ix.psets.get(&element).cloned().unwrap_or_default() {
+            let Some(set) = self.ent(s) else { continue };
+            if set.kind != "IFCPROPERTYSET" || set.arg(2).as_str() != Some(pset) {
+                continue;
+            }
+            for p in set.arg(4).as_list() {
+                let Some(p) = self.deref(p) else { continue };
+                if p.kind == "IFCPROPERTYSINGLEVALUE" && p.arg(0).as_str() == Some(name) {
+                    return Some(p.arg(2));
+                }
+            }
+        }
+        None
+    }
+
     fn is_external(&self, element: u64, pset: &str) -> Option<bool> {
         self.property(element, pset, "IsExternal")
             .and_then(Value::as_bool)
@@ -1787,7 +1804,13 @@ impl<'a> Importer<'a> {
         let name = own_name
             .clone()
             .unwrap_or_else(|| format!("Hueco {:.0}×{:.0}", width * 100.0, height * 100.0));
-        let any = self.fallback_material("frame");
+        // A void has no frame or leaf: any material of the file will do (a
+        // new one only if there is none).
+        let first = self.model.materials().next().map(|m| m.id);
+        let any = match first {
+            Some(m) => m,
+            None => self.fallback_material("frame"),
+        };
         let key = (
             None,
             format!("void {:?}", own_guid),
@@ -2045,10 +2068,12 @@ impl<'a> Importer<'a> {
                     height * 100.0
                 )
             });
+        let family_data = te.and_then(|t| self.family_data(t, &type_props));
         let opening_type = self
             .opening_type(
                 ifc_type,
                 &type_name,
+                family_data,
                 NewOpeningType {
                     name: String::new(),
                     kind,
@@ -2074,6 +2099,7 @@ impl<'a> Importer<'a> {
                 setback,
             })
             .map_err(|e| explain(&e))?;
+        self.instance_values(filling, oid);
         if is_door {
             self.report.doors += 1;
         } else {
@@ -2147,6 +2173,7 @@ impl<'a> Importer<'a> {
         &mut self,
         ifc_type: Option<u64>,
         name: &str,
+        family_data: Option<FamilyData>,
         spec: NewOpeningType,
         leaf_ops: &[String],
     ) -> Result<OpeningTypeId, ModelError> {
@@ -2168,6 +2195,22 @@ impl<'a> Importer<'a> {
             return Ok(t);
         }
         let name = self.unique_name(name);
+        // Written by ArchiSim: the very same family, values and mark.
+        if let Some(data) = family_data {
+            match self.family_type(&name, data) {
+                Ok(id) => {
+                    if let Some(g) = self.type_guid(ifc_type) {
+                        self.guids.opening_types.push((id, g));
+                    }
+                    self.opening_types.insert(key, id);
+                    self.report.opening_types += 1;
+                    return Ok(id);
+                }
+                Err(why) => self.report.warn(format!(
+                    "El tipo «{name}» trae su familia de ArchiSim pero no se puede rehacer ({why}): se importa por sus medidas."
+                )),
+            }
+        }
         let id = self
             .model
             .add_opening_type(NewOpeningType { name, ..spec })?;
@@ -2202,6 +2245,156 @@ impl<'a> Importer<'a> {
         self.opening_types.insert(key, id);
         self.report.opening_types += 1;
         Ok(id)
+    }
+
+    /// ArchiSim's family data of a door or window type (`ArchiSim_Family`
+    /// and `ArchiSim_FamilyValues`), with its mark (`Tag`) and description.
+    fn family_data(&self, te: &'a Entity, type_props: &[&'a Entity]) -> Option<FamilyData> {
+        let set = |name: &str| {
+            type_props
+                .iter()
+                .find(|p| p.kind == "IFCPROPERTYSET" && p.arg(2).as_str() == Some(name))
+                .copied()
+        };
+        let props = |set: &'a Entity| -> Vec<(String, &'a Value)> {
+            set.arg(4)
+                .as_list()
+                .iter()
+                .filter_map(|p| self.deref(p))
+                .filter(|p| p.kind == "IFCPROPERTYSINGLEVALUE")
+                .filter_map(|p| Some((p.arg(0).as_str()?.to_string(), p.arg(2))))
+                .collect()
+        };
+        let family = props(set("ArchiSim_Family")?);
+        let text = |key: &str| {
+            family
+                .iter()
+                .find(|(k, _)| k == key)
+                .and_then(|(_, v)| v.as_str())
+                .map(str::to_string)
+        };
+        let values = set("ArchiSim_FamilyValues")
+            .map(|s| props(s).into_iter().map(|(k, v)| (k, v.clone())).collect())
+            .unwrap_or_default();
+        Some(FamilyData {
+            source: text("Source")?,
+            values,
+            mark: te.arg(7).as_str().map(str::to_string),
+            description: te.arg(3).as_str().map(str::to_string),
+        })
+    }
+
+    /// Instance parameters written by ArchiSim (`ArchiSim_FamilyValues` on
+    /// the door or window itself), for families that have them.
+    fn instance_values(&mut self, filling: u64, oid: archisim_core::OpeningId) {
+        use archisim_core::{ParamKind, Value as V};
+        let Some(o) = self.model.opening(oid) else {
+            return;
+        };
+        let Some(t) = self.model.opening_type(o.opening_type) else {
+            return;
+        };
+        let Some(def) = self.model.family(t.family).map(|f| f.def().clone()) else {
+            return;
+        };
+        let mut values = o.values.clone();
+        let mut changed = false;
+        for p in def.params_of(archisim_core::ParamScope::Instance) {
+            let Some(raw) = self.property_own(filling, "ArchiSim_FamilyValues", &p.name) else {
+                continue;
+            };
+            let value = match &p.kind {
+                ParamKind::Bool => raw.as_bool().map(V::Bool),
+                ParamKind::Length => raw.as_f64().map(|x| V::Number(snap(x * self.geo.length))),
+                k if k.is_numeric() => raw.as_f64().map(V::Number),
+                ParamKind::Material => raw
+                    .as_str()
+                    .and_then(|n| self.model.materials().find(|m| m.name == n))
+                    .map(|m| V::Material(m.id.0)),
+                _ => raw.as_str().map(|t| V::Text(t.to_string())),
+            };
+            if let Some(v) = value {
+                values.insert(p.name.clone(), v);
+                changed = true;
+            }
+        }
+        if changed && self.model.set_opening_values(oid, values).is_err() {
+            self.report
+                .warn("Algún parámetro de ejemplar de una puerta o ventana no es válido: se deja el de la familia.");
+        }
+    }
+
+    /// Rebuilds a door or window type from ArchiSim's family data: the
+    /// family (loaded from its recipe if the project does not have it), its
+    /// values (materials by name) and its mark.
+    fn family_type(&mut self, name: &str, data: FamilyData) -> Result<OpeningTypeId, String> {
+        use archisim_core::{Family, FamilyId, ParamKind, Value as V};
+        let parsed = Family::new(FamilyId(1), data.source.clone()).map_err(|e| e.to_string())?;
+        let family = match self.model.family_by_name(parsed.name()) {
+            Some(f) if f.source == parsed.source => f.id,
+            Some(_) => {
+                return Err(format!(
+                    "el proyecto ya tiene otra versión de la familia «{}»",
+                    parsed.name()
+                ))
+            }
+            None => self
+                .model
+                .add_family(&data.source)
+                .map_err(|e| explain(&e))?,
+        };
+        let def = self
+            .model
+            .family(family)
+            .ok_or("familia perdida")?
+            .def()
+            .clone();
+        let mut values = self
+            .model
+            .family_defaults(family, archisim_core::ParamScope::Type)
+            .map_err(|e| explain(&e))?;
+        for (key, raw) in &data.values {
+            let Some(p) = def.param(key) else {
+                continue;
+            };
+            let value = match &p.kind {
+                ParamKind::Material => {
+                    let wanted = raw.as_str().unwrap_or_default();
+                    let m = self
+                        .model
+                        .materials()
+                        .find(|m| m.name == wanted)
+                        .map(|m| m.id)
+                        .ok_or_else(|| format!("no hay material «{wanted}»"))?;
+                    V::Material(m.0)
+                }
+                ParamKind::Bool => V::Bool(raw.as_bool().ok_or("valor sí/no ilegible")?),
+                k if k.is_numeric() => {
+                    let x = raw.as_f64().ok_or("número ilegible")?;
+                    // Lengths come in the file's unit.
+                    let x = if *k == ParamKind::Length {
+                        snap(x * self.geo.length)
+                    } else {
+                        x
+                    };
+                    V::Number(x)
+                }
+                _ => V::Text(raw.as_str().unwrap_or_default().to_string()),
+            };
+            values.insert(key.clone(), value);
+        }
+        let mark = data
+            .mark
+            .filter(|m| self.model.opening_types().all(|t| &t.mark != m));
+        self.model
+            .add_family_type(archisim_core::NewFamilyType {
+                family,
+                name: name.to_string(),
+                mark,
+                description: data.description.unwrap_or_default(),
+                values,
+            })
+            .map_err(|e| explain(&e))
     }
 
     // ---- Everything else ---------------------------------------------
@@ -2433,4 +2626,12 @@ fn leaf_operation(op: &str) -> &'static str {
         "PIVOTHORIZONTAL" => "basculante",
         _ => "practicable",
     }
+}
+
+/// A door or window type's family data, as ArchiSim writes it.
+struct FamilyData {
+    source: String,
+    values: Vec<(String, Value)>,
+    mark: Option<String>,
+    description: Option<String>,
 }

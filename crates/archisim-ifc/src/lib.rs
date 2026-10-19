@@ -313,27 +313,6 @@ impl<'a> Exporter<'a> {
         self.attach_set(element, guid, pset, name);
     }
 
-    /// A planar extrusion: `profile` is drawn in the local XZ plane (x along
-    /// the wall, y up) and extruded `depth` across the wall, centred on the
-    /// local XZ plane. The solid gets the surface style of `material`.
-    fn vertical_solid(&mut self, profile: Ref, depth: f64, material: MaterialId) -> Ref {
-        let at = self.point3(0.0, depth / 2.0, 0.0);
-        let axis = self.w.add("IFCDIRECTION((0.,-1.,0.))");
-        let xdir = self.w.add("IFCDIRECTION((1.,0.,0.))");
-        let pl = self
-            .w
-            .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
-        let solid = self.w.add(format!(
-            "IFCEXTRUDEDAREASOLID({profile},{pl},{},{})",
-            self.z,
-            real(depth)
-        ));
-        if let Some(&style) = self.styles.get(&material) {
-            self.w.add(format!("IFCSTYLEDITEM({solid},({style}),$)"));
-        }
-        solid
-    }
-
     fn rect_profile(&mut self, x0: f64, x1: f64, y0: f64, y1: f64) -> Ref {
         let pts = [
             Point2::new(x0, y0),
@@ -344,6 +323,107 @@ impl<'a> Exporter<'a> {
         let curve = self.polyline(&pts, true);
         self.w
             .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{curve})"))
+    }
+
+    /// A box between two corners in the current placement (x along the
+    /// wall, y across it, z up), as a profile in the XZ plane extruded
+    /// across. `None` for a box with no volume.
+    fn box_solid(&mut self, min: [f64; 3], max: [f64; 3], material: MaterialId) -> Option<Ref> {
+        if (0..3).any(|k| max[k] - min[k] <= EPSILON) {
+            return None;
+        }
+        let profile = self.rect_profile(min[0], max[0], min[2], max[2]);
+        let at = self.point3(0.0, max[1], 0.0);
+        let axis = self.w.add("IFCDIRECTION((0.,-1.,0.))");
+        let xdir = self.w.add("IFCDIRECTION((1.,0.,0.))");
+        let pl = self
+            .w
+            .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+        let solid = self.w.add(format!(
+            "IFCEXTRUDEDAREASOLID({profile},{pl},{},{})",
+            self.z,
+            real(max[1] - min[1])
+        ));
+        if let Some(&style) = self.styles.get(&material) {
+            self.w.add(format!("IFCSTYLEDITEM({solid},({style}),$)"));
+        }
+        Some(solid)
+    }
+
+    /// `ArchiSim_Family` (family name, version and recipe) and
+    /// `ArchiSim_FamilyValues` (one property per parameter, if any) for a
+    /// type, as property set definitions of the type.
+    fn family_psets(
+        &mut self,
+        type_guid: &GlobalId,
+        family: &archisim_core::Family,
+        values: &archisim_core::Values,
+    ) -> (Ref, Option<Ref>) {
+        let props = [
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Family',$,IFCLABEL({}),$)",
+                string(family.name())
+            )),
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Version',$,IFCINTEGER({}),$)",
+                family.version()
+            )),
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Source',$,IFCTEXT({}),$)",
+                string(&family.source)
+            )),
+        ];
+        let set = self.w.add(format!(
+            "IFCPROPERTYSET({},$,'ArchiSim_Family',$,{})",
+            string(derived_guid(type_guid, "ArchiSim_Family").as_str()),
+            list(&props)
+        ));
+        let value_props = self.value_properties(family, values);
+        let values_set = (!value_props.is_empty()).then(|| {
+            self.w.add(format!(
+                "IFCPROPERTYSET({},$,'ArchiSim_FamilyValues',$,{})",
+                string(derived_guid(type_guid, "ArchiSim_FamilyValues").as_str()),
+                list(&value_props)
+            ))
+        });
+        (set, values_set)
+    }
+
+    /// One `IfcPropertySingleValue` per parameter value, typed by the
+    /// parameter's kind: lengths in metres, materials by name.
+    fn value_properties(
+        &mut self,
+        family: &archisim_core::Family,
+        values: &archisim_core::Values,
+    ) -> Vec<Ref> {
+        use archisim_core::{ParamKind, Value};
+        let mut out = Vec::new();
+        for (name, value) in values {
+            let kind = family.def().param(name).map(|p| p.kind.clone());
+            let typed = match (kind, value) {
+                (Some(ParamKind::Length), Value::Number(x)) => {
+                    format!("IFCLENGTHMEASURE({})", real(*x))
+                }
+                (Some(ParamKind::Integer), Value::Number(x)) => {
+                    format!("IFCINTEGER({})", x.round() as i64)
+                }
+                (_, Value::Number(x)) => format!("IFCREAL({})", real(*x)),
+                (_, Value::Bool(b)) => format!("IFCBOOLEAN({})", boolean(*b)),
+                (_, Value::Text(t)) => format!("IFCLABEL({})", string(t)),
+                (_, Value::Material(m)) => {
+                    let name = self
+                        .model
+                        .material(MaterialId(*m))
+                        .map_or(String::new(), |m| m.name.clone());
+                    format!("IFCLABEL({})", string(&name))
+                }
+            };
+            out.push(self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE({},$,{typed},$)",
+                string(name)
+            )));
+        }
+        out
     }
 
     /// `IfcDoorType` or `IfcWindowType` with its material constituents.
@@ -380,12 +460,36 @@ impl<'a> Exporter<'a> {
                 )));
             }
         }
+        // ArchiSim's own data: the family (name, version and recipe) and the
+        // value of each type parameter, so that any family comes back the
+        // same, and others can read the parameters.
+        let model = self.model;
+        if let Some(family) = model.family(t.family) {
+            let (a, b) = self.family_psets(&t.guid, family, &t.values);
+            props.push(a);
+            if let Some(b) = b {
+                props.push(b);
+            }
+        }
         let props = list(&props);
+        let description = if t.description.is_empty() {
+            "$".to_string()
+        } else {
+            string(&t.description)
+        };
+        let tag = if t.mark.is_empty() {
+            "$".to_string()
+        } else {
+            string(&t.mark)
+        };
+        let element_type = model
+            .family(t.family)
+            .map_or("$".to_string(), |f| string(f.name()));
         let (ty, constituents) = match t.kind {
             OpeningKind::Void => unreachable!("voids have no IFC type"),
             OpeningKind::Door(op) => (
                 self.w.add(format!(
-                    "IFCDOORTYPE({},$,{},$,$,{props},$,$,$,.DOOR.,.{}.,.F.,$)",
+                    "IFCDOORTYPE({},$,{},{description},$,{props},$,{tag},{element_type},.DOOR.,.{}.,.F.,$)",
                     string(t.guid.as_str()),
                     string(&t.name),
                     door_operation(op, Hand::Right)
@@ -394,7 +498,7 @@ impl<'a> Exporter<'a> {
             ),
             OpeningKind::Window(_) => (
                 self.w.add(format!(
-                    "IFCWINDOWTYPE({},$,{},$,$,{props},$,$,$,.WINDOW.,.{}.,.F.,$)",
+                    "IFCWINDOWTYPE({},$,{},{description},$,{props},$,{tag},{element_type},.WINDOW.,.{}.,.F.,$)",
                     string(t.guid.as_str()),
                     string(&t.name),
                     window_partitioning(t.panels.len())
@@ -565,86 +669,26 @@ impl<'a> Exporter<'a> {
             .add(format!("IFCDIRECTION(({},0.,0.))", real(facing.signum())));
         let pl = self.placement(Some(void_pl), loc, Some(xdir));
 
-        let f = t.frame_width;
-        let depth = t.frame_depth;
-        let (x0, x1) = (-w / 2.0, w / 2.0);
+        // The body: the 3D pieces of the family, one box each. The family
+        // draws with x to the right seen from the side the leaves open to,
+        // which is the opposite of this placement's x.
+        let is_door = matches!(t.kind, OpeningKind::Door(_));
+        let parts = self
+            .model
+            .evaluate_opening(og.opening)
+            .map(|e| e.parts)
+            .unwrap_or_default();
         let mut solids = Vec::new();
-        let is_door = match t.kind {
-            OpeningKind::Door(op) => {
-                // Lining: two jambs and the head, open at the floor.
-                let lining = self.polyline(
-                    &[
-                        Point2::new(x0, 0.0),
-                        Point2::new(x0 + f, 0.0),
-                        Point2::new(x0 + f, h - f),
-                        Point2::new(x1 - f, h - f),
-                        Point2::new(x1 - f, 0.0),
-                        Point2::new(x1, 0.0),
-                        Point2::new(x1, h),
-                        Point2::new(x0, h),
-                    ],
-                    true,
-                );
-                let lining = self
-                    .w
-                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{lining})"));
-                solids.push(self.vertical_solid(lining, depth, t.frame_material));
-                let leaf = 0.04_f64.min(depth);
-                let leaves: Vec<(f64, f64)> = match op {
-                    DoorOperation::DoubleSwing => vec![(x0 + f, 0.0), (0.0, x1 - f)],
-                    _ => vec![(x0 + f, x1 - f)],
-                };
-                for (a, b) in leaves {
-                    let p = self.rect_profile(a, b, 0.0, h - f);
-                    solids.push(self.vertical_solid(p, leaf, t.panel_material));
-                }
-                true
+        for part in &parts {
+            let solid = self.box_solid(
+                [-part.max[0], part.min[1], part.min[2]],
+                [-part.min[0], part.max[1], part.max[2]],
+                MaterialId(part.material),
+            );
+            if let Some(solid) = solid {
+                solids.push(solid);
             }
-            OpeningKind::Window(_) => {
-                let n = t.panels.len().max(1);
-                let clear = (w - 2.0 * f - (n as f64 - 1.0) * f) / n as f64;
-                let panes: Vec<(f64, f64)> = (0..n)
-                    .map(|i| {
-                        let a = x0 + f + i as f64 * (clear + f);
-                        (a, a + clear)
-                    })
-                    .collect();
-                let outer = self.polyline(
-                    &[
-                        Point2::new(x0, 0.0),
-                        Point2::new(x1, 0.0),
-                        Point2::new(x1, h),
-                        Point2::new(x0, h),
-                    ],
-                    true,
-                );
-                let holes: Vec<Ref> = panes
-                    .iter()
-                    .map(|&(a, b)| {
-                        self.polyline(
-                            &[
-                                Point2::new(a, f),
-                                Point2::new(a, h - f),
-                                Point2::new(b, h - f),
-                                Point2::new(b, f),
-                            ],
-                            true,
-                        )
-                    })
-                    .collect();
-                let frame = self.w.add(format!(
-                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outer},{})",
-                    list(&holes)
-                ));
-                solids.push(self.vertical_solid(frame, depth, t.frame_material));
-                for (a, b) in panes {
-                    let p = self.rect_profile(a, b, f, h - f);
-                    solids.push(self.vertical_solid(p, 0.024_f64.min(depth), t.panel_material));
-                }
-                false
-            }
-            OpeningKind::Void => unreachable!("a void returns before its filling"),
-        };
+        }
         let rep = self.w.add(format!(
             "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',{})",
             self.body_ctx,
@@ -656,7 +700,7 @@ impl<'a> Exporter<'a> {
         let name = format!("{} {tag}", t.name);
         let filling = if is_door {
             let OpeningKind::Door(op) = t.kind else {
-                unreachable!()
+                unreachable!("checked above")
             };
             self.w.add(format!(
                 "IFCDOOR({},$,{},$,{},{pl},{shape},{},{},{},.DOOR.,.{}.,$)",
@@ -669,9 +713,6 @@ impl<'a> Exporter<'a> {
                 door_operation(op, og.hand)
             ))
         } else {
-            let OpeningKind::Window(_) = t.kind else {
-                unreachable!()
-            };
             self.w.add(format!(
                 "IFCWINDOW({},$,{},$,{},{pl},{shape},{},{},{},.WINDOW.,.{}.,$)",
                 string(guid.as_str()),
@@ -693,10 +734,13 @@ impl<'a> Exporter<'a> {
         } else {
             ("Pset_WindowCommon", "Qto_WindowBaseQuantities")
         };
+        // `Reference` is the type mark ("P-01"), as IFC defines it; the name
+        // when the type has none.
+        let reference = if t.mark.is_empty() { &t.name } else { &t.mark };
         let props = [
             self.w.add(format!(
                 "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
-                string(&t.name)
+                string(reference)
             )),
             self.w.add(format!(
                 "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({}),$)",
@@ -704,6 +748,15 @@ impl<'a> Exporter<'a> {
             )),
         ];
         self.pset(filling, guid, pset_name, &props);
+        // Instance parameters of the family, if it has any.
+        if let Some(o) = self.model.opening(og.opening) {
+            if !o.values.is_empty() {
+                if let Some(family) = self.model.family(t.family) {
+                    let values = self.value_properties(family, &o.values);
+                    self.pset(filling, guid, "ArchiSim_FamilyValues", &values);
+                }
+            }
+        }
         // ArchiSim's own data: the hand (UNE-EN 12519), which IFC only
         // records for doors.
         let hand = self.w.add(format!(
