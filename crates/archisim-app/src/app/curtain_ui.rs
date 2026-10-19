@@ -191,12 +191,16 @@ impl ArchiSimApp {
                 ui,
                 "Retícula",
                 "Módulos × filas",
+                &format!("{} × {}", g.mullions.len() - 1, g.transoms.len() - 1),
+            );
+            text_row(
+                ui,
+                "Paño (mm)",
+                "Entre ejes de montantes y de travesaños",
                 &format!(
-                    "{} × {}  ({} × {} mm)",
-                    g.mullions.len() - 1,
-                    g.transoms.len() - 1,
+                    "{} × {}",
                     fmt_mm(g.mullions[1] - g.mullions[0]),
-                    fmt_mm(g.transoms[1] - g.transoms[0]),
+                    fmt_mm(g.transoms[1] - g.transoms[0])
                 ),
             );
         });

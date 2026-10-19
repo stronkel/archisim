@@ -269,6 +269,39 @@ impl ArchiSimApp {
                 }
             })
             .collect();
+        // Curtain walls and railings, one row each with their length.
+        let curtains = m
+            .curtain_walls()
+            .map(|c| TypeRow {
+                tab: None,
+                id: c.id.0,
+                badge: None,
+                name: format!("Muro cortina {}", c.id.0),
+                count: 1,
+                here: if c.level == self.ed.level {
+                    vec![Element::CurtainWall(c.id)]
+                } else {
+                    Vec::new()
+                },
+                value: Some(format!("{} m", fmt_m(c.length()))),
+            })
+            .collect();
+        let railings = m
+            .railings()
+            .map(|r| TypeRow {
+                tab: None,
+                id: r.id.0,
+                badge: None,
+                name: format!("Barandilla {}", r.id.0),
+                count: 1,
+                here: if r.level == self.ed.level {
+                    vec![Element::Railing(r.id)]
+                } else {
+                    Vec::new()
+                },
+                value: Some(format!("{} m", fmt_m(r.length()))),
+            })
+            .collect();
         // Roofs, by type.
         let roofs = m
             .slab_types()
@@ -318,6 +351,8 @@ impl ArchiSimApp {
             ("Forjados", Icon::Slab, slabs),
             ("Cubiertas", Icon::Roof, roofs),
             ("Escaleras", Icon::Stair, stairs),
+            ("Muros cortina", Icon::CurtainWall, curtains),
+            ("Barandillas", Icon::Railing, railings),
             ("Puertas", Icon::Door, openings(true)),
             ("Ventanas", Icon::Window, openings(false)),
         ]
