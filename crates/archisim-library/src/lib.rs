@@ -31,6 +31,8 @@ pub struct Library {
     pub sliding_door: OpeningTypeId,
     /// Folding door of four leaves, 160 × 205.
     pub folding_door: OpeningTypeId,
+    /// Pocket sliding door (into a frame in the wall), 80 × 205.
+    pub pocket_door: OpeningTypeId,
     pub window_two_leaves: OpeningTypeId,
     pub window_one_leaf: OpeningTypeId,
     /// Two-leaf window with a roller shutter and its box, 120 × 150.
@@ -314,6 +316,25 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         aluminio,
         vidrio,
     )?;
+    let pocket_door = {
+        let family = m.system_family(archisim_core::family::POCKET_DOOR)?;
+        let mut values = m.family_defaults(family, archisim_core::ParamScope::Type)?;
+        values.insert(
+            "frame_material".into(),
+            archisim_core::Value::Material(madera.0),
+        );
+        values.insert(
+            "panel_material".into(),
+            archisim_core::Value::Material(madera.0),
+        );
+        m.add_family_type(archisim_core::NewFamilyType {
+            family,
+            name: "Puerta corredera empotrada 80×205".into(),
+            mark: None,
+            description: String::new(),
+            values,
+        })?
+    };
     let window_shutter = opening(
         m,
         "Ventana practicable 2 hojas con persiana 120×150",
@@ -396,6 +417,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         double_door,
         sliding_door,
         folding_door,
+        pocket_door,
         window_two_leaves,
         window_one_leaf,
         window_shutter,
@@ -534,7 +556,7 @@ mod tests {
         assert_eq!(m.levels()[0].elevation, 0.0);
         assert_eq!(m.wall_types().count(), 3);
         assert_eq!(m.slab_types().count(), 4);
-        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 5);
+        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 6);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 5);
         assert_eq!(
             m.member_types()

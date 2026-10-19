@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(m.columns().count(), 2);
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
-        assert_eq!(m.opening_types().count(), 11);
+        assert_eq!(m.opening_types().count(), 12);
         assert_eq!(doc.undo_label(), Some("Secciones y alzados"));
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.spaces().count(), 4);

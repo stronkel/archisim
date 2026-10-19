@@ -1,0 +1,60 @@
+family "Puerta corredera empotrada"
+  category door
+  host wall
+  version 1
+  description "Puerta corredera de una hoja que se esconde dentro del muro, en un armazón (cajón) junto al hueco, con cerco"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.80 range 0.10..20.00 label "Hueco de obra: ancho"
+    height length = 2.05 range 0.10..20.00 label "Hueco de obra: alto"
+  section "Cerco"
+    frame_width length = 0.05 range 0.001..2.00 label "Cerco: anchura vista"
+    frame_depth length = 0.07 range 0.001..2.00 label "Cerco: fondo"
+  section "Materiales"
+    frame_material material = "Madera de pino" label "Cerco"
+    panel_material material = "Madera de pino" label "Hoja"
+
+require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para la hoja"
+
+# La hoja cerrada, en el plano del cerco; el armazón queda dentro del muro.
+body
+  use door_lining(width, height, frame_width, frame_depth, frame_material)
+  use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+
+# Cerco cortado, la hoja a medio meter en el muro hacia el lado de la mano
+# y el armazón (el cajón dentro del muro) en discontinua.
+plan 1:50
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  let s = if hand == "left" then -1 else 1
+  let lw = c1 - c0
+  let jamb = if hand == "left" then -width / 2 else width / 2
+  let t = min(0.02, frame_depth / 4)
+  polygon (c0 + s * lw / 2, -t) (c1 + s * lw / 2, -t) (c1 + s * lw / 2, t) (c0 + s * lw / 2, t) pen frame filled
+  let p = min(frame_depth / 2, 0.04)
+  line (jamb, -p) to (jamb + s * lw, -p) pen thin dashed
+  line (jamb, p) to (jamb + s * lw, p) pen thin dashed
+  line (jamb + s * lw, -p) to (jamb + s * lw, p) pen thin dashed
+
+plan 1:100
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let s = if hand == "left" then -1 else 1
+  let lw = c1 - c0
+  let jamb = if hand == "left" then -width / 2 else width / 2
+  line (c0 + s * lw / 2, 0) to (c1 + s * lw / 2, 0) pen frame
+  line (jamb, 0) to (jamb + s * lw, 0) pen thin dashed
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  operation = "sliding"

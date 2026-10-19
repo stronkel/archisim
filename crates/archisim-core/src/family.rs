@@ -85,10 +85,11 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 6] = [
+const SYSTEM_SOURCES: [&str; 7] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
     include_str!("../families/puerta_plegable.asfam"),
+    include_str!("../families/puerta_corredera_empotrada.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
     include_str!("../families/hueco.asfam"),
@@ -97,6 +98,7 @@ const SYSTEM_SOURCES: [&str; 6] = [
 pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
 pub const FOLDING_DOOR: &str = "Puerta plegable";
+pub const POCKET_DOOR: &str = "Puerta corredera empotrada";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
 /// Opening with no door or window in it (IFC: an `IfcOpeningElement`
@@ -311,6 +313,7 @@ mod tests {
                 SWING_DOOR,
                 SLIDING_DOOR,
                 FOLDING_DOOR,
+                POCKET_DOOR,
                 CASEMENT_WINDOW,
                 SLIDING_WINDOW,
                 VOID
@@ -697,9 +700,12 @@ mod tests {
                                                     panic!("{} plan: {e}", fam.name())
                                                 });
                                             assert!(marks.is_empty() == (def.category == "void"));
+                                            // Within the opening and, at most,
+                                            // a leaf's width beyond a jamb (the
+                                            // pocket of a pocket door).
                                             for p in mark_points(&marks) {
                                                 assert!(
-                                                    p[0].abs() <= w + 0.1,
+                                                    p[0].abs() <= 1.5 * w + 0.1,
                                                     "{} {p:?}",
                                                     fam.name()
                                                 );
