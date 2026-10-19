@@ -10,6 +10,7 @@
 //! always metres of the drawing per millimetre of paper (`scale / 1000`).
 
 pub mod font;
+pub mod grips;
 pub mod hatch;
 pub mod measure;
 pub mod ops;

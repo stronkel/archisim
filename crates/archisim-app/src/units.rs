@@ -173,8 +173,12 @@ fn es_shape(what: &str) -> &str {
         "polyline arc too large" => "un arco de la polilínea es demasiado grande",
         "polyline has no length" => "la polilínea no tiene longitud",
         "arc sweep must be between 0 and 360°" => "el arco tiene que abarcar entre 0 y 360°",
-        "ellipse ratio must be in (0, 1]" => "la proporción de la elipse tiene que estar entre 0 y 1",
-        "ellipse sweep must be in (0, 360°]" => "el arco de elipse tiene que abarcar entre 0 y 360°",
+        "ellipse ratio must be in (0, 1]" => {
+            "la proporción de la elipse tiene que estar entre 0 y 1"
+        }
+        "ellipse sweep must be in (0, 360°]" => {
+            "el arco de elipse tiene que abarcar entre 0 y 360°"
+        }
         "text is empty" => "el texto está vacío",
         "hatch needs a boundary" => "el sombreado necesita un contorno",
         "layer name is empty" => "la capa necesita un nombre",

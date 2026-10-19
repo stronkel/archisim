@@ -9,6 +9,7 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod cad;
 mod dim_tool;
 mod drag;
 mod editor;
@@ -27,6 +28,7 @@ mod units;
 mod view;
 mod view3d;
 mod wall_tool;
+mod xform;
 
 use app::ArchiSimApp;
 use editor::Editor;

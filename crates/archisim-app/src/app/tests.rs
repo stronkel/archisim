@@ -31,6 +31,9 @@ impl Harness {
             modifiers: Modifiers::NONE,
             events: Vec::new(),
         };
+        // The drawing tests were written with ArchiCAD's keys (M, F… at
+        // once); the AutoCAD command line has its own tests.
+        h.app.keys_autocad = false;
         h.frame();
         h.frame();
         h
@@ -1750,4 +1753,176 @@ fn slab_holes_and_voids_by_clicks() {
     let back = archisim_ifc::import_ifc(&ifc).unwrap();
     let diffs = archisim_ifc::differences(h.model(), &back.model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}
+
+// ---- 2D drafting with the command line (AutoCAD) -----------------------
+
+/// Types a command or value and presses Enter, as in AutoCAD.
+fn command(h: &mut Harness, text: &str) {
+    h.type_text(text);
+    h.key(Key::Enter);
+}
+
+fn drafts(h: &Harness) -> Vec<archisim_core::Draft> {
+    h.model().drafts().cloned().collect()
+}
+
+#[test]
+fn lines_rectangles_and_typed_coordinates() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    // LINEA with a click, relative and polar coordinates, and Cerrar.
+    command(&mut h, "l");
+    assert_eq!(h.app.tool, Tool::Cad);
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@3000,0");
+    command(&mut h, "@2000<90");
+    command(&mut h, "c");
+    let d = drafts(&h);
+    assert_eq!(d.len(), 3, "{d:?}");
+    assert_eq!(h.app.tool, Tool::Arrow);
+    assert!(d
+        .iter()
+        .any(|x| matches!(x.shape, archisim_core::Shape::Line { a, b }
+        if a.approx_eq(p(3.0, 0.0)) && b.approx_eq(p(3.0, 2.0)))));
+    // Enter on an empty line repeats LINEA; Esc keeps what was drawn.
+    h.key(Key::Enter);
+    assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("LINEA"));
+    command(&mut h, "10000,0");
+    command(&mut h, "12000,0");
+    h.key(Key::Escape);
+    assert_eq!(drafts(&h).len(), 4);
+    assert!(h.app.cad.is_none());
+    // A rectangle by its size.
+    command(&mut h, "rec");
+    command(&mut h, "0,5000");
+    command(&mut h, "@4000,3000");
+    let rect = drafts(&h).last().unwrap().shape.clone();
+    assert!((archisim_draft::area(&rect).unwrap() - 12.0).abs() < 1e-9);
+    // An unknown command is said, nothing changes.
+    command(&mut h, "zzz");
+    assert!(h.app.cmdline.history.last().unwrap().1);
+    // M + Enter takes the wall tool.
+    command(&mut h, "m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.key(Key::Escape);
+    // Undo removes the rectangle.
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert_eq!(drafts(&h).len(), 4);
+}
+
+#[test]
+fn offset_trim_hatch_and_move() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    command(&mut h, "rec");
+    command(&mut h, "0,0");
+    command(&mut h, "4000,3000");
+    // EQUIDIST 500 outwards.
+    command(&mut h, "eq");
+    command(&mut h, "500");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(2.0, -2.0));
+    h.key(Key::Enter);
+    let d = drafts(&h);
+    assert_eq!(d.len(), 2);
+    assert!((archisim_draft::area(&d[1].shape).unwrap() - 20.0).abs() < 1e-9);
+    // A line across both, trimmed between them on the right.
+    command(&mut h, "l");
+    command(&mut h, "-2000,1500");
+    command(&mut h, "6000,1500");
+    h.key(Key::Enter);
+    command(&mut h, "rr");
+    h.click_at(p(4.25, 1.5));
+    h.key(Key::Enter);
+    let line = drafts(&h)
+        .into_iter()
+        .filter(|x| matches!(x.shape, archisim_core::Shape::Line { .. }))
+        .count();
+    // Cut in two: left part and right part.
+    assert_eq!(line, 2);
+    // A hatch with a click inside the inner rectangle (it has the line
+    // pieces through it: the lower half).
+    command(&mut h, "sb");
+    h.click_at(p(1.0, 1.0));
+    h.key(Key::Enter);
+    let hatch = drafts(&h)
+        .into_iter()
+        .find(|x| matches!(x.shape, archisim_core::Shape::Hatch(_)))
+        .expect("a hatch");
+    let a = archisim_draft::area(&hatch.shape).unwrap();
+    assert!((a - 6.0).abs() < 1e-6, "{a}");
+    // Move everything 1 m right: window from right to left (crossing).
+    h.drag(p(7.0, 4.0), p(-1.5, -1.0));
+    assert_eq!(h.app.ed.selection.len(), drafts(&h).len());
+    command(&mut h, "d");
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@1000,0");
+    assert!(h.app.ed.selection.is_empty());
+    let moved = drafts(&h)
+        .into_iter()
+        .find(|x| matches!(x.shape, archisim_core::Shape::Hatch(_)))
+        .unwrap();
+    let (lo, _) = archisim_draft::bounds(&moved.shape, 0.05);
+    assert!((lo.x - 1.0).abs() < 1e-9, "{lo:?}");
+}
+
+#[test]
+fn texts_layers_and_drafting_properties() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    // A layer for texts, made current.
+    let textos = h
+        .app
+        .ed
+        .add_draw_layer(archisim_core::DrawLayer::new(
+            "Textos",
+            [0, 0, 200],
+            0.25,
+            archisim_core::LineStyle::Continuous,
+        ))
+        .unwrap();
+    h.app.cad_settings.layer = textos;
+    command(&mut h, "tx");
+    h.click_at(p(1.0, 1.0));
+    command(&mut h, "3,5");
+    h.key(Key::Enter);
+    assert_eq!(h.app.cad_want(), Some(crate::cad::Want::Text));
+    h.frame();
+    h.app
+        .cad_feed(crate::cad::Input::Value("Salón\n25,40 m²".into()));
+    h.key(Key::Escape);
+    let t = drafts(&h).pop().expect("a text");
+    assert_eq!(t.layer, textos);
+    let archisim_core::Shape::Text(text) = &t.shape else {
+        panic!()
+    };
+    assert_eq!(text.height, 3.5);
+    assert_eq!(text.content.lines().count(), 2);
+    // Selected, the palette shows it; the dialog of layers opens with CAPA.
+    h.app.ed.selection = [Element::Draft(t.id)].into_iter().collect();
+    h.frame();
+    command(&mut h, "capa");
+    assert!(h.app.show_layers);
+    h.frame();
+    // Hidden layer: its texts are not picked.
+    let mut l = h.model().draw_layer(textos).unwrap().clone();
+    l.visible = false;
+    h.app.ed.set_draw_layer(l).unwrap();
+    h.app.ed.selection.clear();
+    assert!(crate::pick::elements_on_level(h.model(), h.app.ed.level)
+        .iter()
+        .all(|e| !matches!(e, Element::Draft(_))));
+    // Every command starts and is left with Esc without trouble.
+    for (name, _) in crate::cad::ALIASES {
+        if let crate::cad::Launch::Command(c) = crate::cad::launch(name).unwrap() {
+            h.app.start_command(c);
+            h.move_to(p(2.0, 2.0));
+            h.frame();
+            h.key(Key::Escape);
+            assert!(h.app.cad.is_none(), "{c}");
+        }
+    }
 }

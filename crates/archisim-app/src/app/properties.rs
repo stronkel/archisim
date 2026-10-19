@@ -42,6 +42,17 @@ impl ArchiSimApp {
             self.tool_properties(ui);
             return;
         }
+        let drafts: Vec<archisim_core::DraftId> = selection
+            .iter()
+            .filter_map(|e| match e {
+                Element::Draft(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        if !drafts.is_empty() && drafts.len() == selection.len() {
+            self.draft_properties(ui, &drafts);
+            return;
+        }
         match selection.as_slice() {
             [] => self.view_properties(ui),
             [Element::Wall(id)] => self.wall_properties(ui, *id),
@@ -189,6 +200,7 @@ impl ArchiSimApp {
             Tool::Door => self.opening_tool_properties(ui, true),
             Tool::Window => self.opening_tool_properties(ui, false),
             Tool::Dimension => self.dim_tool_properties(ui),
+            Tool::Cad => self.cad_tool_properties(ui),
         }
     }
 
@@ -1443,6 +1455,7 @@ impl ArchiSimApp {
         let openings = count(|e| matches!(e, Element::Opening(_)));
         let slabs = count(|e| matches!(e, Element::Slab(_)));
         let annotations = count(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)));
+        let drafts = count(|e| matches!(e, Element::Draft(_)));
         props::title(ui, &format!("{} elementos seleccionados", many.len()));
         group(ui, "many-summary", "Selección", |ui| {
             for (name, n) in [
@@ -1450,6 +1463,7 @@ impl ArchiSimApp {
                 ("Puertas y ventanas", openings),
                 ("Forjados", slabs),
                 ("Cotas", annotations),
+                ("Dibujo 2D", drafts),
             ] {
                 if n > 0 {
                     text_row(ui, name, "", &n.to_string());

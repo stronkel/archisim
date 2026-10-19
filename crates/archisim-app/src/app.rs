@@ -50,6 +50,9 @@ const TRACK_REACH: f32 = 6.0;
 const SIDE_WIDTH: f32 = 340.0;
 const MIN_SIDE_WIDTH: f32 = 290.0;
 const MAX_SIDE_WIDTH: f32 = 520.0;
+/// Height of the command line under the drawing (two lines said and the
+/// prompt).
+const COMMAND_LINE_HEIGHT: f32 = 62.0;
 /// Width of the toolbox, with names and with icons only.
 const TOOLBOX_WIDTH: f32 = 124.0;
 const TOOLBOX_COMPACT_WIDTH: f32 = 52.0;
@@ -62,6 +65,8 @@ pub enum Tool {
     Door,
     Window,
     Dimension,
+    /// A 2D drafting or editing command is running (AutoCAD's).
+    Cad,
 }
 
 impl Tool {
@@ -156,6 +161,19 @@ pub struct ArchiSimApp {
     pub window_settings: OpeningSettings,
     pub dim_tool: DimTool,
     pub dim_settings: DimSettings,
+    /// The 2D command running, if any.
+    pub cad: Option<Box<dyn crate::cad::Command>>,
+    /// Layer, style and the values 2D commands remember.
+    pub cad_settings: crate::cad::CadSettings,
+    /// The command line under the drawing.
+    pub cmdline: cad_ui::CmdLine,
+    /// Keys as in AutoCAD (type the command and Enter) or as in ArchiCAD
+    /// (M, F, P, V, C, N change tool at once).
+    pub keys_autocad: bool,
+    /// The text being written for the text command.
+    text_draft: Option<String>,
+    /// The drawing layers dialog is open.
+    pub show_layers: bool,
     /// The levels dialog is open.
     pub show_levels: bool,
     /// A level waiting for confirmation before being deleted with its
@@ -261,6 +279,12 @@ impl ArchiSimApp {
             window_settings,
             dim_tool: DimTool::default(),
             dim_settings: DimSettings::default(),
+            cad: None,
+            cad_settings: Default::default(),
+            cmdline: Default::default(),
+            keys_autocad: true,
+            text_draft: None,
+            show_layers: false,
             show_levels: false,
             level_to_delete: None,
             types: TypesDialog::default(),
@@ -335,6 +359,10 @@ impl ArchiSimApp {
     }
 
     fn set_tool(&mut self, tool: Tool) {
+        if tool != Tool::Cad && self.cad.is_some() {
+            // Another tool ends the command (keeping what it drew).
+            self.end_command(true);
+        }
         if tool != self.tool {
             self.wall_tool.finish();
             self.slab_tool.finish();
@@ -824,6 +852,7 @@ impl ArchiSimApp {
         egui::Panel::bottom("bottom-bar")
             .frame(bar(p.panel))
             .show(ui, |ui| self.bottom_bar(ui));
+        crate::pick::set_scale(self.plan_scale);
         // The drawing stays in the middle of the window: the column on the
         // right (navigator) is as wide as the two on the left (tools and
         // properties). Dragging the edge of Properties widens both sides.
@@ -881,6 +910,18 @@ impl ArchiSimApp {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             self.tab_strip(ui);
+            if self.mode == ViewMode::Plan {
+                egui::Panel::bottom("command-line")
+                    .resizable(false)
+                    .exact_size(COMMAND_LINE_HEIGHT)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(p.panel)
+                            .inner_margin(egui::Margin::symmetric(10, 3))
+                            .stroke(Stroke::new(1.0, p.line)),
+                    )
+                    .show(ui, |ui| self.command_line(ui));
+            }
             match self.mode {
                 ViewMode::Plan => self.plan_view(ui),
                 ViewMode::ThreeD => self.view_3d(ui),
@@ -893,6 +934,8 @@ impl ArchiSimApp {
             ));
         }
         self.dialogs(&ctx);
+        self.text_entry(&ctx);
+        self.layers_dialog(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -1334,7 +1377,9 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 }
 
 mod annotation_ui;
+mod cad_ui;
 mod chrome;
+mod draft_props;
 mod icons;
 mod levels_ui;
 mod navigator;

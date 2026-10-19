@@ -235,6 +235,7 @@ impl Editor {
             Element::Slab(id) => model.slab(*id).is_some(),
             Element::Dimension(id) => model.dimension(*id).is_some(),
             Element::Mark(id) => model.elevation_mark(*id).is_some(),
+            Element::Draft(id) => model.draft(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -404,6 +405,9 @@ impl Editor {
                     Element::Mark(id) => {
                         m.remove_elevation_mark(*id)?;
                     }
+                    Element::Draft(id) => {
+                        m.remove_draft(*id)?;
+                    }
                     Element::Opening(_) => {}
                 }
             }
@@ -411,6 +415,139 @@ impl Editor {
         })?;
         self.selection.clear();
         Ok(n)
+    }
+
+    /// Applies the changes of a step of a 2D command as one undoable
+    /// step. New drafting elements go to `view` with the layer and style
+    /// of `st`. Returns the elements created or changed (the new
+    /// selection after a copy).
+    pub fn apply_cad(
+        &mut self,
+        view: archisim_core::ViewRef,
+        st: &crate::cad::CadSettings,
+        step: &crate::cad::Changes,
+    ) -> EditResult<BTreeSet<Element>> {
+        use crate::cad::Change;
+        let changes = step.changes.clone();
+        let out = self.transact(step.label, |m| {
+            let mut out = BTreeSet::new();
+            for c in changes {
+                match c {
+                    Change::Add(shape) => {
+                        let id = m.add_draft(archisim_core::NewDraft {
+                            view,
+                            layer: st.layer,
+                            shape,
+                            color: st.color,
+                            weight: st.weight,
+                            line: st.line,
+                        })?;
+                        out.insert(Element::Draft(id));
+                    }
+                    Change::AddDraft(spec) => {
+                        out.insert(Element::Draft(m.add_draft(spec)?));
+                    }
+                    Change::Reshape(id, shape) => {
+                        m.set_draft_shape(id, shape)?;
+                        out.insert(Element::Draft(id));
+                    }
+                    Change::Remove(e) => match e {
+                        Element::Draft(id) => {
+                            m.remove_draft(id)?;
+                        }
+                        Element::Wall(id) => {
+                            if m.wall(id).is_some() {
+                                m.remove_wall(id)?;
+                            }
+                        }
+                        Element::Slab(id) => {
+                            m.remove_slab(id)?;
+                        }
+                        Element::Opening(id) => {
+                            if m.opening(id).is_some() {
+                                m.remove_opening(id)?;
+                            }
+                        }
+                        Element::Dimension(id) => {
+                            m.remove_dimension(id)?;
+                        }
+                        Element::Mark(id) => {
+                            m.remove_elevation_mark(id)?;
+                        }
+                    },
+                    Change::Transform { items, t, copy } => {
+                        out.extend(crate::xform::transform(m, &items, &t, copy)?);
+                    }
+                    Change::MatchStyle { from, to } => {
+                        let f = m.draft(from).ok_or(ModelError::UnknownDraft(from))?.clone();
+                        for id in to {
+                            m.set_draft_style(id, f.layer, f.color, f.weight, f.line)?;
+                            out.insert(Element::Draft(id));
+                        }
+                    }
+                }
+            }
+            Ok(out)
+        })?;
+        Ok(out)
+    }
+
+    // ---- 2D drafting ----------------------------------------------------
+
+    /// Changes the layer, colour, weight and line style of drafting
+    /// elements; `None` in an argument leaves that property as it is, and
+    /// `Some(None)` sets it to "by layer".
+    pub fn set_drafts_style(
+        &mut self,
+        ids: &[archisim_core::DraftId],
+        layer: Option<archisim_core::DrawLayerId>,
+        color: Option<Option<archisim_core::Rgb>>,
+        weight: Option<Option<f64>>,
+        line: Option<Option<archisim_core::LineStyle>>,
+    ) -> EditResult {
+        self.transact("Cambiar estilo", |m| {
+            for id in ids {
+                let d = m.draft(*id).ok_or(ModelError::UnknownDraft(*id))?.clone();
+                m.set_draft_style(
+                    *id,
+                    layer.unwrap_or(d.layer),
+                    color.unwrap_or(d.color),
+                    weight.unwrap_or(d.weight),
+                    line.unwrap_or(d.line),
+                )?;
+            }
+            Ok(())
+        })
+    }
+
+    /// New geometry for a drafting element (a text's words, a hatch's
+    /// pattern…).
+    pub fn set_draft_shape(
+        &mut self,
+        id: archisim_core::DraftId,
+        shape: archisim_core::Shape,
+        label: &str,
+    ) -> EditResult {
+        self.transact(label, |m| m.set_draft_shape(id, shape))
+    }
+
+    pub fn add_draw_layer(
+        &mut self,
+        layer: archisim_core::DrawLayer,
+    ) -> EditResult<archisim_core::DrawLayerId> {
+        self.transact("Nueva capa", |m| m.add_draw_layer(layer))
+    }
+
+    pub fn set_draw_layer(&mut self, layer: archisim_core::DrawLayer) -> EditResult {
+        self.transact("Cambiar capa", |m| m.set_draw_layer(layer))
+    }
+
+    /// Removes a layer, moving its elements to layer "0".
+    pub fn remove_draw_layer(&mut self, id: archisim_core::DrawLayerId) -> EditResult {
+        self.transact("Borrar capa", |m| {
+            m.remove_draw_layer(id, Some(archisim_core::LAYER_ZERO))
+                .map(|_| ())
+        })
     }
 
     pub fn set_walls_type(&mut self, walls: &[WallId], t: WallTypeId) -> EditResult {

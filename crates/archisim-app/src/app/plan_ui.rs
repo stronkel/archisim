@@ -55,6 +55,7 @@ impl ArchiSimApp {
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
+        self.draw_cad(&painter, rect);
         self.draw_tracking(&painter, rect);
         self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
@@ -78,6 +79,12 @@ impl ArchiSimApp {
             Tool::Wall | Tool::Slab | Tool::Door | Tool::Window | Tool::Dimension => {
                 CursorIcon::Crosshair
             }
+            Tool::Cad => match self.cad_want() {
+                Some(crate::cad::Want::Pick) => CursorIcon::Cell,
+                Some(crate::cad::Want::Select) if self.hover.is_some() => CursorIcon::PointingHand,
+                Some(crate::cad::Want::Select) => CursorIcon::Default,
+                _ => CursorIcon::Crosshair,
+            },
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -156,6 +163,7 @@ impl ArchiSimApp {
         let reach = self.view.to_metres(REACH);
         let model = self.ed.model();
         match self.tool {
+            Tool::Cad => self.cad_cursor(ctx, raw, reach),
             Tool::Wall => {
                 let mut s = self.snap_at(raw, reach, &self.wall_tool.chain(), &BTreeSet::new());
                 if let Some(a) = self.wall_tool.tracking_from() {
@@ -282,6 +290,15 @@ impl ArchiSimApp {
             self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
             return;
         }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
+            self.toggle_ortho();
+        }
+        if self.command_keys(&events, enter, escape, backspace, space) {
+            return;
+        }
+        if self.tool == Tool::Cad {
+            return;
+        }
         let drawing =
             self.wall_tool.is_drawing() || self.slab_tool.is_drawing() || self.dim_tool.is_active();
         let mut used_text = false;
@@ -373,6 +390,7 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Door | Tool::Window => self.set_tool(Tool::Arrow),
+                Tool::Cad => self.cad_escape(),
                 Tool::Dimension => {
                     if !self.dim_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -443,6 +461,7 @@ impl ArchiSimApp {
             }
         }
         match self.tool {
+            Tool::Cad => self.cad_clicks(ctx, response, rect),
             Tool::Wall => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
@@ -663,7 +682,7 @@ impl ArchiSimApp {
         painter.circle_stroke(o, 4.0, s);
     }
 
-    fn polygon(&self, rect: Rect, poly: &[Point2]) -> Vec<Pos2> {
+    pub(super) fn polygon(&self, rect: Rect, poly: &[Point2]) -> Vec<Pos2> {
         poly.iter().map(|p| self.view.to_screen(rect, *p)).collect()
     }
 
@@ -788,7 +807,7 @@ impl ArchiSimApp {
                 Ok(polys) => {
                     for poly in polys {
                         let pts = self.polygon(rect, poly);
-                        painter.add(Shape::closed_line(pts, Stroke::new(1.5, ACCENT)));
+                        painter.add(Shape::line(pts, Stroke::new(1.5, ACCENT)));
                     }
                 }
                 Err(e) => problem = Some(e.clone()),
@@ -803,6 +822,7 @@ impl ArchiSimApp {
             (Grip::SlabEdge { .. }, false) => "Arista",
             (Grip::SlabEdge { .. }, true) => "Nueva esquina",
             (Grip::WallBend { .. }, _) => "Curvar",
+            (Grip::DraftPoint { .. }, _) => "Estirar",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
@@ -1156,6 +1176,7 @@ impl ArchiSimApp {
             Tool::Dimension if !self.dim_tool.is_placing() => {
                 self.dim_tool.points().last().copied()
             }
+            Tool::Cad => self.cad.as_ref().and_then(|c| c.base()),
             _ => None,
         }
     }
@@ -1188,8 +1209,13 @@ impl ArchiSimApp {
     }
 
     fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
-        let points =
-            self.tool.draws_points() && !(self.tool == Tool::Slab && self.slab_settings.wand);
+        let cad_points = self.tool == Tool::Cad
+            && matches!(
+                self.cad_want(),
+                Some(crate::cad::Want::Point) | Some(crate::cad::Want::Value)
+            );
+        let points = cad_points
+            || self.tool.draws_points() && !(self.tool == Tool::Slab && self.slab_settings.wand);
         let (true, Some(c)) = (points || self.drag.is_some(), self.cursor) else {
             return;
         };
@@ -1219,6 +1245,41 @@ impl ArchiSimApp {
             SnapKind::OnEdge => {
                 painter.line_segment([p + Vec2::new(-5.0, -5.0), p + Vec2::new(5.0, 5.0)], stroke);
                 painter.line_segment([p + Vec2::new(-5.0, 5.0), p + Vec2::new(5.0, -5.0)], stroke);
+            }
+            SnapKind::Quadrant => {
+                let pts = vec![
+                    p + Vec2::new(0.0, -7.0),
+                    p + Vec2::new(7.0, 0.0),
+                    p + Vec2::new(0.0, 7.0),
+                    p + Vec2::new(-7.0, 0.0),
+                ];
+                painter.add(Shape::closed_line(pts, stroke));
+            }
+            SnapKind::Node => {
+                painter.circle_stroke(p, 5.0, stroke);
+                painter.line_segment([p + Vec2::new(-5.0, -5.0), p + Vec2::new(5.0, 5.0)], stroke);
+                painter.line_segment([p + Vec2::new(-5.0, 5.0), p + Vec2::new(5.0, -5.0)], stroke);
+            }
+            SnapKind::Intersection => {
+                let bold = Stroke::new(2.5, stroke.color);
+                painter.line_segment([p + Vec2::new(-6.0, -6.0), p + Vec2::new(6.0, 6.0)], bold);
+                painter.line_segment([p + Vec2::new(-6.0, 6.0), p + Vec2::new(6.0, -6.0)], bold);
+            }
+            SnapKind::Perpendicular => {
+                painter.line_segment([p + Vec2::new(-7.0, 6.0), p + Vec2::new(7.0, 6.0)], stroke);
+                painter.line_segment(
+                    [p + Vec2::new(-7.0, 6.0), p + Vec2::new(-7.0, -7.0)],
+                    stroke,
+                );
+                painter.line_segment([p + Vec2::new(-7.0, 0.0), p + Vec2::new(0.0, 0.0)], stroke);
+                painter.line_segment([p + Vec2::new(0.0, 0.0), p + Vec2::new(0.0, 6.0)], stroke);
+            }
+            SnapKind::Tangent => {
+                painter.circle_stroke(p + Vec2::new(0.0, 2.0), 5.0, stroke);
+                painter.line_segment(
+                    [p + Vec2::new(-7.0, -3.0), p + Vec2::new(7.0, -3.0)],
+                    stroke,
+                );
             }
             SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => {}
         }

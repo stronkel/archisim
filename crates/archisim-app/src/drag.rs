@@ -40,6 +40,12 @@ pub enum Grip {
     SlabCorner { slab: SlabId, index: usize },
     /// The edge of a slab from corner `index` to the next one.
     SlabEdge { slab: SlabId, index: usize },
+    /// A grip of a drafting element (its end, centre, middle…), by its
+    /// index in [`archisim_draft::grips::grips`].
+    DraftPoint {
+        draft: archisim_core::DraftId,
+        index: usize,
+    },
 }
 
 /// A handle drawn on the selection.
@@ -109,6 +115,19 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::Draft(id) => {
+                if let Some(d) = model.draft(*id) {
+                    for (index, (point, _)) in archisim_draft::grips::grips(&d.shape)
+                        .into_iter()
+                        .enumerate()
+                    {
+                        v.push(Hotspot {
+                            grip: Grip::DraftPoint { draft: *id, index },
+                            point,
+                        });
+                    }
+                }
+            }
             Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) => {}
         }
     }
@@ -133,7 +152,13 @@ pub fn grip_at<G: Geo + ?Sized>(
     if let Some((_, h)) = spot {
         return Some((h.grip, h.point));
     }
+    let k = crate::pick::paper_k();
     let on_selection = selection.iter().any(|e| {
+        if let Element::Draft(id) = e {
+            return model
+                .draft(*id)
+                .is_some_and(|d| archisim_draft::distance(&d.shape, p, k) <= tolerance);
+        }
         outline(geo, *e)
             .is_some_and(|poly| contains(&poly, p) || distance_to_outline(&poly, p) <= tolerance)
     });
@@ -153,6 +178,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
             [Element::Slab(slab)].into_iter().collect()
         }
+        Grip::DraftPoint { draft, .. } => [Element::Draft(draft)].into_iter().collect(),
     }
 }
 
@@ -193,6 +219,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         }
         Grip::SlabEdge { .. } if drag.variant => "Añadir esquina de forjado",
         Grip::SlabEdge { .. } => "Desplazar arista de forjado",
+        Grip::DraftPoint { .. } => "Estirar",
     }
 }
 
@@ -269,6 +296,11 @@ pub fn apply(
             }
             model.set_slab_outline(slab, outline).map(|_| None)
         }
+        Grip::DraftPoint { draft, index } => {
+            let d = model.draft(draft).ok_or(ModelError::UnknownDraft(draft))?;
+            let shape = archisim_draft::grips::move_grip(&d.shape, index, drag.to);
+            model.set_draft_shape(draft, shape).map(|_| None)
+        }
     }
 }
 
@@ -296,9 +328,12 @@ fn move_selection(
     }
     // Dimensions go with the building elements they are moved with; moved
     // on their own, only their line moves (it is how they are tidied up).
-    let only_annotations = selection
-        .iter()
-        .all(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)));
+    let only_annotations = selection.iter().all(|e| {
+        matches!(
+            e,
+            Element::Dimension(_) | Element::Mark(_) | Element::Draft(_)
+        )
+    });
     for e in selection {
         match e {
             Element::Slab(id) => {
@@ -324,6 +359,18 @@ fn move_selection(
                     .ok_or(ModelError::UnknownElevationMark(*id))?
                     .point;
                 model.move_elevation_mark(*id, p + d)?;
+            }
+            Element::Draft(id) => {
+                let shape = model
+                    .draft(*id)
+                    .ok_or(ModelError::UnknownDraft(*id))?
+                    .shape
+                    .clone();
+                let moved = archisim_draft::transform_shape(
+                    &shape,
+                    &archisim_draft::Transform::translate(d),
+                );
+                model.set_draft_shape(*id, moved)?;
             }
             _ => {}
         }
@@ -471,6 +518,24 @@ fn copy(
                 let new = model.add_elevation_mark(m.level, m.point + d)?;
                 copies.insert(Element::Mark(new));
             }
+            Element::Draft(id) => {
+                let dr = model
+                    .draft(*id)
+                    .ok_or(ModelError::UnknownDraft(*id))?
+                    .clone();
+                let new = model.add_draft(archisim_core::NewDraft {
+                    view: dr.view,
+                    layer: dr.layer,
+                    shape: archisim_draft::transform_shape(
+                        &dr.shape,
+                        &archisim_draft::Transform::translate(d),
+                    ),
+                    color: dr.color,
+                    weight: dr.weight,
+                    line: dr.line,
+                })?;
+                copies.insert(Element::Draft(new));
+            }
             Element::Wall(id) => {
                 let w = model.wall(*id).ok_or(ModelError::UnknownWall(*id))?.clone();
                 let hosted: Vec<NewOpening> = model
@@ -593,14 +658,30 @@ pub fn preview<G: Geo + ?Sized>(
         if !candidate {
             continue;
         }
+        if let Element::Draft(id) = e {
+            // Drafting elements are shown as drawn, not by their box.
+            let k = crate::pick::paper_k();
+            let new = after.draft(id).map(|d| &d.shape);
+            let old = model.draft(id).map(|d| &d.shape);
+            if let Some(shape) = new {
+                if old != Some(shape) {
+                    out.extend(crate::pick::shape_paths(shape, k));
+                }
+            }
+            continue;
+        }
         let new = outline(&later, e);
         let old = if exists(model, e) {
             outline(geo, e)
         } else {
             None
         };
-        if let Some(poly) = new {
+        if let Some(mut poly) = new {
             if old.as_ref() != Some(&poly) {
+                // Closed, to be drawn as a line.
+                if let Some(first) = poly.first().copied() {
+                    poly.push(first);
+                }
                 out.push(poly);
             }
         }
@@ -616,6 +697,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Slab(id) => model.slab(id).is_some(),
         Element::Dimension(id) => model.dimension(id).is_some(),
         Element::Mark(id) => model.elevation_mark(id).is_some(),
+        Element::Draft(id) => model.draft(id).is_some(),
     }
 }
 
@@ -641,13 +723,22 @@ fn level_of(
         Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
             model.slab(slab).map(|s| s.level)
         }
+        Grip::DraftPoint { draft, .. } => draft_level(model, draft),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
             Element::Opening(id) => model.opening(*id).and_then(|o| wall_level(o.wall)),
             Element::Dimension(id) => model.dimension(*id).map(|d| d.level),
             Element::Mark(id) => model.elevation_mark(*id).map(|m| m.level),
+            Element::Draft(id) => draft_level(model, *id),
         }),
+    }
+}
+
+/// The level whose plan a drafting element is drawn on.
+fn draft_level(model: &Model, id: archisim_core::DraftId) -> Option<archisim_core::LevelId> {
+    match model.draft(id)?.view {
+        archisim_core::ViewRef::Level(l) => Some(l),
     }
 }
 

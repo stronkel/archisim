@@ -211,6 +211,7 @@ name = "archisim-app"
 version = "0.24.0"
 dependencies = [
  "archisim-core",
+ "archisim-draft",
  "archisim-file",
  "archisim-geom",
  "archisim-ifc",
