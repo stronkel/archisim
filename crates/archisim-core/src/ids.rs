@@ -88,6 +88,10 @@ typed_id!(
     TerrainId
 );
 typed_id!(
+    /// Identifies a [`crate::CurtainWallType`].
+    CurtainTypeId
+);
+typed_id!(
     /// Identifies a [`crate::CurtainWall`].
     CurtainWallId
 );

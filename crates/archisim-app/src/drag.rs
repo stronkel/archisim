@@ -978,19 +978,13 @@ fn copy(
                     .ok_or(ModelError::UnknownCurtainWall(*id))?
                     .clone();
                 let new = model.add_curtain_wall(archisim_core::NewCurtainWall {
+                    curtain_type: c.curtain_type,
                     level: c.level,
                     start: c.start + d,
                     end: c.end + d,
                     base_offset: c.base_offset,
                     top: c.top,
                     height: c.height,
-                    bay: c.bay,
-                    row: c.row,
-                    frame_width: c.frame_width,
-                    frame_depth: c.frame_depth,
-                    panel_thickness: c.panel_thickness,
-                    frame_material: c.frame_material,
-                    panel_material: c.panel_material,
                 })?;
                 copies.insert(Element::CurtainWall(new));
             }
@@ -1344,21 +1338,26 @@ mod tests {
     fn new_elements_move_copy_and_stretch() {
         let (mut m, lvl, _) = room();
         let al = m.materials().next().unwrap().id;
+        let frame = archisim_core::CurtainProfile {
+            width: 0.05,
+            depth: 0.12,
+            material: al,
+        };
+        let t = m
+            .add_curtain_type(
+                "Muro cortina",
+                archisim_core::CurtainDesign::simple(1.0, 1.2, frame, 0.024, al),
+            )
+            .unwrap();
         let cw = m
             .add_curtain_wall(archisim_core::NewCurtainWall {
+                curtain_type: t,
                 level: lvl,
                 start: p(1.0, 1.0),
                 end: p(4.0, 1.0),
                 base_offset: 0.0,
                 top: archisim_core::WallTop::Unconnected,
                 height: 2.5,
-                bay: 1.0,
-                row: 1.2,
-                frame_width: 0.05,
-                frame_depth: 0.12,
-                panel_thickness: 0.024,
-                frame_material: al,
-                panel_material: al,
             })
             .unwrap();
         let rail = m

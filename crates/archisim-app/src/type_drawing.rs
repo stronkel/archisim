@@ -352,9 +352,234 @@ pub fn material_swatch(model: &Model, material: archisim_core::MaterialId) -> Dr
     d.pad(0.01)
 }
 
+// ---- Curtain walls --------------------------------------------------------
+
+/// The curtain wall of a preview model (`type_preview::curtain_model`),
+/// its design and pieces.
+fn curtain_of(
+    model: &Model,
+) -> Option<(
+    &archisim_core::CurtainWall,
+    &archisim_core::CurtainDesign,
+    Vec<archisim_core::CurtainPiece>,
+)> {
+    let c = model.curtain_walls().next()?;
+    let d = model.curtain_design(c.id)?;
+    Some((c, d, c.pieces(d)))
+}
+
+/// A curtain wall seen from outside: `x` along it from its end (its start
+/// is on the right, as seen from outside), `y` up from its base. Farther
+/// things first, so the caps and louvres cover what is behind them.
+/// Returns the drawing and, to label it, where the grid lines fall on the
+/// paper (`x` of each mullion line, `y` of each transom line).
+pub fn curtain_elevation(model: &Model) -> Option<(Drawing, Vec<f64>, Vec<f64>)> {
+    let (c, d, mut pieces) = curtain_of(model)?;
+    let l = c.length();
+    pieces.sort_by(|a, b| a.across.0.total_cmp(&b.across.0));
+    let mut out = Drawing::new();
+    for p in &pieces {
+        let pen = match p.kind {
+            archisim_core::CurtainPieceKind::Panel(_) => Pen::Thin,
+            _ => Pen::Medium,
+        };
+        out.rect(
+            [l - p.along.1, p.up.0],
+            [l - p.along.0, p.up.1],
+            seen(model, p.material.0),
+            None,
+            pen,
+        );
+    }
+    // The ground line.
+    out.line([-0.2, 0.0], [l + 0.2, 0.0], Pen::Thick, false);
+    let g = c.grid(d);
+    let xs = g.mullions.iter().map(|x| l - x).collect();
+    Some((out.pad(0.05), xs, g.transoms))
+}
+
+/// A curtain wall cut in plan at mid-height of the row its cut plane
+/// (1,10 m, or half the height if lower) goes through: the exterior on
+/// top, from its start; only its corner and first mullion (a detail), with what is seen
+/// below (louvres) thin.
+pub fn curtain_plan_detail(model: &Model) -> Option<Drawing> {
+    let (c, d, pieces) = curtain_of(model)?;
+    let g = c.grid(d);
+    let cut = 1.1_f64.min(c.height / 2.0);
+    let end = g.mullions.get(1).copied().unwrap_or(c.length()) + 0.35;
+    let end = end.min(c.length());
+    let mut out = Drawing::new();
+    for p in &pieces {
+        let (a0, a1) = (p.along.0.max(0.0), p.along.1.min(end));
+        if a1 - a0 < 1e-6 {
+            continue;
+        }
+        let (min, max) = ([a0, p.across.0], [a1, p.across.1]);
+        match p.kind {
+            archisim_core::CurtainPieceKind::Louvre => {
+                if p.up.1 <= cut {
+                    out.rect(min, max, [0, 0, 0, 0], None, Pen::Thin);
+                }
+            }
+            _ if p.up.0 <= cut && p.up.1 >= cut => {
+                let (fill, pattern) = cut_fill(model, p.material.0);
+                out.rect(min, max, fill, pattern, Pen::Thick);
+            }
+            _ => {}
+        }
+    }
+    if end < c.length() - 1e-6 {
+        // Broken off: the wall goes on.
+        let (lo, hi) = (out.lo[1], out.hi[1]);
+        out.line([end, lo - 0.03], [end, hi + 0.03], Pen::Thin, true);
+    }
+    out.sides = ("Exterior arriba", "");
+    Some(out.pad(0.03))
+}
+
+/// A curtain wall cut vertically through the middle of its first bay:
+/// the exterior on the left, what the cut goes through thick.
+pub fn curtain_section(model: &Model) -> Option<Drawing> {
+    let (c, d, pieces) = curtain_of(model)?;
+    let g = c.grid(d);
+    let at = (g.mullions[0] + g.mullions[1]) / 2.0;
+    let mut out = Drawing::new();
+    for p in &pieces {
+        if p.along.0 > at || p.along.1 < at {
+            continue;
+        }
+        let (fill, pattern) = cut_fill(model, p.material.0);
+        out.rect(
+            [-p.across.1, p.up.0],
+            [-p.across.0, p.up.1],
+            fill,
+            pattern.filter(|_| p.across.1 - p.across.0 > 0.03),
+            Pen::Thick,
+        );
+    }
+    // The mullion behind the cut, seen.
+    if let Some(m) = pieces
+        .iter()
+        .find(|p| p.kind.is_frame() && p.is_vertical() && p.along.1 <= at && p.across.0 < 0.0)
+    {
+        out.rect(
+            [-m.across.1, m.up.0],
+            [-m.across.0, m.up.1],
+            [0, 0, 0, 0],
+            None,
+            Pen::Thin,
+        );
+    }
+    out.line([-0.4, 0.0], [0.4, 0.0], Pen::Thick, false);
+    out.sides = ("Exterior", "Interior");
+    Some(out.pad(0.05))
+}
+
+fn cut_fill(model: &Model, material: u64) -> ([u8; 4], Option<CutPattern>) {
+    cut(model, material)
+}
+
+impl Drawing {
+    /// The drawing as an SVG on white paper, `px_per_m` pixels per metre,
+    /// with the pens of the screen (to rasterise it into a picture).
+    pub fn svg(&self, px_per_m: f64) -> String {
+        use std::fmt::Write as _;
+        let (w, h) = (self.width() * px_per_m, self.height() * px_per_m);
+        let x = |v: f64| (v - self.lo[0]) * px_per_m;
+        let y = |v: f64| (self.hi[1] - v) * px_per_m;
+        let pen = |p: Pen| match p {
+            Pen::Thin => 0.6,
+            Pen::Medium => 1.0,
+            Pen::Thick => 1.6,
+        };
+        let mut s = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w:.1}" height="{h:.1}" viewBox="0 0 {w:.2} {h:.2}"><rect width="100%" height="100%" fill="white"/>"#
+        );
+        for item in &self.items {
+            match item {
+                Item::Rect {
+                    min,
+                    max,
+                    fill,
+                    pen: p,
+                    ..
+                } => {
+                    let [r, g, b, a] = *fill;
+                    let _ = write!(
+                        s,
+                        r#"<rect x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}" fill="rgb({r},{g},{b})" fill-opacity="{:.3}" stroke="rgb(30,30,30)" stroke-width="{}"/>"#,
+                        x(min[0]),
+                        y(max[1]),
+                        (max[0] - min[0]) * px_per_m,
+                        (max[1] - min[1]) * px_per_m,
+                        a as f64 / 255.0,
+                        pen(*p)
+                    );
+                }
+                Item::Line {
+                    from,
+                    to,
+                    pen: p,
+                    dashed,
+                } => {
+                    let dash = if *dashed {
+                        r#" stroke-dasharray="4 3""#
+                    } else {
+                        ""
+                    };
+                    let _ = write!(
+                        s,
+                        r#"<line x1="{:.2}" y1="{:.2}" x2="{:.2}" y2="{:.2}" stroke="rgb(30,30,30)" stroke-width="{}"{dash}/>"#,
+                        x(from[0]),
+                        y(from[1]),
+                        x(to[0]),
+                        y(to[1]),
+                        pen(*p)
+                    );
+                }
+            }
+        }
+        s.push_str("</svg>");
+        s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_library_curtain_wall_has_its_drawings() {
+        let m = archisim_library::new_project("p");
+        for t in m.curtain_types() {
+            let model = crate::type_preview::curtain_model(&m, &t.design, 4.8, 3.0)
+                .unwrap_or_else(|| panic!("{}", t.name));
+            let (e, xs, ys) = curtain_elevation(&model).unwrap();
+            assert!(e.width() > 4.8 && e.height() > 3.0, "{}", t.name);
+            assert_eq!(
+                xs.len(),
+                model
+                    .curtain_walls()
+                    .next()
+                    .unwrap()
+                    .grid(&t.design)
+                    .mullions
+                    .len()
+            );
+            assert!(ys.len() >= 2);
+            let p = curtain_plan_detail(&model).unwrap();
+            assert!(p.items.iter().any(|i| matches!(
+                i,
+                Item::Rect {
+                    pen: Pen::Thick,
+                    ..
+                }
+            )));
+            let s = curtain_section(&model).unwrap();
+            assert!(s.height() > 3.0, "{}", t.name);
+            assert!(e.svg(40.0).starts_with("<svg"));
+        }
+    }
 
     #[test]
     fn every_library_door_and_window_has_an_elevation_and_a_section() {

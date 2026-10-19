@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 7,
+//!   "version": 8,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 7;
+pub const CURRENT_VERSION: u32 = 8;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -208,11 +208,89 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
                 }
                 v
             }
+            // 7 → 8: curtain walls take their grid, frames and panels from
+            // a type.
+            7 => to_curtain_types(value),
             other => return Err(FileError::UnknownVersion(other)),
         };
         version += 1;
     }
     Ok(value)
+}
+
+/// Version 7 → 8. Version 7 curtain walls carried their own grid
+/// (largest bay and row), frame (width, depth, material) and glass
+/// (thickness, material); each different set becomes a curtain wall type
+/// ("Muro cortina 1200 × 1500") with that frame all round and one panel,
+/// numbered after the highest id in the file.
+fn to_curtain_types(mut value: Value) -> Value {
+    let Value::Object(map) = &mut value else {
+        return value;
+    };
+    map.insert("version".into(), Value::from(8));
+    let mut next_id = 0;
+    for items in map.values() {
+        if let Value::Array(items) = items {
+            for id in items.iter().filter_map(|i| i.get("id")?.as_u64()) {
+                next_id = next_id.max(id);
+            }
+        }
+    }
+    let mut types: Vec<Value> = Vec::new();
+    let mut seen: Vec<(Value, u64)> = Vec::new();
+    if let Some(Value::Array(walls)) = map.get_mut("curtain_walls") {
+        for w in walls.iter_mut() {
+            let Value::Object(obj) = w else {
+                continue;
+            };
+            let mut take = |k: &str| obj.remove(k).unwrap_or(Value::Null);
+            let (bay, row) = (take("bay"), take("row"));
+            let (width, depth, thickness) = (
+                take("frame_width"),
+                take("frame_depth"),
+                take("panel_thickness"),
+            );
+            let (frame, glass) = (take("frame_material"), take("panel_material"));
+            let profile = serde_json::json!({
+                "width": width, "depth": depth, "material": frame,
+            });
+            let design = serde_json::json!({
+                "columns": { "rest": { "max_spacing": bay } },
+                "rows": { "rest": { "max_spacing": row } },
+                "border": profile,
+                "mullion": profile,
+                "transom": profile,
+                "panels": [{ "name": "Vidrio", "thickness": thickness, "material": glass }],
+            });
+            let id = match seen.iter().find(|(d, _)| *d == design) {
+                Some((_, id)) => *id,
+                None => {
+                    next_id += 1;
+                    let mm = |v: &Value| v.as_f64().map_or(0.0, |v| (v * 1000.0).round());
+                    let mut t = design.clone();
+                    if let Value::Object(t) = &mut t {
+                        t.insert("id".into(), Value::from(next_id));
+                        t.insert(
+                            "guid".into(),
+                            Value::from(archisim_core::GlobalId::new().to_string()),
+                        );
+                        t.insert(
+                            "name".into(),
+                            Value::from(format!("Muro cortina {} × {}", mm(&bay), mm(&row))),
+                        );
+                    }
+                    types.push(t);
+                    seen.push((design, next_id));
+                    next_id
+                }
+            };
+            obj.insert("type".into(), Value::from(id));
+        }
+    }
+    if !types.is_empty() {
+        map.insert("curtain_types".into(), Value::Array(types));
+    }
+    value
 }
 
 /// Version 2 → 3. Each door or window type, described by its category,
@@ -720,7 +798,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 8", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -747,7 +825,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 7"));
+        assert!(to_string(&opened).contains("\"version\": 8"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -915,7 +993,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 7", "\"version\": 3", 1)
+            .replacen("\"version\": 8", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -977,8 +1055,82 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 8", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
+    }
+
+    #[test]
+    fn curtain_wall_types_and_version_7_files() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        let glass = m.add_material("Vidrio", "glass", [190, 222, 236], CutPattern::Solid);
+        let al = m.add_material("Aluminio", "aluminium", [120, 124, 128], CutPattern::Solid);
+        let frame = archisim_core::CurtainProfile {
+            width: 0.05,
+            depth: 0.12,
+            material: al,
+        };
+        let mut design = archisim_core::CurtainDesign::simple(1.2, 1.5, frame, 0.024, glass);
+        design.rows.fixed = vec![0.9];
+        design.caps = Some(archisim_core::CurtainCaps {
+            width: 0.06,
+            depth: 0.02,
+            material: al,
+        });
+        let t = m.add_curtain_type("Con tapajuntas", design).unwrap();
+        for x in [0.0, 6.0] {
+            m.add_curtain_wall(archisim_core::NewCurtainWall {
+                curtain_type: t,
+                level,
+                start: Point2::new(x, -3.0),
+                end: Point2::new(x + 4.8, -3.0),
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 2.7,
+            })
+            .unwrap();
+        }
+        let text = to_string(&m);
+        assert!(text.contains("\"curtain_types\""));
+        assert!(text.contains("\"max_spacing\": 1.2"));
+        let back = from_str(&text).unwrap();
+        assert_same_project(&back, &m);
+        assert_eq!(back.curtain_types().count(), 1);
+
+        // Version 7 (ArchiSim 0.25): each curtain wall with its own grid;
+        // the same grid gives one type.
+        let mut v: Value = serde_json::from_str(&text).unwrap();
+        v["version"] = Value::from(7);
+        v.as_object_mut().unwrap().remove("curtain_types");
+        for w in v["curtain_walls"].as_array_mut().unwrap() {
+            let w = w.as_object_mut().unwrap();
+            w.remove("type");
+            for (k, x) in [
+                ("bay", 1.0),
+                ("row", 1.5),
+                ("frame_width", 0.05),
+                ("frame_depth", 0.12),
+                ("panel_thickness", 0.024),
+            ] {
+                w.insert(k.into(), Value::from(x));
+            }
+            w.insert("frame_material".into(), Value::from(al.0));
+            w.insert("panel_material".into(), Value::from(glass.0));
+        }
+        let old = from_str(&serde_json::to_string(&v).unwrap()).unwrap();
+        assert_eq!(old.curtain_types().count(), 1);
+        let t = old.curtain_types().next().unwrap();
+        assert_eq!(t.name, "Muro cortina 1000 × 1500");
+        assert_eq!(
+            t.design.columns,
+            archisim_core::CurtainDivision::max_spacing(1.0)
+        );
+        assert_eq!(t.design.border.material, al);
+        assert_eq!(t.design.panels[0].material, glass);
+        assert!(old.curtain_walls().all(|c| c.curtain_type == t.id));
+        // Five bays of 0,96 on 4,80 m, as before.
+        let c = old.curtain_walls().next().unwrap();
+        assert_eq!(c.grid(&t.design).mullions.len(), 6);
     }
 
     fn slab_material(m: &Model) -> archisim_core::MaterialId {
@@ -1011,7 +1163,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 8", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1023,7 +1175,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 7,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 8,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1069,11 +1221,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 7", "\"version\": 8"),
-            Err(FileError::TooNew { version: 8 })
+            edited("\"version\": 8", "\"version\": 9"),
+            Err(FileError::TooNew { version: 9 })
         ));
         assert!(matches!(
-            edited("\"version\": 7", "\"version\": 0"),
+            edited("\"version\": 8", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

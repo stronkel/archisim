@@ -240,6 +240,8 @@ struct Importer<'a> {
     terrain_ids: HashSet<u64>,
     /// `IfcCurtainWall`s read back as ArchiSim curtain walls.
     curtain_ids: HashSet<u64>,
+    /// `IfcCurtainWallType`s read back as curtain wall types.
+    curtain_types: HashMap<u64, archisim_core::CurtainTypeId>,
     /// `IfcRailing`s read back as ArchiSim railings.
     railing_ids: HashSet<u64>,
     /// `IfcFurniture` and `IfcSanitaryTerminal` read back as objects.
@@ -264,6 +266,7 @@ struct GuidPlan {
     stairs: Vec<(archisim_core::StairId, String)>,
     terrains: Vec<(archisim_core::TerrainId, String)>,
     curtain_walls: Vec<(archisim_core::CurtainWallId, String)>,
+    curtain_types: Vec<(archisim_core::CurtainTypeId, String)>,
     railings: Vec<(archisim_core::RailingId, String)>,
     object_types: Vec<(archisim_core::ObjectTypeId, String)>,
     objects: Vec<(archisim_core::ObjectId, String)>,
@@ -484,6 +487,7 @@ impl<'a> Importer<'a> {
             stair_ids: HashSet::new(),
             terrain_ids: HashSet::new(),
             curtain_ids: HashSet::new(),
+            curtain_types: HashMap::new(),
             railing_ids: HashSet::new(),
             object_ids: HashSet::new(),
             object_types: Default::default(),
@@ -2705,6 +2709,7 @@ impl<'a> Importer<'a> {
         restore!(roofs, roofs);
         restore!(stairs, stairs);
         restore!(terrains, terrains);
+        restore!(curtain_types, curtain_types);
         restore!(curtain_walls, curtain_walls);
         restore!(railings, railings);
         restore!(object_types, object_types);

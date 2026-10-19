@@ -248,6 +248,59 @@ pub fn member_model(source: &Model, t: &archisim_core::MemberType) -> Option<(Mo
     Some((m, level))
 }
 
+/// A model with one curtain wall of design `design` (materials copied
+/// from `source`), from (0, 0) to (`length`, 0), `height` high: what the
+/// curtain wall types window draws and shows in 3D.
+pub fn curtain_model(
+    source: &Model,
+    design: &archisim_core::CurtainDesign,
+    length: f64,
+    height: f64,
+) -> Option<Model> {
+    let mut m = Model::new("preview");
+    let level = m.add_level("preview", 0.0);
+    let mut copied: std::collections::HashMap<MaterialId, MaterialId> = Default::default();
+    let mut copy = |m: &mut Model, id: MaterialId| -> Option<MaterialId> {
+        if let Some(n) = copied.get(&id) {
+            return Some(*n);
+        }
+        let mat = source.material(id)?;
+        let n = m.add_material(
+            mat.name.clone(),
+            mat.category.clone(),
+            mat.cut_color,
+            mat.cut_pattern,
+        );
+        copied.insert(id, n);
+        Some(n)
+    };
+    let mut d = design.clone();
+    for p in [&mut d.border, &mut d.mullion, &mut d.transom] {
+        p.material = copy(&mut m, p.material)?;
+    }
+    for p in &mut d.panels {
+        p.material = copy(&mut m, p.material)?;
+    }
+    if let Some(c) = &mut d.caps {
+        c.material = copy(&mut m, c.material)?;
+    }
+    if let Some(l) = &mut d.louvres {
+        l.material = copy(&mut m, l.material)?;
+    }
+    let t = m.add_curtain_type("preview", d).ok()?;
+    m.add_curtain_wall(archisim_core::NewCurtainWall {
+        curtain_type: t,
+        level,
+        start: Point2::new(0.0, 0.0),
+        end: Point2::new(length, 0.0),
+        base_offset: 0.0,
+        top: archisim_core::WallTop::Unconnected,
+        height,
+    })
+    .ok()?;
+    Some(m)
+}
+
 /// Draws a preview model around its wall (or its column), `px_per_m`
 /// pixels per metre. Returns the image and the drawn region (lower-left,
 /// upper-right).

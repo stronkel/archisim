@@ -6,9 +6,11 @@
 //! demo house is built on the same library so both stay in step.
 
 use archisim_core::{
-    CutPattern, DoorOperation, Layer, LayerFunction, MaterialId, MemberTypeId, MemberUsage, Model,
-    ModelError, NewOpeningType, ObjectTypeId, OpeningKind, OpeningTypeId, Profile, SlabFunction,
-    SlabTypeId, WallFunction, WallTypeId, WindowOperation,
+    CurtainCaps, CurtainDesign, CurtainDivision, CurtainJoint, CurtainLouvres, CurtainPanel,
+    CurtainProfile, CurtainRest, CurtainTypeId, CutPattern, DoorOperation, Layer, LayerFunction,
+    MaterialId, MemberTypeId, MemberUsage, Model, ModelError, NewOpeningType, ObjectTypeId,
+    OpeningKind, OpeningTypeId, Profile, SlabFunction, SlabTypeId, WallFunction, WallTypeId,
+    WindowOperation,
 };
 
 /// Ids of the types added by [`add_library`], to place elements in code.
@@ -45,6 +47,8 @@ pub struct Library {
     pub column: MemberTypeId,
     /// Reinforced concrete downstand beam, 30 × 50.
     pub beam: MemberTypeId,
+    /// Stick curtain wall, bays up to 120 and rows up to 150.
+    pub curtain: CurtainTypeId,
 }
 
 /// A new, empty project: one level at ±0.00 ("Planta baja") and the
@@ -403,8 +407,10 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     // Structure (v0.25), added last so older ids stay put.
     let (column, beam) = add_structure_with(m, hormigon)?;
     add_objects(m)?;
+    let curtain = add_curtain_types(m)?;
 
     Ok(Library {
+        curtain,
         void,
         facade,
         partition,
@@ -565,6 +571,116 @@ pub fn add_structure(m: &mut Model) -> Result<(MemberTypeId, MemberTypeId), Mode
         CutPattern::Cross,
     );
     add_structure_with(m, concrete)
+}
+
+/// Adds the curtain wall types of the library (and their materials, those
+/// of the same name reused). Returns the plain stick curtain wall.
+pub fn add_curtain_types(m: &mut Model) -> Result<CurtainTypeId, ModelError> {
+    let aluminium = material_named(
+        m,
+        "Aluminio lacado",
+        "aluminium",
+        [120, 124, 128],
+        CutPattern::Solid,
+    );
+    let glass = material_named(
+        m,
+        "Vidrio doble",
+        "glass",
+        [190, 222, 236],
+        CutPattern::Solid,
+    );
+    let spandrel = material_named(
+        m,
+        "Panel sándwich lacado",
+        "metal",
+        [96, 100, 106],
+        CutPattern::Solid,
+    );
+    let profile = |width, depth| CurtainProfile {
+        width,
+        depth,
+        material: aluminium,
+    };
+    let glazing = |thickness| CurtainPanel {
+        name: "Vidrio".into(),
+        thickness,
+        material: glass,
+    };
+    let stick = CurtainDesign {
+        columns: CurtainDivision::max_spacing(1.2),
+        rows: CurtainDivision::max_spacing(1.5),
+        border: profile(0.06, 0.15),
+        mullion: profile(0.05, 0.15),
+        transom: profile(0.05, 0.12),
+        joint: CurtainJoint::Mullions,
+        panels: vec![glazing(0.024)],
+        row_panels: Vec::new(),
+        caps: None,
+        louvres: None,
+    };
+    let plain = m.add_curtain_type("Montante y travesaño 120 × 150", stick.clone())?;
+    m.add_curtain_type(
+        "Fachada con antepecho opaco",
+        CurtainDesign {
+            rows: CurtainDivision {
+                fixed: vec![1.0],
+                rest: CurtainRest::MaxSpacing(2.4),
+            },
+            panels: vec![
+                glazing(0.024),
+                CurtainPanel {
+                    name: "Antepecho".into(),
+                    thickness: 0.06,
+                    material: spandrel,
+                },
+            ],
+            row_panels: vec![1, 0],
+            ..stick.clone()
+        },
+    )?;
+    m.add_curtain_type(
+        "Con tapajuntas 150",
+        CurtainDesign {
+            columns: CurtainDivision::max_spacing(1.5),
+            caps: Some(CurtainCaps {
+                width: 0.06,
+                depth: 0.025,
+                material: aluminium,
+            }),
+            ..stick.clone()
+        },
+    )?;
+    m.add_curtain_type(
+        "Ventanal corrido",
+        CurtainDesign {
+            columns: CurtainDivision::max_spacing(1.8),
+            rows: CurtainDivision {
+                fixed: Vec::new(),
+                rest: CurtainRest::Count(1),
+            },
+            border: profile(0.07, 0.12),
+            mullion: profile(0.06, 0.12),
+            transom: profile(0.06, 0.12),
+            joint: CurtainJoint::Transoms,
+            ..stick.clone()
+        },
+    )?;
+    m.add_curtain_type(
+        "Con lamas horizontales",
+        CurtainDesign {
+            columns: CurtainDivision::max_spacing(1.5),
+            louvres: Some(CurtainLouvres {
+                depth: 0.2,
+                thickness: 0.03,
+                spacing: 0.35,
+                offset: 0.1,
+                material: aluminium,
+            }),
+            ..stick
+        },
+    )?;
+    Ok(plain)
 }
 
 fn material_named(
@@ -751,5 +867,6 @@ mod tests {
             .unwrap();
         assert!((facade.thickness() - 0.265).abs() < 1e-12);
         assert_eq!(facade.function, WallFunction::Exterior);
+        assert_eq!(m.curtain_types().count(), 5);
     }
 }

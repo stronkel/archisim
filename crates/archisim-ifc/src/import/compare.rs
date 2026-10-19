@@ -380,6 +380,26 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             b.curtain_walls().count()
         ));
     }
+    for s in a.curtain_types() {
+        let same = b
+            .curtain_types()
+            .find(|t| t.guid == s.guid)
+            .is_some_and(|t| {
+                t.name == s.name
+                    && crate::curtain::design_texts(a, &s.design)
+                        == crate::curtain::design_texts(b, &t.design)
+            });
+        if !same {
+            diff(format!("tipo de muro cortina «{}» ({})", s.name, s.guid));
+        }
+    }
+    if a.curtain_types().count() != b.curtain_types().count() {
+        diff(format!(
+            "número de tipos de muro cortina: {} / {}",
+            a.curtain_types().count(),
+            b.curtain_types().count()
+        ));
+    }
     for s in a.curtain_walls() {
         let Some(t) = b.curtain_walls().find(|t| t.guid == s.guid) else {
             diff(format!("muro cortina {} falta", s.guid));
@@ -389,14 +409,18 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && s.end.distance(t.end) <= TOL
             && close(s.base_offset, t.base_offset)
             && close(s.height, t.height)
-            && close(s.bay, t.bay)
-            && close(s.row, t.row)
-            && close(s.frame_width, t.frame_width)
-            && close(s.frame_depth, t.frame_depth)
-            && close(s.panel_thickness, t.panel_thickness)
             && level_guid(a, s.level) == level_guid(b, t.level)
-            && material_name(a, s.frame_material) == material_name(b, t.frame_material)
-            && material_name(a, s.panel_material) == material_name(b, t.panel_material);
+            && match (
+                a.curtain_type(s.curtain_type),
+                b.curtain_type(t.curtain_type),
+            ) {
+                (Some(x), Some(y)) => {
+                    x.name == y.name
+                        && crate::curtain::design_texts(a, &x.design)
+                            == crate::curtain::design_texts(b, &y.design)
+                }
+                _ => false,
+            };
         if !same {
             diff(format!("muro cortina {}: {:?} / {:?}", s.guid, s, t));
         }

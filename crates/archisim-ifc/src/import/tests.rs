@@ -1063,3 +1063,70 @@ fn glass_railing_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// Curtain wall types (R11) go out as `IfcCurtainWallType`s with their
+/// grid, frames, panels and extras, used or not, and come back the same,
+/// with their GlobalIds; their walls keep their type.
+#[test]
+fn curtain_wall_types_round_trip() {
+    use archisim_core::{
+        CurtainCaps, CurtainDivision, CurtainJoint, CurtainRest, NewCurtainWall, WallTop,
+    };
+    let mut m = Model::new("Muros cortina");
+    let pb = m.add_level("PB", 0.0);
+    let p1 = m.add_level("P1", 3.2);
+    let plain = archisim_library::add_curtain_types(&mut m).unwrap();
+    let spandrel = m
+        .curtain_types()
+        .find(|t| t.name == "Fachada con antepecho opaco")
+        .unwrap()
+        .id;
+    let mut d = m.curtain_type(spandrel).unwrap().design.clone();
+    d.columns = CurtainDivision {
+        fixed: vec![0.9, 0.6],
+        rest: CurtainRest::Count(3),
+    };
+    d.joint = CurtainJoint::Transoms;
+    d.caps = Some(CurtainCaps {
+        width: 0.07,
+        depth: 0.03,
+        material: d.mullion.material,
+    });
+    let name = m.curtain_type(spandrel).unwrap().name.clone();
+    m.edit_curtain_type(spandrel, name, d).unwrap();
+    let louvres = m
+        .curtain_types()
+        .find(|t| t.design.louvres.is_some())
+        .unwrap()
+        .id;
+    for (t, y) in [(plain, 0.0), (spandrel, 5.0), (louvres, 10.0)] {
+        m.add_curtain_wall(NewCurtainWall {
+            curtain_type: t,
+            level: pb,
+            start: Point2::new(0.0, y),
+            end: Point2::new(6.0, y),
+            base_offset: 0.0,
+            top: WallTop::Level {
+                level: p1,
+                offset: 0.0,
+            },
+            height: 0.0,
+        })
+        .unwrap();
+    }
+    let ifc = export(&m);
+    assert_eq!(ifc.matches("IFCCURTAINWALLTYPE(").count(), 5);
+    assert!(ifc.contains("IFCSHADINGDEVICE("));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    assert_eq!(report.curtain_walls, 3);
+    for t in m.curtain_types() {
+        assert!(
+            model.curtain_types().any(|u| u.guid == t.guid),
+            "{}",
+            t.name
+        );
+    }
+    assert!(differences(&model, &import_ifc(&export(&model)).unwrap().model).is_empty());
+}

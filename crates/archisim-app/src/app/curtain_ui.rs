@@ -1,13 +1,40 @@
 //! The curtain wall tool ("Muro cortina"): two clicks give its line (the
-//! outside to the left, as walls); its grid, frames and panels are set in
-//! Properties.
+//! outside to the left, as walls); what it looks like is its type, chosen
+//! in Properties and designed in the curtain wall types window
+//! (`curtain_types_ui`).
 
-use archisim_core::CurtainWallId;
+use archisim_core::{CurtainTypeId, CurtainWallId};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
-use super::props::{self, group, row, text_row};
+use super::props::{self, group, row, text_row, type_card, TypeItem};
 use super::*;
+
+/// Size of the elevations of the type card.
+const CARD_PICTURE: egui::Vec2 = egui::Vec2::new(260.0, 130.0);
+
+/// Bays × rows and the largest bay, as the type's note says it.
+pub(super) fn grid_note(d: &archisim_core::CurtainDesign) -> String {
+    let rest = |r: archisim_core::CurtainRest| match r {
+        archisim_core::CurtainRest::MaxSpacing(v) => format!("≤ {}", fmt_mm(v)),
+        archisim_core::CurtainRest::Count(n) => format!("{n} partes"),
+    };
+    let fixed = |f: &[f64]| {
+        if f.is_empty() {
+            String::new()
+        } else {
+            let v: Vec<String> = f.iter().map(|x| fmt_mm(*x)).collect();
+            format!("{} + ", v.join(" + "))
+        }
+    };
+    format!(
+        "Paños {}{} · filas {}{}",
+        fixed(&d.columns.fixed),
+        rest(d.columns.rest),
+        fixed(&d.rows.fixed),
+        rest(d.rows.rest)
+    )
+}
 
 impl ArchiSimApp {
     pub(super) fn curtain_click(&mut self, p: Point2) {
@@ -19,7 +46,7 @@ impl ArchiSimApp {
                 match self.ed.add_curtain_wall(&self.curtain_settings, a, p) {
                     Ok(id) => {
                         self.ed.selection = [Element::CurtainWall(id)].into_iter().collect();
-                        self.say("Muro cortina creado: cambia su modulación en Propiedades.");
+                        self.say("Muro cortina creado: su retícula, marcos y paneles son los de su tipo.");
                     }
                     Err(e) => self.complain(format!("No se puede crear el muro cortina: {e}.")),
                 }
@@ -27,7 +54,16 @@ impl ArchiSimApp {
         }
     }
 
-    /// The line being drawn, with its mullions.
+    /// The type the tool draws with.
+    fn curtain_tool_type(&self) -> Option<CurtainTypeId> {
+        let m = self.ed.model();
+        self.curtain_settings
+            .curtain_type
+            .filter(|t| m.curtain_type(*t).is_some())
+            .or_else(|| m.curtain_types().next().map(|t| t.id))
+    }
+
+    /// The line being drawn, with its mullions where the type puts them.
     pub(super) fn draw_curtain_preview(&self, painter: &egui::Painter, rect: Rect) {
         let (Tool::CurtainWall, Some(c), Some(a)) = (self.tool, self.cursor, self.curtain_anchor)
         else {
@@ -40,12 +76,18 @@ impl ArchiSimApp {
         );
         painter.line_segment([pa, pb], ink);
         let len = a.distance(c.point);
-        let s = &self.curtain_settings;
-        let n = (len / s.bay - 1e-9).ceil().max(1.0) as usize;
-        if let Some(u) = (c.point - a).normalized() {
-            let nrm = u.perp_left() * (s.frame_depth / 2.0);
-            for i in 0..=n {
-                let p = a + u * (len * i as f64 / n as f64);
+        let model = self.ed.model();
+        let design = self
+            .curtain_tool_type()
+            .and_then(|t| model.curtain_type(t))
+            .map(|t| t.design.clone());
+        let mut bays = 0;
+        if let (Some(u), Some(d)) = ((c.point - a).normalized(), design) {
+            let nrm = u.perp_left() * (d.frame_depth() / 2.0);
+            let lines = d.columns.lines(len);
+            bays = lines.len() - 1;
+            for x in lines {
+                let p = a + u * x;
                 painter.line_segment(
                     [
                         self.view.to_screen(rect, p - nrm),
@@ -59,7 +101,7 @@ impl ArchiSimApp {
             painter,
             rect,
             c.point,
-            format!("Muro cortina   L {} mm   {n} módulos", fmt_mm(len)),
+            format!("Muro cortina   L {} mm   {bays} paños", fmt_mm(len)),
         );
     }
 
@@ -71,38 +113,74 @@ impl ArchiSimApp {
         out
     }
 
+    /// The project's curtain wall types for the type card, each with its
+    /// elevation.
+    pub(super) fn curtain_type_items(
+        &mut self,
+        ctx: &egui::Context,
+    ) -> Vec<TypeItem<CurtainTypeId>> {
+        let model = self.ed.model();
+        let thumbs = &mut self.thumbs;
+        model
+            .curtain_types()
+            .map(|t| {
+                let key = format!(
+                    "curtain:{:?}:{:?}",
+                    t.design,
+                    super::curtain_types_ui::materials_signature(model, &t.design)
+                );
+                let thumb = thumbs.get_drawing(ctx, key, CARD_PICTURE, || {
+                    let m = crate::type_preview::curtain_model(model, &t.design, 3.6, 3.0)?;
+                    crate::type_drawing::curtain_elevation(&m).map(|x| x.0)
+                });
+                TypeItem {
+                    id: t.id,
+                    name: t.name.clone(),
+                    note: grid_note(&t.design),
+                    thumb,
+                    caption: "Alzado exterior de 3,60 × 3,00 m",
+                }
+            })
+            .collect()
+    }
+
     pub(super) fn curtain_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Muro cortina · lo que vas a dibujar");
-        group(ui, "tool-curtain", "Muro cortina", |ui| {
+        let items = self.curtain_type_items(ui.ctx());
+        let mut chosen = None;
+        let current = self.curtain_tool_type();
+        let card = type_card(
+            ui,
+            "tool-curtain",
+            Icon::CurtainWall,
+            "Cortina",
+            "IfcCurtainWall",
+            current,
+            &items,
+            &mut chosen,
+            None,
+        );
+        if let Some(t) = chosen {
+            self.curtain_settings.curtain_type = Some(t);
+        }
+        if card.edit {
+            self.open_curtain_types(current, None);
+        }
+        if items.is_empty() {
+            props::note(
+                ui,
+                "El proyecto no tiene tipos de muro cortina: al dibujar el primero se cargan los de la biblioteca.",
+            );
+        }
+        group(ui, "tool-curtain", "Restricciones", |ui| {
             let s = &mut self.curtain_settings;
-            let fields: [(&str, &str, &mut f64); 7] = [
+            let fields: [(&str, &str, &mut f64); 2] = [
                 ("Altura (mm)", "Desde su base", &mut s.height),
                 (
                     "Desfase base (mm)",
                     "Respecto a la planta",
                     &mut s.base_offset,
                 ),
-                (
-                    "Módulo máx. (mm)",
-                    "Distancia mayor entre montantes",
-                    &mut s.bay,
-                ),
-                (
-                    "Fila máx. (mm)",
-                    "Distancia mayor entre travesaños",
-                    &mut s.row,
-                ),
-                (
-                    "Ancho perfil (mm)",
-                    "Montantes y travesaños vistos de frente",
-                    &mut s.frame_width,
-                ),
-                (
-                    "Fondo perfil (mm)",
-                    "Montantes y travesaños de dentro afuera",
-                    &mut s.frame_depth,
-                ),
-                ("Vidrio (mm)", "Espesor del panel", &mut s.panel_thickness),
             ];
             for (i, (label, hint, v)) in fields.into_iter().enumerate() {
                 if let Some(x) =
@@ -115,7 +193,7 @@ impl ArchiSimApp {
         ui.add_space(6.0);
         props::note(
             ui,
-            "Dos clics: inicio y final. El exterior queda a la izquierda del trazo, como en los muros. Los módulos se reparten iguales, sin pasar del máximo.",
+            "Dos clics: inicio y final. El exterior queda a la izquierda del trazo, como en los muros. La retícula, los marcos, los paneles y los accesorios son los del tipo: «Editar tipo» abre el editor de tipos de muro cortina.",
         );
     }
 
@@ -123,14 +201,45 @@ impl ArchiSimApp {
         let Some(c) = self.ed.model().curtain_wall(id).cloned() else {
             return;
         };
+        let Some(design) = self.ed.model().curtain_design(id).cloned() else {
+            return;
+        };
         props::title(ui, "Muro cortina · 1 seleccionado");
-        super::properties::view_card_pub(
+        let items = self.curtain_type_items(ui.ctx());
+        let mut chosen = None;
+        let users = self.ed.model().curtain_type_users(c.curtain_type);
+        let card = type_card(
             ui,
+            "curtain-type",
             Icon::CurtainWall,
-            &format!("Muro cortina de {} m", fmt_m(c.length())),
+            "Cortina",
             "IfcCurtainWall",
+            Some(c.curtain_type),
+            &items,
+            &mut chosen,
+            (users > 1).then_some(users),
         );
-        let g = c.grid();
+        if let Some(t) = chosen {
+            let r = self
+                .ed
+                .edit_curtain_wall("Tipo del muro cortina", id, |c| c.curtain_type = t);
+            self.report(r, "Tipo cambiado.");
+        }
+        if card.edit {
+            self.open_curtain_types(Some(c.curtain_type), Some((c.length(), c.height)));
+        }
+        if card.select_all {
+            let t = c.curtain_type;
+            let level = self.ed.level;
+            self.ed.selection = self
+                .ed
+                .model()
+                .curtain_walls()
+                .filter(|x| x.curtain_type == t && x.level == level)
+                .map(|x| Element::CurtainWall(x.id))
+                .collect();
+        }
+        let g = c.grid(&design);
         let above = self.levels_above(c.level);
         group(ui, "curtain-top", "Restricciones", |ui| {
             row(
@@ -162,10 +271,8 @@ impl ArchiSimApp {
                     }
                 },
             );
-        });
-        group(ui, "curtain-data", "Muro cortina", |ui| {
             type Set = fn(&mut archisim_core::CurtainWall, f64);
-            let fields: [(&str, &str, f64, Set); 7] = [
+            let fields: [(&str, &str, f64, Set); 2] = [
                 ("Altura (mm)", "Desde su base", c.height, |c, v| {
                     c.height = v;
                     c.top = archisim_core::WallTop::Unconnected;
@@ -175,36 +282,6 @@ impl ArchiSimApp {
                     "Respecto a la planta",
                     c.base_offset,
                     |c, v| c.base_offset = v,
-                ),
-                (
-                    "Módulo máx. (mm)",
-                    "Distancia mayor entre montantes",
-                    c.bay,
-                    |c, v| c.bay = v,
-                ),
-                (
-                    "Fila máx. (mm)",
-                    "Distancia mayor entre travesaños",
-                    c.row,
-                    |c, v| c.row = v,
-                ),
-                (
-                    "Ancho perfil (mm)",
-                    "Visto de frente",
-                    c.frame_width,
-                    |c, v| c.frame_width = v,
-                ),
-                (
-                    "Fondo perfil (mm)",
-                    "De dentro afuera",
-                    c.frame_depth,
-                    |c, v| c.frame_depth = v,
-                ),
-                (
-                    "Vidrio (mm)",
-                    "Espesor del panel",
-                    c.panel_thickness,
-                    |c, v| c.panel_thickness = v,
                 ),
             ];
             for (i, (label, hint, value, set)) in fields.into_iter().enumerate() {
@@ -219,21 +296,36 @@ impl ArchiSimApp {
                     self.report(r, "Muro cortina cambiado.");
                 }
             }
+        });
+        group(ui, "curtain-data", "Retícula de este muro", |ui| {
             text_row(
                 ui,
-                "Retícula",
-                "Módulos × filas",
-                &format!("{} × {}", g.mullions.len() - 1, g.transoms.len() - 1),
+                "Longitud (mm)",
+                "De inicio a final",
+                &fmt_mm(c.length()),
             );
             text_row(
                 ui,
-                "Paño (mm)",
-                "Entre ejes de montantes y de travesaños",
-                &format!(
-                    "{} × {}",
-                    fmt_mm(g.mullions[1] - g.mullions[0]),
-                    fmt_mm(g.transoms[1] - g.transoms[0])
-                ),
+                "Paños × filas",
+                "Lo que da el tipo en esta longitud y altura",
+                &format!("{} × {}", g.mullions.len() - 1, g.transoms.len() - 1),
+            );
+            let sizes = |v: &[f64]| {
+                let mut s: Vec<String> = v.windows(2).map(|w| fmt_mm(w[1] - w[0])).collect();
+                s.dedup();
+                s.join(" · ")
+            };
+            text_row(
+                ui,
+                "Paños (mm)",
+                "Entre ejes, desde el inicio",
+                &sizes(&g.mullions),
+            );
+            text_row(
+                ui,
+                "Filas (mm)",
+                "Entre ejes, desde abajo",
+                &sizes(&g.transoms),
             );
         });
         group(ui, "curtain-identity", "Datos de identidad", |ui| {

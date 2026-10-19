@@ -281,6 +281,9 @@ impl ArchiSimApp {
             if ui.button("Tipos y materiales…").clicked() {
                 self.types.open = true;
             }
+            if ui.button("Tipos de muro cortina…").clicked() {
+                self.open_curtain_types(None, None);
+            }
         });
         ui.menu_button("Ayuda", |ui| {
             if ui.button("Ratón y teclado").clicked() {

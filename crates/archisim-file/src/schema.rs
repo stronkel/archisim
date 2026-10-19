@@ -68,7 +68,10 @@ pub(crate) struct ProjectFile {
     /// Terrains (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terrains: Vec<Terrain>,
-    /// Curtain walls (version 7).
+    /// Curtain wall types (version 8).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub curtain_types: Vec<CurtainType>,
+    /// Curtain walls (version 7; with a type from version 8).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub curtain_walls: Vec<CurtainWall>,
     /// Loose railings (version 7).
@@ -127,13 +130,14 @@ pub(crate) struct Railing {
     pub glass: Option<u64>,
 }
 
-/// A curtain wall (version 7): its line, foot and top (as walls), the
-/// largest bay and row of its grid, its frame and panels.
+/// A curtain wall (version 8): its type, line, foot and top (as walls).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CurtainWall {
     pub id: u64,
     pub guid: String,
+    #[serde(rename = "type")]
+    pub curtain_type: u64,
     pub level: u64,
     pub start: Xy,
     pub end: Xy,
@@ -141,13 +145,213 @@ pub(crate) struct CurtainWall {
     pub height: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top: Option<WallTop>,
-    pub bay: f64,
-    pub row: f64,
-    pub frame_width: f64,
-    pub frame_depth: f64,
-    pub panel_thickness: f64,
-    pub frame_material: u64,
-    pub panel_material: u64,
+}
+
+/// How the rest of a curtain wall's length or height is divided.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum CurtainRest {
+    MaxSpacing(f64),
+    Count(usize),
+}
+
+/// Fixed bays from the start, then the rest.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainDivision {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixed: Vec<f64>,
+    pub rest: CurtainRest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainProfile {
+    pub width: f64,
+    pub depth: f64,
+    pub material: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CurtainJoint {
+    #[default]
+    Mullions,
+    Transoms,
+}
+
+fn is_default_joint(j: &CurtainJoint) -> bool {
+    *j == CurtainJoint::Mullions
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainPanel {
+    pub name: String,
+    pub thickness: f64,
+    pub material: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainCaps {
+    pub width: f64,
+    pub depth: f64,
+    pub material: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainLouvres {
+    pub depth: f64,
+    pub thickness: f64,
+    pub spacing: f64,
+    pub offset: f64,
+    pub material: u64,
+}
+
+/// A curtain wall type (version 8): its grid, frames, panels (with the
+/// panel of each row from the base) and extras.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainType {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub columns: CurtainDivision,
+    pub rows: CurtainDivision,
+    pub border: CurtainProfile,
+    pub mullion: CurtainProfile,
+    pub transom: CurtainProfile,
+    #[serde(default, skip_serializing_if = "is_default_joint")]
+    pub joint: CurtainJoint,
+    pub panels: Vec<CurtainPanel>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub row_panels: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caps: Option<CurtainCaps>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub louvres: Option<CurtainLouvres>,
+}
+
+fn division_out(d: core::CurtainDivision) -> CurtainDivision {
+    CurtainDivision {
+        fixed: d.fixed,
+        rest: match d.rest {
+            core::CurtainRest::MaxSpacing(v) => CurtainRest::MaxSpacing(v),
+            core::CurtainRest::Count(n) => CurtainRest::Count(n),
+        },
+    }
+}
+
+fn division_in(d: CurtainDivision) -> core::CurtainDivision {
+    core::CurtainDivision {
+        fixed: d.fixed,
+        rest: match d.rest {
+            CurtainRest::MaxSpacing(v) => core::CurtainRest::MaxSpacing(v),
+            CurtainRest::Count(n) => core::CurtainRest::Count(n),
+        },
+    }
+}
+
+fn curtain_profile_out(p: core::CurtainProfile) -> CurtainProfile {
+    CurtainProfile {
+        width: p.width,
+        depth: p.depth,
+        material: p.material.0,
+    }
+}
+
+fn curtain_profile_in(p: CurtainProfile) -> core::CurtainProfile {
+    core::CurtainProfile {
+        width: p.width,
+        depth: p.depth,
+        material: core::MaterialId(p.material),
+    }
+}
+
+fn curtain_type_out(t: core::CurtainWallType) -> CurtainType {
+    let d = t.design;
+    CurtainType {
+        id: t.id.0,
+        guid: t.guid.to_string(),
+        name: t.name,
+        columns: division_out(d.columns),
+        rows: division_out(d.rows),
+        border: curtain_profile_out(d.border),
+        mullion: curtain_profile_out(d.mullion),
+        transom: curtain_profile_out(d.transom),
+        joint: match d.joint {
+            core::CurtainJoint::Mullions => CurtainJoint::Mullions,
+            core::CurtainJoint::Transoms => CurtainJoint::Transoms,
+        },
+        panels: d
+            .panels
+            .into_iter()
+            .map(|p| CurtainPanel {
+                name: p.name,
+                thickness: p.thickness,
+                material: p.material.0,
+            })
+            .collect(),
+        row_panels: d.row_panels,
+        caps: d.caps.map(|c| CurtainCaps {
+            width: c.width,
+            depth: c.depth,
+            material: c.material.0,
+        }),
+        louvres: d.louvres.map(|l| CurtainLouvres {
+            depth: l.depth,
+            thickness: l.thickness,
+            spacing: l.spacing,
+            offset: l.offset,
+            material: l.material.0,
+        }),
+    }
+}
+
+fn curtain_type_in(t: CurtainType) -> Result<core::CurtainWallType, FileError> {
+    Ok(core::CurtainWallType {
+        id: core::CurtainTypeId(t.id),
+        guid: GlobalId::parse(&t.guid).ok_or_else(|| FileError::Value {
+            element: format!("curtain wall type {}", t.id),
+            message: format!("«{}» is not a 22-character IFC GlobalId", t.guid),
+        })?,
+        name: t.name,
+        design: core::CurtainDesign {
+            columns: division_in(t.columns),
+            rows: division_in(t.rows),
+            border: curtain_profile_in(t.border),
+            mullion: curtain_profile_in(t.mullion),
+            transom: curtain_profile_in(t.transom),
+            joint: match t.joint {
+                CurtainJoint::Mullions => core::CurtainJoint::Mullions,
+                CurtainJoint::Transoms => core::CurtainJoint::Transoms,
+            },
+            panels: t
+                .panels
+                .into_iter()
+                .map(|p| core::CurtainPanel {
+                    name: p.name,
+                    thickness: p.thickness,
+                    material: core::MaterialId(p.material),
+                })
+                .collect(),
+            row_panels: t.row_panels,
+            caps: t.caps.map(|c| core::CurtainCaps {
+                width: c.width,
+                depth: c.depth,
+                material: core::MaterialId(c.material),
+            }),
+            louvres: t.louvres.map(|l| core::CurtainLouvres {
+                depth: l.depth,
+                thickness: l.thickness,
+                spacing: l.spacing,
+                offset: l.offset,
+                material: core::MaterialId(l.material),
+            }),
+        },
+    })
 }
 
 /// A terrain (version 7): survey points as `[x, y, z]` (z from project
@@ -1136,25 +1340,20 @@ impl ProjectFile {
                     glass: r.glass.map(|g| g.0),
                 })
                 .collect(),
+            curtain_types: p.curtain_types.into_iter().map(curtain_type_out).collect(),
             curtain_walls: p
                 .curtain_walls
                 .into_iter()
                 .map(|c| CurtainWall {
                     id: c.id.0,
                     guid: c.guid.to_string(),
+                    curtain_type: c.curtain_type.0,
                     level: c.level.0,
                     start: xy(c.start),
                     end: xy(c.end),
                     base_offset: c.base_offset,
                     height: c.height,
                     top: top_out(c.top),
-                    bay: c.bay,
-                    row: c.row,
-                    frame_width: c.frame_width,
-                    frame_depth: c.frame_depth,
-                    panel_thickness: c.panel_thickness,
-                    frame_material: c.frame_material.0,
-                    panel_material: c.panel_material.0,
                 })
                 .collect(),
             wall_roofs: p
@@ -1298,6 +1497,12 @@ impl ProjectFile {
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
+            curtain_types: self
+                .curtain_types
+                .iter()
+                .cloned()
+                .map(curtain_type_in)
+                .collect::<Result<Vec<_>, FileError>>()?,
             curtain_walls: self
                 .curtain_walls
                 .iter()
@@ -1305,19 +1510,13 @@ impl ProjectFile {
                     Ok(core::CurtainWall {
                         id: core::CurtainWallId(c.id),
                         guid: guid(&format!("curtain wall {}", c.id), &c.guid)?,
+                        curtain_type: core::CurtainTypeId(c.curtain_type),
                         level: core::LevelId(c.level),
                         start: pt(c.start),
                         end: pt(c.end),
                         base_offset: c.base_offset,
                         top: top_in(c.top),
                         height: c.height,
-                        bay: c.bay,
-                        row: c.row,
-                        frame_width: c.frame_width,
-                        frame_depth: c.frame_depth,
-                        panel_thickness: c.panel_thickness,
-                        frame_material: core::MaterialId(c.frame_material),
-                        panel_material: core::MaterialId(c.panel_material),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

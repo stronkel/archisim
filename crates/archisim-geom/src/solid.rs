@@ -971,8 +971,8 @@ pub fn stair_solids(model: &Model, id: archisim_core::StairId) -> Vec<Solid> {
 
 /// The ground of a terrain: its surface on top, flat underneath `depth`
 /// below its lowest point, plumb at its edges.
-/// Solids of a curtain wall: one for its frame (mullions and transoms,
-/// each a closed box) and one for its panels.
+/// Solids of a curtain wall: one per material (frames, each kind of
+/// panel, caps, louvres), each piece a closed box.
 pub fn curtain_wall_solids(model: &Model, id: archisim_core::CurtainWallId) -> Vec<Solid> {
     let Some(c) = model.curtain_wall(id) else {
         return Vec::new();
@@ -981,27 +981,22 @@ pub fn curtain_wall_solids(model: &Model, id: archisim_core::CurtainWallId) -> V
         return Vec::new();
     };
     let z = c.base_z(level.elevation);
-    let mut frame = Vec::new();
-    let mut panels = Vec::new();
-    for p in c.pieces() {
+    let mut by_material: Vec<(archisim_core::MaterialId, Vec<[P3; 3]>)> = Vec::new();
+    for p in model.curtain_wall_pieces(id) {
         let tris = prism(&c.piece_footprint(&p), z + p.up.0, z + p.up.1);
-        match p.kind {
-            archisim_core::CurtainPieceKind::Panel => panels.extend(tris),
-            _ => frame.extend(tris),
+        match by_material.iter_mut().find(|(m, _)| *m == p.material) {
+            Some((_, t)) => t.extend(tris),
+            None => by_material.push((p.material, tris)),
         }
     }
-    vec![
-        Solid {
+    by_material
+        .into_iter()
+        .map(|(material, triangles)| Solid {
             owner: SolidOwner::CurtainWall(id),
-            material: c.frame_material,
-            triangles: frame,
-        },
-        Solid {
-            owner: SolidOwner::CurtainWall(id),
-            material: c.panel_material,
-            triangles: panels,
-        },
-    ]
+            material,
+            triangles,
+        })
+        .collect()
 }
 
 /// The bars of a loose railing, in model space: its frame (posts and

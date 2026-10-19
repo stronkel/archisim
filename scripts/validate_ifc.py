@@ -30,7 +30,8 @@ Checks:
  10. Every curtain wall (IfcCurtainWall) is contained in a storey, has its
      common property set and quantities, and is made of mullions
      (IfcMember) and panels (IfcPlate) with their material, quantities and
-     a 3D volume matching them.
+     a 3D volume matching them; sun louvres (IfcShadingDevice) with their
+     material and 3D geometry. It is typed by an IfcCurtainWallType.
  12. Every object (IfcFurniture, IfcSanitaryTerminal; vegetation as
      IfcGeographicElement and people or vehicles as IfcBuildingElementProxy,
      with a type) is contained in a storey, has its type and 3D geometry.
@@ -283,12 +284,24 @@ def main(path: str) -> int:
         for required in ("Pset_CurtainWallCommon", "Qto_CurtainWallQuantities"):
             if required not in psets:
                 errors.append(f"{name}: missing {required}")
+        cw_type = eu.get_type(cw)
+        if cw_type is None or not cw_type.is_a("IfcCurtainWallType"):
+            errors.append(f"{name}: no IfcCurtainWallType")
         parts = [p for rel in cw.IsDecomposedBy for p in rel.RelatedObjects]
         if not any(p.is_a("IfcMember") for p in parts):
             errors.append(f"{name}: no mullions")
         for p in parts:
             if eu.get_material(p) is None:
                 errors.append(f"{p.Name}: no material")
+            if p.is_a("IfcShadingDevice"):
+                if geom_ok:
+                    try:
+                        shp = geom.create_shape(settings, p)
+                        if shape.get_volume(shp.geometry) <= 0:
+                            errors.append(f"{p.Name}: no volume")
+                    except Exception as exc:
+                        errors.append(f"{p.Name}: geometry failed: {exc}")
+                continue
             qto = "Qto_PlateBaseQuantities" if p.is_a("IfcPlate") else "Qto_MemberBaseQuantities"
             q = eu.get_psets(p).get(qto, {})
             if not q:

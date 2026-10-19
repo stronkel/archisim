@@ -2605,3 +2605,90 @@ fn l_shaped_roof_and_its_valleys() {
             >= 6
     );
 }
+
+/// Curtain wall types (R11): the tool draws with a type of the library;
+/// the types window opens on the selected wall's type with its length and
+/// height as the sample, shows it in every view, and a change to the type
+/// (an opaque spandrel row, caps) is one undoable step every wall of the
+/// type follows.
+#[test]
+fn curtain_wall_types_window() {
+    use super::curtain_types_ui::CurtainView;
+    use archisim_core::{CurtainCaps, CurtainDivision, CurtainPieceKind, CurtainRest};
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_tool(Tool::CurtainWall);
+    h.frame();
+    h.click_at(Point2::new(0.0, 0.0));
+    h.click_at(Point2::new(4.8, 0.0));
+    let id = h.model().curtain_walls().next().expect("drawn").id;
+    let t = h.model().curtain_wall(id).unwrap().curtain_type;
+    assert_eq!(
+        h.model().curtain_type(t).unwrap().name,
+        "Montante y travesaño 120 × 150"
+    );
+    h.app.set_tool(Tool::Arrow);
+    h.app.ed.selection = [Element::CurtainWall(id)].into_iter().collect();
+    h.frame();
+    h.app.open_curtain_types(Some(t), Some((4.8, 2.7)));
+    for view in [
+        CurtainView::Elevation,
+        CurtainView::Plan,
+        CurtainView::Section,
+        CurtainView::ThreeD,
+    ] {
+        h.app.curtain_types.view = view;
+        h.frame();
+    }
+    assert!(h.app.curtain_types.open);
+    assert_eq!(h.app.curtain_types.selected, Some(t));
+    // A spandrel row and caps.
+    let opaque = h
+        .model()
+        .materials()
+        .find(|m| m.name == "Panel sándwich lacado")
+        .unwrap()
+        .id;
+    let mut d = h.model().curtain_type(t).unwrap().design.clone();
+    d.rows = CurtainDivision {
+        fixed: vec![0.9],
+        rest: CurtainRest::MaxSpacing(2.0),
+    };
+    d.panels.push(archisim_core::CurtainPanel {
+        name: "Antepecho".into(),
+        thickness: 0.05,
+        material: opaque,
+    });
+    d.row_panels = vec![1, 0];
+    d.caps = Some(CurtainCaps {
+        width: 0.06,
+        depth: 0.02,
+        material: d.mullion.material,
+    });
+    let name = h.model().curtain_type(t).unwrap().name.clone();
+    h.app
+        .ed
+        .edit_curtain_type("Antepecho", t, &name, d)
+        .unwrap();
+    h.app.curtain_types.view = CurtainView::Elevation;
+    h.frame();
+    let pieces = h.model().curtain_wall_pieces(id);
+    assert!(pieces.iter().any(|p| p.kind == CurtainPieceKind::Panel(1)));
+    assert!(pieces.iter().any(|p| p.kind == CurtainPieceKind::Cap));
+    h.app.ed.undo();
+    h.frame();
+    let pieces = h.model().curtain_wall_pieces(id);
+    assert!(!pieces.iter().any(|p| p.kind == CurtainPieceKind::Cap));
+    // A type in use cannot be deleted; a duplicate can.
+    assert!(h.app.ed.remove_curtain_type(t).is_err());
+    let copy = h.app.ed.duplicate_curtain_type(t).unwrap();
+    h.app.curtain_types.selected = Some(copy);
+    h.frame();
+    h.app.ed.remove_curtain_type(copy).unwrap();
+    h.frame();
+    assert_eq!(h.app.curtain_types.selected, Some(t));
+    if let Ok(dir) = std::env::var("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        archisim_file::save(h.model(), dir.join("muro_cortina.archisim")).unwrap();
+    }
+}

@@ -793,6 +793,7 @@ pub enum ModelError {
     UnknownStair(StairId),
     UnknownTerrain(TerrainId),
     UnknownCurtainWall(CurtainWallId),
+    UnknownCurtainType(CurtainTypeId),
     UnknownRailing(RailingId),
     UnknownObjectType(ObjectTypeId),
     UnknownObject(ObjectId),
@@ -806,6 +807,9 @@ pub enum ModelError {
     /// A curtain wall with no height, too small a grid or a frame wider
     /// than its bays.
     InvalidCurtainWall,
+    /// A curtain wall type with too small a division, a frame or panel out
+    /// of range, or a row pointing at no panel.
+    InvalidCurtainType,
     /// A terrain with fewer than three points out of line, or no depth.
     InvalidTerrain,
     /// A stair with no flight, nothing to climb, or too narrow or shallow.
@@ -911,6 +915,11 @@ impl fmt::Display for ModelError {
             ModelError::UnknownStair(id) => write!(f, "unknown stair {id}"),
             ModelError::UnknownTerrain(id) => write!(f, "unknown terrain {id}"),
             ModelError::UnknownCurtainWall(id) => write!(f, "unknown curtain wall {id}"),
+            ModelError::UnknownCurtainType(id) => write!(f, "unknown curtain wall type {id}"),
+            ModelError::InvalidCurtainType => write!(
+                f,
+                "a curtain wall type needs bays of at least 0.1 m (0.2 m when equal), frames of 5 mm to 1 m, at least one panel no thicker than the frame and rows pointing at its panels"
+            ),
             ModelError::UnknownRailing(id) => write!(f, "unknown railing {id}"),
             ModelError::UnknownObjectType(id) => write!(f, "unknown object type {id}"),
             ModelError::UnknownObject(id) => write!(f, "unknown object {id}"),
@@ -924,7 +933,7 @@ impl fmt::Display for ModelError {
             ),
             ModelError::InvalidCurtainWall => write!(
                 f,
-                "a curtain wall needs some height, bays and rows of at least 0.2 m and a frame narrower than half a bay"
+                "a curtain wall needs some height and room between the frames of its type in every bay and row"
             ),
             ModelError::InvalidTerrain => write!(
                 f,
@@ -1059,6 +1068,7 @@ pub struct ModelParts {
     pub wall_roofs: Vec<(WallId, RoofId)>,
     pub stairs: Vec<Stair>,
     pub terrains: Vec<Terrain>,
+    pub curtain_types: Vec<CurtainWallType>,
     pub curtain_walls: Vec<CurtainWall>,
     pub railings: Vec<Railing>,
     pub object_types: Vec<ObjectType>,
@@ -1123,6 +1133,7 @@ pub struct Model {
     wall_roofs: BTreeMap<WallId, RoofId>,
     stairs: BTreeMap<StairId, Stair>,
     terrains: BTreeMap<TerrainId, Terrain>,
+    curtain_types: BTreeMap<CurtainTypeId, CurtainWallType>,
     curtain_walls: BTreeMap<CurtainWallId, CurtainWall>,
     railings: BTreeMap<RailingId, Railing>,
     object_types: BTreeMap<ObjectTypeId, ObjectType>,
@@ -1164,6 +1175,7 @@ impl Model {
             wall_roofs: BTreeMap::new(),
             stairs: BTreeMap::new(),
             terrains: BTreeMap::new(),
+            curtain_types: BTreeMap::new(),
             curtain_walls: BTreeMap::new(),
             railings: BTreeMap::new(),
             object_types: BTreeMap::new(),
@@ -1438,10 +1450,10 @@ impl Model {
                     .map(|t| format!("terreno {}", t.id.0)),
             )
             .chain(
-                self.curtain_walls
+                self.curtain_types
                     .values()
-                    .filter(|c| c.frame_material == id || c.panel_material == id)
-                    .map(|c| format!("muro cortina {}", c.id.0)),
+                    .filter(|t| t.design.materials().contains(&id))
+                    .map(|t| t.name.clone()),
             )
             .chain(
                 self.railings
@@ -3207,6 +3219,7 @@ impl Model {
             wall_roofs: self.wall_roofs.iter().map(|(w, r)| (*w, *r)).collect(),
             stairs: self.stairs.values().cloned().collect(),
             terrains: self.terrains.values().cloned().collect(),
+            curtain_types: self.curtain_types.values().cloned().collect(),
             curtain_walls: self.curtain_walls.values().cloned().collect(),
             railings: self.railings.values().cloned().collect(),
             object_types: self.object_types.values().cloned().collect(),
@@ -3433,7 +3446,7 @@ impl Model {
         }
         model.restore_stairs(parts.stairs, &mut claim)?;
         model.restore_terrains(parts.terrains, &mut claim)?;
-        model.restore_curtain_walls(parts.curtain_walls, &mut claim)?;
+        model.restore_curtain_walls(parts.curtain_types, parts.curtain_walls, &mut claim)?;
         model.restore_railings(parts.railings, &mut claim)?;
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
         model

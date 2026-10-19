@@ -72,6 +72,41 @@ impl Thumbs {
         Some(thumb)
     }
 
+    /// A picture of a vector drawing (an elevation), no larger than `max`
+    /// points, made the first time it is asked for.
+    pub fn get_drawing(
+        &mut self,
+        ctx: &egui::Context,
+        key: String,
+        max: Vec2,
+        build: impl FnOnce() -> Option<crate::type_drawing::Drawing>,
+    ) -> Option<Thumb> {
+        if let Some((tex, size)) = self.cache.get(&key) {
+            self.used.insert(key);
+            return Some(Thumb {
+                tex: tex.id(),
+                size: *size,
+            });
+        }
+        let d = build()?;
+        let ppp = ctx.pixels_per_point() as f64;
+        let k = (max.x as f64 / d.width()).min(max.y as f64 / d.height());
+        let size = Vec2::new((d.width() * k) as f32, (d.height() * k) as f32);
+        let px = [
+            (size.x as f64 * ppp).round().max(1.0) as usize,
+            (size.y as f64 * ppp).round().max(1.0) as usize,
+        ];
+        let img = crate::plan_image::rasterize_svg(&d.svg(k * ppp), px);
+        let tex = ctx.load_texture(format!("thumb:{key}"), img, TextureOptions::LINEAR);
+        let thumb = Thumb {
+            tex: tex.id(),
+            size,
+        };
+        self.used.insert(key.clone());
+        self.cache.insert(key, (tex, size));
+        Some(thumb)
+    }
+
     /// Keeps the cache small: past `KEEP` pictures, forgets those not
     /// shown in this frame.
     pub fn end_frame(&mut self) {

@@ -141,10 +141,28 @@ pub fn phase_model(model: &Model, view: PhaseView) -> Option<Model> {
         if !show {
             let _ = m.remove_curtain_wall(c);
         } else if marked {
-            let _ = m.edit_curtain_wall(c, |c| {
-                c.frame_material = mark;
-                c.panel_material = mark;
-            });
+            // A copy of its type, all of the phase's colour.
+            let Some(t) = m.curtain_wall(c).map(|c| c.curtain_type) else {
+                continue;
+            };
+            let Some(mut design) = m.curtain_type(t).map(|t| t.design.clone()) else {
+                continue;
+            };
+            for p in [&mut design.border, &mut design.mullion, &mut design.transom] {
+                p.material = mark;
+            }
+            for p in &mut design.panels {
+                p.material = mark;
+            }
+            if let Some(x) = &mut design.caps {
+                x.material = mark;
+            }
+            if let Some(x) = &mut design.louvres {
+                x.material = mark;
+            }
+            if let Ok(copy) = m.add_curtain_type("", design) {
+                let _ = m.edit_curtain_wall(c, |c| c.curtain_type = copy);
+            }
         }
     }
     let railings: Vec<_> = m.railings().map(|r| r.id).collect();

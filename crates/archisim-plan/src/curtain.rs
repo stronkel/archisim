@@ -10,8 +10,11 @@ use archisim_core::{CurtainPieceKind, CurtainWall, Model, Point2};
 use crate::{fill_cut, num, path, CUT_LINE, INK, LAYER_LINE, VIEW_LINE};
 
 /// Every point of the curtain wall the plan must show.
-pub fn curtain_points(c: &CurtainWall) -> Vec<Point2> {
-    c.outline()
+pub fn curtain_points(model: &Model, c: &CurtainWall) -> Vec<Point2> {
+    model
+        .curtain_design(c.id)
+        .map(|d| c.outline(d))
+        .unwrap_or_default()
 }
 
 fn outline(s: &mut String, poly: &[Point2], weight: f64, dashed: bool, k: f64) {
@@ -29,35 +32,53 @@ fn outline(s: &mut String, poly: &[Point2], weight: f64, dashed: bool, k: f64) {
 }
 
 pub fn draw_curtain_wall(s: &mut String, model: &Model, c: &CurtainWall, cut_plane: f64, k: f64) {
+    let Some(d) = model.curtain_design(c.id) else {
+        return;
+    };
     let _ = writeln!(s, r#"<g class="curtain-wall">"#);
     let (z0, z1) = (c.base_offset, c.base_offset + c.height);
+    let pieces = c.pieces(d);
+    // Louvres below the cut are seen from above.
+    let cut = cut_plane - c.base_offset;
+    if let Some(l) = pieces
+        .iter()
+        .find(|p| p.kind == CurtainPieceKind::Louvre && p.up.1 <= cut)
+    {
+        outline(s, &c.piece_footprint(l), VIEW_LINE, false, k);
+    }
     if cut_plane > z0 && cut_plane < z1 {
-        let pieces = c.pieces();
-        // Panels of the first row stand for all of them.
-        let first_row = pieces
+        // What the cut goes through; where it falls on a transom, the
+        // panels of the row under it stand for their row.
+        let row = pieces
             .iter()
-            .filter(|p| p.kind == CurtainPieceKind::Panel)
+            .filter(|p| matches!(p.kind, CurtainPieceKind::Panel(_)))
+            .filter(|p| p.up.0 <= cut)
             .map(|p| p.up.0)
-            .fold(f64::INFINITY, f64::min);
-        for p in pieces
-            .iter()
-            .filter(|p| p.kind == CurtainPieceKind::Panel && (p.up.0 - first_row).abs() < 1e-9)
-        {
-            outline(s, &c.piece_footprint(p), LAYER_LINE, false, k);
-        }
-        for (i, p) in pieces
-            .iter()
-            .filter(|p| p.kind == CurtainPieceKind::Mullion)
-            .enumerate()
-        {
+            .fold(f64::NEG_INFINITY, f64::max);
+        for (i, p) in pieces.iter().enumerate() {
+            let hit = match p.kind {
+                CurtainPieceKind::Panel(_) => (p.up.0 - row).abs() < 1e-9,
+                CurtainPieceKind::Louvre => false,
+                _ => p.is_vertical() && p.up.0 <= cut && p.up.1 >= cut,
+            };
+            if !hit {
+                continue;
+            }
             let poly = c.piece_footprint(p);
-            if let Some(m) = model.material(c.frame_material) {
+            let material = model.material(p.material);
+            let glass = material.is_some_and(|m| m.category == "glass");
+            if let (Some(m), false) = (material, glass) {
                 fill_cut(s, m, &poly, &format!("cw{}-{i}", c.id.0), k);
             }
-            outline(s, &poly, CUT_LINE, false, k);
+            let weight = if matches!(p.kind, CurtainPieceKind::Panel(_)) {
+                LAYER_LINE
+            } else {
+                CUT_LINE
+            };
+            outline(s, &poly, weight, false, k);
         }
     } else {
-        outline(s, &c.outline(), VIEW_LINE, cut_plane <= z0, k);
+        outline(s, &c.outline(d), VIEW_LINE, cut_plane <= z0, k);
     }
     s.push_str("</g>\n");
 }

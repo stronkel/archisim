@@ -243,6 +243,8 @@ pub struct ArchiSimApp {
     /// The intersection priorities window, whether it lists unused
     /// materials too, and the bar being dragged (material, value).
     pub show_priorities: bool,
+    /// The curtain wall types window.
+    pub curtain_types: curtain_types_ui::CurtainTypesWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// The whole object library, for the gallery's pictures of the types
@@ -392,6 +394,7 @@ impl ArchiSimApp {
             zone_tool: SlabTool::default(),
             show_levels: false,
             show_priorities: false,
+            curtain_types: Default::default(),
             survey_import: None,
             object_library: None,
             priorities_all: false,
@@ -1290,6 +1293,7 @@ impl ArchiSimApp {
         }
         self.levels_dialog(ctx);
         self.priorities_dialog(ctx);
+        self.curtain_types_dialog(ctx);
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
         if self.show_about {
@@ -1528,6 +1532,7 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 
 mod annotation_ui;
 mod chrome;
+mod curtain_types_ui;
 mod curtain_ui;
 mod icons;
 mod levels_ui;

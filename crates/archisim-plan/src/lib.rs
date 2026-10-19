@@ -353,7 +353,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         marker_points.extend(terrain::terrain_points(t));
     }
     for c in model.curtain_walls_on_level(level) {
-        marker_points.extend(curtain::curtain_points(c));
+        marker_points.extend(curtain::curtain_points(model, c));
     }
     for r in model.railings_on_level(level) {
         marker_points.extend(railings::railing_points(r));
@@ -505,7 +505,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     draw_objects(&mut s, model, level, options.scale, k, &poly_visible);
     members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
     for c in model.curtain_walls_on_level(level) {
-        if poly_visible(&c.outline()) {
+        if poly_visible(&curtain::curtain_points(model, c)) {
             curtain::draw_curtain_wall(&mut s, model, c, options.cut_plane, k);
         }
     }

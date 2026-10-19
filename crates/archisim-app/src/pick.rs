@@ -94,7 +94,10 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Terrain(id) => model
             .terrain(id)
             .map(|t| t.boundary().iter().map(|i| t.points[*i].at).collect()),
-        Element::CurtainWall(id) => model.curtain_wall(id).map(|c| c.outline()),
+        Element::CurtainWall(id) => model
+            .curtain_wall(id)
+            .zip(model.curtain_design(id))
+            .map(|(c, d)| c.outline(d)),
         Element::Railing(id) => model.railing(id).map(railing_outline),
         Element::Object(id) => Some(model.object_outline(id)).filter(|o| !o.is_empty()),
     }

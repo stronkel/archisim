@@ -182,7 +182,9 @@ pub fn explain(e: &ModelError) -> String {
         }
         ModelError::InvalidPriority => "la prioridad de intersección va de 0 a 999".into(),
         ModelError::InvalidRailing => "la barandilla necesita dos puntos al menos (a más de 5 cm), una altura de 30 cm a 3 m y montantes a 30 cm – 5 m".into(),
-        ModelError::InvalidCurtainWall => "el muro cortina necesita altura, módulos y filas de al menos 20 cm y montantes más estrechos que medio módulo".into(),
+        ModelError::InvalidCurtainWall => "el muro cortina necesita altura y sitio entre los marcos de su tipo en cada paño y cada fila".into(),
+        ModelError::UnknownCurtainType(_) => "el tipo de muro cortina ya no existe".into(),
+        ModelError::InvalidCurtainType => "el tipo de muro cortina necesita paños fijos de al menos 10 cm (20 cm si se reparten iguales), marcos de 5 mm a 1 m, al menos un panel no más grueso que el marco y filas que usen sus paneles".into(),
         ModelError::InvalidTerrain => {
             "el terreno necesita tres puntos que no estén en línea y algo de profundidad".into()
         }
