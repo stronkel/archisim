@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 · Fase 4 — colaboración e ingenierías: vínculos, interferencias, BCF e IDS (v0.26)
+
+Rama `bloque/colaboracion`, desde `main` (v0.24). Pedida por Antonio el 19/10/2026: «ve desarrollando la fase 4». Diseño y uso en `docs/COLABORACION.md`.
+
+**Hecho**
+- **Requisitos IDS 1.0** (4.4, crate `archisim-ids`): comprueba cualquier IFC2X3, IFC4 o IFC4.3 —el del proyecto o el de otro programa— contra los requisitos del cliente: clase y tipo predefinido, atributos, propiedades y cantidades (con tipo de dato, unidades y herencia del tipo), materiales, clasificaciones y pertenencia (planta, conjunto, grupo, hueco). Pasa los **334 casos oficiales de buildingSMART** y da lo mismo que ifctester (IfcOpenShell) con la vivienda de prueba.
+- **Incidencias BCF 2.1 y 3.0** (4.3, crate `archisim-bcf`): temas con tipo, estado, prioridad, etiquetas, fechas, asignación, fase, enlaces, comentarios y vistas (cámara, selección, visibilidad, colores, planos de corte, líneas, imagen). Lee y reescribe idénticos los 38 BCF de prueba de buildingSMART; lo que escribe valida contra sus esquemas.
+- **Vínculos IFC con versiones** (4.1, crate `archisim-coord`): cualquier IFC leído como elementos con su malla (perfiles metálicos, tubos, mallas, geometría compartida…), sus huecos y una huella de sus datos. Los volúmenes coinciden con IfcOpenShell en los **21 modelos de ejemplo de buildingSMART** y en la vivienda. Comparación de versiones por GlobalId: nuevos, borrados, movidos, cambian de forma o de datos.
+- **Interferencias** (4.2): con tolerancia (10 mm), sin contar contactos ni lo que pasa por un hueco; a BCF con historial (las que siguen reciben un comentario, las que desaparecen pasan a «Resuelta»).
+- **En la aplicación**: menú **Colaboración** y ventana **Coordinación** con cuatro pestañas. Vínculos en planta (cortados por el plano de corte) y en 3D con color por disciplina, transparentes u ocultos, recarga automática con los cambios en verde y naranja; clic en un elemento vinculado en 3D dice qué es. Interferencias: lista, clic para verlas en 3D **aisladas** (el resto del modelo en fantasma), pasar a incidencias. Incidencias: abrir y guardar BCF (3.0 o 2.1), aplicar la vista de cada una, estado, asignación, comentarios y **nueva incidencia desde la vista 3D** con imagen. Requisitos: abrir un IDS, ver qué cumple, clic en un fallo para seleccionar el elemento, pasar a incidencias.
+- Vínculos, fichero de incidencias y tolerancia se guardan **junto al proyecto** en `<proyecto>.coordinacion.txt`: **sin cambios en el formato `.archisim` ni en el IFC** (demo validada con IfcOpenShell; ida y vuelta idéntica salvo la fecha).
+- Órdenes nuevas: `comprobar-ids` (con BCF de salida), `comparar`, `interferencias`, `bcf` y `demo-coordinacion` (la vivienda con una estructura y unas instalaciones con interferencias a propósito, y requisitos IDS de ejemplo).
+- Ventana real revisada con capturas (Xvfb y Vulkan por software): cortes de pilares y bajante en planta, lista de interferencias, pilar metido en la puerta aislado en 3D, incidencias abiertas con su vista. Encontrado y corregido así: con dos vínculos, pasar a incidencias daba por resueltas las del primero.
+- Versión 0.26.0.
+
+**Pendiente / limitaciones conocidas**
+- `main` no se ha movido durante la sesión. Al fusionar con `bloque/documentacion` habrá conflictos pequeños en `app.rs`, `main.rs` de la app y de la línea de órdenes; con `bloque/revision-19oct`, en `app.rs`, `view3d_ui.rs` y `scene.rs` (los he probado). Los resuelvo yo cuando lleguen a `main`.
+- Faltan: holguras, reglas por disciplina e interferencias entre vínculos (4.2); bSDD (4.4); BCF API con servidores; planos de corte y líneas de las vistas BCF (se guardan, no se dibujan); caja de sección en 3D. 4.5 (puente con Revit), 4.6 (trabajo en equipo) y 4.7 (CTE, espera a los locales) siguen por hacer.
+- Pilares y vigas de ArchiSim (fase 2, en otra rama) entrarán solos en las interferencias en cuanto se exporten a IFC.
+- Decisiones nuevas D13 a D16 en `docs/COLABORACION.md` (dónde guardar los vínculos, versión de BCF, tolerancia, orden de lo que queda).
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama (pull request «Fase 4: colaboración…», *Artifacts*) o, con Rust, `cargo run --release -p archisim-cli -- demo-coordinacion out/` (deja `out/demo.archisim`, `demo-estructura.ifc`, `demo-instalaciones.ifc` y `demo-requisitos.ids`).
+2. Abre `demo.archisim` → *Colaboración → Vincular IFC…* y elige los dos IFC. En planta deben verse los pilares (uno, por error, dentro de la puerta del pasillo) y el círculo de la bajante; en 3D, la estructura azul y las instalaciones celestes.
+3. *Colaboración → Comprobar interferencias*: deben salir 15. Pincha la de la puerta con el pilar P-3: el 3D va allí con lo demás en fantasma. *Ver todo* lo devuelve.
+4. *Pasar a incidencias* → pestaña *Incidencias*: cambia el estado de una a «En curso», asígnala, comenta, y *Guardar como…* un `.bcf`. **Ábrelo en BIMcollab, Solibri o ArchiCAD** (y en Revit con el BCF Manager guardándolo como 2.1): ¿ves las incidencias, sus vistas y los elementos seleccionados?
+5. Guarda el proyecto y vuelve a abrirlo: los vínculos y el BCF deben volver solos. Cambia el IFC de estructura (o expórtalo de nuevo desde Revit con algo movido): ArchiSim debe avisar y colorear lo nuevo y lo modificado.
+6. *Comprobar requisitos (IDS)…* con `demo-requisitos.ids`: debe cumplir 6 de 7 (falta la transmitancia de las fachadas). Si tienes un IDS de algún cliente o de BIMcollab, pruébalo y dime qué falla.
+7. Lo más útil: **un IFC de estructura y otro de instalaciones de un proyecto real de AD5** (en local, no se suben) vinculados a su arquitectura. ¿Las interferencias que salen son las que un coordinador marcaría? ¿Sobran o faltan?
+
 ## 2026-10-19 · Familias, bloque D — diálogo de tipos al estilo ArchiCAD y tipos de línea (v0.24)
 
 **Hecho**

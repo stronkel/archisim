@@ -602,6 +602,24 @@ impl ArchiSimApp {
                     self.save_issues(true);
                 }
             }
+            if let Some(issues) = &mut self.coord.issues {
+                // BCF 2.1 for programs that do not read 3.0 yet.
+                let v = &mut issues.bcf.version;
+                let before = *v;
+                egui::ComboBox::from_id_salt("bcf-version")
+                    .selected_text(format!("BCF {}", v.id()))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(v, archisim_bcf::BcfVersion::V3_0, "BCF 3.0");
+                        ui.selectable_value(v, archisim_bcf::BcfVersion::V2_1, "BCF 2.1");
+                    })
+                    .response
+                    .on_hover_text(
+                        "Versión con la que se guarda (2.1 para programas que aún no leen la 3.0)",
+                    );
+                if *v != before {
+                    issues.modified = true;
+                }
+            }
         });
         // New issue from the 3D view.
         let mut create = false;

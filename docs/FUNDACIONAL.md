@@ -48,10 +48,13 @@ Crates actuales (`crates/`):
 | `archisim-plan` | Planta en SVG a cualquier escala: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana (los de su familia para la escala), ejes, rotulación; cotas y cotas de nivel con rotulación técnica de trazo propia (`lettering`) |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
+| `archisim-ids` | Requisitos de información IDS 1.0 de buildingSMART: lectura y comprobación de cualquier IFC2X3/4/4.3 (pasa los 334 casos oficiales) |
+| `archisim-bcf` | Incidencias BCF 2.1 y 3.0: temas, comentarios y puntos de vista (cámara, selección, colores), lectura y escritura |
+| `archisim-coord` | Coordinación: cualquier IFC como elementos con su malla, huecos y huella de datos; versiones por `GlobalId`; interferencias; incidencias desde interferencias e IDS (`docs/COLABORACION.md`) |
 | `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta; `importar` convierte un IFC en proyecto |
 | `archisim-app` | La aplicación de escritorio (egui sobre wgpu), con la interfaz descrita en «Interfaz» (§4): vista de planta y vista 3D en pestañas, herramientas muro, forjado (por polígono o varita mágica), puerta, ventana y cota, gestión de plantas, tipos y materiales (multicapas, puertas, ventanas y materiales, con vista previa), selección y propiedades, mover, copiar y estirar con el ratón, deshacer, abrir/guardar `.archisim` (también soltando el fichero en la ventana o, en Mac, con doble clic en el Finder), importar IFC, exportar IFC, planta e imagen 3D |
 
-Reglas de dependencias: `family` (el lenguaje) no depende de nadie; `core` solo de `family`; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
+Reglas de dependencias: `family` (el lenguaje) no depende de nadie; `bcf` tampoco (no conoce el modelo); `ids` solo de `ifc` (el lector STEP); `coord` de `core`, `geom`, `ifc`, `ids` y `bcf`; `core` solo de `family`; `geom` solo de `core`; los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
 La vista de planta de la aplicación **es** la planta 1:50 que se exporta: se dibuja el mismo SVG de la zona visible y se rasteriza a la resolución de pantalla (grosores de línea reales a 1:50, como la vista de «grosor de línea real» de ArchiCAD). Lo que se ve es lo que se exporta. Encima, en vectorial, van la selección, la vista previa del muro y los puntos de forzado.
 
@@ -178,6 +181,14 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - Huecos de muro sin puerta ni ventana, como huecos de la familia Hueco de su tamaño (v0.20).
 - Lo que no se importa (pilares, vigas, escaleras, cubiertas inclinadas, forjados inclinados, locales…) se cuenta en un **informe**; lo que se importa con aproximaciones (capas sin espesor, marcos sin medidas, huecos en forjados), también.
 - Lo que exporta ArchiSim se importa idéntico (ida y vuelta comprobada en pruebas): para ello el IFC lleva, además, el cerco de puertas y ventanas (`IfcDoorLiningProperties`, `IfcWindowLiningProperties`), el funcionamiento de cada hoja de ventana (`IfcWindowPanelProperties`), la mano de cada hueco (`ArchiSim_Opening`) y la trama de corte de cada material (`ArchiSim_Material`).
+
+### Colaboración (fase 4, v0.26)
+
+- Menú **Colaboración** y ventana **Coordinación** (Vínculos, Interferencias, Incidencias BCF, Requisitos IDS). Detalle en `docs/COLABORACION.md`.
+- **Vínculos**: IFC de otras disciplinas vistos en planta (cortados por el plano de corte) y en 3D, sin importarlos ni exportarlos; se recargan solos al cambiar el fichero y colorean lo nuevo y lo modificado por `GlobalId`. Se guardan junto al proyecto (`<proyecto>.coordinacion.txt`); el formato `.archisim` no cambia.
+- **Interferencias** con tolerancia (10 mm), sin contar contactos ni lo que pasa por huecos; vista 3D aislada (el resto del modelo en fantasma); a BCF con historial (siguen, nuevas, resueltas).
+- **BCF 2.1 y 3.0**: abrir, aplicar vistas, estado, asignación y comentarios, nueva incidencia desde la vista 3D con imagen.
+- **IDS 1.0**: el proyecto tal como sale en su IFC contra los requisitos del cliente; clic en un fallo para seleccionar el elemento.
 
 ### Instalación
 
