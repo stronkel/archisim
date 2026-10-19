@@ -64,6 +64,8 @@ Una familia es un fichero `.asfam` con estas partes:
 
 Ejes de las familias alojadas en muro (metros): origen en el **centro del hueco de obra**, a la altura del **antepecho** (el suelo en las puertas) y en el **plano medio del marco**; **x** a lo largo del muro, hacia la derecha vista desde el lado al que abren las hojas; **y** a través del muro, hacia ese lado; **z** hacia arriba. Así la familia no necesita saber el espesor ni la orientación del muro, y la mano y el lado de apertura la reflejan solos.
 
+Ejes de los **objetos** (familias `host none` de categoría `furniture`, `sanitary` o `kitchen`, v0.25): origen en el **centro del lado de atrás**, a ras de suelo; **x** hacia la derecha, **y** hacia delante (hacia donde mira el objeto), **z** hacia arriba. Así una cama o un inodoro se colocan con un clic contra la cara del muro. Sus salidas `ifc_class` (`IfcFurniture` o `IfcSanitaryTerminal`) e `ifc_type` (`BED`, `TOILETPAN`…) deciden la clase IFC. Las familias de sistema de objetos están en `crates/archisim-core/families/objetos/`.
+
 ## El lenguaje (como está en el bloque B)
 
 Palabras clave en inglés, como IFC, porque el código será abierto; lo que ve el usuario (nombres, secciones, opciones, mensajes) va en español. La indentación (con espacios) marca qué va dentro de qué. `#` empieza un comentario.
