@@ -736,6 +736,7 @@ impl ArchiSimApp {
                 },
             );
         });
+        self.phase_view_group(ui);
         if let Some(l) = level {
             group(ui, "view-level", "Planta", |ui| {
                 row(ui, "Nombre", "", |ui, w| {
@@ -1213,6 +1214,7 @@ impl ArchiSimApp {
             );
         });
         self.layers_group(ui, w.wall_type);
+        self.phase_group(ui, "wall-phase", &[Element::Wall(id)]);
         group(ui, "wall-identity", "Datos de identidad", |ui| {
             text_row(ui, "Puertas y ventanas", "", &openings.to_string());
             id_row(ui, "GlobalId", &w.guid.to_string());
@@ -1344,6 +1346,7 @@ impl ArchiSimApp {
                 &format!("{} × {}", fmt_mm(ot.width), fmt_mm(ot.height)),
             );
         });
+        self.phase_group(ui, "opening-phase", &[Element::Opening(id)]);
         group(ui, "opening-identity", "Datos de identidad", |ui| {
             text_row(
                 ui,
@@ -1441,6 +1444,7 @@ impl ArchiSimApp {
                 }
             });
         }
+        self.phase_group(ui, "slab-phase", &[Element::Slab(id)]);
         group(ui, "slab-identity", "Datos de identidad", |ui| {
             id_row(ui, "GlobalId", &s.guid.to_string());
         });
@@ -1471,6 +1475,7 @@ impl ArchiSimApp {
                 }
             }
         });
+        self.phase_group(ui, "many-phase", many);
         let movable: Vec<Element> = many
             .iter()
             .copied()

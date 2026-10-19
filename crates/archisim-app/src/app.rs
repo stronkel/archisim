@@ -235,6 +235,8 @@ pub struct ArchiSimApp {
     /// Every plan line as a hairline (ArchiCAD's "Líneas finas"), instead
     /// of its real weight at the drawing scale.
     pub thin_lines: bool,
+    /// Which phases of a refurbishment the plans show.
+    pub phase_view: archisim_plan::phases::PhaseView,
     /// The level below is drawn in grey under the active plan (and snaps).
     pub show_underlay: bool,
     /// Walls of other levels shown in the active plan (cut by its cut plane,
@@ -326,6 +328,7 @@ impl ArchiSimApp {
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             show_grid: true,
             thin_lines: false,
+            phase_view: Default::default(),
             show_underlay: true,
             other_walls: Vec::new(),
             snap_filter: SnapFilter::default(),
@@ -648,7 +651,12 @@ impl ArchiSimApp {
             d = d.set_directory(dir);
         }
         if let Some(path) = d.save_file() {
-            match self.ed.export_plan(&path, self.show_reference_lines, scale) {
+            match self.ed.export_plan_phase(
+                &path,
+                self.show_reference_lines,
+                scale,
+                self.phase_view,
+            ) {
                 Ok(()) => self.say(format!("Planta exportada en {}.", path.display())),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }

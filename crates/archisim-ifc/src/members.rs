@@ -128,6 +128,7 @@ impl Exporter<'_> {
             let area = t.profile.area();
             self.member_psets(
                 el,
+                c.id.0,
                 &c.guid,
                 "Pset_ColumnCommon",
                 "Qto_ColumnBaseQuantities",
@@ -182,6 +183,7 @@ impl Exporter<'_> {
             );
             self.member_psets(
                 el,
+                b.id.0,
                 &b.guid,
                 "Pset_BeamCommon",
                 "Qto_BeamBaseQuantities",
@@ -247,6 +249,7 @@ impl Exporter<'_> {
     fn member_psets(
         &mut self,
         el: Ref,
+        id: u64,
         guid: &archisim_core::GlobalId,
         pset: &str,
         qto: &str,
@@ -254,7 +257,7 @@ impl Exporter<'_> {
         length: f64,
         area: f64,
     ) {
-        self.common_pset(el, guid, pset, type_name, false, true);
+        self.common_pset(el, id, guid, pset, type_name, false, true);
         self.quantities(
             el,
             guid,

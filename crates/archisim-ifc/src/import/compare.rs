@@ -233,6 +233,31 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         }
     }
 
+    // Phases (by GlobalId).
+    let phases = |m: &Model| -> Vec<(String, archisim_core::Phase)> {
+        let mut v: Vec<(String, archisim_core::Phase)> = Vec::new();
+        for w in m.walls() {
+            v.push((w.guid.to_string(), m.phase(w.id.0)));
+        }
+        for s in m.slabs() {
+            v.push((s.guid.to_string(), m.phase(s.id.0)));
+        }
+        for o in m.openings() {
+            v.push((o.guid.to_string(), m.phase(o.id.0)));
+        }
+        for c in m.columns() {
+            v.push((c.guid.to_string(), m.phase(c.id.0)));
+        }
+        for b in m.beams() {
+            v.push((b.guid.to_string(), m.phase(b.id.0)));
+        }
+        v.sort();
+        v
+    };
+    if phases(a) != phases(b) {
+        diff("fases de los elementos distintas".to_string());
+    }
+
     // Rooms.
     if a.spaces().count() != b.spaces().count() {
         diff(format!(

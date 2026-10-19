@@ -57,7 +57,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 2.8 ◐ v0.19 | **Muros curvos** (hechos, sin huecos todavía), **muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |
 | 2.9 ✅ v0.25 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso; también importarlos — hechos (herramienta Local por recinto, polígono o rectángulo; sello en planta; IFC e importación). Falta: editar los vértices del contorno, rellenos por uso, tablas de superficies (3.7) | M | 1.2 |
 | 2.10 | **Secciones y alzados** con líneas ocultas, profundidad de vista y poché por capa | L | 2.3 |
-| 2.11 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo | M | — |
+| 2.11 ✅ v0.25 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo — hechas (fase por elemento, «dibujar como», vistas Estado actual / Demoliciones / Estado reformado en amarillo y rojo, 3D, IFC `Status`). Falta: tramas o colores configurables por estudio (D5) y fase en locales | M | — |
 | 2.12 | **Terreno** sencillo (curvas de nivel o puntos), emplazamiento y orientación real del norte | M | — |
 
 ## 3. Fase 3 — Documentación

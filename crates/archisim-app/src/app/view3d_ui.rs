@@ -35,8 +35,9 @@ pub struct View3dState {
     pub camera: Camera,
     pub fit_requested: bool,
     scene: Scene,
-    /// What the scene was built from: model revision and selection.
-    scene_key: Option<(u64, BTreeSet<Element>)>,
+    /// What the scene was built from: model revision, selection and the
+    /// phases shown.
+    scene_key: Option<(u64, BTreeSet<Element>, archisim_plan::phases::PhaseView)>,
     gpu: Option<Gpu>,
     /// What the last picture was drawn with.
     drawn: Option<(Camera, [u32; 2], u64, Option<SectionBox>)>,
@@ -95,10 +96,12 @@ impl View3dState {
         revision: u64,
         selection: &BTreeSet<Element>,
         model: &archisim_core::Model,
+        phases: archisim_plan::phases::PhaseView,
     ) {
-        let key = (revision, selection.clone());
+        let key = (revision, selection.clone(), phases);
         if self.scene_key.as_ref() != Some(&key) {
-            self.scene = Scene::build(model, selection);
+            let shown = archisim_plan::phases::phase_model(model, phases);
+            self.scene = Scene::build(shown.as_ref().unwrap_or(model), selection);
             self.scene_key = Some(key);
             self.scene_serial += 1;
         }
@@ -208,7 +211,7 @@ impl View3dState {
     ) {
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        let wanted = Some((key, BTreeSet::new()));
+        let wanted = Some((key, BTreeSet::new(), Default::default()));
         if self.scene_key != wanted {
             self.scene =
                 build().map_or_else(Scene::default, |m| Scene::build(&m, &BTreeSet::new()));
@@ -300,7 +303,12 @@ impl ArchiSimApp {
         let painter = ui.painter_at(rect);
         let v = &mut self.v3d;
         v.canvas = rect;
-        v.refresh_scene(self.ed.revision(), &self.ed.selection, self.ed.model());
+        v.refresh_scene(
+            self.ed.revision(),
+            &self.ed.selection,
+            self.ed.model(),
+            self.phase_view,
+        );
         let size = rect.size();
         if v.fit_requested && size.x > 50.0 && size.y > 50.0 {
             v.fit_requested = false;
@@ -393,7 +401,12 @@ impl ArchiSimApp {
             }
         }
         let v = &mut self.v3d;
-        v.refresh_scene(self.ed.revision(), &self.ed.selection, self.ed.model());
+        v.refresh_scene(
+            self.ed.revision(),
+            &self.ed.selection,
+            self.ed.model(),
+            self.phase_view,
+        );
 
         // The picture.
         let ppp = ctx.pixels_per_point();

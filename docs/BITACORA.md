@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
+## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
 
 Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientras dormía, más cuatro mejoras pequeñas. Todo va en la rama `bloque/fase2-noche` (pull request para revisar), con commit y push tras cada avance. Esta entrada se completa conforme avanza la noche.
 
@@ -28,6 +28,11 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
   - **Rotulación técnica con letras**: el trazo propio de las cotas (UNE-EN ISO 3098) tiene ahora el alfabeto completo con ñ, tildes, ² y signos, para los nombres de locales (y las futuras etiquetas), igual en pantalla, en el SVG y en el futuro PDF.
   - IFC: `IfcSpace` agregado a su planta (número en `Name`, nombre en `LongName`, uso en `ObjectType`), extruido por su altura, con `Pset_SpaceCommon` y `Qto_SpaceBaseQuantities` (superficie útil y construida, perímetros, volumen); validado con IfcOpenShell. Se importan los `IfcSpace` de cualquier programa; la ida y vuelta de ArchiSim sale idéntica (también el sitio del sello).
   - Demo: cuatro locales (Estar-comedor, Dormitorio, Cocina, Dormitorio 2), numerados 0.01 a 0.04; las cotas de nivel se han apartado de los sellos.
+- **Fases de reforma (2.11)**, como las de Revit o el estado de reforma de ArchiCAD, con la convención española de color:
+  - Cada muro, forjado, puerta, ventana, pilar y viga es **Nuevo** (por defecto), **Existente** o **A derribar** (Propiedades → «Fases (reforma)», también con varios seleccionados). Las puertas y ventanas siguen a su muro al cambiarle la fase, y luego se les puede dar otra (una puerta nueva en un muro existente).
+  - **Dibujar como**: en las propiedades de la vista, «Dibujar como: Existente» para levantar el estado actual; lo que se dibuje desde entonces nace existente (deshacer no lo cambia).
+  - **Qué muestra la planta** (propiedades de la vista y, si el proyecto tiene fases, un desplegable «Fase» en la barra inferior): **Todo**; **Estado actual** (lo existente y lo que se derriba, sin lo nuevo); **Demoliciones** (lo que se conserva normal y lo que se derriba en **amarillo**); **Estado reformado** (lo que se conserva normal y lo nuevo en **rojo**, sin lo derribado). El 3D y la planta exportada siguen la misma elección.
+  - IFC: la propiedad estándar `Status` de `Pset_WallCommon`, `Pset_SlabCommon`, `Pset_DoorCommon`… (`EXISTING`, `DEMOLISH`; sin ella, nuevo), que es como la leen Revit y ArchiCAD; se importa igual. Formato `.archisim`: lista `phases` (versión 7).
 - **Punto 0 del proyecto forzable** (mejora 1 de Antonio): el origen (0, 0) se dibuja como un hito (círculo con dos cuartos rellenos) y es un punto de forzado propio, «Punto 0 del proyecto», que alcanza desde algo más lejos que los demás, para empezar muros, líneas o cotas desde él.
 - **Cotas azules con extremos arrastrables** (mejora 2), como los de Revit: cada cota temporal tiene dos círculos en sus extremos. El de la **referencia** se arrastra a cualquier punto que fuerce (esquina, cara, extremo de muro, punto 0…) y la cota pasa a medir hasta él; el del **elemento** salta a otra línea del propio elemento: en puertas y ventanas, la otra jamba o el **centro** del hueco; en muros, la otra cara o el **eje**. Después se escribe el valor como siempre. Las asas del elemento seleccionado (extremos de muro, esquinas) tienen preferencia sobre estos círculos. Lo elegido se mantiene mientras el elemento sigue seleccionado.
 - **Líneas finas** (mejora 3): botón «Líneas finas» en la barra inferior (también en Vista y en las propiedades de la vista): todas las líneas de la planta a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la pestaña. Para cuando haya grosores por pluma (D5), este mismo botón los alternará.
@@ -39,6 +44,7 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
 - Pilares y vigas inclinados, perfiles en L, U, T y tubos: más adelante.
 
 **Antonio debe probar**
+0. Fases (piensa en Poetas Andaluces): abre `demo.archisim`, selecciona todos los muros (ventana de selección) y ponlos en **Existente**; pon la tabiquería de un dormitorio **A derribar**; dibuja un tabique nuevo. En la barra inferior, «Fase»: mira **Demoliciones** (amarillo) y **Estado reformado** (rojo), en planta y en 3D. ¿Los colores y lo que aparece en cada estado son los que usáis en AD5? Exporta el IFC y comprueba en Revit/ArchiCAD si leen el estado (Status).
 0. Locales: herramienta **Local** (tecla Z), clic dentro de cada recinto de una planta: ¿el sello (número, nombre, superficie útil) se lee bien a 1:50 y a 1:100? Cambia el uso en Propiedades y compara la superficie construida con la que medirías tú. Exporta el IFC y mira en Revit/ArchiCAD si salen como habitaciones/zonas con su número y nombre.
 1. Descarga la versión de la rama (pull request «Fase 2 nocturna…», *Artifacts*) y abre `demo.archisim`: abajo, el porche con dos pilares cortados y la viga discontinua. En el navegador, Pilares (2) y Vigas (1).
 2. Herramienta **Pilar** (tecla I): coloca pilares; Espacio los gira; cambia en Propiedades el tipo (galería con su sección). En la planta superior el pilar llega hasta ella: cambia la cota de esa planta en *Plantas…* y mira que el pilar la sigue (Propiedades → Altura).

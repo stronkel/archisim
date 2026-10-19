@@ -388,6 +388,7 @@ impl Model {
                 height,
             },
         );
+        self.stamp_phase(id.0);
         Ok(id)
     }
 
@@ -497,6 +498,7 @@ impl Model {
                 top_offset: spec.top_offset,
             },
         );
+        self.stamp_phase(id.0);
         Ok(id)
     }
 

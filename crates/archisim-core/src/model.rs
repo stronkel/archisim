@@ -13,8 +13,10 @@ use crate::family::{
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
+mod phases;
 mod spaces;
 mod structure;
+pub use phases::*;
 pub use spaces::*;
 pub use structure::*;
 
@@ -668,6 +670,8 @@ pub enum ModelError {
     /// A steel section whose web or flanges do not fit in it.
     InvalidProfile,
     UnknownSpace(SpaceId),
+    /// No element with that id can have a phase.
+    UnknownElement(u64),
     /// Another room on the level already has that number.
     DuplicateNumber(String),
 }
@@ -761,6 +765,7 @@ impl fmt::Display for ModelError {
                 write!(f, "the web and flanges do not fit in the section")
             }
             ModelError::UnknownSpace(id) => write!(f, "space {id} does not exist"),
+            ModelError::UnknownElement(id) => write!(f, "element {id} does not exist"),
             ModelError::DuplicateNumber(n) => {
                 write!(f, "another room on the level already has the number «{n}»")
             }
@@ -866,6 +871,8 @@ pub struct ModelParts {
     pub columns: Vec<Column>,
     pub beams: Vec<Beam>,
     pub spaces: Vec<Space>,
+    /// Elements that are not new: (id, phase).
+    pub phases: Vec<(u64, Phase)>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -912,6 +919,11 @@ pub struct Model {
     columns: BTreeMap<ColumnId, Column>,
     beams: BTreeMap<BeamId, Beam>,
     spaces: BTreeMap<SpaceId, Space>,
+    /// Phases of the elements that are not new, by id.
+    phases: BTreeMap<u64, Phase>,
+    /// The phase new elements are given (the survey is drawn as
+    /// existing). Not saved.
+    pub draw_phase: Phase,
 }
 
 impl Model {
@@ -937,6 +949,8 @@ impl Model {
             columns: BTreeMap::new(),
             beams: BTreeMap::new(),
             spaces: BTreeMap::new(),
+            phases: BTreeMap::new(),
+            draw_phase: Phase::New,
         }
     }
 
@@ -1236,6 +1250,7 @@ impl Model {
             top: spec.top,
         };
         self.walls.insert(id, wall);
+        self.stamp_phase(id.0);
         Ok(id)
     }
 
@@ -1760,6 +1775,7 @@ impl Model {
                 holes: Vec::new(),
             },
         );
+        self.stamp_phase(id.0);
         Ok(id)
     }
 
@@ -2547,6 +2563,7 @@ impl Model {
                 values,
             },
         );
+        self.stamp_phase(id.0);
         Ok(id)
     }
 
@@ -2863,6 +2880,7 @@ impl Model {
             columns: self.columns.values().cloned().collect(),
             beams: self.beams.values().cloned().collect(),
             spaces: self.spaces.values().cloned().collect(),
+            phases: self.phase_table(),
         }
     }
 
@@ -3061,6 +3079,7 @@ impl Model {
 
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
         model.restore_spaces(parts.spaces, &mut claim)?;
+        model.restore_phases(parts.phases)?;
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);
         Ok(model)

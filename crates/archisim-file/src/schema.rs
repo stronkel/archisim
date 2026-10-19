@@ -50,6 +50,25 @@ pub(crate) struct ProjectFile {
     /// Rooms (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub spaces: Vec<Space>,
+    /// Phases of the elements that are not new (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<PhaseOf>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Phase {
+    New,
+    Existing,
+    Demolished,
+}
+
+/// The phase of one element, by its id (version 7).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PhaseOf {
+    pub id: u64,
+    pub phase: Phase,
 }
 
 /// A room (version 7).
@@ -692,6 +711,18 @@ impl ProjectFile {
                     label: s.label.map(xy),
                 })
                 .collect(),
+            phases: p
+                .phases
+                .into_iter()
+                .map(|(id, ph)| PhaseOf {
+                    id,
+                    phase: match ph {
+                        core::Phase::New => Phase::New,
+                        core::Phase::Existing => Phase::Existing,
+                        core::Phase::Demolished => Phase::Demolished,
+                    },
+                })
+                .collect(),
         }
     }
 
@@ -730,6 +761,20 @@ impl ProjectFile {
             columns: Vec::new(),
             beams: Vec::new(),
             spaces: Vec::new(),
+            phases: self
+                .phases
+                .iter()
+                .map(|p| {
+                    (
+                        p.id,
+                        match p.phase {
+                            Phase::New => core::Phase::New,
+                            Phase::Existing => core::Phase::Existing,
+                            Phase::Demolished => core::Phase::Demolished,
+                        },
+                    )
+                })
+                .collect(),
         };
 
         for l in self.levels {

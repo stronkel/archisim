@@ -223,6 +223,9 @@ struct Importer<'a> {
     /// The walls made from each IFC wall (one per piece of its axis).
     walls: HashMap<u64, Vec<WallFrame>>,
     member_types: HashMap<members::MemberKey, archisim_core::MemberTypeId>,
+    /// Imported elements and the IFC entity each came from, to read their
+    /// phase (`Status`) at the end.
+    sources: Vec<(u64, u64)>,
 }
 
 #[derive(Default)]
@@ -450,6 +453,7 @@ impl<'a> Importer<'a> {
             guids: GuidPlan::default(),
             walls: HashMap::new(),
             member_types: HashMap::new(),
+            sources: Vec::new(),
         };
         imp.index();
         imp
@@ -644,6 +648,43 @@ impl<'a> Importer<'a> {
             }
         }
         None
+    }
+
+    /// The `Status` of an element's common property set (phases of a
+    /// refurbishment), whatever the set is called.
+    fn status_of(&self, element: u64) -> Option<archisim_core::Phase> {
+        for s in self.ix.psets.get(&element).cloned().unwrap_or_default() {
+            let Some(set) = self.ent(s) else { continue };
+            if set.kind != "IFCPROPERTYSET" {
+                continue;
+            }
+            for p in set.arg(4).as_list() {
+                let Some(p) = self.deref(p) else { continue };
+                if p.kind == "IFCPROPERTYSINGLEVALUE" && p.arg(0).as_str() == Some("Status") {
+                    if let Some(v) = p.arg(2).as_str() {
+                        return archisim_core::Phase::from_ifc_status(v);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Gives every imported element the phase its file says.
+    fn read_statuses(&mut self) {
+        let mut found = 0;
+        for (id, ifc) in std::mem::take(&mut self.sources) {
+            if let Some(p) = self.status_of(ifc) {
+                if p != archisim_core::Phase::New && self.model.set_own_phase(id, p).is_ok() {
+                    found += 1;
+                }
+            }
+        }
+        if found > 0 {
+            self.report.warn(format!(
+                "{found} elementos existentes o a derribar (fases de reforma)."
+            ));
+        }
     }
 
     fn is_external(&self, element: u64, pset: &str) -> Option<bool> {
@@ -1357,6 +1398,7 @@ impl<'a> Importer<'a> {
                 Ok(wid) => {
                     self.report.walls += 1;
                     self.guids.walls.push((wid, c.guid));
+                    self.sources.push((wid.0, c.ifc));
                     let length = a.distance(b);
                     self.walls.entry(c.ifc).or_default().push(WallFrame {
                         id: wid,
@@ -1623,6 +1665,7 @@ impl<'a> Importer<'a> {
             }
         }
         self.report.slabs += 1;
+        self.sources.push((sid.0, id));
         self.guids
             .slabs
             .push((sid, e.arg(0).as_str().unwrap_or("").to_string()));
@@ -1869,6 +1912,7 @@ impl<'a> Importer<'a> {
             })
             .map_err(|e| explain(&e))?;
         self.report.voids += 1;
+        self.sources.push((oid.0, void));
         self.guids.openings.push((oid, guid));
         Ok(())
     }
@@ -2108,6 +2152,7 @@ impl<'a> Importer<'a> {
             })
             .map_err(|e| explain(&e))?;
         self.instance_values(filling, oid);
+        self.sources.push((oid.0, filling));
         if is_door {
             self.report.doors += 1;
         } else {
@@ -2465,6 +2510,7 @@ impl<'a> Importer<'a> {
         self.import_members();
         self.import_openings();
         self.import_spaces();
+        self.read_statuses();
         self.count_unsupported();
     }
 

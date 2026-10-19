@@ -622,6 +622,12 @@ mod tests {
             .unwrap();
         m.edit_space(room, |s| s.label = Some(Point2::new(1.0, 1.0)))
             .unwrap();
+        // A refurbishment: the first wall existing, the column demolished.
+        let first = m.walls().next().unwrap().id.0;
+        m.set_phase(first, archisim_core::Phase::Existing).unwrap();
+        let col_id = m.columns().next().unwrap().id.0;
+        m.set_phase(col_id, archisim_core::Phase::Demolished)
+            .unwrap();
         let text = to_string(&m);
         assert!(text.contains("\"shape\": \"i_shape\""), "{text}");
         let back = from_str(&text).unwrap();

@@ -923,3 +923,30 @@ outputs
         std::fs::write(std::path::Path::new(&dir).join("familia_propia.ifc"), &ifc).unwrap();
     }
 }
+
+/// A refurbishment: existing and demolished elements keep their phase
+/// through IFC (`Status` of the common property sets).
+#[test]
+fn phases_round_trip() {
+    use archisim_core::Phase;
+    let mut m = model();
+    let walls: Vec<u64> = m.walls().map(|w| w.id.0).collect();
+    m.set_phase(walls[0], Phase::Existing).unwrap();
+    m.set_phase(walls[1], Phase::Demolished).unwrap();
+    let slab = m.slabs().next().unwrap().id.0;
+    m.set_phase(slab, Phase::Existing).unwrap();
+    // A new door in the existing wall.
+    let door = m.openings().find(|o| o.wall.0 == walls[0]).map(|o| o.id.0);
+    if let Some(o) = door {
+        m.set_phase(o, Phase::New).unwrap();
+    }
+    let ifc = export(&m);
+    assert!(ifc.contains("'Status',$,IFCLABEL('DEMOLISH')"));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    assert!(report
+        .warnings
+        .keys()
+        .any(|w| w.contains("fases de reforma")));
+}

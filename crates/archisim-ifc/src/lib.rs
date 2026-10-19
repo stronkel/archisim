@@ -252,16 +252,31 @@ impl<'a> Exporter<'a> {
     }
 
     /// The common properties shared by walls and slabs.
+    /// IFC's `Status` property for an element that is not new (phases of
+    /// a refurbishment).
+    fn status_prop(&mut self, id: u64) -> Option<Ref> {
+        let phase = self.model.phase(id);
+        (phase != archisim_core::Phase::New).then(|| {
+            self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Status',$,IFCLABEL({}),$)",
+                string(phase.ifc_status())
+            ))
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn common_pset(
         &mut self,
         element: Ref,
+        id: u64,
         guid: &GlobalId,
         pset_name: &str,
         reference: &str,
         is_external: bool,
         load_bearing: bool,
     ) {
-        let props = [
+        let status = self.status_prop(id);
+        let mut props = vec![
             self.w.add(format!(
                 "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
                 string(reference)
@@ -275,6 +290,7 @@ impl<'a> Exporter<'a> {
                 boolean(load_bearing)
             )),
         ];
+        props.extend(status);
         let pset = self.w.add(format!(
             "IFCPROPERTYSET({},$,{},$,{})",
             string(derived_guid(guid, pset_name).as_str()),
@@ -743,7 +759,8 @@ impl<'a> Exporter<'a> {
         // `Reference` is the type mark ("P-01"), as IFC defines it; the name
         // when the type has none.
         let reference = if t.mark.is_empty() { &t.name } else { &t.mark };
-        let props = [
+        let status = self.status_prop(og.opening.0);
+        let mut props = vec![
             self.w.add(format!(
                 "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
                 string(reference)
@@ -753,6 +770,7 @@ impl<'a> Exporter<'a> {
                 boolean(is_external)
             )),
         ];
+        props.extend(status);
         self.pset(filling, guid, pset_name, &props);
         // Instance parameters of the family, if it has any.
         if let Some(o) = self.model.opening(og.opening) {
@@ -1083,6 +1101,7 @@ impl<'a> Exporter<'a> {
             // Properties and quantities.
             self.common_pset(
                 w,
+                wall.id.0,
                 &wall.guid,
                 "Pset_WallCommon",
                 &wtype.name,
@@ -1204,6 +1223,7 @@ impl<'a> Exporter<'a> {
 
             self.common_pset(
                 sl,
+                slab.id.0,
                 &slab.guid,
                 "Pset_SlabCommon",
                 &stype.name,

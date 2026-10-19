@@ -608,6 +608,7 @@ impl ArchiSimApp {
             }
         });
         self.member_type_group(ui, c.member_type);
+        self.phase_group(ui, "column-phase", &[Element::Column(id)]);
         group(ui, "column-identity", "Datos de identidad", |ui| {
             id_row(ui, "GlobalId", &c.guid.to_string());
         });
@@ -700,6 +701,7 @@ impl ArchiSimApp {
             }
         });
         self.member_type_group(ui, b.member_type);
+        self.phase_group(ui, "beam-phase", &[Element::Beam(id)]);
         group(ui, "beam-identity", "Datos de identidad", |ui| {
             id_row(ui, "GlobalId", &b.guid.to_string());
         });

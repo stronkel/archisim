@@ -26,6 +26,7 @@ pub struct PlanKey {
     pub reference_level: Option<LevelId>,
     /// Hairlines instead of real line weights.
     pub thin_lines: bool,
+    pub phase_view: archisim_plan::phases::PhaseView,
 }
 
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,

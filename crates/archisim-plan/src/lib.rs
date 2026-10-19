@@ -26,6 +26,7 @@
 pub mod annotate;
 pub mod lettering;
 pub mod members;
+pub mod phases;
 
 use std::fmt::Write as _;
 
@@ -66,6 +67,8 @@ pub struct PlanOptions {
     /// "Líneas finas"): one pixel on screen, 0.1 mm on paper. Off, lines
     /// have their real weight at the drawing scale.
     pub thin_lines: bool,
+    /// Which phases of a refurbishment the plan shows.
+    pub phase_view: phases::PhaseView,
 }
 
 /// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
@@ -83,6 +86,7 @@ impl Default for PlanOptions {
             reference_level: None,
             px_per_mm: None,
             thin_lines: false,
+            phase_view: phases::PhaseView::All,
         }
     }
 }
@@ -232,7 +236,8 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         .is_some_and(|px| px * HATCH_SPACING < MIN_HATCH_PX);
     COARSE.with(|c| c.set(coarse));
     PX_PER_MM.with(|c| c.set(options.px_per_mm));
-    let svg = render_plan_inner(model, level, options);
+    let phased = phases::phase_model(model, options.phase_view);
+    let svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
     if options.thin_lines {

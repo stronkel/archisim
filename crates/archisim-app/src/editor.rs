@@ -18,6 +18,7 @@ use crate::pick::Element;
 use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
+mod phases;
 mod spaces;
 mod structure;
 mod types;
@@ -219,13 +220,26 @@ impl Editor {
     /// Writes the plan of the active level as SVG at a scale (50 for
     /// 1:50): line weights are paper weights, and doors and windows use the
     /// plan symbol their family gives for that scale.
+    #[cfg(test)]
     pub fn export_plan(&self, path: &Path, show_reference_lines: bool, scale: f64) -> EditResult {
+        self.export_plan_phase(path, show_reference_lines, scale, Default::default())
+    }
+
+    /// [`Editor::export_plan`] of one phase of a refurbishment.
+    pub fn export_plan_phase(
+        &self,
+        path: &Path,
+        show_reference_lines: bool,
+        scale: f64,
+        phase_view: archisim_plan::phases::PhaseView,
+    ) -> EditResult {
         let svg = render_plan(
             self.model(),
             self.level,
             &PlanOptions {
                 show_reference_lines,
                 scale,
+                phase_view,
                 ..PlanOptions::default()
             },
         );

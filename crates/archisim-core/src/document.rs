@@ -33,6 +33,12 @@ impl Document {
         &self.model
     }
 
+    /// The phase new elements are drawn in (see [`Model::draw_phase`]):
+    /// a setting of the drawing, not a change to undo.
+    pub fn set_draw_phase(&mut self, phase: crate::model::Phase) {
+        self.model.draw_phase = phase;
+    }
+
     /// Runs an edit as one undoable step. On error nothing changes.
     pub fn transact<T>(
         &mut self,
@@ -53,7 +59,9 @@ impl Document {
     /// Undoes the last step and returns its label.
     pub fn undo(&mut self) -> Option<String> {
         let step = self.undo.pop()?;
+        let phase = self.model.draw_phase;
         let after = std::mem::replace(&mut self.model, step.before);
+        self.model.draw_phase = phase;
         self.redo.push((step.label.clone(), after));
         Some(step.label)
     }
@@ -61,7 +69,9 @@ impl Document {
     /// Redoes the last undone step and returns its label.
     pub fn redo(&mut self) -> Option<String> {
         let (label, after) = self.redo.pop()?;
+        let phase = self.model.draw_phase;
         let before = std::mem::replace(&mut self.model, after);
+        self.model.draw_phase = phase;
         self.undo.push(Step {
             label: label.clone(),
             before,

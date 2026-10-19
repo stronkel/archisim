@@ -1903,3 +1903,58 @@ fn room_tool() {
     h.key(Key::Delete);
     assert_eq!(h.model().spaces().count(), 1);
 }
+
+/// Phases of a refurbishment: walls drawn "as existing", one set to be
+/// demolished in Properties, and the plan of each phase.
+#[test]
+fn phases_of_a_refurbishment() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.ed.set_draw_phase(archisim_core::Phase::Existing);
+    draw_outline(&mut h);
+    h.app.ed.set_draw_phase(archisim_core::Phase::New);
+    let m = h.model();
+    assert!(m
+        .walls()
+        .all(|w| m.phase(w.id.0) == archisim_core::Phase::Existing));
+    // A new partition.
+    h.key(Key::Escape);
+    h.type_text("m");
+    h.click_at(p(6.0, 0.265));
+    h.click_at(p(6.0, 8.735));
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let partition = h.model().walls().last().unwrap().id;
+    assert_eq!(h.model().phase(partition.0), archisim_core::Phase::New);
+    // The north façade to be demolished.
+    let north = h.model().walls().nth(1).unwrap().id;
+    h.app.ed.selection = [Element::Wall(north)].into_iter().collect();
+    assert_eq!(
+        h.app
+            .ed
+            .set_phase(&[Element::Wall(north)], archisim_core::Phase::Demolished),
+        Ok(1)
+    );
+    let level = h.app.ed.level;
+    let plan = |view| {
+        archisim_plan::render_plan(
+            h.model(),
+            level,
+            &archisim_plan::PlanOptions {
+                phase_view: view,
+                ..Default::default()
+            },
+        )
+    };
+    use archisim_plan::phases::PhaseView;
+    let yellow = "rgb(246,214,40)";
+    let red = "rgb(222,74,60)";
+    assert!(plan(PhaseView::Demolition).contains(yellow));
+    assert!(!plan(PhaseView::Demolition).contains(red));
+    assert!(plan(PhaseView::Proposed).contains(red));
+    assert!(!plan(PhaseView::Proposed).contains(yellow));
+    assert!(!plan(PhaseView::All).contains(red));
+    // Undo keeps the drawing phase setting.
+    h.app.ed.set_draw_phase(archisim_core::Phase::Existing);
+    h.app.ed.undo();
+    assert_eq!(h.app.ed.draw_phase(), archisim_core::Phase::Existing);
+}

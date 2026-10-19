@@ -249,6 +249,7 @@ impl<'a> Importer<'a> {
                     })
                     .map_err(|e| explain(&e))?;
                 self.report.columns += 1;
+                self.sources.push((cid.0, id));
                 self.guids.columns.push((cid, guid));
             }
             MemberUsage::Beam => {
@@ -305,6 +306,7 @@ impl<'a> Importer<'a> {
                     })
                     .map_err(|e| explain(&e))?;
                 self.report.beams += 1;
+                self.sources.push((bid.0, id));
                 self.guids.beams.push((bid, guid));
             }
         }

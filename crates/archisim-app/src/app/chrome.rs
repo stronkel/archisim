@@ -401,6 +401,21 @@ impl ArchiSimApp {
                         "Líneas finas",
                         "Todas las líneas de la planta a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista (corte, proyección, tramas)",
                     );
+                    if self.ed.model().has_phases()
+                        || self.phase_view != archisim_plan::phases::PhaseView::All
+                    {
+                        let current = self.phase_view;
+                        egui::ComboBox::from_id_salt("bar-phase")
+                            .width(130.0)
+                            .selected_text(format!("Fase: {}", current.name()))
+                            .show_ui(ui, |ui| {
+                                for v in archisim_plan::phases::PhaseView::ALL {
+                                    ui.selectable_value(&mut self.phase_view, v, v.name());
+                                }
+                            })
+                            .response
+                            .on_hover_text("Qué fases de la reforma muestra la planta: estado actual, demoliciones (amarillo) o estado reformado (nuevo en rojo)");
+                    }
                     chip(
                         ui,
                         &mut self.show_underlay,
