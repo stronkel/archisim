@@ -879,6 +879,7 @@ impl<'a> Importer<'a> {
         };
         // Hatch written by ArchiSim, else guessed from the category.
         let mut pattern = None;
+        let mut priority = None;
         for &p in self.ix.material_props.get(&ifc).into_iter().flatten() {
             let Some(props) = self.ent(p) else { continue };
             if props.arg(0).as_str() != Some("ArchiSim_Material") {
@@ -888,6 +889,13 @@ impl<'a> Importer<'a> {
                 let Some(v) = self.deref(v) else { continue };
                 if v.arg(0).as_str() == Some("CutPattern") {
                     pattern = v.arg(2).as_str().and_then(pattern_from_name);
+                }
+                if v.arg(0).as_str() == Some("Priority") {
+                    priority = v
+                        .arg(2)
+                        .as_f64()
+                        .filter(|p| (0.0..=999.0).contains(p))
+                        .map(|p| p as u16);
                 }
             }
         }
@@ -900,6 +908,9 @@ impl<'a> Importer<'a> {
             _ => guess_pattern,
         });
         let id = self.material_named(&name, &category, rgb, pattern);
+        if priority.is_some() {
+            let _ = self.model.set_material_priority(id, priority);
+        }
         self.materials.insert(ifc, id);
         id
     }

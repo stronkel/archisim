@@ -110,6 +110,7 @@ pub(super) enum Action {
     DuplicateMaterial(MaterialId),
     RemoveMaterial(MaterialId),
     EditMaterial(MaterialId, String, String, [u8; 3], CutPattern),
+    MaterialPriority(MaterialId, Option<u16>),
     DuplicateWall(WallTypeId),
     RemoveWall(WallTypeId),
     EditWall(WallTypeId, String, WallFunction, Vec<Layer>),
@@ -1184,6 +1185,26 @@ impl ArchiSimApp {
                     ));
                 }
             });
+            props::row(
+                ui,
+                "Prioridad de intersección",
+                "De 0 a 999: en las uniones en T, una capa atraviesa las del otro muro de menor prioridad. Vacío: según la función de cada capa (estructura 900, soporte 700, aislante 500, lámina o cámara 300, acabado 100).",
+                |ui, w| {
+                    let shown = mat.priority.map(|p| p.to_string()).unwrap_or_default();
+                    if let Some(new) =
+                        text_edit_committed(ui, Id::unique(("mat-prio", id.0)), &shown, w - 8.0)
+                    {
+                        let t = new.trim();
+                        if t.is_empty() {
+                            actions.push(Action::MaterialPriority(id, None));
+                        } else if let Ok(p) = t.parse::<u16>() {
+                            actions.push(Action::MaterialPriority(id, Some(p)));
+                        } else {
+                            actions.push(Action::MaterialPriority(id, Some(u16::MAX)));
+                        }
+                    }
+                },
+            );
         });
         if let Some(rgb) = draft {
             self.types.color_draft = Some((id, rgb));
@@ -1551,6 +1572,13 @@ impl ArchiSimApp {
             Action::EditMaterial(id, name, cat, rgb, pat) => {
                 let r = self.ed.edit_material(id, &name, &cat, rgb, pat);
                 self.report(r, "Material modificado.");
+            }
+            Action::MaterialPriority(id, p) => {
+                let r = self.ed.set_material_priority(id, p);
+                self.report(
+                    r,
+                    "Prioridad cambiada: las uniones en T se rehacen con ella.",
+                );
             }
             Action::DuplicateWall(id) => match self.ed.duplicate_wall_type(id) {
                 Ok(new) => {

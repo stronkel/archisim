@@ -532,6 +532,10 @@ pub(crate) struct Material {
     /// `#RRGGBB`.
     pub cut_color: String,
     pub cut_pattern: CutPattern,
+    /// Intersection priority, 0–999 (version 7); by layer function if
+    /// absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u16>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -782,6 +786,7 @@ impl ProjectFile {
                     name: m.name,
                     category: m.category,
                     cut_color: hex(m.cut_color),
+                    priority: m.priority,
                     cut_pattern: match m.cut_pattern {
                         core::CutPattern::Solid => CutPattern::Solid,
                         core::CutPattern::Diagonal => CutPattern::Diagonal,
@@ -1316,6 +1321,7 @@ impl ProjectFile {
                 name: m.name,
                 category: m.category,
                 cut_color,
+                priority: m.priority,
                 cut_pattern: match m.cut_pattern {
                     CutPattern::Solid => core::CutPattern::Solid,
                     CutPattern::Diagonal => core::CutPattern::Diagonal,

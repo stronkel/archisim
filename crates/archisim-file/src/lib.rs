@@ -622,6 +622,8 @@ mod tests {
             .unwrap();
         m.edit_space(room, |s| s.label = Some(Point2::new(1.0, 1.0)))
             .unwrap();
+        // Concrete goes through anything (material intersection priority).
+        m.set_material_priority(concrete, Some(990)).unwrap();
         // A refurbishment: the first wall existing, the column demolished.
         let first = m.walls().next().unwrap().id.0;
         m.set_phase(first, archisim_core::Phase::Existing).unwrap();

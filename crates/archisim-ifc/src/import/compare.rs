@@ -12,13 +12,14 @@ fn layers_text(model: &Model, layers: &[Layer]) -> String {
         .map(|l| {
             let m = model.material(l.material);
             format!(
-                "{} {:.6} {:?} [{}/{}/{:?}]",
+                "{} {:.6} {:?} [{}/{}/{:?}/{:?}]",
                 m.map_or("?", |m| m.name.as_str()),
                 l.thickness,
                 l.function,
                 m.map_or("", |m| m.category.as_str()),
                 m.map_or(String::new(), |m| format!("{:?}", m.cut_color)),
                 m.map(|m| m.cut_pattern),
+                m.and_then(|m| m.priority),
             )
         })
         .collect::<Vec<_>>()

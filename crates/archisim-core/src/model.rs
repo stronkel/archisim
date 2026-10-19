@@ -69,7 +69,15 @@ pub struct Material {
     /// Fill colour when cut, RGB.
     pub cut_color: [u8; 3],
     pub cut_pattern: CutPattern,
+    /// Intersection priority of its layers, 0 to 999 (ArchiCAD's
+    /// "prioridad de intersección"): where walls meet in a T, a layer goes
+    /// through the other wall's layers of lower priority. `None`: by the
+    /// layer's function (see [`LayerFunction::default_priority`]).
+    pub priority: Option<u16>,
 }
+
+/// Highest intersection priority of a material.
+pub const MAX_PRIORITY: u16 = 999;
 
 /// What a layer does inside a composite element. Mirrors Revit's
 /// "Function" column of compound structures. IFC: `IfcMaterialLayer.Category`.
@@ -84,6 +92,18 @@ pub enum LayerFunction {
 }
 
 impl LayerFunction {
+    /// Intersection priority of a layer of this function when its material
+    /// has none of its own: the structure goes through, finishes stop.
+    pub fn default_priority(self) -> u16 {
+        match self {
+            LayerFunction::Finish => 100,
+            LayerFunction::Membrane | LayerFunction::AirGap => 300,
+            LayerFunction::Insulation => 500,
+            LayerFunction::Substrate => 700,
+            LayerFunction::Structure => 900,
+        }
+    }
+
     /// Category string used in IFC exports (IFC4 recommended values).
     pub fn ifc_category(self) -> &'static str {
         match self {
@@ -770,6 +790,8 @@ pub enum ModelError {
     UnknownTerrain(TerrainId),
     UnknownCurtainWall(CurtainWallId),
     UnknownRailing(RailingId),
+    /// A material priority above 999.
+    InvalidPriority,
     /// A railing with fewer than two points, or out of range.
     InvalidRailing,
     /// A curtain wall with no height, too small a grid or a frame wider
@@ -880,6 +902,7 @@ impl fmt::Display for ModelError {
             ModelError::UnknownTerrain(id) => write!(f, "unknown terrain {id}"),
             ModelError::UnknownCurtainWall(id) => write!(f, "unknown curtain wall {id}"),
             ModelError::UnknownRailing(id) => write!(f, "unknown railing {id}"),
+            ModelError::InvalidPriority => write!(f, "an intersection priority goes from 0 to 999"),
             ModelError::InvalidRailing => write!(
                 f,
                 "a railing needs two points at least, 5 cm apart, a height from 0.3 to 3 m and posts 0.3 to 5 m apart"
@@ -1292,9 +1315,35 @@ impl Model {
                 category: category.into(),
                 cut_color,
                 cut_pattern,
+                priority: None,
             },
         );
         id
+    }
+
+    /// Sets (or clears, back to the layer function's) the intersection
+    /// priority of a material.
+    pub fn set_material_priority(
+        &mut self,
+        id: MaterialId,
+        priority: Option<u16>,
+    ) -> Result<(), ModelError> {
+        if priority.is_some_and(|p| p > MAX_PRIORITY) {
+            return Err(ModelError::InvalidPriority);
+        }
+        self.materials
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownMaterial(id))?
+            .priority = priority;
+        Ok(())
+    }
+
+    /// Intersection priority of a layer: its material's, or its function's.
+    pub fn layer_priority(&self, layer: &Layer) -> u16 {
+        self.materials
+            .get(&layer.material)
+            .and_then(|m| m.priority)
+            .unwrap_or_else(|| layer.function.default_priority())
     }
 
     pub fn material(&self, id: MaterialId) -> Option<&Material> {
@@ -3178,7 +3227,15 @@ impl Model {
         }
         for material in parts.materials {
             let name = format!("material {} «{}»", material.id.0, material.name);
-            claim(material.id.0, None).map_err(fail(name))?;
+            claim(material.id.0, None)
+                .and_then(|_| {
+                    if material.priority.is_some_and(|p| p > MAX_PRIORITY) {
+                        Err(ModelError::InvalidPriority)
+                    } else {
+                        Ok(())
+                    }
+                })
+                .map_err(fail(name))?;
             model.materials.insert(material.id, material);
         }
         for wt in parts.wall_types {

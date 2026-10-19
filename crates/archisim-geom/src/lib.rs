@@ -1221,6 +1221,31 @@ mod tests {
     }
 
     #[test]
+    fn material_priority_overrides_the_layer_function() {
+        let (mut m, _, p) = with_tee();
+        let t = m.wall_types().next().unwrap().clone();
+        let plaster = t.layers[1].material;
+        // A plaster stronger than brick: nothing goes through it.
+        m.set_material_priority(plaster, Some(950)).unwrap();
+        let g = wall_geometry(&m, p).unwrap();
+        let EndCut::Tee(tee) = &g.start_cut else {
+            panic!()
+        };
+        assert!(tee.reach.iter().all(|r| *r == 0.0), "{:?}", tee.reach);
+        // Back to the functions: the brick goes through the plaster again.
+        m.set_material_priority(plaster, None).unwrap();
+        let g = wall_geometry(&m, p).unwrap();
+        let EndCut::Tee(tee) = &g.start_cut else {
+            panic!()
+        };
+        assert!(approx(tee.reach[0], 0.1));
+        assert_eq!(
+            m.set_material_priority(plaster, Some(1000)),
+            Err(archisim_core::ModelError::InvalidPriority)
+        );
+    }
+
+    #[test]
     fn a_lower_or_cornered_wall_just_butts() {
         let (mut m, ids, p) = with_tee();
         // Taller than the host: it stops at the face.

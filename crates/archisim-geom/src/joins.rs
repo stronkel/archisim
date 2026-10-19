@@ -25,15 +25,10 @@ use archisim_core::{LayerFunction, Model, Point2, Vec2, Wall, WallId, EPSILON};
 use crate::index::{bounds, WallIndex};
 use crate::Line;
 
-/// Intersection priority of a layer, by its function.
-pub fn priority(f: LayerFunction) -> u8 {
-    match f {
-        LayerFunction::Finish => 0,
-        LayerFunction::Membrane | LayerFunction::AirGap => 1,
-        LayerFunction::Insulation => 2,
-        LayerFunction::Substrate => 3,
-        LayerFunction::Structure => 4,
-    }
+/// Intersection priority of a layer by its function alone (its material
+/// may have its own: [`Model::layer_priority`]).
+pub fn priority(f: LayerFunction) -> u16 {
+    f.default_priority()
 }
 
 /// The end of a wall that butts against another one.
@@ -106,7 +101,7 @@ struct Frame {
     len: f64,
     /// Offsets of every layer boundary, exterior to interior.
     tops: Vec<f64>,
-    priorities: Vec<u8>,
+    priorities: Vec<u16>,
     thicknesses: Vec<f64>,
 }
 
@@ -126,7 +121,11 @@ impl Frame {
             n: u.perp_left(),
             len: w.length(),
             tops,
-            priorities: wtype.layers.iter().map(|l| priority(l.function)).collect(),
+            priorities: wtype
+                .layers
+                .iter()
+                .map(|l| model.layer_priority(l))
+                .collect(),
             thicknesses: wtype.layers.iter().map(|l| l.thickness).collect(),
         })
     }

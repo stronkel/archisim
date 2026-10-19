@@ -1021,3 +1021,19 @@ fn trimmed_walls_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// A material's own intersection priority goes to the IFC with its hatch
+/// and comes back.
+#[test]
+fn material_priority_round_trip() {
+    let mut m = model();
+    let mat = m.materials().next().unwrap().clone();
+    m.set_material_priority(mat.id, Some(950)).unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("'Priority',$,IFCINTEGER(950)"));
+    let Imported { model, .. } = import_ifc(&ifc).unwrap();
+    let back = model.materials().find(|x| x.name == mat.name).unwrap();
+    assert_eq!(back.priority, Some(950));
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

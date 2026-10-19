@@ -107,6 +107,14 @@ impl Editor {
         })
     }
 
+    /// Sets a material's intersection priority (0–999), or back to that of
+    /// each layer's function.
+    pub fn set_material_priority(&mut self, id: MaterialId, priority: Option<u16>) -> EditResult {
+        self.transact("Prioridad de intersección", |m| {
+            m.set_material_priority(id, priority)
+        })
+    }
+
     /// Deletes a material that no type uses; otherwise says which types do.
     pub fn remove_material(&mut self, id: MaterialId) -> EditResult {
         let users = self.model().material_users(id);

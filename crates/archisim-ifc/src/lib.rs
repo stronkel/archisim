@@ -1055,8 +1055,16 @@ impl<'a> Exporter<'a> {
                 "IFCPROPERTYSINGLEVALUE('CutPattern',$,IFCLABEL({}),$)",
                 string(import::pattern_name(m.cut_pattern))
             ));
+            // …and its intersection priority, if it has its own.
+            let mut props = vec![pattern];
+            if let Some(p) = m.priority {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Priority',$,IFCINTEGER({p}),$)"
+                )));
+            }
             self.w.add(format!(
-                "IFCMATERIALPROPERTIES('ArchiSim_Material',$,({pattern}),{r})"
+                "IFCMATERIALPROPERTIES('ArchiSim_Material',$,{},{r})",
+                list(&props)
             ));
             materials.insert(m.id, r);
         }
