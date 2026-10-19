@@ -271,6 +271,23 @@ pub(crate) enum Profile {
         web: f64,
         flange: f64,
     },
+    UShape {
+        width: f64,
+        depth: f64,
+        web: f64,
+        flange: f64,
+    },
+    TShape {
+        width: f64,
+        depth: f64,
+        web: f64,
+        flange: f64,
+    },
+    LShape {
+        width: f64,
+        depth: f64,
+        thickness: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -336,6 +353,37 @@ fn profile_out(p: core::Profile) -> Profile {
             web,
             flange,
         },
+        core::Profile::UShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => Profile::UShape {
+            width,
+            depth,
+            web,
+            flange,
+        },
+        core::Profile::TShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => Profile::TShape {
+            width,
+            depth,
+            web,
+            flange,
+        },
+        core::Profile::LShape {
+            width,
+            depth,
+            thickness,
+        } => Profile::LShape {
+            width,
+            depth,
+            thickness,
+        },
     }
 }
 
@@ -353,6 +401,37 @@ fn profile_in(p: Profile) -> core::Profile {
             depth,
             web,
             flange,
+        },
+        Profile::UShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => core::Profile::UShape {
+            width,
+            depth,
+            web,
+            flange,
+        },
+        Profile::TShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => core::Profile::TShape {
+            width,
+            depth,
+            web,
+            flange,
+        },
+        Profile::LShape {
+            width,
+            depth,
+            thickness,
+        } => core::Profile::LShape {
+            width,
+            depth,
+            thickness,
         },
     }
 }

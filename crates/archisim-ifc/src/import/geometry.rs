@@ -849,6 +849,38 @@ impl<'a> Geo<'a> {
                     Vec::new(),
                 ))
             }
+            "IFCUSHAPEPROFILEDEF" | "IFCTSHAPEPROFILEDEF" | "IFCLSHAPEPROFILEDEF" => {
+                let xf = self.axis_placement(e.arg(2));
+                let v = |i: usize| e.arg(i).as_f64().map(|x| x * self.length);
+                let (depth, width) = (v(3)?, v(4));
+                let profile = match e.kind.as_str() {
+                    "IFCUSHAPEPROFILEDEF" => archisim_core::Profile::UShape {
+                        width: width?,
+                        depth,
+                        web: v(5)?,
+                        flange: v(6)?,
+                    },
+                    "IFCTSHAPEPROFILEDEF" => archisim_core::Profile::TShape {
+                        width: width?,
+                        depth,
+                        web: v(5)?,
+                        flange: v(6)?,
+                    },
+                    _ => archisim_core::Profile::LShape {
+                        width: width.unwrap_or(depth),
+                        depth,
+                        thickness: v(5)?,
+                    },
+                };
+                Some((
+                    profile
+                        .outline(0)
+                        .into_iter()
+                        .map(|q| xf.apply([q.x, q.y, 0.0]))
+                        .collect(),
+                    Vec::new(),
+                ))
+            }
             "IFCDERIVEDPROFILEDEF" => {
                 let (outer, holes) = self.profile(e.arg(2))?;
                 let op = self.operator(e.arg(3));

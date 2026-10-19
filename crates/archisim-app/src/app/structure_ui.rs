@@ -33,6 +33,9 @@ enum SectionShape {
     Rectangle,
     Circle,
     IShape,
+    UShape,
+    TShape,
+    LShape,
 }
 
 fn shape_of(p: Profile) -> SectionShape {
@@ -40,6 +43,9 @@ fn shape_of(p: Profile) -> SectionShape {
         Profile::Rectangle { .. } => SectionShape::Rectangle,
         Profile::Circle { .. } => SectionShape::Circle,
         Profile::IShape { .. } => SectionShape::IShape,
+        Profile::UShape { .. } => SectionShape::UShape,
+        Profile::TShape { .. } => SectionShape::TShape,
+        Profile::LShape { .. } => SectionShape::LShape,
     }
 }
 
@@ -51,6 +57,22 @@ pub fn profile_text(p: Profile) -> String {
         Profile::IShape { width, depth, .. } => {
             format!("I {} × {} mm", fmt_mm(width), fmt_mm(depth))
         }
+        Profile::UShape { width, depth, .. } => {
+            format!("U {} × {} mm", fmt_mm(width), fmt_mm(depth))
+        }
+        Profile::TShape { width, depth, .. } => {
+            format!("T {} × {} mm", fmt_mm(width), fmt_mm(depth))
+        }
+        Profile::LShape {
+            width,
+            depth,
+            thickness,
+        } => format!(
+            "L {} × {} × {} mm",
+            fmt_mm(width),
+            fmt_mm(depth),
+            fmt_mm(thickness)
+        ),
     }
 }
 
@@ -368,6 +390,9 @@ impl ArchiSimApp {
                         (SectionShape::Rectangle, "Rectangular"),
                         (SectionShape::Circle, "Circular"),
                         (SectionShape::IShape, "Perfil I / H"),
+                        (SectionShape::UShape, "Perfil U (UPN)"),
+                        (SectionShape::TShape, "Perfil T"),
+                        (SectionShape::LShape, "Angular L"),
                     ],
                 );
                 if picked != shape {
@@ -380,6 +405,23 @@ impl ArchiSimApp {
                             depth: b,
                             web: (a * 0.05).max(0.005),
                             flange: (b * 0.06).max(0.007),
+                        },
+                        SectionShape::UShape => Profile::UShape {
+                            width: a,
+                            depth: b,
+                            web: (a * 0.1).max(0.005),
+                            flange: (b * 0.06).max(0.007),
+                        },
+                        SectionShape::TShape => Profile::TShape {
+                            width: a,
+                            depth: b,
+                            web: (a * 0.1).max(0.005),
+                            flange: (b * 0.1).max(0.005),
+                        },
+                        SectionShape::LShape => Profile::LShape {
+                            width: a,
+                            depth: b,
+                            thickness: (a.min(b) * 0.1).max(0.004),
                         },
                     };
                     changed = true;
@@ -417,6 +459,44 @@ impl ArchiSimApp {
                     dim(ui, "Canto (mm)", "", "member-d", depth);
                     dim(ui, "Espesor del alma (mm)", "", "member-web", web);
                     dim(ui, "Espesor de ala (mm)", "", "member-fl", flange);
+                }
+                Profile::UShape {
+                    width,
+                    depth,
+                    web,
+                    flange,
+                }
+                | Profile::TShape {
+                    width,
+                    depth,
+                    web,
+                    flange,
+                } => {
+                    dim(ui, "Ancho de ala (mm)", "", "member-w", width);
+                    dim(ui, "Canto (mm)", "", "member-d", depth);
+                    dim(ui, "Espesor del alma (mm)", "", "member-web", web);
+                    dim(ui, "Espesor de ala (mm)", "", "member-fl", flange);
+                }
+                Profile::LShape {
+                    width,
+                    depth,
+                    thickness,
+                } => {
+                    dim(
+                        ui,
+                        "Ala horizontal (mm)",
+                        "Eje X de la sección",
+                        "member-w",
+                        width,
+                    );
+                    dim(
+                        ui,
+                        "Ala vertical (mm)",
+                        "Eje Y de la sección",
+                        "member-d",
+                        depth,
+                    );
+                    dim(ui, "Espesor (mm)", "", "member-t", thickness);
                 }
             }
             text_row(

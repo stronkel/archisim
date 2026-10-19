@@ -44,6 +44,43 @@ impl Exporter<'_> {
                 real(web),
                 real(flange)
             )),
+            Profile::UShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => self.w.add(format!(
+                "IFCUSHAPEPROFILEDEF(.AREA.,{},$,{},{},{},{},$,$,$)",
+                string(name),
+                real(depth),
+                real(width),
+                real(web),
+                real(flange)
+            )),
+            Profile::TShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => self.w.add(format!(
+                "IFCTSHAPEPROFILEDEF(.AREA.,{},$,{},{},{},{},$,$,$,$,$)",
+                string(name),
+                real(depth),
+                real(width),
+                real(web),
+                real(flange)
+            )),
+            Profile::LShape {
+                width,
+                depth,
+                thickness,
+            } => self.w.add(format!(
+                "IFCLSHAPEPROFILEDEF(.AREA.,{},$,{},{},{},$,$,$)",
+                string(name),
+                real(depth),
+                real(width),
+                real(thickness)
+            )),
         }
     }
 

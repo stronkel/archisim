@@ -535,6 +535,38 @@ fn add_structure_with(
         },
     )?;
     m.add_member_type(
+        "Viga UPN 200",
+        MemberUsage::Beam,
+        acero,
+        Profile::UShape {
+            width: 0.075,
+            depth: 0.200,
+            web: 0.0085,
+            flange: 0.0115,
+        },
+    )?;
+    m.add_member_type(
+        "Viga T 100",
+        MemberUsage::Beam,
+        acero,
+        Profile::TShape {
+            width: 0.100,
+            depth: 0.100,
+            web: 0.011,
+            flange: 0.011,
+        },
+    )?;
+    m.add_member_type(
+        "Angular L 80×8",
+        MemberUsage::Beam,
+        acero,
+        Profile::LShape {
+            width: 0.080,
+            depth: 0.080,
+            thickness: 0.008,
+        },
+    )?;
+    m.add_member_type(
         "Viga madera GL24h 16×32",
         MemberUsage::Beam,
         glulam,
@@ -568,7 +600,7 @@ mod tests {
             m.member_types()
                 .filter(|t| t.usage == MemberUsage::Beam)
                 .count(),
-            4
+            7
         );
         let facade = m
             .wall_types()

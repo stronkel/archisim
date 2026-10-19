@@ -30,6 +30,29 @@ pub enum Profile {
         web: f64,
         flange: f64,
     },
+    /// Steel channel (UPN), web on the -X side and flanges towards +X.
+    /// IFC: `IfcUShapeProfileDef`.
+    UShape {
+        width: f64,
+        depth: f64,
+        web: f64,
+        flange: f64,
+    },
+    /// Steel T section, flange on top (+Y) and web down. IFC:
+    /// `IfcTShapeProfileDef`.
+    TShape {
+        width: f64,
+        depth: f64,
+        web: f64,
+        flange: f64,
+    },
+    /// Steel angle with equal thickness, legs along -X and -Y. IFC:
+    /// `IfcLShapeProfileDef`.
+    LShape {
+        width: f64,
+        depth: f64,
+        thickness: f64,
+    },
 }
 
 impl Profile {
@@ -38,7 +61,10 @@ impl Profile {
         match self {
             Profile::Rectangle { width, depth } => (width, depth),
             Profile::Circle { diameter } => (diameter, diameter),
-            Profile::IShape { width, depth, .. } => (width, depth),
+            Profile::IShape { width, depth, .. }
+            | Profile::UShape { width, depth, .. }
+            | Profile::TShape { width, depth, .. }
+            | Profile::LShape { width, depth, .. } => (width, depth),
         }
     }
 
@@ -53,6 +79,23 @@ impl Profile {
                 web,
                 flange,
             } => 2.0 * width * flange + (depth - 2.0 * flange) * web,
+            Profile::UShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => 2.0 * width * flange + (depth - 2.0 * flange) * web,
+            Profile::TShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => width * flange + (depth - flange) * web,
+            Profile::LShape {
+                width,
+                depth,
+                thickness,
+            } => thickness * (width + depth - thickness),
         }
     }
 
@@ -97,6 +140,57 @@ impl Profile {
                     p(-a, -b + f),
                 ]
             }
+            Profile::UShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => {
+                let (a, b, f) = (width / 2.0, depth / 2.0, flange);
+                vec![
+                    p(-a, -b),
+                    p(a, -b),
+                    p(a, -b + f),
+                    p(-a + web, -b + f),
+                    p(-a + web, b - f),
+                    p(a, b - f),
+                    p(a, b),
+                    p(-a, b),
+                ]
+            }
+            Profile::TShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => {
+                let (a, b, w, f) = (width / 2.0, depth / 2.0, web / 2.0, flange);
+                vec![
+                    p(-w, -b),
+                    p(w, -b),
+                    p(w, b - f),
+                    p(a, b - f),
+                    p(a, b),
+                    p(-a, b),
+                    p(-a, b - f),
+                    p(-w, b - f),
+                ]
+            }
+            Profile::LShape {
+                width,
+                depth,
+                thickness: t,
+            } => {
+                let (a, b) = (width / 2.0, depth / 2.0);
+                vec![
+                    p(-a, -b),
+                    p(a, -b),
+                    p(a, -b + t),
+                    p(-a + t, -b + t),
+                    p(-a + t, b),
+                    p(-a, b),
+                ]
+            }
         }
     }
 
@@ -125,6 +219,42 @@ impl Profile {
                 positive(web, "web thickness")?;
                 positive(flange, "flange thickness")?;
                 if web >= width || 2.0 * flange >= depth {
+                    return Err(ModelError::InvalidProfile);
+                }
+                Ok(())
+            }
+            Profile::UShape {
+                width,
+                depth,
+                web,
+                flange,
+            }
+            | Profile::TShape {
+                width,
+                depth,
+                web,
+                flange,
+            } => {
+                positive(width, "section width")?;
+                positive(depth, "section depth")?;
+                positive(web, "web thickness")?;
+                positive(flange, "flange thickness")?;
+                let u = matches!(self, Profile::UShape { .. });
+                let flanges = if u { 2.0 } else { 1.0 };
+                if web >= width || flanges * flange >= depth {
+                    return Err(ModelError::InvalidProfile);
+                }
+                Ok(())
+            }
+            Profile::LShape {
+                width,
+                depth,
+                thickness,
+            } => {
+                positive(width, "section width")?;
+                positive(depth, "section depth")?;
+                positive(thickness, "leg thickness")?;
+                if thickness >= width.min(depth) {
                     return Err(ModelError::InvalidProfile);
                 }
                 Ok(())
@@ -773,5 +903,49 @@ mod tests {
         .unwrap();
         let back = Model::from_parts(m.to_parts()).unwrap();
         assert_eq!(back, m);
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    #[test]
+    fn steel_sections_have_the_area_of_their_outline() {
+        for p in [
+            Profile::UShape {
+                width: 0.075,
+                depth: 0.2,
+                web: 0.0085,
+                flange: 0.0115,
+            },
+            Profile::TShape {
+                width: 0.1,
+                depth: 0.1,
+                web: 0.011,
+                flange: 0.011,
+            },
+            Profile::LShape {
+                width: 0.08,
+                depth: 0.06,
+                thickness: 0.008,
+            },
+        ] {
+            p.validate().unwrap();
+            let o = p.outline(16);
+            assert!(signed_area(&o) > 0.0, "{p:?}");
+            assert!((signed_area(&o) - p.area()).abs() < 1e-12, "{p:?}");
+            let (lo, hi) = o
+                .iter()
+                .fold((f64::MAX, f64::MIN), |(l, h), q| (l.min(q.x), h.max(q.x)));
+            assert!((lo + hi).abs() < 1e-12, "centred on its box: {p:?}");
+        }
+        assert!(Profile::LShape {
+            width: 0.05,
+            depth: 0.05,
+            thickness: 0.05
+        }
+        .validate()
+        .is_err());
     }
 }

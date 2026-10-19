@@ -32,6 +32,23 @@ fn key_of(p: Profile) -> ([i64; 4], u8) {
             web,
             flange,
         } => ([mm(width), mm(depth), mm(web), mm(flange)], 2),
+        Profile::UShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => ([mm(width), mm(depth), mm(web), mm(flange)], 3),
+        Profile::TShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => ([mm(width), mm(depth), mm(web), mm(flange)], 4),
+        Profile::LShape {
+            width,
+            depth,
+            thickness,
+        } => ([mm(width), mm(depth), mm(thickness), 0], 5),
     }
 }
 
@@ -55,6 +72,23 @@ impl<'a> Importer<'a> {
                 depth: f(e.arg(4))?,
                 web: f(e.arg(5))?,
                 flange: f(e.arg(6))?,
+            }),
+            "IFCUSHAPEPROFILEDEF" => Some(Profile::UShape {
+                depth: f(e.arg(3))?,
+                width: f(e.arg(4))?,
+                web: f(e.arg(5))?,
+                flange: f(e.arg(6))?,
+            }),
+            "IFCTSHAPEPROFILEDEF" => Some(Profile::TShape {
+                depth: f(e.arg(3))?,
+                width: f(e.arg(4))?,
+                web: f(e.arg(5))?,
+                flange: f(e.arg(6))?,
+            }),
+            "IFCLSHAPEPROFILEDEF" => Some(Profile::LShape {
+                depth: f(e.arg(3))?,
+                width: f(e.arg(4)).or(f(e.arg(3)))?,
+                thickness: f(e.arg(5))?,
             }),
             _ => None,
         }
@@ -274,7 +308,13 @@ impl<'a> Importer<'a> {
                     world(c)[2]
                 });
                 let profile = match section {
-                    Some(p @ (Profile::Circle { .. } | Profile::IShape { .. })) => p,
+                    Some(
+                        p @ (Profile::Circle { .. }
+                        | Profile::IShape { .. }
+                        | Profile::UShape { .. }
+                        | Profile::TShape { .. }
+                        | Profile::LShape { .. }),
+                    ) => p,
                     _ => {
                         if section.is_none() {
                             self.report.warn(
@@ -369,6 +409,15 @@ impl<'a> Importer<'a> {
                 Profile::Circle { diameter } => format!("{what} Ø{}", cm(diameter)),
                 Profile::IShape { width, depth, .. } => {
                     format!("{what} I {}×{}", cm(width), cm(depth))
+                }
+                Profile::UShape { width, depth, .. } => {
+                    format!("{what} U {}×{}", cm(width), cm(depth))
+                }
+                Profile::TShape { width, depth, .. } => {
+                    format!("{what} T {}×{}", cm(width), cm(depth))
+                }
+                Profile::LShape { width, depth, .. } => {
+                    format!("{what} L {}×{}", cm(width), cm(depth))
                 }
             }
         });
