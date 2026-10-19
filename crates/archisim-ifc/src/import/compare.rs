@@ -233,6 +233,41 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         }
     }
 
+    // Rooms.
+    if a.spaces().count() != b.spaces().count() {
+        diff(format!(
+            "número de locales: {} / {}",
+            a.spaces().count(),
+            b.spaces().count()
+        ));
+    }
+    for s in a.spaces() {
+        let Some(t) = b.spaces().find(|t| t.guid == s.guid) else {
+            diff(format!("local {} falta", s.guid));
+            continue;
+        };
+        let same_outline = s.outline.len() == t.outline.len()
+            && s.outline
+                .iter()
+                .zip(&t.outline)
+                .all(|(p, q)| p.distance(*q) <= TOL);
+        let same_label = match (s.label, t.label) {
+            (None, None) => true,
+            (Some(p), Some(q)) => p.distance(q) <= TOL,
+            _ => false,
+        };
+        if !same_outline
+            || s.number != t.number
+            || s.name != t.name
+            || s.usage != t.usage
+            || !close(s.height, t.height)
+            || !same_label
+            || level_guid(a, s.level) != level_guid(b, t.level)
+        {
+            diff(format!("local {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
+
     // Columns and beams, with their types (section, material by name).
     let member_type = |m: &Model, id| {
         m.member_type(id).map(|t| {

@@ -166,6 +166,10 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::InvalidProfile => {
             "el alma y las alas no caben en la sección del perfil".into()
         }
+        ModelError::UnknownSpace(_) => "el local ya no existe".into(),
+        ModelError::DuplicateNumber(n) => {
+            format!("otro local de esta planta ya tiene el número «{n}»")
+        }
     }
 }
 
@@ -268,6 +272,8 @@ fn es_what(what: &str) -> String {
         "section diameter" => "el diámetro de la sección",
         "web thickness" => "el espesor del alma",
         "flange thickness" => "el espesor de las alas",
+        "space height" => "la altura del local",
+        "space label" => "la posición del rótulo del local",
         other => other,
     }
     .to_string()

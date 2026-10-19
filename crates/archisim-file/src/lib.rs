@@ -553,7 +553,7 @@ mod tests {
         m
     }
 
-    /// Columns and beams (version 7) are saved and come back identical.
+    /// Columns, beams and rooms (version 7) are saved and come back identical.
     #[test]
     fn columns_and_beams_round_trip() {
         use archisim_core::{MemberUsage, NewBeam, NewColumn, Profile, WallTop};
@@ -605,6 +605,23 @@ mod tests {
             top_offset: -0.05,
         })
         .unwrap();
+        let room = m
+            .add_space(archisim_core::NewSpace {
+                level: levels[0],
+                number: "0.01".into(),
+                name: "Salón «comedor»".into(),
+                usage: "Estar".into(),
+                outline: vec![
+                    Point2::new(0.3, 0.3),
+                    Point2::new(4.0, 0.3),
+                    Point2::new(4.0, 4.7),
+                    Point2::new(0.3, 4.7),
+                ],
+                height: 2.6,
+            })
+            .unwrap();
+        m.edit_space(room, |s| s.label = Some(Point2::new(1.0, 1.0)))
+            .unwrap();
         let text = to_string(&m);
         assert!(text.contains("\"shape\": \"i_shape\""), "{text}");
         let back = from_str(&text).unwrap();

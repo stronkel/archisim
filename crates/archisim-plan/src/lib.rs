@@ -325,6 +325,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             v
         })
         .chain(marks.iter().map(|m| m.point))
+        .chain(model.spaces_on_level(level).map(|sp| sp.label_point()))
         .collect();
     let structure_points = members::member_points(model, level, options.cut_plane);
     let all_points = all_points
@@ -449,6 +450,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
     for m in &marks {
         annotate::draw_elevation_mark(&mut s, model, m, k);
+    }
+    for sp in model.spaces_on_level(level) {
+        let (lo, hi) = annotate::room_stamp_box(sp, k);
+        if visible(lo, hi) {
+            annotate::draw_room(&mut s, sp, k);
+        }
     }
     s.push_str("</g>\n");
 

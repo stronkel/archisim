@@ -18,6 +18,8 @@ pub enum Element {
     Slab(SlabId),
     Column(archisim_core::ColumnId),
     Beam(archisim_core::BeamId),
+    /// A room ("local"), picked by its stamp or its outline.
+    Space(archisim_core::SpaceId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -71,6 +73,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Beam(id) => model
             .beam(id)
             .map(|b| archisim_plan::members::beam_outline(model, b)),
+        Element::Space(id) => model.space(id).map(|s| s.outline.clone()),
     }
 }
 
@@ -130,6 +133,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     for w in model.walls_on_level(level) {
         v.extend(by_wall.remove(&w.id).unwrap_or_default());
     }
+    v.extend(model.spaces_on_level(level).map(|s| Element::Space(s.id)));
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
@@ -154,7 +158,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Opening(id) => model.opening(id).map(|o| TypeOf::Opening(o.opening_type)),
         Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
         Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
-        Element::Dimension(_) | Element::Mark(_) => None,
+        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) => None,
     }
 }
 
@@ -179,7 +183,7 @@ pub fn pick<G: Geo + ?Sized>(
 ) -> Option<Element> {
     let model = geo.model();
     let rank = |e: &Element| match e {
-        Element::Dimension(_) | Element::Mark(_) => 0,
+        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) => 0,
         Element::Opening(_) => 1,
         // Columns stand in front of the walls they go through.
         Element::Column(_) => 1,
@@ -191,9 +195,14 @@ pub fn pick<G: Geo + ?Sized>(
         .into_iter()
         .filter_map(|e| {
             let poly = outline(geo, e)?;
-            // A hole of a slab is not the slab.
+            // A hole of a slab is not the slab; a room is picked by its
+            // stamp (inside it, the slab under it is picked) or its edge.
             let inside = match e {
                 Element::Slab(id) => model.slab(id).is_some_and(|s| s.covers(p)),
+                Element::Space(id) => model.space(id).is_some_and(|s| {
+                    let (lo, hi) = archisim_plan::annotate::room_stamp_box(s, MM);
+                    p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y
+                }),
                 _ => contains(&poly, p),
             };
             let d = distance_to_outline(&poly, p);

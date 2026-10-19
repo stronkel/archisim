@@ -213,6 +213,64 @@ fn pt(p: Point2) -> String {
     format!("{},{}", num(p.x), num(-p.y))
 }
 
+/// Height of a room's name, paper millimetres.
+pub const ROOM_NAME_HEIGHT: f64 = 3.0;
+/// Height of a room's area line, paper millimetres.
+pub const ROOM_AREA_HEIGHT: f64 = 2.2;
+
+/// An area in square metres as written in a room stamp: `12,45 m²`.
+pub fn format_area(v: f64) -> String {
+    format!("{} m²", format_dimension(v))
+}
+
+/// The lines of a room's stamp: its number and name, then its usable area.
+pub fn room_lines(space: &archisim_core::Space) -> (String, String) {
+    let name = match (space.number.trim(), space.name.trim()) {
+        ("", n) => n.to_string(),
+        (num, "") => num.to_string(),
+        (num, n) => format!("{num} {n}"),
+    };
+    (name, format!("Su {}", format_area(space.area())))
+}
+
+/// The box of a room's stamp around its label point, in model metres
+/// (lower-left, upper-right).
+pub fn room_stamp_box(space: &archisim_core::Space, k: f64) -> (Point2, Point2) {
+    let (a, b) = room_lines(space);
+    let p = space.label_point();
+    let (h1, h2) = (ROOM_NAME_HEIGHT * k, ROOM_AREA_HEIGHT * k);
+    let w = text_width(&a, h1).max(text_width(&b, h2)) / 2.0 + k;
+    (
+        Point2::new(p.x - w, p.y - h2 - 1.6 * k),
+        Point2::new(p.x + w, p.y + h1 + 1.6 * k),
+    )
+}
+
+/// Draws a room's stamp: its name above its label point, its usable area
+/// below, centred.
+pub fn draw_room(s: &mut String, space: &archisim_core::Space, k: f64) {
+    let (a, b) = room_lines(space);
+    let p = space.label_point();
+    let (h1, h2) = (ROOM_NAME_HEIGHT * k, ROOM_AREA_HEIGHT * k);
+    let right = Point2::new(1.0, 0.0);
+    let name = text_path(&a, p + Point2::new(0.0, 0.6 * k), right, h1, Align::Centre);
+    let area = text_path(
+        &b,
+        p - Point2::new(0.0, 0.6 * k + h2),
+        right,
+        h2,
+        Align::Centre,
+    );
+    let _ = writeln!(
+        s,
+        r#"<g class="room" fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round"><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/></g>"#,
+        name,
+        num(STROKE * h1 * 1.15),
+        area,
+        num(STROKE * h2)
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

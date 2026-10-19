@@ -33,6 +33,7 @@ mod compare;
 pub mod geometry;
 mod members;
 pub mod report;
+mod spaces;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -236,6 +237,7 @@ struct GuidPlan {
     member_types: Vec<(archisim_core::MemberTypeId, String)>,
     columns: Vec<(archisim_core::ColumnId, String)>,
     beams: Vec<(archisim_core::BeamId, String)>,
+    spaces: Vec<(archisim_core::SpaceId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -2462,6 +2464,7 @@ impl<'a> Importer<'a> {
         self.import_slabs();
         self.import_members();
         self.import_openings();
+        self.import_spaces();
         self.count_unsupported();
     }
 
@@ -2503,6 +2506,7 @@ impl<'a> Importer<'a> {
         restore!(member_types, member_types);
         restore!(columns, columns);
         restore!(beams, beams);
+        restore!(spaces, spaces);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

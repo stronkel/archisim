@@ -64,6 +64,8 @@ pub enum Tool {
     Dimension,
     Column,
     Beam,
+    /// Rooms ("locales").
+    Zone,
 }
 
 impl Tool {
@@ -71,7 +73,7 @@ impl Tool {
     fn draws_points(self) -> bool {
         matches!(
             self,
-            Tool::Wall | Tool::Slab | Tool::Dimension | Tool::Column | Tool::Beam
+            Tool::Wall | Tool::Slab | Tool::Dimension | Tool::Column | Tool::Beam | Tool::Zone
         )
     }
 
@@ -86,6 +88,7 @@ impl Tool {
             "c" => Some(Tool::Dimension),
             "i" => Some(Tool::Column),
             "g" => Some(Tool::Beam),
+            "z" => Some(Tool::Zone),
             _ => None,
         }
     }
@@ -166,6 +169,9 @@ pub struct ArchiSimApp {
     pub column_settings: ColumnSettings,
     pub beam_settings: BeamSettings,
     pub beam_tool: structure_ui::BeamTool,
+    pub space_settings: crate::editor::SpaceSettings,
+    /// The outline of a room drawn by hand.
+    pub zone_tool: SlabTool,
     /// The levels dialog is open.
     pub show_levels: bool,
     /// A level waiting for confirmation before being deleted with its
@@ -283,6 +289,8 @@ impl ArchiSimApp {
             column_settings,
             beam_settings,
             beam_tool: structure_ui::BeamTool::default(),
+            space_settings: Default::default(),
+            zone_tool: SlabTool::default(),
             show_levels: false,
             level_to_delete: None,
             types: TypesDialog::default(),
@@ -365,6 +373,7 @@ impl ArchiSimApp {
             self.slab_tool.finish();
             self.dim_tool.finish();
             self.beam_tool.finish();
+            self.zone_tool.finish();
             self.placement = None;
             self.window_start = None;
             self.drag = None;
@@ -1390,6 +1399,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod space_ui;
 mod structure_ui;
 mod tabs;
 mod temp_ui;

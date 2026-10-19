@@ -13,7 +13,9 @@ use crate::family::{
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
+mod spaces;
 mod structure;
+pub use spaces::*;
 pub use structure::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
@@ -665,6 +667,9 @@ pub enum ModelError {
     ZeroLengthBeam,
     /// A steel section whose web or flanges do not fit in it.
     InvalidProfile,
+    UnknownSpace(SpaceId),
+    /// Another room on the level already has that number.
+    DuplicateNumber(String),
 }
 
 impl fmt::Display for ModelError {
@@ -754,6 +759,10 @@ impl fmt::Display for ModelError {
             ModelError::ZeroLengthBeam => write!(f, "a beam needs two different points"),
             ModelError::InvalidProfile => {
                 write!(f, "the web and flanges do not fit in the section")
+            }
+            ModelError::UnknownSpace(id) => write!(f, "space {id} does not exist"),
+            ModelError::DuplicateNumber(n) => {
+                write!(f, "another room on the level already has the number «{n}»")
             }
         }
     }
@@ -856,6 +865,7 @@ pub struct ModelParts {
     pub member_types: Vec<MemberType>,
     pub columns: Vec<Column>,
     pub beams: Vec<Beam>,
+    pub spaces: Vec<Space>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -901,6 +911,7 @@ pub struct Model {
     member_types: BTreeMap<MemberTypeId, MemberType>,
     columns: BTreeMap<ColumnId, Column>,
     beams: BTreeMap<BeamId, Beam>,
+    spaces: BTreeMap<SpaceId, Space>,
 }
 
 impl Model {
@@ -925,6 +936,7 @@ impl Model {
             member_types: BTreeMap::new(),
             columns: BTreeMap::new(),
             beams: BTreeMap::new(),
+            spaces: BTreeMap::new(),
         }
     }
 
@@ -1013,6 +1025,7 @@ impl Model {
         }
         self.slabs.retain(|_, s| s.level != id);
         self.remove_members_on_level(id);
+        self.spaces.retain(|_, s| s.level != id);
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
@@ -2849,6 +2862,7 @@ impl Model {
             member_types: self.member_types.values().cloned().collect(),
             columns: self.columns.values().cloned().collect(),
             beams: self.beams.values().cloned().collect(),
+            spaces: self.spaces.values().cloned().collect(),
         }
     }
 
@@ -3046,6 +3060,7 @@ impl Model {
         }
 
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
+        model.restore_spaces(parts.spaces, &mut claim)?;
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);
         Ok(model)

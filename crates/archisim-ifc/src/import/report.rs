@@ -20,6 +20,8 @@ pub struct ImportReport {
     pub voids: usize,
     pub columns: usize,
     pub beams: usize,
+    /// Rooms (`IfcSpace`).
+    pub spaces: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -122,11 +124,14 @@ impl ImportReport {
         } else {
             String::new()
         };
-        let members = if self.columns + self.beams > 0 {
+        let mut members = if self.columns + self.beams > 0 {
             format!(", {} pilares y {} vigas", self.columns, self.beams)
         } else {
             String::new()
         };
+        if self.spaces > 0 {
+            members.push_str(&format!(", {} locales", self.spaces));
+        }
         format!(
             "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}{members}",
             self.levels, self.walls, self.slabs, self.doors, self.windows
@@ -195,7 +200,6 @@ pub const UNSUPPORTED_CLASSES: &[&str] = &[
     "IFCBUILDINGELEMENTPROXY",
     "IFCFURNISHINGELEMENT",
     "IFCFURNITURE",
-    "IFCSPACE",
     "IFCSANITARYTERMINAL",
     "IFCFLOWTERMINAL",
     "IFCFLOWSEGMENT",

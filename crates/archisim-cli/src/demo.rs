@@ -224,8 +224,32 @@ pub fn build() -> Result<Document, ModelError> {
                 position: first + chain.outward * 1.4,
             })?;
         }
-        m.add_elevation_mark(pb, Point2::new(3.0, 6.5))?;
-        m.add_elevation_mark(pb, Point2::new(9.0, 2.5))?;
+        // Clear of the room stamps, in a corner of two rooms.
+        m.add_elevation_mark(pb, Point2::new(1.0, 5.0))?;
+        m.add_elevation_mark(pb, Point2::new(10.2, 1.0))?;
+        Ok(())
+    })?;
+
+    // Rooms (v0.25), by their interior faces, numbered on the ground floor.
+    doc.transact("Locales", |m| {
+        for (number, name, usage, at) in [
+            ("0.01", "Estar-comedor", "Estar", Point2::new(3.0, 6.0)),
+            ("0.02", "Dormitorio", "Dormitorio", Point2::new(3.0, 1.8)),
+            ("0.03", "Cocina", "Cocina", Point2::new(9.0, 6.8)),
+            ("0.04", "Dormitorio 2", "Dormitorio", Point2::new(9.0, 2.2)),
+        ] {
+            let outline =
+                archisim_geom::room_outline(m, pb, at, archisim_geom::Contour::InteriorFace)
+                    .map_err(|_| ModelError::InvalidOutline)?;
+            m.add_space(archisim_core::NewSpace {
+                level: pb,
+                number: number.into(),
+                name: name.into(),
+                usage: usage.into(),
+                outline,
+                height: WALL_HEIGHT,
+            })?;
+        }
         Ok(())
     })?;
 
@@ -246,7 +270,8 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 9);
-        assert_eq!(doc.undo_label(), Some("Cotas"));
+        assert_eq!(doc.undo_label(), Some("Locales"));
+        assert_eq!(m.spaces().count(), 4);
         assert_eq!(m.dimensions().count(), 4);
         assert_eq!(m.elevation_marks().count(), 2);
         // The roof slab rests on the façade walls.

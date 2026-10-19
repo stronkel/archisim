@@ -47,6 +47,28 @@ pub(crate) struct ProjectFile {
     /// Beams (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub beams: Vec<Beam>,
+    /// Rooms (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spaces: Vec<Space>,
+}
+
+/// A room (version 7).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Space {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub number: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub usage: String,
+    pub outline: Vec<Xy>,
+    pub height: f64,
+    /// Where its label is drawn; absent: in the middle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<Xy>,
 }
 
 /// A column or beam section (version 7), in metres.
@@ -655,6 +677,21 @@ impl ProjectFile {
                     top_offset: b.top_offset,
                 })
                 .collect(),
+            spaces: p
+                .spaces
+                .into_iter()
+                .map(|s| Space {
+                    id: s.id.0,
+                    guid: s.guid.to_string(),
+                    level: s.level.0,
+                    number: s.number,
+                    name: s.name,
+                    usage: s.usage,
+                    outline: s.outline.into_iter().map(xy).collect(),
+                    height: s.height,
+                    label: s.label.map(xy),
+                })
+                .collect(),
         }
     }
 
@@ -692,6 +729,7 @@ impl ProjectFile {
             member_types: Vec::new(),
             columns: Vec::new(),
             beams: Vec::new(),
+            spaces: Vec::new(),
         };
 
         for l in self.levels {
@@ -908,6 +946,19 @@ impl ProjectFile {
                 start: pt(b.start),
                 end: pt(b.end),
                 top_offset: b.top_offset,
+            });
+        }
+        for s in self.spaces {
+            parts.spaces.push(core::Space {
+                id: core::SpaceId(s.id),
+                guid: guid(&format!("space {}", s.id), &s.guid)?,
+                level: core::LevelId(s.level),
+                number: s.number,
+                name: s.name,
+                usage: s.usage,
+                outline: s.outline.into_iter().map(pt).collect(),
+                height: s.height,
+                label: s.label.map(pt),
             });
         }
         core::Model::from_parts(parts).map_err(FileError::Model)

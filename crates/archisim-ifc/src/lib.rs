@@ -18,6 +18,7 @@
 //!   `Pset_WindowCommon` and base quantities. Walls carry net side area and
 //!   net volume once their openings are cut.
 //!
+//! - rooms (`IfcSpace`, see `spaces`), aggregated into their storey;
 //! - column and beam types and members (see `members`), extruded from the
 //!   type's profile with an `IfcMaterialProfileSet`.
 //!
@@ -43,6 +44,7 @@
 
 pub mod import;
 mod members;
+mod spaces;
 pub mod step;
 pub mod step_read;
 
@@ -1230,6 +1232,7 @@ impl<'a> Exporter<'a> {
         }
 
         self.write_members(&materials, &storeys, &mut contained);
+        self.write_spaces(&storeys);
 
         for (level, elements) in &contained {
             let (storey, _) = storeys[level];

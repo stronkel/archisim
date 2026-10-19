@@ -1857,3 +1857,49 @@ fn temporary_dimension_witness_dragged_to_the_origin() {
     let u = (w.end - w.start).normalized().unwrap();
     assert!(((w.start + u * o.along).x - 2.0).abs() < 1e-6);
 }
+
+/// Rooms (2.9): `z`, a click inside the outline makes the room with its
+/// usable area; the next one gets the next number; clicking its stamp
+/// selects it; its stamp can be dragged; and it is deleted like the rest.
+#[test]
+fn room_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("z");
+    assert_eq!(h.app.tool, Tool::Zone);
+    h.click_at(p(6.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.spaces().count(), 1, "{:?}", h.app.message);
+    let s = m.spaces().next().unwrap().clone();
+    assert!((s.area() - (12.0 - 0.53) * (9.0 - 0.53)).abs() < 1e-6);
+    assert_eq!(s.number, "1");
+    // A second one in the same room is refused.
+    h.click_at(p(3.0, 3.0));
+    assert_eq!(h.model().spaces().count(), 1);
+    // By hand, a rectangle (a part of the room): number 2.
+    h.app.space_settings.wand = false;
+    h.app.zone_tool.set_mode(SlabMode::Rectangle);
+    h.click_at(p(1.0, 1.0));
+    h.click_at(p(4.0, 3.0));
+    assert_eq!(h.model().spaces().count(), 2, "{:?}", h.app.message);
+    assert!(h.model().spaces().any(|s| s.number == "2"));
+    // Select the first by its stamp, drag the stamp.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let at = s.label_point();
+    h.click_at(at);
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Space(s.id)]
+    );
+    h.drag(at, at + Point2::new(1.0, 1.0));
+    let moved = h.model().space(s.id).unwrap().label_point();
+    assert!(
+        moved.distance(at + Point2::new(1.0, 1.0)) < 0.02,
+        "{moved:?}"
+    );
+    h.key(Key::Delete);
+    assert_eq!(h.model().spaces().count(), 1);
+}

@@ -18,9 +18,11 @@ use crate::pick::Element;
 use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
+mod spaces;
 mod structure;
 mod types;
 
+pub use spaces::{space_height, SpaceSettings, USAGES};
 pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 
 /// Settings of the wall tool (ArchiCAD "Cuadro de información").
@@ -243,6 +245,7 @@ impl Editor {
             Element::Mark(id) => model.elevation_mark(*id).is_some(),
             Element::Column(id) => model.column(*id).is_some(),
             Element::Beam(id) => model.beam(*id).is_some(),
+            Element::Space(id) => model.space(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -418,6 +421,9 @@ impl Editor {
                     Element::Beam(id) => {
                         m.remove_beam(*id)?;
                     }
+                    Element::Space(id) => {
+                        m.remove_space(*id)?;
+                    }
                     Element::Opening(_) => {}
                 }
             }
@@ -551,7 +557,11 @@ impl Editor {
             .filter(|e| {
                 matches!(
                     e,
-                    Element::Wall(_) | Element::Slab(_) | Element::Column(_) | Element::Beam(_)
+                    Element::Wall(_)
+                        | Element::Slab(_)
+                        | Element::Column(_)
+                        | Element::Beam(_)
+                        | Element::Space(_)
                 )
             })
             .collect();
@@ -565,6 +575,7 @@ impl Editor {
                     Element::Slab(id) => m.set_slab_level(*id, level)?,
                     Element::Column(id) => m.set_column_level(*id, level)?,
                     Element::Beam(id) => m.edit_beam(*id, |b| b.level = level)?,
+                    Element::Space(id) => m.edit_space(*id, |s| s.level = level)?,
                     _ => {}
                 }
             }

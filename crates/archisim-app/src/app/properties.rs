@@ -51,6 +51,7 @@ impl ArchiSimApp {
             [Element::Mark(id)] => self.mark_properties(ui, *id),
             [Element::Column(id)] => self.column_properties(ui, *id),
             [Element::Beam(id)] => self.beam_properties(ui, *id),
+            [Element::Space(id)] => self.space_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -193,6 +194,7 @@ impl ArchiSimApp {
             Tool::Dimension => self.dim_tool_properties(ui),
             Tool::Column => self.column_tool_properties(ui),
             Tool::Beam => self.beam_tool_properties(ui),
+            Tool::Zone => self.space_tool_properties(ui),
         }
     }
 
@@ -1671,6 +1673,10 @@ impl ArchiSimApp {
 }
 
 /// A header card for things without types (views, annotations).
+pub(super) fn view_card_pub(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
+    view_card(ui, icon, title, subtitle);
+}
+
 fn view_card(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
     let p = super::theme::Palette::current(ui.ctx());
     egui::Frame::new()

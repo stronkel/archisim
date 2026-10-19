@@ -45,6 +45,8 @@ pub enum Grip {
         beam: archisim_core::BeamId,
         start: bool,
     },
+    /// The stamp of a room (its name and area), moved on its own.
+    SpaceLabel { space: archisim_core::SpaceId },
 }
 
 /// A handle drawn on the selection.
@@ -132,6 +134,14 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     });
                 }
             }
+            Element::Space(id) => {
+                if let Some(s) = model.space(*id) {
+                    v.push(Hotspot {
+                        grip: Grip::SpaceLabel { space: *id },
+                        point: s.label_point(),
+                    });
+                }
+            }
             Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) | Element::Column(_) => {
             }
         }
@@ -178,6 +188,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
             [Element::Slab(slab)].into_iter().collect()
         }
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
+        Grip::SpaceLabel { space } => [Element::Space(space)].into_iter().collect(),
     }
 }
 
@@ -219,6 +230,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SlabEdge { .. } if drag.variant => "Añadir esquina de forjado",
         Grip::SlabEdge { .. } => "Desplazar arista de forjado",
         Grip::BeamEnd { .. } => "Estirar viga",
+        Grip::SpaceLabel { .. } => "Mover rótulo de local",
     }
 }
 
@@ -276,6 +288,13 @@ pub fn apply(
                 outline[index] = drag.to;
             }
             model.set_slab_outline(slab, outline).map(|_| None)
+        }
+        Grip::SpaceLabel { space } => {
+            let s = model.space(space).ok_or(ModelError::UnknownSpace(space))?;
+            let at = s.label_point() + d;
+            model
+                .edit_space(space, |s| s.label = Some(at))
+                .map(|_| None)
         }
         Grip::BeamEnd { beam, start } => model
             .edit_beam(beam, |b| {
@@ -341,6 +360,14 @@ fn move_selection(
             }
             Element::Column(id) => {
                 model.edit_column(*id, |c| c.position = c.position + d)?;
+            }
+            Element::Space(id) => {
+                model.edit_space(*id, |s| {
+                    for p in &mut s.outline {
+                        *p = *p + d;
+                    }
+                    s.label = s.label.map(|p| p + d);
+                })?;
             }
             Element::Beam(id) => {
                 model.edit_beam(*id, |b| {
@@ -562,6 +589,29 @@ fn copy(
                 model.set_slab_holes(new, holes)?;
                 copies.insert(Element::Slab(new));
             }
+            Element::Space(id) => {
+                let s = model
+                    .space(*id)
+                    .ok_or(ModelError::UnknownSpace(*id))?
+                    .clone();
+                let number = if s.number.is_empty() {
+                    String::new()
+                } else {
+                    model.next_space_number(s.level)
+                };
+                let new = model.add_space(archisim_core::NewSpace {
+                    level: s.level,
+                    number,
+                    name: s.name.clone(),
+                    usage: s.usage.clone(),
+                    outline: s.outline.iter().map(|p| *p + d).collect(),
+                    height: s.height,
+                })?;
+                if let Some(l) = s.label {
+                    model.edit_space(new, |n| n.label = Some(l + d))?;
+                }
+                copies.insert(Element::Space(new));
+            }
             Element::Column(id) => {
                 let c = model
                     .column(*id)
@@ -689,6 +739,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Mark(id) => model.elevation_mark(id).is_some(),
         Element::Column(id) => model.column(id).is_some(),
         Element::Beam(id) => model.beam(id).is_some(),
+        Element::Space(id) => model.space(id).is_some(),
     }
 }
 
@@ -715,6 +766,7 @@ fn level_of(
             model.slab(slab).map(|s| s.level)
         }
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
+        Grip::SpaceLabel { space } => model.space(space).map(|s| s.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -723,6 +775,7 @@ fn level_of(
             Element::Mark(id) => model.elevation_mark(*id).map(|m| m.level),
             Element::Column(id) => model.column(*id).map(|c| c.level),
             Element::Beam(id) => model.beam(*id).map(|b| b.level),
+            Element::Space(id) => model.space(*id).map(|s| s.level),
         }),
     }
 }

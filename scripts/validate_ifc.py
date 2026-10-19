@@ -13,6 +13,8 @@ Checks:
   6. Every column and beam has a column or beam type, a material profile
      set usage, its common property set and base quantities, and its 3D
      volume matches its quantities (and its profile area times length).
+  7. Every room (IfcSpace) is aggregated into a storey, has its common
+     property set and base quantities, and its 3D volume matches them.
   5. Every opening voids a wall and is filled by exactly one door or window
      (a void, "hueco", marked with ArchiSim_Void, by none);
      every door and window fills an opening, has a type, a material
@@ -186,6 +188,28 @@ def main(path: str) -> int:
             except Exception as exc:
                 errors.append(f"{name}: geometry failed: {exc}")
 
+    spaces = f.by_type("IfcSpace")
+    for sp in spaces:
+        name = f"{sp.Name} {sp.LongName}"
+        parent = sp.Decomposes[0].RelatingObject if sp.Decomposes else None
+        if parent is None or not parent.is_a("IfcBuildingStorey"):
+            errors.append(f"{name}: not aggregated into a storey")
+        psets = eu.get_psets(sp)
+        for required in ("Pset_SpaceCommon", "Qto_SpaceBaseQuantities"):
+            if required not in psets:
+                errors.append(f"{name}: missing {required}")
+        q = psets.get("Qto_SpaceBaseQuantities", {})
+        if q and q.get("GrossFloorArea", 0) + 1e-9 < q.get("NetFloorArea", 0):
+            errors.append(f"{name}: gross area smaller than net area")
+        if geom_ok and q:
+            try:
+                shp = geom.create_shape(settings, sp)
+                vol = shape.get_volume(shp.geometry)
+                if abs(vol - q["NetVolume"]) > 1e-4:
+                    errors.append(f"{name}: volume {vol:.4f} != {q['NetVolume']:.4f}")
+            except Exception as exc:
+                errors.append(f"{name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
                 ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
@@ -193,7 +217,7 @@ def main(path: str) -> int:
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
           f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
-          f"{len(f.by_type('IfcBeam'))} vigas, {len(storeys)} plantas, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:
         print(f"{len(errors)} error(es):")

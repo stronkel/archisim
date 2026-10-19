@@ -24,6 +24,8 @@ struct TypeRow {
     /// Elements of this type in the whole project and on the level.
     count: usize,
     here: Vec<Element>,
+    /// Shown instead of the count (the area of a room).
+    value: Option<String>,
 }
 
 impl ArchiSimApp {
@@ -128,6 +130,7 @@ impl ArchiSimApp {
                     name: t.name.clone(),
                     count: m.walls().filter(|w| w.wall_type == t.id).count(),
                     here,
+                    value: None,
                 }
             })
             .collect();
@@ -146,6 +149,7 @@ impl ArchiSimApp {
                     name: t.name.clone(),
                     count: m.slabs().filter(|s| s.slab_type == t.id).count(),
                     here,
+                    value: None,
                 }
             })
             .collect();
@@ -169,6 +173,7 @@ impl ArchiSimApp {
                         name: t.name.clone(),
                         count: m.openings().filter(|o| o.opening_type == t.id).count(),
                         here,
+                        value: None,
                     }
                 })
                 .collect()
@@ -191,11 +196,28 @@ impl ArchiSimApp {
                         name: t.name.clone(),
                         count: m.member_type_users(t.id),
                         here,
+                        value: None,
                     }
                 })
                 .collect()
         };
+        // Rooms of the active level, by number, with their usable area.
+        let mut rooms: Vec<&archisim_core::Space> = m.spaces_on_level(self.ed.level).collect();
+        rooms.sort_by(|a, b| a.number.cmp(&b.number).then(a.name.cmp(&b.name)));
+        let rooms = rooms
+            .into_iter()
+            .map(|s| TypeRow {
+                tab: None,
+                id: s.id.0,
+                badge: (!s.number.is_empty()).then(|| s.number.clone()),
+                name: s.name.clone(),
+                count: 1,
+                here: vec![Element::Space(s.id)],
+                value: Some(fmt_area(s.area())),
+            })
+            .collect();
         vec![
+            ("Locales (planta)", Icon::Room, rooms),
             ("Muros", Icon::Wall, walls),
             (
                 "Pilares",
@@ -237,7 +259,7 @@ impl ArchiSimApp {
                             None,
                             r.badge.as_deref(),
                             &r.name,
-                            &r.count.to_string(),
+                            &r.value.clone().unwrap_or_else(|| r.count.to_string()),
                             false,
                             26.0,
                         );
