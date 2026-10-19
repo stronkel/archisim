@@ -45,6 +45,22 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 
 **Restricción superior de muros** ✅ v0.17 (pedida por Antonio el 18/10/2026, antes del bloque C de familias): muros hasta una planta con desfase, que siguen los cambios de cota. Falta lo mismo para pilares cuando existan (2.5) y el recorte con forjados y cubiertas (2.3, 2.4).
 
+**Revisión de Antonio del 19/10/2026** (sobre v0.25, PR #19). Por orden de trabajo:
+
+| # | Tarea | Tamaño | Estado |
+|---|---|---|---|
+| R1 | **Líneas de ayuda de intersección**: al dibujar muros, forjados, cubiertas, locales, cotas…, guías perpendiculares y de alineación desde los puntos ya dibujados (para cerrar una vivienda con el último vértice en línea con el primero), como la de ortogonalidad | M | — |
+| R2 | **Cotas normales re-anclables**: arrastrar un extremo de una cota a otro punto, sin borrar y redibujar; anclajes más visibles | S | — |
+| R3 | **Usos de local propios**: lista de usos editable por proyecto (no solo vivienda) | S | — |
+| R4 | **Terreno editable en planta**: clic en un punto para escribir su cota (adiós a la lista); **líneas de nivel** dibujadas con su cota, que generan puntos; cambiar la cota de una línea entera; más adelante, crearlas con la varita sobre un dibujo CAD | M | — |
+| R5 | **Seleccionar en sección y alzado** (y ver/editar sus propiedades) | M | — |
+| R6 | **Encuentro de muros con forjados y cubiertas**: el muro se recorta con el forjado o la cubierta que lo atraviesa (prioridades) | L | 2.3 |
+| R7 | **Cuadro de prioridades de intersección** en el proyecto, visual con barras como ArchiCAD, con criterios predefinidos | M | 2.3 |
+| R8 | **Galería de objetos** con vistas previas y carpetas por categoría como ArchiCAD: Mobiliario (cocina, estanterías, camas, sofás…), Entorno (vegetación…), Gente, Vehículos; familias nuevas para cada una | L | 2.2 |
+| R9 | **Importar topografía DXF** (puntos y curvas 3D) desde el programa; DWG más adelante (formato cerrado: hará falta un convertidor) | M | 2.12 |
+| R10 | **Cubierta única en L con limahoyas** (contornos con esquinas entrantes) y **mover a mano limatesas y limahoyas** en geometrías especiales | L | 2.4 |
+| R11 | **Editor de muros cortina** como el de ArchiCAD pero más claro: esquema de columnas y filas de paneles, marcos, tipos de panel, uniones y accesorios, con vista previa siempre y **tipos de muro cortina guardados** | L | 2.8 |
+
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
 | 2.1 ★ ◐ v0.24 | **Sistema de familias paramétricas** — bloques A, B y C hechos, D casi (falta símbolo 1:20 y puntos de control); sigue E — (diseño en `docs/FAMILIAS.md`), en cinco bloques: **A** núcleo (recetas, parámetros por secciones, fórmulas, piezas comunes, 3D; puertas y ventanas actuales convertidas en cinco familias; formato v3), **B** símbolos de planta por escala y alzado, **C** IFC (tipos con marca, Psets, `ArchiSim_Family`), **D** configurador con vista previa en directo y puntos de control, **E** navegador de familias y tipos con nº de ejemplares, biblioteca de tipos (`.asfam`) y herramienta Objeto | L | D2 ✅ |
