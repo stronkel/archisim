@@ -1,0 +1,12 @@
+[package]
+name = "archisim-draft"
+description = "2D drafting geometry: AutoCAD-style editing (offset, trim, extend, fillet…), snaps, hatches and boundaries"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true

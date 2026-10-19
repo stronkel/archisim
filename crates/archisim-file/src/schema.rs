@@ -38,6 +38,10 @@ pub(crate) struct ProjectFile {
     pub dimensions: Vec<Dimension>,
     /// Level marks in plan (version 2).
     pub elevation_marks: Vec<ElevationMark>,
+    /// Drawing layers (version 7).
+    pub draw_layers: Vec<crate::drafting::DrawLayer>,
+    /// Lines, arcs, texts and hatches of the views (version 7).
+    pub drafts: Vec<crate::drafting::Draft>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -480,6 +484,8 @@ impl ProjectFile {
                     point: xy(m.point),
                 })
                 .collect(),
+            draw_layers: crate::drafting::layers_out(&p.draw_layers),
+            drafts: crate::drafting::drafts_out(&p.drafts),
         }
     }
 
@@ -514,6 +520,8 @@ impl ProjectFile {
             openings: Vec::new(),
             dimensions: Vec::new(),
             elevation_marks: Vec::new(),
+            draw_layers: crate::drafting::layers_in(self.draw_layers)?,
+            drafts: crate::drafting::drafts_in(self.drafts)?,
         };
 
         for l in self.levels {

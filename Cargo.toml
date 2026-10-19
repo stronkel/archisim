@@ -4,6 +4,7 @@ members = [
     "crates/archisim-family",
     "crates/archisim-core",
     "crates/archisim-geom",
+    "crates/archisim-draft",
     "crates/archisim-ifc",
     "crates/archisim-plan",
     "crates/archisim-file",
@@ -25,6 +26,7 @@ uuid = { version = "1", features = ["v4"] }
 archisim-family = { path = "crates/archisim-family" }
 archisim-core = { path = "crates/archisim-core" }
 archisim-geom = { path = "crates/archisim-geom" }
+archisim-draft = { path = "crates/archisim-draft" }
 archisim-ifc = { path = "crates/archisim-ifc" }
 archisim-plan = { path = "crates/archisim-plan" }
 archisim-file = { path = "crates/archisim-file" }

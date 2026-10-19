@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 6,
+//!   "version": 7,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -31,6 +31,7 @@
 //!   the same model twice gives byte-identical files. The undo history is
 //!   not saved.
 
+mod drafting;
 mod schema;
 
 use std::fmt;
@@ -44,7 +45,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 6;
+pub const CURRENT_VERSION: u32 = 7;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -203,6 +204,19 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
+                }
+                v
+            }
+            // 6 → 7: drawing layers and drafting elements (lines, arcs,
+            // texts, hatches); older files have only layer "0".
+            6 => {
+                let mut v = value;
+                if let Value::Object(map) = &mut v {
+                    map.insert("version".into(), Value::from(7));
+                    map.entry("draw_layers")
+                        .or_insert_with(|| Value::Array(Vec::new()));
+                    map.entry("drafts")
+                        .or_insert_with(|| Value::Array(Vec::new()));
                 }
                 v
             }
@@ -573,8 +587,8 @@ mod tests {
         assert!(old.contains("\"version\": 1"));
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
-        // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 6"));
+        // Saved again, it is a current file.
+        assert!(to_string(&opened).contains("\"version\": 7"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -741,7 +755,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 6", "\"version\": 3", 1)
+            .replacen("\"version\": 7", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -803,8 +817,107 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 6", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
+    }
+
+    /// Drawing layers and every kind of drafting element (version 7) are
+    /// saved and come back; version 6 files open with layer "0" only.
+    #[test]
+    fn drafting_and_version_6_files() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        let v = ViewRef::Level(level);
+        let ejes = m
+            .add_draw_layer(DrawLayer {
+                locked: true,
+                printable: false,
+                ..DrawLayer::new("Ejes", [200, 30, 30], 0.13, LineStyle::DashDot)
+            })
+            .unwrap();
+        let p = |x, y| Point2::new(x, y);
+        let shapes = vec![
+            Shape::Line {
+                a: p(0.0, 0.0),
+                b: p(4.0, 1.0),
+            },
+            Shape::Polyline(Polyline {
+                points: vec![p(0.0, 0.0), p(2.0, 0.0), p(2.0, 2.0)],
+                bulges: vec![0.0, 0.5, 0.0],
+                closed: false,
+                width: 0.05,
+            }),
+            Shape::Circle {
+                centre: p(1.0, 1.0),
+                radius: 0.5,
+            },
+            Shape::Arc {
+                centre: p(1.0, 1.0),
+                radius: 2.0,
+                start: 0.3,
+                sweep: 1.2,
+            },
+            Shape::Ellipse {
+                centre: p(3.0, 3.0),
+                axis: p(2.0, 1.0),
+                ratio: 0.4,
+                start: 0.0,
+                sweep: std::f64::consts::TAU,
+            },
+            Shape::Point { at: p(-1.0, -1.0) },
+            Shape::Text(Text {
+                at: p(0.0, 5.0),
+                content: "Salón-comedor\n25,40 m²".into(),
+                height: 3.5,
+                angle: 0.25,
+                align: TextAlign::Middle,
+            }),
+            Shape::Hatch(Hatch {
+                loops: vec![
+                    Polyline::straight(
+                        vec![p(0.0, 0.0), p(3.0, 0.0), p(3.0, 3.0), p(0.0, 3.0)],
+                        true,
+                    ),
+                    Polyline::straight(vec![p(1.0, 1.0), p(2.0, 1.0), p(2.0, 2.0)], true),
+                ],
+                pattern: HatchPattern::Brick,
+                scale: 1.5,
+                angle: 0.1,
+                background: Some([250, 250, 240]),
+            }),
+        ];
+        for (i, s) in shapes.into_iter().enumerate() {
+            let mut d = NewDraft::new(v, if i % 2 == 0 { ejes } else { LAYER_ZERO }, s);
+            if i == 3 {
+                d.color = Some([0, 128, 255]);
+                d.weight = Some(0.35);
+                d.line = Some(LineStyle::Dashed);
+            }
+            m.add_draft(d).unwrap();
+        }
+        let text = to_string(&m);
+        assert!(text.contains("\"draw_layers\""));
+        assert!(text.contains("\"kind\": \"hatch\""));
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.draw_layers(), m.draw_layers());
+        assert_eq!(
+            back.drafts().collect::<Vec<_>>(),
+            m.drafts().collect::<Vec<_>>()
+        );
+        assert_same_project(&back, &m);
+        // Version 6 (ArchiSim 0.20 to 0.24): no layers, no drafting.
+        let mut old: Value = serde_json::from_str(&to_string(&sample())).unwrap();
+        let map = old.as_object_mut().unwrap();
+        map.remove("draw_layers");
+        map.remove("drafts");
+        map.insert("version".into(), Value::from(6));
+        let opened = from_str(&serde_json::to_string_pretty(&old).unwrap()).unwrap();
+        assert_eq!(opened.draw_layers().len(), 1);
+        assert_eq!(opened.drafts().count(), 0);
+        // A wrong alignment is explained.
+        let err =
+            from_str(&text.replace("\"align\": \"middle\"", "\"align\": \"centro\"")).unwrap_err();
+        assert!(err.to_string().contains("centro"), "{err}");
     }
 
     fn slab_material(m: &Model) -> archisim_core::MaterialId {
@@ -837,7 +950,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 6", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -849,7 +962,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 6,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 7,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -895,11 +1008,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 6", "\"version\": 7"),
-            Err(FileError::TooNew { version: 7 })
+            edited("\"version\": 7", "\"version\": 8"),
+            Err(FileError::TooNew { version: 8 })
         ));
         assert!(matches!(
-            edited("\"version\": 6", "\"version\": 0"),
+            edited("\"version\": 7", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

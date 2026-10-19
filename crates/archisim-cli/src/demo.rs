@@ -190,6 +190,88 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Drafting: structural grid lines, a paved terrace to the east and the
+    // title of the plan.
+    doc.transact("Dibujo 2D", |m| {
+        use archisim_core::{
+            DrawLayer, Hatch, HatchPattern, LineStyle, NewDraft, Polyline, Shape, Text, TextAlign,
+            ViewRef,
+        };
+        let view = ViewRef::Level(pb);
+        let ejes = m.add_draw_layer(DrawLayer::new(
+            "Ejes",
+            [200, 40, 40],
+            0.13,
+            LineStyle::DashDot,
+        ))?;
+        let urb = m.add_draw_layer(DrawLayer::new(
+            "Urbanización",
+            [90, 90, 90],
+            0.18,
+            LineStyle::Continuous,
+        ))?;
+        let textos = m.add_draw_layer(DrawLayer::new(
+            "Textos",
+            [0, 0, 0],
+            0.25,
+            LineStyle::Continuous,
+        ))?;
+        for x in [0.0, 6.0, 12.0] {
+            m.add_draft(NewDraft::new(
+                view,
+                ejes,
+                Shape::Line {
+                    a: Point2::new(x, -2.5),
+                    b: Point2::new(x, 11.0),
+                },
+            ))?;
+        }
+        let terrace = Polyline::straight(
+            vec![
+                Point2::new(12.0, 0.0),
+                Point2::new(15.0, 0.0),
+                Point2::new(15.0, 9.0),
+                Point2::new(12.0, 9.0),
+            ],
+            true,
+        );
+        m.add_draft(NewDraft::new(
+            view,
+            urb,
+            Shape::Hatch(Hatch {
+                loops: vec![terrace.clone()],
+                pattern: HatchPattern::Tiles,
+                scale: 1.0,
+                angle: 0.0,
+                background: None,
+            }),
+        ))?;
+        m.add_draft(NewDraft::new(view, urb, Shape::Polyline(terrace)))?;
+        m.add_draft(NewDraft::new(
+            view,
+            textos,
+            Shape::Text(Text {
+                at: Point2::new(6.0, 10.2),
+                content: "PLANTA BAJA".into(),
+                height: 5.0,
+                angle: 0.0,
+                align: TextAlign::BottomCentre,
+            }),
+        ))?;
+        m.add_draft(NewDraft::new(
+            view,
+            textos,
+            Shape::Text(Text {
+                at: Point2::new(13.5, 4.5),
+                content: "Terraza\nbaldosa 30×30".into(),
+                height: 2.5,
+                angle: 0.0,
+                align: TextAlign::Middle,
+            }),
+        ))?;
+        Ok(())
+    })?;
+
     Ok(doc)
 }
 
@@ -205,7 +287,9 @@ mod tests {
         assert_eq!(m.slabs().count(), 2);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 9);
-        assert_eq!(doc.undo_label(), Some("Cotas"));
+        assert_eq!(doc.undo_label(), Some("Dibujo 2D"));
+        assert_eq!(m.drafts().count(), 7);
+        assert_eq!(m.draw_layers().len(), 4);
         assert_eq!(m.dimensions().count(), 4);
         assert_eq!(m.elevation_marks().count(), 2);
         // The roof slab rests on the façade walls.

@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::drafting::{Draft, DrawLayer, ViewRef, LAYER_ZERO};
 use crate::family::{
     self, Evaluation, Family, FamilyError, Mark, NotAnOpening, ParamKind, ParamScope, Value, Values,
 };
@@ -653,6 +654,12 @@ pub enum ModelError {
     DuplicateMark(String),
     /// The family cannot make door or window types.
     NotAnOpening(NotAnOpening),
+    UnknownDrawLayer(DrawLayerId),
+    UnknownDraft(DraftId),
+    /// A drafting element or annotation is not well formed.
+    InvalidShape(&'static str),
+    /// Another element of the same list already has that name.
+    DuplicateName(String),
 }
 
 impl fmt::Display for ModelError {
@@ -731,6 +738,12 @@ impl fmt::Display for ModelError {
                 write!(f, "another type already has the mark «{mark}»")
             }
             ModelError::NotAnOpening(e) => write!(f, "{e}"),
+            ModelError::UnknownDrawLayer(id) => write!(f, "drawing layer {id} does not exist"),
+            ModelError::UnknownDraft(id) => write!(f, "drafting element {id} does not exist"),
+            ModelError::InvalidShape(what) => write!(f, "{what}"),
+            ModelError::DuplicateName(name) => {
+                write!(f, "another element is already called «{name}»")
+            }
         }
     }
 }
@@ -829,6 +842,9 @@ pub struct ModelParts {
     pub openings: Vec<Opening>,
     pub dimensions: Vec<Dimension>,
     pub elevation_marks: Vec<ElevationMark>,
+    /// Drawing layers, layer "0" included.
+    pub draw_layers: Vec<DrawLayer>,
+    pub drafts: Vec<Draft>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -871,6 +887,8 @@ pub struct Model {
     openings: BTreeMap<OpeningId, Opening>,
     dimensions: BTreeMap<DimensionId, Dimension>,
     elevation_marks: BTreeMap<ElevationMarkId, ElevationMark>,
+    pub(crate) draw_layers: BTreeMap<DrawLayerId, DrawLayer>,
+    pub(crate) drafts: BTreeMap<DraftId, Draft>,
 }
 
 impl Model {
@@ -892,10 +910,12 @@ impl Model {
             openings: BTreeMap::new(),
             dimensions: BTreeMap::new(),
             elevation_marks: BTreeMap::new(),
+            draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
+            drafts: BTreeMap::new(),
         }
     }
 
-    fn take_id(&mut self) -> u64 {
+    pub(crate) fn take_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -976,6 +996,7 @@ impl Model {
         self.slabs.retain(|_, s| s.level != id);
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
+        self.drafts.retain(|_, d| d.view != ViewRef::Level(id));
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
     }
 
@@ -993,6 +1014,11 @@ impl Model {
                 .elevation_marks
                 .values()
                 .filter(|m| m.level == id)
+                .count()
+            + self
+                .drafts
+                .values()
+                .filter(|d| d.view == ViewRef::Level(id))
                 .count();
         (
             walls.len(),
@@ -1277,6 +1303,61 @@ impl Model {
         if let Err(e) = check {
             let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
             (wall.start, wall.end) = previous;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Places a wall again with new ends and bulge, and its doors and
+    /// windows at new distances from its start and with a new hand, all at
+    /// once (moving, turning, scaling or mirroring a wall with what it
+    /// hosts). Everything keeps its identity and GUID; if anything no
+    /// longer fits, nothing changes.
+    pub fn place_wall(
+        &mut self,
+        id: WallId,
+        start: Point2,
+        end: Point2,
+        bulge: f64,
+        openings: &[(OpeningId, f64, Hand)],
+    ) -> Result<(), ModelError> {
+        finite_point(start, "wall start")?;
+        finite_point(end, "wall end")?;
+        finite(bulge, "wall bulge")?;
+        if start.approx_eq(end) {
+            return Err(ModelError::ZeroLengthWall);
+        }
+        let wall = self.walls.get(&id).ok_or(ModelError::UnknownWall(id))?;
+        let before_wall = wall.clone();
+        let before_openings: Vec<Opening> = self
+            .openings
+            .values()
+            .filter(|o| o.wall == id)
+            .cloned()
+            .collect();
+        for (oid, along, hand) in openings {
+            finite(*along, "opening position")?;
+            match self.openings.get_mut(oid) {
+                Some(o) if o.wall == id => {
+                    o.along = *along;
+                    o.hand = *hand;
+                }
+                _ => return Err(ModelError::UnknownOpening(*oid)),
+            }
+        }
+        if let Some(w) = self.walls.get_mut(&id) {
+            w.start = start;
+            w.end = end;
+            w.bulge = bulge;
+        }
+        let check = self
+            .check_arc(id)
+            .and_then(|()| self.check_hosted_openings(id));
+        if let Err(e) = check {
+            self.walls.insert(id, before_wall);
+            for o in before_openings {
+                self.openings.insert(o.id, o);
+            }
             return Err(e);
         }
         Ok(())
@@ -2697,6 +2778,36 @@ impl Model {
         Ok(())
     }
 
+    /// Replaces a dimension's points, measuring direction and line position
+    /// (turning or mirroring it).
+    pub fn reshape_dimension(
+        &mut self,
+        id: DimensionId,
+        points: Vec<Point2>,
+        direction: Point2,
+        position: Point2,
+    ) -> Result<(), ModelError> {
+        let d = self
+            .dimensions
+            .get(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        let spec = NewDimension {
+            level: d.level,
+            points,
+            direction,
+            position,
+        };
+        let dir = self.validate_dimension(&spec)?;
+        let d = self
+            .dimensions
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        d.points = spec.points;
+        d.direction = dir;
+        d.position = spec.position;
+        Ok(())
+    }
+
     pub fn remove_dimension(&mut self, id: DimensionId) -> Result<Dimension, ModelError> {
         self.dimensions
             .remove(&id)
@@ -2802,6 +2913,8 @@ impl Model {
             openings: self.openings.values().cloned().collect(),
             dimensions: self.dimensions.values().cloned().collect(),
             elevation_marks: self.elevation_marks.values().cloned().collect(),
+            draw_layers: self.draw_layers.values().cloned().collect(),
+            drafts: self.drafts.values().cloned().collect(),
         }
     }
 
@@ -2996,6 +3109,20 @@ impl Model {
                 })
                 .map_err(fail(name))?;
             model.elevation_marks.insert(m.id, m);
+        }
+        for layer in parts.draw_layers {
+            let name = format!("drawing layer {} «{}»", layer.id.0, layer.name);
+            // Layer "0" has id 0, which no other element can have.
+            if layer.id != LAYER_ZERO {
+                claim(layer.id.0, None).map_err(fail(name.clone()))?;
+            }
+            model.restore_draw_layer(layer).map_err(fail(name))?;
+        }
+        for d in parts.drafts {
+            let name = format!("drafting element {} ({})", d.id.0, d.shape.label());
+            claim(d.id.0, None)
+                .and_then(|_| model.restore_draft(d))
+                .map_err(fail(name))?;
         }
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);

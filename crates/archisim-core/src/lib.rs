@@ -6,12 +6,14 @@
 //! model.
 
 pub mod document;
+pub mod drafting;
 pub mod family;
 pub mod ids;
 pub mod math;
 pub mod model;
 
 pub use document::Document;
+pub use drafting::*;
 pub use family::{
     Evaluation, Family, FamilyDef, FamilyError, LineStyle, Mark, ParamKind, ParamScope, Part, Pen,
     Value, Values,

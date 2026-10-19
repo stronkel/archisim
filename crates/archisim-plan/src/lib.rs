@@ -24,6 +24,7 @@
 //!   the cut plane are drawn dashed and do not interrupt the wall.
 
 pub mod annotate;
+pub mod drafting;
 pub mod lettering;
 
 use std::fmt::Write as _;
@@ -286,6 +287,15 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             v
         })
         .chain(marks.iter().map(|m| m.point))
+        .chain(
+            model
+                .drafts_in(archisim_core::ViewRef::Level(level))
+                .filter(|d| model.draft_visible(d))
+                .flat_map(|d| {
+                    let (a, b) = archisim_draft::bounds(&d.shape, k);
+                    [a, b]
+                }),
+        )
         .collect();
     let all_points = all_points.chain(annotation_points.iter());
     for p in all_points {
@@ -391,6 +401,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
     s.push_str("</g>\n");
 
+    drafting::draw_drafts(
+        &mut s,
+        model,
+        archisim_core::ViewRef::Level(level),
+        k,
+        options.viewport,
+        options.viewport.is_none(),
+    );
     s.push_str("<g id=\"annotations\">\n");
     for d in &dimensions {
         annotate::draw_dimension(&mut s, d, k);
@@ -1326,7 +1344,7 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
 /// The SVG dash attribute of a line style, at the drawing scale (`k`
 /// metres per paper millimetre); empty for a continuous line. Dots are
 /// drawn with round caps so they read as dots.
-fn dash_attr(style: LineStyle, k: f64) -> String {
+pub(crate) fn dash_attr(style: LineStyle, k: f64) -> String {
     let pattern = style.pattern_mm();
     if pattern.is_empty() {
         return String::new();
@@ -1380,7 +1398,7 @@ fn draw_opening_above(s: &mut String, o: &OpeningGeometry, k: f64) {
 /// (`1.5`, `-0.25`, `3`): the same text as Rust's shortest form of the
 /// rounded value, written without going through floating point formatting
 /// (a plan has millions of them).
-fn num(v: f64) -> String {
+pub(crate) fn num(v: f64) -> String {
     let n = (v * 1e6).round();
     if n == 0.0 || !n.is_finite() {
         return "0".into();
@@ -1554,7 +1572,7 @@ fn open_path(pts: &[Point2]) -> String {
     d.trim_end().to_string()
 }
 
-fn pt(p: Point2) -> String {
+pub(crate) fn pt(p: Point2) -> String {
     format!("{},{}", num(p.x), num(-p.y))
 }
 

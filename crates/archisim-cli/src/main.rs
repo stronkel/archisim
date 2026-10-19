@@ -5,6 +5,7 @@
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
 //! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
+//! archisim png <dibujo.svg> [imagen.png] [ppp]   imagen de un SVG
 //! archisim --version
 //! ```
 
@@ -48,6 +49,10 @@ Uso:
       3D, varita mágica, guardar y abrir, exportar e importar el IFC. Deja
       grande.archisim y grande.ifc en la carpeta (./out por defecto).
 
+  archisim png <dibujo.svg> [imagen.png] [ppp]
+      Convierte una planta o un plano en SVG en una imagen PNG, a 200
+      puntos por pulgada si no se dice otra cosa.
+
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
 ";
@@ -59,6 +64,21 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(run_demo(&dir))
         }
+        Some("png") => match args.get(1) {
+            Some(svg) => {
+                let svg = PathBuf::from(svg);
+                let png = args
+                    .get(2)
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| svg.with_extension("png"));
+                let dpi: f32 = args.get(3).and_then(|d| d.parse().ok()).unwrap_or(200.0);
+                report(svg_to_png(&svg, &png, dpi))
+            }
+            None => {
+                eprintln!("Falta el dibujo: archisim png <dibujo.svg> [imagen.png] [ppp]");
+                ExitCode::FAILURE
+            }
+        },
         Some("exportar") | Some("export") => match args.get(1) {
             Some(project) => {
                 let project = PathBuf::from(project);
@@ -264,6 +284,30 @@ fn slug(name: &str) -> String {
         }
     }
     out.trim_end_matches('-').to_string()
+}
+
+/// Rasterizes an SVG drawing to a PNG at `dpi` dots per inch.
+fn svg_to_png(svg: &Path, png: &Path, dpi: f32) -> Result<(), Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(svg).map_err(|e| format!("{}: {e}", svg.display()))?;
+    let tree = resvg::usvg::Tree::from_str(&text, &resvg::usvg::Options::default())
+        .map_err(|e| format!("{}: {e}", svg.display()))?;
+    // usvg sizes are in CSS pixels (96 per inch).
+    let k = dpi / 96.0;
+    let size = tree.size();
+    let w = (size.width() * k).ceil().max(1.0) as u32;
+    let h = (size.height() * k).ceil().max(1.0) as u32;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h).ok_or("imagen demasiado grande")?;
+    pixmap.fill(resvg::tiny_skia::Color::WHITE);
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(k, k),
+        &mut pixmap.as_mut(),
+    );
+    pixmap
+        .save_png(png)
+        .map_err(|e| format!("{}: {e}", png.display()))?;
+    println!("{} ({w} × {h} px)", png.display());
+    Ok(())
 }
 
 #[cfg(test)]

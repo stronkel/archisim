@@ -156,6 +156,30 @@ pub fn explain(e: &ModelError) -> String {
                 e.family
             )
         }
+        ModelError::UnknownDrawLayer(_) => "la capa no existe".into(),
+        ModelError::UnknownDraft(_) => "el elemento de dibujo ya no existe".into(),
+        ModelError::InvalidShape(what) => es_shape(what).into(),
+        ModelError::DuplicateName(name) => format!("ya hay otro elemento llamado «{name}»"),
+    }
+}
+
+/// Why a drafting element is not well formed, in Spanish.
+fn es_shape(what: &str) -> &str {
+    match what {
+        "line has no length" => "la línea no tiene longitud",
+        "polyline needs more points" => "la polilínea necesita más puntos",
+        "hatch boundaries must be closed" => "el contorno del sombreado tiene que estar cerrado",
+        "polyline needs one bulge per point" => "a la polilínea le faltan curvaturas",
+        "polyline arc too large" => "un arco de la polilínea es demasiado grande",
+        "polyline has no length" => "la polilínea no tiene longitud",
+        "arc sweep must be between 0 and 360°" => "el arco tiene que abarcar entre 0 y 360°",
+        "ellipse ratio must be in (0, 1]" => "la proporción de la elipse tiene que estar entre 0 y 1",
+        "ellipse sweep must be in (0, 360°]" => "el arco de elipse tiene que abarcar entre 0 y 360°",
+        "text is empty" => "el texto está vacío",
+        "hatch needs a boundary" => "el sombreado necesita un contorno",
+        "layer name is empty" => "la capa necesita un nombre",
+        "layer 0 cannot be renamed" => "la capa 0 no se puede renombrar",
+        other => other,
     }
 }
 
@@ -245,6 +269,13 @@ fn es_what(what: &str) -> String {
         "frame depth" => "el fondo del marco",
         "clear opening inside the frame" => "el paso libre dentro del marco",
         "level elevation" => "la cota de la planta",
+        "circle radius" => "el radio del círculo",
+        "arc radius" => "el radio del arco",
+        "ellipse axis" => "el eje de la elipse",
+        "text height" => "la altura del texto",
+        "hatch scale" => "la escala del sombreado",
+        "line weight" | "layer line weight" => "el grosor de línea",
+        "polyline width" => "la anchura de la polilínea",
         other => other,
     }
     .to_string()

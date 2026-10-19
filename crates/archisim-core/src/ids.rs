@@ -68,6 +68,16 @@ typed_id!(
     ElevationMarkId
 );
 
+typed_id!(
+    /// Identifies a [`crate::DrawLayer`] (a drawing layer, as in AutoCAD).
+    DrawLayerId
+);
+typed_id!(
+    /// Identifies a [`crate::Draft`] (a 2D drafting element: line, arc,
+    /// text, hatch…).
+    DraftId
+);
+
 /// Alphabet used by IFC to compress a 128-bit GUID into 22 characters.
 const IFC_GUID_ALPHABET: &[u8; 64] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";
