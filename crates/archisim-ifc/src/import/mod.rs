@@ -1181,7 +1181,9 @@ impl<'a> Importer<'a> {
         if top - base < 1e-3 {
             return Err("muro sin altura");
         }
-        if body.clipped {
+        // ArchiSim's own walls trimmed under a roof come back trimmed.
+        let own_trim = self.own_file && self.property_own(id, "ArchiSim_Trim", "Roof").is_some();
+        if body.clipped && !own_trim {
             self.report.warn(
                 "Muros recortados (por cubiertas u otros elementos): se importan rectos, con su altura máxima.",
             );

@@ -1155,7 +1155,18 @@ impl<'a> Exporter<'a> {
             // Walls butting into this one take part of its layers over
             // their own height only: one extrusion per height band.
             let base = wall.base_offset;
-            let top = base + wall.height;
+            // Under a roof: built up to its ridge, then clipped.
+            let trims = if wall.arc().is_none() {
+                model.wall_trim_planes(wall.id)
+            } else {
+                Vec::new()
+            };
+            let level_z = model.level(wall.level).map_or(0.0, |l| l.elevation);
+            let top = if trims.is_empty() {
+                base + wall.height
+            } else {
+                model.wall_top_z(wall) - level_z
+            };
             let mut zs = vec![base, top];
             zs.extend(
                 geo.notch_heights()
@@ -1196,13 +1207,52 @@ impl<'a> Exporter<'a> {
                     real(z1 - z0)
                 )));
             }
+            // Each roof plane clips what is above its underside: a half
+            // space in the wall's axes (x along it, y to its left, z up
+            // from its base), its material above the plane.
+            let mut kind = "SweptSolid";
+            if !trims.is_empty() {
+                kind = "Clipping";
+                for plane in &trims {
+                    let a = plane[0] * u.x + plane[1] * u.y;
+                    let b = plane[0] * n.x + plane[1] * n.y;
+                    let c = plane[0] * wall.start.x + plane[1] * wall.start.y + plane[2]
+                        - level_z
+                        - base;
+                    let len = (a * a + b * b + 1.0).sqrt();
+                    let at = self.point3(0.0, 0.0, c);
+                    let normal = self.w.add(format!(
+                        "IFCDIRECTION(({},{},{}))",
+                        real(-a / len),
+                        real(-b / len),
+                        real(1.0 / len)
+                    ));
+                    // In the plane, along the wall.
+                    let rl = (1.0 + a * a).sqrt();
+                    let along = self.w.add(format!(
+                        "IFCDIRECTION(({},0.,{}))",
+                        real(1.0 / rl),
+                        real(a / rl)
+                    ));
+                    let ppl = self
+                        .w
+                        .add(format!("IFCAXIS2PLACEMENT3D({at},{normal},{along})"));
+                    let surf = self.w.add(format!("IFCPLANE({ppl})"));
+                    let half = self.w.add(format!("IFCHALFSPACESOLID({surf},.F.)"));
+                    for s in solids.iter_mut() {
+                        *s = self
+                            .w
+                            .add(format!("IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,{s},{half})"));
+                    }
+                }
+            }
             let items = solids
                 .iter()
                 .map(|r| r.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
             let body_rep = self.w.add(format!(
-                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({items}))",
+                "IFCSHAPEREPRESENTATION({},'Body','{kind}',({items}))",
                 self.body_ctx
             ));
             let shape = self.w.add(format!(
@@ -1268,11 +1318,36 @@ impl<'a> Exporter<'a> {
                 }
             }
 
+            if let Some(roof) = model.wall_roof(wall.id).and_then(|r| model.roof(r)) {
+                // What ArchiSim needs to read the trim back: the roof and
+                // the wall's own height (its body goes up to the ridge).
+                let props = [
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Roof',$,IFCIDENTIFIER({}),$)",
+                        string(roof.guid.as_str())
+                    )),
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('Height',$,IFCLENGTHMEASURE({}),$)",
+                        real(wall.height)
+                    )),
+                ];
+                self.pset(w, &wall.guid, "ArchiSim_Trim", &props);
+            }
             let footprint = match &path {
                 Some(path) => path_area(path).abs(),
                 None => signed_area(&geo.outline_at(Some(base + 1e-6))),
             };
             let side = length * wall.height;
+            // Clipped under a roof: the volume of what is left.
+            let volume = if trims.is_empty() {
+                volume
+            } else {
+                archisim_core::volume_under_planes(
+                    &geo.outline_at(Some(base + 1e-6)),
+                    &trims,
+                    level_z + base,
+                )
+            };
             self.quantities(
                 w,
                 &wall.guid,

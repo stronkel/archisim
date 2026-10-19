@@ -2094,6 +2094,14 @@ fn roof_tool() {
         .set_roof_kind(r.id, crate::editor::RoofKind::Gable, 0.3)
         .unwrap();
     assert_eq!(h.model().roof(r.id).unwrap().planes().len(), 2);
+    // The walls under it go up to it: the gables come by themselves.
+    assert_eq!(h.app.ed.trim_walls_under(r.id), Ok(4));
+    let gable = h
+        .model()
+        .walls()
+        .map(|w| h.model().wall_top_z(w))
+        .fold(f64::MIN, f64::max);
+    assert!(gable > 3.0, "{gable}");
     // It shows in the plan of its level and in 3D.
     let svg = archisim_plan::render_plan(h.model(), top, &archisim_plan::PlanOptions::default());
     assert!(svg.contains("class=\"roof\""));
@@ -2105,6 +2113,11 @@ fn roof_tool() {
     h.app.ed.selection = [Element::Roof(r.id)].into_iter().collect();
     h.key(Key::Delete);
     assert_eq!(h.model().roofs().count(), 0);
+    // The trims go with it.
+    assert!(h
+        .model()
+        .walls()
+        .all(|w| h.model().wall_roof(w.id).is_none()));
 }
 
 /// The stair tool (E): the walking line by clicks, Enter to finish; up to

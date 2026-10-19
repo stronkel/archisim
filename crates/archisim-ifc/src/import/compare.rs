@@ -347,6 +347,21 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("escalera {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    // Walls trimmed under roofs (by GlobalId).
+    let trims = |m: &Model| -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = m
+            .walls()
+            .filter_map(|w| {
+                let r = m.wall_roof(w.id).and_then(|r| m.roof(r))?;
+                Some((w.guid.to_string(), r.guid.to_string()))
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    if trims(a) != trims(b) {
+        diff("muros recortados bajo cubierta distintos".to_string());
+    }
     if a.roofs().count() != b.roofs().count() {
         diff(format!(
             "número de cubiertas: {} / {}",

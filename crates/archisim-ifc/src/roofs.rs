@@ -96,7 +96,11 @@ impl Exporter<'_> {
                         ("NetVolume", "IFCQUANTITYVOLUME", surface * thickness),
                     ],
                 );
-                slabs_by_type.entry(roof.roof_type).or_default().push(sl);
+                // Typed by the roof's type when it is a roof type (a
+                // floor type would contradict the part's ROOF).
+                if rtype.function == archisim_core::SlabFunction::Roof {
+                    slabs_by_type.entry(roof.roof_type).or_default().push(sl);
+                }
                 parts.push(sl);
             }
             self.rel_aggregates(derived_guid(&roof.guid, "planes"), r, &parts);

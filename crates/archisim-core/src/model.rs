@@ -994,6 +994,8 @@ pub struct ModelParts {
     pub phases: Vec<(u64, Phase)>,
     pub sections: Vec<SectionLine>,
     pub roofs: Vec<Roof>,
+    /// Walls trimmed under a roof: (wall, roof).
+    pub wall_roofs: Vec<(WallId, RoofId)>,
     pub stairs: Vec<Stair>,
     pub terrains: Vec<Terrain>,
     /// Radians, clockwise from the plan's up.
@@ -1048,6 +1050,9 @@ pub struct Model {
     phases: BTreeMap<u64, Phase>,
     sections: BTreeMap<SectionId, SectionLine>,
     roofs: BTreeMap<RoofId, Roof>,
+    /// Walls trimmed under a roof (ArchiCAD's "Recortar con cubierta",
+    /// Revit's "Enlazar parte superior").
+    wall_roofs: BTreeMap<WallId, RoofId>,
     stairs: BTreeMap<StairId, Stair>,
     terrains: BTreeMap<TerrainId, Terrain>,
     /// True north: radians, clockwise from the plan's up (+Y).
@@ -1083,6 +1088,7 @@ impl Model {
             phases: BTreeMap::new(),
             sections: BTreeMap::new(),
             roofs: BTreeMap::new(),
+            wall_roofs: BTreeMap::new(),
             stairs: BTreeMap::new(),
             terrains: BTreeMap::new(),
             true_north: 0.0,
@@ -1178,6 +1184,8 @@ impl Model {
         self.remove_members_on_level(id);
         self.spaces.retain(|_, s| s.level != id);
         self.roofs.retain(|_, r| r.level != id);
+        let roofs = &self.roofs;
+        self.wall_roofs.retain(|_, r| roofs.contains_key(r));
         self.stairs.retain(|_, s| s.level != id);
         self.terrains.retain(|_, t| t.level != id);
         for s in self.stairs.values_mut() {
@@ -1726,6 +1734,7 @@ impl Model {
     pub fn remove_wall(&mut self, id: WallId) -> Result<Wall, ModelError> {
         let wall = self.walls.remove(&id).ok_or(ModelError::UnknownWall(id))?;
         self.openings.retain(|_, o| o.wall != id);
+        self.wall_roofs.remove(&id);
         Ok(wall)
     }
 
@@ -3064,6 +3073,7 @@ impl Model {
             phases: self.phase_table(),
             sections: self.sections.values().cloned().collect(),
             roofs: self.roofs.values().cloned().collect(),
+            wall_roofs: self.wall_roofs.iter().map(|(w, r)| (*w, *r)).collect(),
             stairs: self.stairs.values().cloned().collect(),
             terrains: self.terrains.values().cloned().collect(),
             true_north: self.true_north,
@@ -3269,6 +3279,14 @@ impl Model {
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
         model.restore_spaces(parts.spaces, &mut claim)?;
         model.restore_roofs(parts.roofs, &mut claim)?;
+        for (w, r) in parts.wall_roofs {
+            model
+                .set_wall_roof(w, Some(r))
+                .map_err(|error| RestoreError {
+                    element: format!("wall {} under roof {}", w.0, r.0),
+                    error,
+                })?;
+        }
         model.restore_stairs(parts.stairs, &mut claim)?;
         model.restore_terrains(parts.terrains, &mut claim)?;
         model

@@ -1133,6 +1133,38 @@ impl ArchiSimApp {
                     });
                 }
             }
+            // Trimmed under a roof (straight walls).
+            if w.arc().is_none() {
+                let roofs: Vec<(Option<archisim_core::RoofId>, String)> =
+                    std::iter::once((None, "No".to_string()))
+                        .chain(self.ed.model().roofs().map(|r| {
+                            let level = self
+                                .ed
+                                .model()
+                                .level(r.level)
+                                .map(|l| l.name.clone())
+                                .unwrap_or_default();
+                            (Some(r.id), format!("Cubierta {} ({level})", r.id.0))
+                        }))
+                        .collect();
+                if roofs.len() > 1 {
+                    let current = self.ed.model().wall_roof(id);
+                    row(
+                        ui,
+                        "Bajo cubierta",
+                        "El muro sube hasta la cara inferior de la cubierta (piñones incluidos)",
+                        |ui, wd| {
+                            let opts: Vec<_> =
+                                roofs.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                            let picked = choice(ui, ("wall-roof", id), wd, current, &opts);
+                            if picked != current {
+                                let r = self.ed.set_walls_roof(&walls, picked);
+                                self.report(r, "Recorte bajo cubierta cambiado.");
+                            }
+                        },
+                    );
+                }
+            }
         });
         group(ui, "wall-construction", "Construcción", |ui| {
             row(ui, "Línea de referencia", "", |ui, wd| {

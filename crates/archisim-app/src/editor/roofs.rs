@@ -108,6 +108,51 @@ impl Editor {
         self.transact(label, |m| m.edit_roof(id, edit))
     }
 
+    /// Trims walls under a roof (or frees them).
+    pub fn set_walls_roof(
+        &mut self,
+        walls: &[archisim_core::WallId],
+        roof: Option<RoofId>,
+    ) -> EditResult {
+        self.transact("Recortar bajo cubierta", |m| {
+            walls.iter().try_for_each(|w| m.set_wall_roof(*w, roof))
+        })
+    }
+
+    /// Trims under a roof every straight wall of its level and of the level
+    /// below whose axis lies under it. Returns how many.
+    pub fn trim_walls_under(&mut self, id: RoofId) -> EditResult<usize> {
+        let model = self.model();
+        let Some(r) = model.roof(id) else {
+            return Err("la cubierta ya no existe".into());
+        };
+        let eaves = r.eaves();
+        let below = model
+            .levels()
+            .iter()
+            .filter(|l| {
+                model
+                    .level(r.level)
+                    .is_some_and(|x| l.elevation < x.elevation)
+            })
+            .map(|l| l.id)
+            .next_back();
+        let walls: Vec<archisim_core::WallId> = model
+            .walls()
+            .filter(|w| w.arc().is_none())
+            .filter(|w| w.level == r.level || Some(w.level) == below)
+            .filter(|w| {
+                crate::pick::contains(&eaves, w.start) && crate::pick::contains(&eaves, w.end)
+            })
+            .map(|w| w.id)
+            .collect();
+        if walls.is_empty() {
+            return Ok(0);
+        }
+        self.set_walls_roof(&walls, Some(id))?;
+        Ok(walls.len())
+    }
+
     /// Gives a roof the pitched sides of a kind, at `slope`.
     pub fn set_roof_kind(&mut self, id: RoofId, kind: RoofKind, slope: f64) -> EditResult {
         let Some(r) = self.model().roof(id) else {

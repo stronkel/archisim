@@ -39,6 +39,20 @@ pub fn default_roof_settings(model: &archisim_core::Model) -> RoofSettings {
     }
 }
 
+/// The types a roof may take: those of roofs (all, if there is none).
+fn roof_types(model: &archisim_core::Model) -> Vec<(archisim_core::SlabTypeId, String)> {
+    let roofs: Vec<_> = model
+        .slab_types()
+        .filter(|t| t.function == SlabFunction::Roof)
+        .map(|t| (t.id, t.name.clone()))
+        .collect();
+    if roofs.is_empty() {
+        model.slab_types().map(|t| (t.id, t.name.clone())).collect()
+    } else {
+        roofs
+    }
+}
+
 /// A pitch typed as a percentage ("30", "27,5 %").
 fn parse_percent(text: &str) -> Option<f64> {
     let v = text
@@ -254,12 +268,7 @@ impl ArchiSimApp {
                 },
             );
         });
-        let types: Vec<(archisim_core::SlabTypeId, String)> = self
-            .ed
-            .model()
-            .slab_types()
-            .map(|t| (t.id, t.name.clone()))
-            .collect();
+        let types = roof_types(self.ed.model());
         group(ui, "tool-roof-type", "Tipo", |ui| {
             row(ui, "Composición", "Capas, de arriba abajo", |ui, w| {
                 let opts: Vec<_> = types.iter().map(|(id, n)| (*id, n.as_str())).collect();
@@ -281,8 +290,7 @@ impl ArchiSimApp {
         let thickness = model.slab_type(r.roof_type).map_or(0.0, |t| t.thickness());
         props::title(ui, "Cubierta · 1 seleccionada");
         super::properties::view_card_pub(ui, Icon::Roof, &type_name, "IfcRoof");
-        let types: Vec<(archisim_core::SlabTypeId, String)> =
-            model.slab_types().map(|t| (t.id, t.name.clone())).collect();
+        let types = roof_types(model);
         group(ui, "roof-shape", "Forma", |ui| {
             let pitched: Vec<f64> = r.slopes.iter().flatten().copied().collect();
             let slope = pitched.first().copied().unwrap_or(0.3);
@@ -441,6 +449,31 @@ impl ArchiSimApp {
                 "Punto más bajo de la cara superior, sobre la planta",
                 &fmt_mm(lo),
             );
+        });
+        group(ui, "roof-walls", "Muros", |ui| {
+            let trimmed = self
+                .ed
+                .model()
+                .walls()
+                .filter(|w| self.ed.model().wall_roof(w.id) == Some(id))
+                .count();
+            text_row(
+                ui,
+                "Recortados debajo",
+                "Muros que suben hasta la cara inferior de esta cubierta",
+                &trimmed.to_string(),
+            );
+            if ui
+                .button("Recortar los muros de debajo")
+                .on_hover_text("Los muros rectos de esta planta y de la de debajo que quedan bajo la cubierta suben hasta ella: los piñones salen solos")
+                .clicked()
+            {
+                match self.ed.trim_walls_under(id) {
+                    Ok(0) => self.complain("No hay muros rectos bajo esta cubierta."),
+                    Ok(n) => self.say(format!("{n} muros recortados bajo la cubierta.")),
+                    Err(e) => self.complain(format!("No se puede: {e}.")),
+                }
+            }
         });
         self.phase_group(ui, "roof-phase", &[Element::Roof(id)]);
         group(ui, "roof-identity", "Datos de identidad", |ui| {

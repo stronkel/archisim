@@ -979,3 +979,45 @@ fn inclined_slabs_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// A gable roof with the walls under it trimmed: the IFC clips their
+/// bodies under its planes (validated in CI on the demo), and ArchiSim
+/// reads the trims back.
+#[test]
+fn trimmed_walls_round_trip() {
+    let mut m = model();
+    let walls: Vec<archisim_core::WallId> = m.walls().map(|w| w.id).collect();
+    let level = m.wall(walls[0]).unwrap().level;
+    let st = m
+        .slab_types()
+        .find(|t| t.function == archisim_core::SlabFunction::Roof)
+        .unwrap()
+        .id;
+    let r = m
+        .add_roof(archisim_core::NewRoof {
+            roof_type: st,
+            level,
+            outline: vec![
+                Point2::new(-1.0, -1.0),
+                Point2::new(12.0, -1.0),
+                Point2::new(12.0, 10.0),
+                Point2::new(-1.0, 10.0),
+            ],
+            slopes: vec![Some(0.3), None, Some(0.3), None],
+            base_offset: 2.6,
+            overhang: 0.3,
+        })
+        .unwrap();
+    for w in &walls[..2] {
+        m.set_wall_roof(*w, Some(r)).unwrap();
+    }
+    let ifc = export(&m);
+    assert!(ifc.contains("IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE."));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(
+        !report.warnings.keys().any(|w| w.contains("recortados")),
+        "{report}"
+    );
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

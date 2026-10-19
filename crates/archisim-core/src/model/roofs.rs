@@ -218,6 +218,42 @@ fn clip_half_plane(poly: &[Point2], g: Vec2, c: f64) -> Vec<Point2> {
     out
 }
 
+/// Volume of a prism on `footprint` from `z_base` up to the lowest of
+/// the planes `z = a·x + b·y + c` (a wall trimmed under a roof): over the
+/// part of the footprint where each plane is the lowest, its area by the
+/// height at its centroid.
+pub fn volume_under_planes(footprint: &[Point2], planes: &[[f64; 3]], z_base: f64) -> f64 {
+    let mut poly = footprint.to_vec();
+    if signed_area(&poly) < 0.0 {
+        poly.reverse();
+    }
+    let mut total = 0.0;
+    for (i, p) in planes.iter().enumerate() {
+        let mut region = poly.clone();
+        for (j, q) in planes.iter().enumerate() {
+            if i == j || region.len() < 3 {
+                continue;
+            }
+            let g = Vec2::new(p[0] - q[0], p[1] - q[1]);
+            let c = q[2] - p[2];
+            if g.length() < 1e-12 {
+                // The same slope: the lower one covers it all.
+                if c < 0.0 || (c.abs() < 1e-12 && j < i) {
+                    region.clear();
+                }
+                continue;
+            }
+            region = clip_half_plane(&region, g, c);
+        }
+        if region.len() >= 3 {
+            let area = signed_area(&region).abs();
+            let m = super::spaces::centroid(&region);
+            total += area * (p[0] * m.x + p[1] * m.y + p[2] - z_base);
+        }
+    }
+    total
+}
+
 /// Whether a counter-clockwise polygon has no re-entrant corner.
 fn is_convex(poly: &[Point2]) -> bool {
     let n = poly.len();
@@ -327,7 +363,73 @@ impl Model {
     }
 
     pub fn remove_roof(&mut self, id: RoofId) -> Result<Roof, ModelError> {
-        self.roofs.remove(&id).ok_or(ModelError::UnknownRoof(id))
+        let r = self.roofs.remove(&id).ok_or(ModelError::UnknownRoof(id))?;
+        self.wall_roofs.retain(|_, x| *x != id);
+        Ok(r)
+    }
+
+    /// Trims a wall under a roof (its top follows the underside of the
+    /// roof's planes), or frees it.
+    pub fn set_wall_roof(&mut self, wall: WallId, roof: Option<RoofId>) -> Result<(), ModelError> {
+        if !self.walls.contains_key(&wall) {
+            return Err(ModelError::UnknownWall(wall));
+        }
+        match roof {
+            Some(r) => {
+                if !self.roofs.contains_key(&r) {
+                    return Err(ModelError::UnknownRoof(r));
+                }
+                self.wall_roofs.insert(wall, r);
+            }
+            None => {
+                self.wall_roofs.remove(&wall);
+            }
+        }
+        Ok(())
+    }
+
+    /// The roof a wall is trimmed under.
+    pub fn wall_roof(&self, wall: WallId) -> Option<RoofId> {
+        self.wall_roofs.get(&wall).copied()
+    }
+
+    /// The planes under which a wall is trimmed, as `z = a·x + b·y + c`
+    /// (heights from project zero): the undersides of its roof's planes.
+    pub fn wall_trim_planes(&self, wall: WallId) -> Vec<[f64; 3]> {
+        let Some(roof) = self.wall_roof(wall).and_then(|r| self.roofs.get(&r)) else {
+            return Vec::new();
+        };
+        let level = self.levels.get(&roof.level).map_or(0.0, |l| l.elevation);
+        let thickness = self
+            .slab_types
+            .get(&roof.roof_type)
+            .map_or(0.0, |t| t.thickness());
+        roof.planes()
+            .iter()
+            .filter_map(|p| {
+                let u = p.slope.direction()?;
+                let s = p.slope.slope;
+                let c = level + roof.base_offset
+                    - s * p.slope.from.dot(u)
+                    - p.slope.vertical(thickness);
+                Some([s * u.x, s * u.y, c])
+            })
+            .collect()
+    }
+
+    /// The highest point a wall reaches: its own top, or the ridge of the
+    /// roof it is trimmed under if that is higher (it is built that high
+    /// and then trimmed).
+    pub fn wall_top_z(&self, wall: &Wall) -> f64 {
+        let level = self.levels.get(&wall.level).map_or(0.0, |l| l.elevation);
+        let own = level + wall.base_offset + wall.height;
+        match self.wall_roof(wall.id).and_then(|r| self.roofs.get(&r)) {
+            Some(roof) => {
+                let rl = self.levels.get(&roof.level).map_or(0.0, |l| l.elevation);
+                own.max(rl + roof.top_range().1)
+            }
+            None => own,
+        }
     }
 
     pub fn roof(&self, id: RoofId) -> Option<&Roof> {

@@ -59,6 +59,9 @@ pub(crate) struct ProjectFile {
     /// Pitched roofs (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roofs: Vec<Roof>,
+    /// Walls trimmed under a roof (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wall_roofs: Vec<WallRoof>,
     /// Stairs (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stairs: Vec<Stair>,
@@ -125,6 +128,14 @@ fn both() -> Railings {
 
 fn is_both(r: &Railings) -> bool {
     *r == Railings::Both
+}
+
+/// A wall trimmed under a roof (version 7).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WallRoof {
+    pub wall: u64,
+    pub roof: u64,
 }
 
 /// A pitched roof (version 7): its footprint, the pitch of each side
@@ -896,6 +907,14 @@ impl ProjectFile {
                     contour: t.contour,
                 })
                 .collect(),
+            wall_roofs: p
+                .wall_roofs
+                .iter()
+                .map(|(w, r)| WallRoof {
+                    wall: w.0,
+                    roof: r.0,
+                })
+                .collect(),
             stairs: p
                 .stairs
                 .into_iter()
@@ -1029,6 +1048,11 @@ impl ProjectFile {
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
             true_north: project.true_north.to_radians(),
+            wall_roofs: self
+                .wall_roofs
+                .iter()
+                .map(|x| (core::WallId(x.wall), core::RoofId(x.roof)))
+                .collect(),
             stairs: self
                 .stairs
                 .iter()

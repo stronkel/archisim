@@ -22,6 +22,46 @@ impl<'a> Importer<'a> {
                 Err(why) => self.report.skip("cubiertas", why),
             }
         }
+        self.read_wall_trims();
+    }
+
+    /// Walls written trimmed under a roof: the trim and their own height.
+    fn read_wall_trims(&mut self) {
+        let walls: Vec<(u64, u64)> = self
+            .sources
+            .iter()
+            .copied()
+            .filter(|(id, _)| self.model.wall(archisim_core::WallId(*id)).is_some())
+            .collect();
+        for (wid, ifc) in walls {
+            let Some(guid) = self
+                .property_own(ifc, "ArchiSim_Trim", "Roof")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+            else {
+                continue;
+            };
+            let Some(roof) = self
+                .guids
+                .roofs
+                .iter()
+                .find(|(_, g)| *g == guid)
+                .map(|(r, _)| *r)
+            else {
+                continue;
+            };
+            let wall = archisim_core::WallId(wid);
+            let height = self
+                .property_own(ifc, "ArchiSim_Trim", "Height")
+                .and_then(|v| v.as_f64())
+                .map(|h| snap(h * self.geo.length));
+            if let (Some(h), Some(w)) = (height, self.model.wall(wall).cloned()) {
+                if w.top == archisim_core::WallTop::Unconnected {
+                    let _ = self.model.set_wall_height(wall, h, w.base_offset);
+                }
+            }
+            let _ = self.model.set_wall_roof(wall, Some(roof));
+        }
     }
 
     /// Whether the roof was read as an ArchiSim roof.

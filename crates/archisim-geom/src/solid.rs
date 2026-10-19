@@ -234,7 +234,17 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     };
     let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
     let z_base = level + wall.base_offset;
-    let z_top = z_base + wall.height;
+    // Under a roof, built up to its ridge and then trimmed.
+    let planes = if g.arc.is_none() {
+        model.wall_trim_planes(id)
+    } else {
+        Vec::new()
+    };
+    let z_top = if planes.is_empty() {
+        z_base + wall.height
+    } else {
+        model.wall_top_z(wall)
+    };
     if g.arc.is_some() {
         return curved_wall_solids(&g, &offsets_of(&g, wtype), wtype, z_base, z_top);
     }
@@ -486,7 +496,7 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
             }
         }
     }
-    wtype
+    let mut solids: Vec<Solid> = wtype
         .layers
         .iter()
         .zip(tris)
@@ -495,7 +505,180 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
             material: layer.material,
             triangles,
         })
-        .collect()
+        .collect();
+    if !planes.is_empty() {
+        let bands: Vec<(f64, f64)> = (0..layers).map(|k| (offsets[k + 1], offsets[k])).collect();
+        for plane in &planes {
+            clip_under(&mut solids, *plane, a, n, &bands);
+        }
+    }
+    solids
+}
+
+/// Cuts the layers of a wall under the plane `z = a·x + b·y + c`:
+/// whatever is above goes, and the cut is closed, each layer over its own
+/// band across the wall (`bands[k]`: the offsets of layer `k` from the
+/// wall's axis through `origin`, along `n`).
+fn clip_under(
+    solids: &mut [Solid],
+    plane: [f64; 3],
+    origin: Point2,
+    n: archisim_core::Vec2,
+    bands: &[(f64, f64)],
+) {
+    let f = |p: P3| plane[0] * p[0] + plane[1] * p[1] + plane[2] - p[2];
+    let lerp3 = |a: P3, b: P3, t: f64| {
+        [
+            a[0] + (b[0] - a[0]) * t,
+            a[1] + (b[1] - a[1]) * t,
+            a[2] + (b[2] - a[2]) * t,
+        ]
+    };
+    let mut segments: Vec<(P3, P3)> = Vec::new();
+    for solid in solids.iter_mut() {
+        let mut out: Vec<[P3; 3]> = Vec::new();
+        for t in &solid.triangles {
+            let d = [f(t[0]), f(t[1]), f(t[2])];
+            if d.iter().all(|v| *v >= -1e-9) {
+                out.push(*t);
+                continue;
+            }
+            if d.iter().all(|v| *v <= 1e-9) {
+                continue;
+            }
+            // Keep the part below: a triangle or a quadrilateral.
+            let mut poly: Vec<P3> = Vec::new();
+            let mut cut: Vec<P3> = Vec::new();
+            for i in 0..3 {
+                let (p, q) = (t[i], t[(i + 1) % 3]);
+                let (dp, dq) = (d[i], d[(i + 1) % 3]);
+                if dp >= -1e-9 {
+                    poly.push(p);
+                }
+                if (dp > 1e-9 && dq < -1e-9) || (dp < -1e-9 && dq > 1e-9) {
+                    let x = lerp3(p, q, dp / (dp - dq));
+                    poly.push(x);
+                    cut.push(x);
+                }
+            }
+            for k in 1..poly.len().saturating_sub(1) {
+                out.push([poly[0], poly[k], poly[k + 1]]);
+            }
+            if cut.len() == 2 {
+                segments.push((cut[0], cut[1]));
+            }
+        }
+        solid.triangles = out;
+    }
+    // The cut's outline(s), walked from the pieces.
+    let key = |p: P3| {
+        (
+            (p[0] * 1e7).round() as i64,
+            (p[1] * 1e7).round() as i64,
+            (p[2] * 1e7).round() as i64,
+        )
+    };
+    type K = (i64, i64, i64);
+    let mut adj: std::collections::HashMap<K, Vec<(K, P3)>> = Default::default();
+    let mut at: std::collections::HashMap<K, P3> = Default::default();
+    for (p, q) in &segments {
+        let (kp, kq) = (key(*p), key(*q));
+        if kp == kq {
+            continue;
+        }
+        adj.entry(kp).or_default().push((kq, *q));
+        adj.entry(kq).or_default().push((kp, *p));
+        at.insert(kp, *p);
+        at.insert(kq, *q);
+    }
+    let mut loops: Vec<Vec<Point2>> = Vec::new();
+    let mut starts: Vec<K> = adj.keys().copied().collect();
+    starts.sort_unstable();
+    for start in starts {
+        if adj.get(&start).is_none_or(|v| v.is_empty()) {
+            continue;
+        }
+        let mut lp = vec![at[&start]];
+        let mut prev = start;
+        let Some((mut cur, _)) = adj.get_mut(&start).and_then(|v| v.pop()) else {
+            continue;
+        };
+        if let Some(v) = adj.get_mut(&cur) {
+            if let Some(i) = v.iter().position(|x| x.0 == prev) {
+                v.remove(i);
+            }
+        }
+        let mut guard = 0;
+        while cur != start && guard < 100_000 {
+            guard += 1;
+            lp.push(at[&cur]);
+            let Some((next, _)) = adj.get_mut(&cur).and_then(|v| v.pop()) else {
+                break;
+            };
+            if let Some(v) = adj.get_mut(&next) {
+                if let Some(i) = v.iter().position(|x| x.0 == cur) {
+                    v.remove(i);
+                }
+            }
+            prev = cur;
+            cur = next;
+        }
+        let _ = prev;
+        if lp.len() >= 3 {
+            let mut poly: Vec<Point2> = lp.iter().map(|p| Point2::new(p[0], p[1])).collect();
+            poly.dedup_by(|a, b| a.approx_eq(*b));
+            if archisim_core::signed_area(&poly) < 0.0 {
+                poly.reverse();
+            }
+            loops.push(poly);
+        }
+    }
+    // Each layer's part of the cap, on the plane, facing up.
+    let z = |p: Point2| plane[0] * p.x + plane[1] * p.y + plane[2];
+    for (k, solid) in solids.iter_mut().enumerate() {
+        let Some(&(lo, hi)) = bands.get(k) else {
+            continue;
+        };
+        for poly in &loops {
+            let mut band = poly.clone();
+            for (limit, keep_above) in [(lo, true), (hi, false)] {
+                let g = |p: Point2| {
+                    let d = (p - origin).dot(n) - limit;
+                    if keep_above {
+                        d
+                    } else {
+                        -d
+                    }
+                };
+                let m = band.len();
+                let mut next = Vec::new();
+                for i in 0..m {
+                    let (p, q) = (band[i], band[(i + 1) % m]);
+                    let (gp, gq) = (g(p), g(q));
+                    if gp >= -1e-9 {
+                        next.push(p);
+                    }
+                    if (gp > 1e-9 && gq < -1e-9) || (gp < -1e-9 && gq > 1e-9) {
+                        next.push(p + (q - p) * (gp / (gp - gq)));
+                    }
+                }
+                band = next;
+                if band.len() < 3 {
+                    break;
+                }
+            }
+            band.dedup_by(|a, b| a.approx_eq(*b));
+            if band.len() < 3 || archisim_core::signed_area(&band).abs() < 1e-12 {
+                continue;
+            }
+            for [i, j, l] in triangulate(&band) {
+                let (p, q, r) = (band[i], band[j], band[l]);
+                solid
+                    .triangles
+                    .push([[p.x, p.y, z(p)], [q.x, q.y, z(q)], [r.x, r.y, z(r)]]);
+            }
+        }
+    }
 }
 
 /// Offsets of every layer boundary of a wall, from the exterior face in.
@@ -1778,6 +1961,64 @@ mod tests {
         let solids = terrain_solids(&m, id);
         assert_closed(&solids);
         assert!(solids[0].volume() > 100.0);
+    }
+
+    /// A gable wall under a two-slope roof: built up to the ridge and
+    /// trimmed under both planes; its volume is its thickness by the area
+    /// under the roof's underside.
+    #[test]
+    fn walls_trimmed_under_a_roof() {
+        let (mut m, w) = model();
+        let l = m.wall(w).unwrap().level;
+        let wt = m.wall(w).unwrap().wall_type;
+        let st = m.slabs().next().unwrap().slab_type;
+        let g = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: l,
+                start: p(3.0, -2.5),
+                end: p(3.0, 2.5),
+                reference: ReferenceLine::Center,
+                height: 2.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let r = m
+            .add_roof(archisim_core::NewRoof {
+                roof_type: st,
+                level: l,
+                outline: vec![p(-1.0, -3.0), p(7.0, -3.0), p(7.0, 3.0), p(-1.0, 3.0)],
+                slopes: vec![Some(0.5), None, Some(0.5), None],
+                base_offset: 2.0,
+                overhang: 0.0,
+            })
+            .unwrap();
+        let before: f64 = wall_solids(&m, g).iter().map(Solid::volume).sum();
+        m.set_wall_roof(g, Some(r)).unwrap();
+        let solids = wall_solids(&m, g);
+        let after: f64 = solids.iter().map(Solid::volume).sum();
+        // Under the soffit: level 1 + base 2 + 0,5·(3 − |y|) − the slab's
+        // vertical thickness, over y in −2,5…2,5, from the wall's base (1).
+        let t = m.slab_type(st).unwrap().thickness() * (1.25f64).sqrt();
+        let thickness = 0.3;
+        // ∫ 0,5·|y| dy over −2,5…2,5 = 0,5·2,5² = 3,125.
+        let expected = thickness * (5.0 * (2.0 + 1.5 - t) - 3.125);
+        assert!(
+            (after - expected).abs() < 1e-6,
+            "{after} vs {expected} (was {before})"
+        );
+        let top = solids
+            .iter()
+            .flat_map(|s| s.triangles.iter().flatten())
+            .map(|q| q[2])
+            .fold(f64::MIN, f64::max);
+        assert!((top - (1.0 + 2.0 + 1.5 - t)).abs() < 1e-9, "{top}");
+        // Freed, it is its own height again.
+        m.set_wall_roof(g, None).unwrap();
+        let again: f64 = wall_solids(&m, g).iter().map(Solid::volume).sum();
+        assert!((again - before).abs() < 1e-9);
     }
 
     /// Every edge of the solids together is shared by exactly two

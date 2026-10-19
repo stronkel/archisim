@@ -263,6 +263,44 @@ pub fn build() -> Result<Document, ModelError> {
         })
     })?;
 
+    // A garden shed (v0.25): four 10 cm walls under a gable roof of tiles
+    // at 35 %, trimmed under it, so its gables rise to the ridge.
+    doc.transact("Caseta", |m| {
+        let c = [
+            Point2::new(-5.0, 10.0),
+            Point2::new(-5.0, 12.5),
+            Point2::new(-2.0, 12.5),
+            Point2::new(-2.0, 10.0),
+        ];
+        let mut walls = Vec::new();
+        for i in 0..4 {
+            walls.push(m.add_wall(NewWall {
+                wall_type: tabique,
+                level: pb,
+                start: c[i],
+                end: c[(i + 1) % 4],
+                reference: ReferenceLine::ExteriorFace,
+                height: 2.2,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })?);
+        }
+        let roof = m.add_roof(archisim_core::NewRoof {
+            roof_type: lib.pitched_roof,
+            level: pb,
+            outline: vec![c[0], c[3], c[2], c[1]],
+            // Gables east and west; the slopes fall north and south.
+            slopes: vec![Some(0.35), None, Some(0.35), None],
+            base_offset: 2.2,
+            overhang: 0.3,
+        })?;
+        for w in walls {
+            m.set_wall_roof(w, Some(roof))?;
+        }
+        Ok(())
+    })?;
+
     // The plot (v0.25): survey points falling gently to the south-east,
     // under the floor of the house; true north 12° to the east of up.
     doc.transact("Terreno", |m| {
@@ -381,9 +419,9 @@ mod tests {
     fn demo_builds() {
         let doc = super::build().unwrap();
         let m = doc.model();
-        assert_eq!(m.walls().count(), 7);
+        assert_eq!(m.walls().count(), 11);
         assert_eq!(m.slabs().count(), 3);
-        assert_eq!(m.roofs().count(), 1);
+        assert_eq!(m.roofs().count(), 2);
         assert_eq!(m.stairs().count(), 1);
         assert_eq!(m.terrains().count(), 1);
         let stair = m.stairs().next().unwrap();
