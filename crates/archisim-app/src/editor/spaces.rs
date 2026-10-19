@@ -56,6 +56,112 @@ pub const USAGES: &[&str] = &[
     "Oficina",
 ];
 
+/// Sets of uses for other kinds of building, to add to a project's list:
+/// (name, uses).
+pub const USAGE_SETS: &[(&str, &[&str])] = &[
+    ("Vivienda", USAGES),
+    (
+        "Oficinas",
+        &[
+            "Despacho",
+            "Oficina abierta",
+            "Sala de reuniones",
+            "Recepción",
+            "Archivo",
+            "Office",
+            "Aseo",
+            "Almacén",
+            "Instalaciones",
+            "Vestíbulo",
+            "Pasillo",
+        ],
+    ),
+    (
+        "Docente",
+        &[
+            "Aula",
+            "Laboratorio",
+            "Biblioteca",
+            "Sala de profesores",
+            "Despacho",
+            "Gimnasio",
+            "Comedor",
+            "Aseo",
+            "Vestuario",
+            "Almacén",
+            "Vestíbulo",
+            "Pasillo",
+        ],
+    ),
+    (
+        "Sanitario",
+        &[
+            "Consulta",
+            "Sala de espera",
+            "Sala de curas",
+            "Habitación",
+            "Control de enfermería",
+            "Almacén",
+            "Aseo",
+            "Vestuario",
+            "Instalaciones",
+        ],
+    ),
+    (
+        "Comercial",
+        &[
+            "Sala de ventas",
+            "Probador",
+            "Caja",
+            "Almacén",
+            "Oficina",
+            "Aseo",
+            "Muelle de carga",
+        ],
+    ),
+    (
+        "Hostelería",
+        &[
+            "Comedor",
+            "Barra",
+            "Cocina industrial",
+            "Cámara frigorífica",
+            "Habitación",
+            "Recepción",
+            "Aseo",
+            "Almacén",
+        ],
+    ),
+    (
+        "Industrial",
+        &[
+            "Nave",
+            "Taller",
+            "Almacén",
+            "Muelle de carga",
+            "Oficina",
+            "Vestuario",
+            "Aseo",
+        ],
+    ),
+];
+
+/// The uses offered for rooms: the project's list, or the default one.
+pub fn usages_of(model: &Model) -> Vec<String> {
+    if model.space_usages().is_empty() {
+        USAGES.iter().map(|u| u.to_string()).collect()
+    } else {
+        model.space_usages().to_vec()
+    }
+}
+
+impl Editor {
+    /// Replaces the project's list of room uses.
+    pub fn set_space_usages(&mut self, usages: Vec<String>) -> EditResult {
+        self.transact("Usos de los locales", |m| m.set_space_usages(usages))
+    }
+}
+
 /// The height a new room on `level` gets: the settings', or the height
 /// from the level to the one above (3 m on the top level).
 pub fn space_height(model: &Model, level: LevelId, s: &SpaceSettings) -> f64 {
@@ -142,5 +248,26 @@ mod tests {
         ed.edit_space("Renombrar local", id, |s| s.name = "Salón".into())
             .unwrap();
         assert_eq!(ed.model().space(id).unwrap().name, "Salón");
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+
+    #[test]
+    fn projects_have_their_own_uses() {
+        let mut ed = Editor::new_project();
+        assert_eq!(usages_of(ed.model()).len(), USAGES.len());
+        let mut v = usages_of(ed.model());
+        v.push(" Sala de reuniones ".into());
+        v.push("Estar".into());
+        ed.set_space_usages(v).unwrap();
+        let u = usages_of(ed.model());
+        assert_eq!(u.len(), USAGES.len() + 1, "trimmed, no repeats");
+        assert_eq!(u.last().unwrap(), "Sala de reuniones");
+        assert!(ed.set_space_usages(vec!["  ".into()]).is_err());
+        ed.undo();
+        assert_eq!(usages_of(ed.model()).len(), USAGES.len());
     }
 }

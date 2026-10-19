@@ -624,6 +624,9 @@ mod tests {
             .unwrap();
         // Concrete goes through anything (material intersection priority).
         m.set_material_priority(concrete, Some(990)).unwrap();
+        // An office project: its own room uses.
+        m.set_space_usages(vec!["Despacho".into(), "Sala de reuniones".into()])
+            .unwrap();
         // A refurbishment: the first wall existing, the column demolished.
         let first = m.walls().next().unwrap().id.0;
         m.set_phase(first, archisim_core::Phase::Existing).unwrap();

@@ -34,7 +34,7 @@ pub use curtain::CurtainSettings;
 pub use objects::ObjectSettings;
 pub use railings::RailingSettings;
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
-pub use spaces::{space_height, SpaceSettings, USAGES};
+pub use spaces::{space_height, usages_of, SpaceSettings, USAGE_SETS};
 pub use stairs::{default_stair_settings, StairSettings};
 pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 pub use terrain::TerrainSettings;

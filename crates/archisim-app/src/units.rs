@@ -174,6 +174,7 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownTerrain(_) => "el terreno ya no existe".into(),
         ModelError::UnknownCurtainWall(_) => "el muro cortina ya no existe".into(),
         ModelError::UnknownRailing(_) => "la barandilla ya no existe".into(),
+        ModelError::EmptyName => "el nombre no puede quedar vacío".into(),
         ModelError::UnknownObjectType(_) => "el tipo de objeto ya no existe".into(),
         ModelError::UnknownObject(_) => "el objeto ya no existe".into(),
         ModelError::NotAnObject(name) => {

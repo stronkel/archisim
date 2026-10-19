@@ -20,6 +20,7 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `project` | Nombre y `guid` del proyecto, del emplazamiento y del edificio | `IfcProject`, `IfcSite`, `IfcBuilding` |
 | `levels` | Niveles con su cota | `IfcBuildingStorey` |
 | `materials` | Materiales: categoría IFC, color de corte (`#RRGGBB`) y trama (`solid`, `diagonal`, `cross`, `insulation`, `dots`, `empty`) y, desde la versión 7, `priority` opcional (prioridad de intersección, 0–999) | `IfcMaterial` (+ `ArchiSim_Material`: trama y prioridad) |
+| `project.space_usages` | Usos de los locales que ofrece el proyecto (versión 7); si falta, la lista de vivienda del programa | — |
 | `wall_types` | Tipos de muro: función (`exterior` / `interior`) y capas **de exterior a interior** | `IfcWallType` + capas |
 | `walls` | Muros: `type`, `level`, `start` y `end` como `[x, y]`, línea de referencia (`center`, `exterior_face`, `interior_face`), altura y desfase de la base; si es curvo (versión 5), `bulge`: la comba del arco que va de `start` a `end`, `tan(θ/4)` del ángulo que barre, positiva en sentido antihorario (1 = media circunferencia; sin `bulge`, muro recto); y, si llega hasta una planta (versión 4), `top` con esa planta (`level`) y el desfase superior (`offset`); sin `top`, la altura es propia. Con `top`, la altura escrita es la que resulta, y al abrir se vuelve a calcular desde las cotas de las plantas | `IfcWall` |
 | `slab_types` | Tipos de forjado: función (`floor`, `base_slab`, `roof`) y capas **de arriba abajo** | `IfcSlabType` + capas |

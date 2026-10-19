@@ -94,6 +94,29 @@ pub struct NewSpace {
 }
 
 impl Model {
+    /// The uses offered for rooms in this project (empty: the program's
+    /// default list).
+    pub fn space_usages(&self) -> &[String] {
+        &self.space_usages
+    }
+
+    /// Sets the project's list of room uses: trimmed, none empty, no
+    /// repeats (the first stays).
+    pub fn set_space_usages(&mut self, usages: Vec<String>) -> Result<(), ModelError> {
+        let mut out: Vec<String> = Vec::new();
+        for u in usages {
+            let u = u.trim().to_string();
+            if u.is_empty() {
+                return Err(ModelError::EmptyName);
+            }
+            if !out.contains(&u) {
+                out.push(u);
+            }
+        }
+        self.space_usages = out;
+        Ok(())
+    }
+
     fn validate_space(&self, s: &NewSpace, me: Option<SpaceId>) -> Result<(), ModelError> {
         if !self.levels.contains_key(&s.level) {
             return Err(ModelError::UnknownLevel(s.level));

@@ -537,6 +537,10 @@ pub(crate) struct Project {
     /// True north, degrees clockwise from the plan's up (version 7).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub true_north: f64,
+    /// Room uses offered in this project (version 7); absent: the
+    /// program's default list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub space_usages: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -803,6 +807,7 @@ impl ProjectFile {
                 site_guid: p.site_guid.to_string(),
                 building_guid: p.building_guid.to_string(),
                 true_north: p.true_north.to_degrees(),
+                space_usages: p.space_usages,
             },
             levels: p
                 .levels
@@ -1331,6 +1336,7 @@ impl ProjectFile {
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
             true_north: project.true_north.to_radians(),
+            space_usages: project.space_usages.clone(),
             wall_roofs: self
                 .wall_roofs
                 .iter()

@@ -850,6 +850,7 @@ impl ArchiSimApp {
             );
             id_row(ui, "IfcProject", &guid);
         });
+        self.usages_group(ui);
     }
 
     // ---- Elements ---------------------------------------------------------------

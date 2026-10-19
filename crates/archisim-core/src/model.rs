@@ -746,6 +746,8 @@ pub enum ModelError {
     DuplicateGuid(String),
     /// A wall or slab type must have at least one layer.
     EmptyType,
+    /// A name or label with nothing in it.
+    EmptyName,
     /// The element is still used by others and cannot be removed.
     InUse(String),
     /// A door cannot become a window, or the other way round.
@@ -863,6 +865,7 @@ impl fmt::Display for ModelError {
                 write!(f, "GlobalId {guid} is used by more than one element")
             }
             ModelError::EmptyType => write!(f, "a type needs at least one layer"),
+            ModelError::EmptyName => write!(f, "a name cannot be empty"),
             ModelError::InUse(what) => write!(f, "still in use: {what}"),
             ModelError::CategoryMismatch => {
                 write!(
@@ -1062,6 +1065,9 @@ pub struct ModelParts {
     pub objects: Vec<Object>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
+    /// The uses rooms of this project are offered (empty: the default
+    /// residential list).
+    pub space_usages: Vec<String>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -1123,6 +1129,7 @@ pub struct Model {
     objects: BTreeMap<ObjectId, Object>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
+    space_usages: Vec<String>,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -1162,6 +1169,7 @@ impl Model {
             object_types: BTreeMap::new(),
             objects: BTreeMap::new(),
             true_north: 0.0,
+            space_usages: Vec::new(),
             draw_phase: Phase::New,
         }
     }
@@ -3204,6 +3212,7 @@ impl Model {
             object_types: self.object_types.values().cloned().collect(),
             objects: self.objects.values().cloned().collect(),
             true_north: self.true_north,
+            space_usages: self.space_usages.clone(),
         }
     }
 
@@ -3431,6 +3440,12 @@ impl Model {
             .set_true_north(parts.true_north)
             .map_err(|error| RestoreError {
                 element: "true north".into(),
+                error,
+            })?;
+        model
+            .set_space_usages(parts.space_usages)
+            .map_err(|error| RestoreError {
+                element: "room uses".into(),
                 error,
             })?;
         model.restore_phases(parts.phases)?;

@@ -8,7 +8,7 @@ use eframe::egui::{self, Id, Ui};
 use super::icons::Icon;
 use super::props::{self, choice, group, id_row, row, text_row};
 use super::*;
-use crate::editor::USAGES;
+use crate::editor::{usages_of, USAGE_SETS};
 use crate::slab_tool::Outcome as PolyOutcome;
 
 impl ArchiSimApp {
@@ -126,9 +126,10 @@ impl ArchiSimApp {
                 .unwrap_or_default(),
             None => self.space_settings.usage.clone(),
         };
+        let usages = usages_of(self.ed.model());
         let mut options: Vec<(&str, &str)> = vec![("", "—")];
-        options.extend(USAGES.iter().map(|u| (*u, *u)));
-        if !current.is_empty() && !USAGES.contains(&current.as_str()) {
+        options.extend(usages.iter().map(|u| (u.as_str(), u.as_str())));
+        if !current.is_empty() && !usages.contains(&current) {
             options.push((current.as_str(), current.as_str()));
         }
         let picked = row(
@@ -157,6 +158,68 @@ impl ArchiSimApp {
                 }
                 s.usage = picked;
             }
+        }
+    }
+
+    /// The project's list of room uses, in the project's properties: each
+    /// use can be removed, new ones typed, and whole sets for other kinds
+    /// of building added (offices, schools, health…).
+    pub(super) fn usages_group(&mut self, ui: &mut Ui) {
+        let usages = usages_of(self.ed.model());
+        let mut changed: Option<Vec<String>> = None;
+        props::group(ui, "project-usages", "Usos de los locales", |ui| {
+            for (i, u) in usages.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.add_space(8.0);
+                    ui.label(u);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .small_button("✕")
+                            .on_hover_text("Quitar de la lista")
+                            .clicked()
+                        {
+                            let mut v = usages.clone();
+                            v.remove(i);
+                            changed = Some(v);
+                        }
+                    });
+                });
+            }
+            row(ui, "Nuevo uso", "Escríbelo y pulsa Intro", |ui, w| {
+                if let Some(new) =
+                    text_edit_committed(ui, egui::Id::unique("project-usage-new"), "", w - 8.0)
+                {
+                    let new = new.trim().to_string();
+                    if !new.is_empty() && !usages.contains(&new) {
+                        let mut v = usages.clone();
+                        v.push(new);
+                        changed = Some(v);
+                    }
+                }
+            });
+            row(
+                ui,
+                "Añadir conjunto",
+                "Usos habituales de otro tipo de edificio",
+                |ui, w| {
+                    let mut opts: Vec<(usize, &str)> = vec![(usize::MAX, "—")];
+                    opts.extend(USAGE_SETS.iter().enumerate().map(|(i, (n, _))| (i, *n)));
+                    let picked = choice(ui, "project-usage-set", w, usize::MAX, &opts);
+                    if let Some((_, set)) = USAGE_SETS.get(picked) {
+                        let mut v = usages.clone();
+                        for u in set.iter() {
+                            if !v.iter().any(|x| x == u) {
+                                v.push(u.to_string());
+                            }
+                        }
+                        changed = Some(v);
+                    }
+                },
+            );
+        });
+        if let Some(v) = changed {
+            let r = self.ed.set_space_usages(v);
+            self.report(r, "Usos del proyecto cambiados.");
         }
     }
 
