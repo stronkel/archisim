@@ -57,6 +57,7 @@ fn element(owner: SolidOwner) -> Element {
         SolidOwner::Opening(id) => Element::Opening(id),
         SolidOwner::Column(id) => Element::Column(id),
         SolidOwner::Beam(id) => Element::Beam(id),
+        SolidOwner::Roof(id) => Element::Roof(id),
     }
 }
 

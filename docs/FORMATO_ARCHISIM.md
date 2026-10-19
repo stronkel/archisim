@@ -35,6 +35,7 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `spaces` | Locales (versión 7): `level`, número (`number`, único en la planta), nombre, uso (`usage`), contorno en sentido antihorario (`outline`, la superficie útil), altura libre y, si se movió, el punto del rótulo (`label`) | `IfcSpace` (+ `Pset_SpaceCommon`, `Qto_SpaceBaseQuantities`) |
 | `phases` | Fases de reforma (versión 7): lista de `{"id", "phase"}` con `existing` o `demolished`; lo que no aparece es nuevo (`new`) | Propiedad `Status` de `Pset_*Common` (`EXISTING`, `DEMOLISH`, `NEW`) |
 | `sections` | Secciones y alzados (versión 7): nombre («A», «Norte»), `kind` (`section` / `elevation`), `start` y `end` de su línea en planta (mira hacia la izquierda yendo de inicio a fin) y profundidad de vista (`depth`, metros) | No se exporta (vista) |
+| `roofs` | Cubiertas inclinadas (versión 7): `type` (un tipo de forjado: sus capas), `level`, contorno en sentido antihorario y convexo (`outline`), pendiente de cada lado (`slopes`, metros por metro; `null`, piñón; el lado `i` va de la esquina `i` a la siguiente), altura de la cara superior en el contorno (`base_offset`) y vuelo del alero (`overhang`) | `IfcRoof` con un `IfcSlab` (`ROOF`) por faldón, y `ArchiSim_Roof` para leerla de vuelta |
 
 Las referencias entre elementos van por `id`: un muro con `"type": 7` usa el tipo de muro cuyo `id` es 7.
 

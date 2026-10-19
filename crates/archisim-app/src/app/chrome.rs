@@ -542,6 +542,9 @@ impl ArchiSimApp {
             Tool::Zone => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
             Tool::Section if self.section_tool.anchor.is_some() => "Clic: final de la sección (mira hacia la izquierda del trazo) · Mayús: 45° · Esc: anular",
             Tool::Section => "Clic: inicio de la sección · Esc: flecha",
+            Tool::Roof if self.roof_wand() => "Clic dentro del edificio: cubierta por las caras exteriores de sus muros · Esc: flecha",
+            Tool::Roof if !self.roof_tool.is_drawing() => "Clic: primera esquina de la cubierta · Esc: flecha",
+            Tool::Roof => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
         }
     }
 

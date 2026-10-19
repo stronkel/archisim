@@ -33,6 +33,7 @@ mod compare;
 pub mod geometry;
 mod members;
 pub mod report;
+mod roofs;
 mod spaces;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -226,6 +227,8 @@ struct Importer<'a> {
     /// Imported elements and the IFC entity each came from, to read their
     /// phase (`Status`) at the end.
     sources: Vec<(u64, u64)>,
+    /// `IfcRoof`s read back as ArchiSim roofs.
+    roof_ids: HashSet<u64>,
 }
 
 #[derive(Default)]
@@ -241,6 +244,7 @@ struct GuidPlan {
     columns: Vec<(archisim_core::ColumnId, String)>,
     beams: Vec<(archisim_core::BeamId, String)>,
     spaces: Vec<(archisim_core::SpaceId, String)>,
+    roofs: Vec<(archisim_core::RoofId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -454,6 +458,7 @@ impl<'a> Importer<'a> {
             walls: HashMap::new(),
             member_types: HashMap::new(),
             sources: Vec::new(),
+            roof_ids: HashSet::new(),
         };
         imp.index();
         imp
@@ -2531,7 +2536,7 @@ impl<'a> Importer<'a> {
         }
         for id in self.file.of_kind("IFCROOF") {
             let has_slabs = self.ix.parent.values().any(|&p| p == id);
-            if !has_slabs {
+            if !has_slabs && !self.roof_ids.contains(&id) {
                 self.report.skip(
                     class_name("IFCROOF"),
                     "cubierta sin forjados (las cubiertas inclinadas llegarán más adelante)",
@@ -2564,6 +2569,7 @@ impl<'a> Importer<'a> {
         self.import_members();
         self.import_openings();
         self.import_spaces();
+        self.import_roofs();
         self.read_statuses();
         self.count_unsupported();
     }
@@ -2607,6 +2613,7 @@ impl<'a> Importer<'a> {
         restore!(columns, columns);
         restore!(beams, beams);
         restore!(spaces, spaces);
+        restore!(roofs, roofs);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

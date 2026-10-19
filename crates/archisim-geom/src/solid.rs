@@ -32,6 +32,7 @@ pub enum SolidOwner {
     Opening(OpeningId),
     Column(ColumnId),
     Beam(BeamId),
+    Roof(archisim_core::RoofId),
 }
 
 /// One closed piece of one material.
@@ -606,34 +607,85 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
         return Vec::new();
     };
     let level = model.level(slab.level).map_or(0.0, |l| l.elevation);
-    let outer = ensure_ccw(slab.outline.clone());
+    layered_plate(
+        SolidOwner::Slab(id),
+        &slab.outline,
+        &slab.holes,
+        &|p| level + slab.top_at(p),
+        &|t| slab.vertical(t),
+        &stype.layers,
+    )
+}
+
+/// Solids of a roof: each plane as an inclined slab over the part of the
+/// roof it covers, its layers square to it, its edges plumb (two planes
+/// meet on the plumb plane through their hip or ridge).
+pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
+    let Some(roof) = model.roof(id) else {
+        return Vec::new();
+    };
+    let Some(stype) = model.slab_type(roof.roof_type) else {
+        return Vec::new();
+    };
+    let level = model.level(roof.level).map_or(0.0, |l| l.elevation);
+    let mut out = Vec::new();
+    for plane in roof.planes() {
+        let slope = plane.slope;
+        out.extend(layered_plate(
+            SolidOwner::Roof(id),
+            &plane.outline,
+            &[],
+            &|p| level + roof.base_offset + slope.rise_at(p),
+            &|t| slope.vertical(t),
+            &stype.layers,
+        ));
+    }
+    out
+}
+
+/// A plate of layers under a (level or inclined) top face: one skin with
+/// the top face in the top layer's material, the soffit in the bottom
+/// layer's, and the edges banded by layer. Layers touching inside have no
+/// faces. `top` is the height of the top face at a point; `vertical` the
+/// vertical height of a thickness.
+fn layered_plate(
+    owner: SolidOwner,
+    outline: &[Point2],
+    holes: &[Vec<Point2>],
+    top: &dyn Fn(Point2) -> f64,
+    vertical: &dyn Fn(f64) -> f64,
+    layers: &[archisim_core::Layer],
+) -> Vec<Solid> {
+    let outer = ensure_ccw(outline.to_vec());
     // The faces round the outline and round each hole (walked clockwise,
     // so they face into the hole).
     let mut rings = vec![outer.clone()];
-    rings.extend(slab.holes.iter().map(|h| {
+    rings.extend(holes.iter().map(|h| {
         let mut h = ensure_ccw(h.clone());
         h.reverse();
         h
     }));
-    let poly = with_holes(&outer, &slab.holes);
+    let poly = with_holes(&outer, holes);
     let caps = triangulate(&poly);
     // Heights of the faces between layers at a point: the top face, then
     // each layer down (square to an inclined face, so vertically a little
     // more).
-    let z = |p: Point2, depth: f64| level + slab.top_at(p) - slab.vertical(depth);
-    let at = |p: Point2, depth: f64| [p.x, p.y, z(p, depth)];
-    let mut top = 0.0;
-    let count = stype.layers.len();
-    stype
-        .layers
+    let at = |p: Point2, depth: f64| [p.x, p.y, top(p) - vertical(depth)];
+    let mut upper = 0.0;
+    let count = layers.len();
+    layers
         .iter()
         .enumerate()
         .map(|(i, layer)| {
-            let bottom = top + layer.thickness;
+            let bottom = upper + layer.thickness;
             let mut tris = Vec::new();
             if i == 0 {
                 for [x, y, z] in &caps {
-                    tris.push([at(poly[*x], top), at(poly[*y], top), at(poly[*z], top)]);
+                    tris.push([
+                        at(poly[*x], upper),
+                        at(poly[*y], upper),
+                        at(poly[*z], upper),
+                    ]);
                 }
             }
             if i + 1 == count {
@@ -648,13 +700,13 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
             for ring in &rings {
                 for k in 0..ring.len() {
                     let (p, q) = (ring[k], ring[(k + 1) % ring.len()]);
-                    tris.push([at(p, bottom), at(q, bottom), at(q, top)]);
-                    tris.push([at(p, bottom), at(q, top), at(p, top)]);
+                    tris.push([at(p, bottom), at(q, bottom), at(q, upper)]);
+                    tris.push([at(p, bottom), at(q, upper), at(p, upper)]);
                 }
             }
-            top = bottom;
+            upper = bottom;
             Solid {
-                owner: SolidOwner::Slab(id),
+                owner,
                 material: layer.material,
                 triangles: tris,
             }
@@ -798,6 +850,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for b in model.beams() {
         out.extend(beam_solids(model, b.id));
     }
+    for r in model.roofs() {
+        out.extend(roof_solids(model, r.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -813,6 +868,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
             .is_some_and(|w| w.level == level),
         SolidOwner::Column(c) => model.column(c).is_some_and(|c| c.level == level),
         SolidOwner::Beam(b) => model.beam(b).is_some_and(|b| b.level == level),
+        SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| r.level == level),
     };
     model_solids(model)
         .into_iter()
@@ -1183,6 +1239,38 @@ mod tests {
             .map(|p| p[2])
             .fold(f64::MIN, f64::max);
         assert!((top - (1.0 + 0.1 * (hi - lo))).abs() < 1e-9, "{top}");
+    }
+
+    /// A hip roof: one plate per plane, each closed, the volume that of
+    /// the planes' plan areas by their vertical thickness.
+    #[test]
+    fn roofs_are_plates_per_plane() {
+        let (mut m, w) = model();
+        let l = m.wall(w).unwrap().level;
+        let t = m.slabs().next().unwrap().slab_type;
+        let r = m
+            .add_roof(archisim_core::NewRoof {
+                roof_type: t,
+                level: l,
+                outline: vec![p(0.0, 0.0), p(6.0, 0.0), p(6.0, 4.0), p(0.0, 4.0)],
+                slopes: vec![Some(0.5)],
+                base_offset: 0.0,
+                overhang: 0.5,
+            })
+            .unwrap();
+        let solids = roof_solids(&m, r);
+        let layers = m.slab_type(t).unwrap().layers.len();
+        assert_eq!(solids.len(), 4 * layers);
+        for plane in solids.chunks(layers) {
+            assert_closed(plane);
+        }
+        let thickness = m.slab_type(t).unwrap().thickness();
+        let volume: f64 = solids.iter().map(Solid::volume).sum();
+        let expected = 7.0 * 5.0 * thickness * (1.25f64).sqrt();
+        assert!((volume - expected).abs() < 1e-9, "{volume} {expected}");
+        assert!(model_solids(&m)
+            .iter()
+            .any(|s| s.owner == SolidOwner::Roof(r)));
     }
 
     /// Every edge of the solids together is shared by exactly two

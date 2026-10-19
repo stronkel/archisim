@@ -14,10 +14,12 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod phases;
+mod roofs;
 mod sections;
 mod spaces;
 mod structure;
 pub use phases::*;
+pub use roofs::*;
 pub use sections::*;
 pub use spaces::*;
 pub use structure::*;
@@ -748,6 +750,12 @@ pub enum ModelError {
     ZeroLengthSection,
     /// A slab slope with no direction or steeper than [`MAX_SLAB_SLOPE`].
     InvalidSlope,
+    UnknownRoof(RoofId),
+    /// A roof with no sloping side, a pitch out of range, a side without
+    /// one, or too much overhang.
+    InvalidRoof,
+    /// A roof footprint with a re-entrant corner.
+    RoofNotConvex,
     /// Another room on the level already has that number.
     DuplicateNumber(String),
 }
@@ -844,6 +852,15 @@ impl fmt::Display for ModelError {
             ModelError::UnknownElement(id) => write!(f, "element {id} does not exist"),
             ModelError::UnknownSection(id) => write!(f, "section {id} does not exist"),
             ModelError::ZeroLengthSection => write!(f, "a section line needs two different points"),
+            ModelError::UnknownRoof(id) => write!(f, "unknown roof {id}"),
+            ModelError::InvalidRoof => write!(
+                f,
+                "a roof needs a pitch for each side (or a gable), at least one sloping side, pitches up to {MAX_SLAB_SLOPE} and an overhang up to {MAX_OVERHANG} m"
+            ),
+            ModelError::RoofNotConvex => write!(
+                f,
+                "a roof footprint cannot have re-entrant corners (draw one roof per wing)"
+            ),
             ModelError::InvalidSlope => write!(
                 f,
                 "a slab slope needs a direction and at most {MAX_SLAB_SLOPE} m per metre"
@@ -956,6 +973,7 @@ pub struct ModelParts {
     /// Elements that are not new: (id, phase).
     pub phases: Vec<(u64, Phase)>,
     pub sections: Vec<SectionLine>,
+    pub roofs: Vec<Roof>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -1005,6 +1023,7 @@ pub struct Model {
     /// Phases of the elements that are not new, by id.
     phases: BTreeMap<u64, Phase>,
     sections: BTreeMap<SectionId, SectionLine>,
+    roofs: BTreeMap<RoofId, Roof>,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -1035,6 +1054,7 @@ impl Model {
             spaces: BTreeMap::new(),
             phases: BTreeMap::new(),
             sections: BTreeMap::new(),
+            roofs: BTreeMap::new(),
             draw_phase: Phase::New,
         }
     }
@@ -1125,6 +1145,7 @@ impl Model {
         self.slabs.retain(|_, s| s.level != id);
         self.remove_members_on_level(id);
         self.spaces.retain(|_, s| s.level != id);
+        self.roofs.retain(|_, r| r.level != id);
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
@@ -1148,7 +1169,7 @@ impl Model {
         (
             walls.len(),
             openings,
-            self.slabs_on_level(id).count(),
+            self.slabs_on_level(id).count() + self.roofs_on_level(id).count(),
             annotations,
         )
     }
@@ -1787,7 +1808,7 @@ impl Model {
     }
 
     pub fn remove_slab_type(&mut self, id: SlabTypeId) -> Result<SlabType, ModelError> {
-        let users = self.slabs.values().filter(|s| s.slab_type == id).count();
+        let users = self.slab_type_users(id);
         if users > 0 {
             return Err(ModelError::InUse(format!("{users} slab(s) use this type")));
         }
@@ -1819,6 +1840,7 @@ impl Model {
     /// How many slabs use a slab type.
     pub fn slab_type_users(&self, id: SlabTypeId) -> usize {
         self.slabs.values().filter(|s| s.slab_type == id).count()
+            + self.roofs.values().filter(|r| r.roof_type == id).count()
     }
 
     // ---- Slabs --------------------------------------------------------
@@ -2986,6 +3008,7 @@ impl Model {
             spaces: self.spaces.values().cloned().collect(),
             phases: self.phase_table(),
             sections: self.sections.values().cloned().collect(),
+            roofs: self.roofs.values().cloned().collect(),
         }
     }
 
@@ -3187,6 +3210,7 @@ impl Model {
 
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
         model.restore_spaces(parts.spaces, &mut claim)?;
+        model.restore_roofs(parts.roofs, &mut claim)?;
         model.restore_phases(parts.phases)?;
         model.restore_sections(parts.sections, &mut claim)?;
 

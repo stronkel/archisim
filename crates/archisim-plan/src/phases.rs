@@ -126,6 +126,22 @@ pub fn phase_model(model: &Model, view: PhaseView) -> Option<Model> {
             }
         }
     }
+    let roofs: Vec<_> = m.roofs().map(|r| (r.id, r.roof_type)).collect();
+    for (r, t) in roofs {
+        let (show, marked) = view.shows(m.phase(r.0));
+        if !show {
+            let _ = m.remove_roof(r);
+        } else if marked {
+            let Some(st) = m.slab_type(t).cloned() else {
+                continue;
+            };
+            if let Ok(nt) =
+                m.add_slab_type(format!("(fase) {}", r.0), st.function, solid(&st.layers))
+            {
+                let _ = m.edit_roof(r, |r| r.roof_type = nt);
+            }
+        }
+    }
     let columns: Vec<_> = m.columns().map(|c| (c.id, c.member_type)).collect();
     for (c, t) in columns {
         let (show, marked) = view.shows(m.phase(c.0));

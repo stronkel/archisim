@@ -636,8 +636,38 @@ mod tests {
             depth: 12.0,
         })
         .unwrap();
+        // A roof with a gable, and an inclined slab.
+        let st = m.slab_types().next().unwrap().id;
+        m.add_roof(archisim_core::NewRoof {
+            roof_type: st,
+            level: levels[1],
+            outline: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(5.0, 0.0),
+                Point2::new(5.0, 4.0),
+                Point2::new(0.0, 4.0),
+            ],
+            slopes: vec![Some(0.3), None, Some(0.35), Some(0.3)],
+            base_offset: 0.1,
+            overhang: 0.4,
+        })
+        .unwrap();
+        let slab = m.slabs().next().unwrap().id;
+        m.set_slab_slope(
+            slab,
+            Some(archisim_core::SlabSlope {
+                from: Point2::new(0.0, 0.0),
+                to: Point2::new(0.0, 1.0),
+                slope: -0.02,
+            }),
+        )
+        .unwrap();
         let text = to_string(&m);
         assert!(text.contains("\"shape\": \"i_shape\""), "{text}");
+        assert!(
+            text.contains("\"slopes\": [") && text.contains("null"),
+            "{text}"
+        );
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.

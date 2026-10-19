@@ -19,11 +19,13 @@ use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
 mod phases;
+mod roofs;
 mod sections;
 mod spaces;
 mod structure;
 mod types;
 
+pub use roofs::{slopes_for, RoofKind, RoofSettings};
 pub use spaces::{space_height, SpaceSettings, USAGES};
 pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 
@@ -262,6 +264,7 @@ impl Editor {
             Element::Beam(id) => model.beam(*id).is_some(),
             Element::Space(id) => model.space(*id).is_some(),
             Element::Section(id) => model.section(*id).is_some(),
+            Element::Roof(id) => model.roof(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -443,6 +446,9 @@ impl Editor {
                     Element::Section(id) => {
                         m.remove_section(*id)?;
                     }
+                    Element::Roof(id) => {
+                        m.remove_roof(*id)?;
+                    }
                     Element::Opening(_) => {}
                 }
             }
@@ -581,6 +587,7 @@ impl Editor {
                         | Element::Column(_)
                         | Element::Beam(_)
                         | Element::Space(_)
+                        | Element::Roof(_)
                 )
             })
             .collect();
@@ -595,6 +602,7 @@ impl Editor {
                     Element::Column(id) => m.set_column_level(*id, level)?,
                     Element::Beam(id) => m.edit_beam(*id, |b| b.level = level)?,
                     Element::Space(id) => m.edit_space(*id, |s| s.level = level)?,
+                    Element::Roof(id) => m.edit_roof(*id, |r| r.level = level)?,
                     _ => {}
                 }
             }

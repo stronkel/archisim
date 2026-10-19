@@ -159,10 +159,18 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
-    // A porch to the south (v0.25): a roof slab on a concrete beam carried
-    // by two columns, tied to the roof level so they follow it.
+    // A porch to the south (v0.25): a lean-to roof of tiles falling 10 %
+    // away from the house, on a concrete beam carried by two columns, tied
+    // to the roof level so they follow it. The roof meets the façade at
+    // the top of the flat roof; the beam's top follows the roof's soffit.
     doc.transact("Porche", |m| {
         let beam_depth = m.member_type(lib.beam).map_or(0.0, |t| t.profile.size().1);
+        let pitch = 0.1;
+        let depth = 2.85;
+        let base = -pitch * depth;
+        let tiles = m.slab_type(lib.pitched_roof).map_or(0.0, |t| t.thickness());
+        let soffit_at = |y: f64| base + pitch * (y + depth) - tiles * (1.0 + pitch * pitch).sqrt();
+        let beam_top = soffit_at(-2.7);
         for x in [0.3, 11.7] {
             m.add_column(NewColumn {
                 member_type: lib.column,
@@ -172,7 +180,7 @@ pub fn build() -> Result<Document, ModelError> {
                 base_offset: 0.0,
                 top: archisim_core::WallTop::Level {
                     level: cubierta,
-                    offset: -roof_depth - beam_depth,
+                    offset: beam_top - beam_depth,
                 },
                 height: 0.0,
             })?;
@@ -182,18 +190,21 @@ pub fn build() -> Result<Document, ModelError> {
             level: cubierta,
             start: Point2::new(0.15, -2.7),
             end: Point2::new(11.85, -2.7),
-            top_offset: -roof_depth,
+            top_offset: beam_top,
         })?;
-        m.add_slab(NewSlab {
-            slab_type: cubierta_plana,
+        m.add_roof(archisim_core::NewRoof {
+            roof_type: lib.pitched_roof,
             level: cubierta,
             outline: vec![
-                Point2::new(0.0, -2.85),
-                Point2::new(12.0, -2.85),
+                Point2::new(0.0, -depth),
+                Point2::new(12.0, -depth),
                 Point2::new(12.0, 0.0),
                 Point2::new(0.0, 0.0),
             ],
-            top_offset: 0.0,
+            // The south side slopes; the others are gables.
+            slopes: vec![Some(pitch), None, None, None],
+            base_offset: base,
+            overhang: 0.0,
         })?;
         Ok(())
     })?;
@@ -311,7 +322,8 @@ mod tests {
         let doc = super::build().unwrap();
         let m = doc.model();
         assert_eq!(m.walls().count(), 7);
-        assert_eq!(m.slabs().count(), 4);
+        assert_eq!(m.slabs().count(), 3);
+        assert_eq!(m.roofs().count(), 1);
         assert_eq!(m.columns().count(), 2);
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);

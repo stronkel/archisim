@@ -21,6 +21,9 @@ Checks:
      constituent set, its common property set and quantities, and 3D
      geometry. Wall volumes are compared with their net volume, after the
      openings are cut.
+  8. Every pitched roof (IfcRoof) is contained in a storey, made of roof
+     slabs (checked as slabs above) and has its common property set and
+     base quantities, its area the sum of its planes'.
 
 Usage:  python3 scripts/validate_ifc.py out/demo.ifc
 Needs:  pip install ifcopenshell
@@ -210,6 +213,24 @@ def main(path: str) -> int:
             except Exception as exc:
                 errors.append(f"{name}: geometry failed: {exc}")
 
+    roofs = f.by_type("IfcRoof")
+    for r in roofs:
+        name = r.Name
+        parts = [p for rel in r.IsDecomposedBy for p in rel.RelatedObjects]
+        if not parts or not all(p.is_a("IfcSlab") and p.PredefinedType == "ROOF" for p in parts):
+            errors.append(f"{name}: not made of roof slabs")
+        if not r.ContainedInStructure:
+            errors.append(f"{name}: not contained in a storey")
+        psets = eu.get_psets(r)
+        for required in ("Pset_RoofCommon", "Qto_RoofBaseQuantities"):
+            if required not in psets:
+                errors.append(f"{name}: missing {required}")
+        q = psets.get("Qto_RoofBaseQuantities", {})
+        surface = sum(eu.get_psets(p).get("Qto_SlabBaseQuantities", {}).get("NetArea", 0)
+                      for p in parts)
+        if q and abs(q.get("NetArea", 0) - surface) > 1e-4:
+            errors.append(f"{name}: area {q.get('NetArea')} != planes {surface}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
                 ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
@@ -217,7 +238,8 @@ def main(path: str) -> int:
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
           f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
-          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(storeys)} plantas, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, "
+          f"{len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:
         print(f"{len(errors)} error(es):")

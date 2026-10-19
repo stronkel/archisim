@@ -68,6 +68,8 @@ pub enum Tool {
     Zone,
     /// Section lines (elevations are made from the navigator).
     Section,
+    /// Pitched roofs.
+    Roof,
 }
 
 impl Tool {
@@ -82,6 +84,7 @@ impl Tool {
                 | Tool::Beam
                 | Tool::Zone
                 | Tool::Section
+                | Tool::Roof
         )
     }
 
@@ -98,6 +101,7 @@ impl Tool {
             "g" => Some(Tool::Beam),
             "z" => Some(Tool::Zone),
             "s" => Some(Tool::Section),
+            "t" => Some(Tool::Roof),
             _ => None,
         }
     }
@@ -185,6 +189,8 @@ pub struct ArchiSimApp {
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
     pub space_settings: crate::editor::SpaceSettings,
+    pub roof_settings: crate::editor::RoofSettings,
+    pub roof_tool: SlabTool,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
     /// The levels dialog is open.
@@ -290,6 +296,7 @@ impl ArchiSimApp {
         let door_settings = default_opening_settings(ed.model(), true);
         let window_settings = default_opening_settings(ed.model(), false);
         let (column_settings, beam_settings) = default_member_settings(ed.model());
+        let roof_settings = roof_ui::default_roof_settings(ed.model());
         let level = ed.level;
         Self {
             ed,
@@ -310,6 +317,8 @@ impl ArchiSimApp {
             section_cache: None,
             section_hover: None,
             space_settings: Default::default(),
+            roof_settings,
+            roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             show_levels: false,
             level_to_delete: None,
@@ -395,6 +404,7 @@ impl ArchiSimApp {
             self.dim_tool.finish();
             self.beam_tool.finish();
             self.zone_tool.finish();
+            self.roof_tool.finish();
             self.section_tool.anchor = None;
             self.placement = None;
             self.window_start = None;
@@ -414,6 +424,7 @@ impl ArchiSimApp {
         self.door_settings = default_opening_settings(ed.model(), true);
         self.window_settings = default_opening_settings(ed.model(), false);
         (self.column_settings, self.beam_settings) = default_member_settings(ed.model());
+        self.roof_settings = roof_ui::default_roof_settings(ed.model());
         self.beam_tool.finish();
         self.ed = ed;
         self.drag = None;
@@ -1427,6 +1438,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod roof_ui;
 mod section_ui;
 mod space_ui;
 mod structure_ui;

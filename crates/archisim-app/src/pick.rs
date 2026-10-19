@@ -22,6 +22,8 @@ pub enum Element {
     Space(archisim_core::SpaceId),
     /// A section or elevation line (seen on every level).
     Section(archisim_core::SectionId),
+    /// A pitched roof, picked by its eaves.
+    Roof(archisim_core::RoofId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -77,6 +79,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .map(|b| archisim_plan::members::beam_outline(model, b)),
         Element::Space(id) => model.space(id).map(|s| s.outline.clone()),
         Element::Section(id) => model.section(id).map(section_outline),
+        Element::Roof(id) => model.roof(id).map(|r| r.eaves()),
     }
 }
 
@@ -154,6 +157,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
+    v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
     v
 }
@@ -175,6 +179,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Opening(id) => model.opening(id).map(|o| TypeOf::Opening(o.opening_type)),
         Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
         Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
+        Element::Roof(id) => model.roof(id).map(|r| TypeOf::Slab(r.roof_type)),
         Element::Dimension(_) | Element::Mark(_) | Element::Space(_) | Element::Section(_) => None,
     }
 }
@@ -206,6 +211,7 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Column(_) => 1,
         Element::Wall(_) => 2,
         Element::Beam(_) => 3,
+        Element::Roof(_) => 3,
         Element::Slab(_) => 4,
     };
     elements_on_level(model, level)

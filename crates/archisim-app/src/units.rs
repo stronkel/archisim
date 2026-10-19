@@ -169,6 +169,9 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownSpace(_) => "el local ya no existe".into(),
         ModelError::UnknownSection(_) => "la sección ya no existe".into(),
         ModelError::ZeroLengthSection => "la sección necesita dos puntos distintos".into(),
+        ModelError::UnknownRoof(_) => "la cubierta ya no existe".into(),
+        ModelError::InvalidRoof => "cada lado necesita una pendiente (de 0 a 300 %) o ser piñón, al menos uno con pendiente, y el alero no puede pasar de 3 m".into(),
+        ModelError::RoofNotConvex => "el contorno de la cubierta no puede tener esquinas entrantes: dibuja una cubierta por cada ala (en L, dos)".into(),
         ModelError::InvalidSlope => {
             "la pendiente necesita una dirección y no puede pasar del 300 %".into()
         }
@@ -280,6 +283,10 @@ fn es_what(what: &str) -> String {
         "flange thickness" => "el espesor de las alas",
         "space height" => "la altura del local",
         "section start" => "el inicio de la sección",
+        "roof base offset" => "la altura de la cubierta",
+        "roof overhang" => "el alero",
+        "roof outline point" => "un punto del contorno de la cubierta",
+        "roof slope" => "la pendiente de la cubierta",
         "slab slope start" => "el inicio de la flecha de pendiente",
         "slab slope end" => "el final de la flecha de pendiente",
         "slab slope" => "la pendiente",

@@ -75,6 +75,10 @@ typed_id!(
     /// Identifies a [`crate::Space`] (a room).
     SpaceId
 );
+typed_id!(
+    /// Identifies a [`crate::Roof`].
+    RoofId
+);
 
 typed_id!(
     /// Identifies a [`crate::Family`] loaded in the project.

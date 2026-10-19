@@ -104,11 +104,11 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Ventanas en muros",
             ),
             tile(
-                Pick::Later("2.4"),
+                Pick::Tool(Tool::Roof),
                 Icon::Roof,
                 "Cubierta",
-                "",
-                "Cubiertas inclinadas",
+                "T",
+                "Cubiertas inclinadas por faldones: a cuatro, dos o un agua, con alero",
             ),
             tile(Pick::Later("2.6"), Icon::Stair, "Escalera", "", "Escaleras"),
             tile(

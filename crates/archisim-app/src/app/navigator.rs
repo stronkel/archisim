@@ -249,6 +249,24 @@ impl ArchiSimApp {
                 })
                 .collect()
         };
+        // Roofs, by type.
+        let roofs = m
+            .slab_types()
+            .filter(|t| m.roofs().any(|r| r.roof_type == t.id))
+            .map(|t| TypeRow {
+                tab: Some(TypesTab::Slabs),
+                id: t.id.0,
+                badge: None,
+                name: t.name.clone(),
+                count: m.roofs().filter(|r| r.roof_type == t.id).count(),
+                here: m
+                    .roofs_on_level(self.ed.level)
+                    .filter(|r| r.roof_type == t.id)
+                    .map(|r| Element::Roof(r.id))
+                    .collect(),
+                value: None,
+            })
+            .collect();
         // Rooms of the active level, by number, with their usable area.
         let mut rooms: Vec<&archisim_core::Space> = m.spaces_on_level(self.ed.level).collect();
         rooms.sort_by(|a, b| a.number.cmp(&b.number).then(a.name.cmp(&b.name)));
@@ -278,6 +296,7 @@ impl ArchiSimApp {
                 members(archisim_core::MemberUsage::Beam),
             ),
             ("Forjados", Icon::Slab, slabs),
+            ("Cubiertas", Icon::Roof, roofs),
             ("Puertas", Icon::Door, openings(true)),
             ("Ventanas", Icon::Window, openings(false)),
         ]

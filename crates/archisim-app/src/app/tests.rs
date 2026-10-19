@@ -2061,3 +2061,48 @@ fn inclined_slab_with_its_arrow() {
     h.app.ed.set_slab_slope(slab.id, None).unwrap();
     assert!(h.model().slab(slab.id).unwrap().slope.is_none());
 }
+
+/// The roof tool (T): a click inside the building makes a hip roof over
+/// the outer faces of its walls, on the level above; Properties turn it
+/// into a gable roof; it is selected, moved and deleted like the rest.
+#[test]
+fn roof_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let pb = h.app.ed.level;
+    let top = h.app.ed.add_level("Cubierta", 3.0).unwrap();
+    h.app.ed.level = pb;
+    h.frame();
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("t");
+    assert_eq!(h.app.tool, Tool::Roof);
+    h.click_at(p(6.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.roofs().count(), 1, "{:?}", h.app.message);
+    let r = m.roofs().next().unwrap().clone();
+    assert_eq!(r.level, top);
+    assert_eq!(r.planes().len(), 4);
+    // Over the outer faces of the 12 × 9 outline, 50 cm of eaves.
+    assert!((archisim_core::signed_area(&r.eaves()) - 13.0 * 10.0).abs() < 1e-6);
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Roof(r.id)]
+    );
+    h.app
+        .ed
+        .set_roof_kind(r.id, crate::editor::RoofKind::Gable, 0.3)
+        .unwrap();
+    assert_eq!(h.model().roof(r.id).unwrap().planes().len(), 2);
+    // It shows in the plan of its level and in 3D.
+    let svg = archisim_plan::render_plan(h.model(), top, &archisim_plan::PlanOptions::default());
+    assert!(svg.contains("class=\"roof\""));
+    assert!(archisim_geom::solid::model_solids(h.model())
+        .iter()
+        .any(|s| s.owner == archisim_geom::solid::SolidOwner::Roof(r.id)));
+    // Deleted with Supr.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Roof(r.id)].into_iter().collect();
+    h.key(Key::Delete);
+    assert_eq!(h.model().roofs().count(), 0);
+}

@@ -256,6 +256,9 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         for b in m.beams() {
             v.push((b.guid.to_string(), m.phase(b.id.0)));
         }
+        for r in m.roofs() {
+            v.push((r.guid.to_string(), m.phase(r.id.0)));
+        }
         v.sort();
         v
     };
@@ -270,6 +273,37 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             a.spaces().count(),
             b.spaces().count()
         ));
+    }
+    if a.roofs().count() != b.roofs().count() {
+        diff(format!(
+            "número de cubiertas: {} / {}",
+            a.roofs().count(),
+            b.roofs().count()
+        ));
+    }
+    for r in a.roofs() {
+        let Some(t) = b.roofs().find(|t| t.guid == r.guid) else {
+            diff(format!("cubierta {} falta", r.guid));
+            continue;
+        };
+        let same = r.outline.len() == t.outline.len()
+            && r.outline
+                .iter()
+                .zip(&t.outline)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && r.slopes.iter().zip(&t.slopes).all(|(x, y)| match (x, y) {
+                (Some(x), Some(y)) => close(*x, *y),
+                (None, None) => true,
+                _ => false,
+            })
+            && close(r.base_offset, t.base_offset)
+            && close(r.overhang, t.overhang)
+            && level_guid(a, r.level) == level_guid(b, t.level)
+            && a.slab_type(r.roof_type).map(|x| &x.guid)
+                == b.slab_type(t.roof_type).map(|x| &x.guid);
+        if !same {
+            diff(format!("cubierta {}: {:?} / {:?}", r.guid, r, t));
+        }
     }
     for s in a.spaces() {
         let Some(t) = b.spaces().find(|t| t.guid == s.guid) else {

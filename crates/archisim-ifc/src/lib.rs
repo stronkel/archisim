@@ -44,6 +44,7 @@
 
 pub mod import;
 mod members;
+mod roofs;
 mod spaces;
 pub mod step;
 pub mod step_read;
@@ -162,6 +163,93 @@ impl<'a> Exporter<'a> {
         };
         let rel = relative_to.map_or("$".to_string(), |r| r.to_string());
         self.w.add(format!("IFCLOCALPLACEMENT({rel},{ap})"))
+    }
+
+    /// Placement and shape of a slab (level or inclined): placed at the
+    /// soffit and swept up by its thickness; inclined, a profile on the
+    /// soffit in tilted axes swept plumb.
+    fn slab_shape(
+        &mut self,
+        slab: &archisim_core::Slab,
+        thickness: f64,
+        storey_pl: Ref,
+    ) -> (Ref, Ref) {
+        let vertical = slab.vertical(thickness);
+        let solid = match slab.slope.and_then(|s| s.direction().map(|u| (s, u))) {
+            None => {
+                let loc = self.point3(0.0, 0.0, slab.top_offset - thickness);
+                let pl = self.placement(Some(storey_pl), loc, None);
+                let profile = self.slab_profile(slab, &|p| p);
+                let solid_pl = self
+                    .w
+                    .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
+                let solid = self.w.add(format!(
+                    "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                    self.z,
+                    real(thickness)
+                ));
+                (pl, solid)
+            }
+            Some((slope, u)) => {
+                // Inclined: the profile lies on the soffit, in axes
+                // tilted with it (x up the slope, z square to it), and
+                // is swept vertically, so the edges stay plumb.
+                let loc = self.point3(0.0, 0.0, 0.0);
+                let pl = self.placement(Some(storey_pl), loc, None);
+                let k = slope.slope;
+                let n = (1.0 + k * k).sqrt();
+                let x3 = [u.x / n, u.y / n, k / n];
+                let z3 = [-k * u.x / n, -k * u.y / n, 1.0 / n];
+                let y3 = [-u.y, u.x, 0.0];
+                let o = slope.from;
+                let o3 = [o.x, o.y, slab.top_offset - vertical];
+                let soffit = |p: Point2| slab.top_at(p) - vertical;
+                let to_local = |p: Point2| {
+                    let d = [p.x - o3[0], p.y - o3[1], soffit(p) - o3[2]];
+                    Point2::new(
+                        d[0] * x3[0] + d[1] * x3[1] + d[2] * x3[2],
+                        d[0] * y3[0] + d[1] * y3[1] + d[2] * y3[2],
+                    )
+                };
+                let profile = self.slab_profile(slab, &to_local);
+                let at = self.point3(o3[0], o3[1], o3[2]);
+                let axis = self.w.add(format!(
+                    "IFCDIRECTION(({},{},{}))",
+                    real(z3[0]),
+                    real(z3[1]),
+                    real(z3[2])
+                ));
+                let xdir = self.w.add(format!(
+                    "IFCDIRECTION(({},{},{}))",
+                    real(x3[0]),
+                    real(x3[1]),
+                    real(x3[2])
+                ));
+                let solid_pl = self
+                    .w
+                    .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+                // The vertical in the tilted axes.
+                let up = self.w.add(format!(
+                    "IFCDIRECTION(({},0.,{}))",
+                    real(k / n),
+                    real(1.0 / n)
+                ));
+                let solid = self.w.add(format!(
+                    "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{up},{})",
+                    real(vertical)
+                ));
+                (pl, solid)
+            }
+        };
+        let (pl, solid) = solid;
+        let body_rep = self.w.add(format!(
+            "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+            self.body_ctx
+        ));
+        let shape = self
+            .w
+            .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body_rep}))"));
+        (pl, shape)
     }
 
     /// The profile of a slab (its outline, with its holes as voids), each
@@ -1199,81 +1287,7 @@ impl<'a> Exporter<'a> {
                 continue;
             };
             let thickness = stype.thickness();
-            let vertical = slab.vertical(thickness);
-            let solid = match slab.slope.and_then(|s| s.direction().map(|u| (s, u))) {
-                None => {
-                    let loc = self.point3(0.0, 0.0, slab.top_offset - thickness);
-                    let pl = self.placement(Some(storey_pl), loc, None);
-                    let profile = self.slab_profile(slab, &|p| p);
-                    let solid_pl = self
-                        .w
-                        .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
-                    let solid = self.w.add(format!(
-                        "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
-                        self.z,
-                        real(thickness)
-                    ));
-                    (pl, solid)
-                }
-                Some((slope, u)) => {
-                    // Inclined: the profile lies on the soffit, in axes
-                    // tilted with it (x up the slope, z square to it), and
-                    // is swept vertically, so the edges stay plumb.
-                    let loc = self.point3(0.0, 0.0, 0.0);
-                    let pl = self.placement(Some(storey_pl), loc, None);
-                    let k = slope.slope;
-                    let n = (1.0 + k * k).sqrt();
-                    let x3 = [u.x / n, u.y / n, k / n];
-                    let z3 = [-k * u.x / n, -k * u.y / n, 1.0 / n];
-                    let y3 = [-u.y, u.x, 0.0];
-                    let o = slope.from;
-                    let o3 = [o.x, o.y, slab.top_offset - vertical];
-                    let soffit = |p: Point2| slab.top_at(p) - vertical;
-                    let to_local = |p: Point2| {
-                        let d = [p.x - o3[0], p.y - o3[1], soffit(p) - o3[2]];
-                        Point2::new(
-                            d[0] * x3[0] + d[1] * x3[1] + d[2] * x3[2],
-                            d[0] * y3[0] + d[1] * y3[1] + d[2] * y3[2],
-                        )
-                    };
-                    let profile = self.slab_profile(slab, &to_local);
-                    let at = self.point3(o3[0], o3[1], o3[2]);
-                    let axis = self.w.add(format!(
-                        "IFCDIRECTION(({},{},{}))",
-                        real(z3[0]),
-                        real(z3[1]),
-                        real(z3[2])
-                    ));
-                    let xdir = self.w.add(format!(
-                        "IFCDIRECTION(({},{},{}))",
-                        real(x3[0]),
-                        real(x3[1]),
-                        real(x3[2])
-                    ));
-                    let solid_pl = self
-                        .w
-                        .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
-                    // The vertical in the tilted axes.
-                    let up = self.w.add(format!(
-                        "IFCDIRECTION(({},0.,{}))",
-                        real(k / n),
-                        real(1.0 / n)
-                    ));
-                    let solid = self.w.add(format!(
-                        "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{up},{})",
-                        real(vertical)
-                    ));
-                    (pl, solid)
-                }
-            };
-            let (pl, solid) = solid;
-            let body_rep = self.w.add(format!(
-                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
-                self.body_ctx
-            ));
-            let shape = self
-                .w
-                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body_rep}))"));
+            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl);
             let name = format!("{} {}", stype.name, slab.id.0);
             let sl = self.w.add(format!(
                 "IFCSLAB({},$,{},$,{},{pl},{shape},{},.{}.)",
@@ -1327,6 +1341,7 @@ impl<'a> Exporter<'a> {
         }
 
         self.write_members(&materials, &storeys, &mut contained);
+        self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
         self.write_spaces(&storeys);
 
         for (level, elements) in &contained {

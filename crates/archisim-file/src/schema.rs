@@ -56,6 +56,26 @@ pub(crate) struct ProjectFile {
     /// Section and elevation lines (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sections: Vec<Section>,
+    /// Pitched roofs (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roofs: Vec<Roof>,
+}
+
+/// A pitched roof (version 7): its footprint, the pitch of each side
+/// (`null`: a gable), the height of its top face at the footprint and the
+/// overhang.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Roof {
+    pub id: u64,
+    pub guid: String,
+    #[serde(rename = "type")]
+    pub roof_type: u64,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    pub slopes: Vec<Option<f64>>,
+    pub base_offset: f64,
+    pub overhang: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -779,6 +799,20 @@ impl ProjectFile {
                     depth: s.depth,
                 })
                 .collect(),
+            roofs: p
+                .roofs
+                .into_iter()
+                .map(|r| Roof {
+                    id: r.id.0,
+                    guid: r.guid.to_string(),
+                    roof_type: r.roof_type.0,
+                    level: r.level.0,
+                    outline: r.outline.into_iter().map(xy).collect(),
+                    slopes: r.slopes,
+                    base_offset: r.base_offset,
+                    overhang: r.overhang,
+                })
+                .collect(),
         }
     }
 
@@ -846,6 +880,22 @@ impl ProjectFile {
                     depth: s.depth,
                 })
                 .collect(),
+            roofs: self
+                .roofs
+                .iter()
+                .map(|r| {
+                    Ok(core::Roof {
+                        id: core::RoofId(r.id),
+                        guid: guid(&format!("roof {}", r.id), &r.guid)?,
+                        roof_type: core::SlabTypeId(r.roof_type),
+                        level: core::LevelId(r.level),
+                        outline: r.outline.iter().copied().map(pt).collect(),
+                        slopes: r.slopes.clone(),
+                        base_offset: r.base_offset,
+                        overhang: r.overhang,
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
         };
 
         for l in self.levels {

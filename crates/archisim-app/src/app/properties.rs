@@ -53,6 +53,7 @@ impl ArchiSimApp {
             [Element::Beam(id)] => self.beam_properties(ui, *id),
             [Element::Space(id)] => self.space_properties(ui, *id),
             [Element::Section(id)] => self.section_properties(ui, *id),
+            [Element::Roof(id)] => self.roof_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -197,6 +198,7 @@ impl ArchiSimApp {
             Tool::Beam => self.beam_tool_properties(ui),
             Tool::Zone => self.space_tool_properties(ui),
             Tool::Section => self.section_tool_properties(ui),
+            Tool::Roof => self.roof_tool_properties(ui),
         }
     }
 

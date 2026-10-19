@@ -56,6 +56,7 @@ impl ArchiSimApp {
         self.draw_member_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
+        self.draw_roof_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -87,7 +88,8 @@ impl ArchiSimApp {
             | Tool::Column
             | Tool::Beam
             | Tool::Zone
-            | Tool::Section => CursorIcon::Crosshair,
+            | Tool::Section
+            | Tool::Roof => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -236,6 +238,34 @@ impl ArchiSimApp {
                     self.wand_preview = Some((key.0, key.1, key.2, found));
                 }
             }
+            Tool::Roof if self.roof_wand() => {
+                let p = crate::snap::round_point(raw);
+                self.cursor = Some(Snap::at(p, SnapKind::Free));
+                self.hover = None;
+                let contour = Contour::ExteriorFace;
+                let key = (self.ed.revision(), p, contour);
+                let fresh = self
+                    .wand_preview
+                    .as_ref()
+                    .is_some_and(|w| (w.0, w.1, w.2) == key);
+                if !fresh {
+                    let found = room_outline(model, self.ed.level, p, contour)
+                        .map_err(|e| explain_room(&e));
+                    self.wand_preview = Some((key.0, key.1, key.2, found));
+                }
+            }
+            Tool::Roof => {
+                let mut s = self.snap_at(raw, reach, self.roof_tool.corners(), &BTreeSet::new());
+                if let Some(a) = self.roof_tool.anchor() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::Zone => {
                 let mut s = self.snap_at(raw, reach, self.zone_tool.corners(), &BTreeSet::new());
                 if let Some(a) = self.zone_tool.anchor() {
@@ -355,7 +385,8 @@ impl ArchiSimApp {
             || self.slab_tool.is_drawing()
             || self.dim_tool.is_active()
             || self.beam_tool.is_drawing()
-            || self.zone_tool.is_drawing();
+            || self.zone_tool.is_drawing()
+            || self.roof_tool.is_drawing();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -364,6 +395,7 @@ impl ArchiSimApp {
                         Tool::Wall => self.wall_tool.type_char(c),
                         Tool::Slab => self.slab_tool.type_char(c),
                         Tool::Zone => self.zone_tool.type_char(c),
+                        Tool::Roof => self.roof_tool.type_char(c),
                         _ => false,
                     };
                 }
@@ -382,6 +414,7 @@ impl ArchiSimApp {
                 Tool::Wall => self.wall_tool.backspace(),
                 Tool::Slab => self.slab_tool.backspace(),
                 Tool::Zone => self.zone_tool.backspace(),
+                Tool::Roof => self.roof_tool.backspace(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -441,6 +474,13 @@ impl ArchiSimApp {
                     ),
                     SlabOutcome::Nothing => {}
                 },
+                Tool::Roof => match self.roof_tool.enter(towards) {
+                    SlabOutcome::Build(outline) => self.build_roof(outline),
+                    SlabOutcome::Invalid => self.complain(
+                        "El contorno necesita al menos tres esquinas y no puede cruzarse.",
+                    ),
+                    SlabOutcome::Nothing => {}
+                },
                 Tool::Zone => match self.zone_tool.enter(towards) {
                     SlabOutcome::Build(outline) => self.build_space(outline),
                     SlabOutcome::Invalid => self.complain(
@@ -469,6 +509,11 @@ impl ArchiSimApp {
                 Tool::Door | Tool::Window | Tool::Column => self.set_tool(Tool::Arrow),
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Roof => {
+                    if !self.roof_tool.escape() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -594,6 +639,16 @@ impl ArchiSimApp {
             Tool::Door | Tool::Window => {
                 if response.clicked_by(PointerButton::Primary) {
                     self.place_opening();
+                }
+            }
+            Tool::Roof => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.roof_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.roof_tool.finish();
                 }
             }
             Tool::Zone => {
@@ -1000,6 +1055,7 @@ impl ArchiSimApp {
             (Grip::SpaceLabel { .. }, _) => "Rótulo",
             (Grip::SectionEnd { .. }, _) => "Estirar sección",
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
+            (Grip::RoofCorner { .. }, _) => "Esquina",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
@@ -1023,13 +1079,14 @@ impl ArchiSimApp {
 
     /// The room the magic wand would turn into a slab.
     fn draw_wand_preview(&self, painter: &egui::Painter, rect: Rect) {
-        let (Tool::Slab | Tool::Zone, Some(c), Some((_, _, _, found))) =
+        let (Tool::Slab | Tool::Zone | Tool::Roof, Some(c), Some((_, _, _, found))) =
             (self.tool, self.cursor, &self.wand_preview)
         else {
             return;
         };
         let off = match self.tool {
             Tool::Zone => !self.zone_wand(),
+            Tool::Roof => !self.roof_wand(),
             _ => self.slab_tool.is_drawing() || !(self.slab_settings.wand || self.space_held),
         };
         if off {
@@ -1357,6 +1414,7 @@ impl ArchiSimApp {
             Tool::Beam => self.beam_tool.anchor,
             Tool::Section => self.section_tool.anchor,
             Tool::Zone => self.zone_tool.anchor(),
+            Tool::Roof => self.roof_tool.anchor(),
             Tool::Dimension if !self.dim_tool.is_placing() => {
                 self.dim_tool.points().last().copied()
             }
@@ -1394,7 +1452,8 @@ impl ArchiSimApp {
     fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
         let points = self.tool.draws_points()
             && !(self.tool == Tool::Slab && self.slab_settings.wand)
-            && !(self.tool == Tool::Zone && self.zone_wand());
+            && !(self.tool == Tool::Zone && self.zone_wand())
+            && !(self.tool == Tool::Roof && self.roof_wand());
         let (true, Some(c)) = (points || self.drag.is_some(), self.cursor) else {
             return;
         };

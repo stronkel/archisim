@@ -55,6 +55,7 @@ impl Model {
             || self.openings.contains_key(&OpeningId(id))
             || self.columns.contains_key(&ColumnId(id))
             || self.beams.contains_key(&BeamId(id))
+            || self.roofs.contains_key(&RoofId(id))
     }
 
     /// Sets an element's phase. The doors and windows of a wall follow

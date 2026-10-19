@@ -27,6 +27,7 @@ pub mod annotate;
 pub mod lettering;
 pub mod members;
 pub mod phases;
+pub mod roofs;
 pub mod section;
 
 use std::fmt::Write as _;
@@ -334,7 +335,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .chain(model.spaces_on_level(level).map(|sp| sp.label_point()))
         .collect();
     let structure_points = members::member_points(model, level, options.cut_plane);
-    let marker_points = section::marker_points(model, k);
+    let mut marker_points = section::marker_points(model, k);
+    for roof in model.roofs_on_level(level) {
+        marker_points.extend(roofs::roof_points(roof));
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -347,6 +351,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         && slabs.is_empty()
         && annotation_points.is_empty()
         && structure_points.is_empty()
+        && marker_points.is_empty()
     {
         min = Point2::new(0.0, 0.0);
         max = Point2::new(1.0, 1.0);
@@ -397,6 +402,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     s.push_str("<g id=\"slabs\">\n");
     for (si, slab) in slabs.iter().enumerate() {
         draw_slab(&mut s, model, slab, si, options.cut_plane, k);
+    }
+    for roof in model.roofs_on_level(level) {
+        let (lo, hi) = bounds(&roof.eaves());
+        if visible(lo, hi) {
+            roofs::draw_roof(&mut s, roof, k);
+        }
     }
     s.push_str("</g>\n");
     if !reference.is_empty() {

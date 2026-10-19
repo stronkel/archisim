@@ -22,6 +22,8 @@ pub struct ImportReport {
     pub beams: usize,
     /// Rooms (`IfcSpace`).
     pub spaces: usize,
+    /// Pitched roofs written by ArchiSim (`IfcRoof`).
+    pub roofs: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -131,6 +133,9 @@ impl ImportReport {
         };
         if self.spaces > 0 {
             members.push_str(&format!(", {} locales", self.spaces));
+        }
+        if self.roofs > 0 {
+            members.push_str(&format!(", {} cubiertas", self.roofs));
         }
         format!(
             "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}{members}",

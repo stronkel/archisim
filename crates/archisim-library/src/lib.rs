@@ -23,6 +23,8 @@ pub struct Library {
     pub ground_slab: SlabTypeId,
     pub floor_slab: SlabTypeId,
     pub flat_roof: SlabTypeId,
+    /// Tiled pitched roof on an inclined concrete slab.
+    pub pitched_roof: SlabTypeId,
     pub entrance_door: OpeningTypeId,
     pub interior_door: OpeningTypeId,
     pub double_door: OpeningTypeId,
@@ -128,6 +130,12 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         CutPattern::Solid,
     );
     let vidrio = mat("Vidrio doble", "glass", [190, 222, 236], CutPattern::Solid);
+    let teja = mat(
+        "Teja cerámica curva",
+        "ceramic",
+        [196, 104, 72],
+        CutPattern::Solid,
+    );
 
     let layer = |material, thickness, function| Layer {
         material,
@@ -195,6 +203,17 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
             layer(lamina, 0.003, LayerFunction::Membrane),
             layer(celular, 0.100, LayerFunction::Substrate),
             layer(hormigon, 0.300, LayerFunction::Structure),
+            layer(yeso, 0.015, LayerFunction::Finish),
+        ],
+    )?;
+    let pitched_roof = m.add_slab_type(
+        "Cubierta inclinada de teja sobre losa HA",
+        SlabFunction::Roof,
+        vec![
+            layer(teja, 0.030, LayerFunction::Finish),
+            layer(mortero, 0.020, LayerFunction::Substrate),
+            layer(xps, 0.060, LayerFunction::Insulation),
+            layer(hormigon, 0.180, LayerFunction::Structure),
             layer(yeso, 0.015, LayerFunction::Finish),
         ],
     )?;
@@ -337,6 +356,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         ground_slab,
         floor_slab,
         flat_roof,
+        pitched_roof,
         entrance_door,
         interior_door,
         double_door,
@@ -477,7 +497,7 @@ mod tests {
         assert_eq!(m.levels().len(), 1);
         assert_eq!(m.levels()[0].elevation, 0.0);
         assert_eq!(m.wall_types().count(), 3);
-        assert_eq!(m.slab_types().count(), 3);
+        assert_eq!(m.slab_types().count(), 4);
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 4);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 4);
         assert_eq!(

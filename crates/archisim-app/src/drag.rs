@@ -47,6 +47,11 @@ pub enum Grip {
     },
     /// The stamp of a room (its name and area), moved on its own.
     SpaceLabel { space: archisim_core::SpaceId },
+    /// A corner of a roof's footprint.
+    RoofCorner {
+        roof: archisim_core::RoofId,
+        index: usize,
+    },
     /// One end of the slope arrow of an inclined slab.
     SlopeEnd { slab: SlabId, start: bool },
     /// One end of a section or elevation line.
@@ -171,6 +176,16 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::Roof(id) => {
+                if let Some(r) = model.roof(*id) {
+                    for (index, point) in r.outline.iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::RoofCorner { roof: *id, index },
+                            point: *point,
+                        });
+                    }
+                }
+            }
             Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) | Element::Column(_) => {
             }
         }
@@ -219,6 +234,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
         Grip::SpaceLabel { space } => [Element::Space(space)].into_iter().collect(),
         Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
+        Grip::RoofCorner { roof, .. } => [Element::Roof(roof)].into_iter().collect(),
     }
 }
 
@@ -263,6 +279,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SpaceLabel { .. } => "Mover rótulo de local",
         Grip::SectionEnd { .. } => "Estirar sección",
         Grip::SlopeEnd { .. } => "Mover flecha de pendiente",
+        Grip::RoofCorner { .. } => "Mover esquina de cubierta",
     }
 }
 
@@ -328,6 +345,13 @@ pub fn apply(
                 .edit_space(space, |s| s.label = Some(at))
                 .map(|_| None)
         }
+        Grip::RoofCorner { roof, index } => model
+            .edit_roof(roof, |r| {
+                if let Some(p) = r.outline.get_mut(index) {
+                    *p = drag.to;
+                }
+            })
+            .map(|_| None),
         Grip::SlopeEnd { slab, start } => {
             let s = model.slab(slab).ok_or(ModelError::UnknownSlab(slab))?;
             let Some(mut a) = s.slope else {
@@ -432,6 +456,13 @@ fn move_selection(
                 model.edit_section(*id, |s| {
                     s.start = s.start + d;
                     s.end = s.end + d;
+                })?;
+            }
+            Element::Roof(id) => {
+                model.edit_roof(*id, |r| {
+                    for p in &mut r.outline {
+                        *p = *p + d;
+                    }
                 })?;
             }
             Element::Dimension(id) => {
@@ -653,6 +684,18 @@ fn copy(
                 }
                 copies.insert(Element::Slab(new));
             }
+            Element::Roof(id) => {
+                let r = model.roof(*id).ok_or(ModelError::UnknownRoof(*id))?.clone();
+                let new = model.add_roof(archisim_core::NewRoof {
+                    roof_type: r.roof_type,
+                    level: r.level,
+                    outline: r.outline.iter().map(|p| *p + d).collect(),
+                    slopes: r.slopes.clone(),
+                    base_offset: r.base_offset,
+                    overhang: r.overhang,
+                })?;
+                copies.insert(Element::Roof(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -823,6 +866,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Beam(id) => model.beam(id).is_some(),
         Element::Space(id) => model.space(id).is_some(),
         Element::Section(id) => model.section(id).is_some(),
+        Element::Roof(id) => model.roof(id).is_some(),
     }
 }
 
@@ -851,6 +895,7 @@ fn level_of(
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
         Grip::SpaceLabel { space } => model.space(space).map(|s| s.level),
         Grip::SectionEnd { .. } => None,
+        Grip::RoofCorner { roof, .. } => model.roof(roof).map(|r| r.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -861,6 +906,7 @@ fn level_of(
             Element::Beam(id) => model.beam(*id).map(|b| b.level),
             Element::Space(id) => model.space(*id).map(|s| s.level),
             Element::Section(_) => None,
+            Element::Roof(id) => model.roof(*id).map(|r| r.level),
         }),
     }
 }
