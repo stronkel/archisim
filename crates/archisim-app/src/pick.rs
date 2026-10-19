@@ -332,6 +332,66 @@ pub fn in_window<G: Geo + ?Sized>(geo: &G, level: LevelId, a: Point2, b: Point2)
         .collect()
 }
 
+/// The drafting element of a sheet under `p` (texts, lines and hatches
+/// drawn on the paper).
+pub fn pick_on_sheet(
+    model: &Model,
+    sheet: archisim_core::SheetId,
+    p: Point2,
+    tolerance: f64,
+) -> Option<Element> {
+    let k = paper_k();
+    model
+        .drafts_in(ViewRef::Sheet(sheet))
+        .filter(|d| model.draft_editable(d))
+        .filter_map(|d| {
+            let dist = archisim_draft::distance(&d.shape, p, k);
+            let edge = match &d.shape {
+                Shape::Hatch(h) => h
+                    .loops
+                    .iter()
+                    .flat_map(archisim_draft::polyline_segs)
+                    .map(|s| s.distance(p))
+                    .fold(f64::INFINITY, f64::min),
+                _ => dist,
+            };
+            if edge <= tolerance {
+                Some((0, edge, Element::Draft(d.id)))
+            } else {
+                (dist <= tolerance).then_some((1, 0.0, Element::Draft(d.id)))
+            }
+        })
+        .min_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)))
+        .map(|(_, _, e)| e)
+}
+
+/// [`in_window`] for what is drawn on a sheet.
+pub fn in_window_on_sheet(
+    model: &Model,
+    sheet: archisim_core::SheetId,
+    a: Point2,
+    b: Point2,
+) -> Vec<Element> {
+    let crossing = b.x < a.x;
+    let (lo, hi) = (
+        Point2::new(a.x.min(b.x), a.y.min(b.y)),
+        Point2::new(a.x.max(b.x), a.y.max(b.y)),
+    );
+    let k = paper_k();
+    model
+        .drafts_in(ViewRef::Sheet(sheet))
+        .filter(|d| model.draft_editable(d))
+        .filter(|d| {
+            if crossing {
+                archisim_draft::crosses_window(&d.shape, lo, hi, k)
+            } else {
+                archisim_draft::inside_window(&d.shape, lo, hi, k)
+            }
+        })
+        .map(|d| Element::Draft(d.id))
+        .collect()
+}
+
 /// Whether a closed polygon touches a box: a corner inside it, the box
 /// inside the polygon, or an edge crossing it.
 fn polygon_touches(poly: &[Point2], lo: Point2, hi: Point2) -> bool {

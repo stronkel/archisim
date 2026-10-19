@@ -28,12 +28,13 @@ Uso:
       y la exporta a demo.ifc (IFC4) y a una planta 1:50 por nivel:
       demo.svg (planta baja), demo-cubierta.svg…, y otra 1:100
       (demo-1a100.svg…), con los símbolos de puertas y ventanas de esa
-      escala.
+      escala, y cada plano con su cajetín (demo-plano-a-01.svg).
       Carpeta por defecto: ./out
 
   archisim exportar <proyecto.archisim> [carpeta]
       Abre un proyecto y lo exporta a IFC4 y a plantas 1:50 y 1:100 con el
-      mismo nombre (casa.archisim → casa.ifc, casa.svg, casa-1a100.svg…). Por defecto, en la
+      mismo nombre (casa.archisim → casa.ifc, casa.svg, casa-1a100.svg…) y sus
+      planos (casa-plano-a-01.svg…). Por defecto, en la
       misma carpeta del proyecto.
 
   archisim importar <fichero.ifc> [proyecto.archisim]
@@ -260,6 +261,22 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         };
         std::fs::write(&svg_100, render_plan(model, level, &options))?;
         println!("  Planta «{name}» 1:100: {}", svg_100.display());
+    }
+    for sheet in model.sheets() {
+        let path = dir.join(format!("{stem}-plano-{}.svg", slug(&sheet.number)));
+        let svg = archisim_plan::sheet::render_sheet(
+            model,
+            sheet.id,
+            &archisim_plan::sheet::SheetOptions::default(),
+        );
+        std::fs::write(&path, svg)?;
+        println!(
+            "  Plano {} «{}» ({}): {}",
+            sheet.number,
+            sheet.name,
+            sheet.size_name(),
+            path.display()
+        );
     }
     Ok(())
 }

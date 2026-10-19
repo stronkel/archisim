@@ -668,6 +668,10 @@ impl ArchiSimApp {
         match self.mode {
             ViewMode::Plan => self.plan_view_properties(ui),
             ViewMode::ThreeD => self.view_3d_properties(ui),
+            ViewMode::Sheet(id) => {
+                self.sheet_properties(ui, id);
+                return;
+            }
         }
         self.project_group(ui);
         ui.add_space(8.0);

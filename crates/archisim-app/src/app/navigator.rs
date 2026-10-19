@@ -104,9 +104,19 @@ impl ArchiSimApp {
     }
 
     fn nav_sheets(&mut self, ui: &mut Ui) {
+        let active = self.tabs.get(self.active_tab).map(|t| t.kind);
+        let mut new = false;
+        let mut open = None;
         nav_section(ui, "nav-sheets", "PLANOS", |ui| {
-            later_row(ui, Icon::Sheet, "Planos y maquetación: fase 3 (3.5)");
+            sub_header(ui, "Planos", Some(("+ Nuevo plano", &mut new)));
+            open = self.nav_sheet_rows(ui, active);
         });
+        if new {
+            self.new_sheet();
+        }
+        if let Some(kind) = open {
+            self.open_view(kind);
+        }
     }
 
     fn type_rows(&self) -> Vec<(&'static str, Icon, Vec<TypeRow>)> {
@@ -330,7 +340,11 @@ fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .small_button(text)
-                    .on_hover_text("Añadir, renombrar, cambiar la cota o borrar plantas")
+                    .on_hover_text(if title == "Plantas" {
+                        "Añadir, renombrar, cambiar la cota o borrar plantas"
+                    } else {
+                        "Crear un plano (A1 apaisado) y abrirlo"
+                    })
                     .clicked()
                 {
                     *clicked = true;

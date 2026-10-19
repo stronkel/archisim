@@ -232,6 +232,17 @@ pub struct ArchiSimApp {
     pub view_style: archisim_core::ViewStyle,
     /// The graphic standard dialog is open.
     pub show_graphics: bool,
+    /// The sheet picture and what it was drawn for.
+    sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
+    /// The view selected on the sheet shown.
+    pub sheet_sel: Option<archisim_core::ViewportId>,
+    /// The view of the sheet under the cursor.
+    sheet_hover: Option<archisim_core::ViewportId>,
+    /// A view being moved on its sheet.
+    sheet_drag: Option<sheet_ui::ViewportDrag>,
+    /// Level and scale offered for the next view placed on a sheet.
+    sheet_new_level: Option<LevelId>,
+    sheet_new_scale: f64,
     pub show_grid: bool,
     /// The level below is drawn in grey under the active plan (and snaps).
     pub show_underlay: bool,
@@ -322,6 +333,12 @@ impl ArchiSimApp {
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             view_style: Default::default(),
             show_graphics: false,
+            sheet_image: None,
+            sheet_sel: None,
+            sheet_hover: None,
+            sheet_drag: None,
+            sheet_new_level: None,
+            sheet_new_scale: 50.0,
             show_grid: true,
             show_underlay: true,
             other_walls: Vec::new(),
@@ -380,7 +397,9 @@ impl ArchiSimApp {
             self.tool = tool;
         }
         // Drawing happens in plan.
-        if tool != Tool::Arrow {
+        // Drawing happens in plan (2D drafting also on sheets).
+        let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
+        if tool != Tool::Arrow && !(tool == Tool::Cad && on_sheet) {
             self.show_plan();
         }
     }
@@ -858,7 +877,11 @@ impl ArchiSimApp {
         egui::Panel::bottom("bottom-bar")
             .frame(bar(p.panel))
             .show(ui, |ui| self.bottom_bar(ui));
-        crate::pick::set_scale(self.plan_scale);
+        crate::pick::set_scale(if matches!(self.mode, ViewMode::Sheet(_)) {
+            1.0
+        } else {
+            self.plan_scale
+        });
         // The drawing stays in the middle of the window: the column on the
         // right (navigator) is as wide as the two on the left (tools and
         // properties). Dragging the edge of Properties widens both sides.
@@ -916,7 +939,7 @@ impl ArchiSimApp {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             self.tab_strip(ui);
-            if self.mode == ViewMode::Plan {
+            if self.mode != ViewMode::ThreeD {
                 egui::Panel::bottom("command-line")
                     .resizable(false)
                     .exact_size(COMMAND_LINE_HEIGHT)
@@ -931,6 +954,7 @@ impl ArchiSimApp {
             match self.mode {
                 ViewMode::Plan => self.plan_view(ui),
                 ViewMode::ThreeD => self.view_3d(ui),
+                ViewMode::Sheet(s) => self.sheet_view(ui, s),
             }
         });
 
@@ -1393,6 +1417,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod sheet_ui;
 mod tabs;
 mod temp_ui;
 pub mod theme;

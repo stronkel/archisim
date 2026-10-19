@@ -203,11 +203,14 @@ fn draw_frame(s: &mut String, model: &Model, sheet: &Sheet) {
     } else {
         info.studio.as_str()
     };
+    // As large as fits (a long name gets smaller letters, down to 3 mm).
+    let w = text_width(studio, 1.0).max(1e-9);
+    let h = (50.0 / w).clamp(3.0, 6.0);
     text(
         s,
-        &fit(studio, 6.0, 50.0),
+        &fit(studio, h, 50.0),
         p(x0 + 27.5, r1 + 5.0),
-        6.0,
+        h,
         Align::Centre,
         INK,
     );

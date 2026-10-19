@@ -688,7 +688,7 @@ impl ArchiSimApp {
         poly.iter().map(|p| self.view.to_screen(rect, *p)).collect()
     }
 
-    fn draw_selection(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_selection(&self, painter: &egui::Painter, rect: Rect) {
         let model = self.ed.model();
         if let Some(h) = self.hover {
             if !self.ed.selection.contains(&h) {

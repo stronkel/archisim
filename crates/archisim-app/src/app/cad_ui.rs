@@ -67,12 +67,13 @@ impl ArchiSimApp {
         let mut cmd = self.cad.take()?;
         let mut st = std::mem::take(&mut self.cad_settings);
         let cursor = self.cursor.map(|c| c.point).unwrap_or_default();
+        let (view, k) = (self.active_view(), self.active_k());
         let r = {
             let cx = Ctx {
                 geo: &self.ed as &dyn crate::geo::Geo,
-                view: archisim_core::ViewRef::Level(self.ed.level),
+                view,
                 selection: &self.ed.selection,
-                k: self.plan_scale / 1000.0,
+                k,
                 cursor,
             };
             f(cmd.as_mut(), &cx, &mut st)
@@ -136,7 +137,7 @@ impl ArchiSimApp {
     }
 
     fn apply_changes(&mut self, ch: &Changes) -> bool {
-        let view = archisim_core::ViewRef::Level(self.ed.level);
+        let view = self.active_view();
         match self.ed.apply_cad(view, &self.cad_settings, ch) {
             Ok(_) => true,
             Err(e) => {
@@ -402,7 +403,7 @@ impl ArchiSimApp {
                     };
                     let raw = self.view.to_model(rect, pos);
                     let reach = self.view.to_metres(REACH);
-                    match crate::pick::pick(&self.ed, self.ed.level, raw, reach) {
+                    match self.pick_here(raw, reach) {
                         Some(e) => {
                             let shift = ctx.input(|i| i.modifiers.shift);
                             if shift {
@@ -444,7 +445,7 @@ impl ArchiSimApp {
         }
         if response.drag_stopped() {
             if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
-                let found = crate::pick::in_window(&self.ed, self.ed.level, a, c.point);
+                let found = self.window_here(a, c.point);
                 for e in found {
                     if shift {
                         self.ed.selection.remove(&e);
@@ -464,7 +465,7 @@ impl ArchiSimApp {
         if matches!(want, Some(Want::Pick) | Some(Want::Select)) {
             self.cursor = Some(Snap::at(raw, SnapKind::Free));
             self.hover = if want == Some(Want::Select) && self.window_start.is_none() {
-                crate::pick::pick(&self.ed, self.ed.level, raw, reach)
+                self.pick_here(raw, reach)
             } else {
                 None
             };
@@ -472,17 +473,28 @@ impl ArchiSimApp {
         }
         let base = self.cad.as_ref().and_then(|c| c.base());
         let extra: Vec<Point2> = base.into_iter().collect();
-        let mut s = crate::snap::snap_cad(
-            &self.ed,
-            self.ed.level,
-            raw,
-            reach,
-            &extra,
-            &BTreeSet::new(),
-            self.snap_filter,
-            &self.other_walls,
-            base,
-        );
+        let mut s = match self.mode {
+            ViewMode::Sheet(sheet) => crate::snap::snap_sheet(
+                self.ed.model(),
+                sheet,
+                raw,
+                reach,
+                &extra,
+                self.snap_filter,
+                base,
+            ),
+            _ => crate::snap::snap_cad(
+                &self.ed,
+                self.ed.level,
+                raw,
+                reach,
+                &extra,
+                &BTreeSet::new(),
+                self.snap_filter,
+                &self.other_walls,
+                base,
+            ),
+        };
         if let Some(b) = base {
             if self.cad_settings.ortho && matches!(s.kind, SnapKind::Free | SnapKind::OnEdge) {
                 s = Snap::at(cad::ortho(b, s.point), SnapKind::Constrained);
@@ -502,7 +514,7 @@ impl ArchiSimApp {
         let Some(cmd) = &self.cad else {
             return;
         };
-        let k = self.plan_scale / 1000.0;
+        let k = self.active_k();
         let stroke = Stroke::new(1.5, ACCENT);
         for e in cmd.picked() {
             for path in self.element_paths(e) {
@@ -513,7 +525,7 @@ impl ArchiSimApp {
         let cursor = self.cursor.map(|c| c.point).unwrap_or_default();
         let cx = Ctx {
             geo: &self.ed as &dyn crate::geo::Geo,
-            view: archisim_core::ViewRef::Level(self.ed.level),
+            view: self.active_view(),
             selection: &self.ed.selection,
             k,
             cursor,

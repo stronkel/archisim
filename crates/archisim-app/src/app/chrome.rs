@@ -305,7 +305,7 @@ impl ArchiSimApp {
 
     pub(super) fn fit_active_view(&mut self) {
         match self.mode {
-            ViewMode::Plan => self.fit_requested = true,
+            ViewMode::Plan | ViewMode::Sheet(_) => self.fit_requested = true,
             ViewMode::ThreeD => self.v3d.fit_requested = true,
         }
     }
@@ -401,6 +401,15 @@ impl ArchiSimApp {
                         "La planta de debajo en gris, como referencia para dibujar encima (sus puntos también fuerzan). Los muros de otras plantas que atraviesa el plano de corte se ven siempre cortados",
                     );
                 }
+                ViewMode::Sheet(id) => {
+                    let paper = self
+                        .ed
+                        .model()
+                        .sheet(id)
+                        .map(|s| format!("Papel {} · escala 1:1", s.size_name()))
+                        .unwrap_or_default();
+                    ui.label(egui::RichText::new(paper).small().color(p.muted));
+                }
                 ViewMode::ThreeD => {
                     let cam = &mut self.v3d.camera;
                     let mut persp = cam.perspective;
@@ -432,7 +441,22 @@ impl ArchiSimApp {
                     .level(self.ed.level)
                     .map(|l| format!("{} {}", l.name, fmt_level(l.elevation)))
                     .unwrap_or_default();
-                if self.mode == ViewMode::Plan {
+                if let ViewMode::Sheet(_) = self.mode {
+                    if let Some(c) = self.cursor {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "X {:.1}   Y {:.1} mm",
+                                c.point.x * 1000.0,
+                                c.point.y * 1000.0
+                            ))
+                            .monospace()
+                            .color(p.text),
+                        );
+                        if c.kind != crate::snap::SnapKind::Free {
+                            ui.label(egui::RichText::new(c.kind.label()).small().color(p.accent));
+                        }
+                    }
+                } else if self.mode == ViewMode::Plan {
                     ui.label(egui::RichText::new(level).small().color(p.muted));
                     if let Some(c) = self.cursor {
                         ui.separator();
@@ -470,6 +494,9 @@ impl ArchiSimApp {
     pub(super) fn hint_text(&self) -> &'static str {
         if self.mode == ViewMode::ThreeD {
             return "Arrastrar: girar · Rueda: zoom · Botón derecho: encuadre · Clic: seleccionar · Inicio: ajustar · F2: planta";
+        }
+        if matches!(self.mode, ViewMode::Sheet(_)) && self.tool != Tool::Cad {
+            return "Clic: seleccionar vista o dibujo · Arrastrar vista: colocarla · Doble clic: abrir su planta · L, TX…: dibujar en el plano · Supr: quitar";
         }
         match self.tool {
             Tool::Arrow if self.drag.is_some() => "Soltar: terminar · Ctrl: copiar · Mayús: 45° · Distancia + Intro: exacto · Esc: cancelar",

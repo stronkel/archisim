@@ -1926,3 +1926,84 @@ fn texts_layers_and_drafting_properties() {
         }
     }
 }
+
+#[test]
+fn sheets_views_and_drafting_on_paper() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.app.keys_autocad = true;
+    let level = h.app.ed.level;
+    // A new sheet opens in its tab, as paper fitted to the window.
+    h.app.new_sheet();
+    h.frame();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    assert_eq!(h.app.mode, ViewMode::Sheet(sheet));
+    assert_eq!(h.model().sheets()[0].number, "A-01");
+    let paper = h.screen(p(0.841, 0.594)) - h.screen(p(0.0, 0.0));
+    assert!(paper.x > 500.0, "{paper:?}");
+    // A view of the level at 1:100, then moved by dragging it.
+    let v = h
+        .app
+        .ed
+        .add_viewport(archisim_core::NewViewport {
+            sheet,
+            level,
+            scale: 100.0,
+            cut_plane: 1.0,
+            crop: None,
+            centre: p(0.3, 0.3),
+        })
+        .unwrap();
+    h.frame();
+    h.drag(p(0.3, 0.3), p(0.35, 0.32));
+    let c = h.model().viewport(v).unwrap().centre;
+    assert!(c.distance(p(0.35, 0.32)) < 0.002, "{c:?}");
+    assert_eq!(h.app.sheet_sel, Some(v));
+    // A line drawn on the paper belongs to the sheet, in paper metres.
+    command(&mut h, "l");
+    assert_eq!(h.app.mode, ViewMode::Sheet(sheet));
+    h.click_at(p(0.62, 0.40));
+    command(&mut h, "@100,0");
+    h.key(Key::Escape);
+    let line = drafts(&h).pop().expect("a line");
+    assert_eq!(line.view, archisim_core::ViewRef::Sheet(sheet));
+    let archisim_core::Shape::Line { a, b } = line.shape else {
+        panic!("{:?}", line.shape)
+    };
+    assert!((b.x - a.x - 0.1).abs() < 1e-9, "{a:?} {b:?}");
+    // Picked on the sheet and deleted with Supr.
+    h.click_at(p(0.67, 0.40));
+    assert_eq!(
+        h.app.ed.selection.iter().next(),
+        Some(&Element::Draft(line.id))
+    );
+    h.key(Key::Delete);
+    assert!(h.model().draft(line.id).is_none());
+    // Supr on a selected view takes it off the sheet; double click on it
+    // opens its plan.
+    h.click_at(p(0.35, 0.32));
+    assert_eq!(h.app.sheet_sel, Some(v));
+    h.move_to(p(0.35, 0.32));
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert_eq!(h.app.ed.level, level);
+    // Back to the sheet from its tab; its framing was kept.
+    h.app.open_view(TabKind::Sheet(sheet));
+    h.frame();
+    h.click_at(p(0.35, 0.32));
+    h.key(Key::Delete);
+    assert!(h.model().viewport(v).is_none());
+    // Deleting the sheet closes its tab.
+    h.app.ed.remove_sheet(sheet).unwrap();
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert!(h.app.tabs.iter().all(|t| t.kind != TabKind::Sheet(sheet)));
+}

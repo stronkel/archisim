@@ -96,7 +96,18 @@ fn round_to(v: f64, step: f64) -> f64 {
 
 /// Rounds a free point to the [`FREE_STEP`] grid.
 pub fn round_point(p: Point2) -> Point2 {
-    Point2::new(round_to(p.x, FREE_STEP), round_to(p.y, FREE_STEP))
+    let step = free_step();
+    Point2::new(round_to(p.x, step), round_to(p.y, step))
+}
+
+/// The grid free points round to: [`FREE_STEP`] in plans, half a
+/// millimetre on sheets (drawn at 1:1).
+pub fn free_step() -> f64 {
+    if crate::pick::paper_k() < 0.01 {
+        0.0005
+    } else {
+        FREE_STEP
+    }
 }
 
 /// Snaps `cursor` to the elements of `level` within `tolerance` metres.
@@ -260,7 +271,29 @@ pub fn snap_filtered<G: Geo + ?Sized>(
     }
     // 2D drafting: its points, and anywhere along its lines and arcs.
     let mut curves: Vec<archisim_draft::Seg> = Vec::new();
-    for d in model.drafts_in(archisim_core::ViewRef::Level(level)) {
+    draft_snaps(
+        model,
+        archisim_core::ViewRef::Level(level),
+        cursor,
+        tolerance,
+        skip,
+        &mut points,
+        &mut curves,
+    );
+    choose(cursor, tolerance, filter, &points, edges, curves)
+}
+
+/// The snap points and curves of the drafting near `cursor` in a view.
+fn draft_snaps(
+    model: &archisim_core::Model,
+    view: archisim_core::ViewRef,
+    cursor: Point2,
+    tolerance: f64,
+    skip: &BTreeSet<Element>,
+    points: &mut Vec<(Point2, SnapKind)>,
+    curves: &mut Vec<archisim_draft::Seg>,
+) {
+    for d in model.drafts_in(view) {
         if skip.contains(&Element::Draft(d.id)) || !model.draft_visible(d) {
             continue;
         }
@@ -285,7 +318,17 @@ pub fn snap_filtered<G: Geo + ?Sized>(
         }
         curves.extend(archisim_draft::boundary_segs(&d.shape));
     }
+}
 
+/// The best snap among points, straight edges and curves.
+fn choose(
+    cursor: Point2,
+    tolerance: f64,
+    filter: SnapFilter,
+    points: &[(Point2, SnapKind)],
+    edges: Vec<(Point2, Point2)>,
+    curves: Vec<archisim_draft::Seg>,
+) -> Snap {
     // Closest point within tolerance; on a tie, the stronger kind (listed
     // first in `SnapKind`) wins, so a wall end beats the corner under it.
     let best_point = points
@@ -416,6 +459,61 @@ pub fn snap_cad<G: Geo + ?Sized>(
     s
 }
 
+/// [`snap_cad`] on a sheet: what is drawn on the paper and the frames of
+/// its views.
+pub fn snap_sheet(
+    model: &archisim_core::Model,
+    sheet: archisim_core::SheetId,
+    cursor: Point2,
+    tolerance: f64,
+    extra: &[Point2],
+    filter: SnapFilter,
+    from: Option<Point2>,
+) -> Snap {
+    let mut points: Vec<(Point2, SnapKind)> =
+        extra.iter().map(|p| (*p, SnapKind::Endpoint)).collect();
+    let mut curves = Vec::new();
+    let view = archisim_core::ViewRef::Sheet(sheet);
+    draft_snaps(
+        model,
+        view,
+        cursor,
+        tolerance,
+        &BTreeSet::new(),
+        &mut points,
+        &mut curves,
+    );
+    let mut edges = Vec::new();
+    for v in model.viewports_on(sheet) {
+        let (lo, hi) = archisim_plan::sheet::viewport_rect(model, v);
+        let c = [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)];
+        outline_snaps(&c, &mut points, &mut edges);
+    }
+    let s = choose(cursor, tolerance, filter, &points, edges, curves.clone());
+    if !matches!(s.kind, SnapKind::OnEdge | SnapKind::Free) {
+        return s;
+    }
+    if filter.points {
+        let best = archisim_draft::snaps::intersections(&curves, cursor, tolerance)
+            .into_iter()
+            .min_by(|a, b| a.distance(cursor).total_cmp(&b.distance(cursor)));
+        if let Some(p) = best {
+            return Snap::at(p, SnapKind::Intersection);
+        }
+    }
+    if let (Some(from), true) = (from, filter.edges) {
+        if let Some(p) = archisim_draft::snaps::tangent(&curves, from, cursor, tolerance) {
+            return Snap::at(p, SnapKind::Tangent);
+        }
+        if let Some(p) = archisim_draft::snaps::perpendicular(&curves, from, cursor, tolerance) {
+            if p.distance(from) > 1e-9 {
+                return Snap::at(p, SnapKind::Perpendicular);
+            }
+        }
+    }
+    s
+}
+
 /// Constrains `p` to the nearest multiple of 45° from `from` (Shift held),
 /// keeping its distance along that direction rounded to [`FREE_STEP`]
 /// unless it came from an object snap (then it is projected exactly, which
@@ -432,7 +530,7 @@ pub fn constrain(from: Point2, p: Snap) -> Snap {
     let dir = Point2::new(clean(dir.x), clean(dir.y));
     let mut along = d.dot(dir);
     if p.kind == SnapKind::Free {
-        along = round_to(along, FREE_STEP);
+        along = round_to(along, free_step());
     }
     Snap::at(
         from + dir * along,
@@ -473,7 +571,7 @@ pub fn track(from: Point2, p: Snap, reach: f64) -> Snap {
     match p.kind {
         SnapKind::Free => {
             if let Some(dir) = ortho_dir(d) {
-                let along = round_to(d.dot(dir), FREE_STEP);
+                let along = round_to(d.dot(dir), free_step());
                 return Snap::at(from + dir * along, SnapKind::Tracked);
             }
             let on_line = constrain(from, p);

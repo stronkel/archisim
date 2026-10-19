@@ -515,7 +515,7 @@ pub(crate) struct Sheet {
     pub revision: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Style {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -524,6 +524,16 @@ pub(crate) struct Style {
     pub hidden_layers: Vec<u64>,
     #[serde(default = "fine", skip_serializing_if = "is_fine")]
     pub detail: String,
+}
+
+impl Default for Style {
+    fn default() -> Self {
+        Self {
+            hidden: Vec::new(),
+            hidden_layers: Vec::new(),
+            detail: fine(),
+        }
+    }
 }
 
 fn fine() -> String {

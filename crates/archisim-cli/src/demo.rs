@@ -272,6 +272,35 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // The ground floor plan on an A2 sheet at 1:50, with its title block.
+    doc.transact("Plano", |m| {
+        use archisim_core::{NewSheet, NewViewport, ProjectInfo};
+        m.set_info(ProjectInfo {
+            client: "Promotor de ejemplo".into(),
+            site: "Calle Mayor 1, Madrid".into(),
+            author: "ArchiSim".into(),
+            studio: "Estudio de ejemplo".into(),
+            number: "2026-001".into(),
+            phase: "Proyecto básico".into(),
+            date: "octubre 2026".into(),
+        });
+        let sheet = m.add_sheet(NewSheet {
+            number: "A-01".into(),
+            name: "Planta baja".into(),
+            width: 594.0,
+            height: 420.0,
+        })?;
+        m.add_viewport(NewViewport {
+            sheet,
+            level: pb,
+            scale: 50.0,
+            cut_plane: 1.0,
+            crop: None,
+            centre: Point2::new(0.21, 0.24),
+        })?;
+        Ok(())
+    })?;
+
     Ok(doc)
 }
 
@@ -287,7 +316,8 @@ mod tests {
         assert_eq!(m.slabs().count(), 2);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 9);
-        assert_eq!(doc.undo_label(), Some("Dibujo 2D"));
+        assert_eq!(doc.undo_label(), Some("Plano"));
+        assert_eq!(m.sheets().len(), 1);
         assert_eq!(m.drafts().count(), 7);
         assert_eq!(m.draw_layers().len(), 4);
         assert_eq!(m.dimensions().count(), 4);

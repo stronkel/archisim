@@ -27,6 +27,8 @@ const SUPERSAMPLE: f32 = 2.0;
 pub enum ViewMode {
     Plan,
     ThreeD,
+    /// A sheet (paper with views on it).
+    Sheet(archisim_core::SheetId),
 }
 
 /// Everything the 3D view keeps between frames.
@@ -253,6 +255,7 @@ impl ArchiSimApp {
         match mode {
             ViewMode::Plan => self.show_plan(),
             ViewMode::ThreeD => self.open_view(super::TabKind::ThreeD),
+            ViewMode::Sheet(s) => self.open_view(super::TabKind::Sheet(s)),
         }
     }
 

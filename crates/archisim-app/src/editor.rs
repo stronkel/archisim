@@ -542,6 +542,47 @@ impl Editor {
         })
     }
 
+    pub fn add_sheet(
+        &mut self,
+        spec: archisim_core::NewSheet,
+    ) -> EditResult<archisim_core::SheetId> {
+        self.transact("Nuevo plano", |m| m.add_sheet(spec))
+    }
+
+    pub fn set_sheet(&mut self, sheet: archisim_core::Sheet) -> EditResult {
+        self.transact("Cambiar plano", |m| m.set_sheet(sheet))
+    }
+
+    /// Removes a sheet with its views and what is drawn on it.
+    pub fn remove_sheet(&mut self, id: archisim_core::SheetId) -> EditResult {
+        self.transact("Borrar plano", |m| m.remove_sheet(id).map(|_| ()))
+    }
+
+    pub fn add_viewport(
+        &mut self,
+        spec: archisim_core::NewViewport,
+    ) -> EditResult<archisim_core::ViewportId> {
+        self.transact("Colocar vista en el plano", |m| m.add_viewport(spec))
+    }
+
+    pub fn set_viewport(&mut self, v: archisim_core::Viewport, label: &str) -> EditResult {
+        self.transact(label, |m| m.set_viewport(v))
+    }
+
+    pub fn remove_viewport(&mut self, id: archisim_core::ViewportId) -> EditResult {
+        self.transact("Quitar vista del plano", |m| {
+            m.remove_viewport(id).map(|_| ())
+        })
+    }
+
+    /// The project's data for the title blocks.
+    pub fn set_info(&mut self, info: archisim_core::ProjectInfo) -> EditResult {
+        self.transact("Datos del proyecto", |m| {
+            m.set_info(info);
+            Ok(())
+        })
+    }
+
     pub fn add_draw_layer(
         &mut self,
         layer: archisim_core::DrawLayer,
