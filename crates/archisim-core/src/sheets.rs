@@ -7,7 +7,7 @@
 //! a plan at 1:1.
 
 use crate::graphics::ViewStyle;
-use crate::ids::{LevelId, SheetId, TableId, ViewportId};
+use crate::ids::{LevelId, SectionId, SheetId, TableId, ViewportId};
 use crate::math::{Point2, EPSILON};
 use crate::model::{Model, ModelError};
 
@@ -80,12 +80,18 @@ pub struct NewSheet {
     pub height: f64,
 }
 
-/// A plan of a level placed on a sheet at a scale.
+/// A plan of a level, or a section or elevation, placed on a sheet at a
+/// scale.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Viewport {
     pub id: ViewportId,
     pub sheet: SheetId,
+    /// The level of a plan view (for a section, the level it was placed
+    /// from; it does not change what it shows).
     pub level: LevelId,
+    /// A section or elevation instead of a plan. Its crop is in the
+    /// section's own plane: along its line and height, metres.
+    pub section: Option<SectionId>,
     /// Scale denominator (50 is 1:50).
     pub scale: f64,
     /// Height of the cut plane above the level, metres.
@@ -107,6 +113,7 @@ pub struct Viewport {
 pub struct NewViewport {
     pub sheet: SheetId,
     pub level: LevelId,
+    pub section: Option<SectionId>,
     pub scale: f64,
     pub cut_plane: f64,
     pub crop: Option<(Point2, Point2)>,
@@ -245,6 +252,11 @@ impl Model {
         if self.level(v.level).is_none() {
             return Err(ModelError::UnknownLevel(v.level));
         }
+        if let Some(sec) = v.section {
+            if self.section(sec).is_none() {
+                return Err(ModelError::UnknownSection(sec));
+            }
+        }
         finite(v.scale, "view scale")?;
         finite(v.cut_plane, "cut plane")?;
         finite(v.centre.x, "view position")?;
@@ -276,6 +288,7 @@ impl Model {
                 id,
                 sheet: spec.sheet,
                 level: spec.level,
+                section: spec.section,
                 scale: spec.scale,
                 cut_plane: spec.cut_plane,
                 crop: spec.crop,
@@ -297,6 +310,7 @@ impl Model {
         self.check_viewport(&NewViewport {
             sheet: v.sheet,
             level: v.level,
+            section: v.section,
             scale: v.scale,
             cut_plane: v.cut_plane,
             crop: v.crop,
@@ -334,6 +348,7 @@ impl Model {
         self.check_viewport(&NewViewport {
             sheet: v.sheet,
             level: v.level,
+            section: v.section,
             scale: v.scale,
             cut_plane: v.cut_plane,
             crop: v.crop,
@@ -382,14 +397,26 @@ pub enum ScheduleKind {
     Slabs,
     /// Rooms: areas, heights and finishes ("cuadro de superficies").
     Rooms,
+    /// Columns and beams by type: number, length, volume.
+    Structure,
+    /// Pitched roofs by type: area in plan and of the slopes.
+    Roofs,
+    /// Stairs one by one: risers, going, width and their CTE check.
+    Stairs,
+    /// Curtain walls by type: length and area.
+    CurtainWalls,
 }
 
 impl ScheduleKind {
-    pub const ALL: [ScheduleKind; 4] = [
+    pub const ALL: [ScheduleKind; 8] = [
         ScheduleKind::Openings,
         ScheduleKind::Walls,
         ScheduleKind::Slabs,
         ScheduleKind::Rooms,
+        ScheduleKind::Structure,
+        ScheduleKind::Roofs,
+        ScheduleKind::Stairs,
+        ScheduleKind::CurtainWalls,
     ];
 
     pub fn code(self) -> &'static str {
@@ -398,6 +425,10 @@ impl ScheduleKind {
             ScheduleKind::Walls => "walls",
             ScheduleKind::Slabs => "slabs",
             ScheduleKind::Rooms => "rooms",
+            ScheduleKind::Structure => "structure",
+            ScheduleKind::Roofs => "roofs",
+            ScheduleKind::Stairs => "stairs",
+            ScheduleKind::CurtainWalls => "curtain_walls",
         }
     }
 
@@ -411,6 +442,10 @@ impl ScheduleKind {
             ScheduleKind::Walls => "Muros",
             ScheduleKind::Slabs => "Forjados",
             ScheduleKind::Rooms => "Cuadro de superficies",
+            ScheduleKind::Structure => "Pilares y vigas",
+            ScheduleKind::Roofs => "Cubiertas",
+            ScheduleKind::Stairs => "Escaleras",
+            ScheduleKind::CurtainWalls => "Muros cortina",
         }
     }
 }
@@ -530,6 +565,7 @@ mod tests {
             .add_viewport(NewViewport {
                 sheet: s,
                 level: l,
+                section: None,
                 scale: 50.0,
                 cut_plane: 1.1,
                 crop: None,

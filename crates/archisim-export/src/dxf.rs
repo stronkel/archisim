@@ -48,6 +48,24 @@ pub fn plan_dxf(model: &Model, level: LevelId, options: &PlanOptions) -> Result<
     Ok(d.finish(model))
 }
 
+/// The DXF of a section or elevation, in millimetres: along its line (x)
+/// and in height (y), the ±0,00 at y = 0.
+pub fn section_dxf(
+    model: &Model,
+    d: &archisim_plan::section::SectionDrawing,
+    options: &PlanOptions,
+) -> Result<String, String> {
+    let mut o = options.clone();
+    o.title = false;
+    o.viewport = None;
+    o.px_per_mm = None;
+    let svg = archisim_plan::section::render_section(model, d, &o);
+    let k = options.scale / 1000.0;
+    let mut dx = Dxf::new(options.scale);
+    dx.drawing(&svg, k, 1000.0)?;
+    Ok(dx.finish(model))
+}
+
 /// The DXF of a sheet, in paper millimetres: its views (cut at their
 /// frames), title block and what is drawn on it.
 pub fn sheet_dxf(model: &Model, sheet: SheetId) -> Result<String, String> {

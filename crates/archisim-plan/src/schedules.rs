@@ -7,7 +7,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use archisim_core::{LevelId, Model, OpeningKind, Point2, ScheduleKind, Text, TextAlign};
+use archisim_core::{
+    signed_area, LevelId, Model, OpeningKind, Phase, Point2, ScheduleKind, Text, TextAlign,
+};
 use archisim_draft::font::{text_strokes, text_width, STROKE};
 
 use crate::{num, pt};
@@ -73,11 +75,14 @@ impl Item {
 /// The chapters of a budget's measurements: (code, title, items).
 pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>)> {
     let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    // A refurbishment: what is there and stays is not measured; what is
+    // demolished goes to its own chapter.
+    let new = |id: u64| model.phase(id) == Phase::New;
     // Walls by type, m² of one face less the openings.
     let mut walls: BTreeMap<String, Item> = BTreeMap::new();
     for (i, t) in model.wall_types().enumerate() {
         let mut lines: Vec<Measured> = Vec::new();
-        for w in model.walls().filter(|w| w.wall_type == t.id) {
+        for w in model.walls().filter(|w| w.wall_type == t.id && new(w.id.0)) {
             lines.push(Measured {
                 comment: format!("Muro {} · {}", w.id.0, level_name(w.level)),
                 units: 1.0,
@@ -87,7 +92,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                 quantity: w.length() * w.height,
             });
             // Its doors and windows, taken off.
-            for o in model.openings_in_wall(w.id) {
+            for o in model.openings_in_wall(w.id).filter(|o| new(o.id.0)) {
                 if let Some(ot) = model.opening_type(o.opening_type) {
                     let name = if ot.mark.trim().is_empty() {
                         ot.name.clone()
@@ -121,7 +126,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
     for (i, t) in model.slab_types().enumerate() {
         let lines: Vec<Measured> = model
             .slabs()
-            .filter(|s| s.slab_type == t.id)
+            .filter(|s| s.slab_type == t.id && new(s.id.0))
             .map(|s| Measured {
                 comment: format!("Forjado {} · {}", s.id.0, level_name(s.level)),
                 units: 1.0,
@@ -150,7 +155,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         }
         let lines: Vec<Measured> = model
             .openings()
-            .filter(|o| o.opening_type == t.id)
+            .filter(|o| o.opening_type == t.id && new(o.id.0))
             .map(|o| {
                 let level = model.wall(o.wall).map(|w| w.level);
                 Measured {
@@ -214,7 +219,8 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
             });
         }
     }
-    vec![
+    let mut chapters = vec![
+        ("00", "Demoliciones", demolitions(model)),
         ("01", "Fábricas y muros", walls.into_values().collect()),
         ("02", "Forjados", slabs.into_values().collect()),
         ("03", "Carpintería", joinery.into_values().collect()),
@@ -223,7 +229,300 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
             "Acabados de locales",
             finishes.into_values().collect(),
         ),
+        ("05", "Estructura", structure(model)),
+        ("06", "Cubiertas", roofs(model)),
+        ("07", "Escaleras y barandillas", stairs_and_railings(model)),
+        ("08", "Muros cortina", curtain_walls(model)),
+    ];
+    chapters.retain(|(_, _, items)| !items.is_empty());
+    chapters
+}
+
+/// What a refurbishment demolishes: walls (m² of one face), slabs (m²),
+/// doors and windows taken out (ud), columns and beams (m³).
+fn demolitions(model: &Model) -> Vec<Item> {
+    let gone = |id: u64| model.phase(id) == Phase::Demolished;
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let mut walls = Vec::new();
+    for w in model.walls().filter(|w| gone(w.id.0)) {
+        let name = model
+            .wall_type(w.wall_type)
+            .map_or(String::new(), |t| t.name.clone());
+        walls.push(Measured {
+            comment: format!("Muro {} ({name}) · {}", w.id.0, level_name(w.level)),
+            units: 1.0,
+            length: w.length(),
+            width: 0.0,
+            height: w.height,
+            quantity: w.length() * w.height,
+        });
+    }
+    let slabs: Vec<Measured> = model
+        .slabs()
+        .filter(|s| gone(s.id.0))
+        .map(|s| Measured {
+            comment: format!("Forjado {} · {}", s.id.0, level_name(s.level)),
+            units: 1.0,
+            length: 0.0,
+            width: 0.0,
+            height: 0.0,
+            quantity: s.area(),
+        })
+        .collect();
+    let joinery: Vec<Measured> = model
+        .openings()
+        .filter(|o| gone(o.id.0))
+        .filter_map(|o| {
+            let t = model.opening_type(o.opening_type)?;
+            (t.kind != OpeningKind::Void).then(|| Measured {
+                comment: format!("{} {}×{}", t.name, dec(t.width, 2), dec(t.height, 2)),
+                units: 1.0,
+                length: 0.0,
+                width: t.width,
+                height: t.height,
+                quantity: 1.0,
+            })
+        })
+        .collect();
+    let members: Vec<Measured> = member_lines(model, gone);
+    [
+        ("D01", "m2", "Demolición de muros y tabiques", walls),
+        ("D02", "m2", "Demolición de forjados", slabs),
+        ("D03", "ud", "Desmontaje de carpinterías", joinery),
+        ("D04", "m3", "Demolición de pilares y vigas", members),
     ]
+    .into_iter()
+    .filter(|(_, _, _, l)| !l.is_empty())
+    .map(|(code, unit, summary, lines)| Item {
+        code: code.into(),
+        unit,
+        summary: summary.into(),
+        lines,
+    })
+    .collect()
+}
+
+/// Columns and beams that pass `keep`, as m³ of their section.
+fn member_lines(model: &Model, keep: impl Fn(u64) -> bool) -> Vec<Measured> {
+    let mut v = Vec::new();
+    for c in model.columns().filter(|c| keep(c.id.0)) {
+        if let Some(t) = model.member_type(c.member_type) {
+            let a = t.profile.area();
+            v.push(Measured {
+                comment: format!("Pilar {} ({})", c.id.0, t.name),
+                units: 1.0,
+                length: c.height,
+                width: 0.0,
+                height: 0.0,
+                quantity: a * c.height,
+            });
+        }
+    }
+    for b in model.beams().filter(|b| keep(b.id.0)) {
+        if let Some(t) = model.member_type(b.member_type) {
+            let a = t.profile.area();
+            v.push(Measured {
+                comment: format!("Viga {} ({})", b.id.0, t.name),
+                units: 1.0,
+                length: b.length(),
+                width: 0.0,
+                height: 0.0,
+                quantity: a * b.length(),
+            });
+        }
+    }
+    v
+}
+
+/// Density of structural steel, kg/m³.
+const STEEL_DENSITY: f64 = 7850.0;
+
+/// Columns and beams by type: concrete and timber in m³, steel in kg.
+fn structure(model: &Model) -> Vec<Item> {
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let mut items = Vec::new();
+    for (i, t) in model.member_types().enumerate() {
+        let steel = model
+            .material(t.material)
+            .is_some_and(|m| matches!(m.category.as_str(), "steel" | "metal"));
+        let (unit, factor) = if steel {
+            ("kg", t.profile.area() * STEEL_DENSITY)
+        } else {
+            ("m3", t.profile.area())
+        };
+        let mut lines = Vec::new();
+        for c in model
+            .columns()
+            .filter(|c| c.member_type == t.id && model.phase(c.id.0) == Phase::New)
+        {
+            lines.push(Measured {
+                comment: format!("Pilar {} · {}", c.id.0, level_name(c.level)),
+                units: 1.0,
+                length: c.height,
+                width: 0.0,
+                height: 0.0,
+                quantity: c.height * factor,
+            });
+        }
+        for b in model
+            .beams()
+            .filter(|b| b.member_type == t.id && model.phase(b.id.0) == Phase::New)
+        {
+            lines.push(Measured {
+                comment: format!("Viga {} · {}", b.id.0, level_name(b.level)),
+                units: 1.0,
+                length: b.length(),
+                width: 0.0,
+                height: 0.0,
+                quantity: b.length() * factor,
+            });
+        }
+        if !lines.is_empty() {
+            items.push(Item {
+                code: format!("E{:02}", i + 1),
+                unit,
+                summary: t.name.clone(),
+                lines,
+            });
+        }
+    }
+    items
+}
+
+/// Pitched roofs by type: m² of their sloping surface.
+fn roofs(model: &Model) -> Vec<Item> {
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let mut items = Vec::new();
+    for (i, t) in model.slab_types().enumerate() {
+        let lines: Vec<Measured> = model
+            .roofs()
+            .filter(|r| r.roof_type == t.id && model.phase(r.id.0) == Phase::New)
+            .map(|r| Measured {
+                comment: format!(
+                    "Cubierta {} · {} (en planta {} m²)",
+                    r.id.0,
+                    level_name(r.level),
+                    dec(signed_area(&r.eaves()).abs(), 2)
+                ),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: r.surface_area(),
+            })
+            .collect();
+        if !lines.is_empty() {
+            items.push(Item {
+                code: format!("T{:02}", i + 1),
+                unit: "m2",
+                summary: format!("{} (superficie inclinada)", t.name),
+                lines,
+            });
+        }
+    }
+    items
+}
+
+/// Stairs (ud, with their risers and treads) and railings (m).
+fn stairs_and_railings(model: &Model) -> Vec<Item> {
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let stairs: Vec<Measured> = model
+        .stairs()
+        .filter(|s| model.phase(s.id.0) == Phase::New)
+        .map(|s| {
+            let l = s.layout();
+            Measured {
+                comment: format!(
+                    "Escalera {} · {}: {} tabicas de {} mm, huella {} mm, ancho {} m",
+                    s.id.0,
+                    level_name(s.level),
+                    l.risers(),
+                    dec(l.riser * 1000.0, 0),
+                    dec(s.going * 1000.0, 0),
+                    dec(s.width, 2)
+                ),
+                units: 1.0,
+                length: 0.0,
+                width: s.width,
+                height: s.height,
+                quantity: 1.0,
+            }
+        })
+        .collect();
+    let railings: Vec<Measured> = model
+        .railings()
+        .filter(|r| model.phase(r.id.0) == Phase::New)
+        .map(|r| {
+            let len: f64 = r.path.windows(2).map(|w| w[0].distance(w[1])).sum();
+            Measured {
+                comment: format!(
+                    "Barandilla {} · {}{}",
+                    r.id.0,
+                    level_name(r.level),
+                    if r.glass.is_some() {
+                        " (con vidrio)"
+                    } else {
+                        ""
+                    }
+                ),
+                units: 1.0,
+                length: len,
+                width: 0.0,
+                height: r.height,
+                quantity: len,
+            }
+        })
+        .collect();
+    let mut v = Vec::new();
+    if !stairs.is_empty() {
+        v.push(Item {
+            code: "S01".into(),
+            unit: "ud",
+            summary: "Escalera de losa de hormigón armado".into(),
+            lines: stairs,
+        });
+    }
+    if !railings.is_empty() {
+        v.push(Item {
+            code: "S02".into(),
+            unit: "m",
+            summary: "Barandilla".into(),
+            lines: railings,
+        });
+    }
+    v
+}
+
+/// Curtain walls by type: m² of façade.
+fn curtain_walls(model: &Model) -> Vec<Item> {
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let mut items = Vec::new();
+    for (i, t) in model.curtain_types().enumerate() {
+        let lines: Vec<Measured> = model
+            .curtain_walls()
+            .filter(|c| c.curtain_type == t.id && model.phase(c.id.0) == Phase::New)
+            .map(|c| {
+                let len = c.start.distance(c.end);
+                Measured {
+                    comment: format!("Muro cortina {} · {}", c.id.0, level_name(c.level)),
+                    units: 1.0,
+                    length: len,
+                    width: 0.0,
+                    height: c.height,
+                    quantity: len * c.height,
+                }
+            })
+            .collect();
+        if !lines.is_empty() {
+            items.push(Item {
+                code: format!("K{:02}", i + 1),
+                unit: "m2",
+                summary: t.name.clone(),
+                lines,
+            });
+        }
+    }
+    items
 }
 
 /// A type mark usable as a BC3 code (letters, digits, `.`, `-`, `_`).
@@ -486,6 +785,189 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     String::new(),
                     String::new(),
                 ]),
+            }
+        }
+        ScheduleKind::Structure => {
+            let mut rows = Vec::new();
+            let (mut tl, mut tv) = (0.0, 0.0);
+            for t in model.member_types() {
+                let a = t.profile.area();
+                let (mut n, mut l) = (0, 0.0);
+                for c in model
+                    .columns()
+                    .filter(|c| c.member_type == t.id && on(Some(c.level)))
+                {
+                    n += 1;
+                    l += c.height;
+                }
+                for b in model
+                    .beams()
+                    .filter(|b| b.member_type == t.id && on(Some(b.level)))
+                {
+                    n += 1;
+                    l += b.length();
+                }
+                if n == 0 {
+                    continue;
+                }
+                tl += l;
+                tv += l * a;
+                let usage = match t.usage {
+                    archisim_core::MemberUsage::Column => "Pilar",
+                    archisim_core::MemberUsage::Beam => "Viga",
+                };
+                let material = model
+                    .material(t.material)
+                    .map_or(String::new(), |m| m.name.clone());
+                rows.push(vec![
+                    t.name.clone(),
+                    usage.into(),
+                    material,
+                    n.to_string(),
+                    dec(l, 2),
+                    dec(l * a, 3),
+                ]);
+            }
+            Table {
+                title: format!("PILARES Y VIGAS{scope}"),
+                columns: vec![
+                    col("Tipo", false),
+                    col("Uso", false),
+                    col("Material", false),
+                    col("Nº", true),
+                    col("Longitud (m)", true),
+                    col("Volumen (m³)", true),
+                ],
+                rows,
+                totals: Some(vec![
+                    "Total".into(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    dec(tl, 2),
+                    dec(tv, 3),
+                ]),
+            }
+        }
+        ScheduleKind::Roofs => {
+            let mut rows = Vec::new();
+            let (mut tp, mut ts) = (0.0, 0.0);
+            for r in model.roofs().filter(|r| on(Some(r.level))) {
+                let plan = archisim_core::signed_area(&r.eaves()).abs();
+                let surface = r.surface_area();
+                let slopes: Vec<String> = r
+                    .slopes
+                    .iter()
+                    .flatten()
+                    .map(|p| format!("{} %", dec(p * 100.0, 0)))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
+                tp += plan;
+                ts += surface;
+                rows.push(vec![
+                    model
+                        .slab_type(r.roof_type)
+                        .map_or(String::new(), |t| t.name.clone()),
+                    level_name(r.level),
+                    slopes.join(", "),
+                    dec(r.overhang, 2),
+                    dec(plan, 2),
+                    dec(surface, 2),
+                ]);
+            }
+            Table {
+                title: format!("CUBIERTAS{scope}"),
+                columns: vec![
+                    col("Tipo", false),
+                    col("Planta", false),
+                    col("Pendientes", false),
+                    col("Alero (m)", true),
+                    col("En planta (m²)", true),
+                    col("Inclinada (m²)", true),
+                ],
+                rows,
+                totals: Some(vec![
+                    "Total".into(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    dec(tp, 2),
+                    dec(ts, 2),
+                ]),
+            }
+        }
+        ScheduleKind::Stairs => {
+            let rows = model
+                .stairs()
+                .filter(|s| on(Some(s.level)))
+                .map(|s| {
+                    let l = s.layout();
+                    let issues = s.issues();
+                    vec![
+                        format!("{} · {}", s.id.0, level_name(s.level)),
+                        match s.usage {
+                            archisim_core::StairUse::General => "General".into(),
+                            archisim_core::StairUse::Restricted => "Restringido".into(),
+                        },
+                        l.risers().to_string(),
+                        dec(l.riser * 1000.0, 0),
+                        dec(s.going * 1000.0, 0),
+                        dec(s.width, 2),
+                        if issues.is_empty() {
+                            "Cumple".into()
+                        } else {
+                            format!("{} incumplimientos", issues.len())
+                        },
+                    ]
+                })
+                .collect();
+            Table {
+                title: format!("ESCALERAS{scope}"),
+                columns: vec![
+                    col("Escalera", false),
+                    col("Uso (CTE)", false),
+                    col("Tabicas", true),
+                    col("Tabica (mm)", true),
+                    col("Huella (mm)", true),
+                    col("Ancho (m)", true),
+                    col("DB-SUA", false),
+                ],
+                rows,
+                totals: None,
+            }
+        }
+        ScheduleKind::CurtainWalls => {
+            let mut rows = Vec::new();
+            let (mut tl, mut ta) = (0.0, 0.0);
+            for t in model.curtain_types() {
+                let (mut n, mut l, mut a) = (0, 0.0, 0.0);
+                for c in model
+                    .curtain_walls()
+                    .filter(|c| c.curtain_type == t.id && on(Some(c.level)))
+                {
+                    let len = c.start.distance(c.end);
+                    n += 1;
+                    l += len;
+                    a += len * c.height;
+                }
+                if n == 0 {
+                    continue;
+                }
+                tl += l;
+                ta += a;
+                rows.push(vec![t.name.clone(), n.to_string(), dec(l, 2), dec(a, 2)]);
+            }
+            Table {
+                title: format!("MUROS CORTINA{scope}"),
+                columns: vec![
+                    col("Tipo", false),
+                    col("Nº", true),
+                    col("Longitud (m)", true),
+                    col("Superficie (m²)", true),
+                ],
+                rows,
+                totals: Some(vec!["Total".into(), String::new(), dec(tl, 2), dec(ta, 2)]),
             }
         }
     }

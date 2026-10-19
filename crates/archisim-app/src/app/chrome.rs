@@ -184,10 +184,20 @@ impl ArchiSimApp {
             if ui.button("Exportar IFC4…").clicked() {
                 self.export_ifc();
             }
-            ui.menu_button("Exportar planta (PDF, DXF, SVG)", |ui| {
+            let section = matches!(self.mode, ViewMode::Section);
+            let what = if section {
+                "Exportar sección o alzado (PDF, DXF, SVG)"
+            } else {
+                "Exportar planta (PDF, DXF, SVG)"
+            };
+            ui.menu_button(what, |ui| {
                 for s in SCALES {
                     if ui.button(format!("A escala 1:{s}…")).clicked() {
-                        self.export_plan(s);
+                        if section {
+                            self.export_section(s);
+                        } else {
+                            self.export_plan(s);
+                        }
                     }
                 }
             });

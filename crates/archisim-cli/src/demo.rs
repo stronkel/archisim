@@ -685,6 +685,7 @@ pub fn build() -> Result<Document, ModelError> {
         m.add_viewport(NewViewport {
             sheet,
             level: pb,
+            section: None,
             scale: 50.0,
             cut_plane: 1.0,
             crop: None,
@@ -699,6 +700,35 @@ pub fn build() -> Result<Document, ModelError> {
             Some(pb),
             Point2::new(0.579 - w * 0.001, 0.405),
         )?;
+        // Sections and elevations at 1:100 on A-02: the south elevation
+        // above, section A below, one over the other on the left.
+        let sheet2 = m.add_sheet(NewSheet {
+            number: "A-02".into(),
+            name: "Alzado sur y sección A".into(),
+            width: 594.0,
+            height: 420.0,
+        })?;
+        let find = |m: &archisim_core::Model, t: &str| {
+            m.sections()
+                .find(|s| s.title() == t)
+                .map(|s| s.id)
+                .ok_or(ModelError::InvalidShape("demo section missing"))
+        };
+        for (title, top) in [("Alzado Sur", 0.395), ("Sección A", 0.2)] {
+            let id = find(m, title)?;
+            let crop = archisim_plan::sheet::section_extent(m, id, 100.0)
+                .ok_or(ModelError::InvalidShape("demo section missing"))?;
+            let half = (crop.1 - crop.0) * (0.5 / 100.0);
+            m.add_viewport(NewViewport {
+                sheet: sheet2,
+                level: pb,
+                section: Some(id),
+                scale: 100.0,
+                cut_plane: 1.0,
+                crop: Some(crop),
+                centre: Point2::new(0.03 + half.x, top - half.y),
+            })?;
+        }
         Ok(())
     })?;
 
@@ -729,7 +759,8 @@ mod tests {
         assert_eq!(m.opening_types().count(), 12);
         assert_eq!(doc.undo_label(), Some("Plano"));
         assert_eq!(m.sections().count(), 6);
-        assert_eq!(m.sheets().len(), 1);
+        assert_eq!(m.sheets().len(), 2);
+        assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 2);
         assert_eq!(m.rooms().count(), 4);
         assert_eq!(m.tags().count(), 9);
         let total: f64 = m.rooms().map(|r| r.area()).sum();
@@ -754,6 +785,28 @@ mod tests {
     /// The partitions of the demo butt against the façades: their inner
     /// leaf goes through the plaster; a load-bearing wall instead goes up
     /// to the outer leaf. The IFC volumes still match (validated in CI).
+    /// Section A dimensions the floor-to-floor height (3,55) and the clear
+    /// height of the two rooms it cuts (3,00 from the floor to the slab);
+    /// switched off, none.
+    #[test]
+    fn sections_dimension_their_heights() {
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let a = m.sections().find(|s| s.title() == "Sección A").unwrap();
+        let options = archisim_plan::PlanOptions {
+            scale: 100.0,
+            ..Default::default()
+        };
+        let d = archisim_plan::section::section_drawing(m, a);
+        let svg = archisim_plan::section::render_section(m, &d, &options);
+        assert!(svg.contains("<g id=\"heights\">"));
+        let mut off = a.clone();
+        off.heights = false;
+        let d = archisim_plan::section::section_drawing(m, &off);
+        let svg = archisim_plan::section::render_section(m, &d, &options);
+        assert!(!svg.contains("<g id=\"heights\">"));
+    }
+
     /// A view can hide what phase 2 added: the furniture, the columns and
     /// beams, the terrain…, as it hides walls or dimensions.
     #[test]

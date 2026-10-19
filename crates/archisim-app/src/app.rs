@@ -342,7 +342,8 @@ pub struct ArchiSimApp {
     /// A view being moved on its sheet.
     sheet_drag: Option<sheet_ui::ViewportDrag>,
     /// Level and scale offered for the next view placed on a sheet.
-    sheet_new_level: Option<LevelId>,
+    /// What «Añadir vista» places: a level's plan or a section.
+    sheet_new_view: Option<sheet_ui::ViewChoice>,
     sheet_new_scale: f64,
     /// Schedule and level offered for the next schedule placed on a sheet.
     table_new_kind: archisim_core::ScheduleKind,
@@ -486,7 +487,7 @@ impl ArchiSimApp {
             sheet_sel: None,
             sheet_hover: None,
             sheet_drag: None,
-            sheet_new_level: None,
+            sheet_new_view: None,
             sheet_new_scale: 50.0,
             table_new_kind: archisim_core::ScheduleKind::Rooms,
             table_new_level: None,
@@ -888,6 +889,44 @@ impl ArchiSimApp {
                 Ok(()) => self.say(format!("Planta exportada en {}.", path.display())),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }
+        }
+    }
+
+    /// Exports the section or elevation shown as PDF, DXF or SVG, with the
+    /// phases the view shows.
+    fn export_section(&mut self, scale: f64) {
+        let Some(id) = self.active_section() else {
+            return;
+        };
+        let title = self
+            .ed
+            .model()
+            .section(id)
+            .map(|s| s.title())
+            .unwrap_or_default();
+        let mut d = rfd::FileDialog::new()
+            .set_title(format!("Exportar {title} 1:{scale}"))
+            .add_filter("PDF (para imprimir)", &["pdf"])
+            .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
+            .add_filter("SVG", &["svg"])
+            .set_file_name(format!("{} - {title} 1-{scale}.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.save_file() {
+            let options = self.section_export_options(scale);
+            match self.ed.export_section(&path, id, &options) {
+                Ok(()) => self.say(format!("{title} exportada en {}.", path.display())),
+                Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+            }
+        }
+    }
+
+    pub(super) fn section_export_options(&self, scale: f64) -> archisim_plan::PlanOptions {
+        archisim_plan::PlanOptions {
+            scale,
+            phase_view: self.phase_view,
+            ..archisim_plan::PlanOptions::default()
         }
     }
 

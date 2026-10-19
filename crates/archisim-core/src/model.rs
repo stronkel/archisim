@@ -3663,6 +3663,8 @@ impl Model {
             }
             model.restore_draw_layer(layer).map_err(fail(name))?;
         }
+        // Sections before sheets: views on sheets may show them.
+        model.restore_sections(parts.sections, &mut claim)?;
         for sh in parts.sheets {
             let name = format!("sheet {} «{}»", sh.id.0, sh.number);
             claim(sh.id.0, None)
@@ -3728,7 +3730,6 @@ impl Model {
                 error,
             })?;
         model.restore_phases(parts.phases)?;
-        model.restore_sections(parts.sections, &mut claim)?;
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);
         Ok(model)

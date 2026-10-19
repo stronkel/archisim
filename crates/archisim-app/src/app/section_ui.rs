@@ -413,6 +413,20 @@ impl ArchiSimApp {
                 "",
                 &format!("{} mm", fmt_mm(s.start.distance(s.end))),
             );
+            row(
+                ui,
+                "Acotar alturas",
+                "Alturas entre plantas a la izquierda y, en una sección, la altura libre de cada local cortado",
+                |ui, _| {
+                    let mut on = s.heights;
+                    if ui.checkbox(&mut on, "").changed() {
+                        let r = self
+                            .ed
+                            .edit_section("Acotar alturas de la sección", id, |s| s.heights = on);
+                        self.report(r, "Sección cambiada.");
+                    }
+                },
+            );
         });
         ui.add_space(6.0);
         ui.horizontal(|ui| {

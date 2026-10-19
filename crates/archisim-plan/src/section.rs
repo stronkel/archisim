@@ -38,6 +38,9 @@ pub struct SectionDrawing {
     faces: Vec<Face>,
     /// Levels: name and elevation.
     levels: Vec<(String, f64)>,
+    /// Height dimensions: the points measured (vertical, along x = the
+    /// first point's) and where the dimension line goes (x).
+    heights: Vec<(Vec<Point2>, f64)>,
     pub lo: Point2,
     pub hi: Point2,
     pub title: String,
@@ -175,6 +178,26 @@ impl SectionDrawing {
 }
 
 /// Works out what a section draws.
+impl SectionDrawing {
+    /// How far right of the drawing its level labels reach at a scale
+    /// (they start a metre past it), metres.
+    pub fn labels_reach(&self, scale: f64) -> f64 {
+        let k = scale / 1000.0;
+        let h = annotate::TEXT_HEIGHT * k;
+        let widest = self
+            .levels
+            .iter()
+            .map(|(name, z)| {
+                crate::lettering::text_width(
+                    &format!("{} {}", annotate::format_elevation(*z), name),
+                    h,
+                )
+            })
+            .fold(0.0, f64::max);
+        1.0 + 0.5 * k + widest + 2.0 * k
+    }
+}
+
 pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     let mut d = SectionDrawing {
         title: sec.title(),
@@ -342,6 +365,13 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
             let x = lo.x;
             grow_to(&mut lo, &mut hi, Point2::new(x, *z));
         }
+        if sec.heights {
+            d.heights = heights(model, sec, &d.levels, &d.cuts, lo.x);
+            // Room for the chain of levels on the left.
+            if d.heights.iter().any(|(_, x)| *x < lo.x) {
+                lo = Point2::new(lo.x - 1.5, lo.y);
+            }
+        }
         d.lo = lo;
         d.hi = hi;
     } else {
@@ -349,6 +379,112 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         d.hi = Point2::new(o.distance(sec.end), 3.0);
     }
     d
+}
+
+/// The heights a section dimensions: the floor-to-floor heights of its
+/// levels, in a chain a metre left of the drawing (`left`), and, in a
+/// section (not an elevation), the clear height of each room the line cuts,
+/// in the middle of the room: from the top of what is cut under its floor
+/// to the underside of what is cut above (a room with its own height, a
+/// false ceiling, up to it).
+fn heights(
+    model: &Model,
+    sec: &SectionLine,
+    levels: &[(String, f64)],
+    cuts: &[CutPiece],
+    left: f64,
+) -> Vec<(Vec<Point2>, f64)> {
+    // Heights at which the cut pieces cross the vertical through x.
+    let crossings = |x: f64| -> Vec<f64> {
+        let mut v = Vec::new();
+        for (_, loops, _, _) in cuts {
+            for l in loops {
+                let n = l.len();
+                for i in 0..n {
+                    let (a, b) = (l[i], l[(i + 1) % n]);
+                    if (a.x <= x) != (b.x <= x) && (b.x - a.x).abs() > 1e-12 {
+                        v.push(a.y + (x - a.x) / (b.x - a.x) * (b.y - a.y));
+                    }
+                }
+            }
+        }
+        v
+    };
+    let mut out = Vec::new();
+    let mut zs: Vec<f64> = levels.iter().map(|(_, z)| *z).collect();
+    zs.sort_by(f64::total_cmp);
+    zs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    if zs.len() >= 2 {
+        let x = left - 1.0;
+        out.push((zs.iter().map(|z| Point2::new(x, *z)).collect(), x));
+    }
+    if sec.kind != archisim_core::SectionKind::Section {
+        return out;
+    }
+    let (Some(u), len) = (sec.along(), sec.start.distance(sec.end)) else {
+        return out;
+    };
+    for r in model.rooms() {
+        let Some(level) = model.level(r.level) else {
+            continue;
+        };
+        // Where the line crosses the room's outline, along the line.
+        let n = r.outline.len();
+        let mut ts: Vec<f64> = Vec::new();
+        for i in 0..n {
+            let (a, b) = (r.outline[i], r.outline[(i + 1) % n]);
+            let e = b - a;
+            let denom = u.x * e.y - u.y * e.x;
+            if denom.abs() < 1e-12 {
+                continue;
+            }
+            let w = a - sec.start;
+            let t = (w.x * e.y - w.y * e.x) / denom;
+            let s = (w.x * u.y - w.y * u.x) / denom;
+            if (0.0..1.0).contains(&s) {
+                ts.push(t.clamp(0.0, len));
+            }
+        }
+        ts.sort_by(f64::total_cmp);
+        for pair in ts.chunks(2) {
+            let [t0, t1] = pair else { continue };
+            if t1 - t0 < 0.6 {
+                continue;
+            }
+            let mid = (t0 + t1) / 2.0;
+            if !r.contains(sec.start + u * mid) {
+                continue;
+            }
+            let ys = crossings(mid);
+            let base = level.elevation;
+            // The floor: the top of what is cut just under the level.
+            let z0 = ys
+                .iter()
+                .copied()
+                .filter(|y| (*y - base).abs() <= 0.3)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let z0 = if z0.is_finite() { z0 } else { base };
+            let z1 = match r.height {
+                Some(h) => base + h,
+                None => {
+                    let up = ys
+                        .iter()
+                        .copied()
+                        .filter(|y| *y > z0 + 0.5)
+                        .fold(f64::INFINITY, f64::min);
+                    if up.is_finite() {
+                        up
+                    } else {
+                        base + model.room_height(r)
+                    }
+                }
+            };
+            if z1 - z0 > 0.5 {
+                out.push((vec![Point2::new(mid, z0), Point2::new(mid, z1)], mid));
+            }
+        }
+    }
+    out
 }
 
 /// Glass seen beyond the cut.
@@ -686,7 +822,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             (hi.y - lo.y).max(1e-9),
         ),
         None => {
-            let extra = 30.0 * k; // the level labels on the right
+            let extra = d.labels_reach(options.scale); // the level labels
             (
                 d.lo.x - margin,
                 -d.hi.y - margin,
@@ -801,6 +937,22 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
     s.push_str("</g>\n");
 
     // Levels.
+    if !d.heights.is_empty() {
+        s.push_str("<g id=\"heights\">\n");
+        for (points, x) in &d.heights {
+            let mid = (points[0].y + points[points.len() - 1].y) / 2.0;
+            let dim = archisim_core::Dimension {
+                id: archisim_core::DimensionId(0),
+                level: archisim_core::LevelId(0),
+                points: points.clone(),
+                direction: Point2::new(0.0, 1.0),
+                position: Point2::new(*x, mid),
+                anchors: vec![None; points.len()],
+            };
+            annotate::draw_dimension(&mut s, &dim, k);
+        }
+        s.push_str("</g>\n");
+    }
     s.push_str("<g id=\"levels\">\n");
     let (x0, x1) = (d.lo.x - 1.0, d.hi.x + 1.0);
     for (name, z) in &d.levels {
@@ -832,7 +984,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
     }
     s.push_str("</g>\n");
 
-    if options.viewport.is_none() {
+    if options.viewport.is_none() && options.title {
         // Title, in the technical lettering (no fonts needed).
         let h = TEXT_SIZE * k;
         let text = format!(

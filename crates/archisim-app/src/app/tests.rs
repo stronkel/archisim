@@ -2892,6 +2892,7 @@ fn sheets_views_and_drafting_on_paper() {
         .add_viewport(archisim_core::NewViewport {
             sheet,
             level,
+            section: None,
             scale: 100.0,
             cut_plane: 1.0,
             crop: None,
@@ -3170,4 +3171,66 @@ fn escape_then_a_new_command_in_the_same_instant() {
     h.frame();
     h.key(Key::Enter);
     assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("CIRCULO"));
+}
+
+/// Sections and elevations on sheets: placed from the sheet's panel with
+/// their crop worked out once, drawn on the sheet, opened with a double
+/// click; and exported on their own to PDF, DXF and SVG.
+#[test]
+fn sections_on_sheets_and_exported() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("s");
+    h.click_at(p(-0.8, 4.0));
+    h.click_at(p(12.8, 4.0));
+    h.key(Key::Escape);
+    let sec = h.model().sections().next().unwrap().id;
+    h.app.new_sheet();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    let v = h
+        .app
+        .place_view(
+            sheet,
+            super::sheet_ui::ViewChoice::Section(sec),
+            100.0,
+            Point2::new(0.2, 0.2),
+        )
+        .unwrap();
+    let vp = h.model().viewport(v).unwrap().clone();
+    assert_eq!(vp.section, Some(sec));
+    let (lo, hi) = vp.crop.expect("a section view gets its crop");
+    // The 12 m of the outline, and the level labels on the right.
+    assert!(hi.x - lo.x > 12.0, "{lo:?} {hi:?}");
+    assert_eq!(
+        archisim_plan::sheet::viewport_title(h.model(), &vp),
+        "SECCIÓN A"
+    );
+    let svg = archisim_plan::sheet::render_sheet(h.model(), sheet, &Default::default());
+    assert!(
+        svg.contains("id=\"cut\""),
+        "the section is drawn on the sheet"
+    );
+    h.frame();
+    // Exported on its own.
+    let dir = std::env::temp_dir().join(format!("archisim-sec-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let options = h.app.section_export_options(50.0);
+    for ext in ["pdf", "dxf", "svg"] {
+        let path = dir.join(format!("seccion.{ext}"));
+        h.app.ed.export_section(&path, sec, &options).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        match ext {
+            "pdf" => assert!(bytes.starts_with(b"%PDF")),
+            "dxf" => assert!(String::from_utf8_lossy(&bytes).contains("AC1021")),
+            _ => assert!(String::from_utf8_lossy(&bytes).contains("<svg")),
+        }
+    }
+    // Deleting the section takes its view off the sheet.
+    h.app.ed.selection = [Element::Section(sec)].into_iter().collect();
+    h.app.ed.delete_selection().unwrap();
+    assert_eq!(h.model().viewports().count(), 0);
+    let _ = std::fs::remove_dir_all(&dir);
 }

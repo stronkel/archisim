@@ -375,7 +375,10 @@ impl ArchiSimApp {
                 _ => None,
             };
             if let Some(v) = view {
-                self.open_view(TabKind::Plan(v.level));
+                self.open_view(match v.section {
+                    Some(s) => TabKind::Section(s),
+                    None => TabKind::Plan(v.level),
+                });
                 return;
             }
         }
@@ -629,26 +632,37 @@ impl ArchiSimApp {
             let r = self.ed.set_sheet(new);
             self.report(r, "Plano cambiado.");
         }
-        // Add a view.
-        let levels: Vec<(LevelId, String)> = self
-            .ed
-            .model()
+        // Add a view: the plan of a level, or a section or elevation.
+        let model = self.ed.model();
+        let mut views: Vec<(ViewChoice, String)> = model
             .levels()
             .iter()
-            .map(|l| (l.id, l.name.clone()))
+            .map(|l| (ViewChoice::Level(l.id), format!("Planta · {}", l.name)))
             .collect();
+        views.extend(
+            model
+                .sections()
+                .map(|s| (ViewChoice::Section(s.id), s.title())),
+        );
         let mut add = None;
         group(ui, "sheet-add", "Añadir vista", |ui| {
-            let mut level = self.sheet_new_level.unwrap_or(self.ed.level);
-            if !levels.iter().any(|l| l.0 == level) {
-                level = levels.first().map(|l| l.0).unwrap_or(level);
+            let mut view = self
+                .sheet_new_view
+                .unwrap_or(ViewChoice::Level(self.ed.level));
+            if !views.iter().any(|v| v.0 == view) {
+                view = views.first().map(|v| v.0).unwrap_or(view);
             }
-            row(ui, "Planta", "", |ui, w| {
-                let refs: Vec<(LevelId, &str)> =
-                    levels.iter().map(|(a, b)| (*a, b.as_str())).collect();
-                level = choice(ui, "sheet-add-level", w, level, &refs);
-            });
-            self.sheet_new_level = Some(level);
+            row(
+                ui,
+                "Vista",
+                "La planta de un nivel, o una sección o alzado",
+                |ui, w| {
+                    let refs: Vec<(ViewChoice, &str)> =
+                        views.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                    view = choice(ui, "sheet-add-view", w, view, &refs);
+                },
+            );
+            self.sheet_new_view = Some(view);
             let mut scale = self.sheet_new_scale as u32;
             row(ui, "Escala", "", |ui, w| {
                 let options: Vec<(u32, String)> = [20.0, 50.0, 100.0, 200.0, 500.0]
@@ -665,22 +679,15 @@ impl ArchiSimApp {
                 .on_hover_text("Se coloca en el centro; luego arrástrala")
                 .clicked()
             {
-                add = Some((level, scale as f64));
+                add = Some((view, scale as f64));
             }
         });
-        if let Some((level, scale)) = add {
+        if let Some((view, scale)) = add {
             let centre = Point2::new(
                 (sheet.width - archisim_plan::sheet::TITLE_W / 2.0) * MM / 2.0 + 0.01,
                 sheet.height * MM / 2.0 + 0.02,
             );
-            let r = self.ed.add_viewport(NewViewport {
-                sheet: id,
-                level,
-                scale,
-                cut_plane: self.cut_plane,
-                crop: None,
-                centre,
-            });
+            let r = self.place_view(id, view, scale, centre);
             match r {
                 Ok(v) => {
                     self.sheet_sel = Some(Placed::View(v));
@@ -798,12 +805,18 @@ impl ArchiSimApp {
             .iter()
             .map(|l| (l.id, l.name.clone()))
             .collect();
+        let section_title = v.section.and_then(|s| model.section(s)).map(|s| s.title());
         group(ui, "vp-view", "Vista", |ui| {
-            row(ui, "Planta", "", |ui, w| {
-                let refs: Vec<(LevelId, &str)> =
-                    levels.iter().map(|(a, b)| (*a, b.as_str())).collect();
-                new.level = choice(ui, "vp-level", w, new.level, &refs);
-            });
+            match &section_title {
+                Some(t) => text_row(ui, "Sección o alzado", "", t),
+                None => {
+                    row(ui, "Planta", "", |ui, w| {
+                        let refs: Vec<(LevelId, &str)> =
+                            levels.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                        new.level = choice(ui, "vp-level", w, new.level, &refs);
+                    });
+                }
+            }
             row(ui, "Escala", "", |ui, w| {
                 let mut opts: Vec<(u32, String)> = [20.0, 50.0, 100.0, 200.0, 500.0]
                     .iter()
@@ -815,22 +828,29 @@ impl ArchiSimApp {
                 let refs: Vec<(u32, &str)> = opts.iter().map(|(a, b)| (*a, b.as_str())).collect();
                 new.scale = choice(ui, "vp-scale", w, new.scale as u32, &refs) as f64;
             });
-            row(ui, "Plano de corte (mm)", "", |ui, w| {
-                if let Some(c) =
-                    length_field(ui, Id::unique(("vp-cut", v.id)), v.cut_plane, w - 8.0)
-                {
-                    if c > 0.0 {
-                        new.cut_plane = c;
+            if section_title.is_none() {
+                row(ui, "Plano de corte (mm)", "", |ui, w| {
+                    if let Some(c) =
+                        length_field(ui, Id::unique(("vp-cut", v.id)), v.cut_plane, w - 8.0)
+                    {
+                        if c > 0.0 {
+                            new.cut_plane = c;
+                        }
                     }
-                }
-            });
-            row(ui, "Título", "Vacío: el nombre de la planta", |ui, w| {
-                if let Some(t) =
-                    text_edit_committed(ui, Id::unique(("vp-title", v.id)), &v.title, w - 8.0)
-                {
-                    new.title = t;
-                }
-            });
+                });
+            }
+            row(
+                ui,
+                "Título",
+                "Vacío: el nombre de la planta o de la sección",
+                |ui, w| {
+                    if let Some(t) =
+                        text_edit_committed(ui, Id::unique(("vp-title", v.id)), &v.title, w - 8.0)
+                    {
+                        new.title = t;
+                    }
+                },
+            );
             row(ui, "Mostrar título", "", |ui, _| {
                 ui.checkbox(&mut new.show_title, "");
             });
@@ -847,7 +867,7 @@ impl ArchiSimApp {
             row(
                 ui,
                 "Recorte propio",
-                "Sin recorte, la vista muestra toda la planta",
+                "Sin recorte, la vista muestra toda la planta o la sección",
                 |ui, _| {
                     if ui.checkbox(&mut custom, "").changed() {
                         new.crop = custom.then_some((lo, hi));
@@ -901,7 +921,10 @@ impl ArchiSimApp {
         }
         ui.add_space(4.0);
         if ui.button("Abrir la planta").clicked() {
-            self.open_view(TabKind::Plan(v.level));
+            self.open_view(match v.section {
+                Some(s) => TabKind::Section(s),
+                None => TabKind::Plan(v.level),
+            });
         }
         if ui.button("Quitar del plano").clicked() {
             let r = self.ed.remove_viewport(v.id);
@@ -1016,5 +1039,42 @@ impl ArchiSimApp {
             self.report(r, "Plano borrado.");
         }
         open
+    }
+}
+
+/// What a new view on a sheet shows.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum ViewChoice {
+    Level(LevelId),
+    Section(archisim_core::SectionId),
+}
+
+impl ArchiSimApp {
+    /// Places a view on a sheet, centred at `centre`. A section gets as
+    /// crop what it draws now (worked out once, as a view's crop region),
+    /// so the sheet need not draw it to know its size.
+    pub(super) fn place_view(
+        &mut self,
+        sheet: archisim_core::SheetId,
+        view: ViewChoice,
+        scale: f64,
+        centre: Point2,
+    ) -> crate::editor::EditResult<ViewportId> {
+        let (level, section, crop) = match view {
+            ViewChoice::Level(l) => (l, None, None),
+            ViewChoice::Section(s) => {
+                let crop = archisim_plan::sheet::section_extent(self.ed.model(), s, scale);
+                (self.ed.level, Some(s), crop)
+            }
+        };
+        self.ed.add_viewport(NewViewport {
+            sheet,
+            level,
+            section,
+            scale,
+            cut_plane: self.cut_plane,
+            crop,
+            centre,
+        })
     }
 }

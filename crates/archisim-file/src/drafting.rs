@@ -707,6 +707,9 @@ pub(crate) struct Viewport {
     pub id: u64,
     pub sheet: u64,
     pub level: u64,
+    /// A section or elevation instead of the level's plan (version 10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<u64>,
     pub scale: f64,
     pub cut_plane: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -757,6 +760,7 @@ pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
             id: v.id.0,
             sheet: v.sheet.0,
             level: v.level.0,
+            section: v.section.map(|s| s.0),
             scale: v.scale,
             cut_plane: v.cut_plane,
             crop: v.crop.map(|(a, b)| [xy(a), xy(b)]),
@@ -776,6 +780,7 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
                 id: core::ViewportId(v.id),
                 sheet: core::SheetId(v.sheet),
                 level: core::LevelId(v.level),
+                section: v.section.map(core::SectionId),
                 scale: v.scale,
                 cut_plane: v.cut_plane,
                 crop: v.crop.map(|[a, b]| (pt(a), pt(b))),

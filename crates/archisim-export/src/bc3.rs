@@ -172,4 +172,86 @@ mod tests {
         assert!(text.contains("|20|"), "{text}");
         assert!(text.ends_with("\r\n"));
     }
+
+    /// A refurbishment: the demolished wall goes to «Demoliciones», the
+    /// existing one is not measured; a concrete column goes to
+    /// «Estructura» in m³ and a steel beam in kg.
+    #[test]
+    fn demolitions_and_structure() {
+        use archisim_core::{MemberUsage, NewBeam, NewColumn, Phase};
+        let mut m = Model::new("Reforma");
+        let pb = m.add_level("Planta baja", 0.0);
+        m.add_level("Planta 1", 3.0);
+        let lib = archisim_library::add_library(&mut m).unwrap();
+        let wall = |m: &mut Model, y: f64| {
+            m.add_wall(NewWall {
+                wall_type: lib.facade,
+                level: pb,
+                start: Point2::new(0.0, y),
+                end: Point2::new(4.0, y),
+                reference: ReferenceLine::ExteriorFace,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap()
+        };
+        let kept = wall(&mut m, 0.0);
+        let gone = wall(&mut m, 5.0);
+        wall(&mut m, 10.0);
+        m.set_phase(kept.0, Phase::Existing).unwrap();
+        m.set_phase(gone.0, Phase::Demolished).unwrap();
+        let concrete = m
+            .member_types()
+            .find(|t| t.usage == MemberUsage::Column && t.name.contains("30"))
+            .unwrap()
+            .clone();
+        let steel = m
+            .member_types()
+            .find(|t| t.usage == MemberUsage::Beam && t.name.contains("IPE"))
+            .unwrap()
+            .clone();
+        m.add_column(NewColumn {
+            member_type: concrete.id,
+            level: pb,
+            position: Point2::new(1.0, 1.0),
+            rotation: 0.0,
+            base_offset: 0.0,
+            top: WallTop::Unconnected,
+            height: 3.0,
+        })
+        .unwrap();
+        m.add_beam(NewBeam {
+            member_type: steel.id,
+            level: pb,
+            start: Point2::new(0.0, 2.0),
+            end: Point2::new(5.0, 2.0),
+            top_offset: 3.0,
+        })
+        .unwrap();
+        let chapters = archisim_plan::schedules::measurements(&m);
+        let chapter = |c: &str| chapters.iter().find(|x| x.0 == c).unwrap();
+        // Demolitions: the one wall, 4 × 2,5 = 10 m².
+        let demo = chapter("00");
+        assert_eq!(demo.2.len(), 1);
+        assert!((demo.2[0].total() - 10.0).abs() < 1e-9);
+        // Walls: only the new one.
+        let walls = chapter("01");
+        assert!((walls.2.iter().map(|i| i.total()).sum::<f64>() - 10.0).abs() < 1e-9);
+        // Structure: m³ of the column, kg of the beam.
+        let st = chapter("05");
+        let col = st.2.iter().find(|i| i.summary == concrete.name).unwrap();
+        assert_eq!(col.unit, "m3");
+        assert!((col.total() - concrete.profile.area() * 3.0).abs() < 1e-9);
+        let beam = st.2.iter().find(|i| i.summary == steel.name).unwrap();
+        assert_eq!(beam.unit, "kg");
+        assert!((beam.total() - steel.profile.area() * 5.0 * 7850.0).abs() < 1e-6);
+        let text: String = bc3(&m, "19102026", "0.28")
+            .iter()
+            .map(|b| *b as char)
+            .collect();
+        assert!(text.contains("~C|00#||Demoliciones|"), "{text}");
+        assert!(text.contains("~C|05#||Estructura|"), "{text}");
+    }
 }

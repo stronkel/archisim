@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (madrugada) · Planos completos: secciones y alzados en planos, tablas y mediciones de todo, alturas en sección (v0.28)
+
+Primer bloque de los cinco que Antonio pidió en orden (planos completos, IFC 4.3, bloque E, CTE, librería AD5). Decisiones suyas: **D3 → IFC 4.3**; **D4** (nombre) pendiente, con una propuesta de nombres (Alarife, Tapial, Odiel…) enviada en el chat.
+
+**Hecho**
+- **Secciones y alzados en los planos.** En el panel del plano, «Añadir vista» ofrece las plantas y también cada sección y alzado. Al colocarla se calcula una vez lo que ocupa (recorte), con las cotas de nivel de la derecha enteras; luego se arrastra, se recorta y se titula como una planta («SECCIÓN A», «ALZADO SUR»). Doble clic en la vista abre la sección. Borrar una sección quita sus vistas de los planos. PDF y DXF de los planos las llevan.
+- **Exportar una sección o un alzado** a PDF, DXF o SVG (Archivo → «Exportar sección o alzado», con la pestaña de la sección delante), con las fases que muestra la vista.
+- **Alturas en sección**, automáticas (se apagan con «Acotar alturas» en las propiedades de la sección): la cadena de alturas entre plantas a la izquierda y, en las secciones, la **altura libre de cada local cortado**, medida en el propio corte: de la cara superior del suelo a la cara inferior de lo que haya encima (o hasta la altura propia del local, si la tiene, como un falso techo).
+- **Tablas nuevas**: Pilares y vigas (nº, longitud, volumen), Cubiertas (pendientes, alero, superficie en planta e inclinada), Escaleras (tabicas, huella, ancho y si cumple el DB-SUA) y Muros cortina. En el navegador y para colocar en los planos.
+- **Mediciones BC3**: capítulo **00 Demoliciones** en las reformas (muros y forjados a derribar en m², carpinterías a desmontar, pilares y vigas en m³), y lo existente que se conserva ya no se mide; capítulos nuevos de **Estructura** (hormigón y madera en m³, acero en kg), **Cubiertas** (m² inclinados), **Escaleras y barandillas** y **Muros cortina**.
+- Demo: plano **A-02 «Alzado sur y sección A»** a 1:100.
+- Recuperadas dos pruebas del formato que se habían perdido al juntar las ramas (capas y dibujo 2D en ficheros antiguos; planos, vistas y cajetín).
+- Formato `.archisim` **versión 10** (vistas de secciones, «acotar alturas»); los de la 9 se abren tal cual. Sin cambios en el IFC. Versión 0.28.0.
+
+**Pendiente / limitaciones conocidas**
+- Acotar a mano sobre una sección (cotas propias, textos): la línea de órdenes todavía no dibuja en las secciones.
+- Una vista de sección en un plano no tiene fase de reforma propia (muestra todo).
+- El recorte de una sección en un plano se calcula al colocarla: si el edificio crece, quita y vuelve a poner «Recorte propio».
+
+**Antonio debe probar**
+1. Instala la v0.28 (se publica sola).
+2. Abre la demo y el plano **A-02**: alzado sur y sección A a 1:100. ¿Grosores, rótulos y cotas como los pondrías en un plano de proyecto?
+3. En un plano tuyo: panel «Añadir vista» → elige «Sección A» o un alzado, escala 1:50, «Colocar en el plano». Arrástrala y recórtala. Exporta el plano a PDF y a DXF.
+4. Abre la Sección A: a la izquierda la altura entre plantas; en cada local, su **altura libre**. ¿Es la que medirías tú? Pon a un local una altura propia de 2,50 (falso techo) y mira cómo cambia.
+5. Navegador → Tablas → **Escaleras** y **Pilares y vigas**; Archivo → Exportar mediciones (BC3) y ábrelo en Presto o Arquímedes. En un proyecto con fases, marca un tabique «A derribar»: debe salir en el capítulo 00 y no en el 01.
+
 ## 2026-10-19 (noche) · Las cuatro ramas juntas en `main`, con un solo local (v0.27)
 
 Antonio dio luz verde para unificar los locales y fusionar en `main` las PR #19 (fase 2), #20 (revisión R1–R11), #21 (fase 3, documentación) y #22 (fase 4, colaboración). Se hizo en la rama `bloque/fusion` y, con todo comprobado, se subió a `main`.

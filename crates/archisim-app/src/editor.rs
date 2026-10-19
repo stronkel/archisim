@@ -254,6 +254,37 @@ impl Editor {
         std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir la planta: {e}"))
     }
 
+    /// Writes a section or elevation, as the file's extension says: PDF
+    /// (vector, at its scale), DXF (millimetres) or SVG. `options` gives
+    /// the scale and the phases shown.
+    pub fn export_section(
+        &self,
+        path: &Path,
+        section: archisim_core::SectionId,
+        options: &PlanOptions,
+    ) -> EditResult {
+        let model = self.model();
+        let sec = model.section(section).ok_or("la sección ya no existe")?;
+        let phased = archisim_plan::phases::phase_model(model, options.phase_view);
+        let shown = phased.as_ref().unwrap_or(model);
+        let d = archisim_plan::section::section_drawing(shown, sec);
+        let bytes = match extension(path).as_str() {
+            "dxf" => archisim_export::dxf::section_dxf(shown, &d, options)?.into_bytes(),
+            "pdf" => {
+                let svg = archisim_plan::section::render_section(shown, &d, options);
+                archisim_export::pdf::pdf(
+                    &[archisim_export::pdf::Page {
+                        svg: &svg,
+                        title: &d.title,
+                    }],
+                    &model.project_name,
+                )?
+            }
+            _ => archisim_plan::section::render_section(shown, &d, options).into_bytes(),
+        };
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir la sección: {e}"))
+    }
+
     /// Writes sheets: several in one PDF, or one as PDF, DXF or SVG.
     pub fn export_sheets(&self, path: &Path, sheets: &[archisim_core::SheetId]) -> EditResult {
         let model = self.model();
