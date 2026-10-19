@@ -50,7 +50,7 @@ impl ArchiSimApp {
         let table = archisim_plan::schedules::table(model, kind, level);
         egui::Window::new("Tabla de planificación")
             .open(&mut open)
-            .default_size([760.0, 420.0])
+            .default_size([980.0, 420.0])
             .resizable(true)
             .collapsible(false)
             .show(ctx, |ui| {

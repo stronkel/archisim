@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22).
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 3 en v0.25).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -55,23 +55,25 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 2.6 | **Escaleras** por tramos y mesetas con comprobación de huella, tabica y anchura (CTE DB-SUA); **barandillas**; **rampas** | L | 2.1 |
 | 2.7 ◐ v0.20 | **Huecos en forjados** (hechos) y **forjados inclinados** (también importarlos) | S | — |
 | 2.8 ◐ v0.19 | **Muros curvos** (hechos, sin huecos todavía), **muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |
-| 2.9 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso; también importarlos | M | 1.2 |
+| 2.9 ✅ v0.25 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso, altura, acabados; siguen a los muros; también importarlos — hecho con la fase 3 | M | 1.2 |
 | 2.10 | **Secciones y alzados** con líneas ocultas, profundidad de vista y poché por capa | L | 2.3 |
 | 2.11 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo | M | — |
 | 2.12 | **Terreno** sencillo (curvas de nivel o puntos), emplazamiento y orientación real del norte | M | — |
 
 ## 3. Fase 3 — Documentación
 
+Hecha en v0.25 (bloques 3A a 3I de `docs/DOCUMENTACION.md`), a falta de que Antonio la revise y de lo que espera a las secciones (2.10).
+
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
-| 3.1 | **Plantillas de vista y estilos gráficos**: qué se ve, con qué grosores y tramas, por escala (1:100, 1:50, 1:20); capas de dibujo | M | D5 |
-| 3.2 | **Acotación completa**: cotas asociativas que se actualizan al mover, cotas de altura en sección, cotas de superficie | M | 1.4, 2.10 |
-| 3.3 | **Etiquetas**: de puertas y ventanas (tipo, medida), de locales (nombre, superficie), de muros (tipo) | S | 2.9 |
-| 3.4 | **Textos, líneas, tramas y detalles 2D** sobre las vistas | M | — |
-| 3.5 | **Planos y maquetación**: hojas con cajetín propio, varias vistas por hoja a distintas escalas, numeración | L | 3.1 |
-| 3.6 | **Salida PDF vectorial** e impresión; exportación **DXF** | M | 3.5 |
-| 3.7 | **Tablas de planificación**: carpinterías, superficies de locales, mediciones de muros y forjados por capa | M | 2.9 |
-| 3.8 | **Mediciones para presupuesto** en formato **FIEBDC-3 (BC3)** | M | 3.7 |
+| 3.1 ◐ v0.25 | **Plantillas de vista y estilos gráficos**: normas gráficas (plumillas finas y gruesas por escala), categorías y capas ocultas y nivel de detalle por vista; capas de dibujo — hecho; falta guardar estilos con nombre (plantillas de vista) y la decisión D5 sobre tramas y grosores | M | D5 |
+| 3.2 ◐ v0.25 | **Acotación completa**: cotas asociativas (hechas), angulares, de radio, de diámetro y de longitud de arco (hechas), superficie en el rótulo de los locales (hecha); faltan las cotas de altura en sección | M | 1.4, 2.10 |
+| 3.3 ✅ v0.25 | **Etiquetas**: de puertas y ventanas (marca, medida), de locales, de muros (tipo); siguen a su elemento; «etiquetar todas» | S | 2.9 |
+| 3.4 ✅ v0.25 | **Textos, líneas, tramas y detalles 2D** sobre las vistas, con línea de órdenes, órdenes de edición y forzados al estilo AutoCAD | M | — |
+| 3.5 ✅ v0.25 | **Planos y maquetación**: hojas A4–A0 con cajetín propio, varias vistas por hoja a distintas escalas con recorte y título, numeración, dibujo y tablas en el plano | L | 3.1 |
+| 3.6 ✅ v0.25 | **Salida PDF vectorial** (plantas y planos, todos en un PDF); **DXF** de plantas y planos con capas; **importar DXF** | M | 3.5 |
+| 3.7 ✅ v0.25 | **Tablas de planificación**: carpinterías, muros y forjados por tipo, cuadro de superficies; CSV y en planos (falta el desglose por capa de los multicapas) | M | 2.9 |
+| 3.8 ✅ v0.25 | **Mediciones para presupuesto** en formato **FIEBDC-3 (BC3)**, sin precios (los bancos de precios, en `docs/DISCIPLINAS.md`) | M | 3.7 |
 
 ## 4. Fase 4 — Colaboración e ingenierías
 
@@ -102,3 +104,4 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 5. ~~Bloque 12: **aplicación de Mac** (parte de 1.8)~~ — hecho en v0.13.
 6. Fase 2 con **familias** (2.1): D2 decidida el 18/10/2026. Bloques 13 a 17 = A a E de `docs/FAMILIAS.md`; después la librería (2.2). Bloque 13 (A, núcleo) hecho en v0.14; bloque 14 (B, planta y hojas configurables) en v0.15.
 7. ~~Bloques 19 a 22: **cierre de la fase 1** (1.7, 1.8 y 1.9) con modos de construcción y muros curvos~~ — hechos en v0.19 a v0.22. La §1 queda completa.
+8. ~~**Fase 3, documentación** (3.1 a 3.8 y 2.9), pedida por Antonio el 19/10/2026 con herramientas de dibujo completas para quien viene de AutoCAD~~ — hecha en v0.25 (bloques 3A a 3I).

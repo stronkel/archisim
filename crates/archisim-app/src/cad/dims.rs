@@ -35,6 +35,15 @@ fn picked_seg(cx: &Ctx<'_, dyn Geo + '_>, e: Element, at: Point2) -> Option<Seg>
                 .filter(|s| s.length() > 1e-9)
                 .collect()
         }
+        Element::Room(id) => {
+            let o = &cx.model().room(id)?.outline;
+            (0..o.len())
+                .map(|i| Seg::Line {
+                    a: o[i],
+                    b: o[(i + 1) % o.len()],
+                })
+                .collect()
+        }
         Element::Slab(id) => {
             let o = &cx.model().slab(id)?.outline;
             (0..o.len())

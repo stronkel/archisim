@@ -6,6 +6,38 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 · Fase 3 — documentación completa, con dibujo 2D al estilo AutoCAD (v0.25)
+
+**Hecho** (bloques 3A a 3I de `docs/DOCUMENTACION.md`, rama `bloque/documentacion`)
+- **Dibujo 2D y línea de órdenes al estilo AutoCAD**: línea de órdenes bajo el dibujo con alias en español e inglés (`L`, `PL`, `REC`, `C`, `A`, `EL`, `TX`, `SB`, `D`, `CP`, `GI`, `ES`, `SI`, `EQ`, `RR`, `AL`, `EM`, `CHA`, `MA`, `PA`, `JUN`, `DES`, `EST`, `LO`, `B`, `IP`, `DIV`, `DI`, `AA`, `LI`…), coordenadas tecleadas (`3000,2000`, `@1500,0`, `@2000<45`, distancia directa), Intro/Espacio para repetir, Esc, opciones clicables, orto (F8). Líneas, polilíneas con arcos y grosor, rectángulos, polígonos, arcos, círculos, elipses, puntos, textos de varias líneas, sombreados por recinto con tramas propias, directrices y nubes. Edición completa: desplazar, copiar, girar, escalar, simetría, alinear, desfase, recortar/alargar, empalme y chaflán, matriz rectangular y polar, partir, juntar, descomponer, estirar, longitud, igualar propiedades, dividir; distancia, área y lista. Forzados a objeto (final, medio, centro, cuadrante, nodo, intersección, perpendicular, tangente) sobre el dibujo y sobre muros y forjados. Pinzamientos para estirar. Las transformaciones valen también para muros, forjados, cotas y locales.
+- **Capas de dibujo** (diálogo `CAPA`: color, grosor, tipo de línea, visible, bloqueada, imprimible) y estilo propio por elemento («PorCapa» por defecto).
+- **Normas gráficas** (plumillas finas y gruesas por escala) y **visibilidad por vista**: categorías, capas y nivel de detalle de cada planta.
+- **Cotas asociativas**: siguen a esquinas de muro, jambas y esquinas de forjado al mover o estirar. **Cotas angulares, de radio, de diámetro y de longitud de arco** (`ACOANGULO`/`DAN`, `ACORADIO`/`DRA`, `ACODIAMETRO`/`DDI`, `ACOARCO`/`DAR`).
+- **Locales** (`LOCAL`, ficha «Local»): clic dentro de los muros; siguen a los muros; número, nombre, uso, superficies útil y construida, perímetro, altura, volumen y acabados; **IfcSpace** con cantidades y acabados, también al importar. **Etiquetas** (`ETIQUETA`, opción «Todas»): carpinterías (marca y medida), muros y locales; acompañan a su elemento.
+- **Planos**: A4 a A0 con cajetín propio y datos del proyecto, vistas a escala con recorte, título y visibilidad propia, que se arrastran; dibujo y tablas sobre el papel; pestaña propia y lista en el Navegador.
+- **Salida**: planta o plano en **PDF vectorial**, **DXF** (con capas, colores, grosores y tipos de línea; dibujo 2D nativo) o SVG; todos los planos en un PDF; **importar DXF** en la vista (o soltándolo en la ventana).
+- **Tablas de planificación** (Navegador → Tablas): carpinterías, muros, forjados y cuadro de superficies, por planta o del edificio; CSV y en planos. **Mediciones BC3** (Archivo → Exportar mediciones).
+- Arreglado de paso: en `ESCALA` y `GIRA` un número tecleado es el factor o el ángulo (antes se tomaba como distancia).
+- La demo trae capas, ejes, terraza sombreada, cuatro locales con acabados, etiquetas y el plano A-01 con su cuadro de superficies; `archisim demo` escribe además DXF, PDF, CSV y BC3.
+- Formato `.archisim` **versión 7** (los de la 6 se abren tal cual). IFC validado con IfcOpenShell (también las reglas EXPRESS); ida y vuelta idéntica salvo la fecha; DXF auditados con ezdxf (`scripts/validate_dxf.py`); PDF comprobado con qpdf y mirado. Versión 0.25.0.
+
+**Pendiente / limitaciones conocidas**
+- Cotas de altura en sección (llegan con las secciones, 2.10); plantillas de vista con nombre; desglose por capas en las tablas.
+- En el DXF de un plano, las vistas van como líneas recortadas en espacio modelo (en mm de papel), no como ventanas de espacio papel; los textos de cotas y etiquetas van como trazos. No se ha podido abrir en AutoCAD aquí: lo valida ezdxf.
+- Al importar DXF, las tramas no sólidas pasan a «Diagonal» y los sólidos 3D se dejan fuera (lo dice el aviso).
+- La tabla se ve en una ventana (no en pestaña).
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama (pull request «Fase 3: documentación…», *Artifacts*) y abre `demo.archisim` (`archisim demo` o la que viene).
+2. **Línea de órdenes**: con el cursor sobre la planta escribe `L` Intro, clic, `@3000,0` Intro, `@0,2000` Intro, `C` (cerrar). Prueba `REC`, `C` (círculo), `EQ` sobre una línea, `RR` para recortar dos líneas que se cruzan, `EM` con radio, `MA` matriz. ¿Te resulta natural viniendo de AutoCAD? ¿Qué alias o qué comportamiento echas en falta?
+3. **Capas**: escribe `CAPA`, crea una capa roja discontinua, hazla actual y dibuja; apágala y bloquéala.
+4. **Cotas**: acota la fachada con la herramienta Cota y luego arrastra un muro: la cota debe seguirle. Prueba `DAN` entre dos caras de muro y `DRA` sobre un círculo.
+5. **Locales**: ficha «Local» y clic dentro de una habitación; mueve un tabique y mira cómo cambia la superficie. Rellena acabados en Propiedades. `ETIQUETA` → `T` etiqueta todas las carpinterías.
+6. **Planos**: Navegador → Planos → «A-01». Mueve la vista y la tabla arrastrándolas; cambia la escala de la vista; rellena los datos del cajetín en Propiedades. Crea un plano nuevo y coloca la planta a 1:100.
+7. **Salida**: Archivo → «Exportar todos los planos (PDF)» y ábrelo; «Exportar este plano» en DXF y ábrelo en **AutoCAD** (capas, grosores, textos); «Exportar planta → 1:50» en DXF. Importa un DXF tuyo (un topográfico o un plano antiguo) con «Importar DXF en la vista».
+8. **Tablas y BC3**: Navegador → Tablas → Cuadro de superficies → «Exportar CSV…» y ábrelo en Excel; Archivo → «Exportar mediciones (BC3)» y ábrelo en Presto o Arquímedes: ¿capítulos, partidas y líneas de medición como esperas?
+9. Exporta el IFC y ábrelo en ArchiCAD y Revit: ¿aparecen los locales como zonas / habitaciones con su nombre, número, superficie y acabados?
+
 ## 2026-10-19 · Familias, bloque D — diálogo de tipos al estilo ArchiCAD y tipos de línea (v0.24)
 
 **Hecho**

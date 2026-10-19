@@ -88,14 +88,23 @@ Ventana de izquierda a derecha (lo que queda dentro entero) y **captura** de der
 
 ## 8. Orden de los bloques
 
-| Bloque | Contenido |
-|---|---|
-| 3A | Elementos de dibujo y capas en el modelo, el fichero (versión 7) y la planta |
-| 3B | Geometría de las órdenes de edición (equidistancia, recortar, alargar, empalme…) con pruebas |
-| 3C | Línea de órdenes, herramientas de dibujo, forzados a objeto y edición en la aplicación |
-| 3D | Estilos gráficos de vista y plumillas |
-| 3E | Acotación completa |
-| 3F | Locales y etiquetas |
-| 3G | Planos y maquetación |
-| 3H | PDF, DXF (exportar e importar) |
-| 3I | Tablas de planificación y mediciones BC3 |
+| Bloque | Contenido | Estado |
+|---|---|---|
+| 3A | Elementos de dibujo y capas en el modelo, el fichero (versión 7) y la planta | ✅ v0.25 |
+| 3B | Geometría de las órdenes de edición (equidistancia, recortar, alargar, empalme…) con pruebas | ✅ v0.25 |
+| 3C | Línea de órdenes, herramientas de dibujo, forzados a objeto y edición en la aplicación | ✅ v0.25 |
+| 3D | Estilos gráficos de vista y plumillas | ✅ v0.25 |
+| 3E | Acotación completa | ✅ v0.25 |
+| 3F | Locales y etiquetas | ✅ v0.25 |
+| 3G | Planos y maquetación | ✅ v0.25 |
+| 3H | PDF, DXF (exportar e importar) | ✅ v0.25 |
+| 3I | Tablas de planificación y mediciones BC3 | ✅ v0.25 |
+
+## 9. Lo que quedó para después
+
+- Cotas de altura en sección (con las secciones, 2.10) y estilos de cota por escala.
+- Plantillas de vista con nombre (hoy cada vista guarda su propio estilo).
+- Desglose de muros y forjados por capa en las tablas; tablas en pestaña propia (hoy en ventana).
+- En DXF: las vistas de un plano van como líneas recortadas (no como ventanas gráficas de espacio papel) y los textos de cotas y etiquetas como trazos.
+- Al importar DXF: las tramas que no son sólidas se convierten en «Diagonal»; los sólidos 3D y las imágenes se dejan fuera (el informe dice cuántos).
+
