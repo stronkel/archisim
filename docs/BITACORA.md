@@ -6,6 +6,18 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 (mañana) · Revisión de Antonio sobre v0.25 (R1 a R11, rama `bloque/revision-19oct`)
+
+Antonio revisó la fase 2 nocturna y pidió once cambios (apuntados en `docs/HOJA_DE_RUTA.md` como R1 a R11). Esta entrada se completa conforme avanzan.
+
+**Hecho**
+- **R1 · Líneas de ayuda de alineación** (como las guías de ArchiCAD y Revit): al dibujar cualquier cosa por puntos (muros, forjados, cubiertas, locales, cotas, escaleras, barandillas…), los puntos ya dibujados y los últimos puntos de los elementos que el cursor ha tocado (extremos, esquinas, puntos medios, el punto 0; recuerda ocho) prestan su línea horizontal y vertical. Si el cursor pasa cerca, se engancha y aparece la guía azul discontinua desde ese punto (con un circulito en él). Si además va por la línea de rastreo del tramo, se engancha justo donde se cruzan: así el último muro de una vivienda termina en línea con la primera esquina. Libre, se engancha al cruce de una guía horizontal y otra vertical. Los forzados a objeto mandan sobre las guías; se apagan con «Rastreo» en la barra inferior o manteniendo Mayúsculas. El cursor muestra «Alineado con un punto».
+
+**Antonio debe probar**
+1. **Guías**: herramienta Muro, dibuja tres lados de un rectángulo y, en el cuarto tramo, acércate a la vertical de la primera esquina: el cursor se engancha y sale la guía azul. Pasa antes el cursor por una esquina de otro muro y luego aléjate: su línea horizontal y vertical también guían. ¿Es como lo esperabas? ¿Las quieres también a 45°?
+
+---
+
 ## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), secciones y alzados (2.10), forjados inclinados (2.7), cubiertas inclinadas (2.4), escaleras y barandillas (2.6), terreno y norte (2.12), muros cortina (2.8), perfiles de acero (2.5), prioridades por material (2.3), puerta plegable, corredera empotrada, persiana y mobiliario (2.2), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
 
 Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientras dormía, más cuatro mejoras pequeñas. Todo va en la rama `bloque/fase2-noche` (pull request para revisar), con commit y push tras cada avance. Esta entrada se completa conforme avanza la noche.

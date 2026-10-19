@@ -2302,3 +2302,25 @@ fn object_tool() {
     h.key(Key::Delete);
     assert_eq!(h.model().objects().count(), 0);
 }
+
+/// Alignment guides: closing a house, the last corner lines up with the
+/// first one without any wall there to snap to.
+#[test]
+fn alignment_guides_close_the_outline() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    h.click_at(p(2.0, 2.0));
+    h.click_at(p(12.0, 2.0));
+    h.click_at(p(12.0, 10.0));
+    // Going west along y = 10, near x = 2: the vertical through the first
+    // corner catches it.
+    h.move_to(p(2.04, 10.02));
+    let c = h.app.cursor.unwrap();
+    assert_eq!(c.kind, SnapKind::Aligned, "{c:?}");
+    assert_eq!(c.point, p(2.0, 10.0));
+    assert_eq!(h.app.guides.len(), 1);
+    // With tracking off in the bottom bar, no guides.
+    h.app.snap_filter.tracking = false;
+    h.move_to(p(2.04, 10.02));
+    assert!(h.app.guides.is_empty());
+}

@@ -37,6 +37,10 @@ pub enum SnapKind {
     /// Locked onto a horizontal, vertical or 45° line through the previous
     /// point because the cursor was close to it.
     Tracked,
+    /// On the horizontal or vertical line through a point already drawn
+    /// or touched (ArchiCAD's and Revit's alignment guides), or where two
+    /// such lines cross, or where one crosses the tracking line.
+    Aligned,
     /// Nothing nearby: rounded free point.
     Free,
 }
@@ -52,6 +56,7 @@ impl SnapKind {
             SnapKind::OnEdge => "Sobre arista",
             SnapKind::Constrained => "Ángulo forzado",
             SnapKind::Tracked => "Alineado",
+            SnapKind::Aligned => "Alineado con un punto",
             SnapKind::Free => "Libre",
         }
     }
@@ -137,7 +142,7 @@ impl SnapFilter {
             }
             SnapKind::Midpoint => self.midpoints,
             SnapKind::OnEdge => self.edges,
-            SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => true,
+            SnapKind::Constrained | SnapKind::Tracked | SnapKind::Aligned | SnapKind::Free => true,
         }
     }
 }
@@ -590,5 +595,131 @@ mod tests {
             Snap::at(Point2::new(5.0, 1.234567), SnapKind::Endpoint),
         );
         assert_eq!(s.point, Point2::new(5.0, 1.0));
+    }
+}
+
+/// How many points the alignment guides remember (the last ones drawn or
+/// touched by the cursor).
+pub const ALIGN_MEMORY: usize = 8;
+
+/// Alignment guides: a free or tracked point `p` within `reach` of the
+/// horizontal or vertical line through one of `refs` goes onto it. With a
+/// tracking line from `from` (the point moves along it), it goes to where
+/// that line crosses the guide; free, to where a horizontal and a vertical
+/// guide cross, or onto the nearer one. Returns the point and the guides
+/// it lies on, each as (reference point, point), to draw them.
+///
+/// So the last wall of a house stops exactly in line with the first
+/// corner: drawing down from the previous corner, the cursor locks where
+/// the horizontal through the first corner crosses.
+pub fn align(
+    from: Option<Point2>,
+    p: Snap,
+    refs: &[Point2],
+    reach: f64,
+) -> (Snap, Vec<(Point2, Point2)>) {
+    if !matches!(p.kind, SnapKind::Free | SnapKind::Tracked) || refs.is_empty() {
+        return (p, Vec::new());
+    }
+    let q = p.point;
+    // The nearest reference by each axis (not the anchor itself: its
+    // lines are the tracking line).
+    let pick = |horizontal: bool| {
+        let gap = |r: &Point2| {
+            if horizontal {
+                (r.y - q.y).abs()
+            } else {
+                (r.x - q.x).abs()
+            }
+        };
+        refs.iter()
+            .copied()
+            .filter(|r| from.is_none_or(|f| !f.approx_eq(*r)))
+            .filter(|r| gap(r) <= reach)
+            .min_by(|a, b| gap(a).total_cmp(&gap(b)))
+    };
+    let (h, v) = (pick(true), pick(false));
+    let tracked = p.kind == SnapKind::Tracked;
+    let dir = from.and_then(|f| (q - f).normalized()).filter(|_| tracked);
+    let snapped = match (dir, from) {
+        (Some(d), Some(f)) => {
+            // Along the tracking line: cross it with a guide not parallel
+            // to it, the nearer one.
+            let mut best: Option<(f64, Point2, Point2)> = None;
+            for (r, horizontal) in [(h, true), (v, false)] {
+                let Some(r) = r else { continue };
+                let (axis, along) = if horizontal {
+                    (d.y, r.y - f.y)
+                } else {
+                    (d.x, r.x - f.x)
+                };
+                if axis.abs() < 1e-9 {
+                    continue;
+                }
+                let x = f + d * (along / axis);
+                let dist = x.distance(q);
+                if dist <= reach && best.is_none_or(|b| dist < b.0) {
+                    best = Some((dist, x, r));
+                }
+            }
+            best.map(|(_, x, r)| (x, vec![(r, x)]))
+        }
+        _ => match (h, v) {
+            (Some(rh), Some(rv)) => {
+                let x = Point2::new(rv.x, rh.y);
+                Some((x, vec![(rh, x), (rv, x)]))
+            }
+            (Some(rh), None) => {
+                let x = Point2::new(q.x, rh.y);
+                Some((x, vec![(rh, x)]))
+            }
+            (None, Some(rv)) => {
+                let x = Point2::new(rv.x, q.y);
+                Some((x, vec![(rv, x)]))
+            }
+            (None, None) => None,
+        },
+    };
+    match snapped {
+        Some((x, guides)) => (Snap::at(x, SnapKind::Aligned), guides),
+        None => (p, Vec::new()),
+    }
+}
+
+#[cfg(test)]
+mod align_tests {
+    use super::*;
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+
+    #[test]
+    fn the_last_wall_stops_in_line_with_the_first_corner() {
+        // Drawing down from (10, 8): the first corner is (0, 0).
+        let from = p(10.0, 8.0);
+        let cursor = Snap::at(p(10.0, 0.04), SnapKind::Tracked);
+        let (s, guides) = align(Some(from), cursor, &[p(0.0, 0.0), from], 0.1);
+        assert_eq!(s.point, p(10.0, 0.0));
+        assert_eq!(s.kind, SnapKind::Aligned);
+        assert_eq!(guides, vec![(p(0.0, 0.0), p(10.0, 0.0))]);
+        // Too far: left alone.
+        let far = Snap::at(p(10.0, 0.5), SnapKind::Tracked);
+        assert_eq!(align(Some(from), far, &[p(0.0, 0.0)], 0.1).0, far);
+        // Object snaps win.
+        let corner = Snap::at(p(10.0, 0.04), SnapKind::Corner);
+        assert_eq!(align(Some(from), corner, &[p(0.0, 0.0)], 0.1).0, corner);
+    }
+
+    #[test]
+    fn free_points_meet_two_guides() {
+        let (s, guides) = align(
+            None,
+            Snap::at(p(3.03, 4.96), SnapKind::Free),
+            &[p(3.0, 0.0), p(0.0, 5.0)],
+            0.1,
+        );
+        assert_eq!(s.point, p(3.0, 5.0));
+        assert_eq!(guides.len(), 2);
     }
 }

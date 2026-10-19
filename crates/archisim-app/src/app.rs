@@ -217,6 +217,11 @@ pub struct ArchiSimApp {
     pub curtain_settings: crate::editor::CurtainSettings,
     /// The first point of the curtain wall being drawn.
     pub curtain_anchor: Option<Point2>,
+    /// Points the alignment guides start from: the last ones the cursor
+    /// snapped to (ArchiCAD's and Revit's acquired points).
+    pub acquired: Vec<Point2>,
+    /// Alignment guides through the cursor, to draw: (from, to).
+    pub guides: Vec<(Point2, Point2)>,
     pub railing_settings: crate::editor::RailingSettings,
     pub object_settings: crate::editor::ObjectSettings,
     /// Points of the railing being drawn.
@@ -356,6 +361,8 @@ impl ArchiSimApp {
             terrain_settings: Default::default(),
             curtain_settings: Default::default(),
             curtain_anchor: None,
+            acquired: Vec::new(),
+            guides: Vec::new(),
             railing_settings: Default::default(),
             object_settings: Default::default(),
             railing_points: Vec::new(),
@@ -452,6 +459,7 @@ impl ArchiSimApp {
             self.section_tool.anchor = None;
             self.curtain_anchor = None;
             self.railing_points.clear();
+            self.guides.clear();
             self.placement = None;
             self.window_start = None;
             self.drag = None;

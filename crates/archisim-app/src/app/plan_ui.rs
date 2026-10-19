@@ -420,6 +420,7 @@ impl ArchiSimApp {
                 };
             }
         }
+        self.align_cursor(ctx.input(|i| i.modifiers.shift));
     }
 
     fn keyboard_in_view(&mut self, ctx: &egui::Context) {
@@ -1584,10 +1585,95 @@ impl ArchiSimApp {
         }
     }
 
+    /// The points of what is being drawn (the chain of walls, the corners
+    /// of a slab or room…), for the alignment guides.
+    fn drawing_points(&self) -> Vec<Point2> {
+        match self.tool {
+            Tool::Wall => self.wall_tool.chain(),
+            Tool::Slab => self.slab_tool.corners().to_vec(),
+            Tool::Zone => self.zone_tool.corners().to_vec(),
+            Tool::Roof => self.roof_tool.corners().to_vec(),
+            Tool::Stair => self.stair_tool.points.clone(),
+            Tool::Railing => self.railing_points.clone(),
+            Tool::Terrain => self.terrain_points.iter().map(|p| p.at).collect(),
+            Tool::Dimension => self.dim_tool.points().to_vec(),
+            Tool::Section => self.section_tool.anchor.into_iter().collect(),
+            Tool::CurtainWall => self.curtain_anchor.into_iter().collect(),
+            Tool::Beam => self.beam_tool.anchor.into_iter().collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Alignment guides (after the snaps and the tracking line): points
+    /// the cursor touched and points of what is being drawn lend their
+    /// horizontal and vertical lines. Off with tracking, or with Shift.
+    fn align_cursor(&mut self, shift: bool) {
+        self.guides.clear();
+        let Some(c) = self.cursor else {
+            return;
+        };
+        // Not for the magic wand: it clicks inside, not on points.
+        let draws = self.tool.draws_points()
+            && !(self.tool == Tool::Slab && self.slab_settings.wand)
+            && !(self.tool == Tool::Zone && self.zone_wand())
+            && !(self.tool == Tool::Roof && self.roof_wand());
+        if !(draws || self.drag.is_some()) {
+            return;
+        }
+        // Remember the object points the cursor rests on.
+        if matches!(
+            c.kind,
+            SnapKind::Endpoint
+                | SnapKind::Corner
+                | SnapKind::Midpoint
+                | SnapKind::Origin
+                | SnapKind::Centre
+        ) && !self.acquired.iter().any(|p| p.approx_eq(c.point))
+        {
+            self.acquired.push(c.point);
+            if self.acquired.len() > crate::snap::ALIGN_MEMORY {
+                self.acquired.remove(0);
+            }
+        }
+        if shift || !self.snap_filter.tracking {
+            return;
+        }
+        let mut refs = self.drawing_points();
+        // Touched points only while point snaps are on.
+        if self.snap_filter.points {
+            refs.extend(self.acquired.iter().copied());
+        }
+        let reach = self.view.to_metres(TRACK_REACH);
+        let (s, guides) = crate::snap::align(self.track_anchor(), c, &refs, reach);
+        self.cursor = Some(s);
+        self.guides = guides;
+    }
+
     /// The tracking line: when the line being drawn runs exactly
     /// horizontal, vertical or at 45°, a blue line across the view through
     /// its start says so (Revit's and ArchiCAD's tracking line).
     fn draw_tracking(&self, painter: &egui::Painter, rect: Rect) {
+        // Alignment guides: from the point they come from, past the cursor.
+        for (from, to) in &self.guides {
+            let Some(dir) = (*to - *from).normalized() else {
+                continue;
+            };
+            let past = *to + dir * self.view.to_metres(40.0);
+            painter.extend(Shape::dashed_line(
+                &[
+                    self.view.to_screen(rect, *from),
+                    self.view.to_screen(rect, past),
+                ],
+                Stroke::new(1.0, TRACK_LINE),
+                4.0,
+                3.0,
+            ));
+            painter.circle_stroke(
+                self.view.to_screen(rect, *from),
+                4.0,
+                Stroke::new(1.0, TRACK_LINE),
+            );
+        }
         let (Some(a), Some(c)) = (self.track_anchor(), self.cursor) else {
             return;
         };
@@ -1654,6 +1740,9 @@ impl ArchiSimApp {
             SnapKind::OnEdge => {
                 painter.line_segment([p + Vec2::new(-5.0, -5.0), p + Vec2::new(5.0, 5.0)], stroke);
                 painter.line_segment([p + Vec2::new(-5.0, 5.0), p + Vec2::new(5.0, -5.0)], stroke);
+            }
+            SnapKind::Aligned => {
+                painter.circle_stroke(p, 5.0, Stroke::new(1.5, TRACK_LINE));
             }
             SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => {}
         }
