@@ -952,6 +952,7 @@ fn copy(
                     material: t.material,
                     depth: t.depth,
                     contour: t.contour,
+                    lines: t.lines,
                 })?;
                 copies.insert(Element::Terrain(new));
             }

@@ -2209,6 +2209,68 @@ fn terrain_tool_and_north() {
     assert!(ifc.contains("IFCDIRECTION((0.34202"));
 }
 
+/// The terrain in plan (R4): contour lines drawn at a height make the
+/// terrain; clicks on its points give them the height written; with the
+/// arrow, a point or a whole line is picked and given a height at once,
+/// and Delete takes the picked points away.
+#[test]
+fn terrain_lines_and_picked_points() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("r");
+    assert_eq!(h.app.tool, Tool::Terrain);
+    h.app.terrain_settings.line = true;
+    // Two contour lines: 0 m to the south, +1 m to the north.
+    h.app.terrain_settings.z = 0.0;
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(10.0, 0.0));
+    h.key(Key::Enter);
+    assert!(h.model().terrains().next().is_none());
+    assert_eq!(h.app.terrain_lines.len(), 1);
+    h.app.terrain_settings.z = 1.0;
+    h.click_at(p(0.0, 8.0));
+    h.click_at(p(10.0, 8.0));
+    h.key(Key::Enter);
+    let t = h.model().terrains().next().expect("terrain").clone();
+    assert_eq!(t.lines.len(), 2);
+    // Points every metre at most: 11 on each line.
+    assert_eq!(t.points.len(), 22);
+    assert!((t.height_at(p(5.0, 4.0)).unwrap() - 0.5).abs() < 1e-9);
+    // A third line goes into it; a point click on a point sets its height.
+    h.app.terrain_settings.z = 0.5;
+    h.click_at(p(0.0, 4.0));
+    h.click_at(p(10.0, 4.0));
+    h.key(Key::Enter);
+    h.app.terrain_settings.line = false;
+    h.app.terrain_settings.z = 2.0;
+    h.click_at(p(10.0, 8.0));
+    let t = h.model().terrains().next().unwrap().clone();
+    assert_eq!(t.lines.len(), 3);
+    assert_eq!(t.points.len(), 33);
+    let corner = t.points.iter().position(|q| q.at == p(10.0, 8.0)).unwrap();
+    assert_eq!(t.points[corner].z, 2.0);
+    // With the arrow: click the middle line, all its points are picked.
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.app.ed.selection = [Element::Terrain(t.id)].into_iter().collect();
+    h.click_at(p(5.5, 4.0));
+    assert_eq!(h.app.terrain_pick.len(), 11, "{:?}", h.app.message);
+    assert!(h.app.ed.selection.contains(&Element::Terrain(t.id)));
+    // A click on one point picks only it.
+    h.click_at(p(0.0, 0.0));
+    assert_eq!(h.app.terrain_pick.len(), 1);
+    // Delete takes the picked point, not the terrain.
+    h.key(Key::Delete);
+    let t = h.model().terrains().next().expect("still there").clone();
+    assert_eq!(t.points.len(), 32);
+    assert_eq!(t.lines[0].len(), 10);
+    // Away from points and lines, the click selects as usual.
+    h.click_at(p(50.0, 50.0));
+    assert!(h.app.terrain_pick.is_empty());
+    // The lines are saved with the project.
+    let back = archisim_file::from_str(&archisim_file::to_string(h.model())).unwrap();
+    assert_eq!(back.terrains().next().unwrap().lines, t.lines);
+}
+
 #[test]
 fn curtain_wall_tool() {
     let mut h = Harness::new(Editor::new_project());

@@ -681,6 +681,7 @@ mod tests {
             material: earth,
             depth: 1.5,
             contour: 0.25,
+            lines: vec![vec![0, 1]],
         })
         .unwrap();
         m.set_true_north(0.4).unwrap();

@@ -300,6 +300,7 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
                 .all(|(p, q)| p.at.distance(q.at) <= TOL && close(p.z, q.z))
             && close(s.depth, t.depth)
             && close(s.contour, t.contour)
+            && s.lines == t.lines
             && level_guid(a, s.level) == level_guid(b, t.level);
         if !same {
             diff(format!("terreno {}: {:?} / {:?}", s.guid, s, t));

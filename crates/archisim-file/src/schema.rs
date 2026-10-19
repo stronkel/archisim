@@ -162,6 +162,9 @@ pub(crate) struct Terrain {
     pub material: u64,
     pub depth: f64,
     pub contour: f64,
+    /// Contour lines drawn by hand, as point indices (optional).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lines: Vec<Vec<usize>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1091,6 +1094,7 @@ impl ProjectFile {
                     material: t.material.0,
                     depth: t.depth,
                     contour: t.contour,
+                    lines: t.lines,
                 })
                 .collect(),
             object_types: p
@@ -1290,6 +1294,7 @@ impl ProjectFile {
                         material: core::MaterialId(t.material),
                         depth: t.depth,
                         contour: t.contour,
+                        lines: t.lines.clone(),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

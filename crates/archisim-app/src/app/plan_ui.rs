@@ -445,7 +445,8 @@ impl ArchiSimApp {
             || self.zone_tool.is_drawing()
             || self.roof_tool.is_drawing()
             || !self.stair_tool.points.is_empty()
-            || !self.terrain_points.is_empty();
+            || !self.terrain_points.is_empty()
+            || !self.terrain_line.is_empty();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -476,7 +477,7 @@ impl ArchiSimApp {
                 Tool::Roof => self.roof_tool.backspace(),
                 Tool::Stair => self.stair_tool.points.pop().is_some(),
                 Tool::Railing => self.railing_points.pop().is_some(),
-                Tool::Terrain => self.terrain_points.pop().is_some(),
+                Tool::Terrain => self.terrain_back(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -609,7 +610,7 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Terrain => {
-                    if self.terrain_points.pop().is_none() {
+                    if !self.terrain_back() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -864,7 +865,11 @@ impl ArchiSimApp {
                         return;
                     }
                 }
-                if response.clicked_by(PointerButton::Primary) {
+                let on_terrain = response.clicked_by(PointerButton::Primary)
+                    && response
+                        .interact_pointer_pos()
+                        .is_some_and(|p| self.pick_terrain_points(rect, p, shift));
+                if response.clicked_by(PointerButton::Primary) && !on_terrain {
                     let hit = self.hover;
                     match (hit, shift) {
                         (Some(e), true) => {

@@ -404,12 +404,17 @@ pub fn build() -> Result<Document, ModelError> {
                 });
             }
         }
-        m.add_terrain(archisim_core::NewTerrain {
+        let terrain = m.add_terrain(archisim_core::NewTerrain {
             level: pb,
             points,
             material: earth,
             depth: 1.0,
             contour: 0.1,
+            lines: Vec::new(),
+        })?;
+        // A contour line drawn by hand to the north, past the survey grid.
+        m.edit_terrain(terrain, |t| {
+            t.add_line(&[Point2::new(-6.0, 22.0), Point2::new(18.0, 22.0)], -0.05);
         })?;
         m.set_true_north(12f64.to_radians())
     })?;

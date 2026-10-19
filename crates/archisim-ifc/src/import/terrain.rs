@@ -65,6 +65,19 @@ impl<'a> Importer<'a> {
             })
             .collect();
         let points = points.ok_or("puntos ilegibles")?;
+        let lines: Vec<Vec<usize>> = self
+            .property_own(id, "ArchiSim_Terrain", "Lines")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                s.split(';')
+                    .map(|l| {
+                        l.split_whitespace()
+                            .filter_map(|i| i.parse().ok())
+                            .collect()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         let material = self.single_material(id);
         let level = self.level_of(id, 0.0);
         let tid = self
@@ -75,6 +88,7 @@ impl<'a> Importer<'a> {
                 material,
                 depth: snap(depth),
                 contour: snap(contour),
+                lines,
             })
             .map_err(|e| explain(&e))?;
         self.terrain_ids.insert(id);

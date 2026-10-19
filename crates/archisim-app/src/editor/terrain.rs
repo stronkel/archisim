@@ -11,6 +11,8 @@ pub struct TerrainSettings {
     pub z: f64,
     pub contour: f64,
     pub depth: f64,
+    /// Clicks draw a contour line (all its points at `z`), not points.
+    pub line: bool,
 }
 
 impl Default for TerrainSettings {
@@ -19,6 +21,7 @@ impl Default for TerrainSettings {
             z: 0.0,
             contour: 0.5,
             depth: 1.0,
+            line: false,
         }
     }
 }
@@ -46,6 +49,7 @@ impl Editor {
         &mut self,
         s: &TerrainSettings,
         points: Vec<SurveyPoint>,
+        lines: Vec<Vec<usize>>,
     ) -> EditResult<TerrainId> {
         let level = self.level;
         self.transact("Crear terreno", |m| {
@@ -56,6 +60,7 @@ impl Editor {
                 material,
                 depth: s.depth,
                 contour: s.contour,
+                lines,
             })
         })
     }
@@ -91,6 +96,7 @@ mod tests {
             .add_terrain(
                 &s,
                 vec![sp(0.0, 0.0, 0.0), sp(10.0, 0.0, 1.0), sp(0.0, 10.0, 2.0)],
+                Vec::new(),
             )
             .unwrap();
         assert!(ed.model().materials().any(|m| m.category == "earth"));

@@ -7,7 +7,25 @@ use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
 use super::props::{self, group, row, text_row};
+use super::widgets::segmented;
 use super::*;
+
+/// Colour of the survey points and contour lines drawn by hand (earth).
+const TERRAIN_LINE: Color32 = Color32::from_rgb(140, 98, 52);
+
+/// How close (screen points) a click must be to pick a survey point.
+const POINT_REACH: f32 = 5.0;
+
+/// Distance from `p` to the segment `a b`.
+fn segment_distance(p: Point2, a: Point2, b: Point2) -> f64 {
+    let ab = b - a;
+    let len2 = ab.dot(ab);
+    if len2 < 1e-18 {
+        return p.distance(a);
+    }
+    let t = ((p - a).dot(ab) / len2).clamp(0.0, 1.0);
+    p.distance(a + ab * t)
+}
 
 /// A height as on a topographic plan: "+1,25".
 fn height(z: f64) -> String {
@@ -20,28 +38,130 @@ fn height(z: f64) -> String {
 }
 
 impl ArchiSimApp {
+    /// The terrain the terrain tool adds to: the selected one on this
+    /// level, or the first one there.
+    pub(super) fn level_terrain(&self) -> Option<TerrainId> {
+        let level = self.ed.level;
+        let selected = self.ed.selection.iter().find_map(|e| match e {
+            Element::Terrain(id) => Some(*id),
+            _ => None,
+        });
+        selected
+            .filter(|id| {
+                self.ed
+                    .model()
+                    .terrain(*id)
+                    .is_some_and(|t| t.level == level)
+            })
+            .or_else(|| {
+                self.ed
+                    .model()
+                    .terrains_on_level(level)
+                    .map(|t| t.id)
+                    .next()
+            })
+    }
+
+    /// The terrain selected on its own, whose points can be picked.
+    fn selected_terrain(&self) -> Option<TerrainId> {
+        match self.ed.selection.iter().collect::<Vec<_>>().as_slice() {
+            [Element::Terrain(id)] => Some(*id),
+            _ => None,
+        }
+    }
+
+    /// The point of a terrain nearest to `p`, within `reach`.
+    fn terrain_point_at(&self, id: TerrainId, p: Point2, reach: f64) -> Option<usize> {
+        let t = self.ed.model().terrain(id)?;
+        t.points
+            .iter()
+            .enumerate()
+            .map(|(i, q)| (i, q.at.distance(p)))
+            .filter(|(_, d)| *d <= reach)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i)
+    }
+
+    /// The contour line drawn by hand passing within `reach` of `p`.
+    fn terrain_line_at(&self, id: TerrainId, p: Point2, reach: f64) -> Option<usize> {
+        let t = self.ed.model().terrain(id)?;
+        t.lines.iter().position(|l| {
+            l.windows(2)
+                .any(|w| segment_distance(p, t.points[w[0]].at, t.points[w[1]].at) <= reach)
+        })
+    }
+
     pub(super) fn terrain_click(&mut self, p: Point2) {
+        if self.terrain_settings.line {
+            if self.terrain_line.last().is_some_and(|q| q.approx_eq(p)) {
+                return;
+            }
+            self.terrain_line.push(p);
+            self.say(format!(
+                "Línea de nivel a {}: {} vértices · Intro o doble clic: terminarla.",
+                height(self.terrain_settings.z),
+                self.terrain_line.len()
+            ));
+            return;
+        }
+        let z = self.terrain_settings.z;
+        // With a terrain on the level, a click goes straight into it: on
+        // one of its points, it takes the height; elsewhere, a new point.
+        if let Some(id) = self.level_terrain() {
+            let reach = self.view.to_metres(REACH);
+            let r = match self.terrain_point_at(id, p, reach) {
+                Some(i) => self
+                    .ed
+                    .edit_terrain("Cota de punto", id, |t| t.points[i].z = z),
+                None => self.ed.edit_terrain("Añadir punto al terreno", id, |t| {
+                    t.points.push(SurveyPoint { at: p, z })
+                }),
+            };
+            self.report(r, &format!("Punto a {}.", height(z)));
+            return;
+        }
         if self.terrain_points.iter().any(|q| q.at.approx_eq(p)) {
             return;
         }
-        self.terrain_points.push(SurveyPoint {
-            at: p,
-            z: self.terrain_settings.z,
-        });
+        self.terrain_points.push(SurveyPoint { at: p, z });
         let n = self.terrain_points.len();
         self.say(format!(
             "{n} puntos. Cambia la cota en Propiedades antes de cada clic · Intro o doble clic: crear el terreno."
         ));
     }
 
+    /// Esc or Backspace with the terrain tool: the last vertex of the line,
+    /// or the last point marked. False if there was nothing to take.
+    pub(super) fn terrain_back(&mut self) -> bool {
+        if self.terrain_line.pop().is_some() {
+            return true;
+        }
+        if self.terrain_points.pop().is_none() {
+            return false;
+        }
+        let n = self.terrain_points.len();
+        self.terrain_lines
+            .retain(|l| l.iter().all(|&i| i < n) && l.len() >= 2);
+        true
+    }
+
     pub(super) fn finish_terrain(&mut self) {
+        if !self.terrain_line.is_empty() {
+            self.finish_terrain_line();
+            return;
+        }
+        if self.terrain_points.is_empty() && self.level_terrain().is_some() {
+            return;
+        }
         let points = std::mem::take(&mut self.terrain_points);
+        let lines = std::mem::take(&mut self.terrain_lines);
         if points.len() < 3 {
             self.complain("El terreno necesita al menos tres puntos.");
             self.terrain_points = points;
+            self.terrain_lines = lines;
             return;
         }
-        match self.ed.add_terrain(&self.terrain_settings, points) {
+        match self.ed.add_terrain(&self.terrain_settings, points, lines) {
             Ok(id) => {
                 self.ed.selection = [Element::Terrain(id)].into_iter().collect();
                 self.say("Terreno creado: sus curvas de nivel en planta; cambia las cotas en Propiedades.");
@@ -50,7 +170,163 @@ impl ArchiSimApp {
         }
     }
 
+    /// Ends the contour line being drawn: into the level's terrain, or
+    /// into the points being marked (the terrain is made as soon as they
+    /// make a surface: a second line at another height).
+    fn finish_terrain_line(&mut self) {
+        let path = std::mem::take(&mut self.terrain_line);
+        if path.len() < 2 {
+            self.complain("La línea de nivel necesita dos vértices como mínimo.");
+            return;
+        }
+        let z = self.terrain_settings.z;
+        if let Some(id) = self.level_terrain() {
+            let r = self.ed.edit_terrain("Línea de nivel", id, |t| {
+                t.add_line(&path, z);
+            });
+            self.report(
+                r,
+                &format!("Línea de nivel a {} añadida al terreno.", height(z)),
+            );
+            return;
+        }
+        let line = archisim_core::push_line(&mut self.terrain_points, &path, z);
+        self.terrain_lines.push(line);
+        let pts: Vec<Point2> = self.terrain_points.iter().map(|p| p.at).collect();
+        if archisim_core::delaunay(&pts).is_empty() {
+            self.say(format!(
+                "Línea de nivel a {}. Dibuja otra a otra cota (o marca puntos) para formar el terreno.",
+                height(z)
+            ));
+            return;
+        }
+        self.finish_terrain();
+    }
+
+    /// A click with the arrow on the selected terrain: on one of its
+    /// points, it picks it (Shift adds or takes it); on a contour line
+    /// drawn by hand, all its points. False if it hit neither (the pick
+    /// is cleared and the click selects as usual).
+    pub(super) fn pick_terrain_points(&mut self, rect: Rect, pos: Pos2, shift: bool) -> bool {
+        let Some(id) = self.selected_terrain() else {
+            self.terrain_pick.clear();
+            return false;
+        };
+        let p = self.view.to_model(rect, pos);
+        let reach = self.view.to_metres(REACH);
+        // A point needs a close click: the points of a line are near each
+        // other, and a click on the line between them takes it whole.
+        let hit: Vec<usize> = match self.terrain_point_at(id, p, self.view.to_metres(POINT_REACH)) {
+            Some(i) => vec![i],
+            None => match self.terrain_line_at(id, p, reach) {
+                Some(l) => self.ed.model().terrain(id).unwrap().lines[l].clone(),
+                None => {
+                    self.terrain_pick.clear();
+                    return false;
+                }
+            },
+        };
+        if shift {
+            for i in hit {
+                if let Some(k) = self.terrain_pick.iter().position(|&j| j == i) {
+                    self.terrain_pick.remove(k);
+                } else {
+                    self.terrain_pick.push(i);
+                }
+            }
+        } else {
+            self.terrain_pick = hit;
+        }
+        let n = self.terrain_pick.len();
+        self.say(format!(
+            "{n} punto(s) elegido(s): escribe su cota en Propiedades · Supr: quitarlos · Mayús: añadir más."
+        ));
+        true
+    }
+
+    /// The picked points of the selected terrain, if any (stale picks are
+    /// dropped).
+    fn terrain_picked(&self) -> Option<(TerrainId, Vec<usize>)> {
+        let id = self.selected_terrain()?;
+        let n = self.ed.model().terrain(id)?.points.len();
+        let pick: Vec<usize> = self
+            .terrain_pick
+            .iter()
+            .copied()
+            .filter(|&i| i < n)
+            .collect();
+        (!pick.is_empty()).then_some((id, pick))
+    }
+
+    /// Delete with points of the terrain picked: those points go, not the
+    /// terrain.
+    pub(super) fn delete_terrain_points(&mut self) -> bool {
+        let Some((id, pick)) = self.terrain_picked() else {
+            return false;
+        };
+        let r = self
+            .ed
+            .edit_terrain("Quitar puntos del terreno", id, |t| t.remove_points(&pick));
+        match r {
+            Ok(()) => {
+                self.terrain_pick.clear();
+                self.say(format!("{} punto(s) quitado(s) del terreno.", pick.len()));
+            }
+            Err(_) => self.complain(
+                "No se pueden quitar: el terreno necesita al menos tres puntos que no estén en línea.",
+            ),
+        }
+        true
+    }
+
+    /// Survey points with their heights, and the contour lines drawn by
+    /// hand: of the terrain being drawn and, with the terrain tool, the
+    /// level's terrain; of the selected terrain, with the points picked.
     pub(super) fn draw_terrain_preview(&self, painter: &egui::Painter, rect: Rect) {
+        let font = FontId::proportional(11.0);
+        let labels = self.view.zoom >= 25.0;
+        let shown = match self.tool {
+            Tool::Terrain => self.level_terrain(),
+            Tool::Arrow => self.selected_terrain(),
+            _ => None,
+        };
+        if let Some(t) = shown.and_then(|id| self.ed.model().terrain(id)) {
+            let picked = |i: usize| self.tool == Tool::Arrow && self.terrain_pick.contains(&i);
+            for l in &t.lines {
+                let pts: Vec<Point2> = l.iter().map(|&i| t.points[i].at).collect();
+                painter.add(Shape::line(
+                    self.polygon(rect, &pts),
+                    Stroke::new(2.0, TERRAIN_LINE),
+                ));
+            }
+            let few = t.points.len() <= 400;
+            // Heights only where they do not overlap one already written.
+            let mut written: Vec<Pos2> = Vec::new();
+            for (i, p) in t.points.iter().enumerate() {
+                let s = self.view.to_screen(rect, p.at);
+                if !rect.expand(20.0).contains(s) {
+                    continue;
+                }
+                if picked(i) {
+                    painter.circle_filled(s, 5.0, ACCENT);
+                } else {
+                    painter.circle(s, 3.0, Color32::WHITE, Stroke::new(1.2, TERRAIN_LINE));
+                }
+                let free = !written
+                    .iter()
+                    .any(|w| (w.x - s.x).abs() < 40.0 && (w.y - s.y).abs() < 14.0);
+                if free && (picked(i) || (labels && few)) {
+                    written.push(s);
+                    painter.text(
+                        s + Vec2::new(5.0, -5.0),
+                        Align2::LEFT_BOTTOM,
+                        height(p.z),
+                        font.clone(),
+                        if picked(i) { ACCENT } else { TERRAIN_LINE },
+                    );
+                }
+            }
+        }
         if self.tool != Tool::Terrain {
             return;
         }
@@ -60,6 +336,13 @@ impl ArchiSimApp {
             let tri = [pts[a], pts[b], pts[c]];
             painter.add(Shape::closed_line(self.polygon(rect, &tri), ink));
         }
+        for l in &self.terrain_lines {
+            let line: Vec<Point2> = l.iter().map(|&i| pts[i]).collect();
+            painter.add(Shape::line(
+                self.polygon(rect, &line),
+                Stroke::new(2.0, ACCENT),
+            ));
+        }
         for p in &self.terrain_points {
             let s = self.view.to_screen(rect, p.at);
             painter.circle_filled(s, 3.0, ACCENT);
@@ -67,16 +350,31 @@ impl ArchiSimApp {
                 s + Vec2::new(5.0, -5.0),
                 Align2::LEFT_BOTTOM,
                 height(p.z),
-                FontId::proportional(11.0),
+                font.clone(),
                 ACCENT,
             );
         }
+        let mut line = self.terrain_line.clone();
+        if let (false, Some(c)) = (line.is_empty(), self.cursor) {
+            line.push(c.point);
+        }
+        if line.len() >= 2 {
+            painter.add(Shape::line(
+                self.polygon(rect, &line),
+                Stroke::new(2.0, ACCENT),
+            ));
+        }
         if let Some(c) = self.cursor {
+            let what = if self.terrain_settings.line {
+                "Línea de nivel a"
+            } else {
+                "Punto a"
+            };
             self.draw_label(
                 painter,
                 rect,
                 c.point,
-                format!("Punto a {}", height(self.terrain_settings.z)),
+                format!("{what} {}", height(self.terrain_settings.z)),
             );
         }
     }
@@ -84,10 +382,33 @@ impl ArchiSimApp {
     pub(super) fn terrain_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Terreno · lo que vas a crear");
         group(ui, "tool-terrain", "Terreno", |ui| {
+            ui.add_space(2.0);
+            let before = self.terrain_settings.line;
+            segmented(
+                ui,
+                "terrain-mode",
+                &mut self.terrain_settings.line,
+                &[
+                    (false, "Puntos", "Un punto por clic, a la cota escrita"),
+                    (
+                        true,
+                        "Línea de nivel",
+                        "Una línea de varios clics: todos sus puntos a la cota escrita",
+                    ),
+                ],
+            );
+            if before != self.terrain_settings.line {
+                self.terrain_line.clear();
+            }
+            ui.add_space(4.0);
             row(
                 ui,
-                "Cota del punto (mm)",
-                "Del próximo punto, respecto al ±0,00 del proyecto",
+                if self.terrain_settings.line {
+                    "Cota de la línea (mm)"
+                } else {
+                    "Cota del punto (mm)"
+                },
+                "Respecto al ±0,00 del proyecto",
                 |ui, w| {
                     if let Some(v) = length_field(
                         ui,
@@ -129,17 +450,28 @@ impl ArchiSimApp {
                     }
                 },
             );
-            text_row(
-                ui,
-                "Puntos",
-                "Marcados hasta ahora",
-                &self.terrain_points.len().to_string(),
-            );
+            match self
+                .level_terrain()
+                .and_then(|id| self.ed.model().terrain(id))
+            {
+                Some(t) => text_row(
+                    ui,
+                    "Se añade a",
+                    "El terreno de esta planta",
+                    &format!("Terreno de {} puntos", t.points.len()),
+                ),
+                None => text_row(
+                    ui,
+                    "Puntos",
+                    "Marcados hasta ahora",
+                    &self.terrain_points.len().to_string(),
+                ),
+            }
         });
         ui.add_space(6.0);
         props::note(
             ui,
-            "Marca los puntos del levantamiento: escribe la cota y haz clic en su sitio, uno tras otro. Intro o doble clic crea el terreno (tres puntos como mínimo); Esc quita el último.",
+            "Puntos: escribe la cota y haz clic en su sitio; sobre un punto que ya existe, le pone esa cota. Línea de nivel: escribe la cota y dibuja la curva con varios clics; Intro o doble clic la termina (sus puntos, cada metro como mucho). Con un terreno en la planta todo se añade a él; si no, se crea en cuanto los puntos forman superficie (Intro con tres puntos, o dos líneas a distinta cota). Esc quita el último vértice.",
         );
     }
 
@@ -194,26 +526,82 @@ impl ArchiSimApp {
                 &format!("{} … {}", height(lo), height(hi)),
             );
         });
-        group(ui, "terrain-points", "Puntos", |ui| {
-            for (i, p) in t.points.iter().enumerate().take(60) {
-                let label = format!("{} · {}, {}", i + 1, fmt_m(p.at.x), fmt_m(p.at.y));
-                row(ui, &label, "Cota del punto (mm)", |ui, w| {
-                    if let Some(v) =
-                        length_field(ui, Id::unique(("terrain-z", id.0, i)), p.z, w - 8.0)
-                    {
-                        let r = self
-                            .ed
-                            .edit_terrain("Cota de punto", id, |t| t.points[i].z = v);
-                        self.report(r, "Cota cambiada.");
-                    }
-                });
-            }
-            if t.points.len() > 60 {
-                props::note(ui, "Solo se muestran los 60 primeros puntos.");
-            }
-        });
+        self.terrain_pick_group(ui, id, &t);
         group(ui, "terrain-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &t.guid.to_string());
+        });
+    }
+
+    /// The points picked in plan: how many, and one height for all.
+    fn terrain_pick_group(&mut self, ui: &mut Ui, id: TerrainId, t: &archisim_core::Terrain) {
+        let pick: Vec<usize> = self.terrain_picked().map(|(_, p)| p).unwrap_or_default();
+        group(ui, "terrain-points", "Puntos elegidos", |ui| {
+            text_row(
+                ui,
+                "Puntos",
+                "Del terreno, y líneas de nivel dibujadas",
+                &format!("{} · {} líneas", t.points.len(), t.lines.len()),
+            );
+            if pick.is_empty() {
+                props::note(
+                    ui,
+                    "Haz clic en la planta sobre un punto para elegirlo (Mayús: añadir o quitar) o sobre una línea de nivel para elegir todos sus puntos; aquí les das la cota de una vez. Supr los quita del terreno; arrastrándolos se mueven.",
+                );
+                return;
+            }
+            let zs: Vec<f64> = pick.iter().map(|&i| t.points[i].z).collect();
+            let (lo, hi) = zs
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), z| {
+                    (a.min(*z), b.max(*z))
+                });
+            text_row(
+                ui,
+                "Elegidos",
+                "Puntos elegidos en la planta",
+                &pick.len().to_string(),
+            );
+            if hi - lo > 1e-9 {
+                text_row(
+                    ui,
+                    "Cotas ahora",
+                    "Distintas: la que escribas se pone a todos",
+                    &format!("{} … {}", height(lo), height(hi)),
+                );
+            }
+            row(
+                ui,
+                "Cota (mm)",
+                "De todos los puntos elegidos, respecto al ±0,00",
+                |ui, w| {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique(("terrain-pick-z", id.0, pick.len(), pick[0])),
+                        lo,
+                        w - 8.0,
+                    ) {
+                        let r = self.ed.edit_terrain("Cota de puntos", id, |t| {
+                            for &i in &pick {
+                                t.points[i].z = v;
+                            }
+                        });
+                        self.report(r, &format!("{} punto(s) a {}.", pick.len(), height(v)));
+                    }
+                },
+            );
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui.button("Quitar del terreno").clicked() {
+                    self.delete_terrain_points();
+                }
+                if ui
+                    .button("Soltar")
+                    .on_hover_text("No elegir ningún punto")
+                    .clicked()
+                {
+                    self.terrain_pick.clear();
+                }
+            });
         });
     }
 

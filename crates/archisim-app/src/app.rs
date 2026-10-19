@@ -228,6 +228,14 @@ pub struct ArchiSimApp {
     pub railing_points: Vec<Point2>,
     /// Survey points of the terrain being drawn.
     pub terrain_points: Vec<archisim_core::SurveyPoint>,
+    /// Contour lines of the terrain being drawn (indices into
+    /// `terrain_points`), before there is a terrain to put them in.
+    pub terrain_lines: Vec<Vec<usize>>,
+    /// The contour line being drawn with the terrain tool.
+    pub terrain_line: Vec<Point2>,
+    /// Points of the selected terrain picked in plan (clicked one by one,
+    /// or a whole contour line), to give them a height at once.
+    pub terrain_pick: Vec<usize>,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
     /// The levels dialog is open.
@@ -367,6 +375,9 @@ impl ArchiSimApp {
             object_settings: Default::default(),
             railing_points: Vec::new(),
             terrain_points: Vec::new(),
+            terrain_lines: Vec::new(),
+            terrain_line: Vec::new(),
+            terrain_pick: Vec::new(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             show_levels: false,
@@ -456,6 +467,8 @@ impl ArchiSimApp {
             self.roof_tool.finish();
             self.stair_tool.points.clear();
             self.terrain_points.clear();
+            self.terrain_lines.clear();
+            self.terrain_line.clear();
             self.section_tool.anchor = None;
             self.curtain_anchor = None;
             self.railing_points.clear();
@@ -773,6 +786,9 @@ impl ArchiSimApp {
     }
 
     fn delete(&mut self) {
+        if self.delete_terrain_points() {
+            return;
+        }
         match self.ed.delete_selection() {
             Ok(0) => {}
             Ok(n) => self.say(format!("Borrados {n} elemento(s).")),

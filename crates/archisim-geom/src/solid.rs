@@ -2159,6 +2159,7 @@ mod tests {
                 material: mat,
                 depth: 1.0,
                 contour: 0.5,
+                lines: Vec::new(),
             })
             .unwrap();
         let solids = terrain_solids(&m, id);

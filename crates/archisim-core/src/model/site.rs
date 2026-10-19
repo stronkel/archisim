@@ -33,6 +33,10 @@ pub struct Terrain {
     pub depth: f64,
     /// Interval between contour lines.
     pub contour: f64,
+    /// Contour lines drawn by hand ("líneas de nivel"): runs of points,
+    /// by index, each two points at least. They pick their points
+    /// together, to give them a height at once.
+    pub lines: Vec<Vec<usize>>,
 }
 
 /// Data needed to create a terrain.
@@ -43,9 +47,43 @@ pub struct NewTerrain {
     pub material: MaterialId,
     pub depth: f64,
     pub contour: f64,
+    pub lines: Vec<Vec<usize>>,
 }
 
+/// Largest gap between the points of a contour line drawn by hand.
+pub const LINE_SPACING: f64 = 1.0;
+
 impl Terrain {
+    /// Adds a contour line through `path` at height `z`: points no more
+    /// than `LINE_SPACING` apart along it (reusing points already there).
+    /// Returns the index of the new line.
+    pub fn add_line(&mut self, path: &[Point2], z: f64) -> usize {
+        let line = push_line(&mut self.points, path, z);
+        self.lines.push(line);
+        self.lines.len() - 1
+    }
+
+    /// Removes the points with these indices, and them from the lines (a
+    /// line left with fewer than two points goes).
+    pub fn remove_points(&mut self, gone: &[usize]) {
+        let mut map = Vec::with_capacity(self.points.len());
+        let mut kept = Vec::with_capacity(self.points.len());
+        for (i, p) in self.points.iter().enumerate() {
+            if gone.contains(&i) {
+                map.push(None);
+            } else {
+                map.push(Some(kept.len()));
+                kept.push(*p);
+            }
+        }
+        self.points = kept;
+        self.lines = std::mem::take(&mut self.lines)
+            .into_iter()
+            .map(|l| l.into_iter().filter_map(|i| map[i]).collect::<Vec<_>>())
+            .filter(|l| l.len() >= 2)
+            .collect();
+    }
+
     /// The surface's triangles, counter-clockwise in plan, by point index.
     pub fn triangles(&self) -> Vec<[usize; 3]> {
         delaunay(&self.points.iter().map(|p| p.at).collect::<Vec<_>>())
@@ -145,6 +183,40 @@ impl Terrain {
     }
 }
 
+/// Puts the points of a contour line through `path` at height `z` into
+/// `points` (no more than `LINE_SPACING` apart; a point already there is
+/// reused and takes the height), and returns their indices in order.
+pub fn push_line(points: &mut Vec<SurveyPoint>, path: &[Point2], z: f64) -> Vec<usize> {
+    let mut at: Vec<Point2> = Vec::new();
+    for (k, w) in path.windows(2).enumerate() {
+        let n = (w[0].distance(w[1]) / LINE_SPACING - 1e-9).ceil().max(1.0) as usize;
+        let first = if k == 0 { 0 } else { 1 };
+        for j in first..=n {
+            at.push(w[0] + (w[1] - w[0]) * (j as f64 / n as f64));
+        }
+    }
+    if path.len() == 1 {
+        at.push(path[0]);
+    }
+    let mut line: Vec<usize> = Vec::new();
+    for p in at {
+        let i = match points.iter().position(|q| q.at.approx_eq(p)) {
+            Some(i) => {
+                points[i].z = z;
+                i
+            }
+            None => {
+                points.push(SurveyPoint { at: p, z });
+                points.len() - 1
+            }
+        };
+        if line.last() != Some(&i) {
+            line.push(i);
+        }
+    }
+    line
+}
+
 /// Barycentric coordinates of `p` in the triangle `a b c`, if inside.
 fn barycentric(p: Point2, a: Point2, b: Point2, c: Point2) -> Option<(f64, f64, f64)> {
     let d = (b - a).cross(c - a);
@@ -241,6 +313,13 @@ impl Model {
         if t.depth <= EPSILON || t.contour < 0.0 {
             return Err(ModelError::InvalidTerrain);
         }
+        let n = t.points.len();
+        if t.lines
+            .iter()
+            .any(|l| l.len() < 2 || l.iter().any(|&i| i >= n))
+        {
+            return Err(ModelError::InvalidTerrain);
+        }
         let pts: Vec<Point2> = t.points.iter().map(|p| p.at).collect();
         if delaunay(&pts).is_empty() {
             return Err(ModelError::InvalidTerrain);
@@ -261,6 +340,7 @@ impl Model {
                 material: spec.material,
                 depth: spec.depth,
                 contour: spec.contour,
+                lines: spec.lines,
             },
         );
         Ok(id)
@@ -345,6 +425,7 @@ fn spec_of(t: &Terrain) -> NewTerrain {
         material: t.material,
         depth: t.depth,
         contour: t.contour,
+        lines: t.lines.clone(),
     }
 }
 
@@ -379,6 +460,7 @@ mod tests {
                 material: earth,
                 depth: 2.0,
                 contour: 1.0,
+                lines: Vec::new(),
             })
             .unwrap();
         let t = m.terrain(id).unwrap();
@@ -404,6 +486,55 @@ mod tests {
             Err(ModelError::InvalidTerrain)
         );
         m.set_true_north(-0.3).unwrap();
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back, m);
+    }
+
+    /// Contour lines drawn by hand: their points no more than a metre
+    /// apart, sharing the points already there; removing points keeps the
+    /// lines right.
+    #[test]
+    fn contour_lines_by_hand() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let earth = m.add_material("Tierra", "earth", [150, 120, 90], CutPattern::Dots);
+        let id = m
+            .add_terrain(NewTerrain {
+                level: l,
+                points: vec![sp(0.0, 0.0, 0.0), sp(10.0, 0.0, 0.0), sp(0.0, 10.0, 0.0)],
+                material: earth,
+                depth: 1.0,
+                contour: 0.5,
+                lines: Vec::new(),
+            })
+            .unwrap();
+        m.edit_terrain(id, |t| {
+            // From an existing corner, 2.5 m east then 1 m north.
+            t.add_line(
+                &[
+                    Point2::new(0.0, 0.0),
+                    Point2::new(2.5, 0.0),
+                    Point2::new(2.5, 1.0),
+                ],
+                1.5,
+            );
+        })
+        .unwrap();
+        let t = m.terrain(id).unwrap().clone();
+        // 0, 0.83, 1.67, 2.5 and (2.5, 1): the first one reused.
+        assert_eq!(t.lines, vec![vec![0, 3, 4, 5, 6]]);
+        assert_eq!(t.points.len(), 7);
+        assert!(t.lines[0].iter().all(|&i| t.points[i].z == 1.5));
+        assert_eq!(
+            m.edit_terrain(id, |t| t.lines.push(vec![1])),
+            Err(ModelError::InvalidTerrain)
+        );
+        m.edit_terrain(id, |t| t.remove_points(&[3, 4, 5])).unwrap();
+        let t = m.terrain(id).unwrap();
+        assert_eq!(t.lines, vec![vec![0, 3]]);
+        assert_eq!(t.points[3].at, Point2::new(2.5, 1.0));
+        m.edit_terrain(id, |t| t.remove_points(&[3])).unwrap();
+        assert!(m.terrain(id).unwrap().lines.is_empty());
         let back = Model::from_parts(m.to_parts()).unwrap();
         assert_eq!(back, m);
     }

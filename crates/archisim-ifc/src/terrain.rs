@@ -73,7 +73,7 @@ impl Exporter<'_> {
                 .map(|p| format!("{} {} {}", real(p.at.x), real(p.at.y), real(p.z)))
                 .collect::<Vec<_>>()
                 .join(";");
-            let props = [
+            let mut props = vec![
                 self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Points',$,IFCTEXT({}),$)",
                     string(&points)
@@ -87,6 +87,24 @@ impl Exporter<'_> {
                     real(t.contour)
                 )),
             ];
+            // Contour lines drawn by hand: point indices, line by line.
+            if !t.lines.is_empty() {
+                let lines = t
+                    .lines
+                    .iter()
+                    .map(|l| {
+                        l.iter()
+                            .map(|i| i.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(";");
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Lines',$,IFCTEXT({}),$)",
+                    string(&lines)
+                )));
+            }
             self.pset(el, &t.guid, "ArchiSim_Terrain", &props);
             contained.entry(t.level).or_default().push(el);
         }
