@@ -128,7 +128,11 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) => {}
+            Element::Opening(_)
+            | Element::Dimension(_)
+            | Element::Mark(_)
+            | Element::Room(_)
+            | Element::Tag(_) => {}
         }
     }
     v
@@ -331,7 +335,11 @@ fn move_selection(
     let only_annotations = selection.iter().all(|e| {
         matches!(
             e,
-            Element::Dimension(_) | Element::Mark(_) | Element::Draft(_)
+            Element::Dimension(_)
+                | Element::Mark(_)
+                | Element::Draft(_)
+                | Element::Room(_)
+                | Element::Tag(_)
         )
     });
     for e in selection {
@@ -371,6 +379,12 @@ fn move_selection(
                     &archisim_draft::Transform::translate(d),
                 );
                 model.set_draft_shape(*id, moved)?;
+            }
+            Element::Room(_) | Element::Tag(_) => {
+                // Moved with walls, a room goes whole.
+                let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
+                let t = archisim_draft::Transform::translate(d);
+                crate::xform::transform_one(model, *e, &t, false, walls_too)?;
             }
             _ => {}
         }
@@ -517,6 +531,16 @@ fn copy(
                     .clone();
                 let new = model.add_elevation_mark(m.level, m.point + d)?;
                 copies.insert(Element::Mark(new));
+            }
+            Element::Room(_) | Element::Tag(_) => {
+                let t = archisim_draft::Transform::translate(d);
+                copies.insert(crate::xform::transform_one(
+                    model,
+                    *e,
+                    &t,
+                    true,
+                    !copied_walls.is_empty(),
+                )?);
             }
             Element::Draft(id) => {
                 let dr = model
@@ -698,6 +722,8 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Dimension(id) => model.dimension(id).is_some(),
         Element::Mark(id) => model.elevation_mark(id).is_some(),
         Element::Draft(id) => model.draft(id).is_some(),
+        Element::Room(id) => model.room(id).is_some(),
+        Element::Tag(id) => model.tag(id).is_some(),
     }
 }
 
@@ -731,6 +757,8 @@ fn level_of(
             Element::Dimension(id) => model.dimension(*id).map(|d| d.level),
             Element::Mark(id) => model.elevation_mark(*id).map(|m| m.level),
             Element::Draft(id) => draft_level(model, *id),
+            Element::Room(id) => model.room(*id).map(|r| r.level),
+            Element::Tag(id) => model.tag(*id).map(|t| t.level),
         }),
     }
 }

@@ -824,6 +824,8 @@ fn category_layer(group: &str, nested: bool) -> (&'static str, [u8; 3], i32) {
         "annotations" => ("A-COTA", [0, 255, 0], 13),
         "drafting" => ("A-DIBUJO", [255, 255, 255], 18),
         "view-titles" => ("A-TITULO-VISTA", [255, 255, 255], 25),
+        "rooms" => ("A-LOCAL-NOMBRE", [255, 255, 255], 18),
+        "tags" => ("A-ETIQUETA", [255, 255, 255], 18),
         "title-block" => ("A-CAJETIN", [255, 255, 255], 25),
         _ if nested => ("A-VISTA", [255, 255, 255], 18),
         _ => ("A-OTROS", [255, 255, 255], 18),

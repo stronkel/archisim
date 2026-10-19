@@ -26,6 +26,7 @@
 pub mod annotate;
 pub mod drafting;
 pub mod lettering;
+pub mod rooms;
 pub mod sheet;
 
 use std::fmt::Write as _;
@@ -339,6 +340,18 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
                     [a, b]
                 }),
         )
+        .chain(
+            model
+                .rooms_on_level(level)
+                .filter(|_| show(archisim_core::Category::Rooms))
+                .map(|r| r.label),
+        )
+        .chain(
+            model
+                .tags_on_level(level)
+                .filter(|_| show(archisim_core::Category::Tags))
+                .map(|t| t.at),
+        )
         .collect();
     let all_points = all_points.chain(annotation_points.iter());
     for p in all_points {
@@ -458,6 +471,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             &options.style.hidden_layers,
             !show(archisim_core::Category::Dimensions),
         );
+    }
+    if show(archisim_core::Category::Rooms) {
+        rooms::draw_rooms(&mut s, model, level, k);
+    }
+    if show(archisim_core::Category::Tags) {
+        rooms::draw_tags(&mut s, model, level, k);
     }
     s.push_str("<g id=\"annotations\">\n");
     for d in &dimensions {

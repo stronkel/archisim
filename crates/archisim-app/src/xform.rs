@@ -171,10 +171,92 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Room(_) | Element::Tag(_) => {
+                let walls_too = selection.iter().any(|e| matches!(e, Element::Wall(_)));
+                out.insert(transform_one(model, *e, t, copy, walls_too)?);
+            }
             Element::Opening(_) => {}
         }
     }
     Ok(out)
+}
+
+/// A room or a tag moved, turned or copied (`walls_too`: with walls).
+pub fn transform_one(
+    model: &mut Model,
+    e: Element,
+    t: &Transform,
+    copy: bool,
+    walls_too: bool,
+) -> Result<Element, ModelError> {
+    match e {
+        Element::Room(id) => room(model, id, t, copy, walls_too),
+        Element::Tag(id) => {
+            let tag = model.tag(id).ok_or(ModelError::UnknownTag(id))?.clone();
+            let at = t.apply(tag.at);
+            if copy {
+                Ok(Element::Tag(model.add_tag(tag.target, at, tag.leader)?))
+            } else {
+                model.move_tag(id, at)?;
+                Ok(e)
+            }
+        }
+        other => Ok(other),
+    }
+}
+
+/// A room moved, turned or copied. A room bounded by walls moved without
+/// them only moves its stamp, while it stays inside; moved out of its
+/// walls, it is freed and goes whole.
+fn room(
+    model: &mut Model,
+    id: archisim_core::RoomId,
+    t: &Transform,
+    copy: bool,
+    walls_too: bool,
+) -> Result<Element, ModelError> {
+    let r = model.room(id).ok_or(ModelError::UnknownRoom(id))?.clone();
+    let label = t.apply(r.label);
+    let whole = archisim_core::Room {
+        outline: r.outline.iter().map(|p| t.apply(*p)).collect(),
+        holes: r
+            .holes
+            .iter()
+            .map(|h| h.iter().map(|p| t.apply(*p)).collect())
+            .collect(),
+        label,
+        ..r.clone()
+    };
+    if copy {
+        let number = model.next_room_number(r.level);
+        let new = model.add_room(archisim_core::NewRoom {
+            level: r.level,
+            number,
+            name: r.name.clone(),
+            outline: whole.outline,
+            holes: whole.holes,
+            label,
+            bounded: r.bounded && walls_too,
+        })?;
+        if let Some(mut n) = model.room(new).cloned() {
+            n.height = r.height;
+            n.finishes = r.finishes.clone();
+            model.set_room(n)?;
+        }
+        return Ok(Element::Room(new));
+    }
+    let moved = if !r.bounded || walls_too {
+        whole
+    } else if r.contains(label) {
+        archisim_core::Room { label, ..r }
+    } else {
+        archisim_core::Room {
+            bounded: false,
+            ..whole
+        }
+    };
+    model.set_room(moved)?;
+    Ok(Element::Room(id))
 }
 
 #[cfg(test)]

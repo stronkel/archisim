@@ -305,6 +305,8 @@ impl Editor {
             Element::Dimension(id) => model.dimension(*id).is_some(),
             Element::Mark(id) => model.elevation_mark(*id).is_some(),
             Element::Draft(id) => model.draft(*id).is_some(),
+            Element::Room(id) => model.room(*id).is_some(),
+            Element::Tag(id) => model.tag(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -324,9 +326,22 @@ impl Editor {
                 // Dimensions follow what they measure (and new or moved
                 // ones are tied to what is under their points).
                 let before = archisim_geom::anchors::snapshot(m);
+                // Rooms bounded by walls follow them too.
+                let rooms = m.rooms().any(|r| r.bounded);
+                let walls = if rooms {
+                    archisim_geom::room::wall_signatures(m)
+                } else {
+                    Default::default()
+                };
                 let r = edit(m)?;
                 if m.dimensions().next().is_some() {
                     archisim_geom::anchors::follow(m, &before);
+                }
+                if rooms {
+                    archisim_geom::room::follow_walls(m, &walls);
+                }
+                if m.tags().next().is_some() {
+                    m.remove_orphan_tags();
                 }
                 Ok(r)
             })
@@ -489,6 +504,14 @@ impl Editor {
                     Element::Draft(id) => {
                         m.remove_draft(*id)?;
                     }
+                    Element::Room(id) => {
+                        m.remove_room(*id)?;
+                    }
+                    Element::Tag(id) => {
+                        if m.tag(*id).is_some() {
+                            m.remove_tag(*id)?;
+                        }
+                    }
                     Element::Opening(_) => {}
                 }
             }
@@ -555,9 +578,76 @@ impl Editor {
                         Element::Mark(id) => {
                             m.remove_elevation_mark(id)?;
                         }
+                        Element::Room(id) => {
+                            m.remove_room(id)?;
+                        }
+                        Element::Tag(id) => {
+                            if m.tag(id).is_some() {
+                                m.remove_tag(id)?;
+                            }
+                        }
                     },
                     Change::Transform { items, t, copy } => {
                         out.extend(crate::xform::transform(m, &items, &t, copy)?);
+                    }
+                    Change::RoomAt(p) => {
+                        let level = match view {
+                            archisim_core::ViewRef::Level(l) => l,
+                            _ => return Err(ModelError::InvalidShape("no room there")),
+                        };
+                        let outline = archisim_geom::room_outline(
+                            m,
+                            level,
+                            p,
+                            archisim_geom::Contour::InteriorFace,
+                        )
+                        .map_err(|_| ModelError::InvalidShape("no room there"))?;
+                        out.insert(Element::Room(new_room(m, level, outline, p, true)?));
+                    }
+                    Change::Room(outline) => {
+                        let level = match view {
+                            archisim_core::ViewRef::Level(l) => l,
+                            _ => return Err(ModelError::InvalidShape("no room there")),
+                        };
+                        let n = outline.len().max(1) as f64;
+                        let c = outline
+                            .iter()
+                            .fold(Point2::new(0.0, 0.0), |a, p| a + *p * (1.0 / n));
+                        out.insert(Element::Room(new_room(m, level, outline, c, false)?));
+                    }
+                    Change::Tag(e, at) => {
+                        let target = tag_target(e)
+                            .ok_or(ModelError::InvalidShape("nothing to tag there"))?;
+                        let at = match at {
+                            Some(p) => p,
+                            None => default_tag_point(m, target)
+                                .ok_or(ModelError::InvalidShape("nothing to tag there"))?,
+                        };
+                        out.insert(Element::Tag(m.add_tag(target, at, false)?));
+                    }
+                    Change::TagAll => {
+                        let level = match view {
+                            archisim_core::ViewRef::Level(l) => l,
+                            _ => continue,
+                        };
+                        let tagged: BTreeSet<archisim_core::TagTarget> =
+                            m.tags().map(|t| t.target).collect();
+                        let todo: Vec<archisim_core::OpeningId> = m
+                            .walls_on_level(level)
+                            .flat_map(|w| m.openings_in_wall(w.id))
+                            .filter(|o| {
+                                m.opening_type(o.opening_type)
+                                    .is_some_and(|t| t.kind != archisim_core::OpeningKind::Void)
+                            })
+                            .map(|o| o.id)
+                            .filter(|o| !tagged.contains(&archisim_core::TagTarget::Opening(*o)))
+                            .collect();
+                        for o in todo {
+                            let target = archisim_core::TagTarget::Opening(o);
+                            if let Some(at) = default_tag_point(m, target) {
+                                out.insert(Element::Tag(m.add_tag(target, at, false)?));
+                            }
+                        }
                     }
                     Change::MatchStyle { from, to } => {
                         let f = m.draft(from).ok_or(ModelError::UnknownDraft(from))?.clone();
@@ -654,6 +744,14 @@ impl Editor {
         self.transact("Quitar vista del plano", |m| {
             m.remove_viewport(id).map(|_| ())
         })
+    }
+
+    pub fn set_room(&mut self, room: archisim_core::Room, label: &str) -> EditResult {
+        self.transact(label, |m| m.set_room(room))
+    }
+
+    pub fn set_tag_leader(&mut self, id: archisim_core::TagId, leader: bool) -> EditResult {
+        self.transact("Cambiar etiqueta", |m| m.set_tag_leader(id, leader))
     }
 
     /// The project's data for the title blocks.
@@ -992,6 +1090,54 @@ fn extension(path: &Path) -> String {
     path.extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default()
+}
+
+/// A new room of a level with the next number.
+fn new_room(
+    m: &mut Model,
+    level: LevelId,
+    outline: Vec<Point2>,
+    label: Point2,
+    bounded: bool,
+) -> Result<archisim_core::RoomId, ModelError> {
+    let number = m.next_room_number(level);
+    m.add_room(archisim_core::NewRoom {
+        level,
+        number,
+        name: "Local".into(),
+        outline,
+        holes: Vec::new(),
+        label,
+        bounded,
+    })
+}
+
+/// What a tag of an element points at.
+pub fn tag_target(e: Element) -> Option<archisim_core::TagTarget> {
+    match e {
+        Element::Opening(o) => Some(archisim_core::TagTarget::Opening(o)),
+        Element::Wall(w) => Some(archisim_core::TagTarget::Wall(w)),
+        Element::Room(r) => Some(archisim_core::TagTarget::Room(r)),
+        _ => None,
+    }
+}
+
+/// Where a tag goes by default: outside the wall in front of a door or
+/// window, beside a wall's middle, under a room's stamp.
+pub fn default_tag_point(m: &Model, target: archisim_core::TagTarget) -> Option<Point2> {
+    match target {
+        archisim_core::TagTarget::Opening(o) => {
+            let g = archisim_geom::opening_geometry(m, o)?;
+            Some(g.point((g.t0 + g.t1) / 2.0, g.exterior_offset + 0.35))
+        }
+        archisim_core::TagTarget::Wall(w) => {
+            let w = m.wall(w)?;
+            let u = (w.end - w.start).normalized()?;
+            let t = m.wall_type(w.wall_type).map_or(0.2, |t| t.thickness());
+            Some(w.midpoint() + u.perp_left() * (t + 0.4))
+        }
+        archisim_core::TagTarget::Room(r) => m.room(r).map(|r| r.label - Point2::new(0.0, 0.6)),
+    }
 }
 
 #[cfg(test)]

@@ -16,6 +16,8 @@ pub struct ImportReport {
     pub slabs: usize,
     pub doors: usize,
     pub windows: usize,
+    /// Rooms (IfcSpace).
+    pub rooms: usize,
     /// Openings in walls with no door or window in them.
     pub voids: usize,
     pub wall_types: usize,
@@ -50,6 +52,9 @@ impl ImportReport {
         );
         if self.voids > 0 {
             s.push_str(&format!(", {} huecos", self.voids));
+        }
+        if self.rooms > 0 {
+            s.push_str(&format!(", {} locales", self.rooms));
         }
         let n = self.skipped_count();
         if n > 0 {
@@ -108,8 +113,13 @@ impl ImportReport {
         } else {
             String::new()
         };
+        let rooms = if self.rooms > 0 {
+            format!(", {} locales", self.rooms)
+        } else {
+            String::new()
+        };
         format!(
-            "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}",
+            "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}{rooms}",
             self.levels, self.walls, self.slabs, self.doors, self.windows
         )
     }
@@ -180,7 +190,6 @@ pub const UNSUPPORTED_CLASSES: &[&str] = &[
     "IFCBUILDINGELEMENTPROXY",
     "IFCFURNISHINGELEMENT",
     "IFCFURNITURE",
-    "IFCSPACE",
     "IFCSANITARYTERMINAL",
     "IFCFLOWTERMINAL",
     "IFCFLOWSEGMENT",

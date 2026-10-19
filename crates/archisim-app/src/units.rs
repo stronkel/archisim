@@ -160,6 +160,8 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownDraft(_) => "el elemento de dibujo ya no existe".into(),
         ModelError::UnknownSheet(_) => "el plano ya no existe".into(),
         ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
+        ModelError::UnknownRoom(_) => "el local ya no existe".into(),
+        ModelError::UnknownTag(_) => "la etiqueta ya no existe".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),
         ModelError::DuplicateName(name) => format!("ya hay otro elemento llamado «{name}»"),
     }
@@ -185,6 +187,12 @@ fn es_shape(what: &str) -> &str {
         "hatch needs a boundary" => "el sombreado necesita un contorno",
         "layer name is empty" => "la capa necesita un nombre",
         "layer 0 cannot be renamed" => "la capa 0 no se puede renombrar",
+        "no room there" => {
+            "ahí no hay un recinto cerrado por muros (dibuje su contorno con la opción Polígono)"
+        }
+        "nothing to tag there" => {
+            "eso no se etiqueta: elija una puerta, una ventana, un muro o un local"
+        }
         other => other,
     }
 }

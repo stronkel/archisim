@@ -231,6 +231,7 @@ struct GuidPlan {
     walls: Vec<(WallId, String)>,
     slabs: Vec<(archisim_core::SlabId, String)>,
     openings: Vec<(archisim_core::OpeningId, String)>,
+    rooms: Vec<(archisim_core::RoomId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -1621,6 +1622,95 @@ impl<'a> Importer<'a> {
         Ok(())
     }
 
+    /// Spaces (rooms): their outline in plan, number, name, height and
+    /// finishes.
+    fn import_spaces(&mut self) {
+        for id in self.file.of_kind("IFCSPACE") {
+            if let Err(why) = self.import_space(id) {
+                self.report.skip("locales", why);
+            }
+        }
+    }
+
+    fn import_space(&mut self, id: u64) -> Result<(), String> {
+        let e = self.ent(id).ok_or("no existe")?;
+        let xf = self.geo.placement(e.arg(5));
+        let (_, body) = self.shape(e, &xf);
+        let (outline, holes, bottom, top) = if let Some(x) = body
+            .extrusions
+            .iter()
+            .max_by(|a, b| area(&a.outline).total_cmp(&area(&b.outline)))
+        {
+            (x.outline.clone(), x.holes.clone(), x.bottom, x.top)
+        } else {
+            let (lo, hi) = body
+                .bounds()
+                .ok_or("sin geometría que ArchiSim sepa leer")?;
+            match geometry::top_outline(&body, lo[2]) {
+                Some((outline, holes)) => (outline, holes, lo[2], hi[2]),
+                None => return Err("sin contorno en planta legible".into()),
+            }
+        };
+        let outline = clean_outline(&outline);
+        if outline.len() < 3 {
+            return Err("contorno sin superficie".into());
+        }
+        let holes: Vec<Vec<Point2>> = holes
+            .iter()
+            .map(|h| clean_outline(h))
+            .filter(|h| h.len() >= 3)
+            .collect();
+        let text = |v: &Value| v.as_str().map(|s| s.trim().to_string()).unwrap_or_default();
+        let number = text(e.arg(2));
+        let mut name = text(e.arg(7));
+        if name.is_empty() {
+            name = text(e.arg(3));
+        }
+        let level = self.level_of(id, bottom + 0.01);
+        // The label at the middle of the outline (or of its box).
+        let n = outline.len() as f64;
+        let c = outline
+            .iter()
+            .fold(Point2::new(0.0, 0.0), |a, p| a + *p * (1.0 / n));
+        let rid = self
+            .model
+            .add_room(archisim_core::NewRoom {
+                level,
+                number,
+                name,
+                outline,
+                holes,
+                label: c,
+                bounded: false,
+            })
+            .map_err(|e| explain(&e))?;
+        let height = snap(top - bottom);
+        let finish = |me: &Self, n: &str| {
+            me.property(id, "Pset_SpaceCoveringRequirements", n)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let finishes = archisim_core::Finishes {
+            floor: finish(self, "FloorCovering"),
+            walls: finish(self, "WallCovering"),
+            ceiling: finish(self, "CeilingCovering"),
+        };
+        if let Some(mut r) = self.model.room(rid).cloned() {
+            let default = self.model.room_height(&r);
+            if height > 0.01 && (height - default).abs() > 0.005 {
+                r.height = Some(height);
+            }
+            r.finishes = finishes;
+            let _ = self.model.set_room(r);
+        }
+        self.report.rooms += 1;
+        self.guids
+            .rooms
+            .push((rid, e.arg(0).as_str().unwrap_or("").to_string()));
+        Ok(())
+    }
+
     /// The outline in plan of an opening element that voids a slab: its
     /// vertical extrusion, or the box of its body.
     fn void_outline(&self, void: u64) -> Option<Vec<Point2>> {
@@ -2455,6 +2545,7 @@ impl<'a> Importer<'a> {
         self.import_walls();
         self.import_slabs();
         self.import_openings();
+        self.import_spaces();
         self.count_unsupported();
     }
 
@@ -2493,6 +2584,7 @@ impl<'a> Importer<'a> {
         restore!(slabs, slabs);
         restore!(opening_types, opening_types);
         restore!(openings, openings);
+        restore!(rooms, rooms);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

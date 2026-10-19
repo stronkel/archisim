@@ -691,6 +691,8 @@ pub enum ModelError {
     UnknownDraft(DraftId),
     UnknownSheet(SheetId),
     UnknownViewport(ViewportId),
+    UnknownRoom(RoomId),
+    UnknownTag(TagId),
     /// A drafting element or annotation is not well formed.
     InvalidShape(&'static str),
     /// Another element of the same list already has that name.
@@ -777,6 +779,8 @@ impl fmt::Display for ModelError {
             ModelError::UnknownDraft(id) => write!(f, "drafting element {id} does not exist"),
             ModelError::UnknownSheet(id) => write!(f, "sheet {id} does not exist"),
             ModelError::UnknownViewport(id) => write!(f, "view {id} on a sheet does not exist"),
+            ModelError::UnknownRoom(id) => write!(f, "room {id} does not exist"),
+            ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
             ModelError::DuplicateName(name) => {
                 write!(f, "another element is already called «{name}»")
@@ -798,7 +802,7 @@ pub const MAX_BULGE: f64 = 11.430052302761343;
 pub const MIN_INNER_RADIUS: f64 = 0.05;
 
 /// Whether a closed polygon contains a point (ray casting).
-fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
+pub(crate) fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
     let mut inside = false;
     let n = poly.len();
     for i in 0..n {
@@ -849,7 +853,7 @@ fn finite(value: f64, what: &'static str) -> Result<(), ModelError> {
     }
 }
 
-fn finite_point(p: Point2, what: &'static str) -> Result<(), ModelError> {
+pub(crate) fn finite_point(p: Point2, what: &'static str) -> Result<(), ModelError> {
     finite(p.x, what)?;
     finite(p.y, what)
 }
@@ -886,6 +890,8 @@ pub struct ModelParts {
     pub info: crate::sheets::ProjectInfo,
     pub sheets: Vec<crate::sheets::Sheet>,
     pub viewports: Vec<crate::sheets::Viewport>,
+    pub rooms: Vec<crate::rooms::Room>,
+    pub tags: Vec<crate::rooms::Tag>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -935,6 +941,8 @@ pub struct Model {
     pub(crate) info: crate::sheets::ProjectInfo,
     pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
     pub(crate) viewports: BTreeMap<ViewportId, crate::sheets::Viewport>,
+    pub(crate) rooms: BTreeMap<RoomId, crate::rooms::Room>,
+    pub(crate) tags: BTreeMap<TagId, crate::rooms::Tag>,
 }
 
 impl Model {
@@ -962,6 +970,8 @@ impl Model {
             info: Default::default(),
             sheets: BTreeMap::new(),
             viewports: BTreeMap::new(),
+            rooms: BTreeMap::new(),
+            tags: BTreeMap::new(),
         }
     }
 
@@ -1048,6 +1058,8 @@ impl Model {
         self.elevation_marks.retain(|_, m| m.level != id);
         self.drafts.retain(|_, d| d.view != ViewRef::Level(id));
         self.viewports.retain(|_, v| v.level != id);
+        self.rooms.retain(|_, r| r.level != id);
+        self.tags.retain(|_, t| t.level != id);
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
     }
 
@@ -1799,7 +1811,7 @@ impl Model {
     // ---- Slabs --------------------------------------------------------
 
     /// Checks an outline and returns it counter-clockwise.
-    fn normalized_outline(outline: Vec<Point2>) -> Result<Vec<Point2>, ModelError> {
+    pub(crate) fn normalized_outline(outline: Vec<Point2>) -> Result<Vec<Point2>, ModelError> {
         for p in &outline {
             finite_point(*p, "slab outline point")?;
         }
@@ -2999,6 +3011,8 @@ impl Model {
             info: self.info.clone(),
             sheets: self.sheets.values().cloned().collect(),
             viewports: self.viewports.values().cloned().collect(),
+            rooms: self.rooms.values().cloned().collect(),
+            tags: self.tags.values().cloned().collect(),
         }
     }
 
@@ -3228,6 +3242,18 @@ impl Model {
             let name = format!("drafting element {} ({})", d.id.0, d.shape.label());
             claim(d.id.0, None)
                 .and_then(|_| model.restore_draft(d))
+                .map_err(fail(name))?;
+        }
+        for r in parts.rooms {
+            let name = format!("room {} «{} {}»", r.id.0, r.number, r.name);
+            claim(r.id.0, Some(&r.guid))
+                .and_then(|_| model.restore_room(r))
+                .map_err(fail(name))?;
+        }
+        for t in parts.tags {
+            let name = format!("tag {}", t.id.0);
+            claim(t.id.0, None)
+                .and_then(|_| model.restore_tag(t))
                 .map_err(fail(name))?;
         }
 

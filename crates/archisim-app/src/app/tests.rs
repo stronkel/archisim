@@ -2096,3 +2096,59 @@ fn angular_radius_and_arc_dimensions() {
     };
     assert_eq!(archisim_draft::dims::label(&m), "Ø 5,00");
 }
+
+#[test]
+fn rooms_follow_walls_and_tags_follow_doors() {
+    let (m, lvl, _) = crate::pick::tests::room();
+    let mut h = Harness::new(Editor::with_model(m, None));
+    h.app.ed.level = lvl;
+    h.frame();
+    h.app.keys_autocad = true;
+    command(&mut h, "loc");
+    h.click_at(p(3.0, 2.0));
+    h.key(Key::Escape);
+    let r = h.model().rooms().next().cloned().expect("a room");
+    assert_eq!(r.number, "1");
+    assert!(r.bounded);
+    let before = r.area();
+    assert!(before > 15.0 && before < 24.0, "{before}");
+    // Every door and window tagged at once.
+    command(&mut h, "eti");
+    command(&mut h, "t");
+    assert_eq!(h.model().tags().count(), 1);
+    // The east wall moves out a metre: the room grows with it.
+    let east = h
+        .model()
+        .walls()
+        .find(|w| w.start.x > 5.9 && w.end.x > 5.9)
+        .unwrap()
+        .id;
+    h.app.ed.selection = [Element::Wall(east)].into_iter().collect();
+    let drag = crate::drag::Drag {
+        grip: crate::drag::Grip::Body,
+        from: p(6.0, 2.0),
+        to: p(7.0, 2.0),
+        variant: false,
+    };
+    h.app.ed.drag(&drag).unwrap();
+    let after = h.model().room(r.id).unwrap().area();
+    assert!(after > before + 3.0, "{before} → {after}");
+    // The door goes: its tag too.
+    let door = h.model().openings().next().unwrap().id;
+    h.app.ed.selection = [Element::Opening(door)].into_iter().collect();
+    h.app.ed.delete_selection().unwrap();
+    assert_eq!(h.model().tags().count(), 0);
+    // Picked by its stamp, its name changed in the palette.
+    h.app.ed.selection.clear();
+    h.click_at(r.label);
+    assert_eq!(h.app.ed.selection.iter().next(), Some(&Element::Room(r.id)));
+    let mut renamed = h.model().room(r.id).unwrap().clone();
+    renamed.name = "Salón".into();
+    h.app.ed.set_room(renamed, "Cambiar local").unwrap();
+    h.frame();
+    // In the IFC, as a space with its quantities.
+    let ifc = archisim_ifc::export_ifc(h.model(), &Default::default());
+    assert!(ifc.contains("IFCSPACE("), "no space");
+    assert!(ifc.contains("'Salón'") || ifc.contains("Sal\\X2\\00F3\\X0\\n"));
+    assert!(ifc.contains("'Qto_SpaceBaseQuantities'"));
+}

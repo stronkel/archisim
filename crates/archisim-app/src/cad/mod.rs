@@ -12,6 +12,7 @@ pub mod dims;
 pub mod draw;
 pub mod inquiry;
 pub mod modify;
+pub mod rooms;
 
 use std::collections::BTreeSet;
 
@@ -139,6 +140,14 @@ pub enum Change {
     },
     /// Copies the layer and style of `from` to the elements.
     MatchStyle { from: DraftId, to: Vec<DraftId> },
+    /// A room found inside the walls around a point.
+    RoomAt(Point2),
+    /// A room with the given outline.
+    Room(Vec<Point2>),
+    /// A tag of an element; `None`: where it goes by default.
+    Tag(Element, Option<Point2>),
+    /// Tags on every door and window of the level that has none.
+    TagAll,
 }
 
 /// The changes of a finished step of a command.
@@ -512,6 +521,13 @@ pub const ALIASES: &[(&str, Launch)] = &[
     ("VE", Launch::Window),
     ("V", Launch::Window),
     ("WINDOW", Launch::Window),
+    ("LOCAL", Launch::Command("LOCAL")),
+    ("LOC", Launch::Command("LOCAL")),
+    ("ROOM", Launch::Command("LOCAL")),
+    ("ESPACIO", Launch::Command("LOCAL")),
+    ("ETIQUETA", Launch::Command("ETIQUETA")),
+    ("ETI", Launch::Command("ETIQUETA")),
+    ("TAG", Launch::Command("ETIQUETA")),
     ("ACOANGULO", Launch::Command("ACOANGULO")),
     ("DAN", Launch::Command("ACOANGULO")),
     ("DIMANGULAR", Launch::Command("ACOANGULO")),
@@ -610,6 +626,8 @@ pub fn new_command(name: &str) -> Option<Box<dyn Command>> {
         "DIST" => Box::new(inquiry::Dist::default()),
         "AREA" => Box::new(inquiry::AreaCmd::default()),
         "LIST" => Box::new(inquiry::List),
+        "LOCAL" => Box::new(rooms::RoomCmd::default()),
+        "ETIQUETA" => Box::new(rooms::TagCmd::default()),
         "ACOANGULO" => Box::new(dims::DimAngle::default()),
         "ACORADIO" => Box::new(dims::DimRadius::new(false)),
         "ACODIAMETRO" => Box::new(dims::DimRadius::new(true)),

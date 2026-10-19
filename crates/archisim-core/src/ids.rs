@@ -87,6 +87,15 @@ typed_id!(
     ViewportId
 );
 
+typed_id!(
+    /// Identifies a [`crate::Room`] (a room, "local"; IfcSpace).
+    RoomId
+);
+typed_id!(
+    /// Identifies a [`crate::Tag`] (a tag of a door, window, wall or room).
+    TagId
+);
+
 /// Alphabet used by IFC to compress a 128-bit GUID into 22 characters.
 const IFC_GUID_ALPHABET: &[u8; 64] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";

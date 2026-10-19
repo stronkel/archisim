@@ -19,6 +19,10 @@ pub enum Element {
     Opening(OpeningId),
     Wall(WallId),
     Slab(SlabId),
+    /// A room ("local").
+    Room(archisim_core::RoomId),
+    /// A tag of a door, window, wall or room.
+    Tag(archisim_core::TagId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -70,6 +74,43 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             let (lo, hi) = archisim_draft::bounds(&d.shape, paper_k());
             vec![lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]
         }),
+        Element::Room(id) => model.room(id).map(|r| r.outline.clone()),
+        Element::Tag(id) => model.tag(id).map(|t| tag_box(model, t, paper_k()).to_vec()),
+    }
+}
+
+fn box_of(pts: impl IntoIterator<Item = Point2>) -> [Point2; 4] {
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for p in pts {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]
+}
+
+/// The box around a room's stamp (name, number, area).
+pub fn stamp_box(model: &Model, r: &archisim_core::Room, k: f64) -> [Point2; 4] {
+    box_of(
+        archisim_plan::rooms::room_stamp(model, r, k)
+            .iter()
+            .flat_map(|t| archisim_draft::font::text_frame(t, k)),
+    )
+}
+
+/// The box around a tag.
+pub fn tag_box(model: &Model, t: &archisim_core::Tag, k: f64) -> [Point2; 4] {
+    let l = archisim_plan::rooms::tag_layout(model, t, k);
+    match l.frame {
+        Some(f) => f,
+        None if l.texts.is_empty() => box_of([t.at, t.at]),
+        None => box_of(
+            l.texts
+                .iter()
+                .flat_map(|x| archisim_draft::font::text_frame(x, k)),
+        ),
     }
 }
 
@@ -225,6 +266,8 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     }
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
+    v.extend(model.tags_on_level(level).map(|t| Element::Tag(t.id)));
+    v.extend(model.rooms_on_level(level).map(|r| Element::Room(r.id)));
     v
 }
 
@@ -242,7 +285,11 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Wall(id) => model.wall(id).map(|w| TypeOf::Wall(w.wall_type)),
         Element::Slab(id) => model.slab(id).map(|s| TypeOf::Slab(s.slab_type)),
         Element::Opening(id) => model.opening(id).map(|o| TypeOf::Opening(o.opening_type)),
-        Element::Dimension(_) | Element::Mark(_) | Element::Draft(_) => None,
+        Element::Dimension(_)
+        | Element::Mark(_)
+        | Element::Draft(_)
+        | Element::Room(_)
+        | Element::Tag(_) => None,
     }
 }
 
@@ -267,9 +314,10 @@ pub fn pick<G: Geo + ?Sized>(
 ) -> Option<Element> {
     let model = geo.model();
     let rank = |e: &Element| match e {
-        Element::Dimension(_) | Element::Mark(_) | Element::Draft(_) => 0,
+        Element::Dimension(_) | Element::Mark(_) | Element::Draft(_) | Element::Tag(_) => 0,
         Element::Opening(_) => 1,
         Element::Wall(_) => 2,
+        Element::Room(_) => 3,
         Element::Slab(_) => 4,
     };
     let k = paper_k();
@@ -294,6 +342,15 @@ pub fn pick<G: Geo + ?Sized>(
                     return Some((0, edge, e));
                 }
                 return (dist <= tolerance).then_some((3, 0.0, e));
+            }
+            if let Element::Room(id) = e {
+                // By its stamp first; from inside after walls, before
+                // slabs.
+                let r = model.room(id)?;
+                if contains(&stamp_box(model, r, k), p) {
+                    return Some((0, 0.0, e));
+                }
+                return r.contains(p).then_some((3, 0.0, e));
             }
             let poly = outline(geo, e)?;
             // A hole of a slab is not the slab.

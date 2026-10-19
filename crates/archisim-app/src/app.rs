@@ -1513,6 +1513,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod room_ui;
 mod sheet_ui;
 mod tabs;
 mod temp_ui;

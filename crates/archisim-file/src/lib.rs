@@ -32,6 +32,7 @@
 //!   not saved.
 
 mod drafting;
+mod rooms;
 mod schema;
 
 use std::fmt;

@@ -274,6 +274,46 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Rooms found inside the walls, and a tag on every door and window,
+    // on the outer side of its wall.
+    doc.transact("Locales y etiquetas", |m| {
+        use archisim_core::{NewRoom, TagTarget};
+        use archisim_geom::{opening_geometry, room_outline, Contour};
+        for (number, name, at) in [
+            ("0.01", "Estar", Point2::new(2.6, 7.6)),
+            ("0.02", "Cocina", Point2::new(3.0, 2.6)),
+            ("0.03", "Dormitorio", Point2::new(9.0, 7.4)),
+            ("0.04", "Estudio", Point2::new(9.6, 3.6)),
+        ] {
+            let outline = room_outline(m, pb, at, Contour::InteriorFace)
+                .map_err(|_| ModelError::InvalidOutline)?;
+            m.add_room(NewRoom {
+                level: pb,
+                number: number.into(),
+                name: name.into(),
+                outline,
+                holes: Vec::new(),
+                label: at,
+                bounded: true,
+            })?;
+        }
+        let ops: Vec<_> = m
+            .openings()
+            .filter(|o| {
+                m.opening_type(o.opening_type)
+                    .is_some_and(|t| t.kind != archisim_core::OpeningKind::Void)
+            })
+            .map(|o| o.id)
+            .collect();
+        for o in ops {
+            if let Some(g) = opening_geometry(m, o) {
+                let at = g.point((g.t0 + g.t1) / 2.0, g.exterior_offset + 0.35);
+                m.add_tag(TagTarget::Opening(o), at, false)?;
+            }
+        }
+        Ok(())
+    })?;
+
     // The ground floor plan on an A2 sheet at 1:50, with its title block.
     doc.transact("Plano", |m| {
         use archisim_core::{NewSheet, NewViewport, ProjectInfo};
@@ -320,6 +360,10 @@ mod tests {
         assert_eq!(m.opening_types().count(), 9);
         assert_eq!(doc.undo_label(), Some("Plano"));
         assert_eq!(m.sheets().len(), 1);
+        assert_eq!(m.rooms().count(), 4);
+        assert_eq!(m.tags().count(), 9);
+        let total: f64 = m.rooms().map(|r| r.area()).sum();
+        assert!(total > 90.0 && total < 108.0, "{total}");
         assert_eq!(m.drafts().count(), 7);
         assert_eq!(m.draw_layers().len(), 4);
         assert_eq!(m.dimensions().count(), 4);

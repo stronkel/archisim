@@ -53,6 +53,12 @@ pub(crate) struct ProjectFile {
     pub sheets: Vec<crate::drafting::Sheet>,
     #[serde(default)]
     pub viewports: Vec<crate::drafting::Viewport>,
+    /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
+    /// (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rooms: Vec<crate::rooms::Room>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<crate::rooms::Tag>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -599,6 +605,8 @@ impl ProjectFile {
             info: crate::drafting::Info::out(&p.info),
             sheets: crate::drafting::sheets_out(&p.sheets),
             viewports: crate::drafting::viewports_out(&p.viewports),
+            rooms: crate::rooms::rooms_out(&p.rooms),
+            tags: crate::rooms::tags_out(&p.tags),
         }
     }
 
@@ -639,6 +647,8 @@ impl ProjectFile {
             info: self.info.map(|i| i.into_core()).unwrap_or_default(),
             sheets: crate::drafting::sheets_in(self.sheets),
             viewports: crate::drafting::viewports_in(self.viewports)?,
+            rooms: crate::rooms::rooms_in(self.rooms)?,
+            tags: crate::rooms::tags_in(self.tags),
         };
 
         for l in self.levels {

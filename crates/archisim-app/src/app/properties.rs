@@ -60,6 +60,8 @@ impl ArchiSimApp {
             [Element::Slab(id)] => self.slab_properties(ui, *id),
             [Element::Dimension(id)] => self.dimension_properties(ui, *id),
             [Element::Mark(id)] => self.mark_properties(ui, *id),
+            [Element::Room(id)] => self.room_properties(ui, *id),
+            [Element::Tag(id)] => self.tag_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -1461,6 +1463,8 @@ impl ArchiSimApp {
         let slabs = count(|e| matches!(e, Element::Slab(_)));
         let annotations = count(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)));
         let drafts = count(|e| matches!(e, Element::Draft(_)));
+        let rooms = count(|e| matches!(e, Element::Room(_)));
+        let tags = count(|e| matches!(e, Element::Tag(_)));
         props::title(ui, &format!("{} elementos seleccionados", many.len()));
         group(ui, "many-summary", "Selección", |ui| {
             for (name, n) in [
@@ -1469,6 +1473,8 @@ impl ArchiSimApp {
                 ("Forjados", slabs),
                 ("Cotas", annotations),
                 ("Dibujo 2D", drafts),
+                ("Locales", rooms),
+                ("Etiquetas", tags),
             ] {
                 if n > 0 {
                     text_row(ui, name, "", &n.to_string());
@@ -1688,7 +1694,7 @@ impl ArchiSimApp {
 }
 
 /// A header card for things without types (views, annotations).
-fn view_card(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
+pub(super) fn view_card(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
     let p = super::theme::Palette::current(ui.ctx());
     egui::Frame::new()
         .fill(p.raised)

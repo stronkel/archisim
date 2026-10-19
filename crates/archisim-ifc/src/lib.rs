@@ -1225,6 +1225,107 @@ impl<'a> Exporter<'a> {
             slabs_by_type.entry(slab.slab_type).or_default().push(sl);
         }
 
+        // Rooms: spaces of their storey, extruded to their clear height.
+        let mut spaces: BTreeMap<LevelId, Vec<Ref>> = BTreeMap::new();
+        for room in model.rooms() {
+            let Some(&(_, storey_pl)) = storeys.get(&room.level) else {
+                continue;
+            };
+            let height = model.room_height(room);
+            let loc = self.point3(0.0, 0.0, 0.0);
+            let pl = self.placement(Some(storey_pl), loc, None);
+            let outline = self.polyline(&room.outline, true);
+            let profile = if room.holes.is_empty() {
+                self.w
+                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"))
+            } else {
+                let inner: Vec<Ref> = room.holes.iter().map(|h| self.polyline(h, true)).collect();
+                self.w.add(format!(
+                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outline},{})",
+                    list(&inner)
+                ))
+            };
+            let solid_pl = self
+                .w
+                .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
+            let solid = self.w.add(format!(
+                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                self.z,
+                real(height)
+            ));
+            let body_rep = self.w.add(format!(
+                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+                self.body_ctx
+            ));
+            let shape = self
+                .w
+                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body_rep}))"));
+            let number = if room.number.trim().is_empty() {
+                room.id.0.to_string()
+            } else {
+                room.number.clone()
+            };
+            let sp = self.w.add(format!(
+                "IFCSPACE({},$,{},$,$,{pl},{shape},{},.ELEMENT.,.INTERNAL.,$)",
+                string(room.guid.as_str()),
+                string(&number),
+                string(&room.name)
+            ));
+            let props = [
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
+                    string(&number)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN({}),$)",
+                    boolean(false)
+                )),
+            ];
+            self.pset(sp, &room.guid, "Pset_SpaceCommon", &props);
+            let f = &room.finishes;
+            if !(f.floor.is_empty() && f.walls.is_empty() && f.ceiling.is_empty()) {
+                let props: Vec<Ref> = [
+                    ("FloorCovering", &f.floor),
+                    ("WallCovering", &f.walls),
+                    ("CeilingCovering", &f.ceiling),
+                ]
+                .into_iter()
+                .filter(|(_, v)| !v.is_empty())
+                .map(|(n, v)| {
+                    self.w.add(format!(
+                        "IFCPROPERTYSINGLEVALUE('{n}',$,IFCLABEL({}),$)",
+                        string(v)
+                    ))
+                })
+                .collect();
+                self.pset(sp, &room.guid, "Pset_SpaceCoveringRequirements", &props);
+            }
+            let gross = signed_area(&room.outline).abs();
+            let net = room.area();
+            self.quantities(
+                sp,
+                &room.guid,
+                "Qto_SpaceBaseQuantities",
+                &[
+                    ("Height", "IFCQUANTITYLENGTH", height),
+                    ("GrossPerimeter", "IFCQUANTITYLENGTH", room.perimeter()),
+                    ("GrossFloorArea", "IFCQUANTITYAREA", gross),
+                    ("NetFloorArea", "IFCQUANTITYAREA", net),
+                    ("GrossVolume", "IFCQUANTITYVOLUME", gross * height),
+                    ("NetVolume", "IFCQUANTITYVOLUME", net * height),
+                ],
+            );
+            spaces.entry(room.level).or_default().push(sp);
+        }
+        for (level, rooms) in &spaces {
+            let (storey, _) = storeys[level];
+            let guid = model
+                .level(*level)
+                .map(|l| l.guid.clone())
+                .unwrap_or_default();
+            self.rel_aggregates(derived_guid(&guid, "spaces"), storey, rooms);
+        }
+
         for (level, elements) in &contained {
             let (storey, _) = storeys[level];
             let guid = model
