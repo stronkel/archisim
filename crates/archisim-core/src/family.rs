@@ -95,6 +95,20 @@ const SYSTEM_SOURCES: [&str; 7] = [
     include_str!("../families/hueco.asfam"),
 ];
 
+/// Recipes of the system object families (furniture, sanitary ware,
+/// kitchen), placed on a level with no wall.
+const OBJECT_SOURCES: [&str; 9] = [
+    include_str!("../families/objetos/mesa.asfam"),
+    include_str!("../families/objetos/silla.asfam"),
+    include_str!("../families/objetos/sofa.asfam"),
+    include_str!("../families/objetos/cama.asfam"),
+    include_str!("../families/objetos/encimera.asfam"),
+    include_str!("../families/objetos/inodoro.asfam"),
+    include_str!("../families/objetos/lavabo.asfam"),
+    include_str!("../families/objetos/ducha.asfam"),
+    include_str!("../families/objetos/banera.asfam"),
+];
+
 pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
 pub const FOLDING_DOOR: &str = "Puerta plegable";
@@ -132,10 +146,25 @@ pub fn system_families() -> Vec<(String, String)> {
         .collect()
 }
 
-/// The recipe of one system family, by name.
+/// The system object families: `(name, recipe)`.
+pub fn object_families() -> Vec<(String, String)> {
+    OBJECT_SOURCES
+        .iter()
+        .map(|src| {
+            let source = expand_shared_pieces(src).expect("object families expand");
+            let name = archisim_family::parse(&source)
+                .expect("object families parse")
+                .name;
+            (name, source)
+        })
+        .collect()
+}
+
+/// The recipe of one system family (door, window or object), by name.
 pub fn system_family(name: &str) -> Option<String> {
     system_families()
         .into_iter()
+        .chain(object_families())
         .find(|(n, _)| n == name)
         .map(|(_, s)| s)
 }

@@ -1,0 +1,30 @@
+family "Lavabo"
+  category sanitary
+  host none
+  version 1
+  description "Lavabo sobre encimera o mueble, con su seno"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.40..2.00 label "Ancho"
+    depth  length = 0.45 range 0.35..0.60 label "Fondo"
+    height length = 0.85 range 0.70..1.00 label "Altura"
+  section "Materiales"
+    mat material = "Porcelana" label "Porcelana"
+
+body
+  box (-width / 2, 0, height - 0.15) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  let a = min(width / 2 - 0.06, 0.24)
+  let b = depth / 2 - 0.06
+  let c = depth / 2 + 0.02
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen thin
+
+outputs
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "WASHHANDBASIN"

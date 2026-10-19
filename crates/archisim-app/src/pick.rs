@@ -32,6 +32,8 @@ pub enum Element {
     CurtainWall(archisim_core::CurtainWallId),
     /// A loose railing, picked by its line.
     Railing(archisim_core::RailingId),
+    /// Furniture, sanitary ware…, picked by its box.
+    Object(archisim_core::ObjectId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -94,6 +96,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .map(|t| t.boundary().iter().map(|i| t.points[*i].at).collect()),
         Element::CurtainWall(id) => model.curtain_wall(id).map(|c| c.outline()),
         Element::Railing(id) => model.railing(id).map(railing_outline),
+        Element::Object(id) => Some(model.object_outline(id)).filter(|o| !o.is_empty()),
     }
 }
 
@@ -213,6 +216,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
             .railings_on_level(level)
             .map(|r| Element::Railing(r.id)),
     );
+    v.extend(model.objects_on_level(level).map(|o| Element::Object(o.id)));
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
     v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
@@ -250,7 +254,8 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Stair(_)
         | Element::Terrain(_)
         | Element::CurtainWall(_)
-        | Element::Railing(_) => None,
+        | Element::Railing(_)
+        | Element::Object(_) => None,
     }
 }
 
@@ -280,7 +285,7 @@ pub fn pick<G: Geo + ?Sized>(
         // Columns stand in front of the walls they go through.
         Element::Column(_) => 1,
         Element::Wall(_) | Element::CurtainWall(_) => 2,
-        Element::Railing(_) => 1,
+        Element::Railing(_) | Element::Object(_) => 1,
         Element::Beam(_) => 3,
         Element::Roof(_) => 3,
         Element::Stair(_) => 1,

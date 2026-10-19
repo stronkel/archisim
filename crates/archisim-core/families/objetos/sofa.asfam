@@ -1,0 +1,37 @@
+family "Sofá"
+  category furniture
+  host none
+  version 1
+  description "Sofá recto con brazos y respaldo"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.00 range 0.80..4.00 label "Largo"
+    depth  length = 0.90 range 0.60..1.20 label "Fondo"
+    seat   length = 0.42 range 0.30..0.60 label "Altura del asiento"
+    height length = 0.80 range 0.60..1.20 label "Altura del respaldo"
+    places integer = 3 range 1..5 label "Plazas"
+  section "Materiales"
+    mat material = "Madera de pino" label "Tapicería"
+
+require 0.5 < width - 0.4 else "No caben los brazos"
+require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.2, height) material mat
+  box (-width / 2, 0.2, 0) to (-width / 2 + 0.2, depth, 0.6) material mat
+  box (width / 2 - 0.2, 0.2, 0) to (width / 2, depth, 0.6) material mat
+  box (-width / 2 + 0.2, 0.2, 0) to (width / 2 - 0.2, depth, seat) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2 + 0.2, 0.2) to (width / 2 - 0.2, 0.2) pen thin
+  line (-width / 2 + 0.2, 0.2) to (-width / 2 + 0.2, depth) pen thin
+  line (width / 2 - 0.2, 0.2) to (width / 2 - 0.2, depth) pen thin
+  let pw = (width - 0.4) / places
+  repeat i in 1..places
+    line (-width / 2 + 0.2 + i * pw, 0.2) to (-width / 2 + 0.2 + i * pw, depth) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "SOFA"

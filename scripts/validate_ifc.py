@@ -31,6 +31,8 @@ Checks:
      common property set and quantities, and is made of mullions
      (IfcMember) and panels (IfcPlate) with their material, quantities and
      a 3D volume matching them.
+ 12. Every object (IfcFurniture, IfcSanitaryTerminal) is contained in a
+     storey, has its type and 3D geometry.
  11. Every loose railing (IfcRailing not part of a stair) is contained in
      a storey, has its material, Pset_RailingCommon and 3D geometry.
 
@@ -313,6 +315,18 @@ def main(path: str) -> int:
             except Exception as exc:
                 errors.append(f"{r.Name}: geometry failed: {exc}")
 
+    objects = f.by_type("IfcFurniture") + f.by_type("IfcSanitaryTerminal")
+    for o in objects:
+        if not o.ContainedInStructure:
+            errors.append(f"{o.Name}: not contained in a storey")
+        if eu.get_type(o) is None:
+            errors.append(f"{o.Name}: no type")
+        if geom_ok:
+            try:
+                geom.create_shape(settings, o)
+            except Exception as exc:
+                errors.append(f"{o.Name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
                 ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
@@ -320,7 +334,7 @@ def main(path: str) -> int:
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
           f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
-          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, {len(curtains)} muros cortina, {len(railings)} barandillas, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, {len(curtains)} muros cortina, {len(railings)} barandillas, {len(objects)} objetos, "
           f"{len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:

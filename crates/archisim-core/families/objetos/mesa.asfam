@@ -1,0 +1,32 @@
+family "Mesa"
+  category furniture
+  host none
+  version 1
+  description "Mesa rectangular de tablero y cuatro patas"
+
+# Ejes de los objetos: origen en el centro del lado de atrás, x hacia la
+# derecha, y hacia delante, z hacia arriba desde el suelo.
+
+type_params
+  section "Dimensiones"
+    width  length = 1.60 range 0.40..6.00 label "Largo"
+    depth  length = 0.90 range 0.40..3.00 label "Fondo"
+    height length = 0.75 range 0.40..1.20 label "Altura"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+
+body
+  let t = 0.04
+  let l = 0.06
+  box (-width / 2, 0, height - t) to (width / 2, depth, height) material mat
+  box (-width / 2 + 0.04, 0.04, 0) to (-width / 2 + 0.04 + l, 0.04 + l, height - t) material mat
+  box (width / 2 - 0.04 - l, 0.04, 0) to (width / 2 - 0.04, 0.04 + l, height - t) material mat
+  box (-width / 2 + 0.04, depth - 0.04 - l, 0) to (-width / 2 + 0.04 + l, depth - 0.04, height - t) material mat
+  box (width / 2 - 0.04 - l, depth - 0.04 - l, 0) to (width / 2 - 0.04, depth - 0.04, height - t) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "TABLE"

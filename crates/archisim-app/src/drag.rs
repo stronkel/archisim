@@ -196,6 +196,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            // Moved whole; turned with Space or in Properties.
+            Element::Object(_) => {}
             Element::Railing(id) => {
                 if let Some(r) = model.railing(*id) {
                     for (index, point) in r.path.iter().enumerate() {
@@ -586,6 +588,9 @@ fn move_selection(
                     }
                 })?;
             }
+            Element::Object(id) => {
+                model.edit_object(*id, |o| o.position = o.position + d)?;
+            }
             Element::Railing(id) => {
                 model.edit_railing(*id, |r| {
                     for p in &mut r.path {
@@ -861,6 +866,20 @@ fn copy(
                 })?;
                 copies.insert(Element::CurtainWall(new));
             }
+            Element::Object(id) => {
+                let o = model
+                    .object(*id)
+                    .ok_or(ModelError::UnknownObject(*id))?
+                    .clone();
+                let new = model.add_object(archisim_core::NewObject {
+                    level: o.level,
+                    object_type: o.object_type,
+                    position: o.position + d,
+                    rotation: o.rotation,
+                    base_offset: o.base_offset,
+                })?;
+                copies.insert(Element::Object(new));
+            }
             Element::Railing(id) => {
                 let r = model
                     .railing(*id)
@@ -1082,6 +1101,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Terrain(id) => model.terrain(id).is_some(),
         Element::CurtainWall(id) => model.curtain_wall(id).is_some(),
         Element::Railing(id) => model.railing(id).is_some(),
+        Element::Object(id) => model.object(id).is_some(),
     }
 }
 
@@ -1130,6 +1150,7 @@ fn level_of(
             Element::Terrain(id) => model.terrain(*id).map(|t| t.level),
             Element::CurtainWall(id) => model.curtain_wall(*id).map(|c| c.level),
             Element::Railing(id) => model.railing(*id).map(|r| r.level),
+            Element::Object(id) => model.object(*id).map(|o| o.level),
         }),
     }
 }

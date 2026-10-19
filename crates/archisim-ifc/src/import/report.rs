@@ -32,6 +32,8 @@ pub struct ImportReport {
     pub curtain_walls: usize,
     /// Railings written by ArchiSim (`IfcRailing`).
     pub railings: usize,
+    /// Furniture and sanitary ware written by ArchiSim.
+    pub objects: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -150,6 +152,9 @@ impl ImportReport {
         }
         if self.curtain_walls > 0 {
             members.push_str(&format!(", {} muros cortina", self.curtain_walls));
+        }
+        if self.objects > 0 {
+            members.push_str(&format!(", {} objetos", self.objects));
         }
         if self.railings > 0 {
             members.push_str(&format!(", {} barandillas", self.railings));

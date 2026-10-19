@@ -302,6 +302,24 @@ impl ArchiSimApp {
                 value: Some(format!("{} m", fmt_m(r.length()))),
             })
             .collect();
+        // Objects, by type.
+        let objects = m
+            .object_types()
+            .filter(|t| m.object_type_users(t.id) > 0)
+            .map(|t| TypeRow {
+                tab: None,
+                id: t.id.0,
+                badge: None,
+                name: t.name.clone(),
+                count: m.object_type_users(t.id),
+                here: m
+                    .objects_on_level(self.ed.level)
+                    .filter(|o| o.object_type == t.id)
+                    .map(|o| Element::Object(o.id))
+                    .collect(),
+                value: None,
+            })
+            .collect();
         // Roofs, by type.
         let roofs = m
             .slab_types()
@@ -353,6 +371,7 @@ impl ArchiSimApp {
             ("Escaleras", Icon::Stair, stairs),
             ("Muros cortina", Icon::CurtainWall, curtains),
             ("Barandillas", Icon::Railing, railings),
+            ("Objetos", Icon::Object, objects),
             ("Puertas", Icon::Door, openings(true)),
             ("Ventanas", Icon::Window, openings(false)),
         ]

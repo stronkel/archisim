@@ -62,6 +62,7 @@ fn element(owner: SolidOwner) -> Element {
         SolidOwner::Terrain(id) => Element::Terrain(id),
         SolidOwner::CurtainWall(id) => Element::CurtainWall(id),
         SolidOwner::Railing(id) => Element::Railing(id),
+        SolidOwner::Object(id) => Element::Object(id),
     }
 }
 

@@ -95,7 +95,7 @@ fn fmt_deg(a: f64) -> String {
     format!("{d}").replace('.', ",")
 }
 
-fn angle_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> {
+pub(super) fn angle_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> {
     let text = text_edit_committed(ui, id, &fmt_deg(value), width)?;
     text.trim()
         .trim_end_matches('°')

@@ -327,6 +327,36 @@ pub fn build() -> Result<Document, ModelError> {
 
     // The plot (v0.25): survey points falling gently to the south-east,
     // under the floor of the house; true north 12° to the east of up.
+    // Furniture (v0.25): kitchen units along the north wall, a sofa and a
+    // dining table in the living room, a bed in each bedroom.
+    doc.transact("Mobiliario", |m| {
+        let ty = |m: &archisim_core::Model, name: &str| {
+            m.object_types()
+                .find(|t| t.name == name)
+                .map(|t| t.id)
+                .ok_or_else(|| ModelError::NotAnObject(name.to_string()))
+        };
+        use std::f64::consts::{FRAC_PI_2, PI};
+        let inner = 0.265;
+        for (name, x, y, rotation) in [
+            ("Muebles de cocina 240", 7.45, 9.0 - inner, PI),
+            ("Sofá de 3 plazas", inner, 5.5, -FRAC_PI_2),
+            ("Mesa de comedor 160×90", 4.3, 7.0, 0.0),
+            ("Cama doble 150×200", 2.0, 3.45, PI),
+            ("Cama individual 90×190", 12.0 - inner, 2.0, FRAC_PI_2),
+        ] {
+            let object_type = ty(m, name)?;
+            m.add_object(archisim_core::NewObject {
+                level: pb,
+                object_type,
+                position: Point2::new(x, y),
+                rotation,
+                base_offset: 0.0,
+            })?;
+        }
+        Ok(())
+    })?;
+
     // A guard round the flat roof (v0.25), open where the outdoor stair
     // arrives on the east side.
     doc.transact("Barandilla", |m| {
@@ -476,6 +506,7 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
+        assert_eq!(m.objects().count(), 5);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);

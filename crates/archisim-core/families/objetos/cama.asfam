@@ -1,0 +1,35 @@
+family "Cama"
+  category furniture
+  host none
+  version 1
+  description "Cama con cabecero contra la pared, colchón y almohadas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.50 range 0.80..2.20 label "Ancho"
+    depth  length = 2.00 range 1.80..2.40 label "Largo"
+    height length = 0.50 range 0.25..0.80 label "Altura del colchón"
+    head   length = 1.00 range 0.50..1.60 label "Altura del cabecero"
+  section "Materiales"
+    mat material = "Madera de pino" label "Estructura"
+
+require height + 0.1 < head else "El cabecero tiene que subir por encima del colchón"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.05, head) material mat
+  box (-width / 2, 0.05, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0.05) to (width / 2, 0.05) pen thin
+  let pillows = if width >= 1.2 then 2 else 1
+  let pw = (width - 0.1 * (pillows + 1)) / pillows
+  repeat i in 0..pillows
+    let a = -width / 2 + 0.1 + i * (pw + 0.1)
+    polygon (a, 0.12) (a + pw, 0.12) (a + pw, 0.42) (a, 0.42) pen thin
+  line (-width / 2, 0.6) to (width / 2, 0.6) pen thin
+  line (-width / 2, 0.6) to (-width / 2 + 0.35, 0.95) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "BED"

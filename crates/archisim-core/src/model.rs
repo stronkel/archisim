@@ -14,6 +14,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod curtain;
+mod objects;
 mod phases;
 mod railings;
 mod roofs;
@@ -23,6 +24,7 @@ mod spaces;
 mod stairs;
 mod structure;
 pub use curtain::*;
+pub use objects::*;
 pub use phases::*;
 pub use railings::*;
 pub use roofs::*;
@@ -790,6 +792,11 @@ pub enum ModelError {
     UnknownTerrain(TerrainId),
     UnknownCurtainWall(CurtainWallId),
     UnknownRailing(RailingId),
+    UnknownObjectType(ObjectTypeId),
+    UnknownObject(ObjectId),
+    /// The family does not make objects (it is a door, a window, or goes in
+    /// a wall).
+    NotAnObject(String),
     /// A material priority above 999.
     InvalidPriority,
     /// A railing with fewer than two points, or out of range.
@@ -902,6 +909,11 @@ impl fmt::Display for ModelError {
             ModelError::UnknownTerrain(id) => write!(f, "unknown terrain {id}"),
             ModelError::UnknownCurtainWall(id) => write!(f, "unknown curtain wall {id}"),
             ModelError::UnknownRailing(id) => write!(f, "unknown railing {id}"),
+            ModelError::UnknownObjectType(id) => write!(f, "unknown object type {id}"),
+            ModelError::UnknownObject(id) => write!(f, "unknown object {id}"),
+            ModelError::NotAnObject(name) => {
+                write!(f, "the family «{name}» does not make objects placed on a level")
+            }
             ModelError::InvalidPriority => write!(f, "an intersection priority goes from 0 to 999"),
             ModelError::InvalidRailing => write!(
                 f,
@@ -1046,6 +1058,8 @@ pub struct ModelParts {
     pub terrains: Vec<Terrain>,
     pub curtain_walls: Vec<CurtainWall>,
     pub railings: Vec<Railing>,
+    pub object_types: Vec<ObjectType>,
+    pub objects: Vec<Object>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
 }
@@ -1105,6 +1119,8 @@ pub struct Model {
     terrains: BTreeMap<TerrainId, Terrain>,
     curtain_walls: BTreeMap<CurtainWallId, CurtainWall>,
     railings: BTreeMap<RailingId, Railing>,
+    object_types: BTreeMap<ObjectTypeId, ObjectType>,
+    objects: BTreeMap<ObjectId, Object>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     /// The phase new elements are given (the survey is drawn as
@@ -1143,6 +1159,8 @@ impl Model {
             terrains: BTreeMap::new(),
             curtain_walls: BTreeMap::new(),
             railings: BTreeMap::new(),
+            object_types: BTreeMap::new(),
+            objects: BTreeMap::new(),
             true_north: 0.0,
             draw_phase: Phase::New,
         }
@@ -1243,6 +1261,7 @@ impl Model {
         self.terrains.retain(|_, t| t.level != id);
         self.curtain_walls.retain(|_, c| c.level != id);
         self.railings.retain(|_, r| r.level != id);
+        self.objects.retain(|_, o| o.level != id);
         for c in self.curtain_walls.values_mut() {
             if matches!(c.top, WallTop::Level { level, .. } if level == id) {
                 c.top = WallTop::Unconnected;
@@ -1421,6 +1440,12 @@ impl Model {
                     .values()
                     .filter(|r| r.material == id)
                     .map(|r| format!("barandilla {}", r.id.0)),
+            )
+            .chain(
+                self.object_types
+                    .values()
+                    .filter(|t| t.values.values().any(|v| *v == Value::Material(id.0)))
+                    .map(|t| t.name.clone()),
             );
         walls
             .chain(slabs)
@@ -3176,6 +3201,8 @@ impl Model {
             terrains: self.terrains.values().cloned().collect(),
             curtain_walls: self.curtain_walls.values().cloned().collect(),
             railings: self.railings.values().cloned().collect(),
+            object_types: self.object_types.values().cloned().collect(),
+            objects: self.objects.values().cloned().collect(),
             true_north: self.true_north,
         }
     }
@@ -3399,6 +3426,7 @@ impl Model {
         model.restore_terrains(parts.terrains, &mut claim)?;
         model.restore_curtain_walls(parts.curtain_walls, &mut claim)?;
         model.restore_railings(parts.railings, &mut claim)?;
+        model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
         model
             .set_true_north(parts.true_north)
             .map_err(|error| RestoreError {

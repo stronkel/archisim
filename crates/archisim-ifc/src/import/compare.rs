@@ -305,6 +305,45 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("terreno {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    if a.objects().count() != b.objects().count() {
+        diff(format!(
+            "número de objetos: {} / {}",
+            a.objects().count(),
+            b.objects().count()
+        ));
+    }
+    for s in a.objects() {
+        let Some(t) = b.objects().find(|t| t.guid == s.guid) else {
+            diff(format!("objeto {} falta", s.guid));
+            continue;
+        };
+        let kind = |m: &Model, o: &archisim_core::Object| {
+            m.object_type(o.object_type).map(|ty| {
+                let fam = m.family(ty.family).map(|f| f.name().to_string());
+                let values: Vec<String> = ty
+                    .values
+                    .iter()
+                    .map(|(k, v)| match v {
+                        archisim_core::Value::Material(id) => {
+                            format!("{k}={:?}", material_name(m, archisim_core::MaterialId(*id)))
+                        }
+                        archisim_core::Value::Number(x) => format!("{k}={x:.6}"),
+                        other => format!("{k}={other:?}"),
+                    })
+                    .collect();
+                (ty.name.clone(), fam, values)
+            })
+        };
+        let same = s.position.distance(t.position) <= TOL
+            && (s.rotation - t.rotation).sin().abs() < 1e-6
+            && (s.rotation - t.rotation).cos() > 0.0
+            && close(s.base_offset, t.base_offset)
+            && level_guid(a, s.level) == level_guid(b, t.level)
+            && kind(a, s) == kind(b, t);
+        if !same {
+            diff(format!("objeto {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     if a.railings().count() != b.railings().count() {
         diff(format!(
             "número de barandillas: {} / {}",

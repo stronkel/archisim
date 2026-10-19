@@ -1,0 +1,31 @@
+family "Inodoro"
+  category sanitary
+  host none
+  version 1
+  description "Inodoro de tanque bajo, contra la pared"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.38 range 0.30..0.60 label "Ancho"
+    depth  length = 0.68 range 0.50..0.90 label "Fondo"
+  section "Materiales"
+    mat material = "Porcelana" label "Porcelana"
+
+body
+  box (-width / 2, 0, 0.40) to (width / 2, 0.18, 0.80) material mat
+  box (-width / 2 + 0.04, 0.18, 0) to (width / 2 - 0.04, depth, 0.40) material mat
+  box (-width / 2 + 0.06, 0, 0) to (width / 2 - 0.06, 0.18, 0.40) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.18) (-width / 2, 0.18) pen view
+  let a = width / 2 - 0.02
+  let b = (depth - 0.18) / 2
+  let c = 0.18 + b
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen view
+
+outputs
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "TOILETPAN"

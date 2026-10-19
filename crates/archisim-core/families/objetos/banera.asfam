@@ -1,0 +1,28 @@
+family "Bañera"
+  category sanitary
+  host none
+  version 1
+  description "Bañera rectangular empotrada"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.70 range 1.20..2.00 label "Largo"
+    depth  length = 0.70 range 0.60..0.90 label "Ancho"
+    height length = 0.55 range 0.40..0.70 label "Altura"
+  section "Materiales"
+    mat material = "Porcelana" label "Material"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  polygon (-width / 2 + 0.08, 0.08) (width / 2 - 0.08, 0.08) (width / 2 - 0.08, depth - 0.08) (-width / 2 + 0.08, depth - 0.08) pen thin
+  arc center (width / 2 - 0.2, depth / 2) from (width / 2 - 0.17, depth / 2) to (width / 2 - 0.2, depth / 2 + 0.03) pen thin
+  arc center (width / 2 - 0.2, depth / 2) from (width / 2 - 0.2, depth / 2 + 0.03) to (width / 2 - 0.23, depth / 2) pen thin
+  arc center (width / 2 - 0.2, depth / 2) from (width / 2 - 0.23, depth / 2) to (width / 2 - 0.2, depth / 2 - 0.03) pen thin
+  arc center (width / 2 - 0.2, depth / 2) from (width / 2 - 0.2, depth / 2 - 0.03) to (width / 2 - 0.17, depth / 2) pen thin
+
+outputs
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "BATH"

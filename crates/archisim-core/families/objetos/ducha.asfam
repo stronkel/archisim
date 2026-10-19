@@ -1,0 +1,29 @@
+family "Plato de ducha"
+  category sanitary
+  host none
+  version 1
+  description "Plato de ducha rectangular, con su desagüe"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.90 range 0.60..2.00 label "Ancho"
+    depth  length = 0.90 range 0.60..2.00 label "Fondo"
+    height length = 0.04 range 0.01..0.20 label "Altura"
+  section "Materiales"
+    mat material = "Porcelana" label "Material"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin
+  line (width / 2, 0) to (-width / 2, depth) pen thin
+  arc center (0, depth / 2) from (0.04, depth / 2) to (0, depth / 2 + 0.04) pen thin
+  arc center (0, depth / 2) from (0, depth / 2 + 0.04) to (-0.04, depth / 2) pen thin
+  arc center (0, depth / 2) from (-0.04, depth / 2) to (0, depth / 2 - 0.04) pen thin
+  arc center (0, depth / 2) from (0, depth / 2 - 0.04) to (0.04, depth / 2) pen thin
+
+outputs
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "SHOWER"

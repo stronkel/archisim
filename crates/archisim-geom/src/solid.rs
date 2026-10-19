@@ -37,6 +37,7 @@ pub enum SolidOwner {
     Terrain(archisim_core::TerrainId),
     CurtainWall(archisim_core::CurtainWallId),
     Railing(archisim_core::RailingId),
+    Object(archisim_core::ObjectId),
 }
 
 /// One closed piece of one material.
@@ -986,6 +987,38 @@ pub fn loose_railing_bars(model: &Model, id: archisim_core::RailingId) -> Vec<Ba
         .collect()
 }
 
+/// Solids of an object (furniture, sanitary ware…): the 3D body of its
+/// family, one solid per material, turned and placed.
+pub fn object_solids(model: &Model, id: archisim_core::ObjectId) -> Vec<Solid> {
+    let (Some(o), Ok(ev)) = (model.object(id), model.evaluate_object(id)) else {
+        return Vec::new();
+    };
+    let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+    let mut by_material: Vec<(MaterialId, Vec<[P3; 3]>)> = Vec::new();
+    for part in &ev.parts {
+        let rect = [
+            o.to_plan(part.min[0], part.min[1]),
+            o.to_plan(part.max[0], part.min[1]),
+            o.to_plan(part.max[0], part.max[1]),
+            o.to_plan(part.min[0], part.max[1]),
+        ];
+        let tris = prism(&rect, z0 + part.min[2], z0 + part.max[2]);
+        let material = MaterialId(part.material);
+        match by_material.iter_mut().find(|(m, _)| *m == material) {
+            Some((_, list)) => list.extend(tris),
+            None => by_material.push((material, tris)),
+        }
+    }
+    by_material
+        .into_iter()
+        .map(|(material, triangles)| Solid {
+            owner: SolidOwner::Object(id),
+            material,
+            triangles,
+        })
+        .collect()
+}
+
 /// Solids of a loose railing: its bars, each a closed box, as one solid.
 pub fn loose_railing_solids(model: &Model, id: archisim_core::RailingId) -> Vec<Solid> {
     let Some(r) = model.railing(id) else {
@@ -1586,6 +1619,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for r in model.railings() {
         out.extend(loose_railing_solids(model, r.id));
     }
+    for o in model.objects() {
+        out.extend(object_solids(model, o.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -1606,6 +1642,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
         SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),
         SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
+        SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
     };
     model_solids(model)
         .into_iter()

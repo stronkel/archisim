@@ -2268,3 +2268,37 @@ fn railing_tool() {
     h.key(Key::Delete);
     assert_eq!(h.model().railings().count(), 0);
 }
+
+#[test]
+fn object_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("o");
+    assert_eq!(h.app.tool, Tool::Object);
+    h.key(Key::Space);
+    h.click_at(p(2.0, 2.0));
+    let m = h.model();
+    assert_eq!(m.objects().count(), 1, "{:?}", h.app.message);
+    let o = m.objects().next().unwrap().clone();
+    assert!((o.rotation - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+    assert!(o.position.distance(archisim_core::Point2::new(2.0, 2.0)) < 0.05);
+    // In the plan, the family's symbol; in the IFC, furniture.
+    let svg = archisim_plan::render_plan(
+        h.model(),
+        h.app.ed.level,
+        &archisim_plan::PlanOptions::default(),
+    );
+    assert!(svg.contains(r#"<g id="objects">"#));
+    let ifc = archisim_ifc::export_ifc(
+        h.model(),
+        &archisim_ifc::ExportOptions {
+            file_name: "t.ifc".into(),
+            author: "t".into(),
+            organization: String::new(),
+            timestamp: None,
+        },
+    );
+    assert!(ifc.contains("IFCFURNITURE(") || ifc.contains("IFCSANITARYTERMINAL("));
+    h.key(Key::Escape);
+    h.key(Key::Delete);
+    assert_eq!(h.model().objects().count(), 0);
+}

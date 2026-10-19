@@ -1,0 +1,33 @@
+family "Silla"
+  category furniture
+  host none
+  version 1
+  description "Silla de cuatro patas con respaldo"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.45 range 0.30..1.00 label "Ancho"
+    depth  length = 0.50 range 0.30..1.00 label "Fondo"
+    seat   length = 0.45 range 0.30..0.80 label "Altura del asiento"
+    height length = 0.90 range 0.50..1.40 label "Altura del respaldo"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+
+require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"
+
+body
+  let l = 0.04
+  box (-width / 2, 0, seat - 0.04) to (width / 2, depth, seat) material mat
+  box (-width / 2, 0, seat) to (width / 2, 0.04, height) material mat
+  box (-width / 2, 0, 0) to (-width / 2 + l, l, seat - 0.04) material mat
+  box (width / 2 - l, 0, 0) to (width / 2, l, seat - 0.04) material mat
+  box (-width / 2, depth - l, 0) to (-width / 2 + l, depth, seat - 0.04) material mat
+  box (width / 2 - l, depth - l, 0) to (width / 2, depth, seat - 0.04) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0.04) to (width / 2, 0.04) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "CHAIR"

@@ -139,11 +139,11 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Terreno por puntos de cota: curvas de nivel, sección del terreno y norte",
             ),
             tile(
-                Pick::Later("2.2"),
+                Pick::Tool(Tool::Object),
                 Icon::Object,
                 "Objeto",
-                "",
-                "Mobiliario y sanitarios",
+                "O",
+                "Mobiliario, sanitarios y cocina: mesa, sillas, sofá, camas, inodoro, lavabo, ducha, bañera…",
             ),
             tile(
                 Pick::Tool(Tool::Zone),

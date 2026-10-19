@@ -61,6 +61,7 @@ impl ArchiSimApp {
         self.draw_terrain_preview(&painter, rect);
         self.draw_curtain_preview(&painter, rect);
         self.draw_railing_preview(&painter, rect);
+        self.draw_object_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -97,7 +98,8 @@ impl ArchiSimApp {
             | Tool::Stair
             | Tool::Terrain
             | Tool::CurtainWall
-            | Tool::Railing => CursorIcon::Crosshair,
+            | Tool::Railing
+            | Tool::Object => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -303,6 +305,11 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Object => {
+                let s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::Railing => {
                 let mut s = self.snap_at(raw, reach, &self.railing_points, &BTreeSet::new());
                 if let Some(a) = self.railing_points.last().copied() {
@@ -504,6 +511,11 @@ impl ArchiSimApp {
                         Err(e) => self.complain(format!("No se puede girar: {e}.")),
                     }
                 }
+                Tool::Object => {
+                    let r = &mut self.object_settings.rotation;
+                    *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
+                    self.say("Objeto girado 90° (Espacio para seguir girando).");
+                }
                 Tool::Column => {
                     let r = &mut self.column_settings.rotation;
                     *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
@@ -577,7 +589,9 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Door | Tool::Window | Tool::Column => self.set_tool(Tool::Arrow),
+                Tool::Door | Tool::Window | Tool::Column | Tool::Object => {
+                    self.set_tool(Tool::Arrow)
+                }
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -800,6 +814,13 @@ impl ArchiSimApp {
                             reach,
                         );
                         self.dim_outcome(out);
+                    }
+                }
+            }
+            Tool::Object => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.object_click(c.point);
                     }
                 }
             }

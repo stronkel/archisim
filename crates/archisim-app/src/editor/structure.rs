@@ -142,7 +142,12 @@ impl Editor {
     pub fn turn_members(&mut self, items: &[Element]) -> EditResult<usize> {
         let n = items
             .iter()
-            .filter(|e| matches!(e, Element::Column(_) | Element::Beam(_)))
+            .filter(|e| {
+                matches!(
+                    e,
+                    Element::Column(_) | Element::Beam(_) | Element::Object(_)
+                )
+            })
             .count();
         if n == 0 {
             return Ok(0);
@@ -156,6 +161,9 @@ impl Editor {
                     Element::Beam(id) => {
                         m.edit_beam(*id, |b| std::mem::swap(&mut b.start, &mut b.end))?
                     }
+                    Element::Object(id) => m.edit_object(*id, |o| {
+                        o.rotation = normal_angle(o.rotation + std::f64::consts::FRAC_PI_2)
+                    })?,
                     _ => {}
                 }
             }

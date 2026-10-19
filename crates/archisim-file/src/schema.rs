@@ -74,6 +74,39 @@ pub(crate) struct ProjectFile {
     /// Loose railings (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub railings: Vec<Railing>,
+    /// Object types (version 7): a family with no wall and its values.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub object_types: Vec<ObjectType>,
+    /// Objects: furniture, sanitary ware, kitchen units (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objects: Vec<Object>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ObjectType {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub family: u64,
+    pub values: ParamValues,
+}
+
+/// An object (version 7): its type, level, insertion point, turn
+/// (radians, counter-clockwise) and height above the level.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Object {
+    pub id: u64,
+    pub guid: String,
+    #[serde(rename = "type")]
+    pub object_type: u64,
+    pub level: u64,
+    pub position: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub base_offset: f64,
 }
 
 /// A railing (version 7): its line, foot, height, post spacing and
@@ -1052,6 +1085,30 @@ impl ProjectFile {
                     contour: t.contour,
                 })
                 .collect(),
+            object_types: p
+                .object_types
+                .iter()
+                .map(|t| ObjectType {
+                    id: t.id.0,
+                    guid: t.guid.to_string(),
+                    name: t.name.clone(),
+                    family: t.family.0,
+                    values: values_out(&t.values),
+                })
+                .collect(),
+            objects: p
+                .objects
+                .iter()
+                .map(|o| Object {
+                    id: o.id.0,
+                    guid: o.guid.to_string(),
+                    object_type: o.object_type.0,
+                    level: o.level.0,
+                    position: xy(o.position),
+                    rotation: o.rotation,
+                    base_offset: o.base_offset,
+                })
+                .collect(),
             railings: p
                 .railings
                 .into_iter()
@@ -1250,6 +1307,8 @@ impl ProjectFile {
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
+            object_types: Vec::new(),
+            objects: Vec::new(),
             railings: self
                 .railings
                 .iter()
@@ -1469,6 +1528,31 @@ impl ProjectFile {
                 },
                 setback: o.setback,
                 values,
+            });
+        }
+
+        for t in self.object_types {
+            let element = format!("object type {} «{}»", t.id, t.name);
+            let family = parts.families.iter().find(|f| f.id.0 == t.family);
+            let values = values_in(family, core::ParamScope::Type, t.values, &element)?;
+            parts.object_types.push(core::ObjectType {
+                id: core::ObjectTypeId(t.id),
+                guid: guid(&element, &t.guid)?,
+                name: t.name,
+                family: core::FamilyId(t.family),
+                values,
+            });
+        }
+        for o in self.objects {
+            let element = format!("object {}", o.id);
+            parts.objects.push(core::Object {
+                id: core::ObjectId(o.id),
+                guid: guid(&element, &o.guid)?,
+                level: core::LevelId(o.level),
+                object_type: core::ObjectTypeId(o.object_type),
+                position: pt(o.position),
+                rotation: o.rotation,
+                base_offset: o.base_offset,
             });
         }
 

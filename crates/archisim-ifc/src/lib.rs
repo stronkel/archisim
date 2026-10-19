@@ -45,6 +45,7 @@
 mod curtain;
 pub mod import;
 mod members;
+mod objects;
 mod railings;
 mod roofs;
 mod spaces;
@@ -1446,6 +1447,7 @@ impl<'a> Exporter<'a> {
         self.write_terrains(&materials, &storeys, &mut contained);
         self.write_curtain_walls(&materials, &storeys, &mut contained);
         self.write_railings(&materials, &storeys, &mut contained);
+        self.write_objects(&materials, &storeys, &mut contained);
         self.write_spaces(&storeys);
 
         for (level, elements) in &contained {

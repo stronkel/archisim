@@ -59,6 +59,7 @@ impl Model {
             || self.stairs.contains_key(&StairId(id))
             || self.curtain_walls.contains_key(&CurtainWallId(id))
             || self.railings.contains_key(&RailingId(id))
+            || self.objects.contains_key(&ObjectId(id))
     }
 
     /// Sets an element's phase. The doors and windows of a wall follow

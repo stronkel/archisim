@@ -33,6 +33,7 @@ mod compare;
 mod curtain;
 pub mod geometry;
 mod members;
+mod objects;
 mod railings;
 pub mod report;
 mod roofs;
@@ -241,6 +242,9 @@ struct Importer<'a> {
     curtain_ids: HashSet<u64>,
     /// `IfcRailing`s read back as ArchiSim railings.
     railing_ids: HashSet<u64>,
+    /// `IfcFurniture` and `IfcSanitaryTerminal` read back as objects.
+    object_ids: HashSet<u64>,
+    object_types: objects::ObjectTypes,
 }
 
 #[derive(Default)]
@@ -261,6 +265,8 @@ struct GuidPlan {
     terrains: Vec<(archisim_core::TerrainId, String)>,
     curtain_walls: Vec<(archisim_core::CurtainWallId, String)>,
     railings: Vec<(archisim_core::RailingId, String)>,
+    object_types: Vec<(archisim_core::ObjectTypeId, String)>,
+    objects: Vec<(archisim_core::ObjectId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -479,6 +485,8 @@ impl<'a> Importer<'a> {
             terrain_ids: HashSet::new(),
             curtain_ids: HashSet::new(),
             railing_ids: HashSet::new(),
+            object_ids: HashSet::new(),
+            object_types: Default::default(),
         };
         imp.index();
         imp
@@ -2404,7 +2412,11 @@ impl<'a> Importer<'a> {
 
     /// ArchiSim's family data of a door or window type (`ArchiSim_Family`
     /// and `ArchiSim_FamilyValues`), with its mark (`Tag`) and description.
-    fn family_data(&self, te: &'a Entity, type_props: &[&'a Entity]) -> Option<FamilyData> {
+    pub(super) fn family_data(
+        &self,
+        te: &'a Entity,
+        type_props: &[&'a Entity],
+    ) -> Option<FamilyData> {
         let set = |name: &str| {
             type_props
                 .iter()
@@ -2483,6 +2495,27 @@ impl<'a> Importer<'a> {
     /// family (loaded from its recipe if the project does not have it), its
     /// values (materials by name) and its mark.
     fn family_type(&mut self, name: &str, data: FamilyData) -> Result<OpeningTypeId, String> {
+        let (family, values) = self.family_values(&data)?;
+        let mark = data
+            .mark
+            .filter(|m| self.model.opening_types().all(|t| &t.mark != m));
+        self.model
+            .add_family_type(archisim_core::NewFamilyType {
+                family,
+                name: name.to_string(),
+                mark,
+                description: data.description.unwrap_or_default(),
+                values,
+            })
+            .map_err(|e| explain(&e))
+    }
+
+    /// The family of ArchiSim's family data (loaded from its recipe if the
+    /// project does not have it) and its type values, materials by name.
+    pub(super) fn family_values(
+        &mut self,
+        data: &FamilyData,
+    ) -> Result<(archisim_core::FamilyId, archisim_core::Values), String> {
         use archisim_core::{Family, FamilyId, ParamKind, Value as V};
         let parsed = Family::new(FamilyId(1), data.source.clone()).map_err(|e| e.to_string())?;
         let family = match self.model.family_by_name(parsed.name()) {
@@ -2538,18 +2571,7 @@ impl<'a> Importer<'a> {
             };
             values.insert(key.clone(), value);
         }
-        let mark = data
-            .mark
-            .filter(|m| self.model.opening_types().all(|t| &t.mark != m));
-        self.model
-            .add_family_type(archisim_core::NewFamilyType {
-                family,
-                name: name.to_string(),
-                mark,
-                description: data.description.unwrap_or_default(),
-                values,
-            })
-            .map_err(|e| explain(&e))
+        Ok((family, values))
     }
 
     // ---- Everything else ---------------------------------------------
@@ -2565,6 +2587,7 @@ impl<'a> Importer<'a> {
                         && !self.terrain_ids.contains(id)
                         && !self.curtain_ids.contains(id)
                         && !self.railing_ids.contains(id)
+                        && !self.object_ids.contains(id)
                         && !self
                             .ix
                             .parent
@@ -2633,6 +2656,7 @@ impl<'a> Importer<'a> {
         self.import_terrains();
         self.import_curtain_walls();
         self.import_railings();
+        self.import_objects();
         self.read_statuses();
         self.count_unsupported();
     }
@@ -2681,6 +2705,8 @@ impl<'a> Importer<'a> {
         restore!(terrains, terrains);
         restore!(curtain_walls, curtain_walls);
         restore!(railings, railings);
+        restore!(object_types, object_types);
+        restore!(objects, objects);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

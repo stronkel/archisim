@@ -358,6 +358,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for r in model.railings_on_level(level) {
         marker_points.extend(railings::railing_points(r));
     }
+    for o in model.objects_on_level(level) {
+        marker_points.extend(model.object_outline(o.id));
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -499,6 +502,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let (lo, hi) = bounds(poly);
         visible(lo, hi)
     };
+    draw_objects(&mut s, model, level, options.scale, k, &poly_visible);
     members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
     for c in model.curtain_walls_on_level(level) {
         if poly_visible(&c.outline()) {
@@ -1433,6 +1437,44 @@ fn line(s: &mut String, p: Point2, q: Point2, weight: f64, k: f64) {
     );
 }
 
+/// Objects of a level (furniture, sanitary ware…): the plan symbol of
+/// their family for the drawing scale, turned and placed. Too small to
+/// see: just their box.
+fn draw_objects(
+    s: &mut String,
+    model: &Model,
+    level: archisim_core::LevelId,
+    scale: f64,
+    k: f64,
+    visible: &dyn Fn(&[Point2]) -> bool,
+) {
+    s.push_str("<g id=\"objects\">\n");
+    for o in model.objects_on_level(level) {
+        let outline = model.object_outline(o.id);
+        if outline.is_empty() || !visible(&outline) {
+            continue;
+        }
+        let size = outline[0].distance(outline[2]);
+        let marks = if too_small_for_symbol(size * 1000.0 / scale) {
+            Err(())
+        } else {
+            model.object_plan_symbol(o.id, scale).map_err(|_| ())
+        };
+        match marks {
+            Ok(marks) => draw_marks(s, marks, &|p| o.to_plan(p[0], p[1]), k),
+            Err(()) => {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    path(&outline),
+                    num(VIEW_LINE * k)
+                );
+            }
+        }
+    }
+    s.push_str("</g>\n");
+}
+
 /// A door or window crossed by the cut plane: the plan symbol of its
 /// family for the drawing scale.
 ///
@@ -1465,6 +1507,12 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
         return;
     };
     let world = |p: [f64; 2]| o.point(mid + sx * p[0], y_mid + sy * p[1]);
+    draw_marks(s, marks, &world, k);
+}
+
+/// The marks of a family's plan symbol, through `world` (family axes to
+/// plan).
+fn draw_marks(s: &mut String, marks: Vec<Mark>, world: &dyn Fn([f64; 2]) -> Point2, k: f64) {
     for mark in marks {
         match mark {
             Mark::Line {

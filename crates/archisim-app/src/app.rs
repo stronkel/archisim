@@ -78,6 +78,8 @@ pub enum Tool {
     CurtainWall,
     /// Loose railings, by their line.
     Railing,
+    /// Furniture, sanitary ware and kitchen units.
+    Object,
 }
 
 impl Tool {
@@ -97,6 +99,7 @@ impl Tool {
                 | Tool::Terrain
                 | Tool::CurtainWall
                 | Tool::Railing
+                | Tool::Object
         )
     }
 
@@ -118,6 +121,7 @@ impl Tool {
             "r" => Some(Tool::Terrain),
             "u" => Some(Tool::CurtainWall),
             "b" => Some(Tool::Railing),
+            "o" => Some(Tool::Object),
             _ => None,
         }
     }
@@ -214,6 +218,7 @@ pub struct ArchiSimApp {
     /// The first point of the curtain wall being drawn.
     pub curtain_anchor: Option<Point2>,
     pub railing_settings: crate::editor::RailingSettings,
+    pub object_settings: crate::editor::ObjectSettings,
     /// Points of the railing being drawn.
     pub railing_points: Vec<Point2>,
     /// Survey points of the terrain being drawn.
@@ -352,6 +357,7 @@ impl ArchiSimApp {
             curtain_settings: Default::default(),
             curtain_anchor: None,
             railing_settings: Default::default(),
+            object_settings: Default::default(),
             railing_points: Vec::new(),
             terrain_points: Vec::new(),
             roof_tool: SlabTool::default(),
@@ -1477,6 +1483,7 @@ mod curtain_ui;
 mod icons;
 mod levels_ui;
 mod navigator;
+mod object_ui;
 mod plan_ui;
 mod properties;
 mod props;

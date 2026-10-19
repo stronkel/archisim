@@ -1,0 +1,42 @@
+family "Encimera de cocina"
+  category kitchen
+  host none
+  version 1
+  description "Muebles bajos de cocina con encimera, fregadero y placa"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.40 range 0.60..8.00 label "Largo"
+    depth  length = 0.60 range 0.45..1.00 label "Fondo"
+    height length = 0.90 range 0.80..1.00 label "Altura"
+  section "Equipamiento"
+    sink bool = yes label "Fregadero"
+    hob  bool = yes label "Placa de cocina"
+  section "Materiales"
+    mat material = "Madera de pino" label "Muebles"
+
+require width >= (if sink then 0.6 else 0) + (if hob then 0.6 else 0) else "No caben el fregadero y la placa"
+
+body
+  box (-width / 2, 0, 0.1) to (width / 2, depth - 0.02, height - 0.04) material mat
+  box (-width / 2, 0, height - 0.04) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  if sink
+    let x0 = -width / 2 + 0.1
+    polygon (x0, 0.08) (x0 + 0.4, 0.08) (x0 + 0.4, depth - 0.12) (x0, depth - 0.12) pen thin
+  if hob
+    let xc = width / 2 - 0.35
+    let yc = depth / 2
+    repeat i in 0..4
+      let dx = if i == 0 or i == 2 then -0.12 else 0.12
+      let dy = if i < 2 then -0.12 else 0.12
+      arc center (xc + dx, yc + dy) from (xc + dx + 0.08, yc + dy) to (xc + dx, yc + dy + 0.08) pen thin
+      arc center (xc + dx, yc + dy) from (xc + dx, yc + dy + 0.08) to (xc + dx - 0.08, yc + dy) pen thin
+      arc center (xc + dx, yc + dy) from (xc + dx - 0.08, yc + dy) to (xc + dx, yc + dy - 0.08) pen thin
+      arc center (xc + dx, yc + dy) from (xc + dx, yc + dy - 0.08) to (xc + dx + 0.08, yc + dy) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"

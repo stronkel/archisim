@@ -41,6 +41,7 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `terrains` | Terrenos (versión 7): `level`, puntos de cota `[x, y, z]` (z respecto al ±0,00 del proyecto), material (`id`), profundidad bajo el punto más bajo (`depth`) y equidistancia de las curvas de nivel (`contour`) | `IfcGeographicElement` (`TERRAIN`) con superficie triangulada y `ArchiSim_Terrain` |
 | `curtain_walls` | Muros cortina (versión 7): `level`, `start` y `end` (exterior a la izquierda), `base_offset`, `height`, `top` (como los muros), módulo y fila máximos (`bay`, `row`), perfil (`frame_width`, `frame_depth`, `frame_material`) y vidrio (`panel_thickness`, `panel_material`) | `IfcCurtainWall` con `IfcMember` (`MULLION`) e `IfcPlate` (`CURTAIN_PANEL`) y `ArchiSim_CurtainWall` |
 | `railings` | Barandillas sueltas (versión 7): `level`, `path` (puntos de su línea), `base_offset`, `height` (del pie al pasamanos), `post_spacing` (separación máxima de montantes) y `material` | `IfcRailing` (`GUARDRAIL`) con cuerpo triangulado y `ArchiSim_Railing` |
+| `object_types`, `objects` | Objetos (versión 7): tipos (`name`, `family`, `values` como en los tipos de puerta) y objetos (`type`, `level`, `position`, `rotation` en radianes, `base_offset`) | `IfcFurniture` / `IfcSanitaryTerminal` con su tipo (`IfcFurnitureType` / `IfcSanitaryTerminalType`, con `ArchiSim_Family`) |
 
 Las referencias entre elementos van por `id`: un muro con `"type": 7` usa el tipo de muro cuyo `id` es 7.
 

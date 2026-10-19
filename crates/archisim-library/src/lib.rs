@@ -402,6 +402,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
 
     // Structure (v0.25), added last so older ids stay put.
     let (column, beam) = add_structure_with(m, hormigon)?;
+    add_objects(m)?;
 
     Ok(Library {
         void,
@@ -426,6 +427,50 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         column,
         beam,
     })
+}
+
+/// Adds the object types of the library (v0.25): furniture, sanitary ware
+/// and kitchen units, each from its system family with these sizes.
+pub fn add_objects(
+    m: &mut Model,
+) -> Result<Vec<(String, archisim_core::ObjectTypeId)>, ModelError> {
+    use archisim_core::{ParamScope, Value};
+    if !m.materials().any(|x| x.name == "Porcelana") {
+        m.add_material("Porcelana", "ceramic", [244, 244, 240], CutPattern::Solid);
+    }
+    // (type name, family, sizes that differ from the family's)
+    type Entry<'a> = (&'a str, &'a str, &'a [(&'a str, f64)]);
+    let catalogue: [Entry; 11] = [
+        ("Mesa de comedor 160×90", "Mesa", &[]),
+        ("Silla", "Silla", &[]),
+        ("Sofá de 3 plazas", "Sofá", &[]),
+        ("Cama doble 150×200", "Cama", &[]),
+        (
+            "Cama individual 90×190",
+            "Cama",
+            &[("width", 0.9), ("depth", 1.9)],
+        ),
+        ("Muebles de cocina 240", "Encimera de cocina", &[]),
+        ("Inodoro", "Inodoro", &[]),
+        ("Lavabo 60", "Lavabo", &[]),
+        ("Plato de ducha 90×90", "Plato de ducha", &[]),
+        (
+            "Plato de ducha 120×80",
+            "Plato de ducha",
+            &[("width", 1.2), ("depth", 0.8)],
+        ),
+        ("Bañera 170×70", "Bañera", &[]),
+    ];
+    let mut out = Vec::new();
+    for (name, family, sizes) in catalogue {
+        let f = m.system_family(family)?;
+        let mut values = m.family_defaults(f, ParamScope::Type)?;
+        for (k, v) in sizes {
+            values.insert((*k).into(), Value::Number(*v));
+        }
+        out.push((name.to_string(), m.add_object_type(name, f, values)?));
+    }
+    Ok(out)
 }
 
 /// Adds the column and beam types of the library (and their steel and

@@ -95,6 +95,14 @@ typed_id!(
     /// Identifies a [`crate::Railing`].
     RailingId
 );
+typed_id!(
+    /// Identifies a [`crate::ObjectType`].
+    ObjectTypeId
+);
+typed_id!(
+    /// Identifies a [`crate::Object`] (furniture, sanitary ware…).
+    ObjectId
+);
 
 typed_id!(
     /// Identifies a [`crate::Family`] loaded in the project.
