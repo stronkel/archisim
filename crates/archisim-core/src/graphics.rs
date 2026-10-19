@@ -118,15 +118,34 @@ pub enum Category {
     Rooms,
     /// Tags of doors, windows, walls and rooms.
     Tags,
+    /// Columns and beams.
+    Structure,
+    Roofs,
+    Stairs,
+    CurtainWalls,
+    Railings,
+    /// Furniture, sanitary ware, kitchens and the garden's objects.
+    Objects,
+    Terrain,
+    /// The marks of sections and elevations.
+    SectionMarks,
 }
 
 impl Category {
-    pub const ALL: [Category; 8] = [
+    pub const ALL: [Category; 16] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
+        Category::Structure,
+        Category::Roofs,
+        Category::Stairs,
+        Category::CurtainWalls,
+        Category::Railings,
+        Category::Objects,
+        Category::Terrain,
         Category::Dimensions,
         Category::LevelMarks,
+        Category::SectionMarks,
         Category::Drafting,
         Category::Rooms,
         Category::Tags,
@@ -142,6 +161,14 @@ impl Category {
             Category::Drafting => "drafting",
             Category::Rooms => "rooms",
             Category::Tags => "tags",
+            Category::Structure => "structure",
+            Category::Roofs => "roofs",
+            Category::Stairs => "stairs",
+            Category::CurtainWalls => "curtain_walls",
+            Category::Railings => "railings",
+            Category::Objects => "objects",
+            Category::Terrain => "terrain",
+            Category::SectionMarks => "section_marks",
         }
     }
 
@@ -159,6 +186,14 @@ impl Category {
             Category::Drafting => "Dibujo 2D",
             Category::Rooms => "Locales",
             Category::Tags => "Etiquetas",
+            Category::Structure => "Pilares y vigas",
+            Category::Roofs => "Cubiertas",
+            Category::Stairs => "Escaleras",
+            Category::CurtainWalls => "Muros cortina",
+            Category::Railings => "Barandillas",
+            Category::Objects => "Objetos y mobiliario",
+            Category::Terrain => "Terreno",
+            Category::SectionMarks => "Marcas de sección",
         }
     }
 }

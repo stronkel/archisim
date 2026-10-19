@@ -492,19 +492,28 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
 
     s.push_str("<g id=\"slabs\">\n");
-    for t in model.terrains_on_level(level) {
+    for t in model
+        .terrains_on_level(level)
+        .filter(|_| show(archisim_core::Category::Terrain))
+    {
         terrain::draw_terrain(&mut s, t, k);
     }
     for (si, slab) in slabs.iter().enumerate() {
         draw_slab(&mut s, model, slab, si, options.cut_plane, k);
     }
-    for roof in model.roofs_on_level(level) {
+    for roof in model
+        .roofs_on_level(level)
+        .filter(|_| show(archisim_core::Category::Roofs))
+    {
         let (lo, hi) = bounds(&roof.eaves());
         if visible(lo, hi) {
             roofs::draw_roof(&mut s, roof, k);
         }
     }
-    for stair in model.stairs_on_level(level) {
+    for stair in model
+        .stairs_on_level(level)
+        .filter(|_| show(archisim_core::Category::Stairs))
+    {
         let pts = stairs::stair_points(stair);
         let (lo, hi) = bounds(&pts);
         if visible(lo, hi) {
@@ -513,7 +522,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
     // Stairs arriving at this level, seen from above through their hole:
     // the whole stair below the cut plane.
-    for (stair, rise) in stairs::arriving(model, level) {
+    for (stair, rise) in stairs::arriving(model, level)
+        .into_iter()
+        .filter(|_| show(archisim_core::Category::Stairs))
+    {
         let pts = stairs::stair_points(stair);
         let (lo, hi) = bounds(&pts);
         if visible(lo, hi) {
@@ -575,16 +587,26 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let (lo, hi) = bounds(poly);
         visible(lo, hi)
     };
-    draw_objects(&mut s, model, level, options.scale, k, &poly_visible);
-    members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
+    if show(archisim_core::Category::Objects) {
+        draw_objects(&mut s, model, level, options.scale, k, &poly_visible);
+    }
+    if show(archisim_core::Category::Structure) {
+        members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
+    }
     s.push_str("<g id=\"curtain-walls\">\n");
-    for c in model.curtain_walls_on_level(level) {
+    for c in model
+        .curtain_walls_on_level(level)
+        .filter(|_| show(archisim_core::Category::CurtainWalls))
+    {
         if poly_visible(&curtain::curtain_points(model, c)) {
             curtain::draw_curtain_wall(&mut s, model, c, options.cut_plane, k);
         }
     }
     s.push_str("</g>\n<g id=\"railings\">\n");
-    for r in model.railings_on_level(level) {
+    for r in model
+        .railings_on_level(level)
+        .filter(|_| show(archisim_core::Category::Railings))
+    {
         if poly_visible(&r.path) {
             railings::draw_railing(&mut s, r, options.cut_plane, k);
         }
@@ -616,7 +638,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for m in &marks {
         annotate::draw_elevation_mark(&mut s, model, m, k);
     }
-    section::draw_markers(&mut s, model, k);
+    if show(archisim_core::Category::SectionMarks) {
+        section::draw_markers(&mut s, model, k);
+    }
     s.push_str("</g>\n");
 
     if options.show_reference_lines {

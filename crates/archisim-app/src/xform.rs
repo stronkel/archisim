@@ -382,6 +382,68 @@ mod tests {
         Point2::new(x, y)
     }
 
+    /// Phase 2 elements go with the 2D commands: moved, copied, turned;
+    /// not mirrored.
+    #[test]
+    fn columns_and_beams_move_copy_and_turn() {
+        let (mut m, lvl, _) = room();
+        let mt = m
+            .member_types()
+            .find(|t| t.usage == archisim_core::MemberUsage::Column)
+            .unwrap()
+            .id;
+        let c = m
+            .add_column(archisim_core::NewColumn {
+                member_type: mt,
+                level: lvl,
+                position: p(2.0, 1.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 2.7,
+            })
+            .unwrap();
+        let sel: BTreeSet<Element> = [Element::Column(c)].into_iter().collect();
+        let guid = m.column(c).unwrap().guid.clone();
+        transform(&mut m, &sel, &Transform::translate(p(1.0, 0.0)), false).unwrap();
+        assert!(m.column(c).unwrap().position.distance(p(3.0, 1.0)) < 1e-9);
+        let copies = transform(&mut m, &sel, &Transform::translate(p(0.0, 2.0)), true).unwrap();
+        assert_eq!(m.columns().count(), 2);
+        assert_eq!(copies.len(), 1);
+        assert!(!copies.contains(&Element::Column(c)));
+        transform(
+            &mut m,
+            &sel,
+            &Transform::rotate(p(0.0, 0.0), FRAC_PI_2),
+            false,
+        )
+        .unwrap();
+        let col = m.column(c).unwrap();
+        assert!(
+            col.position.distance(p(-1.0, 3.0)) < 1e-9,
+            "{:?}",
+            col.position
+        );
+        assert!((col.rotation - FRAC_PI_2).abs() < 1e-9);
+        assert_eq!(col.guid, guid);
+        // A turned copy: in place, then turned.
+        transform(
+            &mut m,
+            &sel,
+            &Transform::rotate(p(-1.0, 3.0), FRAC_PI_2),
+            true,
+        )
+        .unwrap();
+        assert_eq!(m.columns().count(), 3);
+        assert!(transform(
+            &mut m,
+            &sel,
+            &Transform::mirror(p(0.0, 0.0), p(0.0, 1.0)),
+            false
+        )
+        .is_err());
+    }
+
     #[test]
     fn rotate_a_room_with_its_door() {
         let (mut m, _, _) = room();

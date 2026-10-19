@@ -567,7 +567,7 @@ pub fn build() -> Result<Document, ModelError> {
             view,
             textos,
             Shape::Text(Text {
-                at: Point2::new(6.0, 10.2),
+                at: Point2::new(6.0, 11.6),
                 content: "PLANTA BAJA".into(),
                 height: 5.0,
                 angle: 0.0,
@@ -754,6 +754,30 @@ mod tests {
     /// The partitions of the demo butt against the façades: their inner
     /// leaf goes through the plaster; a load-bearing wall instead goes up
     /// to the outer leaf. The IFC volumes still match (validated in CI).
+    /// A view can hide what phase 2 added: the furniture, the columns and
+    /// beams, the terrain…, as it hides walls or dimensions.
+    #[test]
+    fn views_hide_phase_2_elements() {
+        use archisim_core::Category;
+        let doc = super::build().unwrap();
+        let m = doc.model();
+        let pb = m.levels()[0].id;
+        let mut o = archisim_plan::PlanOptions::default();
+        let all = archisim_plan::render_plan(m, pb, &o);
+        assert!(all.contains("<g id=\"objects\">"));
+        assert!(all.contains("<g id=\"structure\">"));
+        for c in [Category::Objects, Category::Structure, Category::Terrain] {
+            o.style.hidden.insert(c);
+        }
+        let some = archisim_plan::render_plan(m, pb, &o);
+        assert!(!some.contains("<g id=\"objects\">"));
+        assert!(!some.contains("<g id=\"structure\">"));
+        assert!(some.len() < all.len());
+        // Walls and rooms are still there.
+        assert!(some.contains("<g id=\"poche\">"));
+        assert!(some.contains("<g id=\"rooms\">") == all.contains("<g id=\"rooms\">"));
+    }
+
     #[test]
     fn partitions_and_bearing_walls_butt_into_the_facade() {
         use archisim_geom::{wall_geometry, EndCut};

@@ -6,6 +6,52 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 (noche) · Las cuatro ramas juntas en `main`, con un solo local (v0.27)
+
+Antonio dio luz verde para unificar los locales y fusionar en `main` las PR #19 (fase 2), #20 (revisión R1–R11), #21 (fase 3, documentación) y #22 (fase 4, colaboración). Se hizo en la rama `bloque/fusion` y, con todo comprobado, se subió a `main`.
+
+**Hecho**
+- **Un solo local.** Las ramas de la fase 2 y de la fase 3 habían hecho cada una su local (`Space` y `Room`) y las dos guardaban «versión 7». Queda el de la fase 3 (`Room`: huecos para pilares y patinillos, sigue a sus muros, acabados, etiquetas, cuadro de superficies, BC3) con lo que solo tenía el de la fase 2:
+  - la **herramienta Local (Z)** de la caja, con sus tres métodos (recinto, polígono, rectángulo) y nombre, uso y altura elegidos antes de hacer clic; la orden **LOCAL** de la línea de órdenes sigue igual;
+  - la **lista de usos del proyecto** (R3) en las propiedades del proyecto y el desplegable «Uso» del local;
+  - **superficie construida** (a ejes de los muros que lo rodean) junto a la útil, el GlobalId, cambiar de planta, y **«Rótulo al centro»**;
+  - número **único en su planta** (como pedía la fase 2) y «ese recinto ya tiene un local» al repetir clic;
+  - el rótulo se arrastra por su asa, y no puede salir del local (de él se vuelve a buscar el recinto cuando cambian los muros).
+- **Formato `.archisim` versión 9.** Abre los ficheros de la versión 7 de las dos ramas y los de la 8: los locales de la fase 2 pasan a ser locales sin seguir a los muros, con su altura y su rótulo, y `space_usages` pasa a `room_usages`. Comprobado con ficheros de verdad, generados con el programa de cada rama (fase 2, v7; fase 3, v7; revisión, v8): los tres se abren con sus 4 locales y su IFC valida.
+- **IfcSpace unificado:** huecos, acabados (`Pset_SpaceCoveringRequirements`), altura propia o hasta la planta superior, superficies útil y construida, y `ArchiSim_Space` (rótulo, si sigue a los muros, si la altura es propia) para que la ida y vuelta salga idéntica.
+- **Encajes entre fases** que ninguna rama podía ver sola:
+  - las secciones y alzados usan las plumillas de su escala (a 1:100, las finas) y rotulan el título con el trazo técnico, como las plantas;
+  - pilares y vigas, mobiliario, muros cortina, barandillas, marcas de sección y norte van en el DXF en capas propias (`A-ESTRUCTURA`, `A-MOBILIARIO`, `A-MURO-CORTINA`, `A-BARANDILLA`, `A-SECCION`, `A-NORTE`), no en `A-OTROS`;
+  - **Visibilidad** de cada vista (y de cada vista en un plano): además de muros, cotas…, ahora se pueden ocultar pilares y vigas, cubiertas, escaleras, muros cortina, barandillas, objetos y mobiliario, terreno y marcas de sección;
+  - las órdenes de edición 2D (`D` desplazar, `CP` copiar, `GI` girar) mueven, copian y giran también pilares, vigas, cubiertas, escaleras, muros cortina, barandillas, objetos, terreno y secciones (escalar y simetría siguen siendo solo para muros, forjados y dibujo 2D); un forjado inclinado se lleva su flecha de pendiente;
+  - con las teclas de ArchiCAD, las letras de las herramientas nuevas (I, G, Z, S, T, E, R, U, B, O) cambian de herramienta; mientras se dibuja una viga, escalera, barandilla, muro cortina o sección, lo tecleado son medidas, no órdenes;
+  - en 3D, la caja de sección (fase 2) recorta también los modelos vinculados (fase 4) a la hora de elegir;
+  - soltar un DXF en la ventana lo importa como dibujo 2D (fase 3); con la herramienta Terreno activa o un terreno seleccionado, como topografía (fase 2). Un DWG, siempre como topografía (avisa de que hay que pasarlo a DXF).
+- **Demo:** los locales de la fase 3 con los nombres de la fase 2 (que casan con el mobiliario: estar-comedor y cocina al norte, dormitorios al sur) y sus acabados; el texto «PLANTA BAJA» apartado de las cotas del terreno.
+- El IDS de ejemplo admite mesetas de escalera como forjados. La persona y el coche del jardín salen como elementos genéricos (`IfcBuildingElementProxy`), que ese IDS prohíbe: es un hallazgo real, y la prueba lo espera.
+- Versión **0.27.0**. Comprobado: `cargo fmt`, `clippy -D warnings`, todas las pruebas; demo validada con IfcOpenShell (también las reglas EXPRESS); ida y vuelta idéntica salvo la fecha; importación; DXF con ezdxf; PDF con qpdf; la casa dibujada con la app y su IFC; ventana real abierta con Xvfb.
+
+**Decisiones tomadas por mí (cámbialas si no te convencen)**
+- Un clic **dentro** de un local selecciona el local (después de los muros, antes del forjado), como en la fase 3; en la fase 2 seleccionaba el forjado. Al forjado se llega por su borde.
+- Un local nuevo sin altura propia llega **hasta la planta superior**; en la última planta, 2,50 m (la fase 2 usaba 3,00 m).
+- El tipo predefinido del IfcSpace es `SPACE` (la fase 3 escribía `INTERNAL`).
+
+**Pendiente / limitaciones conocidas**
+- Las **secciones y alzados no se pueden colocar en los planos** todavía (los planos solo admiten plantas); tampoco se exportan a PDF/DXF desde la app (sí a SVG desde la línea de órdenes).
+- Las **tablas y el BC3** no cuentan pilares, vigas, cubiertas, escaleras ni muros cortina.
+- Las vistas colocadas en un plano no tienen fase de reforma propia (muestran todo).
+- Lo pendiente de cada rama sigue igual (ver sus entradas): bloque E de familias, cotas de altura en sección, holguras y reglas por disciplina en interferencias, bSDD, 4.5–4.7.
+
+**Antonio debe probar**
+1. Instala la v0.27.0 (se publica sola al subir a `main`): en el Mac, `curl -fsSL https://github.com/stronkel/archisim/releases/latest/download/instalar-mac.sh | bash`; en Windows, `ArchiSim-Windows.exe` de la página de versiones.
+2. **Tus ficheros de antes:** abre cualquier `.archisim` que guardaras con las versiones de prueba de las PR #19, #20, #21 o #22. Deben abrirse con sus locales. Guárdalo y vuelve a abrirlo.
+3. **Locales:** herramienta **Local (Z)**, «Recinto», elige el uso «Cocina» antes de hacer clic y pincha dentro de una habitación: sale con nombre y uso; repite el clic: «ese recinto ya tiene un local». Prueba «Rectángulo». Con un local seleccionado mira Propiedades: superficie útil y construida, acabados, «Sigue a los muros», «Rótulo al centro». Escribe `LOCAL` en la línea de órdenes y haz clic en otra habitación: debe salir el mismo tipo de local.
+4. **Usos:** sin nada seleccionado, «Usos de los locales» → añade el conjunto «Oficinas»: el desplegable «Uso» de la herramienta y de cada local los ofrece.
+5. **Visibilidad:** en las propiedades de la vista, quita «Objetos y mobiliario» y «Terreno»: la planta debe quedar limpia. Haz lo mismo en la vista del plano A-01 y exporta el plano a PDF.
+6. **DXF:** exporta la planta baja a DXF y ábrela en AutoCAD: ¿pilares, mobiliario, barandilla y muro cortina en sus capas?
+7. **Órdenes sobre elementos nuevos:** selecciona los dos pilares del porche y escribe `GI` (girar) 90: deben girar con su sección.
+8. Repasa la decisión del clic dentro del local (arriba): ¿prefieres que dentro se elija el forjado, como en la fase 2?
+
 ## 2026-10-19 (mañana) · Revisión de Antonio sobre v0.25 (R1 a R11, rama `bloque/revision-19oct`)
 
 Antonio revisó la fase 2 nocturna y pidió once cambios (apuntados en `docs/HOJA_DE_RUTA.md` como R1 a R11). Están todos hechos, en la PR #20 (sobre la rama de la PR #19).
