@@ -131,6 +131,38 @@ impl ArchiSimApp {
             "IfcCurtainWall",
         );
         let g = c.grid();
+        let above = self.levels_above(c.level);
+        group(ui, "curtain-top", "Restricciones", |ui| {
+            row(
+                ui,
+                "Llega a",
+                "Hasta una planta (sigue sus cambios de cota) o altura propia",
+                |ui, w| {
+                    let current = match c.top {
+                        archisim_core::WallTop::Level { level, .. } => Some(level),
+                        archisim_core::WallTop::Unconnected => None,
+                    };
+                    let mut opts: Vec<(Option<archisim_core::LevelId>, String)> =
+                        vec![(None, "Altura propia".into())];
+                    opts.extend(above.iter().map(|(l, n)| (Some(*l), format!("Hasta {n}"))));
+                    let o: Vec<_> = opts.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                    let picked = super::props::choice(ui, ("curtain-top", id.0), w, current, &o);
+                    if picked != current {
+                        let r =
+                            self.ed
+                                .edit_curtain_wall("Coronación del muro cortina", id, |c| {
+                                    c.top = match picked {
+                                        Some(level) => {
+                                            archisim_core::WallTop::Level { level, offset: 0.0 }
+                                        }
+                                        None => archisim_core::WallTop::Unconnected,
+                                    }
+                                });
+                        self.report(r, "Coronación cambiada.");
+                    }
+                },
+            );
+        });
         group(ui, "curtain-data", "Muro cortina", |ui| {
             type Set = fn(&mut archisim_core::CurtainWall, f64);
             let fields: [(&str, &str, f64, Set); 7] = [
