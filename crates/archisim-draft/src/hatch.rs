@@ -177,8 +177,7 @@ fn clip_family(
             }
         }
         xs.sort_by(f64::total_cmp);
-        for pair in xs.chunks_exact(2) {
-            let (s0, s1) = (pair[0], pair[1]);
+        for &[s0, s1] in xs.as_chunks::<2>().0 {
             if f.dashes.is_empty() || period <= 1e-12 {
                 out.push((line_o + u * s0, line_o + u * s1));
             } else {
