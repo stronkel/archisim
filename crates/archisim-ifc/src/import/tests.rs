@@ -1037,3 +1037,29 @@ fn material_priority_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// A glass railing: its panels go to the IFC as a second face set with
+/// the glass's colour, and it comes back with its glass.
+#[test]
+fn glass_railing_round_trip() {
+    let mut m = model();
+    let level = m.levels()[0].id;
+    let mats: Vec<_> = m.materials().map(|x| x.id).collect();
+    m.add_railing(archisim_core::NewRailing {
+        level,
+        path: vec![Point2::new(0.5, 0.5), Point2::new(3.5, 0.5)],
+        base_offset: 0.0,
+        height: 1.1,
+        post_spacing: 1.5,
+        material: mats[0],
+        glass: Some(mats[1]),
+    })
+    .unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("'Glass'"));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+    assert!(model.railings().next().unwrap().glass.is_some());
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

@@ -10,6 +10,8 @@ pub struct RailingSettings {
     pub height: f64,
     pub base_offset: f64,
     pub post_spacing: f64,
+    /// Glass panels instead of bars.
+    pub glass: bool,
 }
 
 impl Default for RailingSettings {
@@ -19,6 +21,7 @@ impl Default for RailingSettings {
             height: 1.1,
             base_offset: 0.0,
             post_spacing: 1.5,
+            glass: false,
         }
     }
 }
@@ -40,12 +43,38 @@ fn steel(model: &mut Model) -> MaterialId {
     }
 }
 
+/// The model's glass, or added.
+pub(crate) fn glass(model: &mut Model) -> MaterialId {
+    let found = model
+        .materials()
+        .find(|m| m.category == "glass")
+        .map(|m| m.id);
+    match found {
+        Some(m) => m,
+        None => model.add_material(
+            "Vidrio laminado",
+            "glass",
+            [190, 222, 236],
+            archisim_core::CutPattern::Solid,
+        ),
+    }
+}
+
 impl Editor {
+    /// Glass panels (true) or bars (false) for a railing.
+    pub fn set_railing_glass(&mut self, id: RailingId, on: bool) -> EditResult {
+        self.transact("Barandilla de vidrio", |m| {
+            let g = on.then(|| glass(m));
+            m.edit_railing(id, |r| r.glass = g)
+        })
+    }
+
     /// A railing along `path`, on the active level.
     pub fn add_railing(&mut self, s: &RailingSettings, path: Vec<Point2>) -> EditResult<RailingId> {
         let level = self.level;
         self.transact("Crear barandilla", |m| {
             let material = steel(m);
+            let glass = s.glass.then(|| glass(m));
             m.add_railing(NewRailing {
                 level,
                 path,
@@ -53,6 +82,7 @@ impl Editor {
                 height: s.height,
                 post_spacing: s.post_spacing,
                 material,
+                glass,
             })
         })
     }

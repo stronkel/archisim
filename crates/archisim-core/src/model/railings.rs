@@ -25,6 +25,8 @@ pub struct Railing {
     /// Largest distance between posts.
     pub post_spacing: f64,
     pub material: MaterialId,
+    /// Glass panels between the posts instead of bars (their material).
+    pub glass: Option<MaterialId>,
 }
 
 /// Data needed to create a railing.
@@ -36,6 +38,7 @@ pub struct NewRailing {
     pub height: f64,
     pub post_spacing: f64,
     pub material: MaterialId,
+    pub glass: Option<MaterialId>,
 }
 
 /// What a piece of a railing is.
@@ -45,17 +48,25 @@ pub enum RailingPieceKind {
     Handrail,
     BottomRail,
     Baluster,
+    /// A glass panel between two posts, from the bottom rail to the
+    /// handrail.
+    Panel,
 }
 
 /// A straight bar of a railing: from `a` to `b` (plan points, heights
-/// from the railing's foot), `size` square.
+/// from the railing's foot), `size` square; a glass panel is `size` thick
+/// and `tall` high about the line from `a` to `b`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RailingPiece {
     pub kind: RailingPieceKind,
     pub a: (Point2, f64),
     pub b: (Point2, f64),
     pub size: f64,
+    pub tall: f64,
 }
+
+/// Thickness of a glass panel (laminated 6+6).
+pub const GLASS_THICKNESS: f64 = 0.012;
 
 /// Sizes of the pieces (metres).
 pub const POST_SIZE: f64 = 0.04;
@@ -81,6 +92,7 @@ impl Railing {
             a: (a, za),
             b: (b, zb),
             size,
+            tall: size,
         };
         let n = self.path.len();
         for (i, w) in self.path.windows(2).enumerate() {
@@ -120,7 +132,24 @@ impl Railing {
                     POST_SIZE,
                 ));
             }
-            // Bars between posts, evenly, no gap over 10 cm.
+            // Glass panels between posts, or bars evenly, no gap over 10 cm.
+            if self.glass.is_some() {
+                for k in 0..bays {
+                    let (s0, s1) = (
+                        len * k as f64 / bays as f64 + POST_SIZE / 2.0,
+                        len * (k + 1) as f64 / bays as f64 - POST_SIZE / 2.0,
+                    );
+                    let (za, zb) = (rail_top, top);
+                    out.push(RailingPiece {
+                        kind: RailingPieceKind::Panel,
+                        a: (at(s0), (za + zb) / 2.0),
+                        b: (at(s1), (za + zb) / 2.0),
+                        size: GLASS_THICKNESS,
+                        tall: zb - za,
+                    });
+                }
+                continue;
+            }
             for k in 0..bays {
                 let (s0, s1) = (
                     len * k as f64 / bays as f64 + POST_SIZE / 2.0,
@@ -153,8 +182,10 @@ impl Model {
         if !self.levels.contains_key(&r.level) {
             return Err(ModelError::UnknownLevel(r.level));
         }
-        if !self.materials.contains_key(&r.material) {
-            return Err(ModelError::UnknownMaterial(r.material));
+        for m in std::iter::once(r.material).chain(r.glass) {
+            if !self.materials.contains_key(&m) {
+                return Err(ModelError::UnknownMaterial(m));
+            }
         }
         for p in &r.path {
             finite_point(*p, "railing point")?;
@@ -190,6 +221,7 @@ impl Model {
                 height: spec.height,
                 post_spacing: spec.post_spacing,
                 material: spec.material,
+                glass: spec.glass,
             },
         );
         self.stamp_phase(id.0);
@@ -258,6 +290,7 @@ fn spec_of(r: &Railing) -> NewRailing {
         height: r.height,
         post_spacing: r.post_spacing,
         material: r.material,
+        glass: r.glass,
     }
 }
 
@@ -282,6 +315,7 @@ mod tests {
                 height: 1.1,
                 post_spacing: 1.5,
                 material: steel,
+                glass: None,
             })
             .unwrap();
         let r = m.railing(id).unwrap();
@@ -306,6 +340,12 @@ mod tests {
         for w in xs.windows(2) {
             assert!(w[1] - w[0] - BALUSTER_SIZE.max(POST_SIZE) < MAX_BAR_GAP + 1e-9);
         }
+        // With glass: a panel per bay, no bars.
+        m.edit_railing(id, |r| r.glass = Some(steel)).unwrap();
+        let pieces = m.railing(id).unwrap().pieces();
+        let count = |k| pieces.iter().filter(|p| p.kind == k).count();
+        assert_eq!(count(RailingPieceKind::Panel), 4);
+        assert_eq!(count(RailingPieceKind::Baluster), 0);
         assert_eq!(
             m.edit_railing(id, |r| r.path.truncate(1)),
             Err(ModelError::InvalidRailing)

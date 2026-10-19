@@ -381,6 +381,7 @@ pub fn build() -> Result<Document, ModelError> {
             height: 1.1,
             post_spacing: 1.5,
             material: steel,
+            glass: None,
         })?;
         Ok(())
     })?;

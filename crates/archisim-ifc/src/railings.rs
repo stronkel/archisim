@@ -22,35 +22,50 @@ impl Exporter<'_> {
                 continue;
             };
             let storey_z = model.level(r.level).map_or(0.0, |l| l.elevation);
-            let mut pts: Vec<String> = Vec::new();
-            let mut faces: Vec<String> = Vec::new();
-            for b in archisim_geom::solid::loose_railing_bars(model, r.id) {
-                for t in b.triangles() {
-                    let base = pts.len();
-                    for p in t {
-                        pts.push(format!(
-                            "({},{},{})",
-                            real(p[0]),
-                            real(p[1]),
-                            real(p[2] - storey_z)
-                        ));
+            // The frame and, apart, the glass, each a face set with its
+            // material's colour.
+            let (frame, glass) = archisim_geom::solid::loose_railing_parts(model, r.id);
+            let mut items = Vec::new();
+            for (bars, material) in [(frame, Some(r.material)), (glass, r.glass)] {
+                let Some(material) = material else { continue };
+                let mut pts: Vec<String> = Vec::new();
+                let mut faces: Vec<String> = Vec::new();
+                for b in bars {
+                    for t in b.triangles() {
+                        let base = pts.len();
+                        for p in t {
+                            pts.push(format!(
+                                "({},{},{})",
+                                real(p[0]),
+                                real(p[1]),
+                                real(p[2] - storey_z)
+                            ));
+                        }
+                        faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
                     }
-                    faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
                 }
+                if faces.is_empty() {
+                    continue;
+                }
+                let list3 = self
+                    .w
+                    .add(format!("IFCCARTESIANPOINTLIST3D(({}),$)", pts.join(",")));
+                let body = self.w.add(format!(
+                    "IFCTRIANGULATEDFACESET({list3},$,.T.,({}),$)",
+                    faces.join(",")
+                ));
+                if let Some(&style) = self.styles.get(&material) {
+                    self.w.add(format!("IFCSTYLEDITEM({body},({style}),$)"));
+                }
+                items.push(body);
             }
-            if faces.is_empty() {
+            if items.is_empty() {
                 continue;
             }
-            let list3 = self
-                .w
-                .add(format!("IFCCARTESIANPOINTLIST3D(({}),$)", pts.join(",")));
-            let body = self.w.add(format!(
-                "IFCTRIANGULATEDFACESET({list3},$,.T.,({}),$)",
-                faces.join(",")
-            ));
             let rep = self.w.add(format!(
-                "IFCSHAPEREPRESENTATION({},'Body','Tessellation',({body}))",
-                self.body_ctx
+                "IFCSHAPEREPRESENTATION({},'Body','Tessellation',{})",
+                self.body_ctx,
+                crate::step::list(&items)
             ));
             let shape = self
                 .w
@@ -102,6 +117,12 @@ impl Exporter<'_> {
                 props.push(self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('{key}',$,IFCLENGTHMEASURE({}),$)",
                     real(v)
+                )));
+            }
+            if let Some(name) = r.glass.and_then(|g| model.material(g)) {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Glass',$,IFCLABEL({}),$)",
+                    string(&name.name)
                 )));
             }
             self.pset(el, &r.guid, "ArchiSim_Railing", &props);

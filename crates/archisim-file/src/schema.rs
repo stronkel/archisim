@@ -122,6 +122,9 @@ pub(crate) struct Railing {
     pub height: f64,
     pub post_spacing: f64,
     pub material: u64,
+    /// Glass panels instead of bars: their material.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glass: Option<u64>,
 }
 
 /// A curtain wall (version 7): its line, foot and top (as walls), the
@@ -1121,6 +1124,7 @@ impl ProjectFile {
                     height: r.height,
                     post_spacing: r.post_spacing,
                     material: r.material.0,
+                    glass: r.glass.map(|g| g.0),
                 })
                 .collect(),
             curtain_walls: p
@@ -1322,6 +1326,7 @@ impl ProjectFile {
                         height: r.height,
                         post_spacing: r.post_spacing,
                         material: core::MaterialId(r.material),
+                        glass: r.glass.map(core::MaterialId),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

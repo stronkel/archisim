@@ -970,6 +970,7 @@ fn copy(
                     height: r.height,
                     post_spacing: r.post_spacing,
                     material: r.material,
+                    glass: r.glass,
                 })?;
                 copies.insert(Element::Railing(new));
             }
@@ -1315,6 +1316,7 @@ mod tests {
                 height: 1.0,
                 post_spacing: 1.5,
                 material: al,
+                glass: None,
             })
             .unwrap();
         let ot = m.object_types().next().unwrap().id;

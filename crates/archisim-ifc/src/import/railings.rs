@@ -54,6 +54,11 @@ impl<'a> Importer<'a> {
             .collect();
         let path = path.ok_or("línea ilegible")?;
         let material = self.single_material(id);
+        let glass = self
+            .property_own(id, PSET, "Glass")
+            .and_then(|v| v.as_str())
+            .and_then(|n| self.model.materials().find(|m| m.name == n))
+            .map(|m| m.id);
         let level = self.level_of(id, 0.0);
         let rid = self
             .model
@@ -64,6 +69,7 @@ impl<'a> Importer<'a> {
                 height,
                 post_spacing,
                 material,
+                glass,
             })
             .map_err(|e| explain(&e))?;
         self.railing_ids.insert(id);

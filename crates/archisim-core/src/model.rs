@@ -1438,7 +1438,7 @@ impl Model {
             .chain(
                 self.railings
                     .values()
-                    .filter(|r| r.material == id)
+                    .filter(|r| r.material == id || r.glass == Some(id))
                     .map(|r| format!("barandilla {}", r.id.0)),
             )
             .chain(

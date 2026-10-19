@@ -947,7 +947,29 @@ pub fn curtain_wall_solids(model: &Model, id: archisim_core::CurtainWallId) -> V
     ]
 }
 
-/// The bars of a loose railing, in model space.
+/// The bars of a loose railing, in model space: its frame (posts and
+/// rails) and its glass panels, apart.
+pub fn loose_railing_parts(model: &Model, id: archisim_core::RailingId) -> (Vec<Bar>, Vec<Bar>) {
+    let Some(r) = model.railing(id) else {
+        return (Vec::new(), Vec::new());
+    };
+    let panel = |p: &archisim_core::RailingPiece| p.kind == archisim_core::RailingPieceKind::Panel;
+    let pieces = r.pieces();
+    let bars = loose_railing_bars(model, id);
+    pieces
+        .iter()
+        .zip(bars)
+        .fold((Vec::new(), Vec::new()), |(mut f, mut g), (p, b)| {
+            if panel(p) {
+                g.push(b);
+            } else {
+                f.push(b);
+            }
+            (f, g)
+        })
+}
+
+/// The bars of a loose railing, in model space, one per piece.
 pub fn loose_railing_bars(model: &Model, id: archisim_core::RailingId) -> Vec<Bar> {
     let Some(r) = model.railing(id) else {
         return Vec::new();
@@ -981,7 +1003,7 @@ pub fn loose_railing_bars(model: &Model, id: archisim_core::RailingId) -> Vec<Ba
                     [0.0, 0.0, 1.0]
                 },
                 w: p.size,
-                d: p.size,
+                d: p.tall,
             })
         })
         .collect()
@@ -1024,15 +1046,17 @@ pub fn loose_railing_solids(model: &Model, id: archisim_core::RailingId) -> Vec<
     let Some(r) = model.railing(id) else {
         return Vec::new();
     };
-    let triangles = loose_railing_bars(model, id)
-        .iter()
-        .flat_map(|b| b.triangles())
-        .collect();
-    vec![Solid {
+    let (bars, panels) = loose_railing_parts(model, id);
+    let solid = |material, bars: Vec<Bar>| Solid {
         owner: SolidOwner::Railing(id),
-        material: r.material,
-        triangles,
-    }]
+        material,
+        triangles: bars.iter().flat_map(|b| b.triangles()).collect(),
+    };
+    let mut out = vec![solid(r.material, bars)];
+    if let Some(glass) = r.glass {
+        out.push(solid(glass, panels));
+    }
+    out
 }
 
 pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid> {
@@ -2188,6 +2212,7 @@ mod tests {
                 height: 1.0,
                 post_spacing: 1.5,
                 material: steel,
+                glass: None,
             })
             .unwrap();
         let bars = loose_railing_bars(&m, id);

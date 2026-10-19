@@ -365,7 +365,9 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && close(s.height, t.height)
             && close(s.post_spacing, t.post_spacing)
             && level_guid(a, s.level) == level_guid(b, t.level)
-            && material_name(a, s.material) == material_name(b, t.material);
+            && material_name(a, s.material) == material_name(b, t.material)
+            && s.glass.and_then(|g| material_name(a, g))
+                == t.glass.and_then(|g| material_name(b, g));
         if !same {
             diff(format!("barandilla {}: {:?} / {:?}", s.guid, s, t));
         }

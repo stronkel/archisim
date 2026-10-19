@@ -82,6 +82,14 @@ impl ArchiSimApp {
                     }
                 });
             }
+            row(
+                ui,
+                "Vidrio",
+                "Paneles de vidrio entre montantes en vez de barrotes",
+                |ui, _| {
+                    ui.checkbox(&mut self.railing_settings.glass, "");
+                },
+            );
         });
         ui.add_space(6.0);
         props::note(
@@ -130,6 +138,18 @@ impl ArchiSimApp {
                     }
                 });
             }
+            row(
+                ui,
+                "Vidrio",
+                "Paneles de vidrio entre montantes en vez de barrotes",
+                |ui, _| {
+                    let mut on = r.glass.is_some();
+                    if ui.checkbox(&mut on, "").changed() {
+                        let res = self.ed.set_railing_glass(id, on);
+                        self.report(res, "Barandilla cambiada.");
+                    }
+                },
+            );
             let posts = r
                 .pieces()
                 .iter()
