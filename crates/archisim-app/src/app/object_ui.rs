@@ -135,7 +135,7 @@ impl ArchiSimApp {
             })
             .unwrap_or_default();
         props::title(ui, "Objeto · 1 seleccionado");
-        super::properties::view_card_pub(ui, Icon::Object, &t.name, &ifc);
+        super::properties::view_card(ui, Icon::Object, &t.name, &ifc);
         if let Some(pick) = self.object_card(ui, &format!("object-{}", id.0), Some(t.id)) {
             if let Some(picked) = self.object_pick_type(pick).filter(|p| *p != t.id) {
                 let r = self

@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use archisim_core::{Point2, Terrain};
 
 use crate::lettering::{text_path, Align, STROKE};
-use crate::{annotate, num, pt, HATCH_LINE, INK, VIEW_LINE};
+use crate::{annotate, num, pens, pt, INK};
 
 /// Colour of the contour lines.
 const CONTOUR: &str = "#8a7a62";
@@ -45,7 +45,7 @@ pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
             s,
             r#"<path d="{}" fill="none" stroke="{CONTOUR}" stroke-width="{}"/>"#,
             d.trim_end(),
-            num(if index { VIEW_LINE } else { HATCH_LINE } * k)
+            num(if index { pens().view } else { pens().hatch } * k)
         );
         if labelled {
             // The height on the longest piece, along it.
@@ -75,7 +75,7 @@ pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
             s,
             r#"<path d="M{} Z" fill="none" stroke="{CONTOUR}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
             pts.join(" L"),
-            num(HATCH_LINE * k),
+            num(pens().hatch * k),
             num(3.0 * k),
             num(1.5 * k)
         );
@@ -91,7 +91,7 @@ pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
             pt(q + Point2::new(c, 0.0)),
             pt(q - Point2::new(0.0, c)),
             pt(q + Point2::new(0.0, c)),
-            num(HATCH_LINE * k),
+            num(pens().hatch * k),
             text_path(
                 &height(p.z),
                 q + Point2::new(c, c * 0.6),
@@ -119,13 +119,13 @@ pub fn draw_north(s: &mut String, at: Point2, angle: f64, k: f64) {
         num(at.x),
         num(-at.y),
         num(r),
-        num(HATCH_LINE * k),
+        num(pens().hatch * k),
         pt(tip),
         pt(at + side * (r * 0.3) - up * (r * 0.2)),
         pt(at - side * (r * 0.3) - up * (r * 0.2)),
         pt(at),
         pt(tail),
-        num(HATCH_LINE * k),
+        num(pens().hatch * k),
         text_path(
             "N",
             tip + up * (2.4 * k),

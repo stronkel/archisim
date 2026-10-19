@@ -24,6 +24,7 @@
 //! the wall, the faces of their frame and their height. [`clip_span`] cuts a
 //! wall (or one of its layers) into the solid pieces between openings.
 
+pub mod anchors;
 pub mod index;
 pub mod joins;
 pub mod junctions;

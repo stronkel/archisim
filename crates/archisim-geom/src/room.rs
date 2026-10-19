@@ -613,6 +613,53 @@ fn intersections(a: Point2, b: Point2, c: Point2, d: Point2) -> Vec<(f64, f64)> 
     out
 }
 
+/// What the rooms of each level depend on: its walls and their types.
+pub fn wall_signatures(model: &Model) -> std::collections::BTreeMap<LevelId, u64> {
+    use std::hash::{Hash, Hasher};
+    let mut out = std::collections::BTreeMap::new();
+    for l in model.levels() {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for w in model.walls_on_level(l.id) {
+            w.id.hash(&mut h);
+            for v in [w.start.x, w.start.y, w.end.x, w.end.y, w.bulge] {
+                v.to_bits().hash(&mut h);
+            }
+            format!("{:?}", w.reference).hash(&mut h);
+            if let Some(t) = model.wall_type(w.wall_type) {
+                t.thickness().to_bits().hash(&mut h);
+            }
+        }
+        out.insert(l.id, h.finish());
+    }
+    out
+}
+
+/// After a change: the rooms bounded by walls on levels whose walls
+/// changed are found again from their label point. A room whose walls no
+/// longer close it keeps its outline.
+pub fn follow_walls(model: &mut Model, before: &std::collections::BTreeMap<LevelId, u64>) {
+    let now = wall_signatures(model);
+    let changed: Vec<LevelId> = now
+        .iter()
+        .filter(|(l, s)| before.get(l) != Some(s))
+        .map(|(l, _)| *l)
+        .collect();
+    for level in changed {
+        let rooms: Vec<archisim_core::Room> = model
+            .rooms_on_level(level)
+            .filter(|r| r.bounded)
+            .cloned()
+            .collect();
+        for r in rooms {
+            if let Ok(outline) = room_outline(model, level, r.label, Contour::InteriorFace) {
+                if outline != r.outline {
+                    let _ = model.set_room(archisim_core::Room { outline, ..r });
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

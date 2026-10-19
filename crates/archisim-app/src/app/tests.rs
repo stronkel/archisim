@@ -31,6 +31,9 @@ impl Harness {
             modifiers: Modifiers::NONE,
             events: Vec::new(),
         };
+        // The drawing tests were written with ArchiCAD's keys (M, F… at
+        // once); the AutoCAD command line has its own tests.
+        h.app.keys_autocad = false;
         h.frame();
         h.frame();
         h
@@ -1870,38 +1873,38 @@ fn room_tool() {
     assert_eq!(h.app.tool, Tool::Zone);
     h.click_at(p(6.0, 4.5));
     let m = h.model();
-    assert_eq!(m.spaces().count(), 1, "{:?}", h.app.message);
-    let s = m.spaces().next().unwrap().clone();
+    assert_eq!(m.rooms().count(), 1, "{:?}", h.app.message);
+    let s = m.rooms().next().unwrap().clone();
     assert!((s.area() - (12.0 - 0.53) * (9.0 - 0.53)).abs() < 1e-6);
     assert_eq!(s.number, "1");
     // A second one in the same room is refused.
     h.click_at(p(3.0, 3.0));
-    assert_eq!(h.model().spaces().count(), 1);
+    assert_eq!(h.model().rooms().count(), 1);
     // By hand, a rectangle (a part of the room): number 2.
-    h.app.space_settings.wand = false;
+    h.app.room_settings.wand = false;
     h.app.zone_tool.set_mode(SlabMode::Rectangle);
     h.click_at(p(1.0, 1.0));
     h.click_at(p(4.0, 3.0));
-    assert_eq!(h.model().spaces().count(), 2, "{:?}", h.app.message);
-    assert!(h.model().spaces().any(|s| s.number == "2"));
+    assert_eq!(h.model().rooms().count(), 2, "{:?}", h.app.message);
+    assert!(h.model().rooms().any(|s| s.number == "2"));
     // Select the first by its stamp, drag the stamp.
     h.key(Key::Escape);
     h.key(Key::Escape);
     assert_eq!(h.app.tool, Tool::Arrow);
-    let at = s.label_point();
+    let at = s.label;
     h.click_at(at);
     assert_eq!(
         h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
-        vec![Element::Space(s.id)]
+        vec![Element::Room(s.id)]
     );
     h.drag(at, at + Point2::new(1.0, 1.0));
-    let moved = h.model().space(s.id).unwrap().label_point();
+    let moved = h.model().room(s.id).unwrap().label;
     assert!(
         moved.distance(at + Point2::new(1.0, 1.0)) < 0.02,
         "{moved:?}"
     );
     h.key(Key::Delete);
-    assert_eq!(h.model().spaces().count(), 1);
+    assert_eq!(h.model().rooms().count(), 1);
 }
 
 /// Phases of a refurbishment: walls drawn "as existing", one set to be
@@ -2691,4 +2694,480 @@ fn curtain_wall_types_window() {
         std::fs::create_dir_all(&dir).unwrap();
         archisim_file::save(h.model(), dir.join("muro_cortina.archisim")).unwrap();
     }
+}
+
+// ---- 2D drafting with the command line (AutoCAD) -----------------------
+
+/// Types a command or value and presses Enter, as in AutoCAD.
+fn command(h: &mut Harness, text: &str) {
+    h.type_text(text);
+    h.key(Key::Enter);
+}
+
+fn drafts(h: &Harness) -> Vec<archisim_core::Draft> {
+    h.model().drafts().cloned().collect()
+}
+
+#[test]
+fn lines_rectangles_and_typed_coordinates() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    // LINEA with a click, relative and polar coordinates, and Cerrar.
+    command(&mut h, "l");
+    assert_eq!(h.app.tool, Tool::Cad);
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@3000,0");
+    command(&mut h, "@2000<90");
+    command(&mut h, "c");
+    let d = drafts(&h);
+    assert_eq!(d.len(), 3, "{d:?}");
+    assert_eq!(h.app.tool, Tool::Arrow);
+    assert!(d
+        .iter()
+        .any(|x| matches!(x.shape, archisim_core::Shape::Line { a, b }
+        if a.approx_eq(p(3.0, 0.0)) && b.approx_eq(p(3.0, 2.0)))));
+    // Enter on an empty line repeats LINEA; Esc keeps what was drawn.
+    h.key(Key::Enter);
+    assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("LINEA"));
+    command(&mut h, "10000,0");
+    command(&mut h, "12000,0");
+    h.key(Key::Escape);
+    assert_eq!(drafts(&h).len(), 4);
+    assert!(h.app.cad.is_none());
+    // A rectangle by its size.
+    command(&mut h, "rec");
+    command(&mut h, "0,5000");
+    command(&mut h, "@4000,3000");
+    let rect = drafts(&h).last().unwrap().shape.clone();
+    assert!((archisim_draft::area(&rect).unwrap() - 12.0).abs() < 1e-9);
+    // An unknown command is said, nothing changes.
+    command(&mut h, "zzz");
+    assert!(h.app.cmdline.history.last().unwrap().1);
+    // M + Enter takes the wall tool.
+    command(&mut h, "m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.key(Key::Escape);
+    // Undo removes the rectangle.
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert_eq!(drafts(&h).len(), 4);
+}
+
+#[test]
+fn offset_trim_hatch_and_move() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    command(&mut h, "rec");
+    command(&mut h, "0,0");
+    command(&mut h, "4000,3000");
+    // EQUIDIST 500 outwards.
+    command(&mut h, "eq");
+    command(&mut h, "500");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(2.0, -2.0));
+    h.key(Key::Enter);
+    let d = drafts(&h);
+    assert_eq!(d.len(), 2);
+    assert!((archisim_draft::area(&d[1].shape).unwrap() - 20.0).abs() < 1e-9);
+    // A line across both, trimmed between them on the right.
+    command(&mut h, "l");
+    command(&mut h, "-2000,1500");
+    command(&mut h, "6000,1500");
+    h.key(Key::Enter);
+    command(&mut h, "rr");
+    h.click_at(p(4.25, 1.5));
+    h.key(Key::Enter);
+    let line = drafts(&h)
+        .into_iter()
+        .filter(|x| matches!(x.shape, archisim_core::Shape::Line { .. }))
+        .count();
+    // Cut in two: left part and right part.
+    assert_eq!(line, 2);
+    // A hatch with a click inside the inner rectangle (it has the line
+    // pieces through it: the lower half).
+    command(&mut h, "sb");
+    h.click_at(p(1.0, 1.0));
+    h.key(Key::Enter);
+    let hatch = drafts(&h)
+        .into_iter()
+        .find(|x| matches!(x.shape, archisim_core::Shape::Hatch(_)))
+        .expect("a hatch");
+    let a = archisim_draft::area(&hatch.shape).unwrap();
+    assert!((a - 6.0).abs() < 1e-6, "{a}");
+    // Move everything 1 m right: window from right to left (crossing).
+    h.drag(p(7.0, 4.0), p(-1.5, -1.0));
+    assert_eq!(h.app.ed.selection.len(), drafts(&h).len());
+    command(&mut h, "d");
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@1000,0");
+    assert!(h.app.ed.selection.is_empty());
+    let moved = drafts(&h)
+        .into_iter()
+        .find(|x| matches!(x.shape, archisim_core::Shape::Hatch(_)))
+        .unwrap();
+    let (lo, _) = archisim_draft::bounds(&moved.shape, 0.05);
+    assert!((lo.x - 1.0).abs() < 1e-9, "{lo:?}");
+}
+
+#[test]
+fn texts_layers_and_drafting_properties() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    // A layer for texts, made current.
+    let textos = h
+        .app
+        .ed
+        .add_draw_layer(archisim_core::DrawLayer::new(
+            "Textos",
+            [0, 0, 200],
+            0.25,
+            archisim_core::LineStyle::Continuous,
+        ))
+        .unwrap();
+    h.app.cad_settings.layer = textos;
+    command(&mut h, "tx");
+    h.click_at(p(1.0, 1.0));
+    command(&mut h, "3,5");
+    h.key(Key::Enter);
+    assert_eq!(h.app.cad_want(), Some(crate::cad::Want::Text));
+    h.frame();
+    h.app
+        .cad_feed(crate::cad::Input::Value("Salón\n25,40 m²".into()));
+    h.key(Key::Escape);
+    let t = drafts(&h).pop().expect("a text");
+    assert_eq!(t.layer, textos);
+    let archisim_core::Shape::Text(text) = &t.shape else {
+        panic!()
+    };
+    assert_eq!(text.height, 3.5);
+    assert_eq!(text.content.lines().count(), 2);
+    // Selected, the palette shows it; the dialog of layers opens with CAPA.
+    h.app.ed.selection = [Element::Draft(t.id)].into_iter().collect();
+    h.frame();
+    command(&mut h, "capa");
+    assert!(h.app.show_layers);
+    h.frame();
+    // Hidden layer: its texts are not picked.
+    let mut l = h.model().draw_layer(textos).unwrap().clone();
+    l.visible = false;
+    h.app.ed.set_draw_layer(l).unwrap();
+    h.app.ed.selection.clear();
+    assert!(crate::pick::elements_on_level(h.model(), h.app.ed.level)
+        .iter()
+        .all(|e| !matches!(e, Element::Draft(_))));
+    // Every command starts and is left with Esc without trouble.
+    for (name, _) in crate::cad::ALIASES {
+        if let crate::cad::Launch::Command(c) = crate::cad::launch(name).unwrap() {
+            h.app.start_command(c);
+            h.move_to(p(2.0, 2.0));
+            h.frame();
+            h.key(Key::Escape);
+            assert!(h.app.cad.is_none(), "{c}");
+        }
+    }
+}
+
+#[test]
+fn sheets_views_and_drafting_on_paper() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.app.keys_autocad = true;
+    let level = h.app.ed.level;
+    // A new sheet opens in its tab, as paper fitted to the window.
+    h.app.new_sheet();
+    h.frame();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    assert_eq!(h.app.mode, ViewMode::Sheet(sheet));
+    assert_eq!(h.model().sheets()[0].number, "A-01");
+    let paper = h.screen(p(0.841, 0.594)) - h.screen(p(0.0, 0.0));
+    assert!(paper.x > 500.0, "{paper:?}");
+    // A view of the level at 1:100, then moved by dragging it.
+    let v = h
+        .app
+        .ed
+        .add_viewport(archisim_core::NewViewport {
+            sheet,
+            level,
+            scale: 100.0,
+            cut_plane: 1.0,
+            crop: None,
+            centre: p(0.3, 0.3),
+        })
+        .unwrap();
+    h.frame();
+    h.drag(p(0.3, 0.3), p(0.35, 0.32));
+    let c = h.model().viewport(v).unwrap().centre;
+    assert!(c.distance(p(0.35, 0.32)) < 0.002, "{c:?}");
+    assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::View(v)));
+    // A line drawn on the paper belongs to the sheet, in paper metres.
+    command(&mut h, "l");
+    assert_eq!(h.app.mode, ViewMode::Sheet(sheet));
+    h.click_at(p(0.62, 0.40));
+    command(&mut h, "@100,0");
+    h.key(Key::Escape);
+    let line = drafts(&h).pop().expect("a line");
+    assert_eq!(line.view, archisim_core::ViewRef::Sheet(sheet));
+    let archisim_core::Shape::Line { a, b } = line.shape else {
+        panic!("{:?}", line.shape)
+    };
+    assert!((b.x - a.x - 0.1).abs() < 1e-9, "{a:?} {b:?}");
+    // Picked on the sheet and deleted with Supr.
+    h.click_at(p(0.67, 0.40));
+    assert_eq!(
+        h.app.ed.selection.iter().next(),
+        Some(&Element::Draft(line.id))
+    );
+    h.key(Key::Delete);
+    assert!(h.model().draft(line.id).is_none());
+    // Supr on a selected view takes it off the sheet; double click on it
+    // opens its plan.
+    h.click_at(p(0.35, 0.32));
+    assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::View(v)));
+    h.move_to(p(0.35, 0.32));
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert_eq!(h.app.ed.level, level);
+    // Back to the sheet from its tab; its framing was kept.
+    h.app.open_view(TabKind::Sheet(sheet));
+    h.frame();
+    h.click_at(p(0.35, 0.32));
+    h.key(Key::Delete);
+    assert!(h.model().viewport(v).is_none());
+    // Deleting the sheet closes its tab.
+    h.app.ed.remove_sheet(sheet).unwrap();
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert!(h.app.tabs.iter().all(|t| t.kind != TabKind::Sheet(sheet)));
+}
+
+#[test]
+fn dxf_out_and_back_in_and_pdf_of_the_sheets() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.keys_autocad = true;
+    command(&mut h, "l");
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@4000,0");
+    h.key(Key::Escape);
+    let dir = std::env::temp_dir().join(format!("archisim-dxf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dxf = dir.join("planta.dxf");
+    let options = h.app.plan_export_options(50.0);
+    h.app.ed.export_plan(&dxf, &options).unwrap();
+    // Into a sheet: the line comes back at paper size (4 m → 4000 mm of
+    // paper would be huge, but it is what the DXF says).
+    h.app.new_sheet();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    h.app.import_dxf_from(&dxf);
+    // The line; the north arrow of the plan comes on its own layer.
+    let on_sheet: Vec<_> = h
+        .model()
+        .drafts_in(archisim_core::ViewRef::Sheet(sheet))
+        .filter(|d| {
+            h.model()
+                .draw_layer(d.layer)
+                .is_none_or(|l| l.name != "A-NORTE")
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        on_sheet.len(),
+        1,
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Importar DXF «planta.dxf»"));
+    // Every sheet in one PDF.
+    let pdf = dir.join("planos.pdf");
+    h.app.ed.export_sheets(&pdf, &[sheet]).unwrap();
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn angular_radius_and_arc_dimensions() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.keys_autocad = true;
+    for second in ["@4000,0", "@0,3000"] {
+        command(&mut h, "l");
+        h.click_at(p(0.0, 0.0));
+        command(&mut h, second);
+        h.key(Key::Escape);
+    }
+    command(&mut h, "dan");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(0.0, 1.5));
+    h.click_at(p(1.0, 1.0));
+    let dims: Vec<archisim_core::Measure> = drafts(&h)
+        .iter()
+        .filter_map(|d| match d.shape {
+            archisim_core::Shape::Dim(m) => Some(m),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(dims.len(), 1, "{:?}", h.app.cmdline.history);
+    assert_eq!(archisim_draft::dims::label(&dims[0]), "90°");
+    // A circle of 1,25 m: its radius and diameter.
+    command(&mut h, "c");
+    h.click_at(p(8.0, 2.0));
+    command(&mut h, "1250");
+    for (cmd, text) in [("dra", "R 1,25"), ("ddi", "Ø 2,50")] {
+        command(&mut h, cmd);
+        h.click_at(p(9.25, 2.0));
+        h.click_at(p(10.5, 3.0));
+        let last = drafts(&h).pop().unwrap();
+        let archisim_core::Shape::Dim(m) = last.shape else {
+            panic!("{:?}", last.shape)
+        };
+        assert_eq!(archisim_draft::dims::label(&m), text);
+    }
+    // Scaled ×2, the diameter dimension reads twice as much.
+    let id = drafts(&h).pop().unwrap().id;
+    h.app.ed.selection = [Element::Draft(id)].into_iter().collect();
+    command(&mut h, "es");
+    command(&mut h, "8000,2000");
+    command(&mut h, "2");
+    let archisim_core::Shape::Dim(m) = h.model().draft(id).unwrap().shape else {
+        panic!()
+    };
+    assert_eq!(archisim_draft::dims::label(&m), "Ø 5,00");
+}
+
+#[test]
+fn rooms_follow_walls_and_tags_follow_doors() {
+    let (m, lvl, _) = crate::pick::tests::room();
+    let mut h = Harness::new(Editor::with_model(m, None));
+    h.app.ed.level = lvl;
+    h.frame();
+    h.app.keys_autocad = true;
+    command(&mut h, "loc");
+    h.click_at(p(3.0, 2.0));
+    h.key(Key::Escape);
+    let r = h.model().rooms().next().cloned().expect("a room");
+    assert_eq!(r.number, "1");
+    assert!(r.bounded);
+    let before = r.area();
+    assert!(before > 15.0 && before < 24.0, "{before}");
+    // Every door and window tagged at once.
+    command(&mut h, "eti");
+    command(&mut h, "t");
+    assert_eq!(h.model().tags().count(), 1);
+    // The door slides half a metre: its tag goes with it.
+    let tag_before = h.model().tags().next().unwrap().at;
+    let door = h.model().openings().next().unwrap().clone();
+    h.app
+        .ed
+        .move_opening(door.id, door.along + 0.5, door.sill)
+        .unwrap();
+    let tag_after = h.model().tags().next().unwrap().at;
+    assert!(
+        (tag_after.distance(tag_before) - 0.5).abs() < 1e-9,
+        "{tag_before:?} → {tag_after:?}"
+    );
+    // The east wall moves out a metre: the room grows with it.
+    let east = h
+        .model()
+        .walls()
+        .find(|w| w.start.x > 5.9 && w.end.x > 5.9)
+        .unwrap()
+        .id;
+    h.app.ed.selection = [Element::Wall(east)].into_iter().collect();
+    let drag = crate::drag::Drag {
+        grip: crate::drag::Grip::Body,
+        from: p(6.0, 2.0),
+        to: p(7.0, 2.0),
+        variant: false,
+    };
+    h.app.ed.drag(&drag).unwrap();
+    let after = h.model().room(r.id).unwrap().area();
+    assert!(after > before + 3.0, "{before} → {after}");
+    // The door goes: its tag too.
+    let door = h.model().openings().next().unwrap().id;
+    h.app.ed.selection = [Element::Opening(door)].into_iter().collect();
+    h.app.ed.delete_selection().unwrap();
+    assert_eq!(h.model().tags().count(), 0);
+    // Picked by its stamp, its name changed in the palette.
+    h.app.ed.selection.clear();
+    h.click_at(r.label);
+    assert_eq!(h.app.ed.selection.iter().next(), Some(&Element::Room(r.id)));
+    let mut renamed = h.model().room(r.id).unwrap().clone();
+    renamed.name = "Salón".into();
+    h.app.ed.set_room(renamed, "Cambiar local").unwrap();
+    h.frame();
+    // In the IFC, as a space with its quantities.
+    let ifc = archisim_ifc::export_ifc(h.model(), &Default::default());
+    assert!(ifc.contains("IFCSPACE("), "no space");
+    assert!(ifc.contains("'Salón'") || ifc.contains("Sal\\X2\\00F3\\X0\\n"));
+    assert!(ifc.contains("'Qto_SpaceBaseQuantities'"));
+}
+
+#[test]
+fn schedules_on_sheets_and_bc3() {
+    let (m, lvl, _) = crate::pick::tests::room();
+    let mut h = Harness::new(Editor::with_model(m, None));
+    h.app.ed.level = lvl;
+    h.frame();
+    h.app.new_sheet();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    // From the schedule window, onto the sheet shown.
+    h.app.schedule_open = Some((archisim_core::ScheduleKind::Walls, None));
+    h.frame();
+    let t = h
+        .app
+        .ed
+        .add_table(sheet, archisim_core::ScheduleKind::Walls, None, p(0.1, 0.5))
+        .unwrap();
+    h.frame();
+    let table =
+        archisim_plan::schedules::table(h.model(), archisim_core::ScheduleKind::Walls, None);
+    assert_eq!(table.rows.len(), 1);
+    // Dragged by its middle.
+    let (lo, hi) = super::sheet_ui::table_rect(h.model(), h.model().table(t).unwrap());
+    let mid = (lo + hi) * 0.5;
+    h.drag(mid, mid + p(0.05, -0.02));
+    let at = h.model().table(t).unwrap().at;
+    assert!(at.distance(p(0.15, 0.48)) < 0.002, "{at:?}");
+    assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::Table(t)));
+    h.key(Key::Delete);
+    assert!(h.model().table(t).is_none());
+    // The budget.
+    let dir = std::env::temp_dir().join(format!("archisim-bc3-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    h.app.ed.export_bc3(&dir.join("m.bc3")).unwrap();
+    let text = std::fs::read(dir.join("m.bc3")).unwrap();
+    assert!(text.starts_with(b"~V|ArchiSim|FIEBDC-3/2016"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn escape_then_a_new_command_in_the_same_instant() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.keys_autocad = true;
+    command(&mut h, "l");
+    h.click_at(p(0.0, 0.0));
+    // Esc and «c» arrive together: the line ends and CIRCULO starts.
+    h.events.push(Event::Key {
+        key: Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.events.push(Event::Text("c".into()));
+    h.frame();
+    h.key(Key::Enter);
+    assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("CIRCULO"));
 }

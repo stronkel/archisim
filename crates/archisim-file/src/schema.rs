@@ -47,9 +47,6 @@ pub(crate) struct ProjectFile {
     /// Beams (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub beams: Vec<Beam>,
-    /// Rooms (version 7).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub spaces: Vec<Space>,
     /// Phases of the elements that are not new (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub phases: Vec<PhaseOf>,
@@ -83,6 +80,30 @@ pub(crate) struct ProjectFile {
     /// Objects: furniture, sanitary ware, kitchen units (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub objects: Vec<Object>,
+    /// Drawing layers (version 7).
+    pub draw_layers: Vec<crate::drafting::DrawLayer>,
+    /// Lines, arcs, texts and hatches of the views (version 7).
+    pub drafts: Vec<crate::drafting::Draft>,
+    /// Line weights by scale (version 7; the defaults if missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphics: Option<crate::drafting::Graphics>,
+    /// Project data for the title block (version 7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub info: Option<crate::drafting::Info>,
+    /// Drawing sheets and the views placed on them (version 7).
+    #[serde(default)]
+    pub sheets: Vec<crate::drafting::Sheet>,
+    #[serde(default)]
+    pub viewports: Vec<crate::drafting::Viewport>,
+    /// Rooms (IfcSpace) and tags of doors, windows, walls and rooms
+    /// (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rooms: Vec<crate::rooms::Room>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<crate::rooms::Tag>,
+    /// Schedules placed on sheets (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<crate::drafting::Table>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -478,25 +499,6 @@ pub(crate) struct PhaseOf {
     pub phase: Phase,
 }
 
-/// A room (version 7).
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct Space {
-    pub id: u64,
-    pub guid: String,
-    pub level: u64,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub number: String,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub usage: String,
-    pub outline: Vec<Xy>,
-    pub height: f64,
-    /// Where its label is drawn; absent: in the middle.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub label: Option<Xy>,
-}
-
 /// A column or beam section (version 7), in metres.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, tag = "shape", rename_all = "snake_case")]
@@ -724,6 +726,102 @@ pub(crate) struct Dimension {
     pub points: Vec<Xy>,
     pub direction: Xy,
     pub position: Xy,
+    /// What each point is tied to (`null`: free); absent when none is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<Option<Anchor>>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub(crate) enum AnchorSide {
+    Exterior,
+    Axis,
+    Interior,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "kind")]
+pub(crate) enum Anchor {
+    WallEnd {
+        wall: u64,
+        start: bool,
+        side: AnchorSide,
+    },
+    Jamb {
+        opening: u64,
+        end: bool,
+        side: AnchorSide,
+    },
+    SlabCorner {
+        slab: u64,
+        index: usize,
+    },
+}
+
+impl Anchor {
+    fn out(a: core::Anchor) -> Self {
+        let side = |s: core::AnchorSide| match s {
+            core::AnchorSide::Exterior => AnchorSide::Exterior,
+            core::AnchorSide::Axis => AnchorSide::Axis,
+            core::AnchorSide::Interior => AnchorSide::Interior,
+        };
+        match a {
+            core::Anchor::WallEnd {
+                wall,
+                start,
+                side: s,
+            } => Anchor::WallEnd {
+                wall: wall.0,
+                start,
+                side: side(s),
+            },
+            core::Anchor::Jamb {
+                opening,
+                end,
+                side: s,
+            } => Anchor::Jamb {
+                opening: opening.0,
+                end,
+                side: side(s),
+            },
+            core::Anchor::SlabCorner { slab, index } => Anchor::SlabCorner {
+                slab: slab.0,
+                index,
+            },
+        }
+    }
+
+    fn into_core(self) -> core::Anchor {
+        let side = |s: AnchorSide| match s {
+            AnchorSide::Exterior => core::AnchorSide::Exterior,
+            AnchorSide::Axis => core::AnchorSide::Axis,
+            AnchorSide::Interior => core::AnchorSide::Interior,
+        };
+        match self {
+            Anchor::WallEnd {
+                wall,
+                start,
+                side: s,
+            } => core::Anchor::WallEnd {
+                wall: core::WallId(wall),
+                start,
+                side: side(s),
+            },
+            Anchor::Jamb {
+                opening,
+                end,
+                side: s,
+            } => core::Anchor::Jamb {
+                opening: core::OpeningId(opening),
+                end,
+                side: side(s),
+            },
+            Anchor::SlabCorner { slab, index } => core::Anchor::SlabCorner {
+                slab: core::SlabId(slab),
+                index,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -744,10 +842,11 @@ pub(crate) struct Project {
     /// True north, degrees clockwise from the plan's up (version 7).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub true_north: f64,
-    /// Room uses offered in this project (version 7); absent: the
-    /// program's default list.
+    /// Room uses offered in this project (version 9; `space_usages` in
+    /// the version 7 and 8 files of phase 2); absent: the program's
+    /// default list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub space_usages: Vec<String>,
+    pub room_usages: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1014,7 +1113,7 @@ impl ProjectFile {
                 site_guid: p.site_guid.to_string(),
                 building_guid: p.building_guid.to_string(),
                 true_north: p.true_north.to_degrees(),
-                space_usages: p.space_usages,
+                room_usages: p.room_usages,
             },
             levels: p
                 .levels
@@ -1177,6 +1276,7 @@ impl ProjectFile {
                     points: d.points.into_iter().map(xy).collect(),
                     direction: xy(d.direction),
                     position: xy(d.position),
+                    anchors: d.anchors.into_iter().map(|a| a.map(Anchor::out)).collect(),
                 })
                 .collect(),
             elevation_marks: p
@@ -1229,21 +1329,6 @@ impl ProjectFile {
                     start: xy(b.start),
                     end: xy(b.end),
                     top_offset: b.top_offset,
-                })
-                .collect(),
-            spaces: p
-                .spaces
-                .into_iter()
-                .map(|s| Space {
-                    id: s.id.0,
-                    guid: s.guid.to_string(),
-                    level: s.level.0,
-                    number: s.number,
-                    name: s.name,
-                    usage: s.usage,
-                    outline: s.outline.into_iter().map(xy).collect(),
-                    height: s.height,
-                    label: s.label.map(xy),
                 })
                 .collect(),
             phases: p
@@ -1391,6 +1476,16 @@ impl ProjectFile {
                     },
                 })
                 .collect(),
+            draw_layers: crate::drafting::layers_out(&p.draw_layers),
+            drafts: crate::drafting::drafts_out(&p.drafts),
+            graphics: (p.graphics != core::GraphicStandard::default())
+                .then(|| crate::drafting::Graphics::out(&p.graphics)),
+            info: crate::drafting::Info::out(&p.info),
+            sheets: crate::drafting::sheets_out(&p.sheets),
+            viewports: crate::drafting::viewports_out(&p.viewports),
+            rooms: crate::rooms::rooms_out(&p.rooms),
+            tags: crate::rooms::tags_out(&p.tags),
+            tables: crate::drafting::tables_out(&p.tables),
         }
     }
 
@@ -1428,7 +1523,6 @@ impl ProjectFile {
             member_types: Vec::new(),
             columns: Vec::new(),
             beams: Vec::new(),
-            spaces: Vec::new(),
             phases: self
                 .phases
                 .iter()
@@ -1540,7 +1634,7 @@ impl ProjectFile {
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
             true_north: project.true_north.to_radians(),
-            space_usages: project.space_usages.clone(),
+            room_usages: project.room_usages.clone(),
             wall_roofs: self
                 .wall_roofs
                 .iter()
@@ -1575,6 +1669,15 @@ impl ProjectFile {
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
+            draw_layers: crate::drafting::layers_in(self.draw_layers)?,
+            drafts: crate::drafting::drafts_in(self.drafts)?,
+            graphics: self.graphics.map(|g| g.into_core()).unwrap_or_default(),
+            info: self.info.map(|i| i.into_core()).unwrap_or_default(),
+            sheets: crate::drafting::sheets_in(self.sheets),
+            viewports: crate::drafting::viewports_in(self.viewports)?,
+            rooms: crate::rooms::rooms_in(self.rooms)?,
+            tags: crate::rooms::tags_in(self.tags),
+            tables: crate::drafting::tables_in(self.tables)?,
         };
 
         for l in self.levels {
@@ -1778,6 +1881,11 @@ impl ProjectFile {
                 points: d.points.into_iter().map(pt).collect(),
                 direction: pt(d.direction),
                 position: pt(d.position),
+                anchors: d
+                    .anchors
+                    .into_iter()
+                    .map(|a| a.map(Anchor::into_core))
+                    .collect(),
             });
         }
         for m in self.elevation_marks {
@@ -1822,19 +1930,6 @@ impl ProjectFile {
                 start: pt(b.start),
                 end: pt(b.end),
                 top_offset: b.top_offset,
-            });
-        }
-        for s in self.spaces {
-            parts.spaces.push(core::Space {
-                id: core::SpaceId(s.id),
-                guid: guid(&format!("space {}", s.id), &s.guid)?,
-                level: core::LevelId(s.level),
-                number: s.number,
-                name: s.name,
-                usage: s.usage,
-                outline: s.outline.into_iter().map(pt).collect(),
-                height: s.height,
-                label: s.label.map(pt),
             });
         }
         core::Model::from_parts(parts).map_err(FileError::Model)

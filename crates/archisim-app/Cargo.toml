@@ -15,8 +15,10 @@ path = "src/main.rs"
 [dependencies]
 archisim-core.workspace = true
 archisim-geom.workspace = true
+archisim-draft.workspace = true
 archisim-ifc.workspace = true
 archisim-plan.workspace = true
+archisim-export.workspace = true
 archisim-file.workspace = true
 archisim-dxf.workspace = true
 archisim-library.workspace = true

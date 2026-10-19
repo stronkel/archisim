@@ -30,6 +30,8 @@ pub enum ViewMode {
     ThreeD,
     /// A section or elevation.
     Section,
+    /// A sheet (paper with views on it).
+    Sheet(archisim_core::SheetId),
 }
 
 /// Everything the 3D view keeps between frames.
@@ -297,6 +299,7 @@ impl ArchiSimApp {
             ViewMode::Plan => self.show_plan(),
             ViewMode::ThreeD => self.open_view(super::TabKind::ThreeD),
             ViewMode::Section => {}
+            ViewMode::Sheet(s) => self.open_view(super::TabKind::Sheet(s)),
         }
     }
 

@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::drafting::{Draft, DrawLayer, ViewRef, LAYER_ZERO};
 use crate::family::{
     self, Evaluation, Family, FamilyError, Mark, NotAnOpening, ParamKind, ParamScope, Value, Values,
 };
@@ -20,7 +21,6 @@ mod railings;
 mod roofs;
 mod sections;
 mod site;
-mod spaces;
 mod stairs;
 mod structure;
 pub use curtain::*;
@@ -30,7 +30,6 @@ pub use railings::*;
 pub use roofs::*;
 pub use sections::*;
 pub use site::*;
-pub use spaces::*;
 pub use stairs::*;
 pub use structure::*;
 
@@ -635,6 +634,39 @@ pub struct Dimension {
     pub direction: Point2,
     /// A point the dimension line passes through.
     pub position: Point2,
+    /// What each point is tied to (empty, or one per point): the
+    /// dimension follows walls, doors and windows and slabs when they
+    /// change, as Revit's and ArchiCAD's associative dimensions.
+    pub anchors: Vec<Option<Anchor>>,
+}
+
+/// Which line of a wall or opening a dimension point sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AnchorSide {
+    Exterior,
+    /// The drawn line (reference line) of the wall.
+    Axis,
+    Interior,
+}
+
+/// A point of an element a dimension point is tied to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Anchor {
+    /// The corner of a wall end on a face, or the end of its drawn line.
+    WallEnd {
+        wall: WallId,
+        start: bool,
+        side: AnchorSide,
+    },
+    /// A jamb of a door or window on a face of its wall (`end`: the jamb
+    /// farther from the wall's start).
+    Jamb {
+        opening: OpeningId,
+        end: bool,
+        side: AnchorSide,
+    },
+    /// A corner of a slab's outline.
+    SlabCorner { slab: SlabId, index: usize },
 }
 
 impl Dimension {
@@ -776,7 +808,6 @@ pub enum ModelError {
     ZeroLengthBeam,
     /// A steel section whose web or flanges do not fit in it.
     InvalidProfile,
-    UnknownSpace(SpaceId),
     /// No element with that id can have a phase.
     UnknownElement(u64),
     UnknownSection(SectionId),
@@ -816,6 +847,17 @@ pub enum ModelError {
     InvalidStair,
     /// Another room on the level already has that number.
     DuplicateNumber(String),
+    UnknownDrawLayer(DrawLayerId),
+    UnknownDraft(DraftId),
+    UnknownSheet(SheetId),
+    UnknownViewport(ViewportId),
+    UnknownRoom(RoomId),
+    UnknownTag(TagId),
+    UnknownTable(TableId),
+    /// A drafting element or annotation is not well formed.
+    InvalidShape(&'static str),
+    /// Another element of the same list already has that name.
+    DuplicateName(String),
 }
 
 impl fmt::Display for ModelError {
@@ -907,7 +949,6 @@ impl fmt::Display for ModelError {
             ModelError::InvalidProfile => {
                 write!(f, "the web and flanges do not fit in the section")
             }
-            ModelError::UnknownSpace(id) => write!(f, "space {id} does not exist"),
             ModelError::UnknownElement(id) => write!(f, "element {id} does not exist"),
             ModelError::UnknownSection(id) => write!(f, "section {id} does not exist"),
             ModelError::ZeroLengthSection => write!(f, "a section line needs two different points"),
@@ -958,6 +999,17 @@ impl fmt::Display for ModelError {
             ModelError::DuplicateNumber(n) => {
                 write!(f, "another room on the level already has the number «{n}»")
             }
+            ModelError::UnknownDrawLayer(id) => write!(f, "drawing layer {id} does not exist"),
+            ModelError::UnknownDraft(id) => write!(f, "drafting element {id} does not exist"),
+            ModelError::UnknownSheet(id) => write!(f, "sheet {id} does not exist"),
+            ModelError::UnknownViewport(id) => write!(f, "view {id} on a sheet does not exist"),
+            ModelError::UnknownRoom(id) => write!(f, "room {id} does not exist"),
+            ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
+            ModelError::UnknownTable(id) => write!(f, "schedule {id} on a sheet does not exist"),
+            ModelError::InvalidShape(what) => write!(f, "{what}"),
+            ModelError::DuplicateName(name) => {
+                write!(f, "another element is already called «{name}»")
+            }
         }
     }
 }
@@ -975,7 +1027,7 @@ pub const MAX_BULGE: f64 = 11.430052302761343;
 pub const MIN_INNER_RADIUS: f64 = 0.05;
 
 /// Whether a closed polygon contains a point (ray casting).
-fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
+pub(crate) fn polygon_contains(poly: &[Point2], p: Point2) -> bool {
     let mut inside = false;
     let n = poly.len();
     for i in 0..n {
@@ -1026,7 +1078,7 @@ fn finite(value: f64, what: &'static str) -> Result<(), ModelError> {
     }
 }
 
-fn finite_point(p: Point2, what: &'static str) -> Result<(), ModelError> {
+pub(crate) fn finite_point(p: Point2, what: &'static str) -> Result<(), ModelError> {
     finite(p.x, what)?;
     finite(p.y, what)
 }
@@ -1059,7 +1111,6 @@ pub struct ModelParts {
     pub member_types: Vec<MemberType>,
     pub columns: Vec<Column>,
     pub beams: Vec<Beam>,
-    pub spaces: Vec<Space>,
     /// Elements that are not new: (id, phase).
     pub phases: Vec<(u64, Phase)>,
     pub sections: Vec<SectionLine>,
@@ -1077,7 +1128,17 @@ pub struct ModelParts {
     pub true_north: f64,
     /// The uses rooms of this project are offered (empty: the default
     /// residential list).
-    pub space_usages: Vec<String>,
+    pub room_usages: Vec<String>,
+    /// Drawing layers, layer "0" included.
+    pub draw_layers: Vec<DrawLayer>,
+    pub drafts: Vec<Draft>,
+    pub graphics: crate::graphics::GraphicStandard,
+    pub info: crate::sheets::ProjectInfo,
+    pub sheets: Vec<crate::sheets::Sheet>,
+    pub viewports: Vec<crate::sheets::Viewport>,
+    pub rooms: Vec<crate::rooms::Room>,
+    pub tags: Vec<crate::rooms::Tag>,
+    pub tables: Vec<crate::sheets::SheetTable>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -1108,6 +1169,8 @@ pub struct Model {
     pub project_guid: GlobalId,
     pub site_guid: GlobalId,
     pub building_guid: GlobalId,
+    /// Line weights of the drawings by scale.
+    pub graphics: crate::graphics::GraphicStandard,
     next_id: u64,
     levels: BTreeMap<LevelId, Level>,
     materials: BTreeMap<MaterialId, Material>,
@@ -1123,7 +1186,6 @@ pub struct Model {
     member_types: BTreeMap<MemberTypeId, MemberType>,
     columns: BTreeMap<ColumnId, Column>,
     beams: BTreeMap<BeamId, Beam>,
-    spaces: BTreeMap<SpaceId, Space>,
     /// Phases of the elements that are not new, by id.
     phases: BTreeMap<u64, Phase>,
     sections: BTreeMap<SectionId, SectionLine>,
@@ -1140,10 +1202,18 @@ pub struct Model {
     objects: BTreeMap<ObjectId, Object>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
-    space_usages: Vec<String>,
+    pub(crate) room_usages: Vec<String>,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
+    pub(crate) draw_layers: BTreeMap<DrawLayerId, DrawLayer>,
+    pub(crate) drafts: BTreeMap<DraftId, Draft>,
+    pub(crate) info: crate::sheets::ProjectInfo,
+    pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
+    pub(crate) viewports: BTreeMap<ViewportId, crate::sheets::Viewport>,
+    pub(crate) rooms: BTreeMap<RoomId, crate::rooms::Room>,
+    pub(crate) tags: BTreeMap<TagId, crate::rooms::Tag>,
+    pub(crate) tables: BTreeMap<TableId, crate::sheets::SheetTable>,
 }
 
 impl Model {
@@ -1153,6 +1223,7 @@ impl Model {
             project_guid: GlobalId::new(),
             site_guid: GlobalId::new(),
             building_guid: GlobalId::new(),
+            graphics: Default::default(),
             next_id: 1,
             levels: BTreeMap::new(),
             materials: BTreeMap::new(),
@@ -1168,7 +1239,6 @@ impl Model {
             member_types: BTreeMap::new(),
             columns: BTreeMap::new(),
             beams: BTreeMap::new(),
-            spaces: BTreeMap::new(),
             phases: BTreeMap::new(),
             sections: BTreeMap::new(),
             roofs: BTreeMap::new(),
@@ -1181,12 +1251,20 @@ impl Model {
             object_types: BTreeMap::new(),
             objects: BTreeMap::new(),
             true_north: 0.0,
-            space_usages: Vec::new(),
+            room_usages: Vec::new(),
             draw_phase: Phase::New,
+            draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
+            drafts: BTreeMap::new(),
+            info: Default::default(),
+            sheets: BTreeMap::new(),
+            viewports: BTreeMap::new(),
+            rooms: BTreeMap::new(),
+            tags: BTreeMap::new(),
+            tables: BTreeMap::new(),
         }
     }
 
-    fn take_id(&mut self) -> u64 {
+    pub(crate) fn take_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -1273,7 +1351,6 @@ impl Model {
         }
         self.slabs.retain(|_, s| s.level != id);
         self.remove_members_on_level(id);
-        self.spaces.retain(|_, s| s.level != id);
         self.roofs.retain(|_, r| r.level != id);
         let roofs = &self.roofs;
         self.wall_roofs.retain(|_, r| roofs.contains_key(r));
@@ -1294,6 +1371,15 @@ impl Model {
         }
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
+        self.drafts.retain(|_, d| d.view != ViewRef::Level(id));
+        self.viewports.retain(|_, v| v.level != id);
+        self.rooms.retain(|_, r| r.level != id);
+        self.tags.retain(|_, t| t.level != id);
+        for t in self.tables.values_mut() {
+            if t.level == Some(id) {
+                t.level = None;
+            }
+        }
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
     }
 
@@ -1311,6 +1397,11 @@ impl Model {
                 .elevation_marks
                 .values()
                 .filter(|m| m.level == id)
+                .count()
+            + self
+                .drafts
+                .values()
+                .filter(|d| d.view == ViewRef::Level(id))
                 .count();
         (
             walls.len(),
@@ -1661,6 +1752,61 @@ impl Model {
         if let Err(e) = check {
             let wall = self.walls.get_mut(&id).ok_or(ModelError::UnknownWall(id))?;
             (wall.start, wall.end) = previous;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Places a wall again with new ends and bulge, and its doors and
+    /// windows at new distances from its start and with a new hand, all at
+    /// once (moving, turning, scaling or mirroring a wall with what it
+    /// hosts). Everything keeps its identity and GUID; if anything no
+    /// longer fits, nothing changes.
+    pub fn place_wall(
+        &mut self,
+        id: WallId,
+        start: Point2,
+        end: Point2,
+        bulge: f64,
+        openings: &[(OpeningId, f64, Hand)],
+    ) -> Result<(), ModelError> {
+        finite_point(start, "wall start")?;
+        finite_point(end, "wall end")?;
+        finite(bulge, "wall bulge")?;
+        if start.approx_eq(end) {
+            return Err(ModelError::ZeroLengthWall);
+        }
+        let wall = self.walls.get(&id).ok_or(ModelError::UnknownWall(id))?;
+        let before_wall = wall.clone();
+        let before_openings: Vec<Opening> = self
+            .openings
+            .values()
+            .filter(|o| o.wall == id)
+            .cloned()
+            .collect();
+        for (oid, along, hand) in openings {
+            finite(*along, "opening position")?;
+            match self.openings.get_mut(oid) {
+                Some(o) if o.wall == id => {
+                    o.along = *along;
+                    o.hand = *hand;
+                }
+                _ => return Err(ModelError::UnknownOpening(*oid)),
+            }
+        }
+        if let Some(w) = self.walls.get_mut(&id) {
+            w.start = start;
+            w.end = end;
+            w.bulge = bulge;
+        }
+        let check = self
+            .check_arc(id)
+            .and_then(|()| self.check_hosted_openings(id));
+        if let Err(e) = check {
+            self.walls.insert(id, before_wall);
+            for o in before_openings {
+                self.openings.insert(o.id, o);
+            }
             return Err(e);
         }
         Ok(())
@@ -2053,7 +2199,7 @@ impl Model {
     // ---- Slabs --------------------------------------------------------
 
     /// Checks an outline and returns it counter-clockwise.
-    fn normalized_outline(outline: Vec<Point2>) -> Result<Vec<Point2>, ModelError> {
+    pub(crate) fn normalized_outline(outline: Vec<Point2>) -> Result<Vec<Point2>, ModelError> {
         for p in &outline {
             finite_point(*p, "slab outline point")?;
         }
@@ -3072,9 +3218,32 @@ impl Model {
                 points: spec.points,
                 direction,
                 position: spec.position,
+                anchors: Vec::new(),
             },
         );
         Ok(id)
+    }
+
+    /// Ties a dimension's points to elements (one entry per point, or
+    /// none to free them all).
+    pub fn set_dimension_anchors(
+        &mut self,
+        id: DimensionId,
+        anchors: Vec<Option<Anchor>>,
+    ) -> Result<(), ModelError> {
+        let d = self
+            .dimensions
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        if !anchors.is_empty() && anchors.len() != d.points.len() {
+            return Err(ModelError::DegenerateDimension);
+        }
+        d.anchors = if anchors.iter().all(Option::is_none) {
+            Vec::new()
+        } else {
+            anchors
+        };
+        Ok(())
     }
 
     /// Replaces a dimension's points, direction and line position.
@@ -3099,7 +3268,43 @@ impl Model {
             .dimensions
             .get_mut(&id)
             .ok_or(ModelError::UnknownDimension(id))?;
+        if spec.points.len() != d.points.len() {
+            d.anchors.clear();
+        }
         d.points = spec.points;
+        d.position = spec.position;
+        Ok(())
+    }
+
+    /// Replaces a dimension's points, measuring direction and line position
+    /// (turning or mirroring it).
+    pub fn reshape_dimension(
+        &mut self,
+        id: DimensionId,
+        points: Vec<Point2>,
+        direction: Point2,
+        position: Point2,
+    ) -> Result<(), ModelError> {
+        let d = self
+            .dimensions
+            .get(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        let spec = NewDimension {
+            level: d.level,
+            points,
+            direction,
+            position,
+        };
+        let dir = self.validate_dimension(&spec)?;
+        let d = self
+            .dimensions
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        if spec.points.len() != d.points.len() {
+            d.anchors.clear();
+        }
+        d.points = spec.points;
+        d.direction = dir;
         d.position = spec.position;
         Ok(())
     }
@@ -3212,7 +3417,6 @@ impl Model {
             member_types: self.member_types.values().cloned().collect(),
             columns: self.columns.values().cloned().collect(),
             beams: self.beams.values().cloned().collect(),
-            spaces: self.spaces.values().cloned().collect(),
             phases: self.phase_table(),
             sections: self.sections.values().cloned().collect(),
             roofs: self.roofs.values().cloned().collect(),
@@ -3225,7 +3429,16 @@ impl Model {
             object_types: self.object_types.values().cloned().collect(),
             objects: self.objects.values().cloned().collect(),
             true_north: self.true_north,
-            space_usages: self.space_usages.clone(),
+            room_usages: self.room_usages.clone(),
+            draw_layers: self.draw_layers.values().cloned().collect(),
+            drafts: self.drafts.values().cloned().collect(),
+            graphics: self.graphics,
+            info: self.info.clone(),
+            sheets: self.sheets.values().cloned().collect(),
+            viewports: self.viewports.values().cloned().collect(),
+            rooms: self.rooms.values().cloned().collect(),
+            tags: self.tags.values().cloned().collect(),
+            tables: self.tables.values().cloned().collect(),
         }
     }
 
@@ -3242,6 +3455,13 @@ impl Model {
         model.project_guid = parts.project_guid;
         model.site_guid = parts.site_guid;
         model.building_guid = parts.building_guid;
+        if !parts.graphics.is_valid() {
+            return Err(fail("graphic standard".into())(ModelError::NonPositive(
+                "line weight",
+            )));
+        }
+        model.graphics = parts.graphics;
+        model.info = parts.info;
 
         let mut ids = std::collections::HashSet::new();
         let mut guids = std::collections::HashSet::new();
@@ -3418,6 +3638,9 @@ impl Model {
                 .and_then(|_| model.validate_dimension(&spec))
                 .map(|dir| d.direction = dir)
                 .map_err(fail(name))?;
+            if !d.anchors.is_empty() && d.anchors.len() != d.points.len() {
+                d.anchors.clear();
+            }
             model.dimensions.insert(d.id, d);
         }
         for m in parts.elevation_marks {
@@ -3432,9 +3655,52 @@ impl Model {
                 .map_err(fail(name))?;
             model.elevation_marks.insert(m.id, m);
         }
+        for layer in parts.draw_layers {
+            let name = format!("drawing layer {} «{}»", layer.id.0, layer.name);
+            // Layer "0" has id 0, which no other element can have.
+            if layer.id != LAYER_ZERO {
+                claim(layer.id.0, None).map_err(fail(name.clone()))?;
+            }
+            model.restore_draw_layer(layer).map_err(fail(name))?;
+        }
+        for sh in parts.sheets {
+            let name = format!("sheet {} «{}»", sh.id.0, sh.number);
+            claim(sh.id.0, None)
+                .and_then(|_| model.restore_sheet(sh))
+                .map_err(fail(name))?;
+        }
+        for v in parts.viewports {
+            let name = format!("view {} on a sheet", v.id.0);
+            claim(v.id.0, None)
+                .and_then(|_| model.restore_viewport(v))
+                .map_err(fail(name))?;
+        }
+        for d in parts.drafts {
+            let name = format!("drafting element {} ({})", d.id.0, d.shape.label());
+            claim(d.id.0, None)
+                .and_then(|_| model.restore_draft(d))
+                .map_err(fail(name))?;
+        }
+        for r in parts.rooms {
+            let name = format!("room {} «{} {}»", r.id.0, r.number, r.name);
+            claim(r.id.0, Some(&r.guid))
+                .and_then(|_| model.restore_room(r))
+                .map_err(fail(name))?;
+        }
+        for t in parts.tags {
+            let name = format!("tag {}", t.id.0);
+            claim(t.id.0, None)
+                .and_then(|_| model.restore_tag(t))
+                .map_err(fail(name))?;
+        }
+        for t in parts.tables {
+            let name = format!("schedule {} on a sheet", t.id.0);
+            claim(t.id.0, None)
+                .and_then(|_| model.restore_table(t))
+                .map_err(fail(name))?;
+        }
 
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
-        model.restore_spaces(parts.spaces, &mut claim)?;
         model.restore_roofs(parts.roofs, &mut claim)?;
         for (w, r) in parts.wall_roofs {
             model
@@ -3456,7 +3722,7 @@ impl Model {
                 error,
             })?;
         model
-            .set_space_usages(parts.space_usages)
+            .set_room_usages(parts.room_usages)
             .map_err(|error| RestoreError {
                 element: "room uses".into(),
                 error,

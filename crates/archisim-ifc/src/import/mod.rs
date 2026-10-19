@@ -261,7 +261,6 @@ struct GuidPlan {
     member_types: Vec<(archisim_core::MemberTypeId, String)>,
     columns: Vec<(archisim_core::ColumnId, String)>,
     beams: Vec<(archisim_core::BeamId, String)>,
-    spaces: Vec<(archisim_core::SpaceId, String)>,
     roofs: Vec<(archisim_core::RoofId, String)>,
     stairs: Vec<(archisim_core::StairId, String)>,
     terrains: Vec<(archisim_core::TerrainId, String)>,
@@ -270,6 +269,7 @@ struct GuidPlan {
     railings: Vec<(archisim_core::RailingId, String)>,
     object_types: Vec<(archisim_core::ObjectTypeId, String)>,
     objects: Vec<(archisim_core::ObjectId, String)>,
+    rooms: Vec<(archisim_core::RoomId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -2705,7 +2705,6 @@ impl<'a> Importer<'a> {
         restore!(member_types, member_types);
         restore!(columns, columns);
         restore!(beams, beams);
-        restore!(spaces, spaces);
         restore!(roofs, roofs);
         restore!(stairs, stairs);
         restore!(terrains, terrains);
@@ -2714,6 +2713,7 @@ impl<'a> Importer<'a> {
         restore!(railings, railings);
         restore!(object_types, object_types);
         restore!(objects, objects);
+        restore!(rooms, rooms);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

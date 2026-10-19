@@ -289,7 +289,7 @@ impl ArchiSimApp {
             .unwrap_or_default();
         let thickness = model.slab_type(r.roof_type).map_or(0.0, |t| t.thickness());
         props::title(ui, "Cubierta · 1 seleccionada");
-        super::properties::view_card_pub(ui, Icon::Roof, &type_name, "IfcRoof");
+        super::properties::view_card(ui, Icon::Roof, &type_name, "IfcRoof");
         let types = roof_types(model);
         props::note(
             ui,

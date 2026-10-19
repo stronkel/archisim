@@ -604,7 +604,7 @@ pub fn volume_under_planes(footprint: &[Point2], planes: &[[f64; 3]], z_base: f6
         }
         if region.len() >= 3 {
             let area = signed_area(&region).abs();
-            let m = super::spaces::centroid(&region);
+            let m = crate::rooms::centroid(&region);
             total += area * (p[0] * m.x + p[1] * m.y + p[2] - z_base);
         }
     }

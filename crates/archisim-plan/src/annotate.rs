@@ -16,10 +16,6 @@ use crate::lettering::{text_path, text_width, Align, STROKE};
 
 /// Text height, paper millimetres.
 pub const TEXT_HEIGHT: f64 = 2.5;
-/// Thin lines (dimension and extension lines), paper millimetres.
-const THIN: f64 = 0.13;
-/// Oblique ticks, paper millimetres.
-const TICK: f64 = 0.35;
 /// Half length of a tick, paper millimetres.
 const TICK_HALF: f64 = 1.25;
 /// Gap between the measured point and its extension line, paper mm.
@@ -152,7 +148,7 @@ pub fn draw_dimension(s: &mut String, d: &Dimension, k: f64) {
     for t in &g.ticks {
         seg(&mut ticks, *t - diag, *t + diag);
     }
-    let h = TEXT_HEIGHT * k;
+    let h = crate::pens().text * k;
     let mut text = String::new();
     for (value, at, dir) in &g.texts {
         let _ = write!(text, "{} ", text_path(value, *at, *dir, h, Align::Centre));
@@ -161,9 +157,9 @@ pub fn draw_dimension(s: &mut String, d: &Dimension, k: f64) {
         s,
         r#"<g class="dimension" fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round"><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/></g>"#,
         thin.trim_end(),
-        num(THIN * k),
+        num(crate::pens().dimension * k),
         ticks.trim_end(),
-        num(TICK * k),
+        num(crate::pens().tick * k),
         text.trim_end(),
         num(STROKE * h)
     );
@@ -179,7 +175,7 @@ pub fn draw_elevation_mark(s: &mut String, model: &Model, m: &ElevationMark, k: 
     let left = p + Point2::new(-a / 2.0, h);
     let right = p + Point2::new(a / 2.0, h);
     let top = p + Point2::new(0.0, h);
-    let th = TEXT_HEIGHT * k;
+    let th = crate::pens().text * k;
     let text_at = right + Point2::new(TEXT_LIFT * k, TEXT_LIFT * k);
     let rule_end = text_at + Point2::new(text_width(&text, th), -TEXT_LIFT * k);
     let _ = writeln!(
@@ -188,13 +184,13 @@ pub fn draw_elevation_mark(s: &mut String, model: &Model, m: &ElevationMark, k: 
         pt(p),
         pt(left),
         pt(top),
-        num(THIN * k),
+        num(crate::pens().dimension * k),
         pt(p),
         pt(left),
         pt(right),
         pt(right),
         pt(rule_end),
-        num(THIN * k),
+        num(crate::pens().dimension * k),
         text_path(&text, text_at, Point2::new(1.0, 0.0), th, Align::Left),
         num(STROKE * th)
     );
@@ -221,54 +217,6 @@ pub const ROOM_AREA_HEIGHT: f64 = 2.2;
 /// An area in square metres as written in a room stamp: `12,45 m²`.
 pub fn format_area(v: f64) -> String {
     format!("{} m²", format_dimension(v))
-}
-
-/// The lines of a room's stamp: its number and name, then its usable area.
-pub fn room_lines(space: &archisim_core::Space) -> (String, String) {
-    let name = match (space.number.trim(), space.name.trim()) {
-        ("", n) => n.to_string(),
-        (num, "") => num.to_string(),
-        (num, n) => format!("{num} {n}"),
-    };
-    (name, format!("Su {}", format_area(space.area())))
-}
-
-/// The box of a room's stamp around its label point, in model metres
-/// (lower-left, upper-right).
-pub fn room_stamp_box(space: &archisim_core::Space, k: f64) -> (Point2, Point2) {
-    let (a, b) = room_lines(space);
-    let p = space.label_point();
-    let (h1, h2) = (ROOM_NAME_HEIGHT * k, ROOM_AREA_HEIGHT * k);
-    let w = text_width(&a, h1).max(text_width(&b, h2)) / 2.0 + k;
-    (
-        Point2::new(p.x - w, p.y - h2 - 1.6 * k),
-        Point2::new(p.x + w, p.y + h1 + 1.6 * k),
-    )
-}
-
-/// Draws a room's stamp: its name above its label point, its usable area
-/// below, centred.
-pub fn draw_room(s: &mut String, space: &archisim_core::Space, k: f64) {
-    let (a, b) = room_lines(space);
-    let p = space.label_point();
-    let (h1, h2) = (ROOM_NAME_HEIGHT * k, ROOM_AREA_HEIGHT * k);
-    let right = Point2::new(1.0, 0.0);
-    let name = text_path(&a, p + Point2::new(0.0, 0.6 * k), right, h1, Align::Centre);
-    let area = text_path(
-        &b,
-        p - Point2::new(0.0, 0.6 * k + h2),
-        right,
-        h2,
-        Align::Centre,
-    );
-    let _ = writeln!(
-        s,
-        r#"<g class="room" fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round"><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/></g>"#,
-        name,
-        num(STROKE * h1 * 1.15),
-        area,
-        num(STROKE * h2)
-    );
 }
 
 #[cfg(test)]
@@ -300,6 +248,7 @@ mod tests {
             ],
             direction: Point2::new(-1.0, 0.0),
             position: Point2::new(3.0, -1.0),
+            anchors: Vec::new(),
         };
         let g = dimension_lines(&d, 0.05);
         assert_eq!(g.ticks.len(), 3);

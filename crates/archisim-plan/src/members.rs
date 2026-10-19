@@ -15,7 +15,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Beam, Column, LevelId, Model, Point2};
 
-use crate::{fill_cut, num, path, CUT_LINE, INK, VIEW_LINE};
+use crate::{fill_cut, num, path, pens, INK};
 
 /// How a column or beam meets the cut plane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,7 +134,7 @@ fn draw_cut(
     if let Some(m) = model.material(material) {
         fill_cut(s, m, poly, id, k);
     }
-    outline(s, poly, CUT_LINE, false, k);
+    outline(s, poly, pens().cut, false, k);
 }
 
 /// Draws the beams (under) and columns (over) of a plan.
@@ -159,7 +159,7 @@ pub(crate) fn draw_members(
                     draw_cut(s, model, mat, &poly, &format!("cut-beam-{}", b.id.0), k);
                 }
             }
-            MemberView::Above | MemberView::Below => outline(s, &poly, VIEW_LINE, true, k),
+            MemberView::Above | MemberView::Below => outline(s, &poly, pens().view, true, k),
         }
     }
     for (c, v) in plan_columns(model, level, cut_plane) {
@@ -182,12 +182,12 @@ pub(crate) fn draw_members(
                         s,
                         r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
                         path(&hole),
-                        num(CUT_LINE * k)
+                        num(pens().cut * k)
                     );
                 }
             }
-            MemberView::Below => outline(s, &poly, VIEW_LINE, false, k),
-            MemberView::Above => outline(s, &poly, VIEW_LINE, true, k),
+            MemberView::Below => outline(s, &poly, pens().view, false, k),
+            MemberView::Above => outline(s, &poly, pens().view, true, k),
         }
     }
     s.push_str("</g>\n");

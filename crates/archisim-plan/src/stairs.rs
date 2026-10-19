@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Point2, Stair};
 
-use crate::{num, path, pt, HATCH_LINE, INK, SLAB_COVER, VIEW_LINE};
+use crate::{num, path, pens, pt, INK, SLAB_COVER};
 
 /// The stairs of other levels that arrive at `level` (their top is tied
 /// to it), and how far it is above each one's level.
@@ -67,7 +67,7 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
                 s,
                 landing.outline[i],
                 landing.outline[(i + 1) % n],
-                VIEW_LINE,
+                pens().view,
                 above,
                 k,
             );
@@ -92,17 +92,17 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
         // A line at every riser (the last one is the landing's edge).
         for i in 0..=f.treads {
             let d = (i as f64 * f.going).min(f.length());
-            line(s, at(d) - nrm, at(d) + nrm, VIEW_LINE, !below(d), k);
+            line(s, at(d) - nrm, at(d) + nrm, pens().view, !below(d), k);
         }
         // The sides, solid up to the cut.
         for side in [-1.0, 1.0] {
             let off = nrm * side;
             match cut_at {
                 Some(c) => {
-                    line(s, f.start + off, at(c) + off, VIEW_LINE, false, k);
-                    line(s, at(c) + off, f.end + off, VIEW_LINE, true, k);
+                    line(s, f.start + off, at(c) + off, pens().view, false, k);
+                    line(s, at(c) + off, f.end + off, pens().view, true, k);
                 }
-                None => line(s, f.start + off, f.end + off, VIEW_LINE, false, k),
+                None => line(s, f.start + off, f.end + off, pens().view, false, k),
             }
         }
         // The railings, just inside the sides.
@@ -113,10 +113,10 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
             let off = u.perp_left() * (sign * (half - 0.04));
             match cut_at {
                 Some(c) => {
-                    line(s, f.start + off, at(c) + off, HATCH_LINE, false, k);
-                    line(s, at(c) + off, f.end + off, HATCH_LINE, true, k);
+                    line(s, f.start + off, at(c) + off, pens().hatch, false, k);
+                    line(s, at(c) + off, f.end + off, pens().hatch, true, k);
                 }
-                None => line(s, f.start + off, f.end + off, HATCH_LINE, false, k),
+                None => line(s, f.start + off, f.end + off, pens().hatch, false, k),
             }
         }
         // The break line, once, where the plane cuts.
@@ -136,7 +136,7 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
                 pt(z1),
                 pt(z2),
                 pt(b),
-                num(VIEW_LINE * 1.3 * k)
+                num(pens().view * 1.3 * k)
             );
         }
     }
@@ -151,7 +151,7 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
                 .map(|p| pt(*p))
                 .collect::<Vec<_>>()
                 .join(" L"),
-            num(HATCH_LINE * k)
+            num(pens().hatch * k)
         );
         let p0 = stair.path[0];
         let _ = writeln!(

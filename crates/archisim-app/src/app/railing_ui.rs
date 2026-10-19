@@ -103,7 +103,7 @@ impl ArchiSimApp {
             return;
         };
         props::title(ui, "Barandilla · 1 seleccionada");
-        super::properties::view_card_pub(
+        super::properties::view_card(
             ui,
             Icon::Railing,
             &format!("Barandilla de {} m", fmt_m(r.length())),

@@ -46,6 +46,7 @@ impl ArchiSimApp {
             .show(ui, |ui| {
                 self.nav_views(ui);
                 self.nav_sheets(ui);
+                nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
                 self.nav_model(ui);
                 ui.add_space(6.0);
             });
@@ -155,9 +156,19 @@ impl ArchiSimApp {
     }
 
     fn nav_sheets(&mut self, ui: &mut Ui) {
+        let active = self.tabs.get(self.active_tab).map(|t| t.kind);
+        let mut new = false;
+        let mut open = None;
         nav_section(ui, "nav-sheets", "PLANOS", |ui| {
-            later_row(ui, Icon::Sheet, "Planos y maquetación: fase 3 (3.5)");
+            sub_header(ui, "Planos", Some(("+ Nuevo plano", &mut new)));
+            open = self.nav_sheet_rows(ui, active);
         });
+        if new {
+            self.new_sheet();
+        }
+        if let Some(kind) = open {
+            self.open_view(kind);
+        }
     }
 
     fn type_rows(&self) -> Vec<(&'static str, Icon, Vec<TypeRow>)> {
@@ -339,7 +350,7 @@ impl ArchiSimApp {
             })
             .collect();
         // Rooms of the active level, by number, with their usable area.
-        let mut rooms: Vec<&archisim_core::Space> = m.spaces_on_level(self.ed.level).collect();
+        let mut rooms: Vec<&archisim_core::Room> = m.rooms_on_level(self.ed.level).collect();
         rooms.sort_by(|a, b| a.number.cmp(&b.number).then(a.name.cmp(&b.name)));
         let rooms = rooms
             .into_iter()
@@ -349,7 +360,7 @@ impl ArchiSimApp {
                 badge: (!s.number.is_empty()).then(|| s.number.clone()),
                 name: s.name.clone(),
                 count: 1,
-                here: vec![Element::Space(s.id)],
+                here: vec![Element::Room(s.id)],
                 value: Some(fmt_area(s.area())),
             })
             .collect();
@@ -534,6 +545,8 @@ fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
     let p = Palette::current(ui.ctx());
     let hint = if title == "Plantas" {
         "Añadir, renombrar, cambiar la cota o borrar plantas"
+    } else if title == "Planos" {
+        "Crear un plano (A1 apaisado) y abrirlo"
     } else {
         "Los cuatro alzados alrededor del edificio (los que falten)"
     };

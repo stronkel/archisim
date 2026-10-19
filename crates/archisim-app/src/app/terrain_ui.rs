@@ -480,7 +480,7 @@ impl ArchiSimApp {
             return;
         };
         props::title(ui, "Terreno · 1 seleccionado");
-        super::properties::view_card_pub(
+        super::properties::view_card(
             ui,
             Icon::Terrain,
             &format!("Terreno de {} puntos", t.points.len()),

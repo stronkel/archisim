@@ -45,8 +45,9 @@ pub enum Grip {
         beam: archisim_core::BeamId,
         start: bool,
     },
-    /// The stamp of a room (its name and area), moved on its own.
-    SpaceLabel { space: archisim_core::SpaceId },
+    /// The stamp of a room (its name and area), moved on its own
+    /// inside the room.
+    RoomLabel { room: archisim_core::RoomId },
     /// A survey point of a terrain.
     TerrainPoint {
         terrain: archisim_core::TerrainId,
@@ -97,6 +98,12 @@ pub enum Grip {
     SectionEnd {
         section: archisim_core::SectionId,
         start: bool,
+    },
+    /// A grip of a drafting element (its end, centre, middle…), by its
+    /// index in [`archisim_draft::grips::grips`].
+    DraftPoint {
+        draft: archisim_core::DraftId,
+        index: usize,
     },
 }
 
@@ -194,11 +201,11 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     });
                 }
             }
-            Element::Space(id) => {
-                if let Some(s) = model.space(*id) {
+            Element::Room(id) => {
+                if let Some(r) = model.room(*id) {
                     v.push(Hotspot {
-                        grip: Grip::SpaceLabel { space: *id },
-                        point: s.label_point(),
+                        grip: Grip::RoomLabel { room: *id },
+                        point: r.label,
                     });
                 }
             }
@@ -303,7 +310,20 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Opening(_) | Element::Mark(_) | Element::Column(_) => {}
+            Element::Draft(id) => {
+                if let Some(d) = model.draft(*id) {
+                    for (index, (point, _)) in archisim_draft::grips::grips(&d.shape)
+                        .into_iter()
+                        .enumerate()
+                    {
+                        v.push(Hotspot {
+                            grip: Grip::DraftPoint { draft: *id, index },
+                            point,
+                        });
+                    }
+                }
+            }
+            Element::Opening(_) | Element::Mark(_) | Element::Column(_) | Element::Tag(_) => {}
         }
     }
     v
@@ -327,7 +347,13 @@ pub fn grip_at<G: Geo + ?Sized>(
     if let Some((_, h)) = spot {
         return Some((h.grip, h.point));
     }
+    let k = crate::pick::paper_k();
     let on_selection = selection.iter().any(|e| {
+        if let Element::Draft(id) = e {
+            return model
+                .draft(*id)
+                .is_some_and(|d| archisim_draft::distance(&d.shape, p, k) <= tolerance);
+        }
         outline(geo, *e)
             .is_some_and(|poly| contains(&poly, p) || distance_to_outline(&poly, p) <= tolerance)
     });
@@ -348,7 +374,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         | Grip::SlabEdge { slab, .. }
         | Grip::SlopeEnd { slab, .. } => [Element::Slab(slab)].into_iter().collect(),
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
-        Grip::SpaceLabel { space } => [Element::Space(space)].into_iter().collect(),
+        Grip::RoomLabel { room } => [Element::Room(room)].into_iter().collect(),
         Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
         Grip::RoofCorner { roof, .. } | Grip::RoofNode { roof, .. } => {
             [Element::Roof(roof)].into_iter().collect()
@@ -359,6 +385,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
+        Grip::DraftPoint { draft, .. } => [Element::Draft(draft)].into_iter().collect(),
     }
 }
 
@@ -458,7 +485,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SlabEdge { .. } if drag.variant => "Añadir esquina de forjado",
         Grip::SlabEdge { .. } => "Desplazar arista de forjado",
         Grip::BeamEnd { .. } => "Estirar viga",
-        Grip::SpaceLabel { .. } => "Mover rótulo de local",
+        Grip::RoomLabel { .. } => "Mover rótulo de local",
         Grip::SectionEnd { .. } => "Estirar sección",
         Grip::SlopeEnd { .. } => "Mover flecha de pendiente",
         Grip::RoofCorner { .. } => "Mover esquina de cubierta",
@@ -469,6 +496,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
+        Grip::DraftPoint { .. } => "Estirar",
     }
 }
 
@@ -527,12 +555,20 @@ pub fn apply(
             }
             model.set_slab_outline(slab, outline).map(|_| None)
         }
-        Grip::SpaceLabel { space } => {
-            let s = model.space(space).ok_or(ModelError::UnknownSpace(space))?;
-            let at = s.label_point() + d;
-            model
-                .edit_space(space, |s| s.label = Some(at))
-                .map(|_| None)
+        Grip::RoomLabel { room } => {
+            let mut r = model
+                .room(room)
+                .ok_or(ModelError::UnknownRoom(room))?
+                .clone();
+            let at = r.label + d;
+            // A room that follows its walls is found again from its label.
+            if !r.contains(at) {
+                return Err(ModelError::InvalidShape(
+                    "the stamp of a room stays inside it",
+                ));
+            }
+            r.label = at;
+            model.set_room(r).map(|_| None)
         }
         Grip::TerrainPoint { terrain, index } => model
             .edit_terrain(terrain, |t| {
@@ -636,11 +672,16 @@ pub fn apply(
             }
             model.set_slab_outline(slab, outline).map(|_| None)
         }
+        Grip::DraftPoint { draft, index } => {
+            let d = model.draft(draft).ok_or(ModelError::UnknownDraft(draft))?;
+            let shape = archisim_draft::grips::move_grip(&d.shape, index, drag.to);
+            model.set_draft_shape(draft, shape).map(|_| None)
+        }
     }
 }
 
 /// Moves the selection by `d`.
-fn move_selection(
+pub(crate) fn move_selection(
     model: &mut Model,
     selection: &BTreeSet<Element>,
     d: Point2,
@@ -663,9 +704,16 @@ fn move_selection(
     }
     // Dimensions go with the building elements they are moved with; moved
     // on their own, only their line moves (it is how they are tidied up).
-    let only_annotations = selection
-        .iter()
-        .all(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)));
+    let only_annotations = selection.iter().all(|e| {
+        matches!(
+            e,
+            Element::Dimension(_)
+                | Element::Mark(_)
+                | Element::Draft(_)
+                | Element::Room(_)
+                | Element::Tag(_)
+        )
+    });
     for e in selection {
         match e {
             Element::Slab(id) => {
@@ -673,14 +721,6 @@ fn move_selection(
             }
             Element::Column(id) => {
                 model.edit_column(*id, |c| c.position = c.position + d)?;
-            }
-            Element::Space(id) => {
-                model.edit_space(*id, |s| {
-                    for p in &mut s.outline {
-                        *p = *p + d;
-                    }
-                    s.label = s.label.map(|p| p + d);
-                })?;
             }
             Element::Beam(id) => {
                 model.edit_beam(*id, |b| {
@@ -751,6 +791,24 @@ fn move_selection(
                     .ok_or(ModelError::UnknownElevationMark(*id))?
                     .point;
                 model.move_elevation_mark(*id, p + d)?;
+            }
+            Element::Draft(id) => {
+                let shape = model
+                    .draft(*id)
+                    .ok_or(ModelError::UnknownDraft(*id))?
+                    .shape
+                    .clone();
+                let moved = archisim_draft::transform_shape(
+                    &shape,
+                    &archisim_draft::Transform::translate(d),
+                );
+                model.set_draft_shape(*id, moved)?;
+            }
+            Element::Room(_) | Element::Tag(_) => {
+                // Moved with walls, a room goes whole.
+                let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
+                let t = archisim_draft::Transform::translate(d);
+                crate::xform::transform_one(model, *e, &t, false, walls_too)?;
             }
             _ => {}
         }
@@ -862,7 +920,7 @@ fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2,
 }
 
 /// Copies the selection by `d` and returns the copies.
-fn copy(
+pub(crate) fn copy(
     model: &mut Model,
     selection: &BTreeSet<Element>,
     d: Point2,
@@ -897,6 +955,34 @@ fn copy(
                     .clone();
                 let new = model.add_elevation_mark(m.level, m.point + d)?;
                 copies.insert(Element::Mark(new));
+            }
+            Element::Room(_) | Element::Tag(_) => {
+                let t = archisim_draft::Transform::translate(d);
+                copies.insert(crate::xform::transform_one(
+                    model,
+                    *e,
+                    &t,
+                    true,
+                    !copied_walls.is_empty(),
+                )?);
+            }
+            Element::Draft(id) => {
+                let dr = model
+                    .draft(*id)
+                    .ok_or(ModelError::UnknownDraft(*id))?
+                    .clone();
+                let new = model.add_draft(archisim_core::NewDraft {
+                    view: dr.view,
+                    layer: dr.layer,
+                    shape: archisim_draft::transform_shape(
+                        &dr.shape,
+                        &archisim_draft::Transform::translate(d),
+                    ),
+                    color: dr.color,
+                    weight: dr.weight,
+                    line: dr.line,
+                })?;
+                copies.insert(Element::Draft(new));
             }
             Element::Wall(id) => {
                 let w = model.wall(*id).ok_or(ModelError::UnknownWall(*id))?.clone();
@@ -1067,29 +1153,6 @@ fn copy(
                 })?;
                 copies.insert(Element::Section(new));
             }
-            Element::Space(id) => {
-                let s = model
-                    .space(*id)
-                    .ok_or(ModelError::UnknownSpace(*id))?
-                    .clone();
-                let number = if s.number.is_empty() {
-                    String::new()
-                } else {
-                    model.next_space_number(s.level)
-                };
-                let new = model.add_space(archisim_core::NewSpace {
-                    level: s.level,
-                    number,
-                    name: s.name.clone(),
-                    usage: s.usage.clone(),
-                    outline: s.outline.iter().map(|p| *p + d).collect(),
-                    height: s.height,
-                })?;
-                if let Some(l) = s.label {
-                    model.edit_space(new, |n| n.label = Some(l + d))?;
-                }
-                copies.insert(Element::Space(new));
-            }
             Element::Column(id) => {
                 let c = model
                     .column(*id)
@@ -1192,14 +1255,30 @@ pub fn preview<G: Geo + ?Sized>(
         if !candidate {
             continue;
         }
+        if let Element::Draft(id) = e {
+            // Drafting elements are shown as drawn, not by their box.
+            let k = crate::pick::paper_k();
+            let new = after.draft(id).map(|d| &d.shape);
+            let old = model.draft(id).map(|d| &d.shape);
+            if let Some(shape) = new {
+                if old != Some(shape) {
+                    out.extend(crate::pick::shape_paths(shape, k));
+                }
+            }
+            continue;
+        }
         let new = outline(&later, e);
         let old = if exists(model, e) {
             outline(geo, e)
         } else {
             None
         };
-        if let Some(poly) = new {
+        if let Some(mut poly) = new {
             if old.as_ref() != Some(&poly) {
+                // Closed, to be drawn as a line.
+                if let Some(first) = poly.first().copied() {
+                    poly.push(first);
+                }
                 out.push(poly);
             }
         }
@@ -1217,7 +1296,6 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Mark(id) => model.elevation_mark(id).is_some(),
         Element::Column(id) => model.column(id).is_some(),
         Element::Beam(id) => model.beam(id).is_some(),
-        Element::Space(id) => model.space(id).is_some(),
         Element::Section(id) => model.section(id).is_some(),
         Element::Roof(id) => model.roof(id).is_some(),
         Element::Stair(id) => model.stair(id).is_some(),
@@ -1225,6 +1303,9 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::CurtainWall(id) => model.curtain_wall(id).is_some(),
         Element::Railing(id) => model.railing(id).is_some(),
         Element::Object(id) => model.object(id).is_some(),
+        Element::Draft(id) => model.draft(id).is_some(),
+        Element::Room(id) => model.room(id).is_some(),
+        Element::Tag(id) => model.tag(id).is_some(),
     }
 }
 
@@ -1251,7 +1332,7 @@ fn level_of(
         | Grip::SlabEdge { slab, .. }
         | Grip::SlopeEnd { slab, .. } => model.slab(slab).map(|s| s.level),
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
-        Grip::SpaceLabel { space } => model.space(space).map(|s| s.level),
+        Grip::RoomLabel { room } => model.room(room).map(|r| r.level),
         Grip::SectionEnd { .. } => None,
         Grip::RoofCorner { roof, .. } | Grip::RoofNode { roof, .. } => {
             model.roof(roof).map(|r| r.level)
@@ -1262,6 +1343,7 @@ fn level_of(
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
+        Grip::DraftPoint { draft, .. } => draft_level(model, draft),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -1270,7 +1352,6 @@ fn level_of(
             Element::Mark(id) => model.elevation_mark(*id).map(|m| m.level),
             Element::Column(id) => model.column(*id).map(|c| c.level),
             Element::Beam(id) => model.beam(*id).map(|b| b.level),
-            Element::Space(id) => model.space(*id).map(|s| s.level),
             Element::Section(_) => None,
             Element::Roof(id) => model.roof(*id).map(|r| r.level),
             Element::Stair(id) => model.stair(*id).map(|s| s.level),
@@ -1278,7 +1359,18 @@ fn level_of(
             Element::CurtainWall(id) => model.curtain_wall(*id).map(|c| c.level),
             Element::Railing(id) => model.railing(*id).map(|r| r.level),
             Element::Object(id) => model.object(*id).map(|o| o.level),
+            Element::Draft(id) => draft_level(model, *id),
+            Element::Room(id) => model.room(*id).map(|r| r.level),
+            Element::Tag(id) => model.tag(*id).map(|t| t.level),
         }),
+    }
+}
+
+/// The level whose plan a drafting element is drawn on.
+fn draft_level(model: &Model, id: archisim_core::DraftId) -> Option<archisim_core::LevelId> {
+    match model.draft(id)?.view {
+        archisim_core::ViewRef::Level(l) => Some(l),
+        archisim_core::ViewRef::Sheet(_) => None,
     }
 }
 

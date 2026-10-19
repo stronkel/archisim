@@ -50,6 +50,9 @@ const TRACK_REACH: f32 = 6.0;
 const SIDE_WIDTH: f32 = 340.0;
 const MIN_SIDE_WIDTH: f32 = 290.0;
 const MAX_SIDE_WIDTH: f32 = 520.0;
+/// Height of the command line under the drawing (two lines said and the
+/// prompt).
+const COMMAND_LINE_HEIGHT: f32 = 62.0;
 /// Width of the toolbox, with names and with icons only.
 const TOOLBOX_WIDTH: f32 = 124.0;
 const TOOLBOX_COMPACT_WIDTH: f32 = 52.0;
@@ -80,6 +83,8 @@ pub enum Tool {
     Railing,
     /// Furniture, sanitary ware and kitchen units.
     Object,
+    /// A 2D drafting or editing command is running (AutoCAD's).
+    Cad,
 }
 
 impl Tool {
@@ -103,9 +108,11 @@ impl Tool {
         )
     }
 
-    /// The tool a key selects: M muro, F forjado, P puerta, V ventana,
-    /// C cota.
-    fn from_key(text: &str) -> Option<Tool> {
+    /// The tool a key selects (with the ArchiCAD keys): M muro, F forjado,
+    /// P puerta, V ventana, C cota, I pilar, G viga, Z local, S sección,
+    /// T cubierta, E escalera, R terreno, U muro cortina, B barandilla,
+    /// O objeto.
+    pub(super) fn from_key(text: &str) -> Option<Tool> {
         match text.to_lowercase().as_str() {
             "m" => Some(Tool::Wall),
             "f" => Some(Tool::Slab),
@@ -208,7 +215,7 @@ pub struct ArchiSimApp {
     pub section_cache: Option<section_ui::SectionCache>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
-    pub space_settings: crate::editor::SpaceSettings,
+    pub room_settings: crate::editor::RoomSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
     pub stair_settings: crate::editor::StairSettings,
@@ -238,6 +245,19 @@ pub struct ArchiSimApp {
     pub terrain_pick: Vec<usize>,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
+    /// The 2D command running, if any.
+    pub cad: Option<Box<dyn crate::cad::Command>>,
+    /// Layer, style and the values 2D commands remember.
+    pub cad_settings: crate::cad::CadSettings,
+    /// The command line under the drawing.
+    pub cmdline: cad_ui::CmdLine,
+    /// Keys as in AutoCAD (type the command and Enter) or as in ArchiCAD
+    /// (M, F, P, V, C, N change tool at once).
+    pub keys_autocad: bool,
+    /// The text being written for the text command.
+    text_draft: Option<String>,
+    /// The drawing layers dialog is open.
+    pub show_layers: bool,
     /// The levels dialog is open.
     pub show_levels: bool,
     /// The intersection priorities window, whether it lists unused
@@ -309,6 +329,26 @@ pub struct ArchiSimApp {
     pub plan_scale: f64,
     /// Cut plane of the active plan above its level, in metres.
     pub cut_plane: f64,
+    /// What the active plan shows (categories, layers, detail).
+    pub view_style: archisim_core::ViewStyle,
+    /// The graphic standard dialog is open.
+    pub show_graphics: bool,
+    /// The sheet picture and what it was drawn for.
+    sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
+    /// The view selected on the sheet shown.
+    pub sheet_sel: Option<sheet_ui::Placed>,
+    /// The view of the sheet under the cursor.
+    sheet_hover: Option<sheet_ui::Placed>,
+    /// A view being moved on its sheet.
+    sheet_drag: Option<sheet_ui::ViewportDrag>,
+    /// Level and scale offered for the next view placed on a sheet.
+    sheet_new_level: Option<LevelId>,
+    sheet_new_scale: f64,
+    /// Schedule and level offered for the next schedule placed on a sheet.
+    table_new_kind: archisim_core::ScheduleKind,
+    table_new_level: Option<LevelId>,
+    /// The schedule window, with its level filter.
+    pub schedule_open: Option<(archisim_core::ScheduleKind, Option<LevelId>)>,
     pub show_grid: bool,
     /// Every plan line as a hairline (ArchiCAD's "Líneas finas"), instead
     /// of its real weight at the drawing scale.
@@ -374,7 +414,7 @@ impl ArchiSimApp {
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_hover: None,
-            space_settings: Default::default(),
+            room_settings: Default::default(),
             roof_settings,
             stair_settings,
             stair_tool: Default::default(),
@@ -392,6 +432,12 @@ impl ArchiSimApp {
             terrain_pick: Vec::new(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
+            cad: None,
+            cad_settings: Default::default(),
+            cmdline: Default::default(),
+            keys_autocad: true,
+            text_draft: None,
+            show_layers: false,
             show_levels: false,
             show_priorities: false,
             curtain_types: Default::default(),
@@ -431,6 +477,17 @@ impl ArchiSimApp {
             last_plan_tab: 0,
             plan_scale: archisim_plan::PlanOptions::default().scale,
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
+            view_style: Default::default(),
+            show_graphics: false,
+            sheet_image: None,
+            sheet_sel: None,
+            sheet_hover: None,
+            sheet_drag: None,
+            sheet_new_level: None,
+            sheet_new_scale: 50.0,
+            table_new_kind: archisim_core::ScheduleKind::Rooms,
+            table_new_level: None,
+            schedule_open: None,
             show_grid: true,
             thin_lines: false,
             phase_view: Default::default(),
@@ -476,6 +533,10 @@ impl ArchiSimApp {
     }
 
     fn set_tool(&mut self, tool: Tool) {
+        if tool != Tool::Cad && self.cad.is_some() {
+            // Another tool ends the command (keeping what it drew).
+            self.end_command(true);
+        }
         if tool != self.tool {
             self.wall_tool.finish();
             self.slab_tool.finish();
@@ -498,7 +559,9 @@ impl ArchiSimApp {
             self.tool = tool;
         }
         // Drawing happens in plan.
-        if tool != Tool::Arrow {
+        // Drawing happens in plan (2D drafting also on sheets).
+        let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
+        if tool != Tool::Arrow && !(tool == Tool::Cad && on_sheet) {
             self.show_plan();
         }
     }
@@ -640,17 +703,33 @@ impl ArchiSimApp {
         if paths.is_empty() {
             return;
         }
-        // A survey dropped on the window: imported into the terrain.
-        if let Some(survey) = paths.iter().find(|p| {
+        // DXF drawings dropped on the window go into the view shown; with
+        // the terrain tool (or a terrain selected) a DXF or DWG is a
+        // survey for the terrain.
+        let survey = self.tool == Tool::Terrain
+            || self
+                .ed
+                .selection
+                .iter()
+                .any(|e| matches!(e, Element::Terrain(_)));
+        let (cad, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|p| {
             p.extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("dxf") || e.eq_ignore_ascii_case("dwg"))
-        }) {
-            self.open_survey(survey);
+        });
+        for d in &cad {
+            let dwg = d.extension().is_some_and(|e| e.eq_ignore_ascii_case("dwg"));
+            if survey || dwg {
+                self.open_survey(d);
+            } else {
+                self.import_dxf_from(d);
+            }
+        }
+        if paths.is_empty() {
             return;
         }
         let mut openable = paths.iter().filter(|p| crate::open_files::is_openable(p));
         let Some(path) = openable.next().cloned() else {
-            self.complain("ArchiSim abre proyectos .archisim y ficheros .ifc.");
+            self.complain("ArchiSim abre proyectos .archisim y ficheros .ifc (y los .dxf se importan en la vista).");
             return;
         };
         let rest = openable.count();
@@ -756,6 +835,20 @@ impl ArchiSimApp {
         }
     }
 
+    /// The plan of the current level as drawn now (cut plane, what the view
+    /// shows), at a scale.
+    fn plan_export_options(&self, scale: f64) -> archisim_plan::PlanOptions {
+        archisim_plan::PlanOptions {
+            show_reference_lines: self.show_reference_lines,
+            scale,
+            cut_plane: self.cut_plane,
+            style: self.view_style.clone(),
+            phase_view: self.phase_view,
+            ..archisim_plan::PlanOptions::default()
+        }
+    }
+
+    /// Exports the current level's plan as PDF, DXF or SVG.
     fn export_plan(&mut self, scale: f64) {
         let level = self
             .ed
@@ -764,10 +857,12 @@ impl ArchiSimApp {
             .map(|l| l.name.clone())
             .unwrap_or_default();
         let mut d = rfd::FileDialog::new()
-            .set_title(format!("Exportar planta 1:{scale} (SVG)"))
+            .set_title(format!("Exportar planta 1:{scale}"))
+            .add_filter("PDF (para imprimir)", &["pdf"])
+            .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
             .add_filter("SVG", &["svg"])
             .set_file_name(format!(
-                "{} - {} 1-{scale}.svg",
+                "{} - {} 1-{scale}.pdf",
                 self.file_name_stem(),
                 level
             ));
@@ -775,15 +870,81 @@ impl ArchiSimApp {
             d = d.set_directory(dir);
         }
         if let Some(path) = d.save_file() {
-            match self.ed.export_plan_phase(
-                &path,
-                self.show_reference_lines,
-                scale,
-                self.phase_view,
-            ) {
+            let options = self.plan_export_options(scale);
+            match self.ed.export_plan(&path, &options) {
                 Ok(()) => self.say(format!("Planta exportada en {}.", path.display())),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }
+        }
+    }
+
+    /// Exports sheets: the one shown (PDF, DXF or SVG) or all (one PDF).
+    fn export_sheets(&mut self, all: bool) {
+        let model = self.ed.model();
+        let ids: Vec<archisim_core::SheetId> = match (all, self.mode) {
+            (false, ViewMode::Sheet(s)) => vec![s],
+            _ => model.sheets().iter().map(|s| s.id).collect(),
+        };
+        if ids.is_empty() {
+            self.complain("No hay planos: crea uno en el navegador (Planos › Nuevo plano).");
+            return;
+        }
+        let name = match (all, model.sheet(ids[0])) {
+            (false, Some(s)) => format!("{} - {} {}.pdf", self.file_name_stem(), s.number, s.name),
+            _ => format!("{} - planos.pdf", self.file_name_stem()),
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title(if all {
+                "Exportar todos los planos"
+            } else {
+                "Exportar plano"
+            })
+            .add_filter("PDF (para imprimir)", &["pdf"]);
+        if !all {
+            d = d
+                .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
+                .add_filter("SVG", &["svg"]);
+        }
+        d = d.set_file_name(name);
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.save_file() {
+            match self.ed.export_sheets(&path, &ids) {
+                Ok(()) => self.say(format!(
+                    "{} exportado(s) en {}.",
+                    if ids.len() == 1 { "Plano" } else { "Planos" },
+                    path.display()
+                )),
+                Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+            }
+        }
+    }
+
+    /// Brings a DXF into the view shown (plan or sheet) as 2D drafting.
+    fn import_dxf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Importar DXF en la vista")
+            .add_filter("DXF", &["dxf"]);
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.pick_file() {
+            self.import_dxf_from(&path);
+        }
+    }
+
+    pub(crate) fn import_dxf_from(&mut self, path: &Path) {
+        if self.mode == ViewMode::ThreeD {
+            self.show_plan();
+        }
+        let (view, k) = (self.active_view(), self.active_k());
+        match self.ed.import_dxf(path, view, k) {
+            Ok(r) => {
+                self.say(r.describe());
+                self.fit_requested = true;
+            }
+            Err(e) => self.complain(format!("No se pudo importar: {e}.")),
         }
     }
 
@@ -996,6 +1157,11 @@ impl ArchiSimApp {
         egui::Panel::bottom("bottom-bar")
             .frame(bar(p.panel))
             .show(ui, |ui| self.bottom_bar(ui));
+        crate::pick::set_scale(if matches!(self.mode, ViewMode::Sheet(_)) {
+            1.0
+        } else {
+            self.plan_scale
+        });
         // The drawing stays in the middle of the window: the column on the
         // right (navigator) is as wide as the two on the left (tools and
         // properties). Dragging the edge of Properties widens both sides.
@@ -1053,10 +1219,23 @@ impl ArchiSimApp {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             self.tab_strip(ui);
+            if self.mode != ViewMode::ThreeD {
+                egui::Panel::bottom("command-line")
+                    .resizable(false)
+                    .exact_size(COMMAND_LINE_HEIGHT)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(p.panel)
+                            .inner_margin(egui::Margin::symmetric(10, 3))
+                            .stroke(Stroke::new(1.0, p.line)),
+                    )
+                    .show(ui, |ui| self.command_line(ui));
+            }
             match self.mode {
                 ViewMode::Plan => self.plan_view(ui),
                 ViewMode::ThreeD => self.view_3d(ui),
                 ViewMode::Section => self.section_view(ui),
+                ViewMode::Sheet(s) => self.sheet_view(ui, s),
             }
         });
 
@@ -1066,6 +1245,10 @@ impl ArchiSimApp {
             ));
         }
         self.dialogs(&ctx);
+        self.text_entry(&ctx);
+        self.layers_dialog(&ctx);
+        self.graphics_dialog(&ctx);
+        self.schedule_window(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -1531,22 +1714,28 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 }
 
 mod annotation_ui;
+mod cad_ui;
 mod chrome;
 mod curtain_types_ui;
 mod curtain_ui;
+mod draft_props;
 mod icons;
 mod levels_ui;
 mod navigator;
 mod object_gallery;
 mod object_ui;
+mod phases_ui;
 mod plan_ui;
 mod priorities_ui;
 mod properties;
 mod props;
 mod railing_ui;
 mod roof_ui;
+mod room_tool_ui;
+mod room_ui;
+mod schedule_ui;
 mod section_ui;
-mod space_ui;
+mod sheet_ui;
 mod stair_ui;
 mod structure_ui;
 mod survey_ui;

@@ -27,6 +27,8 @@ pub struct PlanKey {
     /// Hairlines instead of real line weights.
     pub thin_lines: bool,
     pub phase_view: archisim_plan::phases::PhaseView,
+    /// What the view shows.
+    pub style: archisim_core::ViewStyle,
 }
 
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
@@ -98,8 +100,7 @@ pub fn rasterize_with(
     rasterize_svg(&svg, [w, h])
 }
 
-/// Rasterises an SVG drawing (a plan or a section) into an image of `size`
-/// pixels, stretched to it.
+/// Draws an SVG drawing into an image of `size` pixels, stretched to it.
 pub fn rasterize_svg(svg: &str, size: [usize; 2]) -> ColorImage {
     let [w, h] = [size[0].max(1), size[1].max(1)];
     let mut pixmap = tiny_skia::Pixmap::new(w as u32, h as u32).expect("non-empty image");

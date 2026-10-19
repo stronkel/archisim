@@ -1130,3 +1130,43 @@ fn curtain_wall_types_round_trip() {
     }
     assert!(differences(&model, &import_ifc(&export(&model)).unwrap().model).is_empty());
 }
+
+#[test]
+fn rooms_round_trip_as_spaces() {
+    let mut original = model();
+    let level = original.levels()[0].id;
+    let outline = vec![
+        Point2::new(0.5, 0.5),
+        Point2::new(4.5, 0.5),
+        Point2::new(4.5, 3.5),
+        Point2::new(0.5, 3.5),
+    ];
+    let id = original
+        .add_room(archisim_core::NewRoom {
+            level,
+            number: "0.01".into(),
+            name: "Salón".into(),
+            outline,
+            holes: Vec::new(),
+            label: Point2::new(2.0, 2.0),
+            bounded: false,
+        })
+        .unwrap();
+    let mut r = original.room(id).unwrap().clone();
+    r.height = Some(2.6);
+    r.finishes.floor = "Tarima de roble".into();
+    r.usage = "Estancia".into();
+    original.set_room(r.clone()).unwrap();
+    let Imported { model, report } = import_ifc(&export(&original)).unwrap();
+    assert_eq!(report.rooms, 1, "{report}");
+    let back = model.rooms().next().unwrap();
+    assert_eq!(
+        (back.number.as_str(), back.name.as_str()),
+        ("0.01", "Salón")
+    );
+    assert_eq!(back.guid, r.guid);
+    assert!((back.area() - 12.0).abs() < 1e-6);
+    assert_eq!(back.height, Some(2.6));
+    assert_eq!(back.finishes.floor, "Tarima de roble");
+    assert_eq!(back.usage, "Estancia");
+}

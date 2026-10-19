@@ -42,6 +42,17 @@ impl ArchiSimApp {
             self.tool_properties(ui);
             return;
         }
+        let drafts: Vec<archisim_core::DraftId> = selection
+            .iter()
+            .filter_map(|e| match e {
+                Element::Draft(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        if !drafts.is_empty() && drafts.len() == selection.len() {
+            self.draft_properties(ui, &drafts);
+            return;
+        }
         match selection.as_slice() {
             [] => self.view_properties(ui),
             [Element::Wall(id)] => self.wall_properties(ui, *id),
@@ -51,7 +62,7 @@ impl ArchiSimApp {
             [Element::Mark(id)] => self.mark_properties(ui, *id),
             [Element::Column(id)] => self.column_properties(ui, *id),
             [Element::Beam(id)] => self.beam_properties(ui, *id),
-            [Element::Space(id)] => self.space_properties(ui, *id),
+
             [Element::Section(id)] => self.section_properties(ui, *id),
             [Element::Roof(id)] => self.roof_properties(ui, *id),
             [Element::Stair(id)] => self.stair_properties(ui, *id),
@@ -59,6 +70,8 @@ impl ArchiSimApp {
             [Element::CurtainWall(id)] => self.curtain_wall_properties(ui, *id),
             [Element::Railing(id)] => self.railing_properties(ui, *id),
             [Element::Object(id)] => self.object_properties(ui, *id),
+            [Element::Room(id)] => self.room_properties(ui, *id),
+            [Element::Tag(id)] => self.tag_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -201,7 +214,7 @@ impl ArchiSimApp {
             Tool::Dimension => self.dim_tool_properties(ui),
             Tool::Column => self.column_tool_properties(ui),
             Tool::Beam => self.beam_tool_properties(ui),
-            Tool::Zone => self.space_tool_properties(ui),
+            Tool::Zone => self.room_tool_properties(ui),
             Tool::Section => self.section_tool_properties(ui),
             Tool::Roof => self.roof_tool_properties(ui),
             Tool::Stair => self.stair_tool_properties(ui),
@@ -209,6 +222,7 @@ impl ArchiSimApp {
             Tool::CurtainWall => self.curtain_tool_properties(ui),
             Tool::Railing => self.railing_tool_properties(ui),
             Tool::Object => self.object_tool_properties(ui),
+            Tool::Cad => self.cad_tool_properties(ui),
         }
     }
 
@@ -677,6 +691,10 @@ impl ArchiSimApp {
             ViewMode::Plan => self.plan_view_properties(ui),
             ViewMode::ThreeD => self.view_3d_properties(ui),
             ViewMode::Section => self.section_view_properties(ui),
+            ViewMode::Sheet(id) => {
+                self.sheet_properties(ui, id);
+                return;
+            }
         }
         self.project_group(ui);
         ui.add_space(8.0);
@@ -752,6 +770,7 @@ impl ArchiSimApp {
             );
         });
         self.phase_view_group(ui);
+        self.visibility_group(ui);
         if let Some(l) = level {
             group(ui, "view-level", "Planta", |ui| {
                 row(ui, "Nombre", "", |ui, w| {
@@ -1620,6 +1639,9 @@ impl ArchiSimApp {
         let openings = count(|e| matches!(e, Element::Opening(_)));
         let slabs = count(|e| matches!(e, Element::Slab(_)));
         let annotations = count(|e| matches!(e, Element::Dimension(_) | Element::Mark(_)));
+        let drafts = count(|e| matches!(e, Element::Draft(_)));
+        let rooms = count(|e| matches!(e, Element::Room(_)));
+        let tags = count(|e| matches!(e, Element::Tag(_)));
         props::title(ui, &format!("{} elementos seleccionados", many.len()));
         group(ui, "many-summary", "Selección", |ui| {
             for (name, n) in [
@@ -1627,6 +1649,9 @@ impl ArchiSimApp {
                 ("Puertas y ventanas", openings),
                 ("Forjados", slabs),
                 ("Cotas", annotations),
+                ("Dibujo 2D", drafts),
+                ("Locales", rooms),
+                ("Etiquetas", tags),
             ] {
                 if n > 0 {
                     text_row(ui, name, "", &n.to_string());
@@ -1795,6 +1820,17 @@ impl ArchiSimApp {
             );
             text_row(ui, "Total (m)", "", &format_dimension(values.iter().sum()));
             text_row(ui, "Puntos", "", &d.points.len().to_string());
+            let tied = d.anchors.iter().filter(|a| a.is_some()).count();
+            text_row(
+                ui,
+                "Asociativa",
+                "Los puntos asociados siguen a muros, huecos y forjados cuando cambian",
+                &if tied == 0 {
+                    "No".to_string()
+                } else {
+                    format!("{tied} de {} puntos", d.points.len())
+                },
+            );
         });
         ui.add_space(4.0);
         props::note(
@@ -1836,11 +1872,7 @@ impl ArchiSimApp {
 }
 
 /// A header card for things without types (views, annotations).
-pub(super) fn view_card_pub(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
-    view_card(ui, icon, title, subtitle);
-}
-
-fn view_card(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
+pub(super) fn view_card(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
     let p = super::theme::Palette::current(ui.ctx());
     egui::Frame::new()
         .fill(p.raised)

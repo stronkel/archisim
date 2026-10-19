@@ -369,7 +369,7 @@ impl ArchiSimApp {
             SectionKind::Elevation => "Alzado",
         };
         props::title(ui, &format!("{what} · 1 seleccionado"));
-        super::properties::view_card_pub(
+        super::properties::view_card(
             ui,
             match s.kind {
                 SectionKind::Section => Icon::Section,
@@ -442,7 +442,7 @@ impl ArchiSimApp {
             return;
         };
         props::title(ui, &format!("Vista · {}", s.title()));
-        super::properties::view_card_pub(
+        super::properties::view_card(
             ui,
             match s.kind {
                 SectionKind::Section => Icon::Section,

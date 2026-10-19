@@ -1,39 +1,49 @@
 //! Rooms: `IfcSpace`, aggregated into their storey (`IfcRelAggregates`),
-//! extruded from their outline by their height, with `Pset_SpaceCommon`,
+//! extruded from their outline (less their holes) by their clear height,
+//! with `Pset_SpaceCommon`, `Pset_SpaceCoveringRequirements` (finishes),
 //! `Qto_SpaceBaseQuantities` (net area and perimeter of the outline; gross
 //! area to the axes of the walls around it) and `ArchiSim_Space` (where the
-//! label is drawn, for the round trip). The number is the space's `Name`,
-//! its name the `LongName` and its use the `ObjectType`, as Revit and
-//! ArchiCAD write them.
+//! name is drawn, whether it follows the walls and whether its height is
+//! its own, for the round trip). The number is the space's `Name`, its
+//! name the `LongName` and its use the `ObjectType`, as Revit and ArchiCAD
+//! write them.
 
 use std::collections::BTreeMap;
 
 use archisim_core::{perimeter, LevelId, Point2};
 use archisim_geom::{room_outline, signed_area, Contour};
 
-use crate::step::{list, real, string, Ref};
+use crate::step::{boolean, list, real, string, Ref};
 use crate::{derived_guid, Exporter};
 
 impl Exporter<'_> {
     pub(crate) fn write_spaces(&mut self, storeys: &BTreeMap<LevelId, (Ref, Ref)>) {
         let model = self.model;
         let mut by_level: BTreeMap<LevelId, Vec<Ref>> = BTreeMap::new();
-        for sp in model.spaces() {
-            let Some(&(_, storey_pl)) = storeys.get(&sp.level) else {
+        for room in model.rooms() {
+            let Some(&(_, storey_pl)) = storeys.get(&room.level) else {
                 continue;
             };
+            let height = model.room_height(room);
             let pl = self.placement(Some(storey_pl), self.origin, None);
-            let outline = self.polyline(&sp.outline, true);
-            let profile = self
-                .w
-                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"));
+            let outline = self.polyline(&room.outline, true);
+            let profile = if room.holes.is_empty() {
+                self.w
+                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"))
+            } else {
+                let inner: Vec<Ref> = room.holes.iter().map(|h| self.polyline(h, true)).collect();
+                self.w.add(format!(
+                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outline},{})",
+                    list(&inner)
+                ))
+            };
             let solid_pl = self
                 .w
                 .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
             let solid = self.w.add(format!(
                 "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
                 self.z,
-                real(sp.height)
+                real(height)
             ));
             let body = self.w.add(format!(
                 "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
@@ -42,52 +52,75 @@ impl Exporter<'_> {
             let shape = self
                 .w
                 .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
-            let usage = if sp.usage.trim().is_empty() {
+            let usage = if room.usage.trim().is_empty() {
                 "$".to_string()
             } else {
-                string(&sp.usage)
+                string(&room.usage)
             };
             let el = self.w.add(format!(
                 "IFCSPACE({},$,{},$,{usage},{pl},{shape},{},.ELEMENT.,.SPACE.,$)",
-                string(sp.guid.as_str()),
-                string(&sp.number),
-                string(&sp.name)
+                string(room.guid.as_str()),
+                string(&room.number),
+                string(&room.name)
             ));
             let props = [
                 self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER({}),$)",
-                    string(&sp.number)
+                    string(&room.number)
                 )),
                 self.w
                     .add("IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.F.),$)"),
             ];
-            self.pset(el, &sp.guid, "Pset_SpaceCommon", &props);
-            if let Some(p) = sp.label {
-                let props = [
+            self.pset(el, &room.guid, "Pset_SpaceCommon", &props);
+            let f = &room.finishes;
+            if !(f.floor.is_empty() && f.walls.is_empty() && f.ceiling.is_empty()) {
+                let props: Vec<Ref> = [
+                    ("FloorCovering", &f.floor),
+                    ("WallCovering", &f.walls),
+                    ("CeilingCovering", &f.ceiling),
+                ]
+                .into_iter()
+                .filter(|(_, v)| !v.is_empty())
+                .map(|(n, v)| {
                     self.w.add(format!(
-                        "IFCPROPERTYSINGLEVALUE('LabelX',$,IFCLENGTHMEASURE({}),$)",
-                        real(p.x)
-                    )),
-                    self.w.add(format!(
-                        "IFCPROPERTYSINGLEVALUE('LabelY',$,IFCLENGTHMEASURE({}),$)",
-                        real(p.y)
-                    )),
-                ];
-                self.pset(el, &sp.guid, "ArchiSim_Space", &props);
+                        "IFCPROPERTYSINGLEVALUE('{n}',$,IFCLABEL({}),$)",
+                        string(v)
+                    ))
+                })
+                .collect();
+                self.pset(el, &room.guid, "Pset_SpaceCoveringRequirements", &props);
             }
-            let net = sp.area();
+            let props = [
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('LabelX',$,IFCLENGTHMEASURE({}),$)",
+                    real(room.label.x)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('LabelY',$,IFCLENGTHMEASURE({}),$)",
+                    real(room.label.y)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Bounded',$,IFCBOOLEAN({}),$)",
+                    boolean(room.bounded)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('OwnHeight',$,IFCBOOLEAN({}),$)",
+                    boolean(room.height.is_some())
+                )),
+            ];
+            self.pset(el, &room.guid, "ArchiSim_Space", &props);
+            let net = room.area();
             let gross_outline: Vec<Point2> =
-                room_outline(model, sp.level, sp.label_point(), Contour::WallAxis)
-                    .unwrap_or_else(|_| sp.outline.clone());
+                room_outline(model, room.level, room.label, Contour::WallAxis)
+                    .unwrap_or_else(|_| room.outline.clone());
             let gross = signed_area(&gross_outline).abs().max(net);
-            let perim = sp.perimeter();
             self.quantities(
                 el,
-                &sp.guid,
+                &room.guid,
                 "Qto_SpaceBaseQuantities",
                 &[
-                    ("Height", "IFCQUANTITYLENGTH", sp.height),
-                    ("NetPerimeter", "IFCQUANTITYLENGTH", perim),
+                    ("Height", "IFCQUANTITYLENGTH", height),
+                    ("NetPerimeter", "IFCQUANTITYLENGTH", room.perimeter()),
                     (
                         "GrossPerimeter",
                         "IFCQUANTITYLENGTH",
@@ -95,11 +128,11 @@ impl Exporter<'_> {
                     ),
                     ("NetFloorArea", "IFCQUANTITYAREA", net),
                     ("GrossFloorArea", "IFCQUANTITYAREA", gross),
-                    ("NetVolume", "IFCQUANTITYVOLUME", net * sp.height),
-                    ("GrossVolume", "IFCQUANTITYVOLUME", gross * sp.height),
+                    ("NetVolume", "IFCQUANTITYVOLUME", net * height),
+                    ("GrossVolume", "IFCQUANTITYVOLUME", gross * height),
                 ],
             );
-            by_level.entry(sp.level).or_default().push(el);
+            by_level.entry(room.level).or_default().push(el);
         }
         for (level, spaces) in &by_level {
             let (storey, _) = storeys[level];

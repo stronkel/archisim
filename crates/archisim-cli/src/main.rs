@@ -5,6 +5,7 @@
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
 //! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
+//! archisim png <dibujo.svg> [imagen.png] [ppp]   imagen de un SVG
 //! archisim --version
 //! ```
 
@@ -27,12 +28,13 @@ Uso:
       y la exporta a demo.ifc (IFC4) y a una planta 1:50 por nivel:
       demo.svg (planta baja), demo-cubierta.svg…, y otra 1:100
       (demo-1a100.svg…), con los símbolos de puertas y ventanas de esa
-      escala.
+      escala, y cada plano con su cajetín (demo-plano-a-01.svg).
       Carpeta por defecto: ./out
 
   archisim exportar <proyecto.archisim> [carpeta]
       Abre un proyecto y lo exporta a IFC4 y a plantas 1:50 y 1:100 con el
-      mismo nombre (casa.archisim → casa.ifc, casa.svg, casa-1a100.svg…). Por defecto, en la
+      mismo nombre (casa.archisim → casa.ifc, casa.svg, casa-1a100.svg…) y sus
+      planos (casa-plano-a-01.svg…). Por defecto, en la
       misma carpeta del proyecto.
 
   archisim importar <fichero.ifc> [proyecto.archisim]
@@ -48,6 +50,10 @@ Uso:
       3D, varita mágica, guardar y abrir, exportar e importar el IFC. Deja
       grande.archisim y grande.ifc en la carpeta (./out por defecto).
 
+  archisim png <dibujo.svg> [imagen.png] [ppp]
+      Convierte una planta o un plano en SVG en una imagen PNG, a 200
+      puntos por pulgada si no se dice otra cosa.
+
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
 ";
@@ -59,6 +65,21 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(run_demo(&dir))
         }
+        Some("png") => match args.get(1) {
+            Some(svg) => {
+                let svg = PathBuf::from(svg);
+                let png = args
+                    .get(2)
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| svg.with_extension("png"));
+                let dpi: f32 = args.get(3).and_then(|d| d.parse().ok()).unwrap_or(200.0);
+                report(svg_to_png(&svg, &png, dpi))
+            }
+            None => {
+                eprintln!("Falta el dibujo: archisim png <dibujo.svg> [imagen.png] [ppp]");
+                ExitCode::FAILURE
+            }
+        },
         Some("exportar") | Some("export") => match args.get(1) {
             Some(project) => {
                 let project = PathBuf::from(project);
@@ -240,6 +261,60 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         };
         std::fs::write(&svg_100, render_plan(model, level, &options))?;
         println!("  Planta «{name}» 1:100: {}", svg_100.display());
+        let dxf_path = dir.join(file.replace(".svg", ".dxf"));
+        std::fs::write(
+            &dxf_path,
+            archisim_export::dxf::plan_dxf(model, level, &PlanOptions::default())?,
+        )?;
+        println!(
+            "  Planta «{name}» en DXF (mm, 1:50): {}",
+            dxf_path.display()
+        );
+    }
+    for sheet in model.sheets() {
+        let path = dir.join(format!("{stem}-plano-{}.svg", slug(&sheet.number)));
+        let svg = archisim_plan::sheet::render_sheet(
+            model,
+            sheet.id,
+            &archisim_plan::sheet::SheetOptions::default(),
+        );
+        std::fs::write(&path, svg)?;
+        println!(
+            "  Plano {} «{}» ({}): {}",
+            sheet.number,
+            sheet.name,
+            sheet.size_name(),
+            path.display()
+        );
+        let dxf = dir.join(format!("{stem}-plano-{}.dxf", slug(&sheet.number)));
+        std::fs::write(&dxf, archisim_export::dxf::sheet_dxf(model, sheet.id)?)?;
+        println!(
+            "  Plano {} en DXF (mm de papel): {}",
+            sheet.number,
+            dxf.display()
+        );
+    }
+    // Schedules as spreadsheets, and the measurements as a budget.
+    for kind in archisim_core::ScheduleKind::ALL {
+        let t = archisim_plan::schedules::table(model, kind, None);
+        if t.rows.is_empty() {
+            continue;
+        }
+        let path = dir.join(format!("{stem}-tabla-{}.csv", kind.code()));
+        std::fs::write(&path, t.csv())?;
+        println!("  Tabla «{}»: {}", kind.label(), path.display());
+    }
+    let bc3 = dir.join(format!("{stem}.bc3"));
+    let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
+    std::fs::write(
+        &bc3,
+        archisim_export::bc3::bc3(model, &date, env!("CARGO_PKG_VERSION")),
+    )?;
+    println!("  Mediciones en BC3 (FIEBDC-3): {}", bc3.display());
+    if !model.sheets().is_empty() {
+        let pdf = dir.join(format!("{stem}-planos.pdf"));
+        std::fs::write(&pdf, sheets_pdf(model)?)?;
+        println!("  Planos en PDF: {}", pdf.display());
     }
     for sec in model.sections() {
         let file = format!("{stem}-{}.svg", slug(&sec.title()));
@@ -256,6 +331,25 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         println!("  {} 1:100: {}", sec.title(), path.display());
     }
     Ok(())
+}
+
+/// Every sheet of the project, a page each, in order.
+fn sheets_pdf(model: &Model) -> Result<Vec<u8>, String> {
+    let svgs: Vec<(String, String)> = model
+        .sheets()
+        .iter()
+        .map(|s| {
+            (
+                archisim_plan::sheet::render_sheet(model, s.id, &Default::default()),
+                format!("{} {}", s.number, s.name),
+            )
+        })
+        .collect();
+    let pages: Vec<archisim_export::pdf::Page> = svgs
+        .iter()
+        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+        .collect();
+    archisim_export::pdf::pdf(&pages, &model.project_name)
 }
 
 /// A file-name friendly version of a level name: "Planta 1ª" → "planta-1a".
@@ -278,6 +372,30 @@ fn slug(name: &str) -> String {
         }
     }
     out.trim_end_matches('-').to_string()
+}
+
+/// Rasterizes an SVG drawing to a PNG at `dpi` dots per inch.
+fn svg_to_png(svg: &Path, png: &Path, dpi: f32) -> Result<(), Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(svg).map_err(|e| format!("{}: {e}", svg.display()))?;
+    let tree = resvg::usvg::Tree::from_str(&text, &resvg::usvg::Options::default())
+        .map_err(|e| format!("{}: {e}", svg.display()))?;
+    // usvg sizes are in CSS pixels (96 per inch).
+    let k = dpi / 96.0;
+    let size = tree.size();
+    let w = (size.width() * k).ceil().max(1.0) as u32;
+    let h = (size.height() * k).ceil().max(1.0) as u32;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h).ok_or("imagen demasiado grande")?;
+    pixmap.fill(resvg::tiny_skia::Color::WHITE);
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(k, k),
+        &mut pixmap.as_mut(),
+    );
+    pixmap
+        .save_png(png)
+        .map_err(|e| format!("{}: {e}", png.display()))?;
+    println!("{} ({w} × {h} px)", png.display());
+    Ok(())
 }
 
 #[cfg(test)]

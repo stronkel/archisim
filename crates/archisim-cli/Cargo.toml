@@ -17,6 +17,7 @@ archisim-core.workspace = true
 archisim-geom.workspace = true
 archisim-ifc.workspace = true
 archisim-plan.workspace = true
+archisim-export.workspace = true
 archisim-file.workspace = true
 archisim-library.workspace = true
 # Only to measure how long the plan takes to draw on screen (`medir`).

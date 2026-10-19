@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 8,
+//!   "version": 9,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -31,6 +31,8 @@
 //!   the same model twice gives byte-identical files. The undo history is
 //!   not saved.
 
+mod drafting;
+mod rooms;
 mod schema;
 
 use std::fmt;
@@ -44,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 8;
+pub const CURRENT_VERSION: u32 = 9;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -198,23 +200,110 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // 4 → 5: walls may be curved (`bulge`); a wall without it is
             // straight, as all walls of older files are. 5 → 6: slabs may
             // have holes (`holes`) and walls voids (the "Hueco" family);
-            // older files have neither. 6 → 7: columns and beams with
-            // their types (`member_types`, `columns`, `beams`), absent in
-            // older files.
-            4..=6 => {
+            // older files have neither.
+            4 | 5 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
                 }
                 v
             }
+            // 6 → 7: phase 2 elements (columns, beams, sections, roofs,
+            // stairs…) and phase 3 drawing (layers, drafting, sheets,
+            // rooms, tags); all absent in older files, but drawing layers
+            // and drafting elements are always written.
+            6 => {
+                let mut v = value;
+                if let Value::Object(map) = &mut v {
+                    map.insert("version".into(), Value::from(7));
+                }
+                with_drafting(v)
+            }
             // 7 → 8: curtain walls take their grid, frames and panels from
-            // a type.
-            7 => to_curtain_types(value),
+            // a type. Version 7 was written by two branches of ArchiSim
+            // 0.25 (phase 2 and phase 3); both go through here.
+            7 => with_drafting(to_curtain_types(value)),
+            // 8 → 9: phase 2 rooms (`spaces`) and phase 3 rooms (`rooms`)
+            // become one kind of room.
+            8 => spaces_to_rooms(with_drafting(value))?,
             other => return Err(FileError::UnknownVersion(other)),
         };
         version += 1;
     }
+    Ok(value)
+}
+
+/// Drawing layers and drafting elements, written by every file since
+/// version 7; the phase 2 files of version 7 and 8 have neither.
+fn with_drafting(mut value: Value) -> Value {
+    if let Value::Object(map) = &mut value {
+        map.entry("draw_layers")
+            .or_insert_with(|| Value::Array(Vec::new()));
+        map.entry("drafts")
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+    value
+}
+
+/// Version 8 → 9. The rooms of phase 2 (`spaces`: number, name, use,
+/// outline, height and an optional label point) become rooms with their
+/// own height, not tied to walls, their name where it was (or in the
+/// middle); the project's list of uses (`space_usages`) becomes
+/// `room_usages`.
+fn spaces_to_rooms(mut value: Value) -> Result<Value, FileError> {
+    let Value::Object(map) = &mut value else {
+        return Ok(value);
+    };
+    map.insert("version".into(), Value::from(9));
+    if let Some(Value::Object(project)) = map.get_mut("project") {
+        if let Some(u) = project.remove("space_usages") {
+            project.insert("room_usages".into(), u);
+        }
+    }
+    let Some(spaces) = map.remove("spaces") else {
+        return Ok(value);
+    };
+    let bad = |message: &str| FileError::Value {
+        element: "room (version 8)".into(),
+        message: message.into(),
+    };
+    let Value::Array(spaces) = spaces else {
+        return Err(bad("«spaces» is not a list"));
+    };
+    let mut rooms = match map.remove("rooms") {
+        Some(Value::Array(r)) => r,
+        _ => Vec::new(),
+    };
+    for mut sp in spaces {
+        let Value::Object(o) = &mut sp else {
+            return Err(bad("not an object"));
+        };
+        let outline: Vec<archisim_core::Point2> = o
+            .get("outline")
+            .and_then(Value::as_array)
+            .ok_or_else(|| bad("no outline"))?
+            .iter()
+            .map(|p| {
+                let x = p.get(0).and_then(Value::as_f64);
+                let y = p.get(1).and_then(Value::as_f64);
+                match (x, y) {
+                    (Some(x), Some(y)) => Ok(archisim_core::Point2::new(x, y)),
+                    _ => Err(bad("outline point is not [x, y]")),
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        let label = match o.remove("label") {
+            Some(l @ Value::Array(_)) => l,
+            _ => {
+                let c = archisim_core::rooms::label_center(&outline);
+                serde_json::json!([c.x, c.y])
+            }
+        };
+        o.insert("label".into(), label);
+        o.entry("number").or_insert_with(|| Value::from(""));
+        rooms.push(sp);
+    }
+    map.insert("rooms".into(), Value::Array(rooms));
     Ok(value)
 }
 
@@ -684,26 +773,29 @@ mod tests {
         })
         .unwrap();
         let room = m
-            .add_space(archisim_core::NewSpace {
+            .add_room(archisim_core::rooms::NewRoom {
                 level: levels[0],
                 number: "0.01".into(),
                 name: "Salón «comedor»".into(),
-                usage: "Estar".into(),
                 outline: vec![
                     Point2::new(0.3, 0.3),
                     Point2::new(4.0, 0.3),
                     Point2::new(4.0, 4.7),
                     Point2::new(0.3, 4.7),
                 ],
-                height: 2.6,
+                holes: Vec::new(),
+                label: Point2::new(1.0, 1.0),
+                bounded: false,
             })
             .unwrap();
-        m.edit_space(room, |s| s.label = Some(Point2::new(1.0, 1.0)))
-            .unwrap();
+        let mut r = m.room(room).unwrap().clone();
+        r.usage = "Estar".into();
+        r.height = Some(2.6);
+        m.set_room(r).unwrap();
         // Concrete goes through anything (material intersection priority).
         m.set_material_priority(concrete, Some(990)).unwrap();
         // An office project: its own room uses.
-        m.set_space_usages(vec!["Despacho".into(), "Sala de reuniones".into()])
+        m.set_room_usages(vec!["Despacho".into(), "Sala de reuniones".into()])
             .unwrap();
         // A refurbishment: the first wall existing, the column demolished.
         let first = m.walls().next().unwrap().id.0;
@@ -798,7 +890,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 8", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 9", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -825,7 +917,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 8"));
+        assert!(to_string(&opened).contains("\"version\": 9"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -993,7 +1085,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 8", "\"version\": 3", 1)
+            .replacen("\"version\": 9", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1055,7 +1147,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 8", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 9", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1133,6 +1225,70 @@ mod tests {
         assert_eq!(c.grid(&t.design).mullions.len(), 6);
     }
 
+    /// Phase 2 files (version 7 and 8 of ArchiSim 0.25) have rooms as
+    /// `spaces`, the uses as `space_usages`, and no drawing layers: they
+    /// open with those rooms as rooms of their own height.
+    #[test]
+    fn phase_2_rooms_and_version_8_files() {
+        let m = sample();
+        let level = m.levels()[0].id;
+        let mut v: Value = serde_json::from_str(&to_string(&m)).unwrap();
+        let map = v.as_object_mut().unwrap();
+        map.insert("version".into(), Value::from(8));
+        for k in ["draw_layers", "drafts", "rooms", "tags"] {
+            map.remove(k);
+        }
+        map.get_mut("project")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert(
+                "space_usages".into(),
+                serde_json::json!(["Cocina", "Taller"]),
+            );
+        let l_shape = [
+            [0.0, 0.0],
+            [4.0, 0.0],
+            [4.0, 1.0],
+            [1.0, 1.0],
+            [1.0, 4.0],
+            [0.0, 4.0],
+        ];
+        let g1 = archisim_core::GlobalId::new().to_string();
+        let g2 = archisim_core::GlobalId::new().to_string();
+        map.insert(
+            "spaces".into(),
+            serde_json::json!([
+                {"id": 90001, "guid": g1, "level": level.0, "number": "0.01",
+                 "name": "Cocina", "usage": "Cocina", "height": 2.6,
+                 "outline": [[5.0, 0.0], [8.0, 0.0], [8.0, 3.0], [5.0, 3.0]],
+                 "label": [6.0, 2.0]},
+                {"id": 90002, "guid": g2, "level": level.0,
+                 "name": "Pasillo", "height": 2.5, "outline": l_shape}
+            ]),
+        );
+        let old = from_str(&serde_json::to_string(&v).unwrap()).unwrap();
+        assert_eq!(old.room_usages(), ["Cocina", "Taller"]);
+        let rooms: Vec<_> = old.rooms().collect();
+        assert_eq!(rooms.len(), 2);
+        let kitchen = rooms.iter().find(|r| r.name == "Cocina").unwrap();
+        assert_eq!(kitchen.number, "0.01");
+        assert_eq!(kitchen.usage, "Cocina");
+        assert_eq!(kitchen.height, Some(2.6));
+        assert_eq!(kitchen.label, Point2::new(6.0, 2.0));
+        assert_eq!(kitchen.guid.to_string(), g1);
+        assert!(!kitchen.bounded);
+        assert!((kitchen.area() - 9.0).abs() < 1e-9);
+        // Without a label point, the name goes inside the L.
+        let hall = rooms.iter().find(|r| r.name == "Pasillo").unwrap();
+        assert!(hall.contains(hall.label));
+        // Saved again, it is a current file, and reads back the same.
+        let text = to_string(&old);
+        assert!(text.contains("\"room_usages\""));
+        assert!(!text.contains("\"spaces\""));
+        assert_same_project(&from_str(&text).unwrap(), &old);
+    }
+
     fn slab_material(m: &Model) -> archisim_core::MaterialId {
         m.materials().next().unwrap().id
     }
@@ -1163,7 +1319,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 8", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 9", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1175,7 +1331,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 8,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 9,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1221,11 +1377,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 8", "\"version\": 9"),
-            Err(FileError::TooNew { version: 9 })
+            edited("\"version\": 9", "\"version\": 10"),
+            Err(FileError::TooNew { version: 10 })
         ));
         assert!(matches!(
-            edited("\"version\": 8", "\"version\": 0"),
+            edited("\"version\": 9", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

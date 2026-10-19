@@ -16,12 +16,12 @@ pub struct ImportReport {
     pub slabs: usize,
     pub doors: usize,
     pub windows: usize,
+    /// Rooms (IfcSpace).
+    pub rooms: usize,
     /// Openings in walls with no door or window in them.
     pub voids: usize,
     pub columns: usize,
     pub beams: usize,
-    /// Rooms (`IfcSpace`).
-    pub spaces: usize,
     /// Pitched roofs written by ArchiSim (`IfcRoof`).
     pub roofs: usize,
     /// Stairs written by ArchiSim (`IfcStair`).
@@ -70,6 +70,9 @@ impl ImportReport {
         }
         if self.columns + self.beams > 0 {
             s.push_str(&format!(", {} pilares, {} vigas", self.columns, self.beams));
+        }
+        if self.rooms > 0 {
+            s.push_str(&format!(", {} locales", self.rooms));
         }
         let n = self.skipped_count();
         if n > 0 {
@@ -141,8 +144,8 @@ impl ImportReport {
         } else {
             String::new()
         };
-        if self.spaces > 0 {
-            members.push_str(&format!(", {} locales", self.spaces));
+        if self.rooms > 0 {
+            members.push_str(&format!(", {} locales", self.rooms));
         }
         if self.roofs > 0 {
             members.push_str(&format!(", {} cubiertas", self.roofs));

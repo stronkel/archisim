@@ -476,32 +476,11 @@ pub fn build() -> Result<Document, ModelError> {
                 position: first + chain.outward * 1.4,
             })?;
         }
+        // Tied to the corners and jambs they measure.
+        archisim_geom::anchors::follow(m, &Default::default());
         // Clear of the room stamps, in a corner of two rooms.
         m.add_elevation_mark(pb, Point2::new(1.0, 5.0))?;
         m.add_elevation_mark(pb, Point2::new(10.2, 1.0))?;
-        Ok(())
-    })?;
-
-    // Rooms (v0.25), by their interior faces, numbered on the ground floor.
-    doc.transact("Locales", |m| {
-        for (number, name, usage, at) in [
-            ("0.01", "Estar-comedor", "Estar", Point2::new(3.0, 6.0)),
-            ("0.02", "Dormitorio", "Dormitorio", Point2::new(3.0, 1.8)),
-            ("0.03", "Cocina", "Cocina", Point2::new(9.0, 6.8)),
-            ("0.04", "Dormitorio 2", "Dormitorio", Point2::new(9.0, 2.2)),
-        ] {
-            let outline =
-                archisim_geom::room_outline(m, pb, at, archisim_geom::Contour::InteriorFace)
-                    .map_err(|_| ModelError::InvalidOutline)?;
-            m.add_space(archisim_core::NewSpace {
-                level: pb,
-                number: number.into(),
-                name: name.into(),
-                usage: usage.into(),
-                outline,
-                height: WALL_HEIGHT,
-            })?;
-        }
         Ok(())
     })?;
 
@@ -524,6 +503,202 @@ pub fn build() -> Result<Document, ModelError> {
         for e in archisim_plan::section::elevations_around(m) {
             m.add_section(e)?;
         }
+        Ok(())
+    })?;
+
+    // Drafting: structural grid lines, a paved terrace to the east and the
+    // title of the plan.
+    doc.transact("Dibujo 2D", |m| {
+        use archisim_core::{
+            DrawLayer, Hatch, HatchPattern, LineStyle, NewDraft, Polyline, Shape, Text, TextAlign,
+            ViewRef,
+        };
+        let view = ViewRef::Level(pb);
+        let ejes = m.add_draw_layer(DrawLayer::new(
+            "Ejes",
+            [200, 40, 40],
+            0.13,
+            LineStyle::DashDot,
+        ))?;
+        let urb = m.add_draw_layer(DrawLayer::new(
+            "Urbanización",
+            [90, 90, 90],
+            0.18,
+            LineStyle::Continuous,
+        ))?;
+        let textos = m.add_draw_layer(DrawLayer::new(
+            "Textos",
+            [0, 0, 0],
+            0.25,
+            LineStyle::Continuous,
+        ))?;
+        for x in [0.0, 6.0, 12.0] {
+            m.add_draft(NewDraft::new(
+                view,
+                ejes,
+                Shape::Line {
+                    a: Point2::new(x, -2.5),
+                    b: Point2::new(x, 11.0),
+                },
+            ))?;
+        }
+        let terrace = Polyline::straight(
+            vec![
+                Point2::new(12.0, 0.0),
+                Point2::new(15.0, 0.0),
+                Point2::new(15.0, 9.0),
+                Point2::new(12.0, 9.0),
+            ],
+            true,
+        );
+        m.add_draft(NewDraft::new(
+            view,
+            urb,
+            Shape::Hatch(Hatch {
+                loops: vec![terrace.clone()],
+                pattern: HatchPattern::Tiles,
+                scale: 1.0,
+                angle: 0.0,
+                background: None,
+            }),
+        ))?;
+        m.add_draft(NewDraft::new(view, urb, Shape::Polyline(terrace)))?;
+        m.add_draft(NewDraft::new(
+            view,
+            textos,
+            Shape::Text(Text {
+                at: Point2::new(6.0, 10.2),
+                content: "PLANTA BAJA".into(),
+                height: 5.0,
+                angle: 0.0,
+                align: TextAlign::BottomCentre,
+            }),
+        ))?;
+        m.add_draft(NewDraft::new(
+            view,
+            textos,
+            Shape::Text(Text {
+                at: Point2::new(13.5, 4.5),
+                content: "Terraza\nbaldosa 30×30".into(),
+                height: 2.5,
+                angle: 0.0,
+                align: TextAlign::Middle,
+            }),
+        ))?;
+        Ok(())
+    })?;
+
+    // Rooms found inside the walls, and a tag on every door and window,
+    // on the outer side of its wall.
+    doc.transact("Locales y etiquetas", |m| {
+        use archisim_core::{NewRoom, TagTarget};
+        use archisim_geom::{opening_geometry, room_outline, Contour};
+        // Named after the furniture: living and kitchen to the north,
+        // bedrooms to the south.
+        let wood = "Tarima flotante de roble";
+        for (number, name, usage, at, floor) in [
+            (
+                "0.01",
+                "Estar-comedor",
+                "Estar",
+                Point2::new(3.0, 6.0),
+                wood,
+            ),
+            (
+                "0.02",
+                "Dormitorio",
+                "Dormitorio",
+                Point2::new(3.0, 1.8),
+                wood,
+            ),
+            (
+                "0.03",
+                "Cocina",
+                "Cocina",
+                Point2::new(9.0, 6.8),
+                "Gres porcelánico",
+            ),
+            (
+                "0.04",
+                "Dormitorio 2",
+                "Dormitorio",
+                Point2::new(9.0, 2.2),
+                wood,
+            ),
+        ] {
+            let outline = room_outline(m, pb, at, Contour::InteriorFace)
+                .map_err(|_| ModelError::InvalidOutline)?;
+            let id = m.add_room(NewRoom {
+                level: pb,
+                number: number.into(),
+                name: name.into(),
+                outline,
+                holes: Vec::new(),
+                label: at,
+                bounded: true,
+            })?;
+            if let Some(mut r) = m.room(id).cloned() {
+                r.usage = usage.into();
+                r.finishes = archisim_core::Finishes {
+                    floor: floor.into(),
+                    walls: "Pintura plástica lisa".into(),
+                    ceiling: "Falso techo de placa de yeso".into(),
+                };
+                m.set_room(r)?;
+            }
+        }
+        let ops: Vec<_> = m
+            .openings()
+            .filter(|o| {
+                m.opening_type(o.opening_type)
+                    .is_some_and(|t| t.kind != archisim_core::OpeningKind::Void)
+            })
+            .map(|o| o.id)
+            .collect();
+        for o in ops {
+            if let Some(g) = opening_geometry(m, o) {
+                let at = g.point((g.t0 + g.t1) / 2.0, g.exterior_offset + 0.35);
+                m.add_tag(TagTarget::Opening(o), at, false)?;
+            }
+        }
+        Ok(())
+    })?;
+
+    // The ground floor plan on an A2 sheet at 1:50, with its title block.
+    doc.transact("Plano", |m| {
+        use archisim_core::{NewSheet, NewViewport, ProjectInfo};
+        m.set_info(ProjectInfo {
+            client: "Promotor de ejemplo".into(),
+            site: "Calle Mayor 1, Madrid".into(),
+            author: "ArchiSim".into(),
+            studio: "Estudio de ejemplo".into(),
+            number: "2026-001".into(),
+            phase: "Proyecto básico".into(),
+            date: "octubre 2026".into(),
+        });
+        let sheet = m.add_sheet(NewSheet {
+            number: "A-01".into(),
+            name: "Planta baja".into(),
+            width: 594.0,
+            height: 420.0,
+        })?;
+        m.add_viewport(NewViewport {
+            sheet,
+            level: pb,
+            scale: 50.0,
+            cut_plane: 1.0,
+            crop: None,
+            centre: Point2::new(0.21, 0.24),
+        })?;
+        // The rooms' areas over the plan, against the right of the frame.
+        let (w, _) =
+            archisim_plan::schedules::table(m, archisim_core::ScheduleKind::Rooms, Some(pb)).size();
+        m.add_table(
+            sheet,
+            archisim_core::ScheduleKind::Rooms,
+            Some(pb),
+            Point2::new(0.579 - w * 0.001, 0.405),
+        )?;
         Ok(())
     })?;
 
@@ -552,10 +727,19 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 12);
-        assert_eq!(doc.undo_label(), Some("Secciones y alzados"));
+        assert_eq!(doc.undo_label(), Some("Plano"));
         assert_eq!(m.sections().count(), 6);
-        assert_eq!(m.spaces().count(), 4);
+        assert_eq!(m.sheets().len(), 1);
+        assert_eq!(m.rooms().count(), 4);
+        assert_eq!(m.tags().count(), 9);
+        let total: f64 = m.rooms().map(|r| r.area()).sum();
+        assert!(total > 90.0 && total < 108.0, "{total}");
+        assert_eq!(m.drafts().count(), 7);
+        assert_eq!(m.draw_layers().len(), 4);
         assert_eq!(m.dimensions().count(), 4);
+        assert!(m
+            .dimensions()
+            .all(|d| d.anchors.iter().any(Option::is_some)));
         assert_eq!(m.elevation_marks().count(), 2);
         // The roof slab rests on the façade walls.
         let roof = m

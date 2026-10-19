@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{CurtainPieceKind, CurtainWall, Model, Point2};
 
-use crate::{fill_cut, num, path, CUT_LINE, INK, LAYER_LINE, VIEW_LINE};
+use crate::{fill_cut, num, path, pens, INK};
 
 /// Every point of the curtain wall the plan must show.
 pub fn curtain_points(model: &Model, c: &CurtainWall) -> Vec<Point2> {
@@ -44,7 +44,7 @@ pub fn draw_curtain_wall(s: &mut String, model: &Model, c: &CurtainWall, cut_pla
         .iter()
         .find(|p| p.kind == CurtainPieceKind::Louvre && p.up.1 <= cut)
     {
-        outline(s, &c.piece_footprint(l), VIEW_LINE, false, k);
+        outline(s, &c.piece_footprint(l), pens().view, false, k);
     }
     if cut_plane > z0 && cut_plane < z1 {
         // What the cut goes through; where it falls on a transom, the
@@ -71,14 +71,14 @@ pub fn draw_curtain_wall(s: &mut String, model: &Model, c: &CurtainWall, cut_pla
                 fill_cut(s, m, &poly, &format!("cw{}-{i}", c.id.0), k);
             }
             let weight = if matches!(p.kind, CurtainPieceKind::Panel(_)) {
-                LAYER_LINE
+                pens().thin
             } else {
-                CUT_LINE
+                pens().cut
             };
             outline(s, &poly, weight, false, k);
         }
     } else {
-        outline(s, &c.outline(d), VIEW_LINE, cut_plane <= z0, k);
+        outline(s, &c.outline(d), pens().view, cut_plane <= z0, k);
     }
     s.push_str("</g>\n");
 }

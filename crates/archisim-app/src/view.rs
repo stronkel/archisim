@@ -71,6 +71,17 @@ impl View {
         self.center = self.center + (anchor - moved);
     }
 
+    /// [`View::fit`] for regions of any size (a sheet is under a metre
+    /// wide): no minimum extent and no zoom limits.
+    pub fn fit_exact(&mut self, rect: Rect, lo: Point2, hi: Point2, margin: f32) {
+        let w = (hi.x - lo.x).max(1e-6);
+        let h = (hi.y - lo.y).max(1e-6);
+        let avail_w = (rect.width() - 2.0 * margin).max(10.0) as f64;
+        let avail_h = (rect.height() - 2.0 * margin).max(10.0) as f64;
+        self.zoom = (avail_w / w).min(avail_h / h);
+        self.center = Point2::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0);
+    }
+
     /// Frames the model region `lo`–`hi` in `rect` with a margin in points.
     pub fn fit(&mut self, rect: Rect, lo: Point2, hi: Point2, margin: f32) {
         let w = (hi.x - lo.x).max(1.0);

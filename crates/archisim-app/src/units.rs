@@ -166,7 +166,6 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::InvalidProfile => {
             "el alma y las alas no caben en la sección del perfil".into()
         }
-        ModelError::UnknownSpace(_) => "el local ya no existe".into(),
         ModelError::UnknownSection(_) => "la sección ya no existe".into(),
         ModelError::ZeroLengthSection => "la sección necesita dos puntos distintos".into(),
         ModelError::UnknownRoof(_) => "la cubierta ya no existe".into(),
@@ -198,6 +197,45 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::DuplicateNumber(n) => {
             format!("otro local de esta planta ya tiene el número «{n}»")
         }
+        ModelError::UnknownDrawLayer(_) => "la capa no existe".into(),
+        ModelError::UnknownDraft(_) => "el elemento de dibujo ya no existe".into(),
+        ModelError::UnknownSheet(_) => "el plano ya no existe".into(),
+        ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
+        ModelError::UnknownRoom(_) => "el local ya no existe".into(),
+        ModelError::UnknownTag(_) => "la etiqueta ya no existe".into(),
+        ModelError::UnknownTable(_) => "la tabla ya no está en el plano".into(),
+        ModelError::InvalidShape(what) => es_shape(what).into(),
+        ModelError::DuplicateName(name) => format!("ya hay otro elemento llamado «{name}»"),
+    }
+}
+
+/// Why a drafting element is not well formed, in Spanish.
+fn es_shape(what: &str) -> &str {
+    match what {
+        "line has no length" => "la línea no tiene longitud",
+        "polyline needs more points" => "la polilínea necesita más puntos",
+        "hatch boundaries must be closed" => "el contorno del sombreado tiene que estar cerrado",
+        "polyline needs one bulge per point" => "a la polilínea le faltan curvaturas",
+        "polyline arc too large" => "un arco de la polilínea es demasiado grande",
+        "polyline has no length" => "la polilínea no tiene longitud",
+        "arc sweep must be between 0 and 360°" => "el arco tiene que abarcar entre 0 y 360°",
+        "ellipse ratio must be in (0, 1]" => {
+            "la proporción de la elipse tiene que estar entre 0 y 1"
+        }
+        "ellipse sweep must be in (0, 360°]" => {
+            "el arco de elipse tiene que abarcar entre 0 y 360°"
+        }
+        "text is empty" => "el texto está vacío",
+        "hatch needs a boundary" => "el sombreado necesita un contorno",
+        "layer name is empty" => "la capa necesita un nombre",
+        "layer 0 cannot be renamed" => "la capa 0 no se puede renombrar",
+        "no room there" => {
+            "ahí no hay un recinto cerrado por muros (dibuje su contorno con la opción Polígono)"
+        }
+        "nothing to tag there" => {
+            "eso no se etiqueta: elija una puerta, una ventana, un muro o un local"
+        }
+        other => other,
     }
 }
 
@@ -300,7 +338,7 @@ fn es_what(what: &str) -> String {
         "section diameter" => "el diámetro de la sección",
         "web thickness" => "el espesor del alma",
         "flange thickness" => "el espesor de las alas",
-        "space height" => "la altura del local",
+        "room height" => "la altura del local",
         "section start" => "el inicio de la sección",
         "terrain point" => "un punto del terreno",
         "terrain point height" => "la cota de un punto",
@@ -322,7 +360,14 @@ fn es_what(what: &str) -> String {
         "slab slope" => "la pendiente",
         "section end" => "el final de la sección",
         "section view depth" => "la profundidad de la sección",
-        "space label" => "la posición del rótulo del local",
+        "room label" => "la posición del rótulo del local",
+        "circle radius" => "el radio del círculo",
+        "arc radius" => "el radio del arco",
+        "ellipse axis" => "el eje de la elipse",
+        "text height" => "la altura del texto",
+        "hatch scale" => "la escala del sombreado",
+        "line weight" | "layer line weight" => "el grosor de línea",
+        "polyline width" => "la anchura de la polilínea",
         other => other,
     }
     .to_string()

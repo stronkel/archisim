@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Point2, Railing, RailingPieceKind, HANDRAIL_SIZE};
 
-use crate::{num, path, INK, VIEW_LINE};
+use crate::{num, path, pens, INK};
 
 /// Every point of the railing the plan must show.
 pub fn railing_points(r: &Railing) -> Vec<Point2> {
@@ -26,7 +26,7 @@ pub fn draw_railing(s: &mut String, r: &Railing, cut_plane: f64, k: f64) {
             s,
             r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
             path(&quad),
-            num(VIEW_LINE * k)
+            num(pens().view * k)
         );
     }
     let cut = cut_plane > r.base_offset && cut_plane < r.base_offset + r.height;
@@ -48,7 +48,7 @@ pub fn draw_railing(s: &mut String, r: &Railing, cut_plane: f64, k: f64) {
             r#"<path d="{}" fill="{}" stroke="{INK}" stroke-width="{}"/>"#,
             path(&sq),
             if cut { INK } else { "white" },
-            num(VIEW_LINE * k)
+            num(pens().view * k)
         );
     }
     s.push_str("</g>\n");

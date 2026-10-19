@@ -6,7 +6,11 @@ use std::fmt::Write as _;
 use archisim_core::{DoorOperation, OpeningKind, Point2, WindowOperation, EPSILON};
 use archisim_geom::OpeningGeometry;
 
-use super::{num, path, pt, FRAME_LINE, INK, LAYER_LINE};
+use super::{num, path, pt, INK};
+
+/// The weights the old symbols were drawn with.
+const FRAME_LINE: f64 = 0.25;
+const LAYER_LINE: f64 = 0.13;
 
 const LEAF_THICKNESS: f64 = 0.04;
 const SILL_PROJECTION: f64 = 0.03;

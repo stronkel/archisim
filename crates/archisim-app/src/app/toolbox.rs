@@ -18,7 +18,11 @@ pub enum Pick {
     LevelMark,
     /// Makes the four elevations (an action, not a tool).
     Elevations,
-    /// Not there yet: the roadmap item that brings it.
+    /// A 2D drafting or editing command (AutoCAD's), by its name.
+    Command(&'static str),
+    /// Not there yet: the roadmap item that brings it. (Every tool of the
+    /// box is there now; kept for the next ones.)
+    #[allow(dead_code)]
     Later(&'static str),
 }
 
@@ -150,7 +154,7 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 Icon::Room,
                 "Local",
                 "Z",
-                "Locales: clic dentro de un recinto (superficie útil), número, nombre y uso (IfcSpace)",
+                "Locales (IfcSpace): clic dentro de un recinto (superficie útil), polígono o rectángulo; número, nombre y uso. También la orden LOCAL",
             ),
         ],
     ),
@@ -165,20 +169,203 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Cotas lineales, encadenadas y de huecos de muro",
             ),
             tile(
+                Pick::Command("ACOANGULO"),
+                Icon::DimAngle,
+                "Angular",
+                "DAN",
+                "Cota del ángulo entre dos líneas o de un arco",
+            ),
+            tile(
+                Pick::Command("ACORADIO"),
+                Icon::DimRadius,
+                "Radio",
+                "DRA",
+                "Cota de radio de un arco o círculo (diámetro: DDI)",
+            ),
+            tile(
+                Pick::Command("ACOARCO"),
+                Icon::DimArc,
+                "Long. arco",
+                "DAR",
+                "Cota de la longitud de un arco",
+            ),
+            tile(
                 Pick::LevelMark,
                 Icon::Elevation,
                 "Cota nivel",
                 "N",
                 "Cota de nivel del suelo terminado",
             ),
-            tile(Pick::Later("3.4"), Icon::Text, "Texto", "", "Textos"),
-            tile(Pick::Later("3.3"), Icon::Tag, "Etiqueta", "", "Etiquetas"),
             tile(
-                Pick::Later("3.4"),
+                Pick::Command("TEXTO"),
+                Icon::Text,
+                "Texto",
+                "TX",
+                "Textos de una o varias líneas",
+            ),
+            tile(
+                Pick::Command("ETIQUETA"),
+                Icon::Tag,
+                "Etiqueta",
+                "ETI",
+                "Etiquetas de puertas, ventanas, muros y locales (T: todas)",
+            ),
+            tile(
+                Pick::Command("SOMBCONT"),
                 Icon::Hatch,
-                "Trama",
-                "",
-                "Tramas y rellenos",
+                "Sombreado",
+                "SB",
+                "Tramas y rellenos: clic dentro de un recinto",
+            ),
+            tile(
+                Pick::Command("DIRECTRIZ"),
+                Icon::Leader,
+                "Directriz",
+                "DIR",
+                "Flecha con texto",
+            ),
+            tile(
+                Pick::Command("NUBEREV"),
+                Icon::Cloud,
+                "Nube",
+                "NR",
+                "Nube de revisión",
+            ),
+        ],
+    ),
+    (
+        "DIBUJO 2D",
+        &[
+            tile(
+                Pick::Command("LINEA"),
+                Icon::Line,
+                "Línea",
+                "L",
+                "Líneas de punto a punto",
+            ),
+            tile(
+                Pick::Command("POL"),
+                Icon::Pline,
+                "Polilínea",
+                "PL",
+                "Tramos rectos y de arco, con anchura",
+            ),
+            tile(
+                Pick::Command("RECTANG"),
+                Icon::GeoRect,
+                "Rectángulo",
+                "REC",
+                "Por dos esquinas, girado o con esquinas redondeadas",
+            ),
+            tile(
+                Pick::Command("POLIGONO"),
+                Icon::GeoPolygon,
+                "Polígono",
+                "PG",
+                "Polígono regular inscrito o circunscrito",
+            ),
+            tile(
+                Pick::Command("ARCO"),
+                Icon::GeoArc,
+                "Arco",
+                "A",
+                "Por tres puntos o por centro, inicio y fin",
+            ),
+            tile(
+                Pick::Command("CIRCULO"),
+                Icon::GeoCircle,
+                "Círculo",
+                "C",
+                "Centro y radio o diámetro; 2P; 3P",
+            ),
+            tile(
+                Pick::Command("ELIPSE"),
+                Icon::Ellipse,
+                "Elipse",
+                "EL",
+                "Por un eje y la otra distancia, o por su centro",
+            ),
+        ],
+    ),
+    (
+        "EDICIÓN",
+        &[
+            tile(
+                Pick::Command("DESPLAZA"),
+                Icon::Move,
+                "Desplazar",
+                "D",
+                "Mover lo seleccionado de un punto base a otro",
+            ),
+            tile(
+                Pick::Command("COPIA"),
+                Icon::Copy,
+                "Copiar",
+                "CP",
+                "Copias de lo seleccionado, una tras otra",
+            ),
+            tile(
+                Pick::Command("GIRA"),
+                Icon::Rotate,
+                "Girar",
+                "GI",
+                "Girar alrededor de un punto (Copia, Referencia)",
+            ),
+            tile(
+                Pick::Command("SIMETRIA"),
+                Icon::Mirror,
+                "Simetría",
+                "SI",
+                "Reflejar respecto a una línea",
+            ),
+            tile(
+                Pick::Command("ESCALA"),
+                Icon::Scale,
+                "Escala",
+                "ES",
+                "Cambiar de tamaño desde un punto base",
+            ),
+            tile(
+                Pick::Command("EQUIDIST"),
+                Icon::Offset,
+                "Desfase",
+                "EQ",
+                "Paralela a una distancia",
+            ),
+            tile(
+                Pick::Command("RECORTA"),
+                Icon::Trim,
+                "Recortar",
+                "RR",
+                "Recortar contra cualquier borde (Mayús: alargar)",
+            ),
+            tile(
+                Pick::Command("ALARGA"),
+                Icon::Extend,
+                "Alargar",
+                "AL",
+                "Alargar hasta el borde más próximo (Mayús: recortar)",
+            ),
+            tile(
+                Pick::Command("EMPALME"),
+                Icon::Fillet,
+                "Empalme",
+                "EM",
+                "Unir dos líneas en esquina o con un arco",
+            ),
+            tile(
+                Pick::Command("MATRIZ"),
+                Icon::Array,
+                "Matriz",
+                "MA",
+                "Copias en filas y columnas o alrededor de un centro",
+            ),
+            tile(
+                Pick::Command("DIST"),
+                Icon::Measure,
+                "Medir",
+                "DI",
+                "Distancia entre dos puntos (AA: área)",
             ),
         ],
     ),
@@ -212,6 +399,9 @@ impl ArchiSimApp {
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
             Pick::Elevations => Some(false),
+            Pick::Command(name) => {
+                Some(self.tool == Tool::Cad && self.cad.as_ref().is_some_and(|c| c.name() == name))
+            }
             Pick::Later(_) => None,
         }
     }
@@ -235,6 +425,7 @@ impl ArchiSimApp {
                 self.set_tool(Tool::Dimension);
             }
             Pick::Elevations => self.create_elevations(),
+            Pick::Command(name) => self.start_command(name),
             Pick::Later(item) => self.say(format!(
                 "Esta herramienta llegará con el punto {item} de la hoja de ruta."
             )),

@@ -65,6 +65,7 @@ impl ArchiSimApp {
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
+        self.draw_cad(&painter, rect);
         self.draw_tracking(&painter, rect);
         self.draw_cursor(&painter, rect);
         if let (Some(a), Some(c)) = (self.window_start, self.cursor) {
@@ -100,6 +101,12 @@ impl ArchiSimApp {
             | Tool::CurtainWall
             | Tool::Railing
             | Tool::Object => CursorIcon::Crosshair,
+            Tool::Cad => match self.cad_want() {
+                Some(crate::cad::Want::Pick) => CursorIcon::Cell,
+                Some(crate::cad::Want::Select) if self.hover.is_some() => CursorIcon::PointingHand,
+                Some(crate::cad::Want::Select) => CursorIcon::Default,
+                _ => CursorIcon::Crosshair,
+            },
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -178,6 +185,7 @@ impl ArchiSimApp {
         let reach = self.view.to_metres(REACH);
         let model = self.ed.model();
         match self.tool {
+            Tool::Cad => self.cad_cursor(ctx, raw, reach),
             Tool::Wall => {
                 let mut s = self.snap_at(raw, reach, &self.wall_tool.chain(), &BTreeSet::new());
                 if let Some(a) = self.wall_tool.tracking_from() {
@@ -236,7 +244,7 @@ impl ArchiSimApp {
                 let p = crate::snap::round_point(raw);
                 self.cursor = Some(Snap::at(p, SnapKind::Free));
                 self.hover = None;
-                let contour = self.space_settings.contour;
+                let contour = self.room_settings.contour;
                 let key = (self.ed.revision(), p, contour);
                 let fresh = self
                     .wand_preview
@@ -438,15 +446,16 @@ impl ArchiSimApp {
             self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
             return;
         }
-        let drawing = self.wall_tool.is_drawing()
-            || self.slab_tool.is_drawing()
-            || self.dim_tool.is_active()
-            || self.beam_tool.is_drawing()
-            || self.zone_tool.is_drawing()
-            || self.roof_tool.is_drawing()
-            || !self.stair_tool.points.is_empty()
-            || !self.terrain_points.is_empty()
-            || !self.terrain_line.is_empty();
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
+            self.toggle_ortho();
+        }
+        if self.command_keys(&events, enter, escape, backspace, space) {
+            return;
+        }
+        if self.tool == Tool::Cad {
+            return;
+        }
+        let drawing = self.drawing_bim();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -636,6 +645,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Cad => self.cad_escape(),
                 Tool::Dimension => {
                     if !self.dim_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -706,6 +716,7 @@ impl ArchiSimApp {
             }
         }
         match self.tool {
+            Tool::Cad => self.cad_clicks(ctx, response, rect),
             Tool::Wall => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
@@ -1003,6 +1014,7 @@ impl ArchiSimApp {
             reference_level: self.reference_level(),
             thin_lines: self.thin_lines,
             phase_view: self.phase_view,
+            style: self.view_style.clone(),
         };
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
@@ -1018,6 +1030,7 @@ impl ArchiSimApp {
                     reference_level: key.reference_level,
                     thin_lines: key.thin_lines,
                     phase_view: key.phase_view,
+                    style: key.style.clone(),
                     ..archisim_plan::PlanOptions::default()
                 },
             );
@@ -1074,7 +1087,7 @@ impl ArchiSimApp {
         poly.iter().map(|p| self.view.to_screen(rect, *p)).collect()
     }
 
-    fn draw_selection(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_selection(&self, painter: &egui::Painter, rect: Rect) {
         let model = self.ed.model();
         if let Some(h) = self.hover {
             if !self.ed.selection.contains(&h) {
@@ -1195,7 +1208,7 @@ impl ArchiSimApp {
                 Ok(polys) => {
                     for poly in polys {
                         let pts = self.polygon(rect, poly);
-                        painter.add(Shape::closed_line(pts, Stroke::new(1.5, ACCENT)));
+                        painter.add(Shape::line(pts, Stroke::new(1.5, ACCENT)));
                     }
                 }
                 Err(e) => problem = Some(e.clone()),
@@ -1211,7 +1224,7 @@ impl ArchiSimApp {
             (Grip::SlabEdge { .. }, true) => "Nueva esquina",
             (Grip::WallBend { .. }, _) => "Curvar",
             (Grip::BeamEnd { .. }, _) => "Estirar viga",
-            (Grip::SpaceLabel { .. }, _) => "Rótulo",
+            (Grip::RoomLabel { .. }, _) => "Rótulo",
             (Grip::SectionEnd { .. }, _) => "Estirar sección",
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
             (Grip::RoofCorner { .. }, _) => "Esquina",
@@ -1223,6 +1236,7 @@ impl ArchiSimApp {
             (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
             (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
             (Grip::TerrainPoint { .. }, _) => "Punto",
+            (Grip::DraftPoint { .. }, _) => "Estirar",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
@@ -1588,6 +1602,7 @@ impl ArchiSimApp {
             Tool::Dimension if !self.dim_tool.is_placing() => {
                 self.dim_tool.points().last().copied()
             }
+            Tool::Cad => self.cad.as_ref().and_then(|c| c.base()),
             _ => None,
         }
     }
@@ -1705,10 +1720,16 @@ impl ArchiSimApp {
     }
 
     fn draw_cursor(&self, painter: &egui::Painter, rect: Rect) {
-        let points = self.tool.draws_points()
-            && !(self.tool == Tool::Slab && self.slab_settings.wand)
-            && !(self.tool == Tool::Zone && self.zone_wand())
-            && !(self.tool == Tool::Roof && self.roof_wand());
+        let cad_points = self.tool == Tool::Cad
+            && matches!(
+                self.cad_want(),
+                Some(crate::cad::Want::Point) | Some(crate::cad::Want::Value)
+            );
+        let points = cad_points
+            || self.tool.draws_points()
+                && !(self.tool == Tool::Slab && self.slab_settings.wand)
+                && !(self.tool == Tool::Zone && self.zone_wand())
+                && !(self.tool == Tool::Roof && self.roof_wand());
         let (true, Some(c)) = (points || self.drag.is_some(), self.cursor) else {
             return;
         };
@@ -1750,6 +1771,41 @@ impl ArchiSimApp {
             }
             SnapKind::Aligned => {
                 painter.circle_stroke(p, 5.0, Stroke::new(1.5, TRACK_LINE));
+            }
+            SnapKind::Quadrant => {
+                let pts = vec![
+                    p + Vec2::new(0.0, -7.0),
+                    p + Vec2::new(7.0, 0.0),
+                    p + Vec2::new(0.0, 7.0),
+                    p + Vec2::new(-7.0, 0.0),
+                ];
+                painter.add(Shape::closed_line(pts, stroke));
+            }
+            SnapKind::Node => {
+                painter.circle_stroke(p, 5.0, stroke);
+                painter.line_segment([p + Vec2::new(-5.0, -5.0), p + Vec2::new(5.0, 5.0)], stroke);
+                painter.line_segment([p + Vec2::new(-5.0, 5.0), p + Vec2::new(5.0, -5.0)], stroke);
+            }
+            SnapKind::Intersection => {
+                let bold = Stroke::new(2.5, stroke.color);
+                painter.line_segment([p + Vec2::new(-6.0, -6.0), p + Vec2::new(6.0, 6.0)], bold);
+                painter.line_segment([p + Vec2::new(-6.0, 6.0), p + Vec2::new(6.0, -6.0)], bold);
+            }
+            SnapKind::Perpendicular => {
+                painter.line_segment([p + Vec2::new(-7.0, 6.0), p + Vec2::new(7.0, 6.0)], stroke);
+                painter.line_segment(
+                    [p + Vec2::new(-7.0, 6.0), p + Vec2::new(-7.0, -7.0)],
+                    stroke,
+                );
+                painter.line_segment([p + Vec2::new(-7.0, 0.0), p + Vec2::new(0.0, 0.0)], stroke);
+                painter.line_segment([p + Vec2::new(0.0, 0.0), p + Vec2::new(0.0, 6.0)], stroke);
+            }
+            SnapKind::Tangent => {
+                painter.circle_stroke(p + Vec2::new(0.0, 2.0), 5.0, stroke);
+                painter.line_segment(
+                    [p + Vec2::new(-7.0, -3.0), p + Vec2::new(7.0, -3.0)],
+                    stroke,
+                );
             }
             SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => {}
         }

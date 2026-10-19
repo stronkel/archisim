@@ -4,7 +4,7 @@
 //! `plan_scale`, `cut_plane`, `ed.level`) so that the plan code needs to
 //! know nothing about tabs.
 
-use archisim_core::{LevelId, SectionId, SectionKind};
+use archisim_core::{LevelId, SectionId, SectionKind, SheetId};
 use eframe::egui::{
     self, CornerRadius, FontId, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
 };
@@ -22,10 +22,12 @@ pub enum TabKind {
     ThreeD,
     /// A section or elevation.
     Section(SectionId),
+    /// A sheet: paper with views placed on it.
+    Sheet(SheetId),
 }
 
 /// A view open in a tab, with what it remembers while another is shown.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ViewTab {
     pub kind: TabKind,
     pub view: View,
@@ -35,6 +37,8 @@ pub struct ViewTab {
     pub cut_plane: f64,
     /// Framed once already (a new tab is fitted to its level).
     pub fitted: bool,
+    /// What the view shows: categories, drawing layers, detail.
+    pub style: archisim_core::ViewStyle,
 }
 
 impl ViewTab {
@@ -46,6 +50,7 @@ impl ViewTab {
             scale: d.scale,
             cut_plane: d.cut_plane,
             fitted: false,
+            style: Default::default(),
         }
     }
 
@@ -63,6 +68,13 @@ impl ViewTab {
             ..Self::plan(LevelId(0))
         }
     }
+
+    pub fn sheet(id: SheetId) -> Self {
+        Self {
+            kind: TabKind::Sheet(id),
+            ..Self::plan(LevelId(0))
+        }
+    }
 }
 
 /// The scales offered for plans.
@@ -72,11 +84,16 @@ impl ArchiSimApp {
     /// Keeps the active tab's state in its slot of the list.
     fn store_active_tab(&mut self) {
         let (view, scale, cut) = (self.view, self.plan_scale, self.cut_plane);
+        let style = self.view_style.clone();
         if let Some(t) = self.tabs.get_mut(self.active_tab) {
             if matches!(t.kind, TabKind::Plan(_) | TabKind::Section(_)) {
                 t.view = view;
                 t.scale = scale;
                 t.cut_plane = cut;
+                t.style = style;
+                t.fitted = true;
+            } else if matches!(t.kind, TabKind::Sheet(_)) {
+                t.view = view;
                 t.fitted = true;
             }
         }
@@ -91,12 +108,13 @@ impl ArchiSimApp {
             self.store_active_tab();
         }
         self.active_tab = i;
-        let tab = self.tabs[i];
+        let tab = self.tabs[i].clone();
         match tab.kind {
             TabKind::Plan(level) => {
                 self.view = tab.view;
                 self.plan_scale = tab.scale;
                 self.cut_plane = tab.cut_plane;
+                self.view_style = tab.style;
                 if !tab.fitted {
                     self.fit_requested = true;
                 }
@@ -119,6 +137,19 @@ impl ArchiSimApp {
                 }
                 self.mode = ViewMode::Section;
             }
+            TabKind::Sheet(id) => {
+                if !matches!(self.tool, super::Tool::Arrow | super::Tool::Cad) {
+                    self.set_tool(super::Tool::Arrow);
+                }
+                self.end_command(true);
+                self.ed.selection.clear();
+                self.sheet_sel = None;
+                self.view = tab.view;
+                if !tab.fitted {
+                    self.fit_requested = true;
+                }
+                self.mode = ViewMode::Sheet(id);
+            }
         }
     }
 
@@ -132,6 +163,7 @@ impl ArchiSimApp {
             TabKind::Plan(level) => ViewTab::plan(level),
             TabKind::ThreeD => ViewTab::three_d(),
             TabKind::Section(id) => ViewTab::section(id),
+            TabKind::Sheet(id) => ViewTab::sheet(id),
         };
         // Next to the active tab, as browsers do.
         let at = (self.active_tab + 1).min(self.tabs.len());
@@ -196,6 +228,7 @@ impl ArchiSimApp {
             .filter(|&i| match self.tabs[i].kind {
                 TabKind::Plan(l) => !exists(model, l),
                 TabKind::Section(s) => model.section(s).is_none(),
+                TabKind::Sheet(s) => model.sheet(s).is_none(),
                 TabKind::ThreeD => false,
             })
             .collect();
@@ -238,6 +271,7 @@ impl ArchiSimApp {
         self.mode = match self.tabs.get(self.active_tab).map(|t| t.kind) {
             Some(TabKind::ThreeD) => ViewMode::ThreeD,
             Some(TabKind::Section(_)) => ViewMode::Section,
+            Some(TabKind::Sheet(s)) => ViewMode::Sheet(s),
             _ => ViewMode::Plan,
         };
     }
@@ -269,6 +303,11 @@ impl ArchiSimApp {
                 .model()
                 .section(s)
                 .map_or_else(|| "Sección".into(), |s| s.title()),
+            TabKind::Sheet(s) => self
+                .ed
+                .model()
+                .sheet(s)
+                .map_or_else(|| "Plano".into(), |s| format!("{} {}", s.number, s.name)),
         }
     }
 
@@ -308,6 +347,12 @@ impl ArchiSimApp {
                     format!("1:{s}")
                 }
                 TabKind::ThreeD => String::new(),
+                TabKind::Sheet(s) => self
+                    .ed
+                    .model()
+                    .sheet(s)
+                    .map(|s| s.size_name())
+                    .unwrap_or_default(),
             };
             let note = ui
                 .painter()
@@ -323,6 +368,7 @@ impl ArchiSimApp {
                     TabKind::Plan(_) => "Planta · clic con la rueda: cerrar",
                     TabKind::ThreeD => "Vista 3D · clic con la rueda: cerrar",
                     TabKind::Section(_) => "Sección o alzado · clic con la rueda: cerrar",
+                    TabKind::Sheet(_) => "Plano · clic con la rueda: cerrar",
                 });
             let painter = ui.painter();
             if active {
@@ -368,6 +414,7 @@ impl ArchiSimApp {
                     Some(SectionKind::Elevation) => Icon::Elevation,
                     _ => Icon::Section,
                 },
+                TabKind::Sheet(_) => Icon::Sheet,
             };
             icons::paint(
                 painter,
@@ -432,6 +479,13 @@ impl ArchiSimApp {
             .sections()
             .map(|s| (s.id, s.title()))
             .collect();
+        let sheets: Vec<(SheetId, String)> = self
+            .ed
+            .model()
+            .sheets()
+            .iter()
+            .map(|s| (s.id, format!("{} {}", s.number, s.name)))
+            .collect();
         let mut open = None;
         egui::Popup::menu(&presp).show(|ui| {
             ui.label(egui::RichText::new("Plantas").small().weak());
@@ -450,6 +504,15 @@ impl ArchiSimApp {
                 for (id, title) in &sections {
                     if ui.button(title).clicked() {
                         open = Some(TabKind::Section(*id));
+                    }
+                }
+            }
+            if !sheets.is_empty() {
+                ui.separator();
+                ui.label(egui::RichText::new("Planos").small().weak());
+                for (id, name) in &sheets {
+                    if ui.button(name).clicked() {
+                        open = Some(TabKind::Sheet(*id));
                     }
                 }
             }

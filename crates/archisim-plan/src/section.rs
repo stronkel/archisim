@@ -24,9 +24,7 @@ use archisim_core::{MaterialId, Model, NewSection, Point2, SectionKind, SectionL
 use archisim_geom::solid::{model_solids, SolidOwner, P3};
 
 use crate::lettering::{text_path, Align};
-use crate::{
-    annotate, fill_cut, num, path, pt, PlanOptions, CUT_LINE, INK, LAYER_LINE, TEXT_SIZE, VIEW_LINE,
-};
+use crate::{annotate, fill_cut, num, path, pens, pt, PlanOptions, INK, TEXT_SIZE};
 
 /// What a section draws, worked out once for a model and a section line;
 /// [`render_section`] writes it to SVG for any view of it.
@@ -535,7 +533,7 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
                     r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}"/>"#,
                     pt(a),
                     pt(b),
-                    num(LAYER_LINE * k),
+                    num(pens().thin * k),
                     num(10.0 * k),
                     num(1.5 * k),
                     num(1.0 * k),
@@ -549,7 +547,7 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
                     pt(a + u * end),
                     pt(b),
                     pt(b - u * end),
-                    num(CUT_LINE * k)
+                    num(pens().cut * k)
                 );
             }
             SectionKind::Elevation => {
@@ -558,7 +556,7 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
                     r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
                     pt(a),
                     pt(b),
-                    num(LAYER_LINE * k),
+                    num(pens().thin * k),
                     num(2.0 * k),
                     num(1.5 * k)
                 );
@@ -577,11 +575,11 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
                 pt(h + u * r),
                 pt(apex),
                 pt(h - u * r),
-                num(LAYER_LINE * k),
+                num(pens().thin * k),
                 num(h.x),
                 num(-h.y),
                 num(r),
-                num(VIEW_LINE * k),
+                num(pens().view * k),
                 text_path(
                     &label,
                     h - Point2::new(0.0, th / 2.0),
@@ -668,6 +666,16 @@ pub fn elevations_around(model: &Model) -> Vec<NewSection> {
 /// Writes a section drawing to SVG, with the same options as a plan
 /// (scale, viewport for the screen, thin lines).
 pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) -> String {
+    let pens = options
+        .pens
+        .unwrap_or_else(|| model.graphics.pens(options.scale));
+    crate::set_pens(pens);
+    let svg = render_section_inner(model, d, options);
+    crate::set_pens(archisim_core::Pens::FINE);
+    svg
+}
+
+fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions) -> String {
     let k = options.scale / 1000.0;
     let margin = options.margin_mm * k;
     let (vb_x, vb_y, vb_w, vb_h) = match options.viewport {
@@ -724,7 +732,7 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
                 s,
                 r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
                 edges.trim_end(),
-                num(VIEW_LINE * k)
+                num(pens().view * k)
             );
             edges.clear();
         }
@@ -778,7 +786,7 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
                 let target = if fl[i] { &mut heavy } else { &mut thin };
                 let _ = write!(target, "M{} L{} ", pt(a), pt(b));
             }
-            for (d_, w) in [(thin, LAYER_LINE), (heavy, CUT_LINE)] {
+            for (d_, w) in [(thin, pens().thin), (heavy, pens().cut)] {
                 if !d_.is_empty() {
                     let _ = writeln!(
                         s,
@@ -801,7 +809,7 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
             r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}"/>"#,
             pt(Point2::new(x0, *z)),
             pt(Point2::new(x1, *z)),
-            num(LAYER_LINE * k),
+            num(pens().thin * k),
             num(8.0 * k),
             num(1.5 * k),
             num(1.0 * k),
@@ -825,15 +833,23 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
     s.push_str("</g>\n");
 
     if options.viewport.is_none() {
+        // Title, in the technical lettering (no fonts needed).
+        let h = TEXT_SIZE * k;
+        let text = format!(
+            "{} · {} · E 1:{}",
+            model.project_name, d.title, options.scale
+        );
         let _ = writeln!(
             s,
-            r#"<text x="{}" y="{}" font-family="Helvetica, Arial, sans-serif" font-size="{}" fill="{INK}"><tspan font-weight="bold">{}</tspan> · {} · E 1:{}</text>"#,
-            num(d.lo.x),
-            num(-d.lo.y + margin * 0.6 + TEXT_SIZE * k),
-            num(TEXT_SIZE * k),
-            crate::escape(&model.project_name),
-            crate::escape(&d.title),
-            options.scale
+            r#"<path class="title" d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            crate::lettering::text_path(
+                &text,
+                Point2::new(d.lo.x, d.lo.y - margin * 0.6 - h),
+                Point2::new(1.0, 0.0),
+                h,
+                Align::Left
+            ),
+            num(crate::lettering::STROKE * h)
         );
     }
     s.push_str("</svg>\n");

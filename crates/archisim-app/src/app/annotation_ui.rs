@@ -103,6 +103,7 @@ impl ArchiSimApp {
             points: spec.points,
             direction,
             position: spec.position,
+            anchors: Vec::new(),
         };
         let mm = self.plan_scale / 1000.0;
         let g = dimension_lines(&d, mm);

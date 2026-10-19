@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use archisim_core::{Point2, Roof};
 
 use crate::lettering::{text_path, Align, STROKE};
-use crate::{annotate, num, path, pt, HATCH_LINE, INK, SLAB_COVER, VIEW_LINE};
+use crate::{annotate, num, path, pens, pt, INK, SLAB_COVER};
 
 /// Every point of the roof that the plan must show.
 pub fn roof_points(roof: &Roof) -> Vec<Point2> {
@@ -24,7 +24,7 @@ pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
             s,
             r#"<path d="{}" fill="{SLAB_COVER}" stroke="{INK}" stroke-width="{}"/>"#,
             path(&plane.outline),
-            num(VIEW_LINE * k)
+            num(pens().view * k)
         );
     }
     // The walls under the eaves.
@@ -33,7 +33,7 @@ pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
             s,
             r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
             path(&roof.outline),
-            num(HATCH_LINE * k),
+            num(pens().hatch * k),
             num(2.0 * k),
             num(1.2 * k)
         );
@@ -43,7 +43,7 @@ pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
         s,
         r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
         path(&roof.eaves()),
-        num(VIEW_LINE * 1.5 * k)
+        num(pens().view * 1.5 * k)
     );
     for plane in &planes {
         let Some(u) = plane.slope.direction() else {
@@ -62,7 +62,7 @@ pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
             r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="M{} L{} L{} Z" fill="{INK}" stroke="none"/>"#,
             pt(a),
             pt(base),
-            num(VIEW_LINE * k),
+            num(pens().view * k),
             pt(b),
             pt(base + n * (head * 0.35)),
             pt(base - n * (head * 0.35))

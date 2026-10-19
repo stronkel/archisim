@@ -1,8 +1,12 @@
-//! Rooms (`IfcSpace`): the outline of their vertical extrusion (or the top
-//! of their body), their height, their storey (they are aggregated into
-//! it), number (`Name`), name (`LongName`) and use (`ObjectType`).
+//! Rooms (`IfcSpace`): the outline of their vertical extrusion (or the
+//! bottom of their body) with its holes, their height, their storey (they
+//! are aggregated into it), number (`Name`), name (`LongName`, or the
+//! description), use (`ObjectType`) and finishes
+//! (`Pset_SpaceCoveringRequirements`). A file of ArchiSim also gives back
+//! where the name was drawn, whether the room followed its walls and
+//! whether its height was its own (`ArchiSim_Space`).
 
-use archisim_core::{NewSpace, Point2};
+use archisim_core::{Finishes, NewRoom, Point2};
 
 use super::{area, clean_outline, explain, geometry, snap, snap2, Importer};
 
@@ -24,16 +28,16 @@ impl<'a> Importer<'a> {
         if body.is_empty() {
             return Err("sin geometría que ArchiSim sepa leer".into());
         }
-        let (outline, bottom, top) = if let Some(x) = body
+        let (outline, holes, bottom, top) = if let Some(x) = body
             .extrusions
             .iter()
             .max_by(|a, b| area(&a.outline).total_cmp(&area(&b.outline)))
         {
-            (x.outline.clone(), x.bottom, x.top)
+            (x.outline.clone(), x.holes.clone(), x.bottom, x.top)
         } else {
             let (lo, hi) = body.bounds().ok_or("sin geometría")?;
-            match geometry::top_outline(&body, hi[2]) {
-                Some((outline, _)) => (outline, lo[2], hi[2]),
+            match geometry::top_outline(&body, lo[2]) {
+                Some((outline, holes)) => (outline, holes, lo[2], hi[2]),
                 None => return Err("sin contorno en planta legible".into()),
             }
         };
@@ -41,59 +45,97 @@ impl<'a> Importer<'a> {
         if outline.len() < 3 {
             return Err("contorno sin superficie".into());
         }
+        let holes: Vec<Vec<Point2>> = holes
+            .iter()
+            .map(|h| clean_outline(h))
+            .filter(|h| h.len() >= 3)
+            .collect();
         let text = |i: usize| {
             e.arg(i)
                 .as_str()
                 .map(|s| s.trim().to_string())
                 .unwrap_or_default()
         };
-        let (number, name, usage) = (text(2), text(7), text(4));
+        let (mut number, mut name, usage) = (text(2), text(7), text(4));
+        if name.is_empty() {
+            name = text(3);
+        }
         // Some programs write only a name.
-        let (number, name) = if name.is_empty() {
-            (String::new(), number)
-        } else {
-            (number, name)
-        };
+        if name.is_empty() {
+            name = std::mem::take(&mut number);
+        }
+        if name.is_empty() {
+            name = "Local".into();
+        }
         let level = self.level_of(id, bottom + 0.01);
-        let mut spec = NewSpace {
+
+        let own = self.own_file;
+        let read = |me: &Self, n: &str| me.property(id, "ArchiSim_Space", n);
+        let label = match (
+            read(self, "LabelX").and_then(|v| v.as_f64()),
+            read(self, "LabelY").and_then(|v| v.as_f64()),
+        ) {
+            (Some(x), Some(y)) if own => {
+                let len = self.geo.length;
+                snap2(Point2::new(x * len, y * len))
+            }
+            _ => archisim_core::label_center(&outline),
+        };
+        let bounded = own && read(self, "Bounded").and_then(|v| v.as_bool()) == Some(true);
+        let own_height = if own {
+            read(self, "OwnHeight").and_then(|v| v.as_bool())
+        } else {
+            None
+        };
+
+        let mut spec = NewRoom {
             level,
             number,
-            name: if name.is_empty() {
-                "Local".to_string()
-            } else {
-                name
-            },
-            usage,
+            name,
             outline,
-            height: snap(top - bottom).max(0.01),
+            holes,
+            label,
+            bounded,
         };
-        let sid = match self.model.add_space(spec.clone()) {
-            Ok(s) => s,
+        let rid = match self.model.add_room(spec.clone()) {
+            Ok(r) => r,
             Err(archisim_core::ModelError::DuplicateNumber(_)) => {
                 self.report
                     .warn("Locales con el número repetido en su planta: se importan sin número.");
                 spec.number.clear();
-                self.model.add_space(spec).map_err(|e| explain(&e))?
+                self.model.add_room(spec).map_err(|e| explain(&e))?
             }
             Err(e) => return Err(explain(&e)),
         };
-        if self.own_file {
-            let x = self
-                .property(id, "ArchiSim_Space", "LabelX")
-                .and_then(|v| v.as_f64());
-            let y = self
-                .property(id, "ArchiSim_Space", "LabelY")
-                .and_then(|v| v.as_f64());
-            if let (Some(x), Some(y)) = (x, y) {
-                let len = self.geo.length;
-                let p = snap2(Point2::new(x * len, y * len));
-                let _ = self.model.edit_space(sid, |s| s.label = Some(p));
-            }
+        let height = snap(top - bottom);
+        let finish = |me: &Self, n: &str| {
+            me.property(id, "Pset_SpaceCoveringRequirements", n)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let finishes = Finishes {
+            floor: finish(self, "FloorCovering"),
+            walls: finish(self, "WallCovering"),
+            ceiling: finish(self, "CeilingCovering"),
+        };
+        if let Some(mut r) = self.model.room(rid).cloned() {
+            let default = self.model.room_height(&r);
+            r.height = match own_height {
+                Some(true) => Some(height.max(0.01)),
+                Some(false) => None,
+                // Another program: its own height when it is not the one
+                // to the level above.
+                None => (height > 0.01 && (height - default).abs() > 0.005).then_some(height),
+            };
+            r.finishes = finishes;
+            r.usage = usage;
+            self.model.set_room(r).map_err(|e| explain(&e))?;
         }
-        self.report.spaces += 1;
+        self.report.rooms += 1;
         self.guids
-            .spaces
-            .push((sid, e.arg(0).as_str().unwrap_or("").to_string()));
+            .rooms
+            .push((rid, e.arg(0).as_str().unwrap_or("").to_string()));
         Ok(())
     }
 }

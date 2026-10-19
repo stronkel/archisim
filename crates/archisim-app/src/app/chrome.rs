@@ -184,10 +184,47 @@ impl ArchiSimApp {
             if ui.button("Exportar IFC4…").clicked() {
                 self.export_ifc();
             }
-            for s in SCALES {
-                if ui.button(format!("Exportar planta 1:{s} (SVG)…")).clicked() {
-                    self.export_plan(s);
+            ui.menu_button("Exportar planta (PDF, DXF, SVG)", |ui| {
+                for s in SCALES {
+                    if ui.button(format!("A escala 1:{s}…")).clicked() {
+                        self.export_plan(s);
+                    }
                 }
+            });
+            let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
+            if ui
+                .add_enabled(
+                    on_sheet,
+                    egui::Button::new("Exportar este plano (PDF, DXF, SVG)…"),
+                )
+                .clicked()
+            {
+                self.export_sheets(false);
+            }
+            if ui
+                .add_enabled(
+                    !self.ed.model().sheets().is_empty(),
+                    egui::Button::new("Exportar todos los planos (PDF)…"),
+                )
+                .clicked()
+            {
+                self.export_sheets(true);
+            }
+            if ui
+                .button("Exportar mediciones (BC3)…")
+                .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para Presto, Arquímedes y otros")
+                .clicked()
+            {
+                self.export_bc3();
+            }
+            if ui
+                .button("Importar DXF en la vista…")
+                .on_hover_text(
+                    "Líneas, textos, sombreados y bloques del DXF, como dibujo 2D en sus capas",
+                )
+                .clicked()
+            {
+                self.import_dxf();
             }
             if ui
                 .add_enabled(
@@ -316,7 +353,7 @@ impl ArchiSimApp {
 
     pub(super) fn fit_active_view(&mut self) {
         match self.mode {
-            ViewMode::Plan | ViewMode::Section => self.fit_requested = true,
+            ViewMode::Plan | ViewMode::Section | ViewMode::Sheet(_) => self.fit_requested = true,
             ViewMode::ThreeD => self.v3d.fit_requested = true,
         }
     }
@@ -442,6 +479,15 @@ impl ArchiSimApp {
                     );
                     }
                 }
+                ViewMode::Sheet(id) => {
+                    let paper = self
+                        .ed
+                        .model()
+                        .sheet(id)
+                        .map(|s| format!("Papel {} · escala 1:1", s.size_name()))
+                        .unwrap_or_default();
+                    ui.label(egui::RichText::new(paper).small().color(p.muted));
+                }
                 ViewMode::ThreeD => {
                     let cam = &mut self.v3d.camera;
                     let mut persp = cam.perspective;
@@ -484,7 +530,22 @@ impl ArchiSimApp {
                     .level(self.ed.level)
                     .map(|l| format!("{} {}", l.name, fmt_level(l.elevation)))
                     .unwrap_or_default();
-                if self.mode == ViewMode::Plan {
+                if let ViewMode::Sheet(_) = self.mode {
+                    if let Some(c) = self.cursor {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "X {:.1}   Y {:.1} mm",
+                                c.point.x * 1000.0,
+                                c.point.y * 1000.0
+                            ))
+                            .monospace()
+                            .color(p.text),
+                        );
+                        if c.kind != crate::snap::SnapKind::Free {
+                            ui.label(egui::RichText::new(c.kind.label()).small().color(p.accent));
+                        }
+                    }
+                } else if self.mode == ViewMode::Plan {
                     ui.label(egui::RichText::new(level).small().color(p.muted));
                     if let Some(c) = self.cursor {
                         ui.separator();
@@ -529,6 +590,9 @@ impl ArchiSimApp {
             }
             return "Arrastrar: girar · Rueda: zoom · Botón derecho: encuadre · Clic: seleccionar · Inicio: ajustar · F2: planta";
         }
+        if matches!(self.mode, ViewMode::Sheet(_)) && self.tool != Tool::Cad {
+            return "Clic: seleccionar vista o dibujo · Arrastrar vista: colocarla · Doble clic: abrir su planta · L, TX…: dibujar en el plano · Supr: quitar";
+        }
         match self.tool {
             Tool::Arrow if self.drag.is_some() => "Soltar: terminar · Ctrl: copiar · Mayús: 45° · Distancia + Intro: exacto · Esc: cancelar",
             Tool::Arrow if self.temp_edit.is_some() => "Escribe la medida (mm, o 1,2m · 120cm) · Intro: aplicar · Esc: dejarla",
@@ -536,7 +600,7 @@ impl ArchiSimApp {
             Tool::Arrow if self.single_curved_wall_selected() => "Círculo blanco: curvar · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Propiedades: radio · Supr: borrar",
             Tool::Arrow if self.single_wall_selected() => "Clic en una cota azul: medida exacta · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Supr: borrar",
             Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar: mover · Ctrl: copiar · Extremo o esquina: estirar · Rombo: mover la arista · Supr: borrar · Esc: anular",
-            Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C I G Z: herramientas",
+            Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C I G Z: herramientas · Orden (L, PL, C…) + Intro: dibujar y editar",
             Tool::Wall => self.wall_hint(),
             Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Clic: dentro de un recinto de muros · Esc: flecha",
             Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina · Espacio + clic: varita mágica · Esc: flecha",
@@ -564,6 +628,7 @@ impl ArchiSimApp {
             Tool::Terrain => "Escribe la cota en Propiedades y clic: punto del terreno (sobre uno que ya existe: le pone la cota) · Intro o doble clic: crear · Esc: quitar el último",
             Tool::Stair if self.stair_tool.points.is_empty() => "Clic: pie de la escalera (inicio de la línea de huella) · Esc: flecha",
             Tool::Stair => "Clic: final del tramo o giro (meseta) · Intro, doble clic o clic derecho: terminar · Esc: quitar el último punto",
+            Tool::Cad => "Clic o coordenadas + Intro: punto · Intro, Espacio o botón derecho: aceptar · Esc: terminar · F8: orto",
         }
     }
 

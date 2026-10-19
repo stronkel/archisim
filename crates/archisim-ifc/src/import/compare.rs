@@ -1,7 +1,7 @@
 //! Compares two models element by element, matching them by `GlobalId`:
 //! what a round trip through IFC must keep.
 
-use archisim_core::{Layer, MaterialId, Model};
+use archisim_core::{Layer, MaterialId, Model, Point2};
 
 /// Lengths closer than this are equal (0.001 mm).
 const TOL: f64 = 1e-6;
@@ -271,11 +271,11 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
     }
 
     // Rooms.
-    if a.spaces().count() != b.spaces().count() {
+    if a.rooms().count() != b.rooms().count() {
         diff(format!(
             "número de locales: {} / {}",
-            a.spaces().count(),
-            b.spaces().count()
+            a.rooms().count(),
+            b.rooms().count()
         ));
     }
     if (a.true_north() - b.true_north()).abs() > 1e-6 {
@@ -514,27 +514,29 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("cubierta {}: {:?} / {:?}", r.guid, r, t));
         }
     }
-    for s in a.spaces() {
-        let Some(t) = b.spaces().find(|t| t.guid == s.guid) else {
+    for s in a.rooms() {
+        let Some(t) = b.rooms().find(|t| t.guid == s.guid) else {
             diff(format!("local {} falta", s.guid));
             continue;
         };
-        let same_outline = s.outline.len() == t.outline.len()
-            && s.outline
-                .iter()
-                .zip(&t.outline)
-                .all(|(p, q)| p.distance(*q) <= TOL);
-        let same_label = match (s.label, t.label) {
+        let same_ring = |p: &[Point2], q: &[Point2]| {
+            p.len() == q.len() && p.iter().zip(q).all(|(p, q)| p.distance(*q) <= TOL)
+        };
+        let same_height = match (s.height, t.height) {
             (None, None) => true,
-            (Some(p), Some(q)) => p.distance(q) <= TOL,
+            (Some(p), Some(q)) => close(p, q),
             _ => false,
         };
-        if !same_outline
+        if !same_ring(&s.outline, &t.outline)
+            || s.holes.len() != t.holes.len()
+            || !s.holes.iter().zip(&t.holes).all(|(p, q)| same_ring(p, q))
             || s.number != t.number
             || s.name != t.name
             || s.usage != t.usage
-            || !close(s.height, t.height)
-            || !same_label
+            || s.finishes != t.finishes
+            || s.bounded != t.bounded
+            || !same_height
+            || s.label.distance(t.label) > TOL
             || level_guid(a, s.level) != level_guid(b, t.level)
         {
             diff(format!("local {}: {:?} / {:?}", s.guid, s, t));

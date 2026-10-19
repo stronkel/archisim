@@ -311,7 +311,7 @@ impl ArchiSimApp {
         };
         let l = s.layout();
         props::title(ui, "Escalera · 1 seleccionada");
-        super::properties::view_card_pub(ui, Icon::Stair, &summary(&s), "IfcStair");
+        super::properties::view_card(ui, Icon::Stair, &summary(&s), "IfcStair");
         let above: Vec<(archisim_core::LevelId, String)> = {
             let z = model.level(s.level).map_or(0.0, |l| l.elevation);
             model

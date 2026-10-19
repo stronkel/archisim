@@ -2,7 +2,8 @@
 
 use crate::geo::Geo;
 use archisim_core::{
-    DimensionId, ElevationMarkId, LevelId, Model, OpeningId, Point2, SlabId, WallId,
+    DimensionId, DraftId, ElevationMarkId, LevelId, Model, OpeningId, Point2, Shape, SlabId,
+    ViewRef, WallId,
 };
 use archisim_geom::opening_geometry;
 
@@ -13,13 +14,13 @@ pub enum Element {
     Dimension(DimensionId),
     /// A level mark (annotation of the plan).
     Mark(ElevationMarkId),
+    /// A drafting element: line, arc, text, hatch…
+    Draft(DraftId),
     Opening(OpeningId),
     Wall(WallId),
     Slab(SlabId),
     Column(archisim_core::ColumnId),
     Beam(archisim_core::BeamId),
-    /// A room ("local"), picked by its stamp or its outline.
-    Space(archisim_core::SpaceId),
     /// A section or elevation line (seen on every level).
     Section(archisim_core::SectionId),
     /// A pitched roof, picked by its eaves.
@@ -34,6 +35,10 @@ pub enum Element {
     Railing(archisim_core::RailingId),
     /// Furniture, sanitary ware…, picked by its box.
     Object(archisim_core::ObjectId),
+    /// A room ("local").
+    Room(archisim_core::RoomId),
+    /// A tag of a door, window, wall or room.
+    Tag(archisim_core::TagId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -87,7 +92,6 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Beam(id) => model
             .beam(id)
             .map(|b| archisim_plan::members::beam_outline(model, b)),
-        Element::Space(id) => model.space(id).map(|s| s.outline.clone()),
         Element::Section(id) => model.section(id).map(section_outline),
         Element::Roof(id) => model.roof(id).map(|r| r.eaves()),
         Element::Stair(id) => model.stair(id).map(stair_outline),
@@ -100,6 +104,12 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .map(|(c, d)| c.outline(d)),
         Element::Railing(id) => model.railing(id).map(railing_outline),
         Element::Object(id) => Some(model.object_outline(id)).filter(|o| !o.is_empty()),
+        Element::Draft(id) => model.draft(id).map(|d| {
+            let (lo, hi) = archisim_draft::bounds(&d.shape, paper_k());
+            vec![lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]
+        }),
+        Element::Room(id) => model.room(id).map(|r| r.outline.clone()),
+        Element::Tag(id) => model.tag(id).map(|t| tag_box(model, t, paper_k()).to_vec()),
     }
 }
 
@@ -138,7 +148,7 @@ fn stair_outline(s: &archisim_core::Stair) -> Vec<Point2> {
 
 /// A band along a section line, wide enough to take its heads.
 fn section_outline(s: &archisim_core::SectionLine) -> Vec<Point2> {
-    let r = archisim_plan::section::MARKER_RADIUS * MM;
+    let r = archisim_plan::section::MARKER_RADIUS * MM();
     let u = s.along().unwrap_or(Point2::new(1.0, 0.0));
     let n = u.perp_left();
     let (a, b) = match s.kind {
@@ -149,17 +159,139 @@ fn section_outline(s: &archisim_core::SectionLine) -> Vec<Point2> {
     vec![a - n * r, b - n * r, b + n * (2.0 * r), a + n * (2.0 * r)]
 }
 
-/// Paper millimetres in metres at 1:50, the scale of the plan view.
-const MM: f64 = 0.05;
+fn box_of(pts: impl IntoIterator<Item = Point2>) -> [Point2; 4] {
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for p in pts {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]
+}
+
+/// The box around a room's stamp (name, number, area).
+pub fn stamp_box(model: &Model, r: &archisim_core::Room, k: f64) -> [Point2; 4] {
+    box_of(
+        archisim_plan::rooms::room_stamp(model, r, k)
+            .iter()
+            .flat_map(|t| archisim_draft::font::text_frame(t, k)),
+    )
+}
+
+/// The box around a tag.
+pub fn tag_box(model: &Model, t: &archisim_core::Tag, k: f64) -> [Point2; 4] {
+    let l = archisim_plan::rooms::tag_layout(model, t, k);
+    match l.frame {
+        Some(f) => f,
+        None if l.texts.is_empty() => box_of([t.at, t.at]),
+        None => box_of(
+            l.texts
+                .iter()
+                .flat_map(|x| archisim_draft::font::text_frame(x, k)),
+        ),
+    }
+}
+
+thread_local! {
+    /// Metres of the plan per paper millimetre in the view being used.
+    static PAPER_K: std::cell::Cell<f64> = const { std::cell::Cell::new(0.05) };
+}
+
+/// Sets the scale of the active plan view (50 for 1:50), so annotations
+/// and texts are picked by their size on screen.
+pub fn set_scale(scale: f64) {
+    PAPER_K.with(|k| k.set(scale / 1000.0));
+}
+
+/// Metres of the plan per paper millimetre in the active view.
+pub fn paper_k() -> f64 {
+    PAPER_K.with(|k| k.get())
+}
+
+/// What is drawn of a drafting element, as polylines in the plan: its
+/// lines, the boxes of texts, the boundaries of hatches.
+pub fn draft_paths(model: &Model, id: DraftId) -> Vec<Vec<Point2>> {
+    let Some(d) = model.draft(id) else {
+        return Vec::new();
+    };
+    shape_paths(&d.shape, paper_k())
+}
+
+/// The polylines of a shape (texts as their box; points as a cross).
+pub fn shape_paths(shape: &Shape, k: f64) -> Vec<Vec<Point2>> {
+    match shape {
+        Shape::Text(t) => {
+            let mut f = archisim_draft::font::text_frame(t, k).to_vec();
+            f.push(f[0]);
+            vec![f]
+        }
+        Shape::Point { at } => {
+            let r = 0.8 * k;
+            vec![
+                vec![*at - Point2::new(r, 0.0), *at + Point2::new(r, 0.0)],
+                vec![*at - Point2::new(0.0, r), *at + Point2::new(0.0, r)],
+            ]
+        }
+        Shape::Ellipse {
+            centre,
+            axis,
+            ratio,
+            start,
+            sweep,
+        } => vec![archisim_draft::ellipse_points(
+            *centre, *axis, *ratio, *start, *sweep, 1e-3,
+        )],
+        Shape::Hatch(h) => h
+            .loops
+            .iter()
+            .map(|l| {
+                let mut p = archisim_draft::loop_polygon(l, 1e-3);
+                if let Some(f) = p.first().copied() {
+                    p.push(f);
+                }
+                p
+            })
+            .collect(),
+        Shape::Dim(m) => {
+            let d = archisim_draft::dims::drawing(m, k, archisim_draft::dims::DIM_TEXT);
+            let mut out: Vec<Vec<Point2>> = d.segs.iter().map(|s| s.tessellate(1e-3)).collect();
+            out.extend(d.arrows.iter().map(|a| vec![a[0], a[1], a[2], a[0]]));
+            out.extend(archisim_draft::font::text_strokes(&d.text, k));
+            out
+        }
+        _ => {
+            let segs = archisim_draft::shape_segs(shape);
+            let mut out: Vec<Vec<Point2>> = Vec::new();
+            for s in segs {
+                let pts = s.tessellate(1e-3);
+                match out.last_mut() {
+                    Some(last) if last.last().is_some_and(|q| q.approx_eq(pts[0])) => {
+                        last.extend_from_slice(&pts[1..]);
+                    }
+                    _ => out.push(pts),
+                }
+            }
+            out
+        }
+    }
+}
+
+/// Paper millimetres in metres at the active view's scale.
+#[allow(non_snake_case)]
+fn MM() -> f64 {
+    paper_k()
+}
 
 /// A thin band around the dimension line and its texts.
 fn dimension_outline(d: &archisim_core::Dimension) -> Vec<Point2> {
-    let g = archisim_plan::annotate::dimension_lines(d, MM);
+    let g = archisim_plan::annotate::dimension_lines(d, MM());
     let (a, b) = g.line;
     let u = (b - a).normalized().unwrap_or(Point2::new(1.0, 0.0));
     let n = u.perp_left();
-    let below = 1.0 * MM;
-    let above = (archisim_plan::annotate::TEXT_HEIGHT + 1.5) * MM;
+    let below = 1.0 * MM();
+    let above = (archisim_plan::annotate::TEXT_HEIGHT + 1.5) * MM();
     vec![a - n * below, b - n * below, b + n * above, a + n * above]
 }
 
@@ -167,10 +299,11 @@ fn dimension_outline(d: &archisim_core::Dimension) -> Vec<Point2> {
 fn mark_outline(model: &Model, m: &archisim_core::ElevationMark) -> Vec<Point2> {
     let value = model.floor_elevation_at(m.level, m.point).unwrap_or(0.0);
     let text = archisim_plan::annotate::format_elevation(value);
-    let w = archisim_plan::lettering::text_width(&text, archisim_plan::annotate::TEXT_HEIGHT * MM);
+    let w =
+        archisim_plan::lettering::text_width(&text, archisim_plan::annotate::TEXT_HEIGHT * MM());
     let p = m.point;
-    let (x0, x1) = (p.x - 1.6 * MM, p.x + 2.5 * MM + w);
-    let (y0, y1) = (p.y - 0.3 * MM, p.y + 6.0 * MM);
+    let (x0, x1) = (p.x - 1.6 * MM(), p.x + 2.5 * MM() + w);
+    let (y0, y1) = (p.y - 0.3 * MM(), p.y + 6.0 * MM());
     vec![
         Point2::new(x0, y0),
         Point2::new(x1, y0),
@@ -183,6 +316,12 @@ fn mark_outline(model: &Model, m: &archisim_core::ElevationMark) -> Vec<Point2> 
 /// windows first (they sit inside walls), then walls, then slabs.
 pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     let mut v: Vec<Element> = Vec::new();
+    v.extend(
+        model
+            .drafts_in(ViewRef::Level(level))
+            .filter(|d| model.draft_editable(d))
+            .map(|d| Element::Draft(d.id)),
+    );
     v.extend(
         model
             .elevation_marks_on_level(level)
@@ -205,7 +344,6 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     for w in model.walls_on_level(level) {
         v.extend(by_wall.remove(&w.id).unwrap_or_default());
     }
-    v.extend(model.spaces_on_level(level).map(|s| Element::Space(s.id)));
     v.extend(model.sections().map(|s| Element::Section(s.id)));
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
@@ -229,6 +367,8 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
             .terrains_on_level(level)
             .map(|t| Element::Terrain(t.id)),
     );
+    v.extend(model.tags_on_level(level).map(|t| Element::Tag(t.id)));
+    v.extend(model.rooms_on_level(level).map(|r| Element::Room(r.id)));
     v
 }
 
@@ -252,7 +392,9 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Roof(id) => model.roof(id).map(|r| TypeOf::Slab(r.roof_type)),
         Element::Dimension(_)
         | Element::Mark(_)
-        | Element::Space(_)
+        | Element::Room(_)
+        | Element::Draft(_)
+        | Element::Tag(_)
         | Element::Section(_)
         | Element::Stair(_)
         | Element::Terrain(_)
@@ -283,7 +425,11 @@ pub fn pick<G: Geo + ?Sized>(
 ) -> Option<Element> {
     let model = geo.model();
     let rank = |e: &Element| match e {
-        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) | Element::Section(_) => 0,
+        Element::Dimension(_)
+        | Element::Mark(_)
+        | Element::Section(_)
+        | Element::Draft(_)
+        | Element::Tag(_) => 0,
         Element::Opening(_) => 1,
         // Columns stand in front of the walls they go through.
         Element::Column(_) => 1,
@@ -292,21 +438,46 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Beam(_) => 3,
         Element::Roof(_) => 3,
         Element::Stair(_) => 1,
+        Element::Room(_) => 3,
         Element::Slab(_) => 4,
         Element::Terrain(_) => 5,
     };
+    let k = paper_k();
     elements_on_level(model, level)
         .into_iter()
         .filter_map(|e| {
+            if let Element::Draft(id) = e {
+                // Lines by their lines; a hatch also from inside (after
+                // walls, before slabs).
+                let d = model.draft(id)?;
+                let dist = archisim_draft::distance(&d.shape, p, k);
+                let edge = match &d.shape {
+                    Shape::Hatch(h) => h
+                        .loops
+                        .iter()
+                        .flat_map(archisim_draft::polyline_segs)
+                        .map(|s| s.distance(p))
+                        .fold(f64::INFINITY, f64::min),
+                    _ => dist,
+                };
+                if edge <= tolerance {
+                    return Some((0, edge, e));
+                }
+                return (dist <= tolerance).then_some((3, 0.0, e));
+            }
+            if let Element::Room(id) = e {
+                // By its stamp first; from inside after walls, before
+                // slabs.
+                let r = model.room(id)?;
+                if contains(&stamp_box(model, r, k), p) {
+                    return Some((0, 0.0, e));
+                }
+                return r.contains(p).then_some((3, 0.0, e));
+            }
             let poly = outline(geo, e)?;
-            // A hole of a slab is not the slab; a room is picked by its
-            // stamp (inside it, the slab under it is picked) or its edge.
+            // A hole of a slab is not the slab.
             let inside = match e {
                 Element::Slab(id) => model.slab(id).is_some_and(|s| s.covers(p)),
-                Element::Space(id) => model.space(id).is_some_and(|s| {
-                    let (lo, hi) = archisim_plan::annotate::room_stamp_box(s, MM);
-                    p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y
-                }),
                 _ => contains(&poly, p),
             };
             let d = distance_to_outline(&poly, p);
@@ -316,17 +487,34 @@ pub fn pick<G: Geo + ?Sized>(
         .map(|(_, _, e)| e)
 }
 
-/// Elements entirely inside the window `a`–`b` (any two opposite corners).
+/// Elements found by a selection window from `a` to `b`, as in AutoCAD:
+/// dragged from left to right, those entirely inside it; from right to
+/// left (a crossing window), also those it touches.
 pub fn in_window<G: Geo + ?Sized>(geo: &G, level: LevelId, a: Point2, b: Point2) -> Vec<Element> {
     let model = geo.model();
+    let crossing = b.x < a.x;
     let (lo, hi) = (
         Point2::new(a.x.min(b.x), a.y.min(b.y)),
         Point2::new(a.x.max(b.x), a.y.max(b.y)),
     );
+    let k = paper_k();
     let inside = |p: &Point2| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
     elements_on_level(model, level)
         .into_iter()
-        .filter(|e| outline(geo, *e).is_some_and(|poly| poly.iter().all(inside)))
+        .filter(|e| {
+            if let Element::Draft(id) = e {
+                return model.draft(*id).is_some_and(|d| {
+                    if crossing {
+                        archisim_draft::crosses_window(&d.shape, lo, hi, k)
+                    } else {
+                        archisim_draft::inside_window(&d.shape, lo, hi, k)
+                    }
+                });
+            }
+            outline(geo, *e).is_some_and(|poly| {
+                poly.iter().all(inside) || (crossing && polygon_touches(&poly, lo, hi))
+            })
+        })
         .collect()
 }
 
@@ -366,6 +554,90 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Railing(id) => SolidOwner::Railing(id),
         Element::Object(id) => SolidOwner::Object(id),
         _ => return None,
+    })
+}
+
+/// The drafting element of a sheet under `p` (texts, lines and hatches
+/// drawn on the paper).
+pub fn pick_on_sheet(
+    model: &Model,
+    sheet: archisim_core::SheetId,
+    p: Point2,
+    tolerance: f64,
+) -> Option<Element> {
+    let k = paper_k();
+    model
+        .drafts_in(ViewRef::Sheet(sheet))
+        .filter(|d| model.draft_editable(d))
+        .filter_map(|d| {
+            let dist = archisim_draft::distance(&d.shape, p, k);
+            let edge = match &d.shape {
+                Shape::Hatch(h) => h
+                    .loops
+                    .iter()
+                    .flat_map(archisim_draft::polyline_segs)
+                    .map(|s| s.distance(p))
+                    .fold(f64::INFINITY, f64::min),
+                _ => dist,
+            };
+            if edge <= tolerance {
+                Some((0, edge, Element::Draft(d.id)))
+            } else {
+                (dist <= tolerance).then_some((1, 0.0, Element::Draft(d.id)))
+            }
+        })
+        .min_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)))
+        .map(|(_, _, e)| e)
+}
+
+/// [`in_window`] for what is drawn on a sheet.
+pub fn in_window_on_sheet(
+    model: &Model,
+    sheet: archisim_core::SheetId,
+    a: Point2,
+    b: Point2,
+) -> Vec<Element> {
+    let crossing = b.x < a.x;
+    let (lo, hi) = (
+        Point2::new(a.x.min(b.x), a.y.min(b.y)),
+        Point2::new(a.x.max(b.x), a.y.max(b.y)),
+    );
+    let k = paper_k();
+    model
+        .drafts_in(ViewRef::Sheet(sheet))
+        .filter(|d| model.draft_editable(d))
+        .filter(|d| {
+            if crossing {
+                archisim_draft::crosses_window(&d.shape, lo, hi, k)
+            } else {
+                archisim_draft::inside_window(&d.shape, lo, hi, k)
+            }
+        })
+        .map(|d| Element::Draft(d.id))
+        .collect()
+}
+
+/// Whether a closed polygon touches a box: a corner inside it, the box
+/// inside the polygon, or an edge crossing it.
+fn polygon_touches(poly: &[Point2], lo: Point2, hi: Point2) -> bool {
+    let inside = |p: &Point2| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
+    if poly.iter().any(inside) || contains(poly, (lo + hi) * 0.5) {
+        return true;
+    }
+    let rect = [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)];
+    let n = poly.len();
+    (0..n).any(|i| {
+        let e = archisim_draft::Seg::Line {
+            a: poly[i],
+            b: poly[(i + 1) % n],
+        };
+        (0..4).any(|j| {
+            let r = archisim_draft::Seg::Line {
+                a: rect[j],
+                b: rect[(j + 1) % 4],
+            };
+            !archisim_draft::intersect(&e, &r).is_empty()
+        })
     })
 }
 

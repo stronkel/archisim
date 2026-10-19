@@ -27,10 +27,13 @@ Enfoque principal: **arquitectura**. Objetivo secundario: que ingenieros (estruc
 │ app (interfaz)  — wgpu + egui, estilo ArchiCAD               │
 ├──────────────────────────────────────────────────────────────┤
 │ tools — herramientas de dibujo: muro, forjado, hueco…         │
-├──────────────┬───────────────────┬───────────────────────────┤
-│ plan         │ ifc               │ (futuro) families, views   │
-│ vistas 2D    │ import/export     │ sheets, schedules          │
-├──────────────┴───────────────────┴───────────────────────────┤
+├──────────────┬───────────────┬──────────────┬────────────────┤
+│ plan         │ ifc           │ export       │ file, library  │
+│ plantas,     │ import/export │ PDF, DXF,    │ proyecto,      │
+│ planos,tablas│               │ BC3          │ plantilla      │
+├──────────────┴───────────────┴──────────────┴────────────────┤
+│ draft — dibujo 2D: órdenes de edición, forzados, rotulación  │
+├──────────────────────────────────────────────────────────────┤
 │ geom — geometría: polígonos, uniones de muros, extrusiones    │
 ├──────────────────────────────────────────────────────────────┤
 │ core — documento, elementos, tipos, materiales, transacciones │
@@ -45,14 +48,16 @@ Crates actuales (`crates/`):
 | `archisim-dxf` | Lector de DXF de texto y del levantamiento topográfico que contiene (puntos con cota, curvas de nivel, cotas escritas, por capas), y de listas de puntos CSV/TXT. Sin dependencias |
 | `archisim-core` | Documento del proyecto, niveles, materiales, tipos de muro y de forjado multicapa, muros, forjados, familias (copia de la receta en el proyecto y las cinco familias de sistema), tipos de puerta y ventana como tipos de familia con marca, huecos en muro, deshacer/rehacer; edición de materiales y tipos con comprobación de los elementos que los usan |
 | `archisim-geom` | Vectores 2D, contorno de muros con uniones en esquina a inglete y uniones en T con prioridad por capa (`joins`), área de polígonos, posición de huecos y recorte de muros en tramos; recintos cerrados por muros (varita mágica); encuentros de muros y forjados por prioridad de capa (`junctions`, con las operaciones booleanas de polígonos de `i_overlay`); sólidos 3D de muros (por capas, con sus huecos), forjados y carpinterías (el cuerpo 3D de su familia), los mismos que exporta el IFC |
+| `archisim-draft` | Geometría del dibujo 2D al estilo AutoCAD (fase 3): segmentos y arcos, intersecciones, equidistancia, recortar, alargar, empalme, chaflán, partir, juntar, descomponer, estirar, matrices, recintos para sombrear, tramas, forzados a objeto, pinzamientos, cotas angulares, de radio y de arco, y la rotulación técnica de trazo (`font`). Solo depende de `core` |
+| `archisim-export` | Salidas de dibujo (fase 3): **PDF vectorial** de plantas y planos (a su tamaño de papel, sin fuentes), **DXF** (AutoCAD 2007) de una planta en mm o de un plano en mm de papel, con capas, colores, grosores y tipos de línea, y el dibujo 2D nativo (líneas, polilíneas con arcos, textos, sombreados con su patrón); **importar DXF** como dibujo 2D (bloques y cotas descompuestos); **mediciones BC3** (FIEBDC-3). Lee el mismo SVG de `archisim-plan` con usvg |
 | `archisim-ifc` | Escritor IFC4 (STEP) con jerarquía espacial, tipos, capas de material y Psets de muros y forjados; huecos (`IfcOpeningElement`) rellenos con puertas y ventanas. Lector STEP e importador IFC2X3/IFC4 de plantas, muros con capas, forjados, puertas y ventanas, con informe de lo que queda fuera |
-| `archisim-plan` | Planta en SVG a cualquier escala: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana (los de su familia para la escala), ejes, rotulación; cotas y cotas de nivel con rotulación técnica de trazo propia (`lettering`) |
+| `archisim-plan` | Planta en SVG a cualquier escala: poché por capa, forjados según plano de corte, muro interrumpido en huecos, símbolos de puerta y ventana (los de su familia para la escala), ejes, rotulación; cotas y cotas de nivel con rotulación técnica de trazo propia (`lettering`); dibujo 2D por capas (`drafting`), rótulos de locales y etiquetas (`rooms`), plumillas por escala y visibilidad por vista; **planos** con vistas a escala recortadas, títulos y cajetín (`sheet`); **tablas de planificación** y sus mediciones (`schedules`) |
 | `archisim-file` | Proyecto `.archisim`: JSON versionado que conserva ids y `GlobalId`, se comprueba al abrir y se guarda de forma segura (ver `docs/FORMATO_ARCHISIM.md`) |
 | `archisim-library` | Plantilla de inicio: materiales y tipos de muro, forjado, puerta y ventana de construcción española habitual, con los que empieza todo proyecto nuevo (y la vivienda de prueba) |
-| `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta; `exportar` abre un `.archisim` y lo exporta; `importar` convierte un IFC en proyecto |
+| `archisim-cli` | Línea de comandos: `demo` genera una vivienda de prueba, la guarda y la exporta (IFC, plantas SVG y DXF, planos SVG, DXF y PDF, tablas CSV, mediciones BC3); `exportar` abre un `.archisim` y lo exporta igual; `importar` convierte un IFC en proyecto; `png` rasteriza un SVG para verlo |
 | `archisim-app` | La aplicación de escritorio (egui sobre wgpu), con la interfaz descrita en «Interfaz» (§4): vista de planta y vista 3D en pestañas, herramientas muro, forjado (por polígono o varita mágica), puerta, ventana y cota, gestión de plantas, tipos y materiales (multicapas, puertas, ventanas y materiales, con vista previa), selección y propiedades, mover, copiar y estirar con el ratón, deshacer, abrir/guardar `.archisim` (también soltando el fichero en la ventana o, en Mac, con doble clic en el Finder), importar IFC, exportar IFC, planta e imagen 3D |
 
-Reglas de dependencias: `family` (el lenguaje) y `dxf` (lectura de DXF) no dependen de nadie; `core` solo de `family`; `geom` solo de `core` (y de `i_overlay`, MIT, para unir y restar polígonos); los exportadores dependen de `core` + `geom`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
+Reglas de dependencias: `family` (el lenguaje) y `dxf` (lectura de DXF) no dependen de nadie; `core` solo de `family`; `geom` (y `i_overlay`, MIT, para unir y restar polígonos) y `draft` solo de `core`; `plan` de `core`, `geom` y `draft`; `ifc` de `core` y `geom`; `export` de `core`, `draft` y `plan`; `file` (formato de proyecto) y `library` (plantilla) solo de `core`; la interfaz depende de todo y nada depende de la interfaz.
 
 La vista de planta de la aplicación **es** la planta 1:50 que se exporta: se dibuja el mismo SVG de la zona visible y se rasteriza a la resolución de pantalla (grosores de línea reales a 1:50, como la vista de «grosor de línea real» de ArchiCAD). Lo que se ve es lo que se exporta. Encima, en vectorial, van la selección, la vista previa del muro y los puntos de forzado.
 
@@ -75,6 +80,13 @@ La vista 3D dibuja con la tarjeta gráfica (wgpu) los sólidos de `archisim-geom
 | `Opening` | Ejemplar de puerta / ventana (alojado en muro) | Puerta / ventana | `IfcOpeningElement` (vacía el muro) + `IfcDoor` / `IfcWindow` (lo rellena) |
 | `Family` (receta `.asfam`, copia en el proyecto; `docs/FAMILIAS.md`) | Familia .rfa | Objeto GDL | `IfcDoorType`/`IfcWindowType` (`ElementType` = familia, `Tag` = marca) con `ArchiSim_Family` (receta) y `ArchiSim_FamilyValues` (parámetros) |
 | Parámetro compartido | Parámetro compartido | Propiedad | `IfcPropertySet` |
+| `DrawLayer` | Subcategoría / estilo de línea | Capa | — (capa del DXF) |
+| `Draft` (línea, polilínea, arco, texto, sombreado, cota angular…) | Líneas de detalle, texto, región rellena | Elementos 2D | — (entidades del DXF) |
+| `Dimension` con `anchors` | Cota (asociativa) | Cota asociativa | — (anotación) |
+| `Room` | Habitación | Zona | `IfcSpace` (`Pset_SpaceCommon`, `Pset_SpaceCoveringRequirements`, `Qto_SpaceBaseQuantities`) |
+| `Tag` | Etiqueta | Marcador / etiqueta | — (anotación) |
+| `Sheet` + `Viewport` | Plano + vista colocada | Plano del Libro de planos + dibujo | — (PDF, DXF) |
+| `SheetTable` | Tabla de planificación | Listado interactivo | — (CSV, BC3) |
 
 Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres que no cambia nunca, ni al copiar el proyecto ni al exportar varias veces. Así los ingenieros pueden federar modelos y comparar versiones.
 
@@ -83,9 +95,10 @@ Cada elemento tiene un `ElementId` interno y un `GlobalId` IFC de 22 caracteres 
 Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 
 - **Barra superior**: menús (Archivo, Edición, Vista, Ayuda), nombre del proyecto y fichero («sin guardar» si hay cambios), deshacer y rehacer (con lo que deshacen en la ayuda), guardar, **Exportar IFC**, mostrar u ocultar las propiedades y el navegador, y tema claro u oscuro. El dibujo es siempre papel blanco: lo que se ve es lo que se imprime.
-- **Caja de herramientas** (izquierda) por secciones: Selección (Flecha), Modelado (Muro, Forjado, Puerta, Ventana), Documentación (Cota, Cota de nivel) y Vistas. Cada herramienta es una ficha con su icono, su nombre y su tecla (M, F, P, V, C, N). Las que aún no existen (pilar, viga, cubierta, escalera, objeto, zona, texto, etiqueta, trama, sección, alzado) se ven apagadas y dicen con qué punto de la hoja de ruta llegan. Se puede dejar solo con iconos.
+- **Caja de herramientas** (izquierda) por secciones: Selección (Flecha), Modelado (Muro, Forjado, Puerta, Ventana, Local), Documentación (Cota, Angular, Radio, Longitud de arco, Cota de nivel, Texto, Etiqueta, Sombreado, Directriz, Nube), **Dibujo 2D** (Línea, Polilínea, Rectángulo, Polígono, Arco, Círculo, Elipse) y **Edición** (Desplazar, Copiar, Girar, Simetría, Escala, Desfase, Recortar, Alargar, Empalme, Matriz, Medir). Cada herramienta es una ficha con su icono, su nombre y su tecla o su orden (M, F, P, V, C, N, L, PL, TX…). Las que aún no existen (pilar, viga, cubierta, escalera, objeto, sección, alzado) se ven apagadas y dicen con qué punto de la hoja de ruta llegan. Se puede dejar solo con iconos.
+- **Línea de órdenes** (fase 3, bajo el dibujo, como AutoCAD): se escribe la orden o su alias en español o en inglés (`L`/`LINEA`, `RR`/`TRIM`, `EQ`/`O`…), con sus preguntas, opciones clicables, coordenadas tecleadas (`3000,2000`, `@1500,0`, `@2000<45`, distancia directa), Intro o Espacio para repetir y Esc para terminar. El botón «Teclas» elige si las letras sueltas lanzan órdenes de AutoCAD o herramientas de ArchiSim; F8, orto.
 - **Pestañas de vistas** sobre el dibujo: cada planta y la vista 3D en su pestaña. Cada pestaña de planta recuerda su encuadre, su escala y su plano de corte. «+» abre una vista; × o clic con la rueda la cierra (la última no); Ctrl+Tab pasa a la siguiente; F2 vuelve a la última planta y F3 abre el 3D. Una planta añadida se abre en su propia pestaña; una planta borrada cierra la suya.
-- **Navegador** (a la derecha), como el de ArchiCAD o el Navegador de proyectos de Revit: **Vistas** (plantas con su cota, 3D; secciones y alzados cuando existan), **Planos** (fase 3) y **Modelo**: cada categoría (muros, forjados, puertas, ventanas) con sus tipos y el número de elementos de cada uno en el proyecto (el tipo es la unidad de medición). Clic en un tipo: selecciona sus elementos en la planta; doble clic o menú contextual: «Editar tipo». Materiales y «Tipos y materiales…» abren el diálogo.
+- **Navegador** (a la derecha), como el de ArchiCAD o el Navegador de proyectos de Revit: **Vistas** (plantas con su cota, 3D; secciones y alzados cuando existan), **Planos** (cada plano abre su pestaña; «+ Nuevo plano»), **Tablas** (carpinterías, muros, forjados, cuadro de superficies) y **Modelo**: cada categoría (muros, forjados, puertas, ventanas) con sus tipos y el número de elementos de cada uno en el proyecto (el tipo es la unidad de medición). Clic en un tipo: selecciona sus elementos en la planta; doble clic o menú contextual: «Editar tipo». Materiales y «Tipos y materiales…» abren el diálogo.
 - **Propiedades** (a la izquierda, junto a la caja de herramientas, como la paleta de Revit: elegir herramienta y tipo es un movimiento corto del ratón): arriba el **selector de tipo** con su **dibujo a 1:20** (corte en planta del multicapa, capas del forjado, o la puerta o ventana en planta dentro de su muro), categoría y clase IFC, y el tipo, que se elige en una **galería** de fichas con su dibujo y un buscador; «✎ Editar tipo» y «Seleccionar los N» del mismo tipo en la planta; debajo los parámetros por grupos plegables: **Restricciones**, **Construcción**, **Dimensiones**, **Capas** y **Datos de identidad**. Con una herramienta activa muestra lo que se va a dibujar (sustituye al cuadro de información de ArchiCAD); sin nada seleccionado, las propiedades de la vista (escala, plano de corte, líneas de referencia, rejilla; nombre y cota de la planta) y del proyecto.
 - **Barra inferior**: escala de la vista, zoom (100 % = el papel a su tamaño real en pantalla), acercar, alejar y ajustar; **forzados** activables (extremos y esquinas, puntos medios, aristas, rastreo a 0°/45°/90°), rejilla y líneas de referencia; a la derecha, el tipo de punto forzado, las coordenadas del cursor y la planta. En 3D: perspectiva o axonometría, ajustar y guardar imagen.
 - **Sobre el dibujo**: las teclas del paso siguiente en una pastilla abajo («Clic siguiente punto · Longitud + Intro exacto · Mayús 45° · Intro/Esc terminar») y el resultado de cada acción como un aviso arriba a la izquierda que se desvanece (los errores duran más). Junto al cursor, longitud, ángulo y superficie.
@@ -140,7 +153,32 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 - **Cota de nivel**: triángulo semirrelleno con la cota del suelo terminado respecto al ±0,00 (`+0,35`, `±0,00`), leída del forjado más alto de la planta en ese punto; se actualiza sola.
 - El texto es una **rotulación técnica de trazo** propia (estilo UNE-EN ISO 3098): las mismas líneas en pantalla, en el SVG y en el futuro PDF, sin depender de las fuentes del ordenador.
 - Son anotaciones: no tienen `GlobalId` ni se exportan a IFC (tampoco lo hacen Revit ni ArchiCAD). Se guardan en el `.archisim` (formato versión 2).
-- Pendiente (fase 3): cotas asociativas que siguen a los muros, cotas de altura en sección, de superficie, estilos por escala.
+- **Asociativas** (v0.25): cada punto que cae en una esquina de muro, una jamba o una esquina de forjado queda atado a él; al mover, estirar o cambiar el elemento, la cota se rehace. Si el elemento se borra, el punto queda libre.
+- **Cotas de dibujo** (v0.25): angulares (`ACOANGULO`, entre dos líneas o caras de muro, o de un arco), de radio y de diámetro (`ACORADIO`, `ACODIAMETRO`) y de longitud de arco (`ACOARCO`); miden su propia geometría, así que cambian al estirarlas o escalarlas.
+- Pendiente: cotas de altura en sección (con 2.10) y estilos de cota por escala.
+
+### Dibujo 2D, capas y estilos de vista (fase 3, v0.25)
+
+- **Elementos 2D** en plantas y planos: líneas, polilíneas (con arcos y grosor), rectángulos, polígonos, arcos, círculos, elipses, puntos, textos de una o varias líneas (alturas en mm de papel, 9 justificaciones), sombreados por recinto o contorno con tramas propias (líneas, cuadrícula, diagonal, ladrillo, hormigón, grava, baldosa, tierra, césped, madera, sólido) y fondo, directrices y nubes de revisión. Cada uno en una **capa** (color, grosor, tipo de línea; visible, bloqueada, imprimible) o con su estilo propio.
+- **Edición al estilo AutoCAD**: desplazar, copiar, girar, escalar, simetría, alinear, desfase, recortar y alargar (Mayús invierte), empalme y chaflán (también de polilíneas), matriz rectangular y polar, partir, juntar, descomponer, estirar, longitud, borrar, igualar propiedades, dividir; consultas de distancia, área y lista. Las órdenes de transformación valen también para muros, forjados, cotas y locales.
+- **Forzados a objeto**: punto final, medio, centro, cuadrante, nodo, intersección, perpendicular y tangente, sobre el dibujo 2D y sobre las caras de muros y aristas de forjados.
+- **Normas gráficas** del proyecto: plumillas finas (1:20, 1:50) y gruesas (desde 1:100) para corte, carpintería, vista, capas, tramas, cotas y textos. Cada vista oculta las categorías y capas que quiera y tiene su **nivel de detalle** (bajo, medio, alto).
+
+### Locales y etiquetas (v0.25)
+
+- **Local** (`LOCAL`, ficha «Local»): un clic dentro de los muros crea el local con el contorno de sus caras interiores, número siguiente y nombre; **sigue a los muros** cuando cambian (se rehace desde su rótulo). Con la opción Polígono se dibuja el contorno. Tiene número, nombre, uso, superficie útil, superficie construida (a ejes, en el cuadro), perímetro, altura libre (hasta la planta superior o propia), volumen y acabados de suelo, paredes y techo. Su rótulo (nombre, número y superficie) se arrastra. Se exporta e importa como `IfcSpace` con sus cantidades y acabados.
+- **Etiquetas** (`ETIQUETA`): de puertas y ventanas (marca y medidas en un recuadro), de muros (tipo) y de locales; escriben lo que es su elemento y lo acompañan cuando se mueve; se borran con él. Opción «Todas» para etiquetar todas las carpinterías de la planta.
+
+### Planos y salida (v0.25)
+
+- **Planos** de A4 a A0, horizontales o verticales, con marco y **cajetín propio** (estudio, proyecto, promotor, emplazamiento, fase, plano, escala, fecha, autor, revisión, número), cuyos datos se escriben una vez para todo el proyecto. Cada plano en su pestaña, a escala 1:1 del papel.
+- **Vistas en el plano**: una planta a su escala (1:20 a 1:500), con su plano de corte, recorte, visibilidad propia y título con escala; se arrastran y doble clic abre su planta. En el plano también se dibuja (textos, líneas) y se colocan **tablas**.
+- **Exportar**: planta (a cualquier escala, con lo que muestra la vista) o plano en **PDF vectorial**, **DXF** o SVG; todos los planos en un PDF. **Importar DXF** en la vista activa (también soltándolo en la ventana): capas, colores, grosores, tipos de línea, textos, sombreados y bloques.
+
+### Tablas y mediciones (v0.25)
+
+- **Tablas de planificación**: carpinterías (marca, tipo, clase, medidas, unidades, plantas), muros por tipo (espesor, nº, longitud, superficie descontando huecos, volumen), forjados por tipo (superficie, volumen) y **cuadro de superficies** (nº, local, uso, planta, superficie útil y construida, perímetro, altura, volumen, acabados), de una planta o de todo el edificio, con totales. Se ven en una ventana, se exportan a **CSV** (con punto y coma y coma decimal, para Excel en español) y se colocan en los planos; se rehacen solas.
+- **Mediciones en BC3** (FIEBDC-3): capítulos de fábricas y muros (m², con los huecos deducidos línea a línea), forjados (m²), carpintería (ud) y acabados de locales (m²), una partida por tipo y una línea de medición por elemento, sin precios, para Presto, Arquímedes o TCQ.
 
 ### Plantas
 
@@ -217,7 +255,7 @@ La lista detallada, con tamaños, dependencias y decisiones pendientes, está en
 
 
 - **Fase 2:** sistema de familias paramétricas (recetas de texto propias, diseño en `docs/FAMILIAS.md`), librería inicial de puertas, ventanas, mobiliario y sanitarios; cubiertas, escaleras, secciones y alzados con líneas ocultas; recorte de muros con forjados.
-- **Fase 3:** planos y maquetación, acotación, etiquetas, tablas de planificación, impresión a PDF.
+- **Fase 3:** planos y maquetación, acotación, etiquetas, tablas de planificación, impresión a PDF — hecha en su mayor parte en v0.25 (falta lo que depende de las secciones y alzados de la fase 2).
 - **Fase 4:** complemento puente para Revit, BCF, colaboración (modelo central), disciplinas de ingeniería.
 
 ## 7. Forma de trabajo

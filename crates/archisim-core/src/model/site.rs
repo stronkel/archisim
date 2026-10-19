@@ -51,11 +51,11 @@ pub struct NewTerrain {
 }
 
 /// Largest gap between the points of a contour line drawn by hand.
-pub const LINE_SPACING: f64 = 1.0;
+pub const CONTOUR_POINT_SPACING: f64 = 1.0;
 
 impl Terrain {
     /// Adds a contour line through `path` at height `z`: points no more
-    /// than `LINE_SPACING` apart along it (reusing points already there).
+    /// than `CONTOUR_POINT_SPACING` apart along it (reusing points already there).
     /// Returns the index of the new line.
     pub fn add_line(&mut self, path: &[Point2], z: f64) -> usize {
         let line = push_line(&mut self.points, path, z);
@@ -184,12 +184,14 @@ impl Terrain {
 }
 
 /// Puts the points of a contour line through `path` at height `z` into
-/// `points` (no more than `LINE_SPACING` apart; a point already there is
+/// `points` (no more than `CONTOUR_POINT_SPACING` apart; a point already there is
 /// reused and takes the height), and returns their indices in order.
 pub fn push_line(points: &mut Vec<SurveyPoint>, path: &[Point2], z: f64) -> Vec<usize> {
     let mut at: Vec<Point2> = Vec::new();
     for (k, w) in path.windows(2).enumerate() {
-        let n = (w[0].distance(w[1]) / LINE_SPACING - 1e-9).ceil().max(1.0) as usize;
+        let n = (w[0].distance(w[1]) / CONTOUR_POINT_SPACING - 1e-9)
+            .ceil()
+            .max(1.0) as usize;
         let first = if k == 0 { 0 } else { 1 };
         for j in first..=n {
             at.push(w[0] + (w[1] - w[0]) * (j as f64 / n as f64));
@@ -384,7 +386,7 @@ pub fn delaunay(points: &[Point2]) -> Vec<[usize; 3]> {
 /// points a terrain has (kept as they are, so its lines stay right): the
 /// new points, each once (one at the same place as another is left out), and
 /// each contour line through `paths` at its height, its points no more than
-/// `LINE_SPACING` apart and shared with the points already there (they take
+/// `CONTOUR_POINT_SPACING` apart and shared with the points already there (they take
 /// the line's height). Fast for thousands of points.
 pub fn survey_points(
     existing: Vec<SurveyPoint>,
@@ -421,7 +423,9 @@ pub fn survey_points(
             add(*first, &mut out);
         }
         for w in path.windows(2) {
-            let n = (w[0].distance(w[1]) / LINE_SPACING - 1e-9).ceil().max(1.0) as usize;
+            let n = (w[0].distance(w[1]) / CONTOUR_POINT_SPACING - 1e-9)
+                .ceil()
+                .max(1.0) as usize;
             for j in 1..=n {
                 add(w[0] + (w[1] - w[0]) * (j as f64 / n as f64), &mut out);
             }

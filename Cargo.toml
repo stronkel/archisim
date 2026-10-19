@@ -5,8 +5,10 @@ members = [
     "crates/archisim-dxf",
     "crates/archisim-core",
     "crates/archisim-geom",
+    "crates/archisim-draft",
     "crates/archisim-ifc",
     "crates/archisim-plan",
+    "crates/archisim-export",
     "crates/archisim-file",
     "crates/archisim-library",
     "crates/archisim-cli",
@@ -27,8 +29,10 @@ archisim-family = { path = "crates/archisim-family" }
 archisim-dxf = { path = "crates/archisim-dxf" }
 archisim-core = { path = "crates/archisim-core" }
 archisim-geom = { path = "crates/archisim-geom" }
+archisim-draft = { path = "crates/archisim-draft" }
 archisim-ifc = { path = "crates/archisim-ifc" }
 archisim-plan = { path = "crates/archisim-plan" }
+archisim-export = { path = "crates/archisim-export" }
 archisim-file = { path = "crates/archisim-file" }
 archisim-library = { path = "crates/archisim-library" }
 

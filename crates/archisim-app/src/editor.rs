@@ -23,8 +23,8 @@ mod objects;
 mod phases;
 mod railings;
 mod roofs;
+mod room_tool;
 mod sections;
-mod spaces;
 mod stairs;
 mod structure;
 mod terrain;
@@ -34,7 +34,7 @@ pub use curtain::CurtainSettings;
 pub use objects::ObjectSettings;
 pub use railings::RailingSettings;
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
-pub use spaces::{space_height, usages_of, SpaceSettings, USAGE_SETS};
+pub use room_tool::{usages_of, RoomSettings, USAGE_SETS};
 pub use stairs::{default_stair_settings, StairSettings};
 pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 pub use terrain::TerrainSettings;
@@ -234,30 +234,86 @@ impl Editor {
     /// Writes the plan of the active level as SVG at a scale (50 for
     /// 1:50): line weights are paper weights, and doors and windows use the
     /// plan symbol their family gives for that scale.
-    #[cfg(test)]
-    pub fn export_plan(&self, path: &Path, show_reference_lines: bool, scale: f64) -> EditResult {
-        self.export_plan_phase(path, show_reference_lines, scale, Default::default())
+    /// Writes the current level's plan with these options, as the file's
+    /// extension says: PDF (vector, at its scale), DXF (millimetres) or
+    /// SVG.
+    pub fn export_plan(&self, path: &Path, options: &PlanOptions) -> EditResult {
+        let model = self.model();
+        let bytes = match extension(path).as_str() {
+            "dxf" => archisim_export::dxf::plan_dxf(model, self.level, options)?.into_bytes(),
+            "pdf" => {
+                let svg = render_plan(model, self.level, options);
+                let title = model.level(self.level).map_or("", |l| l.name.as_str());
+                archisim_export::pdf::pdf(
+                    &[archisim_export::pdf::Page { svg: &svg, title }],
+                    &model.project_name,
+                )?
+            }
+            _ => render_plan(model, self.level, options).into_bytes(),
+        };
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir la planta: {e}"))
     }
 
-    /// [`Editor::export_plan`] of one phase of a refurbishment.
-    pub fn export_plan_phase(
-        &self,
+    /// Writes sheets: several in one PDF, or one as PDF, DXF or SVG.
+    pub fn export_sheets(&self, path: &Path, sheets: &[archisim_core::SheetId]) -> EditResult {
+        let model = self.model();
+        let svg = |id| {
+            archisim_plan::sheet::render_sheet(
+                model,
+                id,
+                &archisim_plan::sheet::SheetOptions::default(),
+            )
+        };
+        let bytes = match (extension(path).as_str(), sheets) {
+            ("dxf", [id]) => archisim_export::dxf::sheet_dxf(model, *id)?.into_bytes(),
+            ("svg", [id]) => svg(*id).into_bytes(),
+            ("pdf", _) => {
+                let pages: Vec<(String, String)> = sheets
+                    .iter()
+                    .filter_map(|id| {
+                        let s = model.sheet(*id)?;
+                        Some((svg(*id), format!("{} {}", s.number, s.name)))
+                    })
+                    .collect();
+                let pages: Vec<archisim_export::pdf::Page> = pages
+                    .iter()
+                    .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+                    .collect();
+                archisim_export::pdf::pdf(&pages, &model.project_name)?
+            }
+            _ => return Err("los planos se exportan en PDF, DXF o SVG (uno a uno)".into()),
+        };
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el plano: {e}"))
+    }
+
+    /// Brings a DXF drawing into a view as 2D drafting, `k` metres per
+    /// paper millimetre of the view (texts keep their size on paper).
+    pub fn import_dxf(
+        &mut self,
         path: &Path,
-        show_reference_lines: bool,
-        scale: f64,
-        phase_view: archisim_plan::phases::PhaseView,
-    ) -> EditResult {
-        let svg = render_plan(
-            self.model(),
-            self.level,
-            &PlanOptions {
-                show_reference_lines,
-                scale,
-                phase_view,
-                ..PlanOptions::default()
-            },
+        view: archisim_core::ViewRef,
+        k: f64,
+    ) -> EditResult<archisim_export::dxf_read::Report> {
+        let bytes = std::fs::read(path).map_err(|e| format!("no se pudo leer el DXF: {e}"))?;
+        let drawing = archisim_export::dxf_read::read(&bytes)?;
+        if drawing.items.is_empty() {
+            return Err("el DXF no tiene nada que ArchiSim sepa dibujar en 2D".into());
+        }
+        let label = format!(
+            "Importar DXF «{}»",
+            path.file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default()
         );
-        std::fs::write(path, svg).map_err(|e| format!("no se pudo escribir la planta: {e}"))
+        self.transact(&label, |m| {
+            archisim_export::dxf_read::add_to(
+                m,
+                view,
+                &drawing,
+                archisim_core::Vec2::new(0.0, 0.0),
+                k,
+            )
+        })
     }
 
     // ---- History ---------------------------------------------------------
@@ -273,7 +329,6 @@ impl Editor {
             Element::Mark(id) => model.elevation_mark(*id).is_some(),
             Element::Column(id) => model.column(*id).is_some(),
             Element::Beam(id) => model.beam(*id).is_some(),
-            Element::Space(id) => model.space(*id).is_some(),
             Element::Section(id) => model.section(*id).is_some(),
             Element::Roof(id) => model.roof(*id).is_some(),
             Element::Stair(id) => model.stair(*id).is_some(),
@@ -281,6 +336,9 @@ impl Editor {
             Element::CurtainWall(id) => model.curtain_wall(*id).is_some(),
             Element::Railing(id) => model.railing(*id).is_some(),
             Element::Object(id) => model.object(*id).is_some(),
+            Element::Draft(id) => model.draft(*id).is_some(),
+            Element::Room(id) => model.room(*id).is_some(),
+            Element::Tag(id) => model.tag(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -294,7 +352,49 @@ impl Editor {
         label: &str,
         edit: impl FnOnce(&mut Model) -> Result<T, ModelError>,
     ) -> EditResult<T> {
-        let result = self.doc.transact(label, edit).map_err(|e| explain(&e))?;
+        let result = self
+            .doc
+            .transact(label, |m| {
+                // Dimensions follow what they measure (and new or moved
+                // ones are tied to what is under their points).
+                let before = archisim_geom::anchors::snapshot(m);
+                // Rooms bounded by walls follow them too.
+                let rooms = m.rooms().any(|r| r.bounded);
+                let walls = if rooms {
+                    archisim_geom::room::wall_signatures(m)
+                } else {
+                    Default::default()
+                };
+                // Tags go with their element.
+                let tags: Vec<(archisim_core::TagId, Point2, Option<Point2>)> = m
+                    .tags()
+                    .map(|t| (t.id, t.at, archisim_plan::rooms::tag_anchor(m, t.target)))
+                    .collect();
+                let r = edit(m)?;
+                for (id, at, anchor) in tags {
+                    let Some(t) = m.tag(id) else { continue };
+                    if t.at != at {
+                        continue;
+                    }
+                    let now = archisim_plan::rooms::tag_anchor(m, t.target);
+                    if let (Some(a), Some(b)) = (anchor, now) {
+                        if a.distance(b) > 1e-9 {
+                            let _ = m.move_tag(id, at + (b - a));
+                        }
+                    }
+                }
+                if m.dimensions().next().is_some() {
+                    archisim_geom::anchors::follow(m, &before);
+                }
+                if rooms {
+                    archisim_geom::room::follow_walls(m, &walls);
+                }
+                if m.tags().next().is_some() {
+                    m.remove_orphan_tags();
+                }
+                Ok(r)
+            })
+            .map_err(|e| explain(&e))?;
         self.changed();
         Ok(result)
     }
@@ -450,35 +550,25 @@ impl Editor {
                     Element::Mark(id) => {
                         m.remove_elevation_mark(*id)?;
                     }
-                    Element::Column(id) => {
-                        m.remove_column(*id)?;
+                    e @ (Element::Column(_)
+                    | Element::Beam(_)
+                    | Element::Section(_)
+                    | Element::Roof(_)
+                    | Element::Stair(_)
+                    | Element::Terrain(_)
+                    | Element::CurtainWall(_)
+                    | Element::Railing(_)
+                    | Element::Object(_)) => remove_element(m, *e)?,
+                    Element::Draft(id) => {
+                        m.remove_draft(*id)?;
                     }
-                    Element::Beam(id) => {
-                        m.remove_beam(*id)?;
+                    Element::Room(id) => {
+                        m.remove_room(*id)?;
                     }
-                    Element::Space(id) => {
-                        m.remove_space(*id)?;
-                    }
-                    Element::Section(id) => {
-                        m.remove_section(*id)?;
-                    }
-                    Element::Roof(id) => {
-                        m.remove_roof(*id)?;
-                    }
-                    Element::Stair(id) => {
-                        m.remove_stair(*id)?;
-                    }
-                    Element::Terrain(id) => {
-                        m.remove_terrain(*id)?;
-                    }
-                    Element::CurtainWall(id) => {
-                        m.remove_curtain_wall(*id)?;
-                    }
-                    Element::Railing(id) => {
-                        m.remove_railing(*id)?;
-                    }
-                    Element::Object(id) => {
-                        m.remove_object(*id)?;
+                    Element::Tag(id) => {
+                        if m.tag(*id).is_some() {
+                            m.remove_tag(*id)?;
+                        }
                     }
                     Element::Opening(_) => {}
                 }
@@ -487,6 +577,302 @@ impl Editor {
         })?;
         self.selection.clear();
         Ok(n)
+    }
+
+    /// Applies the changes of a step of a 2D command as one undoable
+    /// step. New drafting elements go to `view` with the layer and style
+    /// of `st`. Returns the elements created or changed (the new
+    /// selection after a copy).
+    pub fn apply_cad(
+        &mut self,
+        view: archisim_core::ViewRef,
+        st: &crate::cad::CadSettings,
+        step: &crate::cad::Changes,
+    ) -> EditResult<BTreeSet<Element>> {
+        use crate::cad::Change;
+        let changes = step.changes.clone();
+        let out = self.transact(step.label, |m| {
+            let mut out = BTreeSet::new();
+            for c in changes {
+                match c {
+                    Change::Add(shape) => {
+                        let id = m.add_draft(archisim_core::NewDraft {
+                            view,
+                            layer: st.layer,
+                            shape,
+                            color: st.color,
+                            weight: st.weight,
+                            line: st.line,
+                        })?;
+                        out.insert(Element::Draft(id));
+                    }
+                    Change::AddDraft(spec) => {
+                        out.insert(Element::Draft(m.add_draft(spec)?));
+                    }
+                    Change::Reshape(id, shape) => {
+                        m.set_draft_shape(id, shape)?;
+                        out.insert(Element::Draft(id));
+                    }
+                    Change::Remove(e) => match e {
+                        Element::Draft(id) => {
+                            m.remove_draft(id)?;
+                        }
+                        Element::Wall(id) => {
+                            if m.wall(id).is_some() {
+                                m.remove_wall(id)?;
+                            }
+                        }
+                        Element::Slab(id) => {
+                            m.remove_slab(id)?;
+                        }
+                        Element::Opening(id) => {
+                            if m.opening(id).is_some() {
+                                m.remove_opening(id)?;
+                            }
+                        }
+                        Element::Dimension(id) => {
+                            m.remove_dimension(id)?;
+                        }
+                        Element::Mark(id) => {
+                            m.remove_elevation_mark(id)?;
+                        }
+                        Element::Room(id) => {
+                            m.remove_room(id)?;
+                        }
+                        Element::Tag(id) => {
+                            if m.tag(id).is_some() {
+                                m.remove_tag(id)?;
+                            }
+                        }
+                        e @ (Element::Column(_)
+                        | Element::Beam(_)
+                        | Element::Section(_)
+                        | Element::Roof(_)
+                        | Element::Stair(_)
+                        | Element::Terrain(_)
+                        | Element::CurtainWall(_)
+                        | Element::Railing(_)
+                        | Element::Object(_)) => remove_element(m, e)?,
+                    },
+                    Change::Transform { items, t, copy } => {
+                        out.extend(crate::xform::transform(m, &items, &t, copy)?);
+                    }
+                    Change::RoomAt(p) => {
+                        let level = match view {
+                            archisim_core::ViewRef::Level(l) => l,
+                            _ => return Err(ModelError::InvalidShape("no room there")),
+                        };
+                        let outline = archisim_geom::room_outline(
+                            m,
+                            level,
+                            p,
+                            archisim_geom::Contour::InteriorFace,
+                        )
+                        .map_err(|_| ModelError::InvalidShape("no room there"))?;
+                        out.insert(Element::Room(new_room(m, level, outline, p, true)?));
+                    }
+                    Change::Room(outline) => {
+                        let level = match view {
+                            archisim_core::ViewRef::Level(l) => l,
+                            _ => return Err(ModelError::InvalidShape("no room there")),
+                        };
+                        let n = outline.len().max(1) as f64;
+                        let c = outline
+                            .iter()
+                            .fold(Point2::new(0.0, 0.0), |a, p| a + *p * (1.0 / n));
+                        out.insert(Element::Room(new_room(m, level, outline, c, false)?));
+                    }
+                    Change::Tag(e, at) => {
+                        let target = tag_target(e)
+                            .ok_or(ModelError::InvalidShape("nothing to tag there"))?;
+                        let at = match at {
+                            Some(p) => p,
+                            None => default_tag_point(m, target)
+                                .ok_or(ModelError::InvalidShape("nothing to tag there"))?,
+                        };
+                        out.insert(Element::Tag(m.add_tag(target, at, false)?));
+                    }
+                    Change::TagAll => {
+                        let level = match view {
+                            archisim_core::ViewRef::Level(l) => l,
+                            _ => continue,
+                        };
+                        let tagged: BTreeSet<archisim_core::TagTarget> =
+                            m.tags().map(|t| t.target).collect();
+                        let todo: Vec<archisim_core::OpeningId> = m
+                            .walls_on_level(level)
+                            .flat_map(|w| m.openings_in_wall(w.id))
+                            .filter(|o| {
+                                m.opening_type(o.opening_type)
+                                    .is_some_and(|t| t.kind != archisim_core::OpeningKind::Void)
+                            })
+                            .map(|o| o.id)
+                            .filter(|o| !tagged.contains(&archisim_core::TagTarget::Opening(*o)))
+                            .collect();
+                        for o in todo {
+                            let target = archisim_core::TagTarget::Opening(o);
+                            if let Some(at) = default_tag_point(m, target) {
+                                out.insert(Element::Tag(m.add_tag(target, at, false)?));
+                            }
+                        }
+                    }
+                    Change::MatchStyle { from, to } => {
+                        let f = m.draft(from).ok_or(ModelError::UnknownDraft(from))?.clone();
+                        for id in to {
+                            m.set_draft_style(id, f.layer, f.color, f.weight, f.line)?;
+                            out.insert(Element::Draft(id));
+                        }
+                    }
+                }
+            }
+            Ok(out)
+        })?;
+        Ok(out)
+    }
+
+    // ---- 2D drafting ----------------------------------------------------
+
+    /// Changes the layer, colour, weight and line style of drafting
+    /// elements; `None` in an argument leaves that property as it is, and
+    /// `Some(None)` sets it to "by layer".
+    pub fn set_drafts_style(
+        &mut self,
+        ids: &[archisim_core::DraftId],
+        layer: Option<archisim_core::DrawLayerId>,
+        color: Option<Option<archisim_core::Rgb>>,
+        weight: Option<Option<f64>>,
+        line: Option<Option<archisim_core::LineStyle>>,
+    ) -> EditResult {
+        self.transact("Cambiar estilo", |m| {
+            for id in ids {
+                let d = m.draft(*id).ok_or(ModelError::UnknownDraft(*id))?.clone();
+                m.set_draft_style(
+                    *id,
+                    layer.unwrap_or(d.layer),
+                    color.unwrap_or(d.color),
+                    weight.unwrap_or(d.weight),
+                    line.unwrap_or(d.line),
+                )?;
+            }
+            Ok(())
+        })
+    }
+
+    /// New geometry for a drafting element (a text's words, a hatch's
+    /// pattern…).
+    pub fn set_draft_shape(
+        &mut self,
+        id: archisim_core::DraftId,
+        shape: archisim_core::Shape,
+        label: &str,
+    ) -> EditResult {
+        self.transact(label, |m| m.set_draft_shape(id, shape))
+    }
+
+    /// The project's line weights by scale.
+    pub fn set_graphics(&mut self, g: archisim_core::GraphicStandard) -> EditResult {
+        if !g.is_valid() {
+            return Err("los grosores tienen que ser mayores que cero".into());
+        }
+        self.transact("Normas gráficas", |m| {
+            m.graphics = g;
+            Ok(())
+        })
+    }
+
+    pub fn add_sheet(
+        &mut self,
+        spec: archisim_core::NewSheet,
+    ) -> EditResult<archisim_core::SheetId> {
+        self.transact("Nuevo plano", |m| m.add_sheet(spec))
+    }
+
+    pub fn set_sheet(&mut self, sheet: archisim_core::Sheet) -> EditResult {
+        self.transact("Cambiar plano", |m| m.set_sheet(sheet))
+    }
+
+    /// Removes a sheet with its views and what is drawn on it.
+    pub fn remove_sheet(&mut self, id: archisim_core::SheetId) -> EditResult {
+        self.transact("Borrar plano", |m| m.remove_sheet(id).map(|_| ()))
+    }
+
+    pub fn add_viewport(
+        &mut self,
+        spec: archisim_core::NewViewport,
+    ) -> EditResult<archisim_core::ViewportId> {
+        self.transact("Colocar vista en el plano", |m| m.add_viewport(spec))
+    }
+
+    pub fn set_viewport(&mut self, v: archisim_core::Viewport, label: &str) -> EditResult {
+        self.transact(label, |m| m.set_viewport(v))
+    }
+
+    pub fn remove_viewport(&mut self, id: archisim_core::ViewportId) -> EditResult {
+        self.transact("Quitar vista del plano", |m| {
+            m.remove_viewport(id).map(|_| ())
+        })
+    }
+
+    pub fn set_room(&mut self, room: archisim_core::Room, label: &str) -> EditResult {
+        self.transact(label, |m| m.set_room(room))
+    }
+
+    pub fn set_tag_leader(&mut self, id: archisim_core::TagId, leader: bool) -> EditResult {
+        self.transact("Cambiar etiqueta", |m| m.set_tag_leader(id, leader))
+    }
+
+    pub fn add_table(
+        &mut self,
+        sheet: archisim_core::SheetId,
+        kind: archisim_core::ScheduleKind,
+        level: Option<LevelId>,
+        at: Point2,
+    ) -> EditResult<archisim_core::TableId> {
+        self.transact("Colocar tabla en el plano", |m| {
+            m.add_table(sheet, kind, level, at)
+        })
+    }
+
+    pub fn set_table(&mut self, t: archisim_core::SheetTable, label: &str) -> EditResult {
+        self.transact(label, |m| m.set_table(t))
+    }
+
+    pub fn remove_table(&mut self, id: archisim_core::TableId) -> EditResult {
+        self.transact("Quitar tabla del plano", |m| m.remove_table(id).map(|_| ()))
+    }
+
+    /// The measurements as a BC3 budget.
+    pub fn export_bc3(&self, path: &Path) -> EditResult {
+        let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
+        let bytes = archisim_export::bc3::bc3(self.model(), &date, env!("CARGO_PKG_VERSION"));
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el BC3: {e}"))
+    }
+
+    /// The project's data for the title blocks.
+    pub fn set_info(&mut self, info: archisim_core::ProjectInfo) -> EditResult {
+        self.transact("Datos del proyecto", |m| {
+            m.set_info(info);
+            Ok(())
+        })
+    }
+
+    pub fn add_draw_layer(
+        &mut self,
+        layer: archisim_core::DrawLayer,
+    ) -> EditResult<archisim_core::DrawLayerId> {
+        self.transact("Nueva capa", |m| m.add_draw_layer(layer))
+    }
+
+    pub fn set_draw_layer(&mut self, layer: archisim_core::DrawLayer) -> EditResult {
+        self.transact("Cambiar capa", |m| m.set_draw_layer(layer))
+    }
+
+    /// Removes a layer, moving its elements to layer "0".
+    pub fn remove_draw_layer(&mut self, id: archisim_core::DrawLayerId) -> EditResult {
+        self.transact("Borrar capa", |m| {
+            m.remove_draw_layer(id, Some(archisim_core::LAYER_ZERO))
+                .map(|_| ())
+        })
     }
 
     pub fn set_walls_type(&mut self, walls: &[WallId], t: WallTypeId) -> EditResult {
@@ -617,7 +1003,7 @@ impl Editor {
                         | Element::Slab(_)
                         | Element::Column(_)
                         | Element::Beam(_)
-                        | Element::Space(_)
+                        | Element::Room(_)
                         | Element::Roof(_)
                         | Element::Stair(_)
                         | Element::Terrain(_)
@@ -637,7 +1023,7 @@ impl Editor {
                     Element::Slab(id) => m.set_slab_level(*id, level)?,
                     Element::Column(id) => m.set_column_level(*id, level)?,
                     Element::Beam(id) => m.edit_beam(*id, |b| b.level = level)?,
-                    Element::Space(id) => m.edit_space(*id, |s| s.level = level)?,
+                    Element::Room(id) => m.set_room_level(*id, level)?,
                     Element::Roof(id) => m.edit_roof(*id, |r| r.level = level)?,
                     Element::Stair(id) => m.edit_stair(*id, |s| s.level = level)?,
                     Element::Terrain(id) => m.edit_terrain(*id, |t| t.level = level)?,
@@ -831,6 +1217,77 @@ impl crate::geo::Geo for Editor {
     }
 }
 
+/// A file's extension in lower case.
+fn extension(path: &Path) -> String {
+    path.extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default()
+}
+
+/// Removes an element of phase 2 (columns, beams, roofs, stairs…).
+fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelError> {
+    match e {
+        Element::Column(id) => m.remove_column(id).map(drop),
+        Element::Beam(id) => m.remove_beam(id).map(drop),
+        Element::Section(id) => m.remove_section(id).map(drop),
+        Element::Roof(id) => m.remove_roof(id).map(drop),
+        Element::Stair(id) => m.remove_stair(id).map(drop),
+        Element::Terrain(id) => m.remove_terrain(id).map(drop),
+        Element::CurtainWall(id) => m.remove_curtain_wall(id).map(drop),
+        Element::Railing(id) => m.remove_railing(id).map(drop),
+        Element::Object(id) => m.remove_object(id).map(drop),
+        _ => Ok(()),
+    }
+}
+
+/// A new room of a level with the next number.
+fn new_room(
+    m: &mut Model,
+    level: LevelId,
+    outline: Vec<Point2>,
+    label: Point2,
+    bounded: bool,
+) -> Result<archisim_core::RoomId, ModelError> {
+    let number = m.next_room_number(level);
+    m.add_room(archisim_core::NewRoom {
+        level,
+        number,
+        name: "Local".into(),
+        outline,
+        holes: Vec::new(),
+        label,
+        bounded,
+    })
+}
+
+/// What a tag of an element points at.
+pub fn tag_target(e: Element) -> Option<archisim_core::TagTarget> {
+    match e {
+        Element::Opening(o) => Some(archisim_core::TagTarget::Opening(o)),
+        Element::Wall(w) => Some(archisim_core::TagTarget::Wall(w)),
+        Element::Room(r) => Some(archisim_core::TagTarget::Room(r)),
+        _ => None,
+    }
+}
+
+/// Where a tag goes by default: outside the wall in front of a door or
+/// window, beside a wall's middle, under a room's stamp.
+pub fn default_tag_point(m: &Model, target: archisim_core::TagTarget) -> Option<Point2> {
+    match target {
+        archisim_core::TagTarget::Opening(o) => {
+            let g = archisim_geom::opening_geometry(m, o)?;
+            Some(g.point((g.t0 + g.t1) / 2.0, g.exterior_offset + 0.35))
+        }
+        archisim_core::TagTarget::Wall(w) => {
+            let w = m.wall(w)?;
+            let u = (w.end - w.start).normalized()?;
+            let t = m.wall_type(w.wall_type).map_or(0.2, |t| t.thickness());
+            Some(w.midpoint() + u.perp_left() * (t + 0.4))
+        }
+        archisim_core::TagTarget::Room(r) => m.room(r).map(|r| r.label - Point2::new(0.0, 0.6)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -943,12 +1400,62 @@ mod tests {
         let reopened = Editor::open(&path).unwrap();
         assert_eq!(reopened.model(), ed.model());
         ed.export_ifc(&dir.join("casa.ifc")).unwrap();
-        ed.export_plan(&dir.join("casa.svg"), false, 50.0).unwrap();
+        for name in ["casa.svg", "casa.pdf", "casa.dxf"] {
+            ed.export_plan(&dir.join(name), &PlanOptions::default())
+                .unwrap();
+            assert!(
+                std::fs::metadata(dir.join(name)).unwrap().len() > 1000,
+                "{name}"
+            );
+        }
         let ifc = std::fs::read_to_string(dir.join("casa.ifc")).unwrap();
         assert!(ifc.contains("IFCWALL("));
         std::fs::write(dir.join("roto.archisim"), "{").unwrap();
         let err = Editor::open(&dir.join("roto.archisim")).err().unwrap();
         assert!(err.starts_with("el fichero está mal escrito"), "{err}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn dimensions_follow_walls_and_doors() {
+        let (m, lvl, _) = room();
+        let south = m.walls().last().unwrap().id;
+        let door = m.openings().next().unwrap().id;
+        let g = archisim_geom::opening_geometry(&m, door).unwrap();
+        let jamb = g.point(g.t0, g.exterior_offset);
+        let mut ed = Editor::with_model(m, None);
+        // The whole south façade, and from its corner to the door.
+        let total = ed
+            .add_dimension(NewDimension {
+                level: lvl,
+                points: vec![Point2::new(0.0, 0.0), Point2::new(6.0, 0.0)],
+                direction: Point2::new(1.0, 0.0),
+                position: Point2::new(0.0, -1.0),
+            })
+            .unwrap();
+        let to_door = ed
+            .add_dimension(NewDimension {
+                level: lvl,
+                points: vec![Point2::new(6.0, 0.0), jamb],
+                direction: Point2::new(1.0, 0.0),
+                position: Point2::new(0.0, -1.5),
+            })
+            .unwrap();
+        let d = ed.model().dimension(to_door).unwrap();
+        assert!(d.anchors.iter().all(Option::is_some), "{:?}", d.anchors);
+        let before = ed.model().dimension(to_door).unwrap().values()[0];
+        // The door slides 50 cm: its dimension changes, the façade's not.
+        let along = ed.model().opening(door).unwrap().along;
+        ed.move_opening(door, along + 0.5, 0.0).unwrap();
+        let after = ed.model().dimension(to_door).unwrap().values()[0];
+        assert!((after - before).abs() - 0.5 < 1e-9, "{before} → {after}");
+        assert!((ed.model().dimension(total).unwrap().values()[0] - 6.0).abs() < 1e-9);
+        // The façade is lengthened to 7 m: so is its dimension.
+        ed.set_wall_length(south, 7.0).unwrap();
+        let v = ed.model().dimension(total).unwrap().values()[0];
+        assert!((v - 7.0).abs() < 1e-9, "{v}");
+        // Undo brings both back in one step each.
+        ed.undo();
+        assert!((ed.model().dimension(total).unwrap().values()[0] - 6.0).abs() < 1e-9);
     }
 }

@@ -211,7 +211,9 @@ name = "archisim-app"
 version = "0.25.0"
 dependencies = [
  "archisim-core",
+ "archisim-draft",
  "archisim-dxf",
+ "archisim-export",
  "archisim-file",
  "archisim-geom",
  "archisim-ifc",
@@ -234,6 +236,7 @@ name = "archisim-cli"
 version = "0.25.0"
 dependencies = [
  "archisim-core",
+ "archisim-export",
  "archisim-file",
  "archisim-geom",
  "archisim-ifc",
@@ -251,8 +254,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "archisim-draft"
+version = "0.25.0"
+dependencies = [
+ "archisim-core",
+]
+
+[[package]]
 name = "archisim-dxf"
 version = "0.25.0"
+
+[[package]]
+name = "archisim-export"
+version = "0.25.0"
+dependencies = [
+ "archisim-core",
+ "archisim-draft",
+ "archisim-library",
+ "archisim-plan",
+ "miniz_oxide 0.8.9",
+ "resvg",
+]
 
 [[package]]
 name = "archisim-family"
@@ -296,6 +318,7 @@ name = "archisim-plan"
 version = "0.25.0"
 dependencies = [
  "archisim-core",
+ "archisim-draft",
  "archisim-geom",
  "resvg",
 ]

@@ -72,10 +72,6 @@ typed_id!(
     SectionId
 );
 typed_id!(
-    /// Identifies a [`crate::Space`] (a room).
-    SpaceId
-);
-typed_id!(
     /// Identifies a [`crate::Roof`].
     RoofId
 );
@@ -120,6 +116,38 @@ typed_id!(
 typed_id!(
     /// Identifies an [`crate::ElevationMark`] (a level mark in plan).
     ElevationMarkId
+);
+
+typed_id!(
+    /// Identifies a [`crate::DrawLayer`] (a drawing layer, as in AutoCAD).
+    DrawLayerId
+);
+typed_id!(
+    /// Identifies a [`crate::Draft`] (a 2D drafting element: line, arc,
+    /// text, hatch…).
+    DraftId
+);
+
+typed_id!(
+    /// Identifies a [`crate::Sheet`] (a drawing sheet, "plano").
+    SheetId
+);
+typed_id!(
+    /// Identifies a [`crate::Viewport`] (a view placed on a sheet).
+    ViewportId
+);
+
+typed_id!(
+    /// Identifies a [`crate::SheetTable`] (a schedule placed on a sheet).
+    TableId
+);
+typed_id!(
+    /// Identifies a [`crate::Room`] (a room, "local"; IfcSpace).
+    RoomId
+);
+typed_id!(
+    /// Identifies a [`crate::Tag`] (a tag of a door, window, wall or room).
+    TagId
 );
 
 /// Alphabet used by IFC to compress a 128-bit GUID into 22 characters.
