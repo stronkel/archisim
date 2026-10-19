@@ -734,6 +734,7 @@ impl ArchiSimApp {
                 },
             );
         });
+        self.visibility_group(ui);
         if let Some(l) = level {
             group(ui, "view-level", "Planta", |ui| {
                 row(ui, "Nombre", "", |ui, w| {

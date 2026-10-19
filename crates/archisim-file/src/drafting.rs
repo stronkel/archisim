@@ -378,3 +378,73 @@ pub(crate) fn drafts_in(drafts: Vec<Draft>) -> Result<Vec<core::Draft>, FileErro
         })
         .collect()
 }
+
+/// Line weights of a scale range, paper millimetres.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Pens {
+    pub cut: f64,
+    pub frame: f64,
+    pub view: f64,
+    pub thin: f64,
+    pub hatch: f64,
+    pub dimension: f64,
+    pub tick: f64,
+    pub text: f64,
+}
+
+impl Pens {
+    fn out(p: &core::Pens) -> Self {
+        Self {
+            cut: p.cut,
+            frame: p.frame,
+            view: p.view,
+            thin: p.thin,
+            hatch: p.hatch,
+            dimension: p.dimension,
+            tick: p.tick,
+            text: p.text,
+        }
+    }
+
+    fn into_core(self) -> core::Pens {
+        core::Pens {
+            cut: self.cut,
+            frame: self.frame,
+            view: self.view,
+            thin: self.thin,
+            hatch: self.hatch,
+            dimension: self.dimension,
+            tick: self.tick,
+            text: self.text,
+        }
+    }
+}
+
+/// The project's graphic standard (version 7).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Graphics {
+    pub fine: Pens,
+    pub coarse: Pens,
+    /// Scales from 1:`coarse_from` down use the coarse pens.
+    pub coarse_from: f64,
+}
+
+impl Graphics {
+    pub fn out(g: &core::GraphicStandard) -> Self {
+        Self {
+            fine: Pens::out(&g.fine),
+            coarse: Pens::out(&g.coarse),
+            coarse_from: g.coarse_from,
+        }
+    }
+
+    pub fn into_core(self) -> core::GraphicStandard {
+        core::GraphicStandard {
+            fine: self.fine.into_core(),
+            coarse: self.coarse.into_core(),
+            coarse_from: self.coarse_from,
+        }
+    }
+}

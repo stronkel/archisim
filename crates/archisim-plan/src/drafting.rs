@@ -94,10 +94,11 @@ pub fn draw_drafts(
     k: f64,
     viewport: Option<(Point2, Point2)>,
     printing: bool,
+    hidden_layers: &std::collections::BTreeSet<archisim_core::DrawLayerId>,
 ) {
     let shown: Vec<&Draft> = model
         .drafts_in(view)
-        .filter(|d| model.draft_visible(d))
+        .filter(|d| model.draft_visible(d) && !hidden_layers.contains(&d.layer))
         .filter(|d| !printing || model.draw_layer(d.layer).is_none_or(|l| l.printable))
         .filter(|d| in_view(&d.shape, k, viewport))
         .collect();

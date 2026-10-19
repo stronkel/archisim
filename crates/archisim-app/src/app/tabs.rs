@@ -23,7 +23,7 @@ pub enum TabKind {
 }
 
 /// A view open in a tab, with what it remembers while another is shown.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ViewTab {
     pub kind: TabKind,
     pub view: View,
@@ -33,6 +33,8 @@ pub struct ViewTab {
     pub cut_plane: f64,
     /// Framed once already (a new tab is fitted to its level).
     pub fitted: bool,
+    /// What the view shows: categories, drawing layers, detail.
+    pub style: archisim_core::ViewStyle,
 }
 
 impl ViewTab {
@@ -44,6 +46,7 @@ impl ViewTab {
             scale: d.scale,
             cut_plane: d.cut_plane,
             fitted: false,
+            style: Default::default(),
         }
     }
 
@@ -62,11 +65,13 @@ impl ArchiSimApp {
     /// Keeps the active tab's state in its slot of the list.
     fn store_active_tab(&mut self) {
         let (view, scale, cut) = (self.view, self.plan_scale, self.cut_plane);
+        let style = self.view_style.clone();
         if let Some(t) = self.tabs.get_mut(self.active_tab) {
             if matches!(t.kind, TabKind::Plan(_)) {
                 t.view = view;
                 t.scale = scale;
                 t.cut_plane = cut;
+                t.style = style;
                 t.fitted = true;
             }
         }
@@ -81,12 +86,13 @@ impl ArchiSimApp {
             self.store_active_tab();
         }
         self.active_tab = i;
-        let tab = self.tabs[i];
+        let tab = self.tabs[i].clone();
         match tab.kind {
             TabKind::Plan(level) => {
                 self.view = tab.view;
                 self.plan_scale = tab.scale;
                 self.cut_plane = tab.cut_plane;
+                self.view_style = tab.style;
                 if !tab.fitted {
                     self.fit_requested = true;
                 }

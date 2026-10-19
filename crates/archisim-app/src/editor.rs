@@ -531,6 +531,17 @@ impl Editor {
         self.transact(label, |m| m.set_draft_shape(id, shape))
     }
 
+    /// The project's line weights by scale.
+    pub fn set_graphics(&mut self, g: archisim_core::GraphicStandard) -> EditResult {
+        if !g.is_valid() {
+            return Err("los grosores tienen que ser mayores que cero".into());
+        }
+        self.transact("Normas gráficas", |m| {
+            m.graphics = g;
+            Ok(())
+        })
+    }
+
     pub fn add_draw_layer(
         &mut self,
         layer: archisim_core::DrawLayer,

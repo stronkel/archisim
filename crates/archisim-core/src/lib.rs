@@ -8,6 +8,7 @@
 pub mod document;
 pub mod drafting;
 pub mod family;
+pub mod graphics;
 pub mod ids;
 pub mod math;
 pub mod model;
@@ -18,6 +19,7 @@ pub use family::{
     Evaluation, Family, FamilyDef, FamilyError, LineStyle, Mark, ParamKind, ParamScope, Part, Pen,
     Value, Values,
 };
+pub use graphics::*;
 pub use ids::*;
 pub use math::{
     is_simple_polygon, perimeter, signed_area, Arc, Point2, Vec2, CURVE_TOLERANCE, EPSILON,

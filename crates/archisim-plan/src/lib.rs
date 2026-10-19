@@ -62,6 +62,12 @@ pub struct PlanOptions {
     /// the symbols of tiny openings) are left out when zoomed out, so a
     /// large model stays quick. `None` (exports): everything.
     pub px_per_mm: Option<f64>,
+    /// What the view shows (categories, layers, level of detail).
+    pub style: archisim_core::ViewStyle,
+    /// Line weights; `None`: the project's for this scale.
+    pub pens: Option<archisim_core::Pens>,
+    /// The title under an exported plan (project, level and scale).
+    pub title: bool,
 }
 
 impl Default for PlanOptions {
@@ -74,6 +80,9 @@ impl Default for PlanOptions {
             viewport: None,
             reference_level: None,
             px_per_mm: None,
+            style: Default::default(),
+            pens: None,
+            title: true,
         }
     }
 }
@@ -87,8 +96,26 @@ thread_local! {
     static PX_PER_MM: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
 }
 
+thread_local! {
+    /// Line weights of the plan being drawn.
+    static PENS: std::cell::Cell<archisim_core::Pens> =
+        const { std::cell::Cell::new(archisim_core::Pens::FINE) };
+    /// Level of detail of the plan being drawn.
+    static DETAIL: std::cell::Cell<archisim_core::Detail> =
+        const { std::cell::Cell::new(archisim_core::Detail::Fine) };
+}
+
+/// The line weights of the plan being drawn, paper millimetres.
+pub(crate) fn pens() -> archisim_core::Pens {
+    PENS.with(|p| p.get())
+}
+
+fn detail() -> archisim_core::Detail {
+    DETAIL.with(|d| d.get())
+}
+
 fn coarse() -> bool {
-    COARSE.with(|c| c.get())
+    detail() != archisim_core::Detail::Fine || COARSE.with(|c| c.get())
 }
 
 /// Openings narrower than this on screen, in pixels, are drawn as the gap
@@ -104,9 +131,10 @@ const FAR_POCHE: &str = "rgb(150,146,138)";
 /// Whether a wall this thick in paper millimetres is too thin on screen to
 /// draw its layers.
 fn too_small_for_layers(paper_mm: f64) -> bool {
-    PX_PER_MM
-        .with(|c| c.get())
-        .is_some_and(|px| paper_mm * px < MIN_LAYERS_PX)
+    detail() == archisim_core::Detail::Coarse
+        || PX_PER_MM
+            .with(|c| c.get())
+            .is_some_and(|px| paper_mm * px < MIN_LAYERS_PX)
 }
 
 /// Whether a length in paper millimetres is too small on screen for the
@@ -121,12 +149,9 @@ fn too_small_for_symbol(paper_mm: f64) -> bool {
 const MIN_HATCH_PX: f64 = 2.5;
 
 /// Line weights in paper millimetres.
-const CUT_LINE: f64 = 0.5;
-const LAYER_LINE: f64 = 0.13;
-const HATCH_LINE: f64 = 0.09;
+// Line weights come from the project's graphic standard, by scale: see
+// [`pens`].
 const REF_LINE: f64 = 0.13;
-const VIEW_LINE: f64 = 0.18;
-const FRAME_LINE: f64 = 0.25;
 const SLAB_COVER: &str = "#f1f1ee";
 const HATCH_SPACING: f64 = 1.5;
 const TEXT_SIZE: f64 = 3.0;
@@ -202,9 +227,16 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         .is_some_and(|px| px * HATCH_SPACING < MIN_HATCH_PX);
     COARSE.with(|c| c.set(coarse));
     PX_PER_MM.with(|c| c.set(options.px_per_mm));
+    let pens = options
+        .pens
+        .unwrap_or_else(|| model.graphics.pens(options.scale));
+    PENS.with(|p| p.set(pens));
+    DETAIL.with(|d| d.set(options.style.detail));
     let svg = render_plan_inner(model, level, options);
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
+    PENS.with(|p| p.set(archisim_core::Pens::FINE));
+    DETAIL.with(|d| d.set(archisim_core::Detail::Fine));
     svg
 }
 
@@ -230,14 +262,16 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     };
     // Walls of this level, then those of other levels it cuts, each with
     // the height of the cut above its own level.
+    let show = |c: archisim_core::Category| options.style.shows(c);
     let mut geos: Vec<WallGeometry> = model
         .walls_on_level(level)
+        .filter(|_| show(archisim_core::Category::Walls))
         .filter(|w| wall_visible(w.id))
         .filter_map(|w| wall_geometry_in(&idx, w.id))
         .collect();
     let mut cuts = vec![options.cut_plane; geos.len()];
     for (id, z) in &others.cut {
-        if !wall_visible(*id) {
+        if !wall_visible(*id) || !show(archisim_core::Category::Walls) {
             continue;
         }
         if let Some(g) = wall_geometry_in(&idx, *id) {
@@ -253,6 +287,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .collect();
     let slabs: Vec<&Slab> = model
         .slabs_on_level(level)
+        .filter(|_| show(archisim_core::Category::Slabs))
         .filter(|s| {
             let lo = s
                 .outline
@@ -276,8 +311,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .iter()
         .flat_map(|g| g.outline.iter())
         .chain(slabs.iter().flat_map(|s| s.outline.iter()));
-    let dimensions: Vec<_> = model.dimensions_on_level(level).collect();
-    let marks: Vec<_> = model.elevation_marks_on_level(level).collect();
+    let dimensions: Vec<_> = model
+        .dimensions_on_level(level)
+        .filter(|_| show(archisim_core::Category::Dimensions))
+        .collect();
+    let marks: Vec<_> = model
+        .elevation_marks_on_level(level)
+        .filter(|_| show(archisim_core::Category::LevelMarks))
+        .collect();
     let annotation_points: Vec<Point2> = dimensions
         .iter()
         .flat_map(|d| {
@@ -290,7 +331,8 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .chain(
             model
                 .drafts_in(archisim_core::ViewRef::Level(level))
-                .filter(|d| model.draft_visible(d))
+                .filter(|_| show(archisim_core::Category::Drafting))
+                .filter(|d| model.draft_visible(d) && options.style.shows_layer(d.layer))
                 .flat_map(|d| {
                     let (a, b) = archisim_draft::bounds(&d.shape, k);
                     [a, b]
@@ -387,6 +429,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
     for (ops, cut) in openings.iter().zip(&cuts) {
         for o in ops {
+            if !show(archisim_core::Category::Openings) {
+                continue;
+            }
             match opening_view(o, *cut) {
                 OpeningView::Cut => draw_opening(&mut s, model, o, options.scale, k),
                 OpeningView::Above => draw_opening_above(&mut s, o, k),
@@ -401,14 +446,17 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
     s.push_str("</g>\n");
 
-    drafting::draw_drafts(
-        &mut s,
-        model,
-        archisim_core::ViewRef::Level(level),
-        k,
-        options.viewport,
-        options.viewport.is_none(),
-    );
+    if show(archisim_core::Category::Drafting) {
+        drafting::draw_drafts(
+            &mut s,
+            model,
+            archisim_core::ViewRef::Level(level),
+            k,
+            options.viewport,
+            options.viewport.is_none(),
+            &options.style.hidden_layers,
+        );
+    }
     s.push_str("<g id=\"annotations\">\n");
     for d in &dimensions {
         annotate::draw_dimension(&mut s, d, k);
@@ -441,20 +489,20 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         s.push_str("</g>\n");
     }
 
-    if options.viewport.is_none() {
-        // Title.
+    if options.viewport.is_none() && options.title {
+        // Title, in the technical lettering (no fonts needed).
         let level_name = model.level(level).map(|l| l.name.as_str()).unwrap_or("");
-        let tx = min.x;
-        let ty = -min.y + margin * 0.6;
+        let h = TEXT_SIZE * k;
+        let at = Point2::new(min.x, min.y - margin * 0.6 - h);
+        let text = format!(
+            "{} · {} · E 1:{}",
+            model.project_name, level_name, options.scale
+        );
         let _ = writeln!(
             s,
-            r#"<text x="{}" y="{}" font-family="Helvetica, Arial, sans-serif" font-size="{}" fill="{INK}"><tspan font-weight="bold">{}</tspan> · {} · E 1:{}</text>"#,
-            num(tx),
-            num(ty + TEXT_SIZE * k),
-            num(TEXT_SIZE * k),
-            escape(&model.project_name),
-            escape(level_name),
-            options.scale
+            r#"<path class="title" d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            lettering::text_path(&text, at, Point2::new(1.0, 0.0), h, lettering::Align::Left),
+            num(lettering::STROKE * h)
         );
     }
     s.push_str("</svg>\n");
@@ -480,7 +528,7 @@ fn draw_reference(s: &mut String, model: &Model, geos: &[WallGeometry], k: f64) 
             s,
             r#"<path d="{}" fill="{REFERENCE_FILL}" stroke-width="{}"/>"#,
             path(&outline),
-            num(FRAME_LINE * k)
+            num(pens().frame * k)
         );
         // Openings of the wall below: where its doors and windows are.
         for o in openings_in_wall(model, g.wall) {
@@ -499,7 +547,7 @@ fn draw_reference(s: &mut String, model: &Model, geos: &[WallGeometry], k: f64) 
                 pt(b),
                 pt(c),
                 pt(d),
-                num(VIEW_LINE * k)
+                num(pens().view * k)
             );
         }
     }
@@ -558,7 +606,7 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], i
     let _ = writeln!(
         s,
         r#"<path id="{id}" d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
-        num(HATCH_LINE * k)
+        num(pens().hatch * k)
     );
     // Hatching is real geometry cut to the layer (not SVG patterns or clip
     // paths), so it prints identically everywhere, carries over to PDF/DXF
@@ -573,11 +621,11 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], i
         let _ = writeln!(
             s,
             r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
-            num(HATCH_LINE * k)
+            num(pens().hatch * k)
         );
     }
     if mat.cut_pattern == CutPattern::Dots {
-        let dots = hatch_dots(polygon, sp, HATCH_LINE * k * 1.2);
+        let dots = hatch_dots(polygon, sp, pens().hatch * k * 1.2);
         if !dots.is_empty() {
             let _ = writeln!(s, r#"<path d="{dots}" fill="{INK}"/>"#);
         }
@@ -693,7 +741,7 @@ fn draw_layers(
                     let _ = writeln!(
                         s,
                         r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
-                        num(HATCH_LINE * k)
+                        num(pens().hatch * k)
                     );
                 }
             }
@@ -716,7 +764,7 @@ fn draw_layers(
             for piece in pieces {
                 for polygon in layer_piece(owner, piece) {
                     if let Some((p, q)) = face_edge_at(&polygon, a, n, tops[li + 1]) {
-                        line(s, p, q, LAYER_LINE, k);
+                        line(s, p, q, pens().thin, k);
                     }
                 }
             }
@@ -756,8 +804,8 @@ fn draw_layers(
                     k,
                 );
                 // Against the cavity and against the inner leaf.
-                line(s, local(back, y_out), local(back, y_in), LAYER_LINE, k);
-                line(s, local(t, y_in), local(back, y_in), LAYER_LINE, k);
+                line(s, local(back, y_out), local(back, y_in), pens().thin, k);
+                line(s, local(t, y_in), local(back, y_in), pens().thin, k);
             }
         }
         // The render wraps the reveal from the façade to the frame.
@@ -776,8 +824,8 @@ fn draw_layers(
                     &format!("cut-{gi}-wrap-{ji}"),
                     k,
                 );
-                line(s, local(back, y_out), local(back, y_in), LAYER_LINE, k);
-                line(s, local(t, y_in), local(back, y_in), LAYER_LINE, k);
+                line(s, local(back, y_out), local(back, y_in), pens().thin, k);
+                line(s, local(t, y_in), local(back, y_in), pens().thin, k);
             }
         }
     }
@@ -832,7 +880,7 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
                 s,
                 r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"{dash}/>"#,
                 x.trim_end(),
-                num(HATCH_LINE * k)
+                num(pens().hatch * k)
             );
         }
     };
@@ -841,7 +889,7 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
             let _ = writeln!(
                 s,
                 r#"<path d="{d}" fill="{SLAB_COVER}" fill-rule="evenodd" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
-                num(VIEW_LINE * k)
+                num(pens().view * k)
             );
             crosses(s, false);
         }
@@ -849,7 +897,7 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
             let _ = writeln!(
                 s,
                 r#"<path d="{d}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
-                num(VIEW_LINE * k),
+                num(pens().view * k),
                 num(3.0 * k),
                 num(1.5 * k)
             );
@@ -887,13 +935,13 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
                 let _ = writeln!(
                     s,
                     r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
-                    num(HATCH_LINE * k)
+                    num(pens().hatch * k)
                 );
             }
             let _ = writeln!(
                 s,
                 r#"<path d="{d}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
-                num(CUT_LINE * k)
+                num(pens().cut * k)
             );
             crosses(s, false);
         }
@@ -1211,14 +1259,14 @@ fn draw_cut_lines(s: &mut String, g: &WallGeometry, pieces: &[WallPiece], cut_pl
             s,
             r#"<path d="{}" stroke="{INK}" stroke-width="{}"/>"#,
             thin.trim_end(),
-            num(LAYER_LINE * k)
+            num(pens().thin * k)
         );
     }
     let _ = writeln!(
         s,
         r#"<path d="{}" stroke="{INK}" stroke-width="{}"/>"#,
         d.trim_end(),
-        num(CUT_LINE * k)
+        num(pens().cut * k)
     );
 }
 
@@ -1364,11 +1412,11 @@ pub(crate) fn dash_attr(style: LineStyle, k: f64) -> String {
 /// Paper line weight of a family pen, in millimetres.
 fn pen_weight(pen: Pen) -> f64 {
     match pen {
-        Pen::Cut => CUT_LINE,
-        Pen::Frame => FRAME_LINE,
-        Pen::View => VIEW_LINE,
-        Pen::Thin => LAYER_LINE,
-        Pen::Hatch => HATCH_LINE,
+        Pen::Cut => pens().cut,
+        Pen::Frame => pens().frame,
+        Pen::View => pens().view,
+        Pen::Thin => pens().thin,
+        Pen::Hatch => pens().hatch,
     }
 }
 
@@ -1378,7 +1426,7 @@ fn draw_opening_above(s: &mut String, o: &OpeningGeometry, k: f64) {
         s,
         r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
         path(&o.footprint()),
-        num(VIEW_LINE * k),
+        num(pens().view * k),
         num(2.0 * k),
         num(1.0 * k)
     );
@@ -1388,7 +1436,7 @@ fn draw_opening_above(s: &mut String, o: &OpeningGeometry, k: f64) {
         r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
         pt(o.point(o.t0, mid)),
         pt(o.point(o.t1, mid)),
-        num(LAYER_LINE * k),
+        num(pens().thin * k),
         num(2.0 * k),
         num(1.0 * k)
     );
@@ -1511,7 +1559,7 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
                 let _ = writeln!(
                     s,
                     r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
-                    num(HATCH_LINE * k)
+                    num(pens().hatch * k)
                 );
             }
         }
@@ -1525,7 +1573,7 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
                 s,
                 r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
                 open_path(&run),
-                num(LAYER_LINE * k)
+                num(pens().thin * k)
             );
         }
     }
@@ -1559,7 +1607,7 @@ fn draw_curved_cut_lines(s: &mut String, g: &WallGeometry, arc: &archisim_core::
         s,
         r#"<path d="{}" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
         d.trim_end(),
-        num(CUT_LINE * k)
+        num(pens().cut * k)
     );
 }
 
@@ -1583,13 +1631,6 @@ fn path(poly: &[Point2]) -> String {
     }
     d.push('Z');
     d
-}
-
-fn escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 #[cfg(test)]
@@ -1843,7 +1884,9 @@ mod tests {
         assert!(svg.starts_with("<svg"));
         assert!(svg.contains("id=\"cut-0-0-0\""));
         assert!(!svg.contains("clip-path="), "hatching is real geometry");
-        assert!(svg.contains("Casa &lt;A&amp;B&gt;"));
+        // The title is drawn with the lettering: no text, no fonts.
+        assert!(svg.contains("class=\"title\""));
+        assert!(!svg.contains("<text") && !svg.contains("<A&B>"));
         assert!(!svg.contains(" A0.8"), "no door yet");
         // 5 m at 1:50 = 100 mm plus two 15 mm margins.
         assert!(svg.contains("width=\"130.00mm\""), "{}", &svg[..200]);

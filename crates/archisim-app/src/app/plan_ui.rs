@@ -636,6 +636,7 @@ impl ArchiSimApp {
             scale: self.plan_scale,
             cut_plane: self.cut_plane,
             reference_level: self.reference_level(),
+            style: self.view_style.clone(),
         };
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
@@ -649,6 +650,7 @@ impl ArchiSimApp {
                     scale: self.plan_scale,
                     cut_plane: self.cut_plane,
                     reference_level: key.reference_level,
+                    style: key.style.clone(),
                     ..archisim_plan::PlanOptions::default()
                 },
             );

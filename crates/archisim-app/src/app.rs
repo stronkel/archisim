@@ -228,6 +228,10 @@ pub struct ArchiSimApp {
     pub plan_scale: f64,
     /// Cut plane of the active plan above its level, in metres.
     pub cut_plane: f64,
+    /// What the active plan shows (categories, layers, detail).
+    pub view_style: archisim_core::ViewStyle,
+    /// The graphic standard dialog is open.
+    pub show_graphics: bool,
     pub show_grid: bool,
     /// The level below is drawn in grey under the active plan (and snaps).
     pub show_underlay: bool,
@@ -316,6 +320,8 @@ impl ArchiSimApp {
             last_plan_tab: 0,
             plan_scale: archisim_plan::PlanOptions::default().scale,
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
+            view_style: Default::default(),
+            show_graphics: false,
             show_grid: true,
             show_underlay: true,
             other_walls: Vec::new(),
@@ -936,6 +942,7 @@ impl ArchiSimApp {
         self.dialogs(&ctx);
         self.text_entry(&ctx);
         self.layers_dialog(&ctx);
+        self.graphics_dialog(&ctx);
         self.thumbs.end_frame();
     }
 

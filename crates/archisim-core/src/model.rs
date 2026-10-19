@@ -845,6 +845,7 @@ pub struct ModelParts {
     /// Drawing layers, layer "0" included.
     pub draw_layers: Vec<DrawLayer>,
     pub drafts: Vec<Draft>,
+    pub graphics: crate::graphics::GraphicStandard,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -875,6 +876,8 @@ pub struct Model {
     pub project_guid: GlobalId,
     pub site_guid: GlobalId,
     pub building_guid: GlobalId,
+    /// Line weights of the drawings by scale.
+    pub graphics: crate::graphics::GraphicStandard,
     next_id: u64,
     levels: BTreeMap<LevelId, Level>,
     materials: BTreeMap<MaterialId, Material>,
@@ -898,6 +901,7 @@ impl Model {
             project_guid: GlobalId::new(),
             site_guid: GlobalId::new(),
             building_guid: GlobalId::new(),
+            graphics: Default::default(),
             next_id: 1,
             levels: BTreeMap::new(),
             materials: BTreeMap::new(),
@@ -2915,6 +2919,7 @@ impl Model {
             elevation_marks: self.elevation_marks.values().cloned().collect(),
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
+            graphics: self.graphics,
         }
     }
 
@@ -2931,6 +2936,12 @@ impl Model {
         model.project_guid = parts.project_guid;
         model.site_guid = parts.site_guid;
         model.building_guid = parts.building_guid;
+        if !parts.graphics.is_valid() {
+            return Err(fail("graphic standard".into())(ModelError::NonPositive(
+                "line weight",
+            )));
+        }
+        model.graphics = parts.graphics;
 
         let mut ids = std::collections::HashSet::new();
         let mut guids = std::collections::HashSet::new();

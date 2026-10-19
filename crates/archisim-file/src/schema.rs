@@ -42,6 +42,9 @@ pub(crate) struct ProjectFile {
     pub draw_layers: Vec<crate::drafting::DrawLayer>,
     /// Lines, arcs, texts and hatches of the views (version 7).
     pub drafts: Vec<crate::drafting::Draft>,
+    /// Line weights by scale (version 7; the defaults if missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graphics: Option<crate::drafting::Graphics>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -486,6 +489,8 @@ impl ProjectFile {
                 .collect(),
             draw_layers: crate::drafting::layers_out(&p.draw_layers),
             drafts: crate::drafting::drafts_out(&p.drafts),
+            graphics: (p.graphics != core::GraphicStandard::default())
+                .then(|| crate::drafting::Graphics::out(&p.graphics)),
         }
     }
 
@@ -522,6 +527,7 @@ impl ProjectFile {
             elevation_marks: Vec::new(),
             draw_layers: crate::drafting::layers_in(self.draw_layers)?,
             drafts: crate::drafting::drafts_in(self.drafts)?,
+            graphics: self.graphics.map(|g| g.into_core()).unwrap_or_default(),
         };
 
         for l in self.levels {

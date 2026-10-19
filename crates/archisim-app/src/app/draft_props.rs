@@ -602,4 +602,122 @@ impl ArchiSimApp {
             }
         }
     }
+
+    /// What the active plan shows: level of detail, categories and drawing
+    /// layers (Revit's visibility/graphics), and the project's pen table.
+    pub(super) fn visibility_group(&mut self, ui: &mut Ui) {
+        let layers: Vec<(DrawLayerId, String)> = self.layer_options();
+        let style = &mut self.view_style;
+        let mut open_graphics = false;
+        group(ui, "view-visibility", "Visibilidad", |ui| {
+            row(
+                ui,
+                "Nivel de detalle",
+                "Bajo: muros como una banda; Medio: capas sin tramas; Alto: todo",
+                |ui, w| {
+                    let opts: Vec<_> = archisim_core::Detail::ALL
+                        .iter()
+                        .map(|d| (*d, d.label().to_string()))
+                        .collect();
+                    style.detail = combo(ui, "view-detail", w, style.detail, &opts);
+                },
+            );
+            for c in archisim_core::Category::ALL {
+                row(ui, c.label(), "", |ui, _| {
+                    let mut on = style.shows(c);
+                    if ui.checkbox(&mut on, "").changed() {
+                        if on {
+                            style.hidden.remove(&c);
+                        } else {
+                            style.hidden.insert(c);
+                        }
+                    }
+                });
+            }
+            if layers.len() > 1 {
+                ui.add_space(2.0);
+                props::note(ui, "Capas de dibujo en esta vista:");
+                for (id, name) in &layers {
+                    row(ui, name, "", |ui, _| {
+                        let mut on = style.shows_layer(*id);
+                        if ui.checkbox(&mut on, "").changed() {
+                            if on {
+                                style.hidden_layers.remove(id);
+                            } else {
+                                style.hidden_layers.insert(*id);
+                            }
+                        }
+                    });
+                }
+            }
+            ui.add_space(2.0);
+            if ui
+                .button("Normas gráficas…")
+                .on_hover_text("Grosores de línea del proyecto por escala")
+                .clicked()
+            {
+                open_graphics = true;
+            }
+        });
+        if open_graphics {
+            self.show_graphics = true;
+        }
+    }
+
+    /// The project's pen table: line weights for fine and coarse scales.
+    pub(super) fn graphics_dialog(&mut self, ctx: &egui::Context) {
+        if !self.show_graphics {
+            return;
+        }
+        let mut open = true;
+        let mut g = self.ed.model().graphics;
+        let before = g;
+        egui::Window::new("Normas gráficas")
+            .open(&mut open)
+            .default_width(460.0)
+            .show(ctx, |ui| {
+                ui.label("Grosores en mm de papel (UNE-EN ISO 128). Las escalas finas se usan hasta 1:50; desde la escala indicada, las gruesas.");
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label("Escalas gruesas desde 1:");
+                    ui.add(egui::DragValue::new(&mut g.coarse_from).range(20.0..=1000.0).speed(10.0));
+                });
+                egui::Grid::new("pens-grid").striped(true).spacing([14.0, 6.0]).show(ui, |ui| {
+                    ui.strong("");
+                    ui.strong("Escalas finas");
+                    ui.strong("Escalas gruesas");
+                    ui.end_row();
+                    type Field = fn(&mut archisim_core::Pens) -> &mut f64;
+                    let rows: [(&str, Field); 8] = [
+                        ("Corte (muros, forjados)", |p| &mut p.cut),
+                        ("Carpinterías", |p| &mut p.frame),
+                        ("Proyección (vista)", |p| &mut p.view),
+                        ("Líneas finas, capas", |p| &mut p.thin),
+                        ("Tramas", |p| &mut p.hatch),
+                        ("Líneas de cota", |p| &mut p.dimension),
+                        ("Trazo de cota", |p| &mut p.tick),
+                        ("Texto de cota (altura)", |p| &mut p.text),
+                    ];
+                    for (name, f) in rows {
+                        ui.label(name);
+                        ui.add(egui::DragValue::new(f(&mut g.fine)).range(0.05..=10.0).speed(0.01).max_decimals(2));
+                        ui.add(egui::DragValue::new(f(&mut g.coarse)).range(0.05..=10.0).speed(0.01).max_decimals(2));
+                        ui.end_row();
+                    }
+                });
+                ui.add_space(6.0);
+                if ui.button("Valores por defecto").clicked() {
+                    g = archisim_core::GraphicStandard::default();
+                }
+            });
+        if !open {
+            self.show_graphics = false;
+        }
+        if g != before {
+            let r = self.ed.set_graphics(g);
+            if let Err(e) = r {
+                self.complain(format!("No se puede: {e}."));
+            }
+        }
+    }
 }

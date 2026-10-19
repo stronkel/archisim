@@ -24,6 +24,8 @@ pub struct PlanKey {
     pub cut_plane: f64,
     /// The level drawn underneath in grey, if any.
     pub reference_level: Option<LevelId>,
+    /// What the view shows.
+    pub style: archisim_core::ViewStyle,
 }
 
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
