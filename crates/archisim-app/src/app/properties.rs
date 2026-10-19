@@ -714,6 +714,14 @@ impl ArchiSimApp {
             row(ui, "Líneas de referencia", "", |ui, _| {
                 ui.checkbox(&mut self.show_reference_lines, "");
             });
+            row(
+                ui,
+                "Líneas finas",
+                "Todas las líneas a un píxel (apagado: grosor real a la escala de la vista)",
+                |ui, _| {
+                    ui.checkbox(&mut self.thin_lines, "");
+                },
+            );
             row(ui, "Rejilla", "Cuadrícula de 1 m y 5 m", |ui, _| {
                 ui.checkbox(&mut self.show_grid, "");
             });
@@ -788,6 +796,7 @@ impl ArchiSimApp {
                 }
             });
         });
+        self.section_box_group(ui);
     }
 
     fn project_group(&mut self, ui: &mut Ui) {

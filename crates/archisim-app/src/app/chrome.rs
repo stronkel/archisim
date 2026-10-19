@@ -260,6 +260,7 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
             ui.checkbox(&mut self.show_grid, "Rejilla");
+            ui.checkbox(&mut self.thin_lines, "Líneas finas");
             ui.checkbox(&mut self.show_underlay, "Calco de la planta inferior");
             ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.separator();
@@ -396,6 +397,12 @@ impl ArchiSimApp {
                     );
                     chip(
                         ui,
+                        &mut self.thin_lines,
+                        "Líneas finas",
+                        "Todas las líneas de la planta a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista (corte, proyección, tramas)",
+                    );
+                    chip(
+                        ui,
                         &mut self.show_underlay,
                         "Calco",
                         "La planta de debajo en gris, como referencia para dibujar encima (sus puntos también fuerzan). Los muros de otras plantas que atraviesa el plano de corte se ven siempre cortados",
@@ -422,6 +429,17 @@ impl ArchiSimApp {
                     }
                     if icon_button(ui, Icon::Export, "Guardar imagen 3D (PNG)", false).clicked() {
                         self.export_3d_picture();
+                    }
+                    ui.separator();
+                    let mut on = self.v3d.section.is_some();
+                    chip(
+                        ui,
+                        &mut on,
+                        "Caja de sección",
+                        "Recorta el modelo con una caja, como en Revit: arrastra las flechas azules de sus caras para ver interiores o una sección en perspectiva. Medidas exactas en Propiedades",
+                    );
+                    if on != self.v3d.section.is_some() {
+                        self.v3d.toggle_section();
                     }
                 }
             }
@@ -469,6 +487,9 @@ impl ArchiSimApp {
     /// What the keys and the mouse do now, as "Clic: … · Esc: …".
     pub(super) fn hint_text(&self) -> &'static str {
         if self.mode == ViewMode::ThreeD {
+            if self.v3d.section.is_some() {
+                return "Flechas azules: mover las caras de la caja de sección · Arrastrar: girar · Rueda: zoom · Clic: seleccionar · F2: planta";
+            }
             return "Arrastrar: girar · Rueda: zoom · Botón derecho: encuadre · Clic: seleccionar · Inicio: ajustar · F2: planta";
         }
         match self.tool {

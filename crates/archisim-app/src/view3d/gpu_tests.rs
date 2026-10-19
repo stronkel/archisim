@@ -87,3 +87,54 @@ fn draws_the_room_with_contours() {
         .count();
     assert!(ink > 200, "{ink} ink pixels");
 }
+
+/// With a section box cutting the walls at 1 m, seen from above, the cut
+/// walls show their caps in their own colours (not the floor's), and what
+/// lies above the box is gone.
+#[test]
+fn section_box_cuts_and_caps() {
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: section box test skipped.");
+        return;
+    };
+    let (m, _, _) = room();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [400u32, 300u32];
+    let mut camera = Camera {
+        pitch: 1.45,
+        perspective: false,
+        ..Camera::default()
+    };
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    let mut r = Renderer::new(&device, view_formats);
+    r.set_scene(&device, &scene);
+    let mut cut = super::section_box::SectionBox::around(scene.lo, scene.hi);
+    cut.hi.z = 1.0;
+    r.set_clip(Some((cut.lo, cut.hi)));
+    r.render(&device, &queue, &camera, size, 1);
+    let (w, h, px) = r.read_pixels(&device, &queue).unwrap();
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+            px.clone(),
+            resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+        )
+        .unwrap();
+        pixmap.save_png(dir.join("caja-seccion.png")).unwrap();
+    }
+    // The façade's brick (reddish) shows in the caps of the cut walls.
+    let reddish = (0..(w * h) as usize)
+        .filter(|i| {
+            let p = &px[i * 4..i * 4 + 3];
+            p[0] as i32 - p[2] as i32 > 25
+        })
+        .count();
+    assert!(reddish > 300, "{reddish} brick pixels in the caps");
+    // Without the box, from above, the tops of the walls are drawn too:
+    // the picture changes.
+    r.set_clip(None);
+    r.render(&device, &queue, &camera, size, 1);
+    let (_, _, full) = r.read_pixels(&device, &queue).unwrap();
+    assert_ne!(full, px);
+}

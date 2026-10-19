@@ -86,9 +86,27 @@ impl Camera {
         }
     }
 
-    #[cfg(test)]
     pub fn view_proj(&self, aspect: f32) -> Mat4 {
         self.projection(aspect) * self.view()
+    }
+
+    /// Direction the camera looks in.
+    pub fn forward(&self) -> Vec3 {
+        -self.back()
+    }
+
+    /// Where a model point falls in a view of `size` points (from its
+    /// top-left corner); `None` behind the eye.
+    pub fn project_to_screen(&self, p: Vec3, size: Vec2) -> Option<Vec2> {
+        let clip = self.view_proj(size.x / size.y.max(1.0)) * p.extend(1.0);
+        if clip.w <= 1e-6 {
+            return None;
+        }
+        let ndc = clip.truncate() / clip.w;
+        Some(Vec2::new(
+            (ndc.x + 1.0) / 2.0 * size.x,
+            (1.0 - ndc.y) / 2.0 * size.y,
+        ))
     }
 
     /// Turns the camera around the target (dragging by screen points).

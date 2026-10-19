@@ -17,6 +17,7 @@ use crate::pick::Element;
 use crate::view3d::camera::Camera;
 use crate::view3d::render::Renderer;
 use crate::view3d::scene::Scene;
+use crate::view3d::section_box::{Face, SectionBox};
 
 /// The picture is drawn at twice the screen resolution and scaled down,
 /// which smooths edges (supersampling).
@@ -38,12 +39,20 @@ pub struct View3dState {
     scene_key: Option<(u64, BTreeSet<Element>)>,
     gpu: Option<Gpu>,
     /// What the last picture was drawn with.
-    drawn: Option<(Camera, [u32; 2], u64)>,
+    drawn: Option<(Camera, [u32; 2], u64, Option<SectionBox>)>,
     scene_serial: u64,
     /// Screen area of the 3D view in the last frame.
     pub canvas: Rect,
     /// Last time the picture took to draw, in milliseconds.
     pub last_ms: f64,
+    /// The section box, when it is on.
+    pub section: Option<SectionBox>,
+    /// The last section box used, to switch it back on where it was.
+    pub section_saved: Option<SectionBox>,
+    /// The face of the section box being dragged, and where the drag was.
+    section_drag: Option<Face>,
+    /// The handle under the cursor.
+    section_hover: Option<Face>,
 }
 
 impl Default for View3dState {
@@ -58,6 +67,10 @@ impl Default for View3dState {
             scene_serial: 0,
             canvas: Rect::NOTHING,
             last_ms: 0.0,
+            section: None,
+            section_saved: None,
+            section_drag: None,
+            section_hover: None,
         }
     }
 }
@@ -97,7 +110,31 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        self.scene.pick(ray)
+        self.scene.pick_in(ray, self.section.as_ref())
+    }
+
+    /// The box around the whole model.
+    pub fn model_bounds(&self) -> (glam::Vec3, glam::Vec3) {
+        (self.scene.lo, self.scene.hi)
+    }
+
+    /// The box around some elements, if they have any 3D.
+    pub fn bounds_of(&self, elements: &BTreeSet<Element>) -> Option<(glam::Vec3, glam::Vec3)> {
+        self.scene.bounds_of(elements)
+    }
+
+    /// Switches the section box on (where it last was, or around the whole
+    /// model) or off.
+    pub fn toggle_section(&mut self) {
+        match self.section.take() {
+            Some(b) => self.section_saved = Some(b),
+            None => {
+                self.section = Some(
+                    self.section_saved
+                        .unwrap_or_else(|| SectionBox::around(self.scene.lo, self.scene.hi)),
+                );
+            }
+        }
     }
 
     /// Draws the picture if anything changed and returns its texture.
@@ -124,9 +161,10 @@ impl View3dState {
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
         }
-        let wanted = (self.camera, size, self.scene_serial);
+        let wanted = (self.camera, size, self.scene_serial, self.section);
         if self.drawn != Some(wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
+            gpu.renderer.set_clip(self.section.map(|b| (b.lo, b.hi)));
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
@@ -269,11 +307,47 @@ impl ArchiSimApp {
             v.camera.fit(v.scene.lo, v.scene.hi, size.x / size.y);
         }
 
-        // Navigation.
-        let shift = ctx.input(|i| i.modifiers.shift);
+        // Section box handles: under the cursor, grabbed, dragged.
+        let gsize = glam::Vec2::new(size.x, size.y);
+        let handle_at = |v: &super::View3dState, pos: Pos2| -> Option<Face> {
+            let b = v.section?;
+            let p = glam::Vec2::new(pos.x - rect.min.x, pos.y - rect.min.y);
+            Face::ALL
+                .iter()
+                .filter_map(|f| {
+                    v.camera
+                        .project_to_screen(b.handle(*f), gsize)
+                        .map(|s| (*f, s.distance(p)))
+                })
+                .filter(|(_, d)| *d <= HANDLE_REACH)
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|(f, _)| f)
+        };
+        if v.section_drag.is_none() {
+            v.section_hover = response.hover_pos().and_then(|p| handle_at(v, p));
+        }
+        if response.drag_started_by(PointerButton::Primary) {
+            v.section_drag = ctx
+                .input(|i| i.pointer.press_origin())
+                .and_then(|p| handle_at(v, p));
+        }
         let delta = response.drag_delta();
         let delta = glam::Vec2::new(delta.x, delta.y);
-        if response.dragged_by(PointerButton::Primary)
+        if let (Some(f), Some(mut b)) = (v.section_drag, v.section) {
+            if response.dragged_by(PointerButton::Primary) {
+                let amount = b.drag_amount(f, delta, &v.camera, gsize);
+                b.set_face(f, b.face(f) + amount);
+                v.section = Some(b);
+            }
+        }
+        if response.drag_stopped() {
+            v.section_drag = None;
+        }
+
+        // Navigation.
+        let shift = ctx.input(|i| i.modifiers.shift);
+        let dragging_box = v.section_drag.is_some();
+        if (response.dragged_by(PointerButton::Primary) && !dragging_box)
             || (shift && response.dragged_by(PointerButton::Middle))
         {
             v.camera.orbit(delta);
@@ -348,17 +422,65 @@ impl ArchiSimApp {
                 );
             }
         }
+        draw_section_box(&painter, rect, v);
         draw_north(&painter, rect, &v.camera);
+        let on_handle = v.section_hover.is_some() || v.section_drag.is_some();
+        let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);
 
         if response.hovered() {
-            let icon = if response.dragged() {
+            let icon = if dragging {
                 CursorIcon::Grabbing
+            } else if on_handle {
+                CursorIcon::Grab
             } else {
                 CursorIcon::Default
             };
             ctx.set_cursor_icon(icon);
         }
+    }
+}
+
+/// How close to a handle of the section box the cursor grabs it, in points.
+const HANDLE_REACH: f32 = 12.0;
+
+/// The section box: its edges, and a handle on each face (an arrow out of
+/// it), highlighted under the cursor.
+fn draw_section_box(painter: &egui::Painter, rect: Rect, v: &super::View3dState) {
+    let Some(b) = v.section else {
+        return;
+    };
+    let size = glam::Vec2::new(rect.width(), rect.height());
+    let at = |p: glam::Vec3| {
+        v.camera
+            .project_to_screen(p, size)
+            .map(|s| rect.min + Vec2::new(s.x, s.y))
+    };
+    let ink = Color32::from_rgb(30, 110, 230);
+    for (a, c) in b.edges() {
+        if let (Some(a), Some(c)) = (at(a), at(c)) {
+            painter.line_segment([a, c], Stroke::new(1.2, ink.gamma_multiply(0.8)));
+        }
+    }
+    for f in Face::ALL {
+        let h = b.handle(f);
+        let (Some(p), Some(q)) = (at(h), at(h + f.normal() * 0.6)) else {
+            continue;
+        };
+        let active = v.section_drag == Some(f) || v.section_hover == Some(f);
+        let r = if active { 8.0 } else { 6.0 };
+        let dir = (q - p).normalized();
+        if dir.length() > 0.5 {
+            let tip = p + dir * (r + 9.0);
+            let side = Vec2::new(-dir.y, dir.x) * 5.0;
+            painter.add(egui::Shape::convex_polygon(
+                vec![tip, p + dir * r + side, p + dir * r - side],
+                ink,
+                Stroke::NONE,
+            ));
+        }
+        painter.circle_filled(p, r, if active { ink } else { Color32::WHITE });
+        painter.circle_stroke(p, r, Stroke::new(1.5, ink));
     }
 }
 
@@ -392,4 +514,106 @@ fn draw_north(painter: &egui::Painter, rect: Rect, camera: &Camera) {
         FontId::proportional(10.0),
         ink,
     );
+}
+
+impl ArchiSimApp {
+    /// The section box in the 3D view's properties: on or off, its six
+    /// faces in millimetres, and quick ways to place it.
+    pub(super) fn section_box_group(&mut self, ui: &mut Ui) {
+        use super::props::{group, row};
+        group(ui, "view3d-section", "Caja de sección", |ui| {
+            let mut on = self.v3d.section.is_some();
+            row(
+                ui,
+                "Activa",
+                "Recorta el modelo fuera de la caja (interiores, secciones en perspectiva)",
+                |ui, _| {
+                    ui.checkbox(&mut on, "");
+                },
+            );
+            if on != self.v3d.section.is_some() {
+                self.v3d.toggle_section();
+            }
+            let Some(mut b) = self.v3d.section else {
+                super::props::note(
+                    ui,
+                    "Actívala para recortar el modelo; aparecen flechas azules en sus caras para arrastrarlas.",
+                );
+                return;
+            };
+            let mut changed = false;
+            for (axis, name) in [(0usize, "X"), (1, "Y"), (2, "Z")] {
+                for high in [false, true] {
+                    let f = Face { axis, high };
+                    let label = format!("{name} {} (mm)", if high { "máx." } else { "mín." });
+                    row(ui, &label, f.name(), |ui, w| {
+                        if let Some(v) = super::length_field(
+                            ui,
+                            egui::Id::unique(("section-face", axis, high)),
+                            b.face(f) as f64,
+                            w - 8.0,
+                        ) {
+                            b.set_face(f, v as f32);
+                            changed = true;
+                        }
+                    });
+                }
+            }
+            if changed {
+                self.v3d.section = Some(b);
+            }
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .button("Todo el modelo")
+                    .on_hover_text("La caja alrededor de todo el modelo")
+                    .clicked()
+                {
+                    let (lo, hi) = self.v3d.model_bounds();
+                    self.v3d.section = Some(SectionBox::around(lo, hi));
+                }
+                if ui
+                    .button("Selección")
+                    .on_hover_text("La caja alrededor de lo seleccionado (como «Caja de selección» de Revit)")
+                    .clicked()
+                {
+                    match self.v3d.bounds_of(&self.ed.selection) {
+                        Some((lo, hi)) => self.v3d.section = Some(SectionBox::around(lo, hi)),
+                        None => self.complain("Selecciona antes algún elemento."),
+                    }
+                }
+                if ui
+                    .button("Planta activa")
+                    .on_hover_text("De la planta activa a la de encima, en todo el modelo")
+                    .clicked()
+                {
+                    let model = self.ed.model();
+                    let z0 = model.level(self.ed.level).map_or(0.0, |l| l.elevation);
+                    let z1 = model
+                        .level_above(self.ed.level)
+                        .and_then(|l| model.level(l))
+                        .map_or(z0 + 3.0, |l| l.elevation);
+                    let (lo, hi) = self.v3d.model_bounds();
+                    let mut bx = SectionBox::around(lo, hi);
+                    bx.lo.z = z0 as f32 - 0.05;
+                    bx.hi.z = (z1 as f32 - 0.01).max(bx.lo.z + 0.1);
+                    self.v3d.section = Some(bx);
+                }
+                if ui
+                    .button("Planta en 3D")
+                    .on_hover_text("Corta la planta activa a la altura de su plano de corte: una planta en perspectiva")
+                    .clicked()
+                {
+                    let model = self.ed.model();
+                    let z0 = model.level(self.ed.level).map_or(0.0, |l| l.elevation);
+                    let (lo, hi) = self.v3d.model_bounds();
+                    let mut bx = SectionBox::around(lo, hi);
+                    bx.lo.z = z0 as f32 - 0.6;
+                    bx.hi.z = (z0 + self.cut_plane) as f32;
+                    self.v3d.section = Some(bx);
+                }
+            });
+        });
+    }
 }

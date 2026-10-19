@@ -62,7 +62,15 @@ pub struct PlanOptions {
     /// the symbols of tiny openings) are left out when zoomed out, so a
     /// large model stays quick. `None` (exports): everything.
     pub px_per_mm: Option<f64>,
+    /// Every line drawn as a hairline, whatever its weight (ArchiCAD's
+    /// "Líneas finas"): one pixel on screen, 0.1 mm on paper. Off, lines
+    /// have their real weight at the drawing scale.
+    pub thin_lines: bool,
 }
+
+/// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
+/// when the plan is not for the screen.
+pub const HAIRLINE_MM: f64 = 0.1;
 
 impl Default for PlanOptions {
     fn default() -> Self {
@@ -74,8 +82,30 @@ impl Default for PlanOptions {
             viewport: None,
             reference_level: None,
             px_per_mm: None,
+            thin_lines: false,
         }
     }
+}
+
+/// Sets every `stroke-width` of an SVG to `width` (in the SVG's units).
+pub fn hairlines(svg: &str, width: f64) -> String {
+    let key = "stroke-width=\"";
+    let w = num(width);
+    let mut out = String::with_capacity(svg.len());
+    let mut rest = svg;
+    while let Some(i) = rest.find(key) {
+        out.push_str(&rest[..i + key.len()]);
+        rest = &rest[i + key.len()..];
+        match rest.find('"') {
+            Some(j) => {
+                out.push_str(&w);
+                rest = &rest[j..];
+            }
+            None => break,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 thread_local! {
@@ -205,6 +235,14 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     let svg = render_plan_inner(model, level, options);
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
+    if options.thin_lines {
+        // One pixel on screen; a hairline on paper. In model metres.
+        let k = options.scale / 1000.0;
+        let mm = options
+            .px_per_mm
+            .map_or(HAIRLINE_MM, |px| 1.0 / px.max(1e-6));
+        return hairlines(&svg, mm * k);
+    }
     svg
 }
 
@@ -2331,6 +2369,19 @@ mod num_tests {
             after[0].contains(r#"stroke-dasharray="0.1 0.05""#),
             "{}",
             after[0]
+        );
+    }
+}
+
+#[cfg(test)]
+mod thin_tests {
+    #[test]
+    fn hairlines_replace_every_weight() {
+        let svg =
+            r#"<path stroke-width="0.025"/><path d="M0 0" stroke-width="0.0045" fill="none"/>"#;
+        assert_eq!(
+            super::hairlines(svg, 0.005),
+            r#"<path stroke-width="0.005"/><path d="M0 0" stroke-width="0.005" fill="none"/>"#
         );
     }
 }

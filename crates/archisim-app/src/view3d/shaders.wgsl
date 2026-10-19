@@ -3,6 +3,10 @@
 // Pass 1 draws the opaque model, lit by a sun from the south-west and a
 // sky light, and also writes each pixel's view-space normal and distance.
 // Pass 2 draws the glass, see-through, over it.
+// With a section box (Revit's), everything outside it is cut away: the
+// faces seen through a cut are the inside of a closed solid, and they are
+// painted as the flat cap of the cut, on the box face, in the material's
+// colour.
 // Pass 3 finds contour lines from those normals and distances (edges where
 // the surface turns, silhouettes, and steps in depth) and draws them in ink.
 
@@ -13,6 +17,12 @@ struct Globals {
     sun: vec4<f32>,
     // x: pixel step for contour detection; y: contour strength.
     edges: vec4<f32>,
+    // Section box corners; clip_min.w = 1 when the box is on.
+    clip_min: vec4<f32>,
+    clip_max: vec4<f32>,
+    // Eye position (w = 1 in perspective) and viewing direction.
+    eye: vec4<f32>,
+    forward: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -30,6 +40,7 @@ struct VertexOut {
     @location(1) color: vec4<f32>,
     @location(2) view_normal: vec3<f32>,
     @location(3) view_dist: f32,
+    @location(4) world: vec3<f32>,
 };
 
 @vertex
@@ -44,7 +55,50 @@ fn vs_model(v: VertexIn) -> VertexOut {
     out.view_dist = -vp.z;
     out.normal = v.normal;
     out.color = v.color;
+    out.world = v.pos;
     return out;
+}
+
+fn boxed() -> bool {
+    return g.clip_min.w > 0.5;
+}
+
+// Outside the section box (a hair of tolerance keeps faces on it).
+fn outside(p: vec3<f32>) -> bool {
+    let e = 1e-4;
+    return any(p < g.clip_min.xyz - vec3<f32>(e)) || any(p > g.clip_max.xyz + vec3<f32>(e));
+}
+
+// Where the line of sight through `p` (inside the box) leaves it towards
+// the eye: the cap of the cut. Returns the cap's normal (xyz) and its
+// distance along the view (w).
+fn cap(p: vec3<f32>) -> vec4<f32> {
+    var d = g.forward.xyz;
+    if (g.eye.w > 0.5) {
+        d = normalize(p - g.eye.xyz);
+    }
+    // Back towards the eye.
+    let b = -d;
+    var t = 1e9;
+    var n = vec3<f32>(0.0, 0.0, 1.0);
+    for (var k = 0; k < 3; k = k + 1) {
+        if (abs(b[k]) > 1e-6) {
+            var bound = g.clip_min[k];
+            var sgn = -1.0;
+            if (b[k] > 0.0) {
+                bound = g.clip_max[k];
+                sgn = 1.0;
+            }
+            let tk = (bound - p[k]) / b[k];
+            if (tk < t) {
+                t = tk;
+                n = vec3<f32>(0.0);
+                n[k] = sgn;
+            }
+        }
+    }
+    let q = p + b * max(t, 0.0);
+    return vec4<f32>(n, dot(q - g.eye.xyz, g.forward.xyz));
 }
 
 fn shade(n_in: vec3<f32>, color: vec3<f32>) -> vec3<f32> {
@@ -62,8 +116,21 @@ struct ModelOut {
 };
 
 @fragment
-fn fs_model(i: VertexOut) -> ModelOut {
+fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     var out: ModelOut;
+    if (boxed() && outside(i.world)) {
+        discard;
+    }
+    if (!front) {
+        // The inside of a solid shows only through a cut.
+        if (!boxed()) {
+            discard;
+        }
+        let c = cap(i.world);
+        out.color = vec4<f32>(shade(c.xyz, i.color.rgb) * 0.82, 1.0);
+        out.normal_dist = vec4<f32>(normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz), c.w);
+        return out;
+    }
     out.color = vec4<f32>(shade(i.normal, i.color.rgb), 1.0);
     out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist);
     return out;
@@ -71,6 +138,9 @@ fn fs_model(i: VertexOut) -> ModelOut {
 
 @fragment
 fn fs_glass(i: VertexOut) -> @location(0) vec4<f32> {
+    if (boxed() && outside(i.world)) {
+        discard;
+    }
     return vec4<f32>(shade(i.normal, i.color.rgb), i.color.a);
 }
 

@@ -137,7 +137,57 @@ impl Scene {
         self.opaque.is_empty() && self.glass.is_empty()
     }
 
+    /// The box around the triangles of some elements.
+    pub fn bounds_of(&self, elements: &BTreeSet<Element>) -> Option<(Vec3, Vec3)> {
+        let tris = self
+            .opaque
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0);
+        let mut b: Option<(Vec3, Vec3)> = None;
+        for (i, t) in tris.enumerate() {
+            if !elements.contains(&self.owners[i]) {
+                continue;
+            }
+            for v in t {
+                let p = Vec3::from_array(v.pos);
+                b = Some(b.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p))));
+            }
+        }
+        b
+    }
+
+    /// The nearest element hit by a ray, inside the section box if there
+    /// is one (what is cut away cannot be picked).
+    pub fn pick_in(
+        &self,
+        ray: Ray,
+        clip: Option<&super::section_box::SectionBox>,
+    ) -> Option<Element> {
+        let tris = self
+            .opaque
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0);
+        let mut best: Option<(f32, Element)> = None;
+        for (i, t) in tris.enumerate() {
+            let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos].map(Vec3::from_array);
+            if let Some(d) = hit(ray, a, b, c) {
+                if clip.is_some_and(|bx| !bx.contains(ray.origin + ray.dir * d)) {
+                    continue;
+                }
+                if best.is_none_or(|(bd, _)| d < bd) {
+                    best = Some((d, self.owners[i]));
+                }
+            }
+        }
+        best.map(|(_, e)| e)
+    }
+
     /// The nearest element hit by a ray.
+    #[cfg(test)]
     pub fn pick(&self, ray: Ray) -> Option<Element> {
         let tris = self
             .opaque

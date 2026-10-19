@@ -34,6 +34,10 @@ struct Globals {
     view: [[f32; 4]; 4],
     sun: [f32; 4],
     edges: [f32; 4],
+    clip_min: [f32; 4],
+    clip_max: [f32; 4],
+    eye: [f32; 4],
+    forward: [f32; 4],
 }
 
 /// Render targets of one size.
@@ -67,6 +71,8 @@ pub struct Renderer {
     /// The device can view a texture in another format of the same bytes
     /// (wgpu's `VIEW_FORMATS`); otherwise the picture is copied for display.
     view_formats: bool,
+    /// The section box, if on: everything outside it is cut away.
+    clip: Option<(glam::Vec3, glam::Vec3)>,
 }
 
 impl Renderer {
@@ -134,7 +140,9 @@ impl Renderer {
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
+            // Back faces are dropped by the shader, except through the cut
+            // of a section box, where they are painted as its caps.
+            cull_mode: None,
             ..Default::default()
         };
         let model_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -240,7 +248,13 @@ impl Renderer {
             opaque: None,
             glass: None,
             view_formats,
+            clip: None,
         }
+    }
+
+    /// Sets (or clears) the section box of the next pictures.
+    pub fn set_clip(&mut self, clip: Option<(glam::Vec3, glam::Vec3)>) {
+        self.clip = clip;
     }
 
     /// Uploads the scene's triangles.
@@ -355,6 +369,20 @@ impl Renderer {
             view: camera.view().to_cols_array_2d(),
             sun: [sun.x, sun.y, sun.z, 0.0],
             edges: [edge_step.max(1) as f32, 1.0, 0.0, 0.0],
+            clip_min: self
+                .clip
+                .map_or([0.0; 4], |(lo, _)| [lo.x, lo.y, lo.z, 1.0]),
+            clip_max: self
+                .clip
+                .map_or([0.0; 4], |(_, hi)| [hi.x, hi.y, hi.z, 1.0]),
+            eye: {
+                let e = camera.eye();
+                [e.x, e.y, e.z, if camera.perspective { 1.0 } else { 0.0 }]
+            },
+            forward: {
+                let f = camera.forward();
+                [f.x, f.y, f.z, 0.0]
+            },
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);

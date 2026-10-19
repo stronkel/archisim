@@ -221,6 +221,9 @@ pub struct ArchiSimApp {
     /// Cut plane of the active plan above its level, in metres.
     pub cut_plane: f64,
     pub show_grid: bool,
+    /// Every plan line as a hairline (ArchiCAD's "Líneas finas"), instead
+    /// of its real weight at the drawing scale.
+    pub thin_lines: bool,
     /// The level below is drawn in grey under the active plan (and snaps).
     pub show_underlay: bool,
     /// Walls of other levels shown in the active plan (cut by its cut plane,
@@ -307,6 +310,7 @@ impl ArchiSimApp {
             plan_scale: archisim_plan::PlanOptions::default().scale,
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             show_grid: true,
+            thin_lines: false,
             show_underlay: true,
             other_walls: Vec::new(),
             snap_filter: SnapFilter::default(),

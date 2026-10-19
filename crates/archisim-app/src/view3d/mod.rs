@@ -5,6 +5,7 @@
 pub mod camera;
 pub mod render;
 pub mod scene;
+pub mod section_box;
 
 #[cfg(test)]
 mod gpu_tests;

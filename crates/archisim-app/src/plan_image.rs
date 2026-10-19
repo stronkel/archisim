@@ -24,6 +24,8 @@ pub struct PlanKey {
     pub cut_plane: f64,
     /// The level drawn underneath in grey, if any.
     pub reference_level: Option<LevelId>,
+    /// Hairlines instead of real line weights.
+    pub thin_lines: bool,
 }
 
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
