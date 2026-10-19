@@ -38,6 +38,7 @@ pub use spaces::{space_height, SpaceSettings, USAGES};
 pub use stairs::{default_stair_settings, StairSettings};
 pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 pub use terrain::TerrainSettings;
+pub use types::copy_name;
 
 /// Settings of the wall tool (ArchiCAD "Cuadro de información").
 #[derive(Debug, Clone, Copy, PartialEq)]

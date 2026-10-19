@@ -1212,6 +1212,8 @@ impl ArchiSimApp {
             (Grip::StairPoint { .. }, _) => "Línea de huella",
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::RailingPoint { .. }, _) => "Barandilla",
+            (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
+            (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
             (Grip::TerrainPoint { .. }, _) => "Punto",
         };
         let delta = to - d.from;

@@ -57,6 +57,13 @@ pub enum Grip {
         railing: archisim_core::RailingId,
         index: usize,
     },
+    /// A size handle of an object (ArchiCAD's hotspots): its right side
+    /// stretches its width (both sides, about its axis), its front its
+    /// depth.
+    ObjectSize {
+        object: archisim_core::ObjectId,
+        width: bool,
+    },
     /// One end of a curtain wall.
     CurtainEnd {
         curtain: archisim_core::CurtainWallId,
@@ -196,8 +203,16 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            // Moved whole; turned with Space or in Properties.
-            Element::Object(_) => {}
+            // Moved whole, turned with Space; width and depth by their
+            // handles if the family has them.
+            Element::Object(id) => {
+                for (width, point) in object_handles(model, *id) {
+                    v.push(Hotspot {
+                        grip: Grip::ObjectSize { object: *id, width },
+                        point,
+                    });
+                }
+            }
             Element::Railing(id) => {
                 if let Some(r) = model.railing(*id) {
                     for (index, point) in r.path.iter().enumerate() {
@@ -309,7 +324,66 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
+        Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
+    }
+}
+
+/// The width and depth handles of an object whose family has `width` and
+/// `depth` lengths: the middle of its right side and of its front.
+fn object_handles(model: &Model, id: archisim_core::ObjectId) -> Vec<(bool, Point2)> {
+    use archisim_core::Value;
+    let Some(o) = model.object(id) else {
+        return Vec::new();
+    };
+    let Some(t) = model.object_type(o.object_type) else {
+        return Vec::new();
+    };
+    let (Some(Value::Number(w)), Some(Value::Number(d))) =
+        (t.values.get("width"), t.values.get("depth"))
+    else {
+        return Vec::new();
+    };
+    vec![
+        (true, o.to_plan(w / 2.0, d / 2.0)),
+        (false, o.to_plan(0.0, *d)),
+    ]
+}
+
+/// Stretches an object's width or depth to `to`. A type shared with other
+/// objects is copied first, so only this one changes.
+fn stretch_object(
+    model: &mut Model,
+    id: archisim_core::ObjectId,
+    width: bool,
+    to: Point2,
+) -> Result<(), ModelError> {
+    use archisim_core::Value;
+    let o = model
+        .object(id)
+        .ok_or(ModelError::UnknownObject(id))?
+        .clone();
+    let rel = to - o.position;
+    let (c, s) = (o.rotation.cos(), o.rotation.sin());
+    let (x, y) = (rel.x * c + rel.y * s, -rel.x * s + rel.y * c);
+    let (key, value) = if width {
+        ("width", (2.0 * x.abs() * 1000.0).round() / 1000.0)
+    } else {
+        ("depth", (y * 1000.0).round() / 1000.0)
+    };
+    let t = model
+        .object_type(o.object_type)
+        .ok_or(ModelError::UnknownObjectType(o.object_type))?
+        .clone();
+    let mut values = t.values.clone();
+    values.insert(key.into(), Value::Number(value));
+    if model.object_type_users(t.id) > 1 {
+        let taken: Vec<String> = model.object_types().map(|t| t.name.clone()).collect();
+        let name = crate::editor::copy_name(&t.name, &taken);
+        let new = model.add_object_type(name, t.family, values)?;
+        model.edit_object(id, |o| o.object_type = new)
+    } else {
+        model.set_object_type_values(t.id, values)
     }
 }
 
@@ -358,6 +432,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::StairPoint { .. } => "Mover punto de la escalera",
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
+        Grip::ObjectSize { .. } => "Estirar objeto",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
     }
 }
@@ -431,6 +506,9 @@ pub fn apply(
                 }
             })
             .map(|_| None),
+        Grip::ObjectSize { object, width } => {
+            stretch_object(model, object, width, drag.to).map(|_| None)
+        }
         Grip::RailingPoint { railing, index } => model
             .edit_railing(railing, |r| {
                 if let Some(p) = r.path.get_mut(index) {
@@ -1135,6 +1213,7 @@ fn level_of(
         Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
+        Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -1274,6 +1353,29 @@ mod tests {
         assert_eq!(m.curtain_walls().count(), 2);
         assert_eq!(m.railings().count(), 2);
         assert_eq!(m.objects().count(), 2);
+        // An object's width by its handle: a shared type is copied.
+        let one = sel(&[Element::Object(obj)]);
+        let handles = hotspots(&m, &one);
+        assert_eq!(handles.len(), 2);
+        let w0 = handles[0].point;
+        let stretch = Drag {
+            grip: handles[0].grip,
+            from: w0,
+            to: w0 + archisim_core::Vec2::new(0.2, 0.0),
+            variant: false,
+        };
+        let before = m.object(obj).unwrap().object_type;
+        apply(&mut m, &one, &stretch).unwrap();
+        let after = m.object(obj).unwrap().object_type;
+        assert_ne!(before, after, "the type was shared with the copy");
+        let w = m.object_type(after).unwrap().values["width"].clone();
+        let w0v = m.object_type(before).unwrap().values["width"].clone();
+        match (w, w0v) {
+            (archisim_core::Value::Number(a), archisim_core::Value::Number(b)) => {
+                assert!((a - b - 0.4).abs() < 1e-6, "{a} {b}")
+            }
+            _ => panic!(),
+        }
         // Stretch a curtain wall by its end and move a railing point.
         let ends = sel(&[Element::CurtainWall(cw), Element::Railing(rail)]);
         assert_eq!(hotspots(&m, &ends).len(), 2 + 3);
