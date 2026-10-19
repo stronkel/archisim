@@ -29,6 +29,8 @@ pub struct Library {
     pub interior_door: OpeningTypeId,
     pub double_door: OpeningTypeId,
     pub sliding_door: OpeningTypeId,
+    /// Folding door of four leaves, 160 × 205.
+    pub folding_door: OpeningTypeId,
     pub window_two_leaves: OpeningTypeId,
     pub window_one_leaf: OpeningTypeId,
     pub balcony_door: OpeningTypeId,
@@ -288,6 +290,17 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         madera,
         madera,
     )?;
+    let folding_door = opening(
+        m,
+        "Puerta plegable 4 hojas 160×205",
+        Door(D::Folding),
+        1.60,
+        2.05,
+        0.05,
+        0.07,
+        madera,
+        madera,
+    )?;
     let window_two_leaves = opening(
         m,
         "Ventana practicable 2 hojas 180×130",
@@ -361,6 +374,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         interior_door,
         double_door,
         sliding_door,
+        folding_door,
         window_two_leaves,
         window_one_leaf,
         balcony_door,
@@ -498,7 +512,7 @@ mod tests {
         assert_eq!(m.levels()[0].elevation, 0.0);
         assert_eq!(m.wall_types().count(), 3);
         assert_eq!(m.slab_types().count(), 4);
-        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 4);
+        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 5);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 4);
         assert_eq!(
             m.member_types()

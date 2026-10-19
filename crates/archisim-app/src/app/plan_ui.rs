@@ -1454,7 +1454,7 @@ impl ArchiSimApp {
                         leaves.push((g.t0, mid));
                         leaves.push((g.t1, mid));
                     }
-                    D::Sliding => {}
+                    D::Sliding | D::Folding => {}
                 }
                 for (hinge, free) in leaves {
                     let r = (free - hinge).abs();

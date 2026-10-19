@@ -85,9 +85,10 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 5] = [
+const SYSTEM_SOURCES: [&str; 6] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
+    include_str!("../families/puerta_plegable.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
     include_str!("../families/hueco.asfam"),
@@ -95,6 +96,7 @@ const SYSTEM_SOURCES: [&str; 5] = [
 
 pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
+pub const FOLDING_DOOR: &str = "Puerta plegable";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
 /// Opening with no door or window in it (IFC: an `IfcOpeningElement`
@@ -147,6 +149,7 @@ pub fn legacy_family(kind: OpeningKind) -> (&'static str, Vec<(&'static str, Val
         OpeningKind::Door(DoorOperation::SingleSwing) => (SWING_DOOR, vec![("leaves", n(1.0))]),
         OpeningKind::Door(DoorOperation::DoubleSwing) => (SWING_DOOR, vec![("leaves", n(2.0))]),
         OpeningKind::Door(DoorOperation::Sliding) => (SLIDING_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Folding) => (FOLDING_DOOR, vec![]),
         OpeningKind::Window(WindowOperation::Fixed) => (
             CASEMENT_WINDOW,
             vec![("leaves", n(1.0)), ("leaf_1", t("fija"))],
@@ -209,6 +212,7 @@ pub fn operation_from_name(category: &str, name: &str) -> Option<OpeningKind> {
         ("door", "single_swing") => OpeningKind::Door(DoorOperation::SingleSwing),
         ("door", "double_swing") => OpeningKind::Door(DoorOperation::DoubleSwing),
         ("door", "sliding") => OpeningKind::Door(DoorOperation::Sliding),
+        ("door", "folding") => OpeningKind::Door(DoorOperation::Folding),
         ("window", "fixed") => OpeningKind::Window(WindowOperation::Fixed),
         ("window", "single_casement") => OpeningKind::Window(WindowOperation::SingleCasement),
         ("window", "double_casement") => OpeningKind::Window(WindowOperation::DoubleCasement),
@@ -306,6 +310,7 @@ mod tests {
             [
                 SWING_DOOR,
                 SLIDING_DOOR,
+                FOLDING_DOOR,
                 CASEMENT_WINDOW,
                 SLIDING_WINDOW,
                 VOID

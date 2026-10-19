@@ -1499,6 +1499,8 @@ fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
         (DoorOperation::DoubleSwing, _) => "DOUBLE_DOOR_SINGLE_SWING",
         (DoorOperation::Sliding, Hand::Left) => "SLIDING_TO_RIGHT",
         (DoorOperation::Sliding, Hand::Right) => "SLIDING_TO_LEFT",
+        (DoorOperation::Folding, Hand::Left) => "FOLDING_TO_LEFT",
+        (DoorOperation::Folding, Hand::Right) => "FOLDING_TO_RIGHT",
     }
 }
 

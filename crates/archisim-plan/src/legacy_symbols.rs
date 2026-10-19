@@ -66,7 +66,9 @@ pub(super) fn draw_opening(s: &mut String, o: &OpeningGeometry, k: f64) {
                     draw_leaf(s, o, c0, 1.0, w, Leaf::Door, k);
                     draw_leaf(s, o, c1, -1.0, w, Leaf::Door, k);
                 }
-                DoorOperation::Sliding => draw_sliding_leaf(s, o, c0, c1, k),
+                DoorOperation::Sliding | DoorOperation::Folding => {
+                    draw_sliding_leaf(s, o, c0, c1, k)
+                }
             }
         }
         OpeningKind::Window(op) => {

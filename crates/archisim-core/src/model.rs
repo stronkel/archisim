@@ -408,6 +408,8 @@ pub enum DoorOperation {
     DoubleSwing,
     /// One leaf sliding along the face of the wall ("corredera").
     Sliding,
+    /// Leaves hinged to each other, folding to one side ("plegable").
+    Folding,
 }
 
 /// How a window opens. IFC: `IfcWindowTypePartitioningEnum` plus the

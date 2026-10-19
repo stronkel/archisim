@@ -1,0 +1,80 @@
+family "Puerta plegable"
+  category door
+  host wall
+  version 1
+  description "Puerta plegable (de librillo) de 2 a 8 hojas que se recogen a un lado, con cerco"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.60 range 0.30..20.00 label "Hueco de obra: ancho"
+    height length = 2.05 range 0.10..20.00 label "Hueco de obra: alto"
+  section "Hojas"
+    leaves integer = 4 range 2..8 label "Nº de hojas"
+  section "Cerco"
+    frame_width length = 0.05 range 0.001..2.00 label "Cerco: anchura vista"
+    frame_depth length = 0.07 range 0.001..2.00 label "Cerco: fondo"
+  section "Materiales"
+    frame_material material = "Madera de pino" label "Cerco"
+    panel_material material = "Madera de pino" label "Hoja"
+
+require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para las hojas"
+require (width - 2 * frame_width) / leaves >= 0.10 else "Las hojas quedan de menos de 10 cm"
+
+# Hojas cerradas, una junto a otra, de 3 cm de grueso como mucho.
+body
+  use door_lining(width, height, frame_width, frame_depth, frame_material)
+  let c0 = -width / 2 + frame_width
+  let lw = (width - 2 * frame_width) / leaves
+  repeat i in 0..leaves
+    use block(c0 + i * lw, c0 + (i + 1) * lw, min(0.03, frame_depth), 0, height - frame_width, panel_material)
+
+# Cerco cortado y las hojas a medio plegar, en zigzag hacia el lado al que
+# abre, recogiéndose hacia el lado de la mano (UNE-EN 12519), con una
+# flecha.
+plan 1:50
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  let s = if hand == "left" then 1 else -1
+  let start = if hand == "left" then c0 else c1
+  let lw = (c1 - c0) / leaves
+  let a = 1.0
+  let y0 = frame_depth / 2
+  repeat i in 0..leaves
+    let xa = start + s * i * lw * cos(a)
+    let xb = start + s * (i + 1) * lw * cos(a)
+    let ya = y0 + (if i - 2 * floor(i / 2) == 0 then 0 else lw * sin(a))
+    let yb = y0 + (if i - 2 * floor(i / 2) == 0 then lw * sin(a) else 0)
+    line (xa, ya) to (xb, yb) pen frame
+  let tip = start + s * leaves * lw * cos(a)
+  let ya = y0 + 0.05
+  line (tip + s * 0.05, ya) to (tip + s * 0.25, ya) pen thin
+  line (tip + s * 0.05, ya) to (tip + s * 0.11, ya + 0.03) pen thin
+  line (tip + s * 0.05, ya) to (tip + s * 0.11, ya - 0.03) pen thin
+
+plan 1:100
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let s = if hand == "left" then 1 else -1
+  let start = if hand == "left" then c0 else c1
+  let lw = (c1 - c0) / leaves
+  let a = 1.0
+  let y0 = frame_depth / 2
+  repeat i in 0..leaves
+    let xa = start + s * i * lw * cos(a)
+    let xb = start + s * (i + 1) * lw * cos(a)
+    let ya = y0 + (if i - 2 * floor(i / 2) == 0 then 0 else lw * sin(a))
+    let yb = y0 + (if i - 2 * floor(i / 2) == 0 then lw * sin(a) else 0)
+    line (xa, ya) to (xb, yb) pen frame
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  operation = "folding"

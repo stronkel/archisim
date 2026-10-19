@@ -1285,6 +1285,7 @@ impl ArchiSimApp {
                     archisim_core::DoorOperation::SingleSwing => "Abatible 1 hoja",
                     archisim_core::DoorOperation::DoubleSwing => "Abatible 2 hojas",
                     archisim_core::DoorOperation::Sliding => "Corredera",
+                    archisim_core::DoorOperation::Folding => "Plegable",
                 },
                 OpeningKind::Window(w) => match w {
                     archisim_core::WindowOperation::Fixed => "Fija",

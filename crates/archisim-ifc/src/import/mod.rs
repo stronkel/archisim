@@ -2725,6 +2725,9 @@ fn door_from_ifc(op: &str) -> (DoorOperation, Option<Hand>) {
         "SLIDING_TO_LEFT" => (DoorOperation::Sliding, Some(Hand::Right)),
         "SLIDING_TO_RIGHT" => (DoorOperation::Sliding, Some(Hand::Left)),
         "DOUBLE_DOOR_SLIDING" => (DoorOperation::Sliding, None),
+        "FOLDING_TO_LEFT" => (DoorOperation::Folding, Some(Hand::Left)),
+        "FOLDING_TO_RIGHT" => (DoorOperation::Folding, Some(Hand::Right)),
+        "DOUBLE_DOOR_FOLDING" => (DoorOperation::Folding, None),
         _ => (DoorOperation::SingleSwing, None),
     }
 }

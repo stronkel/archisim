@@ -430,8 +430,8 @@ mod tests {
         let c = ed.model().opening_type(copy).unwrap().clone();
         assert_eq!(c.family, door.family);
         assert_eq!(c.values, door.values);
-        // The template has four door types: the copy takes the next mark.
-        assert_eq!(c.mark, "P-05");
+        // The template has five door types: the copy takes the next mark.
+        assert_eq!(c.mark, "P-06");
 
         let copy_name = ed.model().opening_type(copy).unwrap().name.clone();
         ed.set_opening_type_info(copy, &copy_name, " P-10 ", "Baños")
@@ -444,7 +444,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(err, "la marca «P-10» ya la tiene otro tipo");
         ed.undo();
-        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-05");
+        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-06");
 
         // The family's own rule, in its own words: two jambs and the
         // mullion of 620 mm do not fit in 1800 mm.
@@ -477,7 +477,7 @@ mod tests {
         // A new type of a family the project does not have yet.
         assert_eq!(
             ed.opening_families(true),
-            ["Puerta abatible", "Puerta corredera"]
+            ["Puerta abatible", "Puerta corredera", "Puerta plegable"]
         );
         // Voids are offered with the windows.
         assert!(ed.opening_families(false).contains(&"Hueco".to_string()));

@@ -763,6 +763,7 @@ mod tests {
                 OpeningKind::Door(DoorOperation::SingleSwing) => ("door", "single_swing"),
                 OpeningKind::Door(DoorOperation::DoubleSwing) => ("door", "double_swing"),
                 OpeningKind::Door(DoorOperation::Sliding) => ("door", "sliding"),
+                OpeningKind::Door(DoorOperation::Folding) => ("door", "folding"),
                 OpeningKind::Window(WindowOperation::Fixed) => ("window", "fixed"),
                 OpeningKind::Window(WindowOperation::SingleCasement) => {
                     ("window", "single_casement")

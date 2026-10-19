@@ -265,6 +265,7 @@ fn swing_depth(kind: OpeningKind, width: f64) -> f64 {
         OpeningKind::Door(DoorOperation::DoubleSwing)
         | OpeningKind::Window(WindowOperation::DoubleCasement) => width / 2.0,
         OpeningKind::Door(DoorOperation::Sliding) => 0.1,
+        OpeningKind::Door(DoorOperation::Folding) => width / 3.0,
         OpeningKind::Window(_) => 0.05,
         OpeningKind::Void => 0.0,
     }
