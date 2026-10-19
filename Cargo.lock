@@ -250,6 +250,8 @@ dependencies = [
 name = "archisim-cli"
 version = "0.24.0"
 dependencies = [
+ "archisim-bcf",
+ "archisim-coord",
  "archisim-core",
  "archisim-file",
  "archisim-geom",
@@ -258,6 +260,17 @@ dependencies = [
  "archisim-library",
  "archisim-plan",
  "resvg",
+]
+
+[[package]]
+name = "archisim-coord"
+version = "0.24.0"
+dependencies = [
+ "archisim-bcf",
+ "archisim-core",
+ "archisim-geom",
+ "archisim-ids",
+ "archisim-ifc",
 ]
 
 [[package]]

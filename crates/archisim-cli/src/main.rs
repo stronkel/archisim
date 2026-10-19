@@ -5,7 +5,7 @@
 //! archisim exportar <proyecto.archisim> [carpeta]   IFC y plantas de un proyecto
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
 //! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
-//! archisim comprobar-ids <modelo> <requisitos.ids>   requisitos IDS (fase 4, `colaboracion`)
+//! archisim comprobar-ids | comparar | interferencias | bcf   colaboración (fase 4, `colaboracion`)
 //! archisim --version
 //! ```
 
