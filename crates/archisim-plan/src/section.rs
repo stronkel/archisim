@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use archisim_core::{MaterialId, Model, NewSection, Point2, SectionKind, SectionLine};
-use archisim_geom::solid::{model_solids, P3};
+use archisim_geom::solid::{model_solids, SolidOwner, P3};
 
 use crate::lettering::{text_path, Align};
 use crate::{
@@ -45,13 +45,15 @@ pub struct SectionDrawing {
     pub title: String,
 }
 
-/// A cut solid: its material, loops, and which loop edges are heavy.
-type CutPiece = (MaterialId, Vec<Vec<Point2>>, Vec<Vec<bool>>);
+/// A cut solid: its material, loops, which loop edges are heavy, and the
+/// element it belongs to.
+type CutPiece = (MaterialId, Vec<Vec<Point2>>, Vec<Vec<bool>>, SolidOwner);
 /// An edge as the keys of its two ends.
 type EdgeKey = ((i64, i64, i64), (i64, i64, i64));
 
 #[derive(Debug, Clone)]
 struct Face {
+    owner: SolidOwner,
     poly: Vec<Point2>,
     fill: [u8; 3],
     edges: Vec<(Point2, Point2)>,
@@ -123,6 +125,55 @@ fn subdivide(t: Tri, out: &mut Vec<Tri>, depth: usize) {
     let m = lerp(a, b, 0.5);
     subdivide(([a, m, c], [fab, false, fca]), out, depth + 1);
     subdivide(([m, b, c], [fab, fbc, false]), out, depth + 1);
+}
+
+/// Whether `p` lies inside the polygon (even–odd).
+fn inside(p: Point2, poly: &[Point2]) -> bool {
+    let mut odd = false;
+    let n = poly.len();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + n - 1) % n]);
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            odd = !odd;
+        }
+    }
+    odd
+}
+
+impl SectionDrawing {
+    /// The element seen at `p` (drawing coordinates): one cut by the
+    /// section there, or else the nearest one seen beyond it.
+    pub fn pick(&self, p: Point2) -> Option<SolidOwner> {
+        for (_, loops, _, owner) in self.cuts.iter().rev() {
+            let n = loops.iter().filter(|l| inside(p, l)).count();
+            if n % 2 == 1 {
+                return Some(*owner);
+            }
+        }
+        self.faces
+            .iter()
+            .rev()
+            .find(|f| f.poly.len() >= 3 && inside(p, &f.poly))
+            .map(|f| f.owner)
+    }
+
+    /// What an element looks like in the section, to highlight it: the
+    /// loops of its cut, and its faces seen beyond (pieces of polygons).
+    pub fn shape_of(&self, owner: SolidOwner) -> (Vec<Vec<Point2>>, Vec<Vec<Point2>>) {
+        let cut = self
+            .cuts
+            .iter()
+            .filter(|c| c.3 == owner)
+            .flat_map(|c| c.1.iter().cloned())
+            .collect();
+        let faces = self
+            .faces
+            .iter()
+            .filter(|f| f.owner == owner && f.poly.len() >= 3)
+            .map(|f| f.poly.clone())
+            .collect();
+        (cut, faces)
+    }
 }
 
 /// Works out what a section draws.
@@ -223,7 +274,8 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     grow_to(&mut lo, &mut hi, *p);
                 }
             }
-            d.cuts.push((solid.material, loops, solid_edges));
+            d.cuts
+                .push((solid.material, loops, solid_edges, solid.owner));
         }
 
         // Beyond the cut: faces seen from the section, clipped to its
@@ -256,6 +308,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 faces.push((
                     centre,
                     Face {
+                        owner: solid.owner,
                         poly: poly2,
                         fill: if glass { GLASS } else { [255, 255, 255] },
                         edges: Vec::new(),
@@ -269,6 +322,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     faces.push((
                         at,
                         Face {
+                            owner: solid.owner,
                             poly: Vec::new(),
                             fill: [0, 0, 0],
                             edges: vec![(to2(a), to2(b))],
@@ -701,7 +755,7 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
 
     // The cut, over everything.
     s.push_str("<g id=\"cut\" stroke-linejoin=\"miter\">\n");
-    for (ci, (mat, loops, _)) in d.cuts.iter().enumerate() {
+    for (ci, (mat, loops, _, _)) in d.cuts.iter().enumerate() {
         let Some(material) = model.material(*mat) else {
             continue;
         };
@@ -712,7 +766,7 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
             fill_cut(&mut s, material, l, &format!("cut-{ci}-{li}"), k);
         }
     }
-    for (_, loops, flags) in &d.cuts {
+    for (_, loops, flags, _) in &d.cuts {
         for (l, fl) in loops.iter().zip(flags) {
             if !visible(l) {
                 continue;
@@ -825,23 +879,26 @@ mod tests {
                 ],
             )
             .unwrap();
+        let mut walls = Vec::new();
         for (a, b) in [
             (Point2::new(0.0, 0.0), Point2::new(0.0, 5.0)),
             (Point2::new(4.0, 5.0), Point2::new(4.0, 0.0)),
             (Point2::new(10.0, 6.0), Point2::new(-2.0, 6.0)),
         ] {
-            m.add_wall(NewWall {
-                wall_type: wt,
-                level: l,
-                start: a,
-                end: b,
-                reference: ReferenceLine::Center,
-                height: 3.0,
-                base_offset: 0.0,
-                bulge: 0.0,
-                top: WallTop::Unconnected,
-            })
-            .unwrap();
+            let w = m
+                .add_wall(NewWall {
+                    wall_type: wt,
+                    level: l,
+                    start: a,
+                    end: b,
+                    reference: ReferenceLine::Center,
+                    height: 3.0,
+                    base_offset: 0.0,
+                    bulge: 0.0,
+                    top: WallTop::Unconnected,
+                })
+                .unwrap();
+            walls.push(w);
         }
         let sec = m
             .add_section(NewSection {
@@ -857,7 +914,7 @@ mod tests {
         assert_eq!(d.cuts.len(), 4, "{:?}", d.cuts.len());
         let brick_cuts: Vec<_> = d.cuts.iter().filter(|c| c.0 == brick).collect();
         assert_eq!(brick_cuts.len(), 2);
-        for (_, loops, _) in &brick_cuts {
+        for (_, loops, _, _) in &brick_cuts {
             assert_eq!(loops.len(), 1);
             let area = archisim_core::signed_area(&loops[0]).abs();
             assert!((area - 0.2 * 3.0).abs() < 1e-6, "{area}");
@@ -868,6 +925,16 @@ mod tests {
         assert!(d.hi.y >= 3.0 - 1e-9 && d.lo.y <= 0.0 + 1e-9);
         let svg = render_section(&m, &d, &PlanOptions::default());
         assert!(svg.contains("id=\"cut\"") && svg.contains("id=\"levels\""));
+        // Picked: the first wall where it is cut, the far wall between the
+        // two, nothing above them.
+        let wall = |i: usize| Some(SolidOwner::Wall(walls[i]));
+        assert_eq!(d.pick(Point2::new(1.0, 1.5)), wall(0));
+        assert_eq!(d.pick(Point2::new(3.0, 1.5)), wall(2));
+        assert_eq!(d.pick(Point2::new(3.0, 3.5)), None);
+        let (cut, faces) = d.shape_of(SolidOwner::Wall(walls[0]));
+        assert_eq!(cut.len(), 2);
+        assert!(faces.is_empty());
+        assert!(!d.shape_of(SolidOwner::Wall(walls[2])).1.is_empty());
 
         // Four elevations around, each looking at the building.
         let els = elevations_around(&m);

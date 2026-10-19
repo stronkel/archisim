@@ -1110,12 +1110,12 @@ impl ArchiSimApp {
         if consume(Modifiers::NONE, Key::F3) {
             self.set_mode(ViewMode::ThreeD);
         }
-        if self.mode == ViewMode::ThreeD {
+        if matches!(self.mode, ViewMode::ThreeD | ViewMode::Section) {
             self.keyboard_in_3d(ctx);
         }
     }
 
-    /// Keys while the 3D view is shown: Esc, Supr, and the tool keys,
+    /// Keys while the 3D view or a section is shown: Esc, Supr, and the tool keys,
     /// which go back to the plan to draw.
     fn keyboard_in_3d(&mut self, ctx: &egui::Context) {
         let (events, escape, delete) = ctx.input(|i| {

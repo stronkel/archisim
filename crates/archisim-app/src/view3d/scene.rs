@@ -51,19 +51,7 @@ fn srgb_to_linear(c: u8) -> f32 {
 }
 
 fn element(owner: SolidOwner) -> Element {
-    match owner {
-        SolidOwner::Wall(id) => Element::Wall(id),
-        SolidOwner::Slab(id) => Element::Slab(id),
-        SolidOwner::Opening(id) => Element::Opening(id),
-        SolidOwner::Column(id) => Element::Column(id),
-        SolidOwner::Beam(id) => Element::Beam(id),
-        SolidOwner::Roof(id) => Element::Roof(id),
-        SolidOwner::Stair(id) => Element::Stair(id),
-        SolidOwner::Terrain(id) => Element::Terrain(id),
-        SolidOwner::CurtainWall(id) => Element::CurtainWall(id),
-        SolidOwner::Railing(id) => Element::Railing(id),
-        SolidOwner::Object(id) => Element::Object(id),
-    }
+    crate::pick::of_solid(owner)
 }
 
 impl Scene {

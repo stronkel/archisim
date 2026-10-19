@@ -207,6 +207,71 @@ impl ArchiSimApp {
         } else {
             self.section_hover = None;
         }
+        // Selection, as in plan: click an element cut or seen (Shift adds
+        // or takes it), click nothing to clear.
+        let under = self
+            .section_hover
+            .and_then(|p| self.section_cache.as_ref()?.drawing.pick(p))
+            .map(crate::pick::of_solid);
+        if response.clicked_by(egui::PointerButton::Primary) {
+            let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+            match (under, shift) {
+                (Some(e), true) => {
+                    if !self.ed.selection.remove(&e) {
+                        self.ed.selection.insert(e);
+                    }
+                }
+                (Some(e), false) => {
+                    self.ed.selection = [e].into_iter().collect();
+                }
+                (None, false) => self.ed.selection.clear(),
+                (None, true) => {}
+            }
+        }
+        self.draw_section_selection(&painter, rect, under);
+        if under.is_some() {
+            ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+    }
+
+    /// The selected elements over the section drawing, and the one under
+    /// the cursor: their cut outlined, their faces seen tinted.
+    fn draw_section_selection(&self, painter: &egui::Painter, rect: Rect, under: Option<Element>) {
+        let Some(cache) = self.section_cache.as_ref() else {
+            return;
+        };
+        let mut shown: Vec<(Element, bool)> =
+            self.ed.selection.iter().map(|e| (*e, true)).collect();
+        if let Some(e) = under.filter(|e| !self.ed.selection.contains(e)) {
+            shown.push((e, false));
+        }
+        for (e, selected) in shown {
+            let Some(owner) = crate::pick::solid_of(e) else {
+                continue;
+            };
+            let (cut, faces) = cache.drawing.shape_of(owner);
+            let alpha = if selected { 110 } else { 60 };
+            let tint = Color32::from_rgba_unmultiplied(ACCENT.r(), ACCENT.g(), ACCENT.b(), alpha);
+            let mut mesh = egui::Mesh::default();
+            for poly in &faces {
+                let pts = self.polygon(rect, poly);
+                let base = mesh.vertices.len() as u32;
+                for p in &pts {
+                    mesh.colored_vertex(*p, tint);
+                }
+                for i in 1..pts.len().saturating_sub(1) as u32 {
+                    mesh.add_triangle(base, base + i, base + i + 1);
+                }
+            }
+            painter.add(Shape::mesh(mesh));
+            let width = if selected { 2.5 } else { 1.5 };
+            for l in &cut {
+                painter.add(Shape::closed_line(
+                    self.polygon(rect, l),
+                    Stroke::new(width, ACCENT),
+                ));
+            }
+        }
     }
 
     fn draw_section(&mut self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect) {

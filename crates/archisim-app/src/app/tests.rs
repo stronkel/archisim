@@ -1995,8 +1995,30 @@ fn sections_and_elevations() {
     assert_eq!(h.app.mode, ViewMode::Section);
     assert_eq!(h.app.active_section(), Some(sec.id));
     h.frame();
-    let cache = h.app.section_cache.as_ref().expect("drawn");
-    let _ = cache;
+    assert!(h.app.section_cache.is_some(), "drawn");
+    // Elements are selected in the section (R5): the west wall where it is
+    // cut, the north wall seen beyond; Esc clears.
+    h.click_at(p(0.8, 1.5));
+    let picked: Vec<Element> = h.app.ed.selection.iter().copied().collect();
+    let [Element::Wall(west)] = picked.as_slice() else {
+        panic!("{picked:?}");
+    };
+    assert!(h.model().wall(*west).unwrap().start.x.abs() < 0.2);
+    h.click_at(p(6.8, 1.5));
+    let picked: Vec<Element> = h.app.ed.selection.iter().copied().collect();
+    let [Element::Wall(north)] = picked.as_slice() else {
+        panic!("{picked:?}");
+    };
+    assert_ne!(north, west);
+    h.set_modifiers(Modifiers::SHIFT);
+    h.click_at(p(0.8, 1.5));
+    h.set_modifiers(Modifiers::NONE);
+    assert_eq!(h.app.ed.selection.len(), 2);
+    h.key(Key::Escape);
+    assert!(h.app.ed.selection.is_empty());
+    h.click_at(p(0.8, 1.5));
+    h.click_at(p(6.8, 4.5));
+    assert!(h.app.ed.selection.is_empty());
     // Back to the plan, flip it from Properties' editor and drag an end.
     h.key(Key::F2);
     assert_eq!(h.app.mode, ViewMode::Plan);

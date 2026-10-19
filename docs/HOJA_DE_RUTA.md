@@ -53,7 +53,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | R2 ✅ | **Cotas normales re-anclables**: arrastrar un extremo de una cota a otro punto, sin borrar y redibujar; anclajes más visibles | S | — |
 | R3 ✅ | **Usos de local propios**: lista de usos editable por proyecto (no solo vivienda) | S | — |
 | R4 ✅ | **Terreno editable en planta**: clic en un punto para escribir su cota (adiós a la lista); **líneas de nivel** dibujadas con su cota, que generan puntos; cambiar la cota de una línea entera; más adelante, crearlas con la varita sobre un dibujo CAD | M | — |
-| R5 | **Seleccionar en sección y alzado** (y ver/editar sus propiedades) | M | — |
+| R5 ✅ | **Seleccionar en sección y alzado** (y ver/editar sus propiedades) | M | — |
 | R6 | **Encuentro de muros con forjados y cubiertas**: el muro se recorta con el forjado o la cubierta que lo atraviesa (prioridades) | L | 2.3 |
 | R7 | **Cuadro de prioridades de intersección** en el proyecto, visual con barras como ArchiCAD, con criterios predefinidos | M | 2.3 |
 | R8 | **Galería de objetos** con vistas previas y carpetas por categoría como ArchiCAD: Mobiliario (cocina, estanterías, camas, sofás…), Entorno (vegetación…), Gente, Vehículos; familias nuevas para cada una | L | 2.2 |

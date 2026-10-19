@@ -327,6 +327,45 @@ pub fn in_window<G: Geo + ?Sized>(geo: &G, level: LevelId, a: Point2, b: Point2)
         .collect()
 }
 
+/// The element a solid of the 3D (or of a section drawn from them) belongs
+/// to.
+pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
+    use archisim_geom::solid::SolidOwner;
+    match owner {
+        SolidOwner::Wall(id) => Element::Wall(id),
+        SolidOwner::Slab(id) => Element::Slab(id),
+        SolidOwner::Opening(id) => Element::Opening(id),
+        SolidOwner::Column(id) => Element::Column(id),
+        SolidOwner::Beam(id) => Element::Beam(id),
+        SolidOwner::Roof(id) => Element::Roof(id),
+        SolidOwner::Stair(id) => Element::Stair(id),
+        SolidOwner::Terrain(id) => Element::Terrain(id),
+        SolidOwner::CurtainWall(id) => Element::CurtainWall(id),
+        SolidOwner::Railing(id) => Element::Railing(id),
+        SolidOwner::Object(id) => Element::Object(id),
+    }
+}
+
+/// The solid owner of an element that has a body (not dimensions, marks,
+/// rooms or sections).
+pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
+    use archisim_geom::solid::SolidOwner;
+    Some(match e {
+        Element::Wall(id) => SolidOwner::Wall(id),
+        Element::Slab(id) => SolidOwner::Slab(id),
+        Element::Opening(id) => SolidOwner::Opening(id),
+        Element::Column(id) => SolidOwner::Column(id),
+        Element::Beam(id) => SolidOwner::Beam(id),
+        Element::Roof(id) => SolidOwner::Roof(id),
+        Element::Stair(id) => SolidOwner::Stair(id),
+        Element::Terrain(id) => SolidOwner::Terrain(id),
+        Element::CurtainWall(id) => SolidOwner::CurtainWall(id),
+        Element::Railing(id) => SolidOwner::Railing(id),
+        Element::Object(id) => SolidOwner::Object(id),
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
