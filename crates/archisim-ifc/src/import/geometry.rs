@@ -849,6 +849,29 @@ impl<'a> Geo<'a> {
                     Vec::new(),
                 ))
             }
+            "IFCRECTANGLEHOLLOWPROFILEDEF" | "IFCCIRCLEHOLLOWPROFILEDEF" => {
+                let xf = self.axis_placement(e.arg(2));
+                let v = |i: usize| e.arg(i).as_f64().map(|x| x * self.length);
+                let profile = if e.kind == "IFCCIRCLEHOLLOWPROFILEDEF" {
+                    archisim_core::Profile::CircleHollow {
+                        diameter: 2.0 * v(3)?,
+                        wall: v(4)?,
+                    }
+                } else {
+                    archisim_core::Profile::RectHollow {
+                        width: v(3)?,
+                        depth: v(4)?,
+                        wall: v(5)?,
+                    }
+                };
+                let put = |pts: Vec<archisim_core::Point2>| -> Vec<_> {
+                    pts.into_iter().map(|q| xf.apply([q.x, q.y, 0.0])).collect()
+                };
+                Some((
+                    put(profile.outline(32)),
+                    profile.hole(32).map(put).into_iter().collect(),
+                ))
+            }
             "IFCUSHAPEPROFILEDEF" | "IFCTSHAPEPROFILEDEF" | "IFCLSHAPEPROFILEDEF" => {
                 let xf = self.axis_placement(e.arg(2));
                 let v = |i: usize| e.arg(i).as_f64().map(|x| x * self.length);

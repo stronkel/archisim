@@ -36,6 +36,8 @@ enum SectionShape {
     UShape,
     TShape,
     LShape,
+    RectHollow,
+    CircleHollow,
 }
 
 fn shape_of(p: Profile) -> SectionShape {
@@ -46,6 +48,8 @@ fn shape_of(p: Profile) -> SectionShape {
         Profile::UShape { .. } => SectionShape::UShape,
         Profile::TShape { .. } => SectionShape::TShape,
         Profile::LShape { .. } => SectionShape::LShape,
+        Profile::RectHollow { .. } => SectionShape::RectHollow,
+        Profile::CircleHollow { .. } => SectionShape::CircleHollow,
     }
 }
 
@@ -73,6 +77,15 @@ pub fn profile_text(p: Profile) -> String {
             fmt_mm(depth),
             fmt_mm(thickness)
         ),
+        Profile::RectHollow { width, depth, wall } => format!(
+            "Tubo {} × {} × {} mm",
+            fmt_mm(width),
+            fmt_mm(depth),
+            fmt_mm(wall)
+        ),
+        Profile::CircleHollow { diameter, wall } => {
+            format!("Tubo Ø {} × {} mm", fmt_mm(diameter), fmt_mm(wall))
+        }
     }
 }
 
@@ -393,6 +406,8 @@ impl ArchiSimApp {
                         (SectionShape::UShape, "Perfil U (UPN)"),
                         (SectionShape::TShape, "Perfil T"),
                         (SectionShape::LShape, "Angular L"),
+                        (SectionShape::RectHollow, "Tubo rectangular"),
+                        (SectionShape::CircleHollow, "Tubo circular"),
                     ],
                 );
                 if picked != shape {
@@ -417,6 +432,15 @@ impl ArchiSimApp {
                             depth: b,
                             web: (a * 0.1).max(0.005),
                             flange: (b * 0.1).max(0.005),
+                        },
+                        SectionShape::RectHollow => Profile::RectHollow {
+                            width: a,
+                            depth: b,
+                            wall: (a.min(b) * 0.06).max(0.003),
+                        },
+                        SectionShape::CircleHollow => Profile::CircleHollow {
+                            diameter: a.max(b),
+                            wall: (a.max(b) * 0.05).max(0.003),
                         },
                         SectionShape::LShape => Profile::LShape {
                             width: a,
@@ -497,6 +521,15 @@ impl ArchiSimApp {
                         depth,
                     );
                     dim(ui, "Espesor (mm)", "", "member-t", thickness);
+                }
+                Profile::RectHollow { width, depth, wall } => {
+                    dim(ui, "Ancho (mm)", "Eje X de la sección", "member-w", width);
+                    dim(ui, "Canto (mm)", "Eje Y de la sección", "member-d", depth);
+                    dim(ui, "Espesor de pared (mm)", "", "member-t", wall);
+                }
+                Profile::CircleHollow { diameter, wall } => {
+                    dim(ui, "Diámetro (mm)", "", "member-dia", diameter);
+                    dim(ui, "Espesor de pared (mm)", "", "member-t", wall);
                 }
             }
             text_row(

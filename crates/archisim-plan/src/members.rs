@@ -173,6 +173,18 @@ pub(crate) fn draw_members(
                 if let Some(mat) = mat {
                     draw_cut(s, model, mat, &poly, &format!("cut-column-{}", c.id.0), k);
                 }
+                // A tube: its hole, empty, with its cut line.
+                let hole = model
+                    .member_type(c.member_type)
+                    .and_then(|t| c.plan_hole(t.profile, ROUND));
+                if let Some(hole) = hole {
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" fill="white" stroke="{INK}" stroke-width="{}"/>"#,
+                        path(&hole),
+                        num(CUT_LINE * k)
+                    );
+                }
             }
             MemberView::Below => outline(s, &poly, VIEW_LINE, false, k),
             MemberView::Above => outline(s, &poly, VIEW_LINE, true, k),

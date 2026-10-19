@@ -81,6 +81,19 @@ impl Exporter<'_> {
                 real(width),
                 real(thickness)
             )),
+            Profile::RectHollow { width, depth, wall } => self.w.add(format!(
+                "IFCRECTANGLEHOLLOWPROFILEDEF(.AREA.,{},$,{},{},{},$,$)",
+                string(name),
+                real(width),
+                real(depth),
+                real(wall)
+            )),
+            Profile::CircleHollow { diameter, wall } => self.w.add(format!(
+                "IFCCIRCLEHOLLOWPROFILEDEF(.AREA.,{},$,{},{})",
+                string(name),
+                real(diameter / 2.0),
+                real(wall)
+            )),
         }
     }
 

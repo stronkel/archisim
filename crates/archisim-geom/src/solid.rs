@@ -212,6 +212,39 @@ pub fn prism(poly: &[Point2], z0: f64, z1: f64) -> Vec<[P3; 3]> {
     tris
 }
 
+/// A vertical prism with a hole through it (a tube): caps triangulated
+/// round the hole, sides outside and inside.
+pub fn hollow_prism(outer: &[Point2], hole: Option<&[Point2]>, z0: f64, z1: f64) -> Vec<[P3; 3]> {
+    let Some(hole) = hole else {
+        return prism(outer, z0, z1);
+    };
+    if outer.len() < 3 || hole.len() < 3 || z1 - z0 <= EPSILON {
+        return Vec::new();
+    }
+    let at = |p: Point2, z: f64| [p.x, p.y, z];
+    let cap = with_holes(outer, &[hole.to_vec()]);
+    let mut tris = Vec::new();
+    for [a, b, c] in triangulate(&cap) {
+        tris.push([at(cap[a], z1), at(cap[b], z1), at(cap[c], z1)]);
+        tris.push([at(cap[a], z0), at(cap[c], z0), at(cap[b], z0)]);
+    }
+    let outer = ensure_ccw(outer.to_vec());
+    let mut inner = ensure_ccw(hole.to_vec());
+    inner.reverse();
+    for ring in [&outer, &inner] {
+        let n = ring.len();
+        for i in 0..n {
+            let (p, q) = (ring[i], ring[(i + 1) % n]);
+            if p.approx_eq(q) {
+                continue;
+            }
+            tris.push([at(p, z0), at(q, z0), at(q, z1)]);
+            tris.push([at(p, z0), at(q, z1), at(p, z1)]);
+        }
+    }
+    tris
+}
+
 /// Solids of one wall, one per layer material, together forming a single
 /// skin: the wall is cut into a grid of cells (columns at the jambs of its
 /// doors and windows, rows at their sills and heads, slices at its layer
@@ -1472,7 +1505,12 @@ pub fn column_solids(model: &Model, id: ColumnId) -> Vec<Solid> {
     vec![Solid {
         owner: SolidOwner::Column(id),
         material: t.material,
-        triangles: prism(&outline, base, base + c.height),
+        triangles: hollow_prism(
+            &outline,
+            c.plan_hole(t.profile, ROUND_SEGMENTS).as_deref(),
+            base,
+            base + c.height,
+        ),
     }]
 }
 
@@ -1494,7 +1532,12 @@ pub fn beam_solids(model: &Model, id: BeamId) -> Vec<Solid> {
     let z_mid = top - depth / 2.0;
     // Section `x` → across the beam (left), section `y` → up, extrusion →
     // along the beam: a right-handed frame, so windings stay outward.
-    let local = prism(&t.profile.outline(ROUND_SEGMENTS), 0.0, b.length());
+    let local = hollow_prism(
+        &t.profile.outline(ROUND_SEGMENTS),
+        t.profile.hole(ROUND_SEGMENTS).as_deref(),
+        0.0,
+        b.length(),
+    );
     let map = |[x, y, s]: P3| {
         let p = b.start + n * x + u * s;
         [p.x, p.y, z_mid + y]
@@ -2065,6 +2108,31 @@ mod tests {
     /// A gable wall under a two-slope roof: built up to the ridge and
     /// trimmed under both planes; its volume is its thickness by the area
     /// under the roof's underside.
+    #[test]
+    fn tubes_are_hollow_and_closed() {
+        for p in [
+            archisim_core::Profile::RectHollow {
+                width: 0.12,
+                depth: 0.08,
+                wall: 0.005,
+            },
+            archisim_core::Profile::CircleHollow {
+                diameter: 0.1143,
+                wall: 0.005,
+            },
+        ] {
+            let outer = p.outline(ROUND_SEGMENTS);
+            let hole = p.hole(ROUND_SEGMENTS).unwrap();
+            let s = Solid {
+                owner: SolidOwner::Column(ColumnId(1)),
+                material: MaterialId(1),
+                triangles: hollow_prism(&outer, Some(&hole), 0.0, 2.0),
+            };
+            let area = crate::signed_area(&outer) - crate::signed_area(&hole);
+            assert!((s.volume() - 2.0 * area).abs() < 1e-9, "{p:?}");
+        }
+    }
+
     #[test]
     fn loose_railing_bars_are_closed_outward() {
         let mut m = Model::new("t");

@@ -49,6 +49,8 @@ fn key_of(p: Profile) -> ([i64; 4], u8) {
             depth,
             thickness,
         } => ([mm(width), mm(depth), mm(thickness), 0], 5),
+        Profile::RectHollow { width, depth, wall } => ([mm(width), mm(depth), mm(wall), 0], 6),
+        Profile::CircleHollow { diameter, wall } => ([mm(diameter), mm(wall), 0, 0], 7),
     }
 }
 
@@ -72,6 +74,15 @@ impl<'a> Importer<'a> {
                 depth: f(e.arg(4))?,
                 web: f(e.arg(5))?,
                 flange: f(e.arg(6))?,
+            }),
+            "IFCRECTANGLEHOLLOWPROFILEDEF" => Some(Profile::RectHollow {
+                width: f(e.arg(3))?,
+                depth: f(e.arg(4))?,
+                wall: f(e.arg(5))?,
+            }),
+            "IFCCIRCLEHOLLOWPROFILEDEF" => Some(Profile::CircleHollow {
+                diameter: 2.0 * f(e.arg(3))?,
+                wall: f(e.arg(4))?,
             }),
             "IFCUSHAPEPROFILEDEF" => Some(Profile::UShape {
                 depth: f(e.arg(3))?,
@@ -313,7 +324,9 @@ impl<'a> Importer<'a> {
                         | Profile::IShape { .. }
                         | Profile::UShape { .. }
                         | Profile::TShape { .. }
-                        | Profile::LShape { .. }),
+                        | Profile::LShape { .. }
+                        | Profile::RectHollow { .. }
+                        | Profile::CircleHollow { .. }),
                     ) => p,
                     _ => {
                         if section.is_none() {
@@ -418,6 +431,12 @@ impl<'a> Importer<'a> {
                 }
                 Profile::LShape { width, depth, .. } => {
                     format!("{what} L {}×{}", cm(width), cm(depth))
+                }
+                Profile::RectHollow { width, depth, .. } => {
+                    format!("{what} tubo {}×{}", cm(width), cm(depth))
+                }
+                Profile::CircleHollow { diameter, .. } => {
+                    format!("{what} tubo Ø{}", cm(diameter))
                 }
             }
         });

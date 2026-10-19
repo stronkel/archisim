@@ -53,6 +53,11 @@ pub enum Profile {
         depth: f64,
         thickness: f64,
     },
+    /// Square or rectangular tube (SHS, RHS). IFC:
+    /// `IfcRectangleHollowProfileDef`.
+    RectHollow { width: f64, depth: f64, wall: f64 },
+    /// Round tube (CHS). IFC: `IfcCircleHollowProfileDef`.
+    CircleHollow { diameter: f64, wall: f64 },
 }
 
 impl Profile {
@@ -64,7 +69,9 @@ impl Profile {
             Profile::IShape { width, depth, .. }
             | Profile::UShape { width, depth, .. }
             | Profile::TShape { width, depth, .. }
-            | Profile::LShape { width, depth, .. } => (width, depth),
+            | Profile::LShape { width, depth, .. }
+            | Profile::RectHollow { width, depth, .. } => (width, depth),
+            Profile::CircleHollow { diameter, .. } => (diameter, diameter),
         }
     }
 
@@ -96,6 +103,13 @@ impl Profile {
                 depth,
                 thickness,
             } => thickness * (width + depth - thickness),
+            Profile::RectHollow { width, depth, wall } => {
+                width * depth - (width - 2.0 * wall) * (depth - 2.0 * wall)
+            }
+            Profile::CircleHollow { diameter, wall } => {
+                let (r, i) = (diameter / 2.0, diameter / 2.0 - wall);
+                std::f64::consts::PI * (r * r - i * i)
+            }
         }
     }
 
@@ -107,6 +121,12 @@ impl Profile {
             Profile::Rectangle { width, depth } => {
                 let (a, b) = (width / 2.0, depth / 2.0);
                 vec![p(-a, -b), p(a, -b), p(a, b), p(-a, b)]
+            }
+            Profile::RectHollow { width, depth, .. } => {
+                Profile::Rectangle { width, depth }.outline(segments)
+            }
+            Profile::CircleHollow { diameter, .. } => {
+                Profile::Circle { diameter }.outline(segments)
             }
             Profile::Circle { diameter } => {
                 let n = segments.max(8);
@@ -194,6 +214,26 @@ impl Profile {
         }
     }
 
+    /// The hole of a tube, counter-clockwise, centred on the origin.
+    pub fn hole(self, segments: usize) -> Option<Vec<Point2>> {
+        match self {
+            Profile::RectHollow { width, depth, wall } => Some(
+                Profile::Rectangle {
+                    width: width - 2.0 * wall,
+                    depth: depth - 2.0 * wall,
+                }
+                .outline(segments),
+            ),
+            Profile::CircleHollow { diameter, wall } => Some(
+                Profile::Circle {
+                    diameter: diameter - 2.0 * wall,
+                }
+                .outline(segments),
+            ),
+            _ => None,
+        }
+    }
+
     fn validate(self) -> Result<(), ModelError> {
         let positive = |v: f64, what: &'static str| -> Result<(), ModelError> {
             finite(v, what)?;
@@ -242,6 +282,23 @@ impl Profile {
                 let u = matches!(self, Profile::UShape { .. });
                 let flanges = if u { 2.0 } else { 1.0 };
                 if web >= width || flanges * flange >= depth {
+                    return Err(ModelError::InvalidProfile);
+                }
+                Ok(())
+            }
+            Profile::RectHollow { width, depth, wall } => {
+                positive(width, "section width")?;
+                positive(depth, "section depth")?;
+                positive(wall, "wall thickness")?;
+                if 2.0 * wall >= width.min(depth) {
+                    return Err(ModelError::InvalidProfile);
+                }
+                Ok(())
+            }
+            Profile::CircleHollow { diameter, wall } => {
+                positive(diameter, "section diameter")?;
+                positive(wall, "wall thickness")?;
+                if 2.0 * wall >= diameter {
                     return Err(ModelError::InvalidProfile);
                 }
                 Ok(())
@@ -354,10 +411,17 @@ pub struct NewBeam {
 impl Column {
     /// The section's outline in plan, in project coordinates.
     pub fn plan_outline(&self, profile: Profile, segments: usize) -> Vec<Point2> {
+        self.place(profile.outline(segments))
+    }
+
+    /// The hole of a tube column in plan.
+    pub fn plan_hole(&self, profile: Profile, segments: usize) -> Option<Vec<Point2>> {
+        profile.hole(segments).map(|h| self.place(h))
+    }
+
+    fn place(&self, pts: Vec<Point2>) -> Vec<Point2> {
         let (c, s) = (self.rotation.cos(), self.rotation.sin());
-        profile
-            .outline(segments)
-            .into_iter()
+        pts.into_iter()
             .map(|p| Point2 {
                 x: self.position.x + p.x * c - p.y * s,
                 y: self.position.y + p.x * s + p.y * c,

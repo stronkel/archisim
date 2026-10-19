@@ -288,6 +288,15 @@ pub(crate) enum Profile {
         depth: f64,
         thickness: f64,
     },
+    RectHollow {
+        width: f64,
+        depth: f64,
+        wall: f64,
+    },
+    CircleHollow {
+        diameter: f64,
+        wall: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -384,6 +393,10 @@ fn profile_out(p: core::Profile) -> Profile {
             depth,
             thickness,
         },
+        core::Profile::RectHollow { width, depth, wall } => {
+            Profile::RectHollow { width, depth, wall }
+        }
+        core::Profile::CircleHollow { diameter, wall } => Profile::CircleHollow { diameter, wall },
     }
 }
 
@@ -433,6 +446,10 @@ fn profile_in(p: Profile) -> core::Profile {
             depth,
             thickness,
         },
+        Profile::RectHollow { width, depth, wall } => {
+            core::Profile::RectHollow { width, depth, wall }
+        }
+        Profile::CircleHollow { diameter, wall } => core::Profile::CircleHollow { diameter, wall },
     }
 }
 

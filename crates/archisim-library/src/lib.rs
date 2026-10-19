@@ -506,6 +506,25 @@ fn add_structure_with(
         },
     )?;
     m.add_member_type(
+        "Pilar tubo 100×100×5",
+        MemberUsage::Column,
+        acero,
+        Profile::RectHollow {
+            width: 0.100,
+            depth: 0.100,
+            wall: 0.005,
+        },
+    )?;
+    m.add_member_type(
+        "Pilar tubo Ø114,3×5",
+        MemberUsage::Column,
+        acero,
+        Profile::CircleHollow {
+            diameter: 0.1143,
+            wall: 0.005,
+        },
+    )?;
+    m.add_member_type(
         "Pilar madera GL24h 20×20",
         MemberUsage::Column,
         glulam,
@@ -594,7 +613,7 @@ mod tests {
             m.member_types()
                 .filter(|t| t.usage == MemberUsage::Column)
                 .count(),
-            6
+            8
         );
         assert_eq!(
             m.member_types()
