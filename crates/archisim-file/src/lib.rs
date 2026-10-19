@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 9,
+//!   "version": 10,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -46,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 9;
+pub const CURRENT_VERSION: u32 = 10;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -226,6 +226,15 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // 8 → 9: phase 2 rooms (`spaces`) and phase 3 rooms (`rooms`)
             // become one kind of room.
             8 => spaces_to_rooms(with_drafting(value))?,
+            // 9 → 10: views on sheets may show a section or elevation
+            // (`section`); a view without it is a plan, as all of them were.
+            9 => {
+                let mut v = value;
+                if let Value::Object(map) = &mut v {
+                    map.insert("version".into(), Value::from(10));
+                }
+                v
+            }
             other => return Err(FileError::UnknownVersion(other)),
         };
         version += 1;
@@ -890,7 +899,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 9", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 10", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -917,7 +926,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 9"));
+        assert!(to_string(&opened).contains("\"version\": 10"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1085,7 +1094,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 9", "\"version\": 3", 1)
+            .replacen("\"version\": 10", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1147,7 +1156,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 9", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 10", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1223,6 +1232,197 @@ mod tests {
         // Five bays of 0,96 on 4,80 m, as before.
         let c = old.curtain_walls().next().unwrap();
         assert_eq!(c.grid(&t.design).mullions.len(), 6);
+    }
+
+    /// Drawing layers and every kind of drafting element (version 7) are
+    /// saved and come back; version 6 files open with layer "0" only.
+    #[test]
+    fn drafting_and_version_6_files() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        let v = ViewRef::Level(level);
+        let ejes = m
+            .add_draw_layer(DrawLayer {
+                locked: true,
+                printable: false,
+                ..DrawLayer::new("Ejes", [200, 30, 30], 0.13, LineStyle::DashDot)
+            })
+            .unwrap();
+        let p = |x, y| Point2::new(x, y);
+        let shapes = vec![
+            Shape::Line {
+                a: p(0.0, 0.0),
+                b: p(4.0, 1.0),
+            },
+            Shape::Polyline(Polyline {
+                points: vec![p(0.0, 0.0), p(2.0, 0.0), p(2.0, 2.0)],
+                bulges: vec![0.0, 0.5, 0.0],
+                closed: false,
+                width: 0.05,
+            }),
+            Shape::Circle {
+                centre: p(1.0, 1.0),
+                radius: 0.5,
+            },
+            Shape::Arc {
+                centre: p(1.0, 1.0),
+                radius: 2.0,
+                start: 0.3,
+                sweep: 1.2,
+            },
+            Shape::Ellipse {
+                centre: p(3.0, 3.0),
+                axis: p(2.0, 1.0),
+                ratio: 0.4,
+                start: 0.0,
+                sweep: std::f64::consts::TAU,
+            },
+            Shape::Point { at: p(-1.0, -1.0) },
+            Shape::Text(Text {
+                at: p(0.0, 5.0),
+                content: "Salón-comedor\n25,40 m²".into(),
+                height: 3.5,
+                angle: 0.25,
+                align: TextAlign::Middle,
+            }),
+            Shape::Hatch(Hatch {
+                loops: vec![
+                    Polyline::straight(
+                        vec![p(0.0, 0.0), p(3.0, 0.0), p(3.0, 3.0), p(0.0, 3.0)],
+                        true,
+                    ),
+                    Polyline::straight(vec![p(1.0, 1.0), p(2.0, 1.0), p(2.0, 2.0)], true),
+                ],
+                pattern: HatchPattern::Brick,
+                scale: 1.5,
+                angle: 0.1,
+                background: Some([250, 250, 240]),
+            }),
+        ];
+        for (i, s) in shapes.into_iter().enumerate() {
+            let mut d = NewDraft::new(v, if i % 2 == 0 { ejes } else { LAYER_ZERO }, s);
+            if i == 3 {
+                d.color = Some([0, 128, 255]);
+                d.weight = Some(0.35);
+                d.line = Some(LineStyle::Dashed);
+            }
+            m.add_draft(d).unwrap();
+        }
+        let text = to_string(&m);
+        assert!(text.contains("\"draw_layers\""));
+        assert!(text.contains("\"kind\": \"hatch\""));
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.draw_layers(), m.draw_layers());
+        assert_eq!(
+            back.drafts().collect::<Vec<_>>(),
+            m.drafts().collect::<Vec<_>>()
+        );
+        assert_same_project(&back, &m);
+        // Version 6 (ArchiSim 0.20 to 0.24): no layers, no drafting.
+        let mut old: Value = serde_json::from_str(&to_string(&sample())).unwrap();
+        let map = old.as_object_mut().unwrap();
+        map.remove("draw_layers");
+        map.remove("drafts");
+        map.insert("version".into(), Value::from(6));
+        let opened = from_str(&serde_json::to_string_pretty(&old).unwrap()).unwrap();
+        assert_eq!(opened.draw_layers().len(), 1);
+        assert_eq!(opened.drafts().count(), 0);
+        // A wrong alignment is explained.
+        let err =
+            from_str(&text.replace("\"align\": \"middle\"", "\"align\": \"centro\"")).unwrap_err();
+        assert!(err.to_string().contains("centro"), "{err}");
+    }
+
+    /// Sheets, their views, their drafting, the project data and the pen
+    /// table come back as they were.
+    #[test]
+    fn sheets_views_info_and_graphics() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        m.set_info(ProjectInfo {
+            client: "Ayuntamiento".into(),
+            site: "Punta Umbría (Huelva)".into(),
+            studio: "AD5".into(),
+            phase: "Proyecto básico".into(),
+            ..Default::default()
+        });
+        m.graphics.coarse.cut = 0.3;
+        let s = m
+            .add_sheet(NewSheet {
+                number: "A-01".into(),
+                name: "Planta baja".into(),
+                width: 594.0,
+                height: 420.0,
+            })
+            .unwrap();
+        let v = m
+            .add_viewport(NewViewport {
+                sheet: s,
+                level,
+                section: None,
+                scale: 50.0,
+                cut_plane: 1.1,
+                crop: Some((Point2::new(-1.0, -1.0), Point2::new(8.0, 6.0))),
+                centre: Point2::new(0.25, 0.22),
+            })
+            .unwrap();
+        let mut vv = m.viewport(v).unwrap().clone();
+        vv.style.hidden.insert(Category::Dimensions);
+        vv.style.detail = Detail::Medium;
+        vv.title = "PLANTA BAJA".into();
+        vv.style.hidden.insert(Category::Objects);
+        m.set_viewport(vv).unwrap();
+        // A section on the sheet too (version 10).
+        let sec = m
+            .add_section(archisim_core::NewSection {
+                name: "A".into(),
+                kind: archisim_core::SectionKind::Section,
+                start: Point2::new(-1.0, 2.0),
+                end: Point2::new(9.0, 2.0),
+                depth: 4.0,
+            })
+            .unwrap();
+        m.add_viewport(NewViewport {
+            sheet: s,
+            level,
+            section: Some(sec),
+            scale: 100.0,
+            cut_plane: 1.0,
+            crop: Some((Point2::new(-1.0, -0.5), Point2::new(11.0, 4.0))),
+            centre: Point2::new(0.25, 0.08),
+        })
+        .unwrap();
+        m.add_draft(NewDraft::new(
+            ViewRef::Sheet(s),
+            LAYER_ZERO,
+            Shape::Line {
+                a: Point2::new(0.02, 0.02),
+                b: Point2::new(0.1, 0.02),
+            },
+        ))
+        .unwrap();
+        let text = to_string(&m);
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.info(), m.info());
+        assert_eq!(back.graphics, m.graphics);
+        assert_eq!(back.sheets(), m.sheets());
+        assert_eq!(
+            back.viewports().collect::<Vec<_>>(),
+            m.viewports().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            back.drafts().collect::<Vec<_>>(),
+            m.drafts().collect::<Vec<_>>()
+        );
+        assert_same_project(&back, &m);
+        assert_eq!(
+            back.viewports().filter(|v| v.section == Some(sec)).count(),
+            1
+        );
+        // Removing the section removes its view.
+        let mut m2 = back;
+        m2.remove_section(sec).unwrap();
+        assert_eq!(m2.viewports().count(), 1);
     }
 
     /// Phase 2 files (version 7 and 8 of ArchiSim 0.25) have rooms as
@@ -1319,7 +1519,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 9", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 10", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1331,7 +1531,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 9,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 10,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1377,11 +1577,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 9", "\"version\": 10"),
-            Err(FileError::TooNew { version: 10 })
+            edited("\"version\": 10", "\"version\": 11"),
+            Err(FileError::TooNew { version: 11 })
         ));
         assert!(matches!(
-            edited("\"version\": 9", "\"version\": 0"),
+            edited("\"version\": 10", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

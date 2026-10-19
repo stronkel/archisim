@@ -26,6 +26,9 @@ pub struct SectionLine {
     pub end: Point2,
     /// How far it sees beyond its line, in metres.
     pub depth: f64,
+    /// Draws its heights: the chain of floor-to-floor heights and, in a
+    /// section, the clear height of each room it cuts.
+    pub heights: bool,
 }
 
 impl SectionLine {
@@ -84,6 +87,7 @@ impl Model {
                 start: spec.start,
                 end: spec.end,
                 depth: spec.depth,
+                heights: true,
             },
         );
         Ok(id)
@@ -111,10 +115,14 @@ impl Model {
         Ok(())
     }
 
+    /// Removes a section line and the views of it placed on sheets.
     pub fn remove_section(&mut self, id: SectionId) -> Result<SectionLine, ModelError> {
-        self.sections
+        let s = self
+            .sections
             .remove(&id)
-            .ok_or(ModelError::UnknownSection(id))
+            .ok_or(ModelError::UnknownSection(id))?;
+        self.viewports.retain(|_, v| v.section != Some(id));
+        Ok(s)
     }
 
     pub fn section(&self, id: SectionId) -> Option<&SectionLine> {

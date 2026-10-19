@@ -83,13 +83,13 @@ Hecha en v0.25 (bloques 3A a 3I de `docs/DOCUMENTACION.md`), a falta de que Anto
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
 | 3.1 ◐ v0.25 | **Plantillas de vista y estilos gráficos**: normas gráficas (plumillas finas y gruesas por escala), categorías y capas ocultas y nivel de detalle por vista; capas de dibujo — hecho; falta guardar estilos con nombre (plantillas de vista) y la decisión D5 sobre tramas y grosores | M | D5 |
-| 3.2 ◐ v0.25 | **Acotación completa**: cotas asociativas (hechas), angulares, de radio, de diámetro y de longitud de arco (hechas), superficie en el rótulo de los locales (hecha); faltan las cotas de altura en sección | M | 1.4, 2.10 |
+| 3.2 ◐ v0.28 | **Acotación completa**: cotas asociativas (hechas), angulares, de radio, de diámetro y de longitud de arco (hechas), superficie en el rótulo de los locales (hecha), alturas en sección automáticas (v0.28: entre plantas y altura libre de cada local cortado); falta acotar a mano sobre la sección | M | 1.4, 2.10 |
 | 3.3 ✅ v0.25 | **Etiquetas**: de puertas y ventanas (marca, medida), de locales, de muros (tipo); siguen a su elemento; «etiquetar todas» | S | 2.9 |
 | 3.4 ✅ v0.25 | **Textos, líneas, tramas y detalles 2D** sobre las vistas, con línea de órdenes, órdenes de edición y forzados al estilo AutoCAD | M | — |
-| 3.5 ◐ v0.25 | **Planos y maquetación**: hojas A4–A0 con cajetín propio, varias vistas por hoja a distintas escalas con recorte y título, numeración, dibujo y tablas en el plano — hecho para plantas; falta colocar **secciones y alzados** (fase 2) en los planos | L | 3.1 |
+| 3.5 ✅ v0.28 | **Planos y maquetación**: hojas A4–A0 con cajetín propio, varias vistas por hoja a distintas escalas con recorte y título, numeración, dibujo y tablas en el plano — hecho, también con secciones y alzados (v0.28) | L | 3.1 |
 | 3.6 ✅ v0.25 | **Salida PDF vectorial** (plantas y planos, todos en un PDF); **DXF** de plantas y planos con capas; **importar DXF** | M | 3.5 |
-| 3.7 ✅ v0.25 | **Tablas de planificación**: carpinterías, muros y forjados por tipo, cuadro de superficies; CSV y en planos (falta el desglose por capa de los multicapas, y tablas y mediciones BC3 de pilares, vigas, cubiertas, escaleras y muros cortina de la fase 2) | M | 2.9 |
-| 3.8 ✅ v0.25 | **Mediciones para presupuesto** en formato **FIEBDC-3 (BC3)**, sin precios (los bancos de precios, en `docs/DISCIPLINAS.md`) | M | 3.7 |
+| 3.7 ✅ v0.25 | **Tablas de planificación**: carpinterías, muros y forjados por tipo, cuadro de superficies; CSV y en planos (v0.28: también pilares y vigas, cubiertas, escaleras con su comprobación CTE y muros cortina; falta el desglose por capa de los multicapas) | M | 2.9 |
+| 3.8 ✅ v0.28 | **Mediciones para presupuesto** en formato **FIEBDC-3 (BC3)**, sin precios (los bancos de precios, en `docs/DISCIPLINAS.md`); desde v0.28, capítulo de demoliciones en reformas y estructura, cubiertas, escaleras, barandillas y muros cortina | M | 3.7 |
 
 ## 4. Fase 4 — Colaboración e ingenierías
 

@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{LevelId, Model, Point2, Sheet, SheetId, ViewRef, Viewport};
+use archisim_core::{LevelId, Model, Point2, SectionId, Sheet, SheetId, ViewRef, Viewport};
 
 use crate::lettering::{text_path, text_width, Align, STROKE};
 use crate::{num, render_plan, PlanOptions};
@@ -73,10 +73,33 @@ pub fn level_extent(model: &Model, level: LevelId, scale: f64) -> Option<(Point2
     Some((lo - Point2::new(m, m), hi + Point2::new(m, m)))
 }
 
-/// The part of the model a view shows (its crop, or its whole level).
+/// The part of a section or elevation to show whole at a scale: what it
+/// draws, the level labels on its right and a little air around (along
+/// its line and in height, metres).
+pub fn section_extent(model: &Model, section: SectionId, scale: f64) -> Option<(Point2, Point2)> {
+    let sec = model.section(section)?;
+    let d = crate::section::section_drawing(model, sec);
+    Some(drawing_extent(&d, scale))
+}
+
+fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> (Point2, Point2) {
+    let k = scale / 1000.0;
+    let m = 5.0 * k;
+    (
+        d.lo - Point2::new(m, m),
+        d.hi + Point2::new(m + d.labels_reach(scale), m),
+    )
+}
+
+/// The part of the model a view shows (its crop, or its whole level or
+/// section). A section view placed from the app always has its crop.
 pub fn viewport_crop(model: &Model, v: &Viewport) -> (Point2, Point2) {
+    let whole = || match v.section {
+        Some(s) => section_extent(model, s, v.scale),
+        None => level_extent(model, v.level, v.scale),
+    };
     v.crop
-        .or_else(|| level_extent(model, v.level, v.scale))
+        .or_else(whole)
         .unwrap_or((Point2::new(0.0, 0.0), Point2::new(5.0, 5.0)))
 }
 
@@ -97,10 +120,16 @@ pub fn sheet_to_model(model: &Model, v: &Viewport, p: Point2) -> Point2 {
 /// The title written under a view.
 pub fn viewport_title(model: &Model, v: &Viewport) -> String {
     if v.title.trim().is_empty() {
-        model
-            .level(v.level)
-            .map(|l| l.name.to_uppercase())
-            .unwrap_or_default()
+        match v.section {
+            Some(s) => model
+                .section(s)
+                .map(|s| s.title().to_uppercase())
+                .unwrap_or_default(),
+            None => model
+                .level(v.level)
+                .map(|l| l.name.to_uppercase())
+                .unwrap_or_default(),
+        }
     } else {
         v.title.clone()
     }
@@ -325,23 +354,36 @@ fn draw_view_title(s: &mut String, model: &Model, v: &Viewport) {
     );
 }
 
-/// The plan of a view, as an SVG fragment placed and cut on the sheet.
+/// The plan, section or elevation of a view, as an SVG fragment placed
+/// and cut on the sheet.
 fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<f64>) {
-    let (crop_lo, crop_hi) = viewport_crop(model, v);
-    let (lo, hi) = viewport_rect(model, v);
-    let plan = render_plan(
-        model,
-        v.level,
-        &PlanOptions {
-            scale: v.scale,
-            cut_plane: v.cut_plane,
-            viewport: Some((crop_lo, crop_hi)),
-            style: v.style.clone(),
-            px_per_mm,
-            title: false,
-            ..PlanOptions::default()
-        },
+    let section = v
+        .section
+        .and_then(|id| model.section(id))
+        .map(|sec| crate::section::section_drawing(model, sec));
+    let (crop_lo, crop_hi) = match (&section, v.crop) {
+        (_, Some(c)) => c,
+        (Some(d), None) => drawing_extent(d, v.scale),
+        (None, None) => viewport_crop(model, v),
+    };
+    let half = Point2::new(
+        (crop_hi.x - crop_lo.x) / v.scale / 2.0,
+        (crop_hi.y - crop_lo.y) / v.scale / 2.0,
     );
+    let (lo, hi) = (v.centre - half, v.centre + half);
+    let options = PlanOptions {
+        scale: v.scale,
+        cut_plane: v.cut_plane,
+        viewport: Some((crop_lo, crop_hi)),
+        style: v.style.clone(),
+        px_per_mm,
+        title: false,
+        ..PlanOptions::default()
+    };
+    let plan = match &section {
+        Some(d) => crate::section::render_section(model, d, &options),
+        None => render_plan(model, v.level, &options),
+    };
     // The plan's own <svg> keeps its viewBox (the crop in model metres);
     // placed with x, y, width and height it scales and is cut to them.
     let body_start = plan.find('>').map_or(0, |i| i + 1);
@@ -506,6 +548,7 @@ mod tests {
             .add_viewport(NewViewport {
                 sheet: s,
                 level: l,
+                section: None,
                 scale: 50.0,
                 cut_plane: 1.1,
                 crop: None,

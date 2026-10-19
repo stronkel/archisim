@@ -481,6 +481,17 @@ pub(crate) struct Section {
     pub start: Xy,
     pub end: Xy,
     pub depth: f64,
+    /// Draws its heights (version 10; absent: yes).
+    #[serde(default = "yes_heights", skip_serializing_if = "is_yes")]
+    pub heights: bool,
+}
+
+fn yes_heights() -> bool {
+    true
+}
+
+fn is_yes(v: &bool) -> bool {
+    *v
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1356,6 +1367,7 @@ impl ProjectFile {
                     start: xy(s.start),
                     end: xy(s.end),
                     depth: s.depth,
+                    heights: s.heights,
                 })
                 .collect(),
             roofs: p
@@ -1550,6 +1562,7 @@ impl ProjectFile {
                     start: pt(s.start),
                     end: pt(s.end),
                     depth: s.depth,
+                    heights: s.heights,
                 })
                 .collect(),
             roofs: self
