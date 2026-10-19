@@ -1205,6 +1205,102 @@ mod tests {
         assert_eq!(grip_at(&m, &sel(&[]), p(0.1, 1.0), 0.05), None);
     }
 
+    /// Curtain walls, railings and objects move, copy and stretch like
+    /// the rest, keeping their GUIDs when moved.
+    #[test]
+    fn new_elements_move_copy_and_stretch() {
+        let (mut m, lvl, _) = room();
+        let al = m.materials().next().unwrap().id;
+        let cw = m
+            .add_curtain_wall(archisim_core::NewCurtainWall {
+                level: lvl,
+                start: p(1.0, 1.0),
+                end: p(4.0, 1.0),
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 2.5,
+                bay: 1.0,
+                row: 1.2,
+                frame_width: 0.05,
+                frame_depth: 0.12,
+                panel_thickness: 0.024,
+                frame_material: al,
+                panel_material: al,
+            })
+            .unwrap();
+        let rail = m
+            .add_railing(archisim_core::NewRailing {
+                level: lvl,
+                path: vec![p(1.0, 2.0), p(4.0, 2.0), p(4.0, 3.0)],
+                base_offset: 0.0,
+                height: 1.0,
+                post_spacing: 1.5,
+                material: al,
+            })
+            .unwrap();
+        let ot = m.object_types().next().unwrap().id;
+        let obj = m
+            .add_object(archisim_core::NewObject {
+                level: lvl,
+                object_type: ot,
+                position: p(2.0, 3.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        let all = sel(&[
+            Element::CurtainWall(cw),
+            Element::Railing(rail),
+            Element::Object(obj),
+        ]);
+        let guid = m.object(obj).unwrap().guid.clone();
+        let mv = Drag {
+            grip: Grip::Body,
+            from: p(0.0, 0.0),
+            to: p(0.5, 0.25),
+            variant: false,
+        };
+        apply(&mut m, &all, &mv).unwrap();
+        assert_eq!(m.curtain_wall(cw).unwrap().start, p(1.5, 1.25));
+        assert_eq!(m.railing(rail).unwrap().path[2], p(4.5, 3.25));
+        assert_eq!(m.object(obj).unwrap().position, p(2.5, 3.25));
+        assert_eq!(m.object(obj).unwrap().guid, guid);
+        // Ctrl: copies.
+        let copy = Drag {
+            variant: true,
+            ..mv
+        };
+        apply(&mut m, &all, &copy).unwrap();
+        assert_eq!(m.curtain_walls().count(), 2);
+        assert_eq!(m.railings().count(), 2);
+        assert_eq!(m.objects().count(), 2);
+        // Stretch a curtain wall by its end and move a railing point.
+        let ends = sel(&[Element::CurtainWall(cw), Element::Railing(rail)]);
+        assert_eq!(hotspots(&m, &ends).len(), 2 + 3);
+        let stretch = Drag {
+            grip: Grip::CurtainEnd {
+                curtain: cw,
+                start: false,
+            },
+            from: p(4.5, 1.25),
+            to: p(5.0, 1.25),
+            variant: false,
+        };
+        apply(&mut m, &ends, &stretch).unwrap();
+        assert!((m.curtain_wall(cw).unwrap().length() - 3.5).abs() < 1e-9);
+        let point = Drag {
+            grip: Grip::RailingPoint {
+                railing: rail,
+                index: 0,
+            },
+            from: p(1.5, 2.25),
+            to: p(1.0, 2.25),
+            variant: false,
+        };
+        apply(&mut m, &ends, &point).unwrap();
+        assert_eq!(m.railing(rail).unwrap().path[0], p(1.0, 2.25));
+    }
+
     #[test]
     fn moving_a_wall_drags_the_joined_corners() {
         let (mut m, _, _) = room();
