@@ -456,6 +456,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             options.viewport,
             options.viewport.is_none(),
             &options.style.hidden_layers,
+            !show(archisim_core::Category::Dimensions),
         );
     }
     s.push_str("<g id=\"annotations\">\n");

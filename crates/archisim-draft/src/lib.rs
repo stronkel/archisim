@@ -9,6 +9,7 @@
 //! (millimetres) and turned into model metres with the view's scale: `k` is
 //! always metres of the drawing per millimetre of paper (`scale / 1000`).
 
+pub mod dims;
 pub mod font;
 pub mod grips;
 pub mod hatch;
@@ -146,6 +147,7 @@ pub fn shape_segs(shape: &Shape) -> Vec<Seg> {
                 .collect()
         }
         Shape::Point { .. } | Shape::Text(_) | Shape::Hatch(_) => Vec::new(),
+        Shape::Dim(m) => dims::main_segs(m),
     }
 }
 

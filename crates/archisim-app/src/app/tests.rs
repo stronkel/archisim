@@ -2046,3 +2046,53 @@ fn dxf_out_and_back_in_and_pdf_of_the_sheets() {
     assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn angular_radius_and_arc_dimensions() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.keys_autocad = true;
+    for second in ["@4000,0", "@0,3000"] {
+        command(&mut h, "l");
+        h.click_at(p(0.0, 0.0));
+        command(&mut h, second);
+        h.key(Key::Escape);
+    }
+    command(&mut h, "dan");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(0.0, 1.5));
+    h.click_at(p(1.0, 1.0));
+    let dims: Vec<archisim_core::Measure> = drafts(&h)
+        .iter()
+        .filter_map(|d| match d.shape {
+            archisim_core::Shape::Dim(m) => Some(m),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(dims.len(), 1, "{:?}", h.app.cmdline.history);
+    assert_eq!(archisim_draft::dims::label(&dims[0]), "90°");
+    // A circle of 1,25 m: its radius and diameter.
+    command(&mut h, "c");
+    h.click_at(p(8.0, 2.0));
+    command(&mut h, "1250");
+    for (cmd, text) in [("dra", "R 1,25"), ("ddi", "Ø 2,50")] {
+        command(&mut h, cmd);
+        h.click_at(p(9.25, 2.0));
+        h.click_at(p(10.5, 3.0));
+        let last = drafts(&h).pop().unwrap();
+        let archisim_core::Shape::Dim(m) = last.shape else {
+            panic!("{:?}", last.shape)
+        };
+        assert_eq!(archisim_draft::dims::label(&m), text);
+    }
+    // Scaled ×2, the diameter dimension reads twice as much.
+    let id = drafts(&h).pop().unwrap().id;
+    h.app.ed.selection = [Element::Draft(id)].into_iter().collect();
+    command(&mut h, "es");
+    command(&mut h, "8000,2000");
+    command(&mut h, "2");
+    let archisim_core::Shape::Dim(m) = h.model().draft(id).unwrap().shape else {
+        panic!()
+    };
+    assert_eq!(archisim_draft::dims::label(&m), "Ø 5,00");
+}

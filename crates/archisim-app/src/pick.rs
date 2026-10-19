@@ -133,6 +133,13 @@ pub fn shape_paths(shape: &Shape, k: f64) -> Vec<Vec<Point2>> {
                 p
             })
             .collect(),
+        Shape::Dim(m) => {
+            let d = archisim_draft::dims::drawing(m, k, archisim_draft::dims::DIM_TEXT);
+            let mut out: Vec<Vec<Point2>> = d.segs.iter().map(|s| s.tessellate(1e-3)).collect();
+            out.extend(d.arrows.iter().map(|a| vec![a[0], a[1], a[2], a[0]]));
+            out.extend(archisim_draft::font::text_strokes(&d.text, k));
+            out
+        }
         _ => {
             let segs = archisim_draft::shape_segs(shape);
             let mut out: Vec<Vec<Point2>> = Vec::new();

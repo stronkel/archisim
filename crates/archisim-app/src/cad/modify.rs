@@ -220,9 +220,11 @@ impl Command for Xform {
             (XformKind::Rotate, _) => {
                 Prompt::new("Precise ángulo de rotación (punto o °)", Want::Point)
                     .opts(&[opt("C", "Copia"), opt("R", "Referencia")])
+                    .numeric()
             }
             (XformKind::Scale, _) => Prompt::new("Precise factor de escala (o punto)", Want::Point)
-                .opts(&[opt("C", "Copia"), opt("R", "Referencia")]),
+                .opts(&[opt("C", "Copia"), opt("R", "Referencia")])
+                .numeric(),
         }
     }
 

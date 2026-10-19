@@ -428,6 +428,7 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
         options.region,
         options.px_per_mm.is_none(),
         &Default::default(),
+        false,
     );
     s.push_str("</svg>\n");
     s

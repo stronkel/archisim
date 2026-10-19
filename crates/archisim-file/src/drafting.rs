@@ -168,6 +168,31 @@ pub(crate) enum Shape {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         background: Option<String>,
     },
+    AngleDim {
+        centre: Xy,
+        start: f64,
+        sweep: f64,
+        radius: f64,
+    },
+    RadiusDim {
+        centre: Xy,
+        radius: f64,
+        angle: f64,
+        reach: f64,
+    },
+    DiameterDim {
+        centre: Xy,
+        radius: f64,
+        angle: f64,
+        reach: f64,
+    },
+    ArcLengthDim {
+        centre: Xy,
+        radius: f64,
+        start: f64,
+        sweep: f64,
+        offset: f64,
+    },
 }
 
 impl Shape {
@@ -220,6 +245,54 @@ impl Shape {
                 scale: h.scale,
                 angle: h.angle,
                 background: h.background.map(hex),
+            },
+            core::Shape::Dim(m) => match *m {
+                core::Measure::Angle {
+                    centre,
+                    start,
+                    sweep,
+                    radius,
+                } => Shape::AngleDim {
+                    centre: xy(centre),
+                    start,
+                    sweep,
+                    radius,
+                },
+                core::Measure::Radius {
+                    centre,
+                    radius,
+                    angle,
+                    reach,
+                } => Shape::RadiusDim {
+                    centre: xy(centre),
+                    radius,
+                    angle,
+                    reach,
+                },
+                core::Measure::Diameter {
+                    centre,
+                    radius,
+                    angle,
+                    reach,
+                } => Shape::DiameterDim {
+                    centre: xy(centre),
+                    radius,
+                    angle,
+                    reach,
+                },
+                core::Measure::ArcLength {
+                    centre,
+                    radius,
+                    start,
+                    sweep,
+                    offset,
+                } => Shape::ArcLengthDim {
+                    centre: xy(centre),
+                    radius,
+                    start,
+                    sweep,
+                    offset,
+                },
             },
         }
     }
@@ -288,6 +361,52 @@ impl Shape {
                 scale,
                 angle,
                 background: background.map(|b| parse_hex(element, &b)).transpose()?,
+            }),
+            Shape::AngleDim {
+                centre,
+                start,
+                sweep,
+                radius,
+            } => core::Shape::Dim(core::Measure::Angle {
+                centre: pt(centre),
+                start,
+                sweep,
+                radius,
+            }),
+            Shape::RadiusDim {
+                centre,
+                radius,
+                angle,
+                reach,
+            } => core::Shape::Dim(core::Measure::Radius {
+                centre: pt(centre),
+                radius,
+                angle,
+                reach,
+            }),
+            Shape::DiameterDim {
+                centre,
+                radius,
+                angle,
+                reach,
+            } => core::Shape::Dim(core::Measure::Diameter {
+                centre: pt(centre),
+                radius,
+                angle,
+                reach,
+            }),
+            Shape::ArcLengthDim {
+                centre,
+                radius,
+                start,
+                sweep,
+                offset,
+            } => core::Shape::Dim(core::Measure::ArcLength {
+                centre: pt(centre),
+                radius,
+                start,
+                sweep,
+                offset,
             }),
         })
     }

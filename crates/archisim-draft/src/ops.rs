@@ -1081,6 +1081,16 @@ pub fn stretch(shape: &Shape, lo: Point2, hi: Point2, d: Vec2) -> Shape {
                 .collect(),
             ..h.clone()
         }),
+        Shape::Dim(m) => {
+            let [c, h] = crate::dims::handles(m);
+            if inside(c) {
+                transform_shape(shape, &Transform::translate(d))
+            } else if inside(h) {
+                Shape::Dim(crate::dims::place(m, h + d))
+            } else {
+                shape.clone()
+            }
+        }
     }
 }
 

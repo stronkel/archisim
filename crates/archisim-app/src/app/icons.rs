@@ -68,6 +68,10 @@ pub enum Icon {
     Array,
     Layers,
     Measure,
+    /// Drafted dimensions.
+    DimAngle,
+    DimRadius,
+    DimArc,
 }
 
 /// Draws `icon` in `rect` with lines of `color`.
@@ -411,6 +415,24 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 })
                 .collect();
             painter.add(Shape::line(v, st));
+        }
+        Icon::DimAngle => {
+            line(&[(20.0, 20.0), (4.0, 20.0), (15.0, 5.0)], st_thin);
+            arc(4.0, 20.0, 12.0, -53.0, 0.0, st);
+            filled(&[(16.0, 20.0), (15.0, 17.0), (17.0, 17.0)]);
+            filled(&[(11.2, 10.4), (13.6, 12.4), (10.6, 12.8)]);
+        }
+        Icon::DimRadius => {
+            circle(11.0, 13.0, 8.0, st_thin);
+            line(&[(11.0, 13.0), (20.5, 3.5)], st);
+            filled(&[(16.7, 7.3), (13.8, 8.3), (15.7, 10.2)]);
+            circle(11.0, 13.0, 0.8, st);
+        }
+        Icon::DimArc => {
+            arc(12.0, 19.0, 8.0, 200.0, 340.0, st_thin);
+            arc(12.0, 19.0, 12.0, 200.0, 340.0, st);
+            line(&[(4.5, 16.3), (0.8, 15.0)], st_thin);
+            line(&[(19.5, 16.3), (23.2, 15.0)], st_thin);
         }
         Icon::Cloud => {
             for (x, y) in [

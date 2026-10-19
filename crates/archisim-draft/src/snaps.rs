@@ -147,6 +147,11 @@ pub fn snap_points(shape: &Shape) -> Vec<(Point2, SnapPoint)> {
                 }
             }
         }
+        Shape::Dim(m) => {
+            let [c, h] = crate::dims::handles(m);
+            out.push((c, SnapPoint::Centre));
+            out.push((h, SnapPoint::Node));
+        }
     }
     out
 }

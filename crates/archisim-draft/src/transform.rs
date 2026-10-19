@@ -203,6 +203,7 @@ pub fn transform_shape(shape: &Shape, t: &Transform) -> Shape {
             },
             ..h.clone()
         }),
+        Shape::Dim(m) => Shape::Dim(crate::dims::transform(m, t)),
     }
 }
 

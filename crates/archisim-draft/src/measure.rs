@@ -80,6 +80,13 @@ pub fn area(shape: &Shape) -> Option<f64> {
 pub fn bounds(shape: &Shape, k: f64) -> (Point2, Point2) {
     let pts: Vec<Point2> = match shape {
         Shape::Text(t) => text_frame(t, k).to_vec(),
+        Shape::Dim(m) => {
+            let d = crate::dims::drawing(m, k, crate::dims::DIM_TEXT);
+            let mut v: Vec<Point2> = text_frame(&d.text, k).to_vec();
+            v.extend(d.segs.iter().flat_map(|s| s.tessellate(CURVE_TOL * 10.0)));
+            v.extend(d.arrows.iter().flatten());
+            v
+        }
         Shape::Point { at } => vec![*at],
         Shape::Ellipse {
             centre,
@@ -144,6 +151,11 @@ pub fn distance(shape: &Shape, p: Point2, k: f64) -> f64 {
                     .fold(f64::INFINITY, f64::min)
             }
         }
+        Shape::Dim(m) => {
+            let d = crate::dims::drawing(m, k, crate::dims::DIM_TEXT);
+            let text = distance(&Shape::Text(d.text), p, k);
+            d.segs.iter().map(|s| s.distance(p)).fold(text, f64::min)
+        }
         _ => shape_segs(shape)
             .iter()
             .map(|s| s.distance(p))
@@ -171,7 +183,7 @@ pub fn crosses_window(shape: &Shape, lo: Point2, hi: Point2, k: f64) -> bool {
     let rect = [lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)];
     let inside = |p: Point2| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
     match shape {
-        Shape::Text(_) | Shape::Point { .. } => true,
+        Shape::Text(_) | Shape::Point { .. } | Shape::Dim(_) => true,
         Shape::Hatch(h) => {
             // Inside the hatch, or an edge crossing the window.
             let polys: Vec<Vec<Point2>> = h

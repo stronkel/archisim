@@ -339,6 +339,74 @@ pub struct Hatch {
     pub background: Option<Rgb>,
 }
 
+/// What a drafted dimension measures (AutoCAD's angular, radius,
+/// diameter and arc length dimensions). Its value is read from its own
+/// geometry, so it changes when the dimension is stretched or scaled.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Measure {
+    /// The angle from `start` through `sweep` (counter-clockwise, radians)
+    /// about `centre`, drawn as an arc of `radius`.
+    Angle {
+        centre: Point2,
+        start: f64,
+        sweep: f64,
+        radius: f64,
+    },
+    /// The radius of a circle or arc, drawn from its centre towards
+    /// `angle`; the text at `reach` from the centre.
+    Radius {
+        centre: Point2,
+        radius: f64,
+        angle: f64,
+        reach: f64,
+    },
+    /// The diameter, drawn across the circle through its centre at `angle`.
+    Diameter {
+        centre: Point2,
+        radius: f64,
+        angle: f64,
+        reach: f64,
+    },
+    /// The length of an arc, drawn concentric with it, `offset` outside.
+    ArcLength {
+        centre: Point2,
+        radius: f64,
+        start: f64,
+        sweep: f64,
+        offset: f64,
+    },
+}
+
+impl Measure {
+    /// The measured value: radians for angles, metres otherwise.
+    pub fn value(&self) -> f64 {
+        match *self {
+            Measure::Angle { sweep, .. } => sweep,
+            Measure::Radius { radius, .. } => radius,
+            Measure::Diameter { radius, .. } => 2.0 * radius,
+            Measure::ArcLength { radius, sweep, .. } => radius * sweep,
+        }
+    }
+
+    pub fn centre(&self) -> Point2 {
+        match *self {
+            Measure::Angle { centre, .. }
+            | Measure::Radius { centre, .. }
+            | Measure::Diameter { centre, .. }
+            | Measure::ArcLength { centre, .. } => centre,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Measure::Angle { .. } => "Cota angular",
+            Measure::Radius { .. } => "Cota de radio",
+            Measure::Diameter { .. } => "Cota de diámetro",
+            Measure::ArcLength { .. } => "Cota de longitud de arco",
+        }
+    }
+}
+
 /// The geometry of a drafting element.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Shape {
@@ -375,6 +443,8 @@ pub enum Shape {
     },
     Text(Text),
     Hatch(Hatch),
+    /// A drafted dimension.
+    Dim(Measure),
 }
 
 impl Shape {
@@ -391,6 +461,7 @@ impl Shape {
             Shape::Point { .. } => "Punto",
             Shape::Text(_) => "Texto",
             Shape::Hatch(_) => "Sombreado",
+            Shape::Dim(m) => m.label(),
         }
     }
 
@@ -411,6 +482,16 @@ impl Shape {
             Shape::Point { at } => vec![*at],
             Shape::Text(t) => vec![t.at],
             Shape::Hatch(h) => h.loops.iter().flat_map(|l| l.points.clone()).collect(),
+            Shape::Dim(m) => {
+                let c = m.centre();
+                let r = match *m {
+                    Measure::Angle { radius, .. } => radius,
+                    Measure::Radius { radius, reach, .. }
+                    | Measure::Diameter { radius, reach, .. } => radius.max(reach),
+                    Measure::ArcLength { radius, offset, .. } => radius + offset.max(0.0),
+                };
+                vec![c - Point2::new(r, r), c + Point2::new(r, r)]
+            }
         }
     }
 }
@@ -606,6 +687,55 @@ pub fn check_shape(shape: &Shape) -> Result<(), ModelError> {
             finite(h.angle, "hatch angle")?;
             if h.scale <= 0.0 {
                 return Err(ModelError::NonPositive("hatch scale"));
+            }
+        }
+        Shape::Dim(m) => {
+            finite_point(m.centre(), "dimension centre")?;
+            let (a, b, c) = match *m {
+                Measure::Angle {
+                    start,
+                    sweep,
+                    radius,
+                    ..
+                } => {
+                    if sweep <= 1e-9 || sweep >= TAU - 1e-9 {
+                        return Err(ModelError::InvalidShape("angle must be between 0 and 360°"));
+                    }
+                    (start, sweep, radius)
+                }
+                Measure::Radius {
+                    radius,
+                    angle,
+                    reach,
+                    ..
+                }
+                | Measure::Diameter {
+                    radius,
+                    angle,
+                    reach,
+                    ..
+                } => (angle, reach, radius),
+                Measure::ArcLength {
+                    radius,
+                    start,
+                    sweep,
+                    offset,
+                    ..
+                } => {
+                    finite(offset, "dimension offset")?;
+                    if sweep <= 1e-9 || sweep >= TAU - 1e-9 {
+                        return Err(ModelError::InvalidShape(
+                            "arc sweep must be between 0 and 360°",
+                        ));
+                    }
+                    (start, sweep, radius)
+                }
+            };
+            finite(a, "dimension angle")?;
+            finite(b, "dimension value")?;
+            finite(c, "dimension radius")?;
+            if c <= EPSILON {
+                return Err(ModelError::NonPositive("dimension radius"));
             }
         }
     }

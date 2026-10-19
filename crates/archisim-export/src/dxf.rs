@@ -443,6 +443,27 @@ impl Dxf {
                 let pattern = hatch_def(h, k);
                 self.hatch(&name, &look, &loops, pattern);
             }
+            Shape::Dim(m) => {
+                // As its pieces: lines and arcs, solid arrowheads, the text.
+                let dd = archisim_draft::dims::drawing(m, k, archisim_draft::dims::DIM_TEXT);
+                let mut parts: Vec<Shape> =
+                    dd.segs.iter().map(archisim_draft::ops::seg_shape).collect();
+                for a in &dd.arrows {
+                    parts.push(Shape::Hatch(Hatch {
+                        loops: vec![Polyline::straight(a.to_vec(), true)],
+                        pattern: archisim_core::HatchPattern::Solid,
+                        scale: 1.0,
+                        angle: 0.0,
+                        background: None,
+                    }));
+                }
+                parts.push(Shape::Text(dd.text));
+                for p in parts {
+                    let mut sub = d.clone();
+                    sub.shape = p;
+                    self.draft(model, &sub, k);
+                }
+            }
         }
     }
 

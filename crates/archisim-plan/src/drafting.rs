@@ -87,6 +87,7 @@ fn in_view(shape: &Shape, k: f64, viewport: Option<(Point2, Point2)>) -> bool {
 /// Draws the drafting elements of a view. `k`: drawing units per paper
 /// millimetre. `printing`: leave out layers that are not printed. Hatches
 /// go first so lines and texts are drawn over them.
+#[allow(clippy::too_many_arguments)]
 pub fn draw_drafts(
     s: &mut String,
     model: &Model,
@@ -95,10 +96,12 @@ pub fn draw_drafts(
     viewport: Option<(Point2, Point2)>,
     printing: bool,
     hidden_layers: &std::collections::BTreeSet<archisim_core::DrawLayerId>,
+    hide_dims: bool,
 ) {
     let shown: Vec<&Draft> = model
         .drafts_in(view)
         .filter(|d| model.draft_visible(d) && !hidden_layers.contains(&d.layer))
+        .filter(|d| !(hide_dims && matches!(d.shape, Shape::Dim(_))))
         .filter(|d| !printing || model.draw_layer(d.layer).is_none_or(|l| l.printable))
         .filter(|d| in_view(&d.shape, k, viewport))
         .collect();
@@ -255,6 +258,33 @@ pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
                     );
                 }
             }
+        }
+        Shape::Dim(m) => {
+            let dd = archisim_draft::dims::drawing(m, k, crate::pens().text);
+            stroke(s, &segs_path(&dd.segs, false));
+            let mut arrows = String::new();
+            for a in &dd.arrows {
+                arrows.push_str(&points_path(a, true));
+                arrows.push(' ');
+            }
+            if !arrows.is_empty() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="{color}" stroke="none"/>"#,
+                    arrows.trim_end()
+                );
+            }
+            let mut path = String::new();
+            for st in archisim_draft::font::text_strokes(&dd.text, k) {
+                path.push_str(&points_path(&st, false));
+                path.push(' ');
+            }
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" stroke="{color}" stroke-width="{}" stroke-linecap="round"/>"#,
+                path.trim_end(),
+                num(archisim_draft::font::STROKE * dd.text.height * k)
+            );
         }
     }
 }

@@ -88,6 +88,10 @@ pub fn grips(shape: &Shape) -> Vec<(Point2, GripKind)> {
             .iter()
             .flat_map(|l| l.points.iter().map(|q| (*q, GripKind::Stretch)))
             .collect(),
+        Shape::Dim(m) => {
+            let [c, h] = crate::dims::handles(m);
+            vec![(c, GripKind::Move), (h, GripKind::Size)]
+        }
     }
 }
 
@@ -233,6 +237,10 @@ pub fn move_grip(shape: &Shape, index: usize, to: Point2) -> Shape {
             }
             Shape::Hatch(h)
         }
+        Shape::Dim(m) => match index {
+            0 => translate(shape),
+            _ => Shape::Dim(crate::dims::place(m, to)),
+        },
     }
 }
 

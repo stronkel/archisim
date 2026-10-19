@@ -8,6 +8,7 @@
 //! step comes back as [`Changes`], applied to the model as one undoable
 //! step.
 
+pub mod dims;
 pub mod draw;
 pub mod inquiry;
 pub mod modify;
@@ -59,6 +60,9 @@ pub struct Prompt {
     pub want: Want,
     /// The value Enter takes, shown as `<3000>`.
     pub default: Option<String>,
+    /// A plain number typed is a value (an angle, a factor), not a
+    /// distance from the last point.
+    pub numeric: bool,
 }
 
 impl Prompt {
@@ -68,7 +72,13 @@ impl Prompt {
             options: Vec::new(),
             want,
             default: None,
+            numeric: false,
         }
+    }
+
+    fn numeric(mut self) -> Self {
+        self.numeric = true;
+        self
     }
 
     fn opts(mut self, options: &[Opt]) -> Self {
@@ -502,6 +512,18 @@ pub const ALIASES: &[(&str, Launch)] = &[
     ("VE", Launch::Window),
     ("V", Launch::Window),
     ("WINDOW", Launch::Window),
+    ("ACOANGULO", Launch::Command("ACOANGULO")),
+    ("DAN", Launch::Command("ACOANGULO")),
+    ("DIMANGULAR", Launch::Command("ACOANGULO")),
+    ("ACORADIO", Launch::Command("ACORADIO")),
+    ("DRA", Launch::Command("ACORADIO")),
+    ("DIMRADIUS", Launch::Command("ACORADIO")),
+    ("ACODIAMETRO", Launch::Command("ACODIAMETRO")),
+    ("DDI", Launch::Command("ACODIAMETRO")),
+    ("DIMDIAMETER", Launch::Command("ACODIAMETRO")),
+    ("ACOARCO", Launch::Command("ACOARCO")),
+    ("DAR", Launch::Command("ACOARCO")),
+    ("DIMARC", Launch::Command("ACOARCO")),
     ("COTA", Launch::Dimension),
     ("COT", Launch::Dimension),
     ("ACO", Launch::Dimension),
@@ -588,6 +610,10 @@ pub fn new_command(name: &str) -> Option<Box<dyn Command>> {
         "DIST" => Box::new(inquiry::Dist::default()),
         "AREA" => Box::new(inquiry::AreaCmd::default()),
         "LIST" => Box::new(inquiry::List),
+        "ACOANGULO" => Box::new(dims::DimAngle::default()),
+        "ACORADIO" => Box::new(dims::DimRadius::new(false)),
+        "ACODIAMETRO" => Box::new(dims::DimRadius::new(true)),
+        "ACOARCO" => Box::new(dims::DimArc::default()),
         _ => return None,
     })
 }
@@ -697,6 +723,9 @@ pub fn typed_input(prompt: &Prompt, text: &str, base: Option<Point2>, cursor: Po
         if parse_number(text).is_none() {
             return Input::Option(k);
         }
+    }
+    if prompt.numeric && parse_number(text).is_some() {
+        return Input::Value(text.trim().to_string());
     }
     if prompt.want == Want::Point {
         if let Some(p) = parse_point(text, base, cursor) {

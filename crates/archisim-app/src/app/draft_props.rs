@@ -335,6 +335,14 @@ impl ArchiSimApp {
                     Shape::Line { a, b } => {
                         text_row(ui, "Ángulo", "", &fmt_angle((*b - *a).y.atan2((*b - *a).x)));
                     }
+                    Shape::Dim(m) => {
+                        text_row(
+                            ui,
+                            "Medida",
+                            "Sigue a la cota: cambia al estirarla o escalarla",
+                            &archisim_draft::dims::label(m),
+                        );
+                    }
                     _ => {}
                 }
             }

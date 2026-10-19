@@ -126,6 +126,27 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Cotas lineales, encadenadas y de huecos de muro",
             ),
             tile(
+                Pick::Command("ACOANGULO"),
+                Icon::DimAngle,
+                "Angular",
+                "DAN",
+                "Cota del ángulo entre dos líneas o de un arco",
+            ),
+            tile(
+                Pick::Command("ACORADIO"),
+                Icon::DimRadius,
+                "Radio",
+                "DRA",
+                "Cota de radio de un arco o círculo (diámetro: DDI)",
+            ),
+            tile(
+                Pick::Command("ACOARCO"),
+                Icon::DimArc,
+                "Long. arco",
+                "DAR",
+                "Cota de la longitud de un arco",
+            ),
+            tile(
                 Pick::LevelMark,
                 Icon::Elevation,
                 "Cota nivel",
