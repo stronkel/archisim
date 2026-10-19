@@ -52,6 +52,10 @@ pub fn issue_text(i: &StairIssue) -> String {
         StairIssue::ShortFlight { risers } => {
             format!("Tramo de {risers} peldaños: mínimo 3")
         }
+        StairIssue::NoHandrail => "Sin pasamanos: obligatorio al salvar 55 cm o más".to_string(),
+        StairIssue::HandrailBothSides => {
+            "Pasamanos en un lado: con 1,20 m de ancho o más, en los dos".to_string()
+        }
         StairIssue::FlightTooHigh { height, max } => format!(
             "Tramo que salva {} m: máximo {} m (pon una meseta)",
             fmt_m(height),
@@ -172,6 +176,7 @@ impl ArchiSimApp {
             waist: s.waist,
             material: s.material,
             usage: s.usage,
+            railings: archisim_core::Railings::Both,
         };
         let check = match probe.issues().first() {
             None if !l.flights.is_empty() => "  ✓ CTE".to_string(),
@@ -335,6 +340,30 @@ impl ArchiSimApp {
                     }
                 });
             }
+            row(
+                ui,
+                "Barandillas",
+                "Lados con barandilla (subiendo), a 90 cm",
+                |ui, w| {
+                    use archisim_core::Railings;
+                    let r = choice(
+                        ui,
+                        ("stair-rails", id.0),
+                        w,
+                        s.railings,
+                        &[
+                            (Railings::Both, "A los dos lados"),
+                            (Railings::Left, "A la izquierda"),
+                            (Railings::Right, "A la derecha"),
+                            (Railings::None, "Sin barandilla"),
+                        ],
+                    );
+                    if r != s.railings {
+                        let res = self.ed.edit_stair("Barandillas", id, |s| s.railings = r);
+                        self.report(res, "Barandillas cambiadas.");
+                    }
+                },
+            );
             row(ui, "Uso", "Para comprobar el CTE DB-SUA", |ui, w| {
                 let u = choice(ui, ("stair-use", id.0), w, s.usage, &USES);
                 if u != s.usage {

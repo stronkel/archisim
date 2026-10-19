@@ -2532,7 +2532,14 @@ impl<'a> Importer<'a> {
                 .file
                 .of_kind(kind)
                 .into_iter()
-                .filter(|id| !self.stair_ids.contains(id))
+                .filter(|id| {
+                    !self.stair_ids.contains(id)
+                        && !self
+                            .ix
+                            .parent
+                            .get(id)
+                            .is_some_and(|p| self.stair_ids.contains(p))
+                })
                 .count();
             for _ in 0..n {
                 self.report.skip(

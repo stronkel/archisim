@@ -86,6 +86,20 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
                 None => line(s, f.start + off, f.end + off, VIEW_LINE, false, k),
             }
         }
+        // The railings, just inside the sides.
+        for (on, sign) in [(stair.railings.left(), 1.0), (stair.railings.right(), -1.0)] {
+            if !on {
+                continue;
+            }
+            let off = u.perp_left() * (sign * (half - 0.04));
+            match cut_at {
+                Some(c) => {
+                    line(s, f.start + off, at(c) + off, HATCH_LINE, false, k);
+                    line(s, at(c) + off, f.end + off, HATCH_LINE, true, k);
+                }
+                None => line(s, f.start + off, f.end + off, HATCH_LINE, false, k),
+            }
+        }
         // The break line, once, where the plane cuts.
         if let (Some(c), false) = (cut_at, broken) {
             broken = true;

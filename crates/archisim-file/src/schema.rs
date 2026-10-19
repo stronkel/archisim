@@ -89,6 +89,25 @@ pub(crate) struct Stair {
     pub waist: f64,
     pub material: u64,
     pub usage: StairUse,
+    #[serde(default = "both", skip_serializing_if = "is_both")]
+    pub railings: Railings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Railings {
+    None,
+    Left,
+    Right,
+    Both,
+}
+
+fn both() -> Railings {
+    Railings::Both
+}
+
+fn is_both(r: &Railings) -> bool {
+    *r == Railings::Both
 }
 
 /// A pitched roof (version 7): its footprint, the pitch of each side
@@ -862,6 +881,12 @@ impl ProjectFile {
                         core::StairUse::General => StairUse::General,
                         core::StairUse::Restricted => StairUse::Restricted,
                     },
+                    railings: match s.railings {
+                        core::Railings::None => Railings::None,
+                        core::Railings::Left => Railings::Left,
+                        core::Railings::Right => Railings::Right,
+                        core::Railings::Both => Railings::Both,
+                    },
                 })
                 .collect(),
         }
@@ -966,6 +991,12 @@ impl ProjectFile {
                         usage: match s.usage {
                             StairUse::General => core::StairUse::General,
                             StairUse::Restricted => core::StairUse::Restricted,
+                        },
+                        railings: match s.railings {
+                            Railings::None => core::Railings::None,
+                            Railings::Left => core::Railings::Left,
+                            Railings::Right => core::Railings::Right,
+                            Railings::Both => core::Railings::Both,
                         },
                     })
                 })

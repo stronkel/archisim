@@ -27,6 +27,7 @@ impl Exporter<'_> {
                 continue;
             };
             let l = stair.layout();
+            let storey_z = model.level(stair.level).map_or(0.0, |l| l.elevation);
             let pl = self.placement(Some(storey_pl), self.origin, None);
             let name = format!("Escalera {}", stair.id.0);
             let shape = match l.flights.len() {
@@ -152,6 +153,62 @@ impl Exporter<'_> {
                 );
                 parts.push(sl);
             }
+            // Railings: one IfcRailing, its bars as a triangulated body
+            // (with its own material, so not in the flights' list).
+            let mut railing = None;
+            let bars = archisim_geom::solid::railing_bars(model, stair.id);
+            if !bars.is_empty() {
+                let guid = derived_guid(&stair.guid, "railings");
+                let mut pts: Vec<String> = Vec::new();
+                let mut faces: Vec<String> = Vec::new();
+                for b in &bars {
+                    for t in b.triangles() {
+                        let base = pts.len();
+                        for p in t {
+                            pts.push(format!(
+                                "({},{},{})",
+                                real(p[0]),
+                                real(p[1]),
+                                real(p[2] - storey_z)
+                            ));
+                        }
+                        faces.push(format!("({},{},{})", base + 1, base + 2, base + 3));
+                    }
+                }
+                let list3 = self
+                    .w
+                    .add(format!("IFCCARTESIANPOINTLIST3D(({}),$)", pts.join(",")));
+                let body = self.w.add(format!(
+                    "IFCTRIANGULATEDFACESET({list3},$,.T.,({}),$)",
+                    faces.join(",")
+                ));
+                let rep = self.w.add(format!(
+                    "IFCSHAPEREPRESENTATION({},'Body','Tessellation',({body}))",
+                    self.body_ctx
+                ));
+                let shape = self
+                    .w
+                    .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
+                let rpl = self.placement(Some(pl), self.origin, None);
+                let rail = self.w.add(format!(
+                    "IFCRAILING({},$,{},$,$,{rpl},{shape},$,.HANDRAIL.)",
+                    string(guid.as_str()),
+                    string(&format!("{name} · barandilla")),
+                ));
+                let mat = archisim_geom::solid::railing_material(model, stair);
+                if let Some(m) = materials.get(&mat) {
+                    self.w.add(format!(
+                        "IFCRELASSOCIATESMATERIAL({},$,$,$,({rail}),{m})",
+                        string(derived_guid(&guid, "material").as_str())
+                    ));
+                }
+                let height = self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Height',$,IFCPOSITIVELENGTHMEASURE({}),$)",
+                    real(archisim_core::RAILING_HEIGHT)
+                ));
+                self.pset(rail, &guid, "Pset_RailingCommon", &[height]);
+                railing = Some(rail);
+            }
             if let Some(m) = materials.get(&stair.material) {
                 self.w.add(format!(
                     "IFCRELASSOCIATESMATERIAL({},$,$,$,{},{m})",
@@ -159,6 +216,7 @@ impl Exporter<'_> {
                     list(&parts)
                 ));
             }
+            parts.extend(railing);
             self.rel_aggregates(derived_guid(&stair.guid, "parts"), st, &parts);
             let mut props = self.stair_props(l.risers(), l.treads(), l.riser, l.flights[0].going);
             props.extend(self.status_prop(stair.id.0));
@@ -192,6 +250,15 @@ impl Exporter<'_> {
                 self.w.add(format!(
                     "IFCPROPERTYSINGLEVALUE('Top',$,IFCTEXT({}),$)",
                     string(&top)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Railings',$,IFCLABEL({}),$)",
+                    string(match stair.railings {
+                        archisim_core::Railings::None => "none",
+                        archisim_core::Railings::Left => "left",
+                        archisim_core::Railings::Right => "right",
+                        archisim_core::Railings::Both => "both",
+                    })
                 )),
             ];
             for (key, v) in [

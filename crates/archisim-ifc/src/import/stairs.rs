@@ -42,6 +42,12 @@ impl<'a> Importer<'a> {
         let base_offset = number("BaseOffset")?;
         let height = number("Height")?;
         let waist = number("Waist")?;
+        let railings = match text("Railings").as_deref() {
+            Some("none") => archisim_core::Railings::None,
+            Some("left") => archisim_core::Railings::Left,
+            Some("right") => archisim_core::Railings::Right,
+            _ => archisim_core::Railings::Both,
+        };
         let usage = match text("Usage").as_deref() {
             Some("restricted") => StairUse::Restricted,
             _ => StairUse::General,
@@ -124,6 +130,7 @@ impl<'a> Importer<'a> {
                 usage,
             })
             .map_err(|e| explain(&e))?;
+        let _ = self.model.edit_stair(sid, |s| s.railings = railings);
         self.stair_ids.insert(id);
         self.report.stairs += 1;
         self.sources.push((sid.0, id));

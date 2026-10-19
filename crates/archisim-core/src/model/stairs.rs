@@ -26,6 +26,29 @@ pub enum StairUse {
     Restricted,
 }
 
+/// Which sides of a stair have a railing (walking up).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Railings {
+    None,
+    Left,
+    Right,
+    #[default]
+    Both,
+}
+
+impl Railings {
+    pub fn left(self) -> bool {
+        matches!(self, Railings::Left | Railings::Both)
+    }
+
+    pub fn right(self) -> bool {
+        matches!(self, Railings::Right | Railings::Both)
+    }
+}
+
+/// Height of a stair's railing above the nosings (CTE: 0,90 m).
+pub const RAILING_HEIGHT: f64 = 0.9;
+
 /// A stair.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stair {
@@ -50,6 +73,8 @@ pub struct Stair {
     pub waist: f64,
     pub material: MaterialId,
     pub usage: StairUse,
+    /// Railings along the flights (and round the landings).
+    pub railings: Railings,
 }
 
 /// Data needed to create a stair.
@@ -145,6 +170,10 @@ pub enum StairIssue {
     ShortFlight { risers: usize },
     /// A flight climbing more than 3,20 m (2,25 m in public areas).
     FlightTooHigh { height: f64, max: f64 },
+    /// No handrail on a stair climbing 55 cm or more.
+    NoHandrail,
+    /// A handrail on one side only of a stair 1,20 m wide or more.
+    HandrailBothSides,
 }
 
 /// Extreme values a stair may take at all (not the code's limits).
@@ -211,6 +240,15 @@ impl Stair {
                 width: self.width,
                 min: min_width,
             });
+        }
+        if l.risers() as f64 * l.riser >= 0.55 - e {
+            match self.railings {
+                Railings::None => v.push(StairIssue::NoHandrail),
+                Railings::Left | Railings::Right if self.width >= 1.2 - e => {
+                    v.push(StairIssue::HandrailBothSides)
+                }
+                _ => {}
+            }
         }
         for f in &l.flights {
             if f.risers < 3 {
@@ -436,6 +474,7 @@ impl Model {
                 waist: spec.waist,
                 material: spec.material,
                 usage: spec.usage,
+                railings: Railings::default(),
             },
         );
         self.stamp_phase(id.0);

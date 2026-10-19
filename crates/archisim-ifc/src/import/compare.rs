@@ -300,6 +300,7 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && close(s.height, t.height)
             && close(s.waist, t.waist)
             && s.usage == t.usage
+            && s.railings == t.railings
             && level_guid(a, s.level) == level_guid(b, t.level)
             && match (s.top, t.top) {
                 (
