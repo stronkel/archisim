@@ -6,7 +6,7 @@ use glam::{Mat4, Vec2, Vec3};
 
 /// Vertical field of view in perspective, and the equivalent framing in
 /// axonometry, in radians.
-const FOV_Y: f32 = 0.70;
+pub const FOV_Y: f32 = 0.70;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {

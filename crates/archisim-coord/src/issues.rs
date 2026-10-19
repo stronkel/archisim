@@ -108,10 +108,10 @@ pub fn clashes_to_bcf(
         }
         let storey = ea.storey.as_ref().or(eb.storey.as_ref());
         let text = format!(
-            "{} penetra {} en {}{}.",
+            "{} y {} se meten {} uno en otro{}.",
             label(ea),
-            metres(c.depth),
             label(eb),
+            metres(c.depth),
             storey.map(|s| format!(" ({s})")).unwrap_or_default()
         );
         if let Some(&i) = existing.get(&key) {
@@ -164,19 +164,24 @@ pub fn clashes_to_bcf(
         next_index += 1;
         added += 1;
     }
-    // Clash topics between these two models no longer found.
-    let in_models: HashSet<&str> = left
+    // Clash topics between these two models no longer found: one element
+    // of the pair in each model (topics of other links are left alone).
+    let left_ids: HashSet<&str> = left.elements.iter().map(|e| e.global_id.as_str()).collect();
+    let right_ids: HashSet<&str> = right
         .elements
         .iter()
-        .chain(&right.elements)
         .map(|e| e.global_id.as_str())
         .collect();
+    let between = |a: &str, b: &str| {
+        (left_ids.contains(a) && right_ids.contains(b))
+            || (left_ids.contains(b) && right_ids.contains(a))
+    };
     for (key, &i) in &existing {
         if seen.contains(key) {
             continue;
         }
         let t = &mut bcf.topics[i];
-        let ours = in_models.contains(key.0.as_str()) || in_models.contains(key.1.as_str());
+        let ours = between(&key.0, &key.1);
         let open = !matches!(t.status.as_deref(), Some(RESOLVED) | Some(CLOSED));
         if ours && open {
             t.status = Some(RESOLVED.into());

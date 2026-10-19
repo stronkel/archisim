@@ -234,6 +234,31 @@ fn clash_topics_follow_the_model() {
         .unwrap();
     assert_eq!(beam.status.as_deref(), Some("Resuelta"));
     assert_eq!(beam.comments.len(), 1);
+    // A second linked model checked after the first leaves the first one's
+    // topics as they are.
+    let third = read_elements(&ifc(
+        &[B(
+            "IFCCOLUMN",
+            "0k000000000000000000k9",
+            "Pilar",
+            [1.0, -0.2, 0.0],
+            [1.3, 0.1, 3.0],
+        )],
+        &[],
+    ))
+    .unwrap();
+    let clashes = find_clashes(&arch, &third, &opts);
+    assert_eq!(clashes.len(), 1);
+    assert_eq!(
+        clashes_to_bcf(&mut bcf, &clashes, &arch, &third, &[], &me),
+        (1, 0, 0)
+    );
+    let open = bcf
+        .topics
+        .iter()
+        .filter(|t| t.status.as_deref() == Some("Abierta"))
+        .count();
+    assert_eq!(open, 2);
 }
 
 #[test]

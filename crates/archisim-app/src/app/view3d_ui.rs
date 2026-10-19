@@ -16,7 +16,7 @@ use super::ArchiSimApp;
 use crate::pick::Element;
 use crate::view3d::camera::Camera;
 use crate::view3d::render::Renderer;
-use crate::view3d::scene::Scene;
+use crate::view3d::scene::{LinkedPart, Owner, Scene};
 
 /// The picture is drawn at twice the screen resolution and scaled down,
 /// which smooths edges (supersampling).
@@ -34,8 +34,9 @@ pub struct View3dState {
     pub camera: Camera,
     pub fit_requested: bool,
     scene: Scene,
-    /// What the scene was built from: model revision and selection.
-    scene_key: Option<(u64, BTreeSet<Element>)>,
+    /// What the scene was built from: model revision, selection and the
+    /// state of the linked models.
+    scene_key: Option<(u64, BTreeSet<Element>, u64)>,
     gpu: Option<Gpu>,
     /// What the last picture was drawn with.
     drawn: Option<(Camera, [u32; 2], u64)>,
@@ -76,28 +77,41 @@ impl View3dState {
         self.fit_requested = true;
     }
 
-    /// Builds the scene again if the model or the selection changed.
+    /// Builds the scene again if the model, the selection or the linked
+    /// models changed.
     fn refresh_scene(
         &mut self,
         revision: u64,
         selection: &BTreeSet<Element>,
         model: &archisim_core::Model,
+        coord: &crate::coord::Coord,
     ) {
-        let key = (revision, selection.clone());
+        let key = (revision, selection.clone(), coord.serial);
         if self.scene_key.as_ref() != Some(&key) {
-            self.scene = Scene::build(model, selection);
+            let parts = coord.parts();
+            let linked: Vec<LinkedPart> = parts
+                .iter()
+                .map(|p| LinkedPart {
+                    triangles: &p.element.mesh.triangles,
+                    color: p.color,
+                    alpha: p.alpha,
+                    link: p.link,
+                    index: p.index,
+                })
+                .collect();
+            self.scene = Scene::build_with(model, selection, &linked, coord.isolate);
             self.scene_key = Some(key);
             self.scene_serial += 1;
         }
     }
 
-    /// The element under a point of the view, if any.
-    pub fn pick(&self, pos: Vec2, size: Vec2) -> Option<Element> {
+    /// The element (of the project or linked) under a point of the view.
+    pub fn pick(&self, pos: Vec2, size: Vec2) -> Option<Owner> {
         let ray = self.camera.ray(
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        self.scene.pick(ray)
+        self.scene.pick_owner(ray)
     }
 
     /// Draws the picture if anything changed and returns its texture.
@@ -170,7 +184,7 @@ impl View3dState {
     ) {
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        let wanted = Some((key, BTreeSet::new()));
+        let wanted = Some((key, BTreeSet::new(), 0));
         if self.scene_key != wanted {
             self.scene =
                 build().map_or_else(Scene::default, |m| Scene::build(&m, &BTreeSet::new()));
@@ -262,7 +276,12 @@ impl ArchiSimApp {
         let painter = ui.painter_at(rect);
         let v = &mut self.v3d;
         v.canvas = rect;
-        v.refresh_scene(self.ed.revision(), &self.ed.selection, self.ed.model());
+        v.refresh_scene(
+            self.ed.revision(),
+            &self.ed.selection,
+            self.ed.model(),
+            &self.coord,
+        );
         let size = rect.size();
         if v.fit_requested && size.x > 50.0 && size.y > 50.0 {
             v.fit_requested = false;
@@ -301,8 +320,21 @@ impl ArchiSimApp {
         // Selection: a click picks what is under the cursor.
         if response.clicked_by(PointerButton::Primary) {
             if let Some(pos) = response.interact_pointer_pos() {
-                let hit = v.pick(pos - rect.min, size);
+                let owner = v.pick(pos - rect.min, size);
                 let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
+                // A linked element: say what it is and mark it.
+                if let Some(Owner::Linked(link, index)) = owner {
+                    let said = self.coord.select_linked(link, index);
+                    if let Some(text) = said {
+                        self.say(text);
+                    }
+                } else {
+                    self.coord.select_linked_none();
+                }
+                let hit = match owner {
+                    Some(Owner::Model(e)) => Some(e),
+                    _ => None,
+                };
                 match (hit, add) {
                     (Some(e), true) => {
                         if !self.ed.selection.remove(&e) {
@@ -313,13 +345,21 @@ impl ArchiSimApp {
                         self.ed.selection.clear();
                         self.ed.selection.insert(e);
                     }
-                    (None, false) => self.ed.selection.clear(),
+                    (None, false) => {
+                        self.ed.selection.clear();
+                        self.coord.set_isolate(false);
+                    }
                     (None, true) => {}
                 }
             }
         }
         let v = &mut self.v3d;
-        v.refresh_scene(self.ed.revision(), &self.ed.selection, self.ed.model());
+        v.refresh_scene(
+            self.ed.revision(),
+            &self.ed.selection,
+            self.ed.model(),
+            &self.coord,
+        );
 
         // The picture.
         let ppp = ctx.pixels_per_point();

@@ -219,9 +219,12 @@ dependencies = [
 name = "archisim-app"
 version = "0.24.0"
 dependencies = [
+ "archisim-bcf",
+ "archisim-coord",
  "archisim-core",
  "archisim-file",
  "archisim-geom",
+ "archisim-ids",
  "archisim-ifc",
  "archisim-library",
  "archisim-plan",

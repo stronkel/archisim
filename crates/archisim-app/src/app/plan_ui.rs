@@ -44,6 +44,7 @@ impl ArchiSimApp {
             self.draw_grid(&painter, rect);
         }
         self.draw_plan(&ctx, &painter, rect);
+        self.draw_links_in_plan(&painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_temp_dims(&painter, rect);

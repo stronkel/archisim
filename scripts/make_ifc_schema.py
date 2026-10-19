@@ -14,8 +14,8 @@ lines = [
     "//! Entity names, supertypes and own explicit attributes of IFC2X3, IFC4",
     "//! and IFC4X3, in the order they are written in a STEP file.",
     "",
-    "/// (entity, supertype or \"\", own attributes, abstract)",
-    "pub type Row = (&'static str, &'static str, &'static [&'static str], bool);",
+    "/// (entity, supertype or \"\", own attributes, abstract, name as the schema writes it)",
+    "pub type Row = (&'static str, &'static str, &'static [&'static str], bool, &'static str);",
     "",
 ]
 for name, rust in (("IFC2X3", "IFC2X3"), ("IFC4", "IFC4"), ("IFC4X3_ADD2", "IFC4X3")):
@@ -26,12 +26,12 @@ for name, rust in (("IFC2X3", "IFC2X3"), ("IFC4", "IFC4"), ("IFC4X3_ADD2", "IFC4
             continue
         sup = d.supertype()
         own = [a.name() for a in d.attributes()]
-        rows.append((d.name().upper(), sup.name().upper() if sup else "", own, d.is_abstract()))
+        rows.append((d.name().upper(), sup.name().upper() if sup else "", own, d.is_abstract(), d.name()))
     rows.sort()
     lines.append(f"pub static {rust}: &[Row] = &[")
-    for n, sup, own, ab in rows:
+    for n, sup, own, ab, camel in rows:
         attrs = ", ".join(f'"{a}"' for a in own)
-        lines.append(f'    ("{n}", "{sup}", &[{attrs}], {str(ab).lower()}),')
+        lines.append(f'    ("{n}", "{sup}", &[{attrs}], {str(ab).lower()}, "{camel}"),')
     lines.append("];")
     lines.append("")
 open(OUT, "w").write("\n".join(lines))

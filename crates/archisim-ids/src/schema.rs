@@ -33,6 +33,12 @@ impl Schema {
         }
     }
 
+    /// The name as the schema writes it (`IFCWALLSTANDARDCASE` →
+    /// `IfcWallStandardCase`).
+    pub fn spelling(&self, entity: &str) -> Option<&'static str> {
+        self.rows.get(entity).map(|r| r.4)
+    }
+
     pub fn has(&self, entity: &str) -> bool {
         self.rows.contains_key(entity)
     }

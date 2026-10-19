@@ -746,10 +746,14 @@ pub struct PsetView {
     pub props: BTreeMap<String, Prop>,
 }
 
-/// `IFCWALLSTANDARDCASE` → `IfcWallStandardCase` is not derivable without
-/// the schema's spelling, so the upper-case name is kept but prefixed
-/// in the usual way: `IfcWALL`. Readers recognise both.
+/// `IFCWALLSTANDARDCASE` → `IfcWallStandardCase`, as the schemas write it
+/// (IFC4X3 knows every class of the others but a few old ones).
 pub fn class_display(kind: &str) -> String {
+    for schema in ["IFC4X3", "IFC2X3"] {
+        if let Some(s) = Schema::for_file(schema).spelling(kind) {
+            return s.to_string();
+        }
+    }
     match kind.strip_prefix("IFC") {
         Some(rest) => format!("Ifc{}", title(rest)),
         None => kind.to_string(),

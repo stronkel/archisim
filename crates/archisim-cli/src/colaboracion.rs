@@ -29,6 +29,13 @@ como sale en su IFC, o un IFC de cualquier programa):
 
   archisim bcf <incidencias.bcf>
       Lista las incidencias de un fichero BCF (2.1 o 3.0).
+
+  archisim demo-coordinacion [carpeta]
+      Junto a la vivienda de prueba (demo.archisim), un modelo de
+      estructura (demo-estructura.ifc: pilares y vigas, IFC en milímetros
+      como lo exporta Revit) y otro de instalaciones (demo-instalaciones.ifc:
+      un conducto y una bajante), con interferencias a propósito, y unos
+      requisitos IDS de ejemplo (demo-requisitos.ids). Carpeta: ./out
 ";
 
 /// Runs a collaboration command, or `None` if `args` is not one.
@@ -92,6 +99,7 @@ pub fn run(args: &[String]) -> Option<ExitCode> {
                 }
             })
         }
+        "demo-coordinacion" => Some(done(demo_files(Path::new(a(1).unwrap_or("out"))))),
         "bcf" => Some(match a(1) {
             Some(f) => done(list_bcf(Path::new(f))),
             None => usage("archisim bcf <incidencias.bcf>"),
@@ -276,6 +284,191 @@ fn list_bcf(path: &Path) -> R<()> {
                 .unwrap_or_default()
         );
     }
+    Ok(())
+}
+
+/// A box element for the example models: class, GlobalId, name, lower
+/// and upper corner in metres.
+struct Piece(&'static str, &'static str, &'static str, [f64; 3], [f64; 3]);
+
+/// A small IFC4 file in millimetres (as Revit writes them) with one storey
+/// and the given boxes, and pipes (GlobalId, name, polyline, radius).
+fn example_ifc(
+    project: &str,
+    app: &str,
+    boxes: &[Piece],
+    pipes: &[(&str, &str, Vec<[f64; 3]>, f64)],
+) -> String {
+    let mm = |v: f64| format!("{:.1}", v * 1000.0);
+    let mut s = format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');\n\
+         FILE_NAME('{project}.ifc','2026-10-19T12:00:00',('Ingeniería'),('Ejemplo'),'{app}','{app}','');\n\
+         FILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCPROJECT('3Kq8sM1rT0dOoN0r9pG0a1',$,'{project}',$,$,$,$,(#6),#2);\n\
+         #2=IFCUNITASSIGNMENT((#3));\n#3=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n#5=IFCAXIS2PLACEMENT3D(#7,$,$);\n\
+         #6=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#5,$);\n#7=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #8=IFCLOCALPLACEMENT($,#5);\n\
+         #9=IFCSITE('3Kq8sM1rT0dOoN0r9pG0a2',$,'Parcela',$,$,#8,$,$,.ELEMENT.,$,$,$,$,$);\n\
+         #10=IFCBUILDING('3Kq8sM1rT0dOoN0r9pG0a3',$,'Vivienda',$,$,#8,$,$,.ELEMENT.,$,$,$);\n\
+         #11=IFCBUILDINGSTOREY('3Kq8sM1rT0dOoN0r9pG0a4',$,'Planta baja',$,$,#8,$,$,.ELEMENT.,0.);\n\
+         #12=IFCRELAGGREGATES('3Kq8sM1rT0dOoN0r9pG0a5',$,$,$,#1,(#9));\n\
+         #13=IFCRELAGGREGATES('3Kq8sM1rT0dOoN0r9pG0a6',$,$,$,#9,(#10));\n\
+         #14=IFCRELAGGREGATES('3Kq8sM1rT0dOoN0r9pG0a7',$,$,$,#10,(#11));\n"
+    );
+    let mut n = 100;
+    let mut ids = Vec::new();
+    for Piece(class, guid, name, lo, hi) in boxes {
+        let b = n;
+        n += 10;
+        let (w, d, h) = (hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+        s += &format!(
+            "#{b}=IFCCARTESIANPOINT(({},{},{}));\n#{}=IFCAXIS2PLACEMENT3D(#{b},$,$);\n#{}=IFCLOCALPLACEMENT(#8,#{});\n\
+             #{}=IFCCARTESIANPOINT(({},{}));\n#{}=IFCAXIS2PLACEMENT2D(#{},$);\n\
+             #{}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{},{},{});\n#{}=IFCEXTRUDEDAREASOLID(#{},$,#4,{});\n\
+             #{}=IFCSHAPEREPRESENTATION(#6,'Body','SweptSolid',(#{}));\n#{}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{}));\n\
+             #{}={class}('{guid}',$,'{name}',$,$,#{},#{},$,$);\n",
+            mm(lo[0]), mm(lo[1]), mm(lo[2]),
+            b + 1, b + 2, b + 1,
+            b + 3, mm(w / 2.0), mm(d / 2.0), b + 4, b + 3,
+            b + 5, b + 4, mm(w), mm(d), b + 6, b + 5, mm(h),
+            b + 7, b + 6, b + 8, b + 7,
+            b + 9, b + 2, b + 8,
+        );
+        ids.push(format!("#{}", b + 9));
+    }
+    for (guid, name, path, r) in pipes {
+        let b = n;
+        n += 10 + path.len() as u64;
+        let pts: Vec<String> = (0..path.len())
+            .map(|i| format!("#{}", b + 10 + i as u64))
+            .collect();
+        for (i, p) in path.iter().enumerate() {
+            s += &format!(
+                "#{}=IFCCARTESIANPOINT(({},{},{}));\n",
+                b + 10 + i as u64,
+                mm(p[0]),
+                mm(p[1]),
+                mm(p[2])
+            );
+        }
+        s += &format!(
+            "#{b}=IFCPOLYLINE(({}));\n#{}=IFCSWEPTDISKSOLID(#{b},{},$,$,$);\n\
+             #{}=IFCSHAPEREPRESENTATION(#6,'Body','AdvancedSweptSolid',(#{}));\n#{}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{}));\n\
+             #{}=IFCPIPESEGMENT('{guid}',$,'{name}',$,$,#8,#{},$,.RIGIDSEGMENT.);\n",
+            pts.join(","),
+            b + 1,
+            mm(*r),
+            b + 2,
+            b + 1,
+            b + 3,
+            b + 2,
+            b + 4,
+            b + 3
+        );
+        ids.push(format!("#{}", b + 4));
+    }
+    s += &format!(
+        "#{n}=IFCRELCONTAINEDINSPATIALSTRUCTURE('3Kq8sM1rT0dOoN0r9pG0a8',$,$,$,({}),#11);\nENDSEC;\nEND-ISO-10303-21;\n",
+        ids.join(",")
+    );
+    s
+}
+
+/// The example models of `demo-coordinacion`, matching the demo house
+/// (12 × 9 m, walls 3 m high, roof slab from 3,00 to 3,55).
+pub fn example_models() -> (String, String) {
+    let structure = example_ifc(
+        "Estructura",
+        "Ejemplo de estructura",
+        &[
+            // Columns: in the façade corners (embedded in the walls, as
+            // usual: a clash the architect wants to see) and one in the
+            // middle of the hall door, by mistake.
+            Piece(
+                "IFCCOLUMN",
+                "1Pil00000000000000P001",
+                "P-1 30×30",
+                [0.0, 0.0, -0.35],
+                [0.3, 0.3, 3.0],
+            ),
+            Piece(
+                "IFCCOLUMN",
+                "1Pil00000000000000P002",
+                "P-2 30×30",
+                [11.7, 0.0, -0.35],
+                [12.0, 0.3, 3.0],
+            ),
+            Piece(
+                "IFCCOLUMN",
+                "1Pil00000000000000P003",
+                "P-3 30×30",
+                [4.65, 3.35, -0.35],
+                [4.95, 3.65, 3.0],
+            ),
+            // A beam whose underside is 10 cm below the partition heads.
+            Piece(
+                "IFCBEAM",
+                "1Vig00000000000000V001",
+                "V-1 30×40",
+                [0.26, 4.35, 2.6],
+                [11.74, 4.65, 3.0],
+            ),
+            // A beam embedded in the façade (its outer leaf and insulation).
+            Piece(
+                "IFCBEAM",
+                "1Vig00000000000000V002",
+                "V-2 26×40",
+                [0.3, 0.0, 2.6],
+                [11.7, 0.26, 3.0],
+            ),
+        ],
+        &[],
+    );
+    let services = example_ifc(
+        "Instalaciones",
+        "Ejemplo de instalaciones",
+        &[
+            // A duct through the corridor partition, without a hole.
+            Piece(
+                "IFCDUCTSEGMENT",
+                "1Con00000000000000C001",
+                "Conducto 40×30",
+                [1.0, 5.8, 2.25],
+                [11.0, 6.2, 2.55],
+            ),
+        ],
+        &[(
+            "1Baj00000000000000B001",
+            "Bajante Ø110",
+            vec![[11.5, 8.5, -0.6], [11.5, 8.5, 3.8]],
+            0.055,
+        )],
+    );
+    (structure, services)
+}
+
+fn demo_files(dir: &Path) -> R<()> {
+    std::fs::create_dir_all(dir)?;
+    let doc = crate::demo::build()?;
+    let project = dir.join(format!("demo.{}", archisim_file::EXTENSION));
+    archisim_file::save(doc.model(), &project)?;
+    let (structure, services) = example_models();
+    let s = dir.join("demo-estructura.ifc");
+    let i = dir.join("demo-instalaciones.ifc");
+    let r = dir.join("demo-requisitos.ids");
+    std::fs::write(&s, structure)?;
+    std::fs::write(&i, services)?;
+    std::fs::write(
+        &r,
+        include_str!("../../archisim-ids/tests/fixtures/vivienda.ids"),
+    )?;
+    println!("Ficheros de coordinación de ejemplo:");
+    for p in [&project, &s, &i, &r] {
+        println!("  {}", p.display());
+    }
+    println!();
+    clashes(&project, &[&s, &i], 0.01, None)?;
     Ok(())
 }
 
