@@ -29,8 +29,8 @@ pub mod lettering;
 use std::fmt::Write as _;
 
 use archisim_core::{
-    CutPattern, LayerFunction, LevelId, Mark, Model, Pen, Point2, Slab, WallFunction, WallId,
-    WallSide, EPSILON,
+    CutPattern, LayerFunction, LevelId, LineStyle, Mark, Model, Pen, Point2, Slab, WallFunction,
+    WallId, WallSide, EPSILON,
 };
 use archisim_geom::{
     clip_span, openings_in_wall, wall_geometry_in, wall_pieces, EndCut, OpeningGeometry,
@@ -1270,13 +1270,9 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
                 from,
                 to,
                 pen,
-                dashed,
+                style,
             } => {
-                let dash = if dashed {
-                    format!(r#" stroke-dasharray="{} {}""#, num(2.0 * k), num(1.0 * k))
-                } else {
-                    String::new()
-                };
+                let dash = dash_attr(style, k);
                 let _ = writeln!(
                     s,
                     r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"{dash}/>"#,
@@ -1288,15 +1284,17 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
             Mark::Polygon {
                 points,
                 pen,
+                style,
                 filled,
             } => {
                 let pts: Vec<Point2> = points.into_iter().map(world).collect();
                 let _ = writeln!(
                     s,
-                    r#"<path d="{}" fill="{}" stroke="{INK}" stroke-width="{}"/>"#,
+                    r#"<path d="{}" fill="{}" stroke="{INK}" stroke-width="{}"{}/>"#,
                     path(&pts),
                     if filled { "white" } else { "none" },
-                    num(pen_weight(pen) * k)
+                    num(pen_weight(pen) * k),
+                    dash_attr(style, k)
                 );
             }
             Mark::Arc {
@@ -1304,6 +1302,7 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
                 from,
                 to,
                 pen,
+                style,
             } => {
                 let (c, a, b) = (world(center), world(from), world(to));
                 let r = (a - c).length();
@@ -1312,15 +1311,36 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
                 let sweep = if (a - c).cross(b - c) > 0.0 { 0 } else { 1 };
                 let _ = writeln!(
                     s,
-                    r#"<path d="M{} A{r},{r} 0 0,{sweep} {}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    r#"<path d="M{} A{r},{r} 0 0,{sweep} {}" fill="none" stroke="{INK}" stroke-width="{}"{}/>"#,
                     pt(a),
                     pt(b),
                     num(pen_weight(pen) * k),
+                    dash_attr(style, k),
                     r = num(r)
                 );
             }
         }
     }
+}
+
+/// The SVG dash attribute of a line style, at the drawing scale (`k`
+/// metres per paper millimetre); empty for a continuous line. Dots are
+/// drawn with round caps so they read as dots.
+fn dash_attr(style: LineStyle, k: f64) -> String {
+    let pattern = style.pattern_mm();
+    if pattern.is_empty() {
+        return String::new();
+    }
+    let values: Vec<String> = pattern.iter().map(|v| num(v * k)).collect();
+    let cap = if matches!(
+        style,
+        LineStyle::Dotted | LineStyle::DashDot | LineStyle::DashDotDot
+    ) {
+        r#" stroke-linecap="round""#
+    } else {
+        ""
+    };
+    format!(r#" stroke-dasharray="{}"{cap}"#, values.join(" "))
 }
 
 /// Paper line weight of a family pen, in millimetres.
@@ -2214,5 +2234,89 @@ mod num_tests {
             };
             assert_eq!(super::num(v), old, "{v}");
         }
+    }
+
+    /// The swing line style of a door type reaches the plan: dashed at 1:50
+    /// is 2 mm dash and 1 mm gap of paper, so 0.1 and 0.05 m.
+    #[test]
+    fn swing_line_style_is_drawn() {
+        use super::*;
+        use archisim_core::{
+            CutPattern as Pattern, DoorOperation, Hand, Layer, NewOpening, NewOpeningType, NewWall,
+            OpeningKind, ReferenceLine,
+        };
+        let mut m = Model::new("Giro");
+        let lvl = m.add_level("P1", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], Pattern::Diagonal);
+        let wood = m.add_material("Madera", "wood", [190, 150, 100], Pattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "M",
+                WallFunction::Interior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.1,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 2.7,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let t = m
+            .add_opening_type(NewOpeningType {
+                name: "P".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 0.8,
+                height: 2.05,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: wood,
+                panel_material: wood,
+            })
+            .unwrap();
+        m.add_opening(NewOpening {
+            opening_type: t,
+            wall: w,
+            along: 2.0,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })
+        .unwrap();
+        let arcs = |m: &Model| {
+            render_plan(m, lvl, &PlanOptions::default())
+                .lines()
+                .filter(|l| l.contains(" A0.7,0.7 "))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        let before = arcs(&m);
+        assert_eq!(before.len(), 1);
+        assert!(!before[0].contains("dasharray"));
+        let ty = m.opening_type(t).unwrap().clone();
+        let mut values = ty.values.clone();
+        values.insert(
+            "swing_line".into(),
+            archisim_core::Value::Text("dashed".into()),
+        );
+        m.edit_family_type(t, ty.family, values).unwrap();
+        let after = arcs(&m);
+        assert!(
+            after[0].contains(r#"stroke-dasharray="0.1 0.05""#),
+            "{}",
+            after[0]
+        );
     }
 }

@@ -12,8 +12,8 @@ use std::fmt;
 use std::sync::Arc;
 
 pub use archisim_family::{
-    Evaluation, FamilyDef, FamilyError, Host, Mark, Param, ParamKind, ParamScope, Part, Pen, Value,
-    Values, PLAN_BUILTINS,
+    Evaluation, FamilyDef, FamilyError, Host, LineStyle, Mark, Param, ParamKind, ParamScope, Part,
+    Pen, Value, Values, PLAN_BUILTINS,
 };
 
 use crate::ids::FamilyId;

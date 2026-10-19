@@ -45,6 +45,14 @@ const REACH: f32 = 10.0;
 /// in screen points (horizontal and vertical lock by angle, see
 /// [`crate::snap::ORTHO_LOCK`]).
 const TRACK_REACH: f32 = 6.0;
+/// Default width of each side column (left: tools and properties; right:
+/// navigator), in points.
+const SIDE_WIDTH: f32 = 340.0;
+const MIN_SIDE_WIDTH: f32 = 290.0;
+const MAX_SIDE_WIDTH: f32 = 520.0;
+/// Width of the toolbox, with names and with icons only.
+const TOOLBOX_WIDTH: f32 = 124.0;
+const TOOLBOX_COMPACT_WIDTH: f32 = 52.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tool {
@@ -220,6 +228,9 @@ pub struct ArchiSimApp {
     thumbs: thumbs::Thumbs,
     /// The toolbox shows icons only.
     pub compact_toolbox: bool,
+    /// Width of each side of the drawing: tools and properties on the left,
+    /// navigator on the right, so the drawing is centred.
+    pub side_width: f32,
     /// Counts messages, to know when the last one appeared.
     message_serial: u64,
     /// The message last aged and when it appeared (seconds).
@@ -290,6 +301,7 @@ impl ArchiSimApp {
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
             compact_toolbox: false,
+            side_width: SIDE_WIDTH,
             message_serial: 0,
             message_seen: (0, 0.0),
             styled: false,
@@ -812,13 +824,17 @@ impl ArchiSimApp {
         egui::Panel::bottom("bottom-bar")
             .frame(bar(p.panel))
             .show(ui, |ui| self.bottom_bar(ui));
+        // The drawing stays in the middle of the window: the column on the
+        // right (navigator) is as wide as the two on the left (tools and
+        // properties). Dragging the edge of Properties widens both sides.
+        let tools_w = self.toolbox_width();
         egui::Panel::left("tools")
             .resizable(false)
-            .exact_size(if self.compact_toolbox { 64.0 } else { 160.0 })
+            .exact_size(tools_w)
             .frame(
                 egui::Frame::new()
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(8, 0))
+                    .inner_margin(egui::Margin::symmetric(6, 0))
                     .stroke(Stroke::new(1.0, p.line)),
             )
             .show(ui, |ui| self.toolbox(ui));
@@ -831,11 +847,11 @@ impl ArchiSimApp {
         // Properties beside the tools, as Revit's palette: choosing a tool
         // and its type is a short move of the mouse.
         if self.show_properties {
-            egui::Panel::left("properties")
+            let shown = egui::Panel::left("properties")
                 .resizable(true)
-                .default_size(320.0)
-                .min_size(270.0)
-                .max_size(520.0)
+                .default_size(SIDE_WIDTH - tools_w)
+                .min_size(MIN_SIDE_WIDTH - tools_w)
+                .max_size(MAX_SIDE_WIDTH - tools_w)
                 .frame(column())
                 .show(ui, |ui| {
                     egui::ScrollArea::vertical()
@@ -846,15 +862,21 @@ impl ArchiSimApp {
                             ui.add_space(12.0);
                         });
                 });
+            self.side_width = tools_w + shown.response.rect.width();
         }
         if self.show_navigator {
-            egui::Panel::right("navigator")
-                .resizable(true)
-                .default_size(270.0)
-                .min_size(220.0)
-                .max_size(480.0)
-                .frame(column())
-                .show(ui, |ui| self.navigator(ui));
+            let panel = egui::Panel::right("navigator").frame(column());
+            let panel = if self.show_properties {
+                // Mirrors the left side.
+                panel.resizable(false).exact_size(self.side_width)
+            } else {
+                panel
+                    .resizable(true)
+                    .default_size(SIDE_WIDTH)
+                    .min_size(MIN_SIDE_WIDTH)
+                    .max_size(MAX_SIDE_WIDTH)
+            };
+            panel.show(ui, |ui| self.navigator(ui));
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -992,6 +1014,14 @@ impl ArchiSimApp {
         match saved {
             Some(Ok(())) => self.say(format!("Imagen 3D guardada en {}.", path.display())),
             _ => self.complain("No se pudo guardar la imagen 3D."),
+        }
+    }
+
+    fn toolbox_width(&self) -> f32 {
+        if self.compact_toolbox {
+            TOOLBOX_COMPACT_WIDTH
+        } else {
+            TOOLBOX_WIDTH
         }
     }
 
@@ -1241,11 +1271,6 @@ fn fmt_level(elevation: f64) -> String {
 fn shortcut_button<'a>(text: &'a str, shortcut: &'a str) -> egui::Button<'a> {
     egui::Button::new(text).shortcut_text(shortcut)
 }
-
-fn guid_label(ui: &mut Ui, guid: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(guid).monospace().small()).selectable(true));
-}
-
 fn dashed(painter: &egui::Painter, a: Pos2, b: Pos2, color: Color32) {
     dashed_path(painter, &[a, b], color);
 }
@@ -1321,6 +1346,7 @@ mod temp_ui;
 pub mod theme;
 mod thumbs;
 mod toolbox;
+mod type_views;
 mod types_ui;
 mod view3d_ui;
 mod widgets;

@@ -205,10 +205,10 @@ impl ArchiSimApp {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             if !compact {
-                ui.add_space(4.0);
+                ui.add_space(2.0);
                 ui.label(
                     egui::RichText::new("Herramientas")
-                        .font(super::widgets::strong_font(13.0))
+                        .font(super::widgets::strong_font(12.0))
                         .color(p.text),
                 );
             }
@@ -232,7 +232,7 @@ impl ArchiSimApp {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                let gap = 6.0;
+                let gap = 4.0;
                 let full = ui.available_width();
                 for (title, tiles) in SECTIONS {
                     if compact {
@@ -288,7 +288,7 @@ fn compact_tile(ui: &mut Ui, width: f32, icon: Icon, active: Option<bool>) -> eg
     } else {
         Sense::hover()
     };
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 40.0), sense);
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 36.0), sense);
     let (fill, fg) = match active {
         Some(true) => (p.accent_soft, p.accent),
         Some(false) if resp.hovered() => (p.raised, p.text),

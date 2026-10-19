@@ -518,6 +518,7 @@ fn plan_symbols_draw_lines_outlines_and_arcs() {
                 [-0.5, 0.035]
             ],
             pen: Pen::Frame,
+            style: LineStyle::Continuous,
             filled: true
         }
     );
@@ -527,7 +528,7 @@ fn plan_symbols_draw_lines_outlines_and_arcs() {
             from: [-0.5, -0.15],
             to: [0.5, -0.15],
             pen: Pen::View,
-            dashed: true
+            style: LineStyle::Dashed
         }
     );
     assert!(matches!(marks[3], Mark::Arc { pen: Pen::Thin, .. }));
@@ -591,4 +592,62 @@ fn plan_and_body_statements_stay_in_their_place() {
     // The plan names the program provides cannot be declared.
     let e = parse("family \"x\"\n  category door\ntype_params\n  sill_height length = 1\n");
     assert!(matches!(e, Err(FamilyError::Syntax { line: 4, .. })));
+}
+
+#[test]
+fn line_styles_come_from_names_and_parameters() {
+    let src = r#"
+family "Estilos"
+  category window
+  host wall
+type_params
+  swing linestyle = "dashdot" label "Línea del giro"
+plan 1:50
+  line (0, 0) to (1, 0) pen thin
+  line (0, 0) to (1, 0) pen thin dotted
+  arc center (0, 0) from (1, 0) to (0, 1) pen thin style swing
+  polygon (0, 0) (1, 0) (1, 1) pen frame style "longdash" filled
+"#;
+    let def = parse(src).unwrap();
+    assert_eq!(def.param("swing").unwrap().kind, ParamKind::LineStyle);
+    let t = values(&[("swing", Value::Text("dashdot".into()))]);
+    let marks = def
+        .evaluate_plan(&t, &Values::new(), &plan_builtins(0.0), 50.0)
+        .unwrap();
+    let styles: Vec<LineStyle> = marks
+        .iter()
+        .map(|m| match m {
+            Mark::Line { style, .. } | Mark::Polygon { style, .. } | Mark::Arc { style, .. } => {
+                *style
+            }
+        })
+        .collect();
+    assert_eq!(
+        styles,
+        [
+            LineStyle::Continuous,
+            LineStyle::Dotted,
+            LineStyle::DashDot,
+            LineStyle::LongDash
+        ]
+    );
+    assert!(matches!(&marks[3], Mark::Polygon { filled: true, .. }));
+    // A value that is not a style, in a parameter or written in a mark.
+    let bad = values(&[("swing", Value::Text("ondulada".into()))]);
+    assert!(matches!(
+        def.evaluate_plan(&bad, &Values::new(), &plan_builtins(0.0), 50.0),
+        Err(FamilyError::UnknownOption { .. })
+    ));
+    let e = parse("family \"x\"\n  category door\ntype_params\n  s linestyle = \"wavy\"\n");
+    assert!(matches!(e, Err(FamilyError::Syntax { line: 4, .. })));
+    let e = parse("family \"x\"\n  category door\nplan 1:50\n  line (0, 0) to (1, 0) pen thin style \"wavy\"\n")
+        .unwrap()
+        .evaluate_plan(&Values::new(), &Values::new(), &plan_builtins(0.0), 50.0);
+    assert!(matches!(e, Err(FamilyError::Eval { line: 4, .. })));
+    // Every style has a Spanish name and a pattern; only continuous is solid.
+    for s in LineStyle::ALL {
+        assert_eq!(LineStyle::from_code(s.code()), Some(s));
+        assert!(!s.label().is_empty());
+        assert_eq!(s.pattern_mm().is_empty(), s == LineStyle::Continuous);
+    }
 }

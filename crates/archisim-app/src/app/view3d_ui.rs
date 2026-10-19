@@ -157,6 +157,88 @@ impl View3dState {
         gpu.texture
     }
 
+    /// A small 3D view of a model of its own, as the preview of the types
+    /// dialog: drag to orbit, wheel to zoom, double click to frame it
+    /// again. `key` changes when the model does; `build` makes it then.
+    pub fn preview(
+        &mut self,
+        ui: &mut Ui,
+        gpu_state: Option<&egui_wgpu::RenderState>,
+        key: u64,
+        build: impl FnOnce() -> Option<archisim_core::Model>,
+        size: Vec2,
+    ) {
+        let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
+        let painter = ui.painter_at(rect);
+        let wanted = Some((key, BTreeSet::new()));
+        if self.scene_key != wanted {
+            self.scene =
+                build().map_or_else(Scene::default, |m| Scene::build(&m, &BTreeSet::new()));
+            self.scene_key = wanted;
+            self.scene_serial += 1;
+            self.fit_requested = true;
+        }
+        if self.fit_requested && self.scene.lo.x.is_finite() {
+            self.fit_requested = false;
+            self.camera
+                .fit(self.scene.lo, self.scene.hi, size.x / size.y);
+        }
+        let delta = response.drag_delta();
+        if response.dragged_by(PointerButton::Primary) {
+            self.camera.orbit(glam::Vec2::new(delta.x, delta.y));
+        } else if response.dragged_by(PointerButton::Middle)
+            || response.dragged_by(PointerButton::Secondary)
+        {
+            self.camera.pan(glam::Vec2::new(delta.x, delta.y), size.y);
+        }
+        if response.double_clicked() {
+            self.fit_requested = true;
+        }
+        if let Some(pos) = response.hover_pos() {
+            let (scroll, zoom) = ui.ctx().input(|i| (i.smooth_scroll_delta, i.zoom_delta()));
+            let factor = (-scroll.y / 300.0).exp() / zoom;
+            if (factor - 1.0).abs() > 1e-6 {
+                let local = pos - rect.min;
+                self.camera.zoom_at(
+                    factor,
+                    glam::Vec2::new(local.x, local.y),
+                    glam::Vec2::new(size.x, size.y),
+                );
+            }
+        }
+        let ppp = ui.ctx().pixels_per_point();
+        let px = [
+            ((size.x * ppp * SUPERSAMPLE).round() as u32).clamp(1, 4096),
+            ((size.y * ppp * SUPERSAMPLE).round() as u32).clamp(1, 4096),
+        ];
+        match self.draw(gpu_state, px) {
+            Some(texture) => {
+                painter.image(
+                    texture,
+                    rect,
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            }
+            None => {
+                painter.rect_filled(
+                    rect,
+                    CornerRadius::same(4),
+                    Color32::from_rgb(225, 229, 236),
+                );
+                painter.text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    "La vista 3D necesita la tarjeta gráfica",
+                    FontId::proportional(12.0),
+                    Color32::from_gray(60),
+                );
+            }
+        }
+        response
+            .on_hover_text("Arrastra para girar, rueda para acercar, doble clic para encuadrar");
+    }
+
     /// The last picture as RGBA, to save it.
     pub fn picture(&self) -> Option<(u32, u32, Vec<u8>)> {
         let gpu = self.gpu.as_ref()?;

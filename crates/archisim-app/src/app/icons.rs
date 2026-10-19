@@ -48,6 +48,8 @@ pub enum Icon {
     GeoCircle,
     GeoPolygon,
     GeoWand,
+    Folder,
+    FolderOpen,
 }
 
 /// Draws `icon` in `rect` with lines of `color`.
@@ -361,6 +363,32 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(15.0, 5.0), (19.0, 5.0)], st_thin);
             line(&[(20.0, 9.0), (22.0, 11.0)], st_thin);
             line(&[(11.0, 4.0), (12.5, 5.5)], st_thin);
+        }
+        Icon::Folder => closed(
+            &[
+                (2.5, 6.0),
+                (9.0, 6.0),
+                (11.0, 8.5),
+                (21.5, 8.5),
+                (21.5, 19.0),
+                (2.5, 19.0),
+            ],
+            st,
+        ),
+        Icon::FolderOpen => {
+            line(
+                &[
+                    (4.0, 19.0),
+                    (2.5, 19.0),
+                    (2.5, 6.0),
+                    (9.0, 6.0),
+                    (11.0, 8.5),
+                    (19.0, 8.5),
+                    (19.0, 11.0),
+                ],
+                st,
+            );
+            closed(&[(4.0, 19.0), (7.0, 11.0), (22.0, 11.0), (19.0, 19.0)], st);
         }
     }
 }

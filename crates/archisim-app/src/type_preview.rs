@@ -22,6 +22,27 @@ pub const PREVIEW_SCALE: f64 = 20.0;
 pub fn layers_model(source: &Model, layers: &[Layer], length: f64) -> Option<(Model, LevelId)> {
     let mut m = Model::new("preview");
     let level = m.add_level("preview", 0.0);
+    let mapped = copy_layers(source, &mut m, layers)?;
+    let t = m
+        .add_wall_type("preview", WallFunction::Exterior, mapped)
+        .ok()?;
+    m.add_wall(NewWall {
+        wall_type: t,
+        level,
+        start: Point2::new(0.0, 0.0),
+        end: Point2::new(length, 0.0),
+        reference: ReferenceLine::Center,
+        height: 3.0,
+        base_offset: 0.0,
+        bulge: 0.0,
+        top: archisim_core::WallTop::Unconnected,
+    })
+    .ok()?;
+    Some((m, level))
+}
+
+/// The layers with the materials of `source` copied into `m` (each once).
+fn copy_layers(source: &Model, m: &mut Model, layers: &[Layer]) -> Option<Vec<Layer>> {
     let mut mapped = Vec::new();
     let mut ids: Vec<(MaterialId, MaterialId)> = Vec::new();
     for l in layers {
@@ -44,22 +65,39 @@ pub fn layers_model(source: &Model, layers: &[Layer], length: f64) -> Option<(Mo
             ..l.clone()
         });
     }
+    Some(mapped)
+}
+
+/// A piece of wall of the layers, 1.2 m long and high, for the 3D preview.
+pub fn wall_piece_model(source: &Model, layers: &[Layer]) -> Option<Model> {
+    let (mut m, _) = layers_model(source, layers, 1.2)?;
+    let wall = m.walls().next()?.id;
+    m.set_wall_height(wall, 1.2, 0.0).ok()?;
+    Some(m)
+}
+
+/// A square of slab of the layers, 1.2 m wide, for the 3D preview.
+pub fn slab_piece_model(source: &Model, layers: &[Layer]) -> Option<Model> {
+    let mut m = Model::new("preview");
+    let level = m.add_level("preview", 0.0);
+    let mapped = copy_layers(source, &mut m, layers)?;
     let t = m
-        .add_wall_type("preview", WallFunction::Exterior, mapped)
+        .add_slab_type("preview", archisim_core::SlabFunction::Floor, mapped)
         .ok()?;
-    m.add_wall(NewWall {
-        wall_type: t,
+    let s = 1.2;
+    m.add_slab(archisim_core::NewSlab {
+        slab_type: t,
         level,
-        start: Point2::new(0.0, 0.0),
-        end: Point2::new(length, 0.0),
-        reference: ReferenceLine::Center,
-        height: 3.0,
-        base_offset: 0.0,
-        bulge: 0.0,
-        top: archisim_core::WallTop::Unconnected,
+        outline: vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(s, 0.0),
+            Point2::new(s, s),
+            Point2::new(0.0, s),
+        ],
+        top_offset: 0.0,
     })
     .ok()?;
-    Some((m, level))
+    Some(m)
 }
 
 /// A model with a door or window of type `t` in the middle of a wall that
@@ -212,6 +250,16 @@ mod tests {
         assert_eq!(img.pixels[row * img.size[0] + col].a(), 255);
         // An invalid layer list gives no preview.
         assert!(layers_model(&m, &[], 1.0).is_none());
+        // The 3D pieces.
+        assert_eq!(
+            wall_piece_model(&m, &facade.layers)
+                .unwrap()
+                .walls()
+                .count(),
+            1
+        );
+        let st = m.slab_types().next().unwrap();
+        assert_eq!(slab_piece_model(&m, &st.layers).unwrap().slabs().count(), 1);
     }
 
     #[test]

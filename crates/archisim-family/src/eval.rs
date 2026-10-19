@@ -36,12 +36,13 @@ pub enum Mark {
         from: [f64; 2],
         to: [f64; 2],
         pen: Pen,
-        dashed: bool,
+        style: LineStyle,
     },
     /// Closed outline; `filled` hides what is drawn under it (white).
     Polygon {
         points: Vec<[f64; 2]>,
         pen: Pen,
+        style: LineStyle,
         filled: bool,
     },
     /// Arc around `center` from `from` to `to`, the short way; the radius
@@ -51,6 +52,7 @@ pub enum Mark {
         from: [f64; 2],
         to: [f64; 2],
         pen: Pen,
+        style: LineStyle,
     },
 }
 
@@ -209,6 +211,17 @@ fn check_value(p: &Param, v: &Value) -> Result<(), FamilyError> {
         (ParamKind::Bool, Value::Bool(_))
         | (ParamKind::Material, Value::Material(_))
         | (ParamKind::Text, Value::Text(_)) => Ok(()),
+        (ParamKind::LineStyle, Value::Text(t)) => {
+            if LineStyle::from_code(t).is_some() {
+                Ok(())
+            } else {
+                Err(FamilyError::UnknownOption {
+                    param: p.name.clone(),
+                    label: p.label.clone(),
+                    value: t.clone(),
+                })
+            }
+        }
         (ParamKind::Choice(options), Value::Text(t)) => {
             if options.contains(t) {
                 Ok(())
@@ -273,6 +286,22 @@ impl<'a> Run<'a> {
         ])
     }
 
+    fn line_style(
+        &mut self,
+        e: &Expr,
+        env: &[HashMap<String, Value>],
+        line: usize,
+    ) -> Result<LineStyle, FamilyError> {
+        match self.eval(e, env, line)? {
+            Value::Text(t) => LineStyle::from_code(&t)
+                .ok_or_else(|| eval_err(line, format!("«{t}» is not a line style"))),
+            other => Err(eval_err(
+                line,
+                format!("a line style is a name, not a {}", other.kind_name()),
+            )),
+        }
+    }
+
     fn push_mark(&mut self, mark: Mark, line: usize) -> Result<(), FamilyError> {
         if self.mode != Mode::Plan {
             return Err(eval_err(
@@ -328,7 +357,7 @@ impl<'a> Run<'a> {
                     from,
                     to,
                     pen,
-                    dashed,
+                    style,
                     line,
                 } => {
                     self.tick(*line)?;
@@ -336,13 +365,14 @@ impl<'a> Run<'a> {
                         from: self.point(from, env, *line)?,
                         to: self.point(to, env, *line)?,
                         pen: *pen,
-                        dashed: *dashed,
+                        style: self.line_style(style, env, *line)?,
                     };
                     self.push_mark(mark, *line)?;
                 }
                 Stmt::Polygon {
                     points,
                     pen,
+                    style,
                     filled,
                     line,
                 } => {
@@ -354,6 +384,7 @@ impl<'a> Run<'a> {
                     let mark = Mark::Polygon {
                         points: pts,
                         pen: *pen,
+                        style: self.line_style(style, env, *line)?,
                         filled: *filled,
                     };
                     self.push_mark(mark, *line)?;
@@ -363,6 +394,7 @@ impl<'a> Run<'a> {
                     from,
                     to,
                     pen,
+                    style,
                     line,
                 } => {
                     self.tick(*line)?;
@@ -371,6 +403,7 @@ impl<'a> Run<'a> {
                         from: self.point(from, env, *line)?,
                         to: self.point(to, env, *line)?,
                         pen: *pen,
+                        style: self.line_style(style, env, *line)?,
                     };
                     self.push_mark(mark, *line)?;
                 }
