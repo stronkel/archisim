@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), secciones y alzados (2.10), forjados inclinados (2.7), cubiertas inclinadas (2.4), escaleras (2.6), terreno y norte (2.12), muros cortina (2.8), barandillas sueltas (2.6), puerta plegable, corredera empotrada, persiana y mobiliario (2.2), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
+## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), secciones y alzados (2.10), forjados inclinados (2.7), cubiertas inclinadas (2.4), escaleras y barandillas (2.6), terreno y norte (2.12), muros cortina (2.8), perfiles de acero (2.5), prioridades por material (2.3), puerta plegable, corredera empotrada, persiana y mobiliario (2.2), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
 
 Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientras dormía, más cuatro mejoras pequeñas. Todo va en la rama `bloque/fase2-noche` (pull request para revisar), con commit y push tras cada avance. Esta entrada se completa conforme avanza la noche.
 
@@ -99,6 +99,10 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
 - Muros cortina: solo rectos y con retícula regular; aún sin puertas o paneles opacos por paño, sin perfiles de distinta sección, sin unión con los muros de fábrica (se dibujan encima) y sin leer muros cortina de otros programas (se cuentan en el informe).
 - Secciones: sin cotas ni textos propios todavía (3.2), sin línea de terreno, sin sombras; las secciones quebradas (con saltos) llegarán más adelante. Un alzado de un modelo grande pesa (cada cara se dibuja aparte): si la vista va lenta, se optimizará uniendo caras.
 - Pilares y vigas aún no recortan muros ni forjados (en planta el pilar tapa el muro; en 3D y en el IFC se solapan) ni se unen entre sí.
+- Cubiertas: solo sobre contornos convexos (una casa en L lleva dos cubiertas que se solapan; la limahoya de verdad, con una sola cubierta en L, espera a que Antonio diga cómo la quiere). Los muros curvos no se recortan bajo cubierta.
+- Escaleras: falta la de caracol, el peldañeado compensado y las zancas metálicas o de madera.
+- Terreno: falta importar levantamientos (DXF de curvas, CSV de puntos), según cómo le lleguen a Antonio.
+- Objetos de otros programas (IfcFurniture sin la receta de ArchiSim) aún no se importan: se cuentan en el informe.
 - Pilares y vigas inclinados: más adelante. Al importar de otro programa un perfil U o L, su giro de 180° (hacia qué lado mira el alma) no se distingue todavía.
 
 **Antonio debe probar**
