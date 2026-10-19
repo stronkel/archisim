@@ -3,6 +3,7 @@ family "Bidé"
   host none
   version 1
   description "Bidé de pie, contra la pared"
+  folder "Inodoros y bidés"
 
 type_params
   section "Dimensiones"

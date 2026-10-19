@@ -3,6 +3,7 @@ family "Bañera"
   host none
   version 1
   description "Bañera rectangular empotrada"
+  folder "Duchas y bañeras"
 
 type_params
   section "Dimensiones"

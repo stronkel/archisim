@@ -64,7 +64,7 @@ Una familia es un fichero `.asfam` con estas partes:
 
 Ejes de las familias alojadas en muro (metros): origen en el **centro del hueco de obra**, a la altura del **antepecho** (el suelo en las puertas) y en el **plano medio del marco**; **x** a lo largo del muro, hacia la derecha vista desde el lado al que abren las hojas; **y** a través del muro, hacia ese lado; **z** hacia arriba. Así la familia no necesita saber el espesor ni la orientación del muro, y la mano y el lado de apertura la reflejan solos.
 
-Ejes de los **objetos** (familias `host none` de categoría `furniture`, `sanitary` o `kitchen`, v0.25): origen en el **centro del lado de atrás**, a ras de suelo; **x** hacia la derecha, **y** hacia delante (hacia donde mira el objeto), **z** hacia arriba. Así una cama o un inodoro se colocan con un clic contra la cara del muro. Sus salidas `ifc_class` (`IfcFurniture` o `IfcSanitaryTerminal`) e `ifc_type` (`BED`, `TOILETPAN`…) deciden la clase IFC. Las familias de sistema de objetos están en `crates/archisim-core/families/objetos/`.
+Ejes de los **objetos** (familias `host none` de categoría `furniture`, `sanitary` o `kitchen`, v0.25; `site` —vegetación y mobiliario urbano—, `people` y `vehicle`, v0.26): origen en el **centro del lado de atrás**, a ras de suelo; **x** hacia la derecha, **y** hacia delante (hacia donde mira el objeto), **z** hacia arriba. Así una cama o un inodoro se colocan con un clic contra la cara del muro; árboles, arbustos y personas tienen el origen en su centro. Sus salidas `ifc_class` (`IfcFurniture`, `IfcSanitaryTerminal`, `IfcGeographicElement` para la vegetación o `IfcBuildingElementProxy` para gente y vehículos) e `ifc_type` (`BED`, `TOILETPAN`…; si no es uno de la clase, `USERDEFINED` con el nombre de la familia) deciden la clase IFC. La línea opcional `folder "Camas"` de la cabecera dice en qué carpeta de su categoría sale en la galería (Mobiliario › Camas, Entorno › Vegetación…). Las familias de sistema de objetos están en `crates/archisim-core/families/objetos/`.
 
 ## El lenguaje (como está en el bloque B)
 
@@ -72,7 +72,8 @@ Palabras clave en inglés, como IFC, porque el código será abierto; lo que ve 
 
 ```
 family "Ventana practicable"
-  category window              # door, window, furniture, sanitary…
+  category window              # door, window, furniture, sanitary, kitchen, site, people, vehicle
+  folder "Practicables"        # opcional: carpeta en la galería
   host wall                    # va en un muro y le abre el hueco de obra (o none)
   version 1
   description "Ventana practicable de una o dos hojas"

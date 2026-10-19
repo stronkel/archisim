@@ -11,6 +11,9 @@ impl<'a> Importer<'a> {
     pub(super) fn import_objects(&mut self) {
         let mut ids = self.file.of_kind("IFCFURNITURE");
         ids.extend(self.file.of_kind("IFCSANITARYTERMINAL"));
+        // Vegetation, people and vehicles (terrains have no family).
+        ids.extend(self.file.of_kind("IFCGEOGRAPHICELEMENT"));
+        ids.extend(self.file.of_kind("IFCBUILDINGELEMENTPROXY"));
         ids.sort_unstable();
         for id in ids {
             if let Err(why) = self.import_object(id) {

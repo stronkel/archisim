@@ -16,6 +16,11 @@ use crate::plan_image::rasterize_with;
 /// Scale of the previews: a construction detail.
 pub const PREVIEW_SCALE: f64 = 20.0;
 
+/// Pictures of objects: the longer side in points, and the drawing density
+/// (screen points per metre) the picture asked for is measured against.
+const OBJECT_PICTURE: f64 = 150.0;
+const OBJECT_POINTS_PER_M: f64 = 460.0;
+
 /// A model with one level and one straight wall from (0, 0) to
 /// (`length`, 0), the exterior on top, built from `layers` with the
 /// materials of `source`. `None` if the layers are not valid.
@@ -176,6 +181,40 @@ pub fn opening_model(source: &Model, t: &OpeningType) -> Option<(Model, LevelId)
     Some((m, level))
 }
 
+/// A model with one object of type `t` at the origin, unturned: its plan
+/// symbol as the plan draws it.
+pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Model, LevelId)> {
+    let mut m = Model::new("preview");
+    let level = m.add_level("preview", 0.0);
+    let mut copied: std::collections::HashMap<u64, MaterialId> = Default::default();
+    let mut values = t.values.clone();
+    for v in values.values_mut() {
+        if let archisim_core::Value::Material(id) = v {
+            let new = match copied.get(id) {
+                Some(n) => *n,
+                None => {
+                    let mat = source.material(MaterialId(*id))?.clone();
+                    let n = m.add_material(mat.name, mat.category, mat.cut_color, mat.cut_pattern);
+                    copied.insert(*id, n);
+                    n
+                }
+            };
+            *v = archisim_core::Value::Material(new.0);
+        }
+    }
+    let family = m.add_family(&source.family(t.family)?.source).ok()?;
+    let ot = m.add_object_type(t.name.clone(), family, values).ok()?;
+    m.add_object(archisim_core::NewObject {
+        level,
+        object_type: ot,
+        position: Point2::new(0.0, 0.0),
+        rotation: 0.0,
+        base_offset: 0.0,
+    })
+    .ok()?;
+    Some((m, level))
+}
+
 /// A model with one column of the section and material of a column or
 /// beam type, cut in plan: the section as the plan draws it.
 pub fn member_model(source: &Model, t: &archisim_core::MemberType) -> Option<(Model, LevelId)> {
@@ -213,6 +252,34 @@ pub fn member_model(source: &Model, t: &archisim_core::MemberType) -> Option<(Mo
 /// pixels per metre. Returns the image and the drawn region (lower-left,
 /// upper-right).
 pub fn draw(model: &Model, level: LevelId, px_per_m: f64) -> (ColorImage, Point2, Point2) {
+    if model.walls().next().is_none() && model.columns().next().is_none() {
+        if let Some((lo, hi)) = model
+            .objects()
+            .next()
+            .and_then(|o| model.object_type_box(o.object_type))
+        {
+            // Its box with a little room around, drawn about the size it is
+            // shown (screen textures are not filtered when made smaller,
+            // and thin lines would vanish), at the scale that keeps its
+            // lines a couple of pixels wide whatever its size.
+            let pad = 0.06 + 0.02 * (hi[0] - lo[0]).max(hi[1] - lo[1]);
+            let lo = Point2::new(lo[0] - pad, lo[1] - pad);
+            let hi = Point2::new(hi[0] + pad, hi[1] + pad);
+            let span = (hi.x - lo.x).max(hi.y - lo.y);
+            let density = px_per_m / OBJECT_POINTS_PER_M;
+            let px = OBJECT_PICTURE * density / span;
+            let size = [
+                ((hi.x - lo.x) * px).round().max(1.0) as usize,
+                ((hi.y - lo.y) * px).round().max(1.0) as usize,
+            ];
+            let options = PlanOptions {
+                scale: (PREVIEW_SCALE * 5.0 * span).max(PREVIEW_SCALE),
+                viewport: Some((lo, hi)),
+                ..PlanOptions::default()
+            };
+            return (rasterize_with(model, level, size, &options), lo, hi);
+        }
+    }
     if model.walls().next().is_none() {
         if let Some(c) = model.columns().next() {
             let (w, d) = model

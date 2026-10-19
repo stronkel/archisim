@@ -96,8 +96,8 @@ const SYSTEM_SOURCES: [&str; 7] = [
 ];
 
 /// Recipes of the system object families (furniture, sanitary ware,
-/// kitchen), placed on a level with no wall.
-const OBJECT_SOURCES: [&str; 13] = [
+/// kitchen, the site, people and vehicles), placed on a level with no wall.
+const OBJECT_SOURCES: [&str; 22] = [
     include_str!("../families/objetos/mesa.asfam"),
     include_str!("../families/objetos/silla.asfam"),
     include_str!("../families/objetos/sofa.asfam"),
@@ -111,6 +111,15 @@ const OBJECT_SOURCES: [&str; 13] = [
     include_str!("../families/objetos/lavabo.asfam"),
     include_str!("../families/objetos/ducha.asfam"),
     include_str!("../families/objetos/banera.asfam"),
+    include_str!("../families/objetos/estanteria.asfam"),
+    include_str!("../families/objetos/mueble_alto.asfam"),
+    include_str!("../families/objetos/arbol.asfam"),
+    include_str!("../families/objetos/arbusto.asfam"),
+    include_str!("../families/objetos/seto.asfam"),
+    include_str!("../families/objetos/banco.asfam"),
+    include_str!("../families/objetos/persona.asfam"),
+    include_str!("../families/objetos/coche.asfam"),
+    include_str!("../families/objetos/bicicleta.asfam"),
 ];
 
 pub const SWING_DOOR: &str = "Puerta abatible";

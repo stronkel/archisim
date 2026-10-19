@@ -30,14 +30,41 @@ impl Editor {
             return Err("elige antes el tipo de objeto".into());
         };
         let level = self.level;
+        // Trees, people and vehicles stand on the terrain under them.
+        let model = self.model();
+        let outdoors = model
+            .object_type(object_type)
+            .and_then(|t| model.family(t.family))
+            .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people" | "vehicle"));
+        let ground = outdoors
+            .then(|| {
+                let elevation = model.level(level)?.elevation;
+                let z = model
+                    .terrains_on_level(level)
+                    .find_map(|t| t.height_at(at))?;
+                Some((z - elevation) * 1000.0)
+            })
+            .flatten()
+            .map_or(0.0, |mm| mm.round() / 1000.0);
         self.transact("Colocar objeto", |m| {
             m.add_object(NewObject {
                 level,
                 object_type,
                 position: at,
                 rotation: s.rotation,
-                base_offset: s.base_offset,
+                base_offset: s.base_offset + ground,
             })
+        })
+    }
+
+    /// The project's type of a library object (see
+    /// [`archisim_library::OBJECT_CATALOGUE`]), loaded if it has none.
+    pub fn library_object_type(&mut self, name: &str) -> EditResult<ObjectTypeId> {
+        if let Some(t) = self.model().object_types().find(|t| t.name == name) {
+            return Ok(t.id);
+        }
+        self.transact("Cargar objeto de la biblioteca", |m| {
+            archisim_library::add_object_entry(m, name)
         })
     }
 

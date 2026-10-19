@@ -3,6 +3,7 @@ family "Inodoro"
   host none
   version 1
   description "Inodoro de tanque bajo, contra la pared"
+  folder "Inodoros y bidés"
 
 type_params
   section "Dimensiones"

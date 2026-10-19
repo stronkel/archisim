@@ -78,6 +78,9 @@ fn reads_the_header_and_parameters() {
     assert_eq!(def.host, Host::Wall);
     assert_eq!(def.version, 3);
     assert_eq!(def.description, "Para las pruebas");
+    assert_eq!(def.folder, "");
+    let with_folder = WINDOW.replace("  version 3\n", "  version 3\n  folder \"Practicables\"\n");
+    assert_eq!(parse(&with_folder).unwrap().folder, "Practicables");
     let names: Vec<_> = def.params.iter().map(|p| p.name.as_str()).collect();
     assert_eq!(
         names,

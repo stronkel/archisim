@@ -3,6 +3,7 @@ family "Lavabo"
   host none
   version 1
   description "Lavabo sobre encimera o mueble, con su seno"
+  folder "Lavabos"
 
 type_params
   section "Dimensiones"

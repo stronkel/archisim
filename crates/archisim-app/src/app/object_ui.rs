@@ -6,7 +6,7 @@ use archisim_core::{ObjectId, ObjectTypeId, ParamKind, ParamScope, Value};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
-use super::props::{self, choice, group, row, text_row};
+use super::props::{self, group, row, text_row};
 use super::structure_ui::angle_field;
 use super::*;
 
@@ -72,30 +72,16 @@ impl ArchiSimApp {
         );
     }
 
-    fn object_type_options(&self) -> Vec<(ObjectTypeId, String)> {
-        let mut v: Vec<(ObjectTypeId, String)> = self
-            .ed
-            .model()
-            .object_types()
-            .map(|t| (t.id, t.name.clone()))
-            .collect();
-        v.sort_by(|a, b| a.1.cmp(&b.1));
-        v
-    }
-
     pub(super) fn object_tool_properties(&mut self, ui: &mut Ui) {
         props::title(ui, "Herramienta Objeto · lo que vas a colocar");
         let current = self.tool_object_type();
-        let options = self.object_type_options();
-        group(ui, "tool-object", "Objeto", |ui| {
-            if let Some(cur) = current {
-                row(ui, "Tipo", "Mobiliario, sanitarios y cocina", |ui, w| {
-                    let opts: Vec<(ObjectTypeId, &str)> =
-                        options.iter().map(|(i, n)| (*i, n.as_str())).collect();
-                    let picked = choice(ui, "tool-object-type", w, cur, &opts);
-                    self.object_settings.object_type = Some(picked);
-                });
+        if let Some(pick) = self.object_card(ui, "tool-object", current) {
+            if let Some(t) = self.object_pick_type(pick) {
+                self.object_settings.object_type = Some(t);
             }
+        }
+        ui.add_space(6.0);
+        group(ui, "tool-object", "Objeto", |ui| {
             row(ui, "Giro (°)", "Espacio: +90°", |ui, w| {
                 if let Some(a) = angle_field(
                     ui,
@@ -125,7 +111,7 @@ impl ArchiSimApp {
         ui.add_space(6.0);
         props::note(
             ui,
-            "Clic: colocar el objeto con su lado de atrás en el punto (contra una cara de muro, con los forzados). La flecha marca hacia dónde mira. Espacio: girar 90°.",
+            "Clic: colocar el objeto con su lado de atrás en el punto (contra una cara de muro, con los forzados); árboles y personas, con su centro. La flecha marca hacia dónde mira. Espacio: girar 90°. Árboles, personas y vehículos se apoyan en el terreno que haya debajo.",
         );
     }
 
@@ -148,21 +134,18 @@ impl ArchiSimApp {
                     .and_then(|v| v.as_text().map(String::from))
             })
             .unwrap_or_default();
-        let options = self.object_type_options();
         props::title(ui, "Objeto · 1 seleccionado");
         super::properties::view_card_pub(ui, Icon::Object, &t.name, &ifc);
+        if let Some(pick) = self.object_card(ui, &format!("object-{}", id.0), Some(t.id)) {
+            if let Some(picked) = self.object_pick_type(pick).filter(|p| *p != t.id) {
+                let r = self
+                    .ed
+                    .edit_object("Cambiar tipo de objeto", id, |o| o.object_type = picked);
+                self.report(r, "Tipo cambiado.");
+            }
+        }
+        ui.add_space(6.0);
         group(ui, "object-data", "Objeto", |ui| {
-            row(ui, "Tipo", "", |ui, w| {
-                let opts: Vec<(ObjectTypeId, &str)> =
-                    options.iter().map(|(i, n)| (*i, n.as_str())).collect();
-                let picked = choice(ui, ("object-type", id.0), w, t.id, &opts);
-                if picked != t.id {
-                    let r = self
-                        .ed
-                        .edit_object("Cambiar tipo de objeto", id, |o| o.object_type = picked);
-                    self.report(r, "Tipo cambiado.");
-                }
-            });
             row(ui, "Giro (°)", "Espacio: +90°", |ui, w| {
                 if let Some(a) =
                     angle_field(ui, Id::unique(("object-rot", id.0)), o.rotation, w - 8.0)

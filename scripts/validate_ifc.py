@@ -31,8 +31,9 @@ Checks:
      common property set and quantities, and is made of mullions
      (IfcMember) and panels (IfcPlate) with their material, quantities and
      a 3D volume matching them.
- 12. Every object (IfcFurniture, IfcSanitaryTerminal) is contained in a
-     storey, has its type and 3D geometry.
+ 12. Every object (IfcFurniture, IfcSanitaryTerminal; vegetation as
+     IfcGeographicElement and people or vehicles as IfcBuildingElementProxy,
+     with a type) is contained in a storey, has its type and 3D geometry.
  11. Every loose railing (IfcRailing not part of a stair) is contained in
      a storey, has its material, Pset_RailingCommon and 3D geometry.
 
@@ -315,7 +316,11 @@ def main(path: str) -> int:
             except Exception as exc:
                 errors.append(f"{r.Name}: geometry failed: {exc}")
 
-    objects = f.by_type("IfcFurniture") + f.by_type("IfcSanitaryTerminal")
+    # Vegetation, people and vehicles are typed geographic elements or
+    # proxies (a terrain is a geographic element with no type).
+    typed = [e for e in list(f.by_type("IfcGeographicElement")) + list(f.by_type("IfcBuildingElementProxy"))
+             if eu.get_type(e) is not None]
+    objects = list(f.by_type("IfcFurniture")) + list(f.by_type("IfcSanitaryTerminal")) + typed
     for o in objects:
         if not o.ContainedInStructure:
             errors.append(f"{o.Name}: not contained in a storey")

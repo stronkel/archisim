@@ -243,6 +243,9 @@ pub struct ArchiSimApp {
     /// The intersection priorities window, whether it lists unused
     /// materials too, and the bar being dragged (material, value).
     pub show_priorities: bool,
+    /// The whole object library, for the gallery's pictures of the types
+    /// the project does not have yet (made the first time it is needed).
+    pub object_library: Option<archisim_core::Model>,
     pub priorities_all: bool,
     pub priority_drag: Option<(archisim_core::MaterialId, u16)>,
     /// A level waiting for confirmation before being deleted with its
@@ -387,6 +390,7 @@ impl ArchiSimApp {
             zone_tool: SlabTool::default(),
             show_levels: false,
             show_priorities: false,
+            object_library: None,
             priorities_all: false,
             priority_drag: None,
             level_to_delete: None,
@@ -1516,6 +1520,7 @@ mod curtain_ui;
 mod icons;
 mod levels_ui;
 mod navigator;
+mod object_gallery;
 mod object_ui;
 mod plan_ui;
 mod priorities_ui;

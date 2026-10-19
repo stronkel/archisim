@@ -2442,3 +2442,61 @@ fn intersection_priorities_window() {
     );
     h.frame();
 }
+
+/// The object gallery (R8): the library's types the project lacks are
+/// offered and loaded when chosen (one undoable step); trees and people
+/// placed with the tool stand on the terrain under them.
+#[test]
+fn object_gallery_loads_from_the_library() {
+    use super::object_gallery::ObjectPick;
+    // A project with no objects, as an imported one.
+    let mut model = archisim_core::Model::new("sin objetos");
+    model.add_level("PB", 0.0);
+    model.add_material(
+        "Tierra",
+        "earth",
+        [150, 120, 90],
+        archisim_core::CutPattern::Dots,
+    );
+    let mut h = Harness::new(Editor::with_model(model, None));
+    assert_eq!(h.model().object_types().count(), 0);
+    let t = h
+        .app
+        .object_pick_type(ObjectPick::Library("Árbol de hoja caduca 6 m"))
+        .expect("loaded");
+    assert_eq!(h.model().object_types().count(), 1);
+    assert!(h.model().materials().any(|m| m.name == "Vegetación"));
+    // Choosing it again does not load it twice.
+    assert_eq!(
+        h.app
+            .object_pick_type(ObjectPick::Library("Árbol de hoja caduca 6 m")),
+        Some(t)
+    );
+    assert_eq!(h.model().object_types().count(), 1);
+    h.app.ed.undo();
+    assert_eq!(h.model().object_types().count(), 0);
+    let t = h
+        .app
+        .object_pick_type(ObjectPick::Library("Árbol de hoja caduca 6 m"))
+        .unwrap();
+    // A sloping terrain: the tree stands on it.
+    let sp = |x: f64, y: f64, z: f64| archisim_core::SurveyPoint { at: p(x, y), z };
+    h.app
+        .ed
+        .add_terrain(
+            &crate::editor::TerrainSettings::default(),
+            vec![sp(0.0, 0.0, 0.0), sp(20.0, 0.0, 2.0), sp(0.0, 20.0, 0.0)],
+            Vec::new(),
+        )
+        .unwrap();
+    h.app.object_settings.object_type = Some(t);
+    let o = h
+        .app
+        .ed
+        .add_object(&h.app.object_settings, p(5.0, 5.0))
+        .unwrap();
+    assert!((h.model().object(o).unwrap().base_offset - 0.5).abs() < 1e-9);
+    // The gallery and its card draw with the tool.
+    h.type_text("o");
+    h.frame();
+}

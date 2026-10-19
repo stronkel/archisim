@@ -3,6 +3,7 @@ family "Plato de ducha"
   host none
   version 1
   description "Plato de ducha rectangular, con su desagüe"
+  folder "Duchas y bañeras"
 
 type_params
   section "Dimensiones"

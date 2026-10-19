@@ -1,0 +1,41 @@
+family "Persona"
+  category people
+  host none
+  version 1
+  description "Figura humana de pie, para dar escala; mira hacia delante"
+  folder "Personas"
+
+type_params
+  section "Dimensiones"
+    height length = 1.75 range 0.80..2.20 label "Estatura"
+  section "Materiales"
+    mat material = "Figura" label "Figura"
+
+body
+  let h = height
+  box (-0.11 * h, -0.05 * h, 0) to (-0.02 * h, 0.05 * h, 0.47 * h) material mat
+  box (0.02 * h, -0.05 * h, 0) to (0.11 * h, 0.05 * h, 0.47 * h) material mat
+  box (-0.12 * h, -0.06 * h, 0.47 * h) to (0.12 * h, 0.06 * h, 0.82 * h) material mat
+  box (-0.17 * h, -0.04 * h, 0.45 * h) to (-0.125 * h, 0.04 * h, 0.80 * h) material mat
+  box (0.125 * h, -0.04 * h, 0.45 * h) to (0.17 * h, 0.04 * h, 0.80 * h) material mat
+  box (-0.03 * h, -0.03 * h, 0.82 * h) to (0.03 * h, 0.03 * h, 0.86 * h) material mat
+  box (-0.055 * h, -0.06 * h, 0.86 * h) to (0.055 * h, 0.06 * h, h) material mat
+
+plan 1:50
+  let h = height
+  let a = 0.17 * h
+  let b = 0.065 * h
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (a * cos(t0), b * sin(t0)) to (a * cos(t1), b * sin(t1)) pen view
+  let r = 0.05 * h
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
+  line (0, r) to (0, r + 0.04 * h) pen thin
+
+outputs
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

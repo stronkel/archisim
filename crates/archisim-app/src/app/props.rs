@@ -308,7 +308,7 @@ pub fn type_card<T: PartialEq + Copy>(
 }
 
 /// A type picture on white paper, fitted in `max`, centred.
-fn paper(ui: &mut Ui, t: Thumb, max: Vec2) {
+pub fn paper(ui: &mut Ui, t: Thumb, max: Vec2) {
     let (outer, _) =
         ui.allocate_exact_size(Vec2::new(max.x, max.y.min(t.size.y + 16.0)), Sense::hover());
     ui.painter()
@@ -392,7 +392,7 @@ fn gallery<T: PartialEq + Copy>(
 }
 
 /// A tile of the gallery: picture, name and note.
-fn tile<T>(ui: &mut Ui, width: f32, item: &TypeItem<T>, selected: bool) -> egui::Response {
+pub fn tile<T>(ui: &mut Ui, width: f32, item: &TypeItem<T>, selected: bool) -> egui::Response {
     let p = Palette::current(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 118.0), Sense::click());
     let resp = resp.on_hover_text(format!("{}\n{}", item.name, item.note));

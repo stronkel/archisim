@@ -27,6 +27,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
         host: Host::None,
         version: 1,
         description: String::new(),
+        folder: String::new(),
         params: Vec::new(),
         prelude: Vec::new(),
         components: BTreeMap::new(),
@@ -213,6 +214,7 @@ fn header(def: &mut FamilyDef, children: &[Line]) -> Result<(), FamilyError> {
                 def.version = n as u32;
             }
             "description" => def.description = c.string()?,
+            "folder" => def.folder = c.string()?,
             other => return Err(syntax(line.no, format!("unknown family setting «{other}»"))),
         }
         c.end()?;

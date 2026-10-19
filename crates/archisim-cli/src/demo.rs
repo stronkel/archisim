@@ -348,6 +348,7 @@ pub fn build() -> Result<Document, ModelError> {
             ("Cama individual 90×190", 12.0 - inner, 2.0, FRAC_PI_2),
             ("Armario 120", 5.95, 1.5, FRAC_PI_2),
             ("Frigorífico 60", 6.05, 7.5, -FRAC_PI_2),
+            ("Muebles altos de cocina 120", 7.45, 9.0 - inner, PI),
         ] {
             let object_type = ty(m, name)?;
             m.add_object(archisim_core::NewObject {
@@ -414,11 +415,49 @@ pub fn build() -> Result<Document, ModelError> {
             contour: 0.1,
             lines: Vec::new(),
         })?;
+
         // A contour line drawn by hand to the north, past the survey grid.
         m.edit_terrain(terrain, |t| {
             t.add_line(&[Point2::new(-6.0, 22.0), Point2::new(18.0, 22.0)], -0.05);
         })?;
         m.set_true_north(12f64.to_radians())
+    })?;
+
+    doc.transact("Jardín", |m| {
+        let ty = |m: &archisim_core::Model, name: &str| {
+            m.object_types()
+                .find(|t| t.name == name)
+                .map(|t| t.id)
+                .ok_or_else(|| ModelError::NotAnObject(name.to_string()))
+        };
+        use std::f64::consts::FRAC_PI_2;
+        // The garden (v0.26): trees, shrubs by the entrance, someone
+        // walking to it and a car on the plot, on the ground.
+        let ground = |m: &archisim_core::Model, p: Point2| {
+            m.terrains_on_level(pb)
+                .find_map(|t| t.height_at(p))
+                .map_or(0.0, |z| (z * 1000.0).round() / 1000.0)
+        };
+        for (name, x, y, rotation) in [
+            ("Árbol de hoja caduca 6 m", -3.6, 2.4, 0.0),
+            ("Árbol grande 12 m", 15.5, 13.0, 0.0),
+            ("Arbusto 120", -1.4, 5.6, 0.0),
+            ("Arbusto 120", -1.4, 10.2, 0.0),
+            ("Persona", -2.2, 7.6, -FRAC_PI_2),
+            ("Turismo", 15.0, -6.5, 0.0),
+        ] {
+            let object_type = ty(m, name)?;
+            let at = Point2::new(x, y);
+            let base_offset = ground(m, at);
+            m.add_object(archisim_core::NewObject {
+                level: pb,
+                object_type,
+                position: at,
+                rotation,
+                base_offset,
+            })?;
+        }
+        Ok(())
     })?;
 
     // Dimensions: the openings of the south and west façades, outside, the
@@ -516,7 +555,7 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        assert_eq!(m.objects().count(), 7);
+        assert_eq!(m.objects().count(), 14);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);

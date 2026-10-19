@@ -3,6 +3,7 @@ family "Frigorífico"
   host none
   version 1
   description "Frigorífico de pie"
+  folder "Electrodomésticos"
 
 type_params
   section "Dimensiones"

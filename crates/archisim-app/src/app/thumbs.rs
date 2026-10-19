@@ -55,10 +55,12 @@ impl Thumbs {
         }
         let (model, level) = build()?;
         let ppp = ctx.pixels_per_point() as f64;
-        let (img, lo, hi) = draw(&model, level, POINTS_PER_M * ppp);
+        let (img, _, _) = draw(&model, level, POINTS_PER_M * ppp);
+        // Its natural size: as drawn (objects are drawn smaller than their
+        // region at this density).
         let size = Vec2::new(
-            ((hi.x - lo.x) * POINTS_PER_M) as f32,
-            ((hi.y - lo.y) * POINTS_PER_M) as f32,
+            (img.size[0] as f64 / ppp) as f32,
+            (img.size[1] as f64 / ppp) as f32,
         );
         let tex = ctx.load_texture(format!("thumb:{key}"), img, TextureOptions::LINEAR);
         let thumb = Thumb {

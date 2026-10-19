@@ -3,6 +3,7 @@ family "Encimera de cocina"
   host none
   version 1
   description "Muebles bajos de cocina con encimera, fregadero y placa"
+  folder "Cocina"
 
 type_params
   section "Dimensiones"

@@ -1,0 +1,40 @@
+family "Arbusto"
+  category site
+  host none
+  version 1
+  description "Arbusto o mata redondeada; el punto de inserción es su centro"
+  folder "Vegetación"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.20..6.00 label "Diámetro"
+    height length = 1.00 range 0.20..4.00 label "Altura"
+  section "Materiales"
+    leaves material = "Vegetación" label "Follaje"
+
+body
+  let r = width / 2
+  repeat i in 0..4
+    let m = (i + 0.5) / 4
+    let a = r * sqrt(1 - m * m * 0.85)
+    let b = a * 0.6
+    let z0 = height * i / 4
+    let z1 = height * (i + 1) / 4
+    box (-a, -b, z0) to (a, b, z1) material leaves
+    box (-b, -a, z0) to (b, -b, z1) material leaves
+    box (-b, b, z0) to (b, a, z1) material leaves
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    let k0 = if floor(i / 2) * 2 == i then 1 else 0.88
+    let k1 = if floor(i / 2) * 2 == i then 0.88 else 1
+    line (r * k0 * cos(t0), r * k0 * sin(t0)) to (r * k1 * cos(t1), r * k1 * sin(t1)) pen view
+  line (-r * 0.2, 0) to (r * 0.2, 0) pen thin
+  line (0, -r * 0.2) to (0, r * 0.2) pen thin
+
+outputs
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

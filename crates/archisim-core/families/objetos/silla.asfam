@@ -3,6 +3,7 @@ family "Silla"
   host none
   version 1
   description "Silla de cuatro patas con respaldo"
+  folder "Sillas"
 
 type_params
   section "Dimensiones"

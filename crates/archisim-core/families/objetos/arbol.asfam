@@ -1,0 +1,53 @@
+family "Árbol"
+  category site
+  host none
+  version 1
+  description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
+  folder "Vegetación"
+
+type_params
+  section "Dimensiones"
+    height  length = 6.00 range 1.50..30.00 label "Altura total"
+    crown   length = 4.00 range 0.80..20.00 label "Diámetro de la copa"
+    trunk_h length = 2.00 range 0.30..10.00 label "Altura del tronco"
+    trunk   length = 0.30 range 0.05..2.00 label "Diámetro del tronco"
+  section "Materiales"
+    leaves material = "Vegetación" label "Copa"
+    bark   material = "Corteza" label "Tronco"
+
+require trunk_h < height - 0.3 else "La copa necesita sitio por encima del tronco"
+require trunk < crown else "El tronco no puede ser más ancho que la copa"
+
+body
+  box (-trunk / 2, -trunk / 2, 0) to (trunk / 2, trunk / 2, trunk_h) material bark
+  let h = height - trunk_h
+  let r = crown / 2
+  repeat i in 0..6
+    let m = (i + 0.5) / 3 - 1
+    let a = r * sqrt(1 - m * m)
+    let b = a * 0.6
+    let z0 = trunk_h + h * i / 6
+    let z1 = trunk_h + h * (i + 1) / 6
+    box (-a, -b, z0) to (a, b, z1) material leaves
+    box (-b, -a, z0) to (b, -b, z1) material leaves
+    box (-b, b, z0) to (b, a, z1) material leaves
+
+plan 1:50
+  let r = crown / 2
+  repeat i in 0..36
+    let t0 = 6.283185307 * i / 36
+    let t1 = 6.283185307 * (i + 1) / 36
+    let k0 = if floor(i / 2) * 2 == i then 1 else 0.94
+    let k1 = if floor(i / 2) * 2 == i then 0.94 else 1
+    line (r * k0 * cos(t0), r * k0 * sin(t0)) to (r * k1 * cos(t1), r * k1 * sin(t1)) pen view
+  repeat i in 0..12
+    let t = 6.283185307 * i / 12
+    line (trunk / 2 * cos(t), trunk / 2 * sin(t)) to (r * 0.6 * cos(t), r * 0.6 * sin(t)) pen thin
+  arc center (0, 0) from (trunk / 2, 0) to (0, trunk / 2) pen view
+  arc center (0, 0) from (0, trunk / 2) to (-trunk / 2, 0) pen view
+  arc center (0, 0) from (-trunk / 2, 0) to (0, -trunk / 2) pen view
+  arc center (0, 0) from (0, -trunk / 2) to (trunk / 2, 0) pen view
+
+outputs
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

@@ -3,6 +3,7 @@ family "Mesa"
   host none
   version 2
   description "Mesa rectangular de tablero y cuatro patas, con sillas alrededor si se quiere"
+  folder "Mesas"
 
 # Ejes de los objetos: origen en el centro del lado de atrás, x hacia la
 # derecha, y hacia delante, z hacia arriba desde el suelo. Las sillas de

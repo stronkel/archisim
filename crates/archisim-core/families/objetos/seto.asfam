@@ -1,0 +1,30 @@
+family "Seto"
+  category site
+  host none
+  version 1
+  description "Seto recortado, en línea"
+  folder "Vegetación"
+
+type_params
+  section "Dimensiones"
+    width  length = 3.00 range 0.40..30.00 label "Largo"
+    depth  length = 0.60 range 0.20..3.00 label "Ancho"
+    height length = 1.20 range 0.30..4.00 label "Altura"
+  section "Materiales"
+    leaves material = "Vegetación" label "Follaje"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material leaves
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  let n = max(2, round(width / 0.3))
+  let step = width / n
+  repeat i in 0..n
+    let x0 = -width / 2 + i * step
+    line (x0, depth * 0.3) to (x0 + step / 2, depth * 0.7) pen thin
+    line (x0 + step / 2, depth * 0.7) to (x0 + step, depth * 0.3) pen thin
+
+outputs
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

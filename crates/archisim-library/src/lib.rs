@@ -7,8 +7,8 @@
 
 use archisim_core::{
     CutPattern, DoorOperation, Layer, LayerFunction, MaterialId, MemberTypeId, MemberUsage, Model,
-    ModelError, NewOpeningType, OpeningKind, OpeningTypeId, Profile, SlabFunction, SlabTypeId,
-    WallFunction, WallTypeId, WindowOperation,
+    ModelError, NewOpeningType, ObjectTypeId, OpeningKind, OpeningTypeId, Profile, SlabFunction,
+    SlabTypeId, WallFunction, WallTypeId, WindowOperation,
 };
 
 /// Ids of the types added by [`add_library`], to place elements in code.
@@ -429,50 +429,125 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     })
 }
 
-/// Adds the object types of the library (v0.25): furniture, sanitary ware
-/// and kitchen units, each from its system family with these sizes.
-pub fn add_objects(
-    m: &mut Model,
-) -> Result<Vec<(String, archisim_core::ObjectTypeId)>, ModelError> {
-    use archisim_core::{ParamScope, Value};
-    if !m.materials().any(|x| x.name == "Porcelana") {
-        m.add_material("Porcelana", "ceramic", [244, 244, 240], CutPattern::Solid);
+/// An object type of the library: its name, its family and the sizes
+/// that differ from the family's.
+pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, f64)]);
+
+/// The object types of the library (v0.25, more in v0.26), in the order of
+/// the gallery.
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 30] = [
+    ("Mesa de comedor 160×90", "Mesa", &[]),
+    ("Silla", "Silla", &[]),
+    ("Sofá de 3 plazas", "Sofá", &[]),
+    (
+        "Sillón",
+        "Sofá",
+        &[("width", 1.0), ("places", 1.0), ("depth", 0.85)],
+    ),
+    ("Cama doble 150×200", "Cama", &[]),
+    (
+        "Cama individual 90×190",
+        "Cama",
+        &[("width", 0.9), ("depth", 1.9)],
+    ),
+    ("Armario 120", "Armario", &[]),
+    ("Estantería 80", "Estantería", &[]),
+    (
+        "Librería 160",
+        "Estantería",
+        &[("width", 1.6), ("height", 2.2), ("shelves", 5.0)],
+    ),
+    ("Muebles de cocina 240", "Encimera de cocina", &[]),
+    ("Muebles altos de cocina 120", "Mueble alto de cocina", &[]),
+    ("Frigorífico 60", "Frigorífico", &[]),
+    ("Lavadora 60", "Lavadora", &[]),
+    ("Inodoro", "Inodoro", &[]),
+    ("Bidé", "Bidé", &[]),
+    ("Lavabo 60", "Lavabo", &[]),
+    ("Plato de ducha 90×90", "Plato de ducha", &[]),
+    (
+        "Plato de ducha 120×80",
+        "Plato de ducha",
+        &[("width", 1.2), ("depth", 0.8)],
+    ),
+    ("Bañera 170×70", "Bañera", &[]),
+    ("Árbol de hoja caduca 6 m", "Árbol", &[]),
+    (
+        "Árbol grande 12 m",
+        "Árbol",
+        &[
+            ("height", 12.0),
+            ("crown", 8.0),
+            ("trunk_h", 3.5),
+            ("trunk", 0.5),
+        ],
+    ),
+    (
+        "Palmera",
+        "Árbol",
+        &[
+            ("height", 8.0),
+            ("crown", 3.0),
+            ("trunk_h", 6.5),
+            ("trunk", 0.35),
+        ],
+    ),
+    ("Arbusto 120", "Arbusto", &[]),
+    ("Seto 3 m", "Seto", &[]),
+    ("Banco con respaldo", "Banco", &[]),
+    ("Persona", "Persona", &[]),
+    ("Niño", "Persona", &[("height", 1.20)]),
+    ("Turismo", "Turismo", &[]),
+    (
+        "Furgoneta",
+        "Turismo",
+        &[("length", 5.20), ("width", 2.0), ("height", 2.0)],
+    ),
+    ("Bicicleta", "Bicicleta", &[]),
+];
+
+/// The materials the library's objects ask for by name, added if the
+/// project has none of that name.
+fn object_materials(m: &mut Model) {
+    for (name, category, color) in [
+        ("Porcelana", "ceramic", [244, 244, 240]),
+        ("Madera de pino", "wood", [196, 160, 112]),
+        ("Vegetación", "vegetation", [126, 164, 98]),
+        ("Corteza", "wood", [112, 86, 62]),
+        ("Figura", "other", [150, 158, 172]),
+        ("Carrocería", "metal", [164, 172, 184]),
+        ("Neumático", "rubber", [52, 52, 56]),
+    ] {
+        material_named(m, name, category, color, CutPattern::Solid);
     }
-    // (type name, family, sizes that differ from the family's)
-    type Entry<'a> = (&'a str, &'a str, &'a [(&'a str, f64)]);
-    let catalogue: [Entry; 15] = [
-        ("Mesa de comedor 160×90", "Mesa", &[]),
-        ("Silla", "Silla", &[]),
-        ("Sofá de 3 plazas", "Sofá", &[]),
-        ("Cama doble 150×200", "Cama", &[]),
-        (
-            "Cama individual 90×190",
-            "Cama",
-            &[("width", 0.9), ("depth", 1.9)],
-        ),
-        ("Armario 120", "Armario", &[]),
-        ("Muebles de cocina 240", "Encimera de cocina", &[]),
-        ("Frigorífico 60", "Frigorífico", &[]),
-        ("Lavadora 60", "Lavadora", &[]),
-        ("Inodoro", "Inodoro", &[]),
-        ("Bidé", "Bidé", &[]),
-        ("Lavabo 60", "Lavabo", &[]),
-        ("Plato de ducha 90×90", "Plato de ducha", &[]),
-        (
-            "Plato de ducha 120×80",
-            "Plato de ducha",
-            &[("width", 1.2), ("depth", 0.8)],
-        ),
-        ("Bañera 170×70", "Bañera", &[]),
-    ];
+}
+
+/// Adds one object type of the library (by its name in
+/// [`OBJECT_CATALOGUE`]), or finds the project's type of that name.
+pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, ModelError> {
+    use archisim_core::{ParamScope, Value};
+    if let Some(t) = m.object_types().find(|t| t.name == name) {
+        return Ok(t.id);
+    }
+    let Some((name, family, sizes)) = OBJECT_CATALOGUE.iter().find(|e| e.0 == name) else {
+        return Err(ModelError::NotAnObject(name.to_string()));
+    };
+    object_materials(m);
+    let f = m.system_family(family)?;
+    let mut values = m.family_defaults(f, ParamScope::Type)?;
+    for (k, v) in sizes.iter() {
+        values.insert((*k).into(), Value::Number(*v));
+    }
+    m.add_object_type(*name, f, values)
+}
+
+/// Adds the object types of the library: furniture, sanitary ware,
+/// kitchen units, vegetation and street furniture, people and vehicles,
+/// each from its system family with these sizes.
+pub fn add_objects(m: &mut Model) -> Result<Vec<(String, ObjectTypeId)>, ModelError> {
     let mut out = Vec::new();
-    for (name, family, sizes) in catalogue {
-        let f = m.system_family(family)?;
-        let mut values = m.family_defaults(f, ParamScope::Type)?;
-        for (k, v) in sizes {
-            values.insert((*k).into(), Value::Number(*v));
-        }
-        out.push((name.to_string(), m.add_object_type(name, f, values)?));
+    for (name, _, _) in OBJECT_CATALOGUE {
+        out.push((name.to_string(), add_object_entry(m, name)?));
     }
     Ok(out)
 }

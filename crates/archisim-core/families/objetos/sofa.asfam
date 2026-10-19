@@ -3,6 +3,7 @@ family "Sofá"
   host none
   version 1
   description "Sofá recto con brazos y respaldo"
+  folder "Sofás y sillones"
 
 type_params
   section "Dimensiones"

@@ -3,6 +3,7 @@ family "Cama"
   host none
   version 1
   description "Cama con cabecero contra la pared, colchón y almohadas"
+  folder "Camas"
 
 type_params
   section "Dimensiones"

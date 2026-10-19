@@ -15,6 +15,9 @@ pub struct FamilyDef {
     /// Version of the recipe, raised by its author on every change.
     pub version: u32,
     pub description: String,
+    /// The folder it is shown in within its category in the gallery
+    /// ("Camas", "Vegetación"…); empty: the category's own.
+    pub folder: String,
     /// Type parameters first, then instance parameters, each in the order
     /// written.
     pub params: Vec<Param>,

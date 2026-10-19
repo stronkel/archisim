@@ -3,6 +3,7 @@ family "Lavadora"
   host none
   version 1
   description "Lavadora o lavavajillas bajo encimera"
+  folder "Electrodomésticos"
 
 type_params
   section "Dimensiones"

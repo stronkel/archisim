@@ -3,6 +3,7 @@ family "Armario"
   host none
   version 1
   description "Armario de puertas abatibles con barra de colgar"
+  folder "Armarios"
 
 type_params
   section "Dimensiones"

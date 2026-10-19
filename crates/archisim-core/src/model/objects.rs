@@ -10,8 +10,17 @@
 
 use super::*;
 
-/// Families whose objects ArchiSim places on a level.
-pub const OBJECT_CATEGORIES: [&str; 3] = ["furniture", "sanitary", "kitchen"];
+/// Families whose objects ArchiSim places on a level: furniture, sanitary
+/// ware, kitchen units, the site (vegetation, street furniture), people
+/// and vehicles.
+pub const OBJECT_CATEGORIES: [&str; 6] = [
+    "furniture",
+    "sanitary",
+    "kitchen",
+    "site",
+    "people",
+    "vehicle",
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectType {
@@ -347,11 +356,16 @@ mod tests {
                 .unwrap();
             let ev = m.evaluate_object(o).unwrap();
             assert!(!ev.parts.is_empty(), "{name}");
+            let category = m.family(f).unwrap().def().category.clone();
+            // Trees, shrubs and people stand on their point.
+            let centred = name == "Mesa" || category == "people" || {
+                category == "site" && name != "Seto" && name != "Banco"
+            };
             for p in &ev.parts {
                 // On the floor; against the wall (nothing behind the
                 // origin) but for tables, which have chairs all round.
                 assert!(p.min[2] >= -1e-9, "{name} {p:?}");
-                assert!(name == "Mesa" || p.min[1] >= -1e-9, "{name} {p:?}");
+                assert!(centred || p.min[1] >= -1e-9, "{name} {p:?}");
             }
             for scale in [50.0, 100.0] {
                 assert!(
@@ -360,8 +374,14 @@ mod tests {
                 );
             }
             assert_eq!(m.object_outline(o).len(), 4);
-            assert!(["IfcFurniture", "IfcSanitaryTerminal"]
-                .contains(&ev.outputs["ifc_class"].as_text().unwrap()));
+            assert!([
+                "IfcFurniture",
+                "IfcSanitaryTerminal",
+                "IfcGeographicElement",
+                "IfcBuildingElementProxy"
+            ]
+            .contains(&ev.outputs["ifc_class"].as_text().unwrap()));
+            assert!(!m.family(f).unwrap().def().folder.is_empty(), "{name}");
         }
         // A door family cannot make objects.
         let door = m.system_family(family::SWING_DOOR).unwrap();
