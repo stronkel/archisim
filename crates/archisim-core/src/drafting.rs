@@ -72,6 +72,8 @@ impl DrawLayer {
 pub enum ViewRef {
     /// The plan of a level.
     Level(LevelId),
+    /// A drawing sheet (coordinates in paper metres).
+    Sheet(crate::ids::SheetId),
 }
 
 /// A polyline of straight and arc segments (AutoCAD "polilínea").
@@ -738,6 +740,11 @@ impl Model {
             ViewRef::Level(l) => {
                 if self.level(l).is_none() {
                     return Err(ModelError::UnknownLevel(l));
+                }
+            }
+            ViewRef::Sheet(s) => {
+                if self.sheet(s).is_none() {
+                    return Err(ModelError::UnknownSheet(s));
                 }
             }
         }

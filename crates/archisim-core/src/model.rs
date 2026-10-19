@@ -656,6 +656,8 @@ pub enum ModelError {
     NotAnOpening(NotAnOpening),
     UnknownDrawLayer(DrawLayerId),
     UnknownDraft(DraftId),
+    UnknownSheet(SheetId),
+    UnknownViewport(ViewportId),
     /// A drafting element or annotation is not well formed.
     InvalidShape(&'static str),
     /// Another element of the same list already has that name.
@@ -740,6 +742,8 @@ impl fmt::Display for ModelError {
             ModelError::NotAnOpening(e) => write!(f, "{e}"),
             ModelError::UnknownDrawLayer(id) => write!(f, "drawing layer {id} does not exist"),
             ModelError::UnknownDraft(id) => write!(f, "drafting element {id} does not exist"),
+            ModelError::UnknownSheet(id) => write!(f, "sheet {id} does not exist"),
+            ModelError::UnknownViewport(id) => write!(f, "view {id} on a sheet does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
             ModelError::DuplicateName(name) => {
                 write!(f, "another element is already called «{name}»")
@@ -846,6 +850,9 @@ pub struct ModelParts {
     pub draw_layers: Vec<DrawLayer>,
     pub drafts: Vec<Draft>,
     pub graphics: crate::graphics::GraphicStandard,
+    pub info: crate::sheets::ProjectInfo,
+    pub sheets: Vec<crate::sheets::Sheet>,
+    pub viewports: Vec<crate::sheets::Viewport>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -892,6 +899,9 @@ pub struct Model {
     elevation_marks: BTreeMap<ElevationMarkId, ElevationMark>,
     pub(crate) draw_layers: BTreeMap<DrawLayerId, DrawLayer>,
     pub(crate) drafts: BTreeMap<DraftId, Draft>,
+    pub(crate) info: crate::sheets::ProjectInfo,
+    pub(crate) sheets: BTreeMap<SheetId, crate::sheets::Sheet>,
+    pub(crate) viewports: BTreeMap<ViewportId, crate::sheets::Viewport>,
 }
 
 impl Model {
@@ -916,6 +926,9 @@ impl Model {
             elevation_marks: BTreeMap::new(),
             draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
             drafts: BTreeMap::new(),
+            info: Default::default(),
+            sheets: BTreeMap::new(),
+            viewports: BTreeMap::new(),
         }
     }
 
@@ -1001,6 +1014,7 @@ impl Model {
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
         self.drafts.retain(|_, d| d.view != ViewRef::Level(id));
+        self.viewports.retain(|_, v| v.level != id);
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
     }
 
@@ -2920,6 +2934,9 @@ impl Model {
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
             graphics: self.graphics,
+            info: self.info.clone(),
+            sheets: self.sheets.values().cloned().collect(),
+            viewports: self.viewports.values().cloned().collect(),
         }
     }
 
@@ -2942,6 +2959,7 @@ impl Model {
             )));
         }
         model.graphics = parts.graphics;
+        model.info = parts.info;
 
         let mut ids = std::collections::HashSet::new();
         let mut guids = std::collections::HashSet::new();
@@ -3128,6 +3146,18 @@ impl Model {
                 claim(layer.id.0, None).map_err(fail(name.clone()))?;
             }
             model.restore_draw_layer(layer).map_err(fail(name))?;
+        }
+        for sh in parts.sheets {
+            let name = format!("sheet {} «{}»", sh.id.0, sh.number);
+            claim(sh.id.0, None)
+                .and_then(|_| model.restore_sheet(sh))
+                .map_err(fail(name))?;
+        }
+        for v in parts.viewports {
+            let name = format!("view {} on a sheet", v.id.0);
+            claim(v.id.0, None)
+                .and_then(|_| model.restore_viewport(v))
+                .map_err(fail(name))?;
         }
         for d in parts.drafts {
             let name = format!("drafting element {} ({})", d.id.0, d.shape.label());

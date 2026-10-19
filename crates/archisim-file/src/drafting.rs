@@ -78,6 +78,7 @@ pub(crate) struct DrawLayer {
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
 pub(crate) enum View {
     Level(u64),
+    Sheet(u64),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -349,6 +350,7 @@ pub(crate) fn drafts_out(drafts: &[core::Draft]) -> Vec<Draft> {
             id: d.id.0,
             view: match d.view {
                 core::ViewRef::Level(l) => View::Level(l.0),
+                core::ViewRef::Sheet(s) => View::Sheet(s.0),
             },
             layer: d.layer.0,
             shape: Shape::out(&d.shape),
@@ -368,6 +370,7 @@ pub(crate) fn drafts_in(drafts: Vec<Draft>) -> Result<Vec<core::Draft>, FileErro
                 id: core::DraftId(d.id),
                 view: match d.view {
                     View::Level(l) => core::ViewRef::Level(core::LevelId(l)),
+                    View::Sheet(s) => core::ViewRef::Sheet(core::SheetId(s)),
                 },
                 layer: core::DrawLayerId(d.layer),
                 shape: d.shape.into_core(&element)?,
@@ -447,4 +450,211 @@ impl Graphics {
             coarse_from: self.coarse_from,
         }
     }
+}
+
+// ---- Sheets (version 7) --------------------------------------------------
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Info {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub client: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub site: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub author: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub studio: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub number: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub phase: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub date: String,
+}
+
+impl Info {
+    pub fn out(i: &core::ProjectInfo) -> Option<Self> {
+        (i != &core::ProjectInfo::default()).then(|| Self {
+            client: i.client.clone(),
+            site: i.site.clone(),
+            author: i.author.clone(),
+            studio: i.studio.clone(),
+            number: i.number.clone(),
+            phase: i.phase.clone(),
+            date: i.date.clone(),
+        })
+    }
+
+    pub fn into_core(self) -> core::ProjectInfo {
+        core::ProjectInfo {
+            client: self.client,
+            site: self.site,
+            author: self.author,
+            studio: self.studio,
+            number: self.number,
+            phase: self.phase,
+            date: self.date,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Sheet {
+    pub id: u64,
+    pub number: String,
+    #[serde(default)]
+    pub name: String,
+    /// Millimetres.
+    pub width: f64,
+    pub height: f64,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub title_block: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub revision: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Style {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_layers: Vec<u64>,
+    #[serde(default = "fine", skip_serializing_if = "is_fine")]
+    pub detail: String,
+}
+
+fn fine() -> String {
+    "fine".into()
+}
+
+fn is_fine(d: &String) -> bool {
+    d == "fine"
+}
+
+impl Style {
+    fn out(s: &core::ViewStyle) -> Self {
+        Self {
+            hidden: s.hidden.iter().map(|c| c.code().to_string()).collect(),
+            hidden_layers: s.hidden_layers.iter().map(|l| l.0).collect(),
+            detail: s.detail.code().into(),
+        }
+    }
+
+    fn into_core(self, element: &str) -> Result<core::ViewStyle, FileError> {
+        let bad = |m: String| FileError::Value {
+            element: element.to_string(),
+            message: m,
+        };
+        Ok(core::ViewStyle {
+            hidden: self
+                .hidden
+                .iter()
+                .map(|c| {
+                    core::Category::from_code(c)
+                        .ok_or_else(|| bad(format!("unknown category «{c}»")))
+                })
+                .collect::<Result<_, _>>()?,
+            hidden_layers: self
+                .hidden_layers
+                .into_iter()
+                .map(core::DrawLayerId)
+                .collect(),
+            detail: core::Detail::from_code(&self.detail)
+                .ok_or_else(|| bad(format!("unknown detail «{}»", self.detail)))?,
+        })
+    }
+
+    fn is_default(&self) -> bool {
+        self.hidden.is_empty() && self.hidden_layers.is_empty() && self.detail == "fine"
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Viewport {
+    pub id: u64,
+    pub sheet: u64,
+    pub level: u64,
+    pub scale: f64,
+    pub cut_plane: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<[Xy; 2]>,
+    /// Paper metres from the lower-left corner of the sheet.
+    pub centre: Xy,
+    #[serde(default, skip_serializing_if = "Style::is_default")]
+    pub style: Style,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub show_title: bool,
+}
+
+pub(crate) fn sheets_out(sheets: &[core::Sheet]) -> Vec<Sheet> {
+    sheets
+        .iter()
+        .map(|s| Sheet {
+            id: s.id.0,
+            number: s.number.clone(),
+            name: s.name.clone(),
+            width: s.width,
+            height: s.height,
+            title_block: s.title_block,
+            revision: s.revision.clone(),
+        })
+        .collect()
+}
+
+pub(crate) fn sheets_in(sheets: Vec<Sheet>) -> Vec<core::Sheet> {
+    sheets
+        .into_iter()
+        .map(|s| core::Sheet {
+            id: core::SheetId(s.id),
+            number: s.number,
+            name: s.name,
+            width: s.width,
+            height: s.height,
+            title_block: s.title_block,
+            revision: s.revision,
+        })
+        .collect()
+}
+
+pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
+    v.iter()
+        .map(|v| Viewport {
+            id: v.id.0,
+            sheet: v.sheet.0,
+            level: v.level.0,
+            scale: v.scale,
+            cut_plane: v.cut_plane,
+            crop: v.crop.map(|(a, b)| [xy(a), xy(b)]),
+            centre: xy(v.centre),
+            style: Style::out(&v.style),
+            title: v.title.clone(),
+            show_title: v.show_title,
+        })
+        .collect()
+}
+
+pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, FileError> {
+    v.into_iter()
+        .map(|v| {
+            let element = format!("view {} on a sheet", v.id);
+            Ok(core::Viewport {
+                id: core::ViewportId(v.id),
+                sheet: core::SheetId(v.sheet),
+                level: core::LevelId(v.level),
+                scale: v.scale,
+                cut_plane: v.cut_plane,
+                crop: v.crop.map(|[a, b]| (pt(a), pt(b))),
+                centre: pt(v.centre),
+                style: v.style.into_core(&element)?,
+                title: v.title,
+                show_title: v.show_title,
+            })
+        })
+        .collect()
 }

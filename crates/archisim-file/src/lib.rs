@@ -920,6 +920,68 @@ mod tests {
         assert!(err.to_string().contains("centro"), "{err}");
     }
 
+    /// Sheets, their views, their drafting, the project data and the pen
+    /// table come back as they were.
+    #[test]
+    fn sheets_views_info_and_graphics() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        m.set_info(ProjectInfo {
+            client: "Ayuntamiento".into(),
+            site: "Punta Umbría (Huelva)".into(),
+            studio: "AD5".into(),
+            phase: "Proyecto básico".into(),
+            ..Default::default()
+        });
+        m.graphics.coarse.cut = 0.3;
+        let s = m
+            .add_sheet(NewSheet {
+                number: "A-01".into(),
+                name: "Planta baja".into(),
+                width: 594.0,
+                height: 420.0,
+            })
+            .unwrap();
+        let v = m
+            .add_viewport(NewViewport {
+                sheet: s,
+                level,
+                scale: 50.0,
+                cut_plane: 1.1,
+                crop: Some((Point2::new(-1.0, -1.0), Point2::new(8.0, 6.0))),
+                centre: Point2::new(0.25, 0.22),
+            })
+            .unwrap();
+        let mut vv = m.viewport(v).unwrap().clone();
+        vv.style.hidden.insert(Category::Dimensions);
+        vv.style.detail = Detail::Medium;
+        vv.title = "PLANTA BAJA".into();
+        m.set_viewport(vv).unwrap();
+        m.add_draft(NewDraft::new(
+            ViewRef::Sheet(s),
+            LAYER_ZERO,
+            Shape::Line {
+                a: Point2::new(0.02, 0.02),
+                b: Point2::new(0.1, 0.02),
+            },
+        ))
+        .unwrap();
+        let text = to_string(&m);
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.info(), m.info());
+        assert_eq!(back.graphics, m.graphics);
+        assert_eq!(back.sheets(), m.sheets());
+        assert_eq!(
+            back.viewports().collect::<Vec<_>>(),
+            m.viewports().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            back.drafts().collect::<Vec<_>>(),
+            m.drafts().collect::<Vec<_>>()
+        );
+        assert_same_project(&back, &m);
+    }
+
     fn slab_material(m: &Model) -> archisim_core::MaterialId {
         m.materials().next().unwrap().id
     }

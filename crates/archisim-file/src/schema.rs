@@ -45,6 +45,14 @@ pub(crate) struct ProjectFile {
     /// Line weights by scale (version 7; the defaults if missing).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graphics: Option<crate::drafting::Graphics>,
+    /// Project data for the title block (version 7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub info: Option<crate::drafting::Info>,
+    /// Drawing sheets and the views placed on them (version 7).
+    #[serde(default)]
+    pub sheets: Vec<crate::drafting::Sheet>,
+    #[serde(default)]
+    pub viewports: Vec<crate::drafting::Viewport>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -491,6 +499,9 @@ impl ProjectFile {
             drafts: crate::drafting::drafts_out(&p.drafts),
             graphics: (p.graphics != core::GraphicStandard::default())
                 .then(|| crate::drafting::Graphics::out(&p.graphics)),
+            info: crate::drafting::Info::out(&p.info),
+            sheets: crate::drafting::sheets_out(&p.sheets),
+            viewports: crate::drafting::viewports_out(&p.viewports),
         }
     }
 
@@ -528,6 +539,9 @@ impl ProjectFile {
             draw_layers: crate::drafting::layers_in(self.draw_layers)?,
             drafts: crate::drafting::drafts_in(self.drafts)?,
             graphics: self.graphics.map(|g| g.into_core()).unwrap_or_default(),
+            info: self.info.map(|i| i.into_core()).unwrap_or_default(),
+            sheets: crate::drafting::sheets_in(self.sheets),
+            viewports: crate::drafting::viewports_in(self.viewports)?,
         };
 
         for l in self.levels {

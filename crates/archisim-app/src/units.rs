@@ -158,6 +158,8 @@ pub fn explain(e: &ModelError) -> String {
         }
         ModelError::UnknownDrawLayer(_) => "la capa no existe".into(),
         ModelError::UnknownDraft(_) => "el elemento de dibujo ya no existe".into(),
+        ModelError::UnknownSheet(_) => "el plano ya no existe".into(),
+        ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),
         ModelError::DuplicateName(name) => format!("ya hay otro elemento llamado «{name}»"),
     }

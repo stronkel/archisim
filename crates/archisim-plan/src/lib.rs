@@ -26,6 +26,7 @@
 pub mod annotate;
 pub mod drafting;
 pub mod lettering;
+pub mod sheet;
 
 use std::fmt::Write as _;
 

@@ -78,6 +78,15 @@ typed_id!(
     DraftId
 );
 
+typed_id!(
+    /// Identifies a [`crate::Sheet`] (a drawing sheet, "plano").
+    SheetId
+);
+typed_id!(
+    /// Identifies a [`crate::Viewport`] (a view placed on a sheet).
+    ViewportId
+);
+
 /// Alphabet used by IFC to compress a 128-bit GUID into 22 characters.
 const IFC_GUID_ALPHABET: &[u8; 64] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$";

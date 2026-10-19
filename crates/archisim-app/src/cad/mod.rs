@@ -251,7 +251,9 @@ impl<G: Geo + ?Sized> Ctx<'_, G> {
             .filter(|d| model.draft_visible(d))
             .flat_map(|d| archisim_draft::boundary_segs(&d.shape))
             .collect();
-        let ViewRef::Level(level) = self.view;
+        let ViewRef::Level(level) = self.view else {
+            return v;
+        };
         for w in model.walls_on_level(level) {
             if let Some(g) = self.geo.wall_geometry(w.id) {
                 let n = g.outline.len();

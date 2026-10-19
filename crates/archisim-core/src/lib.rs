@@ -12,6 +12,7 @@ pub mod graphics;
 pub mod ids;
 pub mod math;
 pub mod model;
+pub mod sheets;
 
 pub use document::Document;
 pub use drafting::*;
@@ -26,3 +27,4 @@ pub use math::{
     MIN_BULGE,
 };
 pub use model::*;
+pub use sheets::*;
