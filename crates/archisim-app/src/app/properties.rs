@@ -850,6 +850,18 @@ impl ArchiSimApp {
             );
             id_row(ui, "IfcProject", &guid);
         });
+        group(ui, "project-junctions", "Encuentros", |ui| {
+            props::note(
+                ui,
+                "Qué capa se queda el sitio donde se encuentran muros y forjados: una barra por material.",
+            );
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui.button("Prioridades de intersección…").clicked() {
+                    self.show_priorities = true;
+                }
+            });
+        });
         self.usages_group(ui);
     }
 

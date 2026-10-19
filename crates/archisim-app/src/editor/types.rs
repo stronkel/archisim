@@ -115,6 +115,23 @@ impl Editor {
         })
     }
 
+    /// Gives every material back the priority of its layers' functions
+    /// (one step).
+    pub fn reset_material_priorities(&mut self) -> EditResult {
+        let ids: Vec<MaterialId> = self
+            .model()
+            .materials()
+            .filter(|m| m.priority.is_some())
+            .map(|m| m.id)
+            .collect();
+        self.transact("Prioridades según la función", |m| {
+            for id in ids {
+                m.set_material_priority(id, None)?;
+            }
+            Ok(())
+        })
+    }
+
     /// Deletes a material that no type uses; otherwise says which types do.
     pub fn remove_material(&mut self, id: MaterialId) -> EditResult {
         let users = self.model().material_users(id);

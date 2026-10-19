@@ -240,6 +240,11 @@ pub struct ArchiSimApp {
     pub zone_tool: SlabTool,
     /// The levels dialog is open.
     pub show_levels: bool,
+    /// The intersection priorities window, whether it lists unused
+    /// materials too, and the bar being dragged (material, value).
+    pub show_priorities: bool,
+    pub priorities_all: bool,
+    pub priority_drag: Option<(archisim_core::MaterialId, u16)>,
     /// A level waiting for confirmation before being deleted with its
     /// contents.
     pub level_to_delete: Option<LevelId>,
@@ -381,6 +386,9 @@ impl ArchiSimApp {
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             show_levels: false,
+            show_priorities: false,
+            priorities_all: false,
+            priority_drag: None,
             level_to_delete: None,
             types: TypesDialog::default(),
             placement: None,
@@ -1266,6 +1274,7 @@ impl ArchiSimApp {
             }
         }
         self.levels_dialog(ctx);
+        self.priorities_dialog(ctx);
         self.types_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
@@ -1509,6 +1518,7 @@ mod levels_ui;
 mod navigator;
 mod object_ui;
 mod plan_ui;
+mod priorities_ui;
 mod properties;
 mod props;
 mod railing_ui;

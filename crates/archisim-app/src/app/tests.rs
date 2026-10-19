@@ -2408,3 +2408,37 @@ fn alignment_guides_close_the_outline() {
     h.move_to(p(2.04, 10.02));
     assert!(h.app.guides.is_empty());
 }
+
+/// The intersection priorities window (R7): it opens from the project's
+/// properties, lists the materials of the layers; a priority set on one
+/// and "Todas según la función de la capa" in one undoable step.
+#[test]
+fn intersection_priorities_window() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.show_priorities = true;
+    h.frame();
+    assert!(h.app.show_priorities);
+    let ids: Vec<_> = h.model().materials().map(|m| m.id).take(2).collect();
+    for id in &ids {
+        h.app.ed.set_material_priority(*id, Some(950)).unwrap();
+    }
+    h.frame();
+    assert_eq!(
+        h.model()
+            .materials()
+            .filter(|m| m.priority.is_some())
+            .count(),
+        2
+    );
+    h.app.ed.reset_material_priorities().unwrap();
+    assert!(h.model().materials().all(|m| m.priority.is_none()));
+    h.app.ed.undo();
+    assert_eq!(
+        h.model()
+            .materials()
+            .filter(|m| m.priority.is_some())
+            .count(),
+        2
+    );
+    h.frame();
+}

@@ -107,6 +107,8 @@ pub struct TypesDialog {
 /// What the dialog was asked to do this frame, applied after drawing it.
 pub(super) enum Action {
     Select(TypesTab, u64),
+    /// Open the window with every material's priority.
+    ShowPriorities,
     DuplicateMaterial(MaterialId),
     RemoveMaterial(MaterialId),
     EditMaterial(MaterialId, String, String, [u8; 3], CutPattern),
@@ -1188,7 +1190,7 @@ impl ArchiSimApp {
             props::row(
                 ui,
                 "Prioridad de intersección",
-                "De 0 a 999: en las uniones en T, una capa atraviesa las del otro muro de menor prioridad. Vacío: según la función de cada capa (estructura 900, soporte 700, aislante 500, lámina o cámara 300, acabado 100).",
+                "De 0 a 999: en las uniones en T, una capa atraviesa las del otro muro de menor prioridad; entre muro y forjado, se queda el sitio la de más prioridad (a igualdad, el forjado). Vacío: según la función de cada capa (estructura 900, soporte 700, aislante 500, lámina o cámara 300, acabado 100).",
                 |ui, w| {
                     let shown = mat.priority.map(|p| p.to_string()).unwrap_or_default();
                     if let Some(new) =
@@ -1205,6 +1207,16 @@ impl ArchiSimApp {
                     }
                 },
             );
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .small_button("Ver todas las prioridades…")
+                    .on_hover_text("Una barra por material, como en ArchiCAD")
+                    .clicked()
+                {
+                    actions.push(Action::ShowPriorities);
+                }
+            });
         });
         if let Some(rgb) = draft {
             self.types.color_draft = Some((id, rgb));
@@ -1573,11 +1585,12 @@ impl ArchiSimApp {
                 let r = self.ed.edit_material(id, &name, &cat, rgb, pat);
                 self.report(r, "Material modificado.");
             }
+            Action::ShowPriorities => self.show_priorities = true,
             Action::MaterialPriority(id, p) => {
                 let r = self.ed.set_material_priority(id, p);
                 self.report(
                     r,
-                    "Prioridad cambiada: las uniones en T se rehacen con ella.",
+                    "Prioridad cambiada: las uniones en T y los encuentros con forjados se rehacen con ella.",
                 );
             }
             Action::DuplicateWall(id) => match self.ed.duplicate_wall_type(id) {
