@@ -1,0 +1,147 @@
+//! Stairs in plan, as drawn in Spain: the outline of flights and landings,
+//! a line at every riser, what lies above the cut plane dashed beyond a
+//! zigzag break line, and the walking line from a dot at the foot to an
+//! arrow at the head (the way up).
+
+use std::fmt::Write as _;
+
+use archisim_core::{Point2, Stair};
+
+use crate::{num, path, pt, HATCH_LINE, INK, SLAB_COVER, VIEW_LINE};
+
+/// Every point of the stair the plan must show.
+pub fn stair_points(stair: &Stair) -> Vec<Point2> {
+    stair.outlines().into_iter().flatten().collect()
+}
+
+fn line(s: &mut String, a: Point2, b: Point2, w: f64, dashed: bool, k: f64) {
+    let dash = if dashed {
+        format!(r#" stroke-dasharray="{} {}""#, num(2.0 * k), num(1.2 * k))
+    } else {
+        String::new()
+    };
+    let _ = writeln!(
+        s,
+        r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"{dash}/>"#,
+        pt(a),
+        pt(b),
+        num(w * k)
+    );
+}
+
+pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
+    let l = stair.layout();
+    let half = stair.width / 2.0;
+    let _ = writeln!(s, r#"<g class="stair" stroke-linecap="round">"#);
+    // Landings: light, as floors seen from above.
+    for landing in &l.landings {
+        let above = landing.top > cut_plane;
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{}" stroke="none"/>"#,
+            path(&landing.outline),
+            if above { "none" } else { SLAB_COVER }
+        );
+        let n = landing.outline.len();
+        for i in 0..n {
+            line(
+                s,
+                landing.outline[i],
+                landing.outline[(i + 1) % n],
+                VIEW_LINE,
+                above,
+                k,
+            );
+        }
+    }
+    let mut broken = false;
+    for f in &l.flights {
+        let u = f.direction();
+        let nrm = u.perp_left() * half;
+        let at = |d: f64| f.start + u * d;
+        // Where the cut plane crosses the flight: the first tread above it.
+        let tread_top = |i: usize| f.base + (i + 1) as f64 * l.riser;
+        let cut_at = (0..f.treads)
+            .find(|&i| tread_top(i) > cut_plane)
+            .map(|i| (i as f64 + 0.5) * f.going);
+        let below = |d: f64| cut_at.is_none_or(|c| d <= c);
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{SLAB_COVER}" stroke="none"/>"#,
+            path(&f.outline(stair.width))
+        );
+        // A line at every riser (the last one is the landing's edge).
+        for i in 0..=f.treads {
+            let d = (i as f64 * f.going).min(f.length());
+            line(s, at(d) - nrm, at(d) + nrm, VIEW_LINE, !below(d), k);
+        }
+        // The sides, solid up to the cut.
+        for side in [-1.0, 1.0] {
+            let off = nrm * side;
+            match cut_at {
+                Some(c) => {
+                    line(s, f.start + off, at(c) + off, VIEW_LINE, false, k);
+                    line(s, at(c) + off, f.end + off, VIEW_LINE, true, k);
+                }
+                None => line(s, f.start + off, f.end + off, VIEW_LINE, false, k),
+            }
+        }
+        // The break line, once, where the plane cuts.
+        if let (Some(c), false) = (cut_at, broken) {
+            broken = true;
+            let g = f.going;
+            let a = at(c - g * 0.6) - nrm;
+            let b = at(c + g * 0.6) + nrm;
+            let m = at(c);
+            let zig = u.perp_left() * (0.12 * stair.width);
+            let z1 = m - zig * 1.0 - u * (g * 0.25);
+            let z2 = m + zig * 1.0 + u * (g * 0.25);
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{} L{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                pt(a),
+                pt(z1),
+                pt(z2),
+                pt(b),
+                num(VIEW_LINE * 1.3 * k)
+            );
+        }
+    }
+    // The walking line: from a dot at the foot to an arrow at the head.
+    if stair.path.len() >= 2 {
+        let _ = writeln!(
+            s,
+            r#"<path d="M{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+            stair
+                .path
+                .iter()
+                .map(|p| pt(*p))
+                .collect::<Vec<_>>()
+                .join(" L"),
+            num(HATCH_LINE * k)
+        );
+        let p0 = stair.path[0];
+        let _ = writeln!(
+            s,
+            r#"<circle cx="{}" cy="{}" r="{}" fill="{INK}"/>"#,
+            num(p0.x),
+            num(-p0.y),
+            num(0.8 * k)
+        );
+        let n = stair.path.len();
+        let (a, b) = (stair.path[n - 2], stair.path[n - 1]);
+        if let Some(u) = (b - a).normalized() {
+            let head = 2.2 * k;
+            let base = b - u * head;
+            let w = u.perp_left() * (head * 0.35);
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{} L{} Z" fill="{INK}" stroke="none"/>"#,
+                pt(b),
+                pt(base + w),
+                pt(base - w)
+            );
+        }
+    }
+    s.push_str("</g>\n");
+}

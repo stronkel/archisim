@@ -24,6 +24,8 @@ pub struct ImportReport {
     pub spaces: usize,
     /// Pitched roofs written by ArchiSim (`IfcRoof`).
     pub roofs: usize,
+    /// Stairs written by ArchiSim (`IfcStair`).
+    pub stairs: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -136,6 +138,9 @@ impl ImportReport {
         }
         if self.roofs > 0 {
             members.push_str(&format!(", {} cubiertas", self.roofs));
+        }
+        if self.stairs > 0 {
+            members.push_str(&format!(", {} escaleras", self.stairs));
         }
         format!(
             "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}{members}",

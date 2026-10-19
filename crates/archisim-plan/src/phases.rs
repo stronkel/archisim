@@ -126,6 +126,15 @@ pub fn phase_model(model: &Model, view: PhaseView) -> Option<Model> {
             }
         }
     }
+    let stairs: Vec<_> = m.stairs().map(|s| s.id).collect();
+    for s in stairs {
+        let (show, marked) = view.shows(m.phase(s.0));
+        if !show {
+            let _ = m.remove_stair(s);
+        } else if marked {
+            let _ = m.edit_stair(s, |s| s.material = mark);
+        }
+    }
     let roofs: Vec<_> = m.roofs().map(|r| (r.id, r.roof_type)).collect();
     for (r, t) in roofs {
         let (show, marked) = view.shows(m.phase(r.0));

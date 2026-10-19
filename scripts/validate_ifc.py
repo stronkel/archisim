@@ -21,6 +21,9 @@ Checks:
      constituent set, its common property set and quantities, and 3D
      geometry. Wall volumes are compared with their net volume, after the
      openings are cut.
+  9. Every stair (IfcStair) is contained in a storey, made of flights
+     with their material and quantities (3D volume included) and landings,
+     and its risers add up.
   8. Every pitched roof (IfcRoof) is contained in a storey, made of roof
      slabs (checked as slabs above) and has its common property set and
      base quantities, its area the sum of its planes'.
@@ -101,7 +104,10 @@ def main(path: str) -> int:
     for w in walls:
         check_element(w, "Pset_WallCommon", "Qto_WallBaseQuantities")
 
-    slabs = f.by_type("IfcSlab")
+    def in_stair(el):
+        return any(rel.RelatingObject.is_a("IfcStair") for rel in el.Decomposes)
+
+    slabs = [s for s in f.by_type("IfcSlab") if not in_stair(s)]
     for s in slabs:
         mat = check_element(s, "Pset_SlabCommon", "Qto_SlabBaseQuantities")
         if mat is None:
@@ -231,6 +237,34 @@ def main(path: str) -> int:
         if q and abs(q.get("NetArea", 0) - surface) > 1e-4:
             errors.append(f"{name}: area {q.get('NetArea')} != planes {surface}")
 
+    stairs = f.by_type("IfcStair")
+    for st in stairs:
+        name = st.Name
+        parts = [p for rel in st.IsDecomposedBy for p in rel.RelatedObjects]
+        flights = [p for p in parts if p.is_a("IfcStairFlight")]
+        if not flights:
+            errors.append(f"{name}: no flights")
+        if not st.ContainedInStructure:
+            errors.append(f"{name}: not contained in a storey")
+        psets = eu.get_psets(st)
+        if "Pset_StairCommon" not in psets:
+            errors.append(f"{name}: missing Pset_StairCommon")
+        risers = sum(fl.NumberOfRisers or 0 for fl in flights)
+        if psets.get("Pset_StairCommon", {}).get("NumberOfRiser") != risers:
+            errors.append(f"{name}: risers {risers} do not add up")
+        for fl in flights:
+            if eu.get_material(fl) is None:
+                errors.append(f"{fl.Name}: no material")
+            q = eu.get_psets(fl).get("Qto_StairFlightBaseQuantities", {})
+            if geom_ok and q:
+                try:
+                    shp = geom.create_shape(settings, fl)
+                    vol = shape.get_volume(shp.geometry)
+                    if abs(vol - q["NetVolume"]) > 1e-4:
+                        errors.append(f"{fl.Name}: volume {vol:.4f} != {q['NetVolume']:.4f}")
+                except Exception as exc:
+                    errors.append(f"{fl.Name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
                 ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
@@ -238,7 +272,7 @@ def main(path: str) -> int:
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
           f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
-          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, "
           f"{len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:

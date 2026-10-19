@@ -57,6 +57,7 @@ impl ArchiSimApp {
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
+        self.draw_stair_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -89,7 +90,8 @@ impl ArchiSimApp {
             | Tool::Beam
             | Tool::Zone
             | Tool::Section
-            | Tool::Roof => CursorIcon::Crosshair,
+            | Tool::Roof
+            | Tool::Stair => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -278,6 +280,18 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Stair => {
+                let mut s = self.snap_at(raw, reach, &self.stair_tool.points, &BTreeSet::new());
+                if let Some(a) = self.stair_tool.points.last().copied() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::Section => {
                 let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
                 if let Some(a) = self.section_tool.anchor {
@@ -386,7 +400,8 @@ impl ArchiSimApp {
             || self.dim_tool.is_active()
             || self.beam_tool.is_drawing()
             || self.zone_tool.is_drawing()
-            || self.roof_tool.is_drawing();
+            || self.roof_tool.is_drawing()
+            || !self.stair_tool.points.is_empty();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -415,6 +430,7 @@ impl ArchiSimApp {
                 Tool::Slab => self.slab_tool.backspace(),
                 Tool::Zone => self.zone_tool.backspace(),
                 Tool::Roof => self.roof_tool.backspace(),
+                Tool::Stair => self.stair_tool.points.pop().is_some(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -474,6 +490,14 @@ impl ArchiSimApp {
                     ),
                     SlabOutcome::Nothing => {}
                 },
+                Tool::Stair => {
+                    if let Some(c) = self.cursor {
+                        if self.stair_tool.points.len() == 1 {
+                            self.stair_click(c.point);
+                        }
+                    }
+                    self.finish_stair();
+                }
                 Tool::Roof => match self.roof_tool.enter(towards) {
                     SlabOutcome::Build(outline) => self.build_roof(outline),
                     SlabOutcome::Invalid => self.complain(
@@ -514,6 +538,11 @@ impl ArchiSimApp {
                 }
                 Tool::Roof => {
                     if !self.roof_tool.escape() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Stair => {
+                    if self.stair_tool.points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -639,6 +668,17 @@ impl ArchiSimApp {
             Tool::Door | Tool::Window => {
                 if response.clicked_by(PointerButton::Primary) {
                     self.place_opening();
+                }
+            }
+            Tool::Stair => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.finish_stair();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.stair_click(c.point);
+                    }
                 }
             }
             Tool::Roof => {
@@ -1056,6 +1096,7 @@ impl ArchiSimApp {
             (Grip::SectionEnd { .. }, _) => "Estirar sección",
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
             (Grip::RoofCorner { .. }, _) => "Esquina",
+            (Grip::StairPoint { .. }, _) => "Línea de huella",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
@@ -1415,6 +1456,7 @@ impl ArchiSimApp {
             Tool::Section => self.section_tool.anchor,
             Tool::Zone => self.zone_tool.anchor(),
             Tool::Roof => self.roof_tool.anchor(),
+            Tool::Stair => self.stair_tool.points.last().copied(),
             Tool::Dimension if !self.dim_tool.is_placing() => {
                 self.dim_tool.points().last().copied()
             }

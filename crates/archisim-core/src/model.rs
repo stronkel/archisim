@@ -17,11 +17,13 @@ mod phases;
 mod roofs;
 mod sections;
 mod spaces;
+mod stairs;
 mod structure;
 pub use phases::*;
 pub use roofs::*;
 pub use sections::*;
 pub use spaces::*;
+pub use stairs::*;
 pub use structure::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
@@ -756,6 +758,9 @@ pub enum ModelError {
     InvalidRoof,
     /// A roof footprint with a re-entrant corner.
     RoofNotConvex,
+    UnknownStair(StairId),
+    /// A stair with no flight, nothing to climb, or too narrow or shallow.
+    InvalidStair,
     /// Another room on the level already has that number.
     DuplicateNumber(String),
 }
@@ -853,6 +858,11 @@ impl fmt::Display for ModelError {
             ModelError::UnknownSection(id) => write!(f, "section {id} does not exist"),
             ModelError::ZeroLengthSection => write!(f, "a section line needs two different points"),
             ModelError::UnknownRoof(id) => write!(f, "unknown roof {id}"),
+            ModelError::UnknownStair(id) => write!(f, "unknown stair {id}"),
+            ModelError::InvalidStair => write!(
+                f,
+                "a stair needs a walking line long enough for a flight, something to climb, and a usable width and tread"
+            ),
             ModelError::InvalidRoof => write!(
                 f,
                 "a roof needs a pitch for each side (or a gable), at least one sloping side, pitches up to {MAX_SLAB_SLOPE} and an overhang up to {MAX_OVERHANG} m"
@@ -974,6 +984,7 @@ pub struct ModelParts {
     pub phases: Vec<(u64, Phase)>,
     pub sections: Vec<SectionLine>,
     pub roofs: Vec<Roof>,
+    pub stairs: Vec<Stair>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -1024,6 +1035,7 @@ pub struct Model {
     phases: BTreeMap<u64, Phase>,
     sections: BTreeMap<SectionId, SectionLine>,
     roofs: BTreeMap<RoofId, Roof>,
+    stairs: BTreeMap<StairId, Stair>,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -1055,6 +1067,7 @@ impl Model {
             phases: BTreeMap::new(),
             sections: BTreeMap::new(),
             roofs: BTreeMap::new(),
+            stairs: BTreeMap::new(),
             draw_phase: Phase::New,
         }
     }
@@ -1119,6 +1132,7 @@ impl Model {
             }
             return Err(e);
         }
+        self.refresh_stair_heights();
         Ok(())
     }
 
@@ -1146,6 +1160,12 @@ impl Model {
         self.remove_members_on_level(id);
         self.spaces.retain(|_, s| s.level != id);
         self.roofs.retain(|_, r| r.level != id);
+        self.stairs.retain(|_, s| s.level != id);
+        for s in self.stairs.values_mut() {
+            if matches!(s.top, WallTop::Level { level, .. } if level == id) {
+                s.top = WallTop::Unconnected;
+            }
+        }
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
@@ -1266,7 +1286,17 @@ impl Model {
             .values()
             .filter(|t| t.material == id)
             .map(|t| t.name.clone());
-        walls.chain(slabs).chain(openings).chain(members).collect()
+        let stairs = self
+            .stairs
+            .values()
+            .filter(|s| s.material == id)
+            .map(|s| format!("escalera {}", s.id.0));
+        walls
+            .chain(slabs)
+            .chain(openings)
+            .chain(members)
+            .chain(stairs)
+            .collect()
     }
 
     /// Removes a material that no type uses.
@@ -3009,6 +3039,7 @@ impl Model {
             phases: self.phase_table(),
             sections: self.sections.values().cloned().collect(),
             roofs: self.roofs.values().cloned().collect(),
+            stairs: self.stairs.values().cloned().collect(),
         }
     }
 
@@ -3211,6 +3242,7 @@ impl Model {
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
         model.restore_spaces(parts.spaces, &mut claim)?;
         model.restore_roofs(parts.roofs, &mut claim)?;
+        model.restore_stairs(parts.stairs, &mut claim)?;
         model.restore_phases(parts.phases)?;
         model.restore_sections(parts.sections, &mut claim)?;
 

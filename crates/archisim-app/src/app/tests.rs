@@ -2106,3 +2106,52 @@ fn roof_tool() {
     h.key(Key::Delete);
     assert_eq!(h.model().roofs().count(), 0);
 }
+
+/// The stair tool (E): the walking line by clicks, Enter to finish; up to
+/// the level above, checked against the code; its points dragged.
+#[test]
+fn stair_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let pb = h.app.ed.level;
+    h.app.ed.add_level("Planta 1", 2.97).unwrap();
+    h.app.ed.level = pb;
+    h.frame();
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("e");
+    assert_eq!(h.app.tool, Tool::Stair);
+    // An L: 2,8 m up, then 2 m to the right, inside the room.
+    h.click_at(p(1.0, 1.0));
+    h.click_at(p(1.0, 4.3));
+    h.click_at(p(3.8, 4.3));
+    h.key(Key::Enter);
+    let m = h.model();
+    assert_eq!(m.stairs().count(), 1, "{:?}", h.app.message);
+    let s = m.stairs().next().unwrap().clone();
+    assert_eq!(s.path.len(), 3);
+    let l = s.layout();
+    assert_eq!(l.flights.len(), 2);
+    assert_eq!(l.landings.len(), 1);
+    assert!((s.height - 2.97).abs() < 1e-9);
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Stair(s.id)]
+    );
+    // Drawn in plan, and in 3D.
+    let svg = archisim_plan::render_plan(h.model(), pb, &archisim_plan::PlanOptions::default());
+    assert!(svg.contains("class=\"stair\""));
+    // Its head dragged further: longer second flight.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Stair(s.id)].into_iter().collect();
+    h.frame();
+    h.drag(p(3.8, 4.3), p(4.6, 4.3));
+    let moved = h.model().stair(s.id).unwrap().path[2];
+    assert!(
+        moved.distance(p(4.6, 4.3)) < 0.05,
+        "{moved:?} {:?}",
+        h.app.message
+    );
+    h.key(Key::Delete);
+    assert_eq!(h.model().stairs().count(), 0);
+}

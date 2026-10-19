@@ -33,6 +33,7 @@ pub enum SolidOwner {
     Column(ColumnId),
     Beam(BeamId),
     Roof(archisim_core::RoofId),
+    Stair(archisim_core::StairId),
 }
 
 /// One closed piece of one material.
@@ -643,6 +644,193 @@ pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
     out
 }
 
+/// Solids of a stair: each flight as its stepped profile on a sloping
+/// slab ("losa"), swept across its width; each landing as a slab of the
+/// same thickness.
+pub fn stair_solids(model: &Model, id: archisim_core::StairId) -> Vec<Solid> {
+    let Some(stair) = model.stair(id) else {
+        return Vec::new();
+    };
+    let level = model.level(stair.level).map_or(0.0, |l| l.elevation);
+    let l = stair.layout();
+    let mut out = Vec::new();
+    for f in &l.flights {
+        let profile = flight_profile(f, l.riser, stair.waist, level);
+        out.push(vertical_prism(
+            SolidOwner::Stair(id),
+            stair.material,
+            &profile,
+            f.start,
+            f.direction(),
+            stair.width / 2.0,
+        ));
+    }
+    // Landings: the slab and, in front, the riser up to them.
+    let waist = [archisim_core::Layer {
+        material: stair.material,
+        thickness: stair.waist + l.riser,
+        function: archisim_core::LayerFunction::Structure,
+    }];
+    for landing in &l.landings {
+        out.extend(layered_plate(
+            SolidOwner::Stair(id),
+            &landing.outline,
+            &[],
+            &|_| level + landing.top,
+            &|t| t,
+            &waist,
+        ));
+    }
+    out
+}
+
+/// The side view of a flight: `x` along it from its first riser, `y` the
+/// height; counter-clockwise. The steps on top, the slab under them
+/// parallel to the line of the nosings.
+pub fn flight_profile(
+    f: &archisim_core::Flight,
+    riser: f64,
+    waist: f64,
+    level: f64,
+) -> Vec<Point2> {
+    let z0 = level + f.base;
+    let g = f.going;
+    let t = f.treads;
+    let len = f.length();
+    let mut pts = vec![Point2::new(0.0, z0)];
+    for i in 0..t {
+        let z = z0 + (i + 1) as f64 * riser;
+        pts.push(Point2::new(i as f64 * g, z));
+        pts.push(Point2::new((i + 1) as f64 * g, z));
+    }
+    // The last riser is the front of the landing (or of the floor above).
+    let last = z0 + t as f64 * riser;
+    // Under the steps: the slab ("losa"), `waist` thick square to the
+    // line of the inner corners of the steps (the "garganta").
+    let k = riser / g;
+    let wv = waist * (1.0 + k * k).sqrt();
+    let under = |s: f64| z0 + k * s - wv;
+    let end = under(len).min(last - 0.01);
+    if end > z0 + 1e-9 {
+        pts.push(Point2::new(len, end));
+        // Where the slab meets the floor.
+        pts.push(Point2::new(wv / k, z0));
+    } else {
+        pts.push(Point2::new(len, z0));
+    }
+    pts.dedup_by(|a, b| a.approx_eq(*b));
+    if archisim_core::signed_area(&pts) < 0.0 {
+        pts.reverse();
+    }
+    pts
+}
+
+/// A prism from a profile in the vertical plane through `origin` along
+/// `u` (`x` along `u`, `y` the height), swept `half` to each side. The
+/// profile must be counter-clockwise and x-monotone (any vertical line
+/// crosses it once), as a flight seen from the side: it is cut into
+/// vertical strips at its corners, each convex, so that its many square
+/// corners triangulate cleanly.
+fn vertical_prism(
+    owner: SolidOwner,
+    material: archisim_core::MaterialId,
+    profile: &[Point2],
+    origin: Point2,
+    u: archisim_core::Vec2,
+    half: f64,
+) -> Solid {
+    let n = u.perp_left();
+    let at = |p: Point2, side: f64| {
+        let q = origin + u * p.x + n * (side * half);
+        [q.x, q.y, p.y]
+    };
+    let mut xs: Vec<f64> = profile.iter().map(|p| p.x).collect();
+    xs.sort_by(f64::total_cmp);
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    let key = |p: Point2| ((p.x * 1e7).round() as i64, (p.y * 1e7).round() as i64);
+    let mut strips: Vec<Vec<Point2>> = Vec::new();
+    for w in xs.windows(2) {
+        let mut poly = clip_x(profile, w[0], true);
+        poly = clip_x(&poly, w[1], false);
+        poly.dedup_by(|a, b| a.approx_eq(*b));
+        while poly.len() > 1 && poly[0].approx_eq(poly[poly.len() - 1]) {
+            poly.pop();
+        }
+        // Points of the profile on the cutting line beyond the strip
+        // (the next riser) leave a spike: out and back along the line.
+        loop {
+            let m = poly.len();
+            if m < 3 {
+                break;
+            }
+            let spike = (0..m).find(|&i| {
+                let (a, b, c) = (poly[(i + m - 1) % m], poly[i], poly[(i + 1) % m]);
+                let (u, v) = (b - a, c - b);
+                u.cross(v).abs() < 1e-12 && u.dot(v) < 0.0
+            });
+            match spike {
+                Some(i) => {
+                    poly.remove(i);
+                }
+                None => break,
+            }
+        }
+        if poly.len() >= 3 && archisim_core::signed_area(&poly).abs() > 1e-12 {
+            strips.push(poly);
+        }
+    }
+    let mut tris = Vec::new();
+    type Key = ((i64, i64), (i64, i64));
+    let mut edges: std::collections::HashMap<Key, (Point2, Point2)> = Default::default();
+    for poly in &strips {
+        // A fan from the middle: every side of the strip gets its own
+        // triangle, whatever points lie in line.
+        let c = poly.iter().fold(Point2::new(0.0, 0.0), |a, p| a + *p) * (1.0 / poly.len() as f64);
+        let m = poly.len();
+        for i in 0..m {
+            let (a, b) = (poly[i], poly[(i + 1) % m]);
+            // Counter-clockwise seen from the right of `u`: as is there,
+            // reversed on the left.
+            tris.push([at(c, -1.0), at(a, -1.0), at(b, -1.0)]);
+            tris.push([at(c, 1.0), at(b, 1.0), at(a, 1.0)]);
+            edges.insert((key(a), key(b)), (a, b));
+        }
+    }
+    // The sides: the strips' edges that no other strip shares.
+    for (&(ka, kb), &(p, q)) in &edges {
+        if edges.contains_key(&(kb, ka)) {
+            continue;
+        }
+        tris.push([at(p, -1.0), at(p, 1.0), at(q, 1.0)]);
+        tris.push([at(p, -1.0), at(q, 1.0), at(q, -1.0)]);
+    }
+    Solid {
+        owner,
+        material,
+        triangles: tris,
+    }
+}
+
+/// The part of a polygon on one side of the vertical line `x = at`
+/// (`right`: where x ≥ at).
+fn clip_x(poly: &[Point2], at: f64, right: bool) -> Vec<Point2> {
+    let f = |p: Point2| if right { p.x - at } else { at - p.x };
+    let n = poly.len();
+    let mut out = Vec::new();
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        let (fa, fb) = (f(a), f(b));
+        if fa >= -1e-12 {
+            out.push(a);
+        }
+        if (fa < -1e-12 && fb > 1e-12) || (fa > 1e-12 && fb < -1e-12) {
+            let t = fa / (fa - fb);
+            out.push(a + (b - a) * t);
+        }
+    }
+    out
+}
+
 /// A plate of layers under a (level or inclined) top face: one skin with
 /// the top face in the top layer's material, the soffit in the bottom
 /// layer's, and the edges banded by layer. Layers touching inside have no
@@ -853,6 +1041,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for r in model.roofs() {
         out.extend(roof_solids(model, r.id));
     }
+    for s in model.stairs() {
+        out.extend(stair_solids(model, s.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -869,6 +1060,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Column(c) => model.column(c).is_some_and(|c| c.level == level),
         SolidOwner::Beam(b) => model.beam(b).is_some_and(|b| b.level == level),
         SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| r.level == level),
+        SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
     };
     model_solids(model)
         .into_iter()
@@ -1271,6 +1463,45 @@ mod tests {
         assert!(model_solids(&m)
             .iter()
             .any(|s| s.owner == SolidOwner::Roof(r)));
+    }
+
+    /// A straight stair: one stepped flight, closed, its volume that of
+    /// its profile by its width; an L stair adds a landing.
+    #[test]
+    fn stairs_are_flights_and_landings() {
+        let (mut m, w) = model();
+        let l = m.wall(w).unwrap().level;
+        let mat = m.materials().next().unwrap().id;
+        let id = m
+            .add_stair(archisim_core::NewStair {
+                level: l,
+                path: vec![p(0.0, 0.0), p(2.8, 0.0), p(2.8, 2.0)],
+                width: 1.0,
+                going: 0.28,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+                height: 2.8,
+                waist: 0.15,
+                material: mat,
+                usage: archisim_core::StairUse::General,
+            })
+            .unwrap();
+        let solids = stair_solids(&m, id);
+        let layout = m.stair(id).unwrap().layout();
+        assert_eq!(solids.len(), layout.flights.len() + layout.landings.len());
+        for s in &solids {
+            assert_closed(std::slice::from_ref(s));
+            assert!(s.volume() > 0.0);
+        }
+        let f = layout.flights[0];
+        let profile = flight_profile(&f, layout.riser, 0.15, 1.0);
+        assert!((solids[0].volume() - archisim_core::signed_area(&profile)).abs() < 1e-9);
+        // The first riser stands on the floor; the last tread is a riser
+        // under the landing.
+        let lo = profile.iter().map(|q| q.y).fold(f64::MAX, f64::min);
+        let hi = profile.iter().map(|q| q.y).fold(f64::MIN, f64::max);
+        assert!((lo - 1.0).abs() < 1e-9);
+        assert!((hi - 1.0 - layout.landings[0].top + layout.riser).abs() < 1e-9);
     }
 
     /// Every edge of the solids together is shared by exactly two

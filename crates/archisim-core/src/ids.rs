@@ -79,6 +79,10 @@ typed_id!(
     /// Identifies a [`crate::Roof`].
     RoofId
 );
+typed_id!(
+    /// Identifies a [`crate::Stair`].
+    StairId
+);
 
 typed_id!(
     /// Identifies a [`crate::Family`] loaded in the project.

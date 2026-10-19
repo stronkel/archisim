@@ -636,6 +636,29 @@ mod tests {
             depth: 12.0,
         })
         .unwrap();
+        // A U stair up to the next level.
+        let concrete = m.materials().next().unwrap().id;
+        m.add_stair(archisim_core::NewStair {
+            level: levels[0],
+            path: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(2.5, 0.0),
+                Point2::new(2.5, 1.1),
+                Point2::new(0.0, 1.1),
+            ],
+            width: 1.0,
+            going: 0.28,
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Level {
+                level: levels[1],
+                offset: 0.0,
+            },
+            height: 0.0,
+            waist: 0.15,
+            material: concrete,
+            usage: archisim_core::StairUse::Restricted,
+        })
+        .unwrap();
         // A roof with a gable, and an inclined slab.
         let st = m.slab_types().next().unwrap().id;
         m.add_roof(archisim_core::NewRoof {

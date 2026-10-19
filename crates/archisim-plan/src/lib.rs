@@ -29,6 +29,7 @@ pub mod members;
 pub mod phases;
 pub mod roofs;
 pub mod section;
+pub mod stairs;
 
 use std::fmt::Write as _;
 
@@ -339,6 +340,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for roof in model.roofs_on_level(level) {
         marker_points.extend(roofs::roof_points(roof));
     }
+    for stair in model.stairs_on_level(level) {
+        marker_points.extend(stairs::stair_points(stair));
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -407,6 +411,13 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let (lo, hi) = bounds(&roof.eaves());
         if visible(lo, hi) {
             roofs::draw_roof(&mut s, roof, k);
+        }
+    }
+    for stair in model.stairs_on_level(level) {
+        let pts = stairs::stair_points(stair);
+        let (lo, hi) = bounds(&pts);
+        if visible(lo, hi) {
+            stairs::draw_stair(&mut s, stair, options.cut_plane, k);
         }
     }
     s.push_str("</g>\n");

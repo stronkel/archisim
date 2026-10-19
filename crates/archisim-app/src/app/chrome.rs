@@ -545,6 +545,8 @@ impl ArchiSimApp {
             Tool::Roof if self.roof_wand() => "Clic dentro del edificio: cubierta por las caras exteriores de sus muros · Esc: flecha",
             Tool::Roof if !self.roof_tool.is_drawing() => "Clic: primera esquina de la cubierta · Esc: flecha",
             Tool::Roof => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
+            Tool::Stair if self.stair_tool.points.is_empty() => "Clic: pie de la escalera (inicio de la línea de huella) · Esc: flecha",
+            Tool::Stair => "Clic: final del tramo o giro (meseta) · Intro, doble clic o clic derecho: terminar · Esc: quitar el último punto",
         }
     }
 

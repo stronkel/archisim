@@ -233,6 +233,36 @@ pub fn build() -> Result<Document, ModelError> {
         )
     })?;
 
+    // An outdoor stair up to the flat roof along the east façade (v0.25):
+    // two flights of 10 and 8 treads of 28 cm with a landing between (a
+    // flight may climb 3,20 m at most), 20 risers, in reinforced concrete.
+    doc.transact("Escalera", |m| {
+        let concrete = m
+            .materials()
+            .find(|x| x.category == "concrete")
+            .map(|x| x.id)
+            .ok_or(ModelError::InvalidOutline)?;
+        m.add_stair(archisim_core::NewStair {
+            level: pb,
+            path: vec![
+                Point2::new(12.8, 0.4),
+                Point2::new(12.8, 3.7),
+                Point2::new(12.8, 6.44),
+            ],
+            width: 1.0,
+            going: 0.28,
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Level {
+                level: cubierta,
+                offset: 0.0,
+            },
+            height: 0.0,
+            waist: 0.15,
+            material: concrete,
+            usage: archisim_core::StairUse::General,
+        })
+    })?;
+
     // Dimensions: the openings of the south and west façades, outside, the
     // overall size beyond them, and level marks on the ground slab.
     doc.transact("Cotas", |m| {
@@ -324,6 +354,9 @@ mod tests {
         assert_eq!(m.walls().count(), 7);
         assert_eq!(m.slabs().count(), 3);
         assert_eq!(m.roofs().count(), 1);
+        assert_eq!(m.stairs().count(), 1);
+        let stair = m.stairs().next().unwrap();
+        assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);

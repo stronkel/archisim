@@ -70,6 +70,8 @@ pub enum Tool {
     Section,
     /// Pitched roofs.
     Roof,
+    /// Stairs, by their walking line.
+    Stair,
 }
 
 impl Tool {
@@ -85,6 +87,7 @@ impl Tool {
                 | Tool::Zone
                 | Tool::Section
                 | Tool::Roof
+                | Tool::Stair
         )
     }
 
@@ -102,6 +105,7 @@ impl Tool {
             "z" => Some(Tool::Zone),
             "s" => Some(Tool::Section),
             "t" => Some(Tool::Roof),
+            "e" => Some(Tool::Stair),
             _ => None,
         }
     }
@@ -191,6 +195,8 @@ pub struct ArchiSimApp {
     pub space_settings: crate::editor::SpaceSettings,
     pub roof_settings: crate::editor::RoofSettings,
     pub roof_tool: SlabTool,
+    pub stair_settings: crate::editor::StairSettings,
+    pub stair_tool: stair_ui::StairTool,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
     /// The levels dialog is open.
@@ -297,6 +303,7 @@ impl ArchiSimApp {
         let window_settings = default_opening_settings(ed.model(), false);
         let (column_settings, beam_settings) = default_member_settings(ed.model());
         let roof_settings = roof_ui::default_roof_settings(ed.model());
+        let stair_settings = crate::editor::default_stair_settings(ed.model());
         let level = ed.level;
         Self {
             ed,
@@ -318,6 +325,8 @@ impl ArchiSimApp {
             section_hover: None,
             space_settings: Default::default(),
             roof_settings,
+            stair_settings,
+            stair_tool: Default::default(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             show_levels: false,
@@ -405,6 +414,7 @@ impl ArchiSimApp {
             self.beam_tool.finish();
             self.zone_tool.finish();
             self.roof_tool.finish();
+            self.stair_tool.points.clear();
             self.section_tool.anchor = None;
             self.placement = None;
             self.window_start = None;
@@ -425,6 +435,7 @@ impl ArchiSimApp {
         self.window_settings = default_opening_settings(ed.model(), false);
         (self.column_settings, self.beam_settings) = default_member_settings(ed.model());
         self.roof_settings = roof_ui::default_roof_settings(ed.model());
+        self.stair_settings = crate::editor::default_stair_settings(ed.model());
         self.beam_tool.finish();
         self.ed = ed;
         self.drag = None;
@@ -1441,6 +1452,7 @@ mod props;
 mod roof_ui;
 mod section_ui;
 mod space_ui;
+mod stair_ui;
 mod structure_ui;
 mod tabs;
 mod temp_ui;

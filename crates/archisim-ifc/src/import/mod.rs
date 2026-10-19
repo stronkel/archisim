@@ -35,6 +35,7 @@ mod members;
 pub mod report;
 mod roofs;
 mod spaces;
+mod stairs;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -229,6 +230,8 @@ struct Importer<'a> {
     sources: Vec<(u64, u64)>,
     /// `IfcRoof`s read back as ArchiSim roofs.
     roof_ids: HashSet<u64>,
+    /// `IfcStair`s read back as ArchiSim stairs.
+    stair_ids: HashSet<u64>,
 }
 
 #[derive(Default)]
@@ -245,6 +248,7 @@ struct GuidPlan {
     beams: Vec<(archisim_core::BeamId, String)>,
     spaces: Vec<(archisim_core::SpaceId, String)>,
     roofs: Vec<(archisim_core::RoofId, String)>,
+    stairs: Vec<(archisim_core::StairId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -459,6 +463,7 @@ impl<'a> Importer<'a> {
             member_types: HashMap::new(),
             sources: Vec::new(),
             roof_ids: HashSet::new(),
+            stair_ids: HashSet::new(),
         };
         imp.index();
         imp
@@ -1496,6 +1501,16 @@ impl<'a> Importer<'a> {
     }
 
     fn import_slab(&mut self, id: u64) -> Result<(), String> {
+        // The landings of an ArchiSim stair come back with their stair.
+        if self.own_file {
+            if let Some(&p) = self.ix.parent.get(&id) {
+                if self.ent(p).is_some_and(|x| x.kind == "IFCSTAIR")
+                    && self.property_own(p, "ArchiSim_Stair", "Path").is_some()
+                {
+                    return Ok(());
+                }
+            }
+        }
         let e = self.ent(id).ok_or("no existe")?;
         let xf = self.geo.placement(e.arg(5));
         let (_, body) = self.shape(e, &xf);
@@ -2513,7 +2528,12 @@ impl<'a> Importer<'a> {
 
     fn count_unsupported(&mut self) {
         for kind in UNSUPPORTED_CLASSES {
-            let n = self.file.of_kind(kind).len();
+            let n = self
+                .file
+                .of_kind(kind)
+                .into_iter()
+                .filter(|id| !self.stair_ids.contains(id))
+                .count();
             for _ in 0..n {
                 self.report.skip(
                     class_name(kind),
@@ -2570,6 +2590,7 @@ impl<'a> Importer<'a> {
         self.import_openings();
         self.import_spaces();
         self.import_roofs();
+        self.import_stairs();
         self.read_statuses();
         self.count_unsupported();
     }
@@ -2614,6 +2635,7 @@ impl<'a> Importer<'a> {
         restore!(beams, beams);
         restore!(spaces, spaces);
         restore!(roofs, roofs);
+        restore!(stairs, stairs);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

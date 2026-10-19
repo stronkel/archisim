@@ -46,6 +46,7 @@ pub mod import;
 mod members;
 mod roofs;
 mod spaces;
+mod stairs;
 pub mod step;
 pub mod step_read;
 
@@ -1342,6 +1343,7 @@ impl<'a> Exporter<'a> {
 
         self.write_members(&materials, &storeys, &mut contained);
         self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
+        self.write_stairs(&materials, &storeys, &mut contained);
         self.write_spaces(&storeys);
 
         for (level, elements) in &contained {

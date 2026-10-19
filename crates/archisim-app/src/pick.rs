@@ -24,6 +24,8 @@ pub enum Element {
     Section(archisim_core::SectionId),
     /// A pitched roof, picked by its eaves.
     Roof(archisim_core::RoofId),
+    /// A stair, picked by its flights and landings.
+    Stair(archisim_core::StairId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -80,7 +82,20 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Space(id) => model.space(id).map(|s| s.outline.clone()),
         Element::Section(id) => model.section(id).map(section_outline),
         Element::Roof(id) => model.roof(id).map(|r| r.eaves()),
+        Element::Stair(id) => model.stair(id).map(stair_outline),
     }
+}
+
+/// The box round a stair's flights and landings.
+fn stair_outline(s: &archisim_core::Stair) -> Vec<Point2> {
+    let pts: Vec<Point2> = s.outlines().into_iter().flatten().collect();
+    let lo = pts.iter().fold(Point2::new(f64::MAX, f64::MAX), |a, p| {
+        Point2::new(a.x.min(p.x), a.y.min(p.y))
+    });
+    let hi = pts.iter().fold(Point2::new(f64::MIN, f64::MIN), |a, p| {
+        Point2::new(a.x.max(p.x), a.y.max(p.y))
+    });
+    vec![lo, Point2::new(hi.x, lo.y), hi, Point2::new(lo.x, hi.y)]
 }
 
 /// A band along a section line, wide enough to take its heads.
@@ -157,6 +172,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
+    v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
     v
@@ -180,7 +196,11 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
         Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
         Element::Roof(id) => model.roof(id).map(|r| TypeOf::Slab(r.roof_type)),
-        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) | Element::Section(_) => None,
+        Element::Dimension(_)
+        | Element::Mark(_)
+        | Element::Space(_)
+        | Element::Section(_)
+        | Element::Stair(_) => None,
     }
 }
 
@@ -212,6 +232,7 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Wall(_) => 2,
         Element::Beam(_) => 3,
         Element::Roof(_) => 3,
+        Element::Stair(_) => 1,
         Element::Slab(_) => 4,
     };
     elements_on_level(model, level)

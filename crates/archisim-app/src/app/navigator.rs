@@ -249,6 +249,26 @@ impl ArchiSimApp {
                 })
                 .collect()
         };
+        // Stairs, each with its steps.
+        let stairs = m
+            .stairs()
+            .map(|s| {
+                let l = s.layout();
+                TypeRow {
+                    tab: None,
+                    id: s.id.0,
+                    badge: None,
+                    name: format!("Escalera {}", s.id.0),
+                    count: 1,
+                    here: if s.level == self.ed.level {
+                        vec![Element::Stair(s.id)]
+                    } else {
+                        Vec::new()
+                    },
+                    value: Some(format!("{} tabicas", l.risers())),
+                }
+            })
+            .collect();
         // Roofs, by type.
         let roofs = m
             .slab_types()
@@ -297,6 +317,7 @@ impl ArchiSimApp {
             ),
             ("Forjados", Icon::Slab, slabs),
             ("Cubiertas", Icon::Roof, roofs),
+            ("Escaleras", Icon::Stair, stairs),
             ("Puertas", Icon::Door, openings(true)),
             ("Ventanas", Icon::Window, openings(false)),
         ]

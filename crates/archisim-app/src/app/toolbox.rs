@@ -110,7 +110,13 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "T",
                 "Cubiertas inclinadas por faldones: a cuatro, dos o un agua, con alero",
             ),
-            tile(Pick::Later("2.6"), Icon::Stair, "Escalera", "", "Escaleras"),
+            tile(
+                Pick::Tool(Tool::Stair),
+                Icon::Stair,
+                "Escalera",
+                "E",
+                "Escaleras por su línea de huella: tramos, mesetas y comprobación del CTE",
+            ),
             tile(
                 Pick::Later("2.2"),
                 Icon::Object,

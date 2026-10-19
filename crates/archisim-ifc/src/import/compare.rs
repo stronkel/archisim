@@ -259,6 +259,9 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         for r in m.roofs() {
             v.push((r.guid.to_string(), m.phase(r.id.0)));
         }
+        for s in m.stairs() {
+            v.push((s.guid.to_string(), m.phase(s.id.0)));
+        }
         v.sort();
         v
     };
@@ -273,6 +276,48 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             a.spaces().count(),
             b.spaces().count()
         ));
+    }
+    if a.stairs().count() != b.stairs().count() {
+        diff(format!(
+            "número de escaleras: {} / {}",
+            a.stairs().count(),
+            b.stairs().count()
+        ));
+    }
+    for s in a.stairs() {
+        let Some(t) = b.stairs().find(|t| t.guid == s.guid) else {
+            diff(format!("escalera {} falta", s.guid));
+            continue;
+        };
+        let same = s.path.len() == t.path.len()
+            && s.path
+                .iter()
+                .zip(&t.path)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && close(s.width, t.width)
+            && close(s.going, t.going)
+            && close(s.base_offset, t.base_offset)
+            && close(s.height, t.height)
+            && close(s.waist, t.waist)
+            && s.usage == t.usage
+            && level_guid(a, s.level) == level_guid(b, t.level)
+            && match (s.top, t.top) {
+                (
+                    archisim_core::WallTop::Level {
+                        level: x,
+                        offset: o,
+                    },
+                    archisim_core::WallTop::Level {
+                        level: y,
+                        offset: p,
+                    },
+                ) => level_guid(a, x) == level_guid(b, y) && close(o, p),
+                (archisim_core::WallTop::Unconnected, archisim_core::WallTop::Unconnected) => true,
+                _ => false,
+            };
+        if !same {
+            diff(format!("escalera {}: {:?} / {:?}", s.guid, s, t));
+        }
     }
     if a.roofs().count() != b.roofs().count() {
         diff(format!(

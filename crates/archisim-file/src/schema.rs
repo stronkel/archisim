@@ -59,6 +59,36 @@ pub(crate) struct ProjectFile {
     /// Pitched roofs (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roofs: Vec<Roof>,
+    /// Stairs (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stairs: Vec<Stair>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum StairUse {
+    General,
+    Restricted,
+}
+
+/// A stair (version 7): its walking line, width, going aimed at, foot
+/// and top (as walls), height, waist, material and use.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Stair {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub path: Vec<Xy>,
+    pub width: f64,
+    pub going: f64,
+    pub base_offset: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<WallTop>,
+    pub waist: f64,
+    pub material: u64,
+    pub usage: StairUse,
 }
 
 /// A pitched roof (version 7): its footprint, the pitch of each side
@@ -387,7 +417,7 @@ pub(crate) struct Wall {
 }
 
 /// A wall's top level and the offset from it (version 4).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct WallTop {
     pub level: u64,
@@ -813,6 +843,27 @@ impl ProjectFile {
                     overhang: r.overhang,
                 })
                 .collect(),
+            stairs: p
+                .stairs
+                .into_iter()
+                .map(|s| Stair {
+                    id: s.id.0,
+                    guid: s.guid.to_string(),
+                    level: s.level.0,
+                    path: s.path.into_iter().map(xy).collect(),
+                    width: s.width,
+                    going: s.going,
+                    base_offset: s.base_offset,
+                    height: s.height,
+                    top: top_out(s.top),
+                    waist: s.waist,
+                    material: s.material.0,
+                    usage: match s.usage {
+                        core::StairUse::General => StairUse::General,
+                        core::StairUse::Restricted => StairUse::Restricted,
+                    },
+                })
+                .collect(),
         }
     }
 
@@ -893,6 +944,29 @@ impl ProjectFile {
                         slopes: r.slopes.clone(),
                         base_offset: r.base_offset,
                         overhang: r.overhang,
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
+            stairs: self
+                .stairs
+                .iter()
+                .map(|s| {
+                    Ok(core::Stair {
+                        id: core::StairId(s.id),
+                        guid: guid(&format!("stair {}", s.id), &s.guid)?,
+                        level: core::LevelId(s.level),
+                        path: s.path.iter().copied().map(pt).collect(),
+                        width: s.width,
+                        going: s.going,
+                        base_offset: s.base_offset,
+                        top: top_in(s.top),
+                        height: s.height,
+                        waist: s.waist,
+                        material: core::MaterialId(s.material),
+                        usage: match s.usage {
+                            StairUse::General => core::StairUse::General,
+                            StairUse::Restricted => core::StairUse::Restricted,
+                        },
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

@@ -22,11 +22,13 @@ mod phases;
 mod roofs;
 mod sections;
 mod spaces;
+mod stairs;
 mod structure;
 mod types;
 
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
 pub use spaces::{space_height, SpaceSettings, USAGES};
+pub use stairs::{default_stair_settings, StairSettings};
 pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 
 /// Settings of the wall tool (ArchiCAD "Cuadro de información").
@@ -265,6 +267,7 @@ impl Editor {
             Element::Space(id) => model.space(*id).is_some(),
             Element::Section(id) => model.section(*id).is_some(),
             Element::Roof(id) => model.roof(*id).is_some(),
+            Element::Stair(id) => model.stair(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -449,6 +452,9 @@ impl Editor {
                     Element::Roof(id) => {
                         m.remove_roof(*id)?;
                     }
+                    Element::Stair(id) => {
+                        m.remove_stair(*id)?;
+                    }
                     Element::Opening(_) => {}
                 }
             }
@@ -588,6 +594,7 @@ impl Editor {
                         | Element::Beam(_)
                         | Element::Space(_)
                         | Element::Roof(_)
+                        | Element::Stair(_)
                 )
             })
             .collect();
@@ -603,6 +610,7 @@ impl Editor {
                     Element::Beam(id) => m.edit_beam(*id, |b| b.level = level)?,
                     Element::Space(id) => m.edit_space(*id, |s| s.level = level)?,
                     Element::Roof(id) => m.edit_roof(*id, |r| r.level = level)?,
+                    Element::Stair(id) => m.edit_stair(*id, |s| s.level = level)?,
                     _ => {}
                 }
             }
