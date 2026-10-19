@@ -185,6 +185,8 @@ pub fn build() -> Result<Document, ModelError> {
                 position: first + chain.outward * 1.4,
             })?;
         }
+        // Tied to the corners and jambs they measure.
+        archisim_geom::anchors::follow(m, &Default::default());
         m.add_elevation_mark(pb, Point2::new(3.0, 6.5))?;
         m.add_elevation_mark(pb, Point2::new(9.0, 2.5))?;
         Ok(())
@@ -321,6 +323,9 @@ mod tests {
         assert_eq!(m.drafts().count(), 7);
         assert_eq!(m.draw_layers().len(), 4);
         assert_eq!(m.dimensions().count(), 4);
+        assert!(m
+            .dimensions()
+            .all(|d| d.anchors.iter().any(Option::is_some)));
         assert_eq!(m.elevation_marks().count(), 2);
         // The roof slab rests on the façade walls.
         let roof = m

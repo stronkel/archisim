@@ -1636,6 +1636,17 @@ impl ArchiSimApp {
             );
             text_row(ui, "Total (m)", "", &format_dimension(values.iter().sum()));
             text_row(ui, "Puntos", "", &d.points.len().to_string());
+            let tied = d.anchors.iter().filter(|a| a.is_some()).count();
+            text_row(
+                ui,
+                "Asociativa",
+                "Los puntos asociados siguen a muros, huecos y forjados cuando cambian",
+                &if tied == 0 {
+                    "No".to_string()
+                } else {
+                    format!("{tied} de {} puntos", d.points.len())
+                },
+            );
         });
         ui.add_space(4.0);
         props::note(

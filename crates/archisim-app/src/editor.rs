@@ -318,7 +318,19 @@ impl Editor {
         label: &str,
         edit: impl FnOnce(&mut Model) -> Result<T, ModelError>,
     ) -> EditResult<T> {
-        let result = self.doc.transact(label, edit).map_err(|e| explain(&e))?;
+        let result = self
+            .doc
+            .transact(label, |m| {
+                // Dimensions follow what they measure (and new or moved
+                // ones are tied to what is under their points).
+                let before = archisim_geom::anchors::snapshot(m);
+                let r = edit(m)?;
+                if m.dimensions().next().is_some() {
+                    archisim_geom::anchors::follow(m, &before);
+                }
+                Ok(r)
+            })
+            .map_err(|e| explain(&e))?;
         self.changed();
         Ok(result)
     }
@@ -1108,5 +1120,48 @@ mod tests {
         let err = Editor::open(&dir.join("roto.archisim")).err().unwrap();
         assert!(err.starts_with("el fichero está mal escrito"), "{err}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn dimensions_follow_walls_and_doors() {
+        let (m, lvl, _) = room();
+        let south = m.walls().last().unwrap().id;
+        let door = m.openings().next().unwrap().id;
+        let g = archisim_geom::opening_geometry(&m, door).unwrap();
+        let jamb = g.point(g.t0, g.exterior_offset);
+        let mut ed = Editor::with_model(m, None);
+        // The whole south façade, and from its corner to the door.
+        let total = ed
+            .add_dimension(NewDimension {
+                level: lvl,
+                points: vec![Point2::new(0.0, 0.0), Point2::new(6.0, 0.0)],
+                direction: Point2::new(1.0, 0.0),
+                position: Point2::new(0.0, -1.0),
+            })
+            .unwrap();
+        let to_door = ed
+            .add_dimension(NewDimension {
+                level: lvl,
+                points: vec![Point2::new(6.0, 0.0), jamb],
+                direction: Point2::new(1.0, 0.0),
+                position: Point2::new(0.0, -1.5),
+            })
+            .unwrap();
+        let d = ed.model().dimension(to_door).unwrap();
+        assert!(d.anchors.iter().all(Option::is_some), "{:?}", d.anchors);
+        let before = ed.model().dimension(to_door).unwrap().values()[0];
+        // The door slides 50 cm: its dimension changes, the façade's not.
+        let along = ed.model().opening(door).unwrap().along;
+        ed.move_opening(door, along + 0.5, 0.0).unwrap();
+        let after = ed.model().dimension(to_door).unwrap().values()[0];
+        assert!((after - before).abs() - 0.5 < 1e-9, "{before} → {after}");
+        assert!((ed.model().dimension(total).unwrap().values()[0] - 6.0).abs() < 1e-9);
+        // The façade is lengthened to 7 m: so is its dimension.
+        ed.set_wall_length(south, 7.0).unwrap();
+        let v = ed.model().dimension(total).unwrap().values()[0];
+        assert!((v - 7.0).abs() < 1e-9, "{v}");
+        // Undo brings both back in one step each.
+        ed.undo();
+        assert!((ed.model().dimension(total).unwrap().values()[0] - 6.0).abs() < 1e-9);
     }
 }

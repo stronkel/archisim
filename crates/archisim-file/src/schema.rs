@@ -63,6 +63,102 @@ pub(crate) struct Dimension {
     pub points: Vec<Xy>,
     pub direction: Xy,
     pub position: Xy,
+    /// What each point is tied to (`null`: free); absent when none is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<Option<Anchor>>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub(crate) enum AnchorSide {
+    Exterior,
+    Axis,
+    Interior,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "kind")]
+pub(crate) enum Anchor {
+    WallEnd {
+        wall: u64,
+        start: bool,
+        side: AnchorSide,
+    },
+    Jamb {
+        opening: u64,
+        end: bool,
+        side: AnchorSide,
+    },
+    SlabCorner {
+        slab: u64,
+        index: usize,
+    },
+}
+
+impl Anchor {
+    fn out(a: core::Anchor) -> Self {
+        let side = |s: core::AnchorSide| match s {
+            core::AnchorSide::Exterior => AnchorSide::Exterior,
+            core::AnchorSide::Axis => AnchorSide::Axis,
+            core::AnchorSide::Interior => AnchorSide::Interior,
+        };
+        match a {
+            core::Anchor::WallEnd {
+                wall,
+                start,
+                side: s,
+            } => Anchor::WallEnd {
+                wall: wall.0,
+                start,
+                side: side(s),
+            },
+            core::Anchor::Jamb {
+                opening,
+                end,
+                side: s,
+            } => Anchor::Jamb {
+                opening: opening.0,
+                end,
+                side: side(s),
+            },
+            core::Anchor::SlabCorner { slab, index } => Anchor::SlabCorner {
+                slab: slab.0,
+                index,
+            },
+        }
+    }
+
+    fn into_core(self) -> core::Anchor {
+        let side = |s: AnchorSide| match s {
+            AnchorSide::Exterior => core::AnchorSide::Exterior,
+            AnchorSide::Axis => core::AnchorSide::Axis,
+            AnchorSide::Interior => core::AnchorSide::Interior,
+        };
+        match self {
+            Anchor::WallEnd {
+                wall,
+                start,
+                side: s,
+            } => core::Anchor::WallEnd {
+                wall: core::WallId(wall),
+                start,
+                side: side(s),
+            },
+            Anchor::Jamb {
+                opening,
+                end,
+                side: s,
+            } => core::Anchor::Jamb {
+                opening: core::OpeningId(opening),
+                end,
+                side: side(s),
+            },
+            Anchor::SlabCorner { slab, index } => core::Anchor::SlabCorner {
+                slab: core::SlabId(slab),
+                index,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -484,6 +580,7 @@ impl ProjectFile {
                     points: d.points.into_iter().map(xy).collect(),
                     direction: xy(d.direction),
                     position: xy(d.position),
+                    anchors: d.anchors.into_iter().map(|a| a.map(Anchor::out)).collect(),
                 })
                 .collect(),
             elevation_marks: p
@@ -714,6 +811,11 @@ impl ProjectFile {
                 points: d.points.into_iter().map(pt).collect(),
                 direction: pt(d.direction),
                 position: pt(d.position),
+                anchors: d
+                    .anchors
+                    .into_iter()
+                    .map(|a| a.map(Anchor::into_core))
+                    .collect(),
             });
         }
         for m in self.elevation_marks {

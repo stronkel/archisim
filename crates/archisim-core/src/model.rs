@@ -524,6 +524,39 @@ pub struct Dimension {
     pub direction: Point2,
     /// A point the dimension line passes through.
     pub position: Point2,
+    /// What each point is tied to (empty, or one per point): the
+    /// dimension follows walls, doors and windows and slabs when they
+    /// change, as Revit's and ArchiCAD's associative dimensions.
+    pub anchors: Vec<Option<Anchor>>,
+}
+
+/// Which line of a wall or opening a dimension point sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AnchorSide {
+    Exterior,
+    /// The drawn line (reference line) of the wall.
+    Axis,
+    Interior,
+}
+
+/// A point of an element a dimension point is tied to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Anchor {
+    /// The corner of a wall end on a face, or the end of its drawn line.
+    WallEnd {
+        wall: WallId,
+        start: bool,
+        side: AnchorSide,
+    },
+    /// A jamb of a door or window on a face of its wall (`end`: the jamb
+    /// farther from the wall's start).
+    Jamb {
+        opening: OpeningId,
+        end: bool,
+        side: AnchorSide,
+    },
+    /// A corner of a slab's outline.
+    SlabCorner { slab: SlabId, index: usize },
 }
 
 impl Dimension {
@@ -2764,9 +2797,32 @@ impl Model {
                 points: spec.points,
                 direction,
                 position: spec.position,
+                anchors: Vec::new(),
             },
         );
         Ok(id)
+    }
+
+    /// Ties a dimension's points to elements (one entry per point, or
+    /// none to free them all).
+    pub fn set_dimension_anchors(
+        &mut self,
+        id: DimensionId,
+        anchors: Vec<Option<Anchor>>,
+    ) -> Result<(), ModelError> {
+        let d = self
+            .dimensions
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownDimension(id))?;
+        if !anchors.is_empty() && anchors.len() != d.points.len() {
+            return Err(ModelError::DegenerateDimension);
+        }
+        d.anchors = if anchors.iter().all(Option::is_none) {
+            Vec::new()
+        } else {
+            anchors
+        };
+        Ok(())
     }
 
     /// Replaces a dimension's points, direction and line position.
@@ -2791,6 +2847,9 @@ impl Model {
             .dimensions
             .get_mut(&id)
             .ok_or(ModelError::UnknownDimension(id))?;
+        if spec.points.len() != d.points.len() {
+            d.anchors.clear();
+        }
         d.points = spec.points;
         d.position = spec.position;
         Ok(())
@@ -2820,6 +2879,9 @@ impl Model {
             .dimensions
             .get_mut(&id)
             .ok_or(ModelError::UnknownDimension(id))?;
+        if spec.points.len() != d.points.len() {
+            d.anchors.clear();
+        }
         d.points = spec.points;
         d.direction = dir;
         d.position = spec.position;
@@ -3125,6 +3187,9 @@ impl Model {
                 .and_then(|_| model.validate_dimension(&spec))
                 .map(|dir| d.direction = dir)
                 .map_err(fail(name))?;
+            if !d.anchors.is_empty() && d.anchors.len() != d.points.len() {
+                d.anchors.clear();
+            }
             model.dimensions.insert(d.id, d);
         }
         for m in parts.elevation_marks {

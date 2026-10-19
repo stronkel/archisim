@@ -537,9 +537,19 @@ impl ArchiSimApp {
         if paths.is_empty() {
             return;
         }
+        // DXF drawings dropped on the window go into the view shown.
+        let (dxf, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths
+            .into_iter()
+            .partition(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("dxf")));
+        for d in &dxf {
+            self.import_dxf_from(d);
+        }
+        if paths.is_empty() {
+            return;
+        }
         let mut openable = paths.iter().filter(|p| crate::open_files::is_openable(p));
         let Some(path) = openable.next().cloned() else {
-            self.complain("ArchiSim abre proyectos .archisim y ficheros .ifc.");
+            self.complain("ArchiSim abre proyectos .archisim y ficheros .ifc (y los .dxf se importan en la vista).");
             return;
         };
         let rest = openable.count();

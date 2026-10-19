@@ -2033,7 +2033,12 @@ fn dxf_out_and_back_in_and_pdf_of_the_sheets() {
         .drafts_in(archisim_core::ViewRef::Sheet(sheet))
         .cloned()
         .collect();
-    assert_eq!(on_sheet.len(), 1, "{:?}", h.app.message.as_ref().map(|m| &m.text));
+    assert_eq!(
+        on_sheet.len(),
+        1,
+        "{:?}",
+        h.app.message.as_ref().map(|m| &m.text)
+    );
     assert_eq!(h.app.ed.undo_label(), Some("Importar DXF «planta.dxf»"));
     // Every sheet in one PDF.
     let pdf = dir.join("planos.pdf");
