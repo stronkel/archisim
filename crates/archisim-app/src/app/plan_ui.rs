@@ -1215,6 +1215,7 @@ impl ArchiSimApp {
             (Grip::SectionEnd { .. }, _) => "Estirar sección",
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
             (Grip::RoofCorner { .. }, _) => "Esquina",
+            (Grip::RoofNode { .. }, _) => "Encuentro de faldones",
             (Grip::StairPoint { .. }, _) => "Línea de huella",
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::RailingPoint { .. }, _) => "Barandilla",

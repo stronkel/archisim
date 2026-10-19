@@ -85,6 +85,12 @@ pub enum Grip {
         roof: archisim_core::RoofId,
         index: usize,
     },
+    /// Where planes of a roof meet (an end of a ridge, hip or valley): moved,
+    /// the planes there change pitch.
+    RoofNode {
+        roof: archisim_core::RoofId,
+        index: usize,
+    },
     /// One end of the slope arrow of an inclined slab.
     SlopeEnd { slab: SlabId, start: bool },
     /// One end of a section or elevation line.
@@ -276,6 +282,12 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                             point: *point,
                         });
                     }
+                    for (index, (point, _)) in r.nodes().iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::RoofNode { roof: *id, index },
+                            point: *point,
+                        });
+                    }
                 }
             }
             Element::Dimension(id) => {
@@ -338,7 +350,9 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
         Grip::SpaceLabel { space } => [Element::Space(space)].into_iter().collect(),
         Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
-        Grip::RoofCorner { roof, .. } => [Element::Roof(roof)].into_iter().collect(),
+        Grip::RoofCorner { roof, .. } | Grip::RoofNode { roof, .. } => {
+            [Element::Roof(roof)].into_iter().collect()
+        }
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
@@ -448,6 +462,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SectionEnd { .. } => "Estirar sección",
         Grip::SlopeEnd { .. } => "Mover flecha de pendiente",
         Grip::RoofCorner { .. } => "Mover esquina de cubierta",
+        Grip::RoofNode { .. } => "Mover limatesa o limahoya",
         Grip::StairPoint { .. } => "Mover punto de la escalera",
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
@@ -572,6 +587,7 @@ pub fn apply(
                 }
             })
             .map(|_| None),
+        Grip::RoofNode { roof, index } => model.move_roof_node(roof, index, drag.to).map(|_| None),
         Grip::SlopeEnd { slab, start } => {
             let s = model.slab(slab).ok_or(ModelError::UnknownSlab(slab))?;
             let Some(mut a) = s.slope else {
@@ -1243,7 +1259,9 @@ fn level_of(
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
         Grip::SpaceLabel { space } => model.space(space).map(|s| s.level),
         Grip::SectionEnd { .. } => None,
-        Grip::RoofCorner { roof, .. } => model.roof(roof).map(|r| r.level),
+        Grip::RoofCorner { roof, .. } | Grip::RoofNode { roof, .. } => {
+            model.roof(roof).map(|r| r.level)
+        }
         Grip::StairPoint { stair, .. } => model.stair(stair).map(|s| s.level),
         Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),

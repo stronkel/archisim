@@ -58,7 +58,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | R7 ✅ | **Cuadro de prioridades de intersección** en el proyecto, visual con barras como ArchiCAD, con criterios predefinidos | M | 2.3 |
 | R8 ✅ | **Galería de objetos** con vistas previas y carpetas por categoría como ArchiCAD: Mobiliario (cocina, estanterías, camas, sofás…), Entorno (vegetación…), Gente, Vehículos; familias nuevas para cada una | L | 2.2 |
 | R9 ✅ | **Importar topografía DXF** (puntos y curvas 3D) desde el programa; DWG más adelante (formato cerrado: hará falta un convertidor) | M | 2.12 |
-| R10 | **Cubierta única en L con limahoyas** (contornos con esquinas entrantes) y **mover a mano limatesas y limahoyas** en geometrías especiales | L | 2.4 |
+| R10 ✅ | **Cubierta única en L con limahoyas** (contornos con esquinas entrantes) y **mover a mano limatesas y limahoyas** en geometrías especiales | L | 2.4 |
 | R11 | **Editor de muros cortina** como el de ArchiCAD pero más claro: esquema de columnas y filas de paneles, marcos, tipos de panel, uniones y accesorios, con vista previa siempre y **tipos de muro cortina guardados** | L | 2.8 |
 
 | # | Tarea | Tamaño | Depende de |

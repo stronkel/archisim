@@ -2548,3 +2548,60 @@ fn survey_import_from_dxf() {
     assert!(h.app.survey_import.is_none());
     assert!(h.app.message.as_ref().unwrap().text.contains("DXF"));
 }
+
+/// One roof over an L-shaped house (R10): the magic wand takes the outer
+/// faces of the walls; six planes with a valley; dragging where planes
+/// meet changes their pitches.
+#[test]
+fn l_shaped_roof_and_its_valleys() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("m");
+    for q in [
+        p(0.0, 0.0),
+        p(10.0, 0.0),
+        p(10.0, 4.0),
+        p(4.0, 4.0),
+        p(4.0, 10.0),
+        p(0.0, 10.0),
+        p(0.0, 0.0),
+    ] {
+        h.click_at(q);
+    }
+    h.key(Key::Escape);
+    let pb = h.app.ed.level;
+    h.app.ed.add_level("Cubierta", 3.0).unwrap();
+    h.app.ed.level = pb;
+    h.frame();
+    h.key(Key::Escape);
+    h.type_text("t");
+    assert_eq!(h.app.tool, Tool::Roof);
+    h.click_at(p(2.0, 2.0));
+    let r = h.model().roofs().next().expect("roof").clone();
+    assert!(!r.is_convex());
+    assert_eq!(r.planes().len(), 6, "{:?}", h.app.message);
+    // The valley meets the ridges inside.
+    let nodes = r.nodes();
+    assert!(nodes.iter().any(|(_, sides)| sides.len() >= 3));
+    let (at, sides) = nodes[0].clone();
+    let before: Vec<Option<f64>> = sides.iter().map(|&i| r.slopes[i]).collect();
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Roof(r.id)].into_iter().collect();
+    h.frame();
+    h.drag(at, at + archisim_core::Vec2::new(0.4, 0.0));
+    let after = h.model().roof(r.id).unwrap().clone();
+    let now: Vec<Option<f64>> = sides.iter().map(|&i| after.slopes[i]).collect();
+    assert_ne!(before, now, "{:?}", h.app.message);
+    assert!(after
+        .nodes()
+        .iter()
+        .any(|(q, _)| q.distance(at + archisim_core::Vec2::new(0.4, 0.0)) < 1e-6));
+    // In plan, 3D and the IFC.
+    let solids = archisim_geom::solid::model_solids(h.model());
+    assert!(
+        solids
+            .iter()
+            .filter(|s| s.owner == archisim_geom::solid::SolidOwner::Roof(r.id))
+            .count()
+            >= 6
+    );
+}

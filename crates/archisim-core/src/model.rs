@@ -940,7 +940,7 @@ impl fmt::Display for ModelError {
             ),
             ModelError::RoofNotConvex => write!(
                 f,
-                "a roof footprint cannot have re-entrant corners (draw one roof per wing)"
+                "the planes of this roof footprint cannot be worked out (or its eaves cross themselves)"
             ),
             ModelError::InvalidSlope => write!(
                 f,

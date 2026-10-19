@@ -9,8 +9,15 @@
 //! (usually a roof type): the layers keep their thickness square to each
 //! plane and the edges are plumb, as inclined slabs.
 //!
-//! The footprint must be convex for now (rectangles, any polygon without
-//! re-entrant corners): an L-shaped house takes two roofs.
+//! Any footprint that does not cross itself: over a convex one each plane
+//! covers where it is the lowest (hips over every corner); over one with
+//! re-entrant corners (an L, a T, a U…) the planes are found by the
+//! weighted straight skeleton ([`crate::skeleton`]): each side moves in at
+//! the run of its pitch and sweeps its plane, so the planes meet at hips
+//! over the outer corners and at valleys ("limahoyas") from the inner
+//! ones, and a gable stays put. The eaves and verges stand out from the
+//! footprint with the planes that reach them (at an outer corner the lower
+//! of the two, at an inner one the higher).
 //!
 //! IFC: `IfcRoof` made of one `IfcSlab` (`ROOF`) per plane.
 
@@ -79,12 +86,23 @@ impl Roof {
         Some(self.base_offset + s * (p - a).dot(n))
     }
 
-    /// Height of the top face above the level at `p`: the lowest plane
-    /// there (planes meet at ridges and hips).
+    /// Height of the top face above the level at `p`: the plane over it
+    /// (over a convex footprint, the lowest one: planes meet at ridges and
+    /// hips).
     pub fn top_at(&self, p: Point2) -> f64 {
-        (0..self.outline.len())
-            .filter_map(|i| self.plane_at(i, p))
-            .fold(f64::INFINITY, f64::min)
+        let lowest = || {
+            (0..self.outline.len())
+                .filter_map(|i| self.plane_at(i, p))
+                .fold(f64::INFINITY, f64::min)
+        };
+        if is_convex(&self.outline) {
+            return lowest();
+        }
+        self.planes()
+            .iter()
+            .find(|pl| point_in_polygon(p, &pl.outline))
+            .and_then(|pl| self.plane_at(pl.side, p))
+            .unwrap_or_else(lowest)
     }
 
     /// The outline of the eaves and verges: the footprint grown by the
@@ -93,8 +111,16 @@ impl Roof {
         grow_convex(&self.outline, self.overhang)
     }
 
+    /// Whether its footprint has no re-entrant corner.
+    pub fn is_convex(&self) -> bool {
+        is_convex(&self.outline)
+    }
+
     /// The planes of the roof, each with the part of the roof it covers.
     pub fn planes(&self) -> Vec<RoofPlane> {
+        if !is_convex(&self.outline) {
+            return self.skeleton_planes().unwrap_or_default();
+        }
         let eaves = self.eaves();
         let n = self.outline.len();
         let mut out = Vec::new();
@@ -143,6 +169,193 @@ impl Roof {
         out
     }
 
+    /// The planes over a footprint with re-entrant corners: the faces of
+    /// the weighted straight skeleton, each with its strip of eaves and its
+    /// part of the verges over gables.
+    fn skeleton_planes(&self) -> Option<Vec<RoofPlane>> {
+        let n = self.outline.len();
+        let speeds: Vec<f64> = self
+            .slopes
+            .iter()
+            .map(|s| s.map_or(0.0, |s| 1.0 / s))
+            .collect();
+        let faces = crate::skeleton::faces(&self.outline, &speeds)?;
+        let d = self.overhang;
+        let eaves = self.eaves();
+        // A box holding everything, to clip half-planes from.
+        let (mut lo, mut hi) = (eaves[0], eaves[0]);
+        for q in &eaves {
+            lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+            hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+        }
+        let pad = 1.0 + d;
+        let big = vec![
+            Point2::new(lo.x - pad, lo.y - pad),
+            Point2::new(hi.x + pad, lo.y - pad),
+            Point2::new(hi.x + pad, hi.y + pad),
+            Point2::new(lo.x - pad, hi.y + pad),
+        ];
+        let sides: Vec<Option<(Point2, Vec2)>> = (0..n).map(|i| self.side(i)).collect();
+        let corner_convex = |k: usize| {
+            let (a, b, c) = (
+                self.outline[(k + n - 1) % n],
+                self.outline[k],
+                self.outline[(k + 1) % n],
+            );
+            (b - a).cross(c - b) >= 0.0
+        };
+        // Keeps the part where `g·p <= c`.
+        let keep = |poly: Vec<Point2>, g: Vec2, c: f64| -> Vec<Point2> {
+            if poly.len() < 3 {
+                return poly;
+            }
+            clip_half_plane(&poly, g, c)
+        };
+        // Where plane i is over plane j (rises above it): g·p <= c means
+        // h_i <= h_j.
+        let below = |i: usize, j: usize| -> Option<(Vec2, f64)> {
+            let (si, sj) = (self.slopes[i]?, self.slopes[j]?);
+            let ((a, ni), (b, nj)) = (sides[i]?, sides[j]?);
+            let g = ni * si - nj * sj;
+            let c = si * ni.dot(a) - sj * nj.dot(b);
+            Some((g, c))
+        };
+        let mut pieces: Vec<Vec<Vec<Point2>>> = vec![Vec::new(); n];
+        for i in 0..n {
+            let (Some(_), Some((a, ni))) = (self.slopes[i], sides[i]) else {
+                continue;
+            };
+            pieces[i].push(faces[i].clone());
+            if d <= 1e-9 {
+                continue;
+            }
+            // Its eaves: outside its side, inside its eave line.
+            let mut strip = keep(big.clone(), ni, ni.dot(a));
+            strip = keep(strip, -ni, -(ni.dot(a) - d));
+            for (k, other) in [(i, (i + n - 1) % n), ((i + 1) % n, (i + 1) % n)] {
+                // At corner k, against the side before or after.
+                match below(i, other) {
+                    Some((g, c)) => {
+                        if corner_convex(k) {
+                            strip = keep(strip, g, c);
+                        } else {
+                            strip = keep(strip, -g, -c);
+                        }
+                    }
+                    None => {
+                        // A gable: up to its line.
+                        if let Some((b, nb)) = sides[other] {
+                            strip = keep(strip, -nb, -nb.dot(b));
+                        }
+                    }
+                }
+            }
+            if strip.len() >= 3 && signed_area(&strip).abs() > 1e-9 {
+                pieces[i].push(strip);
+            }
+        }
+        // The verges over each gable: the planes either side reach over
+        // it, the lower of the two where they meet.
+        for g in 0..n {
+            if self.slopes[g].is_some() || d <= 1e-9 {
+                continue;
+            }
+            let Some((a, ng)) = sides[g] else { continue };
+            let (h, k) = ((g + n - 1) % n, (g + 1) % n);
+            let mut verge = keep(big.clone(), ng, ng.dot(a));
+            verge = keep(verge, -ng, -(ng.dot(a) - d));
+            for j in [h, k] {
+                if let Some((b, nj)) = sides[j] {
+                    verge = keep(verge, -nj, -(nj.dot(b) - d));
+                }
+            }
+            match below(h, k) {
+                Some((gv, c)) => {
+                    let mine = keep(verge.clone(), gv, c);
+                    let theirs = keep(verge, -gv, -c);
+                    for (j, part) in [(h, mine), (k, theirs)] {
+                        if part.len() >= 3 && signed_area(&part).abs() > 1e-9 {
+                            pieces[j].push(part);
+                        }
+                    }
+                }
+                None => {
+                    for j in [h, k] {
+                        if self.slopes[j].is_some() && verge.len() >= 3 {
+                            pieces[j].push(verge.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for (i, parts) in pieces.into_iter().enumerate() {
+            let (Some(s), Some((a, ni))) = (self.slopes[i], sides[i]) else {
+                continue;
+            };
+            let slope = SlabSlope {
+                from: a,
+                to: a + ni,
+                slope: s,
+            };
+            match merge_pieces(&parts) {
+                Some(outline) => out.push(RoofPlane {
+                    side: i,
+                    outline,
+                    slope,
+                }),
+                // Not one outline: each piece on its own.
+                None => out.extend(parts.into_iter().filter(|p| p.len() >= 3).map(|outline| {
+                    RoofPlane {
+                        side: i,
+                        outline,
+                        slope,
+                    }
+                })),
+            }
+        }
+        Some(out)
+    }
+
+    /// Where planes meet inside the footprint (or on a gable): the ends of
+    /// ridges, hips and valleys, each with the sides whose planes meet
+    /// there. Moving one ([`Model::move_roof_node`]) changes their pitches.
+    pub fn nodes(&self) -> Vec<(Point2, Vec<usize>)> {
+        let n = self.outline.len();
+        let on_sloping_side = |q: Point2| {
+            (0..n).any(|i| {
+                self.slopes[i].is_some() && {
+                    let (a, b) = (self.outline[i], self.outline[(i + 1) % n]);
+                    let d = b - a;
+                    let t = ((q - a).dot(d) / d.dot(d)).clamp(0.0, 1.0);
+                    (a + d * t).distance(q) <= 1e-7
+                }
+            })
+        };
+        let mut out: Vec<(Point2, Vec<usize>)> = Vec::new();
+        for pl in self.planes() {
+            for q in &pl.outline {
+                if self.outline.iter().any(|c| c.distance(*q) <= 1e-7)
+                    || !point_in_polygon(*q, &self.outline)
+                    || on_sloping_side(*q)
+                {
+                    continue;
+                }
+                match out.iter_mut().find(|(p, _)| p.distance(*q) <= 1e-6) {
+                    Some((_, sides)) => {
+                        if !sides.contains(&pl.side) {
+                            sides.push(pl.side);
+                        }
+                    }
+                    None => out.push((*q, vec![pl.side])),
+                }
+            }
+        }
+        out.retain(|(_, s)| s.len() >= 2);
+        out
+    }
+
     /// Lowest and highest point of the top face above the level.
     pub fn top_range(&self) -> (f64, f64) {
         self.planes()
@@ -162,8 +375,152 @@ impl Roof {
     }
 }
 
-/// A convex polygon (counter-clockwise) grown outwards by `d`: each side
-/// moved out square to itself, the corners where they meet.
+/// Whether `p` lies inside a polygon (even–odd), or on its edge.
+pub fn point_in_polygon(p: Point2, poly: &[Point2]) -> bool {
+    let n = poly.len();
+    let mut odd = false;
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + n - 1) % n]);
+        // On the edge.
+        let d = b - a;
+        let len2 = d.dot(d);
+        if len2 > 0.0 {
+            let t = ((p - a).dot(d) / len2).clamp(0.0, 1.0);
+            if (a + d * t).distance(p) <= 1e-9 {
+                return true;
+            }
+        }
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+            odd = !odd;
+        }
+    }
+    odd
+}
+
+/// One counter-clockwise outline from polygons that touch along their
+/// edges (and do not overlap): the edges they share go, the rest are
+/// joined. `None` if they do not make one outline.
+pub fn merge_pieces(pieces: &[Vec<Point2>]) -> Option<Vec<Point2>> {
+    let tol = 1e-7;
+    let pieces: Vec<Vec<Point2>> = pieces
+        .iter()
+        .filter(|p| p.len() >= 3 && signed_area(p).abs() > 1e-12)
+        .map(|p| {
+            let mut p = p.clone();
+            if signed_area(&p) < 0.0 {
+                p.reverse();
+            }
+            p
+        })
+        .collect();
+    if pieces.len() == 1 {
+        return Some(pieces[0].clone());
+    }
+    if pieces.is_empty() {
+        return None;
+    }
+    // Every corner, once.
+    let mut pts: Vec<Point2> = Vec::new();
+    let id = |pts: &mut Vec<Point2>, q: Point2| -> usize {
+        match pts.iter().position(|r| r.distance(q) <= tol) {
+            Some(k) => k,
+            None => {
+                pts.push(q);
+                pts.len() - 1
+            }
+        }
+    };
+    let loops: Vec<Vec<usize>> = pieces
+        .iter()
+        .map(|p| {
+            let mut l: Vec<usize> = p.iter().map(|q| id(&mut pts, *q)).collect();
+            l.dedup();
+            if l.len() > 1 && l[0] == l[l.len() - 1] {
+                l.pop();
+            }
+            l
+        })
+        .collect();
+    // Edges, split at corners lying on them.
+    let mut edges: Vec<(usize, usize)> = Vec::new();
+    for l in &loops {
+        for k in 0..l.len() {
+            let (a, b) = (l[k], l[(k + 1) % l.len()]);
+            let (pa, pb) = (pts[a], pts[b]);
+            let d = pb - pa;
+            let len2 = d.dot(d);
+            let mut on: Vec<(f64, usize)> = (0..pts.len())
+                .filter(|&c| c != a && c != b)
+                .filter_map(|c| {
+                    let t = (pts[c] - pa).dot(d) / len2;
+                    let off = (pts[c] - pa).cross(d).abs() / len2.sqrt();
+                    (t > 1e-9 && t < 1.0 - 1e-9 && off <= tol).then_some((t, c))
+                })
+                .collect();
+            on.sort_by(|x, y| x.0.total_cmp(&y.0));
+            let mut prev = a;
+            for (_, c) in on {
+                edges.push((prev, c));
+                prev = c;
+            }
+            edges.push((prev, b));
+        }
+    }
+    // Shared edges (one each way) go.
+    let mut keep = vec![true; edges.len()];
+    for i in 0..edges.len() {
+        if !keep[i] {
+            continue;
+        }
+        if let Some(j) =
+            (0..edges.len()).find(|&j| j != i && keep[j] && edges[j] == (edges[i].1, edges[i].0))
+        {
+            keep[i] = false;
+            keep[j] = false;
+        }
+    }
+    let rest: Vec<(usize, usize)> = edges
+        .into_iter()
+        .zip(keep)
+        .filter(|(_, k)| *k)
+        .map(|(e, _)| e)
+        .collect();
+    if rest.is_empty() {
+        return None;
+    }
+    // Joined into one loop.
+    let mut out = vec![rest[0].0];
+    let mut used = vec![false; rest.len()];
+    used[0] = true;
+    let mut at = rest[0].1;
+    while at != out[0] {
+        let k = (0..rest.len()).find(|&k| !used[k] && rest[k].0 == at)?;
+        used[k] = true;
+        out.push(at);
+        at = rest[k].1;
+    }
+    if used.iter().any(|u| !u) {
+        return None;
+    }
+    let mut poly: Vec<Point2> = out.into_iter().map(|k| pts[k]).collect();
+    // Corners in line go.
+    let mut i = 0;
+    while poly.len() > 3 && i < poly.len() {
+        let m = poly.len();
+        let (a, b, c) = (poly[(i + m - 1) % m], poly[i], poly[(i + 1) % m]);
+        if (b - a).cross(c - b).abs() <= 1e-9 * (b - a).length().max(1.0)
+            && (b - a).dot(c - b) > 0.0
+        {
+            poly.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+    Some(poly)
+}
+
+/// A polygon (counter-clockwise) grown outwards by `d`: each side moved
+/// out square to itself, the corners where they meet (convex or not).
 pub fn grow_convex(poly: &[Point2], d: f64) -> Vec<Point2> {
     let n = poly.len();
     if d.abs() < 1e-12 || n < 3 {
@@ -299,9 +656,6 @@ impl Model {
             let old = slopes.clone();
             slopes = (0..n).map(|i| old[(2 * n - 2 - i) % n]).collect();
         }
-        if !is_convex(&outline) {
-            return Err(ModelError::RoofNotConvex);
-        }
         let mut any = false;
         for s in slopes.iter().flatten() {
             finite(*s, "roof slope")?;
@@ -312,6 +666,15 @@ impl Model {
         }
         if !any {
             return Err(ModelError::InvalidRoof);
+        }
+        if !is_convex(&outline) {
+            // Re-entrant corners: the planes must be found, the eaves must
+            // not cross themselves.
+            let speeds: Vec<f64> = slopes.iter().map(|s| s.map_or(0.0, |s| 1.0 / s)).collect();
+            let eaves = grow_convex(&outline, r.overhang);
+            if crate::skeleton::faces(&outline, &speeds).is_none() || !is_simple_polygon(&eaves) {
+                return Err(ModelError::RoofNotConvex);
+            }
         }
         Ok((outline, slopes))
     }
@@ -388,6 +751,49 @@ impl Model {
         Ok(())
     }
 
+    /// Moves the point where planes meet (`node`, from [`Roof::nodes`]) to
+    /// `to`, at the same height: the planes meeting there take the pitch
+    /// that brings them through it (a hip, valley or ridge moved by hand,
+    /// as for a roof of special geometry).
+    pub fn move_roof_node(
+        &mut self,
+        id: RoofId,
+        node: usize,
+        to: Point2,
+    ) -> Result<(), ModelError> {
+        let roof = self.roofs.get(&id).ok_or(ModelError::UnknownRoof(id))?;
+        let nodes = roof.nodes();
+        let (at, sides) = nodes.get(node).cloned().ok_or(ModelError::InvalidRoof)?;
+        finite_point(to, "roof node")?;
+        let rise = |i: usize, p: Point2| -> Option<(f64, f64)> {
+            let s = roof.slopes[i]?;
+            let (a, nrm) = roof.side(i)?;
+            Some((s, (p - a).dot(nrm)))
+        };
+        // Its height: as each plane there gives it.
+        let hs: Vec<f64> = sides
+            .iter()
+            .filter_map(|&i| rise(i, at).map(|(s, d)| s * d))
+            .collect();
+        if hs.is_empty() {
+            return Err(ModelError::InvalidRoof);
+        }
+        let z = hs.iter().sum::<f64>() / hs.len() as f64;
+        let mut new = Vec::new();
+        for &i in &sides {
+            let Some((_, d)) = rise(i, to) else { continue };
+            if d <= 0.05 {
+                return Err(ModelError::InvalidRoof);
+            }
+            new.push((i, z / d));
+        }
+        self.edit_roof(id, |r| {
+            for (i, s) in new {
+                r.slopes[i] = Some(s);
+            }
+        })
+    }
+
     /// The roof a wall is trimmed under.
     pub fn wall_roof(&self, wall: WallId) -> Option<RoofId> {
         self.wall_roofs.get(&wall).copied()
@@ -404,7 +810,38 @@ impl Model {
             .slab_types
             .get(&roof.roof_type)
             .map_or(0.0, |t| t.thickness());
-        roof.planes()
+        let mut planes = roof.planes();
+        // Over a footprint with inner corners, only the planes over the
+        // wall (the far wing's would cut it where it is not).
+        if !roof.is_convex() {
+            if let Some(w) = self.walls.get(&wall) {
+                // Over its footprint: along it, across its thickness (just
+                // inside its faces).
+                let t = self
+                    .wall_types
+                    .get(&w.wall_type)
+                    .map_or(0.3, |t| t.thickness());
+                let (ext, int) = w.face_offsets(t);
+                let across = (w.end - w.start)
+                    .normalized()
+                    .map_or(Vec2::new(0.0, 0.0), |u| u.perp_left());
+                let steps = ((w.start.distance(w.end) / 0.1).ceil() as usize).max(1);
+                let over: Vec<usize> = (1..steps)
+                    .flat_map(|k| {
+                        let p = w.start + (w.end - w.start) * (k as f64 / steps as f64);
+                        [0.02, 0.5, 0.98].map(|f| p + across * (ext + (int - ext) * f))
+                    })
+                    .filter_map(|p| {
+                        planes
+                            .iter()
+                            .find(|pl| point_in_polygon(p, &pl.outline))
+                            .map(|pl| pl.side)
+                    })
+                    .collect();
+                planes.retain(|pl| over.contains(&pl.side));
+            }
+        }
+        planes
             .iter()
             .filter_map(|p| {
                 let u = p.slope.direction()?;
@@ -575,7 +1012,8 @@ mod tests {
             Point2::new(0.0, 6.0),
         ];
         l_shape.slopes = vec![Some(0.3)];
-        assert_eq!(m.add_roof(l_shape), Err(ModelError::RoofNotConvex));
+        // An L is resolved (see `l_roof`).
+        assert!(m.add_roof(l_shape).is_ok());
         let mut flat = spec.clone();
         flat.slopes = vec![Some(0.0)];
         assert_eq!(m.add_roof(flat), Err(ModelError::InvalidRoof));
@@ -599,5 +1037,122 @@ mod tests {
                 Point2::new(-1.0, 3.0)
             ]
         );
+    }
+
+    /// One roof over an L (v0.26): six planes, a valley from the inner
+    /// corner, hips at the outer ones; eaves all round; the top face
+    /// continuous across every hip and valley.
+    #[test]
+    fn l_roof() {
+        let (mut m, l, t) = setup();
+        let outline = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(10.0, 0.0),
+            Point2::new(10.0, 4.0),
+            Point2::new(4.0, 4.0),
+            Point2::new(4.0, 10.0),
+            Point2::new(0.0, 10.0),
+        ];
+        let r = m
+            .add_roof(NewRoof {
+                roof_type: t,
+                level: l,
+                outline: outline.clone(),
+                slopes: vec![Some(0.5)],
+                base_offset: 0.0,
+                overhang: 0.5,
+            })
+            .unwrap();
+        let roof = m.roof(r).unwrap().clone();
+        assert!(!roof.is_convex());
+        let planes = roof.planes();
+        assert_eq!(planes.len(), 6);
+        // They cover the eaves, without overlapping.
+        let area: f64 = planes.iter().map(|p| signed_area(&p.outline)).sum();
+        let eaves = signed_area(&roof.eaves());
+        assert!((area - eaves).abs() < 1e-6, "{area} vs {eaves}");
+        // The valley: at (3, 3) the roof is 1 m × 50 % up (the higher of
+        // the two planes there); the ridges 1 m up; eaves 0.25 m down.
+        assert!((roof.top_at(Point2::new(3.0, 3.0)) - 0.5).abs() < 1e-9);
+        assert!((roof.top_at(Point2::new(7.0, 2.0)) - 1.0).abs() < 1e-9);
+        assert!((roof.top_at(Point2::new(2.0, 7.0)) - 1.0).abs() < 1e-9);
+        assert!((roof.top_at(Point2::new(4.2, 4.3)) - (-0.1)).abs() < 1e-9);
+        assert!((roof.top_at(Point2::new(-0.5, 5.0)) + 0.25).abs() < 1e-9);
+        // Continuous: at every corner of every plane, every plane through
+        // that point gives the same height.
+        for pl in &planes {
+            for q in &pl.outline {
+                let h = |p: &RoofPlane| {
+                    let s = p.slope;
+                    s.slope * (*q - s.from).dot((s.to - s.from).normalized().unwrap())
+                };
+                for other in &planes {
+                    if other.outline.iter().any(|x| x.distance(*q) < 1e-7) {
+                        assert!((h(pl) - h(other)).abs() < 1e-6, "{q:?}");
+                    }
+                }
+            }
+        }
+        // Gable ends on both wings: four planes, verges over the gables.
+        m.edit_roof(r, |r| {
+            r.slopes = vec![Some(0.5), None, Some(0.5), Some(0.5), None, Some(0.5)]
+        })
+        .unwrap();
+        let roof = m.roof(r).unwrap().clone();
+        let planes = roof.planes();
+        assert_eq!(planes.len(), 4);
+        let area: f64 = planes.iter().map(|p| signed_area(&p.outline)).sum();
+        assert!((area - signed_area(&roof.eaves())).abs() < 1e-6);
+        // The ridge runs out to the verge: 1 m up at the gable, still over
+        // the overhang.
+        assert!((roof.top_at(Point2::new(10.4, 2.0)) - 1.0).abs() < 1e-9);
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back, m);
+    }
+
+    /// Hips moved by hand: the end of the ridge of a hip roof dragged
+    /// along it makes that hip end steeper; dragged across, the ridge goes
+    /// off centre (one side steeper, the other gentler).
+    #[test]
+    fn moving_where_planes_meet() {
+        let (mut m, l, t) = setup();
+        let r = m
+            .add_roof(NewRoof {
+                roof_type: t,
+                level: l,
+                outline: rect(12.0, 8.0),
+                slopes: vec![Some(0.5)],
+                base_offset: 0.0,
+                overhang: 0.0,
+            })
+            .unwrap();
+        let nodes = m.roof(r).unwrap().nodes();
+        assert_eq!(nodes.len(), 2);
+        let k = nodes
+            .iter()
+            .position(|(p, _)| p.distance(Point2::new(8.0, 4.0)) < 1e-9)
+            .unwrap();
+        assert_eq!(nodes[k].1.len(), 3);
+        m.move_roof_node(r, k, Point2::new(9.0, 4.0)).unwrap();
+        let roof = m.roof(r).unwrap();
+        assert!((roof.slopes[1].unwrap() - 2.0 / 3.0).abs() < 1e-12);
+        assert_eq!(roof.slopes[0], Some(0.5));
+        assert!(roof
+            .nodes()
+            .iter()
+            .any(|(p, _)| p.distance(Point2::new(9.0, 4.0)) < 1e-9));
+        // Across: the ridge at y = 5, still 2 m up.
+        let k = roof
+            .nodes()
+            .iter()
+            .position(|(p, _)| p.distance(Point2::new(4.0, 4.0)) < 1e-9)
+            .unwrap();
+        m.move_roof_node(r, k, Point2::new(4.0, 5.0)).unwrap();
+        let roof = m.roof(r).unwrap();
+        assert!((roof.slopes[0].unwrap() - 0.4).abs() < 1e-12);
+        assert!((roof.slopes[2].unwrap() - 2.0 / 3.0).abs() < 1e-12);
+        assert!((roof.top_at(Point2::new(6.0, 5.0)) - 2.0).abs() < 1e-9);
+        // Not past the side.
+        assert!(m.move_roof_node(r, 0, Point2::new(4.0, -1.0)).is_err());
     }
 }

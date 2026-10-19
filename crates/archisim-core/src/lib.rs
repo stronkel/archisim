@@ -10,6 +10,7 @@ pub mod family;
 pub mod ids;
 pub mod math;
 pub mod model;
+pub mod skeleton;
 
 pub use document::Document;
 pub use family::{

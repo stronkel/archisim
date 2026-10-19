@@ -195,7 +195,7 @@ impl ArchiSimApp {
                         Method::Polygon,
                         Icon::GeoPolygon,
                         "Polígono",
-                        "Esquina a esquina (sin esquinas entrantes)",
+                        "Esquina a esquina (en L, T o U: limahoyas en las esquinas entrantes)",
                     ),
                     (
                         Method::Rectangle,
@@ -291,6 +291,10 @@ impl ArchiSimApp {
         props::title(ui, "Cubierta · 1 seleccionada");
         super::properties::view_card_pub(ui, Icon::Roof, &type_name, "IfcRoof");
         let types = roof_types(model);
+        props::note(
+            ui,
+            "En la planta, los puntos azules donde se juntan limatesas, limahoyas y cumbrera se arrastran: los faldones que llegan a ellos cambian de pendiente para pasar por el punto nuevo (geometrías especiales).",
+        );
         group(ui, "roof-shape", "Forma", |ui| {
             let pitched: Vec<f64> = r.slopes.iter().flatten().copied().collect();
             let slope = pitched.first().copied().unwrap_or(0.3);

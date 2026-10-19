@@ -188,7 +188,7 @@ pub fn explain(e: &ModelError) -> String {
         }
         ModelError::InvalidStair => "la escalera necesita una línea de huella con sitio para un tramo, algo que subir, un ancho de al menos 40 cm y huella de al menos 10 cm".into(),
         ModelError::InvalidRoof => "cada lado necesita una pendiente (de 0 a 300 %) o ser piñón, al menos uno con pendiente, y el alero no puede pasar de 3 m".into(),
-        ModelError::RoofNotConvex => "el contorno de la cubierta no puede tener esquinas entrantes: dibuja una cubierta por cada ala (en L, dos)".into(),
+        ModelError::RoofNotConvex => "no se pueden resolver los faldones de ese contorno (o el alero se cruza consigo mismo: prueba con menos vuelo)".into(),
         ModelError::InvalidSlope => {
             "la pendiente necesita una dirección y no puede pasar del 300 %".into()
         }
