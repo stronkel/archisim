@@ -306,7 +306,7 @@ impl ArchiSimApp {
 
     pub(super) fn fit_active_view(&mut self) {
         match self.mode {
-            ViewMode::Plan => self.fit_requested = true,
+            ViewMode::Plan | ViewMode::Section => self.fit_requested = true,
             ViewMode::ThreeD => self.v3d.fit_requested = true,
         }
     }
@@ -317,7 +317,7 @@ impl ArchiSimApp {
             ui.set_min_height(30.0);
             ui.spacing_mut().item_spacing.x = 6.0;
             match self.mode {
-                ViewMode::Plan => {
+                ViewMode::Plan | ViewMode::Section => {
                     // Scale.
                     let mut scale = self.plan_scale as u32;
                     egui::ComboBox::from_id_salt("bar-scale")
@@ -356,6 +356,14 @@ impl ArchiSimApp {
                         self.fit_requested = true;
                     }
                     ui.separator();
+                    if self.mode == ViewMode::Section {
+                        chip(
+                            ui,
+                            &mut self.thin_lines,
+                            "Líneas finas",
+                            "Todas las líneas a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista",
+                        );
+                    } else {
                     // Snaps.
                     let f = &mut self.snap_filter;
                     chip(
@@ -422,6 +430,7 @@ impl ArchiSimApp {
                         "Calco",
                         "La planta de debajo en gris, como referencia para dibujar encima (sus puntos también fuerzan). Los muros de otras plantas que atraviesa el plano de corte se ven siempre cortados",
                     );
+                    }
                 }
                 ViewMode::ThreeD => {
                     let cam = &mut self.v3d.camera;
@@ -501,6 +510,9 @@ impl ArchiSimApp {
 
     /// What the keys and the mouse do now, as "Clic: … · Esc: …".
     pub(super) fn hint_text(&self) -> &'static str {
+        if self.mode == ViewMode::Section {
+            return "Rueda: zoom · Botón derecho o central: desplazar · Inicio: ajustar · F2: planta · F3: 3D";
+        }
         if self.mode == ViewMode::ThreeD {
             if self.v3d.section.is_some() {
                 return "Flechas azules: mover las caras de la caja de sección · Arrastrar: girar · Rueda: zoom · Clic: seleccionar · F2: planta";
@@ -528,6 +540,8 @@ impl ArchiSimApp {
             Tool::Zone if self.zone_wand() => "Clic dentro de un recinto de muros: crear el local · Esc: flecha",
             Tool::Zone if !self.zone_tool.is_drawing() => "Clic: primera esquina del local · Esc: flecha",
             Tool::Zone => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
+            Tool::Section if self.section_tool.anchor.is_some() => "Clic: final de la sección (mira hacia la izquierda del trazo) · Mayús: 45° · Esc: anular",
+            Tool::Section => "Clic: inicio de la sección · Esc: flecha",
         }
     }
 

@@ -95,8 +95,15 @@ pub fn rasterize_with(
         options.px_per_mm = Some(px_per_m * options.scale / 1000.0);
     }
     let svg = render_plan(model, level, &options);
+    rasterize_svg(&svg, [w, h])
+}
+
+/// Rasterises an SVG drawing (a plan or a section) into an image of `size`
+/// pixels, stretched to it.
+pub fn rasterize_svg(svg: &str, size: [usize; 2]) -> ColorImage {
+    let [w, h] = [size[0].max(1), size[1].max(1)];
     let mut pixmap = tiny_skia::Pixmap::new(w as u32, h as u32).expect("non-empty image");
-    match usvg::Tree::from_str(&svg, &usvg::Options::default()) {
+    match usvg::Tree::from_str(svg, &usvg::Options::default()) {
         Ok(tree) => {
             let s = tree.size();
             let t = tiny_skia::Transform::from_scale(w as f32 / s.width(), h as f32 / s.height());
@@ -105,7 +112,7 @@ pub fn rasterize_with(
         Err(e) => {
             // The plan writer always produces valid SVG; if not, show
             // nothing rather than crash, and say so where it can be seen.
-            eprintln!("ArchiSim: no se pudo dibujar la planta: {e}");
+            eprintln!("ArchiSim: no se pudo dibujar la vista: {e}");
         }
     }
     ColorImage::from_rgba_premultiplied([w, h], pixmap.data())

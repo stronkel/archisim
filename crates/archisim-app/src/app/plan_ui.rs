@@ -55,6 +55,7 @@ impl ArchiSimApp {
         self.draw_opening_preview(&painter, rect);
         self.draw_member_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
+        self.draw_section_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -85,7 +86,8 @@ impl ArchiSimApp {
             | Tool::Dimension
             | Tool::Column
             | Tool::Beam
-            | Tool::Zone => CursorIcon::Crosshair,
+            | Tool::Zone
+            | Tool::Section => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -103,7 +105,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn navigate(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+    pub(super) fn navigate(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
@@ -237,6 +239,18 @@ impl ArchiSimApp {
             Tool::Zone => {
                 let mut s = self.snap_at(raw, reach, self.zone_tool.corners(), &BTreeSet::new());
                 if let Some(a) = self.zone_tool.anchor() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
+            Tool::Section => {
+                let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+                if let Some(a) = self.section_tool.anchor {
                     if ctx.input(|i| i.modifiers.shift) {
                         s = constrain(a, s);
                     } else {
@@ -458,6 +472,11 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Section => {
+                    if self.section_tool.anchor.take().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Beam => {
                     if self.beam_tool.is_drawing() {
                         self.beam_tool.finish();
@@ -618,7 +637,24 @@ impl ArchiSimApp {
                     }
                 }
             }
+            Tool::Section => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.section_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.section_tool.anchor = None;
+                }
+            }
             Tool::Arrow => {
+                // Double click on a section or elevation mark: its view.
+                if response.double_clicked_by(PointerButton::Primary) {
+                    if let Some(Element::Section(id)) = self.hover {
+                        self.open_view(TabKind::Section(id));
+                        return;
+                    }
+                }
                 if response.clicked_by(PointerButton::Primary) {
                     let hit = self.hover;
                     match (hit, shift) {
@@ -962,6 +998,7 @@ impl ArchiSimApp {
             (Grip::WallBend { .. }, _) => "Curvar",
             (Grip::BeamEnd { .. }, _) => "Estirar viga",
             (Grip::SpaceLabel { .. }, _) => "Rótulo",
+            (Grip::SectionEnd { .. }, _) => "Estirar sección",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
@@ -1317,6 +1354,7 @@ impl ArchiSimApp {
             Tool::Wall => self.wall_tool.anchor(),
             Tool::Slab => self.slab_tool.anchor(),
             Tool::Beam => self.beam_tool.anchor,
+            Tool::Section => self.section_tool.anchor,
             Tool::Zone => self.zone_tool.anchor(),
             Tool::Dimension if !self.dim_tool.is_placing() => {
                 self.dim_tool.points().last().copied()

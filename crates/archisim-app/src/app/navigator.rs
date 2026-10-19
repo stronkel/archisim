@@ -63,6 +63,21 @@ impl ArchiSimApp {
         let active = self.tabs.get(self.active_tab).map(|t| t.kind);
         let mut open = None;
         let mut levels_dialog = false;
+        let mut make_elevations = false;
+        let mut sections: Vec<(archisim_core::SectionId, String, bool)> = self
+            .ed
+            .model()
+            .sections()
+            .map(|s| {
+                (
+                    s.id,
+                    s.title(),
+                    s.kind == archisim_core::SectionKind::Elevation,
+                )
+            })
+            .collect();
+        // Sections first, then elevations, each by name.
+        sections.sort_by(|a, b| a.2.cmp(&b.2).then(a.1.cmp(&b.1)));
         nav_section(ui, "nav-views", "VISTAS", |ui| {
             sub_header(ui, "Plantas", Some(("Plantas…", &mut levels_dialog)));
             for (id, name, elevation) in &levels {
@@ -95,11 +110,44 @@ impl ArchiSimApp {
             {
                 open = Some(TabKind::ThreeD);
             }
-            sub_header(ui, "Secciones y alzados", None);
-            later_row(ui, Icon::Section, "Llegan con el punto 2.10");
+            sub_header(
+                ui,
+                "Secciones y alzados",
+                Some(("Crear alzados", &mut make_elevations)),
+            );
+            if sections.is_empty() {
+                later_row(
+                    ui,
+                    Icon::Section,
+                    "Herramienta Sección (S) o «Crear alzados»",
+                );
+            }
+            for (id, title, elevation) in &sections {
+                let kind = TabKind::Section(*id);
+                let r = list_row(
+                    ui,
+                    Some(if *elevation {
+                        Icon::Elevation
+                    } else {
+                        Icon::Section
+                    }),
+                    None,
+                    title,
+                    "",
+                    active == Some(kind),
+                    10.0,
+                )
+                .on_hover_text("Abrir la vista");
+                if r.clicked() {
+                    open = Some(kind);
+                }
+            }
         });
         if levels_dialog {
             self.show_levels = true;
+        }
+        if make_elevations {
+            self.create_elevations();
         }
         if let Some(kind) = open {
             self.open_view(kind);
@@ -390,17 +438,18 @@ fn nav_section(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
 /// A small heading inside a section ("Plantas"), with an optional button.
 fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
     let p = Palette::current(ui.ctx());
+    let hint = if title == "Plantas" {
+        "Añadir, renombrar, cambiar la cota o borrar plantas"
+    } else {
+        "Los cuatro alzados alrededor del edificio (los que falten)"
+    };
     ui.horizontal(|ui| {
         ui.set_min_height(22.0);
         ui.add_space(10.0);
         ui.label(egui::RichText::new(title).small().color(p.muted));
         if let Some((text, clicked)) = button {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .small_button(text)
-                    .on_hover_text("Añadir, renombrar, cambiar la cota o borrar plantas")
-                    .clicked()
-                {
+                if ui.small_button(text).on_hover_text(hint).clicked() {
                     *clicked = true;
                 }
             });

@@ -66,6 +66,8 @@ pub enum Tool {
     Beam,
     /// Rooms ("locales").
     Zone,
+    /// Section lines (elevations are made from the navigator).
+    Section,
 }
 
 impl Tool {
@@ -73,7 +75,13 @@ impl Tool {
     fn draws_points(self) -> bool {
         matches!(
             self,
-            Tool::Wall | Tool::Slab | Tool::Dimension | Tool::Column | Tool::Beam | Tool::Zone
+            Tool::Wall
+                | Tool::Slab
+                | Tool::Dimension
+                | Tool::Column
+                | Tool::Beam
+                | Tool::Zone
+                | Tool::Section
         )
     }
 
@@ -89,6 +97,7 @@ impl Tool {
             "i" => Some(Tool::Column),
             "g" => Some(Tool::Beam),
             "z" => Some(Tool::Zone),
+            "s" => Some(Tool::Section),
             _ => None,
         }
     }
@@ -169,6 +178,12 @@ pub struct ArchiSimApp {
     pub column_settings: ColumnSettings,
     pub beam_settings: BeamSettings,
     pub beam_tool: structure_ui::BeamTool,
+    pub section_tool: section_ui::SectionTool,
+    /// The section shown: its drawing (worked out once per revision) and
+    /// its picture on screen.
+    pub section_cache: Option<section_ui::SectionCache>,
+    /// Where the pointer is over the section shown (along, height).
+    pub section_hover: Option<Point2>,
     pub space_settings: crate::editor::SpaceSettings,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
@@ -291,6 +306,9 @@ impl ArchiSimApp {
             column_settings,
             beam_settings,
             beam_tool: structure_ui::BeamTool::default(),
+            section_tool: section_ui::SectionTool::default(),
+            section_cache: None,
+            section_hover: None,
             space_settings: Default::default(),
             zone_tool: SlabTool::default(),
             show_levels: false,
@@ -377,6 +395,7 @@ impl ArchiSimApp {
             self.dim_tool.finish();
             self.beam_tool.finish();
             self.zone_tool.finish();
+            self.section_tool.anchor = None;
             self.placement = None;
             self.window_start = None;
             self.drag = None;
@@ -929,6 +948,7 @@ impl ArchiSimApp {
             match self.mode {
                 ViewMode::Plan => self.plan_view(ui),
                 ViewMode::ThreeD => self.view_3d(ui),
+                ViewMode::Section => self.section_view(ui),
             }
         });
 
@@ -1407,6 +1427,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod section_ui;
 mod space_ui;
 mod structure_ui;
 mod tabs;

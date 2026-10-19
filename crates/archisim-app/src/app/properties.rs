@@ -52,6 +52,7 @@ impl ArchiSimApp {
             [Element::Column(id)] => self.column_properties(ui, *id),
             [Element::Beam(id)] => self.beam_properties(ui, *id),
             [Element::Space(id)] => self.space_properties(ui, *id),
+            [Element::Section(id)] => self.section_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -195,6 +196,7 @@ impl ArchiSimApp {
             Tool::Column => self.column_tool_properties(ui),
             Tool::Beam => self.beam_tool_properties(ui),
             Tool::Zone => self.space_tool_properties(ui),
+            Tool::Section => self.section_tool_properties(ui),
         }
     }
 
@@ -662,6 +664,7 @@ impl ArchiSimApp {
         match self.mode {
             ViewMode::Plan => self.plan_view_properties(ui),
             ViewMode::ThreeD => self.view_3d_properties(ui),
+            ViewMode::Section => self.section_view_properties(ui),
         }
         self.project_group(ui);
         ui.add_space(8.0);

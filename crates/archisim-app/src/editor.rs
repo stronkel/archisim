@@ -19,6 +19,7 @@ use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
 mod phases;
+mod sections;
 mod spaces;
 mod structure;
 mod types;
@@ -260,6 +261,7 @@ impl Editor {
             Element::Column(id) => model.column(*id).is_some(),
             Element::Beam(id) => model.beam(*id).is_some(),
             Element::Space(id) => model.space(*id).is_some(),
+            Element::Section(id) => model.section(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -437,6 +439,9 @@ impl Editor {
                     }
                     Element::Space(id) => {
                         m.remove_space(*id)?;
+                    }
+                    Element::Section(id) => {
+                        m.remove_section(*id)?;
                     }
                     Element::Opening(_) => {}
                 }

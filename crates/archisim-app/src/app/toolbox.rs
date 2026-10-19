@@ -16,6 +16,8 @@ pub enum Pick {
     Tool(Tool),
     /// The dimension tool placing level marks.
     LevelMark,
+    /// Makes the four elevations (an action, not a tool).
+    Elevations,
     /// Not there yet: the roadmap item that brings it.
     Later(&'static str),
 }
@@ -157,18 +159,18 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
         "VISTAS",
         &[
             tile(
-                Pick::Later("2.10"),
+                Pick::Tool(Tool::Section),
                 Icon::Section,
                 "Sección",
-                "",
-                "Secciones",
+                "S",
+                "Secciones por dos puntos: miran a la izquierda del trazo",
             ),
             tile(
-                Pick::Later("2.10"),
+                Pick::Elevations,
                 Icon::Elevation,
-                "Alzado",
-                "",
                 "Alzados",
+                "",
+                "Crea los cuatro alzados (norte, sur, este y oeste) alrededor del edificio",
             ),
         ],
     ),
@@ -182,6 +184,7 @@ impl ArchiSimApp {
             Pick::Tool(Tool::Dimension) => Some(self.tool == Tool::Dimension && !level_marks),
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
+            Pick::Elevations => Some(false),
             Pick::Later(_) => None,
         }
     }
@@ -204,6 +207,7 @@ impl ArchiSimApp {
                 }
                 self.set_tool(Tool::Dimension);
             }
+            Pick::Elevations => self.create_elevations(),
             Pick::Later(item) => self.say(format!(
                 "Esta herramienta llegará con el punto {item} de la hoja de ruta."
             )),

@@ -1958,3 +1958,67 @@ fn phases_of_a_refurbishment() {
     h.app.ed.undo();
     assert_eq!(h.app.ed.draw_phase(), archisim_core::Phase::Existing);
 }
+
+/// Sections and elevations: the section tool (S) draws a line with two
+/// clicks; a double click on its mark opens its view in a tab, drawn from
+/// the model; the elevations are made from the toolbox; deleting a section
+/// closes its tab.
+#[test]
+fn sections_and_elevations() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("s");
+    assert_eq!(h.app.tool, Tool::Section);
+    h.click_at(p(-0.8, 4.0));
+    h.click_at(p(12.8, 4.0));
+    let m = h.model();
+    assert_eq!(m.sections().count(), 1, "{:?}", h.app.message);
+    let sec = m.sections().next().unwrap().clone();
+    assert_eq!(sec.title(), "Sección A");
+    assert_eq!(sec.looks(), Some(Point2::new(0.0, 1.0)));
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    // Its view: double click on the line.
+    let on_line = p(3.0, 4.0);
+    h.click_at(on_line);
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Section(sec.id)]
+    );
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    h.button(PointerButton::Primary, true);
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::Section);
+    assert_eq!(h.app.active_section(), Some(sec.id));
+    h.frame();
+    let cache = h.app.section_cache.as_ref().expect("drawn");
+    let _ = cache;
+    // Back to the plan, flip it from Properties' editor and drag an end.
+    h.key(Key::F2);
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    h.app.ed.flip_section(sec.id).unwrap();
+    assert_eq!(
+        h.model().section(sec.id).unwrap().looks(),
+        Some(Point2::new(0.0, -1.0))
+    );
+    // The four elevations.
+    h.app.pick(super::toolbox::Pick::Elevations);
+    assert_eq!(h.model().sections().count(), 5, "{:?}", h.app.message);
+    h.app.pick(super::toolbox::Pick::Elevations);
+    assert_eq!(h.model().sections().count(), 5);
+    // Deleting the section closes its tab.
+    let tabs = h.app.tabs.len();
+    h.app.ed.selection = [Element::Section(sec.id)].into_iter().collect();
+    h.key(Key::Delete);
+    h.frame();
+    assert_eq!(h.model().sections().count(), 4);
+    assert_eq!(h.app.tabs.len(), tabs - 1);
+    // Saved and opened again with the project.
+    let text = archisim_file::to_string(h.model());
+    let back = archisim_file::from_str(&text).unwrap();
+    assert_eq!(back.sections().count(), 4);
+}

@@ -20,6 +20,8 @@ pub enum Element {
     Beam(archisim_core::BeamId),
     /// A room ("local"), picked by its stamp or its outline.
     Space(archisim_core::SpaceId),
+    /// A section or elevation line (seen on every level).
+    Section(archisim_core::SectionId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -74,7 +76,21 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .beam(id)
             .map(|b| archisim_plan::members::beam_outline(model, b)),
         Element::Space(id) => model.space(id).map(|s| s.outline.clone()),
+        Element::Section(id) => model.section(id).map(section_outline),
     }
+}
+
+/// A band along a section line, wide enough to take its heads.
+fn section_outline(s: &archisim_core::SectionLine) -> Vec<Point2> {
+    let r = archisim_plan::section::MARKER_RADIUS * MM;
+    let u = s.along().unwrap_or(Point2::new(1.0, 0.0));
+    let n = u.perp_left();
+    let (a, b) = match s.kind {
+        archisim_core::SectionKind::Section => (s.start - u * (2.0 * r), s.end + u * (2.0 * r)),
+        archisim_core::SectionKind::Elevation => (s.start, s.end),
+    };
+    // On the side it looks to, as far as the arrows go.
+    vec![a - n * r, b - n * r, b + n * (2.0 * r), a + n * (2.0 * r)]
 }
 
 /// Paper millimetres in metres at 1:50, the scale of the plan view.
@@ -134,6 +150,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
         v.extend(by_wall.remove(&w.id).unwrap_or_default());
     }
     v.extend(model.spaces_on_level(level).map(|s| Element::Space(s.id)));
+    v.extend(model.sections().map(|s| Element::Section(s.id)));
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
@@ -158,7 +175,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Opening(id) => model.opening(id).map(|o| TypeOf::Opening(o.opening_type)),
         Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
         Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
-        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) => None,
+        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) | Element::Section(_) => None,
     }
 }
 
@@ -183,7 +200,7 @@ pub fn pick<G: Geo + ?Sized>(
 ) -> Option<Element> {
     let model = geo.model();
     let rank = |e: &Element| match e {
-        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) => 0,
+        Element::Dimension(_) | Element::Mark(_) | Element::Space(_) | Element::Section(_) => 0,
         Element::Opening(_) => 1,
         // Columns stand in front of the walls they go through.
         Element::Column(_) => 1,

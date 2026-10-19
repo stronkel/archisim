@@ -47,6 +47,11 @@ pub enum Grip {
     },
     /// The stamp of a room (its name and area), moved on its own.
     SpaceLabel { space: archisim_core::SpaceId },
+    /// One end of a section or elevation line.
+    SectionEnd {
+        section: archisim_core::SectionId,
+        start: bool,
+    },
 }
 
 /// A handle drawn on the selection.
@@ -142,6 +147,19 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     });
                 }
             }
+            Element::Section(id) => {
+                if let Some(s) = model.section(*id) {
+                    for (start, point) in [(true, s.start), (false, s.end)] {
+                        v.push(Hotspot {
+                            grip: Grip::SectionEnd {
+                                section: *id,
+                                start,
+                            },
+                            point,
+                        });
+                    }
+                }
+            }
             Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) | Element::Column(_) => {
             }
         }
@@ -189,6 +207,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         }
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
         Grip::SpaceLabel { space } => [Element::Space(space)].into_iter().collect(),
+        Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
     }
 }
 
@@ -231,6 +250,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SlabEdge { .. } => "Desplazar arista de forjado",
         Grip::BeamEnd { .. } => "Estirar viga",
         Grip::SpaceLabel { .. } => "Mover rótulo de local",
+        Grip::SectionEnd { .. } => "Estirar sección",
     }
 }
 
@@ -296,6 +316,15 @@ pub fn apply(
                 .edit_space(space, |s| s.label = Some(at))
                 .map(|_| None)
         }
+        Grip::SectionEnd { section, start } => model
+            .edit_section(section, |s| {
+                if start {
+                    s.start = drag.to;
+                } else {
+                    s.end = drag.to;
+                }
+            })
+            .map(|_| None),
         Grip::BeamEnd { beam, start } => model
             .edit_beam(beam, |b| {
                 if start {
@@ -373,6 +402,12 @@ fn move_selection(
                 model.edit_beam(*id, |b| {
                     b.start = b.start + d;
                     b.end = b.end + d;
+                })?;
+            }
+            Element::Section(id) => {
+                model.edit_section(*id, |s| {
+                    s.start = s.start + d;
+                    s.end = s.end + d;
                 })?;
             }
             Element::Dimension(id) => {
@@ -589,6 +624,24 @@ fn copy(
                 model.set_slab_holes(new, holes)?;
                 copies.insert(Element::Slab(new));
             }
+            Element::Section(id) => {
+                let s = model
+                    .section(*id)
+                    .ok_or(ModelError::UnknownSection(*id))?
+                    .clone();
+                let name = match s.kind {
+                    archisim_core::SectionKind::Section => model.next_section_name(),
+                    archisim_core::SectionKind::Elevation => format!("{} (copia)", s.name),
+                };
+                let new = model.add_section(archisim_core::NewSection {
+                    name,
+                    kind: s.kind,
+                    start: s.start + d,
+                    end: s.end + d,
+                    depth: s.depth,
+                })?;
+                copies.insert(Element::Section(new));
+            }
             Element::Space(id) => {
                 let s = model
                     .space(*id)
@@ -740,6 +793,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Column(id) => model.column(id).is_some(),
         Element::Beam(id) => model.beam(id).is_some(),
         Element::Space(id) => model.space(id).is_some(),
+        Element::Section(id) => model.section(id).is_some(),
     }
 }
 
@@ -767,6 +821,7 @@ fn level_of(
         }
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
         Grip::SpaceLabel { space } => model.space(space).map(|s| s.level),
+        Grip::SectionEnd { .. } => None,
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -776,6 +831,7 @@ fn level_of(
             Element::Column(id) => model.column(*id).map(|c| c.level),
             Element::Beam(id) => model.beam(*id).map(|b| b.level),
             Element::Space(id) => model.space(*id).map(|s| s.level),
+            Element::Section(_) => None,
         }),
     }
 }

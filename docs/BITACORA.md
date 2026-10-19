@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
+## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), secciones y alzados (2.10), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
 
 Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientras dormía, más cuatro mejoras pequeñas. Todo va en la rama `bloque/fase2-noche` (pull request para revisar), con commit y push tras cada avance. Esta entrada se completa conforme avanza la noche.
 
@@ -33,6 +33,14 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
   - **Dibujar como**: en las propiedades de la vista, «Dibujar como: Existente» para levantar el estado actual; lo que se dibuje desde entonces nace existente (deshacer no lo cambia).
   - **Qué muestra la planta** (propiedades de la vista y, si el proyecto tiene fases, un desplegable «Fase» en la barra inferior): **Todo**; **Estado actual** (lo existente y lo que se derriba, sin lo nuevo); **Demoliciones** (lo que se conserva normal y lo que se derriba en **amarillo**); **Estado reformado** (lo que se conserva normal y lo nuevo en **rojo**, sin lo derribado). El 3D y la planta exportada siguen la misma elección.
   - IFC: la propiedad estándar `Status` de `Pset_WallCommon`, `Pset_SlabCommon`, `Pset_DoorCommon`… (`EXISTING`, `DEMOLISH`; sin ella, nuevo), que es como la leen Revit y ArchiCAD; se importa igual. Formato `.archisim`: lista `phases` (versión 7).
+- **Secciones y alzados (2.10)**, dibujados de los mismos sólidos que el 3D y el IFC (nada se dibuja aparte):
+  - Herramienta **Sección (S)** en la caja (grupo Vistas): dos clics, inicio y final; la sección **mira hacia la izquierda del trazo** (una flecha azul lo enseña mientras se dibuja) y recibe la siguiente letra libre (A, B…). Profundidad de vista elegible (2, 4, 8, 15 o 30 m; luego, cualquiera en Propiedades).
+  - **Alzados**: botón «Alzados» en la caja o «Crear alzados» en el navegador: los cuatro (Norte, Sur, Este y Oeste) a 3 m del edificio, mirándolo, con la anchura y la profundidad justas para verlo entero (solo crea los que falten).
+  - En planta, las **marcas**: la sección con línea de trazo y punto, tramos gruesos en los extremos y en cada extremo un círculo con su letra y la flecha hacia donde mira; el alzado, línea fina discontinua y un círculo con su inicial y su flecha. Se ven en todas las plantas; se seleccionan con un clic, se mueven, copian (Ctrl), estiran por sus extremos y borran como el resto; **doble clic abre su vista**. Propiedades: nombre, profundidad, longitud, «Abrir vista» e «Invertir» (que mire al otro lado).
+  - **La vista**, en una pestaña propia (navegador → «Secciones y alzados», o el «+» de las pestañas), a 1:100 por defecto, con zoom, encuadre (Inicio), escala y «Líneas finas»: lo **cortado** con el relleno y la trama de cada material y línea gruesa, y línea fina entre capas (como en planta); lo que se ve **más allá**, hasta la profundidad, en blanco con sus aristas, y **sin líneas ocultas** (lo de delante tapa lo de detrás); el vidrio en azul claro; las **plantas** con línea de trazo y punto, su cota y su nombre. Sigue la fase elegida («Demoliciones», «Estado reformado»). En Propiedades, la altura del cursor respecto al ±0,00.
+  - La línea de comandos `archisim demo` / `exportar` escribe también cada sección y alzado en SVG a 1:100 (`demo-seccion-a.svg`, `demo-alzado-norte.svg`…).
+  - Formato `.archisim`: lista `sections` (versión 7). No van al IFC (son vistas, no edificio).
+  - Demo: Sección A (estar y cocina, mirando al norte), Sección B (por el porche, mirando al oeste) y los cuatro alzados.
 - **Punto 0 del proyecto forzable** (mejora 1 de Antonio): el origen (0, 0) se dibuja como un hito (círculo con dos cuartos rellenos) y es un punto de forzado propio, «Punto 0 del proyecto», que alcanza desde algo más lejos que los demás, para empezar muros, líneas o cotas desde él.
 - **Cotas azules con extremos arrastrables** (mejora 2), como los de Revit: cada cota temporal tiene dos círculos en sus extremos. El de la **referencia** se arrastra a cualquier punto que fuerce (esquina, cara, extremo de muro, punto 0…) y la cota pasa a medir hasta él; el del **elemento** salta a otra línea del propio elemento: en puertas y ventanas, la otra jamba o el **centro** del hueco; en muros, la otra cara o el **eje**. Después se escribe el valor como siempre. Las asas del elemento seleccionado (extremos de muro, esquinas) tienen preferencia sobre estos círculos. Lo elegido se mantiene mientras el elemento sigue seleccionado.
 - **Líneas finas** (mejora 3): botón «Líneas finas» en la barra inferior (también en Vista y en las propiedades de la vista): todas las líneas de la planta a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la pestaña. Para cuando haya grosores por pluma (D5), este mismo botón los alternará.
@@ -40,6 +48,7 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
 - Versión 0.25.0.
 
 **Pendiente / limitaciones conocidas**
+- Secciones: sin cotas ni textos propios todavía (3.2), sin línea de terreno, sin sombras; las secciones quebradas (con saltos) llegarán más adelante. Un alzado de un modelo grande pesa (cada cara se dibuja aparte): si la vista va lenta, se optimizará uniendo caras.
 - Pilares y vigas aún no recortan muros ni forjados (en planta el pilar tapa el muro; en 3D y en el IFC se solapan) ni se unen entre sí.
 - Pilares y vigas inclinados, perfiles en L, U, T y tubos: más adelante.
 
@@ -55,6 +64,8 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
 7. Selecciona una puerta: arrastra el círculo del extremo lejano de una cota azul hasta el punto 0 (o hasta la esquina exterior de la fachada) y el otro círculo hasta el centro de la puerta; escribe 2000 en la cota: el centro de la puerta debe quedar a 2 m de ese punto. Con un muro: arrastra su extremo propio al eje y el otro a cualquier punto.
 8. Barra inferior → **Líneas finas**: la planta pasa a líneas de un píxel; otra vez, grosores reales. Prueba a 1:20 y a 1:100.
 9. Vista 3D → barra inferior → **Caja de sección**: arrastra la flecha azul de la cara superior hacia abajo hasta ver el interior; gira la cámara. Prueba en Propiedades «Planta en 3D» y «Selección» (con un muro o un pilar seleccionado). ¿Las tapas del corte se leen bien como sección?
+10. **Secciones**: en el navegador, «Secciones y alzados» → **Sección B** (pasa por el porche): ¿se lee como una sección vuestra? Mira el forjado de cubierta cortado con sus capas, la viga del porche cortada, el tabique y la puerta del fondo en vista. Abre **Alzado Sur**: fachada con sus dos ventanas. Cambia la escala a 1:50 y prueba «Líneas finas».
+11. Herramienta **Sección** (tecla S): dibuja una línea de izquierda a derecha por tu casa (la flecha azul indica hacia dónde mira); doble clic en su marca abre la vista. Selecciónala, arrastra un extremo y vuelve a la pestaña: la sección se actualiza. Prueba «Invertir» en Propiedades.
 
 ## 2026-10-19 · Familias, bloque D — diálogo de tipos al estilo ArchiCAD y tipos de línea (v0.24)
 

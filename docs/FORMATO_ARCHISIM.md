@@ -32,6 +32,9 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `member_types` | Tipos de pilar y viga (versión 7): nombre, uso (`column` / `beam`), material (`id`) y sección `profile`: `{"shape": "rectangle", "width", "depth"}`, `{"shape": "circle", "diameter"}` o `{"shape": "i_shape", "width", "depth", "web", "flange"}` (metros) | `IfcColumnType` / `IfcBeamType` + `IfcMaterialProfileSet` |
 | `columns` | Pilares (versión 7): `type`, `level`, centro (`position`), giro de la sección (`rotation`, radianes; sin él, 0), desfase de base, altura y, si llega hasta una planta, `top` como en los muros | `IfcColumn` |
 | `beams` | Vigas (versión 7): `type`, `level`, `start` y `end` de su eje y `top_offset`, la altura de su cara superior sobre la planta (la sección cuelga hacia abajo) | `IfcBeam` |
+| `spaces` | Locales (versión 7): `level`, número (`number`, único en la planta), nombre, uso (`usage`), contorno en sentido antihorario (`outline`, la superficie útil), altura libre y, si se movió, el punto del rótulo (`label`) | `IfcSpace` (+ `Pset_SpaceCommon`, `Qto_SpaceBaseQuantities`) |
+| `phases` | Fases de reforma (versión 7): lista de `{"id", "phase"}` con `existing` o `demolished`; lo que no aparece es nuevo (`new`) | Propiedad `Status` de `Pset_*Common` (`EXISTING`, `DEMOLISH`, `NEW`) |
+| `sections` | Secciones y alzados (versión 7): nombre («A», «Norte»), `kind` (`section` / `elevation`), `start` y `end` de su línea en planta (mira hacia la izquierda yendo de inicio a fin) y profundidad de vista (`depth`, metros) | No se exporta (vista) |
 
 Las referencias entre elementos van por `id`: un muro con `"type": 7` usa el tipo de muro cuyo `id` es 7.
 
