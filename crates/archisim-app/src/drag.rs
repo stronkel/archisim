@@ -40,6 +40,11 @@ pub enum Grip {
     SlabCorner { slab: SlabId, index: usize },
     /// The edge of a slab from corner `index` to the next one.
     SlabEdge { slab: SlabId, index: usize },
+    /// One end of a beam.
+    BeamEnd {
+        beam: archisim_core::BeamId,
+        start: bool,
+    },
 }
 
 /// A handle drawn on the selection.
@@ -109,7 +114,26 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) => {}
+            Element::Beam(id) => {
+                if let Some(b) = model.beam(*id) {
+                    v.push(Hotspot {
+                        grip: Grip::BeamEnd {
+                            beam: *id,
+                            start: true,
+                        },
+                        point: b.start,
+                    });
+                    v.push(Hotspot {
+                        grip: Grip::BeamEnd {
+                            beam: *id,
+                            start: false,
+                        },
+                        point: b.end,
+                    });
+                }
+            }
+            Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) | Element::Column(_) => {
+            }
         }
     }
     v
@@ -153,6 +177,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
             [Element::Slab(slab)].into_iter().collect()
         }
+        Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
     }
 }
 
@@ -193,6 +218,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         }
         Grip::SlabEdge { .. } if drag.variant => "Añadir esquina de forjado",
         Grip::SlabEdge { .. } => "Desplazar arista de forjado",
+        Grip::BeamEnd { .. } => "Estirar viga",
     }
 }
 
@@ -251,6 +277,15 @@ pub fn apply(
             }
             model.set_slab_outline(slab, outline).map(|_| None)
         }
+        Grip::BeamEnd { beam, start } => model
+            .edit_beam(beam, |b| {
+                if start {
+                    b.start = drag.to;
+                } else {
+                    b.end = drag.to;
+                }
+            })
+            .map(|_| None),
         Grip::SlabEdge { slab, index } => {
             let s = model.slab(slab).ok_or(ModelError::UnknownSlab(slab))?;
             let mut outline = s.outline.clone();
@@ -303,6 +338,15 @@ fn move_selection(
         match e {
             Element::Slab(id) => {
                 model.move_slab(*id, d)?;
+            }
+            Element::Column(id) => {
+                model.edit_column(*id, |c| c.position = c.position + d)?;
+            }
+            Element::Beam(id) => {
+                model.edit_beam(*id, |b| {
+                    b.start = b.start + d;
+                    b.end = b.end + d;
+                })?;
             }
             Element::Dimension(id) => {
                 let dim = model
@@ -518,6 +562,33 @@ fn copy(
                 model.set_slab_holes(new, holes)?;
                 copies.insert(Element::Slab(new));
             }
+            Element::Column(id) => {
+                let c = model
+                    .column(*id)
+                    .ok_or(ModelError::UnknownColumn(*id))?
+                    .clone();
+                let new = model.add_column(archisim_core::NewColumn {
+                    member_type: c.member_type,
+                    level: c.level,
+                    position: c.position + d,
+                    rotation: c.rotation,
+                    base_offset: c.base_offset,
+                    top: c.top,
+                    height: c.height,
+                })?;
+                copies.insert(Element::Column(new));
+            }
+            Element::Beam(id) => {
+                let b = model.beam(*id).ok_or(ModelError::UnknownBeam(*id))?.clone();
+                let new = model.add_beam(archisim_core::NewBeam {
+                    member_type: b.member_type,
+                    level: b.level,
+                    start: b.start + d,
+                    end: b.end + d,
+                    top_offset: b.top_offset,
+                })?;
+                copies.insert(Element::Beam(new));
+            }
             Element::Opening(id) => {
                 let o = model
                     .opening(*id)
@@ -616,6 +687,8 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Slab(id) => model.slab(id).is_some(),
         Element::Dimension(id) => model.dimension(id).is_some(),
         Element::Mark(id) => model.elevation_mark(id).is_some(),
+        Element::Column(id) => model.column(id).is_some(),
+        Element::Beam(id) => model.beam(id).is_some(),
     }
 }
 
@@ -641,12 +714,15 @@ fn level_of(
         Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
             model.slab(slab).map(|s| s.level)
         }
+        Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
             Element::Opening(id) => model.opening(*id).and_then(|o| wall_level(o.wall)),
             Element::Dimension(id) => model.dimension(*id).map(|d| d.level),
             Element::Mark(id) => model.elevation_mark(*id).map(|m| m.level),
+            Element::Column(id) => model.column(*id).map(|c| c.level),
+            Element::Beam(id) => model.beam(*id).map(|b| b.level),
         }),
     }
 }

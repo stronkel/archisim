@@ -10,6 +10,9 @@ Checks:
      thickness.
   4. Every slab's layer set usage runs along Z (AXIS3) and its layers are
      ordered bottom to top, matching the extrusion.
+  6. Every column and beam has a column or beam type, a material profile
+     set usage, its common property set and base quantities, and its 3D
+     volume matches its quantities (and its profile area times length).
   5. Every opening voids a wall and is filled by exactly one door or window
      (a void, "hueco", marked with ArchiSim_Void, by none);
      every door and window fills an opening, has a type, a material
@@ -152,12 +155,45 @@ def main(path: str) -> int:
             except Exception as exc:
                 errors.append(f"{name}: geometry failed: {exc}")
 
+    members = f.by_type("IfcColumn") + f.by_type("IfcBeam")
+    for el in members:
+        name = el.Name
+        kind = "Column" if el.is_a("IfcColumn") else "Beam"
+        type_obj = eu.get_type(el)
+        if type_obj is None or not type_obj.is_a(f"Ifc{kind}Type"):
+            errors.append(f"{name}: no Ifc{kind}Type")
+        mat = eu.get_material(el, should_inherit=False)
+        if mat is None or not mat.is_a("IfcMaterialProfileSetUsage"):
+            errors.append(f"{name}: no material profile set usage")
+        psets = eu.get_psets(el)
+        qto_name = f"Qto_{kind}BaseQuantities"
+        for required in (f"Pset_{kind}Common", qto_name):
+            if required not in psets:
+                errors.append(f"{name}: missing {required}")
+        if psets.get(f"Pset_{kind}Common", {}).get("LoadBearing") is not True:
+            errors.append(f"{name}: not marked load-bearing")
+        if el.ContainedInStructure == ():
+            errors.append(f"{name}: not contained in a storey")
+        if geom_ok and qto_name in psets:
+            try:
+                shp = geom.create_shape(settings, el)
+                vol = shape.get_volume(shp.geometry)
+                expected = psets[qto_name]["NetVolume"]
+                # Round sections are tessellated: allow 1 %.
+                tol = max(1e-4, 0.01 * expected)
+                if abs(vol - expected) > tol:
+                    errors.append(f"{name}: volume {vol:.4f} != {expected:.4f}")
+            except Exception as exc:
+                errors.append(f"{name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
-                ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType"))
+                ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
+                 "IfcColumnType", "IfcBeamType"))
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
-          f"{len(openings)} huecos, {len(storeys)} plantas, "
+          f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:
         print(f"{len(errors)} error(es):")

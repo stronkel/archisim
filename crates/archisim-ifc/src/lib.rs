@@ -18,6 +18,9 @@
 //!   `Pset_WindowCommon` and base quantities. Walls carry net side area and
 //!   net volume once their openings are cut.
 //!
+//! - column and beam types and members (see `members`), extruded from the
+//!   type's profile with an `IfcMaterialProfileSet`.
+//!
 //! Layer set orientation: walls are placed with local X along the drawn line
 //! and local Y to its left (the exterior side). The layer set usage is
 //! `AXIS2 / POSITIVE`, starting at the interior face, so wall layer sets are
@@ -39,6 +42,7 @@
 //! model twice gives the same file apart from the header timestamp.
 
 pub mod import;
+mod members;
 pub mod step;
 pub mod step_read;
 
@@ -1224,6 +1228,8 @@ impl<'a> Exporter<'a> {
             contained.entry(slab.level).or_default().push(sl);
             slabs_by_type.entry(slab.slab_type).or_default().push(sl);
         }
+
+        self.write_members(&materials, &storeys, &mut contained);
 
         for (level, elements) in &contained {
             let (storey, _) = storeys[level];

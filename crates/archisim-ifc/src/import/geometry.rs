@@ -756,6 +756,33 @@ impl<'a> Geo<'a> {
                     Vec::new(),
                 ))
             }
+            "IFCISHAPEPROFILEDEF" | "IFCASYMMETRICISHAPEPROFILEDEF" => {
+                let xf = self.axis_placement(e.arg(2));
+                let a = e.arg(3).as_f64()? * self.length / 2.0;
+                let b = e.arg(4).as_f64()? * self.length / 2.0;
+                let w = e.arg(5).as_f64()? * self.length / 2.0;
+                let f = e.arg(6).as_f64()? * self.length;
+                Some((
+                    [
+                        [-a, -b],
+                        [a, -b],
+                        [a, -b + f],
+                        [w, -b + f],
+                        [w, b - f],
+                        [a, b - f],
+                        [a, b],
+                        [-a, b],
+                        [-a, b - f],
+                        [-w, b - f],
+                        [-w, -b + f],
+                        [-a, -b + f],
+                    ]
+                    .iter()
+                    .map(|&[x, y]| xf.apply([x, y, 0.0]))
+                    .collect(),
+                    Vec::new(),
+                ))
+            }
             "IFCDERIVEDPROFILEDEF" => {
                 let (outer, holes) = self.profile(e.arg(2))?;
                 let op = self.operator(e.arg(3));

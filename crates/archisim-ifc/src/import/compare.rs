@@ -232,5 +232,72 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             _ => diff(format!("tipo de {} falta", o.guid)),
         }
     }
+
+    // Columns and beams, with their types (section, material by name).
+    let member_type = |m: &Model, id| {
+        m.member_type(id).map(|t| {
+            (
+                t.guid.clone(),
+                t.name.clone(),
+                t.usage,
+                format!("{:?}", t.profile),
+                m.material(t.material).map(|m| m.name.clone()),
+            )
+        })
+    };
+    if a.columns().count() != b.columns().count() || a.beams().count() != b.beams().count() {
+        diff(format!(
+            "número de pilares y vigas: {} {} / {} {}",
+            a.columns().count(),
+            a.beams().count(),
+            b.columns().count(),
+            b.beams().count()
+        ));
+    }
+    for c in a.columns() {
+        let Some(d) = b.columns().find(|d| d.guid == c.guid) else {
+            diff(format!("pilar {} falta", c.guid));
+            continue;
+        };
+        let turn = (c.rotation - d.rotation).rem_euclid(std::f64::consts::TAU);
+        let same_turn = turn < 1e-6 || std::f64::consts::TAU - turn < 1e-6;
+        if c.position.distance(d.position) > TOL
+            || !same_turn
+            || !close(c.base_offset, d.base_offset)
+            || !close(c.height, d.height)
+            || level_guid(a, c.level) != level_guid(b, d.level)
+        {
+            diff(format!("pilar {}: {:?} / {:?}", c.guid, c, d));
+        }
+        if member_type(a, c.member_type) != member_type(b, d.member_type) {
+            diff(format!(
+                "tipo del pilar {}: {:?} / {:?}",
+                c.guid,
+                member_type(a, c.member_type),
+                member_type(b, d.member_type)
+            ));
+        }
+    }
+    for x in a.beams() {
+        let Some(y) = b.beams().find(|y| y.guid == x.guid) else {
+            diff(format!("viga {} falta", x.guid));
+            continue;
+        };
+        if x.start.distance(y.start) > TOL
+            || x.end.distance(y.end) > TOL
+            || !close(x.top_offset, y.top_offset)
+            || level_guid(a, x.level) != level_guid(b, y.level)
+        {
+            diff(format!("viga {}: {:?} / {:?}", x.guid, x, y));
+        }
+        if member_type(a, x.member_type) != member_type(b, y.member_type) {
+            diff(format!(
+                "tipo de la viga {}: {:?} / {:?}",
+                x.guid,
+                member_type(a, x.member_type),
+                member_type(b, y.member_type)
+            ));
+        }
+    }
     out
 }

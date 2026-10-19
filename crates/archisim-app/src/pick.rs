@@ -16,6 +16,8 @@ pub enum Element {
     Opening(OpeningId),
     Wall(WallId),
     Slab(SlabId),
+    Column(archisim_core::ColumnId),
+    Beam(archisim_core::BeamId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -63,6 +65,12 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Slab(id) => model.slab(id).map(|s| s.outline.clone()),
         Element::Dimension(id) => model.dimension(id).map(dimension_outline),
         Element::Mark(id) => model.elevation_mark(id).map(|m| mark_outline(model, m)),
+        Element::Column(id) => model
+            .column(id)
+            .map(|c| archisim_plan::members::column_outline(model, c)),
+        Element::Beam(id) => model
+            .beam(id)
+            .map(|b| archisim_plan::members::beam_outline(model, b)),
     }
 }
 
@@ -122,7 +130,9 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     for w in model.walls_on_level(level) {
         v.extend(by_wall.remove(&w.id).unwrap_or_default());
     }
+    v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
+    v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
     v
 }
@@ -133,6 +143,7 @@ pub enum TypeOf {
     Wall(archisim_core::WallTypeId),
     Slab(archisim_core::SlabTypeId),
     Opening(archisim_core::OpeningTypeId),
+    Member(archisim_core::MemberTypeId),
 }
 
 /// The type of a wall, slab, door or window (annotations have none).
@@ -141,6 +152,8 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Wall(id) => model.wall(id).map(|w| TypeOf::Wall(w.wall_type)),
         Element::Slab(id) => model.slab(id).map(|s| TypeOf::Slab(s.slab_type)),
         Element::Opening(id) => model.opening(id).map(|o| TypeOf::Opening(o.opening_type)),
+        Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
+        Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
         Element::Dimension(_) | Element::Mark(_) => None,
     }
 }
@@ -168,8 +181,11 @@ pub fn pick<G: Geo + ?Sized>(
     let rank = |e: &Element| match e {
         Element::Dimension(_) | Element::Mark(_) => 0,
         Element::Opening(_) => 1,
+        // Columns stand in front of the walls they go through.
+        Element::Column(_) => 1,
         Element::Wall(_) => 2,
-        Element::Slab(_) => 3,
+        Element::Beam(_) => 3,
+        Element::Slab(_) => 4,
     };
     elements_on_level(model, level)
         .into_iter()

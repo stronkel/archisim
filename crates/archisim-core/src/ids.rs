@@ -55,6 +55,19 @@ typed_id!(
 );
 
 typed_id!(
+    /// Identifies a [`crate::MemberType`] (a column or beam type).
+    MemberTypeId
+);
+typed_id!(
+    /// Identifies a [`crate::Column`].
+    ColumnId
+);
+typed_id!(
+    /// Identifies a [`crate::Beam`].
+    BeamId
+);
+
+typed_id!(
     /// Identifies a [`crate::Family`] loaded in the project.
     FamilyId
 );

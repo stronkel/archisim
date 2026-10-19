@@ -13,6 +13,9 @@ use crate::family::{
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
+mod structure;
+pub use structure::*;
+
 /// A floor of the building. IFC: `IfcBuildingStorey`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Level {
@@ -653,6 +656,15 @@ pub enum ModelError {
     DuplicateMark(String),
     /// The family cannot make door or window types.
     NotAnOpening(NotAnOpening),
+    UnknownMemberType(MemberTypeId),
+    UnknownColumn(ColumnId),
+    UnknownBeam(BeamId),
+    /// A column's top constraint would put its top at or below its base.
+    ColumnTopBelowBase(ColumnId),
+    /// A beam's start and end are the same point.
+    ZeroLengthBeam,
+    /// A steel section whose web or flanges do not fit in it.
+    InvalidProfile,
 }
 
 impl fmt::Display for ModelError {
@@ -731,6 +743,18 @@ impl fmt::Display for ModelError {
                 write!(f, "another type already has the mark «{mark}»")
             }
             ModelError::NotAnOpening(e) => write!(f, "{e}"),
+            ModelError::UnknownMemberType(id) => {
+                write!(f, "column or beam type {id} does not exist")
+            }
+            ModelError::UnknownColumn(id) => write!(f, "column {id} does not exist"),
+            ModelError::UnknownBeam(id) => write!(f, "beam {id} does not exist"),
+            ModelError::ColumnTopBelowBase(id) => {
+                write!(f, "the top constraint of column {id} is not above its base")
+            }
+            ModelError::ZeroLengthBeam => write!(f, "a beam needs two different points"),
+            ModelError::InvalidProfile => {
+                write!(f, "the web and flanges do not fit in the section")
+            }
         }
     }
 }
@@ -829,6 +853,9 @@ pub struct ModelParts {
     pub openings: Vec<Opening>,
     pub dimensions: Vec<Dimension>,
     pub elevation_marks: Vec<ElevationMark>,
+    pub member_types: Vec<MemberType>,
+    pub columns: Vec<Column>,
+    pub beams: Vec<Beam>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -871,6 +898,9 @@ pub struct Model {
     openings: BTreeMap<OpeningId, Opening>,
     dimensions: BTreeMap<DimensionId, Dimension>,
     elevation_marks: BTreeMap<ElevationMarkId, ElevationMark>,
+    member_types: BTreeMap<MemberTypeId, MemberType>,
+    columns: BTreeMap<ColumnId, Column>,
+    beams: BTreeMap<BeamId, Beam>,
 }
 
 impl Model {
@@ -892,6 +922,9 @@ impl Model {
             openings: BTreeMap::new(),
             dimensions: BTreeMap::new(),
             elevation_marks: BTreeMap::new(),
+            member_types: BTreeMap::new(),
+            columns: BTreeMap::new(),
+            beams: BTreeMap::new(),
         }
     }
 
@@ -943,8 +976,13 @@ impl Model {
         // Walls tied to a level up (or standing on this one) follow; if one
         // cannot, nothing changes.
         let walls = self.walls.clone();
-        if let Err(e) = self.refresh_wall_heights() {
+        let columns = self.columns.clone();
+        if let Err(e) = self
+            .refresh_wall_heights()
+            .and_then(|_| self.refresh_column_heights())
+        {
             self.walls = walls;
+            self.columns = columns;
             if let Some(l) = self.levels.get_mut(&id) {
                 l.elevation = before;
             }
@@ -974,6 +1012,7 @@ impl Model {
             }
         }
         self.slabs.retain(|_, s| s.level != id);
+        self.remove_members_on_level(id);
         self.dimensions.retain(|_, d| d.level != id);
         self.elevation_marks.retain(|_, m| m.level != id);
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
@@ -1089,7 +1128,12 @@ impl Model {
             .values()
             .filter(|t| t.values.values().any(|v| *v == Value::Material(id.0)))
             .map(|t| t.name.clone());
-        walls.chain(slabs).chain(openings).collect()
+        let members = self
+            .member_types
+            .values()
+            .filter(|t| t.material == id)
+            .map(|t| t.name.clone());
+        walls.chain(slabs).chain(openings).chain(members).collect()
     }
 
     /// Removes a material that no type uses.
@@ -2802,6 +2846,9 @@ impl Model {
             openings: self.openings.values().cloned().collect(),
             dimensions: self.dimensions.values().cloned().collect(),
             elevation_marks: self.elevation_marks.values().cloned().collect(),
+            member_types: self.member_types.values().cloned().collect(),
+            columns: self.columns.values().cloned().collect(),
+            beams: self.beams.values().cloned().collect(),
         }
     }
 
@@ -2997,6 +3044,8 @@ impl Model {
                 .map_err(fail(name))?;
             model.elevation_marks.insert(m.id, m);
         }
+
+        model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);
         Ok(model)

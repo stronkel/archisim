@@ -6,9 +6,9 @@
 //! demo house is built on the same library so both stay in step.
 
 use archisim_core::{
-    CutPattern, DoorOperation, Layer, LayerFunction, MaterialId, Model, ModelError, NewOpeningType,
-    OpeningKind, OpeningTypeId, SlabFunction, SlabTypeId, WallFunction, WallTypeId,
-    WindowOperation,
+    CutPattern, DoorOperation, Layer, LayerFunction, MaterialId, MemberTypeId, MemberUsage, Model,
+    ModelError, NewOpeningType, OpeningKind, OpeningTypeId, Profile, SlabFunction, SlabTypeId,
+    WallFunction, WallTypeId, WindowOperation,
 };
 
 /// Ids of the types added by [`add_library`], to place elements in code.
@@ -33,6 +33,10 @@ pub struct Library {
     pub fixed_window: OpeningTypeId,
     /// A passage with no door ("hueco"), 90 × 210.
     pub void: OpeningTypeId,
+    /// Reinforced concrete column, 30 × 30.
+    pub column: MemberTypeId,
+    /// Reinforced concrete downstand beam, 30 × 50.
+    pub beam: MemberTypeId,
 }
 
 /// A new, empty project: one level at ±0.00 ("Planta baja") and the
@@ -322,6 +326,86 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         madera,
     )?;
 
+    // Structure (v0.25). Materials added last so older ids stay put.
+    let acero = m.add_material("Acero S275", "steel", [120, 126, 134], CutPattern::Solid);
+    let glulam = m.add_material(
+        "Madera laminada GL24h",
+        "wood",
+        [214, 176, 120],
+        CutPattern::Solid,
+    );
+    let rect = |width, depth| Profile::Rectangle { width, depth };
+    let column = m.add_member_type(
+        "Pilar HA 30×30",
+        MemberUsage::Column,
+        hormigon,
+        rect(0.30, 0.30),
+    )?;
+    m.add_member_type(
+        "Pilar HA 25×25",
+        MemberUsage::Column,
+        hormigon,
+        rect(0.25, 0.25),
+    )?;
+    m.add_member_type(
+        "Pilar HA 40×40",
+        MemberUsage::Column,
+        hormigon,
+        rect(0.40, 0.40),
+    )?;
+    m.add_member_type(
+        "Pilar HA Ø30",
+        MemberUsage::Column,
+        hormigon,
+        Profile::Circle { diameter: 0.30 },
+    )?;
+    m.add_member_type(
+        "Pilar HEB 160",
+        MemberUsage::Column,
+        acero,
+        Profile::IShape {
+            width: 0.160,
+            depth: 0.160,
+            web: 0.008,
+            flange: 0.013,
+        },
+    )?;
+    m.add_member_type(
+        "Pilar madera GL24h 20×20",
+        MemberUsage::Column,
+        glulam,
+        rect(0.20, 0.20),
+    )?;
+    let beam = m.add_member_type(
+        "Viga HA 30×50",
+        MemberUsage::Beam,
+        hormigon,
+        rect(0.30, 0.50),
+    )?;
+    m.add_member_type(
+        "Viga plana HA 60×30",
+        MemberUsage::Beam,
+        hormigon,
+        rect(0.60, 0.30),
+    )?;
+    m.add_member_type(
+        "Viga IPE 300",
+        MemberUsage::Beam,
+        acero,
+        Profile::IShape {
+            width: 0.150,
+            depth: 0.300,
+            web: 0.0071,
+            flange: 0.0107,
+        },
+    )?;
+    m.add_member_type(
+        "Viga madera GL24h 16×32",
+        MemberUsage::Beam,
+        glulam,
+        rect(0.16, 0.32),
+    )?;
+
     Ok(Library {
         void,
         facade,
@@ -338,6 +422,8 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         window_one_leaf,
         balcony_door,
         fixed_window,
+        column,
+        beam,
     })
 }
 
@@ -355,6 +441,18 @@ mod tests {
         assert_eq!(m.slab_types().count(), 3);
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 4);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 4);
+        assert_eq!(
+            m.member_types()
+                .filter(|t| t.usage == MemberUsage::Column)
+                .count(),
+            6
+        );
+        assert_eq!(
+            m.member_types()
+                .filter(|t| t.usage == MemberUsage::Beam)
+                .count(),
+            4
+        );
         let facade = m
             .wall_types()
             .find(|t| t.name.starts_with("Fachada"))

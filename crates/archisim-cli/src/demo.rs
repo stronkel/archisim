@@ -14,8 +14,8 @@
 //! to the south-east with a high fixed window above the cut plane.
 
 use archisim_core::{
-    Document, Hand, Model, ModelError, NewDimension, NewOpening, NewSlab, NewWall, Point2,
-    ReferenceLine, WallSide,
+    Document, Hand, Model, ModelError, NewBeam, NewColumn, NewDimension, NewOpening, NewSlab,
+    NewWall, Point2, ReferenceLine, WallSide,
 };
 use archisim_library::add_library;
 
@@ -159,6 +159,45 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // A porch to the south (v0.25): a roof slab on a concrete beam carried
+    // by two columns, tied to the roof level so they follow it.
+    doc.transact("Porche", |m| {
+        let beam_depth = m.member_type(lib.beam).map_or(0.0, |t| t.profile.size().1);
+        for x in [0.3, 11.7] {
+            m.add_column(NewColumn {
+                member_type: lib.column,
+                level: pb,
+                position: Point2::new(x, -2.7),
+                rotation: 0.0,
+                base_offset: 0.0,
+                top: archisim_core::WallTop::Level {
+                    level: cubierta,
+                    offset: -roof_depth - beam_depth,
+                },
+                height: 0.0,
+            })?;
+        }
+        m.add_beam(NewBeam {
+            member_type: lib.beam,
+            level: cubierta,
+            start: Point2::new(0.15, -2.7),
+            end: Point2::new(11.85, -2.7),
+            top_offset: -roof_depth,
+        })?;
+        m.add_slab(NewSlab {
+            slab_type: cubierta_plana,
+            level: cubierta,
+            outline: vec![
+                Point2::new(0.0, -2.85),
+                Point2::new(12.0, -2.85),
+                Point2::new(12.0, 0.0),
+                Point2::new(0.0, 0.0),
+            ],
+            top_offset: 0.0,
+        })?;
+        Ok(())
+    })?;
+
     // Dimensions: the openings of the south and west façades, outside, the
     // overall size beyond them, and level marks on the ground slab.
     doc.transact("Cotas", |m| {
@@ -202,7 +241,9 @@ mod tests {
         let doc = super::build().unwrap();
         let m = doc.model();
         assert_eq!(m.walls().count(), 7);
-        assert_eq!(m.slabs().count(), 2);
+        assert_eq!(m.slabs().count(), 3);
+        assert_eq!(m.columns().count(), 2);
+        assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 9);
         assert_eq!(doc.undo_label(), Some("Cotas"));

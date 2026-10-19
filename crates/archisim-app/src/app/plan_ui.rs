@@ -803,6 +803,7 @@ impl ArchiSimApp {
             (Grip::SlabEdge { .. }, false) => "Arista",
             (Grip::SlabEdge { .. }, true) => "Nueva esquina",
             (Grip::WallBend { .. }, _) => "Curvar",
+            (Grip::BeamEnd { .. }, _) => "Estirar viga",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {

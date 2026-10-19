@@ -31,6 +31,7 @@
 
 mod compare;
 pub mod geometry;
+mod members;
 pub mod report;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -220,6 +221,7 @@ struct Importer<'a> {
     guids: GuidPlan,
     /// The walls made from each IFC wall (one per piece of its axis).
     walls: HashMap<u64, Vec<WallFrame>>,
+    member_types: HashMap<members::MemberKey, archisim_core::MemberTypeId>,
 }
 
 #[derive(Default)]
@@ -231,6 +233,9 @@ struct GuidPlan {
     walls: Vec<(WallId, String)>,
     slabs: Vec<(archisim_core::SlabId, String)>,
     openings: Vec<(archisim_core::OpeningId, String)>,
+    member_types: Vec<(archisim_core::MemberTypeId, String)>,
+    columns: Vec<(archisim_core::ColumnId, String)>,
+    beams: Vec<(archisim_core::BeamId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -442,6 +447,7 @@ impl<'a> Importer<'a> {
             type_names: HashSet::new(),
             guids: GuidPlan::default(),
             walls: HashMap::new(),
+            member_types: HashMap::new(),
         };
         imp.index();
         imp
@@ -2454,6 +2460,7 @@ impl<'a> Importer<'a> {
         }
         self.import_walls();
         self.import_slabs();
+        self.import_members();
         self.import_openings();
         self.count_unsupported();
     }
@@ -2493,6 +2500,9 @@ impl<'a> Importer<'a> {
         restore!(slabs, slabs);
         restore!(opening_types, opening_types);
         restore!(openings, openings);
+        restore!(member_types, member_types);
+        restore!(columns, columns);
+        restore!(beams, beams);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

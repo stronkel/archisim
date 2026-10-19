@@ -25,6 +25,7 @@
 
 pub mod annotate;
 pub mod lettering;
+pub mod members;
 
 use std::fmt::Write as _;
 
@@ -287,12 +288,19 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         })
         .chain(marks.iter().map(|m| m.point))
         .collect();
-    let all_points = all_points.chain(annotation_points.iter());
+    let structure_points = members::member_points(model, level, options.cut_plane);
+    let all_points = all_points
+        .chain(annotation_points.iter())
+        .chain(structure_points.iter());
     for p in all_points {
         min = Point2::new(min.x.min(p.x), min.y.min(p.y));
         max = Point2::new(max.x.max(p.x), max.y.max(p.y));
     }
-    if geos.is_empty() && slabs.is_empty() && annotation_points.is_empty() {
+    if geos.is_empty()
+        && slabs.is_empty()
+        && annotation_points.is_empty()
+        && structure_points.is_empty()
+    {
         min = Point2::new(0.0, 0.0);
         max = Point2::new(1.0, 1.0);
     }
@@ -390,6 +398,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         draw_cut_lines(&mut s, g, p, *cut, k);
     }
     s.push_str("</g>\n");
+    // Columns and beams on top: the structure goes through the walls.
+    let poly_visible = |poly: &[Point2]| {
+        let (lo, hi) = bounds(poly);
+        visible(lo, hi)
+    };
+    members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
 
     s.push_str("<g id=\"annotations\">\n");
     for d in &dimensions {

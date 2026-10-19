@@ -18,9 +18,12 @@ pub struct ImportReport {
     pub windows: usize,
     /// Openings in walls with no door or window in them.
     pub voids: usize,
+    pub columns: usize,
+    pub beams: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
+    pub member_types: usize,
     pub materials: usize,
     /// Elements not imported: (what, why) → how many.
     pub skipped: BTreeMap<(String, String), usize>,
@@ -50,6 +53,9 @@ impl ImportReport {
         );
         if self.voids > 0 {
             s.push_str(&format!(", {} huecos", self.voids));
+        }
+        if self.columns + self.beams > 0 {
+            s.push_str(&format!(", {} pilares, {} vigas", self.columns, self.beams));
         }
         let n = self.skipped_count();
         if n > 0 {
@@ -82,8 +88,16 @@ impl fmt::Display for ImportReport {
         writeln!(f, "Importado: {}.", self.summary_imported())?;
         writeln!(
             f,
-            "Tipos: {} de muro, {} de forjado, {} de puerta o ventana; {} materiales.",
-            self.wall_types, self.slab_types, self.opening_types, self.materials
+            "Tipos: {} de muro, {} de forjado, {} de puerta o ventana{}; {} materiales.",
+            self.wall_types,
+            self.slab_types,
+            self.opening_types,
+            if self.member_types > 0 {
+                format!(", {} de pilar o viga", self.member_types)
+            } else {
+                String::new()
+            },
+            self.materials
         )?;
         if !self.skipped.is_empty() {
             writeln!(f, "\nNo importado:")?;
@@ -108,8 +122,13 @@ impl ImportReport {
         } else {
             String::new()
         };
+        let members = if self.columns + self.beams > 0 {
+            format!(", {} pilares y {} vigas", self.columns, self.beams)
+        } else {
+            String::new()
+        };
         format!(
-            "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}",
+            "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}{members}",
             self.levels, self.walls, self.slabs, self.doors, self.windows
         )
     }
@@ -164,10 +183,6 @@ pub fn class_name(kind: &str) -> &'static str {
 /// IFC classes of built elements the importer does not bring in (yet),
 /// counted in the report.
 pub const UNSUPPORTED_CLASSES: &[&str] = &[
-    "IFCCOLUMN",
-    "IFCCOLUMNSTANDARDCASE",
-    "IFCBEAM",
-    "IFCBEAMSTANDARDCASE",
     "IFCSTAIR",
     "IFCRAMP",
     "IFCRAILING",

@@ -156,6 +156,16 @@ pub fn explain(e: &ModelError) -> String {
                 e.family
             )
         }
+        ModelError::UnknownMemberType(_) => "el tipo de pilar o viga no existe".into(),
+        ModelError::UnknownColumn(_) => "el pilar ya no existe".into(),
+        ModelError::UnknownBeam(_) => "la viga ya no existe".into(),
+        ModelError::ColumnTopBelowBase(_) => {
+            "un pilar unido a una planta superior quedaría con su coronación en su base o por debajo (revisa las cotas de las plantas o el desfase superior)".into()
+        }
+        ModelError::ZeroLengthBeam => "la viga necesita dos puntos distintos".into(),
+        ModelError::InvalidProfile => {
+            "el alma y las alas no caben en la sección del perfil".into()
+        }
     }
 }
 
@@ -245,6 +255,19 @@ fn es_what(what: &str) -> String {
         "frame depth" => "el fondo del marco",
         "clear opening inside the frame" => "el paso libre dentro del marco",
         "level elevation" => "la cota de la planta",
+        "column height" => "la altura del pilar",
+        "column position" => "la posición del pilar",
+        "column rotation" => "el giro del pilar",
+        "column base offset" => "el desfase de base del pilar",
+        "column top offset" => "el desfase superior del pilar",
+        "beam start" => "el inicio de la viga",
+        "beam end" => "el final de la viga",
+        "beam top offset" => "el desfase de la viga",
+        "section width" => "el ancho de la sección",
+        "section depth" => "el canto de la sección",
+        "section diameter" => "el diámetro de la sección",
+        "web thickness" => "el espesor del alma",
+        "flange thickness" => "el espesor de las alas",
         other => other,
     }
     .to_string()

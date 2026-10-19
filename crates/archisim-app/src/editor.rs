@@ -235,6 +235,8 @@ impl Editor {
             Element::Slab(id) => model.slab(*id).is_some(),
             Element::Dimension(id) => model.dimension(*id).is_some(),
             Element::Mark(id) => model.elevation_mark(*id).is_some(),
+            Element::Column(id) => model.column(*id).is_some(),
+            Element::Beam(id) => model.beam(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -403,6 +405,12 @@ impl Editor {
                     }
                     Element::Mark(id) => {
                         m.remove_elevation_mark(*id)?;
+                    }
+                    Element::Column(id) => {
+                        m.remove_column(*id)?;
+                    }
+                    Element::Beam(id) => {
+                        m.remove_beam(*id)?;
                     }
                     Element::Opening(_) => {}
                 }

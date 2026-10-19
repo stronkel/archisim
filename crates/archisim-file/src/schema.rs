@@ -38,6 +38,138 @@ pub(crate) struct ProjectFile {
     pub dimensions: Vec<Dimension>,
     /// Level marks in plan (version 2).
     pub elevation_marks: Vec<ElevationMark>,
+    /// Column and beam types (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub member_types: Vec<MemberType>,
+    /// Columns (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<Column>,
+    /// Beams (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub beams: Vec<Beam>,
+}
+
+/// A column or beam section (version 7), in metres.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, tag = "shape", rename_all = "snake_case")]
+pub(crate) enum Profile {
+    Rectangle {
+        width: f64,
+        depth: f64,
+    },
+    Circle {
+        diameter: f64,
+    },
+    IShape {
+        width: f64,
+        depth: f64,
+        web: f64,
+        flange: f64,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MemberUsage {
+    Column,
+    Beam,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MemberType {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub usage: MemberUsage,
+    pub material: u64,
+    pub profile: Profile,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Column {
+    pub id: u64,
+    pub guid: String,
+    #[serde(rename = "type")]
+    pub member_type: u64,
+    pub level: u64,
+    pub position: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+    pub base_offset: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<WallTop>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Beam {
+    pub id: u64,
+    pub guid: String,
+    #[serde(rename = "type")]
+    pub member_type: u64,
+    pub level: u64,
+    pub start: Xy,
+    pub end: Xy,
+    pub top_offset: f64,
+}
+
+fn profile_out(p: core::Profile) -> Profile {
+    match p {
+        core::Profile::Rectangle { width, depth } => Profile::Rectangle { width, depth },
+        core::Profile::Circle { diameter } => Profile::Circle { diameter },
+        core::Profile::IShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => Profile::IShape {
+            width,
+            depth,
+            web,
+            flange,
+        },
+    }
+}
+
+fn profile_in(p: Profile) -> core::Profile {
+    match p {
+        Profile::Rectangle { width, depth } => core::Profile::Rectangle { width, depth },
+        Profile::Circle { diameter } => core::Profile::Circle { diameter },
+        Profile::IShape {
+            width,
+            depth,
+            web,
+            flange,
+        } => core::Profile::IShape {
+            width,
+            depth,
+            web,
+            flange,
+        },
+    }
+}
+
+fn top_out(top: core::WallTop) -> Option<WallTop> {
+    match top {
+        core::WallTop::Unconnected => None,
+        core::WallTop::Level { level, offset } => Some(WallTop {
+            level: level.0,
+            offset,
+        }),
+    }
+}
+
+fn top_in(top: Option<WallTop>) -> core::WallTop {
+    match top {
+        None => core::WallTop::Unconnected,
+        Some(t) => core::WallTop::Level {
+            level: core::LevelId(t.level),
+            offset: t.offset,
+        },
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -480,6 +612,49 @@ impl ProjectFile {
                     point: xy(m.point),
                 })
                 .collect(),
+            member_types: p
+                .member_types
+                .into_iter()
+                .map(|t| MemberType {
+                    id: t.id.0,
+                    guid: t.guid.to_string(),
+                    name: t.name,
+                    usage: match t.usage {
+                        core::MemberUsage::Column => MemberUsage::Column,
+                        core::MemberUsage::Beam => MemberUsage::Beam,
+                    },
+                    material: t.material.0,
+                    profile: profile_out(t.profile),
+                })
+                .collect(),
+            columns: p
+                .columns
+                .into_iter()
+                .map(|c| Column {
+                    id: c.id.0,
+                    guid: c.guid.to_string(),
+                    member_type: c.member_type.0,
+                    level: c.level.0,
+                    position: xy(c.position),
+                    rotation: c.rotation,
+                    base_offset: c.base_offset,
+                    height: c.height,
+                    top: top_out(c.top),
+                })
+                .collect(),
+            beams: p
+                .beams
+                .into_iter()
+                .map(|b| Beam {
+                    id: b.id.0,
+                    guid: b.guid.to_string(),
+                    member_type: b.member_type.0,
+                    level: b.level.0,
+                    start: xy(b.start),
+                    end: xy(b.end),
+                    top_offset: b.top_offset,
+                })
+                .collect(),
         }
     }
 
@@ -514,6 +689,9 @@ impl ProjectFile {
             openings: Vec::new(),
             dimensions: Vec::new(),
             elevation_marks: Vec::new(),
+            member_types: Vec::new(),
+            columns: Vec::new(),
+            beams: Vec::new(),
         };
 
         for l in self.levels {
@@ -693,6 +871,43 @@ impl ProjectFile {
                 id: core::ElevationMarkId(m.id),
                 level: core::LevelId(m.level),
                 point: pt(m.point),
+            });
+        }
+        for t in self.member_types {
+            parts.member_types.push(core::MemberType {
+                id: core::MemberTypeId(t.id),
+                guid: guid(&format!("member type {}", t.id), &t.guid)?,
+                name: t.name,
+                usage: match t.usage {
+                    MemberUsage::Column => core::MemberUsage::Column,
+                    MemberUsage::Beam => core::MemberUsage::Beam,
+                },
+                material: core::MaterialId(t.material),
+                profile: profile_in(t.profile),
+            });
+        }
+        for c in self.columns {
+            parts.columns.push(core::Column {
+                id: core::ColumnId(c.id),
+                guid: guid(&format!("column {}", c.id), &c.guid)?,
+                member_type: core::MemberTypeId(c.member_type),
+                level: core::LevelId(c.level),
+                position: pt(c.position),
+                rotation: c.rotation,
+                base_offset: c.base_offset,
+                top: top_in(c.top),
+                height: c.height,
+            });
+        }
+        for b in self.beams {
+            parts.beams.push(core::Beam {
+                id: core::BeamId(b.id),
+                guid: guid(&format!("beam {}", b.id), &b.guid)?,
+                member_type: core::MemberTypeId(b.member_type),
+                level: core::LevelId(b.level),
+                start: pt(b.start),
+                end: pt(b.end),
+                top_offset: b.top_offset,
             });
         }
         core::Model::from_parts(parts).map_err(FileError::Model)

@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 6,
+//!   "version": 7,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -44,7 +44,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 6;
+pub const CURRENT_VERSION: u32 = 7;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -198,8 +198,10 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // 4 → 5: walls may be curved (`bulge`); a wall without it is
             // straight, as all walls of older files are. 5 → 6: slabs may
             // have holes (`holes`) and walls voids (the "Hueco" family);
-            // older files have neither.
-            4 | 5 => {
+            // older files have neither. 6 → 7: columns and beams with
+            // their types (`member_types`, `columns`, `beams`), absent in
+            // older files.
+            4..=6 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -551,6 +553,67 @@ mod tests {
         m
     }
 
+    /// Columns and beams (version 7) are saved and come back identical.
+    #[test]
+    fn columns_and_beams_round_trip() {
+        use archisim_core::{MemberUsage, NewBeam, NewColumn, Profile, WallTop};
+        let mut m = sample();
+        let levels: Vec<_> = m.levels().iter().map(|l| l.id).collect();
+        let concrete = m.add_material("HA-25", "concrete", [190, 190, 190], CutPattern::Cross);
+        let col = m
+            .add_member_type(
+                "Pilar 30×30",
+                MemberUsage::Column,
+                concrete,
+                Profile::Rectangle {
+                    width: 0.3,
+                    depth: 0.3,
+                },
+            )
+            .unwrap();
+        let beam = m
+            .add_member_type(
+                "IPE 300",
+                MemberUsage::Beam,
+                concrete,
+                Profile::IShape {
+                    width: 0.15,
+                    depth: 0.3,
+                    web: 0.0071,
+                    flange: 0.0107,
+                },
+            )
+            .unwrap();
+        m.add_column(NewColumn {
+            member_type: col,
+            level: levels[0],
+            position: Point2::new(4.2, 0.0),
+            rotation: 0.25,
+            base_offset: 0.0,
+            top: WallTop::Level {
+                level: levels[1],
+                offset: -0.3,
+            },
+            height: 0.0,
+        })
+        .unwrap();
+        m.add_beam(NewBeam {
+            member_type: beam,
+            level: levels[1],
+            start: Point2::new(0.0, 0.0),
+            end: Point2::new(4.2, 0.0),
+            top_offset: -0.05,
+        })
+        .unwrap();
+        let text = to_string(&m);
+        assert!(text.contains("\"shape\": \"i_shape\""), "{text}");
+        let back = from_str(&text).unwrap();
+        assert_eq!(back, m);
+        // A version 6 file has none of them and still opens.
+        let v6 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 6", 1);
+        assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
+    }
+
     #[test]
     fn version_1_files_still_open() {
         // A project saved by ArchiSim 0.8 (file version 1): no dimensions
@@ -574,7 +637,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 6"));
+        assert!(to_string(&opened).contains("\"version\": 7"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -741,7 +804,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 6", "\"version\": 3", 1)
+            .replacen("\"version\": 7", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -803,7 +866,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 6", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -837,7 +900,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 6", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 7", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -849,7 +912,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 6,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 7,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -895,11 +958,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 6", "\"version\": 7"),
-            Err(FileError::TooNew { version: 7 })
+            edited("\"version\": 7", "\"version\": 8"),
+            Err(FileError::TooNew { version: 8 })
         ));
         assert!(matches!(
-            edited("\"version\": 6", "\"version\": 0"),
+            edited("\"version\": 7", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

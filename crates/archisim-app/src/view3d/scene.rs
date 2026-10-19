@@ -55,6 +55,8 @@ fn element(owner: SolidOwner) -> Element {
         SolidOwner::Wall(id) => Element::Wall(id),
         SolidOwner::Slab(id) => Element::Slab(id),
         SolidOwner::Opening(id) => Element::Opening(id),
+        SolidOwner::Column(id) => Element::Column(id),
+        SolidOwner::Beam(id) => Element::Beam(id),
     }
 }
 

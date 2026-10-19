@@ -13,7 +13,8 @@
 //! joined at a mitre leave the shared corner face to each other).
 
 use archisim_core::{
-    LevelId, MaterialId, Model, OpeningId, Point2, SlabId, WallId, WallSide, EPSILON,
+    BeamId, ColumnId, LevelId, MaterialId, Model, OpeningId, Point2, SlabId, WallId, WallSide,
+    EPSILON,
 };
 
 use crate::{
@@ -29,6 +30,8 @@ pub enum SolidOwner {
     Wall(WallId),
     Slab(SlabId),
     Opening(OpeningId),
+    Column(ColumnId),
+    Beam(BeamId),
 }
 
 /// One closed piece of one material.
@@ -719,6 +722,59 @@ fn sorted(a: f64, b: f64) -> (f64, f64) {
     }
 }
 
+/// Segments used for round sections in 3D and IFC tessellations.
+pub const ROUND_SEGMENTS: usize = 32;
+
+/// The solid of a column: its section extruded from base to top.
+pub fn column_solids(model: &Model, id: ColumnId) -> Vec<Solid> {
+    let Some(c) = model.column(id) else {
+        return Vec::new();
+    };
+    let Some(t) = model.member_type(c.member_type) else {
+        return Vec::new();
+    };
+    let base = model.level(c.level).map_or(0.0, |l| l.elevation) + c.base_offset;
+    let outline = c.plan_outline(t.profile, ROUND_SEGMENTS);
+    vec![Solid {
+        owner: SolidOwner::Column(id),
+        material: t.material,
+        triangles: prism(&outline, base, base + c.height),
+    }]
+}
+
+/// The solid of a beam: its section swept from start to end, with the
+/// top of the section at the beam's top face.
+pub fn beam_solids(model: &Model, id: BeamId) -> Vec<Solid> {
+    let Some(b) = model.beam(id) else {
+        return Vec::new();
+    };
+    let Some(t) = model.member_type(b.member_type) else {
+        return Vec::new();
+    };
+    let Some(u) = (b.end - b.start).normalized() else {
+        return Vec::new();
+    };
+    let n = u.perp_left();
+    let top = model.level(b.level).map_or(0.0, |l| l.elevation) + b.top_offset;
+    let (_, depth) = t.profile.size();
+    let z_mid = top - depth / 2.0;
+    // Section `x` → across the beam (left), section `y` → up, extrusion →
+    // along the beam: a right-handed frame, so windings stay outward.
+    let local = prism(&t.profile.outline(ROUND_SEGMENTS), 0.0, b.length());
+    let map = |[x, y, s]: P3| {
+        let p = b.start + n * x + u * s;
+        [p.x, p.y, z_mid + y]
+    };
+    vec![Solid {
+        owner: SolidOwner::Beam(id),
+        material: t.material,
+        triangles: local
+            .into_iter()
+            .map(|[a, b2, c]| [map(a), map(b2), map(c)])
+            .collect(),
+    }]
+}
+
 /// Every solid of the model, on every level.
 pub fn model_solids(model: &Model) -> Vec<Solid> {
     let mut out = Vec::new();
@@ -731,6 +787,12 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     }
     for o in model.openings() {
         out.extend(opening_solids(model, o.id));
+    }
+    for c in model.columns() {
+        out.extend(column_solids(model, c.id));
+    }
+    for b in model.beams() {
+        out.extend(beam_solids(model, b.id));
     }
     out.retain(|s| !s.triangles.is_empty());
     out
@@ -745,6 +807,8 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
             .opening(o)
             .and_then(|o| model.wall(o.wall))
             .is_some_and(|w| w.level == level),
+        SolidOwner::Column(c) => model.column(c).is_some_and(|c| c.level == level),
+        SolidOwner::Beam(b) => model.beam(b).is_some_and(|b| b.level == level),
     };
     model_solids(model)
         .into_iter()
@@ -1415,5 +1479,74 @@ mod tests {
         let key = |a: &[f64; 9]| a.map(|x| (x * 1e6).round() as i64);
         v.sort_by_key(key);
         v
+    }
+}
+
+#[cfg(test)]
+mod member_tests {
+    use super::*;
+    use archisim_core::{CutPattern, MemberUsage, NewBeam, NewColumn, Profile, WallTop};
+
+    #[test]
+    fn column_and_beam_volumes() {
+        let mut m = Model::new("t");
+        let l0 = m.add_level("PB", 0.0);
+        let l1 = m.add_level("P1", 3.0);
+        let mat = m.add_material("HA", "concrete", [200, 200, 200], CutPattern::Cross);
+        let profiles = [
+            Profile::Rectangle {
+                width: 0.3,
+                depth: 0.4,
+            },
+            Profile::IShape {
+                width: 0.15,
+                depth: 0.3,
+                web: 0.0071,
+                flange: 0.0107,
+            },
+        ];
+        for (k, profile) in profiles.into_iter().enumerate() {
+            let ct = m
+                .add_member_type(format!("c{k}"), MemberUsage::Column, mat, profile)
+                .unwrap();
+            let bt = m
+                .add_member_type(format!("b{k}"), MemberUsage::Beam, mat, profile)
+                .unwrap();
+            let c = m
+                .add_column(NewColumn {
+                    member_type: ct,
+                    level: l0,
+                    position: Point2::new(1.0, 1.0),
+                    rotation: 0.7,
+                    base_offset: 0.1,
+                    top: WallTop::Level {
+                        level: l1,
+                        offset: -0.3,
+                    },
+                    height: 0.0,
+                })
+                .unwrap();
+            let b = m
+                .add_beam(NewBeam {
+                    member_type: bt,
+                    level: l1,
+                    start: Point2::new(0.0, 0.0),
+                    end: Point2::new(3.0, 4.0),
+                    top_offset: 0.0,
+                })
+                .unwrap();
+            let cs = column_solids(&m, c);
+            assert!((cs[0].volume() - profile.area() * 2.6).abs() < 1e-9);
+            let bs = beam_solids(&m, b);
+            assert!((bs[0].volume() - profile.area() * 5.0).abs() < 1e-9);
+            // The beam hangs from the level: its top is at 3.0.
+            let top = bs[0]
+                .triangles
+                .iter()
+                .flatten()
+                .map(|p| p[2])
+                .fold(f64::MIN, f64::max);
+            assert!((top - 3.0).abs() < 1e-9);
+        }
     }
 }
