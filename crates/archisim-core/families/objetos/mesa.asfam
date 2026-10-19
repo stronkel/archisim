@@ -1,19 +1,46 @@
 family "Mesa"
   category furniture
   host none
-  version 1
-  description "Mesa rectangular de tablero y cuatro patas"
+  version 2
+  description "Mesa rectangular de tablero y cuatro patas, con sillas alrededor si se quiere"
 
 # Ejes de los objetos: origen en el centro del lado de atrás, x hacia la
-# derecha, y hacia delante, z hacia arriba desde el suelo.
+# derecha, y hacia delante, z hacia arriba desde el suelo. Las sillas de
+# atrás quedan por detrás del origen (la mesa no va contra la pared).
 
 type_params
   section "Dimensiones"
     width  length = 1.60 range 0.40..6.00 label "Largo"
     depth  length = 0.90 range 0.40..3.00 label "Fondo"
     height length = 0.75 range 0.40..1.20 label "Altura"
+  section "Sillas"
+    chairs integer = 6 range 0..16 label "Sillas alrededor"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
+
+let front = ceil(chairs / 2)
+let back = chairs - front
+let cw = 0.42
+
+require cw * max(front, 1) <= width + 0.1 else "No caben tantas sillas a lo largo de la mesa"
+
+component chair(x, y0, dir, m)
+  # Asiento a 45 cm y respaldo en el lado lejano de la mesa.
+  let ya = if dir > 0 then y0 else y0 - 0.42
+  let yb = if dir > 0 then y0 + 0.42 else y0
+  box (x - 0.21, ya, 0.41) to (x + 0.21, yb, 0.45) material m
+  let ra = if dir > 0 then yb - 0.04 else ya
+  box (x - 0.21, ra, 0.45) to (x + 0.21, ra + 0.04, 0.9) material m
+  let la = if dir > 0 then ya else yb - 0.04
+  box (x - 0.21, la, 0) to (x - 0.17, la + 0.04, 0.41) material m
+  box (x + 0.17, la, 0) to (x + 0.21, la + 0.04, 0.41) material m
+
+component chair_plan(x, y0, dir)
+  let ya = if dir > 0 then y0 else y0 - 0.42
+  let yb = if dir > 0 then y0 + 0.42 else y0
+  polygon (x - 0.21, ya) (x + 0.21, ya) (x + 0.21, yb) (x - 0.21, yb) pen view
+  let r = if dir > 0 then yb - 0.04 else ya + 0.04
+  line (x - 0.21, r) to (x + 0.21, r) pen thin
 
 body
   let t = 0.04
@@ -23,9 +50,17 @@ body
   box (width / 2 - 0.04 - l, 0.04, 0) to (width / 2 - 0.04, 0.04 + l, height - t) material mat
   box (-width / 2 + 0.04, depth - 0.04 - l, 0) to (-width / 2 + 0.04 + l, depth - 0.04, height - t) material mat
   box (width / 2 - 0.04 - l, depth - 0.04 - l, 0) to (width / 2 - 0.04, depth - 0.04, height - t) material mat
+  repeat i in 0..front
+    use chair(-width / 2 + (i + 0.5) * width / front, depth + 0.02, 1, mat)
+  repeat i in 0..back
+    use chair(-width / 2 + (i + 0.5) * width / back, -0.02, -1, mat)
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  repeat i in 0..front
+    use chair_plan(-width / 2 + (i + 0.5) * width / front, depth + 0.02, 1)
+  repeat i in 0..back
+    use chair_plan(-width / 2 + (i + 0.5) * width / back, -0.02, -1)
 
 outputs
   ifc_class = "IfcFurniture"

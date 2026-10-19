@@ -348,8 +348,10 @@ mod tests {
             let ev = m.evaluate_object(o).unwrap();
             assert!(!ev.parts.is_empty(), "{name}");
             for p in &ev.parts {
-                // Behind nothing: from the back side forwards, on the floor.
-                assert!(p.min[1] >= -1e-9 && p.min[2] >= -1e-9, "{name} {p:?}");
+                // On the floor; against the wall (nothing behind the
+                // origin) but for tables, which have chairs all round.
+                assert!(p.min[2] >= -1e-9, "{name} {p:?}");
+                assert!(name == "Mesa" || p.min[1] >= -1e-9, "{name} {p:?}");
             }
             for scale in [50.0, 100.0] {
                 assert!(
