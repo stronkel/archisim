@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 · Familias, bloque D — diálogo de tipos al estilo ArchiCAD y tipos de línea (v0.24)
+
+**Hecho**
+- **Paletas laterales más estrechas y simétricas**: caja de herramientas y propiedades ocupan juntas lo mismo que el navegador (340 puntos por lado, ajustable arrastrando el borde de propiedades; el navegador lo sigue), así que el área de dibujo queda centrada aunque estén las tres abiertas. Iconos y rótulos de la caja algo más pequeños.
+- **Diálogo «Tipos y materiales» rehecho**, al estilo de los ajustes de objeto de ArchiCAD:
+  - A la izquierda, **carpetas** con los tipos agrupados por lo que no puede cambiar entre ellos: puertas y ventanas por **familia** (abatible, corredera; practicable, corredera, hueco), muros por **función** (exteriores, interiores), forjados por función (de planta, soleras, cubiertas) y materiales por **categoría**. Cada tipo con su **dibujo** (alzado de la carpintería, sección de las capas, muestra del material), su marca, medidas y nº de colocados. Buscador por nombre o marca, y un **«＋» en cada carpeta de familia** para crear un tipo nuevo de esa familia (aunque la carpeta esté vacía).
+  - A la derecha, primero la **vista previa** con selector: **Alzado, Planta, Sección y 3D** en puertas y ventanas; Planta, Sección y 3D en muros; Sección y 3D en forjados. El alzado y la sección salen de las mismas piezas de la receta que el 3D y el IFC; la sección corta por la primera hoja con el muro anfitrión cortado capa a capa (con su trama) sobre el dintel y bajo el antepecho. El 3D se gira arrastrando, se acerca con la rueda y se encuadra con doble clic.
+  - Debajo, **todas las opciones en grupos plegables** como la paleta de propiedades: Identidad, una por cada sección de la receta (Dimensiones, Hojas, Marco, Materiales, Representación…) y Datos.
+- **Tipos de línea en las recetas**: continua, discontinua, de puntos, trazo y punto, trazo y dos puntos, trazos largos (patrones en mm de papel, escalados con el plano). Cualquier línea, polígono o arco de un símbolo puede llevarlos, y hay un tipo de parámetro nuevo, `linestyle`. La **puerta abatible** y la **ventana practicable** (versión 3) tienen «Línea del giro» en la sección Representación; en el diálogo se elige con una muestra de cada línea. Por defecto, continua (la planta sale igual que antes).
+- Los huecos sin carpintería aparecen con las ventanas también al crear tipos nuevos.
+- Versión 0.24.0. **Sin cambios en el formato `.archisim` ni en el IFC** (demo validada con IfcOpenShell; ida y vuelta idéntica salvo la fecha).
+
+**Pendiente / limitaciones conocidas**
+- Los proyectos anteriores guardan su copia de la puerta abatible y la ventana practicable versión 2, sin «Línea del giro»: la tendrán al actualizar familias (bloque E) o en proyectos nuevos.
+- Del bloque D falta: símbolo 1:20 y líneas de apertura en el alzado desde la receta, y puntos de control (tiradores) en planta.
+- Los nombres largos de la paleta de propiedades se recortan («Plano de corte (…»); se ven enteros al pasar el ratón.
+
+**Antonio debe probar**
+1. Descarga la versión de esta rama (pull request «Familias: diálogo de tipos al estilo ArchiCAD…», *Artifacts*).
+2. Abre `demo.archisim` con las tres paletas abiertas: ¿te queda espacio cómodo para dibujar y el dibujo centrado? Arrastra el borde derecho de Propiedades: el navegador debe cambiar igual.
+3. Navegador → *Tipos y materiales…* → **Puertas**: carpetas «Puerta abatible» y «Puerta corredera» con el dibujo de cada tipo. Cambia entre **Alzado, Planta, Sección y 3D**; en 3D, gíralo arrastrando.
+4. En **Ventanas**, elige V-01, baja hasta **Representación → Línea del giro** y pon «Discontinua»: la vista Planta y el plano deben mostrar el giro discontinuo. Prueba el resto de tipos de línea.
+5. Pulsa el **«＋»** de la carpeta «Hueco» y de «Ventana corredera»: debe crearse un tipo nuevo dentro de esa carpeta, seleccionado.
+6. Revisa **Muros** (Planta/Sección/3D), **Forjados** (Sección/3D) y **Materiales** (carpetas por categoría). Dime qué opciones echas de menos respecto a ArchiCAD y qué agruparías distinto.
+
 ## 2026-10-19 · Familias, bloque C — IFC desde las familias (v0.23)
 
 **Hecho**

@@ -64,10 +64,8 @@ impl Drawing {
     }
 
     fn grow(&mut self, p: [f64; 2]) {
-        for k in 0..2 {
-            self.lo[k] = self.lo[k].min(p[k]);
-            self.hi[k] = self.hi[k].max(p[k]);
-        }
+        self.lo = [self.lo[0].min(p[0]), self.lo[1].min(p[1])];
+        self.hi = [self.hi[0].max(p[0]), self.hi[1].max(p[1])];
     }
 
     fn rect(

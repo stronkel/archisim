@@ -99,6 +99,9 @@ pub struct TypesDialog {
     pub(super) v3d: View3dState,
     /// What the preview showed in the last frame ("plan:…", "section:…").
     pub(super) shown: String,
+    /// Bring the chosen type into view in the list (it was chosen from
+    /// outside the list, or just made).
+    reveal: bool,
 }
 
 /// What the dialog was asked to do this frame, applied after drawing it.
@@ -148,7 +151,7 @@ struct Row {
 /// Size of the drawings of the list.
 const THUMB: f32 = 46.0;
 /// Height of the preview.
-const PREVIEW_HEIGHT: f32 = 250.0;
+const PREVIEW_HEIGHT: f32 = 220.0;
 /// Width of the list.
 const LIST_WIDTH: f32 = 300.0;
 
@@ -173,6 +176,14 @@ pub const CATEGORIES: &[(&str, &str)] = &[
     ("glass", "Vidrio"),
     ("plastic", "Plástico"),
 ];
+
+/// Where a material category goes in the list (unknown ones last).
+fn category_order(code: &str) -> usize {
+    CATEGORIES
+        .iter()
+        .position(|(c, _)| *c == code)
+        .unwrap_or(CATEGORIES.len())
+}
 
 fn category_name(code: &str) -> String {
     CATEGORIES
@@ -278,11 +289,16 @@ impl ArchiSimApp {
     /// Type" from the properties of an element).
     pub fn edit_type(&mut self, tab: TypesTab, id: u64) {
         self.types.open = true;
+        self.types.reveal = true;
+        if self.types.tab != tab {
+            self.types.view = views(tab)[0].0;
+        }
         self.select_type(tab, id);
     }
 
     fn select_type(&mut self, tab: TypesTab, id: u64) {
         let d = &mut self.types;
+        d.reveal = d.tab != tab || d.reveal;
         d.tab = tab;
         match tab {
             TypesTab::Materials => d.material = Some(MaterialId(id)),
@@ -319,7 +335,11 @@ impl ArchiSimApp {
         let m = self.ed.model();
         let d = &mut self.types;
         if d.material.and_then(|id| m.material(id)).is_none() {
-            d.material = sorted_materials(m).first().map(|x| x.0);
+            // The first of the list, as its folders show it.
+            d.material = m
+                .materials()
+                .min_by_key(|x| (category_order(&x.category), x.name.to_lowercase()))
+                .map(|x| x.id);
         }
         if d.wall.and_then(|id| m.wall_type(id)).is_none() {
             d.wall = m.wall_types().next().map(|t| t.id);
@@ -365,7 +385,7 @@ impl ArchiSimApp {
             .open(&mut open)
             .resizable(true)
             .collapsible(false)
-            .default_size([1060.0, 700.0])
+            .default_size([1060.0, 780.0])
             .min_size([820.0, 520.0])
             .show(ctx, |ui| self.types_body(ui, &mut actions));
         self.types.open = open;
@@ -422,6 +442,9 @@ impl ArchiSimApp {
                 );
                 if before != self.types.tab {
                     self.types.filter.clear();
+                    // Each list opens on its usual view: elevation for
+                    // doors and windows, section for slabs, plan for walls.
+                    self.types.view = views(self.types.tab)[0].0;
                 }
             });
             ui.add_space(12.0);
@@ -592,12 +615,7 @@ impl ArchiSimApp {
             }
             TypesTab::Materials => {
                 let mut mats: Vec<_> = m.materials().collect();
-                let order = |c: &str| {
-                    CATEGORIES
-                        .iter()
-                        .position(|(code, _)| *code == c)
-                        .unwrap_or(CATEGORIES.len())
-                };
+                let order = category_order;
                 mats.sort_by(|a, b| {
                     (order(&a.category), a.name.to_lowercase())
                         .cmp(&(order(&b.category), b.name.to_lowercase()))
@@ -683,7 +701,13 @@ impl ArchiSimApp {
                     }
                     for r in &f.rows {
                         let drawing = self.types.drawings.get(&r.thumb);
-                        if type_row(ui, r, drawing, Some(r.id) == selected).clicked() {
+                        let on = Some(r.id) == selected;
+                        let resp = type_row(ui, r, drawing, on);
+                        if on && self.types.reveal {
+                            resp.scroll_to_me(Some(egui::Align::Center));
+                            self.types.reveal = false;
+                        }
+                        if resp.clicked() {
                             actions.push(Action::Select(tab, r.id));
                         }
                     }
@@ -1515,6 +1539,7 @@ impl ArchiSimApp {
             Action::DuplicateMaterial(id) => match self.ed.duplicate_material(id) {
                 Ok(new) => {
                     self.types.material = Some(new);
+                    self.types.reveal = true;
                     self.say("Material duplicado: cámbiale el nombre y lo que quieras.");
                 }
                 Err(e) => self.complain(format!("No se puede: {e}.")),
@@ -1530,6 +1555,7 @@ impl ArchiSimApp {
             Action::DuplicateWall(id) => match self.ed.duplicate_wall_type(id) {
                 Ok(new) => {
                     self.types.wall = Some(new);
+                    self.types.reveal = true;
                     self.say("Tipo de muro duplicado: cámbiale el nombre y sus capas.");
                 }
                 Err(e) => self.complain(format!("No se puede: {e}.")),
@@ -1549,6 +1575,7 @@ impl ArchiSimApp {
             Action::DuplicateSlab(id) => match self.ed.duplicate_slab_type(id) {
                 Ok(new) => {
                     self.types.slab = Some(new);
+                    self.types.reveal = true;
                     self.say("Tipo de forjado duplicado: cámbiale el nombre y sus capas.");
                 }
                 Err(e) => self.complain(format!("No se puede: {e}.")),
@@ -1572,6 +1599,7 @@ impl ArchiSimApp {
                         .model()
                         .opening_type(new)
                         .is_some_and(|t| t.is_door());
+                    self.types.reveal = true;
                     if door {
                         self.types.door = Some(new);
                     } else {
@@ -1604,6 +1632,7 @@ impl ArchiSimApp {
                         TypesTab::Windows
                     };
                     self.types.tab = tab;
+                    self.types.reveal = true;
                     self.select_type(tab, new.0);
                     self.say(format!(
                         "Nuevo tipo de «{family}»: configúralo a la derecha."
@@ -1949,13 +1978,6 @@ fn layers_preview(
         preview_materials(source, &mats)
     );
     (key, layers_model(source, layers, length))
-}
-
-/// Materials sorted by name, case-insensitively.
-fn sorted_materials(m: &Model) -> Vec<(MaterialId, String)> {
-    let mut v: Vec<(MaterialId, String)> = m.materials().map(|x| (x.id, x.name.clone())).collect();
-    v.sort_by_key(|a| a.1.to_lowercase());
-    v
 }
 
 /// What the preview depends on from the materials: their colour and hatch.
