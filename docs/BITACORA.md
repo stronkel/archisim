@@ -17,6 +17,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 - **Tipos de línea en las recetas**: continua, discontinua, de puntos, trazo y punto, trazo y dos puntos, trazos largos (patrones en mm de papel, escalados con el plano). Cualquier línea, polígono o arco de un símbolo puede llevarlos, y hay un tipo de parámetro nuevo, `linestyle`. La **puerta abatible** y la **ventana practicable** (versión 3) tienen «Línea del giro» en la sección Representación; en el diálogo se elige con una muestra de cada línea. Por defecto, continua (la planta sale igual que antes).
 - Los huecos sin carpintería aparecen con las ventanas también al crear tipos nuevos.
 - Versión 0.24.0. **Sin cambios en el formato `.archisim` ni en el IFC** (demo validada con IfcOpenShell; ida y vuelta idéntica salvo la fecha).
+- **Comprobado por Antonio** (19/10/2026, 02:23): «funciona todo perfecto».
 
 **Pendiente / limitaciones conocidas**
 - Los proyectos anteriores guardan su copia de la puerta abatible y la ventana practicable versión 2, sin «Línea del giro»: la tendrán al actualizar familias (bloque E) o en proyectos nuevos.
