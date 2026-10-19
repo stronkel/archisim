@@ -310,9 +310,29 @@ impl ArchiSimApp {
     ) -> bool {
         let drawing_bim =
             self.wall_tool.is_drawing() || self.slab_tool.is_drawing() || self.dim_tool.is_active();
-        let cad = self.tool == Tool::Cad;
         let mut used = false;
+        let mut escaped = false;
         for e in events {
+            let cad = self.tool == Tool::Cad;
+            // Esc acts where it was pressed among the letters typed in the
+            // same instant (Esc and then a new command).
+            if let egui::Event::Key {
+                key: Key::Escape,
+                pressed: true,
+                ..
+            } = e
+            {
+                if !self.cmdline.buffer.is_empty() {
+                    self.cmdline.buffer.clear();
+                    escaped = true;
+                    used = true;
+                } else if cad {
+                    self.cad_escape();
+                    escaped = true;
+                    used = true;
+                }
+                continue;
+            }
             let egui::Event::Text(t) = e else { continue };
             for c in t.chars() {
                 if c == ' ' {
@@ -337,7 +357,11 @@ impl ArchiSimApp {
                 }
             }
         }
+        let cad = self.tool == Tool::Cad;
         let has_text = !self.cmdline.buffer.is_empty();
+        if escaped {
+            return true;
+        }
         if escape {
             if has_text {
                 self.cmdline.buffer.clear();

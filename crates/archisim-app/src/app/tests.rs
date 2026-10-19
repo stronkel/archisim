@@ -2203,3 +2203,24 @@ fn schedules_on_sheets_and_bc3() {
     assert!(text.starts_with(b"~V|ArchiSim|FIEBDC-3/2016"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn escape_then_a_new_command_in_the_same_instant() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.keys_autocad = true;
+    command(&mut h, "l");
+    h.click_at(p(0.0, 0.0));
+    // Esc and «c» arrive together: the line ends and CIRCULO starts.
+    h.events.push(Event::Key {
+        key: Key::Escape,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.events.push(Event::Text("c".into()));
+    h.frame();
+    h.key(Key::Enter);
+    assert_eq!(h.app.cad.as_ref().map(|c| c.name()), Some("CIRCULO"));
+}
