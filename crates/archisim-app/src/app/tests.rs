@@ -2007,3 +2007,37 @@ fn sheets_views_and_drafting_on_paper() {
     assert_eq!(h.app.mode, ViewMode::Plan);
     assert!(h.app.tabs.iter().all(|t| t.kind != TabKind::Sheet(sheet)));
 }
+
+#[test]
+fn dxf_out_and_back_in_and_pdf_of_the_sheets() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.keys_autocad = true;
+    command(&mut h, "l");
+    h.click_at(p(0.0, 0.0));
+    command(&mut h, "@4000,0");
+    h.key(Key::Escape);
+    let dir = std::env::temp_dir().join(format!("archisim-dxf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dxf = dir.join("planta.dxf");
+    let options = h.app.plan_export_options(50.0);
+    h.app.ed.export_plan(&dxf, &options).unwrap();
+    // Into a sheet: the line comes back at paper size (4 m → 4000 mm of
+    // paper would be huge, but it is what the DXF says).
+    h.app.new_sheet();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    h.app.import_dxf_from(&dxf);
+    let on_sheet: Vec<_> = h
+        .model()
+        .drafts_in(archisim_core::ViewRef::Sheet(sheet))
+        .cloned()
+        .collect();
+    assert_eq!(on_sheet.len(), 1, "{:?}", h.app.message.as_ref().map(|m| &m.text));
+    assert_eq!(h.app.ed.undo_label(), Some("Importar DXF «planta.dxf»"));
+    // Every sheet in one PDF.
+    let pdf = dir.join("planos.pdf");
+    h.app.ed.export_sheets(&pdf, &[sheet]).unwrap();
+    assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
+    std::fs::remove_dir_all(&dir).ok();
+}

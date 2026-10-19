@@ -34,6 +34,9 @@ pub struct SheetOptions {
     /// Screen pixels per paper millimetre (on screen: details too small
     /// are left out).
     pub px_per_mm: Option<f64>,
+    /// Leaves out what is drawn on the sheet itself (the DXF writes it
+    /// natively).
+    pub without_drafts: bool,
 }
 
 /// The extent of what a level shows, model metres: walls, slabs,
@@ -403,11 +406,19 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
             draw_viewport(&mut s, model, v, options.px_per_mm);
         }
         if v.show_title {
+            s.push_str("<g id=\"view-titles\">\n");
             draw_view_title(&mut s, model, v);
+            s.push_str("</g>\n");
         }
     }
     if sheet.title_block {
+        s.push_str("<g id=\"title-block\">\n");
         draw_frame(&mut s, model, sheet);
+        s.push_str("</g>\n");
+    }
+    if options.without_drafts {
+        s.push_str("</svg>\n");
+        return s;
     }
     crate::drafting::draw_drafts(
         &mut s,

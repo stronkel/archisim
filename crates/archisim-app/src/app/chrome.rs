@@ -177,10 +177,40 @@ impl ArchiSimApp {
             if ui.button("Exportar IFC4…").clicked() {
                 self.export_ifc();
             }
-            for s in SCALES {
-                if ui.button(format!("Exportar planta 1:{s} (SVG)…")).clicked() {
-                    self.export_plan(s);
+            ui.menu_button("Exportar planta (PDF, DXF, SVG)", |ui| {
+                for s in SCALES {
+                    if ui.button(format!("A escala 1:{s}…")).clicked() {
+                        self.export_plan(s);
+                    }
                 }
+            });
+            let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
+            if ui
+                .add_enabled(
+                    on_sheet,
+                    egui::Button::new("Exportar este plano (PDF, DXF, SVG)…"),
+                )
+                .clicked()
+            {
+                self.export_sheets(false);
+            }
+            if ui
+                .add_enabled(
+                    !self.ed.model().sheets().is_empty(),
+                    egui::Button::new("Exportar todos los planos (PDF)…"),
+                )
+                .clicked()
+            {
+                self.export_sheets(true);
+            }
+            if ui
+                .button("Importar DXF en la vista…")
+                .on_hover_text(
+                    "Líneas, textos, sombreados y bloques del DXF, como dibujo 2D en sus capas",
+                )
+                .clicked()
+            {
+                self.import_dxf();
             }
             if ui
                 .add_enabled(

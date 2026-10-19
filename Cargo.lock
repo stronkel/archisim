@@ -212,6 +212,7 @@ version = "0.24.0"
 dependencies = [
  "archisim-core",
  "archisim-draft",
+ "archisim-export",
  "archisim-file",
  "archisim-geom",
  "archisim-ifc",
@@ -234,6 +235,7 @@ name = "archisim-cli"
 version = "0.24.0"
 dependencies = [
  "archisim-core",
+ "archisim-export",
  "archisim-file",
  "archisim-geom",
  "archisim-ifc",
@@ -255,6 +257,18 @@ name = "archisim-draft"
 version = "0.24.0"
 dependencies = [
  "archisim-core",
+]
+
+[[package]]
+name = "archisim-export"
+version = "0.24.0"
+dependencies = [
+ "archisim-core",
+ "archisim-draft",
+ "archisim-library",
+ "archisim-plan",
+ "miniz_oxide 0.8.9",
+ "resvg",
 ]
 
 [[package]]

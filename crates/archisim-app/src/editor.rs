@@ -211,17 +211,86 @@ impl Editor {
     /// Writes the plan of the active level as SVG at a scale (50 for
     /// 1:50): line weights are paper weights, and doors and windows use the
     /// plan symbol their family gives for that scale.
-    pub fn export_plan(&self, path: &Path, show_reference_lines: bool, scale: f64) -> EditResult {
-        let svg = render_plan(
-            self.model(),
-            self.level,
-            &PlanOptions {
-                show_reference_lines,
-                scale,
-                ..PlanOptions::default()
-            },
+    /// Writes the current level's plan with these options, as the file's
+    /// extension says: PDF (vector, at its scale), DXF (millimetres) or
+    /// SVG.
+    pub fn export_plan(&self, path: &Path, options: &PlanOptions) -> EditResult {
+        let model = self.model();
+        let bytes = match extension(path).as_str() {
+            "dxf" => archisim_export::dxf::plan_dxf(model, self.level, options)?.into_bytes(),
+            "pdf" => {
+                let svg = render_plan(model, self.level, options);
+                let title = model.level(self.level).map_or("", |l| l.name.as_str());
+                archisim_export::pdf::pdf(
+                    &[archisim_export::pdf::Page { svg: &svg, title }],
+                    &model.project_name,
+                )?
+            }
+            _ => render_plan(model, self.level, options).into_bytes(),
+        };
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir la planta: {e}"))
+    }
+
+    /// Writes sheets: several in one PDF, or one as PDF, DXF or SVG.
+    pub fn export_sheets(&self, path: &Path, sheets: &[archisim_core::SheetId]) -> EditResult {
+        let model = self.model();
+        let svg = |id| {
+            archisim_plan::sheet::render_sheet(
+                model,
+                id,
+                &archisim_plan::sheet::SheetOptions::default(),
+            )
+        };
+        let bytes = match (extension(path).as_str(), sheets) {
+            ("dxf", [id]) => archisim_export::dxf::sheet_dxf(model, *id)?.into_bytes(),
+            ("svg", [id]) => svg(*id).into_bytes(),
+            ("pdf", _) => {
+                let pages: Vec<(String, String)> = sheets
+                    .iter()
+                    .filter_map(|id| {
+                        let s = model.sheet(*id)?;
+                        Some((svg(*id), format!("{} {}", s.number, s.name)))
+                    })
+                    .collect();
+                let pages: Vec<archisim_export::pdf::Page> = pages
+                    .iter()
+                    .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+                    .collect();
+                archisim_export::pdf::pdf(&pages, &model.project_name)?
+            }
+            _ => return Err("los planos se exportan en PDF, DXF o SVG (uno a uno)".into()),
+        };
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el plano: {e}"))
+    }
+
+    /// Brings a DXF drawing into a view as 2D drafting, `k` metres per
+    /// paper millimetre of the view (texts keep their size on paper).
+    pub fn import_dxf(
+        &mut self,
+        path: &Path,
+        view: archisim_core::ViewRef,
+        k: f64,
+    ) -> EditResult<archisim_export::dxf_read::Report> {
+        let bytes = std::fs::read(path).map_err(|e| format!("no se pudo leer el DXF: {e}"))?;
+        let drawing = archisim_export::dxf_read::read(&bytes)?;
+        if drawing.items.is_empty() {
+            return Err("el DXF no tiene nada que ArchiSim sepa dibujar en 2D".into());
+        }
+        let label = format!(
+            "Importar DXF «{}»",
+            path.file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default()
         );
-        std::fs::write(path, svg).map_err(|e| format!("no se pudo escribir la planta: {e}"))
+        self.transact(&label, |m| {
+            archisim_export::dxf_read::add_to(
+                m,
+                view,
+                &drawing,
+                archisim_core::Vec2::new(0.0, 0.0),
+                k,
+            )
+        })
     }
 
     // ---- History ---------------------------------------------------------
@@ -906,6 +975,13 @@ impl crate::geo::Geo for Editor {
     }
 }
 
+/// A file's extension in lower case.
+fn extension(path: &Path) -> String {
+    path.extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1018,7 +1094,14 @@ mod tests {
         let reopened = Editor::open(&path).unwrap();
         assert_eq!(reopened.model(), ed.model());
         ed.export_ifc(&dir.join("casa.ifc")).unwrap();
-        ed.export_plan(&dir.join("casa.svg"), false, 50.0).unwrap();
+        for name in ["casa.svg", "casa.pdf", "casa.dxf"] {
+            ed.export_plan(&dir.join(name), &PlanOptions::default())
+                .unwrap();
+            assert!(
+                std::fs::metadata(dir.join(name)).unwrap().len() > 1000,
+                "{name}"
+            );
+        }
         let ifc = std::fs::read_to_string(dir.join("casa.ifc")).unwrap();
         assert!(ifc.contains("IFCWALL("));
         std::fs::write(dir.join("roto.archisim"), "{").unwrap();

@@ -214,6 +214,7 @@ impl ArchiSimApp {
                 &SheetOptions {
                     region: Some((lo, hi)),
                     px_per_mm: Some(px_per_m * MM),
+                    ..Default::default()
                 },
             );
             let image = crate::plan_image::rasterize_svg(&svg, size);

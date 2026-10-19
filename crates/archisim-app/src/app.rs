@@ -645,6 +645,19 @@ impl ArchiSimApp {
         }
     }
 
+    /// The plan of the current level as drawn now (cut plane, what the view
+    /// shows), at a scale.
+    fn plan_export_options(&self, scale: f64) -> archisim_plan::PlanOptions {
+        archisim_plan::PlanOptions {
+            show_reference_lines: self.show_reference_lines,
+            scale,
+            cut_plane: self.cut_plane,
+            style: self.view_style.clone(),
+            ..archisim_plan::PlanOptions::default()
+        }
+    }
+
+    /// Exports the current level's plan as PDF, DXF or SVG.
     fn export_plan(&mut self, scale: f64) {
         let level = self
             .ed
@@ -653,10 +666,12 @@ impl ArchiSimApp {
             .map(|l| l.name.clone())
             .unwrap_or_default();
         let mut d = rfd::FileDialog::new()
-            .set_title(format!("Exportar planta 1:{scale} (SVG)"))
+            .set_title(format!("Exportar planta 1:{scale}"))
+            .add_filter("PDF (para imprimir)", &["pdf"])
+            .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
             .add_filter("SVG", &["svg"])
             .set_file_name(format!(
-                "{} - {} 1-{scale}.svg",
+                "{} - {} 1-{scale}.pdf",
                 self.file_name_stem(),
                 level
             ));
@@ -664,10 +679,81 @@ impl ArchiSimApp {
             d = d.set_directory(dir);
         }
         if let Some(path) = d.save_file() {
-            match self.ed.export_plan(&path, self.show_reference_lines, scale) {
+            let options = self.plan_export_options(scale);
+            match self.ed.export_plan(&path, &options) {
                 Ok(()) => self.say(format!("Planta exportada en {}.", path.display())),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }
+        }
+    }
+
+    /// Exports sheets: the one shown (PDF, DXF or SVG) or all (one PDF).
+    fn export_sheets(&mut self, all: bool) {
+        let model = self.ed.model();
+        let ids: Vec<archisim_core::SheetId> = match (all, self.mode) {
+            (false, ViewMode::Sheet(s)) => vec![s],
+            _ => model.sheets().iter().map(|s| s.id).collect(),
+        };
+        if ids.is_empty() {
+            self.complain("No hay planos: crea uno en el navegador (Planos › Nuevo plano).");
+            return;
+        }
+        let name = match (all, model.sheet(ids[0])) {
+            (false, Some(s)) => format!("{} - {} {}.pdf", self.file_name_stem(), s.number, s.name),
+            _ => format!("{} - planos.pdf", self.file_name_stem()),
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title(if all {
+                "Exportar todos los planos"
+            } else {
+                "Exportar plano"
+            })
+            .add_filter("PDF (para imprimir)", &["pdf"]);
+        if !all {
+            d = d
+                .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
+                .add_filter("SVG", &["svg"]);
+        }
+        d = d.set_file_name(name);
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.save_file() {
+            match self.ed.export_sheets(&path, &ids) {
+                Ok(()) => self.say(format!(
+                    "{} exportado(s) en {}.",
+                    if ids.len() == 1 { "Plano" } else { "Planos" },
+                    path.display()
+                )),
+                Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+            }
+        }
+    }
+
+    /// Brings a DXF into the view shown (plan or sheet) as 2D drafting.
+    fn import_dxf(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Importar DXF en la vista")
+            .add_filter("DXF", &["dxf"]);
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.pick_file() {
+            self.import_dxf_from(&path);
+        }
+    }
+
+    pub(crate) fn import_dxf_from(&mut self, path: &Path) {
+        if self.mode == ViewMode::ThreeD {
+            self.show_plan();
+        }
+        let (view, k) = (self.active_view(), self.active_k());
+        match self.ed.import_dxf(path, view, k) {
+            Ok(r) => {
+                self.say(r.describe());
+                self.fit_requested = true;
+            }
+            Err(e) => self.complain(format!("No se pudo importar: {e}.")),
         }
     }
 

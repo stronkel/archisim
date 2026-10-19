@@ -261,6 +261,15 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         };
         std::fs::write(&svg_100, render_plan(model, level, &options))?;
         println!("  Planta «{name}» 1:100: {}", svg_100.display());
+        let dxf_path = dir.join(file.replace(".svg", ".dxf"));
+        std::fs::write(
+            &dxf_path,
+            archisim_export::dxf::plan_dxf(model, level, &PlanOptions::default())?,
+        )?;
+        println!(
+            "  Planta «{name}» en DXF (mm, 1:50): {}",
+            dxf_path.display()
+        );
     }
     for sheet in model.sheets() {
         let path = dir.join(format!("{stem}-plano-{}.svg", slug(&sheet.number)));
@@ -277,8 +286,39 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             sheet.size_name(),
             path.display()
         );
+        let dxf = dir.join(format!("{stem}-plano-{}.dxf", slug(&sheet.number)));
+        std::fs::write(&dxf, archisim_export::dxf::sheet_dxf(model, sheet.id)?)?;
+        println!(
+            "  Plano {} en DXF (mm de papel): {}",
+            sheet.number,
+            dxf.display()
+        );
+    }
+    if !model.sheets().is_empty() {
+        let pdf = dir.join(format!("{stem}-planos.pdf"));
+        std::fs::write(&pdf, sheets_pdf(model)?)?;
+        println!("  Planos en PDF: {}", pdf.display());
     }
     Ok(())
+}
+
+/// Every sheet of the project, a page each, in order.
+fn sheets_pdf(model: &Model) -> Result<Vec<u8>, String> {
+    let svgs: Vec<(String, String)> = model
+        .sheets()
+        .iter()
+        .map(|s| {
+            (
+                archisim_plan::sheet::render_sheet(model, s.id, &Default::default()),
+                format!("{} {}", s.number, s.name),
+            )
+        })
+        .collect();
+    let pages: Vec<archisim_export::pdf::Page> = svgs
+        .iter()
+        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
+        .collect();
+    archisim_export::pdf::pdf(&pages, &model.project_name)
 }
 
 /// A file-name friendly version of a level name: "Planta 1ª" → "planta-1a".
