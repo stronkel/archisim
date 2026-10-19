@@ -162,6 +162,7 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
         ModelError::UnknownRoom(_) => "el local ya no existe".into(),
         ModelError::UnknownTag(_) => "la etiqueta ya no existe".into(),
+        ModelError::UnknownTable(_) => "la tabla ya no está en el plano".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),
         ModelError::DuplicateName(name) => format!("ya hay otro elemento llamado «{name}»"),
     }

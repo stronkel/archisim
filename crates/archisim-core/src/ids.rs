@@ -88,6 +88,10 @@ typed_id!(
 );
 
 typed_id!(
+    /// Identifies a [`crate::SheetTable`] (a schedule placed on a sheet).
+    TableId
+);
+typed_id!(
     /// Identifies a [`crate::Room`] (a room, "local"; IfcSpace).
     RoomId
 );

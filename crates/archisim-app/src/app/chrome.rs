@@ -204,6 +204,13 @@ impl ArchiSimApp {
                 self.export_sheets(true);
             }
             if ui
+                .button("Exportar mediciones (BC3)…")
+                .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para Presto, Arquímedes y otros")
+                .clicked()
+            {
+                self.export_bc3();
+            }
+            if ui
                 .button("Importar DXF en la vista…")
                 .on_hover_text(
                     "Líneas, textos, sombreados y bloques del DXF, como dibujo 2D en sus capas",

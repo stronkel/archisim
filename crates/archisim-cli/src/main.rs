@@ -294,6 +294,23 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             dxf.display()
         );
     }
+    // Schedules as spreadsheets, and the measurements as a budget.
+    for kind in archisim_core::ScheduleKind::ALL {
+        let t = archisim_plan::schedules::table(model, kind, None);
+        if t.rows.is_empty() {
+            continue;
+        }
+        let path = dir.join(format!("{stem}-tabla-{}.csv", kind.code()));
+        std::fs::write(&path, t.csv())?;
+        println!("  Tabla «{}»: {}", kind.label(), path.display());
+    }
+    let bc3 = dir.join(format!("{stem}.bc3"));
+    let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
+    std::fs::write(
+        &bc3,
+        archisim_export::bc3::bc3(model, &date, env!("CARGO_PKG_VERSION")),
+    )?;
+    println!("  Mediciones en BC3 (FIEBDC-3): {}", bc3.display());
     if !model.sheets().is_empty() {
         let pdf = dir.join(format!("{stem}-planos.pdf"));
         std::fs::write(&pdf, sheets_pdf(model)?)?;

@@ -754,6 +754,33 @@ impl Editor {
         self.transact("Cambiar etiqueta", |m| m.set_tag_leader(id, leader))
     }
 
+    pub fn add_table(
+        &mut self,
+        sheet: archisim_core::SheetId,
+        kind: archisim_core::ScheduleKind,
+        level: Option<LevelId>,
+        at: Point2,
+    ) -> EditResult<archisim_core::TableId> {
+        self.transact("Colocar tabla en el plano", |m| {
+            m.add_table(sheet, kind, level, at)
+        })
+    }
+
+    pub fn set_table(&mut self, t: archisim_core::SheetTable, label: &str) -> EditResult {
+        self.transact(label, |m| m.set_table(t))
+    }
+
+    pub fn remove_table(&mut self, id: archisim_core::TableId) -> EditResult {
+        self.transact("Quitar tabla del plano", |m| m.remove_table(id).map(|_| ()))
+    }
+
+    /// The measurements as a BC3 budget.
+    pub fn export_bc3(&self, path: &Path) -> EditResult {
+        let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
+        let bytes = archisim_export::bc3::bc3(self.model(), &date, env!("CARGO_PKG_VERSION"));
+        std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el BC3: {e}"))
+    }
+
     /// The project's data for the title blocks.
     pub fn set_info(&mut self, info: archisim_core::ProjectInfo) -> EditResult {
         self.transact("Datos del proyecto", |m| {

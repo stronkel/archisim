@@ -279,15 +279,30 @@ pub fn build() -> Result<Document, ModelError> {
     doc.transact("Locales y etiquetas", |m| {
         use archisim_core::{NewRoom, TagTarget};
         use archisim_geom::{opening_geometry, room_outline, Contour};
-        for (number, name, at) in [
-            ("0.01", "Estar", Point2::new(2.6, 7.6)),
-            ("0.02", "Cocina", Point2::new(3.0, 2.6)),
-            ("0.03", "Dormitorio", Point2::new(9.0, 7.4)),
-            ("0.04", "Estudio", Point2::new(9.6, 3.6)),
+        for (number, name, at, floor) in [
+            (
+                "0.01",
+                "Estar",
+                Point2::new(2.6, 7.6),
+                "Tarima flotante de roble",
+            ),
+            ("0.02", "Cocina", Point2::new(3.0, 2.6), "Gres porcelánico"),
+            (
+                "0.03",
+                "Dormitorio",
+                Point2::new(9.0, 7.4),
+                "Tarima flotante de roble",
+            ),
+            (
+                "0.04",
+                "Estudio",
+                Point2::new(9.6, 3.6),
+                "Tarima flotante de roble",
+            ),
         ] {
             let outline = room_outline(m, pb, at, Contour::InteriorFace)
                 .map_err(|_| ModelError::InvalidOutline)?;
-            m.add_room(NewRoom {
+            let id = m.add_room(NewRoom {
                 level: pb,
                 number: number.into(),
                 name: name.into(),
@@ -296,6 +311,14 @@ pub fn build() -> Result<Document, ModelError> {
                 label: at,
                 bounded: true,
             })?;
+            if let Some(mut r) = m.room(id).cloned() {
+                r.finishes = archisim_core::Finishes {
+                    floor: floor.into(),
+                    walls: "Pintura plástica lisa".into(),
+                    ceiling: "Falso techo de placa de yeso".into(),
+                };
+                m.set_room(r)?;
+            }
         }
         let ops: Vec<_> = m
             .openings()
@@ -340,6 +363,13 @@ pub fn build() -> Result<Document, ModelError> {
             crop: None,
             centre: Point2::new(0.21, 0.24),
         })?;
+        // The rooms' areas beside the plan.
+        m.add_table(
+            sheet,
+            archisim_core::ScheduleKind::Rooms,
+            Some(pb),
+            Point2::new(0.43, 0.4),
+        )?;
         Ok(())
     })?;
 

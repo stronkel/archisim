@@ -1961,7 +1961,7 @@ fn sheets_views_and_drafting_on_paper() {
     h.drag(p(0.3, 0.3), p(0.35, 0.32));
     let c = h.model().viewport(v).unwrap().centre;
     assert!(c.distance(p(0.35, 0.32)) < 0.002, "{c:?}");
-    assert_eq!(h.app.sheet_sel, Some(v));
+    assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::View(v)));
     // A line drawn on the paper belongs to the sheet, in paper metres.
     command(&mut h, "l");
     assert_eq!(h.app.mode, ViewMode::Sheet(sheet));
@@ -1985,7 +1985,7 @@ fn sheets_views_and_drafting_on_paper() {
     // Supr on a selected view takes it off the sheet; double click on it
     // opens its plan.
     h.click_at(p(0.35, 0.32));
-    assert_eq!(h.app.sheet_sel, Some(v));
+    assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::View(v)));
     h.move_to(p(0.35, 0.32));
     h.button(PointerButton::Primary, true);
     h.button(PointerButton::Primary, false);
@@ -2151,4 +2151,43 @@ fn rooms_follow_walls_and_tags_follow_doors() {
     assert!(ifc.contains("IFCSPACE("), "no space");
     assert!(ifc.contains("'Salón'") || ifc.contains("Sal\\X2\\00F3\\X0\\n"));
     assert!(ifc.contains("'Qto_SpaceBaseQuantities'"));
+}
+
+#[test]
+fn schedules_on_sheets_and_bc3() {
+    let (m, lvl, _) = crate::pick::tests::room();
+    let mut h = Harness::new(Editor::with_model(m, None));
+    h.app.ed.level = lvl;
+    h.frame();
+    h.app.new_sheet();
+    h.frame();
+    let sheet = h.model().sheets()[0].id;
+    // From the schedule window, onto the sheet shown.
+    h.app.schedule_open = Some((archisim_core::ScheduleKind::Walls, None));
+    h.frame();
+    let t = h
+        .app
+        .ed
+        .add_table(sheet, archisim_core::ScheduleKind::Walls, None, p(0.1, 0.5))
+        .unwrap();
+    h.frame();
+    let table =
+        archisim_plan::schedules::table(h.model(), archisim_core::ScheduleKind::Walls, None);
+    assert_eq!(table.rows.len(), 1);
+    // Dragged by its middle.
+    let (lo, hi) = super::sheet_ui::table_rect(h.model(), h.model().table(t).unwrap());
+    let mid = (lo + hi) * 0.5;
+    h.drag(mid, mid + p(0.05, -0.02));
+    let at = h.model().table(t).unwrap().at;
+    assert!(at.distance(p(0.15, 0.48)) < 0.002, "{at:?}");
+    assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::Table(t)));
+    h.key(Key::Delete);
+    assert!(h.model().table(t).is_none());
+    // The budget.
+    let dir = std::env::temp_dir().join(format!("archisim-bc3-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    h.app.ed.export_bc3(&dir.join("m.bc3")).unwrap();
+    let text = std::fs::read(dir.join("m.bc3")).unwrap();
+    assert!(text.starts_with(b"~V|ArchiSim|FIEBDC-3/2016"));
+    std::fs::remove_dir_all(&dir).ok();
 }

@@ -43,6 +43,7 @@ impl ArchiSimApp {
             .show(ui, |ui| {
                 self.nav_views(ui);
                 self.nav_sheets(ui);
+                nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
                 self.nav_model(ui);
                 ui.add_space(6.0);
             });

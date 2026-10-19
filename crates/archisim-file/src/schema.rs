@@ -59,6 +59,9 @@ pub(crate) struct ProjectFile {
     pub rooms: Vec<crate::rooms::Room>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<crate::rooms::Tag>,
+    /// Schedules placed on sheets (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<crate::drafting::Table>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -607,6 +610,7 @@ impl ProjectFile {
             viewports: crate::drafting::viewports_out(&p.viewports),
             rooms: crate::rooms::rooms_out(&p.rooms),
             tags: crate::rooms::tags_out(&p.tags),
+            tables: crate::drafting::tables_out(&p.tables),
         }
     }
 
@@ -649,6 +653,7 @@ impl ProjectFile {
             viewports: crate::drafting::viewports_in(self.viewports)?,
             rooms: crate::rooms::rooms_in(self.rooms)?,
             tags: crate::rooms::tags_in(self.tags),
+            tables: crate::drafting::tables_in(self.tables)?,
         };
 
         for l in self.levels {

@@ -787,3 +787,43 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
         })
         .collect()
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Table {
+    pub id: u64,
+    pub sheet: u64,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<u64>,
+    pub at: Xy,
+}
+
+pub(crate) fn tables_out(t: &[core::SheetTable]) -> Vec<Table> {
+    t.iter()
+        .map(|t| Table {
+            id: t.id.0,
+            sheet: t.sheet.0,
+            kind: t.kind.code().into(),
+            level: t.level.map(|l| l.0),
+            at: xy(t.at),
+        })
+        .collect()
+}
+
+pub(crate) fn tables_in(t: Vec<Table>) -> Result<Vec<core::SheetTable>, FileError> {
+    t.into_iter()
+        .map(|t| {
+            Ok(core::SheetTable {
+                id: core::TableId(t.id),
+                sheet: core::SheetId(t.sheet),
+                kind: core::ScheduleKind::from_code(&t.kind).ok_or_else(|| FileError::Value {
+                    element: format!("schedule {}", t.id),
+                    message: format!("unknown schedule «{}»", t.kind),
+                })?,
+                level: t.level.map(core::LevelId),
+                at: pt(t.at),
+            })
+        })
+        .collect()
+}

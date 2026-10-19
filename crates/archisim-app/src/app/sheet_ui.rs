@@ -2,7 +2,10 @@
 //! can be selected, moved and opened; 2D drafting works on it as in a
 //! plan), its properties and those of the selected view, and new sheets.
 
-use archisim_core::{NewSheet, NewViewport, Sheet, SheetId, ViewRef, Viewport, ViewportId};
+use archisim_core::{
+    NewSheet, NewViewport, ScheduleKind, Sheet, SheetId, SheetTable, TableId, ViewRef, Viewport,
+    ViewportId,
+};
 use archisim_plan::sheet::{render_sheet, viewport_rect, SheetOptions};
 use eframe::egui::{self, Ui};
 
@@ -20,12 +23,29 @@ pub struct SheetKey {
     size: [usize; 2],
 }
 
-/// A view being dragged on its sheet.
+/// Something placed on a sheet: a view or a schedule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Placed {
+    View(ViewportId),
+    Table(TableId),
+}
+
+/// A view or schedule being dragged on its sheet.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ViewportDrag {
-    pub viewport: ViewportId,
+    pub item: Placed,
     pub from: Point2,
-    pub centre: Point2,
+    /// The view's centre, or the schedule's top-left corner.
+    pub origin: Point2,
+}
+
+/// The paper a schedule takes: lower-left and upper-right, metres.
+pub fn table_rect(model: &archisim_core::Model, t: &SheetTable) -> (Point2, Point2) {
+    let (w, h) = archisim_plan::schedules::table(model, t.kind, t.level).size();
+    (
+        Point2::new(t.at.x, t.at.y - h * MM),
+        Point2::new(t.at.x + w * MM, t.at.y),
+    )
 }
 
 /// Paper metres per millimetre.
@@ -134,14 +154,22 @@ impl ArchiSimApp {
             Color32::from_black_alpha(60),
         );
         self.draw_sheet_image(&ctx, &painter, rect, id);
-        // Views: their outline when hovered or selected.
+        // Views and schedules: their outline when hovered or selected.
         let model = self.ed.model();
-        for v in model.viewports_on(id) {
-            let (lo, hi) = viewport_rect(model, v);
+        let placed: Vec<(Placed, (Point2, Point2))> = model
+            .viewports_on(id)
+            .map(|v| (Placed::View(v.id), viewport_rect(model, v)))
+            .chain(
+                model
+                    .tables_on(id)
+                    .map(|t| (Placed::Table(t.id), table_rect(model, t))),
+            )
+            .collect();
+        for (item, (lo, hi)) in placed {
             let r =
                 Rect::from_two_pos(self.view.to_screen(rect, lo), self.view.to_screen(rect, hi));
-            let selected = self.sheet_sel == Some(v.id);
-            let hovered = self.sheet_hover == Some(v.id);
+            let selected = self.sheet_sel == Some(item);
+            let hovered = self.sheet_hover == Some(item);
             if selected || hovered {
                 painter.rect_stroke(
                     r,
@@ -239,13 +267,19 @@ impl ArchiSimApp {
         }
     }
 
-    /// The view of the sheet under a point.
-    fn viewport_at(&self, id: SheetId, p: Point2) -> Option<ViewportId> {
+    /// The schedule or view of the sheet under a point.
+    fn viewport_at(&self, id: SheetId, p: Point2) -> Option<Placed> {
         let model = self.ed.model();
-        model.viewports_on(id).find_map(|v| {
-            let (lo, hi) = viewport_rect(model, v);
-            (p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y).then_some(v.id)
-        })
+        let inside =
+            |(lo, hi): (Point2, Point2)| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
+        model
+            .tables_on(id)
+            .find_map(|t| inside(table_rect(model, t)).then_some(Placed::Table(t.id)))
+            .or_else(|| {
+                model
+                    .viewports_on(id)
+                    .find_map(|v| inside(viewport_rect(model, v)).then_some(Placed::View(v.id)))
+            })
     }
 
     fn sheet_cursor(
@@ -275,9 +309,6 @@ impl ArchiSimApp {
         } else {
             self.viewport_at(id, raw)
         };
-        if let Some(d) = &self.sheet_drag {
-            let _ = d;
-        }
     }
 
     fn sheet_keys(&mut self, ctx: &egui::Context) {
@@ -308,9 +339,17 @@ impl ArchiSimApp {
             self.window_start = None;
         }
         if delete || backspace {
-            if let Some(v) = self.sheet_sel.take() {
-                let r = self.ed.remove_viewport(v);
-                self.report(r, "Vista quitada del plano (la planta sigue en el modelo).");
+            if let Some(item) = self.sheet_sel.take() {
+                match item {
+                    Placed::View(v) => {
+                        let r = self.ed.remove_viewport(v);
+                        self.report(r, "Vista quitada del plano (la planta sigue en el modelo).");
+                    }
+                    Placed::Table(t) => {
+                        let r = self.ed.remove_table(t);
+                        self.report(r, "Tabla quitada del plano.");
+                    }
+                }
             } else if !self.ed.selection.is_empty() {
                 self.delete();
             }
@@ -331,10 +370,11 @@ impl ArchiSimApp {
         let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
         if response.double_clicked_by(PointerButton::Primary) {
             // Into the plan of the view.
-            if let Some(v) = self
-                .sheet_sel
-                .and_then(|v| self.ed.model().viewport(v).cloned())
-            {
+            let view = match self.sheet_sel {
+                Some(Placed::View(v)) => self.ed.model().viewport(v).cloned(),
+                _ => None,
+            };
+            if let Some(v) = view {
                 self.open_view(TabKind::Plan(v.level));
                 return;
             }
@@ -371,13 +411,18 @@ impl ArchiSimApp {
                 let on_draft =
                     crate::pick::pick_on_sheet(self.ed.model(), id, o, self.view.to_metres(REACH));
                 match (on_draft, on_view) {
-                    (None, Some(v)) => {
-                        let centre = self.ed.model().viewport(v).map(|v| v.centre).unwrap_or(o);
-                        self.sheet_sel = Some(v);
+                    (None, Some(item)) => {
+                        let model = self.ed.model();
+                        let origin = match item {
+                            Placed::View(v) => model.viewport(v).map(|v| v.centre),
+                            Placed::Table(t) => model.table(t).map(|t| t.at),
+                        }
+                        .unwrap_or(o);
+                        self.sheet_sel = Some(item);
                         self.sheet_drag = Some(ViewportDrag {
-                            viewport: v,
+                            item,
                             from: o,
-                            centre,
+                            origin,
                         });
                     }
                     (Some(e), _) if self.ed.selection.contains(&e) => {
@@ -394,10 +439,22 @@ impl ArchiSimApp {
         }
         if response.drag_stopped() {
             if let (Some(d), Some(c)) = (self.sheet_drag.take(), self.cursor) {
-                if let Some(mut v) = self.ed.model().viewport(d.viewport).cloned() {
-                    v.centre = d.centre + (c.point - d.from);
-                    let r = self.ed.set_viewport(v, "Mover vista del plano");
-                    self.report(r, "Vista movida.");
+                let to = d.origin + (c.point - d.from);
+                match d.item {
+                    Placed::View(v) => {
+                        if let Some(mut v) = self.ed.model().viewport(v).cloned() {
+                            v.centre = to;
+                            let r = self.ed.set_viewport(v, "Mover vista del plano");
+                            self.report(r, "Vista movida.");
+                        }
+                    }
+                    Placed::Table(t) => {
+                        if let Some(mut t) = self.ed.model().table(t).cloned() {
+                            t.at = to;
+                            let r = self.ed.set_table(t, "Mover tabla del plano");
+                            self.report(r, "Tabla movida.");
+                        }
+                    }
                 }
             }
             if let (Some(d), Some(c)) = (self.drag.take(), self.cursor) {
@@ -427,10 +484,21 @@ impl ArchiSimApp {
         // While dragging a view, it follows the cursor (drawn as its
         // outline).
         if let (Some(d), Some(c)) = (self.sheet_drag, self.cursor) {
-            if let Some(v) = self.ed.model().viewport(d.viewport) {
-                let mut moved = v.clone();
-                moved.centre = d.centre + (c.point - d.from);
-                let (lo, hi) = viewport_rect(self.ed.model(), &moved);
+            let model = self.ed.model();
+            let to = d.origin + (c.point - d.from);
+            let moved = match d.item {
+                Placed::View(v) => model.viewport(v).map(|v| {
+                    let mut m = v.clone();
+                    m.centre = to;
+                    viewport_rect(model, &m)
+                }),
+                Placed::Table(t) => model.table(t).map(|t| {
+                    let mut m = t.clone();
+                    m.at = to;
+                    table_rect(model, &m)
+                }),
+            };
+            if let Some((lo, hi)) = moved {
                 let r = Rect::from_two_pos(
                     self.view.to_screen(rect, lo),
                     self.view.to_screen(rect, hi),
@@ -469,12 +537,20 @@ impl ArchiSimApp {
 
     /// Properties of the sheet shown, or of its selected view.
     pub(super) fn sheet_properties(&mut self, ui: &mut Ui, id: SheetId) {
-        if let Some(v) = self
-            .sheet_sel
-            .and_then(|v| self.ed.model().viewport(v).cloned())
-        {
-            self.viewport_properties(ui, v);
-            return;
+        match self.sheet_sel {
+            Some(Placed::View(v)) => {
+                if let Some(v) = self.ed.model().viewport(v).cloned() {
+                    self.viewport_properties(ui, v);
+                    return;
+                }
+            }
+            Some(Placed::Table(t)) => {
+                if let Some(t) = self.ed.model().table(t).cloned() {
+                    self.table_properties(ui, t);
+                    return;
+                }
+            }
+            None => {}
         }
         let Some(sheet) = self.ed.model().sheet(id).cloned() else {
             return;
@@ -607,7 +683,7 @@ impl ArchiSimApp {
             });
             match r {
                 Ok(v) => {
-                    self.sheet_sel = Some(v);
+                    self.sheet_sel = Some(Placed::View(v));
                     self.say("Vista colocada: arrástrala a su sitio.");
                 }
                 Err(e) => self.complain(format!("No se puede: {e}.")),
@@ -633,13 +709,77 @@ impl ArchiSimApp {
             }
             for (v, label) in views {
                 if ui
-                    .selectable_label(self.sheet_sel == Some(v), label)
+                    .selectable_label(self.sheet_sel == Some(Placed::View(v)), label)
                     .clicked()
                 {
-                    self.sheet_sel = Some(v);
+                    self.sheet_sel = Some(Placed::View(v));
                 }
             }
         });
+        // Schedules.
+        let levels: Vec<(Option<LevelId>, String)> =
+            std::iter::once((None, "Todo el edificio".to_string()))
+                .chain(
+                    self.ed
+                        .model()
+                        .levels()
+                        .iter()
+                        .map(|l| (Some(l.id), l.name.clone())),
+                )
+                .collect();
+        let mut place = None;
+        group(ui, "sheet-tables", "Tablas", |ui| {
+            let mut kind = self.table_new_kind;
+            row(ui, "Tabla", "", |ui, w| {
+                let opts: Vec<(ScheduleKind, &str)> =
+                    ScheduleKind::ALL.iter().map(|k| (*k, k.label())).collect();
+                kind = choice(ui, "sheet-table-kind", w, kind, &opts);
+            });
+            self.table_new_kind = kind;
+            let mut level = self.table_new_level;
+            row(ui, "De", "", |ui, w| {
+                let opts: Vec<(Option<LevelId>, &str)> =
+                    levels.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                level = choice(ui, "sheet-table-level", w, level, &opts);
+            });
+            self.table_new_level = level;
+            if ui.button("Colocar la tabla").clicked() {
+                place = Some((kind, level));
+            }
+            let model = self.ed.model();
+            let placed: Vec<(TableId, String)> = model
+                .tables_on(id)
+                .map(|t| {
+                    let of = t
+                        .level
+                        .and_then(|l| model.level(l))
+                        .map_or("todo el edificio".to_string(), |l| l.name.clone());
+                    (t.id, format!("{} · {of}", t.kind.label()))
+                })
+                .collect();
+            for (t, label) in placed {
+                if ui
+                    .selectable_label(self.sheet_sel == Some(Placed::Table(t)), label)
+                    .clicked()
+                {
+                    self.sheet_sel = Some(Placed::Table(t));
+                }
+            }
+        });
+        if let Some((kind, level)) = place {
+            // Top right, under the frame.
+            let at = Point2::new(
+                (sheet.width - archisim_plan::sheet::FRAME - 10.0) * MM - 0.15,
+                (sheet.height - archisim_plan::sheet::FRAME - 10.0) * MM,
+            );
+            match self.ed.add_table(id, kind, level, at) {
+                Ok(t) => {
+                    self.sheet_sel = Some(Placed::Table(t));
+                    self.say("Tabla colocada: arrástrala a su sitio.");
+                }
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
+        }
         self.project_info_group(ui);
         ui.add_space(4.0);
         props::note(
@@ -768,6 +908,44 @@ impl ArchiSimApp {
             self.sheet_sel = None;
             self.report(r, "Vista quitada del plano.");
         }
+    }
+
+    fn table_properties(&mut self, ui: &mut Ui, t: SheetTable) {
+        props::title(ui, &format!("Tabla · {}", t.kind.label()));
+        let model = self.ed.model();
+        let table = archisim_plan::schedules::table(model, t.kind, t.level);
+        let levels: Vec<(Option<LevelId>, String)> =
+            std::iter::once((None, "Todo el edificio".to_string()))
+                .chain(model.levels().iter().map(|l| (Some(l.id), l.name.clone())))
+                .collect();
+        let mut new = t.clone();
+        group(ui, "table", "Tabla", |ui| {
+            row(ui, "Tabla", "", |ui, w| {
+                let opts: Vec<(ScheduleKind, &str)> =
+                    ScheduleKind::ALL.iter().map(|k| (*k, k.label())).collect();
+                new.kind = choice(ui, "table-kind", w, t.kind, &opts);
+            });
+            row(ui, "De", "", |ui, w| {
+                let opts: Vec<(Option<LevelId>, &str)> =
+                    levels.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                new.level = choice(ui, "table-level", w, t.level, &opts);
+            });
+            text_row(ui, "Filas", "", &table.rows.len().to_string());
+        });
+        if new != t {
+            let r = self.ed.set_table(new, "Cambiar tabla del plano");
+            self.report(r, "Tabla cambiada.");
+        }
+        ui.add_space(4.0);
+        if ui.button("Ver y exportar (CSV)…").clicked() {
+            self.schedule_open = Some((t.kind, t.level));
+        }
+        if ui.button("Quitar del plano").clicked() {
+            let r = self.ed.remove_table(t.id);
+            self.sheet_sel = None;
+            self.report(r, "Tabla quitada del plano.");
+        }
+        props::note(ui, "La tabla se rehace sola cuando cambia el modelo.");
     }
 
     /// The project's data for the title block.

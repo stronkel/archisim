@@ -235,14 +235,19 @@ pub struct ArchiSimApp {
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
     /// The view selected on the sheet shown.
-    pub sheet_sel: Option<archisim_core::ViewportId>,
+    pub sheet_sel: Option<sheet_ui::Placed>,
     /// The view of the sheet under the cursor.
-    sheet_hover: Option<archisim_core::ViewportId>,
+    sheet_hover: Option<sheet_ui::Placed>,
     /// A view being moved on its sheet.
     sheet_drag: Option<sheet_ui::ViewportDrag>,
     /// Level and scale offered for the next view placed on a sheet.
     sheet_new_level: Option<LevelId>,
     sheet_new_scale: f64,
+    /// Schedule and level offered for the next schedule placed on a sheet.
+    table_new_kind: archisim_core::ScheduleKind,
+    table_new_level: Option<LevelId>,
+    /// The schedule window, with its level filter.
+    pub schedule_open: Option<(archisim_core::ScheduleKind, Option<LevelId>)>,
     pub show_grid: bool,
     /// The level below is drawn in grey under the active plan (and snaps).
     pub show_underlay: bool,
@@ -339,6 +344,9 @@ impl ArchiSimApp {
             sheet_drag: None,
             sheet_new_level: None,
             sheet_new_scale: 50.0,
+            table_new_kind: archisim_core::ScheduleKind::Rooms,
+            table_new_level: None,
+            schedule_open: None,
             show_grid: true,
             show_underlay: true,
             other_walls: Vec::new(),
@@ -1063,6 +1071,7 @@ impl ArchiSimApp {
         self.text_entry(&ctx);
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
+        self.schedule_window(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -1514,6 +1523,7 @@ mod plan_ui;
 mod properties;
 mod props;
 mod room_ui;
+mod schedule_ui;
 mod sheet_ui;
 mod tabs;
 mod temp_ui;

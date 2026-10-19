@@ -411,6 +411,15 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
             s.push_str("</g>\n");
         }
     }
+    let tables: Vec<&archisim_core::SheetTable> = model.tables_on(id).collect();
+    if !tables.is_empty() {
+        s.push_str("<g id=\"tables\">\n");
+        for t in tables {
+            let table = crate::schedules::table(model, t.kind, t.level);
+            crate::schedules::draw_table(&mut s, &table, t.at);
+        }
+        s.push_str("</g>\n");
+    }
     if sheet.title_block {
         s.push_str("<g id=\"title-block\">\n");
         draw_frame(&mut s, model, sheet);

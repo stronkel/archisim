@@ -693,6 +693,7 @@ pub enum ModelError {
     UnknownViewport(ViewportId),
     UnknownRoom(RoomId),
     UnknownTag(TagId),
+    UnknownTable(TableId),
     /// A drafting element or annotation is not well formed.
     InvalidShape(&'static str),
     /// Another element of the same list already has that name.
@@ -781,6 +782,7 @@ impl fmt::Display for ModelError {
             ModelError::UnknownViewport(id) => write!(f, "view {id} on a sheet does not exist"),
             ModelError::UnknownRoom(id) => write!(f, "room {id} does not exist"),
             ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
+            ModelError::UnknownTable(id) => write!(f, "schedule {id} on a sheet does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
             ModelError::DuplicateName(name) => {
                 write!(f, "another element is already called «{name}»")
@@ -892,6 +894,7 @@ pub struct ModelParts {
     pub viewports: Vec<crate::sheets::Viewport>,
     pub rooms: Vec<crate::rooms::Room>,
     pub tags: Vec<crate::rooms::Tag>,
+    pub tables: Vec<crate::sheets::SheetTable>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -943,6 +946,7 @@ pub struct Model {
     pub(crate) viewports: BTreeMap<ViewportId, crate::sheets::Viewport>,
     pub(crate) rooms: BTreeMap<RoomId, crate::rooms::Room>,
     pub(crate) tags: BTreeMap<TagId, crate::rooms::Tag>,
+    pub(crate) tables: BTreeMap<TableId, crate::sheets::SheetTable>,
 }
 
 impl Model {
@@ -972,6 +976,7 @@ impl Model {
             viewports: BTreeMap::new(),
             rooms: BTreeMap::new(),
             tags: BTreeMap::new(),
+            tables: BTreeMap::new(),
         }
     }
 
@@ -1060,6 +1065,11 @@ impl Model {
         self.viewports.retain(|_, v| v.level != id);
         self.rooms.retain(|_, r| r.level != id);
         self.tags.retain(|_, t| t.level != id);
+        for t in self.tables.values_mut() {
+            if t.level == Some(id) {
+                t.level = None;
+            }
+        }
         self.levels.remove(&id).ok_or(ModelError::UnknownLevel(id))
     }
 
@@ -3013,6 +3023,7 @@ impl Model {
             viewports: self.viewports.values().cloned().collect(),
             rooms: self.rooms.values().cloned().collect(),
             tags: self.tags.values().cloned().collect(),
+            tables: self.tables.values().cloned().collect(),
         }
     }
 
@@ -3254,6 +3265,12 @@ impl Model {
             let name = format!("tag {}", t.id.0);
             claim(t.id.0, None)
                 .and_then(|_| model.restore_tag(t))
+                .map_err(fail(name))?;
+        }
+        for t in parts.tables {
+            let name = format!("schedule {} on a sheet", t.id.0);
+            claim(t.id.0, None)
+                .and_then(|_| model.restore_table(t))
                 .map_err(fail(name))?;
         }
 

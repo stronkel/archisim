@@ -7,7 +7,7 @@
 //! a plan at 1:1.
 
 use crate::graphics::ViewStyle;
-use crate::ids::{LevelId, SheetId, ViewportId};
+use crate::ids::{LevelId, SheetId, TableId, ViewportId};
 use crate::math::{Point2, EPSILON};
 use crate::model::{Model, ModelError};
 
@@ -205,6 +205,7 @@ impl Model {
             .remove(&id)
             .ok_or(ModelError::UnknownSheet(id))?;
         self.viewports.retain(|_, v| v.sheet != id);
+        self.tables.retain(|_, t| t.sheet != id);
         self.drafts
             .retain(|_, d| d.view != crate::drafting::ViewRef::Sheet(id));
         Ok(s)
@@ -367,6 +368,134 @@ fn part(s: &str, digits: bool) -> (bool, String, u64) {
         (true, String::new(), s.parse().unwrap_or(0))
     } else {
         (false, s.to_lowercase(), 0)
+    }
+}
+
+/// What a schedule lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ScheduleKind {
+    /// Doors and windows by type.
+    Openings,
+    /// Walls by type: length, area, volume.
+    Walls,
+    /// Slabs by type: area, volume.
+    Slabs,
+    /// Rooms: areas, heights and finishes ("cuadro de superficies").
+    Rooms,
+}
+
+impl ScheduleKind {
+    pub const ALL: [ScheduleKind; 4] = [
+        ScheduleKind::Openings,
+        ScheduleKind::Walls,
+        ScheduleKind::Slabs,
+        ScheduleKind::Rooms,
+    ];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            ScheduleKind::Openings => "openings",
+            ScheduleKind::Walls => "walls",
+            ScheduleKind::Slabs => "slabs",
+            ScheduleKind::Rooms => "rooms",
+        }
+    }
+
+    pub fn from_code(c: &str) -> Option<ScheduleKind> {
+        ScheduleKind::ALL.into_iter().find(|k| k.code() == c)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ScheduleKind::Openings => "Carpinterías",
+            ScheduleKind::Walls => "Muros",
+            ScheduleKind::Slabs => "Forjados",
+            ScheduleKind::Rooms => "Cuadro de superficies",
+        }
+    }
+}
+
+/// A schedule placed on a sheet.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SheetTable {
+    pub id: TableId,
+    pub sheet: SheetId,
+    pub kind: ScheduleKind,
+    /// Only this level; `None`: the whole building.
+    pub level: Option<LevelId>,
+    /// Top-left corner on the paper, metres.
+    pub at: Point2,
+}
+
+impl Model {
+    pub fn add_table(
+        &mut self,
+        sheet: SheetId,
+        kind: ScheduleKind,
+        level: Option<LevelId>,
+        at: Point2,
+    ) -> Result<TableId, ModelError> {
+        self.check_table(sheet, level, at)?;
+        let id = TableId(self.take_id());
+        self.tables.insert(
+            id,
+            SheetTable {
+                id,
+                sheet,
+                kind,
+                level,
+                at,
+            },
+        );
+        Ok(id)
+    }
+
+    fn check_table(
+        &self,
+        sheet: SheetId,
+        level: Option<LevelId>,
+        at: Point2,
+    ) -> Result<(), ModelError> {
+        if self.sheet(sheet).is_none() {
+            return Err(ModelError::UnknownSheet(sheet));
+        }
+        if let Some(l) = level {
+            if self.level(l).is_none() {
+                return Err(ModelError::UnknownLevel(l));
+            }
+        }
+        crate::model::finite_point(at, "table position")
+    }
+
+    pub fn set_table(&mut self, t: SheetTable) -> Result<(), ModelError> {
+        if !self.tables.contains_key(&t.id) {
+            return Err(ModelError::UnknownTable(t.id));
+        }
+        self.check_table(t.sheet, t.level, t.at)?;
+        self.tables.insert(t.id, t);
+        Ok(())
+    }
+
+    pub fn remove_table(&mut self, id: TableId) -> Result<SheetTable, ModelError> {
+        self.tables.remove(&id).ok_or(ModelError::UnknownTable(id))
+    }
+
+    pub fn table(&self, id: TableId) -> Option<&SheetTable> {
+        self.tables.get(&id)
+    }
+
+    pub fn tables(&self) -> impl Iterator<Item = &SheetTable> {
+        self.tables.values()
+    }
+
+    pub fn tables_on(&self, sheet: SheetId) -> impl Iterator<Item = &SheetTable> {
+        self.tables.values().filter(move |t| t.sheet == sheet)
+    }
+
+    pub(crate) fn restore_table(&mut self, t: SheetTable) -> Result<(), ModelError> {
+        self.check_table(t.sheet, t.level, t.at)?;
+        self.tables.insert(t.id, t);
+        Ok(())
     }
 }
 

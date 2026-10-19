@@ -27,6 +27,7 @@ pub mod annotate;
 pub mod drafting;
 pub mod lettering;
 pub mod rooms;
+pub mod schedules;
 pub mod sheet;
 
 use std::fmt::Write as _;
