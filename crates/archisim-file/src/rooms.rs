@@ -42,6 +42,9 @@ pub(crate) struct Room {
     pub walls: String,
     #[serde(default, skip_serializing_if = "is_empty")]
     pub ceiling: String,
+    /// m² per occupant (version 12); absent: from its use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub occupancy: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,6 +93,7 @@ pub(crate) fn rooms_out(rooms: &[core::Room]) -> Vec<Room> {
             floor: r.finishes.floor.clone(),
             walls: r.finishes.walls.clone(),
             ceiling: r.finishes.ceiling.clone(),
+            occupancy: r.occupancy,
         })
         .collect()
 }
@@ -123,6 +127,7 @@ pub(crate) fn rooms_in(rooms: Vec<Room>) -> Result<Vec<core::Room>, FileError> {
                     walls: r.walls,
                     ceiling: r.ceiling,
                 },
+                occupancy: r.occupancy,
             })
         })
         .collect()

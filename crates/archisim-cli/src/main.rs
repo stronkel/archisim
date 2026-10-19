@@ -46,6 +46,12 @@ Uso:
       quedado fuera. Por defecto, casa.ifc → casa.archisim en la misma
       carpeta.
 
+  archisim cte <proyecto.archisim> [informe.csv]
+      Comprueba el proyecto con el Código Técnico: ocupación y evacuación
+      (DB-SI 3), accesibilidad (DB-SUA 9), escaleras y rampas (DB-SUA 1) y
+      superficies, según el uso del edificio guardado en el proyecto.
+      Escribe el informe en pantalla y, si se da, en CSV.
+
   archisim medir [n] [carpeta]
       Repite la vivienda de prueba en una rejilla de n × n (20 por defecto:
       400 viviendas, 2800 muros) y mide cuánto tarda cada trabajo: planta,
@@ -110,6 +116,13 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("cte") => match args.get(1) {
+            Some(project) => report(run_cte(Path::new(project), args.get(2).map(Path::new))),
+            None => {
+                eprintln!("Falta el proyecto: archisim cte <proyecto.archisim> [informe.csv]");
+                ExitCode::FAILURE
+            }
+        },
         Some("medir") => {
             let n = args.get(1).and_then(|a| a.parse().ok()).unwrap_or(20);
             let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
@@ -152,6 +165,18 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     summary(doc.model());
     println!("  Proyecto: {}", project.display());
     export_all(doc.model(), dir, "demo")
+}
+
+fn run_cte(project: &Path, csv: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let r = archisim_cte::check(&model);
+    print!("{}", r.to_text(&model));
+    if let Some(csv) = csv {
+        std::fs::write(csv, r.to_csv(&model))?;
+        println!("\nInforme CSV: {}", csv.display());
+    }
+    Ok(())
 }
 
 fn run_export(project: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -266,6 +291,9 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         ifc_text_in(model, stem, None, archisim_ifc::Schema::Ifc4),
     )?;
     println!("  IFC4:    {}", ifc4_path.display());
+    let cte_path = dir.join(format!("{stem}-cte.txt"));
+    std::fs::write(&cte_path, archisim_cte::check(model).to_text(model))?;
+    println!("  Comprobación CTE: {}", cte_path.display());
     for (level, name, file) in plan_files(model, stem) {
         let svg_path = dir.join(&file);
         std::fs::write(

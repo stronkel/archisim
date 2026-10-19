@@ -47,6 +47,7 @@ impl ArchiSimApp {
         self.draw_links_in_plan(&painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
+        self.draw_cte_route(&painter, rect);
         self.draw_temp_dims(&painter, rect);
         self.draw_anchor_drag(&painter, rect);
         self.draw_flip_controls(&painter, rect);

@@ -267,6 +267,8 @@ pub struct ArchiSimApp {
     pub curtain_types: curtain_types_ui::CurtainTypesWindow,
     /// The library window.
     pub library: library_ui::LibraryWindow,
+    /// The code check window.
+    pub cte: cte_ui::CteWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// The whole object library, for the gallery's pictures of the types
@@ -448,6 +450,7 @@ impl ArchiSimApp {
             show_priorities: false,
             curtain_types: Default::default(),
             library: Default::default(),
+            cte: Default::default(),
             survey_import: None,
             object_library: None,
             priorities_all: false,
@@ -1540,6 +1543,7 @@ impl ArchiSimApp {
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
+        self.cte_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
@@ -1779,6 +1783,7 @@ mod annotation_ui;
 mod cad_ui;
 mod chrome;
 mod coord_ui;
+mod cte_ui;
 mod curtain_types_ui;
 mod curtain_ui;
 mod draft_props;
