@@ -378,7 +378,8 @@ mod tests {
                 "IfcFurniture",
                 "IfcSanitaryTerminal",
                 "IfcGeographicElement",
-                "IfcBuildingElementProxy"
+                "IfcBuildingElementProxy",
+                "IfcVehicle"
             ]
             .contains(&ev.outputs["ifc_class"].as_text().unwrap()));
             assert!(!m.family(f).unwrap().def().folder.is_empty(), "{name}");

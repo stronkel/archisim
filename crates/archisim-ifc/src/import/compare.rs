@@ -278,6 +278,23 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             b.rooms().count()
         ));
     }
+    let same_geo = match (a.georeference(), b.georeference()) {
+        (None, None) => true,
+        (Some(g), Some(h)) => {
+            g.crs == h.crs
+                && (g.eastings - h.eastings).abs() < 1e-3
+                && (g.northings - h.northings).abs() < 1e-3
+                && (g.height - h.height).abs() < 1e-3
+        }
+        _ => false,
+    };
+    if !same_geo {
+        diff(format!(
+            "georreferencia: {:?} / {:?}",
+            a.georeference(),
+            b.georeference()
+        ));
+    }
     if (a.true_north() - b.true_north()).abs() > 1e-6 {
         diff(format!("norte: {} / {}", a.true_north(), b.true_north()));
     }

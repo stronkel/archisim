@@ -833,17 +833,21 @@ impl ArchiSimApp {
         }
     }
 
-    fn export_ifc(&mut self) {
+    fn export_ifc(&mut self, schema: archisim_ifc::Schema) {
+        let (title, name) = match schema {
+            archisim_ifc::Schema::Ifc4x3 => ("IFC 4.3", format!("{}.ifc", self.file_name_stem())),
+            archisim_ifc::Schema::Ifc4 => ("IFC4", format!("{} (IFC4).ifc", self.file_name_stem())),
+        };
         let mut d = rfd::FileDialog::new()
-            .set_title("Exportar IFC4")
+            .set_title(format!("Exportar {title}"))
             .add_filter("IFC", &["ifc"])
-            .set_file_name(format!("{}.ifc", self.file_name_stem()));
+            .set_file_name(name);
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
         }
         if let Some(path) = d.save_file() {
-            match self.ed.export_ifc(&path) {
-                Ok(()) => self.say(format!("IFC4 exportado en {}.", path.display())),
+            match self.ed.export_ifc(&path, schema) {
+                Ok(()) => self.say(format!("{title} exportado en {}.", path.display())),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }
         }

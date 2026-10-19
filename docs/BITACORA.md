@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (madrugada) · IFC 4.3 por defecto, georreferencia y entorno (v0.29)
+
+Segundo bloque. **D3 decidida por Antonio: IFC 4.3**, «para poder aprovechar el tema de entorno».
+
+**Hecho**
+- **El IFC sale en IFC 4.3** (`IFC4X3_ADD2`, la versión de la norma ISO 16739-1:2024). Todo lo que ya exportaba ArchiSim valida igual en 4.3 con IfcOpenShell, reglas EXPRESS incluidas.
+- **IFC4 sigue disponible** para los programas que aún no leen 4.3: Archivo → «Exportar IFC4 (compatibilidad)…»; `archisim demo`/`exportar` escriben los dos (`demo.ifc` en 4.3 y `demo-ifc4.ifc`).
+- **Georreferencia del proyecto** (propiedades del proyecto, sin nada seleccionado → «Emplazamiento (georreferencia)»): sistema de coordenadas (ETRS89 UTM 29N, 30N y 31N; REGCAN95 para Canarias; WGS 84; EPSG), X e Y UTM del punto 0,0 de la planta y cota del ±0,00 sobre el nivel del mar. Muestra la latitud y longitud y la **convergencia de la cuadrícula**. En el IFC: `IfcProjectedCRS` + `IfcMapConversion` (el eje X del modelo girado con el norte real más la convergencia, para que el norte de la cuadrícula UTM quede bien) y la latitud, longitud y altitud del `IfcSite`. Se lee de vuelta al importar.
+- **Entorno con las clases de 4.3**: árboles, arbustos y setos como `IfcGeographicElement` de tipo **`VEGETATION`**; el coche y la bicicleta como **`IfcVehicle`** (`VEHICLEWHEELED`). Solo la persona sigue como elemento genérico (4.3 no tiene clase para personas). Los de antes se importan igual, y al importar se reconocen también vehículos, firmes, bordillos y rellenos de 4.3 en el informe.
+- Importación probada con un IFC 4.3 escrito por IfcOpenShell (el mismo edificio que el de IFC4: mismas plantas, muros, forjados, puertas y ventanas).
+- Demo georreferenciada (calle Mayor 1, Madrid, ETRS89 UTM 30N, 650 m).
+- Formato `.archisim` **versión 11** (la georreferencia); los de la 10 se abren tal cual. Familias de sistema Árbol, Arbusto, Seto, Turismo y Bicicleta en su versión 2 (solo cambia la clase IFC; los proyectos que ya las tienen guardan su copia anterior). Versión 0.29.0.
+
+**Pendiente / limitaciones conocidas**
+- Altura ortométrica: se escribe la cota que pongas, sin datum vertical (en España sería el de Alicante); dime si quieres que se elija.
+- El terreno no se coloca aún desde coordenadas UTM de un levantamiento: sigue en coordenadas de la planta. Con la georreferencia, el paso siguiente natural es importar el levantamiento en UTM y llevarlo al 0,0 del proyecto.
+- Revit y ArchiCAD: comprobar qué versión de cada uno abre bien el 4.3; si alguno falla, el de compatibilidad.
+
+**Antonio debe probar**
+1. Instala la v0.29.
+2. Propiedades del proyecto (clic en vacío) → «Emplazamiento»: marca «Georreferenciado», sistema ETRS89 UTM 29N y pon las coordenadas de un solar tuyo de Punta Umbría (del catastro o del levantamiento), y su cota. ¿Salen la latitud y la longitud que esperas?
+3. Exporta el IFC (4.3) y ábrelo en tu ArchiCAD y en Revit: ¿lo abren? ¿Aparece en su sitio (en ArchiCAD, «Ubicación del proyecto»; en Revit, «Ubicación»)? Si alguno no lo abre, prueba «Exportar IFC4 (compatibilidad)» y dime cuál y qué versión.
+4. Si tienes BIMcollab Zoom, Solibri o un visor web (por ejemplo, el de That Open o xeokit), ábrelo ahí también: los árboles deben salir como vegetación y el coche como vehículo.
+
 ## 2026-10-20 (madrugada) · Planos completos: secciones y alzados en planos, tablas y mediciones de todo, alturas en sección (v0.28)
 
 Primer bloque de los cinco que Antonio pidió en orden (planos completos, IFC 4.3, bloque E, CTE, librería AD5). Decisiones suyas: **D3 → IFC 4.3**; **D4** (nombre) pendiente, con una propuesta de nombres (Alarife, Tapial, Odiel…) enviada en el chat.

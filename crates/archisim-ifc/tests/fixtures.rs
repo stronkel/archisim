@@ -163,6 +163,32 @@ fn both_versions_give_the_same_building() {
     }
 }
 
+/// The same building written by IfcOpenShell in IFC 4.3 comes in as in
+/// IFC4: same storeys, walls, slabs, doors and windows.
+#[test]
+fn ifc4x3_gives_the_same_building() {
+    let Imported {
+        model: a,
+        report: ra,
+    } = import("ifcopenshell_ifc4_m.ifc");
+    let Imported { model: b, report } = import("ifcopenshell_ifc4x3_m.ifc");
+    assert!(report.schema.starts_with("IFC4X3"), "{}", report.schema);
+    // The same left out (a column with no body, on purpose).
+    assert_eq!(report.skipped_count(), ra.skipped_count(), "{report}");
+    assert_eq!(a.levels().len(), b.levels().len());
+    assert_eq!(a.walls().count(), b.walls().count());
+    assert_eq!(a.slabs().count(), b.slabs().count());
+    assert_eq!(a.openings().count(), b.openings().count());
+    for w in a.walls() {
+        assert!(
+            b.walls().any(|v| v.start.distance(w.start) < 1e-6
+                && v.end.distance(w.end) < 1e-6
+                && v.reference == w.reference),
+            "{w:?}"
+        );
+    }
+}
+
 /// Walls and slabs of other shapes, written entity by entity as Revit does:
 /// an L-shaped wall comes in as two walls joined at the corner, a
 /// quarter-circle wall (angles in degrees) and a round wall (two halves) as

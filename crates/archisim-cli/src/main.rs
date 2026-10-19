@@ -213,8 +213,18 @@ fn summary(model: &Model) {
     );
 }
 
-/// IFC file of a model, named after the project file.
+/// IFC 4.3 file of a model, named after the project file.
 fn ifc_text(model: &Model, stem: &str, timestamp: Option<String>) -> String {
+    ifc_text_in(model, stem, timestamp, archisim_ifc::Schema::Ifc4x3)
+}
+
+/// IFC file of a model in a schema.
+fn ifc_text_in(
+    model: &Model,
+    stem: &str,
+    timestamp: Option<String>,
+    schema: archisim_ifc::Schema,
+) -> String {
     export_ifc(
         model,
         &ExportOptions {
@@ -222,6 +232,7 @@ fn ifc_text(model: &Model, stem: &str, timestamp: Option<String>) -> String {
             author: "ArchiSim".into(),
             organization: "AD5".into(),
             timestamp,
+            schema,
         },
     )
 }
@@ -247,7 +258,14 @@ fn plan_files(model: &Model, stem: &str) -> Vec<(archisim_core::LevelId, String,
 fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::error::Error>> {
     let ifc_path = dir.join(format!("{stem}.ifc"));
     std::fs::write(&ifc_path, ifc_text(model, stem, None))?;
-    println!("  IFC4:   {}", ifc_path.display());
+    println!("  IFC 4.3: {}", ifc_path.display());
+    // The same in IFC4, for programs that do not read 4.3 yet.
+    let ifc4_path = dir.join(format!("{stem}-ifc4.ifc"));
+    std::fs::write(
+        &ifc4_path,
+        ifc_text_in(model, stem, None, archisim_ifc::Schema::Ifc4),
+    )?;
+    println!("  IFC4:    {}", ifc4_path.display());
     for (level, name, file) in plan_files(model, stem) {
         let svg_path = dir.join(&file);
         std::fs::write(

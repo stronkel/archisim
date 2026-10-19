@@ -73,6 +73,31 @@ pub struct ExportOptions {
     pub organization: String,
     /// ISO 8601 timestamp; `None` uses the current UTC time.
     pub timestamp: Option<String>,
+    /// IFC 4.3 (the default) or IFC4, for programs that do not read 4.3
+    /// yet.
+    pub schema: Schema,
+}
+
+/// The IFC schema a file is written in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Schema {
+    /// IFC 4.3 ADD2 (ISO 16739-1:2024): vegetation and vehicles have
+    /// classes of their own.
+    #[default]
+    Ifc4x3,
+    /// IFC4 ADD2 TC1: vegetation as user-defined geographic elements,
+    /// vehicles as building element proxies.
+    Ifc4,
+}
+
+impl Schema {
+    /// The name in `FILE_SCHEMA`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Schema::Ifc4x3 => "IFC4X3_ADD2",
+            Schema::Ifc4 => "IFC4",
+        }
+    }
 }
 
 impl Default for ExportOptions {
@@ -82,28 +107,44 @@ impl Default for ExportOptions {
             author: String::new(),
             organization: String::new(),
             timestamp: None,
+            schema: Schema::default(),
         }
     }
 }
 
 const APP: &str = concat!("ArchiSim ", env!("CARGO_PKG_VERSION"));
 
-/// Exports the whole model as IFC4 text.
+/// An angle in degrees as an `IfcCompoundPlaneAngleMeasure`: degrees,
+/// minutes, seconds and millionths of a second, all with its sign.
+fn compound_angle(deg: f64) -> String {
+    let sign = if deg < 0.0 { -1 } else { 1 };
+    let total = (deg.abs() * 3600.0 * 1e6).round() as i64;
+    let micro = total % 1_000_000;
+    let secs = total / 1_000_000;
+    let (d, m, s) = (secs / 3600, (secs / 60) % 60, secs % 60);
+    let v = [d, m, s, micro].map(|x| (x * sign).to_string());
+    format!("({})", v.join(","))
+}
+
+/// Exports the whole model as IFC text (IFC 4.3 unless the options say
+/// IFC4).
 pub fn export_ifc(model: &Model, options: &ExportOptions) -> String {
     let mut x = Exporter::new(model);
+    x.schema = options.schema;
     x.write();
     let timestamp = options.timestamp.clone().unwrap_or_else(utc_now);
     format!(
         "ISO-10303-21;\nHEADER;\n\
          FILE_DESCRIPTION(('ViewDefinition [DesignTransferView]'),'2;1');\n\
          FILE_NAME({},{},({}),({}),{},{},'');\n\
-         FILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n{}ENDSEC;\nEND-ISO-10303-21;\n",
+         FILE_SCHEMA(('{}'));\nENDSEC;\nDATA;\n{}ENDSEC;\nEND-ISO-10303-21;\n",
         string(&options.file_name),
         string(&timestamp),
         string(&options.author),
         string(&options.organization),
         string(APP),
         string(APP),
+        options.schema.name(),
         x.w.data()
     )
 }
@@ -127,6 +168,7 @@ struct Exporter<'a> {
     axis_ctx: Ref,
     /// Surface style of each material, reused on door and window solids.
     styles: BTreeMap<MaterialId, Ref>,
+    schema: Schema,
 }
 
 impl<'a> Exporter<'a> {
@@ -142,6 +184,7 @@ impl<'a> Exporter<'a> {
             body_ctx: Ref(0),
             axis_ctx: Ref(0),
             styles: BTreeMap::new(),
+            schema: Schema::default(),
         }
     }
 
@@ -985,6 +1028,42 @@ impl<'a> Exporter<'a> {
         ));
     }
 
+    /// Where the model is on the map: `IfcMapConversion` from its context
+    /// to an `IfcProjectedCRS`. The model's x axis on the map turns with
+    /// the true north and the grid convergence.
+    fn write_map_conversion(&mut self, ctx: Ref, metre: Ref) {
+        let Some(g) = self.model.georeference().cloned() else {
+            return;
+        };
+        let (projection, zone) = match g.utm_zone() {
+            Some((z, north)) => (
+                "'UTM'".to_string(),
+                string(&format!("{z}{}", if north { "N" } else { "S" })),
+            ),
+            None => ("$".to_string(), "$".to_string()),
+        };
+        let crs = format!(
+            "IFCPROJECTEDCRS({},$,{},$,{projection},{zone},{metre})",
+            string(&g.crs),
+            string(g.datum())
+        );
+        let crs = self.w.add(crs);
+        // Grid north is the true north turned by the convergence.
+        let a = self.model.true_north() + g.convergence();
+        let tail = match self.schema {
+            Schema::Ifc4x3 => ",$,$",
+            Schema::Ifc4 => "",
+        };
+        self.w.add(format!(
+            "IFCMAPCONVERSION({ctx},{crs},{},{},{},{},{},1.{tail})",
+            real(g.eastings),
+            real(g.northings),
+            real(g.height),
+            real(a.cos()),
+            real(a.sin()),
+        ));
+    }
+
     fn write(&mut self) {
         let model = self.model;
 
@@ -1020,7 +1099,9 @@ impl<'a> Exporter<'a> {
             self.w.add("IFCSIUNIT(*,.VOLUMEUNIT.,$,.CUBIC_METRE.)"),
             self.w.add("IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.)"),
         ];
+        let metre = units[0];
         let units = self.w.add(format!("IFCUNITASSIGNMENT({})", list(&units)));
+        self.write_map_conversion(ctx, metre);
 
         // Spatial structure.
         let project = self.w.add(format!(
@@ -1029,8 +1110,16 @@ impl<'a> Exporter<'a> {
             string(&model.project_name)
         ));
         let site_pl = self.placement(None, self.origin, None);
+        // Latitude, longitude and height of the ±0,00, if georeferenced.
+        let (lat, lon, elev) = match model.georeference() {
+            Some(g) => match g.lat_lon() {
+                Some((la, lo)) => (compound_angle(la), compound_angle(lo), real(g.height)),
+                None => ("$".into(), "$".into(), real(g.height)),
+            },
+            None => ("$".into(), "$".into(), "$".into()),
+        };
         let site = self.w.add(format!(
-            "IFCSITE({},$,'Emplazamiento',$,$,{site_pl},$,$,.ELEMENT.,$,$,$,$,$)",
+            "IFCSITE({},$,'Emplazamiento',$,$,{site_pl},$,$,.ELEMENT.,{lat},{lon},{elev},$,$)",
             string(model.site_guid.as_str())
         ));
         let bldg_pl = self.placement(Some(site_pl), self.origin, None);
@@ -1732,7 +1821,7 @@ mod tests {
         assert!(text.starts_with("ISO-10303-21;"));
         assert!(text.trim_end().ends_with("END-ISO-10303-21;"));
         for needle in [
-            "FILE_SCHEMA(('IFC4'))",
+            "FILE_SCHEMA(('IFC4X3_ADD2'))",
             "IFCPROJECT(",
             "IFCBUILDINGSTOREY(",
             "IFCWALLTYPE(",

@@ -1,7 +1,7 @@
 family "Seto"
   category site
   host none
-  version 1
+  version 2
   description "Seto recortado, en línea"
   folder "Vegetación"
 
@@ -27,4 +27,4 @@ plan 1:50
 
 outputs
   ifc_class = "IfcGeographicElement"
-  ifc_type = "USERDEFINED"
+  ifc_type = "VEGETATION"

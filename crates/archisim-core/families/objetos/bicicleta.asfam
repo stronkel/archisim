@@ -1,7 +1,7 @@
 family "Bicicleta"
   category vehicle
   host none
-  version 1
+  version 2
   description "Bicicleta; el punto de inserción es el centro de la rueda trasera, mira hacia delante"
   folder "Bicicletas"
 
@@ -30,5 +30,5 @@ plan 1:50
   polygon (-0.10, wheel * 0.75) (0.10, wheel * 0.75) (0.10, wheel * 1.05) (-0.10, wheel * 1.05) pen thin
 
 outputs
-  ifc_class = "IfcBuildingElementProxy"
-  ifc_type = "USERDEFINED"
+  ifc_class = "IfcVehicle"
+  ifc_type = "VEHICLEWHEELED"

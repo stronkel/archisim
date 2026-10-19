@@ -8,6 +8,7 @@
 pub mod document;
 pub mod drafting;
 pub mod family;
+pub mod georef;
 pub mod graphics;
 pub mod ids;
 pub mod math;
@@ -22,6 +23,7 @@ pub use family::{
     Evaluation, Family, FamilyDef, FamilyError, LineStyle, Mark, ParamKind, ParamScope, Part, Pen,
     Value, Values,
 };
+pub use georef::*;
 pub use graphics::*;
 pub use ids::*;
 pub use math::{

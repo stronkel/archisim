@@ -6,7 +6,7 @@ use archisim_core::{SurveyPoint, TerrainId};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
-use super::props::{self, group, row, text_row};
+use super::props::{self, choice, group, row, text_row};
 use super::widgets::segmented;
 use super::*;
 
@@ -635,5 +635,146 @@ impl ArchiSimApp {
                 }
             },
         );
+    }
+}
+
+/// A number typed with a decimal comma or point; `None` if it is not one.
+fn parse_number(t: &str) -> Option<f64> {
+    let t: String = t
+        .trim()
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '\u{a0}')
+        .collect();
+    // «4.474.270,5» or «4474270.5».
+    let t = if t.contains(',') {
+        t.replace('.', "").replace(',', ".")
+    } else {
+        t
+    };
+    t.parse::<f64>().ok().filter(|v| v.is_finite())
+}
+
+/// Metres with two decimals and a decimal comma.
+fn metres(v: f64) -> String {
+    format!("{v:.2}").replace('.', ",")
+}
+
+impl ArchiSimApp {
+    /// Where the project is on the map, in the project's properties: the
+    /// coordinate system, the UTM coordinates of the ±0,00 at plan 0,0 and
+    /// its height above sea level. They go to the IFC (`IfcMapConversion`,
+    /// latitude and longitude of the site).
+    pub(super) fn georeference_group(&mut self, ui: &mut Ui) {
+        let current = self.ed.model().georeference().cloned();
+        let mut new = current.clone();
+        group(
+            ui,
+            "project-georef",
+            "Emplazamiento (georreferencia)",
+            |ui| {
+                let mut on = current.is_some();
+                row(
+                    ui,
+                    "Georreferenciado",
+                    "Sitúa el proyecto en el mapa (coordenadas UTM del ±0,00)",
+                    |ui, _| {
+                        if ui.checkbox(&mut on, "").changed() {
+                            new = on.then(|| archisim_core::Georeference {
+                                crs: "EPSG:25830".into(),
+                                eastings: 0.0,
+                                northings: 0.0,
+                                height: 0.0,
+                            });
+                        }
+                    },
+                );
+                let Some(g) = current.clone() else {
+                    return;
+                };
+                let mut edited = g.clone();
+                row(ui, "Sistema", "Sistema de coordenadas (EPSG)", |ui, w| {
+                    let mut opts: Vec<(&str, &str)> = archisim_core::CRS_LIST
+                        .iter()
+                        .map(|(c, n)| (*c, *n))
+                        .collect();
+                    if !opts.iter().any(|(c, _)| *c == g.crs) {
+                        opts.push((g.crs.as_str(), g.crs.as_str()));
+                    }
+                    let picked = choice(ui, "georef-crs", w, g.crs.as_str(), &opts);
+                    edited.crs = picked.to_string();
+                });
+                for (label, hint, which) in [
+                    (
+                        "X (este, m)",
+                        "Coordenada X UTM del punto 0,0 de la planta",
+                        0,
+                    ),
+                    (
+                        "Y (norte, m)",
+                        "Coordenada Y UTM del punto 0,0 de la planta",
+                        1,
+                    ),
+                    ("Cota del ±0,00 (m)", "Altitud sobre el nivel del mar", 2),
+                ] {
+                    let value = [g.eastings, g.northings, g.height][which];
+                    row(ui, label, hint, |ui, w| {
+                        if let Some(t) = text_edit_committed(
+                            ui,
+                            Id::unique(("georef", which)),
+                            &metres(value),
+                            w - 8.0,
+                        ) {
+                            match parse_number(&t) {
+                                Some(v) => match which {
+                                    0 => edited.eastings = v,
+                                    1 => edited.northings = v,
+                                    _ => edited.height = v,
+                                },
+                                None => self.complain(format!("«{t}» no es un número.")),
+                            }
+                        }
+                    });
+                }
+                match g.lat_lon() {
+                Some((lat, lon)) => {
+                    text_row(
+                        ui,
+                        "Latitud, longitud",
+                        "Calculadas desde las coordenadas UTM",
+                        &format!("{lat:.6}°, {lon:.6}°").replace('.', ","),
+                    );
+                    text_row(
+                        ui,
+                        "Convergencia (°)",
+                        "Ángulo entre el norte geográfico y el norte de la cuadrícula UTM",
+                        &format!("{:.3}", g.convergence().to_degrees()).replace('.', ","),
+                    );
+                }
+                None => props::note(
+                    ui,
+                    "Sistema no UTM: el IFC lleva las coordenadas, pero no la latitud ni la longitud.",
+                ),
+            }
+                if edited != g {
+                    new = Some(edited);
+                }
+            },
+        );
+        if new != current {
+            let r = self.ed.set_georeference(new);
+            self.report(r, "Emplazamiento cambiado: va en el IFC.");
+        }
+    }
+}
+
+#[cfg(test)]
+mod georef_tests {
+    #[test]
+    fn numbers_with_commas_and_points() {
+        assert_eq!(super::parse_number("440230"), Some(440_230.0));
+        assert_eq!(super::parse_number("4.474.270,5"), Some(4_474_270.5));
+        assert_eq!(super::parse_number(" 650,25 "), Some(650.25));
+        assert_eq!(super::parse_number("4474270.5"), Some(4_474_270.5));
+        assert_eq!(super::parse_number("abc"), None);
     }
 }

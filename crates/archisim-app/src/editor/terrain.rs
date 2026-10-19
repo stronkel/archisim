@@ -109,6 +109,11 @@ impl Editor {
         self.transact(label, |m| m.edit_terrain(id, edit))
     }
 
+    /// Sets (or clears) where the project is on the map.
+    pub fn set_georeference(&mut self, g: Option<archisim_core::Georeference>) -> EditResult {
+        self.transact("Emplazamiento", |m| m.set_georeference(g))
+    }
+
     pub fn set_true_north(&mut self, degrees: f64) -> EditResult {
         self.transact("Norte", |m| m.set_true_north(degrees.to_radians()))
     }

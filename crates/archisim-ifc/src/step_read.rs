@@ -635,7 +635,7 @@ END-ISO-10303-21;
         m.add_level("Planta baja", 0.0);
         let text = crate::export_ifc(&m, &crate::ExportOptions::default());
         let f = parse(&text).unwrap();
-        assert_eq!(f.schemas, vec!["IFC4"]);
+        assert_eq!(f.schemas, vec!["IFC4X3_ADD2"]);
         let project = f.get(f.of_kind("IFCPROJECT")[0]).unwrap();
         assert_eq!(project.arg(2).as_str(), Some("Casa «Ñ»"));
         assert_eq!(f.of_kind("IFCBUILDINGSTOREY").len(), 1);

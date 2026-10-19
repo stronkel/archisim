@@ -21,6 +21,43 @@ impl<'a> Importer<'a> {
         }
     }
 
+    /// Where the file is on the map: its `IfcMapConversion` to a projected
+    /// system named by its EPSG code.
+    pub(super) fn read_georeference(&mut self) {
+        for id in self.file.of_kind("IFCMAPCONVERSION") {
+            let Some(e) = self.ent(id) else { continue };
+            let Some(crs) = self.deref(e.arg(1)) else {
+                continue;
+            };
+            let name = crs.arg(0).as_str().unwrap_or("").trim().to_string();
+            let code = name.to_ascii_uppercase();
+            let code = if code.starts_with("EPSG:") {
+                code
+            } else if code.chars().all(|c| c.is_ascii_digit()) && !code.is_empty() {
+                format!("EPSG:{code}")
+            } else {
+                self.report.warn(
+                    "Georreferencia con un sistema de coordenadas sin código EPSG: no se importa.",
+                );
+                return;
+            };
+            let len = self.geo.length;
+            let num = |i: usize| e.arg(i).as_f64().map(|v| v * len);
+            let (Some(x), Some(y)) = (num(2), num(3)) else {
+                continue;
+            };
+            let _ = self
+                .model
+                .set_georeference(Some(archisim_core::Georeference {
+                    crs: code,
+                    eastings: x,
+                    northings: y,
+                    height: num(4).unwrap_or(0.0),
+                }));
+            return;
+        }
+    }
+
     pub(super) fn import_terrains(&mut self) {
         if !self.own_file {
             return;

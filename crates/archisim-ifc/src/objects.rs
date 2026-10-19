@@ -1,6 +1,7 @@
 //! Objects: furniture (`IfcFurniture`), sanitary ware
-//! (`IfcSanitaryTerminal`), vegetation (`IfcGeographicElement`) and
-//! people or vehicles (`IfcBuildingElementProxy`) with their types, as the
+//! (`IfcSanitaryTerminal`), vegetation (`IfcGeographicElement`, `VEGETATION`
+//! in IFC 4.3), vehicles (`IfcVehicle` in IFC 4.3) and people
+//! (`IfcBuildingElementProxy`) with their types, as the
 //! family's `ifc_class` and `ifc_type` outputs say. The body is the family's boxes; the type
 //! carries the family (`ArchiSim_Family`, `ArchiSim_FamilyValues`) so that
 //! ArchiSim reads them back as the same objects.
@@ -19,8 +20,10 @@ enum Class {
     Sanitary,
     /// Vegetation and the like (`IfcGeographicElement`).
     Geographic,
-    /// People, vehicles… (`IfcBuildingElementProxy`).
+    /// People… (`IfcBuildingElementProxy`).
     Proxy,
+    /// Cars, bicycles… (`IfcVehicle`, IFC 4.3; a proxy in IFC4).
+    Vehicle,
 }
 
 impl Class {
@@ -31,6 +34,7 @@ impl Class {
             Class::Sanitary => ("IFCSANITARYTERMINAL", "IFCSANITARYTERMINALTYPE"),
             Class::Geographic => ("IFCGEOGRAPHICELEMENT", "IFCGEOGRAPHICELEMENTTYPE"),
             Class::Proxy => ("IFCBUILDINGELEMENTPROXY", "IFCBUILDINGELEMENTPROXYTYPE"),
+            Class::Vehicle => ("IFCVEHICLE", "IFCVEHICLETYPE"),
         }
     }
 
@@ -41,12 +45,15 @@ impl Class {
             Class::Sanitary => "Pset_SanitaryTerminalTypeCommon",
             Class::Geographic => "ArchiSim_Phase",
             Class::Proxy => "Pset_BuildingElementProxyCommon",
+            Class::Vehicle => "ArchiSim_Phase",
         }
     }
 }
 
-/// IFC class and predefined type of an object family's outputs.
-fn ifc_kind(outputs: &archisim_core::Values) -> (Class, String) {
+/// IFC class and predefined type of an object family's outputs, in a
+/// schema: IFC4 has neither vehicles nor vegetation, so they go as proxies
+/// and user-defined geographic elements.
+fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, String) {
     let class = outputs
         .get("ifc_class")
         .and_then(|v| v.as_text())
@@ -56,6 +63,8 @@ fn ifc_kind(outputs: &archisim_core::Values) -> (Class, String) {
         "ifcsanitaryterminal" => Class::Sanitary,
         "ifcgeographicelement" => Class::Geographic,
         "ifcbuildingelementproxy" => Class::Proxy,
+        "ifcvehicle" if schema == crate::Schema::Ifc4x3 => Class::Vehicle,
+        "ifcvehicle" => Class::Proxy,
         _ => Class::Furniture,
     };
     let allowed: &[&str] = match class {
@@ -80,8 +89,18 @@ fn ifc_kind(outputs: &archisim_core::Values) -> (Class, String) {
             "SHELF",
             "SOFA",
         ],
-        Class::Geographic => &[],
+        Class::Geographic => match schema {
+            crate::Schema::Ifc4x3 => &["TERRAIN", "VEGETATION", "SOIL_BORING_POINT"],
+            crate::Schema::Ifc4 => &["TERRAIN"],
+        },
         Class::Proxy => &["COMPLEX", "ELEMENT", "PARTIAL"],
+        Class::Vehicle => &[
+            "VEHICLE",
+            "VEHICLEWHEELED",
+            "VEHICLETRACKED",
+            "CARGO",
+            "ROLLINGSTOCK",
+        ],
     };
     let t = outputs
         .get("ifc_type")
@@ -111,7 +130,7 @@ impl Exporter<'_> {
             let Ok(ev) = model.evaluate_object(o.id) else {
                 continue;
             };
-            let (class, predefined) = ifc_kind(&ev.outputs);
+            let (class, predefined) = ifc_kind(&ev.outputs, self.schema);
             let (element_entity, type_entity) = class.names();
             // The type, once.
             if let std::collections::btree_map::Entry::Vacant(slot) = typed.entry(t.id) {

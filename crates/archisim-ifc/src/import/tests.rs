@@ -1170,3 +1170,46 @@ fn rooms_round_trip_as_spaces() {
     assert_eq!(back.finishes.floor, "Tarima de roble");
     assert_eq!(back.usage, "Estancia");
 }
+
+/// IFC 4.3: the project placed on the map (`IfcMapConversion` to UTM, the
+/// site's latitude and longitude) comes back; IFC4 writes the same map
+/// conversion without the 4.3 attributes.
+#[test]
+fn georeference_round_trip_and_ifc4() {
+    let mut m = model();
+    m.set_true_north(0.2).unwrap();
+    m.set_georeference(Some(archisim_core::Georeference {
+        crs: "EPSG:25829".into(),
+        eastings: 680_123.25,
+        northings: 4_119_456.5,
+        height: 3.5,
+    }))
+    .unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("FILE_SCHEMA(('IFC4X3_ADD2'))"));
+    assert!(ifc.contains("IFCPROJECTEDCRS('EPSG:25829',$,'ETRS89',$,'UTM','29N',"));
+    assert!(ifc.contains(",680123.25,4119456.5,3.5,"));
+    // Latitude 37° N, longitude 6° W.
+    assert!(ifc.contains(",.ELEMENT.,(37,"), "{ifc}");
+    let Imported { model, .. } = import_ifc(&ifc).unwrap();
+    assert_eq!(model.georeference(), m.georeference());
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    // IFC4.
+    let ifc4 = export_ifc(
+        &m,
+        &ExportOptions {
+            timestamp: Some("2026-10-17T12:00:00".into()),
+            schema: crate::Schema::Ifc4,
+            ..Default::default()
+        },
+    );
+    assert!(ifc4.contains("FILE_SCHEMA(('IFC4'))"));
+    let conv = ifc4
+        .lines()
+        .find(|l| l.contains("IFCMAPCONVERSION("))
+        .unwrap();
+    assert!(conv.ends_with(",1.);"), "{conv}");
+    let Imported { model, .. } = import_ifc(&ifc4).unwrap();
+    assert_eq!(model.georeference(), m.georeference());
+}

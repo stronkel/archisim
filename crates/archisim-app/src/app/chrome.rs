@@ -108,10 +108,10 @@ impl ArchiSimApp {
                     .add(egui::Button::new(
                         egui::RichText::new("Exportar IFC").font(strong_font(12.0)),
                     ))
-                    .on_hover_text("Exportar el proyecto en IFC4")
+                    .on_hover_text("Exportar el proyecto en IFC 4.3")
                     .clicked()
                 {
-                    self.export_ifc();
+                    self.export_ifc(archisim_ifc::Schema::Ifc4x3);
                 }
                 if icon_button(ui, Icon::Save, "Guardar (Ctrl+S)", false).clicked() {
                     self.save(false);
@@ -181,8 +181,15 @@ impl ArchiSimApp {
             {
                 self.pick_survey();
             }
-            if ui.button("Exportar IFC4…").clicked() {
-                self.export_ifc();
+            if ui.button("Exportar IFC 4.3…").clicked() {
+                self.export_ifc(archisim_ifc::Schema::Ifc4x3);
+            }
+            if ui
+                .button("Exportar IFC4 (compatibilidad)…")
+                .on_hover_text("Para programas que aún no leen IFC 4.3: la vegetación y los vehículos van como elementos genéricos")
+                .clicked()
+            {
+                self.export_ifc(archisim_ifc::Schema::Ifc4);
             }
             let section = matches!(self.mode, ViewMode::Section);
             let what = if section {
