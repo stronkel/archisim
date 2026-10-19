@@ -1,0 +1,26 @@
+family "Frigorífico"
+  category kitchen
+  host none
+  version 1
+  description "Frigorífico de pie"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.40..1.20 label "Ancho"
+    depth  length = 0.65 range 0.50..0.90 label "Fondo"
+    height length = 1.85 range 0.80..2.20 label "Altura"
+  section "Materiales"
+    mat material = "Acero S275" label "Acabado"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin
+  line (width / 2, 0) to (-width / 2, depth) pen thin
+  line (-width / 2, depth - 0.04) to (width / 2, depth - 0.04) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

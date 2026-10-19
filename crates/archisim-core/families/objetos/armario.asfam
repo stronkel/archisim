@@ -1,0 +1,34 @@
+family "Armario"
+  category furniture
+  host none
+  version 1
+  description "Armario de puertas abatibles con barra de colgar"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.40..6.00 label "Ancho"
+    depth  length = 0.60 range 0.30..1.00 label "Fondo"
+    height length = 2.40 range 0.80..3.00 label "Altura"
+    doors  integer = 2 range 1..8 label "Puertas"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+# Contorno, frente de puertas y la barra de colgar en discontinua.
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+  let dw = width / doors
+  repeat i in 1..doors
+    line (-width / 2 + i * dw, depth - 0.02) to (-width / 2 + i * dw, depth) pen thin
+  line (-width / 2 + 0.05, depth / 2) to (width / 2 - 0.05, depth / 2) pen thin dashed
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"

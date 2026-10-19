@@ -124,14 +124,19 @@ impl Exporter<'_> {
                 .w
                 .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({rep}))"));
             let name = string(&t.name);
+            // ObjectType: the family (required when the type is
+            // USERDEFINED).
+            let object_type = model
+                .family(t.family)
+                .map_or("$".to_string(), |f| string(f.name()));
             let el = if sanitary {
                 self.w.add(format!(
-                    "IFCSANITARYTERMINAL({},$,{name},$,$,{pl},{shape},$,.{predefined}.)",
+                    "IFCSANITARYTERMINAL({},$,{name},$,{object_type},{pl},{shape},$,.{predefined}.)",
                     string(o.guid.as_str()),
                 ))
             } else {
                 self.w.add(format!(
-                    "IFCFURNITURE({},$,{name},$,$,{pl},{shape},$,.{predefined}.)",
+                    "IFCFURNITURE({},$,{name},$,{object_type},{pl},{shape},$,.{predefined}.)",
                     string(o.guid.as_str()),
                 ))
             };

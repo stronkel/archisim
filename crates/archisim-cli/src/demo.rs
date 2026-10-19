@@ -344,6 +344,8 @@ pub fn build() -> Result<Document, ModelError> {
             ("Mesa de comedor 160×90", 4.3, 7.0, 0.0),
             ("Cama doble 150×200", 2.0, 3.45, PI),
             ("Cama individual 90×190", 12.0 - inner, 2.0, FRAC_PI_2),
+            ("Armario 120", 5.95, 1.5, FRAC_PI_2),
+            ("Frigorífico 60", 6.05, 7.5, -FRAC_PI_2),
         ] {
             let object_type = ty(m, name)?;
             m.add_object(archisim_core::NewObject {
@@ -506,7 +508,7 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        assert_eq!(m.objects().count(), 5);
+        assert_eq!(m.objects().count(), 7);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);
