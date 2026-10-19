@@ -50,7 +50,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | # | Tarea | Tamaño | Estado |
 |---|---|---|---|
 | R1 ✅ | **Líneas de ayuda de intersección**: al dibujar muros, forjados, cubiertas, locales, cotas…, guías perpendiculares y de alineación desde los puntos ya dibujados (para cerrar una vivienda con el último vértice en línea con el primero), como la de ortogonalidad | M | — |
-| R2 | **Cotas normales re-anclables**: arrastrar un extremo de una cota a otro punto, sin borrar y redibujar; anclajes más visibles | S | — |
+| R2 ✅ | **Cotas normales re-anclables**: arrastrar un extremo de una cota a otro punto, sin borrar y redibujar; anclajes más visibles | S | — |
 | R3 | **Usos de local propios**: lista de usos editable por proyecto (no solo vivienda) | S | — |
 | R4 | **Terreno editable en planta**: clic en un punto para escribir su cota (adiós a la lista); **líneas de nivel** dibujadas con su cota, que generan puntos; cambiar la cota de una línea entera; más adelante, crearlas con la varita sobre un dibujo CAD | M | — |
 | R5 | **Seleccionar en sección y alzado** (y ver/editar sus propiedades) | M | — |

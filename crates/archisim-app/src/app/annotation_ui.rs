@@ -59,6 +59,19 @@ impl ArchiSimApp {
         let Some(c) = self.cursor else {
             return;
         };
+        // The points the element under the cursor offers to measure to,
+        // so it is clear where the dimension can anchor.
+        if !self.dim_tool.is_placing() {
+            let reach = self.view.to_metres(super::REACH);
+            if let Some(e) = crate::pick::pick(&self.ed, self.ed.level, c.point, reach) {
+                if let Some(poly) = crate::pick::outline(&self.ed, e) {
+                    for q in poly {
+                        let s = self.view.to_screen(rect, q);
+                        painter.circle_filled(s, 2.5, ACCENT.gamma_multiply(0.7));
+                    }
+                }
+            }
+        }
         let pts = self.dim_tool.points();
         for p in pts {
             let s = self.view.to_screen(rect, *p);

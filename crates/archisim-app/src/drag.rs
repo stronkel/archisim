@@ -64,6 +64,12 @@ pub enum Grip {
         object: archisim_core::ObjectId,
         width: bool,
     },
+    /// A measured point of a dimension: dragged to another point, the
+    /// dimension measures to it (no need to delete and draw it again).
+    DimPoint {
+        dimension: archisim_core::DimensionId,
+        index: usize,
+    },
     /// One end of a curtain wall.
     CurtainEnd {
         curtain: archisim_core::CurtainWallId,
@@ -272,8 +278,20 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Opening(_) | Element::Dimension(_) | Element::Mark(_) | Element::Column(_) => {
+            Element::Dimension(id) => {
+                if let Some(d) = model.dimension(*id) {
+                    for (index, point) in d.points.iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::DimPoint {
+                                dimension: *id,
+                                index,
+                            },
+                            point: *point,
+                        });
+                    }
+                }
             }
+            Element::Opening(_) | Element::Mark(_) | Element::Column(_) => {}
         }
     }
     v
@@ -324,6 +342,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
+        Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
     }
@@ -432,6 +451,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::StairPoint { .. } => "Mover punto de la escalera",
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
+        Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
     }
@@ -508,6 +528,19 @@ pub fn apply(
             .map(|_| None),
         Grip::ObjectSize { object, width } => {
             stretch_object(model, object, width, drag.to).map(|_| None)
+        }
+        Grip::DimPoint { dimension, index } => {
+            let d = model
+                .dimension(dimension)
+                .ok_or(ModelError::UnknownDimension(dimension))?;
+            let mut points = d.points.clone();
+            if let Some(p) = points.get_mut(index) {
+                *p = drag.to;
+            }
+            let position = d.position;
+            model
+                .set_dimension(dimension, points, position)
+                .map(|_| None)
         }
         Grip::RailingPoint { railing, index } => model
             .edit_railing(railing, |r| {
@@ -1214,6 +1247,7 @@ fn level_of(
         Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
+        Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
@@ -1475,6 +1509,47 @@ mod tests {
         apply(&mut m, &sel(&[Element::Wall(across)]), &drag).unwrap();
         assert!(m.wall(below).unwrap().end.approx_eq(p(3.0, 2.45)));
         assert_eq!(m.wall(below).unwrap().start, p(3.0, 0.265));
+    }
+
+    /// A measured point of a dimension is a handle: dragged to another
+    /// point, the dimension measures to it; its line stays.
+    #[test]
+    fn dimension_points_are_handles() {
+        let (mut m, lvl, _) = room();
+        let d = m
+            .add_dimension(archisim_core::NewDimension {
+                level: lvl,
+                points: vec![p(0.0, 0.0), p(6.0, 0.0)],
+                direction: p(1.0, 0.0),
+                position: p(0.0, -1.0),
+            })
+            .unwrap();
+        let s = sel(&[Element::Dimension(d)]);
+        let (grip, at) = grip_at(&m, &s, p(5.98, 0.01), 0.1).unwrap();
+        assert_eq!(at, p(6.0, 0.0));
+        assert_eq!(
+            label(
+                &m,
+                &Drag {
+                    grip,
+                    from: at,
+                    to: at,
+                    variant: false
+                }
+            ),
+            "Cambiar punto de cota"
+        );
+        let drag = Drag {
+            grip,
+            from: at,
+            to: p(5.735, 0.265),
+            variant: false,
+        };
+        apply(&mut m, &s, &drag).unwrap();
+        let dim = m.dimension(d).unwrap();
+        assert_eq!(dim.points[1], p(5.735, 0.265));
+        assert!((dim.values()[0] - 5.735).abs() < 1e-9);
+        assert!((dim.line_offset() + 1.0).abs() < 1e-12);
     }
 
     #[test]
