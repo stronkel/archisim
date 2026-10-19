@@ -1129,6 +1129,8 @@ pub struct ModelParts {
     /// The uses rooms of this project are offered (empty: the default
     /// residential list).
     pub room_usages: Vec<String>,
+    /// Where the project is on the map.
+    pub georeference: Option<crate::georef::Georeference>,
     /// Drawing layers, layer "0" included.
     pub draw_layers: Vec<DrawLayer>,
     pub drafts: Vec<Draft>,
@@ -1203,6 +1205,7 @@ pub struct Model {
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     pub(crate) room_usages: Vec<String>,
+    pub(crate) georeference: Option<crate::georef::Georeference>,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -1252,6 +1255,7 @@ impl Model {
             objects: BTreeMap::new(),
             true_north: 0.0,
             room_usages: Vec::new(),
+            georeference: None,
             draw_phase: Phase::New,
             draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
             drafts: BTreeMap::new(),
@@ -3430,6 +3434,7 @@ impl Model {
             objects: self.objects.values().cloned().collect(),
             true_north: self.true_north,
             room_usages: self.room_usages.clone(),
+            georeference: self.georeference.clone(),
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
             graphics: self.graphics,
@@ -3727,6 +3732,12 @@ impl Model {
             .set_room_usages(parts.room_usages)
             .map_err(|error| RestoreError {
                 element: "room uses".into(),
+                error,
+            })?;
+        model
+            .set_georeference(parts.georeference)
+            .map_err(|error| RestoreError {
+                element: "georeference".into(),
                 error,
             })?;
         model.restore_phases(parts.phases)?;

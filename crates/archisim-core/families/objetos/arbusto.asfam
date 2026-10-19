@@ -1,7 +1,7 @@
 family "Arbusto"
   category site
   host none
-  version 1
+  version 2
   description "Arbusto o mata redondeada; el punto de inserción es su centro"
   folder "Vegetación"
 
@@ -37,4 +37,4 @@ plan 1:50
 
 outputs
   ifc_class = "IfcGeographicElement"
-  ifc_type = "USERDEFINED"
+  ifc_type = "VEGETATION"

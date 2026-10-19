@@ -531,12 +531,12 @@ mod tests {
             assert!(s.passed, "{ok}: {}", report.summary());
             assert!(s.applicable > 0, "{ok}");
         }
-        // The person and the car of the garden have no IFC class of their
-        // own: they go as generic elements, which these requirements
-        // forbid.
+        // The person of the garden has no IFC class of its own: it goes as
+        // a generic element, which these requirements forbid (the car is an
+        // IfcVehicle in IFC 4.3).
         let generic = by_name("Sin elementos");
         assert!(!generic.passed);
-        assert_eq!(generic.failures.len(), 2, "{}", report.summary());
+        assert_eq!(generic.failures.len(), 1, "{}", report.summary());
         // No U-values yet: every exterior wall fails, and says why.
         let u = by_name("Muros exteriores");
         assert!(!u.passed);

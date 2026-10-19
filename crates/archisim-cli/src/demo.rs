@@ -676,6 +676,14 @@ pub fn build() -> Result<Document, ModelError> {
             phase: "Proyecto básico".into(),
             date: "octubre 2026".into(),
         });
+        // On the map: Calle Mayor 1, Madrid (ETRS89 / UTM 30N), the ±0,00
+        // at 650 m above sea level.
+        m.set_georeference(Some(archisim_core::Georeference {
+            crs: "EPSG:25830".into(),
+            eastings: 440_230.0,
+            northings: 4_474_270.0,
+            height: 650.0,
+        }))?;
         let sheet = m.add_sheet(NewSheet {
             number: "A-01".into(),
             name: "Planta baja".into(),

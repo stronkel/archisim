@@ -382,7 +382,9 @@ fn drawn_project_saves_and_exports() {
     let path = h.app.ed.save(Some(&dir.join("sesion.archisim"))).unwrap();
     let reopened = Editor::open(&path).unwrap();
     assert_eq!(reopened.model(), h.model());
-    reopened.export_ifc(&dir.join("sesion.ifc")).unwrap();
+    reopened
+        .export_ifc(&dir.join("sesion.ifc"), archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
     let ifc = std::fs::read_to_string(dir.join("sesion.ifc")).unwrap();
     assert_eq!(ifc.matches("IFCWALL(").count(), 4);
     assert_eq!(ifc.matches("IFCSLAB(").count(), 1);
@@ -704,7 +706,10 @@ fn moves_copies_and_stretches_with_the_mouse() {
         None => std::env::temp_dir().join(format!("archisim-drag-{}", std::process::id())),
     };
     std::fs::create_dir_all(&dir).unwrap();
-    h.app.ed.export_ifc(&dir.join("edicion.ifc")).unwrap();
+    h.app
+        .ed
+        .export_ifc(&dir.join("edicion.ifc"), archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
     let ifc = std::fs::read_to_string(dir.join("edicion.ifc")).unwrap();
     assert_eq!(ifc.matches("IFCWALL(").count(), 4);
     assert_eq!(ifc.matches("IFCWINDOW(").count(), 1);
@@ -853,7 +858,10 @@ fn levels_are_managed_from_the_dialog() {
     // The new floor still exports as a storey.
     let dir = std::env::temp_dir().join(format!("archisim-levels-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    h.app.ed.export_ifc(&dir.join("plantas.ifc")).unwrap();
+    h.app
+        .ed
+        .export_ifc(&dir.join("plantas.ifc"), archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
     let ifc = std::fs::read_to_string(dir.join("plantas.ifc")).unwrap();
     assert!(ifc.contains("Planta 1"), "storey name");
     let _ = std::fs::remove_dir_all(dir);
@@ -1012,7 +1020,9 @@ fn drawn_project_with_edited_types() {
     let path = h.app.ed.save(Some(&dir.join("tipos.archisim"))).unwrap();
     let reopened = Editor::open(&path).unwrap();
     assert_eq!(reopened.model(), h.model());
-    reopened.export_ifc(&dir.join("tipos.ifc")).unwrap();
+    reopened
+        .export_ifc(&dir.join("tipos.ifc"), archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
     let ifc = std::fs::read_to_string(dir.join("tipos.ifc")).unwrap();
     assert!(ifc.contains("Fachada doble hoja 29,5"));
     assert!(ifc.contains("Bloque de hormig"));
@@ -1667,7 +1677,9 @@ fn construction_modes_by_clicks() {
     let path = h.app.ed.save(Some(&dir.join("modos.archisim"))).unwrap();
     let reopened = Editor::open(&path).unwrap();
     assert_eq!(reopened.model(), h.model());
-    reopened.export_ifc(&dir.join("modos.ifc")).unwrap();
+    reopened
+        .export_ifc(&dir.join("modos.ifc"), archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
     let ifc = std::fs::read_to_string(dir.join("modos.ifc")).unwrap();
     assert_eq!(ifc.matches("IFCTRIMMEDCURVE(").count(), 3);
     let back = archisim_ifc::import_ifc(&ifc).unwrap();
@@ -2228,6 +2240,7 @@ fn terrain_tool_and_north() {
             author: "t".into(),
             organization: String::new(),
             timestamp: None,
+            schema: Default::default(),
         },
     );
     assert!(ifc.contains("IFCGEOGRAPHICELEMENT"));
@@ -2318,6 +2331,7 @@ fn curtain_wall_tool() {
             author: "t".into(),
             organization: String::new(),
             timestamp: None,
+            schema: Default::default(),
         },
     );
     assert!(ifc.contains("IFCCURTAINWALL"));
@@ -2348,6 +2362,7 @@ fn railing_tool() {
             author: "t".into(),
             organization: String::new(),
             timestamp: None,
+            schema: Default::default(),
         },
     );
     assert!(ifc.contains(".GUARDRAIL."));
@@ -2382,6 +2397,7 @@ fn object_tool() {
             author: "t".into(),
             organization: String::new(),
             timestamp: None,
+            schema: Default::default(),
         },
     );
     assert!(ifc.contains("IFCFURNITURE(") || ifc.contains("IFCSANITARYTERMINAL("));
@@ -3232,5 +3248,38 @@ fn sections_on_sheets_and_exported() {
     h.app.ed.selection = [Element::Section(sec)].into_iter().collect();
     h.app.ed.delete_selection().unwrap();
     assert_eq!(h.model().viewports().count(), 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The project's properties show where it is on the map; set, the IFC
+/// carries it.
+#[test]
+fn georeference_in_the_project() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app
+        .ed
+        .set_georeference(Some(archisim_core::Georeference {
+            crs: "EPSG:25829".into(),
+            eastings: 680_000.0,
+            northings: 4_119_000.0,
+            height: 3.0,
+        }))
+        .unwrap();
+    // Nothing selected: the project's properties, with the map group.
+    h.app.ed.selection.clear();
+    h.frame();
+    h.frame();
+    let dir = std::env::temp_dir().join(format!("archisim-geo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("geo.ifc");
+    h.app
+        .ed
+        .export_ifc(&path, archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("IFCMAPCONVERSION("));
+    h.app.ed.undo();
+    assert!(h.model().georeference().is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -213,8 +213,8 @@ impl Editor {
         Ok(target)
     }
 
-    /// Writes the IFC4 file of the whole project.
-    pub fn export_ifc(&self, path: &Path) -> EditResult {
+    /// Writes the IFC file of the whole project, in IFC 4.3 or IFC4.
+    pub fn export_ifc(&self, path: &Path, schema: archisim_ifc::Schema) -> EditResult {
         let file_name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -226,6 +226,7 @@ impl Editor {
                 author: "ArchiSim".into(),
                 organization: String::new(),
                 timestamp: None,
+                schema,
             },
         );
         std::fs::write(path, text).map_err(|e| format!("no se pudo escribir el IFC: {e}"))
@@ -1430,7 +1431,8 @@ mod tests {
         assert_eq!(ed.display_name(), "casa.archisim");
         let reopened = Editor::open(&path).unwrap();
         assert_eq!(reopened.model(), ed.model());
-        ed.export_ifc(&dir.join("casa.ifc")).unwrap();
+        ed.export_ifc(&dir.join("casa.ifc"), archisim_ifc::Schema::Ifc4x3)
+            .unwrap();
         for name in ["casa.svg", "casa.pdf", "casa.dxf"] {
             ed.export_plan(&dir.join(name), &PlanOptions::default())
                 .unwrap();

@@ -858,6 +858,20 @@ pub(crate) struct Project {
     /// default list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub room_usages: Vec<String>,
+    /// Where the project is on the map (version 11).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub georeference: Option<Georeference>,
+}
+
+/// Map coordinates of the ±0,00 (version 11).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Georeference {
+    /// `EPSG:<code>`.
+    pub crs: String,
+    pub eastings: f64,
+    pub northings: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1125,6 +1139,12 @@ impl ProjectFile {
                 building_guid: p.building_guid.to_string(),
                 true_north: p.true_north.to_degrees(),
                 room_usages: p.room_usages,
+                georeference: p.georeference.map(|g| Georeference {
+                    crs: g.crs,
+                    eastings: g.eastings,
+                    northings: g.northings,
+                    height: g.height,
+                }),
             },
             levels: p
                 .levels
@@ -1648,6 +1668,12 @@ impl ProjectFile {
                 .collect::<Result<Vec<_>, FileError>>()?,
             true_north: project.true_north.to_radians(),
             room_usages: project.room_usages.clone(),
+            georeference: project.georeference.as_ref().map(|g| core::Georeference {
+                crs: g.crs.clone(),
+                eastings: g.eastings,
+                northings: g.northings,
+                height: g.height,
+            }),
             wall_roofs: self
                 .wall_roofs
                 .iter()

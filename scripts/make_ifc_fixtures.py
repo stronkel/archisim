@@ -7,6 +7,7 @@ another program (IfcOpenShell), not by ArchiSim.
 
 Writes, in crates/archisim-ifc/tests/fixtures/:
   - ifcopenshell_ifc4_m.ifc     IFC4, metres, walls with an axis
+  - ifcopenshell_ifc4x3_m.ifc   IFC4X3_ADD2, metres, walls with an axis
   - ifcopenshell_ifc2x3_mm.ifc  IFC2X3, millimetres, walls without an axis
   - ifcopenshell_formas.ifc     IFC2X3, millimetres, written entity by entity
                                 as Revit does: an L-shaped wall (polyline
@@ -467,6 +468,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     build_shapes(os.path.join(OUT, "ifcopenshell_formas.ifc"))
     build("IFC4", False, True, os.path.join(OUT, "ifcopenshell_ifc4_m.ifc"))
+    build("IFC4X3_ADD2", False, True, os.path.join(OUT, "ifcopenshell_ifc4x3_m.ifc"))
     build("IFC2X3", True, False, os.path.join(OUT, "ifcopenshell_ifc2x3_mm.ifc"))
 
 

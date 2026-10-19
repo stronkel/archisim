@@ -6,7 +6,7 @@
 //! ```json
 //! {
 //!   "format": "ArchiSim",
-//!   "version": 10,
+//!   "version": 11,
 //!   "units": "m",
 //!   "generator": "ArchiSim 0.4.0",
 //!   "project": { "name": "…", "guid": "…", … },
@@ -46,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 10;
+pub const CURRENT_VERSION: u32 = 11;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -228,10 +228,12 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             8 => spaces_to_rooms(with_drafting(value))?,
             // 9 → 10: views on sheets may show a section or elevation
             // (`section`); a view without it is a plan, as all of them were.
-            9 => {
+            // 10 → 11: the project may be georeferenced
+            // (`project.georeference`); older ones are not.
+            9 | 10 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
-                    map.insert("version".into(), Value::from(10));
+                    map.insert("version".into(), Value::from(version + 1));
                 }
                 v
             }
@@ -899,7 +901,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 10", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 11", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -926,7 +928,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 10"));
+        assert!(to_string(&opened).contains("\"version\": 11"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1094,7 +1096,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 10", "\"version\": 3", 1)
+            .replacen("\"version\": 11", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1156,7 +1158,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 10", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 11", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1425,6 +1427,24 @@ mod tests {
         assert_eq!(m2.viewports().count(), 1);
     }
 
+    /// The georeference (version 11) is saved and comes back.
+    #[test]
+    fn georeference_round_trip() {
+        let mut m = sample();
+        m.set_georeference(Some(archisim_core::Georeference {
+            crs: "EPSG:25829".into(),
+            eastings: 680_123.456,
+            northings: 4_119_876.5,
+            height: 3.2,
+        }))
+        .unwrap();
+        let text = to_string(&m);
+        assert!(text.contains("\"crs\": \"EPSG:25829\""));
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.georeference(), m.georeference());
+        assert_same_project(&back, &m);
+    }
+
     /// Phase 2 files (version 7 and 8 of ArchiSim 0.25) have rooms as
     /// `spaces`, the uses as `space_usages`, and no drawing layers: they
     /// open with those rooms as rooms of their own height.
@@ -1519,7 +1539,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 10", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 11", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1531,7 +1551,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 10,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 11,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1577,11 +1597,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 10", "\"version\": 11"),
-            Err(FileError::TooNew { version: 11 })
+            edited("\"version\": 11", "\"version\": 12"),
+            Err(FileError::TooNew { version: 12 })
         ));
         assert!(matches!(
-            edited("\"version\": 10", "\"version\": 0"),
+            edited("\"version\": 11", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

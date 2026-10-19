@@ -1,7 +1,7 @@
 family "Árbol"
   category site
   host none
-  version 1
+  version 2
   description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
   folder "Vegetación"
 
@@ -50,4 +50,4 @@ plan 1:50
 
 outputs
   ifc_class = "IfcGeographicElement"
-  ifc_type = "USERDEFINED"
+  ifc_type = "VEGETATION"

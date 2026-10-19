@@ -2648,6 +2648,7 @@ impl<'a> Importer<'a> {
         }
         self.read_project();
         self.read_true_north();
+        self.read_georeference();
         // Every material, in the file's order, used or not.
         for id in self.file.of_kind("IFCMATERIAL") {
             self.material(id);

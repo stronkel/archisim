@@ -881,6 +881,7 @@ impl ArchiSimApp {
                 }
             });
         });
+        self.georeference_group(ui);
         self.usages_group(ui);
     }
 

@@ -195,6 +195,11 @@ pub fn class_name(kind: &str) -> &'static str {
         "IFCCHIMNEY" => "chimeneas",
         "IFCSHADINGDEVICE" => "protecciones solares",
         "IFCBUILDINGELEMENTPROXY" => "objetos genéricos",
+        "IFCVEHICLE" => "vehículos",
+        "IFCPAVEMENT" => "firmes y pavimentos exteriores",
+        "IFCKERB" => "bordillos",
+        "IFCCOURSE" => "capas de firme",
+        "IFCEARTHWORKSFILL" => "rellenos de tierras",
         "IFCFURNISHINGELEMENT" | "IFCFURNITURE" => "mobiliario",
         "IFCSPACE" => "espacios (locales)",
         "IFCSANITARYTERMINAL"
@@ -245,7 +250,12 @@ pub const UNSUPPORTED_CLASSES: &[&str] = &[
     "IFCPIPEFITTING",
     "IFCAIRTERMINAL",
     "IFCTRANSPORTELEMENT",
+    "IFCVEHICLE",
     "IFCGEOGRAPHICELEMENT",
+    "IFCPAVEMENT",
+    "IFCKERB",
+    "IFCCOURSE",
+    "IFCEARTHWORKSFILL",
 ];
 
 /// Classes that are only parts of something else already counted: stair

@@ -1,7 +1,7 @@
 family "Turismo"
   category vehicle
   host none
-  version 1
+  version 2
   description "Coche de turismo; el punto de inserción es el centro de la trasera y mira hacia delante"
   folder "Turismos"
 
@@ -33,5 +33,5 @@ plan 1:50
   line (-w + 0.12, 0.32 * length) to (w - 0.12, 0.32 * length) pen thin
 
 outputs
-  ifc_class = "IfcBuildingElementProxy"
-  ifc_type = "USERDEFINED"
+  ifc_class = "IfcVehicle"
+  ifc_type = "VEHICLEWHEELED"
