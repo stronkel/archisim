@@ -83,6 +83,10 @@ typed_id!(
     /// Identifies a [`crate::Stair`].
     StairId
 );
+typed_id!(
+    /// Identifies a [`crate::Terrain`].
+    TerrainId
+);
 
 typed_id!(
     /// Identifies a [`crate::Family`] loaded in the project.

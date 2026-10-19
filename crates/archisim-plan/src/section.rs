@@ -548,7 +548,11 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
 pub fn elevations_around(model: &Model) -> Vec<NewSection> {
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for solid in model_solids(model) {
+    // The building, not the plot.
+    let solids = model_solids(model)
+        .into_iter()
+        .filter(|s| !matches!(s.owner, archisim_geom::solid::SolidOwner::Terrain(_)));
+    for solid in solids {
         for t in &solid.triangles {
             for p in t {
                 lo = Point2::new(lo.x.min(p[0]), lo.y.min(p[1]));

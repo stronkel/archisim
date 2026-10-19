@@ -263,6 +263,36 @@ pub fn build() -> Result<Document, ModelError> {
         })
     })?;
 
+    // The plot (v0.25): survey points falling gently to the south-east,
+    // under the floor of the house; true north 12° to the east of up.
+    doc.transact("Terreno", |m| {
+        let earth = m.add_material(
+            "Terreno natural",
+            "earth",
+            [176, 156, 120],
+            archisim_core::CutPattern::Dots,
+        );
+        let mut points = Vec::new();
+        for i in 0..5 {
+            for j in 0..5 {
+                let (x, y) = (-6.0 + 6.0 * i as f64, -8.0 + 6.0 * j as f64);
+                let z = -0.25 + 0.012 * y - 0.008 * x;
+                points.push(archisim_core::SurveyPoint {
+                    at: Point2::new(x, y),
+                    z: (z * 100.0f64).round() / 100.0,
+                });
+            }
+        }
+        m.add_terrain(archisim_core::NewTerrain {
+            level: pb,
+            points,
+            material: earth,
+            depth: 1.0,
+            contour: 0.1,
+        })?;
+        m.set_true_north(12f64.to_radians())
+    })?;
+
     // Dimensions: the openings of the south and west façades, outside, the
     // overall size beyond them, and level marks on the ground slab.
     doc.transact("Cotas", |m| {
@@ -355,6 +385,7 @@ mod tests {
         assert_eq!(m.slabs().count(), 3);
         assert_eq!(m.roofs().count(), 1);
         assert_eq!(m.stairs().count(), 1);
+        assert_eq!(m.terrains().count(), 1);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);

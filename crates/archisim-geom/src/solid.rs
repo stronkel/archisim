@@ -34,6 +34,7 @@ pub enum SolidOwner {
     Beam(BeamId),
     Roof(archisim_core::RoofId),
     Stair(archisim_core::StairId),
+    Terrain(archisim_core::TerrainId),
 }
 
 /// One closed piece of one material.
@@ -692,6 +693,41 @@ pub fn stair_solids(model: &Model, id: archisim_core::StairId) -> Vec<Solid> {
     out
 }
 
+/// The ground of a terrain: its surface on top, flat underneath `depth`
+/// below its lowest point, plumb at its edges.
+pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid> {
+    let Some(t) = model.terrain(id) else {
+        return Vec::new();
+    };
+    let tris = t.triangles();
+    if tris.is_empty() {
+        return Vec::new();
+    }
+    let p3 = |i: usize| [t.points[i].at.x, t.points[i].at.y, t.points[i].z];
+    let floor = t.range().0 - t.depth;
+    let low = |i: usize| [t.points[i].at.x, t.points[i].at.y, floor];
+    let mut out: Vec<[P3; 3]> = tris
+        .iter()
+        .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
+        .collect();
+    let ring = t.boundary();
+    let poly: Vec<Point2> = ring.iter().map(|i| t.points[*i].at).collect();
+    for [a, b, c] in triangulate(&poly) {
+        out.push([low(ring[a]), low(ring[c]), low(ring[b])]);
+    }
+    let n = ring.len();
+    for k in 0..n {
+        let (a, b) = (ring[k], ring[(k + 1) % n]);
+        out.push([low(a), low(b), p3(b)]);
+        out.push([low(a), p3(b), p3(a)]);
+    }
+    vec![Solid {
+        owner: SolidOwner::Terrain(id),
+        material: t.material,
+        triangles: out,
+    }]
+}
+
 /// A straight bar of a railing: from `a` to `b` (the middle of its end
 /// faces), `w` wide across `side` (a horizontal unit vector) and `d` deep
 /// along `up`.
@@ -1224,6 +1260,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for s in model.stairs() {
         out.extend(stair_solids(model, s.id));
     }
+    for t in model.terrains() {
+        out.extend(terrain_solids(model, t.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -1241,6 +1280,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Beam(b) => model.beam(b).is_some_and(|b| b.level == level),
         SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| r.level == level),
         SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
+        SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
     };
     model_solids(model)
         .into_iter()
@@ -1710,6 +1750,34 @@ mod tests {
         let hi = profile.iter().map(|q| q.y).fold(f64::MIN, f64::max);
         assert!((lo - 1.0).abs() < 1e-9);
         assert!((hi - 1.0 - layout.landings[0].top + layout.riser).abs() < 1e-9);
+    }
+
+    /// A terrain is one closed solid; its volume, that of the ground down
+    /// to its floor.
+    #[test]
+    fn terrain_is_closed() {
+        let (mut m, w) = model();
+        let l = m.wall(w).unwrap().level;
+        let mat = m.materials().next().unwrap().id;
+        let sp = |x: f64, y: f64, z: f64| archisim_core::SurveyPoint { at: p(x, y), z };
+        let id = m
+            .add_terrain(archisim_core::NewTerrain {
+                level: l,
+                points: vec![
+                    sp(0.0, 0.0, 0.0),
+                    sp(10.0, 0.0, 0.0),
+                    sp(10.0, 10.0, 1.0),
+                    sp(0.0, 10.0, 1.0),
+                    sp(5.0, 5.0, 2.0),
+                ],
+                material: mat,
+                depth: 1.0,
+                contour: 0.5,
+            })
+            .unwrap();
+        let solids = terrain_solids(&m, id);
+        assert_closed(&solids);
+        assert!(solids[0].volume() > 100.0);
     }
 
     /// Every edge of the solids together is shared by exactly two

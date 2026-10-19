@@ -16,12 +16,14 @@ use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MI
 mod phases;
 mod roofs;
 mod sections;
+mod site;
 mod spaces;
 mod stairs;
 mod structure;
 pub use phases::*;
 pub use roofs::*;
 pub use sections::*;
+pub use site::*;
 pub use spaces::*;
 pub use stairs::*;
 pub use structure::*;
@@ -759,6 +761,9 @@ pub enum ModelError {
     /// A roof footprint with a re-entrant corner.
     RoofNotConvex,
     UnknownStair(StairId),
+    UnknownTerrain(TerrainId),
+    /// A terrain with fewer than three points out of line, or no depth.
+    InvalidTerrain,
     /// A stair with no flight, nothing to climb, or too narrow or shallow.
     InvalidStair,
     /// Another room on the level already has that number.
@@ -859,6 +864,11 @@ impl fmt::Display for ModelError {
             ModelError::ZeroLengthSection => write!(f, "a section line needs two different points"),
             ModelError::UnknownRoof(id) => write!(f, "unknown roof {id}"),
             ModelError::UnknownStair(id) => write!(f, "unknown stair {id}"),
+            ModelError::UnknownTerrain(id) => write!(f, "unknown terrain {id}"),
+            ModelError::InvalidTerrain => write!(
+                f,
+                "a terrain needs three points not in a line and some depth"
+            ),
             ModelError::InvalidStair => write!(
                 f,
                 "a stair needs a walking line long enough for a flight, something to climb, and a usable width and tread"
@@ -985,6 +995,9 @@ pub struct ModelParts {
     pub sections: Vec<SectionLine>,
     pub roofs: Vec<Roof>,
     pub stairs: Vec<Stair>,
+    pub terrains: Vec<Terrain>,
+    /// Radians, clockwise from the plan's up.
+    pub true_north: f64,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -1036,6 +1049,9 @@ pub struct Model {
     sections: BTreeMap<SectionId, SectionLine>,
     roofs: BTreeMap<RoofId, Roof>,
     stairs: BTreeMap<StairId, Stair>,
+    terrains: BTreeMap<TerrainId, Terrain>,
+    /// True north: radians, clockwise from the plan's up (+Y).
+    true_north: f64,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -1068,6 +1084,8 @@ impl Model {
             sections: BTreeMap::new(),
             roofs: BTreeMap::new(),
             stairs: BTreeMap::new(),
+            terrains: BTreeMap::new(),
+            true_north: 0.0,
             draw_phase: Phase::New,
         }
     }
@@ -1161,6 +1179,7 @@ impl Model {
         self.spaces.retain(|_, s| s.level != id);
         self.roofs.retain(|_, r| r.level != id);
         self.stairs.retain(|_, s| s.level != id);
+        self.terrains.retain(|_, t| t.level != id);
         for s in self.stairs.values_mut() {
             if matches!(s.top, WallTop::Level { level, .. } if level == id) {
                 s.top = WallTop::Unconnected;
@@ -1290,7 +1309,13 @@ impl Model {
             .stairs
             .values()
             .filter(|s| s.material == id)
-            .map(|s| format!("escalera {}", s.id.0));
+            .map(|s| format!("escalera {}", s.id.0))
+            .chain(
+                self.terrains
+                    .values()
+                    .filter(|t| t.material == id)
+                    .map(|t| format!("terreno {}", t.id.0)),
+            );
         walls
             .chain(slabs)
             .chain(openings)
@@ -3040,6 +3065,8 @@ impl Model {
             sections: self.sections.values().cloned().collect(),
             roofs: self.roofs.values().cloned().collect(),
             stairs: self.stairs.values().cloned().collect(),
+            terrains: self.terrains.values().cloned().collect(),
+            true_north: self.true_north,
         }
     }
 
@@ -3243,6 +3270,13 @@ impl Model {
         model.restore_spaces(parts.spaces, &mut claim)?;
         model.restore_roofs(parts.roofs, &mut claim)?;
         model.restore_stairs(parts.stairs, &mut claim)?;
+        model.restore_terrains(parts.terrains, &mut claim)?;
+        model
+            .set_true_north(parts.true_north)
+            .map_err(|error| RestoreError {
+                element: "true north".into(),
+                error,
+            })?;
         model.restore_phases(parts.phases)?;
         model.restore_sections(parts.sections, &mut claim)?;
 

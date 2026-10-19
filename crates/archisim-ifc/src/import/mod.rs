@@ -36,6 +36,7 @@ pub mod report;
 mod roofs;
 mod spaces;
 mod stairs;
+mod terrain;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
@@ -232,6 +233,8 @@ struct Importer<'a> {
     roof_ids: HashSet<u64>,
     /// `IfcStair`s read back as ArchiSim stairs.
     stair_ids: HashSet<u64>,
+    /// `IfcGeographicElement`s read back as ArchiSim terrains.
+    terrain_ids: HashSet<u64>,
 }
 
 #[derive(Default)]
@@ -249,6 +252,7 @@ struct GuidPlan {
     spaces: Vec<(archisim_core::SpaceId, String)>,
     roofs: Vec<(archisim_core::RoofId, String)>,
     stairs: Vec<(archisim_core::StairId, String)>,
+    terrains: Vec<(archisim_core::TerrainId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -464,6 +468,7 @@ impl<'a> Importer<'a> {
             sources: Vec::new(),
             roof_ids: HashSet::new(),
             stair_ids: HashSet::new(),
+            terrain_ids: HashSet::new(),
         };
         imp.index();
         imp
@@ -2534,6 +2539,7 @@ impl<'a> Importer<'a> {
                 .into_iter()
                 .filter(|id| {
                     !self.stair_ids.contains(id)
+                        && !self.terrain_ids.contains(id)
                         && !self
                             .ix
                             .parent
@@ -2587,6 +2593,7 @@ impl<'a> Importer<'a> {
             ));
         }
         self.read_project();
+        self.read_true_north();
         // Every material, in the file's order, used or not.
         for id in self.file.of_kind("IFCMATERIAL") {
             self.material(id);
@@ -2598,6 +2605,7 @@ impl<'a> Importer<'a> {
         self.import_spaces();
         self.import_roofs();
         self.import_stairs();
+        self.import_terrains();
         self.read_statuses();
         self.count_unsupported();
     }
@@ -2643,6 +2651,7 @@ impl<'a> Importer<'a> {
         restore!(spaces, spaces);
         restore!(roofs, roofs);
         restore!(stairs, stairs);
+        restore!(terrains, terrains);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

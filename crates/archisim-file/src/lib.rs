@@ -659,6 +659,26 @@ mod tests {
             usage: archisim_core::StairUse::Restricted,
         })
         .unwrap();
+        // A small terrain and the true north.
+        let earth = m.materials().last().unwrap().id;
+        let sp = |x: f64, y: f64, z: f64| archisim_core::SurveyPoint {
+            at: Point2::new(x, y),
+            z,
+        };
+        m.add_terrain(archisim_core::NewTerrain {
+            level: levels[0],
+            points: vec![
+                sp(-5.0, -5.0, -0.5),
+                sp(15.0, -5.0, -0.2),
+                sp(15.0, 15.0, 0.4),
+                sp(-5.0, 15.0, 0.1),
+            ],
+            material: earth,
+            depth: 1.5,
+            contour: 0.25,
+        })
+        .unwrap();
+        m.set_true_north(0.4).unwrap();
         // A roof with a gable, and an inclined slab.
         let st = m.slab_types().next().unwrap().id;
         m.add_roof(archisim_core::NewRoof {

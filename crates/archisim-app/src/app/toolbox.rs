@@ -118,6 +118,13 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Escaleras por su línea de huella: tramos, mesetas y comprobación del CTE",
             ),
             tile(
+                Pick::Tool(Tool::Terrain),
+                Icon::Terrain,
+                "Terreno",
+                "R",
+                "Terreno por puntos de cota: curvas de nivel, sección del terreno y norte",
+            ),
+            tile(
                 Pick::Later("2.2"),
                 Icon::Object,
                 "Objeto",

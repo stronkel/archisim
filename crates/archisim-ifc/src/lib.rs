@@ -49,6 +49,7 @@ mod spaces;
 mod stairs;
 pub mod step;
 pub mod step_read;
+mod terrain;
 
 pub use import::{differences, import_ifc, ImportError, ImportReport, Imported};
 
@@ -934,8 +935,21 @@ impl<'a> Exporter<'a> {
         let wcs = self
             .w
             .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
+        // True north, in the plan's axes (clockwise from up).
+        let north = self.model.true_north();
+        let true_north = if north.abs() < 1e-12 {
+            "$".to_string()
+        } else {
+            self.w
+                .add(format!(
+                    "IFCDIRECTION(({},{}))",
+                    real(north.sin()),
+                    real(north.cos())
+                ))
+                .to_string()
+        };
         let ctx = self.w.add(format!(
-            "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,{wcs},$)"
+            "IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,{wcs},{true_north})"
         ));
         self.body_ctx = self.w.add(format!(
             "IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,{ctx},$,.MODEL_VIEW.,$)"
@@ -1344,6 +1358,7 @@ impl<'a> Exporter<'a> {
         self.write_members(&materials, &storeys, &mut contained);
         self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
         self.write_stairs(&materials, &storeys, &mut contained);
+        self.write_terrains(&materials, &storeys, &mut contained);
         self.write_spaces(&storeys);
 
         for (level, elements) in &contained {

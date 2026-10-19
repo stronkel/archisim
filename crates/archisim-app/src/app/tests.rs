@@ -2155,3 +2155,43 @@ fn stair_tool() {
     h.key(Key::Delete);
     assert_eq!(h.model().stairs().count(), 0);
 }
+
+/// The terrain tool (R): points with their heights, Enter to make the
+/// terrain; the true north in the project's properties.
+#[test]
+fn terrain_tool_and_north() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("r");
+    assert_eq!(h.app.tool, Tool::Terrain);
+    for (x, y, z) in [
+        (-1.0, -1.0, -0.4),
+        (13.0, -1.0, -0.6),
+        (13.0, 10.0, 0.2),
+        (-1.0, 10.0, 0.1),
+    ] {
+        h.app.terrain_settings.z = z;
+        h.click_at(p(x, y));
+    }
+    assert_eq!(h.app.terrain_points.len(), 4);
+    h.key(Key::Enter);
+    let m = h.model();
+    assert_eq!(m.terrains().count(), 1, "{:?}", h.app.message);
+    let t = m.terrains().next().unwrap();
+    assert_eq!(t.points.len(), 4);
+    assert!(!t.contours().is_empty());
+    h.app.ed.set_true_north(20.0).unwrap();
+    let ifc = archisim_ifc::export_ifc(
+        h.model(),
+        &archisim_ifc::ExportOptions {
+            file_name: "t.ifc".into(),
+            author: "t".into(),
+            organization: String::new(),
+            timestamp: None,
+        },
+    );
+    assert!(ifc.contains("IFCGEOGRAPHICELEMENT"));
+    assert!(ifc.contains("IFCDIRECTION((0.34202"));
+}

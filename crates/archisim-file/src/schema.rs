@@ -62,6 +62,23 @@ pub(crate) struct ProjectFile {
     /// Stairs (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stairs: Vec<Stair>,
+    /// Terrains (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terrains: Vec<Terrain>,
+}
+
+/// A terrain (version 7): survey points as `[x, y, z]` (z from project
+/// zero), material, depth below the lowest point and contour interval.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Terrain {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub points: Vec<[f64; 3]>,
+    pub material: u64,
+    pub depth: f64,
+    pub contour: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -330,6 +347,9 @@ pub(crate) struct Project {
     pub guid: String,
     pub site_guid: String,
     pub building_guid: String,
+    /// True north, degrees clockwise from the plan's up (version 7).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub true_north: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -591,6 +611,7 @@ impl ProjectFile {
                 guid: p.project_guid.to_string(),
                 site_guid: p.site_guid.to_string(),
                 building_guid: p.building_guid.to_string(),
+                true_north: p.true_north.to_degrees(),
             },
             levels: p
                 .levels
@@ -862,6 +883,19 @@ impl ProjectFile {
                     overhang: r.overhang,
                 })
                 .collect(),
+            terrains: p
+                .terrains
+                .into_iter()
+                .map(|t| Terrain {
+                    id: t.id.0,
+                    guid: t.guid.to_string(),
+                    level: t.level.0,
+                    points: t.points.iter().map(|q| [q.at.x, q.at.y, q.z]).collect(),
+                    material: t.material.0,
+                    depth: t.depth,
+                    contour: t.contour,
+                })
+                .collect(),
             stairs: p
                 .stairs
                 .into_iter()
@@ -972,6 +1006,29 @@ impl ProjectFile {
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
+            terrains: self
+                .terrains
+                .iter()
+                .map(|t| {
+                    Ok(core::Terrain {
+                        id: core::TerrainId(t.id),
+                        guid: guid(&format!("terrain {}", t.id), &t.guid)?,
+                        level: core::LevelId(t.level),
+                        points: t
+                            .points
+                            .iter()
+                            .map(|q| core::SurveyPoint {
+                                at: core::Point2::new(q[0], q[1]),
+                                z: q[2],
+                            })
+                            .collect(),
+                        material: core::MaterialId(t.material),
+                        depth: t.depth,
+                        contour: t.contour,
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
+            true_north: project.true_north.to_radians(),
             stairs: self
                 .stairs
                 .iter()

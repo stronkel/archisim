@@ -26,6 +26,8 @@ pub struct ImportReport {
     pub roofs: usize,
     /// Stairs written by ArchiSim (`IfcStair`).
     pub stairs: usize,
+    /// Terrains written by ArchiSim (`IfcGeographicElement`).
+    pub terrains: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -141,6 +143,9 @@ impl ImportReport {
         }
         if self.stairs > 0 {
             members.push_str(&format!(", {} escaleras", self.stairs));
+        }
+        if self.terrains > 0 {
+            members.push_str(&format!(", {} terrenos", self.terrains));
         }
         format!(
             "{} niveles, {} muros, {} forjados, {} puertas y {} ventanas{voids}{members}",

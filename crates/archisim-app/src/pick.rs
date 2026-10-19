@@ -26,6 +26,8 @@ pub enum Element {
     Roof(archisim_core::RoofId),
     /// A stair, picked by its flights and landings.
     Stair(archisim_core::StairId),
+    /// The terrain, picked anywhere on it if nothing else is there.
+    Terrain(archisim_core::TerrainId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -83,6 +85,9 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Section(id) => model.section(id).map(section_outline),
         Element::Roof(id) => model.roof(id).map(|r| r.eaves()),
         Element::Stair(id) => model.stair(id).map(stair_outline),
+        Element::Terrain(id) => model
+            .terrain(id)
+            .map(|t| t.boundary().iter().map(|i| t.points[*i].at).collect()),
     }
 }
 
@@ -175,6 +180,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
+    v.extend(
+        model
+            .terrains_on_level(level)
+            .map(|t| Element::Terrain(t.id)),
+    );
     v
 }
 
@@ -200,7 +210,8 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Mark(_)
         | Element::Space(_)
         | Element::Section(_)
-        | Element::Stair(_) => None,
+        | Element::Stair(_)
+        | Element::Terrain(_) => None,
     }
 }
 
@@ -234,6 +245,7 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Roof(_) => 3,
         Element::Stair(_) => 1,
         Element::Slab(_) => 4,
+        Element::Terrain(_) => 5,
     };
     elements_on_level(model, level)
         .into_iter()

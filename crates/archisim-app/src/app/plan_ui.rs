@@ -58,6 +58,7 @@ impl ArchiSimApp {
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
         self.draw_stair_preview(&painter, rect);
+        self.draw_terrain_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -91,7 +92,8 @@ impl ArchiSimApp {
             | Tool::Zone
             | Tool::Section
             | Tool::Roof
-            | Tool::Stair => CursorIcon::Crosshair,
+            | Tool::Stair
+            | Tool::Terrain => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -280,6 +282,11 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Terrain => {
+                let s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::Stair => {
                 let mut s = self.snap_at(raw, reach, &self.stair_tool.points, &BTreeSet::new());
                 if let Some(a) = self.stair_tool.points.last().copied() {
@@ -401,7 +408,8 @@ impl ArchiSimApp {
             || self.beam_tool.is_drawing()
             || self.zone_tool.is_drawing()
             || self.roof_tool.is_drawing()
-            || !self.stair_tool.points.is_empty();
+            || !self.stair_tool.points.is_empty()
+            || !self.terrain_points.is_empty();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -431,6 +439,7 @@ impl ArchiSimApp {
                 Tool::Zone => self.zone_tool.backspace(),
                 Tool::Roof => self.roof_tool.backspace(),
                 Tool::Stair => self.stair_tool.points.pop().is_some(),
+                Tool::Terrain => self.terrain_points.pop().is_some(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -490,6 +499,7 @@ impl ArchiSimApp {
                     ),
                     SlabOutcome::Nothing => {}
                 },
+                Tool::Terrain => self.finish_terrain(),
                 Tool::Stair => {
                     if let Some(c) = self.cursor {
                         if self.stair_tool.points.len() == 1 {
@@ -543,6 +553,11 @@ impl ArchiSimApp {
                 }
                 Tool::Stair => {
                     if self.stair_tool.points.pop().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Terrain => {
+                    if self.terrain_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -668,6 +683,15 @@ impl ArchiSimApp {
             Tool::Door | Tool::Window => {
                 if response.clicked_by(PointerButton::Primary) {
                     self.place_opening();
+                }
+            }
+            Tool::Terrain => {
+                if response.double_clicked_by(PointerButton::Primary) {
+                    self.finish_terrain();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.terrain_click(c.point);
+                    }
                 }
             }
             Tool::Stair => {
@@ -1097,6 +1121,7 @@ impl ArchiSimApp {
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
             (Grip::RoofCorner { .. }, _) => "Esquina",
             (Grip::StairPoint { .. }, _) => "Línea de huella",
+            (Grip::TerrainPoint { .. }, _) => "Punto",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {

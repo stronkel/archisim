@@ -439,7 +439,12 @@ impl ArchiSimApp {
             }
         }
         draw_section_box(&painter, rect, v);
-        draw_north(&painter, rect, &v.camera);
+        draw_north(
+            &painter,
+            rect,
+            &v.camera,
+            self.ed.model().true_north() as f32,
+        );
         let on_handle = v.section_hover.is_some() || v.section_drag.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);
@@ -500,12 +505,13 @@ fn draw_section_box(painter: &egui::Painter, rect: Rect, v: &super::View3dState)
     }
 }
 
-/// A north arrow in the corner, turning with the camera.
-fn draw_north(painter: &egui::Painter, rect: Rect, camera: &Camera) {
+/// A north arrow in the corner, turning with the camera, towards the
+/// project's true north (`north`: radians clockwise from the plan's up).
+fn draw_north(painter: &egui::Painter, rect: Rect, camera: &Camera, north: f32) {
     let c = rect.right_top() + Vec2::new(-34.0, 34.0);
     // North (+Y) on the screen: along screen-right it is cos(yaw), along
     // screen-up -sin(yaw)·sin(pitch); egui's Y grows downwards.
-    let (sy, cy) = camera.yaw.sin_cos();
+    let (sy, cy) = (camera.yaw + north).sin_cos();
     let dir = Vec2::new(cy, sy * camera.pitch.sin());
     let len = dir.length();
     let dir = if len > 1e-3 {

@@ -30,6 +30,7 @@ pub mod phases;
 pub mod roofs;
 pub mod section;
 pub mod stairs;
+pub mod terrain;
 
 use std::fmt::Write as _;
 
@@ -343,6 +344,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for stair in model.stairs_on_level(level) {
         marker_points.extend(stairs::stair_points(stair));
     }
+    for t in model.terrains_on_level(level) {
+        marker_points.extend(terrain::terrain_points(t));
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -404,6 +408,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
 
     s.push_str("<g id=\"slabs\">\n");
+    for t in model.terrains_on_level(level) {
+        terrain::draw_terrain(&mut s, t, k);
+    }
     for (si, slab) in slabs.iter().enumerate() {
         draw_slab(&mut s, model, slab, si, options.cut_plane, k);
     }
@@ -514,6 +521,13 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
 
     if options.viewport.is_none() {
+        // The north arrow, in the top right corner.
+        terrain::draw_north(
+            &mut s,
+            Point2::new(max.x - 8.0 * k, max.y - 12.0 * k),
+            model.true_north(),
+            k,
+        );
         // Title.
         let level_name = model.level(level).map(|l| l.name.as_str()).unwrap_or("");
         let tx = min.x;

@@ -58,7 +58,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 2.9 ✅ v0.25 | **Locales** (`IfcSpace`): nombre, número, superficie útil y construida, uso; también importarlos — hechos (herramienta Local por recinto, polígono o rectángulo; sello en planta; IFC e importación). Falta: editar los vértices del contorno, rellenos por uso, tablas de superficies (3.7) | M | 1.2 |
 | 2.10 ✅ v0.25 | **Secciones y alzados** con líneas ocultas, profundidad de vista y poché por capa — hechos (herramienta Sección, cuatro alzados automáticos, marcas en planta, vista en pestaña con corte por material y capas, vista sin líneas ocultas, plantas acotadas, SVG desde la línea de comandos). Falta: cotas en sección (3.2), línea de terreno, secciones quebradas | L | 2.3 |
 | 2.11 ✅ v0.25 | **Fases**: existente, a derribar, nuevo (reformas), con su grafismo — hechas (fase por elemento, «dibujar como», vistas Estado actual / Demoliciones / Estado reformado en amarillo y rojo, 3D, IFC `Status`). Falta: tramas o colores configurables por estudio (D5) y fase en locales | M | — |
-| 2.12 | **Terreno** sencillo (curvas de nivel o puntos), emplazamiento y orientación real del norte | M | — |
+| 2.12 ◐ v0.25 | **Terreno** sencillo (curvas de nivel o puntos), emplazamiento y orientación real del norte — hechos el terreno por puntos de cota (superficie triangulada, curvas de nivel acotadas en planta, sección del terreno, IFC `IfcGeographicElement`) y el norte real (flecha en las plantas exportadas, brújula del 3D, IFC `TrueNorth`). Falta: importar curvas de nivel de un DXF o puntos de un CSV, explanaciones y vaciados, coordenadas geográficas del emplazamiento | M | — |
 
 ## 3. Fase 3 — Documentación
 

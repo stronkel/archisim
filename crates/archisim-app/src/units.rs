@@ -171,6 +171,10 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::ZeroLengthSection => "la sección necesita dos puntos distintos".into(),
         ModelError::UnknownRoof(_) => "la cubierta ya no existe".into(),
         ModelError::UnknownStair(_) => "la escalera ya no existe".into(),
+        ModelError::UnknownTerrain(_) => "el terreno ya no existe".into(),
+        ModelError::InvalidTerrain => {
+            "el terreno necesita tres puntos que no estén en línea y algo de profundidad".into()
+        }
         ModelError::InvalidStair => "la escalera necesita una línea de huella con sitio para un tramo, algo que subir, un ancho de al menos 40 cm y huella de al menos 10 cm".into(),
         ModelError::InvalidRoof => "cada lado necesita una pendiente (de 0 a 300 %) o ser piñón, al menos uno con pendiente, y el alero no puede pasar de 3 m".into(),
         ModelError::RoofNotConvex => "el contorno de la cubierta no puede tener esquinas entrantes: dibuja una cubierta por cada ala (en L, dos)".into(),
@@ -285,6 +289,11 @@ fn es_what(what: &str) -> String {
         "flange thickness" => "el espesor de las alas",
         "space height" => "la altura del local",
         "section start" => "el inicio de la sección",
+        "terrain point" => "un punto del terreno",
+        "terrain point height" => "la cota de un punto",
+        "terrain depth" => "la profundidad del terreno",
+        "terrain contour interval" => "la equidistancia de las curvas",
+        "true north" => "el norte",
         "stair path point" => "un punto de la línea de huella",
         "stair width" => "el ancho de la escalera",
         "stair going" => "la huella",

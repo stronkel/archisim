@@ -277,6 +277,33 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             b.spaces().count()
         ));
     }
+    if (a.true_north() - b.true_north()).abs() > 1e-6 {
+        diff(format!("norte: {} / {}", a.true_north(), b.true_north()));
+    }
+    if a.terrains().count() != b.terrains().count() {
+        diff(format!(
+            "número de terrenos: {} / {}",
+            a.terrains().count(),
+            b.terrains().count()
+        ));
+    }
+    for s in a.terrains() {
+        let Some(t) = b.terrains().find(|t| t.guid == s.guid) else {
+            diff(format!("terreno {} falta", s.guid));
+            continue;
+        };
+        let same = s.points.len() == t.points.len()
+            && s.points
+                .iter()
+                .zip(&t.points)
+                .all(|(p, q)| p.at.distance(q.at) <= TOL && close(p.z, q.z))
+            && close(s.depth, t.depth)
+            && close(s.contour, t.contour)
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("terreno {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     if a.stairs().count() != b.stairs().count() {
         diff(format!(
             "número de escaleras: {} / {}",

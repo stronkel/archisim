@@ -72,6 +72,8 @@ pub enum Tool {
     Roof,
     /// Stairs, by their walking line.
     Stair,
+    /// Terrain, by survey points.
+    Terrain,
 }
 
 impl Tool {
@@ -88,6 +90,7 @@ impl Tool {
                 | Tool::Section
                 | Tool::Roof
                 | Tool::Stair
+                | Tool::Terrain
         )
     }
 
@@ -106,6 +109,7 @@ impl Tool {
             "s" => Some(Tool::Section),
             "t" => Some(Tool::Roof),
             "e" => Some(Tool::Stair),
+            "r" => Some(Tool::Terrain),
             _ => None,
         }
     }
@@ -197,6 +201,9 @@ pub struct ArchiSimApp {
     pub roof_tool: SlabTool,
     pub stair_settings: crate::editor::StairSettings,
     pub stair_tool: stair_ui::StairTool,
+    pub terrain_settings: crate::editor::TerrainSettings,
+    /// Survey points of the terrain being drawn.
+    pub terrain_points: Vec<archisim_core::SurveyPoint>,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
     /// The levels dialog is open.
@@ -327,6 +334,8 @@ impl ArchiSimApp {
             roof_settings,
             stair_settings,
             stair_tool: Default::default(),
+            terrain_settings: Default::default(),
+            terrain_points: Vec::new(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             show_levels: false,
@@ -415,6 +424,7 @@ impl ArchiSimApp {
             self.zone_tool.finish();
             self.roof_tool.finish();
             self.stair_tool.points.clear();
+            self.terrain_points.clear();
             self.section_tool.anchor = None;
             self.placement = None;
             self.window_start = None;
@@ -1456,6 +1466,7 @@ mod stair_ui;
 mod structure_ui;
 mod tabs;
 mod temp_ui;
+mod terrain_ui;
 pub mod theme;
 mod thumbs;
 mod toolbox;
