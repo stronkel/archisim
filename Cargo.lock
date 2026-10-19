@@ -238,6 +238,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "archisim-bcf"
+version = "0.24.0"
+dependencies = [
+ "flate2",
+ "roxmltree",
+ "uuid",
+]
+
+[[package]]
 name = "archisim-cli"
 version = "0.24.0"
 dependencies = [

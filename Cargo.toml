@@ -8,6 +8,7 @@ members = [
     "crates/archisim-plan",
     "crates/archisim-file",
     "crates/archisim-library",
+    "crates/archisim-bcf",
     "crates/archisim-ids",
     "crates/archisim-cli",
     "crates/archisim-app",
@@ -31,6 +32,7 @@ archisim-plan = { path = "crates/archisim-plan" }
 archisim-file = { path = "crates/archisim-file" }
 archisim-library = { path = "crates/archisim-library" }
 archisim-ids = { path = "crates/archisim-ids" }
+archisim-bcf = { path = "crates/archisim-bcf" }
 
 # The plan view rasterises the 1:50 drawing on every change; keep the SVG
 # renderer fast even in debug builds.
