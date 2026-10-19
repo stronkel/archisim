@@ -26,6 +26,8 @@ pub(crate) struct Room {
     pub level: u64,
     pub number: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "is_empty")]
+    pub usage: String,
     pub outline: Vec<Xy>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holes: Vec<Vec<Xy>>,
@@ -75,6 +77,7 @@ pub(crate) fn rooms_out(rooms: &[core::Room]) -> Vec<Room> {
             level: r.level.0,
             number: r.number.clone(),
             name: r.name.clone(),
+            usage: r.usage.clone(),
             outline: r.outline.iter().copied().map(xy).collect(),
             holes: r
                 .holes
@@ -105,6 +108,7 @@ pub(crate) fn rooms_in(rooms: Vec<Room>) -> Result<Vec<core::Room>, FileError> {
                 level: core::LevelId(r.level),
                 number: r.number,
                 name: r.name,
+                usage: r.usage,
                 outline: r.outline.into_iter().map(pt).collect(),
                 holes: r
                     .holes

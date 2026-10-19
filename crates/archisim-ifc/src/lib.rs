@@ -1265,8 +1265,13 @@ impl<'a> Exporter<'a> {
             } else {
                 room.number.clone()
             };
+            let usage = if room.usage.trim().is_empty() {
+                "$".to_string()
+            } else {
+                string(&room.usage)
+            };
             let sp = self.w.add(format!(
-                "IFCSPACE({},$,{},$,$,{pl},{shape},{},.ELEMENT.,.INTERNAL.,$)",
+                "IFCSPACE({},$,{},$,{usage},{pl},{shape},{},.ELEMENT.,.INTERNAL.,$)",
                 string(room.guid.as_str()),
                 string(&number),
                 string(&room.name)

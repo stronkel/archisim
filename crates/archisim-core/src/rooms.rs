@@ -32,6 +32,8 @@ pub struct Room {
     pub level: LevelId,
     pub number: String,
     pub name: String,
+    /// What it is used for ("Estancia", "Cocina", "Aseo"…).
+    pub usage: String,
     /// Counter-clockwise, without repeating the first point.
     pub outline: Vec<Point2>,
     /// Columns, shafts and other islands inside it.
@@ -138,6 +140,7 @@ impl Model {
                 level: spec.level,
                 number: spec.number,
                 name: spec.name,
+                usage: String::new(),
                 outline,
                 holes,
                 label: spec.label,

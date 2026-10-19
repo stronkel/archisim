@@ -1702,6 +1702,11 @@ impl<'a> Importer<'a> {
                 r.height = Some(height);
             }
             r.finishes = finishes;
+            r.usage = e
+                .arg(4)
+                .as_str()
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             let _ = self.model.set_room(r);
         }
         self.report.rooms += 1;

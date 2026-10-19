@@ -312,6 +312,12 @@ pub fn build() -> Result<Document, ModelError> {
                 bounded: true,
             })?;
             if let Some(mut r) = m.room(id).cloned() {
+                r.usage = if name == "Cocina" {
+                    "Cocina"
+                } else {
+                    "Estancia"
+                }
+                .into();
                 r.finishes = archisim_core::Finishes {
                     floor: floor.into(),
                     walls: "Pintura plástica lisa".into(),
@@ -363,12 +369,14 @@ pub fn build() -> Result<Document, ModelError> {
             crop: None,
             centre: Point2::new(0.21, 0.24),
         })?;
-        // The rooms' areas beside the plan.
+        // The rooms' areas over the plan, against the right of the frame.
+        let (w, _) =
+            archisim_plan::schedules::table(m, archisim_core::ScheduleKind::Rooms, Some(pb)).size();
         m.add_table(
             sheet,
             archisim_core::ScheduleKind::Rooms,
             Some(pb),
-            Point2::new(0.43, 0.4),
+            Point2::new(0.579 - w * 0.001, 0.405),
         )?;
         Ok(())
     })?;

@@ -333,7 +333,24 @@ impl Editor {
                 } else {
                     Default::default()
                 };
+                // Tags go with their element.
+                let tags: Vec<(archisim_core::TagId, Point2, Option<Point2>)> = m
+                    .tags()
+                    .map(|t| (t.id, t.at, archisim_plan::rooms::tag_anchor(m, t.target)))
+                    .collect();
                 let r = edit(m)?;
+                for (id, at, anchor) in tags {
+                    let Some(t) = m.tag(id) else { continue };
+                    if t.at != at {
+                        continue;
+                    }
+                    let now = archisim_plan::rooms::tag_anchor(m, t.target);
+                    if let (Some(a), Some(b)) = (anchor, now) {
+                        if a.distance(b) > 1e-9 {
+                            let _ = m.move_tag(id, at + (b - a));
+                        }
+                    }
+                }
                 if m.dimensions().next().is_some() {
                     archisim_geom::anchors::follow(m, &before);
                 }

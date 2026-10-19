@@ -38,6 +38,18 @@ impl ArchiSimApp {
                     new.name = t;
                 }
             });
+            row(
+                ui,
+                "Uso",
+                "Estancia, cocina, aseo, circulación…",
+                |ui, w| {
+                    if let Some(t) =
+                        text_edit_committed(ui, Id::unique(("room-usage", id)), &r.usage, w - 8.0)
+                    {
+                        new.usage = t;
+                    }
+                },
+            );
         });
         group(ui, "room-sizes", "Superficies", |ui| {
             text_row(

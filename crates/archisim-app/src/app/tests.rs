@@ -2116,6 +2116,18 @@ fn rooms_follow_walls_and_tags_follow_doors() {
     command(&mut h, "eti");
     command(&mut h, "t");
     assert_eq!(h.model().tags().count(), 1);
+    // The door slides half a metre: its tag goes with it.
+    let tag_before = h.model().tags().next().unwrap().at;
+    let door = h.model().openings().next().unwrap().clone();
+    h.app
+        .ed
+        .move_opening(door.id, door.along + 0.5, door.sill)
+        .unwrap();
+    let tag_after = h.model().tags().next().unwrap().at;
+    assert!(
+        (tag_after.distance(tag_before) - 0.5).abs() < 1e-9,
+        "{tag_before:?} → {tag_after:?}"
+    );
     // The east wall moves out a metre: the room grows with it.
     let east = h
         .model()

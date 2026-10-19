@@ -948,6 +948,7 @@ fn rooms_round_trip_as_spaces() {
     let mut r = original.room(id).unwrap().clone();
     r.height = Some(2.6);
     r.finishes.floor = "Tarima de roble".into();
+    r.usage = "Estancia".into();
     original.set_room(r.clone()).unwrap();
     let Imported { model, report } = import_ifc(&export(&original)).unwrap();
     assert_eq!(report.rooms, 1, "{report}");
@@ -960,4 +961,5 @@ fn rooms_round_trip_as_spaces() {
     assert!((back.area() - 12.0).abs() < 1e-6);
     assert_eq!(back.height, Some(2.6));
     assert_eq!(back.finishes.floor, "Tarima de roble");
+    assert_eq!(back.usage, "Estancia");
 }

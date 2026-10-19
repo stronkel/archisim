@@ -414,15 +414,34 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     .then_with(|| natural(&a.number).cmp(&natural(&b.number)))
             });
             let total: f64 = rooms.iter().map(|r| r.area()).sum();
+            let built = |r: &archisim_core::Room| {
+                // To the axes of its walls, for rooms bounded by them.
+                if !r.bounded {
+                    return None;
+                }
+                archisim_geom::room_outline(
+                    model,
+                    r.level,
+                    r.label,
+                    archisim_geom::Contour::WallAxis,
+                )
+                .ok()
+                .map(|o| archisim_core::signed_area(&o).abs())
+            };
+            let built_areas: Vec<Option<f64>> = rooms.iter().map(|r| built(r)).collect();
+            let built_total: f64 = built_areas.iter().flatten().sum();
             let rows = rooms
                 .iter()
-                .map(|r| {
+                .zip(&built_areas)
+                .map(|(r, b)| {
                     let h = model.room_height(r);
                     vec![
                         r.number.clone(),
                         r.name.clone(),
+                        r.usage.clone(),
                         level_name(r.level),
                         dec(r.area(), 2),
+                        b.map(|b| dec(b, 2)).unwrap_or_default(),
                         dec(r.perimeter(), 2),
                         dec(h, 2),
                         dec(r.area() * h, 2),
@@ -437,8 +456,10 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                 columns: vec![
                     col("Nº", false),
                     col("Local", false),
+                    col("Uso", false),
                     col("Planta", false),
                     col("Sup. útil (m²)", true),
+                    col("Sup. constr. (m²)", true),
                     col("Perímetro (m)", true),
                     col("Altura (m)", true),
                     col("Volumen (m³)", true),
@@ -451,7 +472,13 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     "Total".into(),
                     String::new(),
                     String::new(),
+                    String::new(),
                     dec(total, 2),
+                    if built_total > 0.0 {
+                        dec(built_total, 2)
+                    } else {
+                        String::new()
+                    },
                     String::new(),
                     String::new(),
                     String::new(),
