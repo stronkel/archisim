@@ -27,6 +27,7 @@ pub mod annotate;
 pub mod lettering;
 pub mod members;
 pub mod phases;
+pub mod section;
 
 use std::fmt::Write as _;
 
@@ -333,8 +334,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .chain(model.spaces_on_level(level).map(|sp| sp.label_point()))
         .collect();
     let structure_points = members::member_points(model, level, options.cut_plane);
+    let marker_points = section::marker_points(model, k);
     let all_points = all_points
         .chain(annotation_points.iter())
+        .chain(marker_points.iter())
         .chain(structure_points.iter());
     for p in all_points {
         min = Point2::new(min.x.min(p.x), min.y.min(p.y));
@@ -462,6 +465,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             annotate::draw_room(&mut s, sp, k);
         }
     }
+    section::draw_markers(&mut s, model, k);
     s.push_str("</g>\n");
 
     if options.show_reference_lines {

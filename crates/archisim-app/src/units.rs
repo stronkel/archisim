@@ -167,6 +167,8 @@ pub fn explain(e: &ModelError) -> String {
             "el alma y las alas no caben en la sección del perfil".into()
         }
         ModelError::UnknownSpace(_) => "el local ya no existe".into(),
+        ModelError::UnknownSection(_) => "la sección ya no existe".into(),
+        ModelError::ZeroLengthSection => "la sección necesita dos puntos distintos".into(),
         ModelError::UnknownElement(_) => "el elemento ya no existe".into(),
         ModelError::DuplicateNumber(n) => {
             format!("otro local de esta planta ya tiene el número «{n}»")
@@ -274,6 +276,9 @@ fn es_what(what: &str) -> String {
         "web thickness" => "el espesor del alma",
         "flange thickness" => "el espesor de las alas",
         "space height" => "la altura del local",
+        "section start" => "el inicio de la sección",
+        "section end" => "el final de la sección",
+        "section view depth" => "la profundidad de la sección",
         "space label" => "la posición del rótulo del local",
         other => other,
     }

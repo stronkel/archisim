@@ -53,6 +53,29 @@ pub(crate) struct ProjectFile {
     /// Phases of the elements that are not new (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub phases: Vec<PhaseOf>,
+    /// Section and elevation lines (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<Section>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SectionKind {
+    Section,
+    Elevation,
+}
+
+/// A section or elevation line (version 7): it looks to the left of
+/// `start` → `end`, `depth` metres far.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Section {
+    pub id: u64,
+    pub name: String,
+    pub kind: SectionKind,
+    pub start: Xy,
+    pub end: Xy,
+    pub depth: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -723,6 +746,21 @@ impl ProjectFile {
                     },
                 })
                 .collect(),
+            sections: p
+                .sections
+                .into_iter()
+                .map(|s| Section {
+                    id: s.id.0,
+                    name: s.name,
+                    kind: match s.kind {
+                        core::SectionKind::Section => SectionKind::Section,
+                        core::SectionKind::Elevation => SectionKind::Elevation,
+                    },
+                    start: xy(s.start),
+                    end: xy(s.end),
+                    depth: s.depth,
+                })
+                .collect(),
         }
     }
 
@@ -773,6 +811,21 @@ impl ProjectFile {
                             Phase::Demolished => core::Phase::Demolished,
                         },
                     )
+                })
+                .collect(),
+            sections: self
+                .sections
+                .iter()
+                .map(|s| core::SectionLine {
+                    id: core::SectionId(s.id),
+                    name: s.name.clone(),
+                    kind: match s.kind {
+                        SectionKind::Section => core::SectionKind::Section,
+                        SectionKind::Elevation => core::SectionKind::Elevation,
+                    },
+                    start: pt(s.start),
+                    end: pt(s.end),
+                    depth: s.depth,
                 })
                 .collect(),
         };

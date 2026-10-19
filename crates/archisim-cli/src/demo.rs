@@ -253,6 +253,28 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Sections and elevations (v0.25): A across the living room and the
+    // kitchen, looking north; B through the porch, looking west; and the
+    // four elevations.
+    doc.transact("Secciones y alzados", |m| {
+        for (name, start, end, depth) in [
+            ("A", Point2::new(-1.5, 6.2), Point2::new(13.5, 6.2), 4.0),
+            ("B", Point2::new(8.5, -4.5), Point2::new(8.5, 11.0), 9.0),
+        ] {
+            m.add_section(archisim_core::NewSection {
+                name: name.into(),
+                kind: archisim_core::SectionKind::Section,
+                start,
+                end,
+                depth,
+            })?;
+        }
+        for e in archisim_plan::section::elevations_around(m) {
+            m.add_section(e)?;
+        }
+        Ok(())
+    })?;
+
     Ok(doc)
 }
 
@@ -270,7 +292,8 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 9);
-        assert_eq!(doc.undo_label(), Some("Locales"));
+        assert_eq!(doc.undo_label(), Some("Secciones y alzados"));
+        assert_eq!(m.sections().count(), 6);
         assert_eq!(m.spaces().count(), 4);
         assert_eq!(m.dimensions().count(), 4);
         assert_eq!(m.elevation_marks().count(), 2);

@@ -14,9 +14,11 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod phases;
+mod sections;
 mod spaces;
 mod structure;
 pub use phases::*;
+pub use sections::*;
 pub use spaces::*;
 pub use structure::*;
 
@@ -672,6 +674,9 @@ pub enum ModelError {
     UnknownSpace(SpaceId),
     /// No element with that id can have a phase.
     UnknownElement(u64),
+    UnknownSection(SectionId),
+    /// A section line needs two different points.
+    ZeroLengthSection,
     /// Another room on the level already has that number.
     DuplicateNumber(String),
 }
@@ -766,6 +771,8 @@ impl fmt::Display for ModelError {
             }
             ModelError::UnknownSpace(id) => write!(f, "space {id} does not exist"),
             ModelError::UnknownElement(id) => write!(f, "element {id} does not exist"),
+            ModelError::UnknownSection(id) => write!(f, "section {id} does not exist"),
+            ModelError::ZeroLengthSection => write!(f, "a section line needs two different points"),
             ModelError::DuplicateNumber(n) => {
                 write!(f, "another room on the level already has the number «{n}»")
             }
@@ -873,6 +880,7 @@ pub struct ModelParts {
     pub spaces: Vec<Space>,
     /// Elements that are not new: (id, phase).
     pub phases: Vec<(u64, Phase)>,
+    pub sections: Vec<SectionLine>,
 }
 
 /// Why a model could not be rebuilt from its parts: which element failed and
@@ -921,6 +929,7 @@ pub struct Model {
     spaces: BTreeMap<SpaceId, Space>,
     /// Phases of the elements that are not new, by id.
     phases: BTreeMap<u64, Phase>,
+    sections: BTreeMap<SectionId, SectionLine>,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -950,6 +959,7 @@ impl Model {
             beams: BTreeMap::new(),
             spaces: BTreeMap::new(),
             phases: BTreeMap::new(),
+            sections: BTreeMap::new(),
             draw_phase: Phase::New,
         }
     }
@@ -2881,6 +2891,7 @@ impl Model {
             beams: self.beams.values().cloned().collect(),
             spaces: self.spaces.values().cloned().collect(),
             phases: self.phase_table(),
+            sections: self.sections.values().cloned().collect(),
         }
     }
 
@@ -3080,6 +3091,7 @@ impl Model {
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
         model.restore_spaces(parts.spaces, &mut claim)?;
         model.restore_phases(parts.phases)?;
+        model.restore_sections(parts.sections, &mut claim)?;
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);
         Ok(model)

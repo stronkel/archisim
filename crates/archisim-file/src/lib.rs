@@ -628,6 +628,14 @@ mod tests {
         let col_id = m.columns().next().unwrap().id.0;
         m.set_phase(col_id, archisim_core::Phase::Demolished)
             .unwrap();
+        m.add_section(archisim_core::NewSection {
+            name: "A".into(),
+            kind: archisim_core::SectionKind::Section,
+            start: Point2::new(-1.0, 2.0),
+            end: Point2::new(5.0, 2.0),
+            depth: 12.0,
+        })
+        .unwrap();
         let text = to_string(&m);
         assert!(text.contains("\"shape\": \"i_shape\""), "{text}");
         let back = from_str(&text).unwrap();

@@ -241,6 +241,20 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         std::fs::write(&svg_100, render_plan(model, level, &options))?;
         println!("  Planta «{name}» 1:100: {}", svg_100.display());
     }
+    for sec in model.sections() {
+        let file = format!("{stem}-{}.svg", slug(&sec.title()));
+        let path = dir.join(&file);
+        let drawing = archisim_plan::section::section_drawing(model, sec);
+        let options = PlanOptions {
+            scale: 100.0,
+            ..PlanOptions::default()
+        };
+        std::fs::write(
+            &path,
+            archisim_plan::section::render_section(model, &drawing, &options),
+        )?;
+        println!("  {} 1:100: {}", sec.title(), path.display());
+    }
     Ok(())
 }
 

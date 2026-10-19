@@ -68,6 +68,10 @@ typed_id!(
 );
 
 typed_id!(
+    /// Identifies a [`crate::SectionLine`] (a section or elevation view).
+    SectionId
+);
+typed_id!(
     /// Identifies a [`crate::Space`] (a room).
     SpaceId
 );
