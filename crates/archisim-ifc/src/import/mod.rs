@@ -1212,7 +1212,9 @@ impl<'a> Importer<'a> {
         }
         // ArchiSim's own walls trimmed under a roof come back trimmed.
         let own_trim = self.own_file && self.property_own(id, "ArchiSim_Trim", "Roof").is_some();
-        if body.clipped && !own_trim {
+        // ArchiSim's own junctions with slabs are worked out again.
+        let cut = body.clipped || (body.differenced && !self.own_file);
+        if cut && !own_trim {
             self.report.warn(
                 "Muros recortados (por cubiertas u otros elementos): se importan rectos, con su altura máxima.",
             );
@@ -1670,7 +1672,7 @@ impl<'a> Importer<'a> {
                     v.reverse();
                 }
                 let total: f64 = v.iter().map(|l| l.thickness).sum();
-                if (total - body_thickness).abs() > 0.001 && !body.clipped {
+                if (total - body_thickness).abs() > 0.001 && !body.clipped && !body.differenced {
                     self.report.warn(
                         "Forjados cuyo sólido no mide lo que suman sus capas: se usan las capas, con la cara superior del sólido.",
                     );

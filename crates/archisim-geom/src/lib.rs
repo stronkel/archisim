@@ -26,6 +26,7 @@
 
 pub mod index;
 pub mod joins;
+pub mod junctions;
 pub mod room;
 pub mod solid;
 

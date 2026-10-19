@@ -10,3 +10,5 @@ repository.workspace = true
 
 [dependencies]
 archisim-core.workspace = true
+# Boolean operations on polygons (slab layers cut by the walls through them).
+i_overlay = "9.1"

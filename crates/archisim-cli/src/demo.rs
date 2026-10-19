@@ -32,10 +32,6 @@ pub fn build() -> Result<Document, ModelError> {
         let cubierta = m.add_level("Cubierta", WALL_HEIGHT + roof_thickness);
         Ok((pb, cubierta, lib))
     })?;
-    let roof_depth = doc
-        .model()
-        .slab_type(lib.flat_roof)
-        .map_or(0.0, |t| t.thickness());
     let (fachada, tabique, solera, cubierta_plana) =
         (lib.facade, lib.partition, lib.ground_slab, lib.flat_roof);
 
@@ -56,19 +52,22 @@ pub fn build() -> Result<Document, ModelError> {
                 reference: ReferenceLine::ExteriorFace,
                 height: WALL_HEIGHT,
                 base_offset: 0.0,
-                // Up to the underside of the roof slab: the façade follows
-                // the roof level if it moves.
+                // Up to the roof level: the roof slab takes the top of it
+                // (junctions by priority), and the façade follows the roof
+                // level if it moves.
                 bulge: 0.0,
                 top: archisim_core::WallTop::Level {
                     level: cubierta,
-                    offset: -roof_depth,
+                    offset: 0.0,
                 },
             })?;
         }
         Ok(())
     })?;
 
-    // Partitions run between faces (T-junctions are square-cut for now).
+    // Partitions run between faces, up to the roof level: the roof slab
+    // cuts them where its structure is, and their brick goes through its
+    // ceiling plaster (junctions by priority, v0.26).
     let inner = 0.265;
     let partitions = [
         (Point2::new(6.0, inner), Point2::new(6.0, 9.0 - inner)),
@@ -86,7 +85,10 @@ pub fn build() -> Result<Document, ModelError> {
                 height: 2.7,
                 base_offset: 0.0,
                 bulge: 0.0,
-                top: archisim_core::WallTop::Unconnected,
+                top: archisim_core::WallTop::Level {
+                    level: cubierta,
+                    offset: 0.0,
+                },
             })?;
         }
         Ok(())

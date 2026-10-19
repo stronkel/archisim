@@ -323,6 +323,37 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     for notch in &g.notches {
         inner.extend(notch.boundaries.iter().copied());
     }
+    // Slabs met (see `junctions`): a line across the wall where an edge of
+    // the slab crosses it (square to the wall: slabs are drawn square to
+    // their walls), and a row at each face of their layers.
+    let slab_cuts = crate::junctions::wall_slab_cuts(idx, id);
+    let mut slabs_seen: Vec<archisim_core::SlabId> = Vec::new();
+    for cut in &slab_cuts {
+        if slabs_seen.contains(&cut.slab) {
+            continue;
+        }
+        slabs_seen.push(cut.slab);
+        for ring in std::iter::once(&cut.outline).chain(&cut.holes) {
+            let m = ring.len();
+            for i in 0..m {
+                let (p, q) = (ring[i], ring[(i + 1) % m]);
+                for k in 0..layers {
+                    let off = (offsets[k] + offsets[k + 1]) / 2.0;
+                    let o = a + n * off;
+                    // Where the edge crosses the line of the layer.
+                    let (sp, sq) = ((p - o).cross(u), (q - o).cross(u));
+                    if (sp > 0.0) == (sq > 0.0) || (sp - sq).abs() < 1e-12 {
+                        continue;
+                    }
+                    let x = p + (q - p) * (sp / (sp - sq));
+                    let t = (x - a).dot(u);
+                    if t > EPSILON && t < len - EPSILON {
+                        inner.push(Line::new(a + u * t, n));
+                    }
+                }
+            }
+        }
+    }
     let mid = (offsets[0] + offsets[layers]) / 2.0;
     let mut keyed: Vec<(f64, Line)> = inner
         .into_iter()
@@ -377,6 +408,11 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     for z in g.notch_heights() {
         heights.push((z, z));
     }
+    for cut in &slab_cuts {
+        for z in [cut.z.0, cut.z.1] {
+            heights.push((z - level, z - level));
+        }
+    }
     for cut in [&g.start_cut, &g.end_cut] {
         if let EndCut::Tee(t) = cut {
             if let Some(h) = model.wall(t.host) {
@@ -420,7 +456,10 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
                 })
             }
         });
-        !in_opening && !in_notch
+        let in_slab = slab_cuts
+            .iter()
+            .any(|cut| z > cut.z.0 && z < cut.z.1 && cut.taken.contains(&k) && cut.contains(p));
+        !in_opening && !in_notch && !in_slab
     };
     let pt = |t: f64, off: f64, z: f64| -> P3 {
         let p = a + u * t + n * off;
@@ -821,6 +860,13 @@ fn quad(out: &mut Vec<[P3; 3]>, q: [P3; 4], inside: P3) {
 /// material, the soffit in the bottom layer's, and the edges banded by
 /// layer. Layers touching inside the slab have no faces.
 pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
+    slab_solids_in(&WallIndex::new(model), id)
+}
+
+/// [`slab_solids`] with the walls around found through an index: the
+/// layers that walls go through lose their room (see [`crate::junctions`]).
+pub fn slab_solids_in(idx: &WallIndex, id: SlabId) -> Vec<Solid> {
+    let model = idx.model;
     let Some(slab) = model.slab(id) else {
         return Vec::new();
     };
@@ -828,6 +874,17 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
         return Vec::new();
     };
     let level = model.level(slab.level).map_or(0.0, |l| l.elevation);
+    let cuts = crate::junctions::slab_wall_cuts(idx, id);
+    if cuts.iter().any(|c| !c.is_empty()) {
+        let regions = crate::junctions::slab_layer_regions(&slab.outline, &slab.holes, &cuts);
+        return layered_regions(
+            SolidOwner::Slab(id),
+            &regions,
+            &|p| level + slab.top_at(p),
+            &|t| slab.vertical(t),
+            &stype.layers,
+        );
+    }
     layered_plate(
         SolidOwner::Slab(id),
         &slab.outline,
@@ -1482,6 +1539,146 @@ fn layered_plate(
         .collect()
 }
 
+/// A plate whose layers have each their own shape (`regions[i]`, top
+/// layer first), as one skin: the top of the first layer, the bottom of the
+/// last, the edges of each, and between two layers only where one of them
+/// is and the other is not. Every edge is split at the corners of the other
+/// faces lying on it, so faces meet corner to corner (no cracks, no lines
+/// drawn along a flat face in sections and elevations).
+fn layered_regions(
+    owner: SolidOwner,
+    regions: &[Vec<crate::junctions::Shape>],
+    top: &dyn Fn(Point2) -> f64,
+    vertical: &dyn Fn(f64) -> f64,
+    layers: &[archisim_core::Layer],
+) -> Vec<Solid> {
+    use crate::junctions::{difference, Shape};
+    let at = |p: Point2, depth: f64| [p.x, p.y, top(p) - vertical(depth)];
+    let count = layers.len().min(regions.len());
+    let mut depths = vec![0.0];
+    for l in &layers[..count] {
+        depths.push(depths.last().copied().unwrap_or(0.0) + l.thickness);
+    }
+    // The flat faces of each layer: above (the top face, or where the layer
+    // above is not) and below.
+    let above: Vec<Vec<Shape>> = (0..count)
+        .map(|i| match i.checked_sub(1) {
+            None => regions[i].clone(),
+            Some(j) => difference(&regions[i], &regions[j]),
+        })
+        .collect();
+    let below: Vec<Vec<Shape>> = (0..count)
+        .map(|i| {
+            if i + 1 == count {
+                regions[i].clone()
+            } else {
+                difference(&regions[i], &regions[i + 1])
+            }
+        })
+        .collect();
+    // Every corner of every face, to split the edges at.
+    let mut corners: Vec<Point2> = Vec::new();
+    for list in regions[..count].iter().chain(&above).chain(&below) {
+        for (outer, holes) in list {
+            corners.extend(outer.iter().copied());
+            for h in holes {
+                corners.extend(h.iter().copied());
+            }
+        }
+    }
+    corners.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    corners.dedup_by(|a, b| a.approx_eq(*b));
+    // The corners strictly inside the segment `p q`, in order from `p`.
+    let on = |p: Point2, q: Point2| -> Vec<Point2> {
+        let d = q - p;
+        let len2 = d.dot(d);
+        if len2 < 1e-18 {
+            return Vec::new();
+        }
+        let (lo, hi) = (
+            Point2::new(p.x.min(q.x) - 1e-7, p.y.min(q.y) - 1e-7),
+            Point2::new(p.x.max(q.x) + 1e-7, p.y.max(q.y) + 1e-7),
+        );
+        let mut found: Vec<(f64, Point2)> = corners
+            .iter()
+            .filter(|c| c.x >= lo.x && c.x <= hi.x && c.y >= lo.y && c.y <= hi.y)
+            .filter_map(|c| {
+                let t = (*c - p).dot(d) / len2;
+                let off = (*c - p).cross(d).abs() / len2.sqrt();
+                (t > 1e-9 && t < 1.0 - 1e-9 && off < 1e-7).then_some((t, *c))
+            })
+            .collect();
+        found.sort_by(|a, b| a.0.total_cmp(&b.0));
+        found.into_iter().map(|(_, c)| c).collect()
+    };
+    // A plan triangle split at the corners on its edges (fans from the
+    // opposite corner).
+    fn split(
+        tri: [Point2; 3],
+        on: &dyn Fn(Point2, Point2) -> Vec<Point2>,
+        out: &mut Vec<[Point2; 3]>,
+        depth: usize,
+    ) {
+        for e in 0..3 {
+            let (a, b, c) = (tri[e], tri[(e + 1) % 3], tri[(e + 2) % 3]);
+            if let Some(m) = on(a, b).first().copied().filter(|_| depth < 64) {
+                split([a, m, c], on, out, depth + 1);
+                split([m, b, c], on, out, depth + 1);
+                return;
+            }
+        }
+        out.push(tri);
+    }
+    let caps = |tris: &mut Vec<[P3; 3]>, shapes: &[Shape], depth: f64, up: bool| {
+        for (outer, holes) in shapes {
+            let poly = with_holes(outer, holes);
+            for [x, y, z] in triangulate(&poly) {
+                let mut pieces = Vec::new();
+                split([poly[x], poly[y], poly[z]], &on, &mut pieces, 0);
+                for [a, b, c] in pieces {
+                    let (a, b, c) = (at(a, depth), at(b, depth), at(c, depth));
+                    tris.push(if up { [a, b, c] } else { [a, c, b] });
+                }
+            }
+        }
+    };
+    (0..count)
+        .map(|i| {
+            let (upper, bottom) = (depths[i], depths[i + 1]);
+            let mut tris = Vec::new();
+            caps(&mut tris, &above[i], upper, true);
+            caps(&mut tris, &below[i], bottom, false);
+            // Edges: round each outline and each hole.
+            for (outer, holes) in &regions[i] {
+                let mut rings = vec![ensure_ccw(outer.clone())];
+                rings.extend(holes.iter().map(|h| {
+                    let mut h = ensure_ccw(h.clone());
+                    h.reverse();
+                    h
+                }));
+                for ring in &rings {
+                    for k in 0..ring.len() {
+                        let (p0, q0) = (ring[k], ring[(k + 1) % ring.len()]);
+                        let mut pts = vec![p0];
+                        pts.extend(on(p0, q0));
+                        pts.push(q0);
+                        for w in pts.windows(2) {
+                            let (p, q) = (w[0], w[1]);
+                            tris.push([at(p, bottom), at(q, bottom), at(q, upper)]);
+                            tris.push([at(p, bottom), at(q, upper), at(p, upper)]);
+                        }
+                    }
+                }
+            }
+            Solid {
+                owner,
+                material: layers[i].material,
+                triangles: tris,
+            }
+        })
+        .collect()
+}
+
 /// Solids of a door or window: the 3D body of its family, one solid per
 /// material (frame or lining, leaves or glazing…).
 ///
@@ -1617,7 +1814,7 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
         out.extend(wall_solids_in(&idx, w.id));
     }
     for s in model.slabs() {
-        out.extend(slab_solids(model, s.id));
+        out.extend(slab_solids_in(&idx, s.id));
     }
     for o in model.openings() {
         out.extend(opening_solids(model, o.id));
@@ -2685,5 +2882,182 @@ mod member_tests {
                 .fold(f64::MIN, f64::max);
             assert!((top - 3.0).abs() < 1e-9);
         }
+    }
+}
+
+#[cfg(test)]
+mod junction_tests {
+    use super::*;
+    use archisim_core::{
+        CutPattern, Layer, LayerFunction, NewSlab, NewWall, ReferenceLine, SlabFunction,
+        WallFunction, WallTop,
+    };
+
+    fn p(x: f64, y: f64) -> Point2 {
+        Point2::new(x, y)
+    }
+
+    /// Every edge shared by exactly two triangles (a closed skin).
+    fn closed(solids: &[Solid]) -> bool {
+        use std::collections::HashMap;
+        let key = |a: P3| {
+            (
+                (a[0] * 1e5).round() as i64,
+                (a[1] * 1e5).round() as i64,
+                (a[2] * 1e5).round() as i64,
+            )
+        };
+        let mut edges: HashMap<_, i32> = HashMap::new();
+        for s in solids {
+            for t in &s.triangles {
+                for i in 0..3 {
+                    let (a, b) = (key(t[i]), key(t[(i + 1) % 3]));
+                    if a != b {
+                        *edges.entry((a, b)).or_default() += 1;
+                        *edges.entry((b, a)).or_default() -= 1;
+                    }
+                }
+            }
+        }
+        edges.values().all(|v| *v == 0)
+    }
+
+    /// A partition up to the top of the slab of the floor above: the slab's
+    /// structure cuts it (it stops under the slab and starts again over
+    /// it), its brick goes through the screed, the floor and the ceiling
+    /// plaster (they stop at its faces), its own plaster stops under the
+    /// ceiling plaster. Nothing is counted twice.
+    #[test]
+    fn walls_and_slabs_share_their_room_by_priority() {
+        let mut m = Model::new("t");
+        let pb = m.add_level("PB", 0.0);
+        let p1 = m.add_level("P1", 3.0);
+        let mat = |m: &mut Model, n: &str| m.add_material(n, "x", [1, 2, 3], CutPattern::Solid);
+        let (plaster, brick, floor, screed, concrete) = (
+            mat(&mut m, "Yeso"),
+            mat(&mut m, "Ladrillo"),
+            mat(&mut m, "Solado"),
+            mat(&mut m, "Mortero"),
+            mat(&mut m, "Hormigón"),
+        );
+        let layer = |material, thickness, function| Layer {
+            material,
+            thickness,
+            function,
+        };
+        let wt = m
+            .add_wall_type(
+                "Tabique",
+                WallFunction::Interior,
+                vec![
+                    layer(plaster, 0.015, LayerFunction::Finish),
+                    layer(brick, 0.115, LayerFunction::Structure),
+                    layer(plaster, 0.015, LayerFunction::Finish),
+                ],
+            )
+            .unwrap();
+        let st = m
+            .add_slab_type(
+                "Forjado",
+                SlabFunction::Floor,
+                vec![
+                    layer(floor, 0.02, LayerFunction::Finish),
+                    layer(screed, 0.05, LayerFunction::Substrate),
+                    layer(concrete, 0.25, LayerFunction::Structure),
+                    layer(plaster, 0.015, LayerFunction::Finish),
+                ],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: pb,
+                start: p(0.0, 5.0),
+                end: p(10.0, 5.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap();
+        let s = m
+            .add_slab(NewSlab {
+                slab_type: st,
+                level: p1,
+                outline: vec![p(0.0, 0.0), p(10.0, 0.0), p(10.0, 10.0), p(0.0, 10.0)],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        // One skin per element: volumes of the whole (a layer alone is
+        // not closed).
+        let vol = |list: &[Solid]| -> f64 { list.iter().map(Solid::volume).sum() };
+        let ws = wall_solids(&m, w);
+        // Plaster up to the ceiling plaster (2,665), brick through it up
+        // to the concrete (2,68). The wall does not go on above the slab,
+        // so its brick does not come out again through the screed.
+        let plaster_v = 2.0 * 0.015 * 10.0 * 2.665;
+        assert!(
+            (vol(&ws) - plaster_v - 0.115 * 10.0 * 2.68).abs() < 1e-9,
+            "{}",
+            vol(&ws)
+        );
+        assert!(closed(&ws));
+        // The slab loses the brick's room in its ceiling plaster only.
+        let ss = slab_solids(&m, s);
+        let left = 100.0 - 10.0 * 0.115;
+        assert!(
+            (vol(&ss) - 100.0 * 0.32 - left * 0.015).abs() < 1e-6,
+            "{}",
+            vol(&ss)
+        );
+        assert!(closed(&ss), "the slab is not a closed skin");
+        // Two storeys high: from above, the brick goes down through the
+        // floor and the screed to the concrete; the plaster stops on the
+        // floor.
+        m.set_wall_height(w, 6.0, 0.0).unwrap();
+        let ws = wall_solids(&m, w);
+        let expected = 0.03 * 10.0 * (2.665 + 3.0) + 0.115 * 10.0 * (2.68 + 3.07);
+        assert!((vol(&ws) - expected).abs() < 1e-9, "{}", vol(&ws));
+        assert!(closed(&ws));
+        let ss = slab_solids(&m, s);
+        assert!(
+            (vol(&ss) - 100.0 * 0.25 - left * 0.085).abs() < 1e-6,
+            "{}",
+            vol(&ss)
+        );
+        assert!(closed(&ss));
+        // Its floor layer, alone, has the brick's strip taken out.
+        let floor_tris = &ss.iter().find(|x| x.material == floor).unwrap().triangles;
+        assert!(floor_tris.iter().all(|t| t
+            .iter()
+            .all(|q| q[1] <= 5.0 - 0.0575 + 1e-6 || q[1] >= 5.0 + 0.0575 - 1e-6)));
+        let _ = (screed, concrete);
+        // Up to 2,95, inside the screed: it does not cover the screed, so
+        // the screed keeps its room; the brick stops at the concrete.
+        m.set_wall_height(w, 2.95, 0.0).unwrap();
+        let ws = wall_solids(&m, w);
+        assert!(
+            (vol(&ws) - plaster_v - 0.115 * 10.0 * 2.68).abs() < 1e-9,
+            "{}",
+            vol(&ws)
+        );
+        let ss = slab_solids(&m, s);
+        assert!(
+            (vol(&ss) - 100.0 * 0.32 - left * 0.015).abs() < 1e-6,
+            "{}",
+            vol(&ss)
+        );
+        // A slab edge across the wall: only the part under the slab is cut.
+        m.set_slab_outline(
+            s,
+            vec![p(4.0, 0.0), p(10.0, 0.0), p(10.0, 10.0), p(4.0, 10.0)],
+        )
+        .unwrap();
+        let ws = wall_solids(&m, w);
+        let full = 0.145 * 4.0 * 2.95;
+        let under = 6.0 * (0.03 * 2.665 + 0.115 * 2.68);
+        assert!((vol(&ws) - full - under).abs() < 1e-9, "{}", vol(&ws));
+        assert!(closed(&ws));
     }
 }

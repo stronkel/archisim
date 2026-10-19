@@ -57,7 +57,7 @@ impl Exporter<'_> {
                     holes: Vec::new(),
                     slope: Some(plane.slope),
                 };
-                let (spl, shape) = self.slab_shape(&part, thickness, pl);
+                let (spl, shape) = self.slab_shape(&part, thickness, pl, &[]);
                 let sl = self.w.add(format!(
                     "IFCSLAB({},$,{},$,{},{spl},{shape},$,.ROOF.)",
                     string(part.guid.as_str()),

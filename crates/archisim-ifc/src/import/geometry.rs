@@ -125,6 +125,10 @@ pub struct Body {
     /// Part of the body was cut away (boolean clipping), so its outline
     /// and height are only an envelope.
     pub clipped: bool,
+    /// Part of it was taken by a boolean difference with a solid (not a
+    /// half space): in ArchiSim's own files, a junction with a slab, which
+    /// the model works out again.
+    pub differenced: bool,
 }
 
 /// A closed loop of plan points.
@@ -983,9 +987,16 @@ impl<'a> Geo<'a> {
             }
             "IFCBOOLEANRESULT" | "IFCBOOLEANCLIPPINGRESULT" => {
                 // Only the first operand: clippings only remove material.
+                // ArchiSim writes a junction with a slab (what the slab
+                // takes from the wall, and the reverse) as a plain boolean
+                // difference (see `Body::differenced`).
                 let op = e.arg(0).as_enum().unwrap_or("DIFFERENCE");
                 if op != "UNION" {
-                    body.clipped = true;
+                    if e.kind == "IFCBOOLEANRESULT" {
+                        body.differenced = true;
+                    } else {
+                        body.clipped = true;
+                    }
                 }
                 self.item(e.arg(1), xf, body, depth + 1);
                 if op == "UNION" {

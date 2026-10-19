@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use archisim_core::{LevelId, Model, OpeningId, Point2, Wall, WallId};
+use archisim_core::{LevelId, Model, OpeningId, Point2, Slab, SlabId, Wall, WallId};
 
 use crate::OpeningGeometry;
 
@@ -40,6 +40,8 @@ pub struct WallIndex<'a> {
     ends: HashMap<Key, Vec<WallId>>,
     /// Doors, windows and voids by wall.
     openings: HashMap<WallId, Vec<OpeningId>>,
+    /// The slabs whose outline may reach each cell (any level).
+    slab_cells: HashMap<Key, Vec<SlabId>>,
 }
 
 impl<'a> WallIndex<'a> {
@@ -62,8 +64,19 @@ impl<'a> WallIndex<'a> {
         for o in model.openings() {
             openings.entry(o.wall).or_default().push(o.id);
         }
+        let mut slab_cells: HashMap<Key, Vec<SlabId>> = HashMap::new();
+        for s in model.slabs() {
+            let (lo, hi) = box_of(&s.outline);
+            let (a, b) = (cell(lo), cell(hi));
+            for i in a.0..=b.0 {
+                for j in a.1..=b.1 {
+                    slab_cells.entry((i, j)).or_default().push(s.id);
+                }
+            }
+        }
         Self {
             model,
+            slab_cells,
             cells,
             ends,
             openings,
@@ -111,6 +124,42 @@ impl<'a> WallIndex<'a> {
             }
         }
         self.walls(level, ids)
+    }
+
+    /// Walls of any level whose outline may reach the box `lo`–`hi`.
+    pub fn in_box_any_level(&self, lo: Point2, hi: Point2) -> Vec<&'a Wall> {
+        let (a, b) = (cell(lo), cell(hi));
+        let mut ids: Vec<WallId> = Vec::new();
+        for i in a.0..=b.0 {
+            for j in a.1..=b.1 {
+                if let Some(v) = self.cells.get(&(i, j)) {
+                    ids.extend(v.iter().copied());
+                }
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        ids.into_iter()
+            .filter_map(|id| self.model.wall(id))
+            .collect()
+    }
+
+    /// Slabs of any level whose outline may reach the box `lo`–`hi`.
+    pub fn slabs_in_box(&self, lo: Point2, hi: Point2) -> Vec<&'a Slab> {
+        let (a, b) = (cell(lo), cell(hi));
+        let mut ids: Vec<SlabId> = Vec::new();
+        for i in a.0..=b.0 {
+            for j in a.1..=b.1 {
+                if let Some(v) = self.slab_cells.get(&(i, j)) {
+                    ids.extend(v.iter().copied());
+                }
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        ids.into_iter()
+            .filter_map(|id| self.model.slab(id))
+            .collect()
     }
 
     /// Walls of `level` with an end at `p` (within the model's tolerance).
@@ -162,4 +211,20 @@ pub fn bounds(model: &Model, w: &Wall) -> (Point2, Point2) {
             Point2::new(a.x.max(p.x), a.y.max(p.y))
         });
     (lo - Point2::new(m, m), hi + Point2::new(m, m))
+}
+
+/// The box a polygon stays within.
+pub fn box_of(poly: &[Point2]) -> (Point2, Point2) {
+    poly.iter().fold(
+        (
+            Point2::new(f64::INFINITY, f64::INFINITY),
+            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    )
 }

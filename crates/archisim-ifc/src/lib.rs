@@ -178,6 +178,7 @@ impl<'a> Exporter<'a> {
         slab: &archisim_core::Slab,
         thickness: f64,
         storey_pl: Ref,
+        voids: &[archisim_geom::junctions::Void],
     ) -> (Ref, Ref) {
         let vertical = slab.vertical(thickness);
         let solid = match slab.slope.and_then(|s| s.direction().map(|u| (s, u))) {
@@ -246,15 +247,68 @@ impl<'a> Exporter<'a> {
                 (pl, solid)
             }
         };
-        let (pl, solid) = solid;
+        let (pl, mut solid) = solid;
+        // What walls going through its layers take (level slabs only):
+        // from its soffit, in the storey's axes.
+        let soffit =
+            self.model.level(slab.level).map_or(0.0, |l| l.elevation) + slab.top_offset - thickness;
+        let cut = self.void_solids(voids, &|p| p, soffit);
+        for (v, _, _) in &cut {
+            solid = self
+                .w
+                .add(format!("IFCBOOLEANRESULT(.DIFFERENCE.,{solid},{v})"));
+        }
+        let kind = if cut.is_empty() { "SweptSolid" } else { "CSG" };
         let body_rep = self.w.add(format!(
-            "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
+            "IFCSHAPEREPRESENTATION({},'Body','{kind}',({solid}))",
             self.body_ctx
         ));
         let shape = self
             .w
             .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body_rep}))"));
         (pl, shape)
+    }
+
+    /// Prisms taken away where walls and slabs meet
+    /// ([`archisim_geom::junctions`]), in the element's axes: plan points
+    /// through `to_local`, heights from `z_ref` (project zero based). With
+    /// their bottom and top in those axes.
+    fn void_solids(
+        &mut self,
+        voids: &[archisim_geom::junctions::Void],
+        to_local: &dyn Fn(Point2) -> Point2,
+        z_ref: f64,
+    ) -> Vec<(Ref, f64, f64)> {
+        let mut out = Vec::new();
+        for (shapes, z0, z1) in voids {
+            let (z0, z1) = (z0 - z_ref, z1 - z_ref);
+            for (outer, holes) in shapes {
+                let local = |pts: &[Point2]| pts.iter().map(|p| to_local(*p)).collect::<Vec<_>>();
+                let curve = self.polyline(&local(outer), true);
+                let profile = if holes.is_empty() {
+                    self.w
+                        .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{curve})"))
+                } else {
+                    let inner: Vec<Ref> = holes
+                        .iter()
+                        .map(|h| self.polyline(&local(h), true))
+                        .collect();
+                    self.w.add(format!(
+                        "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{curve},{})",
+                        list(&inner)
+                    ))
+                };
+                let at = self.point3(0.0, 0.0, z0);
+                let pl = self.w.add(format!("IFCAXIS2PLACEMENT3D({at},$,$)"));
+                let solid = self.w.add(format!(
+                    "IFCEXTRUDEDAREASOLID({profile},{pl},{},{})",
+                    self.z,
+                    real(z1 - z0)
+                ));
+                out.push((solid, z0, z1));
+            }
+        }
+        out
     }
 
     /// The profile of a slab (its outline, with its holes as voids), each
@@ -1120,6 +1174,8 @@ impl<'a> Exporter<'a> {
         let mut contained: BTreeMap<LevelId, Vec<Ref>> = BTreeMap::new();
         let mut by_type: BTreeMap<WallTypeId, Vec<Ref>> = BTreeMap::new();
         let idx = archisim_geom::WallIndex::new(model);
+        // Kept for the slabs: the walls going through them.
+        let mut geometries = std::collections::HashMap::new();
         for wall in model.walls() {
             let (Some(wtype), Some(geo), Some(&(_, storey_pl))) = (
                 model.wall_type(wall.wall_type),
@@ -1257,6 +1313,26 @@ impl<'a> Exporter<'a> {
                     }
                 }
             }
+            // What the slabs it meets take (see `archisim_geom::junctions`).
+            let voids = archisim_geom::junctions::wall_slab_voids(&idx, &geo);
+            geometries.insert(wall.id, geo.clone());
+            let slab_lost: f64 = voids
+                .iter()
+                .map(|(s, z0, z1)| archisim_geom::junctions::area(s) * (z1 - z0))
+                .sum();
+            let cut = self.void_solids(&voids, &to_local, level_z + base);
+            if !cut.is_empty() {
+                kind = "CSG";
+                for (s, band) in solids.iter_mut().zip(zs.windows(2)) {
+                    for (v, z0, z1) in &cut {
+                        if z1.min(band[1] - base) - z0.max(band[0] - base) > EPSILON {
+                            *s = self
+                                .w
+                                .add(format!("IFCBOOLEANRESULT(.DIFFERENCE.,{s},{v})"));
+                        }
+                    }
+                }
+            }
             let items = solids
                 .iter()
                 .map(|r| r.to_string())
@@ -1349,7 +1425,8 @@ impl<'a> Exporter<'a> {
                 None => signed_area(&geo.outline_at(Some(base + 1e-6))),
             };
             let side = length * wall.height;
-            // Clipped under a roof: the volume of what is left.
+            // Clipped under a roof: the volume of what is left; less what
+            // the slabs take.
             let volume = if trims.is_empty() {
                 volume
             } else {
@@ -1358,7 +1435,7 @@ impl<'a> Exporter<'a> {
                     &trims,
                     level_z + base,
                 )
-            };
+            } - slab_lost;
             self.quantities(
                 w,
                 &wall.guid,
@@ -1388,7 +1465,12 @@ impl<'a> Exporter<'a> {
                 continue;
             };
             let thickness = stype.thickness();
-            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl);
+            let voids = archisim_geom::junctions::slab_wall_voids(&idx, slab.id, &geometries);
+            let lost: f64 = voids
+                .iter()
+                .map(|(s, z0, z1)| archisim_geom::junctions::area(s) * (z1 - z0))
+                .sum();
+            let (pl, shape) = self.slab_shape(slab, thickness, storey_pl, &voids);
             let name = format!("{} {}", stype.name, slab.id.0);
             let sl = self.w.add(format!(
                 "IFCSLAB({},$,{},$,{},{pl},{shape},{},.{}.)",
@@ -1433,7 +1515,7 @@ impl<'a> Exporter<'a> {
                     ("GrossArea", "IFCQUANTITYAREA", gross),
                     ("NetArea", "IFCQUANTITYAREA", area),
                     ("GrossVolume", "IFCQUANTITYVOLUME", gross * thickness),
-                    ("NetVolume", "IFCQUANTITYVOLUME", area * thickness),
+                    ("NetVolume", "IFCQUANTITYVOLUME", area * thickness - lost),
                 ],
             );
 
