@@ -1,6 +1,6 @@
 # Familias paramétricas — diseño (fase 2, punto 2.1)
 
-> 18 de octubre de 2026 · diseño aprobado por Antonio. **Bloque A hecho (v0.14):** el lenguaje, las familias de sistema y los tipos por familia con marca. **Bloque B hecho (v0.15):** símbolos de planta por escala desde las recetas, ventana practicable de 1 a 4 hojas con funcionamiento por hoja (también en IFC), y el diálogo de tipos generado desde la receta. Siguen C (IFC desde las familias), D (configurador completo) y E (navegador y biblioteca).
+> 18 de octubre de 2026 · diseño aprobado por Antonio. **Bloque A hecho (v0.14):** el lenguaje, las familias de sistema y los tipos por familia con marca. **Bloque B hecho (v0.15):** símbolos de planta por escala desde las recetas, ventana practicable de 1 a 4 hojas con funcionamiento por hoja (también en IFC), y el diálogo de tipos generado desde la receta. **C (v0.23)**, IFC desde las familias; **D (v0.24)**, configurador al estilo ArchiCAD. **Bloque E hecho (v0.30):** catálogo de tipos en los ficheros `.asfam`, ventana Biblioteca (cargar tipos, actualizar familias, purgar), «Guardar en la biblioteca» desde el Navegador y tipos agrupados por familia (ver «La biblioteca», abajo).
 > Equivale a las familias de Revit (`.rfa`) y a los objetos GDL de ArchiCAD,
 > con formato y contenido propios (sala limpia: nada de GDL ni de `.rfa`).
 
@@ -47,7 +47,7 @@ Los tipos anteriores a las familias se convierten así: puerta de 1 y de 2 hojas
 - **Qué es del tipo y qué del ejemplar.** Todo lo que define el producto es del **tipo**: medidas, hojas, tarjas, subdivisiones, materiales, manilla. Del **ejemplar** solo lo que depende de dónde se coloca: posición en el muro, antepecho, lado de apertura y mano. Así «12 × P-03» describe una puerta de verdad, que es lo que se mide y se pide al carpintero. (En ArchiCAD casi todo es del ejemplar, y por eso acabas recreando la misma puerta.)
 - **Cada tipo tiene**: nombre («Puerta paso 1 hoja 82,5×203 lacada blanca»), **marca de tipo** (P-03, V-01) para etiquetas y tablas, descripción, `GlobalId` estable y la familia de la que sale con su versión.
 - **Ficheros de familia**: un fichero `.asfam` contiene la receta de una familia **y su catálogo de tipos**, como un `.rfa` con sus tipos. Desde el proyecto, *Guardar tipo en biblioteca* añade o actualiza el tipo en el fichero de su familia de la biblioteca de AD5; desde otro proyecto, *Cargar tipos* lo trae con todo (receta incluida). La biblioteca es una carpeta compartible por todo el estudio.
-- **Mismo tipo en varios proyectos**: un tipo cargado conserva su `GlobalId`. Si al cargarlo ya existe uno con el mismo nombre y los mismos valores, no se duplica; si tiene el mismo nombre y valores distintos, se pregunta si sustituir o renombrar.
+- **Mismo tipo en varios proyectos**: un tipo cargado conserva su `GlobalId`, y es el `GlobalId` (no el nombre) lo que dice si es «el mismo tipo»: si el proyecto ya lo tiene con los mismos valores, no se duplica; con valores distintos, se pregunta si sustituir el del proyecto (sus elementos cambian) o cargarlo como otro tipo (nombre y `GlobalId` nuevos). Un tipo de otro `GlobalId` que se llame igual que uno del proyecto entra con el nombre numerado («… (2)»).
 - **Navegador del proyecto** (como el de Revit): Puertas → Abatible → tipos, cada uno con su **número de ejemplares**; doble clic abre el configurador; desde ahí, seleccionar todos los ejemplares de un tipo. Los tipos sin usar se ven y se pueden purgar.
 - **Mediciones**: el tipo es la unidad. Las tablas de carpintería (3.7) agrupan por tipo (y, si se quiere, por mano), con la marca, la cantidad y sus datos; el IFC lleva el tipo enlazado (`IfcRelDefinesByType`) para que lo cuenten igual Revit, ArchiCAD o Presto.
 
@@ -176,3 +176,27 @@ Después viene la **librería** (2.2): primero completar las cinco familias con 
 - Parámetros compartidos entre familias y propiedades de usuario (`ArchiSim_` Psets libres).
 - Familias de anotación (etiquetas, fase 3).
 - Importar objetos de otros programas (`IfcFurniture` con malla) como familias fijas, con la importación de segunda vuelta (1.7).
+
+## La biblioteca (bloque E, v0.30)
+
+La biblioteca es una carpeta de ficheros `.asfam` (por defecto `Documentos/ArchiSim/Biblioteca`; se cambia en la ventana Biblioteca y el programa la recuerda). Se leen también sus subcarpetas, para ordenarla como se quiera (Puertas, Ventanas, Mobiliario…). Puede estar en una carpeta compartida por todo el estudio.
+
+Cada fichero es la receta de una familia seguida de su **catálogo**: los materiales que usan sus tipos (por nombre, con categoría y color, para crearlos si el proyecto no los tiene) y los tipos, con nombre, marca, `GlobalId`, descripción y los valores de sus parámetros de tipo (los que no aparecen toman el valor por defecto de la receta):
+
+```
+catalog
+  material "Madera lacada blanca" category "wood" color 245 244 240
+  type "Paso 82,5 lacada" mark "P-07" guid "2Hx3kLm9n0pQrStUvWxYz1"
+    description "Hoja lisa lacada en blanco"
+    width = 0.825
+    panel_material = "Madera lacada blanca"
+```
+
+El proyecto guarda la receta sin catálogo (su copia, como hasta ahora).
+
+- **Guardar en la biblioteca** (Navegador → clic derecho sobre un tipo de puerta, ventana u objeto): escribe el tipo en el fichero de su familia, sustituyendo la entrada del mismo `GlobalId` o añadiéndola; si la familia del proyecto es más nueva que la del fichero, la receta del fichero se actualiza. Si el fichero ya tiene otro tipo con ese nombre, pide renombrarlo antes.
+- **Cargar** (ventana Biblioteca): trae el tipo con su familia (si el proyecto no la tiene) y sus materiales, en un solo paso que se puede deshacer.
+- **Actualizar familias** (ventana Biblioteca, «Familias del proyecto»): si ArchiSim o la biblioteca tienen una versión más nueva de una familia del proyecto, se ofrece «Actualizar a vN». Los tipos y los ejemplares conservan sus valores, toman los de los parámetros nuevos por defecto y pierden los de los que ya no existen; si algún tipo o ejemplar no cabe con la receta nueva, no cambia nada.
+- **Purgar tipos sin usar**: quita los tipos de puerta, ventana, objeto, muro y forjado que ningún elemento usa (siempre queda uno de muro y uno de forjado) y las familias que se quedan sin tipos, salvo las de ArchiSim. Se puede deshacer.
+- **Navegador**: puertas, ventanas y objetos agrupados por familia, cada tipo con su marca y su número de ejemplares.
+

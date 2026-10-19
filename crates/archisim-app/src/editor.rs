@@ -19,6 +19,7 @@ use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
 mod curtain;
+pub mod library;
 mod objects;
 mod phases;
 mod railings;
@@ -379,7 +380,7 @@ impl Editor {
         }
     }
 
-    fn transact<T>(
+    pub(crate) fn transact<T>(
         &mut self,
         label: &str,
         edit: impl FnOnce(&mut Model) -> Result<T, ModelError>,

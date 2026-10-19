@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (mañana) · Bloque E de familias: biblioteca de tipos (v0.30)
+
+Tercer bloque de los pedidos el 19/10. La v0.29 (IFC 4.3) quedó fusionada en `main` con la integración continua en verde.
+
+**Qué se hizo**
+- **Ficheros de familia con catálogo**: un `.asfam` de la biblioteca es la receta seguida de su catálogo de tipos (nombre, marca, `GlobalId`, descripción, valores) y de los materiales que usan, por nombre, con categoría y color. Formato descrito en `docs/FAMILIAS.md`, «La biblioteca».
+- **Guardar en la biblioteca**: Navegador → clic derecho sobre un tipo de puerta, ventana u objeto. Va al fichero de su familia en la carpeta de la biblioteca (por defecto `Documentos/ArchiSim/Biblioteca`); guardar otra vez el mismo tipo sustituye su entrada, no la duplica.
+- **Ventana Biblioteca** (Vista → Biblioteca…, o el botón al pie del Navegador): lista las familias de la carpeta y sus tipos con buscador; «Cargar» trae el tipo con su familia y sus materiales (los crea si faltan) y **con el mismo `GlobalId`**. Si el proyecto ya lo tiene igual, no hace nada; si lo tiene con otros valores, pregunta: sustituir el del proyecto o cargarlo como otro tipo.
+- **Actualizar familias**: en la misma ventana, cada familia del proyecto con versión más nueva en ArchiSim o en la biblioteca ofrece «Actualizar a vN». Tipos y ejemplares conservan sus valores y toman por defecto los parámetros nuevos; si algo no cabe con la receta nueva, no cambia nada. Así los proyectos antiguos pueden recibir, por ejemplo, la línea del giro de las puertas.
+- **Purgar tipos sin usar** (puertas, ventanas, objetos, muros y forjados; siempre queda uno de muro y uno de forjado), con confirmación y deshacer.
+- **Navegador**: puertas, ventanas y objetos agrupados por familia, con marca y número de ejemplares.
+- Sin cambios de formato `.archisim` ni de IFC: el tipo cargado exporta su `IfcDoorType`/`IfcWindowType` con el mismo `GlobalId` en los dos proyectos.
+- Pruebas: un tipo creado en un proyecto se carga en otro igual y con el mismo `GlobalId` (también pasando por la carpeta), cargar dos veces no duplica, conflicto/sustituir/renombrar, material que falta creado con su color, actualización de familia y receta ajena rechazada, purga, y la ventana dibujada en la app. Validación IFC (4.3 e IFC4), ida y vuelta, DXF y PDF como siempre.
+
+**Pendiente**
+- «Seleccionar todos los ejemplares del proyecto» desde el Navegador: hoy selecciona los de la planta activa.
+- Tipos de muro y forjado en la biblioteca (hoy solo puertas, ventanas y objetos, que son los de familia).
+- Siguiente bloque: 4.7, comprobaciones CTE (superficies útiles, evacuación DB-SI, accesibilidad DB-SUA). D4 (nombre) sigue pendiente de Antonio.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`cargo run --release -p archisim-app -- out/demo.archisim` o la v0.30 instalada). En el Navegador, abre **MODELO → Puertas**: salen agrupadas por familia (Puerta abatible, Puerta corredera…).
+2. Clic derecho sobre «P-02 Puerta de paso 1 hoja 80×205» → **Guardar en la biblioteca**. El aviso dice el fichero (`Puerta abatible.asfam` en `Documentos/ArchiSim/Biblioteca`).
+3. **Archivo → Nuevo** y **Vista → Biblioteca…**: despliega «Puerta abatible» y pulsa **Cargar** en la P-02. Colócala con la herramienta Puerta y exporta el IFC de los dos proyectos: el `IfcDoorType` de la P-02 debe tener el **mismo GlobalId** en ambos.
+4. En el proyecto nuevo, cambia el ancho de la P-02 en Tipos y materiales y vuelve a cargarla: debe preguntarte si sustituir o cargarla como otro tipo.
+5. **Purgar tipos sin usar…** en la ventana Biblioteca: dice cuántos tipos se van; acepta y comprueba con Ctrl+Z que se deshace.
+6. Si tienes un proyecto guardado con una versión antigua, mira en «Familias del proyecto» si alguna ofrece «Actualizar a vN» y prueba a actualizarla.
+
+---
+
 ## 2026-10-20 (madrugada) · IFC 4.3 por defecto, georreferencia y entorno (v0.29)
 
 Segundo bloque. **D3 decidida por Antonio: IFC 4.3**, «para poder aprovechar el tema de entorno».

@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod curtain;
+mod library;
 mod objects;
 mod phases;
 mod railings;
@@ -24,6 +25,7 @@ mod site;
 mod stairs;
 mod structure;
 pub use curtain::*;
+pub use library::*;
 pub use objects::*;
 pub use phases::*;
 pub use railings::*;
@@ -858,6 +860,8 @@ pub enum ModelError {
     InvalidShape(&'static str),
     /// Another element of the same list already has that name.
     DuplicateName(String),
+    /// The project already has a type with that `GlobalId` and other values.
+    TypeConflict(String),
 }
 
 impl fmt::Display for ModelError {
@@ -1009,6 +1013,9 @@ impl fmt::Display for ModelError {
             ModelError::InvalidShape(what) => write!(f, "{what}"),
             ModelError::DuplicateName(name) => {
                 write!(f, "another element is already called «{name}»")
+            }
+            ModelError::TypeConflict(name) => {
+                write!(f, "the project already has the type «{name}» with other values")
             }
         }
     }

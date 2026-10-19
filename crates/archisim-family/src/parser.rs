@@ -35,6 +35,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
         plans: Vec::new(),
         outputs: Vec::new(),
         ifc: Vec::new(),
+        catalog: Catalog::default(),
     };
     let mut seen_family = false;
     let mut seen_body = false;
@@ -144,6 +145,10 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                     def.ifc.extend(list);
                 }
             }
+            "catalog" => {
+                c.end()?;
+                catalog(&mut def.catalog, &line.children)?;
+            }
             other => return Err(syntax(line.no, format!("unknown section «{other}»"))),
         }
     }
@@ -155,6 +160,170 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
     }
     check_names(&def)?;
     Ok(def)
+}
+
+/// The `catalog` section: `material "Name" category "c" color R G B`
+/// lines, and `type "Name" [mark "M"] [guid "G"]` lines with
+/// `description "…"` and `param = value` lines under them.
+fn catalog(cat: &mut Catalog, lines: &[Line]) -> Result<(), FamilyError> {
+    for line in lines {
+        let mut c = Cursor::new(line);
+        match c.ident()?.as_str() {
+            "material" => {
+                let name = c.string()?;
+                let mut category = String::new();
+                let mut color = [200, 200, 200];
+                while !c.at_end() {
+                    match c.ident()?.as_str() {
+                        "category" => category = c.string()?,
+                        "color" => {
+                            for v in color.iter_mut() {
+                                let n = c.number()?;
+                                if !(0.0..=255.0).contains(&n) {
+                                    return Err(syntax(line.no, "a colour goes from 0 to 255"));
+                                }
+                                *v = n as u8;
+                            }
+                        }
+                        other => {
+                            return Err(syntax(
+                                line.no,
+                                format!("unknown material setting «{other}»"),
+                            ))
+                        }
+                    }
+                }
+                cat.materials.push(CatalogMaterial {
+                    name,
+                    category,
+                    color,
+                });
+            }
+            "type" => {
+                let mut t = CatalogType {
+                    name: c.string()?,
+                    mark: String::new(),
+                    guid: String::new(),
+                    description: String::new(),
+                    values: Vec::new(),
+                };
+                while !c.at_end() {
+                    match c.ident()?.as_str() {
+                        "mark" => t.mark = c.string()?,
+                        "guid" => t.guid = c.string()?,
+                        other => {
+                            return Err(syntax(line.no, format!("unknown type setting «{other}»")))
+                        }
+                    }
+                }
+                for l in &line.children {
+                    let mut c = Cursor::new(l);
+                    let key = c.ident()?;
+                    if key == "description" {
+                        t.description = c.string()?;
+                        c.end()?;
+                        continue;
+                    }
+                    c.sym("=")?;
+                    let v = c.literal()?;
+                    c.end()?;
+                    if t.values.iter().any(|(k, _)| *k == key) {
+                        return Err(syntax(l.no, format!("«{key}» is repeated")));
+                    }
+                    t.values.push((key, v));
+                }
+                if cat.types.iter().any(|o| o.name == t.name) {
+                    return Err(syntax(
+                        line.no,
+                        format!("the catalogue already has a type «{}»", t.name),
+                    ));
+                }
+                cat.types.push(t);
+            }
+            other => {
+                return Err(syntax(
+                    line.no,
+                    format!("unknown catalogue line «{other}» (material or type)"),
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A text as written in a recipe, with its quotes.
+fn quoted(s: &str) -> String {
+    let mut out = String::from("\"");
+    for ch in s.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// The `catalog` section of a catalogue, as text to append to a recipe
+/// (empty if it has nothing). Numbers are written exactly.
+pub fn catalog_text(cat: &Catalog) -> String {
+    if cat.materials.is_empty() && cat.types.is_empty() {
+        return String::new();
+    }
+    let mut s = String::from("catalog\n");
+    for m in &cat.materials {
+        s.push_str(&format!(
+            "  material {} category {} color {} {} {}\n",
+            quoted(&m.name),
+            quoted(&m.category),
+            m.color[0],
+            m.color[1],
+            m.color[2]
+        ));
+    }
+    for t in &cat.types {
+        s.push_str(&format!("  type {}", quoted(&t.name)));
+        if !t.mark.is_empty() {
+            s.push_str(&format!(" mark {}", quoted(&t.mark)));
+        }
+        if !t.guid.is_empty() {
+            s.push_str(&format!(" guid {}", quoted(&t.guid)));
+        }
+        s.push('\n');
+        if !t.description.is_empty() {
+            s.push_str(&format!("    description {}\n", quoted(&t.description)));
+        }
+        for (k, v) in &t.values {
+            let v = match v {
+                Value::Number(n) => format!("{n}"),
+                Value::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
+                Value::Text(t) => quoted(t),
+                Value::Material(_) => continue,
+            };
+            s.push_str(&format!("    {k} = {v}\n"));
+        }
+    }
+    s
+}
+
+/// A recipe without its `catalog` section (the recipe a project keeps).
+pub fn without_catalog(source: &str) -> String {
+    let mut out = String::new();
+    let mut skipping = false;
+    for line in source.lines() {
+        let indented = line.starts_with(' ') || line.starts_with('\t');
+        let code = line.split('#').next().unwrap_or("").trim();
+        if !indented && !code.is_empty() {
+            skipping = code == "catalog";
+        }
+        if !skipping {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    format!("{}\n", out.trim_end())
 }
 
 /// Replaces every top-level `include "name"` line with the text the

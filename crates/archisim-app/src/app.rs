@@ -265,6 +265,8 @@ pub struct ArchiSimApp {
     pub show_priorities: bool,
     /// The curtain wall types window.
     pub curtain_types: curtain_types_ui::CurtainTypesWindow,
+    /// The library window.
+    pub library: library_ui::LibraryWindow,
     /// A topographic survey being imported (its window is open).
     pub survey_import: Option<survey_ui::SurveyImport>,
     /// The whole object library, for the gallery's pictures of the types
@@ -445,6 +447,7 @@ impl ArchiSimApp {
             show_levels: false,
             show_priorities: false,
             curtain_types: Default::default(),
+            library: Default::default(),
             survey_import: None,
             object_library: None,
             priorities_all: false,
@@ -1536,6 +1539,7 @@ impl ArchiSimApp {
         self.curtain_types_dialog(ctx);
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
+        self.library_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
@@ -1780,6 +1784,7 @@ mod curtain_ui;
 mod draft_props;
 mod icons;
 mod levels_ui;
+mod library_ui;
 mod navigator;
 mod object_gallery;
 mod object_ui;

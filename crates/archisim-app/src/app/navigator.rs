@@ -16,6 +16,10 @@ use super::*;
 
 /// A type row of the model tree.
 struct TypeRow {
+    /// Doors, windows and objects: the type, to save it in the library.
+    family_type: Option<archisim_core::FamilyTypeRef>,
+    /// Doors, windows and objects: their family, to group them by it.
+    group: Option<String>,
     /// Where the type is edited (columns and beams: in Propiedades).
     tab: Option<TypesTab>,
     id: u64,
@@ -26,6 +30,18 @@ struct TypeRow {
     here: Vec<Element>,
     /// Shown instead of the count (the area of a room).
     value: Option<String>,
+}
+
+/// Rows grouped by family (stable: within a family, as they came).
+trait SortedByFamily {
+    fn by_family(self) -> Self;
+}
+
+impl SortedByFamily for Vec<TypeRow> {
+    fn by_family(mut self) -> Self {
+        self.sort_by(|a, b| a.group.cmp(&b.group));
+        self
+    }
 }
 
 impl ArchiSimApp {
@@ -190,6 +206,8 @@ impl ArchiSimApp {
                     count: m.walls().filter(|w| w.wall_type == t.id).count(),
                     here,
                     value: None,
+                    family_type: None,
+                    group: None,
                 }
             })
             .collect();
@@ -209,6 +227,8 @@ impl ArchiSimApp {
                     count: m.slabs().filter(|s| s.slab_type == t.id).count(),
                     here,
                     value: None,
+                    family_type: None,
+                    group: None,
                 }
             })
             .collect();
@@ -233,9 +253,12 @@ impl ArchiSimApp {
                         count: m.openings().filter(|o| o.opening_type == t.id).count(),
                         here,
                         value: None,
+                        family_type: Some(archisim_core::FamilyTypeRef::Opening(t.id)),
+                        group: m.family(t.family).map(|f| f.name().to_string()),
                     }
                 })
-                .collect()
+                .collect::<Vec<TypeRow>>()
+                .by_family()
         };
         let members = |usage: archisim_core::MemberUsage| -> Vec<TypeRow> {
             m.member_types()
@@ -256,6 +279,8 @@ impl ArchiSimApp {
                         count: m.member_type_users(t.id),
                         here,
                         value: None,
+                        family_type: None,
+                        group: None,
                     }
                 })
                 .collect()
@@ -277,6 +302,8 @@ impl ArchiSimApp {
                         Vec::new()
                     },
                     value: Some(format!("{} tabicas", l.risers())),
+                    family_type: None,
+                    group: None,
                 }
             })
             .collect();
@@ -295,6 +322,8 @@ impl ArchiSimApp {
                     Vec::new()
                 },
                 value: Some(format!("{} m", fmt_m(c.length()))),
+                family_type: None,
+                group: None,
             })
             .collect();
         let railings = m
@@ -311,6 +340,8 @@ impl ArchiSimApp {
                     Vec::new()
                 },
                 value: Some(format!("{} m", fmt_m(r.length()))),
+                family_type: None,
+                group: None,
             })
             .collect();
         // Objects, by type.
@@ -329,8 +360,11 @@ impl ArchiSimApp {
                     .map(|o| Element::Object(o.id))
                     .collect(),
                 value: None,
+                family_type: Some(archisim_core::FamilyTypeRef::Object(t.id)),
+                group: m.family(t.family).map(|f| f.name().to_string()),
             })
-            .collect();
+            .collect::<Vec<TypeRow>>()
+            .by_family();
         // Roofs, by type.
         let roofs = m
             .slab_types()
@@ -347,6 +381,8 @@ impl ArchiSimApp {
                     .map(|r| Element::Roof(r.id))
                     .collect(),
                 value: None,
+                family_type: None,
+                group: None,
             })
             .collect();
         // Rooms of the active level, by number, with their usable area.
@@ -362,6 +398,8 @@ impl ArchiSimApp {
                 count: 1,
                 here: vec![Element::Room(s.id)],
                 value: Some(fmt_area(s.area())),
+                family_type: None,
+                group: None,
             })
             .collect();
         vec![
@@ -395,6 +433,8 @@ impl ArchiSimApp {
         let mut select: Option<(Vec<Element>, String)> = None;
         let mut edit: Option<(Option<TypesTab>, u64, Vec<Element>)> = None;
         let mut show_types = None;
+        let mut to_library = None;
+        let mut open_library = false;
         nav_section(ui, "nav-model", "MODELO", |ui| {
             for (name, icon, rows) in &categories {
                 let total: usize = rows.iter().map(|r| r.count).sum();
@@ -406,7 +446,21 @@ impl ArchiSimApp {
                     state.toggle(ui);
                 }
                 state.show_body_unindented(ui, |ui| {
+                    let mut last_group: Option<&str> = None;
                     for r in rows {
+                        if let Some(g) = r.group.as_deref() {
+                            if last_group != Some(g) {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(22.0);
+                                    ui.label(
+                                        egui::RichText::new(g)
+                                            .size(11.0)
+                                            .color(p.muted),
+                                    );
+                                });
+                                last_group = Some(g);
+                            }
+                        }
                         let resp = list_row(
                             ui,
                             None,
@@ -438,6 +492,16 @@ impl ArchiSimApp {
                                 edit = Some((r.tab, r.id, r.here.clone()));
                                 ui.close();
                             }
+                            if let Some(t) = r.family_type {
+                                if ui
+                                    .button("Guardar en la biblioteca")
+                                    .on_hover_text("Llevar el tipo, con su familia y sus materiales, a la carpeta de la biblioteca para usarlo en otros proyectos")
+                                    .clicked()
+                                {
+                                    to_library = Some(t);
+                                    ui.close();
+                                }
+                            }
                         });
                     }
                 });
@@ -465,8 +529,14 @@ impl ArchiSimApp {
                 {
                     show_types = Some(TypesTab::Walls);
                 }
+                if ui
+                    .button("Biblioteca…")
+                    .on_hover_text("Cargar tipos de otros proyectos, actualizar familias, purgar tipos sin usar")
+                    .clicked()
+                {
+                    open_library = true;
+                }
             });
-            let _ = p;
         });
         if let Some((found, name)) = select {
             let n = found.len();
@@ -496,6 +566,12 @@ impl ArchiSimApp {
                 });
             }
             None => {}
+        }
+        if let Some(t) = to_library {
+            self.save_type_to_library(t);
+        }
+        if open_library {
+            self.library.open = true;
         }
         if let Some(tab) = show_types {
             self.types.tab = tab;

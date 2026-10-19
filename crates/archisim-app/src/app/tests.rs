@@ -3283,3 +3283,53 @@ fn georeference_in_the_project() {
     assert!(h.model().georeference().is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The library window: a door type saved from the project into a library
+/// folder, loaded into another project, and the question when the project
+/// has the same type with other values.
+#[test]
+fn library_window_loads_types() {
+    use crate::editor::library::{save_type, scan};
+    use archisim_core::{FamilyTypeRef, OnConflict};
+    let dir = std::env::temp_dir().join(format!("archisim-libui-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let a = Harness::new(Editor::new_project());
+    let t = a.model().opening_types().find(|t| t.is_door()).unwrap().id;
+    let (entry, version) = a.app.ed.catalog_entry(FamilyTypeRef::Opening(t)).unwrap();
+    save_type(&scan(&dir), &entry, version).unwrap();
+    let guid = a.model().opening_type(t).unwrap().guid.clone();
+    // Another project: the window lists it and loads it.
+    let mut b = Harness::new(Editor::new_project());
+    b.app.library.set(scan(&dir));
+    b.app.library.open = true;
+    b.frame();
+    // Every project's types have their own GlobalIds: this is a new one,
+    // with a free name; loading it again changes nothing.
+    let before = b.model().opening_types().count() + 1;
+    b.app.load_from_library(0, 0, OnConflict::Ask);
+    assert_eq!(b.model().opening_types().count(), before);
+    b.app.load_from_library(0, 0, OnConflict::Ask);
+    assert_eq!(b.model().opening_types().count(), before);
+    // Changed in the project: the window asks.
+    let bt = b
+        .model()
+        .opening_types()
+        .find(|x| x.guid == guid)
+        .unwrap()
+        .id;
+    b.app
+        .ed
+        .transact("w", |m| {
+            let ty = m.opening_type(bt).unwrap().clone();
+            let mut v = ty.values.clone();
+            v.insert("width".into(), archisim_core::Value::Number(1.234));
+            m.edit_family_type(bt, ty.family, v)
+        })
+        .unwrap();
+    b.app.load_from_library(0, 0, OnConflict::Ask);
+    assert_eq!(b.app.library.conflict(), Some((0, 0)));
+    b.frame();
+    b.app.load_from_library(0, 0, OnConflict::Rename);
+    assert_eq!(b.model().opening_types().count(), before + 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
