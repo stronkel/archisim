@@ -467,6 +467,18 @@ impl ArchiSimApp {
                     .speed(0.5),
             )
             .on_hover_text("Lo que entra menos que esto no cuenta (contactos, redondeos)");
+            ui.label("Holgura (mm)");
+            ui.add(
+                egui::DragValue::new(&mut self.coord.clearance_mm)
+                    .range(0.0..=2000.0)
+                    .speed(5.0),
+            )
+            .on_hover_text(
+                "Avisa también de los elementos que no se tocan pero quedan más cerca que esto \
+                 (paso de mantenimiento, aislamiento de tuberías…). 0: sin holgura",
+            );
+            ui.checkbox(&mut self.coord.between_links, "Entre vínculos")
+                .on_hover_text("Comprueba también los modelos vinculados entre sí (estructura con instalaciones…)");
             if ui.button("Comprobar").clicked() {
                 self.run_clash_check();
             }
@@ -492,7 +504,8 @@ impl ArchiSimApp {
         ui.label(
             RichText::new(
                 "Compara el proyecto con los vínculos visibles. No cuenta lo que solo se toca ni lo \
-                 que pasa por un hueco. Un clic en una fila la muestra en 3D.",
+                 que pasa por un hueco. Rojo: se meten uno en otro; ámbar: no se tocan pero no \
+                 respetan la holgura. Un clic en una fila la muestra en 3D.",
             )
             .weak(),
         );
@@ -515,26 +528,40 @@ impl ArchiSimApp {
                 .spacing([10.0, 4.0])
                 .show(ui, |ui| {
                     ui.strong("#");
-                    ui.strong("Proyecto");
-                    ui.strong("Vínculo");
-                    ui.strong("Entra");
+                    ui.strong("Elemento");
+                    ui.strong("Con");
+                    ui.strong("Entra / distancia");
                     ui.strong("Planta");
                     ui.end_row();
                     for (i, c) in self.coord.clashes.iter().enumerate() {
                         if ui.link(format!("{}", i + 1)).clicked() {
                             go = Some(i);
                         }
-                        if ui.link(&c.ours_label).clicked() {
+                        let name_of = |l: usize| {
+                            self.coord
+                                .links
+                                .get(l)
+                                .map(|l| l.name())
+                                .unwrap_or_default()
+                        };
+                        let ours = match c.ours_link {
+                            None => c.ours_label.clone(),
+                            Some(l) => format!("{} ({})", c.ours_label, name_of(l)),
+                        };
+                        if ui.link(ours).clicked() {
                             go = Some(i);
                         }
-                        let link = self
-                            .coord
-                            .links
-                            .get(c.link)
-                            .map(|l| l.name())
-                            .unwrap_or_default();
-                        ui.label(format!("{} ({link})", c.theirs_label));
-                        ui.label(archisim_coord::versions::metres(c.depth));
+                        ui.label(format!("{} ({})", c.theirs_label, name_of(c.link)));
+                        match c.gap {
+                            None => ui.label(
+                                RichText::new(archisim_coord::versions::metres(c.depth))
+                                    .color(Color32::from_rgb(200, 50, 50)),
+                            ),
+                            Some(g) => ui.label(
+                                RichText::new(format!("a {}", archisim_coord::versions::metres(g)))
+                                    .color(Color32::from_rgb(190, 120, 0)),
+                            ),
+                        };
                         ui.label(c.storey.clone().unwrap_or_default());
                         ui.end_row();
                     }
@@ -551,18 +578,34 @@ impl ArchiSimApp {
                 self.coord
                     .highlight
                     .insert((other.link, other.theirs), CLASH_RED);
+                if let Some(ol) = other.ours_link {
+                    self.coord
+                        .highlight
+                        .insert((ol, other.ours_index), CLASH_RED);
+                }
             }
             self.coord.highlight.insert((c.link, c.theirs), CLASH_AMBER);
+            if let Some(ol) = c.ours_link {
+                self.coord.highlight.insert((ol, c.ours_index), CLASH_AMBER);
+            }
             self.coord.selected_linked = None;
             self.coord.isolate = true;
             self.coord.highlight_changed();
             self.look_at(c.point, 6.0);
-            self.say(format!(
-                "{} × {}: {}.",
-                c.ours_label,
-                c.theirs_label,
-                archisim_coord::versions::metres(c.depth)
-            ));
+            self.say(match c.gap {
+                None => format!(
+                    "{} × {}: se meten {}.",
+                    c.ours_label,
+                    c.theirs_label,
+                    archisim_coord::versions::metres(c.depth)
+                ),
+                Some(g) => format!(
+                    "{} × {}: a {}, menos que la holgura.",
+                    c.ours_label,
+                    c.theirs_label,
+                    archisim_coord::versions::metres(g)
+                ),
+            });
         }
     }
 
@@ -1047,6 +1090,23 @@ mod tests {
 
         app.run_clash_check();
         assert_eq!(app.coord.clashes.len(), 1, "{:?}", app.message);
+        // With a clearance of 1 m, elements near the beam also show, in amber.
+        app.coord.clearance_mm = 1000.0;
+        app.coord.between_links = true;
+        app.run_clash_check();
+        assert!(
+            app.coord.clashes.iter().any(|c| c.gap.is_some()),
+            "{:?}",
+            app.message
+        );
+        assert_eq!(
+            app.coord.clashes.iter().filter(|c| c.gap.is_none()).count(),
+            1
+        );
+        frame(&ctx, &mut app, &mut t);
+        app.coord.clearance_mm = 0.0;
+        app.coord.between_links = false;
+        app.run_clash_check();
         frame(&ctx, &mut app, &mut t);
         let author = app.author();
         app.coord

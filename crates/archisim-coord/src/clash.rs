@@ -23,8 +23,12 @@ pub struct Clash {
     pub b: usize,
     /// The deepest point found, in metres.
     pub point: P3,
-    /// How far that point is inside the other element.
+    /// How far that point is inside the other element (0 for a
+    /// clearance clash).
     pub depth: f64,
+    /// A clearance clash: they do not touch, but are this close (less
+    /// than the clearance asked for).
+    pub gap: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +37,10 @@ pub struct ClashOptions {
     pub tolerance: f64,
     /// Classes never checked (spaces, furniture…), upper case.
     pub ignore_classes: HashSet<String>,
+    /// Clearance (holgura): elements that do not touch but are closer
+    /// than this also count, as clearance clashes. 0: off. Elements in
+    /// contact (closer than the tolerance) are never clearance clashes.
+    pub clearance: f64,
 }
 
 impl Default for ClashOptions {
@@ -47,6 +55,7 @@ impl Default for ClashOptions {
             .into_iter()
             .map(String::from)
             .collect(),
+            clearance: 0.0,
         }
     }
 }
@@ -138,6 +147,13 @@ pub fn inside(p: P3, tris: &[Tri]) -> bool {
 
 /// Distance from a point to a triangle.
 pub(crate) fn point_triangle(p: P3, t: &Tri) -> f64 {
+    let c = closest_on_triangle(p, t);
+    let d = sub(p, c);
+    dot(d, d).sqrt()
+}
+
+/// The point of a triangle closest to `p`.
+fn closest_on_triangle(p: P3, t: &Tri) -> P3 {
     // Ericson, Real-Time Collision Detection 5.1.5.
     let (a, b, c) = (t[0], t[1], t[2]);
     let ab = sub(b, a);
@@ -145,7 +161,7 @@ pub(crate) fn point_triangle(p: P3, t: &Tri) -> f64 {
     let ap = sub(p, a);
     let d1 = dot(ab, ap);
     let d2 = dot(ac, ap);
-    let closest = if d1 <= 0.0 && d2 <= 0.0 {
+    if d1 <= 0.0 && d2 <= 0.0 {
         a
     } else {
         let bp = sub(p, b);
@@ -189,9 +205,7 @@ pub(crate) fn point_triangle(p: P3, t: &Tri) -> f64 {
                 }
             }
         }
-    };
-    let d = sub(p, closest);
-    dot(d, d).sqrt()
+    }
 }
 
 /// How deep the points of `a` get into `b` (the deepest one), counting
@@ -239,7 +253,9 @@ pub fn find_clashes(
     let opts = &ClashOptions {
         tolerance: opts.tolerance.max(0.0005),
         ignore_classes: opts.ignore_classes.clone(),
+        clearance: opts.clearance.max(0.0),
     };
+    let reach = opts.clearance;
     let step = (opts.tolerance * 2.0).clamp(0.01, 0.05);
     let keep = |e: &Element| !opts.ignore_classes.contains(&e.class);
     let a: Vec<(usize, Prepared)> = left
@@ -261,8 +277,8 @@ pub fn find_clashes(
     let cell = |v: f64| (v / CELL).floor() as i64;
     let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
     for (k, (_, p)) in b.iter().enumerate() {
-        for x in cell(p.lo[0])..=cell(p.hi[0]) {
-            for y in cell(p.lo[1])..=cell(p.hi[1]) {
+        for x in cell(p.lo[0] - reach)..=cell(p.hi[0] + reach) {
+            for y in cell(p.lo[1] - reach)..=cell(p.hi[1] + reach) {
                 grid.entry((x, y)).or_default().push(k);
             }
         }
@@ -282,7 +298,7 @@ pub fn find_clashes(
         for k in cands {
             let (ib, pb) = &b[k];
             // The same element in both (a copy of the model linked): not a clash.
-            if pa.el.global_id == pb.el.global_id || !overlap(pa, pb, opts.tolerance) {
+            if pa.el.global_id == pb.el.global_id || !overlap(pa, pb, opts.tolerance - reach) {
                 continue;
             }
             let hit = match (
@@ -298,10 +314,92 @@ pub fn find_clashes(
                     b: *ib,
                     point,
                     depth,
+                    gap: None,
                 });
+            } else if reach > opts.tolerance {
+                let near = match (
+                    nearest(pa, pb, opts.tolerance, reach),
+                    nearest(pb, pa, opts.tolerance, reach),
+                ) {
+                    (Some(x), Some(y)) => Some(if x.1 <= y.1 { x } else { y }),
+                    (x, y) => x.or(y),
+                };
+                if let Some((point, gap)) = near {
+                    out.push(Clash {
+                        a: *ia,
+                        b: *ib,
+                        point,
+                        depth: 0.0,
+                        gap: Some(gap),
+                    });
+                }
             }
         }
     }
-    out.sort_by(|x, y| y.depth.total_cmp(&x.depth));
+    // Hard clashes first, deepest first; then clearance, closest first.
+    out.sort_by(|x, y| match (x.gap, y.gap) {
+        (None, None) => y.depth.total_cmp(&x.depth),
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (Some(a), Some(b)) => a.total_cmp(&b),
+    });
     out
+}
+
+/// The point of `a` closest to `b` and its distance, when it is farther
+/// than `tol` (they do not touch) and nearer than `reach`. Points inside
+/// `b` mean contact or a clash, not clearance: then `None`.
+fn nearest(a: &Prepared, b: &Prepared, tol: f64, reach: f64) -> Option<(P3, f64)> {
+    let tris = &b.el.mesh.triangles;
+    let voids = &b.el.voids;
+    // Faces of the openings that are inside the element: the jambs, head
+    // and sill (not the ends of the opening box outside the wall).
+    let reveals: Vec<&Tri> = voids
+        .iter()
+        .flatten()
+        .filter(|t| {
+            let c = [0, 1, 2].map(|k| (t[0][k] + t[1][k] + t[2][k]) / 3.0);
+            inside(c, tris)
+        })
+        .collect();
+    let in_void = |q: P3| voids.iter().any(|v| inside(q, v));
+    let own_void = |q: P3| a.el.voids.iter().any(|v| inside(q, v));
+    let mut best: Option<(P3, f64)> = None;
+    for &p in &a.samples {
+        if (0..3).any(|i| p[i] < b.lo[i] - reach || p[i] > b.hi[i] + reach) {
+            continue;
+        }
+        // Edges of `a`'s faces that cross its own openings: no material.
+        if !a.el.voids.is_empty() && own_void(p) {
+            continue;
+        }
+        let d = if !voids.is_empty() && in_void(p) {
+            // Through an opening: the distance to its reveals.
+            reveals
+                .iter()
+                .map(|t| point_triangle(p, t))
+                .fold(f64::INFINITY, f64::min)
+        } else {
+            // Outside: the nearest face of the element where there is
+            // material (not over its openings).
+            tris.iter()
+                .filter_map(|t| {
+                    let c = closest_on_triangle(p, t);
+                    if !voids.is_empty() && in_void(c) {
+                        return None;
+                    }
+                    let v = sub(p, c);
+                    Some(dot(v, v).sqrt())
+                })
+                .fold(f64::INFINITY, f64::min)
+        };
+        if d <= tol {
+            // They touch: contact, not a clearance problem.
+            return None;
+        }
+        if d < reach && best.is_none_or(|(_, bd)| d < bd) {
+            best = Some((p, d));
+        }
+    }
+    best
 }

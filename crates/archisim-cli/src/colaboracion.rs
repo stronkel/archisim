@@ -20,10 +20,12 @@ como sale en su IFC, o un IFC de cualquier programa):
       Elementos nuevos, borrados, movidos, que cambian de forma o de datos
       entre dos versiones del mismo modelo, por su GlobalId.
 
-  archisim interferencias <modelo> <vinculado.ifc>... [--tolerancia mm] [--bcf incidencias.bcf]
+  archisim interferencias <modelo> <vinculado.ifc>... [--tolerancia mm] [--holgura mm] [--entre-vinculos] [--bcf incidencias.bcf]
       Choques entre el modelo y cada modelo vinculado (estructura,
       instalaciones…), sin contar contactos ni lo que pasa por un hueco.
-      Tolerancia por defecto: 10 mm. Con --bcf, una incidencia por choque;
+      Tolerancia por defecto: 10 mm. Con --holgura, avisa también de lo que
+      no se toca pero queda más cerca que eso; con --entre-vinculos,
+      comprueba además los vinculados entre sí. Con --bcf, una incidencia por choque;
       si el fichero ya existe se actualiza: las que siguen reciben un
       comentario, las que ya no aparecen pasan a «Resuelta».
 
@@ -67,6 +69,8 @@ pub fn run(args: &[String]) -> Option<ExitCode> {
         "interferencias" | "clash" => {
             let mut models = Vec::new();
             let mut tolerance = 0.01;
+            let mut clearance = 0.0;
+            let mut between_links = false;
             let mut bcf = None;
             let mut i = 1;
             while let Some(arg) = a(i) {
@@ -78,6 +82,14 @@ pub fn run(args: &[String]) -> Option<ExitCode> {
                             _ => return Some(usage("--tolerancia <milímetros>")),
                         }
                     }
+                    "--holgura" => {
+                        i += 1;
+                        match a(i).and_then(|v| v.replace(',', ".").parse::<f64>().ok()) {
+                            Some(mm) if mm >= 0.0 => clearance = mm / 1000.0,
+                            _ => return Some(usage("--holgura <milímetros>")),
+                        }
+                    }
+                    "--entre-vinculos" => between_links = true,
                     "--bcf" => {
                         i += 1;
                         bcf = a(i).map(Path::new);
@@ -87,9 +99,15 @@ pub fn run(args: &[String]) -> Option<ExitCode> {
                 i += 1;
             }
             Some(if models.len() < 2 {
-                usage("archisim interferencias <modelo> <vinculado.ifc>... [--tolerancia mm] [--bcf incidencias.bcf]")
+                usage("archisim interferencias <modelo> <vinculado.ifc>... [--tolerancia mm] [--holgura mm] [--entre-vinculos] [--bcf incidencias.bcf]")
             } else {
-                match clashes(models[0], &models[1..], tolerance, bcf) {
+                let args = ClashArgs {
+                    tolerance,
+                    clearance,
+                    between_links,
+                    bcf,
+                };
+                match clashes(models[0], &models[1..], &args) {
                     Ok(0) => ExitCode::SUCCESS,
                     Ok(_) => ExitCode::from(1),
                     Err(e) => {
@@ -188,31 +206,69 @@ fn compare_versions(old: &Path, new: &Path) -> R<()> {
     Ok(())
 }
 
-fn clashes(model: &Path, links: &[&Path], tolerance: f64, bcf_path: Option<&Path>) -> R<usize> {
+/// How to check clashes from the command line.
+struct ClashArgs<'a> {
+    tolerance: f64,
+    clearance: f64,
+    between_links: bool,
+    bcf: Option<&'a Path>,
+}
+
+fn clashes(model: &Path, links: &[&Path], args: &ClashArgs) -> R<usize> {
     let me = load(model)?;
-    println!("Interferencias (tolerancia {:.0} mm):", tolerance * 1000.0);
+    print!(
+        "Interferencias (tolerancia {:.0} mm",
+        args.tolerance * 1000.0
+    );
+    if args.clearance > 0.0 {
+        print!(", holgura {:.0} mm", args.clearance * 1000.0);
+    }
+    println!("):");
     describe(model, &me);
-    let mut bcf = match bcf_path {
+    let mut bcf = match args.bcf {
         Some(p) if p.exists() => archisim_bcf::read_bcf(&std::fs::read(p)?)?,
         _ => archisim_bcf::Bcf::default(),
     };
     let opts = archisim_coord::ClashOptions {
-        tolerance,
+        tolerance: args.tolerance,
+        clearance: args.clearance,
         ..Default::default()
     };
-    let mut total = 0;
-    let (mut added, mut kept, mut resolved) = (0, 0, 0);
+    let mut others = Vec::new();
     for link in links {
         let other = load(link)?;
         describe(link, &other);
-        let found = archisim_coord::find_clashes(&me, &other, &opts);
+        others.push(other);
+    }
+    // The project against each link, then the links among themselves.
+    let mut jobs: Vec<(Option<usize>, usize)> = (0..links.len()).map(|i| (None, i)).collect();
+    if args.between_links {
+        for i in 0..links.len() {
+            for j in i + 1..links.len() {
+                jobs.push((Some(i), j));
+            }
+        }
+    }
+    let (mut hard, mut soft) = (0, 0);
+    let (mut added, mut kept, mut resolved) = (0, 0, 0);
+    for (left, j) in jobs {
+        let (lhs, lhs_path) = match left {
+            None => (&me, model),
+            Some(i) => (&others[i], links[i]),
+        };
+        let rhs = &others[j];
+        println!("\n  {} × {}:", lhs_path.display(), links[j].display());
+        let found = archisim_coord::find_clashes(lhs, rhs, &opts);
         for c in &found {
-            let (x, y) = (&me.elements[c.a], &other.elements[c.b]);
+            let (x, y) = (&lhs.elements[c.a], &rhs.elements[c.b]);
+            let what = match c.gap {
+                None => format!("✘ se meten {}", archisim_coord::versions::metres(c.depth)),
+                Some(g) => format!("△ a {} (holgura)", archisim_coord::versions::metres(g)),
+            };
             println!(
-                "    ✘ {} × {}: {} ({}) en X {:.2}, Y {:.2}, Z {:.2}",
+                "    {what}: {} × {} ({}) en X {:.2}, Y {:.2}, Z {:.2}",
                 label(x),
                 label(y),
-                archisim_coord::versions::metres(c.depth),
                 x.storey
                     .as_deref()
                     .or(y.storey.as_deref())
@@ -225,25 +281,31 @@ fn clashes(model: &Path, links: &[&Path], tolerance: f64, bcf_path: Option<&Path
         if found.is_empty() {
             println!("    ✔ sin interferencias");
         }
-        total += found.len();
-        if bcf_path.is_some() {
-            let files = [file_ref(model), file_ref(link)];
+        let h = found.iter().filter(|c| c.gap.is_none()).count();
+        hard += h;
+        soft += found.len() - h;
+        if args.bcf.is_some() {
+            let files = [file_ref(lhs_path), file_ref(links[j])];
             let (a, k, r) =
-                archisim_coord::clashes_to_bcf(&mut bcf, &found, &me, &other, &files, &author());
+                archisim_coord::clashes_to_bcf(&mut bcf, &found, lhs, rhs, &files, &author());
             added += a;
             kept += k;
             resolved += r;
         }
     }
-    if let Some(p) = bcf_path {
+    if let Some(p) = args.bcf {
         std::fs::write(p, archisim_bcf::write_bcf(&bcf))?;
         println!(
             "\nIncidencias en {}: {added} nuevas, {kept} siguen, {resolved} resueltas.",
             p.display()
         );
     }
-    println!("\n{total} interferencias.");
-    Ok(total)
+    if args.clearance > 0.0 {
+        println!("\n{hard} interferencias y {soft} avisos de holgura.");
+    } else {
+        println!("\n{hard} interferencias.");
+    }
+    Ok(hard + soft)
 }
 
 fn label(e: &archisim_coord::Element) -> String {
@@ -429,6 +491,16 @@ pub fn example_models() -> (String, String) {
         "Instalaciones",
         "Ejemplo de instalaciones",
         &[
+            // A return duct under beam V-1 that does not fit under it: it
+            // clashes with the beam (structure × services) and with the
+            // partition below.
+            Piece(
+                "IFCDUCTSEGMENT",
+                "1Con00000000000000C002",
+                "Retorno 40×30",
+                [8.0, 1.0, 2.65],
+                [8.4, 8.0, 2.95],
+            ),
             // A duct through the corridor partition, without a hole.
             Piece(
                 "IFCDUCTSEGMENT",
@@ -468,7 +540,16 @@ fn demo_files(dir: &Path) -> R<()> {
         println!("  {}", p.display());
     }
     println!();
-    clashes(&project, &[&s, &i], 0.01, None)?;
+    clashes(
+        &project,
+        &[&s, &i],
+        &ClashArgs {
+            tolerance: 0.01,
+            clearance: 0.0,
+            between_links: true,
+            bcf: None,
+        },
+    )?;
     Ok(())
 }
 

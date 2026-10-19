@@ -1,6 +1,6 @@
 # ArchiSim — Colaboración e ingenierías (fase 4)
 
-> 19 de octubre de 2026 · v0.26 · Bloques 4.1 a 4.4 de `docs/HOJA_DE_RUTA.md`.
+> 19 de octubre de 2026 · v0.26 · Bloques 4.1 a 4.4 (holguras e interferencias entre vínculos añadidas el mismo día) de `docs/HOJA_DE_RUTA.md`.
 > Qué hace ArchiSim con los modelos de las otras disciplinas, cómo y con qué
 > estándares, y qué queda por decidir.
 
@@ -77,10 +77,17 @@ de prueba (`scripts/compare_volumes.py`).
   comentario, las que han desaparecido pasan a **Resuelta** y las nuevas se
   añaden. Las incidencias de otros vínculos no se tocan.
 
-Pendiente: holguras (elementos a menos de X cm, como el paso libre bajo una
-viga), interferencias entre dos vínculos y dentro del propio proyecto,
-reglas por disciplina (ignorar mobiliario contra instalaciones…) y una caja
-de sección en 3D.
+- **Holgura** (opcional, en mm): avisa también de los elementos que no se
+  tocan pero quedan más cerca que eso (paso de mantenimiento, aislamiento de
+  tuberías, distancia de un conducto a una puerta). Salen en ámbar, detrás de
+  las interferencias. Lo que se toca nunca es un aviso de holgura. La
+  distancia se mide al material: a través de un hueco, a sus jambas, dintel y
+  alféizar; nunca al hueco.
+- **Entre vínculos** (casilla): comprueba también los modelos vinculados
+  entre sí (la estructura con las instalaciones), como haría el coordinador.
+
+Pendiente: interferencias dentro del propio proyecto, reglas por disciplina
+(ignorar mobiliario contra instalaciones…) y una caja de sección en 3D.
 
 ## 4. Incidencias BCF (4.3)
 
@@ -135,15 +142,16 @@ tipos), un editor de IDS dentro del programa.
 ```
 archisim comprobar-ids <modelo> <requisitos.ids> [incidencias.bcf]
 archisim comparar <version-anterior> <version-nueva>
-archisim interferencias <modelo> <vinculado.ifc>... [--tolerancia mm] [--bcf incidencias.bcf]
+archisim interferencias <modelo> <vinculado.ifc>... [--tolerancia mm] [--holgura mm] [--entre-vinculos] [--bcf incidencias.bcf]
 archisim bcf <incidencias.bcf>
 archisim demo-coordinacion [carpeta]
 ```
 
 Un modelo puede ser un proyecto `.archisim` o un IFC de cualquier programa.
 `demo-coordinacion` deja la vivienda de prueba con una estructura
-(pilares 30×30, vigas) y unas instalaciones (conducto 40×30, bajante Ø110)
-con interferencias a propósito, y requisitos IDS de ejemplo.
+(pilares 30×30, vigas) y unas instalaciones (dos conductos 40×30, uno de
+ellos bajo una viga en la que no cabe, y una bajante Ø110) con interferencias
+a propósito, y requisitos IDS de ejemplo.
 
 ## 7. Piezas (para quien programe)
 
@@ -160,5 +168,5 @@ con interferencias a propósito, y requisitos IDS de ejemplo.
 |---|---|---|
 | D13 | Dónde guardar los vínculos e incidencias: junto al proyecto (hoy) o dentro del `.archisim` | Dentro, en la próxima versión del formato, cuando las ramas abiertas estén en `main` |
 | D14 | BCF por defecto al guardar: 3.0 o 2.1 | 3.0 (BIMcollab, Solibri, ArchiCAD 27+); 2.1 a mano para Revit con el BCF Manager antiguo |
-| D15 | Tolerancia por defecto de interferencias | 10 mm (ajustable) |
+| D15 | Tolerancia y holgura por defecto de interferencias | 10 mm de tolerancia; holgura desactivada (cada proyecto la pide: 50–100 mm suele bastar para instalaciones) |
 | D16 | Orden de lo que queda: CTE (4.7, cuando los locales estén en `main`), puente con Revit (4.5), trabajo en equipo (4.6), holguras y reglas por disciplina | 4.7 → holguras → 4.6 → 4.5 |

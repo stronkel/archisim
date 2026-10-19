@@ -185,6 +185,30 @@ fn clashes_ignore_contact_and_openings() {
         slab.depth
     );
     // A coarse tolerance hides the shallow one.
+    // Clearance of 50 cm: the pipe that went through the window opening
+    // now counts (its sides are 15 cm from the jambs and the sill), the
+    // beam resting on the slab does not (it touches).
+    let roomy = ClashOptions {
+        clearance: 0.5,
+        ..ClashOptions::default()
+    };
+    let with_gaps = find_clashes(&arch, &other, &roomy);
+    let hard = with_gaps.iter().filter(|c| c.gap.is_none()).count();
+    assert_eq!(hard, 2);
+    let soft: Vec<_> = with_gaps.iter().filter(|c| c.gap.is_some()).collect();
+    assert!(soft
+        .iter()
+        .any(|c| other.elements[c.b].name == "Bajante" && arch.elements[c.a].name == "Fachada"));
+    assert!(!soft.iter().any(
+        |c| other.elements[c.b].name == "Viga de atado" && arch.elements[c.a].name == "Solera"
+    ));
+    // The pipe (20 × 20 cm at 2,40–2,60 m, 1,40–1,60 m high) is 40 cm
+    // from the jambs, the head and the sill of the 1 × 1 m opening.
+    let pipe = soft
+        .iter()
+        .find(|c| other.elements[c.b].name == "Bajante")
+        .unwrap();
+    assert!((pipe.gap.unwrap() - 0.4).abs() < 0.03, "{:?}", pipe.gap);
     // A copy of the same model linked to itself: nothing.
     assert!(find_clashes(&arch, &arch, &ClashOptions::default()).is_empty());
     let loose = ClashOptions {

@@ -78,7 +78,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
 | 4.1 ✅ v0.26 | **Vínculo de modelos IFC** de estructuras e instalaciones como referencia (sin importarlos), con control de versiones por `GlobalId` — en planta y 3D, recarga automática con los cambios coloreados (diseño en `docs/COLABORACION.md`) | M | — |
-| 4.2 ◐ v0.26 | **Detección de interferencias** entre el modelo y los vinculados — hecha, con tolerancia, huecos y vista aislada; faltan holguras, reglas por disciplina e interferencias entre vínculos | M | 4.1 |
+| 4.2 ◐ v0.26 | **Detección de interferencias** entre el modelo y los vinculados — hecha, con tolerancia, holgura, huecos, vista aislada y entre vínculos; faltan reglas por disciplina e interferencias dentro del proyecto | M | 4.1 |
 | 4.3 ✅ v0.26 | **BCF**: incidencias con vista guardada, intercambiables con Revit, ArchiCAD, Solibri o BIMcollab — 2.1 y 3.0; falta BCF API (servidores) | M | — |
 | 4.4 ◐ v0.26 | **IDS**: comprobar el modelo contra los requisitos de información del cliente (hecho, 334 casos de buildingSMART); **bSDD** para clasificaciones (falta) | M | — |
 | 4.5 | **Complemento puente para Revit** (C#, API oficial de Revit): llevar tipos y elementos nativos en ambos sentidos | L | — |

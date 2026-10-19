@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 · Fase 4 — holguras e interferencias entre vínculos (v0.26, misma rama)
+
+Revisión periódica pedida por Antonio («haciendo pull cada cierto tiempo para cuadrar»): `main` sigue sin cambios y los pull requests #19, #20 y #21 siguen abiertos, así que no ha habido nada que fusionar. #22 tiene la integración continua en verde.
+
+**Hecho**
+- **Holgura** (4.2): además de lo que se mete uno en otro, aviso de lo que no se toca pero queda más cerca de lo pedido (por ejemplo 300 mm entre la bajante y las fachadas, o entre un conducto y la cabeza de una puerta). En la lista salen en ámbar, después de las interferencias; en BCF, con el título «Holgura: …» y prioridad baja. Lo que se toca nunca cuenta como holgura, y la distancia se mide al material: a través de un hueco, a sus jambas, dintel y alféizar.
+- **Entre vínculos**: casilla en la ventana (y `--entre-vinculos` en la línea de órdenes) para comprobar también los vinculados entre sí, por ejemplo la estructura con las instalaciones.
+- La holgura y la casilla se guardan con los vínculos junto al proyecto.
+- `demo-coordinacion` trae un segundo conducto, de retorno, que no cabe bajo la viga V-1: 16 interferencias con el proyecto y 1 entre estructura e instalaciones.
+- Corregido de paso: las aristas de un muro que cruzan su propio hueco ya no cuentan como material.
+
+**Antonio debe probar**
+1. `archisim demo-coordinacion out/` y abre `demo.archisim` con los dos vínculos.
+2. En *Interferencias*, pon **Holgura 300** y pulsa *Comprobar*: además de las 16 en rojo deben salir avisos en ámbar (la bajante junto a las fachadas, el conducto sobre la puerta). ¿Las distancias son las que medirías?
+3. Marca **Entre vínculos** y comprueba de nuevo: debe aparecer la viga V-1 con el conducto de retorno.
+4. Dime qué holgura usáis normalmente por disciplina (instalaciones, estructura) para ponerla por defecto (D15).
+
 ## 2026-10-19 · Fase 4 — colaboración e ingenierías: vínculos, interferencias, BCF e IDS (v0.26)
 
 Rama `bloque/colaboracion`, desde `main` (v0.24). Pedida por Antonio el 19/10/2026: «ve desarrollando la fase 4». Diseño y uso en `docs/COLABORACION.md`.
@@ -30,7 +47,7 @@ Rama `bloque/colaboracion`, desde `main` (v0.24). Pedida por Antonio el 19/10/20
 **Antonio debe probar**
 1. Descarga la versión de esta rama (pull request «Fase 4: colaboración…», *Artifacts*) o, con Rust, `cargo run --release -p archisim-cli -- demo-coordinacion out/` (deja `out/demo.archisim`, `demo-estructura.ifc`, `demo-instalaciones.ifc` y `demo-requisitos.ids`).
 2. Abre `demo.archisim` → *Colaboración → Vincular IFC…* y elige los dos IFC. En planta deben verse los pilares (uno, por error, dentro de la puerta del pasillo) y el círculo de la bajante; en 3D, la estructura azul y las instalaciones celestes.
-3. *Colaboración → Comprobar interferencias*: deben salir 15. Pincha la de la puerta con el pilar P-3: el 3D va allí con lo demás en fantasma. *Ver todo* lo devuelve.
+3. *Colaboración → Comprobar interferencias*: deben salir 16 (15 en la primera versión de esta rama; luego se añadió un conducto). Pincha la de la puerta con el pilar P-3: el 3D va allí con lo demás en fantasma. *Ver todo* lo devuelve.
 4. *Pasar a incidencias* → pestaña *Incidencias*: cambia el estado de una a «En curso», asígnala, comenta, y *Guardar como…* un `.bcf`. **Ábrelo en BIMcollab, Solibri o ArchiCAD** (y en Revit con el BCF Manager guardándolo como 2.1): ¿ves las incidencias, sus vistas y los elementos seleccionados?
 5. Guarda el proyecto y vuelve a abrirlo: los vínculos y el BCF deben volver solos. Cambia el IFC de estructura (o expórtalo de nuevo desde Revit con algo movido): ArchiSim debe avisar y colorear lo nuevo y lo modificado.
 6. *Comprobar requisitos (IDS)…* con `demo-requisitos.ids`: debe cumplir 6 de 7 (falta la transmitancia de las fachadas). Si tienes un IDS de algún cliente o de BIMcollab, pruébalo y dime qué falla.
