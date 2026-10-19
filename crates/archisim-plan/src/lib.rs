@@ -346,6 +346,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for stair in model.stairs_on_level(level) {
         marker_points.extend(stairs::stair_points(stair));
     }
+    for (stair, _) in stairs::arriving(model, level) {
+        marker_points.extend(stairs::stair_points(stair));
+    }
     for t in model.terrains_on_level(level) {
         marker_points.extend(terrain::terrain_points(t));
     }
@@ -433,6 +436,15 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let (lo, hi) = bounds(&pts);
         if visible(lo, hi) {
             stairs::draw_stair(&mut s, stair, options.cut_plane, k);
+        }
+    }
+    // Stairs arriving at this level, seen from above through their hole:
+    // the whole stair below the cut plane.
+    for (stair, rise) in stairs::arriving(model, level) {
+        let pts = stairs::stair_points(stair);
+        let (lo, hi) = bounds(&pts);
+        if visible(lo, hi) {
+            stairs::draw_stair(&mut s, stair, rise + options.cut_plane, k);
         }
     }
     s.push_str("</g>\n");

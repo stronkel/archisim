@@ -9,6 +9,25 @@ use archisim_core::{Point2, Stair};
 
 use crate::{num, path, pt, HATCH_LINE, INK, SLAB_COVER, VIEW_LINE};
 
+/// The stairs of other levels that arrive at `level` (their top is tied
+/// to it), and how far it is above each one's level.
+pub fn arriving(model: &archisim_core::Model, level: archisim_core::LevelId) -> Vec<(&Stair, f64)> {
+    let Some(here) = model.level(level).map(|l| l.elevation) else {
+        return Vec::new();
+    };
+    model
+        .stairs()
+        .filter(|s| {
+            s.level != level
+                && matches!(s.top, archisim_core::WallTop::Level { level: l, .. } if l == level)
+        })
+        .filter_map(|s| {
+            let base = model.level(s.level)?.elevation;
+            Some((s, here - base))
+        })
+        .collect()
+}
+
 /// Every point of the stair the plan must show.
 pub fn stair_points(stair: &Stair) -> Vec<Point2> {
     stair.outlines().into_iter().flatten().collect()
@@ -158,4 +177,48 @@ pub fn draw_stair(s: &mut String, stair: &Stair, cut_plane: f64, k: f64) {
         }
     }
     s.push_str("</g>\n");
+}
+
+#[cfg(test)]
+mod tests {
+    use archisim_core::{CutPattern, Model, NewStair, Point2, StairUse, WallTop};
+
+    #[test]
+    fn the_upper_plan_shows_the_stair_arriving() {
+        let mut m = Model::new("t");
+        let pb = m.add_level("PB", 0.0);
+        let p1 = m.add_level("P1", 2.8);
+        let p2 = m.add_level("P2", 5.6);
+        let mat = m.add_material("HA", "concrete", [200, 200, 200], CutPattern::Solid);
+        m.add_stair(NewStair {
+            level: pb,
+            path: vec![Point2::new(0.0, 0.0), Point2::new(0.0, 5.0)],
+            width: 1.0,
+            going: 0.28,
+            base_offset: 0.0,
+            top: WallTop::Level {
+                level: p1,
+                offset: 0.0,
+            },
+            height: 0.0,
+            waist: 0.15,
+            material: mat,
+            usage: StairUse::General,
+        })
+        .unwrap();
+        let o = crate::PlanOptions::default();
+        let count = |l| {
+            crate::render_plan(&m, l, &o)
+                .matches(r#"class="stair""#)
+                .count()
+        };
+        assert_eq!(count(pb), 1);
+        assert_eq!(count(p1), 1);
+        assert_eq!(count(p2), 0);
+        // Seen from above: nothing dashed beyond a break line.
+        let upper = crate::render_plan(&m, p1, &o);
+        let stair = &upper[upper.find(r#"class="stair""#).unwrap()..];
+        let stair = &stair[..stair.find("</g>").unwrap()];
+        assert!(!stair.contains("stroke-dasharray"));
+    }
 }
