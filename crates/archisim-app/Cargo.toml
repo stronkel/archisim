@@ -18,6 +18,7 @@ archisim-geom.workspace = true
 archisim-ifc.workspace = true
 archisim-plan.workspace = true
 archisim-file.workspace = true
+archisim-dxf.workspace = true
 archisim-library.workspace = true
 eframe = "0.37"
 resvg = { version = "0.48", default-features = false }

@@ -1,0 +1,11 @@
+[package]
+name = "archisim-dxf"
+description = "Reading DXF drawings (ASCII): the entities of a topographic survey"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

@@ -65,6 +65,41 @@ impl Editor {
         })
     }
 
+    /// A survey imported (points, and contour lines each at its height):
+    /// a new terrain on the active level, or added to `into`.
+    pub fn import_terrain(
+        &mut self,
+        s: &TerrainSettings,
+        points: Vec<SurveyPoint>,
+        contours: Vec<(Vec<archisim_core::Point2>, f64)>,
+        into: Option<TerrainId>,
+    ) -> EditResult<TerrainId> {
+        let level = self.level;
+        self.transact("Importar topografía", |m| match into {
+            Some(id) => {
+                m.edit_terrain(id, |t| {
+                    let existing = std::mem::take(&mut t.points);
+                    let (all, lines) = archisim_core::survey_points(existing, points, &contours);
+                    t.points = all;
+                    t.lines.extend(lines);
+                })?;
+                Ok(id)
+            }
+            None => {
+                let material = earth(m);
+                let (all, lines) = archisim_core::survey_points(Vec::new(), points, &contours);
+                m.add_terrain(NewTerrain {
+                    level,
+                    points: all,
+                    material,
+                    depth: s.depth,
+                    contour: s.contour,
+                    lines,
+                })
+            }
+        })
+    }
+
     pub fn edit_terrain(
         &mut self,
         label: &str,

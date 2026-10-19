@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/archisim-family",
+    "crates/archisim-dxf",
     "crates/archisim-core",
     "crates/archisim-geom",
     "crates/archisim-ifc",
@@ -23,6 +24,7 @@ repository = "https://github.com/stronkel/archisim"
 [workspace.dependencies]
 uuid = { version = "1", features = ["v4"] }
 archisim-family = { path = "crates/archisim-family" }
+archisim-dxf = { path = "crates/archisim-dxf" }
 archisim-core = { path = "crates/archisim-core" }
 archisim-geom = { path = "crates/archisim-geom" }
 archisim-ifc = { path = "crates/archisim-ifc" }

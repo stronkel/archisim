@@ -243,6 +243,8 @@ pub struct ArchiSimApp {
     /// The intersection priorities window, whether it lists unused
     /// materials too, and the bar being dragged (material, value).
     pub show_priorities: bool,
+    /// A topographic survey being imported (its window is open).
+    pub survey_import: Option<survey_ui::SurveyImport>,
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
@@ -390,6 +392,7 @@ impl ArchiSimApp {
             zone_tool: SlabTool::default(),
             show_levels: false,
             show_priorities: false,
+            survey_import: None,
             object_library: None,
             priorities_all: false,
             priority_drag: None,
@@ -632,6 +635,14 @@ impl ArchiSimApp {
     /// project replaces the open one).
     pub fn open_files(&mut self, paths: Vec<PathBuf>) {
         if paths.is_empty() {
+            return;
+        }
+        // A survey dropped on the window: imported into the terrain.
+        if let Some(survey) = paths.iter().find(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("dxf") || e.eq_ignore_ascii_case("dwg"))
+        }) {
+            self.open_survey(survey);
             return;
         }
         let mut openable = paths.iter().filter(|p| crate::open_files::is_openable(p));
@@ -1279,6 +1290,7 @@ impl ArchiSimApp {
         }
         self.levels_dialog(ctx);
         self.priorities_dialog(ctx);
+        self.survey_dialog(ctx);
         self.types_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
@@ -1532,6 +1544,7 @@ mod section_ui;
 mod space_ui;
 mod stair_ui;
 mod structure_ui;
+mod survey_ui;
 mod tabs;
 mod temp_ui;
 mod terrain_ui;

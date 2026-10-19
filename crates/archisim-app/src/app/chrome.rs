@@ -174,6 +174,13 @@ impl ArchiSimApp {
             if ui.button("Importar IFC…").clicked() {
                 self.guarded(Pending::Import(None));
             }
+            if ui
+                .button("Importar topografía (DXF, CSV)…")
+                .on_hover_text("Puntos con cota y curvas de nivel de un levantamiento, en el terreno de la planta")
+                .clicked()
+            {
+                self.pick_survey();
+            }
             if ui.button("Exportar IFC4…").clicked() {
                 self.export_ifc();
             }

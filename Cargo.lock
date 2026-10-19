@@ -211,6 +211,7 @@ name = "archisim-app"
 version = "0.25.0"
 dependencies = [
  "archisim-core",
+ "archisim-dxf",
  "archisim-file",
  "archisim-geom",
  "archisim-ifc",
@@ -248,6 +249,10 @@ dependencies = [
  "archisim-family",
  "uuid",
 ]
+
+[[package]]
+name = "archisim-dxf"
+version = "0.25.0"
 
 [[package]]
 name = "archisim-family"

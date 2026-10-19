@@ -230,70 +230,433 @@ fn barycentric(p: Point2, a: Point2, b: Point2, c: Point2) -> Option<(f64, f64, 
     (u >= e && v >= e && w >= e).then_some((u, v, w))
 }
 
-/// Delaunay triangulation (Bowyer–Watson) of points in plan; triangles
-/// counter-clockwise, by index. Points repeated are ignored.
+/// Delaunay triangulation of points in plan; triangles counter-clockwise,
+/// by index. Points repeated are left out, and so are triangles of no area.
+///
+/// A sweep: points are added in order of distance from a first small
+/// triangle, each joined to the edges of the hull it sees (a point on a
+/// hull edge splits it), and then edges are flipped until every triangle's
+/// circle is empty (Lawson). Close to `n log n` for survey data, where
+/// adding points one at a time into one big triangle was `n²`.
 pub fn delaunay(points: &[Point2]) -> Vec<[usize; 3]> {
     let n = points.len();
     if n < 3 {
         return Vec::new();
     }
+    // Worked about the middle of the points, so that survey coordinates
+    // (hundreds of kilometres) keep their precision.
     let (mut lo, mut hi) = (points[0], points[0]);
     for p in points {
         lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
     }
-    let size = (hi.x - lo.x).max(hi.y - lo.y).max(1.0) * 20.0;
     let mid = (lo + hi) * 0.5;
-    let mut pts: Vec<Point2> = points.to_vec();
-    pts.push(Point2::new(mid.x - size, mid.y - size));
-    pts.push(Point2::new(mid.x + size, mid.y - size));
-    pts.push(Point2::new(mid.x, mid.y + size));
-    let mut tris: Vec<[usize; 3]> = vec![[n, n + 1, n + 2]];
-    let in_circle = |t: &[usize; 3], p: Point2, pts: &[Point2]| {
-        let (a, b, c) = (pts[t[0]] - p, pts[t[1]] - p, pts[t[2]] - p);
-        let det = (a.x * a.x + a.y * a.y) * (b.x * c.y - c.x * b.y)
-            - (b.x * b.x + b.y * b.y) * (a.x * c.y - c.x * a.y)
-            + (c.x * c.x + c.y * c.y) * (a.x * b.y - b.x * a.y);
-        det > 1e-12
+    let pts: Vec<Point2> = points
+        .iter()
+        .map(|p| Point2::new(p.x - mid.x, p.y - mid.y))
+        .collect();
+    let size = (hi.x - lo.x).max(hi.y - lo.y).max(1e-9);
+    // Lengths below this are the same point.
+    let eps = size * 1e-10;
+    let cross = |a: usize, b: usize, c: usize| (pts[b] - pts[a]).cross(pts[c] - pts[a]);
+    let dist2 = |a: Point2, b: Point2| (a.x - b.x).powi(2) + (a.y - b.y).powi(2);
+
+    // The first triangle: the point nearest the middle, its nearest
+    // neighbour, and the point making the smallest circle with them.
+    let centre = Point2::new(0.0, 0.0);
+    let i0 = (0..n)
+        .min_by(|&a, &b| dist2(pts[a], centre).total_cmp(&dist2(pts[b], centre)))
+        .expect("points");
+    let Some(i1) = (0..n)
+        .filter(|&i| dist2(pts[i], pts[i0]) > eps * eps)
+        .min_by(|&a, &b| dist2(pts[a], pts[i0]).total_cmp(&dist2(pts[b], pts[i0])))
+    else {
+        return Vec::new();
     };
-    for i in 0..n {
-        let p = pts[i];
-        if pts[..i].iter().any(|q| q.approx_eq(p)) {
+    let radius2 = |a: usize, b: usize, c: usize| -> f64 {
+        circumcentre(pts[a], pts[b], pts[c]).map_or(f64::INFINITY, |o| dist2(o, pts[a]))
+    };
+    let Some(mut i2) = (0..n)
+        .filter(|&i| i != i0 && i != i1 && cross(i0, i1, i).abs() > eps * size)
+        .min_by(|&a, &b| radius2(i0, i1, a).total_cmp(&radius2(i0, i1, b)))
+    else {
+        // All in a line: no surface.
+        return Vec::new();
+    };
+    let mut i1 = i1;
+    if cross(i0, i1, i2) < 0.0 {
+        std::mem::swap(&mut i1, &mut i2);
+    }
+    let centre = circumcentre(pts[i0], pts[i1], pts[i2]).unwrap_or(centre);
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| dist2(pts[a], centre).total_cmp(&dist2(pts[b], centre)));
+
+    let mut mesh = Mesh::default();
+    // The hull, counter-clockwise: next and previous vertex, and the
+    // half-edge running along the hull from each vertex to the next.
+    const NONE: usize = usize::MAX;
+    let mut next = vec![NONE; n];
+    let mut prev = vec![NONE; n];
+    let mut hull_edge = vec![NONE; n];
+    let t = mesh.add(i0, i1, i2, NONE, NONE, NONE);
+    next[i0] = i1;
+    next[i1] = i2;
+    next[i2] = i0;
+    prev[i1] = i0;
+    prev[i2] = i1;
+    prev[i0] = i2;
+    hull_edge[i0] = t;
+    hull_edge[i1] = t + 1;
+    hull_edge[i2] = t + 2;
+    let mut start = i0;
+    let mut inside: Vec<usize> = Vec::new();
+    let mut last: Option<usize> = None;
+    for &p in &order {
+        if p == i0 || p == i1 || p == i2 {
             continue;
         }
-        let (bad, good): (Vec<[usize; 3]>, Vec<[usize; 3]>) =
-            tris.into_iter().partition(|t| in_circle(t, p, &pts));
-        tris = good;
-        // The hole's edges: those of one bad triangle only.
-        let mut edges: Vec<(usize, usize)> = Vec::new();
-        for t in &bad {
-            for k in 0..3 {
-                let e = (t[k], t[(k + 1) % 3]);
-                if let Some(j) = edges.iter().position(|f| *f == (e.1, e.0)) {
-                    edges.remove(j);
-                } else {
-                    edges.push(e);
+        if last.is_some_and(|q| dist2(pts[p], pts[q]) <= eps * eps) {
+            continue;
+        }
+        last = Some(p);
+        let visible = |a: usize, b: usize| cross(a, b, p) < -eps * size;
+        // A hull edge it sees: walk round the hull (from where the
+        // previous point was added: points come in order round it).
+        let mut e = start;
+        let mut found = false;
+        loop {
+            if visible(e, next[e]) {
+                found = true;
+                break;
+            }
+            e = next[e];
+            if e == start {
+                break;
+            }
+        }
+        if !found {
+            inside.push(p);
+            continue;
+        }
+        // Go back to the first edge it sees (those it sees are together:
+        // the hull is convex).
+        let first = e;
+        while visible(prev[e], e) {
+            e = prev[e];
+            if e == first {
+                break;
+            }
+        }
+        let q = next[e];
+        let t = mesh.add(e, p, q, NONE, NONE, hull_edge[e]);
+        hull_edge[e] = t;
+        hull_edge[p] = t + 1;
+        // Forwards: the next edges it sees.
+        let mut m = q;
+        while visible(m, next[m]) {
+            let r = next[m];
+            let t = mesh.add(m, p, r, hull_edge[p], NONE, hull_edge[m]);
+            hull_edge[p] = t + 1;
+            next[m] = NONE;
+            prev[m] = NONE;
+            m = r;
+        }
+        next[e] = p;
+        prev[p] = e;
+        next[p] = m;
+        prev[m] = p;
+        start = p;
+    }
+    // Points not outside the hull when their turn came: on a hull edge,
+    // or inside (near the first triangle).
+    for p in inside {
+        mesh.insert_inside(p, &pts, eps, &mut next, &mut prev, &mut hull_edge);
+    }
+    mesh.flip_all(&pts);
+    mesh.tris
+        .chunks(3)
+        .filter(|t| cross(t[0], t[1], t[2]) > eps * eps)
+        .map(|t| [t[0], t[1], t[2]])
+        .collect()
+}
+
+/// Survey points and contour lines in bulk (an imported survey), after the
+/// points a terrain has (kept as they are, so its lines stay right): the
+/// new points, each once (one at the same place as another is left out), and
+/// each contour line through `paths` at its height, its points no more than
+/// `LINE_SPACING` apart and shared with the points already there (they take
+/// the line's height). Fast for thousands of points.
+pub fn survey_points(
+    existing: Vec<SurveyPoint>,
+    points: impl IntoIterator<Item = SurveyPoint>,
+    paths: &[(Vec<Point2>, f64)],
+) -> (Vec<SurveyPoint>, Vec<Vec<usize>>) {
+    use std::collections::HashMap;
+    let key = |p: Point2| ((p.x * 1e4).round() as i64, (p.y * 1e4).round() as i64);
+    let mut index: HashMap<(i64, i64), usize> = HashMap::new();
+    for (i, p) in existing.iter().enumerate() {
+        index.entry(key(p.at)).or_insert(i);
+    }
+    let mut out = existing;
+    for p in points {
+        index.entry(key(p.at)).or_insert_with(|| {
+            out.push(p);
+            out.len() - 1
+        });
+    }
+    let mut lines = Vec::new();
+    for (path, z) in paths {
+        let mut line: Vec<usize> = Vec::new();
+        let mut add = |p: Point2, out: &mut Vec<SurveyPoint>| {
+            let i = *index.entry(key(p)).or_insert_with(|| {
+                out.push(SurveyPoint { at: p, z: *z });
+                out.len() - 1
+            });
+            out[i].z = *z;
+            if line.last() != Some(&i) {
+                line.push(i);
+            }
+        };
+        if let Some(first) = path.first() {
+            add(*first, &mut out);
+        }
+        for w in path.windows(2) {
+            let n = (w[0].distance(w[1]) / LINE_SPACING - 1e-9).ceil().max(1.0) as usize;
+            for j in 1..=n {
+                add(w[0] + (w[1] - w[0]) * (j as f64 / n as f64), &mut out);
+            }
+        }
+        if line.len() >= 2 {
+            lines.push(line);
+        }
+    }
+    (out, lines)
+}
+
+/// Centre of the circle through three points.
+fn circumcentre(a: Point2, b: Point2, c: Point2) -> Option<Point2> {
+    let (bx, by) = (b.x - a.x, b.y - a.y);
+    let (cx, cy) = (c.x - a.x, c.y - a.y);
+    let d = 2.0 * (bx * cy - by * cx);
+    if d.abs() < 1e-300 {
+        return None;
+    }
+    let b2 = bx * bx + by * by;
+    let c2 = cx * cx + cy * cy;
+    Some(Point2::new(
+        a.x + (cy * b2 - by * c2) / d,
+        a.y + (bx * c2 - cx * b2) / d,
+    ))
+}
+
+/// Whether `d` lies inside the circle through the counter-clockwise
+/// triangle `a b c`.
+fn in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
+    let (ax, ay) = (a.x - d.x, a.y - d.y);
+    let (bx, by) = (b.x - d.x, b.y - d.y);
+    let (cx, cy) = (c.x - d.x, c.y - d.y);
+    let det = (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay)
+        + (cx * cx + cy * cy) * (ax * by - bx * ay);
+    let scale = (ax * ax + ay * ay) + (bx * bx + by * by) + (cx * cx + cy * cy);
+    det > 1e-12 * scale * scale
+}
+
+/// Triangles as half-edges: half-edge `h` runs from `tris[h]` to the next
+/// corner of its triangle; `twin[h]` is the half-edge the other way, if
+/// another triangle is there.
+#[derive(Default)]
+struct Mesh {
+    tris: Vec<usize>,
+    twin: Vec<usize>,
+}
+
+impl Mesh {
+    const NONE: usize = usize::MAX;
+
+    fn link(&mut self, a: usize, b: usize) {
+        if a != Self::NONE {
+            self.twin[a] = b;
+        }
+        if b != Self::NONE {
+            self.twin[b] = a;
+        }
+    }
+
+    /// A triangle `a b c` whose edges face half-edges `ta`, `tb`, `tc`;
+    /// returns its first half-edge.
+    fn add(&mut self, a: usize, b: usize, c: usize, ta: usize, tb: usize, tc: usize) -> usize {
+        let t = self.tris.len();
+        self.tris.extend([a, b, c]);
+        self.twin.extend([Self::NONE; 3]);
+        self.link(t, ta);
+        self.link(t + 1, tb);
+        self.link(t + 2, tc);
+        t
+    }
+
+    /// Adds a point that is not outside the hull: on a hull edge (the
+    /// triangle there splits in two), on an edge inside (both triangles
+    /// split), or inside a triangle (it splits in three).
+    fn insert_inside(
+        &mut self,
+        p: usize,
+        pts: &[Point2],
+        eps: f64,
+        next: &mut [usize],
+        prev: &mut [usize],
+        hull_edge: &mut [usize],
+    ) {
+        let n = self.tris.len() / 3;
+        let at = pts[p];
+        for t in 0..n {
+            let h = 3 * t;
+            let (a, b, c) = (self.tris[h], self.tris[h + 1], self.tris[h + 2]);
+            let side = |u: usize, v: usize| (pts[v] - pts[u]).cross(at - pts[u]);
+            let len = |u: usize, v: usize| pts[u].distance(pts[v]).max(1e-300);
+            // Distance to each edge's line (inside: positive).
+            let d = [
+                side(a, b) / len(a, b),
+                side(b, c) / len(b, c),
+                side(c, a) / len(c, a),
+            ];
+            if d.iter().any(|x| *x < -eps) {
+                continue;
+            }
+            if [a, b, c].iter().any(|v| pts[*v].distance(at) <= eps) {
+                return; // the same point
+            }
+            match d.iter().position(|x| *x <= eps) {
+                None => self.split3(t, p, hull_edge),
+                Some(k) => {
+                    let e = h + k;
+                    if self.twin[e] == Self::NONE {
+                        self.split_hull(e, p, next, prev, hull_edge);
+                    } else {
+                        self.split_edge(e, p, hull_edge);
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    /// Triangle `t` split in three round `p` inside it.
+    fn split3(&mut self, t: usize, p: usize, hull_edge: &mut [usize]) {
+        let h = 3 * t;
+        let (a, b, c) = (self.tris[h], self.tris[h + 1], self.tris[h + 2]);
+        let (x1, x2) = (self.twin[h + 1], self.twin[h + 2]);
+        // t becomes (a, b, p); then (b, c, p) and (c, a, p).
+        self.tris[h + 2] = p;
+        let n1 = self.add(b, c, p, x1, Self::NONE, h + 1);
+        let n2 = self.add(c, a, p, x2, h + 2, n1 + 1);
+        if x1 == Self::NONE {
+            hull_edge[b] = n1;
+        }
+        if x2 == Self::NONE {
+            hull_edge[c] = n2;
+        }
+    }
+
+    /// The triangle of hull half-edge `e` split at `p`, on that edge.
+    fn split_hull(
+        &mut self,
+        e: usize,
+        p: usize,
+        next: &mut [usize],
+        prev: &mut [usize],
+        hull_edge: &mut [usize],
+    ) {
+        let t = e - e % 3;
+        let (h1, h2) = (t + (e - t + 1) % 3, t + (e - t + 2) % 3);
+        let (a, b, r) = (self.tris[e], self.tris[h1], self.tris[h2]);
+        let x = self.twin[h1];
+        // (a, b, r) becomes (a, p, r) and (p, b, r).
+        self.tris[h1] = p;
+        let m = self.add(p, b, r, Self::NONE, x, h1);
+        if x == Self::NONE {
+            hull_edge[b] = m + 1;
+        }
+        hull_edge[a] = e;
+        hull_edge[p] = m;
+        next[a] = p;
+        prev[p] = a;
+        next[p] = b;
+        prev[b] = p;
+    }
+
+    /// The two triangles of inner half-edge `e` split at `p`, on it.
+    fn split_edge(&mut self, e: usize, p: usize, hull_edge: &mut [usize]) {
+        let f = self.twin[e];
+        let t = e - e % 3;
+        let (e1, e2) = (t + (e - t + 1) % 3, t + (e - t + 2) % 3);
+        let s = f - f % 3;
+        let (f1, f2) = (s + (f - s + 1) % 3, s + (f - s + 2) % 3);
+        // e: a → b with c opposite; f: b → a with d opposite.
+        let (a, b, c) = (self.tris[e], self.tris[e1], self.tris[e2]);
+        let d = self.tris[f2];
+        let (xe1, xf1) = (self.twin[e1], self.twin[f1]);
+        // (a, b, c) → (a, p, c) + (p, b, c); (b, a, d) → (b, p, d) + (p, a, d).
+        self.tris[e1] = p;
+        self.tris[f1] = p;
+        let m = self.add(p, b, c, Self::NONE, xe1, e1);
+        let k = self.add(p, a, d, Self::NONE, xf1, f1);
+        // a → p (e) faces p → a (k); p → b (m) faces b → p (f).
+        self.link(e, k);
+        self.link(m, f);
+        if xe1 == Self::NONE {
+            hull_edge[b] = m + 1;
+        }
+        if xf1 == Self::NONE {
+            hull_edge[a] = k + 1;
+        }
+    }
+
+    /// Flips edges until every triangle's circle is empty.
+    fn flip_all(&mut self, pts: &[Point2]) {
+        let mut stack: Vec<usize> = (0..self.tris.len())
+            .filter(|&h| self.twin[h] != Self::NONE && h < self.twin[h])
+            .collect();
+        let mut guard = 0usize;
+        let limit = 50 * self.tris.len() + 1000;
+        while let Some(a) = stack.pop() {
+            guard += 1;
+            if guard > limit {
+                break;
+            }
+            let b = self.twin[a];
+            if b == Self::NONE {
+                continue;
+            }
+            let ta = a - a % 3;
+            let tb = b - b % 3;
+            let al = ta + (a - ta + 1) % 3;
+            let ar = ta + (a - ta + 2) % 3;
+            let br = tb + (b - tb + 1) % 3;
+            let bl = tb + (b - tb + 2) % 3;
+            let (s, q, p0) = (self.tris[a], self.tris[al], self.tris[ar]);
+            let p1 = self.tris[bl];
+            if !in_circle(pts[s], pts[q], pts[p0], pts[p1]) {
+                continue;
+            }
+            // Only a convex quadrilateral can be flipped.
+            let c1 = (pts[p1] - pts[p0]).cross(pts[s] - pts[p0]);
+            let c2 = (pts[p1] - pts[p0]).cross(pts[q] - pts[p0]);
+            if c1 * c2 >= 0.0 {
+                continue;
+            }
+            let (hbl, har) = (self.twin[bl], self.twin[ar]);
+            self.tris[a] = p1;
+            self.tris[b] = p0;
+            self.link(a, hbl);
+            self.link(b, har);
+            self.link(ar, bl);
+            for h in [a, al, b, br] {
+                if self.twin[h] != Self::NONE {
+                    stack.push(h);
                 }
             }
         }
-        for (a, b) in edges {
-            tris.push([a, b, i]);
-        }
     }
-    tris.retain(|t| t.iter().all(|&k| k < n));
-    // Counter-clockwise, and no slivers of zero area.
-    tris.into_iter()
-        .filter_map(|t| {
-            let area = (pts[t[1]] - pts[t[0]]).cross(pts[t[2]] - pts[t[0]]);
-            if area.abs() < 1e-12 {
-                None
-            } else if area > 0.0 {
-                Some(t)
-            } else {
-                Some([t[0], t[2], t[1]])
-            }
-        })
-        .collect()
 }
 
 impl Model {
@@ -537,5 +900,115 @@ mod tests {
         assert!(m.terrain(id).unwrap().lines.is_empty());
         let back = Model::from_parts(m.to_parts()).unwrap();
         assert_eq!(back, m);
+    }
+
+    /// Area of the convex hull (monotone chain).
+    fn hull_area(points: &[Point2]) -> f64 {
+        let mut p: Vec<Point2> = points.to_vec();
+        p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+        let mut hull: Vec<Point2> = Vec::new();
+        for pass in 0..2 {
+            let start = hull.len();
+            let iter: Box<dyn Iterator<Item = &Point2>> = if pass == 0 {
+                Box::new(p.iter())
+            } else {
+                Box::new(p.iter().rev())
+            };
+            for &q in iter {
+                while hull.len() >= start + 2 {
+                    let (a, b) = (hull[hull.len() - 2], hull[hull.len() - 1]);
+                    if (b - a).cross(q - a) <= 0.0 {
+                        hull.pop();
+                    } else {
+                        break;
+                    }
+                }
+                hull.push(q);
+            }
+            hull.pop();
+        }
+        crate::signed_area(&hull)
+    }
+
+    /// Every triangle's circle is empty, and they cover the convex hull.
+    fn check(points: &[Point2]) {
+        let tris = delaunay(points);
+        let area = |ts: &[[usize; 3]]| -> f64 {
+            ts.iter()
+                .map(|t| (points[t[1]] - points[t[0]]).cross(points[t[2]] - points[t[0]]) / 2.0)
+                .sum()
+        };
+        assert!(tris
+            .iter()
+            .all(|t| (points[t[1]] - points[t[0]]).cross(points[t[2]] - points[t[0]]) > 0.0));
+        // They cover the convex hull (the old triangulation could miss
+        // thin triangles on it).
+        let (a, b) = (area(&tris), hull_area(points));
+        assert!(
+            (a - b).abs() <= 1e-6 * b.abs().max(1.0),
+            "area {a} vs hull {b}"
+        );
+        // Every point used (but repeated ones).
+        let mut used = vec![false; points.len()];
+        for t in &tris {
+            for &i in t {
+                used[i] = true;
+            }
+        }
+        for (i, p) in points.iter().enumerate() {
+            let repeated = points[..i].iter().any(|q| q.approx_eq(*p));
+            assert!(used[i] || repeated, "point {i} {p:?} left out");
+        }
+        for t in &tris {
+            let (pa, pb, pc) = (points[t[0]], points[t[1]], points[t[2]]);
+            let o = circumcentre(pa, pb, pc).unwrap();
+            let r = o.distance(pa);
+            for (i, p) in points.iter().enumerate() {
+                if !t.contains(&i) {
+                    assert!(o.distance(*p) >= r - 1e-6 * r.max(1.0), "{t:?} holds {i}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sweep_triangulation_is_delaunay() {
+        let mut seed = 99u64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % 100_000) as f64 / 1000.0
+        };
+        // Scattered points.
+        let pts: Vec<Point2> = (0..400).map(|_| Point2::new(rnd(), rnd())).collect();
+        check(&pts);
+        // A grid (every four corners on one circle), with repeated points.
+        let mut grid = Vec::new();
+        for i in 0..12 {
+            for j in 0..9 {
+                grid.push(Point2::new(i as f64 * 2.0, j as f64 * 2.0));
+            }
+        }
+        grid.push(Point2::new(4.0, 4.0));
+        grid.push(Point2::new(0.0, 0.0));
+        check(&grid);
+        // Survey coordinates (UTM), and points on lines.
+        let utm: Vec<Point2> = (0..300)
+            .map(|k| {
+                let (x, y) = (rnd(), rnd());
+                if k % 3 == 0 {
+                    Point2::new(431_000.0 + x, 4_581_000.0)
+                } else {
+                    Point2::new(431_000.0 + x, 4_581_000.0 + y)
+                }
+            })
+            .collect();
+        check(&utm);
+        // In a line: nothing.
+        let line: Vec<Point2> = (0..10)
+            .map(|i| Point2::new(i as f64, 2.0 * i as f64))
+            .collect();
+        assert!(delaunay(&line).is_empty());
     }
 }

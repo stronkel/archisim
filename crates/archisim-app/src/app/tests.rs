@@ -2500,3 +2500,51 @@ fn object_gallery_loads_from_the_library() {
     h.type_text("o");
     h.frame();
 }
+
+/// Importing a topographic survey (R9): a DXF in UTM coordinates with
+/// points, contour lines, a breakline, height labels and a building at
+/// height 0. The survey's layers are chosen (not the building's), it is
+/// centred on the origin, with its heights from the chosen ±0,00.
+#[test]
+fn survey_import_from_dxf() {
+    let path = std::path::PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../archisim-dxf/tests/fixtures/levantamiento_r12.dxf"
+    ));
+    let mut h = Harness::new(Editor::new_project());
+    h.app.open_survey(&path);
+    let s = h.app.survey_import.as_mut().expect("window open");
+    let on: Vec<&str> = s
+        .layers
+        .iter()
+        .filter(|(_, on)| *on)
+        .map(|(l, _)| l.name.as_str())
+        .collect();
+    assert_eq!(on, ["CURVAS", "PUNTOS", "RUPTURA"]);
+    assert_eq!(s.contour, 1.0);
+    // The lowest point is at 637,8: the ±0,00 at 637.
+    assert_eq!(s.datum, 637.0);
+    s.datum = 640.0;
+    h.frame();
+    let s = h.app.survey_import.take().unwrap();
+    h.app.finish_survey(&s, None);
+    let t = h.model().terrains().next().expect("terrain").clone();
+    assert_eq!(t.lines.len(), 4);
+    assert_eq!(t.contour, 1.0);
+    // Centred: the top of the hill (645) at the origin, 5 m over ±0,00.
+    let top = t.height_at(p(0.0, 0.0)).unwrap();
+    assert!((top - 5.0).abs() < 0.05, "{top}");
+    assert!(t
+        .points
+        .iter()
+        .all(|q| q.at.x.abs() < 60.0 && q.at.y.abs() < 60.0));
+    // One undoable step.
+    h.app.ed.undo();
+    assert!(h.model().terrains().next().is_none());
+    // A DWG is not read: it says how to make a DXF of it.
+    let dwg = std::env::temp_dir().join("archisim-test.dwg");
+    std::fs::write(&dwg, b"AC1032").unwrap();
+    h.app.open_survey(&dwg);
+    assert!(h.app.survey_import.is_none());
+    assert!(h.app.message.as_ref().unwrap().text.contains("DXF"));
+}

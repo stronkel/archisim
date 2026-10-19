@@ -35,16 +35,18 @@ fn main() -> eframe::Result {
     let ed = Editor::new_project();
     let mut app = ArchiSimApp::new(ed);
     // A project or an IFC file given on the command line (or by opening a
-    // file with the application).
+    // file with the application); a survey (DXF) goes into a new project's
+    // terrain.
     if let Some(path) = std::env::args_os().nth(1) {
         let path = std::path::PathBuf::from(path);
-        let is_ifc = path
+        let ext = path
             .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
-        if is_ifc {
-            app.import_path(&path);
-        } else {
-            app.open_path(&path);
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        match ext.as_str() {
+            "ifc" => app.import_path(&path),
+            "dxf" => app.open_survey(&path),
+            _ => app.open_path(&path),
         }
     }
     let mut viewport = eframe::egui::ViewportBuilder::default()
