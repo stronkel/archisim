@@ -59,6 +59,7 @@ impl ArchiSimApp {
         self.draw_roof_preview(&painter, rect);
         self.draw_stair_preview(&painter, rect);
         self.draw_terrain_preview(&painter, rect);
+        self.draw_curtain_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -93,7 +94,8 @@ impl ArchiSimApp {
             | Tool::Section
             | Tool::Roof
             | Tool::Stair
-            | Tool::Terrain => CursorIcon::Crosshair,
+            | Tool::Terrain
+            | Tool::CurtainWall => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -290,6 +292,18 @@ impl ArchiSimApp {
             Tool::Stair => {
                 let mut s = self.snap_at(raw, reach, &self.stair_tool.points, &BTreeSet::new());
                 if let Some(a) = self.stair_tool.points.last().copied() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
+            Tool::CurtainWall => {
+                let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+                if let Some(a) = self.curtain_anchor {
                     if ctx.input(|i| i.modifiers.shift) {
                         s = constrain(a, s);
                     } else {
@@ -566,6 +580,11 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::CurtainWall => {
+                    if self.curtain_anchor.take().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Beam => {
                     if self.beam_tool.is_drawing() {
                         self.beam_tool.finish();
@@ -754,6 +773,16 @@ impl ArchiSimApp {
                         );
                         self.dim_outcome(out);
                     }
+                }
+            }
+            Tool::CurtainWall => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.curtain_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.curtain_anchor = None;
                 }
             }
             Tool::Section => {
@@ -1121,6 +1150,7 @@ impl ArchiSimApp {
             (Grip::SlopeEnd { .. }, _) => "Pendiente",
             (Grip::RoofCorner { .. }, _) => "Esquina",
             (Grip::StairPoint { .. }, _) => "Línea de huella",
+            (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::TerrainPoint { .. }, _) => "Punto",
         };
         let delta = to - d.from;
@@ -1479,6 +1509,7 @@ impl ArchiSimApp {
             Tool::Slab => self.slab_tool.anchor(),
             Tool::Beam => self.beam_tool.anchor,
             Tool::Section => self.section_tool.anchor,
+            Tool::CurtainWall => self.curtain_anchor,
             Tool::Zone => self.zone_tool.anchor(),
             Tool::Roof => self.roof_tool.anchor(),
             Tool::Stair => self.stair_tool.points.last().copied(),

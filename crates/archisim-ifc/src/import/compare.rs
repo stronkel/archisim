@@ -304,6 +304,34 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("terreno {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    if a.curtain_walls().count() != b.curtain_walls().count() {
+        diff(format!(
+            "número de muros cortina: {} / {}",
+            a.curtain_walls().count(),
+            b.curtain_walls().count()
+        ));
+    }
+    for s in a.curtain_walls() {
+        let Some(t) = b.curtain_walls().find(|t| t.guid == s.guid) else {
+            diff(format!("muro cortina {} falta", s.guid));
+            continue;
+        };
+        let same = s.start.distance(t.start) <= TOL
+            && s.end.distance(t.end) <= TOL
+            && close(s.base_offset, t.base_offset)
+            && close(s.height, t.height)
+            && close(s.bay, t.bay)
+            && close(s.row, t.row)
+            && close(s.frame_width, t.frame_width)
+            && close(s.frame_depth, t.frame_depth)
+            && close(s.panel_thickness, t.panel_thickness)
+            && level_guid(a, s.level) == level_guid(b, t.level)
+            && material_name(a, s.frame_material) == material_name(b, t.frame_material)
+            && material_name(a, s.panel_material) == material_name(b, t.panel_material);
+        if !same {
+            diff(format!("muro cortina {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     if a.stairs().count() != b.stairs().count() {
         diff(format!(
             "número de escaleras: {} / {}",
@@ -487,4 +515,8 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         }
     }
     out
+}
+
+fn material_name(m: &Model, id: archisim_core::MaterialId) -> Option<&str> {
+    m.material(id).map(|x| x.name.as_str())
 }

@@ -28,6 +28,8 @@ pub enum Element {
     Stair(archisim_core::StairId),
     /// The terrain, picked anywhere on it if nothing else is there.
     Terrain(archisim_core::TerrainId),
+    /// A curtain wall, picked by its line.
+    CurtainWall(archisim_core::CurtainWallId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -88,6 +90,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Terrain(id) => model
             .terrain(id)
             .map(|t| t.boundary().iter().map(|i| t.points[*i].at).collect()),
+        Element::CurtainWall(id) => model.curtain_wall(id).map(|c| c.outline()),
     }
 }
 
@@ -176,6 +179,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.sections().map(|s| Element::Section(s.id)));
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
+    v.extend(
+        model
+            .curtain_walls_on_level(level)
+            .map(|c| Element::CurtainWall(c.id)),
+    );
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
     v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
@@ -211,7 +219,8 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Space(_)
         | Element::Section(_)
         | Element::Stair(_)
-        | Element::Terrain(_) => None,
+        | Element::Terrain(_)
+        | Element::CurtainWall(_) => None,
     }
 }
 
@@ -240,7 +249,7 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Opening(_) => 1,
         // Columns stand in front of the walls they go through.
         Element::Column(_) => 1,
-        Element::Wall(_) => 2,
+        Element::Wall(_) | Element::CurtainWall(_) => 2,
         Element::Beam(_) => 3,
         Element::Roof(_) => 3,
         Element::Stair(_) => 1,

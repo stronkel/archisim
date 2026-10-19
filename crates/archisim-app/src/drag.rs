@@ -52,6 +52,11 @@ pub enum Grip {
         terrain: archisim_core::TerrainId,
         index: usize,
     },
+    /// One end of a curtain wall.
+    CurtainEnd {
+        curtain: archisim_core::CurtainWallId,
+        start: bool,
+    },
     /// A point of a stair's walking line.
     StairPoint {
         stair: archisim_core::StairId,
@@ -186,6 +191,19 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::CurtainWall(id) => {
+                if let Some(c) = model.curtain_wall(*id) {
+                    for (start, point) in [(true, c.start), (false, c.end)] {
+                        v.push(Hotspot {
+                            grip: Grip::CurtainEnd {
+                                curtain: *id,
+                                start,
+                            },
+                            point,
+                        });
+                    }
+                }
+            }
             Element::Terrain(id) => {
                 if let Some(t) = model.terrain(*id) {
                     for (index, p) in t.points.iter().enumerate() {
@@ -269,6 +287,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
         Grip::RoofCorner { roof, .. } => [Element::Roof(roof)].into_iter().collect(),
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
+        Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
     }
 }
@@ -316,6 +335,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::SlopeEnd { .. } => "Mover flecha de pendiente",
         Grip::RoofCorner { .. } => "Mover esquina de cubierta",
         Grip::StairPoint { .. } => "Mover punto de la escalera",
+        Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
     }
 }
@@ -386,6 +406,15 @@ pub fn apply(
             .edit_terrain(terrain, |t| {
                 if let Some(p) = t.points.get_mut(index) {
                     p.at = drag.to;
+                }
+            })
+            .map(|_| None),
+        Grip::CurtainEnd { curtain, start } => model
+            .edit_curtain_wall(curtain, |c| {
+                if start {
+                    c.start = drag.to;
+                } else {
+                    c.end = drag.to;
                 }
             })
             .map(|_| None),
@@ -528,6 +557,12 @@ fn move_selection(
                     for p in &mut t.points {
                         p.at = p.at + d;
                     }
+                })?;
+            }
+            Element::CurtainWall(id) => {
+                model.edit_curtain_wall(*id, |c| {
+                    c.start = c.start + d;
+                    c.end = c.end + d;
                 })?;
             }
             Element::Dimension(id) => {
@@ -770,6 +805,28 @@ fn copy(
                 })?;
                 copies.insert(Element::Terrain(new));
             }
+            Element::CurtainWall(id) => {
+                let c = model
+                    .curtain_wall(*id)
+                    .ok_or(ModelError::UnknownCurtainWall(*id))?
+                    .clone();
+                let new = model.add_curtain_wall(archisim_core::NewCurtainWall {
+                    level: c.level,
+                    start: c.start + d,
+                    end: c.end + d,
+                    base_offset: c.base_offset,
+                    top: c.top,
+                    height: c.height,
+                    bay: c.bay,
+                    row: c.row,
+                    frame_width: c.frame_width,
+                    frame_depth: c.frame_depth,
+                    panel_thickness: c.panel_thickness,
+                    frame_material: c.frame_material,
+                    panel_material: c.panel_material,
+                })?;
+                copies.insert(Element::CurtainWall(new));
+            }
             Element::Stair(id) => {
                 let s = model
                     .stair(*id)
@@ -974,6 +1031,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Roof(id) => model.roof(id).is_some(),
         Element::Stair(id) => model.stair(id).is_some(),
         Element::Terrain(id) => model.terrain(id).is_some(),
+        Element::CurtainWall(id) => model.curtain_wall(id).is_some(),
     }
 }
 
@@ -1005,6 +1063,7 @@ fn level_of(
         Grip::RoofCorner { roof, .. } => model.roof(roof).map(|r| r.level),
         Grip::StairPoint { stair, .. } => model.stair(stair).map(|s| s.level),
         Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
+        Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -1018,6 +1077,7 @@ fn level_of(
             Element::Roof(id) => model.roof(*id).map(|r| r.level),
             Element::Stair(id) => model.stair(*id).map(|s| s.level),
             Element::Terrain(id) => model.terrain(*id).map(|t| t.level),
+            Element::CurtainWall(id) => model.curtain_wall(*id).map(|c| c.level),
         }),
     }
 }

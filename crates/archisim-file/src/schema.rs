@@ -68,6 +68,32 @@ pub(crate) struct ProjectFile {
     /// Terrains (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terrains: Vec<Terrain>,
+    /// Curtain walls (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub curtain_walls: Vec<CurtainWall>,
+}
+
+/// A curtain wall (version 7): its line, foot and top (as walls), the
+/// largest bay and row of its grid, its frame and panels.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurtainWall {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub start: Xy,
+    pub end: Xy,
+    pub base_offset: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top: Option<WallTop>,
+    pub bay: f64,
+    pub row: f64,
+    pub frame_width: f64,
+    pub frame_depth: f64,
+    pub panel_thickness: f64,
+    pub frame_material: u64,
+    pub panel_material: u64,
 }
 
 /// A terrain (version 7): survey points as `[x, y, z]` (z from project
@@ -907,6 +933,27 @@ impl ProjectFile {
                     contour: t.contour,
                 })
                 .collect(),
+            curtain_walls: p
+                .curtain_walls
+                .into_iter()
+                .map(|c| CurtainWall {
+                    id: c.id.0,
+                    guid: c.guid.to_string(),
+                    level: c.level.0,
+                    start: xy(c.start),
+                    end: xy(c.end),
+                    base_offset: c.base_offset,
+                    height: c.height,
+                    top: top_out(c.top),
+                    bay: c.bay,
+                    row: c.row,
+                    frame_width: c.frame_width,
+                    frame_depth: c.frame_depth,
+                    panel_thickness: c.panel_thickness,
+                    frame_material: c.frame_material.0,
+                    panel_material: c.panel_material.0,
+                })
+                .collect(),
             wall_roofs: p
                 .wall_roofs
                 .iter()
@@ -1044,6 +1091,29 @@ impl ProjectFile {
                         material: core::MaterialId(t.material),
                         depth: t.depth,
                         contour: t.contour,
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
+            curtain_walls: self
+                .curtain_walls
+                .iter()
+                .map(|c| {
+                    Ok(core::CurtainWall {
+                        id: core::CurtainWallId(c.id),
+                        guid: guid(&format!("curtain wall {}", c.id), &c.guid)?,
+                        level: core::LevelId(c.level),
+                        start: pt(c.start),
+                        end: pt(c.end),
+                        base_offset: c.base_offset,
+                        top: top_in(c.top),
+                        height: c.height,
+                        bay: c.bay,
+                        row: c.row,
+                        frame_width: c.frame_width,
+                        frame_depth: c.frame_depth,
+                        panel_thickness: c.panel_thickness,
+                        frame_material: core::MaterialId(c.frame_material),
+                        panel_material: core::MaterialId(c.panel_material),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

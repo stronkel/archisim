@@ -18,6 +18,7 @@ use crate::pick::Element;
 use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
+mod curtain;
 mod phases;
 mod roofs;
 mod sections;
@@ -27,6 +28,7 @@ mod structure;
 mod terrain;
 mod types;
 
+pub use curtain::CurtainSettings;
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
 pub use spaces::{space_height, SpaceSettings, USAGES};
 pub use stairs::{default_stair_settings, StairSettings};
@@ -271,6 +273,7 @@ impl Editor {
             Element::Roof(id) => model.roof(*id).is_some(),
             Element::Stair(id) => model.stair(*id).is_some(),
             Element::Terrain(id) => model.terrain(*id).is_some(),
+            Element::CurtainWall(id) => model.curtain_wall(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -461,6 +464,9 @@ impl Editor {
                     Element::Terrain(id) => {
                         m.remove_terrain(*id)?;
                     }
+                    Element::CurtainWall(id) => {
+                        m.remove_curtain_wall(*id)?;
+                    }
                     Element::Opening(_) => {}
                 }
             }
@@ -602,6 +608,7 @@ impl Editor {
                         | Element::Roof(_)
                         | Element::Stair(_)
                         | Element::Terrain(_)
+                        | Element::CurtainWall(_)
                 )
             })
             .collect();
@@ -619,6 +626,7 @@ impl Editor {
                     Element::Roof(id) => m.edit_roof(*id, |r| r.level = level)?,
                     Element::Stair(id) => m.edit_stair(*id, |s| s.level = level)?,
                     Element::Terrain(id) => m.edit_terrain(*id, |t| t.level = level)?,
+                    Element::CurtainWall(id) => m.edit_curtain_wall(*id, |c| c.level = level)?,
                     _ => {}
                 }
             }

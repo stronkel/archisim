@@ -27,6 +27,10 @@ Checks:
   8. Every pitched roof (IfcRoof) is contained in a storey, made of roof
      slabs (checked as slabs above) and has its common property set and
      base quantities, its area the sum of its planes'.
+ 10. Every curtain wall (IfcCurtainWall) is contained in a storey, has its
+     common property set and quantities, and is made of mullions
+     (IfcMember) and panels (IfcPlate) with their material, quantities and
+     a 3D volume matching them.
 
 Usage:  python3 scripts/validate_ifc.py out/demo.ifc
 Needs:  pip install ifcopenshell
@@ -265,6 +269,34 @@ def main(path: str) -> int:
                 except Exception as exc:
                     errors.append(f"{fl.Name}: geometry failed: {exc}")
 
+    curtains = f.by_type("IfcCurtainWall")
+    for cw in curtains:
+        name = cw.Name
+        if not cw.ContainedInStructure:
+            errors.append(f"{name}: not contained in a storey")
+        psets = eu.get_psets(cw)
+        for required in ("Pset_CurtainWallCommon", "Qto_CurtainWallQuantities"):
+            if required not in psets:
+                errors.append(f"{name}: missing {required}")
+        parts = [p for rel in cw.IsDecomposedBy for p in rel.RelatedObjects]
+        if not any(p.is_a("IfcMember") for p in parts):
+            errors.append(f"{name}: no mullions")
+        for p in parts:
+            if eu.get_material(p) is None:
+                errors.append(f"{p.Name}: no material")
+            qto = "Qto_PlateBaseQuantities" if p.is_a("IfcPlate") else "Qto_MemberBaseQuantities"
+            q = eu.get_psets(p).get(qto, {})
+            if not q:
+                errors.append(f"{p.Name}: missing {qto}")
+            elif geom_ok:
+                try:
+                    shp = geom.create_shape(settings, p)
+                    vol = shape.get_volume(shp.geometry)
+                    if abs(vol - q["NetVolume"]) > 1e-6:
+                        errors.append(f"{p.Name}: volume {vol:.6f} != {q['NetVolume']:.6f}")
+                except Exception as exc:
+                    errors.append(f"{p.Name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
                 ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
@@ -272,7 +304,7 @@ def main(path: str) -> int:
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
           f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
-          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, {len(curtains)} muros cortina, "
           f"{len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:

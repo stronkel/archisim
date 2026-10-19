@@ -39,6 +39,7 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `wall_roofs` | Muros recortados bajo una cubierta (versión 7): lista de `{"wall", "roof"}` | El cuerpo del muro recortado (`IfcBooleanClippingResult` con un semiespacio por faldón) y `ArchiSim_Trim` |
 | `stairs` | Escaleras (versión 7): `level`, línea de huella del pie a la llegada (`path`), ancho, huella buscada (`going`), arranque (`base_offset`), llegada (`top`, como en los muros) y altura, espesor de la losa (`waist`), material (`id`) y uso para el CTE (`general` / `restricted`). Tramos, mesetas y tabicas se calculan, no se guardan | `IfcStair` con `IfcStairFlight` por tramo e `IfcSlab` `LANDING` por meseta, y `ArchiSim_Stair` para leerla de vuelta |
 | `terrains` | Terrenos (versión 7): `level`, puntos de cota `[x, y, z]` (z respecto al ±0,00 del proyecto), material (`id`), profundidad bajo el punto más bajo (`depth`) y equidistancia de las curvas de nivel (`contour`) | `IfcGeographicElement` (`TERRAIN`) con superficie triangulada y `ArchiSim_Terrain` |
+| `curtain_walls` | Muros cortina (versión 7): `level`, `start` y `end` (exterior a la izquierda), `base_offset`, `height`, `top` (como los muros), módulo y fila máximos (`bay`, `row`), perfil (`frame_width`, `frame_depth`, `frame_material`) y vidrio (`panel_thickness`, `panel_material`) | `IfcCurtainWall` con `IfcMember` (`MULLION`) e `IfcPlate` (`CURTAIN_PANEL`) y `ArchiSim_CurtainWall` |
 
 Las referencias entre elementos van por `id`: un muro con `"type": 7` usa el tipo de muro cuyo `id` es 7.
 

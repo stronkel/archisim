@@ -104,6 +104,13 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Ventanas en muros",
             ),
             tile(
+                Pick::Tool(Tool::CurtainWall),
+                Icon::CurtainWall,
+                "Cortina",
+                "U",
+                "Muros cortina: montantes, travesaños y vidrios con modulación regular",
+            ),
+            tile(
                 Pick::Tool(Tool::Roof),
                 Icon::Roof,
                 "Cubierta",

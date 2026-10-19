@@ -35,6 +35,7 @@ pub enum SolidOwner {
     Roof(archisim_core::RoofId),
     Stair(archisim_core::StairId),
     Terrain(archisim_core::TerrainId),
+    CurtainWall(archisim_core::CurtainWallId),
 }
 
 /// One closed piece of one material.
@@ -878,6 +879,39 @@ pub fn stair_solids(model: &Model, id: archisim_core::StairId) -> Vec<Solid> {
 
 /// The ground of a terrain: its surface on top, flat underneath `depth`
 /// below its lowest point, plumb at its edges.
+/// Solids of a curtain wall: one for its frame (mullions and transoms,
+/// each a closed box) and one for its panels.
+pub fn curtain_wall_solids(model: &Model, id: archisim_core::CurtainWallId) -> Vec<Solid> {
+    let Some(c) = model.curtain_wall(id) else {
+        return Vec::new();
+    };
+    let Some(level) = model.level(c.level) else {
+        return Vec::new();
+    };
+    let z = c.base_z(level.elevation);
+    let mut frame = Vec::new();
+    let mut panels = Vec::new();
+    for p in c.pieces() {
+        let tris = prism(&c.piece_footprint(&p), z + p.up.0, z + p.up.1);
+        match p.kind {
+            archisim_core::CurtainPieceKind::Panel => panels.extend(tris),
+            _ => frame.extend(tris),
+        }
+    }
+    vec![
+        Solid {
+            owner: SolidOwner::CurtainWall(id),
+            material: c.frame_material,
+            triangles: frame,
+        },
+        Solid {
+            owner: SolidOwner::CurtainWall(id),
+            material: c.panel_material,
+            triangles: panels,
+        },
+    ]
+}
+
 pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid> {
     let Some(t) = model.terrain(id) else {
         return Vec::new();
@@ -1446,6 +1480,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for t in model.terrains() {
         out.extend(terrain_solids(model, t.id));
     }
+    for c in model.curtain_walls() {
+        out.extend(curtain_wall_solids(model, c.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -1464,6 +1501,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| r.level == level),
         SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
         SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
+        SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),
     };
     model_solids(model)
         .into_iter()

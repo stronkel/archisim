@@ -2208,3 +2208,34 @@ fn terrain_tool_and_north() {
     assert!(ifc.contains("IFCGEOGRAPHICELEMENT"));
     assert!(ifc.contains("IFCDIRECTION((0.34202"));
 }
+
+#[test]
+fn curtain_wall_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("u");
+    assert_eq!(h.app.tool, Tool::CurtainWall);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(4.8, 0.0));
+    let m = h.model();
+    assert_eq!(m.curtain_walls().count(), 1, "{:?}", h.app.message);
+    let c = m.curtain_walls().next().unwrap().clone();
+    assert!((c.length() - 4.8).abs() < 1e-9);
+    assert_eq!(h.app.ed.selection.len(), 1);
+    // Its ends can be stretched, and it goes to the 3D and the IFC.
+    let solids = archisim_geom::solid::model_solids(h.model());
+    assert_eq!(solids.len(), 2);
+    let ifc = archisim_ifc::export_ifc(
+        h.model(),
+        &archisim_ifc::ExportOptions {
+            file_name: "t.ifc".into(),
+            author: "t".into(),
+            organization: String::new(),
+            timestamp: None,
+        },
+    );
+    assert!(ifc.contains("IFCCURTAINWALL"));
+    assert!(ifc.contains(".CURTAIN_PANEL."));
+    h.key(Key::Escape);
+    h.key(Key::Delete);
+    assert_eq!(h.model().curtain_walls().count(), 0);
+}

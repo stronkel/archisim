@@ -42,6 +42,7 @@
 //! Relationship GUIDs are derived from element GUIDs, so exporting the same
 //! model twice gives the same file apart from the header timestamp.
 
+mod curtain;
 pub mod import;
 mod members;
 mod roofs;
@@ -1434,6 +1435,7 @@ impl<'a> Exporter<'a> {
         self.write_roofs(&storeys, &slab_sets, &mut contained, &mut slabs_by_type);
         self.write_stairs(&materials, &storeys, &mut contained);
         self.write_terrains(&materials, &storeys, &mut contained);
+        self.write_curtain_walls(&materials, &storeys, &mut contained);
         self.write_spaces(&storeys);
 
         for (level, elements) in &contained {

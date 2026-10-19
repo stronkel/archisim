@@ -74,6 +74,8 @@ pub enum Tool {
     Stair,
     /// Terrain, by survey points.
     Terrain,
+    /// Curtain walls, by their line.
+    CurtainWall,
 }
 
 impl Tool {
@@ -91,6 +93,7 @@ impl Tool {
                 | Tool::Roof
                 | Tool::Stair
                 | Tool::Terrain
+                | Tool::CurtainWall
         )
     }
 
@@ -110,6 +113,7 @@ impl Tool {
             "t" => Some(Tool::Roof),
             "e" => Some(Tool::Stair),
             "r" => Some(Tool::Terrain),
+            "u" => Some(Tool::CurtainWall),
             _ => None,
         }
     }
@@ -202,6 +206,9 @@ pub struct ArchiSimApp {
     pub stair_settings: crate::editor::StairSettings,
     pub stair_tool: stair_ui::StairTool,
     pub terrain_settings: crate::editor::TerrainSettings,
+    pub curtain_settings: crate::editor::CurtainSettings,
+    /// The first point of the curtain wall being drawn.
+    pub curtain_anchor: Option<Point2>,
     /// Survey points of the terrain being drawn.
     pub terrain_points: Vec<archisim_core::SurveyPoint>,
     /// The outline of a room drawn by hand.
@@ -335,6 +342,8 @@ impl ArchiSimApp {
             stair_settings,
             stair_tool: Default::default(),
             terrain_settings: Default::default(),
+            curtain_settings: Default::default(),
+            curtain_anchor: None,
             terrain_points: Vec::new(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
@@ -426,6 +435,7 @@ impl ArchiSimApp {
             self.stair_tool.points.clear();
             self.terrain_points.clear();
             self.section_tool.anchor = None;
+            self.curtain_anchor = None;
             self.placement = None;
             self.window_start = None;
             self.drag = None;
@@ -1453,6 +1463,7 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 
 mod annotation_ui;
 mod chrome;
+mod curtain_ui;
 mod icons;
 mod levels_ui;
 mod navigator;

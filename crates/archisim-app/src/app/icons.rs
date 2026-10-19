@@ -16,6 +16,7 @@ pub enum Icon {
     Roof,
     Stair,
     Terrain,
+    CurtainWall,
     Object,
     Room,
     Dimension,
@@ -130,6 +131,12 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             rect_(4.0, 4.0, 20.0, 20.0, st);
             line(&[(12.0, 4.0), (12.0, 20.0)], st_thin);
             line(&[(4.0, 12.0), (20.0, 12.0)], st_thin);
+        }
+        Icon::CurtainWall => {
+            rect_(3.0, 4.0, 21.0, 20.0, st);
+            line(&[(9.0, 4.0), (9.0, 20.0)], st_thin);
+            line(&[(15.0, 4.0), (15.0, 20.0)], st_thin);
+            line(&[(3.0, 12.0), (21.0, 12.0)], st_thin);
         }
         Icon::Column => {
             rect_(7.0, 3.0, 17.0, 21.0, st);

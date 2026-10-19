@@ -24,6 +24,7 @@
 //!   the cut plane are drawn dashed and do not interrupt the wall.
 
 pub mod annotate;
+pub mod curtain;
 pub mod lettering;
 pub mod members;
 pub mod phases;
@@ -347,6 +348,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for t in model.terrains_on_level(level) {
         marker_points.extend(terrain::terrain_points(t));
     }
+    for c in model.curtain_walls_on_level(level) {
+        marker_points.extend(curtain::curtain_points(c));
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -480,6 +484,11 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         visible(lo, hi)
     };
     members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
+    for c in model.curtain_walls_on_level(level) {
+        if poly_visible(&c.outline()) {
+            curtain::draw_curtain_wall(&mut s, model, c, options.cut_plane, k);
+        }
+    }
 
     s.push_str("<g id=\"annotations\">\n");
     for d in &dimensions {

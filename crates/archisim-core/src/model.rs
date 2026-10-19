@@ -13,6 +13,7 @@ use crate::family::{
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
+mod curtain;
 mod phases;
 mod roofs;
 mod sections;
@@ -20,6 +21,7 @@ mod site;
 mod spaces;
 mod stairs;
 mod structure;
+pub use curtain::*;
 pub use phases::*;
 pub use roofs::*;
 pub use sections::*;
@@ -762,6 +764,10 @@ pub enum ModelError {
     RoofNotConvex,
     UnknownStair(StairId),
     UnknownTerrain(TerrainId),
+    UnknownCurtainWall(CurtainWallId),
+    /// A curtain wall with no height, too small a grid or a frame wider
+    /// than its bays.
+    InvalidCurtainWall,
     /// A terrain with fewer than three points out of line, or no depth.
     InvalidTerrain,
     /// A stair with no flight, nothing to climb, or too narrow or shallow.
@@ -865,6 +871,11 @@ impl fmt::Display for ModelError {
             ModelError::UnknownRoof(id) => write!(f, "unknown roof {id}"),
             ModelError::UnknownStair(id) => write!(f, "unknown stair {id}"),
             ModelError::UnknownTerrain(id) => write!(f, "unknown terrain {id}"),
+            ModelError::UnknownCurtainWall(id) => write!(f, "unknown curtain wall {id}"),
+            ModelError::InvalidCurtainWall => write!(
+                f,
+                "a curtain wall needs some height, bays and rows of at least 0.2 m and a frame narrower than half a bay"
+            ),
             ModelError::InvalidTerrain => write!(
                 f,
                 "a terrain needs three points not in a line and some depth"
@@ -998,6 +1009,7 @@ pub struct ModelParts {
     pub wall_roofs: Vec<(WallId, RoofId)>,
     pub stairs: Vec<Stair>,
     pub terrains: Vec<Terrain>,
+    pub curtain_walls: Vec<CurtainWall>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
 }
@@ -1055,6 +1067,7 @@ pub struct Model {
     wall_roofs: BTreeMap<WallId, RoofId>,
     stairs: BTreeMap<StairId, Stair>,
     terrains: BTreeMap<TerrainId, Terrain>,
+    curtain_walls: BTreeMap<CurtainWallId, CurtainWall>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     /// The phase new elements are given (the survey is drawn as
@@ -1091,6 +1104,7 @@ impl Model {
             wall_roofs: BTreeMap::new(),
             stairs: BTreeMap::new(),
             terrains: BTreeMap::new(),
+            curtain_walls: BTreeMap::new(),
             true_north: 0.0,
             draw_phase: Phase::New,
         }
@@ -1157,6 +1171,7 @@ impl Model {
             return Err(e);
         }
         self.refresh_stair_heights();
+        self.refresh_curtain_heights();
         Ok(())
     }
 
@@ -1188,6 +1203,12 @@ impl Model {
         self.wall_roofs.retain(|_, r| roofs.contains_key(r));
         self.stairs.retain(|_, s| s.level != id);
         self.terrains.retain(|_, t| t.level != id);
+        self.curtain_walls.retain(|_, c| c.level != id);
+        for c in self.curtain_walls.values_mut() {
+            if matches!(c.top, WallTop::Level { level, .. } if level == id) {
+                c.top = WallTop::Unconnected;
+            }
+        }
         for s in self.stairs.values_mut() {
             if matches!(s.top, WallTop::Level { level, .. } if level == id) {
                 s.top = WallTop::Unconnected;
@@ -1323,6 +1344,12 @@ impl Model {
                     .values()
                     .filter(|t| t.material == id)
                     .map(|t| format!("terreno {}", t.id.0)),
+            )
+            .chain(
+                self.curtain_walls
+                    .values()
+                    .filter(|c| c.frame_material == id || c.panel_material == id)
+                    .map(|c| format!("muro cortina {}", c.id.0)),
             );
         walls
             .chain(slabs)
@@ -3076,6 +3103,7 @@ impl Model {
             wall_roofs: self.wall_roofs.iter().map(|(w, r)| (*w, *r)).collect(),
             stairs: self.stairs.values().cloned().collect(),
             terrains: self.terrains.values().cloned().collect(),
+            curtain_walls: self.curtain_walls.values().cloned().collect(),
             true_north: self.true_north,
         }
     }
@@ -3289,6 +3317,7 @@ impl Model {
         }
         model.restore_stairs(parts.stairs, &mut claim)?;
         model.restore_terrains(parts.terrains, &mut claim)?;
+        model.restore_curtain_walls(parts.curtain_walls, &mut claim)?;
         model
             .set_true_north(parts.true_north)
             .map_err(|error| RestoreError {

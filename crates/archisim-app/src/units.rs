@@ -172,6 +172,8 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownRoof(_) => "la cubierta ya no existe".into(),
         ModelError::UnknownStair(_) => "la escalera ya no existe".into(),
         ModelError::UnknownTerrain(_) => "el terreno ya no existe".into(),
+        ModelError::UnknownCurtainWall(_) => "el muro cortina ya no existe".into(),
+        ModelError::InvalidCurtainWall => "el muro cortina necesita altura, módulos y filas de al menos 20 cm y montantes más estrechos que medio módulo".into(),
         ModelError::InvalidTerrain => {
             "el terreno necesita tres puntos que no estén en línea y algo de profundidad".into()
         }

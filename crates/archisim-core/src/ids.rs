@@ -87,6 +87,10 @@ typed_id!(
     /// Identifies a [`crate::Terrain`].
     TerrainId
 );
+typed_id!(
+    /// Identifies a [`crate::CurtainWall`].
+    CurtainWallId
+);
 
 typed_id!(
     /// Identifies a [`crate::Family`] loaded in the project.

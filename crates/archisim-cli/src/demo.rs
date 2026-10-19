@@ -206,6 +206,30 @@ pub fn build() -> Result<Document, ModelError> {
             base_offset: base,
             overhang: 0.0,
         })?;
+        // A glazed screen closing the east side of the porch (v0.25), from
+        // the façade to the column, up to the underside of the beam.
+        let find = |name: &str| m.materials().find(|x| x.name == name).map(|x| x.id);
+        let (Some(aluminium), Some(glass)) = (find("Aluminio lacado"), find("Vidrio doble")) else {
+            return Err(ModelError::InvalidCurtainWall);
+        };
+        m.add_curtain_wall(archisim_core::NewCurtainWall {
+            level: pb,
+            start: Point2::new(11.75, 0.0),
+            end: Point2::new(11.75, -2.55),
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Level {
+                level: cubierta,
+                offset: beam_top - beam_depth,
+            },
+            height: 0.0,
+            bay: 1.0,
+            row: 1.5,
+            frame_width: 0.05,
+            frame_depth: 0.12,
+            panel_thickness: 0.024,
+            frame_material: aluminium,
+            panel_material: glass,
+        })?;
         Ok(())
     })?;
 
@@ -424,6 +448,7 @@ mod tests {
         assert_eq!(m.roofs().count(), 2);
         assert_eq!(m.stairs().count(), 1);
         assert_eq!(m.terrains().count(), 1);
+        assert_eq!(m.curtain_walls().count(), 1);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);
