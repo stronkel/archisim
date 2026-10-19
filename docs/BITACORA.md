@@ -14,12 +14,13 @@ Este avance era el último commit de la PR #22; la fusión de las cuatro ramas e
 - **Holgura** (4.2): además de lo que se mete uno en otro, aviso de lo que no se toca pero queda más cerca de lo pedido (por ejemplo 300 mm entre la bajante y las fachadas, o entre un conducto y la cabeza de una puerta). En la lista salen en ámbar, después de las interferencias; en BCF, con el título «Holgura: …» y prioridad baja. Lo que se toca nunca cuenta como holgura, y la distancia se mide al material: a través de un hueco, a sus jambas, dintel y alféizar.
 - **Entre vínculos**: casilla en la ventana (y `--entre-vinculos` en la línea de órdenes) para comprobar también los vinculados entre sí, por ejemplo la estructura con las instalaciones.
 - La holgura y la casilla se guardan con los vínculos junto al proyecto.
-- `demo-coordinacion` trae un segundo conducto, de retorno, que no cabe bajo la viga V-1: 16 interferencias con el proyecto y 1 entre estructura e instalaciones.
+- `demo-coordinacion` trae un segundo conducto, de retorno, que no cabe bajo la viga V-1. Sobre la v0.27: 16 interferencias con el proyecto (pilares y bajante contra la solera y la cubierta, tabiques bajo las vigas…) y 1 entre estructura e instalaciones.
+- El **terreno** de la fase 2 ya no cuenta en las interferencias: los pilares y la bajante entran en él a propósito.
 - Corregido de paso: las aristas de un muro que cruzan su propio hueco ya no cuentan como material.
 
 **Antonio debe probar**
 1. `archisim demo-coordinacion out/` y abre `demo.archisim` con los dos vínculos.
-2. En *Interferencias*, pon **Holgura 300** y pulsa *Comprobar*: además de las 16 en rojo deben salir avisos en ámbar (la bajante junto a las fachadas, el conducto sobre la puerta). ¿Las distancias son las que medirías?
+2. En *Interferencias*, pon **Holgura 300** y pulsa *Comprobar*: además de las 16 en rojo (ninguna contra el terreno) deben salir avisos en ámbar (la bajante junto a las fachadas, el conducto sobre la puerta). ¿Las distancias son las que medirías?
 3. Marca **Entre vínculos** y comprueba de nuevo: debe aparecer la viga V-1 con el conducto de retorno.
 4. Dime qué holgura usáis normalmente por disciplina (instalaciones, estructura) para ponerla por defecto (D15).
 

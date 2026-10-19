@@ -63,7 +63,8 @@ de prueba (`scripts/compare_volumes.py`).
   tolerancia** (10 mm por defecto). Lo que solo se toca (un muro sobre el
   forjado, una viga contra la cara de un pilar) no cuenta, y tampoco lo que
   pasa **por un hueco** (una bajante por el hueco de una ventana, un conducto
-  por un pasamuros dibujado).
+  por un pasamuros dibujado). No se comprueban el mobiliario ni el **terreno**
+  (los pilares y las bajantes enterradas entran en él a propósito).
 - Cómo se mide: se recorren las aristas de cada elemento cada 2 cm y se
   mira si caen dentro del otro y a qué profundidad; se da el punto más
   profundo. Un mismo elemento en los dos modelos (el mismo GlobalId) no es

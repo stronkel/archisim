@@ -51,6 +51,9 @@ impl Default for ClashOptions {
                 "IFCFURNISHINGELEMENT",
                 "IFCFURNITURE",
                 "IFCBUILDINGELEMENTPROXY",
+                // The terrain: columns, footings and buried pipes go into it
+                // on purpose.
+                "IFCGEOGRAPHICELEMENT",
             ]
             .into_iter()
             .map(String::from)
