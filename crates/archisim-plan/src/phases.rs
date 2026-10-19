@@ -135,6 +135,27 @@ pub fn phase_model(model: &Model, view: PhaseView) -> Option<Model> {
             let _ = m.edit_stair(s, |s| s.material = mark);
         }
     }
+    let curtains: Vec<_> = m.curtain_walls().map(|c| c.id).collect();
+    for c in curtains {
+        let (show, marked) = view.shows(m.phase(c.0));
+        if !show {
+            let _ = m.remove_curtain_wall(c);
+        } else if marked {
+            let _ = m.edit_curtain_wall(c, |c| {
+                c.frame_material = mark;
+                c.panel_material = mark;
+            });
+        }
+    }
+    let railings: Vec<_> = m.railings().map(|r| r.id).collect();
+    for r in railings {
+        let (show, marked) = view.shows(m.phase(r.0));
+        if !show {
+            let _ = m.remove_railing(r);
+        } else if marked {
+            let _ = m.edit_railing(r, |r| r.material = mark);
+        }
+    }
     let roofs: Vec<_> = m.roofs().map(|r| (r.id, r.roof_type)).collect();
     for (r, t) in roofs {
         let (show, marked) = view.shows(m.phase(r.0));
