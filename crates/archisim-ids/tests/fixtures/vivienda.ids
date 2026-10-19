@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ejemplo de requisitos de información de un cliente para una vivienda,
+     escrito para las pruebas de ArchiSim. Se puede abrir y modificar con
+     cualquier editor de IDS. -->
+<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info>
+    <title>Vivienda — requisitos de ejemplo</title>
+    <version>1</version>
+    <description>Lo mínimo que un promotor podría pedir al modelo de arquitectura.</description>
+    <author>bim@example.com</author>
+  </info>
+  <specifications>
+    <specification name="Muros: exterior o interior, portante o no, y material" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCBOOLEAN">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>IsExternal</simpleValue></baseName>
+        </property>
+        <property dataType="IFCBOOLEAN">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>LoadBearing</simpleValue></baseName>
+        </property>
+        <material/>
+      </requirements>
+    </specification>
+    <specification name="Muros exteriores: transmitancia térmica" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="0" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+        <property dataType="IFCBOOLEAN">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>IsExternal</simpleValue></baseName>
+          <value><simpleValue>true</simpleValue></value>
+        </property>
+      </applicability>
+      <requirements>
+        <property dataType="IFCTHERMALTRANSMITTANCEMEASURE">
+          <propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet>
+          <baseName><simpleValue>ThermalTransmittance</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:double"><xs:maxInclusive value="0.56"/></xs:restriction>
+          </value>
+        </property>
+      </requirements>
+    </specification>
+    <specification name="Muros: superficie lateral neta medida" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCWALL</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCAREAMEASURE">
+          <propertySet><simpleValue>Qto_WallBaseQuantities</simpleValue></propertySet>
+          <baseName><simpleValue>NetSideArea</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:double"><xs:minExclusive value="0"/></xs:restriction>
+          </value>
+        </property>
+      </requirements>
+    </specification>
+    <specification name="Puertas: marca de tipo P-nn" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCDOOR</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCIDENTIFIER">
+          <propertySet><simpleValue>Pset_DoorCommon</simpleValue></propertySet>
+          <baseName><simpleValue>Reference</simpleValue></baseName>
+          <value>
+            <xs:restriction base="xs:string"><xs:pattern value="P-\d{2,3}"/></xs:restriction>
+          </value>
+        </property>
+      </requirements>
+    </specification>
+    <specification name="Forjados: de planta, solera o cubierta" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCSLAB</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <entity>
+          <name><simpleValue>IFCSLAB</simpleValue></name>
+          <predefinedType>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="FLOOR"/>
+              <xs:enumeration value="BASESLAB"/>
+              <xs:enumeration value="ROOF"/>
+            </xs:restriction>
+          </predefinedType>
+        </entity>
+      </requirements>
+    </specification>
+    <specification name="Todo elemento está en una planta" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity>
+          <name>
+            <xs:restriction base="xs:string">
+              <xs:enumeration value="IFCWALL"/>
+              <xs:enumeration value="IFCSLAB"/>
+              <xs:enumeration value="IFCDOOR"/>
+              <xs:enumeration value="IFCWINDOW"/>
+            </xs:restriction>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+        <partOf relation="IFCRELCONTAINEDINSPATIALSTRUCTURE">
+          <entity><name><simpleValue>IFCBUILDINGSTOREY</simpleValue></name></entity>
+        </partOf>
+      </requirements>
+    </specification>
+    <specification name="Sin elementos genéricos" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="0" maxOccurs="0">
+        <entity><name><simpleValue>IFCBUILDINGELEMENTPROXY</simpleValue></name></entity>
+      </applicability>
+    </specification>
+  </specifications>
+</ids>

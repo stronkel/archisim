@@ -1,0 +1,14 @@
+[package]
+name = "archisim-ids"
+description = "Checks IFC files against buildingSMART IDS 1.0 information requirements"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-ifc.workspace = true
+roxmltree = "0.21"
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
