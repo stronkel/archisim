@@ -47,6 +47,7 @@ impl ArchiSimApp {
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_temp_dims(&painter, rect);
+        self.draw_anchor_drag(&painter, rect);
         self.draw_flip_controls(&painter, rect);
         self.draw_hotspots(&painter, rect);
         self.draw_wall_preview(&painter, rect);
@@ -236,6 +237,13 @@ impl ArchiSimApp {
                 self.placement = placement(&self.ed, self.ed.level, raw, reach, &settings);
                 self.cursor = Some(Snap::at(crate::snap::round_point(raw), SnapKind::Free));
                 self.hover = None;
+            }
+            Tool::Arrow if self.anchor_drag.is_some() => {
+                // A witness end of a temporary dimension: anywhere it snaps.
+                let s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+                self.cursor = Some(s);
+                self.hover = None;
+                self.hover_grip = None;
             }
             Tool::Arrow if self.drag.is_some() => {
                 let Some(d) = &self.drag else {
@@ -572,7 +580,24 @@ impl ArchiSimApp {
                         (None, true) => {}
                     }
                 }
-                if response.drag_started_by(PointerButton::Primary) {
+                // Handles of the selection (wall ends, slab corners) win
+                // over the witness ends of the temporary dimensions.
+                let anchor = response
+                    .drag_started_by(PointerButton::Primary)
+                    .then(|| ctx.input(|i| i.pointer.press_origin()))
+                    .flatten()
+                    .filter(|p| {
+                        let at = self.view.to_model(rect, *p);
+                        let reach = self.view.to_metres(REACH);
+                        !matches!(
+                            grip_at(&self.ed, &self.ed.selection, at, reach),
+                            Some((g, _)) if g != Grip::Body
+                        )
+                    })
+                    .and_then(|p| self.anchor_at(rect, p));
+                if let Some(a) = anchor {
+                    self.anchor_drag = Some(a);
+                } else if response.drag_started_by(PointerButton::Primary) {
                     let origin = ctx
                         .input(|i| i.pointer.press_origin())
                         .map(|p| self.view.to_model(rect, p));
@@ -600,6 +625,9 @@ impl ArchiSimApp {
                         }
                         None => self.window_start = origin,
                     }
+                }
+                if response.drag_stopped() && self.anchor_drag.is_some() {
+                    self.drop_anchor();
                 }
                 if response.drag_stopped() && self.drag.is_some() {
                     match self.cursor {

@@ -13,6 +13,13 @@
 //!   distance from each face to the nearest parallel wall on that side
 //!   (editing it moves the wall across, with the walls joined to it).
 //!
+//! Each dimension has two witness ends, as in Revit: the **reference**
+//! (what it measures to) can be dragged to any other point (a corner, a
+//! face, the end of a wall, the project origin…), and the **own** end can
+//! be moved to another line of the element itself: a door or window's
+//! other jamb or its centre; a wall's other face or its axis. These
+//! choices ([`Anchors`]) last while the element stays selected.
+//!
 //! Nothing here knows about the screen: [`temp_dims`] says what to measure
 //! and [`edit`] turns a typed value into the drag that does it.
 
@@ -35,8 +42,45 @@ pub enum Target {
     /// The clear distance from a wall face to a parallel wall; `towards` is
     /// the unit vector from this wall to the other one.
     WallOffset { wall: WallId, towards: Point2 },
-    /// The length of the wall's drawn line, changed from its end.
-    WallLength { wall: WallId },
+    /// The length of the wall's drawn line (from `from` metres along it
+    /// to its end), changed from its end.
+    WallLength { wall: WallId, from: f64 },
+}
+
+/// Which dimension of the selection a [`TempDim`] is: stays the same when
+/// its ends are moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Slot {
+    /// From a door or window to the reference before it along the wall.
+    OpeningBefore(OpeningId),
+    /// … and after it.
+    OpeningAfter(OpeningId),
+    WallLength(WallId),
+    /// The clear distance on the wall's exterior side (0) or interior (1).
+    WallSide(WallId, u8),
+}
+
+/// The witness ends of a dimension moved by hand.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Anchor {
+    /// The point the dimension measures to, instead of the nearest one.
+    pub reference: Option<Point2>,
+    /// The element's own line it measures from: for a door or window, the
+    /// fraction of its width from its first jamb (0, ½ or 1); for a wall,
+    /// its offset to the left of the drawn line (a face or the axis).
+    pub own: Option<f64>,
+}
+
+/// The anchors moved by hand, by dimension.
+pub type Anchors = std::collections::HashMap<Slot, Anchor>;
+
+/// Which end of a dimension is grabbed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum End {
+    /// `a`, the reference.
+    Reference,
+    /// `b`, the element's own line.
+    Own,
 }
 
 /// One temporary dimension: the two points it measures, the side its line
@@ -49,6 +93,7 @@ pub struct TempDim {
     pub side: Point2,
     pub value: f64,
     pub target: Target,
+    pub slot: Slot,
 }
 
 /// Parallel walls farther than this are not measured to.
@@ -57,15 +102,57 @@ const EPS: f64 = 1e-6;
 
 /// The temporary dimensions of a selection: only for a single wall or a
 /// single door or window, as in Revit.
+#[cfg(test)]
 pub fn temp_dims<G: Geo + ?Sized>(geo: &G, selection: &BTreeSet<Element>) -> Vec<TempDim> {
+    temp_dims_anchored(geo, selection, &Anchors::new())
+}
+
+/// [`temp_dims`] with some witness ends moved by hand.
+pub fn temp_dims_anchored<G: Geo + ?Sized>(
+    geo: &G,
+    selection: &BTreeSet<Element>,
+    anchors: &Anchors,
+) -> Vec<TempDim> {
     let model = geo.model();
     if selection.len() != 1 {
         return Vec::new();
     }
     match selection.iter().next() {
-        Some(Element::Opening(id)) => opening_dims(geo, *id),
-        Some(Element::Wall(id)) => wall_dims(model, *id),
+        Some(Element::Opening(id)) => opening_dims(geo, *id, anchors),
+        Some(Element::Wall(id)) => wall_dims(model, *id, anchors),
         _ => Vec::new(),
+    }
+}
+
+/// Where the own end of a dimension goes when dropped at `p`: the nearest
+/// jamb or centre of a door or window, or the nearest face or axis of a
+/// wall.
+pub fn own_choice(model: &Model, slot: Slot, p: Point2) -> Option<f64> {
+    match slot {
+        Slot::OpeningBefore(id) | Slot::OpeningAfter(id) => {
+            let o = model.opening(id)?;
+            let g = openings_in_wall(model, o.wall)
+                .into_iter()
+                .find(|g| g.opening == id)?;
+            let t = (p - g.point(0.0, 0.0)).dot(g.u);
+            let width = g.t1 - g.t0;
+            [0.0, 0.5, 1.0].into_iter().min_by(|a, b| {
+                (g.t0 + a * width - t)
+                    .abs()
+                    .total_cmp(&(g.t0 + b * width - t).abs())
+            })
+        }
+        Slot::WallSide(id, _) => {
+            let w = model.wall(id)?;
+            let t = model.wall_type(w.wall_type)?;
+            let n = (w.end - w.start).normalized()?.perp_left();
+            let o = (p - w.start).dot(n);
+            let (ext, int) = w.face_offsets(t.thickness());
+            [ext, (ext + int) / 2.0, int]
+                .into_iter()
+                .min_by(|a, b| (a - o).abs().total_cmp(&(b - o).abs()))
+        }
+        Slot::WallLength(_) => None,
     }
 }
 
@@ -83,7 +170,7 @@ fn cross_line(p: Point2, u: Point2, a: Point2, b: Point2) -> Option<f64> {
     (-EPS..=1.0 + EPS).contains(&s).then_some(t)
 }
 
-fn opening_dims<G: Geo + ?Sized>(geo: &G, id: OpeningId) -> Vec<TempDim> {
+fn opening_dims<G: Geo + ?Sized>(geo: &G, id: OpeningId, anchors: &Anchors) -> Vec<TempDim> {
     let model = geo.model();
     let Some(o) = model.opening(id) else {
         return Vec::new();
@@ -146,35 +233,34 @@ fn opening_dims<G: Geo + ?Sized>(geo: &G, id: OpeningId) -> Vec<TempDim> {
         .filter(|t| *t >= g.t1 - EPS)
         .min_by(f64::total_cmp);
     let at = |t: f64| g.point(t, face);
+    let width = g.t1 - g.t0;
     let mut v = Vec::new();
-    if let Some(t) = before {
+    for (slot, found, default_own) in [
+        (Slot::OpeningBefore(id), before, 0.0),
+        (Slot::OpeningAfter(id), after, 1.0),
+    ] {
+        let anchor = anchors.get(&slot).copied().unwrap_or_default();
+        let reference = anchor.reference.map(|p| (p - origin).dot(g.u)).or(found);
+        let Some(t_ref) = reference else {
+            continue;
+        };
+        let t_own = g.t0 + anchor.own.unwrap_or(default_own) * width;
+        // The reference is the dimension's `a`, the opening its `b`.
+        let sign = if t_ref <= t_own { -1.0 } else { 1.0 };
         v.push(TempDim {
-            a: at(t),
-            b: at(g.t0),
+            a: at(t_ref),
+            b: at(t_own),
             side: away,
-            value: g.t0 - t,
-            target: Target::Opening {
-                opening: id,
-                sign: -1.0,
-            },
+            value: (t_own - t_ref).abs(),
+            target: Target::Opening { opening: id, sign },
+            slot,
         });
     }
-    if let Some(t) = after {
-        v.push(TempDim {
-            a: at(g.t1),
-            b: at(t),
-            side: away,
-            value: t - g.t1,
-            target: Target::Opening {
-                opening: id,
-                sign: 1.0,
-            },
-        });
-    }
+    v.retain(|d| d.value > EPS);
     v
 }
 
-fn wall_dims(model: &Model, id: WallId) -> Vec<TempDim> {
+fn wall_dims(model: &Model, id: WallId, anchors: &Anchors) -> Vec<TempDim> {
     let Some(w) = model.wall(id) else {
         return Vec::new();
     };
@@ -191,12 +277,18 @@ fn wall_dims(model: &Model, id: WallId) -> Vec<TempDim> {
     let n = u.perp_left();
     let (ext, int) = w.face_offsets(t.thickness());
     let length = w.length();
+    // The length, from the start or from a reference moved by hand.
+    let from = anchors
+        .get(&Slot::WallLength(id))
+        .and_then(|a| a.reference)
+        .map_or(0.0, |p| (p - w.start).dot(u).min(length - 0.01));
     let mut v = vec![TempDim {
-        a: w.start + n * ext,
+        a: w.start + u * from + n * ext,
         b: w.end + n * ext,
         side: n,
-        value: length,
-        target: Target::WallLength { wall: id },
+        value: length - from,
+        target: Target::WallLength { wall: id, from },
+        slot: Slot::WallLength(id),
     }];
     // The nearest parallel wall on each side, overlapping this one.
     // (signed offset of its facing face, middle of the overlap)
@@ -247,18 +339,32 @@ fn wall_dims(model: &Model, id: WallId) -> Vec<TempDim> {
         }
     }
     for (k, found) in best.iter().enumerate() {
-        let Some((theirs, mid)) = found else {
-            continue;
+        let slot = Slot::WallSide(id, k as u8);
+        let anchor = anchors.get(&slot).copied().unwrap_or_default();
+        // The reference: a point moved by hand (its offset across the
+        // wall, and where it is along it), or the nearest parallel wall.
+        let (theirs, mid) = match (anchor.reference, found) {
+            (Some(p), _) => (
+                (p - w.start).dot(n),
+                (p - w.start).dot(u).clamp(0.0, length),
+            ),
+            (None, Some((theirs, mid))) => (*theirs, *mid),
+            (None, None) => continue,
         };
-        let mine = if k == 0 { ext } else { int };
-        let base = w.start + u * *mid;
-        let towards = if k == 0 { n } else { -n };
+        let mine = anchor.own.unwrap_or(if k == 0 { ext } else { int });
+        let base = w.start + u * mid;
+        let towards = if theirs >= mine { n } else { -n };
+        let value = (theirs - mine).abs();
+        if value <= EPS {
+            continue;
+        }
         v.push(TempDim {
-            a: base + n * mine,
-            b: base + n * *theirs,
+            a: base + n * theirs,
+            b: base + n * mine,
             side: Point2::new(0.0, 0.0),
-            value: (theirs - mine).abs(),
+            value,
             target: Target::WallOffset { wall: id, towards },
+            slot,
         });
     }
     v
@@ -299,7 +405,7 @@ pub fn edit(model: &Model, dim: &TempDim, value: f64) -> Option<(BTreeSet<Elemen
                 },
             ))
         }
-        Target::WallLength { wall } => {
+        Target::WallLength { wall, from } => {
             let w = model.wall(wall)?;
             let u = (w.end - w.start).normalized()?;
             Some((
@@ -307,7 +413,7 @@ pub fn edit(model: &Model, dim: &TempDim, value: f64) -> Option<(BTreeSet<Elemen
                 Drag {
                     grip: Grip::WallEnd { wall, start: false },
                     from: w.end,
-                    to: w.start + u * value,
+                    to: w.start + u * (from + value),
                     variant: false,
                 },
             ))
@@ -389,7 +495,8 @@ mod tests {
             .expect("the east wall");
         // Interior faces: x = 0.265 and x = 5.735.
         assert!(close(gap.value, 6.0 - 2.0 * 0.265), "{}", gap.value);
-        assert!(close(gap.a.x, 0.265) && close(gap.b.x, 5.735), "{gap:?}");
+        // From the reference (the east wall's face) to the wall's own face.
+        assert!(close(gap.b.x, 0.265) && close(gap.a.x, 5.735), "{gap:?}");
 
         // 5000 mm clear: the west wall moves 47 cm east, the north and
         // south walls stretch with it.
@@ -407,6 +514,69 @@ mod tests {
         let (s, drag) = edit(&m3, length, 3.5).unwrap();
         crate::drag::apply(&mut m3, &s, &drag).unwrap();
         assert!(close(m3.wall(west).unwrap().length(), 3.5));
+    }
+
+    /// Witness ends dragged by hand: the door measured from its centre to
+    /// the project origin's x; the west wall's clear distance from its
+    /// axis to a point 2 m east.
+    #[test]
+    fn witness_ends_moved_by_hand() {
+        let (m, lvl, _) = room();
+        let door = m.openings().next().unwrap().clone();
+        let sel: BTreeSet<Element> = [Element::Opening(door.id)].into_iter().collect();
+        let dims = temp_dims(&m, &sel);
+        // The one on the west side (the wall runs east → west).
+        let west_side = dims
+            .iter()
+            .find(|d| d.a.x < d.b.x)
+            .copied()
+            .expect("a dimension towards the west");
+        let mut anchors = Anchors::new();
+        anchors.insert(
+            west_side.slot,
+            Anchor {
+                reference: Some(Point2::new(0.0, -3.0)),
+                own: own_choice(&m, west_side.slot, Point2::new(3.01, 0.2)),
+            },
+        );
+        let moved = temp_dims_anchored(&m, &sel, &anchors);
+        let d = moved.iter().find(|d| d.slot == west_side.slot).unwrap();
+        // From x = 0 to the door's centre at x = 3.
+        assert!(close(d.value, 3.0), "{d:?}");
+        // Typing 2500 puts the door's centre 2.5 m from x = 0.
+        let mut m2 = m.clone();
+        let (s, drag) = edit(&m2, d, 2.5).unwrap();
+        crate::drag::apply(&mut m2, &s, &drag).unwrap();
+        let again = temp_dims_anchored(&m2, &sel, &anchors);
+        let d2 = again.iter().find(|x| x.slot == west_side.slot).unwrap();
+        assert!(close(d2.value, 2.5), "{d2:?}");
+
+        let west = m.walls_on_level(lvl).next().unwrap().id;
+        let wsel: BTreeSet<Element> = [Element::Wall(west)].into_iter().collect();
+        let side = temp_dims(&m, &wsel)
+            .into_iter()
+            .find(|d| matches!(d.slot, Slot::WallSide(..)))
+            .unwrap();
+        let mut anchors = Anchors::new();
+        anchors.insert(
+            side.slot,
+            Anchor {
+                reference: Some(Point2::new(2.0, 1.0)),
+                // The axis of the 26.5 cm wall drawn by its exterior face.
+                own: own_choice(&m, side.slot, Point2::new(0.14, 1.0)),
+            },
+        );
+        let d = temp_dims_anchored(&m, &wsel, &anchors)
+            .into_iter()
+            .find(|d| d.slot == side.slot)
+            .unwrap();
+        assert!(close(d.value, 2.0 - 0.1325), "{d:?}");
+        let mut m3 = m.clone();
+        let (s, drag) = edit(&m3, &d, 1.0).unwrap();
+        crate::drag::apply(&mut m3, &s, &drag).unwrap();
+        let w = m3.wall(west).unwrap();
+        // The axis is now 1 m from x = 2.
+        assert!(close(w.start.x + 0.1325, 1.0), "{:?}", w.start);
     }
 
     #[test]

@@ -1812,3 +1812,48 @@ fn column_and_beam_tools() {
     let svg = archisim_plan::render_plan(h.model(), pb, &archisim_plan::PlanOptions::default());
     assert!(svg.contains("cut-column-"), "{svg}");
 }
+
+/// The witness end of a temporary dimension dragged to another point (the
+/// project origin): the dimension measures to it, and typing a value
+/// places the door from there.
+#[test]
+fn temporary_dimension_witness_dragged_to_the_origin() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    h.key(Key::Escape);
+    let door = h.model().openings().next().unwrap().id;
+    h.app.ed.selection = [Element::Opening(door)].into_iter().collect();
+    h.frame();
+    let dims = h.app.shown_temp_dims();
+    // The one towards the west (x = 0).
+    let d = *dims
+        .iter()
+        .find(|d| d.a.x < d.b.x)
+        .expect("a dimension to the west");
+    h.drag(d.a, p(0.0, 0.0));
+    let after = h.app.shown_temp_dims();
+    let moved = after.iter().find(|x| x.slot == d.slot).unwrap();
+    assert!(moved.a.x.abs() < 1e-9, "{moved:?} {:?}", h.app.message);
+    // Its own end to the door's centre.
+    let o = h.model().opening(door).unwrap().clone();
+    let w = h.model().wall(o.wall).unwrap().clone();
+    let u = (w.end - w.start).normalized().unwrap();
+    let mid = w.start + u * o.along;
+    let own = Point2::new(mid.x, moved.b.y);
+    h.drag(moved.b, own);
+    let after = h.app.shown_temp_dims();
+    let moved = *after.iter().find(|x| x.slot == d.slot).unwrap();
+    assert!((moved.value - mid.x).abs() < 1e-6, "{moved:?}");
+    // Type 2000: the door's centre 2 m from the origin.
+    let label = h.app.temp_layout(h.app.canvas, &moved).4;
+    h.click_screen(label.center());
+    h.frame();
+    h.type_text("2000");
+    h.key(Key::Enter);
+    h.frame();
+    let o = h.model().opening(door).unwrap().clone();
+    let w = h.model().wall(o.wall).unwrap().clone();
+    let u = (w.end - w.start).normalized().unwrap();
+    assert!(((w.start + u * o.along).x - 2.0).abs() < 1e-6);
+}

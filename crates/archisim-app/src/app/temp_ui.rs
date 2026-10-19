@@ -4,7 +4,10 @@
 //! round (across the wall and along it). Space turns it too.
 
 use super::*;
-use crate::temp_dims::{edit, temp_dims, TempDim};
+use crate::temp_dims::{edit, own_choice, temp_dims_anchored, Anchors, End, Slot, TempDim};
+
+/// Grab reach of a witness end, in screen points.
+const ANCHOR_REACH: f32 = 7.0;
 
 /// How far the line of a temporary dimension is drawn off what it
 /// measures, in screen points.
@@ -62,7 +65,78 @@ impl ArchiSimApp {
         if busy || !fits {
             return Vec::new();
         }
-        temp_dims(&self.ed, &self.ed.selection)
+        temp_dims_anchored(&self.ed, &self.ed.selection, self.anchors())
+    }
+
+    /// The witness ends moved by hand, if they belong to the selection.
+    fn anchors(&self) -> &Anchors {
+        static NONE: std::sync::OnceLock<Anchors> = std::sync::OnceLock::new();
+        if self.temp_anchors.0 == self.ed.selection {
+            &self.temp_anchors.1
+        } else {
+            NONE.get_or_init(Anchors::new)
+        }
+    }
+
+    /// The witness end of a temporary dimension under `pos`: its reference
+    /// end, or its own end when it can move (not a wall's length).
+    pub(super) fn anchor_at(&self, rect: Rect, pos: Pos2) -> Option<(Slot, End)> {
+        self.shown_temp_dims()
+            .iter()
+            .flat_map(|d| {
+                let (a, b, ..) = self.temp_layout(rect, d);
+                let own = !matches!(d.slot, Slot::WallLength(_));
+                [
+                    Some((a.distance(pos), d.slot, End::Reference)),
+                    own.then(|| (b.distance(pos), d.slot, End::Own)),
+                ]
+            })
+            .flatten()
+            .filter(|(dist, ..)| *dist <= ANCHOR_REACH)
+            .min_by(|x, y| x.0.total_cmp(&y.0))
+            .map(|(_, slot, end)| (slot, end))
+    }
+
+    /// Drops the witness end being dragged where the cursor snapped.
+    pub(super) fn drop_anchor(&mut self) {
+        let (Some((slot, end)), Some(c)) = (self.anchor_drag.take(), self.cursor) else {
+            return;
+        };
+        if self.temp_anchors.0 != self.ed.selection {
+            self.temp_anchors = (self.ed.selection.clone(), Anchors::new());
+        }
+        let a = self.temp_anchors.1.entry(slot).or_default();
+        match end {
+            End::Reference => {
+                a.reference = Some(c.point);
+                self.say("Cota medida a ese punto: clic en su valor para escribirla.");
+            }
+            End::Own => match own_choice(self.ed.model(), slot, c.point) {
+                Some(v) => {
+                    a.own = Some(v);
+                    self.say("Cota medida desde esa línea del elemento.");
+                }
+                None => self.complain("Ese extremo de la cota no se puede mover."),
+            },
+        }
+    }
+
+    /// The witness end being dragged follows the cursor.
+    pub(super) fn draw_anchor_drag(&self, painter: &egui::Painter, rect: Rect) {
+        let (Some((slot, end)), Some(c)) = (self.anchor_drag, self.cursor) else {
+            return;
+        };
+        let Some(d) = self.shown_temp_dims().into_iter().find(|d| d.slot == slot) else {
+            return;
+        };
+        let (a, b, ..) = self.temp_layout(rect, &d);
+        let from = match end {
+            End::Reference => a,
+            End::Own => b,
+        };
+        let to = self.view.to_screen(rect, c.point);
+        dashed(painter, from, to, TRACK_LINE);
+        painter.circle_filled(to, 4.5, TRACK_LINE);
     }
 
     /// Where a temporary dimension is drawn on screen: its two ends, the
@@ -105,6 +179,13 @@ impl ArchiSimApp {
                 painter.line_segment([b, lb + (lb - b).normalized() * 3.0], stroke);
             }
             painter.line_segment([la, lb], stroke);
+            // The witness ends, to drag to another reference.
+            painter.circle_filled(a, 3.5, Color32::WHITE);
+            painter.circle_stroke(a, 3.5, stroke);
+            if !matches!(d.slot, Slot::WallLength(_)) {
+                painter.circle_filled(b, 3.5, Color32::WHITE);
+                painter.circle_stroke(b, 3.5, stroke);
+            }
             // Oblique ticks, as dimensions are drawn in Spain.
             let along = (lb - la).normalized();
             let tick = Vec2::new(along.x - along.y, along.y + along.x).normalized() * 4.0;
@@ -184,9 +265,11 @@ impl ArchiSimApp {
     /// Whether `pos` is over a temporary dimension's value or a flip arrow
     /// (the cursor becomes a hand there).
     pub(super) fn over_temp_controls(&self, rect: Rect, pos: Pos2) -> bool {
-        self.flip_controls(rect)
-            .iter()
-            .any(|(c, _, _)| c.distance(pos) <= FLIP_REACH)
+        (self.tool == Tool::Arrow && self.anchor_at(rect, pos).is_some())
+            || self
+                .flip_controls(rect)
+                .iter()
+                .any(|(c, _, _)| c.distance(pos) <= FLIP_REACH)
             || self
                 .shown_temp_dims()
                 .iter()

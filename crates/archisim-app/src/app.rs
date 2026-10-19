@@ -195,6 +195,11 @@ pub struct ArchiSimApp {
     window_start: Option<Point2>,
     /// A temporary dimension being typed.
     temp_edit: Option<temp_ui::TempEdit>,
+    /// Witness ends of the temporary dimensions moved by hand, for the
+    /// selection they were moved with.
+    temp_anchors: (BTreeSet<Element>, crate::temp_dims::Anchors),
+    /// The witness end being dragged.
+    anchor_drag: Option<(crate::temp_dims::Slot, crate::temp_dims::End)>,
     plan: Option<(PlanKey, TextureHandle)>,
     pending: Option<Pending>,
     allow_close: bool,
@@ -293,6 +298,8 @@ impl ArchiSimApp {
             space_held: false,
             window_start: None,
             temp_edit: None,
+            temp_anchors: Default::default(),
+            anchor_drag: None,
             plan: None,
             pending: None,
             allow_close: false,
