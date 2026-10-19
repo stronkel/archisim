@@ -322,6 +322,7 @@ impl ArchiSimApp {
                 self.open_curtain_types(None, None);
             }
         });
+        self.coord_menu(ui);
         ui.menu_button("Ayuda", |ui| {
             if ui.button("Ratón y teclado").clicked() {
                 self.show_shortcuts = true;

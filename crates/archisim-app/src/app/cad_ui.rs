@@ -366,7 +366,7 @@ impl ArchiSimApp {
                 } else {
                     // ArchiCAD keys: the tool letters act at once.
                     Tool::from_key(&c.to_string()).is_none()
-                        && c.to_ascii_lowercase() != 'n'
+                        && !c.eq_ignore_ascii_case(&'n')
                         && !c.is_ascii_digit()
                 };
                 if to_buffer {

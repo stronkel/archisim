@@ -1,0 +1,16 @@
+[package]
+name = "archisim-coord"
+description = "Coordination with other disciplines: linked IFC models, versions by GlobalId, clash detection and BCF issues"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true
+archisim-ifc.workspace = true
+archisim-ids.workspace = true
+archisim-bcf.workspace = true

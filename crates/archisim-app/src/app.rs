@@ -384,6 +384,9 @@ pub struct ArchiSimApp {
     pub v3d: View3dState,
     /// The graphics card, when the window has one (never in tests).
     gpu: Option<eframe::egui_wgpu::RenderState>,
+    /// Linked models, issues, clashes and requirements (phase 4).
+    pub coord: crate::coord::Coord,
+    pub coord_window: coord_ui::CoordWindow,
 }
 
 impl ArchiSimApp {
@@ -505,6 +508,8 @@ impl ArchiSimApp {
             styled: false,
             v3d: View3dState::default(),
             gpu: None,
+            coord: crate::coord::Coord::new(),
+            coord_window: coord_ui::CoordWindow::default(),
         }
     }
 
@@ -589,6 +594,11 @@ impl ArchiSimApp {
         self.mode = ViewMode::Plan;
         self.plan_scale = self.tabs[0].scale;
         self.cut_plane = self.tabs[0].cut_plane;
+        // Its links and issues, kept beside it.
+        for problem in self.coord.project_changed(self.ed.path.as_deref()) {
+            self.complain(problem);
+        }
+        self.coord_window = coord_ui::CoordWindow::default();
     }
 
     /// A tool key: M muro, F forjado, P puerta, V ventana, C cota, N cota
@@ -810,6 +820,9 @@ impl ArchiSimApp {
         match self.ed.save(target.as_deref()) {
             Ok(p) => {
                 self.say(format!("Guardado en {}.", p.display()));
+                if let Err(e) = self.coord.save_beside(&p) {
+                    self.complain(format!("No se pudieron guardar los vínculos: {e}."));
+                }
                 true
             }
             Err(e) => {
@@ -1140,6 +1153,7 @@ impl ArchiSimApp {
         self.handle_shortcuts(&ctx);
         self.keep_tool_types_valid();
         self.receive_files(&ctx);
+        self.coord_poll(&ctx);
         self.sync_tabs();
         self.update_title(&ctx);
         self.age_message(ctx.input(|i| i.time));
@@ -1479,6 +1493,7 @@ impl ArchiSimApp {
         self.curtain_types_dialog(ctx);
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
+        self.coord_dialog(ctx);
         if self.show_about {
             egui::Window::new("Acerca de ArchiSim")
                 .open(&mut self.show_about)
@@ -1716,6 +1731,7 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 mod annotation_ui;
 mod cad_ui;
 mod chrome;
+mod coord_ui;
 mod curtain_types_ui;
 mod curtain_ui;
 mod draft_props;

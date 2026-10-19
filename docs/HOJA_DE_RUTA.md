@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 3 en v0.25).
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -95,13 +95,15 @@ Hecha en v0.25 (bloques 3A a 3I de `docs/DOCUMENTACION.md`), a falta de que Anto
 
 | # | Tarea | Tamaño | Depende de |
 |---|---|---|---|
-| 4.1 | **Vínculo de modelos IFC** de estructuras e instalaciones como referencia (sin importarlos), con control de versiones por `GlobalId` | M | — |
-| 4.2 | **Detección de interferencias** entre el modelo y los vinculados | M | 4.1 |
-| 4.3 | **BCF**: incidencias con vista guardada, intercambiables con Revit, ArchiCAD, Solibri o BIMcollab | M | — |
-| 4.4 | **IDS**: comprobar el modelo contra los requisitos de información del cliente; **bSDD** para clasificaciones | M | — |
+| 4.1 ✅ v0.26 | **Vínculo de modelos IFC** de estructuras e instalaciones como referencia (sin importarlos), con control de versiones por `GlobalId` — en planta y 3D, recarga automática con los cambios coloreados (diseño en `docs/COLABORACION.md`) | M | — |
+| 4.2 ◐ v0.26 | **Detección de interferencias** entre el modelo y los vinculados — hecha, con tolerancia, huecos y vista aislada; faltan holguras, reglas por disciplina e interferencias entre vínculos | M | 4.1 |
+| 4.3 ✅ v0.26 | **BCF**: incidencias con vista guardada, intercambiables con Revit, ArchiCAD, Solibri o BIMcollab — 2.1 y 3.0; falta BCF API (servidores) | M | — |
+| 4.4 ◐ v0.26 | **IDS**: comprobar el modelo contra los requisitos de información del cliente (hecho, 334 casos de buildingSMART); **bSDD** para clasificaciones (falta) | M | — |
 | 4.5 | **Complemento puente para Revit** (C#, API oficial de Revit): llevar tipos y elementos nativos en ambos sentidos | L | — |
 | 4.6 | **Trabajo en equipo**: modelo central, reservas de elementos o zonas, historial | L | — |
 | 4.7 | **Comprobaciones normativas** del CTE: evacuación (DB-SI), accesibilidad (DB-SUA), superficies útiles | L | 2.9 |
+
+Hecho en v0.26 (rama `bloque/colaboracion`): 4.1, 4.3 y la mayor parte de 4.2 y 4.4, con las órdenes `comprobar-ids`, `comparar`, `interferencias`, `bcf` y `demo-coordinacion`. Decisiones nuevas D13 a D16 en `docs/COLABORACION.md`. 4.7 espera a los locales (2.9) en `main`.
 
 ## 5. Transversal (cuando toque)
 

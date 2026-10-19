@@ -28,6 +28,26 @@ pub struct Vertex {
 const HIGHLIGHT: [f32; 3] = [0.05, 0.35, 0.85];
 /// How see-through glass is (as in the IFC export).
 const GLASS_ALPHA: f32 = 0.4;
+/// What is left of the rest of the model around an isolated clash.
+pub const GHOST_ALPHA: f32 = 0.12;
+
+/// What a triangle belongs to: an element of the project, or an element
+/// of a linked model (link, element index).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Owner {
+    Model(Element),
+    Linked(usize, usize),
+}
+
+/// Triangles of a linked element to add to the scene.
+pub struct LinkedPart<'a> {
+    pub triangles: &'a [[[f64; 3]; 3]],
+    /// sRGB.
+    pub color: [u8; 3],
+    pub alpha: f32,
+    pub link: usize,
+    pub index: usize,
+}
 
 /// Triangles of the whole model, split into opaque and see-through, with
 /// the element each one belongs to.
@@ -36,7 +56,7 @@ pub struct Scene {
     pub opaque: Vec<Vertex>,
     pub glass: Vec<Vertex>,
     /// Element of each opaque triangle, then of each glass triangle.
-    owners: Vec<Element>,
+    owners: Vec<Owner>,
     pub lo: Vec3,
     pub hi: Vec3,
 }
@@ -56,6 +76,18 @@ fn element(owner: SolidOwner) -> Element {
 
 impl Scene {
     pub fn build(model: &Model, selection: &BTreeSet<Element>) -> Self {
+        Self::build_with(model, selection, &[], false)
+    }
+
+    /// The model and, after it, the elements of linked models. With
+    /// `isolate`, only the selection keeps its colour: the rest of the
+    /// project is a faint ghost, to see a clash through walls and roofs.
+    pub fn build_with(
+        model: &Model,
+        selection: &BTreeSet<Element>,
+        linked: &[LinkedPart],
+        isolate: bool,
+    ) -> Self {
         let mut s = Scene {
             lo: Vec3::splat(f32::INFINITY),
             hi: Vec3::splat(f32::NEG_INFINITY),
@@ -63,23 +95,30 @@ impl Scene {
         };
         let mut glass_owners = Vec::new();
         for solid in model_solids(model) {
-            let owner = element(solid.owner);
+            let owner = Owner::Model(element(solid.owner));
             let mat = model.material(solid.material);
             let [r, g, b] = mat.map_or([200, 200, 200], |m| m.cut_color);
             let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
-            if selection.contains(&owner) {
+            if selection.contains(&element(solid.owner)) {
                 for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
                     *c = *c * 0.45 + h * 0.55;
                 }
             }
-            let is_glass = mat.is_some_and(|m| m.category == "glass");
+            let ghost = isolate && !selection.contains(&element(solid.owner));
+            let is_glass = ghost || mat.is_some_and(|m| m.category == "glass");
             // Doors and windows win where they touch the reveals.
             let opening = matches!(solid.owner, SolidOwner::Opening(_));
             let color = [
                 rgb[0],
                 rgb[1],
                 rgb[2],
-                if is_glass { GLASS_ALPHA } else { 1.0 },
+                if ghost {
+                    GHOST_ALPHA
+                } else if is_glass {
+                    GLASS_ALPHA
+                } else {
+                    1.0
+                },
             ];
             for tri in &solid.triangles {
                 let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
@@ -118,6 +157,43 @@ impl Scene {
                 }
             }
         }
+        for part in linked {
+            let [r, g, b] = part.color;
+            let color = [
+                srgb_to_linear(r),
+                srgb_to_linear(g),
+                srgb_to_linear(b),
+                part.alpha,
+            ];
+            let see_through = part.alpha < 1.0;
+            let owner = Owner::Linked(part.link, part.index);
+            for tri in part.triangles {
+                let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
+                for v in p {
+                    s.lo = s.lo.min(v);
+                    s.hi = s.hi.max(v);
+                }
+                let target = if see_through {
+                    &mut s.glass
+                } else {
+                    &mut s.opaque
+                };
+                for v in p {
+                    target.push(Vertex {
+                        pos: v.to_array(),
+                        normal: n.to_array(),
+                        color,
+                        bias: 0.0,
+                    });
+                }
+                if see_through {
+                    glass_owners.push(owner);
+                } else {
+                    s.owners.push(owner);
+                }
+            }
+        }
         s.owners.extend(glass_owners);
         if s.opaque.is_empty() && s.glass.is_empty() {
             s.lo = Vec3::new(0.0, 0.0, 0.0);
@@ -141,7 +217,7 @@ impl Scene {
             .chain(self.glass.as_chunks::<3>().0);
         let mut b: Option<(Vec3, Vec3)> = None;
         for (i, t) in tris.enumerate() {
-            if !elements.contains(&self.owners[i]) {
+            if !matches!(self.owners[i], Owner::Model(e) if elements.contains(&e)) {
                 continue;
             }
             for v in t {
@@ -152,20 +228,21 @@ impl Scene {
         b
     }
 
-    /// The nearest element hit by a ray, inside the section box if there
-    /// is one (what is cut away cannot be picked).
+    /// The nearest element (of the project or linked) hit by a ray,
+    /// inside the section box if there is one (what is cut away cannot be
+    /// picked).
     pub fn pick_in(
         &self,
         ray: Ray,
         clip: Option<&super::section_box::SectionBox>,
-    ) -> Option<Element> {
+    ) -> Option<Owner> {
         let tris = self
             .opaque
             .as_chunks::<3>()
             .0
             .iter()
             .chain(self.glass.as_chunks::<3>().0);
-        let mut best: Option<(f32, Element)> = None;
+        let mut best: Option<(f32, Owner)> = None;
         for (i, t) in tris.enumerate() {
             let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos].map(Vec3::from_array);
             if let Some(d) = hit(ray, a, b, c) {
@@ -180,25 +257,14 @@ impl Scene {
         best.map(|(_, e)| e)
     }
 
-    /// The nearest element hit by a ray.
+    /// The nearest element of the project hit by a ray (none if a linked
+    /// element is in front).
     #[cfg(test)]
     pub fn pick(&self, ray: Ray) -> Option<Element> {
-        let tris = self
-            .opaque
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .chain(self.glass.as_chunks::<3>().0);
-        let mut best: Option<(f32, Element)> = None;
-        for (i, t) in tris.enumerate() {
-            let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos].map(Vec3::from_array);
-            if let Some(d) = hit(ray, a, b, c) {
-                if best.is_none_or(|(bd, _)| d < bd) {
-                    best = Some((d, self.owners[i]));
-                }
-            }
+        match self.pick_in(ray, None)? {
+            Owner::Model(e) => Some(e),
+            Owner::Linked(..) => None,
         }
-        best.map(|(_, e)| e)
     }
 }
 

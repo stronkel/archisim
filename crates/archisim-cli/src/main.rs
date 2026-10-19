@@ -6,9 +6,11 @@
 //! archisim importar <fichero.ifc> [proyecto.archisim]   proyecto a partir de un IFC
 //! archisim medir [n] [carpeta]             rendimiento con n × n viviendas
 //! archisim png <dibujo.svg> [imagen.png] [ppp]   imagen de un SVG
+//! archisim comprobar-ids | comparar | interferencias | bcf   colaboración (fase 4, `colaboracion`)
 //! archisim --version
 //! ```
 
+mod colaboracion;
 mod demo;
 mod grande;
 
@@ -122,13 +124,13 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("--help") | Some("-h") | None => {
-            print!("{HELP}");
+            print!("{HELP}\n{}", colaboracion::HELP);
             ExitCode::SUCCESS
         }
-        Some(other) => {
+        Some(other) => colaboracion::run(&args).unwrap_or_else(|| {
             eprintln!("Orden desconocida: {other}\n\n{HELP}");
             ExitCode::FAILURE
-        }
+        }),
     }
 }
 

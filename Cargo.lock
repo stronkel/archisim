@@ -146,6 +146,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -208,14 +217,17 @@ dependencies = [
 
 [[package]]
 name = "archisim-app"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
+ "archisim-bcf",
+ "archisim-coord",
  "archisim-core",
  "archisim-draft",
  "archisim-dxf",
  "archisim-export",
  "archisim-file",
  "archisim-geom",
+ "archisim-ids",
  "archisim-ifc",
  "archisim-library",
  "archisim-plan",
@@ -232,13 +244,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "archisim-cli"
-version = "0.25.0"
+name = "archisim-bcf"
+version = "0.27.0"
 dependencies = [
+ "flate2",
+ "roxmltree",
+ "uuid",
+]
+
+[[package]]
+name = "archisim-cli"
+version = "0.27.0"
+dependencies = [
+ "archisim-bcf",
+ "archisim-coord",
  "archisim-core",
  "archisim-export",
  "archisim-file",
  "archisim-geom",
+ "archisim-ids",
  "archisim-ifc",
  "archisim-library",
  "archisim-plan",
@@ -246,8 +270,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "archisim-coord"
+version = "0.27.0"
+dependencies = [
+ "archisim-bcf",
+ "archisim-core",
+ "archisim-geom",
+ "archisim-ids",
+ "archisim-ifc",
+]
+
+[[package]]
 name = "archisim-core"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-family",
  "uuid",
@@ -255,18 +290,18 @@ dependencies = [
 
 [[package]]
 name = "archisim-draft"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
 ]
 
 [[package]]
 name = "archisim-dxf"
-version = "0.25.0"
+version = "0.27.0"
 
 [[package]]
 name = "archisim-export"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
  "archisim-draft",
@@ -278,11 +313,11 @@ dependencies = [
 
 [[package]]
 name = "archisim-family"
-version = "0.25.0"
+version = "0.27.0"
 
 [[package]]
 name = "archisim-file"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
  "serde",
@@ -291,15 +326,24 @@ dependencies = [
 
 [[package]]
 name = "archisim-geom"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
  "i_overlay",
 ]
 
 [[package]]
+name = "archisim-ids"
+version = "0.27.0"
+dependencies = [
+ "archisim-ifc",
+ "regex",
+ "roxmltree",
+]
+
+[[package]]
 name = "archisim-ifc"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",
@@ -308,14 +352,14 @@ dependencies = [
 
 [[package]]
 name = "archisim-library"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
 ]
 
 [[package]]
 name = "archisim-plan"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "archisim-core",
  "archisim-draft",
@@ -2878,6 +2922,35 @@ checksum = "737970939a87c6fa31e7acad13307bccbb017a073b695b6089a2c484f929e20e"
 dependencies = [
  "bitflags 2.13.2",
 ]
+
+[[package]]
+name = "regex"
+version = "1.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "renderdoc-sys"

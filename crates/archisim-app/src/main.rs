@@ -10,6 +10,7 @@
 
 mod app;
 mod cad;
+mod coord;
 mod dim_tool;
 mod drag;
 mod editor;

@@ -22,6 +22,9 @@ archisim-export.workspace = true
 archisim-file.workspace = true
 archisim-dxf.workspace = true
 archisim-library.workspace = true
+archisim-ids.workspace = true
+archisim-bcf.workspace = true
+archisim-coord.workspace = true
 eframe = "0.37"
 resvg = { version = "0.48", default-features = false }
 rfd = "0.17"
