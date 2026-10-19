@@ -238,6 +238,7 @@ mod tests {
             ],
             direction: Point2::new(-1.0, 0.0),
             position: Point2::new(3.0, -1.0),
+            anchors: Vec::new(),
         };
         let g = dimension_lines(&d, 0.05);
         assert_eq!(g.ticks.len(), 3);
