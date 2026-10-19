@@ -107,13 +107,21 @@ pub fn clashes_to_bcf(
             continue;
         }
         let storey = ea.storey.as_ref().or(eb.storey.as_ref());
-        let text = format!(
-            "{} y {} se meten {} uno en otro{}.",
-            label(ea),
-            label(eb),
-            metres(c.depth),
-            storey.map(|s| format!(" ({s})")).unwrap_or_default()
-        );
+        let place = storey.map(|s| format!(" ({s})")).unwrap_or_default();
+        let text = match c.gap {
+            None => format!(
+                "{} y {} se meten {} uno en otro{place}.",
+                label(ea),
+                label(eb),
+                metres(c.depth)
+            ),
+            Some(g) => format!(
+                "{} y {} quedan a {}, menos que la holgura pedida{place}.",
+                label(ea),
+                label(eb),
+                metres(g)
+            ),
+        };
         if let Some(&i) = existing.get(&key) {
             let t = &mut bcf.topics[i];
             let was = t.status.clone().unwrap_or_default();
@@ -147,8 +155,20 @@ pub fn clashes_to_bcf(
             guid: archisim_bcf::new_guid(),
             topic_type: Some(CLASH_TYPE.into()),
             status: Some(OPEN.into()),
-            title: format!("{} × {}", label(ea), label(eb)),
-            priority: Some(if c.depth > 0.1 { "Alta" } else { "Normal" }.into()),
+            title: match c.gap {
+                None => format!("{} × {}", label(ea), label(eb)),
+                Some(_) => format!("Holgura: {} × {}", label(ea), label(eb)),
+            },
+            priority: Some(
+                if c.gap.is_some() {
+                    "Baja"
+                } else if c.depth > 0.1 {
+                    "Alta"
+                } else {
+                    "Normal"
+                }
+                .into(),
+            ),
             index: Some(next_index),
             labels,
             creation_date: date.clone(),

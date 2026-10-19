@@ -78,9 +78,16 @@ impl Link {
 /// A clash found by the last check.
 #[derive(Debug, Clone)]
 pub struct ClashRow {
-    /// The project's element (by GlobalId) and the linked one.
+    /// The first element (by GlobalId): of the project, or of a linked
+    /// model when two links are checked against each other.
     pub ours: String,
     pub ours_label: String,
+    /// The link the first element belongs to (`None`: the project) and
+    /// its index there.
+    pub ours_link: Option<usize>,
+    pub ours_index: usize,
+    /// A clearance clash: how far apart they are.
+    pub gap: Option<f64>,
     pub link: usize,
     pub theirs: usize,
     pub theirs_label: String,
@@ -114,6 +121,10 @@ pub struct Coord {
     /// When the clash check last ran (`None`: never).
     pub clashes_checked: Option<String>,
     pub tolerance_mm: f64,
+    /// Clearance (holgura) asked for, in mm; 0: off.
+    pub clearance_mm: f64,
+    /// Also check the linked models against each other.
+    pub between_links: bool,
     pub requirements: Option<Requirements>,
     /// Linked elements painted in a colour (clash, issue), by
     /// (link, element index).
@@ -389,26 +400,56 @@ impl Coord {
 
     /// Checks the project (as it is exported to IFC) against every
     /// visible link.
+    fn clash_options(&self) -> ClashOptions {
+        ClashOptions {
+            tolerance: self.tolerance_mm.max(0.5) / 1000.0,
+            clearance: self.clearance_mm.max(0.0) / 1000.0,
+            ..ClashOptions::default()
+        }
+    }
+
+    /// The pairs of models to check: the project against each visible
+    /// link and, if asked, each pair of visible links. `None` is the
+    /// project.
+    fn clash_jobs(&self) -> Vec<(Option<usize>, usize)> {
+        let visible: Vec<usize> = (0..self.links.len())
+            .filter(|&i| self.links[i].visible)
+            .collect();
+        let mut jobs: Vec<(Option<usize>, usize)> = visible.iter().map(|&i| (None, i)).collect();
+        if self.between_links {
+            for (k, &i) in visible.iter().enumerate() {
+                for &j in &visible[k + 1..] {
+                    jobs.push((Some(i), j));
+                }
+            }
+        }
+        jobs
+    }
+
+    /// Checks the project (as it is exported to IFC) against every
+    /// visible link (and the links among themselves, if asked).
     pub fn check_clashes(&mut self, model: &Model) -> Result<String, String> {
         if !self.links.iter().any(|l| l.visible) {
             return Err("No hay ningún modelo vinculado visible con el que comprobar.".into());
         }
-        let ours = project_elements(model)?;
-        let opts = ClashOptions {
-            tolerance: self.tolerance_mm.max(0.5) / 1000.0,
-            ..ClashOptions::default()
-        };
+        let project = project_elements(model)?;
+        let opts = self.clash_options();
         let mut rows = Vec::new();
-        for (li, l) in self.links.iter().enumerate() {
-            if !l.visible {
-                continue;
-            }
-            for c in find_clashes(&ours, &l.elements, &opts) {
-                let a = &ours.elements[c.a];
+        for (left, li) in self.clash_jobs() {
+            let lhs = match left {
+                None => &project,
+                Some(i) => &self.links[i].elements,
+            };
+            let l = &self.links[li];
+            for c in find_clashes(lhs, &l.elements, &opts) {
+                let a = &lhs.elements[c.a];
                 let b = &l.elements.elements[c.b];
                 rows.push(ClashRow {
                     ours: a.global_id.clone(),
                     ours_label: element_label(a),
+                    ours_link: left,
+                    ours_index: c.a,
+                    gap: c.gap,
                     link: li,
                     theirs: c.b,
                     theirs_label: element_label(b),
@@ -418,30 +459,50 @@ impl Coord {
                 });
             }
         }
-        rows.sort_by(|x, y| y.depth.total_cmp(&x.depth));
-        let n = rows.len();
+        rows.sort_by(|x, y| match (x.gap, y.gap) {
+            (None, None) => y.depth.total_cmp(&x.depth),
+            (None, Some(_)) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (Some(a), Some(b)) => a.total_cmp(&b),
+        });
+        let hard = rows.iter().filter(|r| r.gap.is_none()).count();
+        let soft = rows.len() - hard;
         self.clashes = rows;
         self.clashes_checked = Some(archisim_bcf::now());
         self.highlight.clear();
         for c in &self.clashes {
-            self.highlight.insert((c.link, c.theirs), CLASH_RED);
+            let color = if c.gap.is_some() {
+                CLASH_AMBER
+            } else {
+                CLASH_RED
+            };
+            self.highlight.entry((c.link, c.theirs)).or_insert(color);
+            if let Some(ol) = c.ours_link {
+                self.highlight.entry((ol, c.ours_index)).or_insert(color);
+            }
         }
         self.bump();
-        Ok(match n {
-            0 => "Sin interferencias con los modelos vinculados.".into(),
-            1 => "1 interferencia con los modelos vinculados.".into(),
-            n => format!("{n} interferencias con los modelos vinculados."),
-        })
+        let mut said = match hard {
+            0 => "Sin interferencias".to_string(),
+            1 => "1 interferencia".to_string(),
+            n => format!("{n} interferencias"),
+        };
+        if self.clearance_mm > 0.0 {
+            said += &format!(
+                " y {soft} {} de holgura",
+                if soft == 1 { "aviso" } else { "avisos" }
+            );
+        }
+        Ok(format!("{said} con los modelos vinculados."))
     }
 
     /// Puts the clashes of the last check in the issues file (a new one if
     /// none is open), keeping the history of each pair.
     pub fn clashes_to_issues(&mut self, model: &Model, author: &str) -> Result<String, String> {
-        let ours = project_elements(model)?;
-        let opts = ClashOptions {
-            tolerance: self.tolerance_mm.max(0.5) / 1000.0,
-            ..ClashOptions::default()
-        };
+        let project = project_elements(model)?;
+        let opts = self.clash_options();
+        let jobs = self.clash_jobs();
+        let names: Vec<String> = self.links.iter().map(Link::name).collect();
         let issues = self.issues.get_or_insert_with(|| Issues {
             path: None,
             bcf: Bcf::default(),
@@ -449,16 +510,18 @@ impl Coord {
             selected: None,
         });
         let (mut added, mut kept, mut resolved) = (0, 0, 0);
-        for l in self.links.iter().filter(|l| l.visible) {
-            let found = find_clashes(&ours, &l.elements, &opts);
-            let files = [
-                file_ref(&format!("{}.ifc", model.project_name)),
-                file_ref(&l.name()),
-            ];
+        for (left, li) in jobs {
+            let (lhs, lhs_name) = match left {
+                None => (&project, format!("{}.ifc", model.project_name)),
+                Some(i) => (&self.links[i].elements, names[i].clone()),
+            };
+            let l = &self.links[li];
+            let found = find_clashes(lhs, &l.elements, &opts);
+            let files = [file_ref(&lhs_name), file_ref(&names[li])];
             let (a, k, r) = archisim_coord::clashes_to_bcf(
                 &mut issues.bcf,
                 &found,
-                &ours,
+                lhs,
                 &l.elements,
                 &files,
                 &archisim_coord::Author(author.to_string()),
@@ -614,6 +677,12 @@ impl Coord {
                         self.tolerance_mm = v;
                     }
                 }
+                ["holgura", mm] => {
+                    if let Ok(v) = mm.parse() {
+                        self.clearance_mm = v;
+                    }
+                }
+                ["entre-vinculos", v] => self.between_links = *v == "1",
                 _ => {}
             }
         }
@@ -655,6 +724,14 @@ impl Coord {
         if (self.tolerance_mm - 10.0).abs() > 1e-9 {
             any = true;
             s += &format!("tolerancia\t{}\n", self.tolerance_mm);
+        }
+        if self.clearance_mm > 0.0 {
+            any = true;
+            s += &format!("holgura\t{}\n", self.clearance_mm);
+        }
+        if self.between_links {
+            any = true;
+            s += "entre-vinculos\t1\n";
         }
         let file = Self::sidecar(project);
         if any {
