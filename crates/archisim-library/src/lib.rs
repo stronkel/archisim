@@ -33,6 +33,8 @@ pub struct Library {
     pub folding_door: OpeningTypeId,
     pub window_two_leaves: OpeningTypeId,
     pub window_one_leaf: OpeningTypeId,
+    /// Two-leaf window with a roller shutter and its box, 120 × 150.
+    pub window_shutter: OpeningTypeId,
     pub balcony_door: OpeningTypeId,
     pub fixed_window: OpeningTypeId,
     /// A passage with no door ("hueco"), 90 × 210.
@@ -312,6 +314,25 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         aluminio,
         vidrio,
     )?;
+    let window_shutter = opening(
+        m,
+        "Ventana practicable 2 hojas con persiana 120×150",
+        Window(W::DoubleCasement),
+        1.20,
+        1.50,
+        0.06,
+        0.07,
+        aluminio,
+        vidrio,
+    )?;
+    {
+        let t = m
+            .opening_type(window_shutter)
+            .ok_or(ModelError::UnknownOpeningType(window_shutter))?;
+        let (family, mut values) = (t.family, t.values.clone());
+        values.insert("shutter".into(), archisim_core::Value::Bool(true));
+        m.edit_family_type(window_shutter, family, values)?;
+    }
     let window_one_leaf = opening(
         m,
         "Ventana practicable 1 hoja 100×120",
@@ -377,6 +398,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         folding_door,
         window_two_leaves,
         window_one_leaf,
+        window_shutter,
         balcony_door,
         fixed_window,
         column,
@@ -513,7 +535,7 @@ mod tests {
         assert_eq!(m.wall_types().count(), 3);
         assert_eq!(m.slab_types().count(), 4);
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 5);
-        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 4);
+        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 5);
         assert_eq!(
             m.member_types()
                 .filter(|t| t.usage == MemberUsage::Column)

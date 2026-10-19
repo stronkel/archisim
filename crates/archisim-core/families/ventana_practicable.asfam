@@ -1,8 +1,8 @@
 family "Ventana practicable"
   category window
   host wall
-  version 3
-  description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante o basculante"
+  version 4
+  description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante o basculante; con persiana enrollable y capialzado si se quiere"
 
 include "piezas"
 
@@ -19,6 +19,9 @@ type_params
   section "Marco"
     frame_width length = 0.06 range 0.001..2.00 label "Marco: anchura vista"
     frame_depth length = 0.07 range 0.001..2.00 label "Marco: fondo"
+  section "Persiana"
+    shutter bool = no label "Persiana enrollable con capialzado"
+    box_height length = 0.25 range 0.10..0.60 visible_if shutter label "Capialzado: alto"
   section "Materiales"
     frame_material material = "Aluminio lacado" label "Marco"
     panel_material material = "Vidrio doble" label "Vidrio"
@@ -27,6 +30,7 @@ type_params
 
 require 2 * frame_width < width and 2 * frame_width < height else "El marco no deja hueco para el vidrio"
 require (leaves + 1) * frame_width < width else "El marco y los montantes no dejan hueco para el vidrio"
+require not shutter or box_height + 2 * frame_width < height else "El capialzado no deja sitio a la ventana"
 
 # Las hojas de la mitad izquierda giran en su jamba izquierda y las de la
 # derecha en la derecha (se encuentran en el centro); una hoja sola, o la
@@ -37,16 +41,25 @@ let side_2 = if leaves >= 3 then "LEFT" else "RIGHT"
 let side_3 = "RIGHT"
 let side_4 = "RIGHT"
 
+# Con persiana, el capialzado ocupa lo alto del hueco, sobre la ventana.
+let window_height = if shutter then height - box_height else height
+
 body
-  use window_frame(width, height, frame_width, frame_depth, frame_material)
-  use glazing(width, height, frame_width, frame_depth, leaves, frame_material, panel_material)
+  use window_frame(width, window_height, frame_width, frame_depth, frame_material)
+  use glazing(width, window_height, frame_width, frame_depth, leaves, frame_material, panel_material)
+  if shutter
+    use block(-width / 2, width / 2, frame_depth, window_height, height, frame_material)
 
 # Marco cortado, línea del vidrio, montantes y el giro de cada hoja que se
 # abre hacia el lado (practicable u oscilobatiente). Las fijas, abatibles,
-# proyectantes y basculantes no giran en planta: se verán en alzado.
+# proyectantes y basculantes no giran en planta: se verán en alzado. La
+# persiana, por fuera del marco, en discontinua (está enrollada arriba).
 plan 1:50
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
+  if shutter
+    let es = if wall_ext > 0 then 1 else -1
+    line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
   use frame_cut_plan(-width / 2, width / 2, frame_depth)
   let f = frame_width
   let c0 = -width / 2 + f
@@ -69,6 +82,9 @@ plan 1:50
 
 # A 1:100, el marco y el vidrio.
 plan 1:100
+  if shutter
+    let es = if wall_ext > 0 then 1 else -1
+    line (-width / 2, es * (frame_depth / 2 + 0.03)) to (width / 2, es * (frame_depth / 2 + 0.03)) pen thin dashed
   use frame_cut_plan(-width / 2, width / 2, frame_depth)
   line (-width / 2 + frame_width, 0) to (width / 2 - frame_width, 0) pen thin
 

@@ -630,7 +630,18 @@ mod tests {
                                 for (i, o) in op.iter().enumerate() {
                                     v.insert(format!("leaf_{}", i + 1), Value::Text(o.clone()));
                                 }
-                                for side in [WallSide::Interior, WallSide::Exterior] {
+                                // Bool options (the shutter of a window) both ways.
+                                for (side, on) in [
+                                    (WallSide::Interior, false),
+                                    (WallSide::Exterior, false),
+                                    (WallSide::Interior, true),
+                                    (WallSide::Exterior, true),
+                                ] {
+                                    if def.param("shutter").is_some() {
+                                        v.insert("shutter".into(), Value::Bool(on));
+                                    } else if on {
+                                        continue;
+                                    }
                                     for hand in [Hand::Left, Hand::Right] {
                                         let b = opening_builtins(side, hand);
                                         let ev = match def.evaluate(&v, &Values::new(), &b) {

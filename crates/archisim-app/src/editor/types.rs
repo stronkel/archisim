@@ -485,7 +485,7 @@ mod tests {
         let t = ed.model().opening_type(n).unwrap();
         assert_eq!(
             (t.name.as_str(), t.mark.as_str()),
-            ("Ventana practicable (nuevo)", "V-05")
+            ("Ventana practicable (nuevo)", "V-06")
         );
         let n2 = ed.new_opening_type("Ventana practicable").unwrap();
         assert_eq!(
