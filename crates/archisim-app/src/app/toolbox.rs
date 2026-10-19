@@ -111,6 +111,13 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "Muros cortina: montantes, travesaños y vidrios con modulación regular",
             ),
             tile(
+                Pick::Tool(Tool::Railing),
+                Icon::Railing,
+                "Barandilla",
+                "B",
+                "Barandillas sueltas para terrazas, cubiertas y huecos: montantes, pasamanos y barrotes (CTE)",
+            ),
+            tile(
                 Pick::Tool(Tool::Roof),
                 Icon::Roof,
                 "Cubierta",

@@ -173,6 +173,8 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownStair(_) => "la escalera ya no existe".into(),
         ModelError::UnknownTerrain(_) => "el terreno ya no existe".into(),
         ModelError::UnknownCurtainWall(_) => "el muro cortina ya no existe".into(),
+        ModelError::UnknownRailing(_) => "la barandilla ya no existe".into(),
+        ModelError::InvalidRailing => "la barandilla necesita dos puntos al menos (a más de 5 cm), una altura de 30 cm a 3 m y montantes a 30 cm – 5 m".into(),
         ModelError::InvalidCurtainWall => "el muro cortina necesita altura, módulos y filas de al menos 20 cm y montantes más estrechos que medio módulo".into(),
         ModelError::InvalidTerrain => {
             "el terreno necesita tres puntos que no estén en línea y algo de profundidad".into()

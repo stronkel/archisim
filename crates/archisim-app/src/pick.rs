@@ -30,6 +30,8 @@ pub enum Element {
     Terrain(archisim_core::TerrainId),
     /// A curtain wall, picked by its line.
     CurtainWall(archisim_core::CurtainWallId),
+    /// A loose railing, picked by its line.
+    Railing(archisim_core::RailingId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -91,7 +93,29 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .terrain(id)
             .map(|t| t.boundary().iter().map(|i| t.points[*i].at).collect()),
         Element::CurtainWall(id) => model.curtain_wall(id).map(|c| c.outline()),
+        Element::Railing(id) => model.railing(id).map(railing_outline),
     }
+}
+
+/// A thin band round a railing's line, there and back.
+fn railing_outline(r: &archisim_core::Railing) -> Vec<Point2> {
+    let half = archisim_core::HANDRAIL_SIZE / 2.0;
+    let side = |sign: f64| -> Vec<Point2> {
+        r.path
+            .windows(2)
+            .flat_map(|w| {
+                let n = (w[1] - w[0])
+                    .normalized()
+                    .map_or(archisim_core::Vec2::new(0.0, 0.0), |u| {
+                        u.perp_left() * (half * sign)
+                    });
+                [w[0] + n, w[1] + n]
+            })
+            .collect()
+    };
+    let mut v = side(1.0);
+    v.extend(side(-1.0).into_iter().rev());
+    v
 }
 
 /// The box round a stair's flights and landings.
@@ -184,6 +208,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
             .curtain_walls_on_level(level)
             .map(|c| Element::CurtainWall(c.id)),
     );
+    v.extend(
+        model
+            .railings_on_level(level)
+            .map(|r| Element::Railing(r.id)),
+    );
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
     v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
@@ -220,7 +249,8 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Section(_)
         | Element::Stair(_)
         | Element::Terrain(_)
-        | Element::CurtainWall(_) => None,
+        | Element::CurtainWall(_)
+        | Element::Railing(_) => None,
     }
 }
 
@@ -250,6 +280,7 @@ pub fn pick<G: Geo + ?Sized>(
         // Columns stand in front of the walls they go through.
         Element::Column(_) => 1,
         Element::Wall(_) | Element::CurtainWall(_) => 2,
+        Element::Railing(_) => 1,
         Element::Beam(_) => 3,
         Element::Roof(_) => 3,
         Element::Stair(_) => 1,

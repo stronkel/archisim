@@ -60,6 +60,7 @@ impl ArchiSimApp {
         self.draw_stair_preview(&painter, rect);
         self.draw_terrain_preview(&painter, rect);
         self.draw_curtain_preview(&painter, rect);
+        self.draw_railing_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -95,7 +96,8 @@ impl ArchiSimApp {
             | Tool::Roof
             | Tool::Stair
             | Tool::Terrain
-            | Tool::CurtainWall => CursorIcon::Crosshair,
+            | Tool::CurtainWall
+            | Tool::Railing => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -301,6 +303,18 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Railing => {
+                let mut s = self.snap_at(raw, reach, &self.railing_points, &BTreeSet::new());
+                if let Some(a) = self.railing_points.last().copied() {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::CurtainWall => {
                 let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
                 if let Some(a) = self.curtain_anchor {
@@ -453,6 +467,7 @@ impl ArchiSimApp {
                 Tool::Zone => self.zone_tool.backspace(),
                 Tool::Roof => self.roof_tool.backspace(),
                 Tool::Stair => self.stair_tool.points.pop().is_some(),
+                Tool::Railing => self.railing_points.pop().is_some(),
                 Tool::Terrain => self.terrain_points.pop().is_some(),
                 _ => false,
             };
@@ -514,6 +529,14 @@ impl ArchiSimApp {
                     SlabOutcome::Nothing => {}
                 },
                 Tool::Terrain => self.finish_terrain(),
+                Tool::Railing => {
+                    if let Some(c) = self.cursor {
+                        if self.railing_points.len() == 1 {
+                            self.railing_click(c.point);
+                        }
+                    }
+                    self.finish_railing();
+                }
                 Tool::Stair => {
                     if let Some(c) = self.cursor {
                         if self.stair_tool.points.len() == 1 {
@@ -577,6 +600,11 @@ impl ArchiSimApp {
                 }
                 Tool::Section => {
                     if self.section_tool.anchor.take().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Railing => {
+                    if self.railing_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -772,6 +800,17 @@ impl ArchiSimApp {
                             reach,
                         );
                         self.dim_outcome(out);
+                    }
+                }
+            }
+            Tool::Railing => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.finish_railing();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.railing_click(c.point);
                     }
                 }
             }
@@ -1151,6 +1190,7 @@ impl ArchiSimApp {
             (Grip::RoofCorner { .. }, _) => "Esquina",
             (Grip::StairPoint { .. }, _) => "Línea de huella",
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
+            (Grip::RailingPoint { .. }, _) => "Barandilla",
             (Grip::TerrainPoint { .. }, _) => "Punto",
         };
         let delta = to - d.from;
@@ -1510,6 +1550,7 @@ impl ArchiSimApp {
             Tool::Beam => self.beam_tool.anchor,
             Tool::Section => self.section_tool.anchor,
             Tool::CurtainWall => self.curtain_anchor,
+            Tool::Railing => self.railing_points.last().copied(),
             Tool::Zone => self.zone_tool.anchor(),
             Tool::Roof => self.roof_tool.anchor(),
             Tool::Stair => self.stair_tool.points.last().copied(),

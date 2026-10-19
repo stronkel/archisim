@@ -57,6 +57,7 @@ impl ArchiSimApp {
             [Element::Stair(id)] => self.stair_properties(ui, *id),
             [Element::Terrain(id)] => self.terrain_properties(ui, *id),
             [Element::CurtainWall(id)] => self.curtain_wall_properties(ui, *id),
+            [Element::Railing(id)] => self.railing_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
@@ -205,6 +206,7 @@ impl ArchiSimApp {
             Tool::Stair => self.stair_tool_properties(ui),
             Tool::Terrain => self.terrain_tool_properties(ui),
             Tool::CurtainWall => self.curtain_tool_properties(ui),
+            Tool::Railing => self.railing_tool_properties(ui),
         }
     }
 

@@ -52,6 +52,11 @@ pub enum Grip {
         terrain: archisim_core::TerrainId,
         index: usize,
     },
+    /// A point of a railing's line.
+    RailingPoint {
+        railing: archisim_core::RailingId,
+        index: usize,
+    },
     /// One end of a curtain wall.
     CurtainEnd {
         curtain: archisim_core::CurtainWallId,
@@ -191,6 +196,19 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::Railing(id) => {
+                if let Some(r) = model.railing(*id) {
+                    for (index, point) in r.path.iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::RailingPoint {
+                                railing: *id,
+                                index,
+                            },
+                            point: *point,
+                        });
+                    }
+                }
+            }
             Element::CurtainWall(id) => {
                 if let Some(c) = model.curtain_wall(*id) {
                     for (start, point) in [(true, c.start), (false, c.end)] {
@@ -288,6 +306,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::RoofCorner { roof, .. } => [Element::Roof(roof)].into_iter().collect(),
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
+        Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
     }
 }
@@ -336,6 +355,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::RoofCorner { .. } => "Mover esquina de cubierta",
         Grip::StairPoint { .. } => "Mover punto de la escalera",
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
+        Grip::RailingPoint { .. } => "Mover punto de la barandilla",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
     }
 }
@@ -406,6 +426,13 @@ pub fn apply(
             .edit_terrain(terrain, |t| {
                 if let Some(p) = t.points.get_mut(index) {
                     p.at = drag.to;
+                }
+            })
+            .map(|_| None),
+        Grip::RailingPoint { railing, index } => model
+            .edit_railing(railing, |r| {
+                if let Some(p) = r.path.get_mut(index) {
+                    *p = drag.to;
                 }
             })
             .map(|_| None),
@@ -556,6 +583,13 @@ fn move_selection(
                 model.edit_terrain(*id, |t| {
                     for p in &mut t.points {
                         p.at = p.at + d;
+                    }
+                })?;
+            }
+            Element::Railing(id) => {
+                model.edit_railing(*id, |r| {
+                    for p in &mut r.path {
+                        *p = *p + d;
                     }
                 })?;
             }
@@ -827,6 +861,21 @@ fn copy(
                 })?;
                 copies.insert(Element::CurtainWall(new));
             }
+            Element::Railing(id) => {
+                let r = model
+                    .railing(*id)
+                    .ok_or(ModelError::UnknownRailing(*id))?
+                    .clone();
+                let new = model.add_railing(archisim_core::NewRailing {
+                    level: r.level,
+                    path: r.path.iter().map(|p| *p + d).collect(),
+                    base_offset: r.base_offset,
+                    height: r.height,
+                    post_spacing: r.post_spacing,
+                    material: r.material,
+                })?;
+                copies.insert(Element::Railing(new));
+            }
             Element::Stair(id) => {
                 let s = model
                     .stair(*id)
@@ -1032,6 +1081,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Stair(id) => model.stair(id).is_some(),
         Element::Terrain(id) => model.terrain(id).is_some(),
         Element::CurtainWall(id) => model.curtain_wall(id).is_some(),
+        Element::Railing(id) => model.railing(id).is_some(),
     }
 }
 
@@ -1064,6 +1114,7 @@ fn level_of(
         Grip::StairPoint { stair, .. } => model.stair(stair).map(|s| s.level),
         Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
+        Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
             Element::Slab(id) => model.slab(*id).map(|s| s.level),
@@ -1078,6 +1129,7 @@ fn level_of(
             Element::Stair(id) => model.stair(*id).map(|s| s.level),
             Element::Terrain(id) => model.terrain(*id).map(|t| t.level),
             Element::CurtainWall(id) => model.curtain_wall(*id).map(|c| c.level),
+            Element::Railing(id) => model.railing(*id).map(|r| r.level),
         }),
     }
 }

@@ -71,6 +71,24 @@ pub(crate) struct ProjectFile {
     /// Curtain walls (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub curtain_walls: Vec<CurtainWall>,
+    /// Loose railings (version 7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub railings: Vec<Railing>,
+}
+
+/// A railing (version 7): its line, foot, height, post spacing and
+/// material.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Railing {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub path: Vec<Xy>,
+    pub base_offset: f64,
+    pub height: f64,
+    pub post_spacing: f64,
+    pub material: u64,
 }
 
 /// A curtain wall (version 7): its line, foot and top (as walls), the
@@ -933,6 +951,20 @@ impl ProjectFile {
                     contour: t.contour,
                 })
                 .collect(),
+            railings: p
+                .railings
+                .into_iter()
+                .map(|r| Railing {
+                    id: r.id.0,
+                    guid: r.guid.to_string(),
+                    level: r.level.0,
+                    path: r.path.into_iter().map(xy).collect(),
+                    base_offset: r.base_offset,
+                    height: r.height,
+                    post_spacing: r.post_spacing,
+                    material: r.material.0,
+                })
+                .collect(),
             curtain_walls: p
                 .curtain_walls
                 .into_iter()
@@ -1114,6 +1146,22 @@ impl ProjectFile {
                         panel_thickness: c.panel_thickness,
                         frame_material: core::MaterialId(c.frame_material),
                         panel_material: core::MaterialId(c.panel_material),
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
+            railings: self
+                .railings
+                .iter()
+                .map(|r| {
+                    Ok(core::Railing {
+                        id: core::RailingId(r.id),
+                        guid: guid(&format!("railing {}", r.id), &r.guid)?,
+                        level: core::LevelId(r.level),
+                        path: r.path.iter().copied().map(pt).collect(),
+                        base_offset: r.base_offset,
+                        height: r.height,
+                        post_spacing: r.post_spacing,
+                        material: core::MaterialId(r.material),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

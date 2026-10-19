@@ -15,6 +15,7 @@ use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MI
 
 mod curtain;
 mod phases;
+mod railings;
 mod roofs;
 mod sections;
 mod site;
@@ -23,6 +24,7 @@ mod stairs;
 mod structure;
 pub use curtain::*;
 pub use phases::*;
+pub use railings::*;
 pub use roofs::*;
 pub use sections::*;
 pub use site::*;
@@ -767,6 +769,9 @@ pub enum ModelError {
     UnknownStair(StairId),
     UnknownTerrain(TerrainId),
     UnknownCurtainWall(CurtainWallId),
+    UnknownRailing(RailingId),
+    /// A railing with fewer than two points, or out of range.
+    InvalidRailing,
     /// A curtain wall with no height, too small a grid or a frame wider
     /// than its bays.
     InvalidCurtainWall,
@@ -874,6 +879,11 @@ impl fmt::Display for ModelError {
             ModelError::UnknownStair(id) => write!(f, "unknown stair {id}"),
             ModelError::UnknownTerrain(id) => write!(f, "unknown terrain {id}"),
             ModelError::UnknownCurtainWall(id) => write!(f, "unknown curtain wall {id}"),
+            ModelError::UnknownRailing(id) => write!(f, "unknown railing {id}"),
+            ModelError::InvalidRailing => write!(
+                f,
+                "a railing needs two points at least, 5 cm apart, a height from 0.3 to 3 m and posts 0.3 to 5 m apart"
+            ),
             ModelError::InvalidCurtainWall => write!(
                 f,
                 "a curtain wall needs some height, bays and rows of at least 0.2 m and a frame narrower than half a bay"
@@ -1012,6 +1022,7 @@ pub struct ModelParts {
     pub stairs: Vec<Stair>,
     pub terrains: Vec<Terrain>,
     pub curtain_walls: Vec<CurtainWall>,
+    pub railings: Vec<Railing>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
 }
@@ -1070,6 +1081,7 @@ pub struct Model {
     stairs: BTreeMap<StairId, Stair>,
     terrains: BTreeMap<TerrainId, Terrain>,
     curtain_walls: BTreeMap<CurtainWallId, CurtainWall>,
+    railings: BTreeMap<RailingId, Railing>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     /// The phase new elements are given (the survey is drawn as
@@ -1107,6 +1119,7 @@ impl Model {
             stairs: BTreeMap::new(),
             terrains: BTreeMap::new(),
             curtain_walls: BTreeMap::new(),
+            railings: BTreeMap::new(),
             true_north: 0.0,
             draw_phase: Phase::New,
         }
@@ -1206,6 +1219,7 @@ impl Model {
         self.stairs.retain(|_, s| s.level != id);
         self.terrains.retain(|_, t| t.level != id);
         self.curtain_walls.retain(|_, c| c.level != id);
+        self.railings.retain(|_, r| r.level != id);
         for c in self.curtain_walls.values_mut() {
             if matches!(c.top, WallTop::Level { level, .. } if level == id) {
                 c.top = WallTop::Unconnected;
@@ -1352,6 +1366,12 @@ impl Model {
                     .values()
                     .filter(|c| c.frame_material == id || c.panel_material == id)
                     .map(|c| format!("muro cortina {}", c.id.0)),
+            )
+            .chain(
+                self.railings
+                    .values()
+                    .filter(|r| r.material == id)
+                    .map(|r| format!("barandilla {}", r.id.0)),
             );
         walls
             .chain(slabs)
@@ -3106,6 +3126,7 @@ impl Model {
             stairs: self.stairs.values().cloned().collect(),
             terrains: self.terrains.values().cloned().collect(),
             curtain_walls: self.curtain_walls.values().cloned().collect(),
+            railings: self.railings.values().cloned().collect(),
             true_north: self.true_north,
         }
     }
@@ -3320,6 +3341,7 @@ impl Model {
         model.restore_stairs(parts.stairs, &mut claim)?;
         model.restore_terrains(parts.terrains, &mut claim)?;
         model.restore_curtain_walls(parts.curtain_walls, &mut claim)?;
+        model.restore_railings(parts.railings, &mut claim)?;
         model
             .set_true_north(parts.true_north)
             .map_err(|error| RestoreError {

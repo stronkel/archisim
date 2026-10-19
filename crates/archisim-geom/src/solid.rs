@@ -36,6 +36,7 @@ pub enum SolidOwner {
     Stair(archisim_core::StairId),
     Terrain(archisim_core::TerrainId),
     CurtainWall(archisim_core::CurtainWallId),
+    Railing(archisim_core::RailingId),
 }
 
 /// One closed piece of one material.
@@ -912,6 +913,62 @@ pub fn curtain_wall_solids(model: &Model, id: archisim_core::CurtainWallId) -> V
     ]
 }
 
+/// The bars of a loose railing, in model space.
+pub fn loose_railing_bars(model: &Model, id: archisim_core::RailingId) -> Vec<Bar> {
+    let Some(r) = model.railing(id) else {
+        return Vec::new();
+    };
+    let z0 = model.level(r.level).map_or(0.0, |l| l.elevation) + r.base_offset;
+    r.pieces()
+        .into_iter()
+        .filter_map(|p| {
+            let (a, b) = (p.a.0, p.b.0);
+            let vertical = a.approx_eq(b);
+            let u = if vertical {
+                // A post or bar faces along its segment: any direction
+                // will do for a square.
+                archisim_core::Vec2::new(1.0, 0.0)
+            } else {
+                (b - a).normalized()?
+            };
+            let n = u.perp_left();
+            Some(Bar {
+                a: [a.x, a.y, z0 + p.a.1],
+                b: [b.x, b.y, z0 + p.b.1],
+                // As the stair railings: wound so faces point out.
+                side: if vertical {
+                    [u.x, u.y, 0.0]
+                } else {
+                    [n.x, n.y, 0.0]
+                },
+                up: if vertical {
+                    [n.x, n.y, 0.0]
+                } else {
+                    [0.0, 0.0, 1.0]
+                },
+                w: p.size,
+                d: p.size,
+            })
+        })
+        .collect()
+}
+
+/// Solids of a loose railing: its bars, each a closed box, as one solid.
+pub fn loose_railing_solids(model: &Model, id: archisim_core::RailingId) -> Vec<Solid> {
+    let Some(r) = model.railing(id) else {
+        return Vec::new();
+    };
+    let triangles = loose_railing_bars(model, id)
+        .iter()
+        .flat_map(|b| b.triangles())
+        .collect();
+    vec![Solid {
+        owner: SolidOwner::Railing(id),
+        material: r.material,
+        triangles,
+    }]
+}
+
 pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid> {
     let Some(t) = model.terrain(id) else {
         return Vec::new();
@@ -1483,6 +1540,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for c in model.curtain_walls() {
         out.extend(curtain_wall_solids(model, c.id));
     }
+    for r in model.railings() {
+        out.extend(loose_railing_solids(model, r.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -1502,6 +1562,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
         SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
         SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),
+        SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
     };
     model_solids(model)
         .into_iter()
@@ -2004,6 +2065,42 @@ mod tests {
     /// A gable wall under a two-slope roof: built up to the ridge and
     /// trimmed under both planes; its volume is its thickness by the area
     /// under the roof's underside.
+    #[test]
+    fn loose_railing_bars_are_closed_outward() {
+        let mut m = Model::new("t");
+        let pb = m.add_level("PB", 0.0);
+        let steel = m.add_material(
+            "Acero",
+            "steel",
+            [120, 126, 134],
+            archisim_core::CutPattern::Solid,
+        );
+        let id = m
+            .add_railing(archisim_core::NewRailing {
+                level: pb,
+                path: vec![Point2::new(0.0, 0.0), Point2::new(2.0, 1.0)],
+                base_offset: 0.5,
+                height: 1.0,
+                post_spacing: 1.5,
+                material: steel,
+            })
+            .unwrap();
+        let bars = loose_railing_bars(&m, id);
+        for b in &bars {
+            let s = Solid {
+                owner: SolidOwner::Railing(id),
+                material: steel,
+                triangles: b.triangles(),
+            };
+            let len =
+                ((b.b[0] - b.a[0]).powi(2) + (b.b[1] - b.a[1]).powi(2) + (b.b[2] - b.a[2]).powi(2))
+                    .sqrt();
+            assert!((s.volume() - len * b.w * b.d).abs() < 1e-9, "{b:?}");
+        }
+        let solids = loose_railing_solids(&m, id);
+        assert_eq!(solids.len(), 1);
+    }
+
     #[test]
     fn walls_trimmed_under_a_roof() {
         let (mut m, w) = model();

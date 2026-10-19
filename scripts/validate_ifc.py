@@ -31,6 +31,8 @@ Checks:
      common property set and quantities, and is made of mullions
      (IfcMember) and panels (IfcPlate) with their material, quantities and
      a 3D volume matching them.
+ 11. Every loose railing (IfcRailing not part of a stair) is contained in
+     a storey, has its material, Pset_RailingCommon and 3D geometry.
 
 Usage:  python3 scripts/validate_ifc.py out/demo.ifc
 Needs:  pip install ifcopenshell
@@ -297,6 +299,20 @@ def main(path: str) -> int:
                 except Exception as exc:
                     errors.append(f"{p.Name}: geometry failed: {exc}")
 
+    railings = [r for r in f.by_type("IfcRailing") if not r.Decomposes]
+    for r in railings:
+        if not r.ContainedInStructure:
+            errors.append(f"{r.Name}: not contained in a storey")
+        if eu.get_material(r) is None:
+            errors.append(f"{r.Name}: no material")
+        if "Pset_RailingCommon" not in eu.get_psets(r):
+            errors.append(f"{r.Name}: missing Pset_RailingCommon")
+        if geom_ok:
+            try:
+                geom.create_shape(settings, r)
+            except Exception as exc:
+                errors.append(f"{r.Name}: geometry failed: {exc}")
+
     storeys = f.by_type("IfcBuildingStorey")
     types = sum(len(f.by_type(t)) for t in
                 ("IfcWallType", "IfcSlabType", "IfcDoorType", "IfcWindowType",
@@ -304,7 +320,7 @@ def main(path: str) -> int:
     print(f"{path}: {len(walls)} muros, {len(slabs)} forjados, "
           f"{len(f.by_type('IfcDoor'))} puertas, {len(f.by_type('IfcWindow'))} ventanas, "
           f"{len(openings)} huecos, {len(f.by_type('IfcColumn'))} pilares, "
-          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, {len(curtains)} muros cortina, "
+          f"{len(f.by_type('IfcBeam'))} vigas, {len(spaces)} locales, {len(roofs)} cubiertas, {len(stairs)} escaleras, {len(curtains)} muros cortina, {len(railings)} barandillas, "
           f"{len(storeys)} plantas, "
           f"{types} tipos, {len(f.by_type('IfcMaterial'))} materiales")
     if errors:

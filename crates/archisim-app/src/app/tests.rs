@@ -2239,3 +2239,32 @@ fn curtain_wall_tool() {
     h.key(Key::Delete);
     assert_eq!(h.model().curtain_walls().count(), 0);
 }
+
+#[test]
+fn railing_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    h.type_text("b");
+    assert_eq!(h.app.tool, Tool::Railing);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(4.0, 0.0));
+    h.click_at(p(4.0, 3.0));
+    h.key(Key::Enter);
+    let m = h.model();
+    assert_eq!(m.railings().count(), 1, "{:?}", h.app.message);
+    let r = m.railings().next().unwrap().clone();
+    assert_eq!(r.path.len(), 3);
+    assert!((r.height - 1.1).abs() < 1e-9);
+    let ifc = archisim_ifc::export_ifc(
+        h.model(),
+        &archisim_ifc::ExportOptions {
+            file_name: "t.ifc".into(),
+            author: "t".into(),
+            organization: String::new(),
+            timestamp: None,
+        },
+    );
+    assert!(ifc.contains(".GUARDRAIL."));
+    h.key(Key::Escape);
+    h.key(Key::Delete);
+    assert_eq!(h.model().railings().count(), 0);
+}

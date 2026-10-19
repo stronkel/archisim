@@ -28,6 +28,7 @@ pub mod curtain;
 pub mod lettering;
 pub mod members;
 pub mod phases;
+pub mod railings;
 pub mod roofs;
 pub mod section;
 pub mod stairs;
@@ -351,6 +352,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for c in model.curtain_walls_on_level(level) {
         marker_points.extend(curtain::curtain_points(c));
     }
+    for r in model.railings_on_level(level) {
+        marker_points.extend(railings::railing_points(r));
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -487,6 +491,11 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for c in model.curtain_walls_on_level(level) {
         if poly_visible(&c.outline()) {
             curtain::draw_curtain_wall(&mut s, model, c, options.cut_plane, k);
+        }
+    }
+    for r in model.railings_on_level(level) {
+        if poly_visible(&r.path) {
+            railings::draw_railing(&mut s, r, options.cut_plane, k);
         }
     }
 

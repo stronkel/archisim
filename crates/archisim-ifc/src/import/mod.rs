@@ -33,6 +33,7 @@ mod compare;
 mod curtain;
 pub mod geometry;
 mod members;
+mod railings;
 pub mod report;
 mod roofs;
 mod spaces;
@@ -238,6 +239,8 @@ struct Importer<'a> {
     terrain_ids: HashSet<u64>,
     /// `IfcCurtainWall`s read back as ArchiSim curtain walls.
     curtain_ids: HashSet<u64>,
+    /// `IfcRailing`s read back as ArchiSim railings.
+    railing_ids: HashSet<u64>,
 }
 
 #[derive(Default)]
@@ -257,6 +260,7 @@ struct GuidPlan {
     stairs: Vec<(archisim_core::StairId, String)>,
     terrains: Vec<(archisim_core::TerrainId, String)>,
     curtain_walls: Vec<(archisim_core::CurtainWallId, String)>,
+    railings: Vec<(archisim_core::RailingId, String)>,
     project: Option<String>,
     site: Option<String>,
     building: Option<String>,
@@ -474,6 +478,7 @@ impl<'a> Importer<'a> {
             stair_ids: HashSet::new(),
             terrain_ids: HashSet::new(),
             curtain_ids: HashSet::new(),
+            railing_ids: HashSet::new(),
         };
         imp.index();
         imp
@@ -2548,6 +2553,7 @@ impl<'a> Importer<'a> {
                     !self.stair_ids.contains(id)
                         && !self.terrain_ids.contains(id)
                         && !self.curtain_ids.contains(id)
+                        && !self.railing_ids.contains(id)
                         && !self
                             .ix
                             .parent
@@ -2615,6 +2621,7 @@ impl<'a> Importer<'a> {
         self.import_stairs();
         self.import_terrains();
         self.import_curtain_walls();
+        self.import_railings();
         self.read_statuses();
         self.count_unsupported();
     }
@@ -2662,6 +2669,7 @@ impl<'a> Importer<'a> {
         restore!(stairs, stairs);
         restore!(terrains, terrains);
         restore!(curtain_walls, curtain_walls);
+        restore!(railings, railings);
         if duplicates > 0 {
             self.report.warn(format!(
                 "{duplicates} GlobalId repetidos en el fichero: esos elementos reciben uno nuevo."

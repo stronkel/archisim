@@ -76,6 +76,8 @@ pub enum Tool {
     Terrain,
     /// Curtain walls, by their line.
     CurtainWall,
+    /// Loose railings, by their line.
+    Railing,
 }
 
 impl Tool {
@@ -94,6 +96,7 @@ impl Tool {
                 | Tool::Stair
                 | Tool::Terrain
                 | Tool::CurtainWall
+                | Tool::Railing
         )
     }
 
@@ -114,6 +117,7 @@ impl Tool {
             "e" => Some(Tool::Stair),
             "r" => Some(Tool::Terrain),
             "u" => Some(Tool::CurtainWall),
+            "b" => Some(Tool::Railing),
             _ => None,
         }
     }
@@ -209,6 +213,9 @@ pub struct ArchiSimApp {
     pub curtain_settings: crate::editor::CurtainSettings,
     /// The first point of the curtain wall being drawn.
     pub curtain_anchor: Option<Point2>,
+    pub railing_settings: crate::editor::RailingSettings,
+    /// Points of the railing being drawn.
+    pub railing_points: Vec<Point2>,
     /// Survey points of the terrain being drawn.
     pub terrain_points: Vec<archisim_core::SurveyPoint>,
     /// The outline of a room drawn by hand.
@@ -344,6 +351,8 @@ impl ArchiSimApp {
             terrain_settings: Default::default(),
             curtain_settings: Default::default(),
             curtain_anchor: None,
+            railing_settings: Default::default(),
+            railing_points: Vec::new(),
             terrain_points: Vec::new(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
@@ -436,6 +445,7 @@ impl ArchiSimApp {
             self.terrain_points.clear();
             self.section_tool.anchor = None;
             self.curtain_anchor = None;
+            self.railing_points.clear();
             self.placement = None;
             self.window_start = None;
             self.drag = None;
@@ -1470,6 +1480,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod railing_ui;
 mod roof_ui;
 mod section_ui;
 mod space_ui;

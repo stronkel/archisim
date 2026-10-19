@@ -30,6 +30,8 @@ pub struct ImportReport {
     pub terrains: usize,
     /// Curtain walls written by ArchiSim (`IfcCurtainWall`).
     pub curtain_walls: usize,
+    /// Railings written by ArchiSim (`IfcRailing`).
+    pub railings: usize,
     pub wall_types: usize,
     pub slab_types: usize,
     pub opening_types: usize,
@@ -148,6 +150,9 @@ impl ImportReport {
         }
         if self.curtain_walls > 0 {
             members.push_str(&format!(", {} muros cortina", self.curtain_walls));
+        }
+        if self.railings > 0 {
+            members.push_str(&format!(", {} barandillas", self.railings));
         }
         if self.terrains > 0 {
             members.push_str(&format!(", {} terrenos", self.terrains));

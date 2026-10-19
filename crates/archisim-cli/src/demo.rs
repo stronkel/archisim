@@ -327,6 +327,32 @@ pub fn build() -> Result<Document, ModelError> {
 
     // The plot (v0.25): survey points falling gently to the south-east,
     // under the floor of the house; true north 12° to the east of up.
+    // A guard round the flat roof (v0.25), open where the outdoor stair
+    // arrives on the east side.
+    doc.transact("Barandilla", |m| {
+        let steel = m
+            .materials()
+            .find(|x| x.category == "steel")
+            .map(|x| x.id)
+            .ok_or(ModelError::InvalidRailing)?;
+        m.add_railing(archisim_core::NewRailing {
+            level: cubierta,
+            path: vec![
+                Point2::new(11.9, 5.9),
+                Point2::new(11.9, 0.1),
+                Point2::new(0.1, 0.1),
+                Point2::new(0.1, 8.9),
+                Point2::new(11.9, 8.9),
+                Point2::new(11.9, 7.0),
+            ],
+            base_offset: 0.0,
+            height: 1.1,
+            post_spacing: 1.5,
+            material: steel,
+        })?;
+        Ok(())
+    })?;
+
     doc.transact("Terreno", |m| {
         let earth = m.add_material(
             "Terreno natural",
@@ -449,6 +475,7 @@ mod tests {
         assert_eq!(m.stairs().count(), 1);
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
+        assert_eq!(m.railings().count(), 1);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);

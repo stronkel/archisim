@@ -304,6 +304,32 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("terreno {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    if a.railings().count() != b.railings().count() {
+        diff(format!(
+            "número de barandillas: {} / {}",
+            a.railings().count(),
+            b.railings().count()
+        ));
+    }
+    for s in a.railings() {
+        let Some(t) = b.railings().find(|t| t.guid == s.guid) else {
+            diff(format!("barandilla {} falta", s.guid));
+            continue;
+        };
+        let same = s.path.len() == t.path.len()
+            && s.path
+                .iter()
+                .zip(&t.path)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && close(s.base_offset, t.base_offset)
+            && close(s.height, t.height)
+            && close(s.post_spacing, t.post_spacing)
+            && level_guid(a, s.level) == level_guid(b, t.level)
+            && material_name(a, s.material) == material_name(b, t.material);
+        if !same {
+            diff(format!("barandilla {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     if a.curtain_walls().count() != b.curtain_walls().count() {
         diff(format!(
             "número de muros cortina: {} / {}",
