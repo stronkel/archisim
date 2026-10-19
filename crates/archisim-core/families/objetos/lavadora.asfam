@@ -1,0 +1,29 @@
+family "Lavadora"
+  category kitchen
+  host none
+  version 1
+  description "Lavadora o lavavajillas bajo encimera"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.40..0.70 label "Ancho"
+    depth  length = 0.60 range 0.40..0.70 label "Fondo"
+    height length = 0.85 range 0.60..0.90 label "Altura"
+  section "Materiales"
+    mat material = "Acero S275" label "Acabado"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  let r = min(width, depth) / 2 - 0.08
+  let c = depth / 2
+  arc center (0, c) from (r, c) to (0, c + r) pen thin
+  arc center (0, c) from (0, c + r) to (-r, c) pen thin
+  arc center (0, c) from (-r, c) to (0, c - r) pen thin
+  arc center (0, c) from (0, c - r) to (r, c) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

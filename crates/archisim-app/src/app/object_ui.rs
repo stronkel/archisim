@@ -274,6 +274,12 @@ impl ArchiSimApp {
                 }
             });
         }
+        if users > 1 && ui.button("Tipo propio para este objeto").clicked() {
+            match self.ed.object_own_type(id) {
+                Ok(_) => self.say("Tipo duplicado: sus medidas ya solo cambian este objeto."),
+                Err(e) => self.complain(format!("No se puede duplicar: {e}.")),
+            }
+        }
         group(ui, "object-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &o.guid.to_string());
         });

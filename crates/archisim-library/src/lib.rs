@@ -440,7 +440,7 @@ pub fn add_objects(
     }
     // (type name, family, sizes that differ from the family's)
     type Entry<'a> = (&'a str, &'a str, &'a [(&'a str, f64)]);
-    let catalogue: [Entry; 13] = [
+    let catalogue: [Entry; 15] = [
         ("Mesa de comedor 160×90", "Mesa", &[]),
         ("Silla", "Silla", &[]),
         ("Sofá de 3 plazas", "Sofá", &[]),
@@ -453,7 +453,9 @@ pub fn add_objects(
         ("Armario 120", "Armario", &[]),
         ("Muebles de cocina 240", "Encimera de cocina", &[]),
         ("Frigorífico 60", "Frigorífico", &[]),
+        ("Lavadora 60", "Lavadora", &[]),
         ("Inodoro", "Inodoro", &[]),
+        ("Bidé", "Bidé", &[]),
         ("Lavabo 60", "Lavabo", &[]),
         ("Plato de ducha 90×90", "Plato de ducha", &[]),
         (

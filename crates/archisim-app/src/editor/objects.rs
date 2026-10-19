@@ -50,6 +50,24 @@ impl Editor {
         self.transact(label, |m| m.edit_object(id, edit))
     }
 
+    /// Gives an object a copy of its type, to change its sizes alone.
+    pub fn object_own_type(&mut self, id: ObjectId) -> EditResult<ObjectTypeId> {
+        let model = self.model();
+        let Some(o) = model.object(id) else {
+            return Err("el objeto no existe".into());
+        };
+        let Some(t) = model.object_type(o.object_type).cloned() else {
+            return Err("el tipo no existe".into());
+        };
+        let taken: Vec<String> = model.object_types().map(|t| t.name.clone()).collect();
+        let name = super::types::copy_name(&t.name, &taken);
+        self.transact("Duplicar tipo de objeto", |m| {
+            let new = m.add_object_type(name, t.family, t.values.clone())?;
+            m.edit_object(id, |o| o.object_type = new)?;
+            Ok(new)
+        })
+    }
+
     /// Changes one value of an object type: every object of it follows.
     pub fn set_object_type_value(
         &mut self,
@@ -96,5 +114,16 @@ mod tests {
         assert!((wide(&ed) - 2.0).abs() < 1e-9);
         ed.undo();
         assert!((wide(&ed) - 1.6).abs() < 1e-9);
+        // Its own type: the others keep theirs.
+        let other = ed.add_object(&s, Point2::new(6.0, 3.0)).unwrap();
+        let own = ed.object_own_type(id).unwrap();
+        assert_eq!(ed.model().object(id).unwrap().object_type, own);
+        assert_eq!(ed.model().object(other).unwrap().object_type, t);
+        assert!(ed
+            .model()
+            .object_type(own)
+            .unwrap()
+            .name
+            .ends_with("(copia)"));
     }
 }

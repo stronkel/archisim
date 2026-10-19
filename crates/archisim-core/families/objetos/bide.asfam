@@ -1,0 +1,29 @@
+family "Bidé"
+  category sanitary
+  host none
+  version 1
+  description "Bidé de pie, contra la pared"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.36 range 0.30..0.50 label "Ancho"
+    depth  length = 0.55 range 0.45..0.70 label "Fondo"
+  section "Materiales"
+    mat material = "Porcelana" label "Porcelana"
+
+body
+  box (-width / 2 + 0.04, 0, 0) to (width / 2 - 0.04, depth, 0.40) material mat
+
+plan 1:50
+  let a = width / 2 - 0.02
+  let b = depth / 2 - 0.02
+  let c = depth / 2
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen view
+  line (-0.04, 0.06) to (0.04, 0.06) pen thin
+
+outputs
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "BIDET"
