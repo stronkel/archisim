@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-app"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
  "archisim-file",
@@ -230,7 +230,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-cli"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
  "archisim-file",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-core"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-family",
  "uuid",
@@ -251,11 +251,11 @@ dependencies = [
 
 [[package]]
 name = "archisim-family"
-version = "0.24.0"
+version = "0.25.0"
 
 [[package]]
 name = "archisim-file"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
  "serde",
@@ -264,14 +264,14 @@ dependencies = [
 
 [[package]]
 name = "archisim-geom"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
 ]
 
 [[package]]
 name = "archisim-ifc"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",
@@ -280,14 +280,14 @@ dependencies = [
 
 [[package]]
 name = "archisim-library"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
 ]
 
 [[package]]
 name = "archisim-plan"
-version = "0.24.0"
+version = "0.25.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",

@@ -14,8 +14,14 @@ use crate::pick::{nearest_on_segment, Element};
 /// Free points and typed lengths are rounded to 1 cm.
 pub const FREE_STEP: f64 = 0.01;
 
+/// The project origin snaps from this many times further than other points.
+pub const ORIGIN_REACH: f64 = 1.6;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapKind {
+    /// The project origin (±0,00 at 0, 0): always on offer, with a wider
+    /// reach than other points, so drawing can start from it.
+    Origin,
     /// End of a wall's drawn line, or a point of the wall being drawn.
     Endpoint,
     /// Corner of a wall outline or of a slab.
@@ -38,6 +44,7 @@ pub enum SnapKind {
 impl SnapKind {
     pub fn label(self) -> &'static str {
         match self {
+            SnapKind::Origin => "Punto 0 del proyecto",
             SnapKind::Endpoint => "Extremo",
             SnapKind::Corner => "Esquina",
             SnapKind::Midpoint => "Punto medio",
@@ -125,7 +132,9 @@ impl Default for SnapFilter {
 impl SnapFilter {
     fn allows(self, kind: SnapKind) -> bool {
         match kind {
-            SnapKind::Endpoint | SnapKind::Corner | SnapKind::Centre => self.points,
+            SnapKind::Origin | SnapKind::Endpoint | SnapKind::Corner | SnapKind::Centre => {
+                self.points
+            }
             SnapKind::Midpoint => self.midpoints,
             SnapKind::OnEdge => self.edges,
             SnapKind::Constrained | SnapKind::Tracked | SnapKind::Free => true,
@@ -237,6 +246,48 @@ pub fn snap_filtered<G: Geo + ?Sized>(
             continue;
         }
         outline_snaps(&s.outline, &mut points, &mut edges);
+    }
+    // Columns: their centre and the outline of their section; beams: their
+    // ends, their middle and the edges of their band.
+    for c in model.columns_on_level(level) {
+        if skip.contains(&Element::Column(c.id)) {
+            continue;
+        }
+        points.push((c.position, SnapKind::Centre));
+        let outline = archisim_plan::members::column_outline(model, c);
+        if outline.len() <= 12 {
+            outline_snaps(&outline, &mut points, &mut edges);
+        } else {
+            // Round: the outline is a fine polygon; only its edges.
+            let n = outline.len();
+            for i in 0..n {
+                edges.push((outline[i], outline[(i + 1) % n]));
+            }
+        }
+    }
+    for b in model.beams_on_level(level) {
+        if skip.contains(&Element::Beam(b.id)) {
+            continue;
+        }
+        points.push((b.start, SnapKind::Endpoint));
+        points.push((b.end, SnapKind::Endpoint));
+        points.push(((b.start + b.end) * 0.5, SnapKind::Midpoint));
+        outline_snaps(
+            &archisim_plan::members::beam_outline(model, b),
+            &mut points,
+            &mut edges,
+        );
+    }
+    // The project origin, reachable from a little further away.
+    let origin = Point2::new(0.0, 0.0);
+    if filter.points && origin.distance(cursor) <= tolerance * ORIGIN_REACH {
+        let nearer = points
+            .iter()
+            .filter(|(_, k)| filter.allows(*k))
+            .any(|(p, _)| p.distance(cursor) < origin.distance(cursor) - 1e-9);
+        if !nearer {
+            return Snap::at(origin, SnapKind::Origin);
+        }
     }
 
     // Closest point within tolerance; on a tie, the stronger kind (listed

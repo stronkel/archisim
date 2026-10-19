@@ -16,7 +16,8 @@ use super::*;
 
 /// A type row of the model tree.
 struct TypeRow {
-    tab: TypesTab,
+    /// Where the type is edited (columns and beams: in Propiedades).
+    tab: Option<TypesTab>,
     id: u64,
     badge: Option<String>,
     name: String,
@@ -121,7 +122,7 @@ impl ArchiSimApp {
                     .filter(|e| matches!(e, Element::Wall(w) if m.wall(*w).is_some_and(|w| w.wall_type == t.id)))
                     .collect();
                 TypeRow {
-                    tab: TypesTab::Walls,
+                    tab: Some(TypesTab::Walls),
                     id: t.id.0,
                     badge: None,
                     name: t.name.clone(),
@@ -139,7 +140,7 @@ impl ArchiSimApp {
                     .filter(|e| matches!(e, Element::Slab(s) if m.slab(*s).is_some_and(|s| s.slab_type == t.id)))
                     .collect();
                 TypeRow {
-                    tab: TypesTab::Slabs,
+                    tab: Some(TypesTab::Slabs),
                     id: t.id.0,
                     badge: None,
                     name: t.name.clone(),
@@ -158,11 +159,11 @@ impl ArchiSimApp {
                         .filter(|e| matches!(e, Element::Opening(o) if m.opening(*o).is_some_and(|o| o.opening_type == t.id)))
                         .collect();
                     TypeRow {
-                        tab: if door {
+                        tab: Some(if door {
                             TypesTab::Doors
                         } else {
                             TypesTab::Windows
-                        },
+                        }),
                         id: t.id.0,
                         badge: (!t.mark.is_empty()).then(|| t.mark.clone()),
                         name: t.name.clone(),
@@ -172,8 +173,40 @@ impl ArchiSimApp {
                 })
                 .collect()
         };
+        let members = |usage: archisim_core::MemberUsage| -> Vec<TypeRow> {
+            m.member_types()
+                .filter(|t| t.usage == usage)
+                .map(|t| {
+                    let here: Vec<Element> = on_level
+                        .iter()
+                        .copied()
+                        .filter(|e| {
+                            crate::pick::type_of(m, *e) == Some(crate::pick::TypeOf::Member(t.id))
+                        })
+                        .collect();
+                    TypeRow {
+                        tab: None,
+                        id: t.id.0,
+                        badge: None,
+                        name: t.name.clone(),
+                        count: m.member_type_users(t.id),
+                        here,
+                    }
+                })
+                .collect()
+        };
         vec![
             ("Muros", Icon::Wall, walls),
+            (
+                "Pilares",
+                Icon::Column,
+                members(archisim_core::MemberUsage::Column),
+            ),
+            (
+                "Vigas",
+                Icon::Beam,
+                members(archisim_core::MemberUsage::Beam),
+            ),
             ("Forjados", Icon::Slab, slabs),
             ("Puertas", Icon::Door, openings(true)),
             ("Ventanas", Icon::Window, openings(false)),
@@ -185,7 +218,7 @@ impl ArchiSimApp {
         let categories = self.type_rows();
         let materials = self.ed.model().materials().count();
         let mut select: Option<(Vec<Element>, String)> = None;
-        let mut edit: Option<(TypesTab, u64)> = None;
+        let mut edit: Option<(Option<TypesTab>, u64, Vec<Element>)> = None;
         let mut show_types = None;
         nav_section(ui, "nav-model", "MODELO", |ui| {
             for (name, icon, rows) in &categories {
@@ -214,7 +247,7 @@ impl ArchiSimApp {
                             r.here.len()
                         ));
                         if resp.double_clicked() {
-                            edit = Some((r.tab, r.id));
+                            edit = Some((r.tab, r.id, r.here.clone()));
                         } else if resp.clicked() {
                             select = Some((r.here.clone(), r.name.clone()));
                         }
@@ -227,7 +260,7 @@ impl ArchiSimApp {
                                 ui.close();
                             }
                             if ui.button("✎ Editar tipo…").clicked() {
-                                edit = Some((r.tab, r.id));
+                                edit = Some((r.tab, r.id, r.here.clone()));
                                 ui.close();
                             }
                         });
@@ -273,8 +306,21 @@ impl ArchiSimApp {
                 ));
             }
         }
-        if let Some((tab, id)) = edit {
-            self.edit_type(tab, id);
+        match edit {
+            Some((Some(tab), id, _)) => self.edit_type(tab, id),
+            Some((None, _, here)) => {
+                // Columns and beams: their type is edited in Propiedades.
+                self.set_tool(Tool::Arrow);
+                self.show_plan();
+                let n = here.len();
+                self.ed.selection = here.into_iter().collect();
+                self.say(if n == 0 {
+                    "No hay elementos de este tipo en esta planta: elige la herramienta Pilar o Viga para editar el tipo en Propiedades.".to_string()
+                } else {
+                    format!("{n} seleccionados: la sección y el material del tipo están en Propiedades → Tipo.")
+                });
+            }
+            None => {}
         }
         if let Some(tab) = show_types {
             self.types.tab = tab;

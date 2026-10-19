@@ -20,7 +20,7 @@ use eframe::egui::{
 
 use crate::dim_tool::{DimSettings, DimTool};
 use crate::drag::{grip_at, hotspots, Drag, Grip};
-use crate::editor::{Editor, WallSettings};
+use crate::editor::{BeamSettings, ColumnSettings, Editor, WallSettings};
 use crate::opening_tool::{placement, OpeningSettings, Placement};
 use crate::pick::{in_window, outline, pick, Element};
 use crate::plan_image::{rasterize_with, PlanKey};
@@ -62,12 +62,17 @@ pub enum Tool {
     Door,
     Window,
     Dimension,
+    Column,
+    Beam,
 }
 
 impl Tool {
     /// Tools that draw by clicking points (snaps and the crosshair apply).
     fn draws_points(self) -> bool {
-        matches!(self, Tool::Wall | Tool::Slab | Tool::Dimension)
+        matches!(
+            self,
+            Tool::Wall | Tool::Slab | Tool::Dimension | Tool::Column | Tool::Beam
+        )
     }
 
     /// The tool a key selects: M muro, F forjado, P puerta, V ventana,
@@ -79,6 +84,8 @@ impl Tool {
             "p" => Some(Tool::Door),
             "v" => Some(Tool::Window),
             "c" => Some(Tool::Dimension),
+            "i" => Some(Tool::Column),
+            "g" => Some(Tool::Beam),
             _ => None,
         }
     }
@@ -156,6 +163,9 @@ pub struct ArchiSimApp {
     pub window_settings: OpeningSettings,
     pub dim_tool: DimTool,
     pub dim_settings: DimSettings,
+    pub column_settings: ColumnSettings,
+    pub beam_settings: BeamSettings,
+    pub beam_tool: structure_ui::BeamTool,
     /// The levels dialog is open.
     pub show_levels: bool,
     /// A level waiting for confirmation before being deleted with its
@@ -248,6 +258,7 @@ impl ArchiSimApp {
         let slab_settings = default_slab_settings(ed.model());
         let door_settings = default_opening_settings(ed.model(), true);
         let window_settings = default_opening_settings(ed.model(), false);
+        let (column_settings, beam_settings) = default_member_settings(ed.model());
         let level = ed.level;
         Self {
             ed,
@@ -261,6 +272,9 @@ impl ArchiSimApp {
             window_settings,
             dim_tool: DimTool::default(),
             dim_settings: DimSettings::default(),
+            column_settings,
+            beam_settings,
+            beam_tool: structure_ui::BeamTool::default(),
             show_levels: false,
             level_to_delete: None,
             types: TypesDialog::default(),
@@ -339,6 +353,7 @@ impl ArchiSimApp {
             self.wall_tool.finish();
             self.slab_tool.finish();
             self.dim_tool.finish();
+            self.beam_tool.finish();
             self.placement = None;
             self.window_start = None;
             self.drag = None;
@@ -356,6 +371,8 @@ impl ArchiSimApp {
         self.slab_settings = default_slab_settings(ed.model());
         self.door_settings = default_opening_settings(ed.model(), true);
         self.window_settings = default_opening_settings(ed.model(), false);
+        (self.column_settings, self.beam_settings) = default_member_settings(ed.model());
+        self.beam_tool.finish();
         self.ed = ed;
         self.drag = None;
         self.wall_tool.finish();
@@ -1233,6 +1250,27 @@ pub fn default_wall_settings(model: &Model) -> WallSettings {
 }
 
 /// Slab tool settings for a model: its first type, top face on the level.
+/// Column and beam tools start with the first type of each (the library's
+/// concrete column and beam), columns up to the level above.
+pub fn default_member_settings(model: &Model) -> (ColumnSettings, BeamSettings) {
+    use archisim_core::MemberUsage;
+    (
+        ColumnSettings {
+            member_type: crate::editor::default_member_type(model, MemberUsage::Column),
+            rotation: 0.0,
+            base_offset: 0.0,
+            height: 3.0,
+            top: crate::editor::TopChoice::NextLevel,
+            top_offset: 0.0,
+        },
+        BeamSettings {
+            member_type: crate::editor::default_member_type(model, MemberUsage::Beam),
+            level_above: true,
+            top_offset: 0.0,
+        },
+    )
+}
+
 pub fn default_slab_settings(model: &Model) -> SlabSettings {
     // A new project starts on the ground floor: a ground-bearing slab.
     let t = model
@@ -1341,6 +1379,7 @@ mod navigator;
 mod plan_ui;
 mod properties;
 mod props;
+mod structure_ui;
 mod tabs;
 mod temp_ui;
 pub mod theme;

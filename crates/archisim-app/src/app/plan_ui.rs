@@ -52,6 +52,7 @@ impl ArchiSimApp {
         self.draw_wall_preview(&painter, rect);
         self.draw_slab_preview(&painter, rect);
         self.draw_opening_preview(&painter, rect);
+        self.draw_member_preview(&painter, rect);
         self.draw_wand_preview(&painter, rect);
         self.draw_dim_preview(&painter, rect);
         self.draw_drag_preview(&painter, rect);
@@ -75,9 +76,13 @@ impl ArchiSimApp {
         self.temp_edit_ui(&ctx);
 
         let icon = match self.tool {
-            Tool::Wall | Tool::Slab | Tool::Door | Tool::Window | Tool::Dimension => {
-                CursorIcon::Crosshair
-            }
+            Tool::Wall
+            | Tool::Slab
+            | Tool::Door
+            | Tool::Window
+            | Tool::Dimension
+            | Tool::Column
+            | Tool::Beam => CursorIcon::Crosshair,
             Tool::Arrow if self.drag.is_some() => CursorIcon::Grabbing,
             Tool::Arrow if matches!(self.hover_grip, Some(Grip::Body)) => CursorIcon::Move,
             Tool::Arrow if self.hover_grip.is_some() => CursorIcon::Grab,
@@ -210,6 +215,18 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Column | Tool::Beam => {
+                let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+                if let Some(a) = self.beam_tool.anchor.filter(|_| self.tool == Tool::Beam) {
+                    if ctx.input(|i| i.modifiers.shift) {
+                        s = constrain(a, s);
+                    } else {
+                        s = self.track_at(a, s);
+                    }
+                }
+                self.cursor = Some(s);
+                self.hover = None;
+            }
             Tool::Door | Tool::Window => {
                 let settings = if self.tool == Tool::Door {
                     self.door_settings
@@ -282,8 +299,10 @@ impl ArchiSimApp {
             self.keyboard_while_dragging(ctx, &events, enter, escape, backspace);
             return;
         }
-        let drawing =
-            self.wall_tool.is_drawing() || self.slab_tool.is_drawing() || self.dim_tool.is_active();
+        let drawing = self.wall_tool.is_drawing()
+            || self.slab_tool.is_drawing()
+            || self.dim_tool.is_active()
+            || self.beam_tool.is_drawing();
         let mut used_text = false;
         for e in &events {
             if let egui::Event::Text(t) = e {
@@ -334,7 +353,20 @@ impl ArchiSimApp {
                     });
                 }
                 Tool::Arrow => {
-                    self.flip_selected(None);
+                    let sel: Vec<Element> = self.ed.selection.iter().copied().collect();
+                    match self.ed.turn_members(&sel) {
+                        Ok(0) => {
+                            self.flip_selected(None);
+                        }
+                        Ok(_) => self.say("Pilares girados 90° / vigas invertidas."),
+                        Err(e) => self.complain(format!("No se puede girar: {e}.")),
+                    }
+                }
+                Tool::Column => {
+                    let r = &mut self.column_settings.rotation;
+                    *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
+                    let deg = r.to_degrees().round();
+                    self.say(format!("Giro del pilar: {deg}° (Espacio: +90°)."));
                 }
                 _ => {}
             }
@@ -372,7 +404,14 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Door | Tool::Window => self.set_tool(Tool::Arrow),
+                Tool::Door | Tool::Window | Tool::Column => self.set_tool(Tool::Arrow),
+                Tool::Beam => {
+                    if self.beam_tool.is_drawing() {
+                        self.beam_tool.finish();
+                    } else {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Dimension => {
                     if !self.dim_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -483,6 +522,18 @@ impl ArchiSimApp {
             Tool::Door | Tool::Window => {
                 if response.clicked_by(PointerButton::Primary) {
                     self.place_opening();
+                }
+            }
+            Tool::Column | Tool::Beam => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.member_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary)
+                    || response.double_clicked_by(PointerButton::Primary)
+                {
+                    self.beam_tool.finish();
                 }
             }
             Tool::Dimension => {
@@ -655,15 +706,34 @@ impl ArchiSimApp {
         }
     }
 
+    /// The project origin (0, 0, ±0,00), as the survey mark of a hotspot:
+    /// a circle with two filled quarters. It is a snap point of its own.
     fn draw_origin(&self, painter: &egui::Painter, rect: Rect) {
         let o = self.view.to_screen(rect, Point2::new(0.0, 0.0));
-        let s = Stroke::new(1.0, Color32::from_rgb(120, 120, 130));
-        painter.line_segment([o - Vec2::new(8.0, 0.0), o + Vec2::new(8.0, 0.0)], s);
-        painter.line_segment([o - Vec2::new(0.0, 8.0), o + Vec2::new(0.0, 8.0)], s);
-        painter.circle_stroke(o, 4.0, s);
+        let ink = Color32::from_rgb(70, 72, 84);
+        let s = Stroke::new(1.2, ink);
+        let r = 6.0;
+        for (a0, a1) in [(0.0f32, 90.0f32), (180.0, 270.0)] {
+            let mut pts = vec![o];
+            for k in 0..=8 {
+                let a = (a0 + (a1 - a0) * k as f32 / 8.0).to_radians();
+                // Screen y grows downwards: quarters NE and SW.
+                pts.push(o + Vec2::new(r * a.cos(), -r * a.sin()));
+            }
+            painter.add(Shape::convex_polygon(pts, ink, Stroke::NONE));
+        }
+        painter.circle_stroke(o, r, s);
+        painter.line_segment(
+            [o - Vec2::new(r + 5.0, 0.0), o + Vec2::new(r + 5.0, 0.0)],
+            s,
+        );
+        painter.line_segment(
+            [o - Vec2::new(0.0, r + 5.0), o + Vec2::new(0.0, r + 5.0)],
+            s,
+        );
     }
 
-    fn polygon(&self, rect: Rect, poly: &[Point2]) -> Vec<Pos2> {
+    pub(super) fn polygon(&self, rect: Rect, poly: &[Point2]) -> Vec<Pos2> {
         poly.iter().map(|p| self.view.to_screen(rect, *p)).collect()
     }
 
@@ -1154,6 +1224,7 @@ impl ArchiSimApp {
         match self.tool {
             Tool::Wall => self.wall_tool.anchor(),
             Tool::Slab => self.slab_tool.anchor(),
+            Tool::Beam => self.beam_tool.anchor,
             Tool::Dimension if !self.dim_tool.is_placing() => {
                 self.dim_tool.points().last().copied()
             }
@@ -1216,6 +1287,15 @@ impl ArchiSimApp {
             SnapKind::Centre => {
                 painter.circle_stroke(p, 6.0, stroke);
                 painter.circle_filled(p, 1.8, stroke.color);
+            }
+            SnapKind::Origin => {
+                painter.circle_stroke(p, 10.0, Stroke::new(2.0, stroke.color));
+                painter.rect_stroke(
+                    Rect::from_center_size(p, Vec2::splat(13.0)),
+                    CornerRadius::ZERO,
+                    stroke,
+                    StrokeKind::Middle,
+                );
             }
             SnapKind::OnEdge => {
                 painter.line_segment([p + Vec2::new(-5.0, -5.0), p + Vec2::new(5.0, 5.0)], stroke);

@@ -326,9 +326,66 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         madera,
     )?;
 
-    // Structure (v0.25). Materials added last so older ids stay put.
-    let acero = m.add_material("Acero S275", "steel", [120, 126, 134], CutPattern::Solid);
-    let glulam = m.add_material(
+    // Structure (v0.25), added last so older ids stay put.
+    let (column, beam) = add_structure_with(m, hormigon)?;
+
+    Ok(Library {
+        void,
+        facade,
+        partition,
+        bearing_wall,
+        ground_slab,
+        floor_slab,
+        flat_roof,
+        entrance_door,
+        interior_door,
+        double_door,
+        sliding_door,
+        window_two_leaves,
+        window_one_leaf,
+        balcony_door,
+        fixed_window,
+        column,
+        beam,
+    })
+}
+
+/// Adds the column and beam types of the library (and their steel and
+/// timber materials) to a model that has none, e.g. an imported one.
+/// Materials already in the model with the same name are reused.
+/// Returns the default column and beam types.
+pub fn add_structure(m: &mut Model) -> Result<(MemberTypeId, MemberTypeId), ModelError> {
+    let concrete = material_named(
+        m,
+        "Hormigón armado",
+        "concrete",
+        [205, 205, 205],
+        CutPattern::Cross,
+    );
+    add_structure_with(m, concrete)
+}
+
+fn material_named(
+    m: &mut Model,
+    name: &str,
+    category: &str,
+    color: [u8; 3],
+    pattern: CutPattern,
+) -> MaterialId {
+    let found = m.materials().find(|x| x.name == name).map(|x| x.id);
+    match found {
+        Some(id) => id,
+        None => m.add_material(name, category, color, pattern),
+    }
+}
+
+fn add_structure_with(
+    m: &mut Model,
+    hormigon: MaterialId,
+) -> Result<(MemberTypeId, MemberTypeId), ModelError> {
+    let acero = material_named(m, "Acero S275", "steel", [120, 126, 134], CutPattern::Solid);
+    let glulam = material_named(
+        m,
         "Madera laminada GL24h",
         "wood",
         [214, 176, 120],
@@ -406,25 +463,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         rect(0.16, 0.32),
     )?;
 
-    Ok(Library {
-        void,
-        facade,
-        partition,
-        bearing_wall,
-        ground_slab,
-        floor_slab,
-        flat_roof,
-        entrance_door,
-        interior_door,
-        double_door,
-        sliding_door,
-        window_two_leaves,
-        window_one_leaf,
-        balcony_door,
-        fixed_window,
-        column,
-        beam,
-    })
+    Ok((column, beam))
 }
 
 #[cfg(test)]

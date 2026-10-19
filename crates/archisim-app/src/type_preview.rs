@@ -176,9 +176,61 @@ pub fn opening_model(source: &Model, t: &OpeningType) -> Option<(Model, LevelId)
     Some((m, level))
 }
 
-/// Draws a preview model around its wall, `px_per_m` pixels per metre.
-/// Returns the image and the drawn region (lower-left, upper-right).
+/// A model with one column of the section and material of a column or
+/// beam type, cut in plan: the section as the plan draws it.
+pub fn member_model(source: &Model, t: &archisim_core::MemberType) -> Option<(Model, LevelId)> {
+    let mut m = Model::new("preview");
+    let level = m.add_level("preview", 0.0);
+    let mat = source.material(t.material)?;
+    let mid = m.add_material(
+        mat.name.clone(),
+        mat.category.clone(),
+        mat.cut_color,
+        mat.cut_pattern,
+    );
+    let ct = m
+        .add_member_type(
+            "preview",
+            archisim_core::MemberUsage::Column,
+            mid,
+            t.profile,
+        )
+        .ok()?;
+    m.add_column(archisim_core::NewColumn {
+        member_type: ct,
+        level,
+        position: Point2::new(0.0, 0.0),
+        rotation: 0.0,
+        base_offset: 0.0,
+        top: archisim_core::WallTop::Unconnected,
+        height: 3.0,
+    })
+    .ok()?;
+    Some((m, level))
+}
+
+/// Draws a preview model around its wall (or its column), `px_per_m`
+/// pixels per metre. Returns the image and the drawn region (lower-left,
+/// upper-right).
 pub fn draw(model: &Model, level: LevelId, px_per_m: f64) -> (ColorImage, Point2, Point2) {
+    if model.walls().next().is_none() {
+        if let Some(c) = model.columns().next() {
+            let (w, d) = model
+                .member_type(c.member_type)
+                .map_or((0.3, 0.3), |t| t.profile.size());
+            // Square, with room around the section.
+            let half = w.max(d) / 2.0 + 0.06;
+            let lo = Point2::new(-half, -half);
+            let hi = Point2::new(half, half);
+            let n = ((2.0 * half) * px_per_m).round().max(1.0) as usize;
+            let options = PlanOptions {
+                scale: PREVIEW_SCALE,
+                viewport: Some((lo, hi)),
+                ..PlanOptions::default()
+            };
+            return (rasterize_with(model, level, [n, n], &options), lo, hi);
+        }
+    }
     let wall = model.walls().next();
     let (length, thickness) = wall.map_or((1.0, 0.3), |w| {
         let t = model.wall_type(w.wall_type).map_or(0.3, |t| t.thickness());

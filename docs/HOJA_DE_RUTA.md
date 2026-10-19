@@ -51,7 +51,7 @@ Cosas pequeñas que faltan para trabajar con comodidad con lo que ya existe.
 | 2.2 | **Librería inicial propia**: puertas y ventanas paramétricas (con premarco, persiana y capialzado, vierteaguas, tarjas, puerta de dos hojas desiguales y hoja activa, corredera empotrada en armazón, corredera de hasta 4 hojas, **puerta plegable**), mobiliario, sanitarios, cocina; plantilla con un catálogo de tipos habituales de AD5 | L | 2.1 |
 | 2.3 ◐ v0.11 | **Uniones en T y prioridades de intersección por capa** (la estructura atraviesa, los acabados se detienen), como ArchiCAD — hechas; falta el recorte de muros con forjados y las prioridades editables por material | M | — |
 | 2.4 | **Cubiertas inclinadas** por faldones (pendiente, aleros, limatesas y limahoyas) y recorte de muros bajo cubierta | L | 2.3 |
-| 2.5 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam`; también importarlos | M | — |
+| 2.5 ◐ v0.25 | **Pilares y vigas** (hormigón, acero, madera) con perfiles; `IfcColumn`, `IfcBeam`; también importarlos — hechos (sección rectangular, circular e I/H, restricción superior de pilares, planta, 3D, IFC e importación); falta el recorte con muros y forjados y los perfiles L, U, T y tubos | M | — |
 | 2.6 | **Escaleras** por tramos y mesetas con comprobación de huella, tabica y anchura (CTE DB-SUA); **barandillas**; **rampas** | L | 2.1 |
 | 2.7 ◐ v0.20 | **Huecos en forjados** (hechos) y **forjados inclinados** (también importarlos) | S | — |
 | 2.8 ◐ v0.19 | **Muros curvos** (hechos, sin huecos todavía), **muros de perfil complejo y muros cortina** (montantes, travesaños, paneles) | L | 2.1 |

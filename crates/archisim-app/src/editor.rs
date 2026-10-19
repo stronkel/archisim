@@ -18,7 +18,10 @@ use crate::pick::Element;
 use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
+mod structure;
 mod types;
+
+pub use structure::{default_member_type, normal_angle, BeamSettings, ColumnSettings};
 
 /// Settings of the wall tool (ArchiCAD "Cuadro de información").
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -138,6 +141,9 @@ impl Editor {
             || !model.opening_types().any(|t| t.is_window());
         if lacks_types {
             archisim_library::add_library(&mut model).map_err(|e| explain(&e))?;
+        } else if model.member_types().next().is_none() {
+            // Columns and beams to draw with, even if the file had none.
+            archisim_library::add_structure(&mut model).map_err(|e| explain(&e))?;
         }
         let mut ed = Self::with_model(model, None);
         // Not saved anywhere yet: closing asks first.
@@ -542,7 +548,12 @@ impl Editor {
         let movable: Vec<Element> = items
             .iter()
             .copied()
-            .filter(|e| matches!(e, Element::Wall(_) | Element::Slab(_)))
+            .filter(|e| {
+                matches!(
+                    e,
+                    Element::Wall(_) | Element::Slab(_) | Element::Column(_) | Element::Beam(_)
+                )
+            })
             .collect();
         if movable.is_empty() {
             return Ok(0);
@@ -552,6 +563,8 @@ impl Editor {
                 match e {
                     Element::Wall(id) => m.set_wall_level(*id, level)?,
                     Element::Slab(id) => m.set_slab_level(*id, level)?,
+                    Element::Column(id) => m.set_column_level(*id, level)?,
+                    Element::Beam(id) => m.edit_beam(*id, |b| b.level = level)?,
                     _ => {}
                 }
             }

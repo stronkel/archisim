@@ -1,4 +1,4 @@
-# Formato de proyecto `.archisim` (versión 6)
+# Formato de proyecto `.archisim` (versión 7)
 
 El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensión `.archisim`. Es el equivalente al `.pln` de ArchiCAD o al `.rvt` de Revit, pero legible con cualquier editor de texto y comparable entre versiones (Git, diff).
 
@@ -6,7 +6,7 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 
 - **Todo en metros.** El campo `"units": "m"` lo deja escrito. La interfaz mostrará milímetros, pero el fichero guarda metros.
 - **Identidad estable.** Cada elemento conserva su `id` interno y su `guid` (el `GlobalId` IFC de 22 caracteres). Guardar, abrir y volver a exportar da **el mismo IFC**: los ingenieros pueden federar y comparar versiones sin que los elementos "cambien de identidad".
-- **Versionado.** `"version": 6` es la versión del formato, no del programa. ArchiSim actualiza los ficheros antiguos al abrirlos: la versión 1 (ArchiSim 0.4 a 0.9) se abre añadiendo listas de cotas vacías; la versión 2 (ArchiSim 0.10 a 0.13) convirtiendo cada tipo de puerta o ventana en un tipo de la familia de sistema que le corresponde, con el mismo nombre, `guid`, medidas y materiales, y una marca nueva (P-01… para puertas, V-01… para ventanas, por orden); la versión 3 (ArchiSim 0.14 a 0.16) se abre tal cual, con todos sus muros de altura propia; la versión 4 (ArchiSim 0.17 y 0.18), tal cual, con todos sus muros rectos; la versión 5 (ArchiSim 0.19), tal cual, sin huecos de forjado ni huecos sin carpintería (la familia Hueco). Un fichero guardado por un ArchiSim más nuevo se rechaza con un aviso claro en vez de abrirse mal.
+- **Versionado.** `"version": 7` es la versión del formato, no del programa. ArchiSim actualiza los ficheros antiguos al abrirlos: la versión 1 (ArchiSim 0.4 a 0.9) se abre añadiendo listas de cotas vacías; la versión 2 (ArchiSim 0.10 a 0.13) convirtiendo cada tipo de puerta o ventana en un tipo de la familia de sistema que le corresponde, con el mismo nombre, `guid`, medidas y materiales, y una marca nueva (P-01… para puertas, V-01… para ventanas, por orden); la versión 3 (ArchiSim 0.14 a 0.16) se abre tal cual, con todos sus muros de altura propia; la versión 4 (ArchiSim 0.17 y 0.18), tal cual, con todos sus muros rectos; la versión 5 (ArchiSim 0.19), tal cual, sin huecos de forjado ni huecos sin carpintería (la familia Hueco); la versión 6 (ArchiSim 0.20 a 0.24), tal cual, sin pilares ni vigas. Un fichero guardado por un ArchiSim más nuevo se rechaza con un aviso claro en vez de abrirse mal.
 - **Familias dentro del proyecto.** El fichero lleva copia de la receta de cada familia que usa (como Revit guarda sus familias cargadas), así que el proyecto se abre igual en cualquier ordenador aunque la biblioteca cambie.
 - **Se comprueba al abrir.** El modelo se reconstruye aplicando las mismas reglas que al dibujar: referencias existentes, `id` y `guid` únicos, números válidos, contornos sin cruces, puertas y ventanas dentro de su muro y sin solaparse. Si algo falla, el proyecto no se abre a medias: se dice qué elemento y por qué.
 - **Guardado seguro.** Se escribe primero un fichero temporal junto al definitivo y luego se sustituye; un corte de luz al guardar no deja un proyecto truncado.
@@ -29,6 +29,9 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `openings` | Puertas y ventanas: muro, posición del centro (`along`), antepecho (`sill`), lado de apertura, mano (UNE-EN 12519), retranqueo (`null` = centrada) y, si la familia los tiene, sus parámetros de ejemplar (`values`) | `IfcOpeningElement` + `IfcDoor` / `IfcWindow` |
 | `dimensions` | Cotas de planta (versión 2): planta, puntos medidos (`points`), dirección de medida (`direction`, vector unitario) y un punto por el que pasa la línea de cota (`position`) | No se exporta (anotación) |
 | `elevation_marks` | Cotas de nivel (versión 2): planta y punto. El valor no se guarda: se lee del forjado que hay debajo | No se exporta (anotación) |
+| `member_types` | Tipos de pilar y viga (versión 7): nombre, uso (`column` / `beam`), material (`id`) y sección `profile`: `{"shape": "rectangle", "width", "depth"}`, `{"shape": "circle", "diameter"}` o `{"shape": "i_shape", "width", "depth", "web", "flange"}` (metros) | `IfcColumnType` / `IfcBeamType` + `IfcMaterialProfileSet` |
+| `columns` | Pilares (versión 7): `type`, `level`, centro (`position`), giro de la sección (`rotation`, radianes; sin él, 0), desfase de base, altura y, si llega hasta una planta, `top` como en los muros | `IfcColumn` |
+| `beams` | Vigas (versión 7): `type`, `level`, `start` y `end` de su eje y `top_offset`, la altura de su cara superior sobre la planta (la sección cuelga hacia abajo) | `IfcBeam` |
 
 Las referencias entre elementos van por `id`: un muro con `"type": 7` usa el tipo de muro cuyo `id` es 7.
 

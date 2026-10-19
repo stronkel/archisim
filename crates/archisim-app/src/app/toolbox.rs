@@ -66,7 +66,13 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "M",
                 "Muros multicapa por su línea de referencia",
             ),
-            tile(Pick::Later("2.5"), Icon::Column, "Pilar", "", "Pilares"),
+            tile(
+                Pick::Tool(Tool::Column),
+                Icon::Column,
+                "Pilar",
+                "I",
+                "Pilares de hormigón, acero o madera, hasta la planta superior",
+            ),
             tile(
                 Pick::Tool(Tool::Slab),
                 Icon::Slab,
@@ -74,7 +80,13 @@ pub const SECTIONS: &[(&str, &[Tile])] = &[
                 "F",
                 "Forjados por contorno o con la varita mágica",
             ),
-            tile(Pick::Later("2.5"), Icon::Beam, "Viga", "", "Vigas"),
+            tile(
+                Pick::Tool(Tool::Beam),
+                Icon::Beam,
+                "Viga",
+                "G",
+                "Vigas por dos puntos, colgadas de la planta superior",
+            ),
             tile(
                 Pick::Tool(Tool::Door),
                 Icon::Door,

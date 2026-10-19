@@ -133,6 +133,10 @@ impl Profile {
     }
 }
 
+/// Registers an id (and GUID) while rebuilding a model, rejecting
+/// duplicates.
+pub(super) type Claim<'a> = dyn FnMut(u64, Option<&GlobalId>) -> Result<(), ModelError> + 'a;
+
 /// Whether a member type is for columns or for beams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemberUsage {
@@ -418,6 +422,32 @@ impl Model {
         Ok(())
     }
 
+    /// Moves a column to another level, keeping its offsets; one that
+    /// reached the level above its old one reaches the level above the new
+    /// one (as walls do).
+    pub fn set_column_level(&mut self, id: ColumnId, level: LevelId) -> Result<(), ModelError> {
+        if !self.levels.contains_key(&level) {
+            return Err(ModelError::UnknownLevel(level));
+        }
+        let c = self.columns.get(&id).ok_or(ModelError::UnknownColumn(id))?;
+        if c.level == level {
+            return Ok(());
+        }
+        let top = match c.top {
+            WallTop::Level { level: top, offset } if Some(top) == self.level_above(c.level) => {
+                match self.level_above(level) {
+                    Some(l) => WallTop::Level { level: l, offset },
+                    None => WallTop::Unconnected,
+                }
+            }
+            t => t,
+        };
+        self.edit_column(id, |c| {
+            c.level = level;
+            c.top = top;
+        })
+    }
+
     pub fn remove_column(&mut self, id: ColumnId) -> Result<Column, ModelError> {
         self.columns
             .remove(&id)
@@ -542,7 +572,7 @@ impl Model {
         types: Vec<MemberType>,
         columns: Vec<Column>,
         beams: Vec<Beam>,
-        claim: &mut dyn FnMut(u64, Option<&GlobalId>) -> Result<(), ModelError>,
+        claim: &mut Claim<'_>,
     ) -> Result<(), RestoreError> {
         let fail = |element: String| move |error: ModelError| RestoreError { element, error };
         for t in types {

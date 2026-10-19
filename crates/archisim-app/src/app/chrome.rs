@@ -478,7 +478,7 @@ impl ArchiSimApp {
             Tool::Arrow if self.single_curved_wall_selected() => "Círculo blanco: curvar · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Propiedades: radio · Supr: borrar",
             Tool::Arrow if self.single_wall_selected() => "Clic en una cota azul: medida exacta · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Supr: borrar",
             Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar: mover · Ctrl: copiar · Extremo o esquina: estirar · Rombo: mover la arista · Supr: borrar · Esc: anular",
-            Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C: herramientas",
+            Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C I G: herramientas",
             Tool::Wall => self.wall_hint(),
             Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Clic: dentro de un recinto de muros · Esc: flecha",
             Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina · Espacio + clic: varita mágica · Esc: flecha",
@@ -486,6 +486,9 @@ impl ArchiSimApp {
             Tool::Slab => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Longitud + Intro: exacto · Esc: quitar la última",
             Tool::Door | Tool::Window => "Clic sobre un muro: colocar, centrada en el cursor, abriendo hacia ese lado · Espacio: cambiar la mano · Esc: flecha",
             Tool::Dimension => self.dim_hint(),
+            Tool::Column => "Clic: centro del pilar · Espacio: girar 90° · Esc: flecha",
+            Tool::Beam if self.beam_tool.is_drawing() => "Clic: final de la viga (y comienzo de la siguiente) · Mayús: 45° · Clic derecho o Esc: terminar",
+            Tool::Beam => "Clic: inicio de la viga · Esc: flecha",
         }
     }
 

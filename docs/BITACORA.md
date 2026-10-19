@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5) y punto 0 forzable (v0.25, rama `bloque/fase2-noche`)
+
+Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientras dormía, más cuatro mejoras pequeñas. Todo va en la rama `bloque/fase2-noche` (pull request para revisar), con commit y push tras cada avance. Esta entrada se completa conforme avanza la noche.
+
+**Hecho**
+- **Pilares y vigas (2.5)**, de punta a punta:
+  - Modelo: tipos de pilar y de viga (nombre, material y sección rectangular, circular o perfil I/H), pilares (centro, giro, desfase de base y restricción superior como los muros: siguen las cotas de las plantas) y vigas (eje por dos puntos y cara superior sobre su planta; la sección cuelga). Se rechaza lo que no cabe (un pilar unido a una planta que quedaría sin altura, un alma más gruesa que el perfil…).
+  - Plantilla: pilares HA 25×25, 30×30, 40×40, Ø30, HEB 160 y madera GL24h 20×20; vigas HA 30×50, plana HA 60×30, IPE 300 y madera GL24h 16×32 (materiales nuevos: «Acero S275» y «Madera laminada GL24h»). Al importar un IFC sin tipos de pilar y viga se añaden.
+  - Formato `.archisim` **versión 7** (`member_types`, `columns`, `beams`); los ficheros anteriores se abren igual.
+  - Planta: el pilar cortado por el plano de corte se dibuja con el relleno y la trama de su material y línea gruesa, **encima de los muros** (el hormigón atraviesa la fábrica); también los de otras plantas que el plano de corte atraviesa. Las vigas de la planta y las de la planta de encima (las del techo) se dibujan discontinuas; cortadas, rellenas.
+  - 3D: pilares y vigas con el color de su material.
+  - IFC: `IfcColumnType`/`IfcBeamType` con `IfcMaterialProfileSet` (perfil paramétrico `IfcRectangleProfileDef`, `IfcCircleProfileDef` o `IfcIShapeProfileDef`, compartido por el tipo), `IfcColumn`/`IfcBeam` extruidos de ese perfil, `Pset_ColumnCommon`/`Pset_BeamCommon` (`LoadBearing` = sí) y `Qto_ColumnBaseQuantities`/`Qto_BeamBaseQuantities` (longitud, área de la sección, volumen). Validado con IfcOpenShell (volúmenes incluidos).
+  - Importación: pilares y vigas de cualquier programa (sección del perfil del material o de la extrusión; si no, la caja del sólido, con aviso); la ida y vuelta de ArchiSim sale idéntica.
+  - Aplicación: herramientas **Pilar (I)** y **Viga (G)** en la caja. Pilar: clic en el centro; Espacio gira 90° el siguiente; por defecto llega hasta la planta superior. Viga: clic inicio, clic final, y sigue encadenando; Esc o clic derecho termina; dibujada en una planta, por defecto pertenece a la de encima (lleva su forjado, como en Revit). Fuerzan al centro y esquinas de los pilares y a extremos y punto medio de las vigas. Seleccionados: mover, copiar (Ctrl), estirar los extremos de una viga, borrar, Espacio (gira el pilar 90° / invierte la viga), cambiar de planta, y en Propiedades sus restricciones, giro, longitud, volumen y el grupo **Tipo** (nombre, material, forma y medidas de la sección, duplicar y borrar tipo), que cambia todos los elementos del tipo. En el navegador, categorías Pilares y Vigas con su número.
+  - Demo: porche al sur con dos pilares HA 30×30 y una viga HA 30×50 bajo un forjado de cubierta.
+- **Punto 0 del proyecto forzable** (mejora 1 de Antonio): el origen (0, 0) se dibuja como un hito (círculo con dos cuartos rellenos) y es un punto de forzado propio, «Punto 0 del proyecto», que alcanza desde algo más lejos que los demás, para empezar muros, líneas o cotas desde él.
+- Versión 0.25.0.
+
+**Pendiente / limitaciones conocidas**
+- Pilares y vigas aún no recortan muros ni forjados (en planta el pilar tapa el muro; en 3D y en el IFC se solapan) ni se unen entre sí.
+- Pilares y vigas inclinados, perfiles en L, U, T y tubos: más adelante.
+
+**Antonio debe probar**
+1. Descarga la versión de la rama (pull request «Fase 2 nocturna…», *Artifacts*) y abre `demo.archisim`: abajo, el porche con dos pilares cortados y la viga discontinua. En el navegador, Pilares (2) y Vigas (1).
+2. Herramienta **Pilar** (tecla I): coloca pilares; Espacio los gira; cambia en Propiedades el tipo (galería con su sección). En la planta superior el pilar llega hasta ella: cambia la cota de esa planta en *Plantas…* y mira que el pilar la sigue (Propiedades → Altura).
+3. Herramienta **Viga** (tecla G) en planta baja: une los centros de dos pilares. La viga sale discontinua (es de la planta de encima). Abre la Vista 3D.
+4. Selecciona un pilar: en Propiedades → **Tipo**, cambia el ancho a 350: cambian todos los pilares de ese tipo. Prueba «Duplicar tipo» y «Perfil I / H».
+5. *Exportar IFC* y ábrelo en **ArchiCAD y Revit**: ¿se ven pilares y vigas con su perfil, como pilares y vigas (no como objetos genéricos), con su material y el tipo con su nombre?
+6. Pasa el cursor cerca del punto 0 (el hito de la esquina suroeste de la demo) con la herramienta Muro: debe engancharse a él («Punto 0 del proyecto» abajo a la derecha).
+
 ## 2026-10-19 · Familias, bloque D — diálogo de tipos al estilo ArchiCAD y tipos de línea (v0.24)
 
 **Hecho**

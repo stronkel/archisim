@@ -1751,3 +1751,64 @@ fn slab_holes_and_voids_by_clicks() {
     let diffs = archisim_ifc::differences(h.model(), &back.model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// Columns and beams with the mouse (2.5): `i` places columns that reach
+/// the level above, `g` chains beams hanging from it; Space turns a
+/// column; the type's section is edited in place; and they move, copy
+/// and delete like the rest.
+#[test]
+fn column_and_beam_tools() {
+    let mut ed = Editor::new_project();
+    let pb = ed.level;
+    ed.add_level("Planta 1", 3.0).unwrap();
+    ed.level = pb;
+    let mut h = Harness::new(ed);
+    h.type_text("i");
+    assert_eq!(h.app.tool, Tool::Column);
+    h.click_at(p(0.0, 0.0));
+    // Space turns the next one a quarter.
+    h.key(Key::Space);
+    h.click_at(p(5.0, 0.0));
+    assert_eq!(h.model().columns().count(), 2, "{:?}", h.app.message);
+    let cols: Vec<_> = h.model().columns().cloned().collect();
+    // Snapped to the project origin, up to the floor above.
+    assert_eq!(cols[0].position, p(0.0, 0.0));
+    assert!((cols[0].height - 3.0).abs() < 1e-9);
+    assert!((cols[1].rotation - std::f64::consts::FRAC_PI_2).abs() < 1e-12);
+
+    h.key(Key::Escape);
+    h.type_text("g");
+    assert_eq!(h.app.tool, Tool::Beam);
+    // From centre to centre of the columns (they snap), then on.
+    h.click_at(p(0.02, 0.01));
+    h.click_at(p(4.99, -0.02));
+    h.click_at(p(5.0, 4.0));
+    h.key(Key::Escape);
+    let m = h.model();
+    assert_eq!(m.beams().count(), 2, "{:?}", h.app.message);
+    let b = m.beams().next().unwrap();
+    assert_eq!((b.start, b.end), (p(0.0, 0.0), p(5.0, 0.0)));
+    // Drawn on the ground floor, it belongs to the floor it carries.
+    assert_eq!(m.level(b.level).unwrap().name, "Planta 1");
+
+    // Select the first column and move it 1 m north.
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let first = cols[0].id;
+    h.click_at(p(0.05, 0.05));
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Column(first)]
+    );
+    h.drag(p(0.05, 0.05), p(0.0, 1.0));
+    assert_eq!(h.model().column(first).unwrap().position, p(0.0, 1.0));
+    // Space turns it.
+    h.key(Key::Space);
+    assert!(h.model().column(first).unwrap().rotation.abs() > 1.0);
+    // Delete.
+    h.key(Key::Delete);
+    assert_eq!(h.model().columns().count(), 1);
+    // The plan draws the remaining column cut and the beams dashed.
+    let svg = archisim_plan::render_plan(h.model(), pb, &archisim_plan::PlanOptions::default());
+    assert!(svg.contains("cut-column-"), "{svg}");
+}

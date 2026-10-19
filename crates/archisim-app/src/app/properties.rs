@@ -49,19 +49,21 @@ impl ArchiSimApp {
             [Element::Slab(id)] => self.slab_properties(ui, *id),
             [Element::Dimension(id)] => self.dimension_properties(ui, *id),
             [Element::Mark(id)] => self.mark_properties(ui, *id),
+            [Element::Column(id)] => self.column_properties(ui, *id),
+            [Element::Beam(id)] => self.beam_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
     }
 
     /// The elements of the current level of the same type as `e`.
-    fn same_type(&self, e: Element) -> Vec<Element> {
+    pub(super) fn same_type(&self, e: Element) -> Vec<Element> {
         let model = self.ed.model();
         crate::pick::type_of(model, e)
             .map(|t| crate::pick::of_type_on_level(model, self.ed.level, t))
             .unwrap_or_default()
     }
 
-    fn select_instances(&mut self, found: Vec<Element>, what: &str) {
+    pub(super) fn select_instances(&mut self, found: Vec<Element>, what: &str) {
         let n = found.len();
         self.ed.selection = found.into_iter().collect();
         self.say(format!(
@@ -72,7 +74,7 @@ impl ArchiSimApp {
     /// What the pictures of the types depend on besides the type itself:
     /// the colours and hatches of the materials (and, for doors and
     /// windows, the walls that host them in the picture).
-    fn picture_signature(&self, hosts: bool) -> String {
+    pub(super) fn picture_signature(&self, hosts: bool) -> String {
         let m = self.ed.model();
         let mats: Vec<_> = m
             .materials()
@@ -189,6 +191,8 @@ impl ArchiSimApp {
             Tool::Door => self.opening_tool_properties(ui, true),
             Tool::Window => self.opening_tool_properties(ui, false),
             Tool::Dimension => self.dim_tool_properties(ui),
+            Tool::Column => self.column_tool_properties(ui),
+            Tool::Beam => self.beam_tool_properties(ui),
         }
     }
 
@@ -852,7 +856,7 @@ impl ArchiSimApp {
     }
 
     /// The levels above `base`, bottom to top, with their names.
-    fn levels_above(&self, base: LevelId) -> Vec<(LevelId, String)> {
+    pub(super) fn levels_above(&self, base: LevelId) -> Vec<(LevelId, String)> {
         let m = self.ed.model();
         let z = m.level(base).map_or(0.0, |l| l.elevation);
         m.levels()
@@ -866,7 +870,7 @@ impl ArchiSimApp {
     /// ArchiCAD's home storey), as a list of every level: choosing another
     /// moves them there with their doors and windows. `current` is `None`
     /// when they are on different levels.
-    fn level_row(
+    pub(super) fn level_row(
         &mut self,
         ui: &mut Ui,
         salt: impl std::hash::Hash + std::fmt::Debug,
