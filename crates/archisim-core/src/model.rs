@@ -297,9 +297,78 @@ pub struct Slab {
     /// Holes through the slab (stairs, shafts), each a closed outline
     /// inside `outline`, counter-clockwise. IFC: the voids of the profile.
     pub holes: Vec<Vec<Point2>>,
+    /// Inclined slabs (ramps, sloping floors): how the top face rises.
+    /// `None`: level.
+    pub slope: Option<SlabSlope>,
+}
+
+/// Slope of an inclined slab, as Revit's slope arrow: the top face is at
+/// the slab's `top_offset` along the line through `from` square to the
+/// arrow, and rises `slope` metres per metre (0.08 = 8 %) towards `to`
+/// (falls if negative). The layers keep their thickness square to the
+/// face; the edges of the slab stay vertical, so its plan is its outline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SlabSlope {
+    pub from: Point2,
+    pub to: Point2,
+    pub slope: f64,
+}
+
+/// Steepest slope a slab may have (metres per metre; 3 ≈ 72°).
+pub const MAX_SLAB_SLOPE: f64 = 3.0;
+
+impl SlabSlope {
+    /// Unit vector of the arrow, in plan.
+    pub fn direction(&self) -> Option<Vec2> {
+        (self.to - self.from).normalized()
+    }
+
+    /// How much higher the top face is at `p` than at `from`.
+    pub fn rise_at(&self, p: Point2) -> f64 {
+        self.direction()
+            .map_or(0.0, |u| (p - self.from).dot(u) * self.slope)
+    }
+
+    /// Vertical height of a layer of `thickness` measured square to the
+    /// sloping face.
+    pub fn vertical(&self, thickness: f64) -> f64 {
+        thickness * (1.0 + self.slope * self.slope).sqrt()
+    }
+
+    fn validate(&self) -> Result<(), ModelError> {
+        finite_point(self.from, "slab slope start")?;
+        finite_point(self.to, "slab slope end")?;
+        finite(self.slope, "slab slope")?;
+        if self.from.approx_eq(self.to) || self.slope.abs() > MAX_SLAB_SLOPE {
+            return Err(ModelError::InvalidSlope);
+        }
+        Ok(())
+    }
 }
 
 impl Slab {
+    /// Height of the top face above the level at `p` (its `top_offset`
+    /// if it is level).
+    pub fn top_at(&self, p: Point2) -> f64 {
+        self.top_offset + self.slope.map_or(0.0, |s| s.rise_at(p))
+    }
+
+    /// Lowest and highest height of the top face above the level.
+    pub fn top_range(&self) -> (f64, f64) {
+        self.outline
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                let z = self.top_at(*p);
+                (lo.min(z), hi.max(z))
+            })
+    }
+
+    /// Vertical height of a layer at this slab (more than its thickness
+    /// if it slopes).
+    pub fn vertical(&self, thickness: f64) -> f64 {
+        self.slope.map_or(thickness, |s| s.vertical(thickness))
+    }
+
     /// Plan area of the outline less its holes (net area).
     pub fn area(&self) -> f64 {
         signed_area(&self.outline).abs()
@@ -677,6 +746,8 @@ pub enum ModelError {
     UnknownSection(SectionId),
     /// A section line needs two different points.
     ZeroLengthSection,
+    /// A slab slope with no direction or steeper than [`MAX_SLAB_SLOPE`].
+    InvalidSlope,
     /// Another room on the level already has that number.
     DuplicateNumber(String),
 }
@@ -773,6 +844,10 @@ impl fmt::Display for ModelError {
             ModelError::UnknownElement(id) => write!(f, "element {id} does not exist"),
             ModelError::UnknownSection(id) => write!(f, "section {id} does not exist"),
             ModelError::ZeroLengthSection => write!(f, "a section line needs two different points"),
+            ModelError::InvalidSlope => write!(
+                f,
+                "a slab slope needs a direction and at most {MAX_SLAB_SLOPE} m per metre"
+            ),
             ModelError::DuplicateNumber(n) => {
                 write!(f, "another room on the level already has the number «{n}»")
             }
@@ -1783,6 +1858,7 @@ impl Model {
                 outline,
                 top_offset: spec.top_offset,
                 holes: Vec::new(),
+                slope: None,
             },
         );
         self.stamp_phase(id.0);
@@ -1810,6 +1886,24 @@ impl Model {
         {
             *p = *p + d;
         }
+        if let Some(s) = &mut slab.slope {
+            s.from = s.from + d;
+            s.to = s.to + d;
+        }
+        Ok(())
+    }
+
+    /// Makes a slab inclined (or level again, with `None`).
+    pub fn set_slab_slope(
+        &mut self,
+        id: SlabId,
+        slope: Option<SlabSlope>,
+    ) -> Result<(), ModelError> {
+        if let Some(s) = &slope {
+            s.validate()?;
+        }
+        let slab = self.slabs.get_mut(&id).ok_or(ModelError::UnknownSlab(id))?;
+        slab.slope = slope;
         Ok(())
     }
 
@@ -2859,7 +2953,7 @@ impl Model {
         let top = self
             .slabs_on_level(level)
             .filter(|s| s.covers(p))
-            .map(|s| s.top_offset)
+            .map(|s| s.top_at(p))
             .fold(None, |acc: Option<f64>, v| {
                 Some(acc.map_or(v, |a| a.max(v)))
             });
@@ -2994,6 +3088,9 @@ impl Model {
                         return Err(ModelError::UnknownSlabType(slab.slab_type));
                     }
                     finite(slab.top_offset, "slab top offset")?;
+                    if let Some(s) = &slab.slope {
+                        s.validate()?;
+                    }
                     slab.outline = Self::normalized_outline(std::mem::take(&mut slab.outline))?;
                     slab.holes = std::mem::take(&mut slab.holes)
                         .into_iter()
@@ -4364,5 +4461,76 @@ mod tests {
             m.move_wall(w, Point2::new(0.0, 0.0), Point2::new(f64::INFINITY, 0.0)),
             Err(ModelError::NotFinite(_))
         ));
+    }
+}
+
+#[cfg(test)]
+mod slope_tests {
+    use super::*;
+
+    /// A ramp: 6 m long rising 8 %, its floor elevation follows it.
+    #[test]
+    fn inclined_slabs() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let concrete = m.add_material("HA", "concrete", [180, 180, 180], CutPattern::Solid);
+        let t = m
+            .add_slab_type(
+                "Losa",
+                SlabFunction::Floor,
+                vec![Layer {
+                    material: concrete,
+                    thickness: 0.2,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let s = m
+            .add_slab(NewSlab {
+                slab_type: t,
+                level: l,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(6.0, 0.0),
+                    Point2::new(6.0, 2.0),
+                    Point2::new(0.0, 2.0),
+                ],
+                top_offset: 0.0,
+            })
+            .unwrap();
+        let ramp = SlabSlope {
+            from: Point2::new(0.0, 1.0),
+            to: Point2::new(6.0, 1.0),
+            slope: 0.08,
+        };
+        m.set_slab_slope(s, Some(ramp)).unwrap();
+        let slab = m.slab(s).unwrap();
+        assert!((slab.top_at(Point2::new(6.0, 0.0)) - 0.48).abs() < 1e-12);
+        assert_eq!(slab.top_range(), (0.0, 0.48));
+        assert!((m.floor_elevation_at(l, Point2::new(3.0, 1.0)).unwrap() - 0.24).abs() < 1e-12);
+        assert!(slab.vertical(0.2) > 0.2);
+        // Moving carries the arrow along.
+        m.move_slab(s, Point2::new(1.0, 0.0)).unwrap();
+        assert_eq!(
+            m.slab(s).unwrap().slope.unwrap().from,
+            Point2::new(1.0, 1.0)
+        );
+        // No direction, or a wall rather than a ramp: refused.
+        let mut flat = ramp;
+        flat.to = flat.from;
+        assert_eq!(
+            m.set_slab_slope(s, Some(flat)),
+            Err(ModelError::InvalidSlope)
+        );
+        let mut steep = ramp;
+        steep.slope = 10.0;
+        assert_eq!(
+            m.set_slab_slope(s, Some(steep)),
+            Err(ModelError::InvalidSlope)
+        );
+        let back = Model::from_parts(m.to_parts()).unwrap();
+        assert_eq!(back, m);
+        m.set_slab_slope(s, None).unwrap();
+        assert_eq!(m.slab(s).unwrap().top_range(), (0.0, 0.0));
     }
 }

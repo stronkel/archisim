@@ -950,3 +950,32 @@ fn phases_round_trip() {
         .keys()
         .any(|w| w.contains("fases de reforma")));
 }
+
+/// An inclined slab goes out as a sweep in tilted axes and comes back
+/// inclined, with the same top face and layers.
+#[test]
+fn inclined_slabs_round_trip() {
+    let mut m = model();
+    let s = m.slabs().next().unwrap().clone();
+    let lo = s.outline.iter().fold(f64::MAX, |a, p| a.min(p.x));
+    let hi = s.outline.iter().fold(f64::MIN, |a, p| a.max(p.x));
+    m.set_slab_slope(
+        s.id,
+        Some(archisim_core::SlabSlope {
+            from: Point2::new(lo, 0.0),
+            to: Point2::new(hi, 0.0),
+            slope: 0.08,
+        }),
+    )
+    .unwrap();
+    let ifc = export(&m);
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+    let back = model
+        .slab(model.slabs().find(|t| t.guid == s.guid).unwrap().id)
+        .unwrap();
+    let slope = back.slope.expect("inclined");
+    assert!((slope.slope - 0.08).abs() < 1e-6, "{slope:?}");
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

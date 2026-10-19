@@ -180,18 +180,84 @@ impl Body {
 /// looking up at its highest level (they may be split in triangles). The
 /// largest loop and the other loops (holes).
 pub fn top_outline(body: &Body, top: f64) -> Option<(Ring, Vec<Ring>)> {
+    plan_outline(body, &|poly| {
+        let n = poly.area_vector();
+        let len = dot(n, n).sqrt();
+        len >= 1e-9 && n[2] / len >= 0.9999 && poly.points.iter().all(|q| (q[2] - top).abs() < 1e-4)
+    })
+}
+
+/// The top of an inclined body (a sloping slab or ramp): its outline in
+/// plan (largest loop and holes), the plane of its top face as
+/// `z = a·x + b·y + c`, and the vertical height down to its bottom face.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlopedTop {
+    pub outline: Ring,
+    pub holes: Vec<Ring>,
+    pub plane: [f64; 3],
+    pub vertical: f64,
+}
+
+/// [`SlopedTop`] of a body whose largest faces lie on two parallel
+/// inclined planes (not level, not steeper than 80°): the top face on the
+/// higher one.
+pub fn sloped_top(body: &Body) -> Option<SlopedTop> {
+    // The plane of each face, z = a·x + b·y + c, with its area in plan
+    // (whichever way the face looks: the caps of an extrusion may both
+    // look up).
+    let plane_of = |poly: &Polygon| -> Option<([f64; 3], f64)> {
+        let n = poly.area_vector();
+        let len = dot(n, n).sqrt();
+        if len < 1e-9 || (n[2] / len).abs() < 0.17 {
+            return None;
+        }
+        let p = *poly.points.first()?;
+        let (a, b) = (-n[0] / n[2], -n[1] / n[2]);
+        Some(([a, b, p[2] - a * p[0] - b * p[1]], n[2].abs()))
+    };
+    let q = |v: f64| (v * 1e4).round() as i64;
+    // Area by slope, then the planes of the largest slope.
+    let mut by_slope: std::collections::HashMap<(i64, i64), f64> = Default::default();
+    let planes: Vec<([f64; 3], f64)> = body.polygons.iter().filter_map(plane_of).collect();
+    for (pl, area) in &planes {
+        *by_slope.entry((q(pl[0]), q(pl[1]))).or_default() += area;
+    }
+    let (&slope, _) = by_slope.iter().max_by(|x, y| x.1.total_cmp(y.1))?;
+    if slope.0.abs() + slope.1.abs() == 0 {
+        return None;
+    }
+    let mut cs: Vec<[f64; 3]> = planes
+        .iter()
+        .filter(|(pl, _)| (q(pl[0]), q(pl[1])) == slope)
+        .map(|(pl, _)| *pl)
+        .collect();
+    cs.sort_by(|x, y| x[2].total_cmp(&y[2]));
+    let (bottom, top) = (*cs.first()?, *cs.last()?);
+    if top[2] - bottom[2] < 1e-4 {
+        return None;
+    }
+    let key = (q(top[0]), q(top[1]), q(top[2]));
+    let (outline, holes) = plan_outline(body, &|poly| {
+        plane_of(poly).is_some_and(|(pl, _)| (q(pl[0]), q(pl[1]), q(pl[2])) == key)
+    })?;
+    Some(SlopedTop {
+        outline,
+        holes,
+        plane: top,
+        vertical: top[2] - bottom[2],
+    })
+}
+
+/// The outline in plan of the faces `keep` picks (they may be split in
+/// triangles): the largest loop and the others (holes).
+fn plan_outline(body: &Body, keep: &dyn Fn(&Polygon) -> bool) -> Option<(Ring, Vec<Ring>)> {
     use std::collections::HashMap;
     type Key = (i64, i64);
     let key = |p: P3| ((p[0] * 1e6).round() as i64, (p[1] * 1e6).round() as i64);
     let mut raw: Vec<(Key, Key)> = Vec::new();
     let mut coords: HashMap<(i64, i64), [f64; 2]> = HashMap::new();
     for poly in &body.polygons {
-        let n = poly.area_vector();
-        let len = dot(n, n).sqrt();
-        if len < 1e-9 || n[2] / len < 0.9999 {
-            continue;
-        }
-        if !poly.points.iter().all(|q| (q[2] - top).abs() < 1e-4) {
+        if !keep(poly) {
             continue;
         }
         let m = poly.points.len();

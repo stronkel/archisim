@@ -406,6 +406,19 @@ pub(crate) struct Slab {
     /// Holes through the slab (version 6), each an outline.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holes: Vec<Vec<Xy>>,
+    /// Inclined slabs (version 7): the slope arrow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slope: Option<SlabSlope>,
+}
+
+/// Slope arrow of an inclined slab: the top face rises `slope` metres per
+/// metre from `from` towards `to`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SlabSlope {
+    pub from: Xy,
+    pub to: Xy,
+    pub slope: f64,
 }
 
 /// A family recipe, one text line per array item. `name` and `version`
@@ -609,6 +622,11 @@ impl ProjectFile {
                         .into_iter()
                         .map(|h| h.into_iter().map(xy).collect())
                         .collect(),
+                    slope: s.slope.map(|a| SlabSlope {
+                        from: xy(a.from),
+                        to: xy(a.to),
+                        slope: a.slope,
+                    }),
                 })
                 .collect(),
             families: p
@@ -921,6 +939,11 @@ impl ProjectFile {
                     .into_iter()
                     .map(|h| h.into_iter().map(pt).collect())
                     .collect(),
+                slope: s.slope.map(|a| core::SlabSlope {
+                    from: pt(a.from),
+                    to: pt(a.to),
+                    slope: a.slope,
+                }),
             });
         }
         for f in self.families {

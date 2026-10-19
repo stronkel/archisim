@@ -627,6 +627,20 @@ impl Editor {
         })
     }
 
+    /// Makes a slab inclined (or level, with `None`).
+    pub fn set_slab_slope(
+        &mut self,
+        s: SlabId,
+        slope: Option<archisim_core::SlabSlope>,
+    ) -> EditResult {
+        let label = if slope.is_some() {
+            "Inclinar forjado"
+        } else {
+            "Forjado horizontal"
+        };
+        self.transact(label, |m| m.set_slab_slope(s, slope))
+    }
+
     /// Moves, copies or stretches the selection as dragged with the mouse,
     /// in one step. After a copy the copies are selected.
     pub fn drag(&mut self, drag: &crate::drag::Drag) -> EditResult<&'static str> {

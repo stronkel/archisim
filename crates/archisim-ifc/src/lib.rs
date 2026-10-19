@@ -164,6 +164,32 @@ impl<'a> Exporter<'a> {
         self.w.add(format!("IFCLOCALPLACEMENT({rel},{ap})"))
     }
 
+    /// The profile of a slab (its outline, with its holes as voids), each
+    /// point taken to the profile's axes by `to_local`.
+    fn slab_profile(
+        &mut self,
+        slab: &archisim_core::Slab,
+        to_local: &dyn Fn(Point2) -> Point2,
+    ) -> Ref {
+        let local = |pts: &[Point2]| pts.iter().map(|p| to_local(*p)).collect::<Vec<_>>();
+        let outline = self.polyline(&local(&slab.outline), true);
+        if slab.holes.is_empty() {
+            self.w
+                .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"))
+        } else {
+            // Holes (stairs, shafts): the voids of the profile.
+            let inner: Vec<Ref> = slab
+                .holes
+                .iter()
+                .map(|h| self.polyline(&local(h), true))
+                .collect();
+            self.w.add(format!(
+                "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outline},{})",
+                list(&inner)
+            ))
+        }
+    }
+
     fn polyline(&mut self, pts: &[Point2], closed: bool) -> Ref {
         let mut refs: Vec<Ref> = pts.iter().map(|&p| self.point2(p)).collect();
         if closed {
@@ -1173,28 +1199,74 @@ impl<'a> Exporter<'a> {
                 continue;
             };
             let thickness = stype.thickness();
-            let loc = self.point3(0.0, 0.0, slab.top_offset - thickness);
-            let pl = self.placement(Some(storey_pl), loc, None);
-            let outline = self.polyline(&slab.outline, true);
-            let profile = if slab.holes.is_empty() {
-                self.w
-                    .add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,{outline})"))
-            } else {
-                // Holes (stairs, shafts): the voids of the profile.
-                let inner: Vec<Ref> = slab.holes.iter().map(|h| self.polyline(h, true)).collect();
-                self.w.add(format!(
-                    "IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,{outline},{})",
-                    list(&inner)
-                ))
+            let vertical = slab.vertical(thickness);
+            let solid = match slab.slope.and_then(|s| s.direction().map(|u| (s, u))) {
+                None => {
+                    let loc = self.point3(0.0, 0.0, slab.top_offset - thickness);
+                    let pl = self.placement(Some(storey_pl), loc, None);
+                    let profile = self.slab_profile(slab, &|p| p);
+                    let solid_pl = self
+                        .w
+                        .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
+                    let solid = self.w.add(format!(
+                        "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
+                        self.z,
+                        real(thickness)
+                    ));
+                    (pl, solid)
+                }
+                Some((slope, u)) => {
+                    // Inclined: the profile lies on the soffit, in axes
+                    // tilted with it (x up the slope, z square to it), and
+                    // is swept vertically, so the edges stay plumb.
+                    let loc = self.point3(0.0, 0.0, 0.0);
+                    let pl = self.placement(Some(storey_pl), loc, None);
+                    let k = slope.slope;
+                    let n = (1.0 + k * k).sqrt();
+                    let x3 = [u.x / n, u.y / n, k / n];
+                    let z3 = [-k * u.x / n, -k * u.y / n, 1.0 / n];
+                    let y3 = [-u.y, u.x, 0.0];
+                    let o = slope.from;
+                    let o3 = [o.x, o.y, slab.top_offset - vertical];
+                    let soffit = |p: Point2| slab.top_at(p) - vertical;
+                    let to_local = |p: Point2| {
+                        let d = [p.x - o3[0], p.y - o3[1], soffit(p) - o3[2]];
+                        Point2::new(
+                            d[0] * x3[0] + d[1] * x3[1] + d[2] * x3[2],
+                            d[0] * y3[0] + d[1] * y3[1] + d[2] * y3[2],
+                        )
+                    };
+                    let profile = self.slab_profile(slab, &to_local);
+                    let at = self.point3(o3[0], o3[1], o3[2]);
+                    let axis = self.w.add(format!(
+                        "IFCDIRECTION(({},{},{}))",
+                        real(z3[0]),
+                        real(z3[1]),
+                        real(z3[2])
+                    ));
+                    let xdir = self.w.add(format!(
+                        "IFCDIRECTION(({},{},{}))",
+                        real(x3[0]),
+                        real(x3[1]),
+                        real(x3[2])
+                    ));
+                    let solid_pl = self
+                        .w
+                        .add(format!("IFCAXIS2PLACEMENT3D({at},{axis},{xdir})"));
+                    // The vertical in the tilted axes.
+                    let up = self.w.add(format!(
+                        "IFCDIRECTION(({},0.,{}))",
+                        real(k / n),
+                        real(1.0 / n)
+                    ));
+                    let solid = self.w.add(format!(
+                        "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{up},{})",
+                        real(vertical)
+                    ));
+                    (pl, solid)
+                }
             };
-            let solid_pl = self
-                .w
-                .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
-            let solid = self.w.add(format!(
-                "IFCEXTRUDEDAREASOLID({profile},{solid_pl},{},{})",
-                self.z,
-                real(thickness)
-            ));
+            let (pl, solid) = solid;
             let body_rep = self.w.add(format!(
                 "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',({solid}))",
                 self.body_ctx
@@ -1230,8 +1302,11 @@ impl<'a> Exporter<'a> {
                 stype.function.is_external(),
                 stype.is_load_bearing(),
             );
-            let area = slab.area();
-            let gross = signed_area(&slab.outline).abs();
+            // Areas on the face (larger than in plan if it slopes);
+            // volumes are plan area by vertical height.
+            let stretch = slab.vertical(1.0);
+            let area = slab.area() * stretch;
+            let gross = signed_area(&slab.outline).abs() * stretch;
             let perim = perimeter(&slab.outline);
             self.quantities(
                 sl,

@@ -845,7 +845,9 @@ fn slab_view(model: &Model, slab: &Slab, cut_plane: f64) -> SlabView {
     let thickness = model
         .slab_type(slab.slab_type)
         .map_or(0.0, |t| t.thickness());
-    let (bottom, top) = (slab.top_offset - thickness, slab.top_offset);
+    // An inclined slab is cut if the plane crosses it anywhere.
+    let (low, high) = slab.top_range();
+    let (bottom, top) = (low - slab.vertical(thickness), high);
     if top <= cut_plane {
         SlabView::Below
     } else if bottom < cut_plane {
@@ -947,6 +949,71 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
             );
             crosses(s, false);
         }
+    }
+    if let Some(slope) = &slab.slope {
+        draw_slope_arrow(s, slab, slope, k);
+    }
+}
+
+/// The slope arrow of an inclined slab: a thin line from its tail to its
+/// head with a filled arrowhead (uphill), and the slope in per cent.
+fn draw_slope_arrow(s: &mut String, slab: &Slab, slope: &archisim_core::SlabSlope, k: f64) {
+    let Some(u) = slope.direction() else {
+        return;
+    };
+    // Along the arrow's line, as far as the slab goes.
+    let (a, b) = (slope.from, slope.to);
+    let pieces = clip_segment(a - u * 1e3, b + u * 1e3, &slab.outline);
+    let (a, b) = pieces
+        .iter()
+        .copied()
+        .max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1)))
+        .unwrap_or((a, b));
+    let (a, b) = if (b - a).dot(u) * slope.slope >= 0.0 {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    let inset = 1.5 * k;
+    let dir = (b - a).normalized().unwrap_or(u);
+    let (a, b) = (a + dir * inset, b - dir * inset);
+    let head = 2.5 * k;
+    let n = dir.perp_left();
+    let base = b - dir * head;
+    let _ = writeln!(
+        s,
+        r#"<g class="slope"><path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="M{} L{} L{} Z" fill="{INK}" stroke="none"/>"#,
+        pt(a),
+        pt(base),
+        num(VIEW_LINE * k),
+        pt(b),
+        pt(base + n * (head * 0.35)),
+        pt(base - n * (head * 0.35))
+    );
+    let text = format!("{} %", fmt_percent(slope.slope.abs() * 100.0));
+    let th = annotate::TEXT_HEIGHT * k;
+    // Read from below or from the right, as dimension texts.
+    let read = if dir.x < -1e-9 || (dir.x.abs() <= 1e-9 && dir.y < 0.0) {
+        dir * -1.0
+    } else {
+        dir
+    };
+    let mid = a + (b - a) * 0.5 + read.perp_left() * (1.0 * k);
+    let _ = writeln!(
+        s,
+        r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
+        lettering::text_path(&text, mid, read, th, lettering::Align::Centre),
+        num(lettering::STROKE * th)
+    );
+}
+
+/// A percentage with up to one decimal and a decimal comma: 8, 12,5.
+fn fmt_percent(v: f64) -> String {
+    let r = (v * 10.0).round() / 10.0;
+    if (r - r.round()).abs() < 1e-9 {
+        format!("{}", r.round() as i64)
+    } else {
+        format!("{r:.1}").replace('.', ",")
     }
 }
 

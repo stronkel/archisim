@@ -1363,6 +1363,101 @@ impl ArchiSimApp {
         });
     }
 
+    /// Inclination of a slab (ramps, sloping floors): on or off, the slope
+    /// in per cent and which way it rises; the arrow's ends are dragged in
+    /// plan for any other direction.
+    fn slab_slope_group(&mut self, ui: &mut Ui, s: &archisim_core::Slab) {
+        let id = s.id;
+        group(ui, "slab-slope", "Pendiente", |ui| {
+            let mut on = s.slope.is_some();
+            row(ui, "Inclinado", "Rampa o forjado en pendiente", |ui, _| {
+                if ui.checkbox(&mut on, "").changed() {
+                    let slope = on.then(|| default_slope(s, Point2::new(1.0, 0.0), 0.05));
+                    let r = self.ed.set_slab_slope(id, slope);
+                    self.report(
+                        r,
+                        if on {
+                            "Forjado inclinado: arrastra los extremos de su flecha para cambiar la dirección."
+                        } else {
+                            "Forjado horizontal."
+                        },
+                    );
+                }
+            });
+            let Some(a) = s.slope else {
+                return;
+            };
+            row(
+                ui,
+                "Pendiente (%)",
+                "Sube en el sentido de la flecha; negativa, baja",
+                |ui, w| {
+                    let shown = fmt_percent(a.slope * 100.0);
+                    if let Some(v) =
+                        text_edit_committed(ui, Id::unique(("slab-slope-pc", id)), &shown, w - 8.0)
+                    {
+                        match v
+                            .trim()
+                            .trim_end_matches('%')
+                            .trim()
+                            .replace(',', ".")
+                            .parse::<f64>()
+                        {
+                            Ok(pc) if pc.is_finite() => {
+                                let r = self.ed.set_slab_slope(
+                                    id,
+                                    Some(archisim_core::SlabSlope {
+                                        slope: pc / 100.0,
+                                        ..a
+                                    }),
+                                );
+                                self.report(r, "Pendiente cambiada.");
+                            }
+                            _ => self
+                                .complain(format!("«{v}» no es un porcentaje: escribe 8 o 8,5.")),
+                        }
+                    }
+                },
+            );
+            row(ui, "Sube hacia", "Dirección de la flecha", |ui, w| {
+                let dirs: [(u32, &str, Point2); 4] = [
+                    (0, "Este", Point2::new(1.0, 0.0)),
+                    (1, "Norte", Point2::new(0.0, 1.0)),
+                    (2, "Oeste", Point2::new(-1.0, 0.0)),
+                    (3, "Sur", Point2::new(0.0, -1.0)),
+                ];
+                let u = a.direction().unwrap_or(Point2::new(1.0, 0.0));
+                let current = dirs.iter().find(|d| d.2.dot(u) > 0.9999).map_or(9, |d| d.0);
+                let mut opts: Vec<(u32, &str)> = dirs.iter().map(|d| (d.0, d.1)).collect();
+                if current == 9 {
+                    opts.push((9, "Otra (arrastrada)"));
+                }
+                let v = props::choice(ui, ("slab-slope-dir", id.0), w, current, &opts);
+                if v != current {
+                    if let Some(d) = dirs.iter().find(|d| d.0 == v) {
+                        let r = self
+                            .ed
+                            .set_slab_slope(id, Some(default_slope(s, d.2, a.slope)));
+                        self.report(r, "Dirección cambiada.");
+                    }
+                }
+            });
+            let (lo, hi) = s.top_range();
+            text_row(
+                ui,
+                "Ángulo",
+                "",
+                &format!("{}°", fmt_angle_deg(a.slope.abs().atan())),
+            );
+            text_row(
+                ui,
+                "Cara superior",
+                "Más baja y más alta, sobre la planta",
+                &format!("{} … {} mm", fmt_mm(lo), fmt_mm(hi)),
+            );
+        });
+    }
+
     fn slab_properties(&mut self, ui: &mut Ui, id: SlabId) {
         let model = self.ed.model();
         let Some(s) = model.slab(id).cloned() else {
@@ -1416,6 +1511,7 @@ impl ArchiSimApp {
                 },
             );
         });
+        self.slab_slope_group(ui, &s);
         group(ui, "slab-dimensions", "Dimensiones", |ui| {
             text_row(ui, "Canto (mm)", "Del tipo", &fmt_mm(thickness));
             text_row(
@@ -1713,4 +1809,40 @@ fn view_card(ui: &mut Ui, icon: Icon, title: &str, subtitle: &str) {
                 });
             });
         });
+}
+
+/// A slope arrow across a slab, through its middle, rising towards `u`
+/// from one side of it to the other (the slab keeps its top at that side).
+pub(super) fn default_slope(
+    s: &archisim_core::Slab,
+    u: Point2,
+    slope: f64,
+) -> archisim_core::SlabSlope {
+    let along = |p: &Point2| p.dot(u);
+    let (lo, hi) = s
+        .outline
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
+            (a.min(along(p)), b.max(along(p)))
+        });
+    let c = archisim_core::centroid(&s.outline);
+    let base = c - u * (along(&c) - lo);
+    archisim_core::SlabSlope {
+        from: base,
+        to: base + u * (hi - lo).max(0.1),
+        slope,
+    }
+}
+
+/// A percentage with up to two decimals and a decimal comma.
+fn fmt_percent(v: f64) -> String {
+    let r = (v * 100.0).round() / 100.0;
+    let t = format!("{r:.2}");
+    let t = t.trim_end_matches('0').trim_end_matches('.');
+    t.replace('.', ",")
+}
+
+/// An angle in degrees with one decimal and a decimal comma.
+fn fmt_angle_deg(radians: f64) -> String {
+    format!("{:.1}", radians.to_degrees()).replace('.', ",")
 }

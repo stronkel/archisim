@@ -169,6 +169,9 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownSpace(_) => "el local ya no existe".into(),
         ModelError::UnknownSection(_) => "la sección ya no existe".into(),
         ModelError::ZeroLengthSection => "la sección necesita dos puntos distintos".into(),
+        ModelError::InvalidSlope => {
+            "la pendiente necesita una dirección y no puede pasar del 300 %".into()
+        }
         ModelError::UnknownElement(_) => "el elemento ya no existe".into(),
         ModelError::DuplicateNumber(n) => {
             format!("otro local de esta planta ya tiene el número «{n}»")
@@ -277,6 +280,9 @@ fn es_what(what: &str) -> String {
         "flange thickness" => "el espesor de las alas",
         "space height" => "la altura del local",
         "section start" => "el inicio de la sección",
+        "slab slope start" => "el inicio de la flecha de pendiente",
+        "slab slope end" => "el final de la flecha de pendiente",
+        "slab slope" => "la pendiente",
         "section end" => "el final de la sección",
         "section view depth" => "la profundidad de la sección",
         "space label" => "la posición del rótulo del local",

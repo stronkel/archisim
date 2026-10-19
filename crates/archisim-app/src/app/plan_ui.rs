@@ -999,6 +999,7 @@ impl ArchiSimApp {
             (Grip::BeamEnd { .. }, _) => "Estirar viga",
             (Grip::SpaceLabel { .. }, _) => "Rótulo",
             (Grip::SectionEnd { .. }, _) => "Estirar sección",
+            (Grip::SlopeEnd { .. }, _) => "Pendiente",
         };
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {

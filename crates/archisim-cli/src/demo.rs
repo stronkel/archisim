@@ -198,6 +198,30 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // An access ramp to the west door (v0.25): an inclined ground slab
+    // rising 10 % from the garden (−0,30) to the floor.
+    doc.transact("Rampa", |m| {
+        let ramp = m.add_slab(NewSlab {
+            slab_type: solera,
+            level: pb,
+            outline: vec![
+                Point2::new(-3.0, 7.1),
+                Point2::new(0.0, 7.1),
+                Point2::new(0.0, 8.5),
+                Point2::new(-3.0, 8.5),
+            ],
+            top_offset: -0.3,
+        })?;
+        m.set_slab_slope(
+            ramp,
+            Some(archisim_core::SlabSlope {
+                from: Point2::new(-3.0, 7.8),
+                to: Point2::new(0.0, 7.8),
+                slope: 0.1,
+            }),
+        )
+    })?;
+
     // Dimensions: the openings of the south and west façades, outside, the
     // overall size beyond them, and level marks on the ground slab.
     doc.transact("Cotas", |m| {
@@ -287,7 +311,7 @@ mod tests {
         let doc = super::build().unwrap();
         let m = doc.model();
         assert_eq!(m.walls().count(), 7);
-        assert_eq!(m.slabs().count(), 3);
+        assert_eq!(m.slabs().count(), 4);
         assert_eq!(m.columns().count(), 2);
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);

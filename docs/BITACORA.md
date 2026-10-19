@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), secciones y alzados (2.10), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
+## 2026-10-19 (noche) · Fase 2 sin supervisión: pilares y vigas (2.5), locales (2.9), secciones y alzados (2.10), forjados inclinados (2.7), fases de reforma (2.11) y las cuatro mejoras de Antonio (v0.25, rama `bloque/fase2-noche`)
 
 Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientras dormía, más cuatro mejoras pequeñas. Todo va en la rama `bloque/fase2-noche` (pull request para revisar), con commit y push tras cada avance. Esta entrada se completa conforme avanza la noche.
 
@@ -41,6 +41,12 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
   - La línea de comandos `archisim demo` / `exportar` escribe también cada sección y alzado en SVG a 1:100 (`demo-seccion-a.svg`, `demo-alzado-norte.svg`…).
   - Formato `.archisim`: lista `sections` (versión 7). No van al IFC (son vistas, no edificio).
   - Demo: Sección A (estar y cocina, mirando al norte), Sección B (por el porche, mirando al oeste) y los cuatro alzados.
+- **Forjados inclinados (2.7)**, para rampas y suelos en pendiente, con la flecha de pendiente de Revit:
+  - Propiedades del forjado → grupo **Pendiente**: «Inclinado», **Pendiente (%)** (negativa: baja), **Sube hacia** (este, norte, oeste, sur) y, a título informativo, el ángulo y la cota más baja y más alta de la cara superior. «Cara superior» es la altura en el arranque de la flecha.
+  - En planta, la **flecha de pendiente** con su porcentaje («10 %»), que sube en el sentido de la flecha; con el forjado seleccionado, sus dos extremos se arrastran para darle cualquier dirección (el porcentaje se mantiene). Mover y copiar el forjado se lleva la flecha.
+  - Las capas mantienen su espesor perpendicular a la cara; los cantos quedan verticales, así que la planta sigue siendo el contorno. 3D, secciones y alzados, cota de nivel sobre la rampa (da la altura del punto) y el plano de corte (si corta la rampa, se ve cortada).
+  - IFC: `IfcSlab` extruido verticalmente desde un perfil en ejes inclinados (lo que leen bien Revit y ArchiCAD), con superficies y volúmenes reales; validado con IfcOpenShell (volumen incluido). **Importación**: los forjados inclinados de otros programas (cara superior plana inclinada, por extrusión o por caras) entran inclinados con su flecha; antes se descartaban.
+  - Demo: **rampa de acceso** a la puerta oeste, de −0,30 al ±0,00 con un 10 %.
 - **Punto 0 del proyecto forzable** (mejora 1 de Antonio): el origen (0, 0) se dibuja como un hito (círculo con dos cuartos rellenos) y es un punto de forzado propio, «Punto 0 del proyecto», que alcanza desde algo más lejos que los demás, para empezar muros, líneas o cotas desde él.
 - **Cotas azules con extremos arrastrables** (mejora 2), como los de Revit: cada cota temporal tiene dos círculos en sus extremos. El de la **referencia** se arrastra a cualquier punto que fuerce (esquina, cara, extremo de muro, punto 0…) y la cota pasa a medir hasta él; el del **elemento** salta a otra línea del propio elemento: en puertas y ventanas, la otra jamba o el **centro** del hueco; en muros, la otra cara o el **eje**. Después se escribe el valor como siempre. Las asas del elemento seleccionado (extremos de muro, esquinas) tienen preferencia sobre estos círculos. Lo elegido se mantiene mientras el elemento sigue seleccionado.
 - **Líneas finas** (mejora 3): botón «Líneas finas» en la barra inferior (también en Vista y en las propiedades de la vista): todas las líneas de la planta a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la pestaña. Para cuando haya grosores por pluma (D5), este mismo botón los alternará.
@@ -66,6 +72,7 @@ Antonio pidió avanzar «todo lo posible» en la fase 2 a partir del 2.2 mientra
 9. Vista 3D → barra inferior → **Caja de sección**: arrastra la flecha azul de la cara superior hacia abajo hasta ver el interior; gira la cámara. Prueba en Propiedades «Planta en 3D» y «Selección» (con un muro o un pilar seleccionado). ¿Las tapas del corte se leen bien como sección?
 10. **Secciones**: en el navegador, «Secciones y alzados» → **Sección B** (pasa por el porche): ¿se lee como una sección vuestra? Mira el forjado de cubierta cortado con sus capas, la viga del porche cortada, el tabique y la puerta del fondo en vista. Abre **Alzado Sur**: fachada con sus dos ventanas. Cambia la escala a 1:50 y prueba «Líneas finas».
 11. Herramienta **Sección** (tecla S): dibuja una línea de izquierda a derecha por tu casa (la flecha azul indica hacia dónde mira); doble clic en su marca abre la vista. Selecciónala, arrastra un extremo y vuelve a la pestaña: la sección se actualiza. Prueba «Invertir» en Propiedades.
+12. **Rampa**: en `demo.archisim`, la rampa de la puerta oeste con su flecha «10 %». Selecciónala: en Propiedades → Pendiente, cambia a 8 y luego «Sube hacia: Norte»; arrastra la punta de la flecha en diagonal. Mírala en 3D y en «Alzado Oeste». Pon una cota de nivel encima (tecla N) a media rampa. Exporta el IFC: ¿Revit y ArchiCAD la leen como forjado inclinado?
 
 ## 2026-10-19 · Familias, bloque D — diálogo de tipos al estilo ArchiCAD y tipos de línea (v0.24)
 

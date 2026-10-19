@@ -47,6 +47,8 @@ pub enum Grip {
     },
     /// The stamp of a room (its name and area), moved on its own.
     SpaceLabel { space: archisim_core::SpaceId },
+    /// One end of the slope arrow of an inclined slab.
+    SlopeEnd { slab: SlabId, start: bool },
     /// One end of a section or elevation line.
     SectionEnd {
         section: archisim_core::SectionId,
@@ -102,6 +104,15 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             }
             Element::Slab(id) => {
                 if let Some(s) = model.slab(*id) {
+                    // The arrow first: its ends may lie on the edges.
+                    if let Some(a) = s.slope {
+                        for (start, point) in [(true, a.from), (false, a.to)] {
+                            v.push(Hotspot {
+                                grip: Grip::SlopeEnd { slab: *id, start },
+                                point,
+                            });
+                        }
+                    }
                     let n = s.outline.len();
                     for (i, p) in s.outline.iter().enumerate() {
                         v.push(Hotspot {
@@ -202,9 +213,9 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
             .map(|(w, _)| Element::Wall(w))
             .collect(),
         Grip::WallBend { wall } => [Element::Wall(wall)].into_iter().collect(),
-        Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
-            [Element::Slab(slab)].into_iter().collect()
-        }
+        Grip::SlabCorner { slab, .. }
+        | Grip::SlabEdge { slab, .. }
+        | Grip::SlopeEnd { slab, .. } => [Element::Slab(slab)].into_iter().collect(),
         Grip::BeamEnd { beam, .. } => [Element::Beam(beam)].into_iter().collect(),
         Grip::SpaceLabel { space } => [Element::Space(space)].into_iter().collect(),
         Grip::SectionEnd { section, .. } => [Element::Section(section)].into_iter().collect(),
@@ -251,6 +262,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::BeamEnd { .. } => "Estirar viga",
         Grip::SpaceLabel { .. } => "Mover rótulo de local",
         Grip::SectionEnd { .. } => "Estirar sección",
+        Grip::SlopeEnd { .. } => "Mover flecha de pendiente",
     }
 }
 
@@ -315,6 +327,18 @@ pub fn apply(
             model
                 .edit_space(space, |s| s.label = Some(at))
                 .map(|_| None)
+        }
+        Grip::SlopeEnd { slab, start } => {
+            let s = model.slab(slab).ok_or(ModelError::UnknownSlab(slab))?;
+            let Some(mut a) = s.slope else {
+                return Ok(None);
+            };
+            if start {
+                a.from = drag.to;
+            } else {
+                a.to = drag.to;
+            }
+            model.set_slab_slope(slab, Some(a)).map(|_| None)
         }
         Grip::SectionEnd { section, start } => model
             .edit_section(section, |s| {
@@ -622,6 +646,11 @@ fn copy(
                     .map(|h| h.iter().map(|p| *p + d).collect())
                     .collect();
                 model.set_slab_holes(new, holes)?;
+                if let Some(mut a) = s.slope {
+                    a.from = a.from + d;
+                    a.to = a.to + d;
+                    model.set_slab_slope(new, Some(a))?;
+                }
                 copies.insert(Element::Slab(new));
             }
             Element::Section(id) => {
@@ -816,9 +845,9 @@ fn level_of(
     let wall_level = |id: WallId| model.wall(id).map(|w| w.level);
     match grip {
         Grip::WallEnd { wall, .. } | Grip::WallBend { wall } => wall_level(wall),
-        Grip::SlabCorner { slab, .. } | Grip::SlabEdge { slab, .. } => {
-            model.slab(slab).map(|s| s.level)
-        }
+        Grip::SlabCorner { slab, .. }
+        | Grip::SlabEdge { slab, .. }
+        | Grip::SlopeEnd { slab, .. } => model.slab(slab).map(|s| s.level),
         Grip::BeamEnd { beam, .. } => model.beam(beam).map(|b| b.level),
         Grip::SpaceLabel { space } => model.space(space).map(|s| s.level),
         Grip::SectionEnd { .. } => None,

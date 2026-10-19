@@ -1499,6 +1499,8 @@ impl<'a> Importer<'a> {
         }
         // The outline: the largest vertical extrusion, else the highest
         // horizontal face.
+        // Inclined slabs: the plane of the top face (z = a·x + b·y + c).
+        let mut tilt: Option<[f64; 3]> = None;
         let (outline, holes, bottom, top) = if let Some(x) = body
             .extrusions
             .iter()
@@ -1509,13 +1511,27 @@ impl<'a> Importer<'a> {
             let (lo, hi) = body.bounds().ok_or("sin geometría")?;
             match geometry::top_outline(&body, hi[2]) {
                 Some((outline, holes)) => (outline, holes, lo[2], hi[2]),
-                None => {
-                    return Err(if body.polygons.is_empty() {
-                        "sin contorno horizontal legible".into()
-                    } else {
-                        "forjado inclinado o de forma libre (aún no se importa)".into()
-                    })
-                }
+                None => match geometry::sloped_top(&body) {
+                    Some(t) => {
+                        tilt = Some(t.plane);
+                        // Heights where the slope arrow starts: the top
+                        // and the bottom at the lowest corner.
+                        let low = t
+                            .outline
+                            .iter()
+                            .map(|p| t.plane[0] * p[0] + t.plane[1] * p[1] + t.plane[2])
+                            .fold(f64::INFINITY, f64::min);
+                        (t.outline, t.holes, low - t.vertical, low)
+                    }
+                    None => {
+                        return Err(if body.polygons.is_empty() {
+                            "sin contorno horizontal legible".into()
+                        } else {
+                            "forjado de forma libre (ni plano ni inclinado; aún no se importa)"
+                                .into()
+                        })
+                    }
+                },
             }
         };
         // Holes: the voids of the profile, and the openings that void the
@@ -1539,7 +1555,9 @@ impl<'a> Importer<'a> {
             return Err("contorno sin superficie".into());
         }
         let top = snap(top);
-        let body_thickness = snap(top - bottom);
+        // Square to the face (the vertical height is more if it slopes).
+        let stretch = tilt.map_or(1.0, |p| (1.0 + p[0] * p[0] + p[1] * p[1]).sqrt());
+        let body_thickness = snap((top - bottom) / stretch);
 
         // Function: the slab's own, its type's, or a roof it is part of.
         let predefined = |v: &Value| match v.as_enum() {
@@ -1644,6 +1662,42 @@ impl<'a> Importer<'a> {
                 top_offset: snap(top - elevation),
             })
             .map_err(|e| explain(&e))?;
+        if let Some(plane) = tilt {
+            // The arrow up the slope, from the lowest corner across the
+            // whole slab.
+            let g = Point2::new(plane[0], plane[1]);
+            let slope = g.length();
+            let u = g * (1.0 / slope);
+            let outline = &self
+                .model
+                .slab(sid)
+                .map(|s| s.outline.clone())
+                .unwrap_or_default();
+            let along = |p: &Point2| p.dot(u);
+            let (lo, hi) = outline
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
+                    (a.min(along(p)), b.max(along(p)))
+                });
+            let low = outline
+                .iter()
+                .min_by(|a, b| along(a).total_cmp(&along(b)))
+                .copied()
+                .unwrap_or_default();
+            let from = snap2(low);
+            let to = snap2(low + u * (hi - lo).max(0.1));
+            let slope = archisim_core::SlabSlope {
+                from,
+                to,
+                slope: (slope * 1e6).round() / 1e6,
+            };
+            if let Err(e) = self.model.set_slab_slope(sid, Some(slope)) {
+                self.report.warn(format!(
+                    "Forjado inclinado que no se puede inclinar ({}): se importa horizontal.",
+                    explain(&e)
+                ));
+            }
+        }
         if !hole_outlines.is_empty() {
             // All at once if they fit; else one by one, keeping those that do.
             if self

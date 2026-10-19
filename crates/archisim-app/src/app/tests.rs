@@ -2022,3 +2022,42 @@ fn sections_and_elevations() {
     let back = archisim_file::from_str(&text).unwrap();
     assert_eq!(back.sections().count(), 4);
 }
+
+/// An inclined slab: switched on in Properties (through the editor), its
+/// arrow dragged in plan to turn it, and the level mark on it follows.
+#[test]
+fn inclined_slab_with_its_arrow() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("f");
+    h.app.slab_settings.wand = true;
+    h.app.slab_settings.contour = Contour::InteriorFace;
+    h.click_at(p(6.0, 4.5));
+    let slab = h.model().slabs().last().unwrap().clone();
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let a = super::properties::default_slope(&slab, Point2::new(1.0, 0.0), 0.05);
+    h.app.ed.set_slab_slope(slab.id, Some(a)).unwrap();
+    let s = h.model().slab(slab.id).unwrap().clone();
+    let (lo, hi) = s.top_range();
+    assert!((hi - lo - 0.05 * (12.0 - 0.53)).abs() < 1e-6, "{lo} {hi}");
+    // Select it by its edge and drag the head of the arrow to the north.
+    h.app.ed.selection = [Element::Slab(slab.id)].into_iter().collect();
+    h.frame();
+    let to = a.to;
+    let north = Point2::new(a.from.x, a.from.y + 4.0);
+    h.drag(to, north);
+    let turned = h.model().slab(slab.id).unwrap().slope.unwrap();
+    assert!(
+        turned.to.distance(north) < 0.05,
+        "{turned:?} {:?}",
+        h.app.message
+    );
+    assert!((turned.slope - 0.05).abs() < 1e-12);
+    // Undo, and level again.
+    h.app.ed.undo();
+    assert_eq!(h.model().slab(slab.id).unwrap().slope.unwrap().to, to);
+    h.app.ed.set_slab_slope(slab.id, None).unwrap();
+    assert!(h.model().slab(slab.id).unwrap().slope.is_none());
+}

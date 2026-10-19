@@ -124,15 +124,20 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("forjado {} falta", s.guid));
             continue;
         };
-        let same_outline = s.outline.len() == t.outline.len()
-            && s.outline
-                .iter()
-                .zip(&t.outline)
-                .all(|(p, q)| p.distance(*q) <= TOL);
-        if !same_outline
-            || !close(s.top_offset, t.top_offset)
-            || level_guid(a, s.level) != level_guid(b, t.level)
-        {
+        // The same loop, from whichever corner it starts.
+        let n = s.outline.len();
+        let shift = t
+            .outline
+            .iter()
+            .position(|q| s.outline.first().is_some_and(|p| p.distance(*q) <= TOL));
+        let same_outline = n == t.outline.len()
+            && shift.is_some_and(|k| {
+                (0..n).all(|i| s.outline[i].distance(t.outline[(i + k) % n]) <= TOL)
+            });
+        // The same top face (level or inclined), whatever its arrow.
+        let same_top = s.outline.iter().all(|p| close(s.top_at(*p), t.top_at(*p)))
+            && s.slope.is_some() == t.slope.is_some();
+        if !same_outline || !same_top || level_guid(a, s.level) != level_guid(b, t.level) {
             diff(format!("forjado {}: {:?} / {:?}", s.guid, s, t));
         }
         match (a.slab_type(s.slab_type), b.slab_type(t.slab_type)) {

@@ -617,15 +617,19 @@ pub fn slab_solids(model: &Model, id: SlabId) -> Vec<Solid> {
     }));
     let poly = with_holes(&outer, &slab.holes);
     let caps = triangulate(&poly);
-    let at = |p: Point2, z: f64| [p.x, p.y, z];
-    let mut top = level + slab.top_offset;
+    // Heights of the faces between layers at a point: the top face, then
+    // each layer down (square to an inclined face, so vertically a little
+    // more).
+    let z = |p: Point2, depth: f64| level + slab.top_at(p) - slab.vertical(depth);
+    let at = |p: Point2, depth: f64| [p.x, p.y, z(p, depth)];
+    let mut top = 0.0;
     let count = stype.layers.len();
     stype
         .layers
         .iter()
         .enumerate()
         .map(|(i, layer)| {
-            let bottom = top - layer.thickness;
+            let bottom = top + layer.thickness;
             let mut tris = Vec::new();
             if i == 0 {
                 for [x, y, z] in &caps {
@@ -1148,6 +1152,37 @@ mod tests {
             .map(|p| p[2])
             .fold(f64::MIN, f64::max);
         assert_eq!(top, 1.0);
+    }
+
+    /// An inclined slab: the top face follows the slope, the layers keep
+    /// their thickness square to it, the edges stay vertical.
+    #[test]
+    fn inclined_slabs_follow_their_slope() {
+        let (mut m, _) = model();
+        let s = m.slabs().next().unwrap().clone();
+        let lo = s.outline.iter().fold(f64::MAX, |a, p| a.min(p.x));
+        let hi = s.outline.iter().fold(f64::MIN, |a, p| a.max(p.x));
+        let flat: f64 = slab_solids(&m, s.id).iter().map(Solid::volume).sum();
+        m.set_slab_slope(
+            s.id,
+            Some(archisim_core::SlabSlope {
+                from: Point2::new(lo, 0.0),
+                to: Point2::new(hi, 0.0),
+                slope: 0.1,
+            }),
+        )
+        .unwrap();
+        let solids = slab_solids(&m, s.id);
+        assert_closed(&solids);
+        let volume: f64 = solids.iter().map(Solid::volume).sum();
+        assert!((volume - flat * (1.01f64).sqrt()).abs() < 1e-9, "{volume}");
+        let top = solids[0]
+            .triangles
+            .iter()
+            .flatten()
+            .map(|p| p[2])
+            .fold(f64::MIN, f64::max);
+        assert!((top - (1.0 + 0.1 * (hi - lo))).abs() < 1e-9, "{top}");
     }
 
     /// Every edge of the solids together is shared by exactly two
