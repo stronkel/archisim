@@ -596,7 +596,11 @@ mod tests {
                 setback: None,
             })
             .unwrap();
-        assert!(m.opening(o).unwrap().values.is_empty());
+        // Its one instance parameter: whether it turns a corner.
+        assert_eq!(
+            m.opening(o).unwrap().values.keys().collect::<Vec<_>>(),
+            ["corner"]
+        );
         let ev = m.evaluate_opening(o).unwrap();
         // Two jambs, two rails, one mullion and two panes.
         assert_eq!(ev.parts.len(), 7);
@@ -671,6 +675,13 @@ mod tests {
                         for &f in &[0.001, 0.05, 0.09] {
                             for &d in &[0.001, 0.03, 0.07, 2.0] {
                                 let mut v = def.defaults(ParamScope::Type);
+                                // Inside each family's own range.
+                                let fit = |name: &str, x: f64| {
+                                    let r = def.param(name).and_then(|p| p.range);
+                                    r.map_or(x, |(lo, hi)| x.clamp(lo, hi))
+                                };
+                                let (w, h) = (fit("width", w), fit("height", h));
+                                let (f, d) = (fit("frame_width", f), fit("frame_depth", d));
                                 v.insert("width".into(), Value::Number(w));
                                 v.insert("height".into(), Value::Number(h));
                                 // Only the parameters the family has.
@@ -721,7 +732,8 @@ mod tests {
                                     }
                                     for hand in [Hand::Left, Hand::Right] {
                                         let b = opening_builtins(side, hand);
-                                        let ev = match def.evaluate(&v, &Values::new(), &b) {
+                                        let inst = def.defaults(ParamScope::Instance);
+                                        let ev = match def.evaluate(&v, &inst, &b) {
                                             Ok(ev) => ev,
                                             // Only the recipe's own rules may refuse.
                                             Err(FamilyError::Requirement { .. }) => continue,
@@ -775,14 +787,16 @@ mod tests {
                                             b.insert("wall_int".into(), Value::Number(-ext / 2.0));
                                             b.insert("sill_height".into(), Value::Number(sill));
                                             let marks = def
-                                                .evaluate_plan(&v, &Values::new(), &b, scale)
+                                                .evaluate_plan(&v, &inst, &b, scale)
                                                 .unwrap_or_else(|e| {
                                                     panic!("{} plan: {e}", fam.name())
                                                 });
                                             assert!(marks.is_empty() == (def.category == "void"));
                                             // Within the opening and, at most,
                                             // a leaf's width beyond a jamb (the
-                                            // pocket of a pocket door).
+                                            // pocket of a pocket door); into
+                                            // the room, as far as a leaf or a
+                                            // garage door's height (its tracks).
                                             for p in mark_points(&marks) {
                                                 assert!(
                                                     p[0].abs() <= 1.5 * w + 0.1,
@@ -790,7 +804,7 @@ mod tests {
                                                     fam.name()
                                                 );
                                                 assert!(
-                                                    p[1].abs() <= w + d + 0.5,
+                                                    p[1].abs() <= w.max(h) + d + 0.5,
                                                     "{} {p:?}",
                                                     fam.name()
                                                 );

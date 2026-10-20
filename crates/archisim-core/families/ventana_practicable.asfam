@@ -38,9 +38,20 @@ type_params
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro"
 
+instance_params
+  section "Esquina"
+    corner choice("no", "izquierda", "derecha") = "no" label "Ventana en esquina (lado sin jamba)"
+
 # Con premarco, la ventana va dentro de él.
 let s = if subframe then subframe_width else 0
 let w = width - 2 * s
+# En esquina, sin jamba de ese lado: el vidrio llega hasta el encuentro con
+# la ventana del otro muro.
+let fl = if corner == "izquierda" then 0 else frame_width
+let fr = if corner == "derecha" then 0 else frame_width
+let gc0 = -w / 2 + fl
+let gc1 = w / 2 - fr
+let gclear = (gc1 - gc0 - (leaves - 1) * frame_width) / leaves
 
 require 2 * frame_width < w and 2 * frame_width < height - 2 * s else "El marco no deja hueco para el vidrio"
 require (leaves + 1) * frame_width < w else "El marco y los montantes no dejan hueco para el vidrio"
@@ -68,8 +79,17 @@ require not transom or zl - z0 > 2 * frame_width + 0.20 else "La tarja no deja s
 body
   if subframe
     use subframe(width, height, s, frame_depth, subframe_material, 1)
-  use window_frame_z(w, z0, z1, frame_width, frame_depth, frame_material)
-  use glazing_z(w, z0 + frame_width, zl - frame_width, frame_width, frame_depth, leaves, frame_material, panel_material)
+  if fl > 0
+    use block(-w / 2, gc0, frame_depth, z0, z1, frame_material)
+  if fr > 0
+    use block(gc1, w / 2, frame_depth, z0, z1, frame_material)
+  use block(gc0, gc1, frame_depth, z0, z0 + frame_width, frame_material)
+  use block(gc0, gc1, frame_depth, z1 - frame_width, z1, frame_material)
+  repeat i in 0..leaves
+    let a = gc0 + i * (gclear + frame_width)
+    if i > 0
+      use block(a - frame_width, a, frame_depth, z0 + frame_width, zl - frame_width, frame_material)
+    use block(a, a + gclear, min(0.024, frame_depth), z0 + frame_width, zl - frame_width, panel_material)
   if transom
     use transom(-w / 2 + frame_width, w / 2 - frame_width, zl, z1 - frame_width, frame_width, frame_depth, frame_material, panel_material)
   if shutter
@@ -94,9 +114,9 @@ plan 1:50
     use frame_cut_plan(w / 2, width / 2, frame_depth)
   use frame_cut_plan(-w / 2, w / 2, frame_depth)
   let f = frame_width
-  let c0 = -w / 2 + f
-  let c1 = w / 2 - f
-  let clear = (w - 2 * f - (leaves - 1) * f) / leaves
+  let c0 = gc0
+  let c1 = gc1
+  let clear = gclear
   line (c0, 0) to (c1, 0) pen thin
   repeat i in 1..leaves
     let m = c0 + i * (clear + f) - f / 2
@@ -127,11 +147,13 @@ plan 1:20
     use frame_cut_plan(-width / 2, -w / 2, frame_depth)
     use frame_cut_plan(w / 2, width / 2, frame_depth)
   let f = frame_width
-  let c0 = -w / 2 + f
-  let c1 = w / 2 - f
-  use frame_cut_plan(-w / 2, c0, frame_depth)
-  use frame_cut_plan(c1, w / 2, frame_depth)
-  let clear = (w - 2 * f - (leaves - 1) * f) / leaves
+  let c0 = gc0
+  let c1 = gc1
+  if fl > 0
+    use frame_cut_plan(-w / 2, c0, frame_depth)
+  if fr > 0
+    use frame_cut_plan(c1, w / 2, frame_depth)
+  let clear = gclear
   repeat i in 1..leaves
     let m = c0 + i * (clear + f) - f
     use frame_cut_plan(m, m + f, frame_depth)
@@ -156,8 +178,8 @@ plan 1:20
 # bisagras como en planta.
 elevation
   let f = frame_width
-  let c0 = -w / 2 + f
-  let clear = (w - 2 * f - (leaves - 1) * f) / leaves
+  let c0 = gc0
+  let clear = gclear
   repeat i in 0..leaves
     let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
     let a = c0 + i * (clear + f)

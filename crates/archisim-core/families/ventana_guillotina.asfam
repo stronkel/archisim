@@ -30,22 +30,23 @@ let c1 = width / 2 - f
 let zm = height * meeting
 # Las hojas, en dos planos: la de abajo hacia el lado al que abre, la de
 # arriba hacia el otro.
-let q = min(0.02, frame_depth / 4)
+let q = frame_depth / 4
+let ts = min(0.02, frame_depth / 4)
 let r = f * 0.8
 
 require c1 - c0 > 2 * r + 0.10 else "El marco no deja hueco para las hojas"
 
-component sash(xa, xb, za, zb, y, r, frame_mat, glass_mat)
-  box (xa, y - 0.02, za) to (xa + r, y + 0.02, zb) material frame_mat
-  box (xb - r, y - 0.02, za) to (xb, y + 0.02, zb) material frame_mat
-  box (xa + r, y - 0.02, za) to (xb - r, y + 0.02, za + r) material frame_mat
-  box (xa + r, y - 0.02, zb - r) to (xb - r, y + 0.02, zb) material frame_mat
-  box (xa + r, y - 0.008, za + r) to (xb - r, y + 0.008, zb - r) material glass_mat
+component sash(xa, xb, za, zb, y, t, r, frame_mat, glass_mat)
+  box (xa, y - t, za) to (xa + r, y + t, zb) material frame_mat
+  box (xb - r, y - t, za) to (xb, y + t, zb) material frame_mat
+  box (xa + r, y - t, za) to (xb - r, y + t, za + r) material frame_mat
+  box (xa + r, y - t, zb - r) to (xb - r, y + t, zb) material frame_mat
+  box (xa + r, y - t / 2, za + r) to (xb - r, y + t / 2, zb - r) material glass_mat
 
 body
   use window_frame(width, height, f, frame_depth, frame_material)
-  use sash(c0, c1, f, zm + r / 2, q, r, frame_material, panel_material)
-  use sash(c0, c1, zm - r / 2, height - f, -q, r, frame_material, panel_material)
+  use sash(c0, c1, f, zm + r / 2, q, ts, r, frame_material, panel_material)
+  use sash(c0, c1, zm - r / 2, height - f, -q, ts, r, frame_material, panel_material)
   if sill
     let out = if opens_to == "exterior" then 1 else -1
     use window_sill(width, frame_depth, sill_depth, out, sill_material)
@@ -55,7 +56,7 @@ plan 1:50
     use sill_plan(width, frame_depth, wall_ext, wall_int)
   use frame_cut_plan(-width / 2, c0, frame_depth)
   use frame_cut_plan(c1, width / 2, frame_depth)
-  polygon (c0, q - 0.02) (c1, q - 0.02) (c1, q + 0.02) (c0, q + 0.02) pen thin
+  polygon (c0, q - ts) (c1, q - ts) (c1, q + ts) (c0, q + ts) pen thin
   line (c0, -q) to (c1, -q) pen thin
 
 plan 1:100

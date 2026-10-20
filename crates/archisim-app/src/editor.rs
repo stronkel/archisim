@@ -1017,6 +1017,26 @@ impl Editor {
         self.transact("Mover puerta o ventana", |m| m.move_opening(o, along, sill))
     }
 
+    /// Changes one instance parameter of a door or window (the corner of a
+    /// corner window…).
+    pub fn set_opening_value(
+        &mut self,
+        o: OpeningId,
+        param: &str,
+        value: archisim_core::Value,
+    ) -> EditResult {
+        let mut values = self
+            .model()
+            .opening(o)
+            .ok_or("la puerta o ventana no existe")?
+            .values
+            .clone();
+        values.insert(param.to_string(), value);
+        self.transact("Cambiar parámetro de la puerta o ventana", |m| {
+            m.set_opening_values(o, values)
+        })
+    }
+
     pub fn set_opening_handing(
         &mut self,
         o: OpeningId,

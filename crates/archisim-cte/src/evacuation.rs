@@ -94,18 +94,25 @@ pub fn doors(model: &Model) -> Vec<Door> {
                 .map(|r| r.id)
         };
         let rooms = [room_at(probe[0]), room_at(probe[1])];
+        // The clear width the family gives (without sidelights, or the
+        // short side of a pivot door), or the opening less its jambs.
+        let clear_of = |t: &archisim_core::OpeningType| {
+            model
+                .opening_clear_width(t.id)
+                .unwrap_or(t.width - 2.0 * t.frame_width)
+        };
         let (clear, leaf, hinged, sliding) = match t.kind {
             OpeningKind::Void => (t.width, t.width, false, false),
             OpeningKind::Door(DoorOperation::DoubleSwing) => {
-                let c = t.width - 2.0 * t.frame_width;
+                let c = clear_of(t);
                 (c, c / 2.0, true, false)
             }
-            OpeningKind::Door(DoorOperation::SingleSwing) => {
-                let c = t.width - 2.0 * t.frame_width;
+            OpeningKind::Door(DoorOperation::SingleSwing | DoorOperation::Pivot) => {
+                let c = clear_of(t);
                 (c, c, true, false)
             }
             OpeningKind::Door(_) => {
-                let c = t.width - 2.0 * t.frame_width;
+                let c = clear_of(t);
                 (c, c, false, true)
             }
             OpeningKind::Window(_) => {

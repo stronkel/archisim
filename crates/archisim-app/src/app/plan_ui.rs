@@ -1542,7 +1542,7 @@ impl ArchiSimApp {
                         leaves.push((g.t0, mid));
                         leaves.push((g.t1, mid));
                     }
-                    D::Sliding | D::Folding => {}
+                    D::Sliding | D::Folding | D::Pivot | D::Overhead | D::Rolling => {}
                 }
                 for (hinge, free) in leaves {
                     let r = (free - hinge).abs();

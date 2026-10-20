@@ -614,6 +614,25 @@ impl Opening {
     pub fn frame_setback(&self, wall_thickness: f64, frame_depth: f64) -> f64 {
         self.setback.unwrap_or((wall_thickness - frame_depth) / 2.0)
     }
+
+    /// For a corner window (its family's instance parameter `corner`:
+    /// «izquierda» or «derecha», seen from the side it opens to), which end
+    /// of its wall it reaches: `Some(true)` the end, `Some(false)` the
+    /// start. There it has no jamb, and the wall is opened through the
+    /// corner, so it meets the window of the other wall.
+    pub fn corner_end(&self) -> Option<bool> {
+        let right = match self.values.get("corner").and_then(Value::as_text)? {
+            "derecha" => true,
+            "izquierda" => false,
+            _ => return None,
+        };
+        // Family x runs with the wall when the leaves open to the interior
+        // and against it when they open to the exterior.
+        Some(match self.opens_to {
+            WallSide::Interior => right,
+            WallSide::Exterior => !right,
+        })
+    }
 }
 
 /// Data needed to place a door or window.
@@ -1940,8 +1959,22 @@ impl Model {
                 e => e,
             })?;
         self.walls.insert(id, wall);
+        // Corner windows follow the corner (of this wall or of the walls
+        // joined to it).
+        let saved: Vec<(OpeningId, f64)> = self
+            .openings
+            .values()
+            .filter(|o| o.corner_end().is_some())
+            .map(|o| (o.id, o.along))
+            .collect();
+        self.snap_corner_openings();
         if let Err(e) = self.check_hosted_openings(id) {
             self.walls.insert(id, previous);
+            for (oid, along) in saved {
+                if let Some(o) = self.openings.get_mut(&oid) {
+                    o.along = along;
+                }
+            }
             return Err(e);
         }
         Ok(())
@@ -2905,6 +2938,7 @@ impl Model {
                         }
                     }
                 }
+                self.snap_corner_openings();
                 Ok(())
             }
         }
@@ -3052,6 +3086,20 @@ impl Model {
         spec: &NewOpening,
         ignore: Option<OpeningId>,
     ) -> Result<(), ModelError> {
+        let corner = ignore
+            .and_then(|id| self.openings.get(&id))
+            .and_then(Opening::corner_end);
+        self.validate_opening_at(spec, ignore, corner)
+    }
+
+    /// [`Model::validate_opening`] for a door or window that turns a
+    /// corner (`corner`, see [`Opening::corner_end`]) or not.
+    fn validate_opening_at(
+        &self,
+        spec: &NewOpening,
+        ignore: Option<OpeningId>,
+        corner: Option<bool>,
+    ) -> Result<(), ModelError> {
         let otype = self
             .opening_types
             .get(&spec.opening_type)
@@ -3080,8 +3128,15 @@ impl Model {
         );
         let (bottom, top) = (spec.sill, spec.sill + otype.height);
         let wall_top = wall.base_offset + wall.height;
-        if a < -EPSILON
-            || b > wall.length() + EPSILON
+        // A corner window may reach past the end of the wall's line (into
+        // the corner), by as much as the wall is thick.
+        let (lo, hi) = match corner {
+            Some(false) => (-thickness, wall.length()),
+            Some(true) => (0.0, wall.length() + thickness),
+            None => (0.0, wall.length()),
+        };
+        if a < lo - EPSILON
+            || b > hi + EPSILON
             || bottom < wall.base_offset - EPSILON
             || top > wall_top + EPSILON
         {
@@ -3160,7 +3215,80 @@ impl Model {
             .ok_or(ModelError::UnknownOpening(id))?;
         o.along = along;
         o.sill = sill;
+        self.snap_corner_openings();
         Ok(())
+    }
+
+    /// Where a corner window's jamb goes on its wall's line: where the
+    /// wall's middle meets the middle of the wall joined at that end (or
+    /// the end itself if none is), as a distance from the wall start.
+    fn corner_position(&self, wall: WallId, end: bool) -> Option<f64> {
+        let w = self.walls.get(&wall)?;
+        let t = self.wall_types.get(&w.wall_type)?.thickness();
+        let (ext, int) = w.face_offsets(t);
+        let len = w.length();
+        let u = (w.end - w.start).normalized()?;
+        let n = u.perp_left();
+        let p = if end { w.end } else { w.start };
+        let fallback = if end { len } else { 0.0 };
+        let other = self.walls.values().find(|o| {
+            o.id != wall
+                && o.level == w.level
+                && !o.is_curved()
+                && (o.start.approx_eq(p) || o.end.approx_eq(p))
+        });
+        let Some(o) = other else {
+            return Some(fallback);
+        };
+        let ot = self.wall_types.get(&o.wall_type)?.thickness();
+        let (oe, oi) = o.face_offsets(ot);
+        let Some(u2) = (o.end - o.start).normalized() else {
+            return Some(fallback);
+        };
+        let n2 = u2.perp_left();
+        // This wall's middle: start + n·m + u·t; the other's: q + u2·s.
+        let m = (ext + int) / 2.0;
+        let q = o.start + n2 * ((oe + oi) / 2.0);
+        let origin = w.start + n * m;
+        let cross = u.x * u2.y - u.y * u2.x;
+        if cross.abs() < 1e-9 {
+            return Some(fallback);
+        }
+        let d = q - origin;
+        let t_c = (d.x * u2.y - d.y * u2.x) / cross;
+        // Only near the end (a wall crossing far away is not this corner).
+        if (t_c - fallback).abs() > t.max(ot) * 1.5 {
+            return Some(fallback);
+        }
+        Some(t_c)
+    }
+
+    /// Puts every corner window with its corner jamb where its wall meets
+    /// the next one (see [`Opening::corner_end`]). Called after anything
+    /// that moves walls or changes doors and windows.
+    pub fn snap_corner_openings(&mut self) {
+        let corners: Vec<(OpeningId, WallId, bool, f64)> = self
+            .openings
+            .values()
+            .filter_map(|o| {
+                let end = o.corner_end()?;
+                let w = self.opening_types.get(&o.opening_type)?.width;
+                Some((o.id, o.wall, end, w))
+            })
+            .collect();
+        for (id, wall, end, width) in corners {
+            let Some(t) = self.corner_position(wall, end) else {
+                continue;
+            };
+            let along = if end {
+                t - width / 2.0
+            } else {
+                t + width / 2.0
+            };
+            if let Some(o) = self.openings.get_mut(&id) {
+                o.along = along;
+            }
+        }
     }
 
     /// Changes the instance parameters of a door or window (those of its
@@ -3189,6 +3317,25 @@ impl Model {
             self.openings.get_mut(&id).expect("checked").values = previous;
             return Err(e);
         }
+        // A window that becomes a corner one goes to its corner.
+        let before = self.openings[&id].along;
+        self.snap_corner_openings();
+        let o = &self.openings[&id];
+        let spec = NewOpening {
+            opening_type: o.opening_type,
+            wall: o.wall,
+            along: o.along,
+            sill: o.sill,
+            opens_to: o.opens_to,
+            hand: o.hand,
+            setback: o.setback,
+        };
+        if let Err(e) = self.validate_opening(&spec, Some(id)) {
+            let o = self.openings.get_mut(&id).expect("checked");
+            o.values = previous;
+            o.along = before;
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -3206,6 +3353,7 @@ impl Model {
             .ok_or(ModelError::UnknownOpening(id))?;
         o.opens_to = opens_to;
         o.hand = hand;
+        self.snap_corner_openings();
         Ok(())
     }
 
@@ -3694,8 +3842,16 @@ impl Model {
                 },
             );
         }
-        for o in parts.openings {
+        for mut o in parts.openings {
             let name = format!("door or window {} ({})", o.id.0, o.guid);
+            // Instance parameters a newer recipe added take their defaults.
+            if let Some(family) = model.opening_types.get(&o.opening_type).map(|t| t.family) {
+                if let Ok(defaults) = model.family_defaults(family, ParamScope::Instance) {
+                    for (k, v) in defaults {
+                        o.values.entry(k).or_insert(v);
+                    }
+                }
+            }
             let spec = NewOpening {
                 opening_type: o.opening_type,
                 wall: o.wall,
@@ -3706,7 +3862,7 @@ impl Model {
                 setback: o.setback,
             };
             claim(o.id.0, Some(&o.guid))
-                .and_then(|_| model.validate_opening(&spec, None))
+                .and_then(|_| model.validate_opening_at(&spec, None, o.corner_end()))
                 .and_then(|_| {
                     let family = model.opening_types[&o.opening_type].family;
                     model.families[&family]

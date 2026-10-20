@@ -89,14 +89,18 @@ plan 1:50
   if subframe
     use frame_cut_plan(-width / 2, -w / 2, frame_depth)
     use frame_cut_plan(w / 2, width / 2, frame_depth)
-  use frame_cut_plan(-w / 2, -w / 2 + frame_width, frame_depth)
-  use frame_cut_plan(w / 2 - frame_width, w / 2, frame_depth)
-  use frame_cut_plan(c0 - frame_width, c0, frame_depth)
-  use frame_cut_plan(c1, c1 + frame_width, frame_depth)
   if side_left
+    use frame_cut_plan(-w / 2, -w / 2 + frame_width, frame_depth)
+    use frame_cut_plan(c0 - frame_width, c0, frame_depth)
     line (-w / 2 + frame_width, 0) to (c0 - frame_width, 0) pen thin
+  else
+    use frame_cut_plan(-w / 2, c0, frame_depth)
   if side_right
+    use frame_cut_plan(w / 2 - frame_width, w / 2, frame_depth)
+    use frame_cut_plan(c1, c1 + frame_width, frame_depth)
     line (c1 + frame_width, 0) to (w / 2 - frame_width, 0) pen thin
+  else
+    use frame_cut_plan(c1, w / 2, frame_depth)
   if leaves == 2
     let left = if hand == "left" then active else c1 - c0 - active
     use door_leaf_plan(c0, 1, left, frame_depth, swing_line)

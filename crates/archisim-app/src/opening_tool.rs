@@ -129,6 +129,7 @@ pub fn placement<G: Geo + ?Sized>(
         head: s.sill + otype.height,
         opens_to,
         hand: s.hand,
+        corner: None,
     };
     Some(Placement {
         before: along - width / 2.0,

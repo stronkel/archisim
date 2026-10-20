@@ -441,7 +441,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
 /// leaves, an entrance door with a transom and subframe, a two-leaf door
 /// with an active leaf, windows with subframe, sill and shutter, a
 /// three-leaf sliding window and a casement window with a transom.
-pub const STUDIO_TYPES: [StudioType; 9] = [
+pub const STUDIO_TYPES: [StudioType; 16] = [
     (
         "Puerta de paso 72,5 (baño)",
         "Puerta abatible",
@@ -528,6 +528,64 @@ pub const STUDIO_TYPES: [StudioType; 9] = [
             ("height", N(2.00)),
             ("transom", B(true)),
             ("transom_height", N(0.50)),
+        ],
+    ),
+    // v0.33: the families asked for on 20/10.
+    (
+        "Puerta de entrada con fijo lateral 140×215",
+        "Puerta abatible",
+        &[
+            ("width", N(1.40)),
+            ("height", N(2.15)),
+            ("side_left", B(true)),
+            ("side_width", N(0.40)),
+            ("side_base", N(0.40)),
+            ("frame_width", N(0.06)),
+            ("frame_depth", N(0.10)),
+        ],
+    ),
+    (
+        "Puerta pivotante de entrada 120×240",
+        "Puerta pivotante",
+        &[("width", N(1.20)), ("height", N(2.40)), ("pivot", N(0.25))],
+    ),
+    (
+        "Puerta de garaje seccional 250×220",
+        "Puerta de garaje",
+        &[("width", N(2.50)), ("height", N(2.20))],
+    ),
+    (
+        "Puerta de garaje enrollable 300×250",
+        "Puerta de garaje",
+        &[
+            ("width", N(3.00)),
+            ("height", N(2.50)),
+            ("kind", T("enrollable")),
+        ],
+    ),
+    (
+        "Ventana de guillotina 90×150",
+        "Ventana de guillotina",
+        &[("width", N(0.90)), ("height", N(1.50))],
+    ),
+    (
+        "Ventana pivotante 1 hoja 80×100",
+        "Ventana practicable",
+        &[
+            ("width", N(0.80)),
+            ("height", N(1.00)),
+            ("leaves", N(1.0)),
+            ("leaf_1", T("pivotante")),
+        ],
+    ),
+    (
+        "Ventana basculante 1 hoja 100×60",
+        "Ventana practicable",
+        &[
+            ("width", N(1.00)),
+            ("height", N(0.60)),
+            ("leaves", N(1.0)),
+            ("leaf_1", T("basculante")),
         ],
     ),
 ];
@@ -1002,9 +1060,9 @@ mod tests {
         assert_eq!(m.levels()[0].elevation, 0.0);
         assert_eq!(m.wall_types().count(), 3);
         assert_eq!(m.slab_types().count(), 4);
-        // With the studio's: 4 doors and 5 windows more.
-        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 10);
-        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 10);
+        // With the studio's: 8 doors and 8 windows more.
+        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 14);
+        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 13);
         let entrance = m
             .opening_types()
             .find(|t| t.name == "Puerta de entrada con tarja 100×250")

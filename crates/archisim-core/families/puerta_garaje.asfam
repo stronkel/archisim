@@ -41,7 +41,7 @@ body
   use block(-width / 2, c0, frame_depth, 0, height, frame_material)
   use block(c1, width / 2, frame_depth, 0, height, frame_material)
   if kind == "enrollable"
-    box (c0, -frame_depth / 2, top) to (c1, frame_depth / 2 + drum_height * 0.8, height) material frame_material
+    use block(c0, c1, frame_depth, top, height, frame_material)
     use block(c0, c1, 0.02, 0, top, panel_material)
   else
     use block(c0, c1, frame_depth, top, height, frame_material)
@@ -50,9 +50,9 @@ body
       let ph = (top - gap * (panels - 1)) / panels
       repeat i in 0..panels
         let z = i * (ph + gap)
-        use block(c0, c1, 0.04, z, z + ph, panel_material)
+        use block(c0, c1, min(0.04, frame_depth), z, z + ph, panel_material)
     else
-      use block(c0, c1, 0.04, 0, top, panel_material)
+      use block(c0, c1, min(0.04, frame_depth), 0, top, panel_material)
 
 # El cerco cortado, la hoja cerrada y, en discontinua, por dónde va al
 # abrir: guías bajo el techo (seccional), el giro hacia fuera y hacia

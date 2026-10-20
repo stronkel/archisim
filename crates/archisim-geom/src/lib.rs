@@ -820,11 +820,25 @@ pub struct OpeningGeometry {
     pub head: f64,
     pub opens_to: WallSide,
     pub hand: Hand,
+    /// A corner window: it opens the wall through its start (`Some(false)`)
+    /// or its end (`Some(true)`), past its jamb there.
+    pub corner: Option<bool>,
 }
 
 impl OpeningGeometry {
     pub fn width(&self) -> f64 {
         self.t1 - self.t0
+    }
+
+    /// Where the opening cuts its wall along it: its span, or, on the
+    /// corner side of a corner window, on to the end of the wall (its
+    /// joint with the next one included).
+    pub fn cut_span(&self) -> (f64, f64) {
+        match self.corner {
+            Some(false) => (-1e6, self.t1),
+            Some(true) => (self.t0, 1e6),
+            None => (self.t0, self.t1),
+        }
     }
 
     pub fn height(&self) -> f64 {
@@ -964,6 +978,7 @@ pub fn opening_geometry(model: &Model, id: OpeningId) -> Option<OpeningGeometry>
         head: o.sill + otype.height,
         opens_to: o.opens_to,
         hand: o.hand,
+        corner: o.corner_end(),
     })
 }
 
