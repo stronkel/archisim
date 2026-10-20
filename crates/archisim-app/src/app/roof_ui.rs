@@ -166,53 +166,6 @@ impl ArchiSimApp {
             .level(level)
             .map(|l| l.name.clone())
             .unwrap_or_default();
-        group(ui, "tool-roof-method", "Método", |ui| {
-            ui.add_space(2.0);
-            #[derive(Clone, Copy, PartialEq)]
-            enum Method {
-                Wand,
-                Polygon,
-                Rectangle,
-            }
-            let current = match (self.roof_settings.wand, self.roof_tool.mode) {
-                (true, _) => Method::Wand,
-                (false, SlabMode::Rectangle) => Method::Rectangle,
-                (false, SlabMode::Polygon) => Method::Polygon,
-            };
-            let mut method = current;
-            if super::widgets::method_picker(
-                ui,
-                "roof-method",
-                &mut method,
-                &[
-                    (
-                        Method::Wand,
-                        Icon::GeoWand,
-                        "Edificio",
-                        "Clic dentro del edificio: la cubierta por las caras exteriores de sus muros",
-                    ),
-                    (
-                        Method::Polygon,
-                        Icon::GeoPolygon,
-                        "Polígono",
-                        "Esquina a esquina (en L, T o U: limahoyas en las esquinas entrantes)",
-                    ),
-                    (
-                        Method::Rectangle,
-                        Icon::GeoRect,
-                        "Rectángulo",
-                        "Dos esquinas opuestas",
-                    ),
-                ],
-            ) {
-                self.roof_settings.wand = method == Method::Wand;
-                match method {
-                    Method::Polygon => self.roof_tool.set_mode(SlabMode::Polygon),
-                    Method::Rectangle => self.roof_tool.set_mode(SlabMode::Rectangle),
-                    Method::Wand => self.roof_tool.finish(),
-                }
-            }
-        });
         group(ui, "tool-roof-shape", "Forma", |ui| {
             row(ui, "Forma", "Qué lados llevan faldón", |ui, w| {
                 self.roof_settings.kind =

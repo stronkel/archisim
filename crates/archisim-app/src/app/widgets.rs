@@ -77,63 +77,6 @@ pub fn segmented<T: PartialEq + Copy>(
     changed
 }
 
-/// A row of icon buttons with a short name under each, one chosen (the
-/// geometry methods of the wall and slab tools, as in ArchiCAD's Info
-/// Box). Returns whether the choice changed.
-pub fn method_picker<T: PartialEq + Copy>(
-    ui: &mut Ui,
-    id_salt: impl std::hash::Hash + std::fmt::Debug,
-    value: &mut T,
-    options: &[(T, Icon, &str, &str)],
-) -> bool {
-    let p = Palette::current(ui.ctx());
-    let height = 46.0;
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
-    let painter = ui.painter_at(rect.expand(1.0));
-    let n = options.len().max(1) as f32;
-    let gap = 4.0;
-    let w = (rect.width() - gap * (n - 1.0)) / n;
-    let base = ui.make_persistent_id(id_salt);
-    let mut changed = false;
-    for (i, (v, icon, label, hint)) in options.iter().enumerate() {
-        let r = Rect::from_min_size(
-            Pos2::new(rect.left() + (w + gap) * i as f32, rect.top()),
-            Vec2::new(w, height),
-        );
-        let resp = ui
-            .interact(r, base.with(i), Sense::click())
-            .on_hover_text(format!("{label}: {hint}"));
-        let on = *value == *v;
-        let (fill, stroke, fg) = if on {
-            (p.accent_soft, Stroke::new(1.0, p.accent), p.accent)
-        } else if resp.hovered() {
-            (p.raised, Stroke::new(1.0, p.line), p.text)
-        } else {
-            (p.panel, Stroke::new(1.0, p.line), p.muted)
-        };
-        painter.rect(r, CornerRadius::same(7), fill, stroke, StrokeKind::Inside);
-        let icon_rect =
-            Rect::from_center_size(Pos2::new(r.center().x, r.top() + 17.0), Vec2::splat(20.0));
-        icons::paint(&painter, icon_rect, *icon, fg);
-        painter.text(
-            Pos2::new(r.center().x, r.bottom() - 9.0),
-            Align2::CENTER_CENTER,
-            *label,
-            if on {
-                strong_font(10.0)
-            } else {
-                FontId::proportional(10.0)
-            },
-            fg,
-        );
-        if resp.clicked() && !on {
-            *value = *v;
-            changed = true;
-        }
-    }
-    changed
-}
-
 /// A rounded toggle with a label (bottom bar): accent when on.
 pub fn chip(ui: &mut Ui, on: &mut bool, label: &str, hint: &str) -> Response {
     let p = Palette::current(ui.ctx());
@@ -219,9 +162,44 @@ pub fn list_row(
     active: bool,
     indent: f32,
 ) -> Response {
+    list_row_with(ui, Sense::click(), icon, badge, text, note, active, indent)
+}
+
+/// A row of a list that can also be dragged (onto a sheet).
+pub fn list_row_draggable(
+    ui: &mut Ui,
+    icon: Option<Icon>,
+    badge: Option<&str>,
+    text: &str,
+    note: &str,
+    active: bool,
+    indent: f32,
+) -> Response {
+    list_row_with(
+        ui,
+        Sense::click_and_drag(),
+        icon,
+        badge,
+        text,
+        note,
+        active,
+        indent,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn list_row_with(
+    ui: &mut Ui,
+    sense: Sense,
+    icon: Option<Icon>,
+    badge: Option<&str>,
+    text: &str,
+    note: &str,
+    active: bool,
+    indent: f32,
+) -> Response {
     let p = Palette::current(ui.ctx());
-    let (rect, resp) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), 28.0), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 28.0), sense);
     let painter = ui.painter_at(rect);
     if active {
         painter.rect_filled(rect, CornerRadius::same(6), p.accent_soft);

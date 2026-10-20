@@ -13,6 +13,7 @@ use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Rect, Sense, Str
 use super::coord_ui::CoordTab;
 use super::glyphs::{self, Glyph};
 use super::icons::{self, Icon};
+use super::tabs::{SchedTab, TabKind};
 use super::theme::Palette;
 use super::widgets::strong_font;
 use super::{ArchiSimApp, Tool};
@@ -864,6 +865,21 @@ pub const ORDERS: &[Order] = &[
     ),
 ];
 
+/// The name of an AutoCAD order for people («Sombreado» for SOMBCONT).
+pub fn order_name(command: &str) -> Option<&'static str> {
+    ORDERS
+        .iter()
+        .find(|o| matches!(o.pick, Pick::Command(c) if c == command))
+        .map(|o| o.name)
+        .or_else(|| {
+            Discipline::ALL
+                .iter()
+                .flat_map(|d| d.tiles())
+                .find(|t| matches!(t.pick, Pick::Command(c) if c == command))
+                .map(|t| t.name)
+        })
+}
+
 /// One result of the command search.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Found {
@@ -972,7 +988,14 @@ impl ArchiSimApp {
             Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
             Pick::Action(a) => Some(match a {
                 Action::Cte => self.cte.open,
-                Action::Schedule | Action::Takeoff => self.schedule_open.is_some(),
+                Action::Schedule => matches!(
+                    self.tabs.get(self.active_tab).map(|t| t.kind),
+                    Some(TabKind::Schedule(SchedTab::Kind(_)))
+                ),
+                Action::Takeoff => {
+                    self.tabs.get(self.active_tab).map(|t| t.kind)
+                        == Some(TabKind::Schedule(SchedTab::Takeoff))
+                }
                 Action::Versions => {
                     self.coord_window.open && self.coord_window.tab == CoordTab::Links
                 }
@@ -1041,15 +1064,11 @@ impl ArchiSimApp {
             Action::Elevations => self.create_elevations(),
             Action::NewSheet => self.new_sheet(),
             Action::Schedule => {
-                let kind = self
-                    .schedule_open
-                    .map_or(archisim_core::ScheduleKind::Openings, |o| o.0);
-                self.schedule_open = Some((kind, None));
+                self.open_view(TabKind::Schedule(SchedTab::Kind(
+                    archisim_core::ScheduleKind::Openings,
+                )));
             }
-            Action::Takeoff => {
-                self.schedule_open = Some((archisim_core::ScheduleKind::Walls, None));
-                self.say("Mediciones por tipo; el BC3 de todo el proyecto, en Archivo → Exportar mediciones.");
-            }
+            Action::Takeoff => self.open_view(TabKind::Schedule(SchedTab::Takeoff)),
             Action::Cte => self.cte.open = true,
             Action::Link => self.link_ifc_dialog(),
             Action::Versions => coord_tab(self, CoordTab::Links),

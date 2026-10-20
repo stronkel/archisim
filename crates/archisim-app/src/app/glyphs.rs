@@ -67,6 +67,18 @@ pub enum Glyph {
     Publish,
     /// The magnifier of the command search.
     Search,
+    Spline,
+    PickLine,
+    Align,
+    Break,
+    Join,
+    SnapEnd,
+    SnapMid,
+    SnapEdge,
+    SnapTrack,
+    Ortho,
+    Hatch,
+    Line,
 }
 
 impl Glyph {
@@ -212,6 +224,38 @@ impl Glyph {
             Glyph::Team => {
                 r##"<circle cx="7" cy="7" r="2.5"/><circle cx="14" cy="8" r="2"/><path d="M2 16c0-3 2-5 5-5s5 2 5 5M12 16c0-2 1-4 3-4s3 2 3 4" stroke-width="1"/>"##
             }
+            Glyph::Spline => {
+                r##"<path d="M3 15C6 4 10 16 17 5"/><circle cx="3" cy="15" r="1.3" fill="#fff" stroke="none"/><circle cx="17" cy="5" r="1.3" fill="#fff" stroke="none"/>"##
+            }
+            Glyph::PickLine => {
+                r##"<path d="M2 15L13 4" stroke-dasharray="2 1.6"/><path d="M10.5 10.5l6.5 2.4-2.8 1.3-1.3 2.8z" fill="#fff"/>"##
+            }
+            Glyph::Align => {
+                r##"<path d="M3 2v16"/><rect x="3" y="5" width="9" height="3.5"/><rect x="3" y="11.5" width="13" height="3.5"/>"##
+            }
+            Glyph::Break => {
+                r##"<path d="M2 11h6M12 11h6"/><path d="M8.6 7l-1.2 8M12.6 7l-1.2 8" stroke-width="0.9"/>"##
+            }
+            Glyph::Join => {
+                r##"<path d="M2 14h6.5M11.5 14H18"/><path d="M6.5 9c1.6-3.2 5.4-3.2 7 0" stroke-width="0.9"/><path d="M11.8 8.6l1.7.4.6-1.7" stroke-width="0.9"/>"##
+            }
+            Glyph::SnapEnd => {
+                r##"<path d="M3 17L13 7"/><rect x="12" y="2" width="6" height="6"/>"##
+            }
+            Glyph::SnapMid => r##"<path d="M2 15h16"/><path d="M10 7.5l4.2 7.5H5.8z"/>"##,
+            Glyph::SnapEdge => {
+                r##"<path d="M2 15h16"/><path d="M7 9h6l-6 6h6z" stroke-width="1"/>"##
+            }
+            Glyph::SnapTrack => {
+                r##"<path d="M2 10h16M10 2v16" stroke-dasharray="2 1.6"/><circle cx="10" cy="10" r="2.2"/>"##
+            }
+            Glyph::Ortho => r##"<path d="M4 3v13h13"/><path d="M4 12h4v4" stroke-width="0.9"/>"##,
+            Glyph::Hatch => {
+                r##"<rect x="3" y="3" width="14" height="14"/><path d="M3 9l6-6M3 15L15 3M7 17l10-10M13 17l4-4" stroke-width="0.8"/>"##
+            }
+            Glyph::Line => {
+                r##"<path d="M3 16L17 4"/><circle cx="3" cy="16" r="1.3" fill="#fff" stroke="none"/><circle cx="17" cy="4" r="1.3" fill="#fff" stroke="none"/>"##
+            }
             Glyph::Search => r##"<circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.6 12.6L17 17"/>"##,
             Glyph::Publish => {
                 r##"<path d="M5 15a4 4 0 0 1 0-8 5 5 0 0 1 9.5 1.5A3.5 3.5 0 0 1 15 15z"/><path d="M10 9v5M8 11l2-2 2 2" stroke-width="1"/>"##
@@ -279,6 +323,18 @@ impl Glyph {
         Glyph::Team,
         Glyph::Publish,
         Glyph::Search,
+        Glyph::Spline,
+        Glyph::PickLine,
+        Glyph::Align,
+        Glyph::Break,
+        Glyph::Join,
+        Glyph::SnapEnd,
+        Glyph::SnapMid,
+        Glyph::SnapEdge,
+        Glyph::SnapTrack,
+        Glyph::Ortho,
+        Glyph::Hatch,
+        Glyph::Line,
     ];
 }
 

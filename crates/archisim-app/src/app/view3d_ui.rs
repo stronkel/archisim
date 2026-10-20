@@ -32,6 +32,8 @@ pub enum ViewMode {
     Section,
     /// A sheet (paper with views on it).
     Sheet(archisim_core::SheetId),
+    /// A schedule or the measurements, as a table.
+    Schedule,
 }
 
 /// Everything the 3D view keeps between frames.
@@ -321,7 +323,7 @@ impl ArchiSimApp {
         match mode {
             ViewMode::Plan => self.show_plan(),
             ViewMode::ThreeD => self.open_view(super::TabKind::ThreeD),
-            ViewMode::Section => {}
+            ViewMode::Section | ViewMode::Schedule => {}
             ViewMode::Sheet(s) => self.open_view(super::TabKind::Sheet(s)),
         }
     }

@@ -22,7 +22,7 @@ type StyleChange = (
 
 /// "By layer" or a value, for the combos.
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum ByLayer<T> {
+pub(super) enum ByLayer<T> {
     Layer,
     Own(T),
 }
@@ -32,7 +32,7 @@ fn weight_label(w: f64) -> String {
 }
 
 /// The options of the line weight combo.
-fn weight_options() -> Vec<(ByLayer<u64>, String)> {
+pub(super) fn weight_options() -> Vec<(ByLayer<u64>, String)> {
     let mut v = vec![(ByLayer::Layer, "PorCapa".to_string())];
     v.extend(
         LINE_WEIGHTS
@@ -42,7 +42,7 @@ fn weight_options() -> Vec<(ByLayer<u64>, String)> {
     v
 }
 
-fn line_options() -> Vec<(ByLayer<LineStyle>, &'static str)> {
+pub(super) fn line_options() -> Vec<(ByLayer<LineStyle>, &'static str)> {
     let mut v = vec![(ByLayer::Layer, "PorCapa")];
     v.extend(LineStyle::ALL.iter().map(|l| (ByLayer::Own(*l), l.label())));
     v
@@ -54,7 +54,7 @@ fn combo<T: PartialEq + Copy>(ui: &mut Ui, salt: &str, w: f32, v: T, opts: &[(T,
 }
 
 impl ArchiSimApp {
-    fn layer_options(&self) -> Vec<(DrawLayerId, String)> {
+    pub(super) fn layer_options(&self) -> Vec<(DrawLayerId, String)> {
         self.ed
             .model()
             .draw_layers()

@@ -94,9 +94,10 @@ fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> (Point2, Po
 /// The part of the model a view shows (its crop, or its whole level or
 /// section). A section view placed from the app always has its crop.
 pub fn viewport_crop(model: &Model, v: &Viewport) -> (Point2, Point2) {
-    let whole = || match v.section {
-        Some(s) => section_extent(model, s, v.scale),
-        None => level_extent(model, v.level, v.scale),
+    let whole = || match (v.axo, v.section) {
+        (Some(a), _) => Some(crate::axo::axo_extent(model, &a, v.scale)),
+        (None, Some(s)) => section_extent(model, s, v.scale),
+        (None, None) => level_extent(model, v.level, v.scale),
     };
     v.crop
         .or_else(whole)
@@ -120,6 +121,9 @@ pub fn sheet_to_model(model: &Model, v: &Viewport, p: Point2) -> Point2 {
 /// The title written under a view.
 pub fn viewport_title(model: &Model, v: &Viewport) -> String {
     if v.title.trim().is_empty() {
+        if v.axo.is_some() {
+            return "VISTA 3D".into();
+        }
         match v.section {
             Some(s) => model
                 .section(s)
@@ -357,6 +361,16 @@ fn draw_view_title(s: &mut String, model: &Model, v: &Viewport) {
 /// The plan, section or elevation of a view, as an SVG fragment placed
 /// and cut on the sheet.
 fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<f64>) {
+    if let Some(axo) = v.axo {
+        let d = crate::axo::axo_drawing(model, &axo);
+        let m = 5.0 * v.scale / 1000.0;
+        let crop = v
+            .crop
+            .unwrap_or((d.lo - Point2::new(m, m), d.hi + Point2::new(m, m)));
+        let svg = crate::axo::render_axo(&d, crop, v.scale);
+        place_view_svg(s, &svg, v, crop);
+        return;
+    }
     let section = v
         .section
         .and_then(|id| model.section(id))
@@ -366,11 +380,6 @@ fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<
         (Some(d), None) => drawing_extent(d, v.scale),
         (None, None) => viewport_crop(model, v),
     };
-    let half = Point2::new(
-        (crop_hi.x - crop_lo.x) / v.scale / 2.0,
-        (crop_hi.y - crop_lo.y) / v.scale / 2.0,
-    );
-    let (lo, hi) = (v.centre - half, v.centre + half);
     let options = PlanOptions {
         scale: v.scale,
         cut_plane: v.cut_plane,
@@ -384,6 +393,17 @@ fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<
         Some(d) => crate::section::render_section(model, d, &options),
         None => render_plan(model, v.level, &options),
     };
+    place_view_svg(s, &plan, v, (crop_lo, crop_hi));
+}
+
+/// Puts the drawing of a view on the sheet, scaled and cut to its crop.
+fn place_view_svg(s: &mut String, plan: &str, v: &Viewport, crop: (Point2, Point2)) {
+    let (crop_lo, crop_hi) = crop;
+    let half = Point2::new(
+        (crop_hi.x - crop_lo.x) / v.scale / 2.0,
+        (crop_hi.y - crop_lo.y) / v.scale / 2.0,
+    );
+    let (lo, hi) = (v.centre - half, v.centre + half);
     // The plan's own <svg> keeps its viewBox (the crop in model metres);
     // placed with x, y, width and height it scales and is cut to them.
     let body_start = plan.find('>').map_or(0, |i| i + 1);
@@ -549,6 +569,7 @@ mod tests {
                 sheet: s,
                 level: l,
                 section: None,
+                axo: None,
                 scale: 50.0,
                 cut_plane: 1.1,
                 crop: None,
