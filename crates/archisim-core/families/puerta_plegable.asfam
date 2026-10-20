@@ -1,7 +1,7 @@
 family "Puerta plegable"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta plegable (de librillo) de 2 a 8 hojas que se recogen a un lado, con cerco"
 
 include "piezas"
@@ -54,6 +54,21 @@ plan 1:50
   line (tip + s * 0.05, ya) to (tip + s * 0.25, ya) pen thin
   line (tip + s * 0.05, ya) to (tip + s * 0.11, ya + 0.03) pen thin
   line (tip + s * 0.05, ya) to (tip + s * 0.11, ya - 0.03) pen thin
+
+# En alzado, el zigzag de las hojas a medio plegar visto de frente: en
+# cada par, las líneas de apertura hacia la arista que se recoge.
+elevation
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let lw = (c1 - c0) / leaves
+  let h = height - frame_width
+  repeat i in 0..leaves
+    let a = c0 + i * lw
+    let odd = i - 2 * floor(i / 2)
+    if odd == 0
+      use side_hung_lines(a, a + lw, 0, h, "continuous")
+    else
+      use side_hung_lines(a + lw, a, 0, h, "continuous")
 
 plan 1:100
   let c0 = -width / 2 + frame_width

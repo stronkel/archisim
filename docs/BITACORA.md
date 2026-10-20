@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (12:00) · Familias: lo que faltaba del configurador y tipos multicapa en la biblioteca (v0.33)
+
+Primera de las cinco tandas pedidas el 20/10 a las 11:31: pendientes de familias; después familias nuevas, parámetros compartidos, familias de anotación, importación de objetos y editor gráfico de recetas.
+
+**Hecho**
+- **Símbolo 1:20 en las recetas**: la puerta abatible dibuja a 1:20 el cerco con el **galce** donde cierra la hoja; la ventana practicable, el perfil de **cada hoja**, los montantes y el **doble vidrio**. Se ven en la planta a 1:20 y en la vista previa de Tipos y materiales (que es 1:20). El resto de familias usan a 1:20 su símbolo de 1:50, como hasta ahora.
+- **Alzado en las recetas** (bloque `elevation`, descrito en `docs/FAMILIAS.md`) con las **líneas de apertura**: el vértice del triángulo señala las bisagras; oscilobatiente con los dos triángulos; abatible y proyectante con el vértice abajo o arriba; basculante y pivotante con un rombo y su eje en trazo y punto; correderas con una flecha; plegable con el zigzag. Salen en la vista previa «Alzado» de los tipos y en **los alzados y secciones del proyecto**: continuas vistas desde el lado al que abren las hojas, **discontinuas** desde el otro (así se ven por fuera las ventanas que abren hacia dentro).
+- **Hoja pivotante** (eje vertical) en la ventana practicable, junto a las seis que había: en planta, la hoja girada atravesando el marco; en IFC, `PIVOTVERTICAL` (también al importar).
+- **Puntos de control de puertas y ventanas** (los *hotspots* de ArchiCAD): con una puerta o ventana seleccionada aparecen dos en sus jambas, en la cara del muro contraria a la que abre (en la otra están las cotas temporales). Arrastrando uno, el hueco se ensancha o se estrecha con la otra jamba quieta. Si el tipo lo usan otras puertas, se hace un tipo propio (con marca nueva) para no cambiarlas.
+- **Seleccionar los ejemplares de todo el proyecto**: Navegador → clic derecho sobre un tipo → «Seleccionar los N de todo el proyecto» (todas las plantas); lo que cambies en Propiedades se aplica a todos.
+- **Tipos de muro y de forjado en la biblioteca**: ficheros `Muros.astipos` y `Forjados.astipos` (texto legible: cada tipo con su `GlobalId`, función y capas, y los materiales con su color y trama). Navegador → clic derecho sobre un tipo de muro o forjado → «Guardar en la biblioteca»; ventana Biblioteca → «Cargar», con la misma regla del `GlobalId` que las puertas (igual: no hace nada; distinto: sustituir o cargar como otro tipo). `archisim biblioteca` los escribe también, en la carpeta `Multicapas`.
+- Familias de sistema: puerta abatible v5, ventana practicable v6, ventana corredera v4, puertas correderas y plegable una versión más (los proyectos anteriores las actualizan desde la ventana Biblioteca).
+- Versión 0.33.0. Sin cambios de formato `.archisim` ni de IFC (demo validada en IFC 4.3 e IFC4; ida y vuelta idéntica salvo la fecha; DXF y PDF validados).
+
+**Pendiente**
+- Tandas 2 a 5 (familias nuevas, parámetros compartidos, anotación, importación de objetos y editor gráfico de recetas).
+- El símbolo 1:20 de correderas, plegable y huecos (usan el de 1:50).
+
+**Qué debe probar Antonio**
+1. Abre la demo. En la barra inferior pon la planta a **1:20** y acércate a una puerta y a una ventana: el cerco con su galce y las hojas con doble vidrio.
+2. Abre **Alzado Sur** (Navegador → Secciones y alzados): las ventanas tienen sus líneas de apertura **discontinuas** (abren hacia dentro y las ves desde fuera), con el vértice hacia las bisagras. Dime si es la convención que usáis.
+3. **Tipos y materiales → Ventanas → V-01 → Alzado**: líneas de apertura continuas. Cambia la hoja 1 a «oscilobatiente», «proyectante» y «pivotante» y mira el alzado y la planta.
+4. Selecciona una puerta en planta: arrastra el punto de control de una de sus jambas 20 cm. La puerta se ensancha con la otra jamba quieta; si había más puertas de ese tipo, aparece un tipo nuevo («… (2)»).
+5. Navegador → MODELO → Muros → clic derecho sobre «Fachada doble hoja 26,5» → **Guardar en la biblioteca**. Archivo → Nuevo, Vista → Biblioteca…: en «Muros · tipos multicapa» pulsa **Cargar**.
+6. Navegador → Puertas → clic derecho sobre un tipo → «Seleccionar los N de todo el proyecto».
+
+---
+
 ## 2026-10-20 (tarde) · Librería de AD5, primera vuelta (2.2, v0.32)
 
 Quinto y último bloque de los pedidos el 19/10. La v0.31 (CTE) quedó fusionada en `main` con la integración continua en verde.

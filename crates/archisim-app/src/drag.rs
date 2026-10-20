@@ -65,6 +65,14 @@ pub enum Grip {
         object: archisim_core::ObjectId,
         width: bool,
     },
+    /// A jamb of a door or window (ArchiCAD's hotspots on its rough
+    /// opening): dragged along the wall, it widens or narrows the opening
+    /// with the other jamb staying put. `start`: the jamb nearer the wall's
+    /// start.
+    OpeningJamb {
+        opening: archisim_core::OpeningId,
+        start: bool,
+    },
     /// A measured point of a dimension: dragged to another point, the
     /// dimension measures to it (no need to delete and draw it again).
     DimPoint {
@@ -323,7 +331,28 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Opening(_) | Element::Mark(_) | Element::Column(_) | Element::Tag(_) => {}
+            // Its two jambs, on the face of the wall it does not open to
+            // (the temporary dimensions measure on the other): they
+            // stretch the width.
+            Element::Opening(id) => {
+                if let Some(og) = archisim_geom::opening_geometry(model, *id) {
+                    let face = if (og.swing_face() - og.exterior_offset).abs() < 1e-9 {
+                        og.interior_offset
+                    } else {
+                        og.exterior_offset
+                    };
+                    for (start, t) in [(true, og.t0), (false, og.t1)] {
+                        v.push(Hotspot {
+                            grip: Grip::OpeningJamb {
+                                opening: *id,
+                                start,
+                            },
+                            point: og.point(t, face),
+                        });
+                    }
+                }
+            }
+            Element::Mark(_) | Element::Column(_) | Element::Tag(_) => {}
         }
     }
     v
@@ -384,6 +413,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
+        Grip::OpeningJamb { opening, .. } => [Element::Opening(opening)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
         Grip::DraftPoint { draft, .. } => [Element::Draft(draft)].into_iter().collect(),
     }
@@ -447,6 +477,55 @@ fn stretch_object(
     }
 }
 
+/// Moves one jamb of a door or window along its wall to `to` (projected
+/// on the wall): its type's width changes and its centre moves so the
+/// other jamb stays where it was. A type shared with other doors or windows
+/// is copied first (with a new mark), so only this one changes.
+fn stretch_opening(
+    model: &mut Model,
+    id: archisim_core::OpeningId,
+    start: bool,
+    to: Point2,
+) -> Result<(), ModelError> {
+    use archisim_core::Value;
+    let og = archisim_geom::opening_geometry(model, id).ok_or(ModelError::UnknownOpening(id))?;
+    let o = model
+        .opening(id)
+        .ok_or(ModelError::UnknownOpening(id))?
+        .clone();
+    let t = (to - og.origin).dot(og.u);
+    let (fixed, moved) = if start { (og.t1, t) } else { (og.t0, t) };
+    // Too narrow, the family's range refuses it with its own message.
+    let width = ((fixed - moved).abs() * 1000.0).round().max(1.0) / 1000.0;
+    let centre = o.along + ((fixed + moved) / 2.0 - (og.t0 + og.t1) / 2.0);
+    let ot = model
+        .opening_type(o.opening_type)
+        .ok_or(ModelError::UnknownOpeningType(o.opening_type))?
+        .clone();
+    let mut values = ot.values.clone();
+    values.insert("width".into(), Value::Number(width));
+    let ty = if model.opening_type_users(ot.id) > 1 {
+        let taken: Vec<String> = model.opening_types().map(|t| t.name.clone()).collect();
+        let name = crate::editor::copy_name(&ot.name, &taken);
+        let new = model.duplicate_opening_type(ot.id, name)?;
+        model.set_opening_type(id, new)?;
+        new
+    } else {
+        ot.id
+    };
+    // Narrowing first and moving after, or moving first and widening after,
+    // so it never overlaps its neighbours on the way.
+    if width < ot.width {
+        model.edit_family_type(ty, ot.family, values)?;
+        model.move_opening(id, centre, o.sill)
+    } else {
+        // May not fit yet with the old width; the widening decides.
+        let _ = model.move_opening(id, centre, o.sill);
+        model.edit_family_type(ty, ot.family, values)?;
+        model.move_opening(id, centre, o.sill)
+    }
+}
+
 /// The walls with an end at the same point as the given end of `wall`
 /// (itself included), and which of their ends it is.
 fn joined_at(model: &Model, wall: WallId, start: bool) -> Vec<(WallId, bool)> {
@@ -495,6 +574,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
+        Grip::OpeningJamb { .. } => "Estirar hueco",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
         Grip::DraftPoint { .. } => "Estirar",
     }
@@ -579,6 +659,9 @@ pub fn apply(
             .map(|_| None),
         Grip::ObjectSize { object, width } => {
             stretch_object(model, object, width, drag.to).map(|_| None)
+        }
+        Grip::OpeningJamb { opening, start } => {
+            stretch_opening(model, opening, start, drag.to).map(|_| None)
         }
         Grip::DimPoint { dimension, index } => {
             let d = model
@@ -1343,6 +1426,9 @@ fn level_of(
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
+        Grip::OpeningJamb { opening, .. } => {
+            model.opening(opening).and_then(|o| wall_level(o.wall))
+        }
         Grip::DraftPoint { draft, .. } => draft_level(model, draft),
         Grip::Body => selection.iter().find_map(|e| match e {
             Element::Wall(id) => wall_level(*id),
@@ -1751,6 +1837,55 @@ mod tests {
             apply(&mut m, &sel(&[Element::Opening(door)]), &too_far),
             Err(ModelError::OpeningOutsideWall)
         );
+    }
+
+    #[test]
+    fn dragging_a_jamb_widens_the_door_and_keeps_the_other_jamb() {
+        let (mut m, _, _) = room();
+        let door = m.openings().next().unwrap().id;
+        let before = archisim_geom::opening_geometry(&m, door).unwrap();
+        let hs = hotspots(&m, &sel(&[Element::Opening(door)]));
+        assert_eq!(hs.len(), 2);
+        let jamb = hs
+            .iter()
+            .find(|h| {
+                h.grip
+                    == Grip::OpeningJamb {
+                        opening: door,
+                        start: false,
+                    }
+            })
+            .unwrap();
+        // 20 cm further along the wall: 20 cm wider, the start jamb fixed.
+        let along = before.u * 0.2;
+        let drag = Drag {
+            grip: jamb.grip,
+            from: jamb.point,
+            to: Point2::new(jamb.point.x + along.x, jamb.point.y + along.y + 0.3),
+            variant: false,
+        };
+        let w0 = before.t1 - before.t0;
+        // The door type is shared with another door: a copy is made.
+        let t0 = m.opening(door).unwrap().opening_type;
+        let wall = m.opening(door).unwrap().wall;
+        let other = m
+            .add_opening(NewOpening {
+                opening_type: t0,
+                wall,
+                along: 0.6,
+                sill: 0.0,
+                opens_to: archisim_core::WallSide::Interior,
+                hand: archisim_core::Hand::Left,
+                setback: None,
+            })
+            .unwrap();
+        apply(&mut m, &sel(&[Element::Opening(door)]), &drag).unwrap();
+        let after = archisim_geom::opening_geometry(&m, door).unwrap();
+        assert!((after.t1 - after.t0 - w0 - 0.2).abs() < 1e-9);
+        assert!((after.t0 - before.t0).abs() < 1e-9);
+        assert_ne!(m.opening(door).unwrap().opening_type, t0);
+        assert_eq!(m.opening(other).unwrap().opening_type, t0);
+        assert!((m.opening_type(t0).unwrap().width - w0).abs() < 1e-9);
     }
 
     #[test]

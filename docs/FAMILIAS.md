@@ -140,7 +140,8 @@ ifc                            # datos IFC
 - **Geometría**: `box (x, y, z) to (x, y, z) material m`; `use pieza(…)`; `repeat i in a..b` (b excluido); `if` / `else if` / `else`; `let`. Una pieza común solo ve sus propios argumentos.
 - **Textos**: se unen con `+` (`"SIDEHUNG" + side + "HAND"`).
 - **Tipos de línea**: detrás de la pluma, `dashed`, `dotted`, `dashdot`, `dashdotdot` o `longdash` (continua si no se pone nada), o `style <valor>` con un parámetro de clase `linestyle` («Línea del giro» en las puertas y ventanas de sistema). En pantalla se eligen por su nombre: continua, discontinua, de puntos, trazo y punto, trazo y dos puntos, trazos largos. Los patrones van en milímetros de papel (UNE-EN ISO 128-2), así que se ven igual a cualquier escala.
-- **Símbolos de planta**: un bloque `plan 1:N` por escala; se dibuja el de la escala más cercana (1:20 usa el de 1:50 si no hay otro). Dentro, `line (x, y) to (x, y) pen P [dashed]`, `polygon (x, y) (x, y) (x, y)… pen P [filled]` (relleno blanco, tapa lo que hay debajo) y `arc center (x, y) from (x, y) to (x, y) pen P` (por el camino corto), además de `let`, `if`, `repeat` y piezas comunes. Plumas: `cut` (corte), `frame` (marcos y hojas), `view` (proyección), `thin` (vidrios, giros, cantos) y `hatch`; su grosor real lo pone la escala (D5), no la familia. Una caja no puede ir en planta ni una línea en el cuerpo 3D.
+- **Símbolos de planta**: un bloque `plan 1:N` por escala; se dibuja el de la escala más cercana (1:20 usa el de 1:50 si no hay otro; las familias de sistema abatible y practicable traen el suyo de 1:20).
+- **Alzado**: un bloque `elevation` con las mismas líneas, polígonos y arcos que la planta, pero en `x` (a lo largo del muro) y `z` (hacia arriba desde el antepecho), visto desde el lado al que abren las hojas. Es donde van las **líneas de apertura**: el vértice señala el lado de las bisagras (o el eje, en pivotantes y basculantes). Las dibujan la vista previa de los tipos y los alzados y secciones del proyecto; vistas desde el otro lado, salen discontinuas. Piezas comunes: `side_hung_lines`, `hung_lines`, `pivot_lines`, `arrow_lines` y `leaf_elevation` (las de cada funcionamiento de hoja de la ventana practicable). Dentro, `line (x, y) to (x, y) pen P [dashed]`, `polygon (x, y) (x, y) (x, y)… pen P [filled]` (relleno blanco, tapa lo que hay debajo) y `arc center (x, y) from (x, y) to (x, y) pen P` (por el camino corto), además de `let`, `if`, `repeat` y piezas comunes. Plumas: `cut` (corte), `frame` (marcos y hojas), `view` (proyección), `thin` (vidrios, giros, cantos) y `hatch`; su grosor real lo pone la escala (D5), no la familia. Una caja no puede ir en planta ni una línea en el cuerpo 3D.
 - **Reglas**: `require condición else "mensaje"`; si no se cumple, el cambio se rechaza con ese mensaje.
 - **Lo que pone el programa**: `opens_to` (`"interior"` / `"exterior"`) y `hand` (`"left"` / `"right"`, UNE-EN 12519) en las familias alojadas en muro; en planta, además, `wall_ext` y `wall_int` (dónde están las caras exterior e interior del muro, en los ejes de la familia) y `sill_height` (antepecho).
 - **Salidas que lee ArchiSim** de una familia de puerta o ventana: `opening_width`, `opening_height`, `frame_width`, `frame_depth`, `frame_material`, `panel_material` y `operation` (`single_swing`, `double_swing`, `sliding`, `folding`; `fixed`, `single_casement`, `double_casement`, `sliding`); en `ifc`, para ventanas, `panel_count` y `panel_1`… con el funcionamiento IFC de cada hoja (`FIXEDCASEMENT`, `SIDEHUNGLEFTHAND`, `TILTANDTURNRIGHTHAND`, `TOPHUNG`…). El IFC escribe como cuerpo de cada puerta o ventana las piezas (`box`) de su receta.
@@ -165,21 +166,21 @@ Las recetas de las cuatro familias de sistema están en `crates/archisim-core/fa
 | **A · Núcleo** ✅ v0.14 | Lector de recetas: parámetros con secciones y visibilidad, fórmulas, condiciones, repeticiones, piezas comunes, geometría 3D. Tipos con nombre, marca y familia. Los tipos actuales pasan a las cinco familias (abatible, corredera; practicable, corredera, fija). Formato `.archisim` **versión 3** con migración | La demo y los proyectos v1/v2 se abren y dan **el mismo 3D y el mismo IFC** que hoy (volúmenes y `GlobalId` incluidos), validado con IfcOpenShell |
 | **B · Planta** ✅ v0.15 | Símbolos de planta por escala (1:50 y 1:100; el 1:20 y el alzado, con D); el dibujo fijo de puertas y ventanas de `archisim-plan` se sustituye por el de las familias. Además: la fija entra en la practicable, de 1 a 4 hojas con funcionamiento por hoja (también en el IFC y la importación); el diálogo de tipos muestra los parámetros de la receta por secciones; tipo nuevo de cualquier familia | La planta 1:50 de la demo sale igual que antes (comparada en imagen, 0 píxeles distintos) y 176 casos de prueba dibujan lo mismo; plantas 1:100 para revisar |
 | **C · IFC** ✅ v0.23 | Cuerpo de puertas y ventanas desde las piezas de la receta; marca en `Tag` del tipo y en `Reference` de `Pset_DoorCommon`/`Pset_WindowCommon`; familia en `ElementType`; descripción; `ArchiSim_Family` (nombre, versión y receta) y `ArchiSim_FamilyValues` (un valor por parámetro, materiales por nombre) en el tipo, y los de ejemplar en la puerta o ventana; la importación rehace la familia, los valores y la marca | Ida y vuelta idéntica también con una familia propia; volúmenes comprobados con IfcOpenShell; IFC abierto en ArchiCAD y Revit (Antonio) |
-| **D · Configurador** ◐ v0.24 | Hecho en v0.24: diálogo de tipos al estilo ArchiCAD (carpetas por familia, función o categoría, con dibujo de cada tipo; buscador; «＋» de tipo nuevo por familia); vista previa en planta, sección, alzado y 3D girable, dibujada desde las piezas de la receta; todas las opciones en grupos; **tipos de línea** en los símbolos (continua, discontinua, de puntos, trazo y punto, trazo y dos puntos, trazos largos) y parámetro `linestyle` («Línea del giro» en abatible y practicable). Falta: símbolo 1:20 y líneas de apertura en alzado desde la receta; puntos de control en planta | Probado con clics simulados y en la ventana real; las vistas previas de cada lista se recorren todas |
-| **E · Navegador y biblioteca** | Navegador de familias y tipos con nº de ejemplares; seleccionar ejemplares de un tipo; purgar; ficheros `.asfam` con catálogo de tipos; guardar tipo en biblioteca y cargar tipos en otro proyecto; herramienta **Objeto** para familias sueltas (mobiliario) | Un tipo creado en un proyecto se carga en otro y sale igual, con el mismo `GlobalId` |
+| **D · Configurador** ✅ v0.33 | Diálogo de tipos al estilo ArchiCAD (v0.24: carpetas, vista previa en planta, sección, alzado y 3D, opciones en grupos, tipos de línea). v0.33: **símbolo 1:20** en las recetas (puerta abatible con el galce del cerco; ventana practicable con el perfil de cada hoja y el doble vidrio), **alzado** (`elevation`) con las líneas de apertura en la vista previa y en los alzados y secciones del proyecto (discontinuas si abren hacia el otro lado), y **puntos de control** de puertas y ventanas en planta (las jambas estiran el ancho del hueco) | Probado con clics simulados y en la ventana real; las vistas previas de cada lista se recorren todas |
+| **E · Navegador y biblioteca** ✅ v0.30 | Navegador de familias y tipos con nº de ejemplares; seleccionar ejemplares de un tipo; purgar; ficheros `.asfam` con catálogo de tipos; guardar tipo en biblioteca y cargar tipos en otro proyecto; herramienta **Objeto** para familias sueltas (mobiliario) | Un tipo creado en un proyecto se carga en otro y sale igual, con el mismo `GlobalId` |
 
 Después viene la **librería** (2.2): primero completar las cinco familias con todas sus opciones (premarco, tarjas, persiana y capialzado, vierteaguas, manillas, subdivisiones), luego mobiliario, sanitarios y cocina.
 
 ## Pendiente de decidir más adelante
 
-- Editor gráfico de recetas (encima del mismo formato).
+- Editor gráfico de recetas (encima del mismo formato). *En marcha (tanda 5 del 20/10).*
 - Parámetros compartidos entre familias y propiedades de usuario (`ArchiSim_` Psets libres).
 - Familias de anotación (etiquetas, fase 3).
 - Importar objetos de otros programas (`IfcFurniture` con malla) como familias fijas, con la importación de segunda vuelta (1.7).
 
 ## La biblioteca (bloque E, v0.30)
 
-La biblioteca es una carpeta de ficheros `.asfam` (por defecto `Documentos/ArchiSim/Biblioteca`; se cambia en la ventana Biblioteca y el programa la recuerda). Se leen también sus subcarpetas, para ordenarla como se quiera (Puertas, Ventanas, Mobiliario…). Puede estar en una carpeta compartida por todo el estudio.
+La biblioteca es una carpeta de ficheros `.asfam` y `.astipos` (por defecto `Documentos/ArchiSim/Biblioteca`; se cambia en la ventana Biblioteca y el programa la recuerda). Se leen también sus subcarpetas, para ordenarla como se quiera (Puertas, Ventanas, Mobiliario…). Puede estar en una carpeta compartida por todo el estudio.
 
 Cada fichero es la receta de una familia seguida de su **catálogo**: los materiales que usan sus tipos (por nombre, con categoría y color, para crearlos si el proyecto no los tiene) y los tipos, con nombre, marca, `GlobalId`, descripción y los valores de sus parámetros de tipo (los que no aparecen toman el valor por defecto de la receta):
 
@@ -193,6 +194,17 @@ catalog
 ```
 
 El proyecto guarda la receta sin catálogo (su copia, como hasta ahora).
+
+Los **tipos de muro y de forjado** (v0.33) no salen de una familia, así que van en ficheros propios, `Muros.astipos` y `Forjados.astipos`: cada tipo con su `GlobalId`, su función y sus capas (material por nombre, espesor en metros y función), y los materiales que usan con su categoría, color y trama:
+
+```
+material "Ladrillo perforado" category "brick" color 232 196 178 pattern diagonal
+wall_type "Fachada doble hoja 26,5" guid "1aEVYB6jr06e8Pt00GHHvK" function exterior
+  layer "Mortero monocapa" 0.015 finish
+  layer "Ladrillo perforado" 0.115 structure
+```
+
+Se guardan y se cargan igual que los tipos de familia (Navegador → clic derecho → Guardar en la biblioteca; ventana Biblioteca → Cargar), con la misma regla del `GlobalId`.
 
 - **Guardar en la biblioteca** (Navegador → clic derecho sobre un tipo de puerta, ventana u objeto): escribe el tipo en el fichero de su familia, sustituyendo la entrada del mismo `GlobalId` o añadiéndola; si la familia del proyecto es más nueva que la del fichero, la receta del fichero se actualiza. Si el fichero ya tiene otro tipo con ese nombre, pide renombrarlo antes.
 - **Cargar** (ventana Biblioteca): trae el tipo con su familia (si el proyecto no la tiene) y sus materiales, en un solo paso que se puede deshacer.

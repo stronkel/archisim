@@ -2849,6 +2849,7 @@ fn leaf_operation(op: &str) -> &'static str {
         "BOTTOMHUNG" => "abatible",
         "TOPHUNG" => "proyectante",
         "PIVOTHORIZONTAL" => "basculante",
+        "PIVOTVERTICAL" => "pivotante",
         _ => "practicable",
     }
 }

@@ -1237,6 +1237,7 @@ impl ArchiSimApp {
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
             (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
+            (Grip::OpeningJamb { .. }, _) => "Ancho del hueco",
             (Grip::TerrainPoint { .. }, _) => "Punto",
             (Grip::DraftPoint { .. }, _) => "Estirar",
         };

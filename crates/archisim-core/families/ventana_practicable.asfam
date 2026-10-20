@@ -1,8 +1,8 @@
 family "Ventana practicable"
   category window
   host wall
-  version 5
-  description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante o basculante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
+  version 6
+  description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante, basculante o pivotante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
 
@@ -12,10 +12,10 @@ type_params
     height length = 1.20 range 0.10..20.00 label "Hueco de obra: alto"
   section "Hojas"
     leaves integer = 2 range 1..4 label "Nº de hojas"
-    leaf_1 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante") = "practicable" label "Hoja 1"
-    leaf_2 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante") = "practicable" visible_if leaves >= 2 label "Hoja 2"
-    leaf_3 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante") = "practicable" visible_if leaves >= 3 label "Hoja 3"
-    leaf_4 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante") = "practicable" visible_if leaves >= 4 label "Hoja 4"
+    leaf_1 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante", "pivotante") = "practicable" label "Hoja 1"
+    leaf_2 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante", "pivotante") = "practicable" visible_if leaves >= 2 label "Hoja 2"
+    leaf_3 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante", "pivotante") = "practicable" visible_if leaves >= 3 label "Hoja 3"
+    leaf_4 choice("fija", "practicable", "oscilobatiente", "abatible", "proyectante", "basculante", "pivotante") = "practicable" visible_if leaves >= 4 label "Hoja 4"
   section "Marco"
     frame_width length = 0.06 range 0.001..2.00 label "Marco: anchura vista"
     frame_depth length = 0.07 range 0.001..2.00 label "Marco: fondo"
@@ -111,6 +111,58 @@ plan 1:50
         use window_leaf_plan(a, 1, b - a, frame_depth, swing_line)
       else
         use window_leaf_plan(b, -1, b - a, frame_depth, swing_line)
+    if op == "pivotante"
+      let a = if i == 0 then c0 else c0 + i * (clear + f) - f / 2
+      let b = if i == leaves - 1 then c1 else c0 + (i + 1) * (clear + f) - f / 2
+      use pivot_leaf_plan(a, b, frame_depth, swing_line)
+
+# A 1:20, como a 1:50 con el perfil de cada hoja y el doble vidrio.
+plan 1:20
+  if sill_height > 0
+    use sill_plan(width, frame_depth, wall_ext, wall_int)
+  if shutter
+    let es = if wall_ext > 0 then 1 else -1
+    line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
+  if subframe
+    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
+    use frame_cut_plan(w / 2, width / 2, frame_depth)
+  let f = frame_width
+  let c0 = -w / 2 + f
+  let c1 = w / 2 - f
+  use frame_cut_plan(-w / 2, c0, frame_depth)
+  use frame_cut_plan(c1, w / 2, frame_depth)
+  let clear = (w - 2 * f - (leaves - 1) * f) / leaves
+  repeat i in 1..leaves
+    let m = c0 + i * (clear + f) - f
+    use frame_cut_plan(m, m + f, frame_depth)
+  repeat i in 0..leaves
+    let a = c0 + i * (clear + f)
+    use sash_detail(a, a + clear, frame_depth)
+    use glass_detail(a + 0.01, a + clear - 0.01)
+  repeat i in 0..leaves
+    let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
+    let a = if i == 0 then c0 else c0 + i * (clear + f) - f / 2
+    let b = if i == leaves - 1 then c1 else c0 + (i + 1) * (clear + f) - f / 2
+    if op == "practicable" or op == "oscilobatiente"
+      let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
+      if left
+        use window_leaf_plan(a, 1, b - a, frame_depth, swing_line)
+      else
+        use window_leaf_plan(b, -1, b - a, frame_depth, swing_line)
+    if op == "pivotante"
+      use pivot_leaf_plan(a, b, frame_depth, swing_line)
+
+# En alzado, las líneas de apertura de cada hoja, con el lado de sus
+# bisagras como en planta.
+elevation
+  let f = frame_width
+  let c0 = -w / 2 + f
+  let clear = (w - 2 * f - (leaves - 1) * f) / leaves
+  repeat i in 0..leaves
+    let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
+    let a = c0 + i * (clear + f)
+    let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
+    use leaf_elevation(op, a, a + clear, z0 + f, zl - f, left, swing_line)
 
 # A 1:100, el marco y el vidrio.
 plan 1:100
@@ -131,7 +183,7 @@ outputs
 
 ifc
   panel_count = leaves
-  panel_1 = if leaf_1 == "fija" then "FIXEDCASEMENT" else if leaf_1 == "practicable" then "SIDEHUNG" + side_1 + "HAND" else if leaf_1 == "oscilobatiente" then "TILTANDTURN" + side_1 + "HAND" else if leaf_1 == "abatible" then "BOTTOMHUNG" else if leaf_1 == "proyectante" then "TOPHUNG" else "PIVOTHORIZONTAL"
-  panel_2 = if leaf_2 == "fija" then "FIXEDCASEMENT" else if leaf_2 == "practicable" then "SIDEHUNG" + side_2 + "HAND" else if leaf_2 == "oscilobatiente" then "TILTANDTURN" + side_2 + "HAND" else if leaf_2 == "abatible" then "BOTTOMHUNG" else if leaf_2 == "proyectante" then "TOPHUNG" else "PIVOTHORIZONTAL"
-  panel_3 = if leaf_3 == "fija" then "FIXEDCASEMENT" else if leaf_3 == "practicable" then "SIDEHUNG" + side_3 + "HAND" else if leaf_3 == "oscilobatiente" then "TILTANDTURN" + side_3 + "HAND" else if leaf_3 == "abatible" then "BOTTOMHUNG" else if leaf_3 == "proyectante" then "TOPHUNG" else "PIVOTHORIZONTAL"
-  panel_4 = if leaf_4 == "fija" then "FIXEDCASEMENT" else if leaf_4 == "practicable" then "SIDEHUNG" + side_4 + "HAND" else if leaf_4 == "oscilobatiente" then "TILTANDTURN" + side_4 + "HAND" else if leaf_4 == "abatible" then "BOTTOMHUNG" else if leaf_4 == "proyectante" then "TOPHUNG" else "PIVOTHORIZONTAL"
+  panel_1 = if leaf_1 == "fija" then "FIXEDCASEMENT" else if leaf_1 == "practicable" then "SIDEHUNG" + side_1 + "HAND" else if leaf_1 == "oscilobatiente" then "TILTANDTURN" + side_1 + "HAND" else if leaf_1 == "abatible" then "BOTTOMHUNG" else if leaf_1 == "proyectante" then "TOPHUNG" else if leaf_1 == "pivotante" then "PIVOTVERTICAL" else "PIVOTHORIZONTAL"
+  panel_2 = if leaf_2 == "fija" then "FIXEDCASEMENT" else if leaf_2 == "practicable" then "SIDEHUNG" + side_2 + "HAND" else if leaf_2 == "oscilobatiente" then "TILTANDTURN" + side_2 + "HAND" else if leaf_2 == "abatible" then "BOTTOMHUNG" else if leaf_2 == "proyectante" then "TOPHUNG" else if leaf_2 == "pivotante" then "PIVOTVERTICAL" else "PIVOTHORIZONTAL"
+  panel_3 = if leaf_3 == "fija" then "FIXEDCASEMENT" else if leaf_3 == "practicable" then "SIDEHUNG" + side_3 + "HAND" else if leaf_3 == "oscilobatiente" then "TILTANDTURN" + side_3 + "HAND" else if leaf_3 == "abatible" then "BOTTOMHUNG" else if leaf_3 == "proyectante" then "TOPHUNG" else if leaf_3 == "pivotante" then "PIVOTVERTICAL" else "PIVOTHORIZONTAL"
+  panel_4 = if leaf_4 == "fija" then "FIXEDCASEMENT" else if leaf_4 == "practicable" then "SIDEHUNG" + side_4 + "HAND" else if leaf_4 == "oscilobatiente" then "TILTANDTURN" + side_4 + "HAND" else if leaf_4 == "abatible" then "BOTTOMHUNG" else if leaf_4 == "proyectante" then "TOPHUNG" else if leaf_4 == "pivotante" then "PIVOTVERTICAL" else "PIVOTHORIZONTAL"

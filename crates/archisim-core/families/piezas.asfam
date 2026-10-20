@@ -113,3 +113,103 @@ component sill_plan(w, d, wall_e, wall_i)
   let out = wall_e + es * 0.03
   polygon (-w / 2, fe) (w / 2, fe) (w / 2, wall_e) (w / 2 + 0.02, wall_e) (w / 2 + 0.02, out) (-w / 2 - 0.02, out) (-w / 2 - 0.02, wall_e) (-w / 2, wall_e) pen thin filled
   line (-w / 2, wall_i) to (w / 2, wall_i) pen thin
+
+# ---- Planta a 1:20 ----------------------------------------------------------
+
+# Jamba de puerta a 1:20 con su galce: el cerco cortado de «xa» a «xb» y,
+# en el canto del lado de la hoja («side», 1 si la hoja queda hacia +x y
+# -1 si hacia -x), el rebaje donde cierra la hoja de grueso «lt».
+component door_jamb_detail(xa, xb, d, side, lt)
+  let r = min(0.012, (xb - xa) / 3)
+  let e = if side > 0 then xb else xa
+  let i = e - side * r
+  let yt = d / 2 - min(lt, d / 2)
+  if side > 0
+    polygon (xa, -d / 2) (xb, -d / 2) (xb, yt) (i, yt) (i, d / 2) (xa, d / 2) pen frame filled
+  else
+    polygon (xb, -d / 2) (xa, -d / 2) (xa, yt) (i, yt) (i, d / 2) (xb, d / 2) pen frame filled
+
+# Doble vidrio a 1:20: dos líneas finas del grueso de una cámara.
+component glass_detail(xa, xb)
+  line (xa, -0.008) to (xb, -0.008) pen thin
+  line (xa, 0.008) to (xb, 0.008) pen thin
+
+# Hoja de ventana cerrada a 1:20: el perfil de la hoja alrededor del vidrio.
+component sash_detail(xa, xb, d)
+  let t = min(0.025, d / 3)
+  polygon (xa, -t) (xb, -t) (xb, t) (xa, t) pen thin
+
+# ---- Alzado -------------------------------------------------------------------
+# En alzado la primera coordenada es «x» y la segunda «z», visto desde el
+# lado al que abren las hojas. Líneas de apertura: el vértice señala el
+# lado de las bisagras (o el eje), como se dibuja en los alzados.
+
+# Hoja que gira sobre un lado vertical («hx», el de las bisagras; «ox», el
+# de la manilla), de «z0» a «z1».
+component side_hung_lines(hx, ox, z0, z1, st)
+  line (ox, z0) to (hx, (z0 + z1) / 2) pen thin style st
+  line (ox, z1) to (hx, (z0 + z1) / 2) pen thin style st
+
+# Hoja que gira sobre un lado horizontal («zh», el de las bisagras; «zo»,
+# el otro), de «xa» a «xb»: abatible (bisagras abajo) o proyectante (arriba).
+component hung_lines(xa, xb, zh, zo, st)
+  line (xa, zo) to ((xa + xb) / 2, zh) pen thin style st
+  line (xb, zo) to ((xa + xb) / 2, zh) pen thin style st
+
+# Hoja pivotante (eje vertical, «vertical» 1) o basculante (eje horizontal):
+# un rombo hacia los extremos del eje y el eje en trazo y punto.
+component pivot_lines(xa, xb, z0, z1, vertical, st)
+  let xm = (xa + xb) / 2
+  let zm = (z0 + z1) / 2
+  line (xa, zm) to (xm, z1) pen thin style st
+  line (xm, z1) to (xb, zm) pen thin style st
+  line (xb, zm) to (xm, z0) pen thin style st
+  line (xm, z0) to (xa, zm) pen thin style st
+  if vertical > 0
+    line (xm, z0) to (xm, z1) pen thin dashdot
+  else
+    line (xa, zm) to (xb, zm) pen thin dashdot
+
+# Flecha horizontal de «xa» a «xb» a la altura «z» (correderas).
+component arrow_lines(xa, xb, z)
+  let s = if xb > xa then 1 else -1
+  line (xa, z) to (xb, z) pen thin
+  line (xb, z) to (xb - s * 0.06, z + 0.03) pen thin
+  line (xb, z) to (xb - s * 0.06, z - 0.03) pen thin
+
+# Líneas de apertura de una hoja de ventana según su funcionamiento («op»,
+# las opciones de la ventana practicable) y el lado de sus bisagras
+# («left», si van a la izquierda).
+component leaf_elevation(op, xa, xb, z0, z1, left, st)
+  let hx = if left then xa else xb
+  let ox = if left then xb else xa
+  if op == "practicable"
+    use side_hung_lines(hx, ox, z0, z1, st)
+  else if op == "oscilobatiente"
+    use side_hung_lines(hx, ox, z0, z1, st)
+    use hung_lines(xa, xb, z0, z1, st)
+  else if op == "abatible"
+    use hung_lines(xa, xb, z0, z1, st)
+  else if op == "proyectante"
+    use hung_lines(xa, xb, z1, z0, st)
+  else if op == "basculante"
+    use pivot_lines(xa, xb, z0, z1, 0, st)
+  else if op == "pivotante"
+    use pivot_lines(xa, xb, z0, z1, 1, st)
+
+# Hoja pivotante (eje vertical en su centro) abierta a 90° en planta: la
+# hoja atraviesa el marco, mitad a cada lado, con sus dos giros.
+component pivot_leaf_plan(xa, xb, d, st)
+  let m = (xa + xb) / 2
+  let r = (xb - xa) / 2
+  line (m, -r) to (m, r) pen thin style st
+  arc center (m, 0) from (m, r) to (xb, 0) pen thin style st
+  arc center (m, 0) from (m, -r) to (xa, 0) pen thin style st
+
+# Flecha vertical en alzado, de «z0» a «z1» a la altura «x» (puertas de
+# garaje y guillotinas: hacia donde se mueve la hoja).
+component arrow_v_lines(x, z0, z1)
+  let s = if z1 > z0 then 1 else -1
+  line (x, z0) to (x, z1) pen thin
+  line (x, z1) to (x - 0.04, z1 - s * 0.07) pen thin
+  line (x, z1) to (x + 0.04, z1 - s * 0.07) pen thin

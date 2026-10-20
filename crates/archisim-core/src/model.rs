@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod curtain;
+mod layered_library;
 mod library;
 mod objects;
 mod phases;
@@ -25,6 +26,7 @@ mod site;
 mod stairs;
 mod structure;
 pub use curtain::*;
+pub use layered_library::*;
 pub use library::*;
 pub use objects::*;
 pub use phases::*;
@@ -435,6 +437,13 @@ pub enum DoorOperation {
     Sliding,
     /// Leaves hinged to each other, folding to one side ("plegable").
     Folding,
+    /// One leaf turning on a vertical axis away from the jamb ("pivotante").
+    Pivot,
+    /// A garage door that goes up under the ceiling ("seccional",
+    /// "basculante").
+    Overhead,
+    /// A garage door or shutter rolled up in a drum ("enrollable").
+    Rolling,
 }
 
 /// How a window opens. IFC: `IfcWindowTypePartitioningEnum` plus the
@@ -2982,6 +2991,54 @@ impl Model {
         builtins.insert("sill_height".into(), Value::Number(o.sill));
         fam.def()
             .evaluate_plan(&t.values, &o.values, &builtins, scale)
+            .map_err(ModelError::Family)
+    }
+
+    /// A door or window type's family evaluated with the default instance
+    /// values (opening to the interior, left hand): its `outputs` and its
+    /// `ifc` section, for values that belong to the type (the clear width,
+    /// the IFC partitioning…).
+    pub fn opening_type_evaluation(&self, id: OpeningTypeId) -> Option<Evaluation> {
+        let t = self.opening_types.get(&id)?;
+        let fam = self.families.get(&t.family)?;
+        let instance = self.family_defaults(t.family, ParamScope::Instance).ok()?;
+        fam.def()
+            .evaluate(
+                &t.values,
+                &instance,
+                &opening_builtins(WallSide::Interior, Hand::Left),
+            )
+            .ok()
+    }
+
+    /// The clear width of a door (its leaf, without sidelights or the
+    /// pivot's short side), when its family says (`clear_width` output).
+    pub fn opening_clear_width(&self, id: OpeningTypeId) -> Option<f64> {
+        self.opening_type_evaluation(id)?
+            .outputs
+            .get("clear_width")
+            .and_then(Value::as_number)
+    }
+
+    /// The elevation marks of a placed door or window (opening lines), in
+    /// the family's `x` and `z`, seen from the side its leaves open to.
+    pub fn opening_elevation_marks(&self, id: OpeningId) -> Result<Vec<Mark>, ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let t = self
+            .opening_types
+            .get(&o.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(o.opening_type))?;
+        let fam = self
+            .families
+            .get(&t.family)
+            .ok_or(ModelError::UnknownFamily(t.family))?;
+        let mut builtins = opening_builtins(o.opens_to, o.hand);
+        builtins.insert("sill_height".into(), Value::Number(o.sill));
+        fam.def()
+            .evaluate_elevation(&t.values, &o.values, &builtins)
             .map_err(ModelError::Family)
     }
 

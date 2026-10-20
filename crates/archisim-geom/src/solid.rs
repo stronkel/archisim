@@ -1730,6 +1730,77 @@ pub fn opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
         .collect()
 }
 
+/// The opening lines a door or window's recipe draws in elevation, in the
+/// model: each segment twice, on the face of the element its leaves open
+/// to and on the other, and whether its line style is not continuous. The
+/// last value is the horizontal direction the leaves open to (a viewer on
+/// that side sees the lines as drawn; from the other side, they open away).
+pub fn opening_elevation_lines(model: &Model, id: OpeningId) -> (Vec<ElevationLine>, [f64; 2]) {
+    let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
+        return (Vec::new(), [0.0, 0.0]);
+    };
+    let (Ok(ev), Ok(marks)) = (
+        model.evaluate_opening(id),
+        model.opening_elevation_marks(id),
+    ) else {
+        return (Vec::new(), [0.0, 0.0]);
+    };
+    let Some(wall) = model.wall(o.wall) else {
+        return (Vec::new(), [0.0, 0.0]);
+    };
+    let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
+    let z_sill = level + og.sill;
+    let mid = (og.t0 + og.t1) / 2.0;
+    let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
+    let (sx, sy) = match og.opens_to {
+        WallSide::Exterior => (-1.0, 1.0),
+        WallSide::Interior => (1.0, -1.0),
+    };
+    // Just outside the body on each side.
+    let front = ev.parts.iter().map(|p| p.max[1]).fold(0.0_f64, f64::max) + 0.002;
+    let back = ev.parts.iter().map(|p| p.min[1]).fold(0.0_f64, f64::min) - 0.002;
+    let at = |x: f64, y: f64, z: f64| {
+        let p = og.point(mid + sx * x, y_mid + sy * y);
+        [p.x, p.y, z_sill + z]
+    };
+    let mut out = Vec::new();
+    let mut push = |a: [f64; 2], b: [f64; 2], dashed: bool| {
+        out.push(ElevationLine {
+            front: (at(a[0], front, a[1]), at(b[0], front, b[1])),
+            back: (at(a[0], back, a[1]), at(b[0], back, b[1])),
+            dashed,
+        });
+    };
+    for m in &marks {
+        match m {
+            archisim_core::Mark::Line {
+                from, to, style, ..
+            } => push(*from, *to, *style != archisim_core::LineStyle::Continuous),
+            archisim_core::Mark::Polygon { points, style, .. } => {
+                for i in 0..points.len() {
+                    push(
+                        points[i],
+                        points[(i + 1) % points.len()],
+                        *style != archisim_core::LineStyle::Continuous,
+                    );
+                }
+            }
+            archisim_core::Mark::Arc { .. } => {}
+        }
+    }
+    let n = og.n;
+    (out, [n.x * sy, n.y * sy])
+}
+
+/// One opening line of a door or window in elevation (see
+/// [`opening_elevation_lines`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ElevationLine {
+    pub front: (P3, P3),
+    pub back: (P3, P3),
+    pub dashed: bool,
+}
+
 fn sorted(a: f64, b: f64) -> (f64, f64) {
     if a <= b {
         (a, b)

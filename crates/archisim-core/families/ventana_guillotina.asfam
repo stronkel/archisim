@@ -1,0 +1,85 @@
+family "Ventana de guillotina"
+  category window
+  host wall
+  version 1
+  description "Ventana de dos hojas que deslizan en vertical, una delante de la otra: se mueve la de abajo o las dos"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.00 range 0.30..3.00 label "Hueco de obra: ancho"
+    height length = 1.50 range 0.50..3.50 label "Hueco de obra: alto"
+  section "Hojas"
+    moving choice("la de abajo", "las dos") = "la de abajo" label "Hojas que se mueven"
+    meeting number = 0.50 range 0.30..0.70 label "Encuentro de las hojas (fracción del alto)"
+  section "Marco"
+    frame_width length = 0.06 range 0.001..0.30 label "Marco: anchura vista"
+    frame_depth length = 0.10 range 0.04..0.40 label "Marco: fondo"
+  section "Vierteaguas"
+    sill bool = no label "Vierteaguas"
+    sill_depth length = 0.20 range 0.02..1.00 visible_if sill label "Vierteaguas: vuelo desde el marco"
+  section "Materiales"
+    frame_material material = "Aluminio lacado" label "Marco y hojas"
+    panel_material material = "Vidrio doble" label "Vidrio"
+    sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+
+let f = frame_width
+let c0 = -width / 2 + f
+let c1 = width / 2 - f
+let zm = height * meeting
+# Las hojas, en dos planos: la de abajo hacia el lado al que abre, la de
+# arriba hacia el otro.
+let q = min(0.02, frame_depth / 4)
+let r = f * 0.8
+
+require c1 - c0 > 2 * r + 0.10 else "El marco no deja hueco para las hojas"
+
+component sash(xa, xb, za, zb, y, r, frame_mat, glass_mat)
+  box (xa, y - 0.02, za) to (xa + r, y + 0.02, zb) material frame_mat
+  box (xb - r, y - 0.02, za) to (xb, y + 0.02, zb) material frame_mat
+  box (xa + r, y - 0.02, za) to (xb - r, y + 0.02, za + r) material frame_mat
+  box (xa + r, y - 0.02, zb - r) to (xb - r, y + 0.02, zb) material frame_mat
+  box (xa + r, y - 0.008, za + r) to (xb - r, y + 0.008, zb - r) material glass_mat
+
+body
+  use window_frame(width, height, f, frame_depth, frame_material)
+  use sash(c0, c1, f, zm + r / 2, q, r, frame_material, panel_material)
+  use sash(c0, c1, zm - r / 2, height - f, -q, r, frame_material, panel_material)
+  if sill
+    let out = if opens_to == "exterior" then 1 else -1
+    use window_sill(width, frame_depth, sill_depth, out, sill_material)
+
+plan 1:50
+  if sill_height > 0
+    use sill_plan(width, frame_depth, wall_ext, wall_int)
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  polygon (c0, q - 0.02) (c1, q - 0.02) (c1, q + 0.02) (c0, q + 0.02) pen thin
+  line (c0, -q) to (c1, -q) pen thin
+
+plan 1:100
+  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+  line (c0, 0) to (c1, 0) pen thin
+
+# En alzado, el travesaño del encuentro y las flechas de lo que se mueve.
+elevation
+  line (c0, zm) to (c1, zm) pen thin
+  use arrow_v_lines(0, f + (zm - f) * 0.25, f + (zm - f) * 0.75)
+  if moving == "las dos"
+    use arrow_v_lines(0, zm + (height - f - zm) * 0.75, zm + (height - f - zm) * 0.25)
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  operation = "sliding"
+
+ifc
+  partitioning = "DOUBLE_PANEL_HORIZONTAL"
+  panel_count = 2
+  panel_1 = "SLIDINGVERTICAL"
+  panel_2 = if moving == "las dos" then "SLIDINGVERTICAL" else "FIXEDCASEMENT"

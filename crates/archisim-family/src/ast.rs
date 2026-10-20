@@ -30,6 +30,10 @@ pub struct FamilyDef {
     pub body: Vec<Stmt>,
     /// Plan symbols, one per drawing scale (see [`FamilyDef::plan_for`]).
     pub plans: Vec<PlanSymbol>,
+    /// Marks drawn on the element seen in elevation from the side its
+    /// leaves open to (opening lines), in `x` and `z`; `None` if the
+    /// recipe has no `elevation` block.
+    pub elevation: Option<PlanSymbol>,
     /// Values read by the rest of the program (rough opening, frame…).
     pub outputs: Vec<Output>,
     /// IFC data (class, predefined type…).

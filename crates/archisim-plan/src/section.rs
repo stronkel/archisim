@@ -58,6 +58,9 @@ struct Face {
     poly: Vec<Point2>,
     fill: [u8; 3],
     edges: Vec<(Point2, Point2)>,
+    /// An opening line of a door or window (thin): `Some(true)` dashed, as
+    /// when its leaves open away from the viewer.
+    opening_line: Option<bool>,
 }
 
 /// Faces are split until no edge is longer than this, so that painting
@@ -333,6 +336,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                         poly: poly2,
                         fill: if glass { GLASS } else { [255, 255, 255] },
                         edges: Vec::new(),
+                        opening_line: None,
                     },
                 ));
                 // Each edge is painted on its own, a little ahead of where
@@ -347,10 +351,35 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                             poly: Vec::new(),
                             fill: [0, 0, 0],
                             edges: vec![(to2(a), to2(b))],
+                            opening_line: None,
                         },
                     ));
                 }
             }
+        }
+    }
+    // Opening lines of the doors and windows seen beyond the cut, on the
+    // face that looks at the section: as drawn if their leaves open
+    // towards it, dashed if they open away.
+    for o in model.openings() {
+        let (lines, opens) = archisim_geom::solid::opening_elevation_lines(model, o.id);
+        let towards = opens[0] * look.x + opens[1] * look.y < 0.0;
+        for l in lines {
+            let (a, b) = if towards { l.front } else { l.back };
+            let (da, db) = (depth_of(a), depth_of(b));
+            if da.min(db) < plane || da.max(db) > sec.depth {
+                continue;
+            }
+            faces.push((
+                da.min(db) - EDGE_LEAD,
+                Face {
+                    owner: SolidOwner::Opening(o.id),
+                    poly: Vec::new(),
+                    fill: [0, 0, 0],
+                    edges: vec![(to2(a), to2(b))],
+                    opening_line: Some(l.dashed || !towards),
+                },
+            ));
         }
     }
     faces.sort_by(|a, b| b.0.total_cmp(&a.0));
@@ -874,6 +903,29 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         }
     };
     for f in &d.faces {
+        if let Some(dashed) = f.opening_line {
+            flush(&mut s, &mut edges);
+            let mut dashes = String::new();
+            for (a, b) in &f.edges {
+                if visible(&[*a, *b]) {
+                    let _ = write!(dashes, "M{} L{} ", pt(*a), pt(*b));
+                }
+            }
+            if !dashes.is_empty() {
+                let pattern = if dashed {
+                    format!(r#" stroke-dasharray="{} {}""#, num(2.0 * k), num(1.0 * k))
+                } else {
+                    String::new()
+                };
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"{pattern}/>"#,
+                    dashes.trim_end(),
+                    num(pens().thin * k),
+                );
+            }
+            continue;
+        }
         if f.poly.is_empty() {
             for (a, b) in &f.edges {
                 if visible(&[*a, *b]) {

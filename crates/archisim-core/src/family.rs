@@ -85,13 +85,16 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 7] = [
+const SYSTEM_SOURCES: [&str; 10] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
     include_str!("../families/puerta_plegable.asfam"),
     include_str!("../families/puerta_corredera_empotrada.asfam"),
+    include_str!("../families/puerta_pivotante.asfam"),
+    include_str!("../families/puerta_garaje.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
+    include_str!("../families/ventana_guillotina.asfam"),
     include_str!("../families/hueco.asfam"),
 ];
 
@@ -126,6 +129,9 @@ pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
 pub const FOLDING_DOOR: &str = "Puerta plegable";
 pub const POCKET_DOOR: &str = "Puerta corredera empotrada";
+pub const PIVOT_DOOR: &str = "Puerta pivotante";
+pub const GARAGE_DOOR: &str = "Puerta de garaje";
+pub const SASH_WINDOW: &str = "Ventana de guillotina";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
 /// Opening with no door or window in it (IFC: an `IfcOpeningElement`
@@ -194,6 +200,9 @@ pub fn legacy_family(kind: OpeningKind) -> (&'static str, Vec<(&'static str, Val
         OpeningKind::Door(DoorOperation::DoubleSwing) => (SWING_DOOR, vec![("leaves", n(2.0))]),
         OpeningKind::Door(DoorOperation::Sliding) => (SLIDING_DOOR, vec![]),
         OpeningKind::Door(DoorOperation::Folding) => (FOLDING_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Pivot) => (PIVOT_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Overhead) => (GARAGE_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Rolling) => (GARAGE_DOOR, vec![("kind", t("enrollable"))]),
         OpeningKind::Window(WindowOperation::Fixed) => (
             CASEMENT_WINDOW,
             vec![("leaves", n(1.0)), ("leaf_1", t("fija"))],
@@ -257,6 +266,9 @@ pub fn operation_from_name(category: &str, name: &str) -> Option<OpeningKind> {
         ("door", "double_swing") => OpeningKind::Door(DoorOperation::DoubleSwing),
         ("door", "sliding") => OpeningKind::Door(DoorOperation::Sliding),
         ("door", "folding") => OpeningKind::Door(DoorOperation::Folding),
+        ("door", "pivot") => OpeningKind::Door(DoorOperation::Pivot),
+        ("door", "overhead") => OpeningKind::Door(DoorOperation::Overhead),
+        ("door", "rolling") => OpeningKind::Door(DoorOperation::Rolling),
         ("window", "fixed") => OpeningKind::Window(WindowOperation::Fixed),
         ("window", "single_casement") => OpeningKind::Window(WindowOperation::SingleCasement),
         ("window", "double_casement") => OpeningKind::Window(WindowOperation::DoubleCasement),
@@ -356,8 +368,11 @@ mod tests {
                 SLIDING_DOOR,
                 FOLDING_DOOR,
                 POCKET_DOOR,
+                PIVOT_DOOR,
+                GARAGE_DOOR,
                 CASEMENT_WINDOW,
                 SLIDING_WINDOW,
+                SASH_WINDOW,
                 VOID
             ]
         );

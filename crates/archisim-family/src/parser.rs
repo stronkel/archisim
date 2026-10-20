@@ -33,6 +33,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
         components: BTreeMap::new(),
         body: Vec::new(),
         plans: Vec::new(),
+        elevation: None,
         outputs: Vec::new(),
         ifc: Vec::new(),
         catalog: Catalog::default(),
@@ -121,6 +122,22 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                 }
                 def.plans.push(PlanSymbol {
                     scale,
+                    body,
+                    line: line.no,
+                });
+            }
+            "elevation" => {
+                // Marks on the element seen from the side it opens to.
+                c.end()?;
+                if def.elevation.is_some() {
+                    return Err(syntax(line.no, "only one «elevation» block is allowed"));
+                }
+                let body = statements(&line.children)?;
+                if let Some(bad) = first_where(&body, &|s| matches!(s, Stmt::Box { .. })) {
+                    return Err(syntax(bad, "an elevation draws lines, not boxes"));
+                }
+                def.elevation = Some(PlanSymbol {
+                    scale: 0.0,
                     body,
                     line: line.no,
                 });

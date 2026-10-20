@@ -1,7 +1,7 @@
 family "Puerta corredera"
   category door
   host wall
-  version 2
+  version 3
   description "Puerta corredera de una hoja que desliza por la cara del muro, con cerco"
 
 include "piezas"
@@ -39,6 +39,13 @@ plan 1:50
   line (0, ya) to (tip, ya) pen thin
   line (tip, ya) to (tip - s * 0.06, ya + 0.03) pen thin
   line (tip, ya) to (tip - s * 0.06, ya - 0.03) pen thin
+
+# En alzado, una flecha hacia donde corre la hoja (el lado de la mano).
+elevation
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let s = if hand == "left" then -1 else 1
+  use arrow_lines(-s * (c1 - c0) * 0.2, s * (c1 - c0) * 0.2, height / 2)
 
 plan 1:100
   let c0 = -width / 2 + frame_width
