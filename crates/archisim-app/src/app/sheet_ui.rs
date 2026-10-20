@@ -241,7 +241,7 @@ impl ArchiSimApp {
         if self.sheet_image.as_ref().map(|p| &p.0) != Some(&key) {
             let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
             let svg = render_sheet(
-                self.ed.model(),
+                &self.ed.shown(),
                 id,
                 &SheetOptions {
                     region: Some((lo, hi)),
@@ -1112,13 +1112,13 @@ impl ArchiSimApp {
         let (level, section, crop, axo) = match view {
             ViewChoice::Level(l) => (l, None, None, None),
             ViewChoice::Section(s) => {
-                let crop = archisim_plan::sheet::section_extent(self.ed.model(), s, scale);
+                let crop = archisim_plan::sheet::section_extent(&self.ed.shown(), s, scale);
                 (self.ed.level, Some(s), crop, None)
             }
             ViewChoice::ThreeD => {
                 let axo = self.camera_axo();
                 // Worked out once: the picture is the whole model.
-                let crop = archisim_plan::axo::axo_extent(self.ed.model(), &axo, scale);
+                let crop = archisim_plan::axo::axo_extent(&self.ed.shown(), &axo, scale);
                 (self.ed.level, None, Some(crop), Some(axo))
             }
         };

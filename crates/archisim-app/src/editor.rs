@@ -21,6 +21,7 @@ use crate::wall_tool::Piece;
 mod curtain;
 mod foundations;
 pub mod library;
+mod modules;
 mod objects;
 mod phases;
 mod railings;
@@ -34,6 +35,7 @@ mod types;
 
 pub use curtain::CurtainSettings;
 pub use foundations::{FootingMode, FootingSettings};
+pub use modules::ModuleStatus;
 pub use objects::ObjectSettings;
 pub use railings::RailingSettings;
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
@@ -106,6 +108,8 @@ pub struct Editor {
     revision: u64,
     /// The plan geometry of every wall, for this revision.
     geo: crate::geo::GeoCache,
+    /// The model with the copies of its modules, for this revision.
+    flat: modules::FlatCache,
     /// The level shown in the plan and where new elements go.
     pub level: LevelId,
     pub selection: BTreeSet<Element>,
@@ -134,6 +138,7 @@ impl Editor {
             imported_from: None,
             revision: 0,
             geo: Default::default(),
+            flat: Default::default(),
             level,
             selection: BTreeSet::new(),
         }
@@ -242,7 +247,8 @@ impl Editor {
     /// extension says: PDF (vector, at its scale), DXF (millimetres) or
     /// SVG.
     pub fn export_plan(&self, path: &Path, options: &PlanOptions) -> EditResult {
-        let model = self.model();
+        let shown = self.shown();
+        let model: &Model = &shown;
         let bytes = match extension(path).as_str() {
             "dxf" => archisim_export::dxf::plan_dxf(model, self.level, options)?.into_bytes(),
             "pdf" => {
@@ -267,7 +273,8 @@ impl Editor {
         section: archisim_core::SectionId,
         options: &PlanOptions,
     ) -> EditResult {
-        let model = self.model();
+        let shown = self.shown();
+        let model: &Model = &shown;
         let sec = model.section(section).ok_or("la sección ya no existe")?;
         let phased = archisim_plan::phases::phase_model(model, options.phase_view);
         let shown = phased.as_ref().unwrap_or(model);
@@ -291,7 +298,8 @@ impl Editor {
 
     /// Writes sheets: several in one PDF, or one as PDF, DXF or SVG.
     pub fn export_sheets(&self, path: &Path, sheets: &[archisim_core::SheetId]) -> EditResult {
-        let model = self.model();
+        let shown = self.shown();
+        let model: &Model = &shown;
         let svg = |id| {
             archisim_plan::sheet::render_sheet(
                 model,
@@ -376,6 +384,7 @@ impl Editor {
             Element::Tag(id) => model.tag(*id).is_some(),
             Element::Footing(id) => model.footing(*id).is_some(),
             Element::Grid(id) => model.grid(*id).is_some(),
+            Element::Module(id) => model.module(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -600,7 +609,8 @@ impl Editor {
                     | Element::Railing(_)
                     | Element::Object(_)
                     | Element::Footing(_)
-                    | Element::Grid(_)) => remove_element(m, *e)?,
+                    | Element::Grid(_)
+                    | Element::Module(_)) => remove_element(m, *e)?,
                     Element::Draft(id) => {
                         m.remove_draft(*id)?;
                     }
@@ -696,7 +706,8 @@ impl Editor {
                         | Element::Railing(_)
                         | Element::Object(_)
                         | Element::Footing(_)
-                        | Element::Grid(_)) => remove_element(m, e)?,
+                        | Element::Grid(_)
+                        | Element::Module(_)) => remove_element(m, e)?,
                     },
                     Change::Transform { items, t, copy } => {
                         out.extend(crate::xform::transform(m, &items, &t, copy)?);
@@ -888,7 +899,7 @@ impl Editor {
     /// The measurements as a BC3 budget.
     pub fn export_bc3(&self, path: &Path) -> EditResult {
         let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
-        let bytes = archisim_export::bc3::bc3(self.model(), &date, env!("CARGO_PKG_VERSION"));
+        let bytes = archisim_export::bc3::bc3(&self.shown(), &date, env!("CARGO_PKG_VERSION"));
         std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el BC3: {e}"))
     }
 
@@ -1310,6 +1321,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Object(id) => m.remove_object(id).map(drop),
         Element::Footing(id) => m.remove_footing(id).map(drop),
         Element::Grid(id) => m.remove_grid(id).map(drop),
+        Element::Module(id) => m.remove_module(id).map(drop),
         _ => Ok(()),
     }
 }

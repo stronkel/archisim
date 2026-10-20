@@ -43,6 +43,8 @@ pub enum Element {
     Footing(archisim_core::FootingId),
     /// A setting-out grid line (seen on every level).
     Grid(archisim_core::GridId),
+    /// A copy of a module, picked anywhere inside its box.
+    Module(archisim_core::ModuleId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -116,6 +118,7 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Tag(id) => model.tag(id).map(|t| tag_box(model, t, paper_k()).to_vec()),
         Element::Footing(id) => model.footing(id).map(|f| f.outline()),
         Element::Grid(id) => model.grid(id).map(grid_outline),
+        Element::Module(id) => Some(model.module_outline(id)).filter(|o| o.len() > 2),
     }
 }
 
@@ -392,6 +395,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     );
     v.extend(model.tags_on_level(level).map(|t| Element::Tag(t.id)));
     v.extend(model.rooms_on_level(level).map(|r| Element::Room(r.id)));
+    v.extend(model.modules_on_level(level).map(|m| Element::Module(m.id)));
     v
 }
 
@@ -425,7 +429,8 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Railing(_)
         | Element::Object(_)
         | Element::Footing(_)
-        | Element::Grid(_) => None,
+        | Element::Grid(_)
+        | Element::Module(_) => None,
     }
 }
 
@@ -468,6 +473,9 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Slab(_) => 4,
         // Under the floor: after the slab.
         Element::Footing(_) => 5,
+        // Its elements are not the project's: inside its box, if nothing
+        // of the project is there.
+        Element::Module(_) => 5,
         Element::Terrain(_) => 6,
     };
     let k = paper_k();

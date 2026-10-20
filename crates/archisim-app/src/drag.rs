@@ -356,7 +356,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Column(_)
             | Element::Tag(_)
             | Element::Footing(_)
-            | Element::Grid(_) => {}
+            | Element::Grid(_)
+            | Element::Module(_) => {}
         }
     }
     v
@@ -900,6 +901,9 @@ pub(crate) fn move_selection(
                     g.end = g.end + d;
                 })?;
             }
+            Element::Module(id) => {
+                model.edit_module(*id, |m| m.position = m.position + d)?;
+            }
             Element::Room(_) | Element::Tag(_) => {
                 // Moved with walls, a room goes whole.
                 let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
@@ -1258,6 +1262,20 @@ pub(crate) fn copy(
                 let new = model.add_grid(archisim_core::NewGrid { name, start, end })?;
                 copies.insert(Element::Grid(new));
             }
+            Element::Module(id) => {
+                let p = model
+                    .module(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_module(archisim_core::NewModulePlacement {
+                    source: p.source,
+                    level: p.level,
+                    position: p.position + d,
+                    rotation: p.rotation,
+                    mirror: p.mirror,
+                })?;
+                copies.insert(Element::Module(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -1467,6 +1485,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Tag(id) => model.tag(id).is_some(),
         Element::Footing(id) => model.footing(id).is_some(),
         Element::Grid(id) => model.grid(id).is_some(),
+        Element::Module(id) => model.module(id).is_some(),
     }
 }
 
@@ -1528,6 +1547,7 @@ fn level_of(
             Element::Tag(id) => model.tag(*id).map(|t| t.level),
             Element::Footing(id) => model.footing(*id).map(|f| f.level),
             Element::Grid(_) => None,
+            Element::Module(id) => model.module(*id).map(|m| m.level),
         }),
     }
 }

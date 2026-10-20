@@ -91,6 +91,7 @@ impl ArchiSimApp {
                         self.nav_views(ui);
                         self.nav_sheets(ui);
                         nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
+                        self.nav_modules(ui);
                     }
                     NavTab::Model => {
                         nav_section(ui, "nav-disciplines", "DISCIPLINAS", |ui| {
@@ -697,6 +698,10 @@ impl ArchiSimApp {
 }
 
 /// A top-level section of the navigator (VISTAS, PLANOS, MODELO).
+pub(super) fn nav_section_pub(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
+    nav_section(ui, id, title, add)
+}
+
 fn nav_section(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
     let p = Palette::current(ui.ctx());
     let id = ui.make_persistent_id(id);

@@ -194,7 +194,8 @@ pub fn transform(
             | Element::Railing(_)
             | Element::Object(_)
             | Element::Footing(_)
-            | Element::Grid(_) => {}
+            | Element::Grid(_)
+            | Element::Module(_) => {}
         }
     }
     Ok(out)
@@ -227,6 +228,7 @@ fn transform_phase_2(
                     | Element::Object(_)
                     | Element::Footing(_)
                     | Element::Grid(_)
+                    | Element::Module(_)
             )
         })
         .collect();
@@ -290,6 +292,10 @@ fn transform_phase_2(
             Element::Grid(id) => model.edit_grid(id, |g| {
                 g.start = t.apply(g.start);
                 g.end = t.apply(g.end);
+            })?,
+            Element::Module(id) => model.edit_module(id, |m| {
+                m.position = t.apply(m.position);
+                m.rotation += turn;
             })?,
             Element::Stair(id) => model.edit_stair(id, |x| pts(&mut x.path))?,
             Element::Roof(id) => model.edit_roof(id, |r| pts(&mut r.outline))?,

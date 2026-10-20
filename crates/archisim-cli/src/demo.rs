@@ -879,6 +879,36 @@ pub fn build() -> Result<Document, ModelError> {
     Ok(doc)
 }
 
+/// An urbanisation that places the demo house as a module three times:
+/// two side by side (the second mirrored, so their entrances face each
+/// other) and one turned, across the street (I5).
+pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(house)?;
+    let (text, stamp, module) = archisim_file::read_module(&text)?;
+    let mut m = archisim_library::new_project("Urbanización de prueba");
+    let level = m.levels()[0].id;
+    let name = house
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let src = m.add_module_source("Vivienda tipo", name, text.into(), stamp, module)?;
+    m.add_levels_for_module(src, level)?;
+    for (x, y, rotation, mirror) in [
+        (0.0, 0.0, 0.0, false),
+        (30.0, 0.0, 0.0, true),
+        (6.0, -16.0, std::f64::consts::PI, false),
+    ] {
+        m.add_module(archisim_core::NewModulePlacement {
+            source: src,
+            level,
+            position: Point2::new(x, y),
+            rotation,
+            mirror,
+        })?;
+    }
+    Ok(m)
+}
+
 #[cfg(test)]
 mod tests {
     use archisim_core::SlabFunction;

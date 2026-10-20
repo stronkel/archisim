@@ -129,7 +129,22 @@ fn compound_angle(deg: f64) -> String {
 
 /// Exports the whole model as IFC text (IFC 4.3 unless the options say
 /// IFC4).
+///
+/// The copies of the project's modules are exported as elements of the
+/// project ([`Model::flattened`]), each with `GlobalId`s of its own.
 pub fn export_ifc(model: &Model, options: &ExportOptions) -> String {
+    let flat;
+    let model = if model.has_modules() {
+        match model.flattened() {
+            Ok(m) => {
+                flat = m;
+                &flat
+            }
+            Err(_) => model,
+        }
+    } else {
+        model
+    };
     let mut x = Exporter::new(model);
     x.schema = options.schema;
     x.write();

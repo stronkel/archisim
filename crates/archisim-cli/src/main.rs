@@ -185,7 +185,20 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     archisim_file::save(doc.model(), &project)?;
     summary(doc.model());
     println!("  Proyecto: {}", project.display());
-    export_all(doc.model(), dir, "demo")
+    export_all(doc.model(), dir, "demo")?;
+    // The house as a module of an urbanisation (I5).
+    let master = demo::masterplan(&project)?;
+    let master_path = dir.join(format!("demo-masterplan.{}", archisim_file::EXTENSION));
+    archisim_file::save(&master, &master_path)?;
+    let ifc_path = dir.join("demo-masterplan.ifc");
+    std::fs::write(&ifc_path, ifc_text(&master, "demo-masterplan", None))?;
+    println!(
+        "  Urbanización con {} copias de la vivienda: {} y {}",
+        master.modules().count(),
+        master_path.display(),
+        ifc_path.display()
+    );
+    Ok(())
 }
 
 fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
@@ -366,6 +379,9 @@ fn plan_files(model: &Model, stem: &str) -> Vec<(archisim_core::LevelId, String,
 }
 
 fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Views and exports show the copies of the modules as elements.
+    let flat = model.flattened()?;
+    let model = &flat;
     let ifc_path = dir.join(format!("{stem}.ifc"));
     std::fs::write(&ifc_path, ifc_text(model, stem, None))?;
     println!("  IFC 4.3: {}", ifc_path.display());

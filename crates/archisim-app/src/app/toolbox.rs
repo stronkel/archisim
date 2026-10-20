@@ -582,10 +582,10 @@ const COORDINATION: &[Tile] = &[
         "Vincular modelos IFC de estructuras e instalaciones como referencia",
     ),
     tile(
-        Pick::Later("el bloque I5 (módulos)"),
+        Pick::Tool(Tool::Module),
         Glyph::Module,
         "Módulo",
-        "",
+        "K",
         "Colocar otro proyecto (una vivienda tipo) varias veces, con giro y simetría",
     ),
     tile(

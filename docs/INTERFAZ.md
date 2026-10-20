@@ -247,7 +247,7 @@ Como el trabajo en equipo de ArchiCAD, con presencia en directo:
 | **I2** ✅ | Barra contextual: métodos de inserción de las herramientas que ya existen, y Modificar con sus dos formas (rápida y precisa); barra inferior segmentada con forzados y coordenadas; línea de órdenes oculta. Pedido por Antonio al probar I1: tablas y mediciones en pestañas, y arrastrar plantas, secciones, tablas y la vista 3D a un plano a su escala | Sí (vistas 3D en planos, versión 14) |
 | **I3** ✅ | Disciplina por elemento y atenuación de la vista por disciplina, también al imprimir; ojo y candado por disciplina en el navegador | Sí (disciplina a mano, si se cambia) |
 | **I4** | Disciplina Concepto: aristas y caras, empujar, seguir, volumen, masa con edificabilidad, cinta, pintar, convertir a edificio | Sí |
-| **I5** | Módulos: colocar otro `.archisim` varias veces con giro y simetría, actualizar, mediciones por copias, IFC con identificadores por copia | Sí |
+| **I5** ✅ | Módulos: colocar otro `.archisim` varias veces con giro y simetría, actualizar, mediciones por copias, IFC con identificadores por copia | Sí |
 | **I6** | Tamaño de letra grande y misiones de iniciación | No |
 | 4.6 | Trabajo en equipo (§9.2): carpeta compartida en Google Drive primero (D20) | Sí |
 

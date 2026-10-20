@@ -95,6 +95,12 @@ pub(crate) struct ProjectFile {
     /// Objects: furniture, sanitary ware, kitchen units (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub objects: Vec<Object>,
+    /// Module files kept in the project (version 17).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub module_sources: Vec<ModuleSource>,
+    /// Copies of the modules (version 17).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modules: Vec<Module>,
     /// Drawing layers (version 7).
     pub draw_layers: Vec<crate::drafting::DrawLayer>,
     /// Lines, arcs, texts and hatches of the views (version 7).
@@ -510,6 +516,34 @@ pub(crate) struct Grid {
     pub name: String,
     pub start: Xy,
     pub end: Xy,
+}
+
+/// A module file kept in the project (version 17): where it is, the
+/// fingerprint of the file when it was loaded, and its content (a whole
+/// `.archisim` file).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ModuleSource {
+    pub id: u64,
+    pub name: String,
+    pub path: String,
+    pub stamp: String,
+    pub content: serde_json::Value,
+}
+
+/// A copy of a module (version 17).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Module {
+    pub id: u64,
+    pub guid: String,
+    pub source: u64,
+    pub level: u64,
+    pub position: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mirror: bool,
 }
 
 /// A footing (version 16): `pad` at a point (under a column), `strip`
@@ -1717,6 +1751,30 @@ impl ProjectFile {
                     values: values_out(&t.values),
                 })
                 .collect(),
+            module_sources: p
+                .module_sources
+                .iter()
+                .map(|s| ModuleSource {
+                    id: s.id.0,
+                    name: s.name.clone(),
+                    path: s.path.clone(),
+                    stamp: s.stamp.clone(),
+                    content: serde_json::from_str(&s.text).unwrap_or(serde_json::Value::Null),
+                })
+                .collect(),
+            modules: p
+                .modules
+                .iter()
+                .map(|m| Module {
+                    id: m.id.0,
+                    guid: m.guid.to_string(),
+                    source: m.source.0,
+                    level: m.level.0,
+                    position: xy(m.position),
+                    rotation: m.rotation,
+                    mirror: m.mirror,
+                })
+                .collect(),
             objects: p
                 .objects
                 .iter()
@@ -2027,6 +2085,8 @@ impl ProjectFile {
                 .collect::<Result<Vec<_>, FileError>>()?,
             object_types: Vec::new(),
             objects: Vec::new(),
+            module_sources: Vec::new(),
+            modules: Vec::new(),
             railings: self
                 .railings
                 .iter()
@@ -2294,6 +2354,34 @@ impl ProjectFile {
                 name: t.name,
                 family: core::FamilyId(t.family),
                 values,
+            });
+        }
+        for s in self.module_sources {
+            let element = format!("module {} «{}»", s.id, s.name);
+            let text: std::sync::Arc<str> = crate::pretty(&s.content).into();
+            let model = crate::from_str(&text).map_err(|e| FileError::Value {
+                element: element.clone(),
+                message: format!("the module file inside does not open: {e}"),
+            })?;
+            parts.module_sources.push(core::ModuleSource {
+                id: core::ModuleSourceId(s.id),
+                name: s.name,
+                path: s.path,
+                text,
+                stamp: s.stamp,
+                model: std::sync::Arc::new(model),
+            });
+        }
+        for m in self.modules {
+            let element = format!("module copy {}", m.id);
+            parts.modules.push(core::ModulePlacement {
+                id: core::ModuleId(m.id),
+                guid: guid(&element, &m.guid)?,
+                source: core::ModuleSourceId(m.source),
+                level: core::LevelId(m.level),
+                position: pt(m.position),
+                rotation: m.rotation,
+                mirror: m.mirror,
             });
         }
         for o in self.objects {

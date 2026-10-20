@@ -22,6 +22,15 @@ macro_rules! typed_id {
 }
 
 typed_id!(
+    /// Identifies a [`crate::ModuleSource`] (a module file kept in the
+    /// project).
+    ModuleSourceId
+);
+typed_id!(
+    /// Identifies a [`crate::ModulePlacement`] (a copy of a module).
+    ModuleId
+);
+typed_id!(
     /// Identifies a [`crate::Level`].
     LevelId
 );

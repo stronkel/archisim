@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche, 4) · Interfaz por disciplinas, bloque I5: módulos
+
+Rama `bloque/modulos` (sale de la de ejes y cimentación; pull request para Antonio). Formato `.archisim` **versión 17**: módulos. Los proyectos anteriores se abren igual.
+
+**Hecho**
+- **Módulo** (Coordinación → Módulo, tecla **K**): otro proyecto de ArchiSim (una vivienda tipo) se coloca en este tantas veces como haga falta.
+  - En Propiedades, **Cargar módulo…** elige el fichero. Sus tipos y materiales pasan al proyecto (los que ya hay iguales, de la misma plantilla, no se repiten).
+  - Cada clic coloca una copia con su origen (0,0) en el punto; **Espacio** gira la siguiente 90°; **Simetría** la refleja (pareadas, adosadas).
+  - Si el módulo tiene más plantas que las que hay encima, se crean con su altura.
+- **Una copia se maneja entera**: se selecciona con un clic dentro, se mueve, copia y gira como cualquier elemento, y en Propiedades se cambian planta, X, Y, giro y simetría. No se edita por dentro: se cambia el proyecto del módulo.
+- **Navegador → Proyecto → Módulos**: cada módulo con su número de copias. Si su fichero ha cambiado lo dice («ha cambiado») con un botón **Actualizar**: todas las copias cambian a la vez. Clic derecho: actualizar o quitar el módulo con sus copias.
+- **El proyecto guarda una copia de cada módulo**: se abre igual en otro ordenador aunque falte el fichero («sin fichero»).
+- **Plantas, secciones, 3D, planos, tablas, mediciones, BC3, CTE e IFC** cuentan las copias como elementos: las mediciones multiplican solas por el número de copias. Los locales de cada copia llevan delante su número de copia («2-0.01»).
+- **IFC**: cada elemento de cada copia sale con un `GlobalId` propio calculado del de la copia y el del elemento: no chocan entre copias y son los mismos en cada exportación (comprobado: la urbanización exportada dos veces da el mismo IFC).
+- La demo escribe ahora además `out/demo-masterplan.archisim` y su IFC: la vivienda de la demo tres veces, una reflejada y otra girada 180°.
+
+**Pendiente**
+- Al seleccionar una copia no se resalta en el 3D (sí en planta).
+- Del módulo no pasan sus cotas, textos, secciones, ejes ni terreno: en la urbanización mandan los suyos.
+- Las mediciones no separan aún la urbanización en su propio capítulo.
+- En el IFC las copias no van agrupadas (cada copia podría ser un `IfcElementAssembly`).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y abre `out/demo-masterplan.archisim`: tres viviendas, la segunda reflejada (las entradas enfrentadas) y la tercera girada.
+2. Pincha dentro de una vivienda: se selecciona entera. Cambia Giro o marca Simetría en Propiedades. Arrástrala.
+3. Pulsa **K** y haz clic en un sitio libre: otra copia. Espacio antes de hacer clic la gira.
+4. Abre `out/demo.archisim`, cambia algo (mueve un tabique) y guarda. Vuelve a la urbanización: en el navegador, Módulos → «ha cambiado» → **Actualizar**. Las tres copias cambian.
+5. Exporta el IFC de la urbanización y ábrelo en ArchiCAD o Revit: 33 muros y 12 puertas, todos con identificadores distintos.
+
+---
+
 ## 2026-10-20 (noche, 3) · Ejes y cimentación
 
 Rama `bloque/ejes-cimentacion` (sale de la de I3; pull request para Antonio). Formato `.archisim` **versión 16**: ejes y cimentación. Los proyectos anteriores se abren igual. El IFC lleva ahora `IfcGrid` e `IfcFooting`.

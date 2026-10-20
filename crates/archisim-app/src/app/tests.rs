@@ -3657,3 +3657,72 @@ fn grids_and_footings_are_drawn() {
     ));
     h.frame();
 }
+
+/// A masterplan: the house drawn here saved as a project, loaded as a
+/// module and placed three times (turned, and mirrored); the copies are
+/// drawn and exported but are not elements of the masterplan; one is
+/// selected by clicking inside it. With `ARCHISIM_TEST_OUT` set, leaves
+/// `vivienda.archisim`, `masterplan.archisim` and `masterplan.ifc` there.
+#[test]
+fn masterplan_places_modules() {
+    let dir = match std::env::var_os("ARCHISIM_TEST_OUT") {
+        Some(d) => PathBuf::from(d),
+        None => std::env::temp_dir().join(format!("archisim-modules-{}", std::process::id())),
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut house = Harness::new(Editor::new_project());
+    draw_outline(&mut house);
+    furnish(&mut house);
+    let house_path = house
+        .app
+        .ed
+        .save(Some(&dir.join("vivienda.archisim")))
+        .unwrap();
+
+    let mut h = Harness::new(Editor::new_project());
+    h.app.ed.path = Some(dir.join("masterplan.archisim"));
+    h.app.load_module_from(&house_path);
+    assert_eq!(h.app.tool, Tool::Module);
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-15.0, -15.0), p(65.0, 25.0), 0.0);
+    h.click_at(p(0.0, 0.0));
+    // Space: the next one turned a quarter.
+    h.key(Key::Space);
+    h.click_at(p(30.0, 0.0));
+    h.app.module_tool.rotation = 0.0;
+    h.app.module_tool.mirror = true;
+    h.click_at(p(50.0, 0.0));
+    assert_eq!(h.model().modules().count(), 3);
+    assert_eq!(h.model().walls().count(), 0);
+    assert_eq!(h.app.ed.shown().walls().count(), 12);
+    assert_eq!(h.app.ed.shown().openings().count(), 6);
+    h.frame();
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    // Inside the first copy: the copy is selected, with its properties.
+    h.click_at(p(6.0, 4.5));
+    assert!(matches!(
+        h.app.ed.selection.iter().next(),
+        Some(Element::Module(_))
+    ));
+    h.frame();
+    let path = h
+        .app
+        .ed
+        .save(Some(&dir.join("masterplan.archisim")))
+        .unwrap();
+    let reopened = Editor::open(&path).unwrap();
+    assert_eq!(reopened.model(), h.model());
+    reopened
+        .export_ifc(&dir.join("masterplan.ifc"), archisim_ifc::Schema::Ifc4x3)
+        .unwrap();
+    let ifc = std::fs::read_to_string(dir.join("masterplan.ifc")).unwrap();
+    assert_eq!(ifc.matches("IFCWALL(").count(), 12);
+    assert_eq!(ifc.matches("IFCDOOR(").count(), 3);
+    // Deleted, the copy goes; the module stays, to place it again.
+    h.key(Key::Delete);
+    assert_eq!(h.model().modules().count(), 2);
+    assert_eq!(h.model().module_sources().count(), 1);
+}
