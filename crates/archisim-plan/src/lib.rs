@@ -25,6 +25,7 @@
 
 pub mod annotate;
 pub mod axo;
+pub mod concept;
 pub mod curtain;
 pub(crate) mod dim;
 pub mod drafting;
@@ -445,6 +446,11 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             marker_points.extend(f.outline());
         }
     }
+    if show(archisim_core::Category::Masses) {
+        for m in model.masses_on_level(level) {
+            marker_points.extend(m.outline());
+        }
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -559,6 +565,13 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         grids::draw_footings(&mut s, model, level, k, &vis);
+    }
+    if show(archisim_core::Category::Masses) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        concept::draw_masses(&mut s, model, level, k, &vis);
     }
     if show(archisim_core::Category::Grids) {
         grids::draw_grids(&mut s, model, k);

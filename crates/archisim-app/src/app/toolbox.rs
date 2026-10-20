@@ -146,6 +146,8 @@ pub enum Pick {
     Action(Action),
     /// A 2D drafting or editing command (AutoCAD's), by its name.
     Command(&'static str),
+    /// A tool of the Concepto discipline.
+    Concept(super::concept_ui::ConceptPick),
     /// Not there yet: what brings it.
     Later(&'static str),
 }
@@ -154,6 +156,8 @@ pub enum Pick {
 pub enum Action {
     /// The four elevations around the building.
     Elevations,
+    /// The selected volumes into a building.
+    Convert,
     NewSheet,
     Schedule,
     Takeoff,
@@ -189,77 +193,76 @@ const fn tile(
     }
 }
 
-const CONCEPT_LATER: &str = "el bloque I4 (disciplina Concepto)";
 const SERVICES_LATER: &str = "las herramientas de instalaciones (MEP)";
 const SITE_LATER: &str = "el urbanismo (docs/DISCIPLINAS.md)";
 const TEAM_LATER: &str = "el trabajo en equipo (4.6, carpeta compartida en Google Drive)";
 
 const CONCEPT: &[Tile] = &[
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Line),
         Glyph::Edge,
         "Línea",
         "",
         "Aristas del modelo, como SketchUp: al cerrar un contorno se crea una cara",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Rect),
         Glyph::FaceRect,
         "Rectángulo",
         "",
         "Una cara rectangular para empujar",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Circle),
         Glyph::FaceCircle,
         "Círculo",
         "",
         "Una cara circular para empujar",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Push),
         Glyph::PushPull,
         "Empujar",
         "",
         "Empujar o tirar de una cara para hacer un volumen",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Follow),
         Glyph::FollowMe,
         "Seguir",
         "",
         "Llevar un perfil a lo largo de un camino",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Offset),
         Glyph::FaceOffset,
         "Equidist.",
         "",
         "Contorno paralelo dentro o fuera de una cara",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Volume),
         Glyph::Volume,
         "Volumen",
         "",
         "Prisma por su contorno y altura",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Mass),
         Glyph::Mass,
         "Masa",
         "",
         "Volumen por plantas con superficie construida, edificabilidad y ocupación en directo",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Tape),
         Glyph::Tape,
         "Cinta",
         "",
         "Medir y dejar guías",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Paint),
         Glyph::Paint,
         "Pintar",
         "",
@@ -273,7 +276,7 @@ const CONCEPT: &[Tile] = &[
         "Ejes de replanteo con su numeración",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Action(Action::Convert),
         Glyph::Convert,
         "Convertir",
         "",
@@ -489,7 +492,7 @@ const SITE: &[Tile] = &[
         "Árboles y arbustos (y vehículos): la herramienta Objeto, con la librería de vegetación",
     ),
     tile(
-        Pick::Later(CONCEPT_LATER),
+        Pick::Concept(super::concept_ui::ConceptPick::Volume),
         Glyph::Volume,
         "Forma",
         "",
@@ -988,6 +991,7 @@ impl ArchiSimApp {
             Pick::Tool(Tool::Dimension) => Some(self.tool == Tool::Dimension && !level_marks),
             Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes && !raft),
             Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft),
+            Pick::Concept(c) => Some(self.concept_picked(c)),
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
             Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
@@ -1013,7 +1017,7 @@ impl ArchiSimApp {
                 Action::Requirements => {
                     self.coord_window.open && self.coord_window.tab == CoordTab::Requirements
                 }
-                Action::Elevations | Action::NewSheet | Action::Link => false,
+                Action::Elevations | Action::NewSheet | Action::Link | Action::Convert => false,
             }),
             Pick::Command(name) => {
                 Some(self.tool == Tool::Cad && self.cad.as_ref().is_some_and(|c| c.name() == name))
@@ -1066,6 +1070,7 @@ impl ArchiSimApp {
                 ),
             },
             Pick::Action(a) => self.act(a),
+            Pick::Concept(c) => self.concept_pick(c),
             Pick::Command(name) => self.start_command(name),
             Pick::Later(what) => self.say(format!("Esta herramienta llegará con {what}.")),
         }
@@ -1078,6 +1083,10 @@ impl ArchiSimApp {
         };
         match action {
             Action::Elevations => self.create_elevations(),
+            Action::Convert => {
+                let ids = self.selected_masses();
+                self.convert_masses(&ids);
+            }
             Action::NewSheet => self.new_sheet(),
             Action::Schedule => {
                 self.open_view(TabKind::Schedule(SchedTab::Kind(

@@ -1,0 +1,312 @@
+//! The concept phase: volumes, faces and masses by floors; pushing them,
+//! their parallel contours, guides, painting and turning them into a
+//! building. Each change one undoable step.
+
+use archisim_core::{
+    DrawLayer, DrawLayerId, LineStyle, MassId, MassShape, MaterialId, Model, NewDraft, NewMass,
+    Point2, Shape, SlabFunction, SlabTypeId, ViewRef, WallFunction, WallTypeId,
+};
+
+use super::{EditResult, Editor};
+
+/// The contour the volume tools draw with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MassMode {
+    Polygon,
+    Rectangle,
+    Circle,
+    /// A band along a path ("Seguir").
+    Path,
+}
+
+/// What the contour makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MassWhat {
+    /// A flat face, to push (Línea, Rectángulo, Círculo).
+    Face,
+    /// A prism of a height.
+    Volume,
+    /// A mass by floors.
+    Mass,
+}
+
+/// Settings of the volume tools.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MassSettings {
+    pub mode: MassMode,
+    pub what: MassWhat,
+    /// Height of a volume and of a band along a path.
+    pub height: f64,
+    pub floors: usize,
+    pub floor_height: f64,
+    /// Width of a band along a path.
+    pub width: f64,
+    pub base_offset: f64,
+    pub material: MaterialId,
+}
+
+impl MassSettings {
+    pub fn new(model: &Model) -> Self {
+        let material = model
+            .materials()
+            .find(|m| m.category == "concept")
+            .or_else(|| model.materials().find(|m| m.category == "concrete"))
+            .or_else(|| model.materials().next())
+            .map_or(MaterialId(0), |m| m.id);
+        MassSettings {
+            mode: MassMode::Polygon,
+            what: MassWhat::Volume,
+            height: 3.0,
+            floors: 3,
+            floor_height: 3.0,
+            width: 0.3,
+            base_offset: 0.0,
+            material,
+        }
+    }
+
+    /// The height and floor height of what the tool makes.
+    fn heights(&self) -> (f64, Option<f64>) {
+        match self.what {
+            MassWhat::Face => (0.0, None),
+            MassWhat::Volume => (self.height, None),
+            MassWhat::Mass => (
+                self.floors.max(1) as f64 * self.floor_height,
+                Some(self.floor_height),
+            ),
+        }
+    }
+}
+
+/// The types a mass is turned into a building with: the first of each
+/// kind (an exterior wall; a slab on the ground, a floor and a roof).
+pub fn default_building_types(
+    model: &Model,
+) -> Option<(WallTypeId, SlabTypeId, SlabTypeId, SlabTypeId)> {
+    let wall = model
+        .wall_types()
+        .find(|t| t.function == WallFunction::Exterior)
+        .or_else(|| model.wall_types().next())?
+        .id;
+    let slab = |f: SlabFunction| {
+        model
+            .slab_types()
+            .find(|t| t.function == f)
+            .or_else(|| model.slab_types().next())
+            .map(|t| t.id)
+    };
+    Some((
+        wall,
+        slab(SlabFunction::BaseSlab)?,
+        slab(SlabFunction::Floor)?,
+        slab(SlabFunction::Roof)?,
+    ))
+}
+
+/// A circle as a contour of 32 sides.
+pub fn circle(centre: Point2, radius: f64) -> Vec<Point2> {
+    (0..32)
+        .map(|i| {
+            let a = i as f64 * std::f64::consts::TAU / 32.0;
+            centre + Point2::new(a.cos(), a.sin()) * radius
+        })
+        .collect()
+}
+
+impl Editor {
+    /// A volume, face or mass by its contour on the active level.
+    pub fn add_mass_outline(
+        &mut self,
+        s: &MassSettings,
+        outline: Vec<Point2>,
+    ) -> EditResult<MassId> {
+        self.add_mass_shape(s, MassShape::Prism(outline))
+    }
+
+    /// A band along a path.
+    pub fn add_mass_path(&mut self, s: &MassSettings, path: Vec<Point2>) -> EditResult<MassId> {
+        let mut s = *s;
+        if s.what == MassWhat::Face {
+            s.what = MassWhat::Volume;
+        }
+        self.add_mass_shape(
+            &s,
+            MassShape::Sweep {
+                path,
+                width: s.width,
+            },
+        )
+    }
+
+    fn add_mass_shape(&mut self, s: &MassSettings, shape: MassShape) -> EditResult<MassId> {
+        let level = self.level;
+        let (height, floor_height) = s.heights();
+        let label = match s.what {
+            MassWhat::Face => "Crear cara",
+            MassWhat::Volume => "Crear volumen",
+            MassWhat::Mass => "Crear masa",
+        };
+        self.transact(label, |m| {
+            m.add_mass(NewMass {
+                name: m.next_mass_name(floor_height.is_some()),
+                level,
+                shape,
+                base_offset: s.base_offset,
+                height,
+                floor_height,
+                material: s.material,
+            })
+        })
+    }
+
+    pub fn edit_mass(
+        &mut self,
+        label: &str,
+        id: MassId,
+        edit: impl FnOnce(&mut archisim_core::Mass),
+    ) -> EditResult {
+        self.transact(label, |m| m.edit_mass(id, edit))
+    }
+
+    /// Pushes a mass (or a face) to a height; a mass by floors to a whole
+    /// number of them.
+    pub fn push_mass(&mut self, id: MassId, height: f64) -> EditResult {
+        let height = snap_height(self.model(), id, height);
+        self.transact("Empujar", |m| m.edit_mass(id, |x| x.height = height))
+    }
+
+    /// A face `d` outside the contour of a mass (inside, if negative).
+    pub fn offset_mass(&mut self, id: MassId, d: f64) -> EditResult<MassId> {
+        let mass = self
+            .model()
+            .mass(id)
+            .ok_or("el volumen ya no existe")?
+            .clone();
+        let outline = archisim_core::offset_contour(&mass.outline(), d)
+            .ok_or("el contorno no cabe a esa distancia")?;
+        self.transact("Equidistancia", |m| {
+            m.add_mass(NewMass {
+                name: m.next_mass_name(false),
+                level: mass.level,
+                shape: MassShape::Prism(outline),
+                base_offset: mass.base_offset + mass.height,
+                height: 0.0,
+                floor_height: None,
+                material: mass.material,
+            })
+        })
+    }
+
+    pub fn paint_mass(&mut self, id: MassId, material: MaterialId) -> EditResult {
+        self.transact("Pintar", |m| m.edit_mass(id, |x| x.material = material))
+    }
+
+    /// A guide through two points, on the «Guías» layer (made if missing,
+    /// not printed), as SketchUp's tape measure leaves.
+    pub fn add_guide(&mut self, a: Point2, b: Point2) -> EditResult {
+        let level = self.level;
+        let Some(u) = (b - a).normalized() else {
+            return Err("marca dos puntos distintos".into());
+        };
+        self.transact("Guía", |m| {
+            let layer = guide_layer(m)?;
+            m.add_draft(NewDraft::new(
+                ViewRef::Level(level),
+                layer,
+                Shape::Line {
+                    a: a - u * 50.0,
+                    b: b + u * 50.0,
+                },
+            ))
+            .map(drop)
+        })
+    }
+
+    /// Turns the masses into buildings with the default types (and the
+    /// ones made before, again). Returns how many elements they made.
+    pub fn masses_to_buildings(&mut self, ids: &[MassId]) -> EditResult<usize> {
+        let (w, g, f, r) = default_building_types(self.model())
+            .ok_or("el proyecto no tiene tipos de muro y forjado")?;
+        self.transact("Convertir en edificio", |m| {
+            let mut n = 0;
+            for id in ids {
+                let (w, g, f, r) = m
+                    .mass(*id)
+                    .and_then(|x| x.building.as_ref())
+                    .map_or((w, g, f, r), |b| {
+                        (b.wall_type, b.ground_type, b.floor_type, b.roof_type)
+                    });
+                n += m.mass_to_building(*id, w, g, f, r)?;
+            }
+            Ok(n)
+        })
+    }
+
+    pub fn set_plot_area(&mut self, area: Option<f64>) -> EditResult {
+        self.transact("Superficie de la parcela", |m| m.set_plot_area(area))
+    }
+}
+
+/// A height for a mass: a mass by floors goes by whole floors (one at
+/// least); others stay at or above zero.
+pub fn snap_height(model: &Model, id: MassId, height: f64) -> f64 {
+    let h = height.max(0.0);
+    match model.mass(id).and_then(|m| m.floor_height) {
+        Some(f) if f > 0.0 => (h / f).round().max(1.0) * f,
+        _ => (h * 1000.0).round() / 1000.0,
+    }
+}
+
+/// The «Guías» layer: thin, dashed and not printed.
+fn guide_layer(m: &mut Model) -> Result<DrawLayerId, archisim_core::ModelError> {
+    if let Some(l) = m.draw_layers().into_iter().find(|l| l.name == "Guías") {
+        return Ok(l.id);
+    }
+    let mut layer = DrawLayer::new("Guías", [0, 160, 200], 0.13, LineStyle::Dashed);
+    layer.printable = false;
+    m.add_draw_layer(layer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn faces_are_pushed_offset_painted_and_converted() {
+        let mut ed = Editor::new_project();
+        let mut s = MassSettings::new(ed.model());
+        s.what = MassWhat::Face;
+        let square = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(10.0, 0.0),
+            Point2::new(10.0, 10.0),
+            Point2::new(0.0, 10.0),
+        ];
+        let face = ed.add_mass_outline(&s, square.clone()).unwrap();
+        assert!(ed.model().mass(face).unwrap().is_face());
+        ed.push_mass(face, 6.5).unwrap();
+        assert!((ed.model().mass(face).unwrap().height - 6.5).abs() < 1e-9);
+        // A mass by floors goes by whole floors.
+        s.what = MassWhat::Mass;
+        let mass = ed.add_mass_outline(&s, square).unwrap();
+        ed.push_mass(mass, 10.4).unwrap();
+        assert!((ed.model().mass(mass).unwrap().height - 9.0).abs() < 1e-9);
+        let top = ed.offset_mass(mass, -2.0).unwrap();
+        let t = ed.model().mass(top).unwrap();
+        assert!((archisim_core::signed_area(&t.outline()) - 36.0).abs() < 1e-9);
+        assert!((t.base_offset - 9.0).abs() < 1e-9);
+        let red = ed.model().materials().last().unwrap().id;
+        ed.paint_mass(mass, red).unwrap();
+        assert_eq!(ed.model().mass(mass).unwrap().material, red);
+        let n = ed.masses_to_buildings(&[mass]).unwrap();
+        assert_eq!(n, 3 * 5 + 1);
+        assert_eq!(ed.model().walls().count(), 12);
+        ed.add_guide(Point2::new(0.0, 0.0), Point2::new(5.0, 0.0))
+            .unwrap();
+        assert!(ed
+            .model()
+            .draw_layers()
+            .into_iter()
+            .any(|l| l.name == "Guías" && !l.printable));
+    }
+}

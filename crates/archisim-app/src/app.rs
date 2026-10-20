@@ -89,6 +89,16 @@ pub enum Tool {
     Footing,
     /// Copies of a module (another project).
     Module,
+    /// Faces, volumes and masses of the concept phase.
+    Mass,
+    /// Pushing a face or volume up (SketchUp's push/pull).
+    PushPull,
+    /// A parallel contour on a volume.
+    MassOffset,
+    /// The tape measure: measures and leaves guides.
+    Tape,
+    /// Gives a volume a material.
+    Paint,
     /// A 2D drafting or editing command is running (AutoCAD's).
     Cad,
 }
@@ -114,6 +124,11 @@ impl Tool {
                 | Tool::Grid
                 | Tool::Footing
                 | Tool::Module
+                | Tool::Mass
+                | Tool::PushPull
+                | Tool::MassOffset
+                | Tool::Tape
+                | Tool::Paint
         )
     }
 
@@ -227,6 +242,11 @@ pub struct ArchiSimApp {
     pub footing_anchor: Option<Point2>,
     pub footing_settings: crate::editor::FootingSettings,
     pub module_tool: module_ui::ModuleTool,
+    /// The contour of the volume tools, their settings and what the
+    /// concept tools are doing.
+    pub mass_tool: SlabTool,
+    pub mass_settings: crate::editor::MassSettings,
+    pub concept: concept_ui::ConceptState,
     pub module_watch: module_ui::ModuleWatch,
     pub section_tool: section_ui::SectionTool,
     /// The section shown: its drawing (worked out once per revision) and
@@ -436,6 +456,7 @@ impl ArchiSimApp {
         let window_settings = default_opening_settings(ed.model(), false);
         let (column_settings, beam_settings) = default_member_settings(ed.model());
         let footing_settings = crate::editor::FootingSettings::new(ed.model());
+        let mass_settings = crate::editor::MassSettings::new(ed.model());
         let roof_settings = roof_ui::default_roof_settings(ed.model());
         let stair_settings = crate::editor::default_stair_settings(ed.model());
         let level = ed.level;
@@ -459,6 +480,9 @@ impl ArchiSimApp {
             footing_settings,
             module_tool: Default::default(),
             module_watch: Default::default(),
+            mass_tool: SlabTool::default(),
+            mass_settings,
+            concept: Default::default(),
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_hover: None,
@@ -603,6 +627,8 @@ impl ArchiSimApp {
             self.beam_tool.finish();
             self.grid_anchor = None;
             self.footing_anchor = None;
+            self.mass_tool.finish();
+            self.concept.finish();
             self.zone_tool.finish();
             self.roof_tool.finish();
             self.stair_tool.points.clear();
@@ -641,6 +667,9 @@ impl ArchiSimApp {
         self.footing_anchor = None;
         self.module_tool = Default::default();
         self.module_watch = Default::default();
+        self.mass_settings = crate::editor::MassSettings::new(ed.model());
+        self.mass_tool.finish();
+        self.concept.finish();
         self.ed = ed;
         self.drag = None;
         self.wall_tool.finish();
@@ -1855,6 +1884,7 @@ mod annotation_ui;
 mod bottom_segments;
 mod cad_ui;
 mod chrome;
+mod concept_ui;
 mod context_bar;
 mod coord_ui;
 mod cte_ui;

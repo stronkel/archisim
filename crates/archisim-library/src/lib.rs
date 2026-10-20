@@ -120,6 +120,13 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         CutPattern::Solid,
     );
     let grava = mat("Grava", "gravel", [210, 204, 190], CutPattern::Dots);
+    // The volumes of the concept phase.
+    mat(
+        "Volumen de concepto",
+        "concept",
+        [150, 182, 222],
+        CutPattern::Solid,
+    );
     let xps = mat(
         "Poliestireno extruido (XPS)",
         "insulation",

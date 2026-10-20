@@ -58,6 +58,7 @@ impl ArchiSimApp {
         self.draw_member_preview(&painter, rect);
         self.draw_foundation_preview(&painter, rect);
         self.draw_module_preview(&painter, rect);
+        self.draw_concept_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
@@ -107,7 +108,12 @@ impl ArchiSimApp {
             | Tool::Object
             | Tool::Grid
             | Tool::Footing
-            | Tool::Module => CursorIcon::Crosshair,
+            | Tool::Module
+            | Tool::Mass
+            | Tool::PushPull
+            | Tool::MassOffset
+            | Tool::Tape => CursorIcon::Crosshair,
+            Tool::Paint => CursorIcon::PointingHand,
             Tool::Cad => match self.cad_want() {
                 Some(crate::cad::Want::Pick) => CursorIcon::Cell,
                 Some(crate::cad::Want::Select) if self.hover.is_some() => CursorIcon::PointingHand,
@@ -361,11 +367,22 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
-            Tool::Column | Tool::Beam | Tool::Grid | Tool::Footing | Tool::Module => {
-                let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
+            Tool::Column
+            | Tool::Beam
+            | Tool::Grid
+            | Tool::Footing
+            | Tool::Module
+            | Tool::Mass
+            | Tool::PushPull
+            | Tool::MassOffset
+            | Tool::Tape
+            | Tool::Paint => {
+                let points = self.concept_points();
+                let mut s = self.snap_at(raw, reach, &points, &BTreeSet::new());
                 let anchor = match self.tool {
                     Tool::Beam => self.beam_tool.anchor,
-                    _ => self.foundation_anchor(),
+                    Tool::Grid | Tool::Footing => self.foundation_anchor(),
+                    _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
                     if ctx.input(|i| i.modifiers.shift) {
@@ -472,6 +489,13 @@ impl ArchiSimApp {
             if let egui::Event::Text(t) = e {
                 for c in t.chars() {
                     used_text |= match self.tool {
+                        Tool::Mass
+                            if self.mass_settings.mode != crate::editor::MassMode::Circle
+                                && self.mass_settings.mode != crate::editor::MassMode::Path =>
+                        {
+                            self.mass_tool.type_char(c)
+                        }
+                        Tool::PushPull | Tool::MassOffset => self.concept_type(c),
                         Tool::Wall => self.wall_tool.type_char(c),
                         Tool::Slab => self.slab_tool.type_char(c),
                         Tool::Zone => self.zone_tool.type_char(c),
@@ -498,6 +522,8 @@ impl ArchiSimApp {
                 Tool::Stair => self.stair_tool.points.pop().is_some(),
                 Tool::Railing => self.railing_points.pop().is_some(),
                 Tool::Terrain => self.terrain_back(),
+                Tool::Mass => self.mass_tool.backspace(),
+                Tool::PushPull | Tool::MassOffset => self.concept_backspace(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -564,6 +590,7 @@ impl ArchiSimApp {
                     SlabOutcome::Nothing => {}
                 },
                 Tool::Terrain => self.finish_terrain(),
+                Tool::Mass | Tool::PushPull | Tool::MassOffset => self.concept_enter(),
                 Tool::Railing => {
                     if let Some(c) = self.cursor {
                         if self.railing_points.len() == 1 {
@@ -619,6 +646,9 @@ impl ArchiSimApp {
                     if !self.foundation_finish() {
                         self.set_tool(Tool::Arrow);
                     }
+                }
+                Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
+                    self.concept_escape()
                 }
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
@@ -859,6 +889,22 @@ impl ArchiSimApp {
                     if let Some(c) = self.cursor {
                         self.module_click(c.point);
                     }
+                }
+            }
+            Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
+                let path = self.tool == Tool::Mass
+                    && self.mass_settings.mode == crate::editor::MassMode::Path;
+                if path
+                    && (response.double_clicked_by(PointerButton::Primary)
+                        || response.clicked_by(PointerButton::Secondary))
+                {
+                    self.finish_path();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.concept_click(c.point);
+                    }
+                } else if response.clicked_by(PointerButton::Secondary) {
+                    self.concept_escape();
                 }
             }
             Tool::Grid | Tool::Footing => {
@@ -1631,6 +1677,7 @@ impl ArchiSimApp {
             Tool::Slab => self.slab_tool.anchor(),
             Tool::Beam => self.beam_tool.anchor,
             Tool::Grid | Tool::Footing => self.foundation_anchor(),
+            Tool::Mass | Tool::Tape => self.concept_anchor(),
             Tool::Section => self.section_tool.anchor,
             Tool::CurtainWall => self.curtain_anchor,
             Tool::Railing => self.railing_points.last().copied(),
@@ -1661,6 +1708,7 @@ impl ArchiSimApp {
             Tool::CurtainWall => self.curtain_anchor.into_iter().collect(),
             Tool::Beam => self.beam_tool.anchor.into_iter().collect(),
             Tool::Grid | Tool::Footing => self.foundation_anchor().into_iter().collect(),
+            Tool::Mass | Tool::Tape => self.concept_points(),
             _ => Vec::new(),
         }
     }

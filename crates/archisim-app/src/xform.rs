@@ -196,6 +196,31 @@ pub fn transform(
             | Element::Footing(_)
             | Element::Grid(_)
             | Element::Module(_) => {}
+            Element::Mass(id) => {
+                let mut x = model
+                    .mass(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                x.map_points(|p| t.apply(p));
+                if let archisim_core::MassShape::Sweep { width, .. } = &mut x.shape {
+                    *width *= f;
+                }
+                if copy {
+                    let new = model.add_mass(archisim_core::NewMass {
+                        name: model.next_mass_name(x.floor_height.is_some()),
+                        level: x.level,
+                        shape: x.shape,
+                        base_offset: x.base_offset,
+                        height: x.height,
+                        floor_height: x.floor_height,
+                        material: x.material,
+                    })?;
+                    out.insert(Element::Mass(new));
+                } else {
+                    model.edit_mass(id, |m| m.shape = x.shape)?;
+                    out.insert(*e);
+                }
+            }
         }
     }
     Ok(out)
