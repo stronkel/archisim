@@ -143,7 +143,7 @@ impl ArchiSimApp {
         });
     }
 
-    fn link_ifc_dialog(&mut self) {
+    pub(super) fn link_ifc_dialog(&mut self) {
         let mut d = rfd::FileDialog::new()
             .set_title("Vincular modelos IFC")
             .add_filter("IFC", &["ifc"]);
@@ -158,14 +158,14 @@ impl ArchiSimApp {
         }
     }
 
-    fn run_clash_check(&mut self) {
+    pub(super) fn run_clash_check(&mut self) {
         match self.coord.check_clashes(self.ed.model()) {
             Ok(s) => self.say(s),
             Err(e) => self.complain(e),
         }
     }
 
-    fn requirements_dialog(&mut self) {
+    pub(super) fn requirements_dialog(&mut self) {
         let mut d = rfd::FileDialog::new()
             .set_title("Requisitos de información (IDS)")
             .add_filter("IDS", &["ids", "xml"]);

@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (tarde) · Interfaz por disciplinas, bloque I1
+
+Primer bloque de `docs/INTERFAZ.md`, en la rama `bloque/interfaz-i1` (pull request para Antonio). Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **Barra de disciplinas** a la izquierda del todo: la Flecha arriba y, debajo, Concepto · Arquitectura · Estructura · Instalaciones · Urbanismo · Documentación · Análisis · Coordinación. La elegida se marca en azul.
+- **Fichas de tamaño fijo**: cuatro por fila, 54 px, siempre el sitio de tres filas, con los **iconos nuevos** de `docs/interfaz/iconos.svg` (ventana y pilar en alzado, barandilla con su pasamanos, cubierta a dos aguas…). Sin borde en reposo, fondo suave al pasar el ratón, borde azul en la que está en uso. La tecla y para qué sirve salen al pasar el ratón.
+- **Propiedades debajo de las fichas**, en la misma columna; al cambiar de disciplina no se mueven. La columna se ensancha arrastrando su borde y el navegador la sigue para que el dibujo quede centrado.
+- Cada disciplina con sus herramientas: las que ya existen funcionan (Abertura dibuja huecos en forjados; Vegetación es Objeto con la librería de árboles; Alzado, Plano, Tabla, CTE, Mediciones, Vincular, Versiones, Interferencias, Incidencias y Requisitos abren lo que ya había); las que faltan (todo Concepto, Ejes, Zapata, Losa, Instalaciones, Parcela, Vial, Módulo, Equipo, Publicar) se ven apagadas y dicen qué bloque las trae.
+- **Las teclas cambian de disciplina** (D18): I lleva a Estructura, N a Documentación; F en Estructura se queda en Estructura, porque el forjado está en las dos.
+- **Buscador de órdenes**: Ctrl+Espacio o el campo «Buscar herramienta…» de la barra superior. Se escribe «viga», «cota», «simetría» (con o sin tilde) o la tecla («EQ»), flechas para elegir e Intro. Dice en qué disciplina está cada cosa y su tecla. Encuentra también las órdenes de dibujo y edición 2D (línea, polilínea, sombreado, desplazar, recortar, empalme…), que ya no tienen ficha: hasta el bloque I2 se usan desde aquí o desde la línea de órdenes.
+- **Navegador con dos pestañas**: Modelo (lo construido por tipos, con su número) y Proyecto (plantas, vistas, secciones, alzados, planos y tablas).
+- Quitados la caja antigua por secciones y el modo «solo iconos». En el diseño, el buscador pasa a **Ctrl+Espacio** (Espacio solo ya hace la varita y gira puertas) y la rejilla de ventilación sale de Instalaciones (la «rejilla» que pidió Antonio son los ejes).
+
+**Pendiente**
+- I2: barra contextual bajo las pestañas (métodos de inserción y Modificar) y barra inferior segmentada con línea, relleno, texto y cota; ahí vuelven a tener botón el dibujo y la edición 2D.
+- Inicio y Preferencias al pie de la barra de disciplinas; recordar la disciplina entre sesiones.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`. Pasa por las ocho disciplinas: las fichas no cambian de tamaño y Propiedades se queda en su sitio.
+2. En Arquitectura, pincha Muro: la ficha se marca y debajo sale el muro que vas a dibujar. Pincha «Teclas: AutoCAD» (a la derecha de la línea de órdenes) para que diga «Teclas: ArchiCAD» y pulsa I: salta a Estructura con el pilar.
+3. Ctrl+Espacio, escribe «zapata» (sale apagada, todavía no), luego «girar» e Intro.
+4. En Coordinación, Interferencias abre la ventana de coordinación; en Análisis, CTE abre la comprobación.
+5. Navegador: cambia entre Modelo y Proyecto.
+6. Dime si los iconos de la barra de disciplinas te parecen bien (he usado volumen, muro, pilar, tubería, árbol, cota, escudo y vínculo).
+
+---
+
 ## 2026-10-20 (noche) · Familias: parámetros del proyecto y compartidos (v0.34)
 
 Tanda 3 de las cinco pedidas el 20/10 (rama `bloque/parametros`, encima de la de las tandas 1–2).

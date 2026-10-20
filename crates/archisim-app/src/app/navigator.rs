@@ -60,14 +60,40 @@ impl ArchiSimApp {
             );
         });
         ui.add_space(4.0);
+        // Two tabs: the model (what is built) and the project (its views,
+        // sheets and tables).
+        let mut tab = self.nav_tab;
+        super::widgets::segmented(
+            ui,
+            "navigator-tab",
+            &mut tab,
+            &[
+                (
+                    NavTab::Model,
+                    "Modelo",
+                    "Lo construido, por tipos, con el número de elementos",
+                ),
+                (
+                    NavTab::Project,
+                    "Proyecto",
+                    "Plantas, vistas, secciones, alzados, planos y tablas",
+                ),
+            ],
+        );
+        self.nav_tab = tab;
+        ui.add_space(6.0);
         egui::ScrollArea::vertical()
             .id_salt("navigator")
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                self.nav_views(ui);
-                self.nav_sheets(ui);
-                nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
-                self.nav_model(ui);
+                match self.nav_tab {
+                    NavTab::Project => {
+                        self.nav_views(ui);
+                        self.nav_sheets(ui);
+                        nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
+                    }
+                    NavTab::Model => self.nav_model(ui),
+                }
                 ui.add_space(6.0);
             });
     }
@@ -780,4 +806,12 @@ fn category_row(ui: &mut Ui, icon: Icon, name: &str, count: usize, open: bool) -
         p.muted,
     );
     resp
+}
+
+/// The tabs of the navigator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NavTab {
+    Model,
+    #[default]
+    Project,
 }

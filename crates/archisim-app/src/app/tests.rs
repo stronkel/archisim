@@ -1191,26 +1191,66 @@ fn toolbox_keys_and_tools_to_come() {
     assert_eq!(h.app.dim_settings.mode, DimMode::Linear);
     h.key(Key::Escape);
     assert_eq!(h.app.tool, Tool::Arrow);
-    h.app.pick(super::toolbox::Pick::Later("2.5"));
+    h.app.pick(super::toolbox::Pick::Later("el punto 2.5"));
     assert_eq!(h.app.tool, Tool::Arrow);
     assert!(h.app.message.as_ref().unwrap().text.contains("2.5"));
-    // Every tile of the box has a name and a hint; tools have their key.
-    for (_, tiles) in super::toolbox::SECTIONS {
-        for t in *tiles {
-            assert!(!t.name.is_empty() && !t.hint.is_empty());
-            if let super::toolbox::Pick::Tool(tool) = t.pick {
-                if tool != Tool::Arrow {
-                    assert_eq!(Tool::from_key(t.key), Some(tool), "{}", t.name);
-                }
-            }
-        }
-    }
-    // The compact box and the hidden dock still leave a working plan.
-    h.app.compact_toolbox = true;
+    // The hidden properties and navigator still leave a working plan.
     h.app.show_properties = false;
     h.app.show_navigator = false;
     h.frame();
     h.frame();
+    draw_outline(&mut h);
+    assert_eq!(h.model().walls().count(), 4);
+}
+
+/// The disciplines: a tool key brings the discipline of its tool (M is
+/// always the wall, I the column), the rail changes the tiles, and the
+/// command search finds a tool by its name and takes it with Intro.
+#[test]
+fn disciplines_keys_and_command_search() {
+    use super::toolbox::Discipline;
+    let mut h = Harness::new(Editor::new_project());
+    assert_eq!(h.app.discipline, Discipline::Architecture);
+    h.type_text("i");
+    assert_eq!(h.app.tool, Tool::Column);
+    assert_eq!(h.app.discipline, Discipline::Structure);
+    // The slab is in Structure too: it stays there.
+    h.type_text("f");
+    assert_eq!(h.app.tool, Tool::Slab);
+    assert_eq!(h.app.discipline, Discipline::Structure);
+    h.type_text("n");
+    assert_eq!(h.app.discipline, Discipline::Documentation);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    // The search: Ctrl+Espacio, «viga», Intro.
+    h.set_modifiers(Modifiers::CTRL);
+    h.key(Key::Space);
+    h.set_modifiers(Modifiers::NONE);
+    assert!(h.app.command_search.is_some());
+    h.frame();
+    h.type_text("viga");
+    assert_eq!(h.app.command_search.as_ref().unwrap().0, "viga");
+    h.key(Key::Enter);
+    assert!(h.app.command_search.is_none());
+    assert_eq!(h.app.tool, Tool::Beam);
+    assert_eq!(h.app.discipline, Discipline::Structure);
+    // Orders that are not tiles are found too, and Esc closes the search
+    // without taking anything.
+    h.key(Key::Escape);
+    h.app.open_command_search();
+    h.frame();
+    h.type_text("zapata");
+    h.key(Key::Escape);
+    assert!(h.app.command_search.is_none());
+    assert_eq!(h.app.tool, Tool::Arrow);
+    // Every discipline draws its tiles; Properties keep working below.
+    for d in Discipline::ALL {
+        h.app.discipline = d;
+        h.frame();
+    }
+    h.app.nav_tab = super::navigator::NavTab::Model;
+    h.frame();
+    h.app.discipline = Discipline::Architecture;
     draw_outline(&mut h);
     assert_eq!(h.model().walls().count(), 4);
 }
@@ -2043,9 +2083,13 @@ fn sections_and_elevations() {
         Some(Point2::new(0.0, -1.0))
     );
     // The four elevations.
-    h.app.pick(super::toolbox::Pick::Elevations);
+    h.app.pick(super::toolbox::Pick::Action(
+        super::toolbox::Action::Elevations,
+    ));
     assert_eq!(h.model().sections().count(), 5, "{:?}", h.app.message);
-    h.app.pick(super::toolbox::Pick::Elevations);
+    h.app.pick(super::toolbox::Pick::Action(
+        super::toolbox::Action::Elevations,
+    ));
     assert_eq!(h.model().sections().count(), 5);
     // Deleting the section closes its tab.
     let tabs = h.app.tabs.len();
