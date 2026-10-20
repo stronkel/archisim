@@ -13,6 +13,7 @@
 mod colaboracion;
 mod demo;
 mod grande;
+mod muestrario;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -45,6 +46,18 @@ Uso:
       forjados, puertas y ventanas, con sus GlobalId. Explica qué ha
       quedado fuera. Por defecto, casa.ifc → casa.archisim en la misma
       carpeta.
+
+  archisim biblioteca [carpeta] [proyecto.archisim]
+      Escribe los tipos de puerta, ventana y objeto de la plantilla (o de
+      un proyecto) como ficheros de biblioteca: una familia por fichero
+      .asfam con su catálogo de tipos, en subcarpetas por categoría
+      (Puertas, Ventanas, Mobiliario…). Es lo que lee la ventana
+      Biblioteca de la aplicación. Carpeta por defecto: ./out/biblioteca
+
+  archisim muestrario [carpeta]
+      Un muro con todas las puertas y ventanas de la plantilla, para verlas
+      en planta, en 3D y en IFC: muestrario.archisim, muestrario.ifc y
+      muestrario.svg. Carpeta por defecto: ./out
 
   archisim cte <proyecto.archisim> [informe.csv]
       Comprueba el proyecto con el Código Técnico: ocupación y evacuación
@@ -116,6 +129,14 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("muestrario") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(muestrario::write(&dir))
+        }
+        Some("biblioteca") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out/biblioteca"));
+            report(run_library(&dir, args.get(2).map(Path::new)))
+        }
         Some("cte") => match args.get(1) {
             Some(project) => report(run_cte(Path::new(project), args.get(2).map(Path::new))),
             None => {
@@ -165,6 +186,38 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     summary(doc.model());
     println!("  Proyecto: {}", project.display());
     export_all(doc.model(), dir, "demo")
+}
+
+fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let model = match project {
+        Some(p) => {
+            archisim_file::open(p).map_err(|e| format!("no se puede abrir {}: {e}", p.display()))?
+        }
+        None => archisim_library::new_project("Plantilla"),
+    };
+    let mut n = 0;
+    for (category, family, text) in model.catalog_files() {
+        let folder = match category.as_str() {
+            "door" => "Puertas",
+            "window" => "Ventanas",
+            "void" => "Huecos",
+            "furniture" => "Mobiliario",
+            "sanitary" => "Sanitarios",
+            "kitchen" => "Cocina",
+            "site" => "Entorno",
+            "people" => "Personas",
+            "vehicle" => "Vehículos",
+            _ => "Otros",
+        };
+        let sub = dir.join(folder);
+        std::fs::create_dir_all(&sub)?;
+        let path = sub.join(format!("{}.asfam", family.replace(['/', '\\', ':'], "-")));
+        std::fs::write(&path, text)?;
+        println!("  {}", path.display());
+        n += 1;
+    }
+    println!("{n} familias con sus tipos en {}", dir.display());
+    Ok(())
 }
 
 fn run_cte(project: &Path, csv: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {

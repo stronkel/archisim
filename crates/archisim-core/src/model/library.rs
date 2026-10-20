@@ -147,6 +147,45 @@ impl Model {
         })
     }
 
+    /// Every type of the project made from a family, as library files: one
+    /// per family, with its recipe and the catalogue of its types and their
+    /// materials. Returns (category of the family, family name, text).
+    pub fn catalog_files(&self) -> Vec<(String, String, String)> {
+        let mut by_family: std::collections::BTreeMap<
+            String,
+            (String, String, archisim_family::Catalog),
+        > = std::collections::BTreeMap::new();
+        for (t, family, _) in self.family_types() {
+            let (Ok(e), Some(f)) = (self.catalog_entry(t), self.family(family)) else {
+                continue;
+            };
+            let slot = by_family.entry(e.family_name.clone()).or_insert_with(|| {
+                (
+                    f.def().category.clone(),
+                    e.recipe.clone(),
+                    Default::default(),
+                )
+            });
+            for mat in e.materials {
+                if !slot.2.materials.iter().any(|x| x.name == mat.name) {
+                    slot.2.materials.push(mat);
+                }
+            }
+            slot.2.types.push(e.entry);
+        }
+        by_family
+            .into_iter()
+            .map(|(name, (category, recipe, catalog))| {
+                let text = format!(
+                    "{}\n{}",
+                    recipe.trim_end(),
+                    archisim_family::catalog_text(&catalog)
+                );
+                (category, name, text)
+            })
+            .collect()
+    }
+
     /// The project's family of a recipe's name, loading the recipe if the
     /// project has none (a project keeps its own copy even if the library
     /// has a newer one: see [`Model::update_family`]).
@@ -601,6 +640,14 @@ mod tests {
         let window = crate::family::system_family(family::CASEMENT_WINDOW).unwrap();
         assert!(m.update_family(door, &window).is_err());
         assert_eq!(m.family(door).unwrap().version(), 4);
+        // Library files of every family with types: they read back.
+        let files = m.catalog_files();
+        assert!(!files.is_empty());
+        for (_, name, text) in &files {
+            let def = archisim_family::parse(text).unwrap();
+            assert_eq!(&def.name, name);
+            assert!(!def.catalog.types.is_empty());
+        }
         // Purge: the unused door type goes; the system family stays.
         let before = m.opening_types().count();
         assert!(m.purge_unused_types() >= 1);

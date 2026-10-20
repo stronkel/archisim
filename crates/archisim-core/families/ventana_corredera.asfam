@@ -1,8 +1,8 @@
 family "Ventana corredera"
   category window
   host wall
-  version 2
-  description "Ventana o balconera corredera de dos hojas, con marco"
+  version 3
+  description "Ventana o balconera corredera de 2 a 4 hojas, con marco, premarco y vierteaguas si se quieren"
 
 include "piezas"
 
@@ -10,35 +10,59 @@ type_params
   section "Dimensiones"
     width  length = 1.80 range 0.10..20.00 label "Hueco de obra: ancho"
     height length = 1.30 range 0.10..20.00 label "Hueco de obra: alto"
+  section "Hojas"
+    leaves integer = 2 range 2..4 label "Nº de hojas"
   section "Marco"
     frame_width length = 0.06 range 0.001..2.00 label "Marco: anchura vista"
     frame_depth length = 0.07 range 0.001..2.00 label "Marco: fondo"
+  section "Premarco y vierteaguas"
+    subframe bool = no label "Premarco"
+    subframe_width length = 0.03 range 0.005..0.20 visible_if subframe label "Premarco: anchura"
+    sill bool = no label "Vierteaguas"
+    sill_depth length = 0.20 range 0.02..1.00 visible_if sill label "Vierteaguas: vuelo desde el marco"
   section "Materiales"
     frame_material material = "Aluminio lacado" label "Marco"
     panel_material material = "Vidrio doble" label "Vidrio"
+    subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
+    sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
 
-require 2 * frame_width < width and 2 * frame_width < height else "El marco no deja hueco para el vidrio"
-require 3 * frame_width < width else "El marco y el montante no dejan hueco para el vidrio"
+let s = if subframe then subframe_width else 0
+let w = width - 2 * s
+
+require 2 * frame_width < w and 2 * frame_width < height - 2 * s else "El marco no deja hueco para el vidrio"
+require (leaves + 1) * frame_width < w else "El marco y los montantes no dejan hueco para el vidrio"
 
 body
-  use window_frame(width, height, frame_width, frame_depth, frame_material)
-  use glazing(width, height, frame_width, frame_depth, 2, frame_material, panel_material)
+  if subframe
+    use subframe(width, height, s, frame_depth, subframe_material, 1)
+  use window_frame_z(w, s, height - s, frame_width, frame_depth, frame_material)
+  use glazing_z(w, s + frame_width, height - s - frame_width, frame_width, frame_depth, leaves, frame_material, panel_material)
+  if sill
+    let out = if opens_to == "exterior" then 1 else -1
+    use window_sill(width, frame_depth, sill_depth, out, sill_material)
 
-# Marco cortado y las dos hojas en carriles distintos, solapadas en el
-# centro. La hoja del carril exterior queda en la misma mitad del hueco sea
+# Marco cortado y las hojas en carriles alternos, solapadas «2 · lap» con
+# la de al lado. La hoja del carril exterior queda en el mismo sitio sea
 # cual sea el lado de apertura (en una corredera no cambia nada).
 plan 1:50
   if sill_height > 0
     use sill_plan(width, frame_depth, wall_ext, wall_int)
-  use frame_cut_plan(-width / 2, width / 2, frame_depth)
-  let c0 = -width / 2 + frame_width
-  let c1 = width / 2 - frame_width
+  if subframe
+    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
+    use frame_cut_plan(w / 2, width / 2, frame_depth)
+  use frame_cut_plan(-w / 2, w / 2, frame_depth)
+  let c0 = -w / 2 + frame_width
+  let c1 = w / 2 - frame_width
   let es = if wall_ext > 0 then 1 else -1
   let q = frame_depth / 4
   let lap = frame_width / 2
   let k = if opens_to == "exterior" then -1 else 1
-  polygon (k * c0, 0) (k * lap, 0) (k * lap, es * q) (k * c0, es * q) pen thin filled
-  polygon (-k * lap, -es * q) (k * c1, -es * q) (k * c1, 0) (-k * lap, 0) pen thin filled
+  let lw = (c1 - c0 + (leaves - 1) * 2 * lap) / leaves
+  repeat i in 0..leaves
+    let a = c0 + i * (lw - 2 * lap)
+    let b = a + lw
+    let r = if i == 0 or i == 2 then es * q else -es * q
+    polygon (k * a, 0) (k * b, 0) (k * b, r) (k * a, r) pen thin filled
 
 plan 1:100
   use frame_cut_plan(-width / 2, width / 2, frame_depth)
@@ -47,13 +71,15 @@ plan 1:100
 outputs
   opening_width = width
   opening_height = height
-  frame_width = frame_width
+  frame_width = frame_width + s
   frame_depth = frame_depth
   frame_material = frame_material
   panel_material = panel_material
   operation = "sliding"
 
 ifc
-  panel_count = 2
+  panel_count = leaves
   panel_1 = "SLIDINGHORIZONTAL"
   panel_2 = "SLIDINGHORIZONTAL"
+  panel_3 = "SLIDINGHORIZONTAL"
+  panel_4 = "SLIDINGHORIZONTAL"

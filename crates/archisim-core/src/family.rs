@@ -669,6 +669,15 @@ mod tests {
                                         v.insert(k.into(), x);
                                     }
                                 }
+                                // Other materials (a transom's glass, a
+                                // subframe…), any one.
+                                for p in def.params_of(ParamScope::Type) {
+                                    if p.kind == ParamKind::Material
+                                        && !matches!(v.get(&p.name), Some(Value::Material(_)))
+                                    {
+                                        v.insert(p.name.clone(), Value::Material(3));
+                                    }
+                                }
                                 if n > 0.0 {
                                     v.insert("leaves".into(), Value::Number(n));
                                 }
@@ -682,10 +691,18 @@ mod tests {
                                     (WallSide::Interior, true),
                                     (WallSide::Exterior, true),
                                 ] {
-                                    if def.param("shutter").is_some() {
-                                        v.insert("shutter".into(), Value::Bool(on));
-                                    } else if on {
+                                    // Every option (shutter, transom,
+                                    // subframe, sill, unequal leaves) at once.
+                                    let bools: Vec<String> = def
+                                        .params_of(ParamScope::Type)
+                                        .filter(|p| p.kind == ParamKind::Bool)
+                                        .map(|p| p.name.clone())
+                                        .collect();
+                                    if bools.is_empty() && on {
                                         continue;
+                                    }
+                                    for b in &bools {
+                                        v.insert(b.clone(), Value::Bool(on));
                                     }
                                     for hand in [Hand::Left, Hand::Right] {
                                         let b = opening_builtins(side, hand);
@@ -700,6 +717,12 @@ mod tests {
                                         for p in &ev.parts {
                                             for k in 0..3 {
                                                 assert!(p.min[k] <= p.max[k]);
+                                            }
+                                            // The sill stands out of the
+                                            // wall, under the opening.
+                                            if p.max[2] <= 1e-9 {
+                                                assert!(p.min[2] >= -0.031);
+                                                continue;
                                             }
                                             assert!(p.min[0] >= -w / 2.0 - 1e-9);
                                             assert!(p.max[0] <= w / 2.0 + 1e-9);

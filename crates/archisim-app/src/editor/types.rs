@@ -455,21 +455,21 @@ mod tests {
         let c = ed.model().opening_type(copy).unwrap().clone();
         assert_eq!(c.family, door.family);
         assert_eq!(c.values, door.values);
-        // The template has six door types: the copy takes the next mark.
-        assert_eq!(c.mark, "P-07");
+        // The template has ten door types: the copy takes the next mark.
+        assert_eq!(c.mark, "P-11");
 
         let copy_name = ed.model().opening_type(copy).unwrap().name.clone();
-        ed.set_opening_type_info(copy, &copy_name, " P-10 ", "Baños")
+        ed.set_opening_type_info(copy, &copy_name, " P-20 ", "Baños")
             .unwrap();
         assert_eq!(ed.undo_label(), Some("Modificar tipo de puerta"));
         let c = ed.model().opening_type(copy).unwrap();
-        assert_eq!((c.mark.as_str(), c.description.as_str()), ("P-10", "Baños"));
+        assert_eq!((c.mark.as_str(), c.description.as_str()), ("P-20", "Baños"));
         let err = ed
-            .set_opening_type_info(door.id, &door.name, "P-10", "")
+            .set_opening_type_info(door.id, &door.name, "P-20", "")
             .unwrap_err();
-        assert_eq!(err, "la marca «P-10» ya la tiene otro tipo");
+        assert_eq!(err, "la marca «P-20» ya la tiene otro tipo");
         ed.undo();
-        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-07");
+        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-11");
 
         // The family's own rule, in its own words: two jambs and the
         // mullion of 620 mm do not fit in 1800 mm.
@@ -515,7 +515,7 @@ mod tests {
         let t = ed.model().opening_type(n).unwrap();
         assert_eq!(
             (t.name.as_str(), t.mark.as_str()),
-            ("Ventana practicable (nuevo)", "V-06")
+            ("Ventana practicable (nuevo)", "V-11")
         );
         let n2 = ed.new_opening_type("Ventana practicable").unwrap();
         assert_eq!(

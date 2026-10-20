@@ -38,6 +38,45 @@ component glazing(w, h, f, d, n, frame_mat, glass_mat)
       use block(a - f, a, d, f, h - f, frame_mat)
     use block(a, a + clear, min(0.024, d), f, h - f, glass_mat)
 
+# Marco de ventana de «z0» a «z1» (con premarco, z0 es su ancho).
+component window_frame_z(w, z0, z1, f, d, mat)
+  use block(-w / 2, -w / 2 + f, d, z0, z1, mat)
+  use block(w / 2 - f, w / 2, d, z0, z1, mat)
+  use block(-w / 2 + f, w / 2 - f, d, z0, z0 + f, mat)
+  use block(-w / 2 + f, w / 2 - f, d, z1 - f, z1, mat)
+
+# «n» paños de vidrio de «z0» a «z1» (sin contar el marco), con montantes.
+component glazing_z(w, z0, z1, f, d, n, frame_mat, glass_mat)
+  let clear = (w - 2 * f - (n - 1) * f) / n
+  repeat i in 0..n
+    let a = -w / 2 + f + i * (clear + f)
+    if i > 0
+      use block(a - f, a, d, z0, z1, frame_mat)
+    use block(a, a + clear, min(0.024, d), z0, z1, glass_mat)
+
+# Premarco en el borde del hueco de obra: jambas y cabecero, y el travesaño
+# inferior si «bottom» es 1 (ventanas).
+component subframe(w, h, s, d, mat, bottom)
+  use block(-w / 2, -w / 2 + s, d, 0, h, mat)
+  use block(w / 2 - s, w / 2, d, 0, h, mat)
+  use block(-w / 2 + s, w / 2 - s, d, h - s, h, mat)
+  if bottom > 0
+    use block(-w / 2 + s, w / 2 - s, d, 0, s, mat)
+
+# Tarja: travesaño a «zb» y vidrio fijo encima, hasta «zt» (dentro del
+# marco o cerco), entre «xa» y «xb».
+component transom(xa, xb, zb, zt, f, d, frame_mat, glass_mat)
+  use block(xa, xb, d, zb - f, zb, frame_mat)
+  use block(xa, xb, min(0.024, d), zb, zt, glass_mat)
+
+# Vierteaguas bajo la ventana, por fuera: del marco hacia el exterior
+# («es», 1 o -1, el sentido de «y» hacia fuera), «depth» de vuelo y 3 cm de
+# grueso, 2 cm más ancho que el hueco a cada lado.
+component window_sill(w, d, depth, es, mat)
+  let y0 = es * d / 2
+  let y1 = es * (d / 2 + depth)
+  box (-w / 2 - 0.02, min(y0, y1), -0.03) to (w / 2 + 0.02, max(y0, y1), 0) material mat
+
 # ---- Planta ---------------------------------------------------------------
 # En planta, «y» es el eje a través del muro hacia el lado al que abren las
 # hojas; wall_ext y wall_int (los pone el programa) son las caras del muro,

@@ -343,7 +343,7 @@ mod tests {
                 m.add_family_type(NewFamilyType {
                     family: door,
                     name: "Baño 72,5".into(),
-                    mark: Some("P-09".into()),
+                    mark: Some("P-99".into()),
                     description: String::new(),
                     values,
                 })
@@ -370,7 +370,7 @@ mod tests {
             b.model().opening_type(bt).unwrap(),
         );
         assert_eq!(ta.guid, tb.guid);
-        assert_eq!(tb.mark, "P-09");
+        assert_eq!(tb.mark, "P-99");
         assert!((tb.width - 0.725).abs() < 1e-12);
         // One undoable step.
         assert!(b.undo().is_some());

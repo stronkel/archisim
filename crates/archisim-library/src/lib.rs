@@ -408,6 +408,7 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     let (column, beam) = add_structure_with(m, hormigon)?;
     add_objects(m)?;
     let curtain = add_curtain_types(m)?;
+    add_studio_types(m)?;
 
     Ok(Library {
         curtain,
@@ -433,6 +434,160 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         column,
         beam,
     })
+}
+
+/// Door and window types usual in a Spanish studio (v0.31, a first
+/// proposal for AD5's catalogue): passage doors of 72,5 and 82,5 cm
+/// leaves, an entrance door with a transom and subframe, a two-leaf door
+/// with an active leaf, windows with subframe, sill and shutter, a
+/// three-leaf sliding window and a casement window with a transom.
+pub const STUDIO_TYPES: [StudioType; 9] = [
+    (
+        "Puerta de paso 72,5 (baño)",
+        "Puerta abatible",
+        &[("width", N(0.825)), ("height", N(2.10))],
+    ),
+    (
+        "Puerta de paso 82,5",
+        "Puerta abatible",
+        &[("width", N(0.925)), ("height", N(2.10))],
+    ),
+    (
+        "Puerta de entrada con tarja 100×250",
+        "Puerta abatible",
+        &[
+            ("width", N(1.06)),
+            ("height", N(2.53)),
+            ("transom", B(true)),
+            ("transom_height", N(0.40)),
+            ("subframe", B(true)),
+            ("frame_width", N(0.06)),
+            ("frame_depth", N(0.10)),
+        ],
+    ),
+    (
+        "Puerta de 2 hojas desiguales 120×210",
+        "Puerta abatible",
+        &[
+            ("width", N(1.30)),
+            ("height", N(2.10)),
+            ("leaves", N(2.0)),
+            ("unequal", B(true)),
+            ("active_width", N(0.825)),
+        ],
+    ),
+    (
+        "Ventana oscilobatiente 1 hoja 80×120 con premarco",
+        "Ventana practicable",
+        &[
+            ("width", N(0.80)),
+            ("height", N(1.20)),
+            ("leaves", N(1.0)),
+            ("leaf_1", T("oscilobatiente")),
+            ("subframe", B(true)),
+            ("sill", B(true)),
+        ],
+    ),
+    (
+        "Ventana practicable 2 hojas con persiana y vierteaguas 140×150",
+        "Ventana practicable",
+        &[
+            ("width", N(1.40)),
+            ("height", N(1.50)),
+            ("shutter", B(true)),
+            ("subframe", B(true)),
+            ("sill", B(true)),
+        ],
+    ),
+    (
+        "Balconera practicable 2 hojas con persiana 140×240",
+        "Ventana practicable",
+        &[
+            ("width", N(1.40)),
+            ("height", N(2.40)),
+            ("shutter", B(true)),
+            ("subframe", B(true)),
+        ],
+    ),
+    (
+        "Ventana corredera 3 hojas 240×150 con premarco",
+        "Ventana corredera",
+        &[
+            ("width", N(2.40)),
+            ("height", N(1.50)),
+            ("leaves", N(3.0)),
+            ("subframe", B(true)),
+            ("sill", B(true)),
+        ],
+    ),
+    (
+        "Ventana practicable 2 hojas con tarja 120×200",
+        "Ventana practicable",
+        &[
+            ("width", N(1.20)),
+            ("height", N(2.00)),
+            ("transom", B(true)),
+            ("transom_height", N(0.50)),
+        ],
+    ),
+];
+
+/// A type of [`STUDIO_TYPES`]: name, family and the values that differ
+/// from the family's.
+pub type StudioType = (
+    &'static str,
+    &'static str,
+    &'static [(&'static str, StudioValue)],
+);
+
+/// A value of [`STUDIO_TYPES`].
+#[derive(Debug, Clone, Copy)]
+pub enum StudioValue {
+    N(f64),
+    B(bool),
+    T(&'static str),
+}
+use StudioValue::{B, N, T};
+
+/// Adds the studio's usual door and window types, with the materials they
+/// need (a subframe of galvanised steel, a stone sill).
+pub fn add_studio_types(m: &mut Model) -> Result<Vec<OpeningTypeId>, ModelError> {
+    for (name, category, color, pattern) in [
+        (
+            "Acero galvanizado",
+            "metal",
+            [170, 176, 180],
+            CutPattern::Solid,
+        ),
+        ("Piedra natural", "stone", [226, 220, 204], CutPattern::Dots),
+    ] {
+        if !m.materials().any(|x| x.name == name) {
+            m.add_material(name, category, color, pattern);
+        }
+    }
+    let mut out = Vec::new();
+    for (name, family, values) in STUDIO_TYPES {
+        let family = m.system_family(family)?;
+        let mut v = m.family_defaults(family, archisim_core::ParamScope::Type)?;
+        for (k, x) in values {
+            v.insert(
+                (*k).into(),
+                match x {
+                    N(n) => archisim_core::Value::Number(*n),
+                    B(b) => archisim_core::Value::Bool(*b),
+                    T(t) => archisim_core::Value::Text((*t).into()),
+                },
+            );
+        }
+        out.push(m.add_family_type(archisim_core::NewFamilyType {
+            family,
+            name: name.into(),
+            mark: None,
+            description: String::new(),
+            values: v,
+        })?);
+    }
+    Ok(out)
 }
 
 /// An object type of the library: its name, its family and the sizes
@@ -847,8 +1002,15 @@ mod tests {
         assert_eq!(m.levels()[0].elevation, 0.0);
         assert_eq!(m.wall_types().count(), 3);
         assert_eq!(m.slab_types().count(), 4);
-        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 6);
-        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 5);
+        // With the studio's: 4 doors and 5 windows more.
+        assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 10);
+        assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 10);
+        let entrance = m
+            .opening_types()
+            .find(|t| t.name == "Puerta de entrada con tarja 100×250")
+            .unwrap();
+        // The subframe narrows the clear width: 3 cm + 6 cm each side.
+        assert!((entrance.frame_width - 0.09).abs() < 1e-12);
         assert_eq!(
             m.member_types()
                 .filter(|t| t.usage == MemberUsage::Column)

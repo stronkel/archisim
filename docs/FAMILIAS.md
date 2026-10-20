@@ -200,3 +200,14 @@ El proyecto guarda la receta sin catálogo (su copia, como hasta ahora).
 - **Purgar tipos sin usar**: quita los tipos de puerta, ventana, objeto, muro y forjado que ningún elemento usa (siempre queda uno de muro y uno de forjado) y las familias que se quedan sin tipos, salvo las de ArchiSim. Se puede deshacer.
 - **Navegador**: puertas, ventanas y objetos agrupados por familia, cada tipo con su marca y su número de ejemplares.
 
+## Librería de AD5 (2.2, v0.32)
+
+- **Puerta abatible v4**: dos hojas **desiguales** con la hoja activa del lado de la mano («Hoja activa: ancho»), **tarja** acristalada sobre la puerta y **premarco**.
+- **Ventana practicable v5**: **tarja** fija sobre las hojas, **premarco** (también por abajo) y **vierteaguas** en 3D («vuelo desde el marco»: la receta no conoce el grueso del muro, como en ArchiCAD); el vierteaguas en planta ya salía con antepecho.
+- **Ventana corredera v3**: de **2 a 4 hojas**, en carriles alternos, con premarco y vierteaguas.
+- Con premarco, la anchura vista que ve el programa (huecos, CTE) es la del marco más la del premarco.
+- Piezas comunes nuevas: `window_frame_z`, `glazing_z`, `subframe`, `transom`, `window_sill`.
+- La plantilla trae **nueve tipos habituales** (propuesta para AD5, a revisar): puertas de paso de 72,5 y 82,5, puerta de entrada con tarja y premarco, puerta de dos hojas desiguales, oscilobatiente con premarco y vierteaguas, practicable con persiana y vierteaguas, balconera con persiana, corredera de 3 hojas y practicable con tarja; y los materiales «Acero galvanizado» y «Piedra natural».
+- `archisim biblioteca [carpeta]` escribe todos los tipos de la plantilla (o de un proyecto) como ficheros de biblioteca por categoría, para empezar la biblioteca del estudio; `archisim muestrario [carpeta]` deja un muro con todas las puertas y ventanas para verlas en planta, 3D e IFC.
+- Los proyectos con las versiones anteriores de estas familias las ven en **Biblioteca → Familias del proyecto → Actualizar**.
+
