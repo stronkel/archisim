@@ -129,7 +129,7 @@ impl ArchiSimApp {
             sub_header(ui, "Plantas", Some(("Plantas…", &mut levels_dialog)));
             for (id, name, elevation) in &levels {
                 let kind = TabKind::Plan(*id);
-                let r = list_row(
+                let r = super::widgets::list_row_draggable(
                     ui,
                     Some(Icon::Plan),
                     None,
@@ -138,13 +138,14 @@ impl ArchiSimApp {
                     active == Some(kind),
                     10.0,
                 )
-                .on_hover_text("Abrir la planta");
+                .on_hover_text("Abrir la planta; arrástrala a un plano para colocarla a su escala");
                 if r.clicked() {
                     open = Some(kind);
                 }
+                super::sheet_drop::drag_source(ui, &r, super::sheet_drop::Drop::Level(*id), name);
             }
             sub_header(ui, "3D", None);
-            if list_row(
+            let r = super::widgets::list_row_draggable(
                 ui,
                 Some(Icon::ThreeD),
                 None,
@@ -153,10 +154,11 @@ impl ArchiSimApp {
                 active == Some(TabKind::ThreeD),
                 10.0,
             )
-            .clicked()
-            {
+            .on_hover_text("Abrir la vista 3D; arrástrala a un plano para colocar una axonometría desde donde la miras");
+            if r.clicked() {
                 open = Some(TabKind::ThreeD);
             }
+            super::sheet_drop::drag_source(ui, &r, super::sheet_drop::Drop::ThreeD, "La vista 3D");
             sub_header(
                 ui,
                 "Secciones y alzados",
@@ -171,7 +173,7 @@ impl ArchiSimApp {
             }
             for (id, title, elevation) in &sections {
                 let kind = TabKind::Section(*id);
-                let r = list_row(
+                let r = super::widgets::list_row_draggable(
                     ui,
                     Some(if *elevation {
                         Icon::Elevation
@@ -184,10 +186,16 @@ impl ArchiSimApp {
                     active == Some(kind),
                     10.0,
                 )
-                .on_hover_text("Abrir la vista");
+                .on_hover_text("Abrir la vista; arrástrala a un plano para colocarla a su escala");
                 if r.clicked() {
                     open = Some(kind);
                 }
+                super::sheet_drop::drag_source(
+                    ui,
+                    &r,
+                    super::sheet_drop::Drop::Section(*id),
+                    title,
+                );
             }
         });
         if levels_dialog {

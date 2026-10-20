@@ -7,7 +7,6 @@ use archisim_core::RoomId;
 use archisim_geom::Contour;
 use eframe::egui::{self, Id, Ui};
 
-use super::icons::Icon;
 use super::props::{self, choice, group, row, text_row};
 use super::*;
 use crate::editor::{usages_of, USAGE_SETS};
@@ -23,52 +22,7 @@ impl ArchiSimApp {
         props::title(ui, "Herramienta Local · lo que vas a crear");
         let level = self.ed.level;
         let next = self.ed.model().next_room_number(level);
-        group(ui, "tool-room-method", "Método", |ui| {
-            ui.add_space(2.0);
-            #[derive(Clone, Copy, PartialEq)]
-            enum Method {
-                Wand,
-                Polygon,
-                Rectangle,
-            }
-            let current = match (self.room_settings.wand, self.zone_tool.mode) {
-                (true, _) => Method::Wand,
-                (false, SlabMode::Rectangle) => Method::Rectangle,
-                (false, SlabMode::Polygon) => Method::Polygon,
-            };
-            let mut method = current;
-            if super::widgets::method_picker(
-                ui,
-                "room-method",
-                &mut method,
-                &[
-                    (
-                        Method::Wand,
-                        Icon::GeoWand,
-                        "Recinto",
-                        "Clic dentro de un recinto de muros: el local por las caras interiores; sigue a los muros",
-                    ),
-                    (
-                        Method::Polygon,
-                        Icon::GeoPolygon,
-                        "Polígono",
-                        "Esquina a esquina",
-                    ),
-                    (
-                        Method::Rectangle,
-                        Icon::GeoRect,
-                        "Rectángulo",
-                        "Dos esquinas opuestas",
-                    ),
-                ],
-            ) {
-                self.room_settings.wand = method == Method::Wand;
-                match method {
-                    Method::Polygon => self.zone_tool.set_mode(SlabMode::Polygon),
-                    Method::Rectangle => self.zone_tool.set_mode(SlabMode::Rectangle),
-                    Method::Wand => self.zone_tool.finish(),
-                }
-            }
+        group(ui, "tool-room-method", "Contorno", |ui| {
             if self.room_settings.wand {
                 row(
                     ui,

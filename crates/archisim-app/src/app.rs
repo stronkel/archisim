@@ -354,7 +354,8 @@ pub struct ArchiSimApp {
     table_new_kind: archisim_core::ScheduleKind,
     table_new_level: Option<LevelId>,
     /// The schedule window, with its level filter.
-    pub schedule_open: Option<(archisim_core::ScheduleKind, Option<LevelId>)>,
+    /// The level the schedule tabs list (`None`: the whole building).
+    pub schedule_level: Option<LevelId>,
     pub show_grid: bool,
     /// Every plan line as a hairline (ArchiCAD's "Líneas finas"), instead
     /// of its real weight at the drawing scale.
@@ -376,6 +377,9 @@ pub struct ArchiSimApp {
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
     thumbs: thumbs::Thumbs,
+    /// The command line stays shown (Vista); otherwise it shows only while
+    /// an order is typed or running.
+    pub pin_command_line: bool,
     /// The discipline whose tools are shown.
     pub discipline: toolbox::Discipline,
     /// The tab of the navigator shown.
@@ -503,7 +507,7 @@ impl ArchiSimApp {
             sheet_new_scale: 50.0,
             table_new_kind: archisim_core::ScheduleKind::Rooms,
             table_new_level: None,
-            schedule_open: None,
+            schedule_level: None,
             show_grid: true,
             thin_lines: false,
             phase_view: Default::default(),
@@ -514,6 +518,7 @@ impl ArchiSimApp {
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
+            pin_command_line: false,
             discipline: toolbox::Discipline::default(),
             nav_tab: navigator::NavTab::default(),
             command_search: None,
@@ -1276,7 +1281,21 @@ impl ArchiSimApp {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             self.tab_strip(ui);
-            if self.mode != ViewMode::ThreeD {
+            if self.mode != ViewMode::Schedule {
+                egui::Panel::top("context-bar")
+                    .resizable(false)
+                    .exact_size(context_bar::CONTEXT_BAR_HEIGHT)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(p.panel)
+                            .inner_margin(egui::Margin::symmetric(8, 0))
+                            .stroke(Stroke::new(1.0, p.line)),
+                    )
+                    .show(ui, |ui| self.context_bar(ui));
+            }
+            if !matches!(self.mode, ViewMode::ThreeD | ViewMode::Schedule)
+                && self.command_line_shown()
+            {
                 egui::Panel::bottom("command-line")
                     .resizable(false)
                     .exact_size(COMMAND_LINE_HEIGHT)
@@ -1292,6 +1311,13 @@ impl ArchiSimApp {
                 ViewMode::Plan => self.plan_view(ui),
                 ViewMode::ThreeD => self.view_3d(ui),
                 ViewMode::Section => self.section_view(ui),
+                ViewMode::Schedule => {
+                    if let Some(tabs::TabKind::Schedule(w)) =
+                        self.tabs.get(self.active_tab).map(|t| t.kind)
+                    {
+                        self.schedule_view(ui, w);
+                    }
+                }
                 ViewMode::Sheet(s) => self.sheet_view(ui, s),
             }
         });
@@ -1303,9 +1329,11 @@ impl ArchiSimApp {
         }
         self.dialogs(&ctx);
         self.text_entry(&ctx);
+        if !matches!(self.mode, ViewMode::Sheet(_)) {
+            sheet_drop::paint_carried(&ctx, false);
+        }
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
-        self.schedule_window(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -1431,6 +1459,13 @@ impl ArchiSimApp {
             Some(Ok(())) => self.say(format!("Imagen 3D guardada en {}.", path.display())),
             _ => self.complain("No se pudo guardar la imagen 3D."),
         }
+    }
+
+    /// Whether the command line is shown: only when pinned (Vista). What
+    /// is typed is written beside the cursor and the step of the order
+    /// running is in the contextual bar, so the drawing does not jump.
+    pub(super) fn command_line_shown(&self) -> bool {
+        self.pin_command_line
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
@@ -1770,8 +1805,10 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 }
 
 mod annotation_ui;
+mod bottom_segments;
 mod cad_ui;
 mod chrome;
+mod context_bar;
 mod coord_ui;
 mod cte_ui;
 mod curtain_types_ui;
@@ -1797,6 +1834,7 @@ mod room_ui;
 mod schedule_ui;
 mod search_ui;
 mod section_ui;
+mod sheet_drop;
 mod sheet_ui;
 mod stair_ui;
 mod structure_ui;

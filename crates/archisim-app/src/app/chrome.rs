@@ -329,6 +329,10 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_properties, "Propiedades");
             ui.checkbox(&mut self.show_navigator, "Navegador");
+            ui.checkbox(&mut self.pin_command_line, "Línea de órdenes fija")
+                .on_hover_text("Sin marcar, lo que escribes sale junto al cursor y el paso de la orden en marcha, en la barra bajo las pestañas");
+            ui.checkbox(&mut self.keys_autocad, "Teclas de AutoCAD")
+                .on_hover_text("Marcado: se escribe la orden y se pulsa Intro (L, PL, M de muro…). Sin marcar: M, F, P, V, C y N cambian de herramienta al momento, como en ArchiCAD");
             ui.separator();
             if ui.button("Plantas…").clicked() {
                 self.show_levels = true;
@@ -392,6 +396,7 @@ impl ArchiSimApp {
         match self.mode {
             ViewMode::Plan | ViewMode::Section | ViewMode::Sheet(_) => self.fit_requested = true,
             ViewMode::ThreeD => self.v3d.fit_requested = true,
+            ViewMode::Schedule => {}
         }
     }
 
@@ -401,129 +406,42 @@ impl ArchiSimApp {
             ui.set_min_height(30.0);
             ui.spacing_mut().item_spacing.x = 6.0;
             match self.mode {
-                ViewMode::Plan | ViewMode::Section => {
-                    // Scale.
-                    let mut scale = self.plan_scale as u32;
-                    egui::ComboBox::from_id_salt("bar-scale")
-                        .width(70.0)
-                        .selected_text(
-                            egui::RichText::new(format!("1:{scale}")).font(strong_font(12.0)),
-                        )
-                        .show_ui(ui, |ui| {
-                            for s in SCALES {
-                                ui.selectable_value(&mut scale, s as u32, format!("1:{s}"));
-                            }
-                        })
-                        .response
-                        .on_hover_text("Escala del dibujo: grosores de línea, textos y símbolos");
-                    self.set_scale(scale as f64);
+                ViewMode::Plan => {
+                    self.scale_and_zoom(ui);
                     ui.separator();
-                    // Zoom.
-                    let rect = self.canvas;
-                    if icon_button(ui, Icon::Minus, "Alejar", false).clicked() {
-                        self.view.zoom_at(rect, rect.center(), 1.0 / 1.25);
-                    }
-                    ui.add_sized(
-                        [46.0, 20.0],
-                        egui::Label::new(
-                            egui::RichText::new(format!("{:.0} %", self.zoom_percent()))
-                                .monospace()
-                                .color(p.text),
-                        ),
-                    )
-                    .on_hover_text("100 %: el papel a su tamaño real en la pantalla");
-                    if icon_button(ui, Icon::Plus, "Acercar", false).clicked() {
-                        self.view.zoom_at(rect, rect.center(), 1.25);
-                    }
-                    if icon_button(ui, Icon::Fit, "Ajustar a la ventana (Inicio)", false).clicked()
-                    {
-                        self.fit_requested = true;
-                    }
+                    self.drawing_segments(ui);
                     ui.separator();
-                    if self.mode == ViewMode::Section {
-                        chip(
-                            ui,
-                            &mut self.thin_lines,
-                            "Líneas finas",
-                            "Todas las líneas a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista",
-                        );
-                    } else {
-                    // Snaps.
-                    let f = &mut self.snap_filter;
-                    chip(
-                        ui,
-                        &mut f.points,
-                        "Extremos",
-                        "Forzar a extremos de muro y esquinas",
-                    );
-                    chip(
-                        ui,
-                        &mut f.midpoints,
-                        "Medios",
-                        "Forzar al punto medio de los muros",
-                    );
-                    chip(
-                        ui,
-                        &mut f.edges,
-                        "Aristas",
-                        "Forzar a cualquier punto de las caras de muro y bordes de forjado",
-                    );
-                    chip(
-                        ui,
-                        &mut f.tracking,
-                        "Rastreo",
-                        "Muros rectos por defecto: bloquea en horizontal y vertical (a menos de 8°) y en 45° al acercarse, con una línea azul. Mayús: siempre múltiplos de 45°",
-                    );
+                    self.snap_toggles(ui);
+                }
+                ViewMode::Section => {
+                    self.scale_and_zoom(ui);
                     ui.separator();
-                    chip(
-                        ui,
-                        &mut self.show_grid,
-                        "Rejilla",
-                        "Cuadrícula de 1 m y 5 m",
-                    );
-                    chip(
-                        ui,
-                        &mut self.show_reference_lines,
-                        "Líneas ref.",
-                        "Líneas de referencia de los muros (discontinuas)",
-                    );
                     chip(
                         ui,
                         &mut self.thin_lines,
                         "Líneas finas",
-                        "Todas las líneas de la planta a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista (corte, proyección, tramas)",
+                        "Todas las líneas a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista",
                     );
-                    if self.ed.model().has_phases()
-                        || self.phase_view != archisim_plan::phases::PhaseView::All
-                    {
-                        let current = self.phase_view;
-                        egui::ComboBox::from_id_salt("bar-phase")
-                            .width(130.0)
-                            .selected_text(format!("Fase: {}", current.name()))
-                            .show_ui(ui, |ui| {
-                                for v in archisim_plan::phases::PhaseView::ALL {
-                                    ui.selectable_value(&mut self.phase_view, v, v.name());
-                                }
-                            })
-                            .response
-                            .on_hover_text("Qué fases de la reforma muestra la planta: estado actual, demoliciones (amarillo) o estado reformado (nuevo en rojo)");
-                    }
-                    chip(
-                        ui,
-                        &mut self.show_underlay,
-                        "Calco",
-                        "La planta de debajo en gris, como referencia para dibujar encima (sus puntos también fuerzan). Los muros de otras plantas que atraviesa el plano de corte se ven siempre cortados",
-                    );
-                    }
                 }
                 ViewMode::Sheet(id) => {
                     let paper = self
                         .ed
                         .model()
                         .sheet(id)
-                        .map(|s| format!("Papel {} · escala 1:1", s.size_name()))
+                        .map(|s| format!("Papel {} · 1:1", s.size_name()))
                         .unwrap_or_default();
                     ui.label(egui::RichText::new(paper).small().color(p.muted));
+                    ui.separator();
+                    self.drawing_segments(ui);
+                    ui.separator();
+                    self.snap_toggles(ui);
+                }
+                ViewMode::Schedule => {
+                    ui.label(
+                        egui::RichText::new("Tabla · se rehace sola al cambiar el modelo")
+                            .small()
+                            .color(p.muted),
+                    );
                 }
                 ViewMode::ThreeD => {
                     let cam = &mut self.v3d.camera;
@@ -600,7 +518,7 @@ impl ArchiSimApp {
                             ui.label(egui::RichText::new(kind).small().color(p.accent));
                         }
                     }
-                } else {
+                } else if self.mode != ViewMode::Schedule {
                     ui.label(
                         egui::RichText::new(format!(
                             "{} elementos seleccionados",
@@ -612,6 +530,42 @@ impl ArchiSimApp {
                 }
             });
         });
+    }
+
+    /// The scale of the view and the zoom, at the left of the bottom bar.
+    fn scale_and_zoom(&mut self, ui: &mut Ui) {
+        let p = Palette::current(ui.ctx());
+        let mut scale = self.plan_scale as u32;
+        egui::ComboBox::from_id_salt("bar-scale")
+            .width(70.0)
+            .selected_text(egui::RichText::new(format!("1:{scale}")).font(strong_font(12.0)))
+            .show_ui(ui, |ui| {
+                for s in SCALES {
+                    ui.selectable_value(&mut scale, s as u32, format!("1:{s}"));
+                }
+            })
+            .response
+            .on_hover_text("Escala del dibujo: grosores de línea, textos y símbolos");
+        self.set_scale(scale as f64);
+        let rect = self.canvas;
+        if icon_button(ui, Icon::Minus, "Alejar", false).clicked() {
+            self.view.zoom_at(rect, rect.center(), 1.0 / 1.25);
+        }
+        ui.add_sized(
+            [42.0, 20.0],
+            egui::Label::new(
+                egui::RichText::new(format!("{:.0} %", self.zoom_percent()))
+                    .monospace()
+                    .color(p.text),
+            ),
+        )
+        .on_hover_text("100 %: el papel a su tamaño real en la pantalla");
+        if icon_button(ui, Icon::Plus, "Acercar", false).clicked() {
+            self.view.zoom_at(rect, rect.center(), 1.25);
+        }
+        if icon_button(ui, Icon::Fit, "Ajustar a la ventana (Inicio)", false).clicked() {
+            self.fit_requested = true;
+        }
     }
 
     // ---- Over the drawing --------------------------------------------------------

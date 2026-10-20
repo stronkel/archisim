@@ -24,6 +24,7 @@
 //!   the cut plane are drawn dashed and do not interrupt the wall.
 
 pub mod annotate;
+pub mod axo;
 pub mod curtain;
 pub mod drafting;
 pub mod lettering;

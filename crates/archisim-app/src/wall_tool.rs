@@ -35,37 +35,6 @@ pub enum WallMode {
     Circle,
 }
 
-impl WallMode {
-    pub const ALL: [WallMode; 5] = [
-        WallMode::Single,
-        WallMode::Chain,
-        WallMode::Rectangle,
-        WallMode::Arc,
-        WallMode::Circle,
-    ];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            WallMode::Single => "Recto",
-            WallMode::Chain => "Cadena",
-            WallMode::Rectangle => "Rectángulo",
-            WallMode::Arc => "Arco",
-            WallMode::Circle => "Círculo",
-        }
-    }
-
-    /// What it does, for the tooltip.
-    pub fn help(self) -> &'static str {
-        match self {
-            WallMode::Single => "Un muro por cada dos clics",
-            WallMode::Chain => "Muros encadenados: cada clic añade uno desde el anterior",
-            WallMode::Rectangle => "Cuatro muros desde dos esquinas opuestas",
-            WallMode::Arc => "Muro curvo: inicio, fin y un punto por el que pasa",
-            WallMode::Circle => "Muro circular: centro y un punto de la línea de referencia",
-        }
-    }
-}
-
 /// One wall to build: its drawn line and how much it bends (0: straight).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Piece {

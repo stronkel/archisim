@@ -46,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 13;
+pub const CURRENT_VERSION: u32 = 14;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -235,7 +235,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // occupancy of each room's use.
             // 12 → 13: parameters of the project (`user_parameters`,
             // `parameter_values`); older ones have none.
-            9..=12 => {
+            // 13 → 14: views on sheets may be axonometric 3D views
+            // (`axo`); older ones are plans and sections.
+            9..=13 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -924,7 +926,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 13", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 14", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -951,7 +953,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 13"));
+        assert!(to_string(&opened).contains("\"version\": 14"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1122,7 +1124,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 13", "\"version\": 3", 1)
+            .replacen("\"version\": 14", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1184,7 +1186,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 13", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 14", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1388,6 +1390,7 @@ mod tests {
                 sheet: s,
                 level,
                 section: None,
+                axo: None,
                 scale: 50.0,
                 cut_plane: 1.1,
                 crop: Some((Point2::new(-1.0, -1.0), Point2::new(8.0, 6.0))),
@@ -1414,10 +1417,26 @@ mod tests {
             sheet: s,
             level,
             section: Some(sec),
+            axo: None,
             scale: 100.0,
             cut_plane: 1.0,
             crop: Some((Point2::new(-1.0, -0.5), Point2::new(11.0, 4.0))),
             centre: Point2::new(0.25, 0.08),
+        })
+        .unwrap();
+        // And an axonometric 3D view (version 14).
+        m.add_viewport(NewViewport {
+            sheet: s,
+            level,
+            section: None,
+            axo: Some(archisim_core::Axo {
+                yaw: -1.0,
+                pitch: 0.5,
+            }),
+            scale: 200.0,
+            cut_plane: 1.0,
+            crop: Some((Point2::new(-5.0, -3.0), Point2::new(9.0, 6.0))),
+            centre: Point2::new(0.45, 0.2),
         })
         .unwrap();
         m.add_draft(NewDraft::new(
@@ -1450,7 +1469,8 @@ mod tests {
         // Removing the section removes its view.
         let mut m2 = back;
         m2.remove_section(sec).unwrap();
-        assert_eq!(m2.viewports().count(), 1);
+        assert_eq!(m2.viewports().count(), 2);
+        assert_eq!(m2.viewports().filter(|v| v.axo.is_some()).count(), 1);
     }
 
     /// The georeference (version 11) is saved and comes back.
@@ -1609,7 +1629,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 13", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 14", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1621,7 +1641,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 13,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 14,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1667,11 +1687,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 13", "\"version\": 14"),
-            Err(FileError::TooNew { version: 14 })
+            edited("\"version\": 14", "\"version\": 15"),
+            Err(FileError::TooNew { version: 15 })
         ));
         assert!(matches!(
-            edited("\"version\": 13", "\"version\": 0"),
+            edited("\"version\": 14", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

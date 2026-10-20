@@ -701,6 +701,7 @@ pub fn build() -> Result<Document, ModelError> {
             sheet,
             level: pb,
             section: None,
+            axo: None,
             scale: 50.0,
             cut_plane: 1.0,
             crop: None,
@@ -738,12 +739,27 @@ pub fn build() -> Result<Document, ModelError> {
                 sheet: sheet2,
                 level: pb,
                 section: Some(id),
+                axo: None,
                 scale: 100.0,
                 cut_plane: 1.0,
                 crop: Some(crop),
                 centre: Point2::new(0.03 + half.x, top - half.y),
             })?;
         }
+        // The house in 3D, on the right, as the 3D view opens.
+        let axo = archisim_core::Axo::default();
+        let crop = archisim_plan::axo::axo_extent(m, &axo, 200.0);
+        let half = (crop.1 - crop.0) * (0.5 / 200.0);
+        m.add_viewport(NewViewport {
+            sheet: sheet2,
+            level: pb,
+            section: None,
+            axo: Some(axo),
+            scale: 200.0,
+            cut_plane: 1.0,
+            crop: Some(crop),
+            centre: Point2::new(0.42, 0.3 - half.y.min(0.1)),
+        })?;
         Ok(())
     })?;
 

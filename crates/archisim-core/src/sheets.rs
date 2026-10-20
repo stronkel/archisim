@@ -92,6 +92,9 @@ pub struct Viewport {
     /// A section or elevation instead of a plan. Its crop is in the
     /// section's own plane: along its line and height, metres.
     pub section: Option<SectionId>,
+    /// An axonometric 3D view of the whole model instead of a plan or a
+    /// section. Its crop is in the plane of the picture, metres.
+    pub axo: Option<Axo>,
     /// Scale denominator (50 is 1:50).
     pub scale: f64,
     /// Height of the cut plane above the level, metres.
@@ -108,12 +111,32 @@ pub struct Viewport {
     pub show_title: bool,
 }
 
+/// Where an axonometric view looks from: the direction the eye stands in,
+/// around the vertical from +X (east) counter-clockwise, and its height
+/// over the horizontal; radians. Parallel projection, so it has a scale.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Axo {
+    pub yaw: f64,
+    pub pitch: f64,
+}
+
+impl Default for Axo {
+    /// From the south-east and above, as the 3D view opens.
+    fn default() -> Self {
+        Self {
+            yaw: (-55.0f64).to_radians(),
+            pitch: 30.0f64.to_radians(),
+        }
+    }
+}
+
 /// Data to place a view on a sheet.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewViewport {
     pub sheet: SheetId,
     pub level: LevelId,
     pub section: Option<SectionId>,
+    pub axo: Option<Axo>,
     pub scale: f64,
     pub cut_plane: f64,
     pub crop: Option<(Point2, Point2)>,
@@ -289,6 +312,7 @@ impl Model {
                 sheet: spec.sheet,
                 level: spec.level,
                 section: spec.section,
+                axo: spec.axo,
                 scale: spec.scale,
                 cut_plane: spec.cut_plane,
                 crop: spec.crop,
@@ -311,6 +335,7 @@ impl Model {
             sheet: v.sheet,
             level: v.level,
             section: v.section,
+            axo: v.axo,
             scale: v.scale,
             cut_plane: v.cut_plane,
             crop: v.crop,
@@ -349,6 +374,7 @@ impl Model {
             sheet: v.sheet,
             level: v.level,
             section: v.section,
+            axo: v.axo,
             scale: v.scale,
             cut_plane: v.cut_plane,
             crop: v.crop,
@@ -566,6 +592,7 @@ mod tests {
                 sheet: s,
                 level: l,
                 section: None,
+                axo: None,
                 scale: 50.0,
                 cut_plane: 1.1,
                 crop: None,

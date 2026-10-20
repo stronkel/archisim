@@ -1255,6 +1255,62 @@ fn disciplines_keys_and_command_search() {
     assert_eq!(h.model().walls().count(), 4);
 }
 
+/// The command line is hidden until an order is typed; the step of a
+/// running order is in the contextual bar, and the bar's methods change
+/// how the tool draws.
+#[test]
+fn command_line_hidden_and_contextual_bar() {
+    let mut h = Harness::new(Editor::new_project());
+    assert!(!h.app.command_line_shown());
+    h.app.keys_autocad = true;
+    h.type_text("l");
+    assert_eq!(h.app.cmdline.buffer, "l", "written beside the cursor");
+    assert!(!h.app.command_line_shown());
+    h.key(Key::Enter);
+    assert_eq!(h.app.tool, Tool::Cad);
+    assert!(
+        h.app.cad_prompt().is_some(),
+        "its step is in the contextual bar"
+    );
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.app.pin_command_line = true;
+    assert!(h.app.command_line_shown());
+    h.app.pin_command_line = false;
+    h.app.keys_autocad = false;
+    // Methods: the wall in a rectangle; the slab with the wand.
+    h.type_text("m");
+    h.app.choose_method("Rectángulo");
+    assert_eq!(h.app.wall_tool.mode, crate::wall_tool::WallMode::Rectangle);
+    let states = h.app.method_states();
+    assert!(states.contains(&("Rectángulo", true, true)));
+    assert!(
+        states.contains(&("Spline", false, false)),
+        "faint, not gone"
+    );
+    h.frame();
+    h.type_text("f");
+    h.app.choose_method("Varita");
+    assert!(h.app.slab_settings.wand);
+    h.app.choose_method("Polígono");
+    assert!(!h.app.slab_settings.wand);
+    h.frame();
+    h.key(Key::Escape);
+    // Nothing selected: «Modificar» in grey; a wall selected, its orders.
+    h.type_text("m");
+    h.app.choose_method("Cadena");
+    h.key(Key::Escape);
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    let w = h.model().walls().next().unwrap().id;
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    h.frame();
+    assert_eq!(
+        super::context_bar::selection_label(&h.app.ed.selection),
+        "Muro (1)"
+    );
+}
+
 /// Snaps switched off in the bottom bar are not offered while drawing.
 #[test]
 fn snaps_follow_the_bottom_bar() {
@@ -2953,6 +3009,7 @@ fn sheets_views_and_drafting_on_paper() {
             sheet,
             level,
             section: None,
+            axo: None,
             scale: 100.0,
             cut_plane: 1.0,
             crop: None,
@@ -3182,15 +3239,16 @@ fn schedules_on_sheets_and_bc3() {
     h.app.new_sheet();
     h.frame();
     let sheet = h.model().sheets()[0].id;
-    // From the schedule window, onto the sheet shown.
-    h.app.schedule_open = Some((archisim_core::ScheduleKind::Walls, None));
+    // Dropped from the navigator onto the sheet shown.
+    use super::sheet_drop::Drop;
+    h.app.place_dropped(
+        Drop::Table(archisim_core::ScheduleKind::Walls),
+        "Muros",
+        p(0.1, 0.5),
+    );
     h.frame();
-    let t = h
-        .app
-        .ed
-        .add_table(sheet, archisim_core::ScheduleKind::Walls, None, p(0.1, 0.5))
-        .unwrap();
-    h.frame();
+    let t = h.model().tables_on(sheet).next().unwrap().id;
+    assert_eq!(h.model().table(t).unwrap().at, p(0.1, 0.5));
     let table =
         archisim_plan::schedules::table(h.model(), archisim_core::ScheduleKind::Walls, None);
     assert_eq!(table.rows.len(), 1);
@@ -3203,6 +3261,45 @@ fn schedules_on_sheets_and_bc3() {
     assert_eq!(h.app.sheet_sel, Some(super::sheet_ui::Placed::Table(t)));
     h.key(Key::Delete);
     assert!(h.model().table(t).is_none());
+    // A plan at the scale of its tab, and the 3D view as an axonometric.
+    h.app.place_dropped(Drop::Level(lvl), "Planta", p(0.2, 0.2));
+    let plan = h.model().viewports_on(sheet).next().unwrap().clone();
+    assert_eq!(plan.scale, h.app.tabs[0].scale);
+    assert!(plan.axo.is_none());
+    h.app
+        .place_dropped(Drop::ThreeD, "La vista 3D", p(0.4, 0.2));
+    let axo = h
+        .model()
+        .viewports_on(sheet)
+        .find(|v| v.axo.is_some())
+        .unwrap()
+        .clone();
+    // At a scale that fits the paper.
+    assert!([50.0, 100.0, 200.0, 250.0, 500.0, 1000.0].contains(&axo.scale));
+    assert!(axo.crop.is_some());
+    h.frame();
+    let svg = archisim_plan::sheet::render_sheet(h.model(), sheet, &Default::default());
+    assert!(svg.contains("class=\"axo\""));
+    assert_eq!(
+        archisim_plan::sheet::viewport_title(h.model(), &axo),
+        "VISTA 3D"
+    );
+    // Schedules and measurements in tabs of their own.
+    use super::tabs::{SchedTab, TabKind};
+    h.app.pick(super::toolbox::Pick::Action(
+        super::toolbox::Action::Takeoff,
+    ));
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::Schedule);
+    assert_eq!(
+        h.app.tabs[h.app.active_tab].kind,
+        TabKind::Schedule(SchedTab::Takeoff)
+    );
+    h.app.open_view(TabKind::Schedule(SchedTab::Kind(
+        archisim_core::ScheduleKind::Walls,
+    )));
+    h.frame();
+    assert_eq!(h.app.tab_title(h.app.tabs[h.app.active_tab].kind), "Muros");
     // The budget.
     let dir = std::env::temp_dir().join(format!("archisim-bc3-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

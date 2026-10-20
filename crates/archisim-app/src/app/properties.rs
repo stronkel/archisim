@@ -17,12 +17,10 @@ use eframe::egui::{self, Id, Ui};
 use super::icons::Icon;
 use super::props::{self, choice, group, id_row, row, text_row, type_card, TypeItem};
 use super::tabs::SCALES;
-use super::widgets::{method_picker, segmented};
+use super::widgets::segmented;
 use super::*;
 use crate::dim_tool::{DimDirection, DimMode};
 use crate::editor::TopChoice;
-use crate::slab_tool::SlabMode;
-use crate::wall_tool::WallMode;
 
 const REFERENCES: [(ReferenceLine, &str); 3] = [
     (ReferenceLine::ExteriorFace, "Cara exterior"),
@@ -267,27 +265,6 @@ impl ArchiSimApp {
             .and_then(|l| self.ed.model().level(l))
             .map(|l| l.name.clone());
         let resolved = self.wall_settings.top_on(self.ed.model(), self.ed.level);
-        group(ui, "tool-wall-method", "Método", |ui| {
-            ui.add_space(2.0);
-            let mut mode = self.wall_tool.mode;
-            let options: Vec<(WallMode, Icon, &str, &str)> = WallMode::ALL
-                .iter()
-                .map(|m| {
-                    let icon = match m {
-                        WallMode::Single => Icon::GeoSingle,
-                        WallMode::Chain => Icon::GeoChain,
-                        WallMode::Rectangle => Icon::GeoRect,
-                        WallMode::Arc => Icon::GeoArc,
-                        WallMode::Circle => Icon::GeoCircle,
-                    };
-                    (*m, icon, m.name(), m.help())
-                })
-                .collect();
-            if method_picker(ui, "wall-method", &mut mode, &options) {
-                self.wall_tool.set_mode(mode);
-            }
-            ui.add_space(2.0);
-        });
         group(ui, "tool-wall-constraints", "Restricciones", |ui| {
             text_row(
                 ui,
@@ -425,47 +402,7 @@ impl ArchiSimApp {
         if card.edit {
             self.edit_type(TypesTab::Slabs, self.slab_settings.slab_type.0);
         }
-        group(ui, "tool-slab-method", "Método", |ui| {
-            ui.add_space(2.0);
-            #[derive(Clone, Copy, PartialEq)]
-            enum Method {
-                Polygon,
-                Rectangle,
-                Wand,
-            }
-            let current = match (self.slab_settings.wand, self.slab_tool.mode) {
-                (true, _) => Method::Wand,
-                (false, SlabMode::Rectangle) => Method::Rectangle,
-                (false, SlabMode::Polygon) => Method::Polygon,
-            };
-            let mut method = current;
-            if method_picker(
-                ui,
-                "slab-method",
-                &mut method,
-                &[
-                    (Method::Polygon, Icon::GeoPolygon, "Polígono", "Esquina a esquina"),
-                    (
-                        Method::Rectangle,
-                        Icon::GeoRect,
-                        "Rectángulo",
-                        "Dos esquinas opuestas (o la primera y su tamaño: 6000x4000)",
-                    ),
-                    (
-                        Method::Wand,
-                        Icon::GeoWand,
-                        "Varita",
-                        "Varita mágica: clic dentro de un recinto de muros (también con Espacio + clic)",
-                    ),
-                ],
-            ) {
-                self.slab_settings.wand = method == Method::Wand;
-                match method {
-                    Method::Polygon => self.slab_tool.set_mode(SlabMode::Polygon),
-                    Method::Rectangle => self.slab_tool.set_mode(SlabMode::Rectangle),
-                    Method::Wand => self.slab_tool.finish(),
-                }
-            }
+        group(ui, "tool-slab-method", "Contorno", |ui| {
             if !self.slab_settings.wand {
                 ui.add_space(2.0);
                 ui.checkbox(
@@ -636,24 +573,7 @@ impl ArchiSimApp {
                 "Herramienta Cota"
             },
         );
-        group(ui, "tool-dim", "Método", |ui| {
-            let before = self.dim_settings.mode;
-            row(ui, "Método", "", |ui, w| {
-                self.dim_settings.mode = choice(
-                    ui,
-                    "tool-dim-mode",
-                    w,
-                    self.dim_settings.mode,
-                    &[
-                        (DimMode::Linear, "Lineal"),
-                        (DimMode::WallOpenings, "Huecos de muro"),
-                        (DimMode::LevelMark, "Cota de nivel"),
-                    ],
-                );
-            });
-            if self.dim_settings.mode != before {
-                self.dim_tool.finish();
-            }
+        group(ui, "tool-dim", "Cota", |ui| {
             if self.dim_settings.mode == DimMode::Linear {
                 row(ui, "Dirección", "", |ui, w| {
                     self.dim_settings.direction = choice(
@@ -694,6 +614,7 @@ impl ArchiSimApp {
             ViewMode::Plan => self.plan_view_properties(ui),
             ViewMode::ThreeD => self.view_3d_properties(ui),
             ViewMode::Section => self.section_view_properties(ui),
+            ViewMode::Schedule => {}
             ViewMode::Sheet(id) => {
                 self.sheet_properties(ui, id);
                 return;

@@ -141,6 +141,10 @@ impl ArchiSimApp {
             self.sheet_keys(&ctx);
         }
         self.sheet_clicks(&ctx, &response, rect, id);
+        let at = ctx
+            .pointer_latest_pos()
+            .map(|pos| self.view.to_model(rect, pos));
+        self.sheet_drop(&ctx, &response, at);
 
         // Grey desk, the paper, the drawing, then what is going on.
         painter.rect_filled(rect, CornerRadius::ZERO, Color32::from_rgb(150, 154, 160));
@@ -375,10 +379,7 @@ impl ArchiSimApp {
                 _ => None,
             };
             if let Some(v) = view {
-                self.open_view(match v.section {
-                    Some(s) => TabKind::Section(s),
-                    None => TabKind::Plan(v.level),
-                });
+                self.open_view(Self::viewport_tab(&v));
                 return;
             }
         }
@@ -806,8 +807,27 @@ impl ArchiSimApp {
             .map(|l| (l.id, l.name.clone()))
             .collect();
         let section_title = v.section.and_then(|s| model.section(s)).map(|s| s.title());
+        let axo = v.axo.is_some();
+        let mut from_camera = false;
         group(ui, "vp-view", "Vista", |ui| {
             match &section_title {
+                _ if axo => {
+                    text_row(
+                        ui,
+                        "Vista 3D",
+                        "Axonometría de todo el modelo",
+                        "Axonometría",
+                    );
+                    if ui
+                        .button("Tomar el punto de vista de la vista 3D")
+                        .on_hover_text(
+                            "Gira la vista 3D como la quieras y pulsa aquí: el plano la copia",
+                        )
+                        .clicked()
+                    {
+                        from_camera = true;
+                    }
+                }
                 Some(t) => text_row(ui, "Sección o alzado", "", t),
                 None => {
                     row(ui, "Planta", "", |ui, w| {
@@ -828,7 +848,7 @@ impl ArchiSimApp {
                 let refs: Vec<(u32, &str)> = opts.iter().map(|(a, b)| (*a, b.as_str())).collect();
                 new.scale = choice(ui, "vp-scale", w, new.scale as u32, &refs) as f64;
             });
-            if section_title.is_none() {
+            if section_title.is_none() && !axo {
                 row(ui, "Plano de corte (mm)", "", |ui, w| {
                     if let Some(c) =
                         length_field(ui, Id::unique(("vp-cut", v.id)), v.cut_plane, w - 8.0)
@@ -915,16 +935,22 @@ impl ArchiSimApp {
         let saved = std::mem::replace(&mut self.view_style, new.style.clone());
         self.visibility_group(ui);
         new.style = std::mem::replace(&mut self.view_style, saved);
+        if from_camera {
+            let a = self.camera_axo();
+            new.axo = Some(a);
+            new.crop = Some(archisim_plan::axo::axo_extent(
+                self.ed.model(),
+                &a,
+                new.scale,
+            ));
+        }
         if new != v {
             let r = self.ed.set_viewport(new, "Cambiar vista del plano");
             self.report(r, "Vista cambiada.");
         }
         ui.add_space(4.0);
-        if ui.button("Abrir la planta").clicked() {
-            self.open_view(match v.section {
-                Some(s) => TabKind::Section(s),
-                None => TabKind::Plan(v.level),
-            });
+        if ui.button("Abrir la vista").clicked() {
+            self.open_view(Self::viewport_tab(&v));
         }
         if ui.button("Quitar del plano").clicked() {
             let r = self.ed.remove_viewport(v.id);
@@ -960,8 +986,11 @@ impl ArchiSimApp {
             self.report(r, "Tabla cambiada.");
         }
         ui.add_space(4.0);
-        if ui.button("Ver y exportar (CSV)…").clicked() {
-            self.schedule_open = Some((t.kind, t.level));
+        if ui.button("Abrir la tabla").clicked() {
+            self.schedule_level = t.level;
+            self.open_view(super::tabs::TabKind::Schedule(super::tabs::SchedTab::Kind(
+                t.kind,
+            )));
         }
         if ui.button("Quitar del plano").clicked() {
             let r = self.ed.remove_table(t.id);
@@ -1047,9 +1076,29 @@ impl ArchiSimApp {
 pub(super) enum ViewChoice {
     Level(LevelId),
     Section(archisim_core::SectionId),
+    /// An axonometric from where the 3D view looks.
+    ThreeD,
 }
 
 impl ArchiSimApp {
+    /// Where the 3D view looks from, for an axonometric on a sheet.
+    pub(super) fn camera_axo(&self) -> archisim_core::Axo {
+        let c = &self.v3d.camera;
+        archisim_core::Axo {
+            yaw: c.yaw as f64,
+            pitch: (c.pitch as f64).clamp(0.05, 1.5),
+        }
+    }
+
+    /// The tab a view on a sheet comes from.
+    pub(super) fn viewport_tab(v: &Viewport) -> TabKind {
+        match (v.axo, v.section) {
+            (Some(_), _) => TabKind::ThreeD,
+            (None, Some(s)) => TabKind::Section(s),
+            (None, None) => TabKind::Plan(v.level),
+        }
+    }
+
     /// Places a view on a sheet, centred at `centre`. A section gets as
     /// crop what it draws now (worked out once, as a view's crop region),
     /// so the sheet need not draw it to know its size.
@@ -1060,17 +1109,24 @@ impl ArchiSimApp {
         scale: f64,
         centre: Point2,
     ) -> crate::editor::EditResult<ViewportId> {
-        let (level, section, crop) = match view {
-            ViewChoice::Level(l) => (l, None, None),
+        let (level, section, crop, axo) = match view {
+            ViewChoice::Level(l) => (l, None, None, None),
             ViewChoice::Section(s) => {
                 let crop = archisim_plan::sheet::section_extent(self.ed.model(), s, scale);
-                (self.ed.level, Some(s), crop)
+                (self.ed.level, Some(s), crop, None)
+            }
+            ViewChoice::ThreeD => {
+                let axo = self.camera_axo();
+                // Worked out once: the picture is the whole model.
+                let crop = archisim_plan::axo::axo_extent(self.ed.model(), &axo, scale);
+                (self.ed.level, None, Some(crop), Some(axo))
             }
         };
         self.ed.add_viewport(NewViewport {
             sheet,
             level,
             section,
+            axo,
             scale,
             cut_plane: self.cut_plane,
             crop,

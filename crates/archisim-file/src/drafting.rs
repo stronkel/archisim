@@ -710,6 +710,10 @@ pub(crate) struct Viewport {
     /// A section or elevation instead of the level's plan (version 10).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<u64>,
+    /// An axonometric 3D view: where it looks from, yaw and pitch in
+    /// radians (version 14).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axo: Option<[f64; 2]>,
     pub scale: f64,
     pub cut_plane: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -761,6 +765,7 @@ pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
             sheet: v.sheet.0,
             level: v.level.0,
             section: v.section.map(|s| s.0),
+            axo: v.axo.map(|a| [a.yaw, a.pitch]),
             scale: v.scale,
             cut_plane: v.cut_plane,
             crop: v.crop.map(|(a, b)| [xy(a), xy(b)]),
@@ -781,6 +786,7 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
                 sheet: core::SheetId(v.sheet),
                 level: core::LevelId(v.level),
                 section: v.section.map(core::SectionId),
+                axo: v.axo.map(|[yaw, pitch]| core::Axo { yaw, pitch }),
                 scale: v.scale,
                 cut_plane: v.cut_plane,
                 crop: v.crop.map(|[a, b]| (pt(a), pt(b))),

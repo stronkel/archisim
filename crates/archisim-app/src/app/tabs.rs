@@ -24,6 +24,16 @@ pub enum TabKind {
     Section(SectionId),
     /// A sheet: paper with views placed on it.
     Sheet(SheetId),
+    /// A schedule, or all the measurements.
+    Schedule(SchedTab),
+}
+
+/// What a schedule tab lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchedTab {
+    Kind(archisim_core::ScheduleKind),
+    /// Every schedule of quantities, one after another, with the BC3.
+    Takeoff,
 }
 
 /// A view open in a tab, with what it remembers while another is shown.
@@ -72,6 +82,13 @@ impl ViewTab {
     pub fn sheet(id: SheetId) -> Self {
         Self {
             kind: TabKind::Sheet(id),
+            ..Self::plan(LevelId(0))
+        }
+    }
+
+    pub fn schedule(which: SchedTab) -> Self {
+        Self {
+            kind: TabKind::Schedule(which),
             ..Self::plan(LevelId(0))
         }
     }
@@ -150,6 +167,22 @@ impl ArchiSimApp {
                 }
                 self.mode = ViewMode::Sheet(id);
             }
+            TabKind::Schedule(_) => {
+                self.set_tool(super::Tool::Arrow);
+                self.end_command(true);
+                self.mode = ViewMode::Schedule;
+            }
+        }
+    }
+
+    /// Shows something else in the active tab (another schedule).
+    pub(super) fn replace_active_tab(&mut self, kind: TabKind) {
+        if let Some(i) = self.tabs.iter().position(|t| t.kind == kind) {
+            self.activate_tab(i);
+            return;
+        }
+        if let Some(t) = self.tabs.get_mut(self.active_tab) {
+            t.kind = kind;
         }
     }
 
@@ -164,6 +197,7 @@ impl ArchiSimApp {
             TabKind::ThreeD => ViewTab::three_d(),
             TabKind::Section(id) => ViewTab::section(id),
             TabKind::Sheet(id) => ViewTab::sheet(id),
+            TabKind::Schedule(w) => ViewTab::schedule(w),
         };
         // Next to the active tab, as browsers do.
         let at = (self.active_tab + 1).min(self.tabs.len());
@@ -229,7 +263,7 @@ impl ArchiSimApp {
                 TabKind::Plan(l) => !exists(model, l),
                 TabKind::Section(s) => model.section(s).is_none(),
                 TabKind::Sheet(s) => model.sheet(s).is_none(),
-                TabKind::ThreeD => false,
+                TabKind::ThreeD | TabKind::Schedule(_) => false,
             })
             .collect();
         for i in stale.into_iter().rev() {
@@ -272,6 +306,7 @@ impl ArchiSimApp {
             Some(TabKind::ThreeD) => ViewMode::ThreeD,
             Some(TabKind::Section(_)) => ViewMode::Section,
             Some(TabKind::Sheet(s)) => ViewMode::Sheet(s),
+            Some(TabKind::Schedule(_)) => ViewMode::Schedule,
             _ => ViewMode::Plan,
         };
     }
@@ -308,6 +343,8 @@ impl ArchiSimApp {
                 .model()
                 .sheet(s)
                 .map_or_else(|| "Plano".into(), |s| format!("{} {}", s.number, s.name)),
+            TabKind::Schedule(SchedTab::Takeoff) => "Mediciones".into(),
+            TabKind::Schedule(SchedTab::Kind(k)) => k.label().into(),
         }
     }
 
@@ -346,7 +383,7 @@ impl ArchiSimApp {
                     let s = if active { self.plan_scale } else { tab.scale };
                     format!("1:{s}")
                 }
-                TabKind::ThreeD => String::new(),
+                TabKind::ThreeD | TabKind::Schedule(_) => String::new(),
                 TabKind::Sheet(s) => self
                     .ed
                     .model()
@@ -369,6 +406,7 @@ impl ArchiSimApp {
                     TabKind::ThreeD => "Vista 3D · clic con la rueda: cerrar",
                     TabKind::Section(_) => "Sección o alzado · clic con la rueda: cerrar",
                     TabKind::Sheet(_) => "Plano · clic con la rueda: cerrar",
+                    TabKind::Schedule(_) => "Tabla · clic con la rueda: cerrar",
                 });
             let painter = ui.painter();
             if active {
@@ -415,6 +453,7 @@ impl ArchiSimApp {
                     _ => Icon::Section,
                 },
                 TabKind::Sheet(_) => Icon::Sheet,
+                TabKind::Schedule(_) => Icon::Measure,
             };
             icons::paint(
                 painter,
@@ -505,6 +544,16 @@ impl ArchiSimApp {
                     if ui.button(title).clicked() {
                         open = Some(TabKind::Section(*id));
                     }
+                }
+            }
+            ui.separator();
+            ui.label(egui::RichText::new("Tablas").small().weak());
+            if ui.button("Mediciones").clicked() {
+                open = Some(TabKind::Schedule(SchedTab::Takeoff));
+            }
+            for k in archisim_core::ScheduleKind::ALL {
+                if ui.button(k.label()).clicked() {
+                    open = Some(TabKind::Schedule(SchedTab::Kind(k)));
                 }
             }
             if !sheets.is_empty() {

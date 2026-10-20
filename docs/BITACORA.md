@@ -6,6 +6,47 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche) · Interfaz por disciplinas, bloque I2 (v0.35)
+
+Bloque I2 de `docs/INTERFAZ.md` y lo que pidió Antonio al probar I1, en la rama `bloque/interfaz-i2` (pull request para Antonio). Formato `.archisim` **versión 14** (vistas 3D en planos); los proyectos anteriores se abren igual. Sin cambios en el IFC.
+
+**Hecho**
+- **Línea de órdenes oculta por defecto.** Lo que se escribe sale junto al cursor y el paso de la orden en marcha, en la barra contextual. Se deja fija en **Vista → Línea de órdenes fija**; «Teclas de AutoCAD» pasa también a Vista.
+- **Barra contextual fija bajo las pestañas**:
+  - con una herramienta, sus **métodos**: Recta, Cadena, Rectángulo, Polígono, Arco, Círculo, Varita (Edificio en cubiertas, Recinto en locales), Spline y Elegir línea. Los que no valen se ven apagados, no desaparecen; Spline y Elegir línea llegarán más adelante. Con la Cota: lineal, huecos de muro, cota de nivel, angular, radio y longitud de arco;
+  - con algo seleccionado, **Modificar · Muro (1)**: Mover, Copiar, Girar, Simetría, Escala y Matriz | Desfase, Alinear, Recortar, Alargar, Partir y Unir. Lo que no vale para la selección sale apagado (escalar una puerta). Si no caben con su nombre, se quedan en dibujos con su nombre y tecla al pasar el ratón;
+  - con una orden en marcha, lo que pregunta, sus opciones como botones y «Terminar».
+  Los métodos salen de Propiedades: allí quedan los ajustes de cada uno (contorno, hueco de forjado, dirección de la cota).
+- **Barra inferior por segmentos**:
+  - escala y zoom;
+  - **Línea**, **Relleno**, **Texto** y **Cota**. El clic lanza su orden; la flecha abre las demás formas (polilínea, rectángulo, arco, círculo, elipse; directriz, nube, etiqueta; cota de nivel, angular…) y sus ajustes (capa, grosor, tipo de línea, trama, escala, ángulo, altura del texto);
+  - los **forzados como dibujos**: extremos, medios, aristas, rastreo y orto;
+  - las coordenadas.
+  Rejilla, líneas de referencia, líneas finas, calco y fases siguen en las propiedades de la vista y en Vista.
+- **Tablas y mediciones en pestañas**, no en ventana flotante. Cada tabla del navegador se abre como una vista más. La pestaña **Mediciones** pone todas las de cantidades seguidas, con su planta y la exportación CSV y BC3. En Análisis, la ficha Mediciones la abre.
+- **Arrastrar a un plano**: con un plano abierto, se arrastran desde el navegador plantas, secciones, alzados, tablas y la **Vista 3D**, y quedan donde se sueltan, a la escala de su pestaña.
+  - La vista 3D se coloca como **axonometría** desde donde la estés mirando, a la escala que quepa en el papel (1:200 en la demo).
+  - Se dibuja con vectores: caras con el color del material, sombreadas, y aristas donde la superficie gira. Sale igual en el PDF y en el DXF.
+  - En Propiedades, «Tomar el punto de vista de la vista 3D» la actualiza.
+  - La demo trae una en el plano A-02.
+- Versión 0.35.0.
+
+**Pendiente**
+- I3: atenuación por disciplina, ojo y candado por disciplina en el navegador.
+- En la barra contextual faltan los campos de longitud y ángulo tecleables (hoy se teclean en las cotas azules temporales) y los métodos Spline y Elegir línea.
+- La axonometría usa el orden de pintor: en encuentros complicados (petos, aleros) puede verse alguna cara mal tapada. Si molesta, la paso a líneas ocultas exactas.
+- Vistas 3D en perspectiva en los planos: hoy solo axonometría, porque la perspectiva no tiene escala.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`. Abajo ya no está la línea de órdenes. Con «Teclas de AutoCAD» (menú Vista) escribe `L` e Intro: la L sale junto al cursor y el paso de la orden, en la barra bajo las pestañas.
+2. Pincha Muro: arriba, Recta, Cadena, Rectángulo, Arco y Círculo encendidos y el resto apagados. Pasa a Forjado: Polígono, Rectángulo y Varita.
+3. Selecciona un muro: «Modificar · Muro (1)»; pulsa Girar y sigue los pasos de la barra.
+4. Abajo, pincha la flecha de **Línea** y elige Círculo; cambia la capa. Prueba los forzados.
+5. Navegador → Tablas → **Mediciones**: se abre una pestaña con todo y los botones CSV y BC3.
+6. Abre el plano A-01 y arrastra desde el navegador «Planta baja», «Muros» y «Vista 3D» al papel. Mira el plano A-02, que ya trae la axonometría, y expórtalo a PDF.
+
+---
+
 ## 2026-10-20 (tarde) · Interfaz por disciplinas, bloque I1
 
 Primer bloque de `docs/INTERFAZ.md`, en la rama `bloque/interfaz-i1` (pull request para Antonio). Sin cambios de formato ni de IFC.

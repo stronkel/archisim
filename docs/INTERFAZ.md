@@ -122,7 +122,7 @@ Segmentada a lo ancho del dibujo, como en el boceto de Antonio:
 
 Línea, relleno, texto y cota son el dibujo y la anotación 2D de la vista: están aquí, siempre a mano, en cualquier disciplina. Los forzados y las coordenadas están abajo (decidido por Antonio).
 
-La **línea de órdenes** al estilo AutoCAD sigue existiendo: aparece justo encima de la barra inferior al empezar a escribir una orden, y se puede dejar fija desde Vista.
+La **línea de órdenes** al estilo AutoCAD sigue existiendo, pero **oculta por defecto** (decidido por Antonio al probar I1): lo que se escribe aparece junto al cursor y el paso de la orden en marcha, en la barra contextual. Se deja fija desde Vista → Línea de órdenes fija, sin que el dibujo salte.
 
 ### 2.9 Navegador (derecha)
 
@@ -243,8 +243,8 @@ Como el trabajo en equipo de ArchiCAD, con presencia en directo:
 
 | Bloque | Contenido | Cambia el formato |
 |---|---|---|
-| **I1** | Barra de disciplinas, fichas en formato fijo con los iconos nuevos, Propiedades debajo, navegador con pestañas Modelo/Proyecto, buscador de órdenes, teclas que cambian de disciplina | No |
-| **I2** | Barra contextual: métodos de inserción de las herramientas que ya existen, y Modificar con sus dos formas (rápida y precisa); barra inferior segmentada con forzados y coordenadas; línea de órdenes encima | No |
+| **I1** ✅ | Barra de disciplinas, fichas en formato fijo con los iconos nuevos, Propiedades debajo, navegador con pestañas Modelo/Proyecto, buscador de órdenes, teclas que cambian de disciplina | No |
+| **I2** ✅ | Barra contextual: métodos de inserción de las herramientas que ya existen, y Modificar con sus dos formas (rápida y precisa); barra inferior segmentada con forzados y coordenadas; línea de órdenes oculta. Pedido por Antonio al probar I1: tablas y mediciones en pestañas, y arrastrar plantas, secciones, tablas y la vista 3D a un plano a su escala | Sí (vistas 3D en planos, versión 14) |
 | **I3** | Disciplina por elemento y atenuación de la vista por disciplina, también al imprimir; ojo y candado por disciplina en el navegador | Sí (disciplina a mano, si se cambia) |
 | **I4** | Disciplina Concepto: aristas y caras, empujar, seguir, volumen, masa con edificabilidad, cinta, pintar, convertir a edificio | Sí |
 | **I5** | Módulos: colocar otro `.archisim` varias veces con giro y simetría, actualizar, mediciones por copias, IFC con identificadores por copia | Sí |
