@@ -22,6 +22,14 @@ macro_rules! typed_id {
 }
 
 typed_id!(
+    /// Identifies a [`crate::Plot`] (a parcel).
+    PlotId
+);
+typed_id!(
+    /// Identifies a [`crate::Road`].
+    RoadId
+);
+typed_id!(
     /// Identifies a [`crate::Mass`] (a volume of the concept phase).
     MassId
 );

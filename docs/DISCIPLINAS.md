@@ -44,8 +44,8 @@ Lo que rodea al edificio y lo que se urbaniza, sin mezclarse con el edificio:
 | Herramienta | Qué hace | IFC 4.3 |
 |---|---|---|
 | **Terreno** | Superficie desde puntos o curvas de nivel (topográfico importado en DXF o CSV); explanaciones con su desmonte y terraplén | `IfcGeographicElement` (`TERRAIN`), `IfcEarthworksCut` / `IfcEarthworksFill` |
-| **Parcela** | Lindes, superficie, retranqueos; la orientación real del norte (2.12) | `IfcSite` |
-| **Vial** | Por un eje y una **sección tipo**: calzada, aparcamiento, bordillo, acera, alcorque; con su firme por capas (como un multicapa) | `IfcAlignment`, `IfcRoad`, `IfcCourse`, `IfcPavement`, `IfcKerb` |
+| **Parcela** ✅ (20/10/2026) | Lindes, superficie, retranqueos; la orientación real del norte (2.12) | `IfcSite` |
+| **Vial** ✅ (20/10/2026, tramos rectos) | Por un eje y una **sección tipo**: calzada, aparcamiento, bordillo, acera, alcorque; con su firme por capas (como un multicapa) | `IfcAlignment`, `IfcRoad`, `IfcCourse`, `IfcPavement`, `IfcKerb` |
 | **Paisajismo** | Árboles y arbustos (objetos de la librería), zonas verdes, pavimentos exteriores | `IfcGeographicElement` |
 | **Mobiliario urbano** | Bancos, farolas, papeleras (librería) | `IfcFurnishingElement` / `IfcLamp` |
 

@@ -135,10 +135,13 @@ pub enum Category {
     Foundations,
     /// Volumes of the concept phase.
     Masses,
+    /// Plots: boundaries and setbacks.
+    Plots,
+    Roads,
 }
 
 impl Category {
-    pub const ALL: [Category; 19] = [
+    pub const ALL: [Category; 21] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
@@ -151,6 +154,8 @@ impl Category {
         Category::Objects,
         Category::Terrain,
         Category::Masses,
+        Category::Plots,
+        Category::Roads,
         Category::Dimensions,
         Category::LevelMarks,
         Category::SectionMarks,
@@ -181,6 +186,8 @@ impl Category {
             Category::Grids => "grids",
             Category::Foundations => "foundations",
             Category::Masses => "masses",
+            Category::Plots => "plots",
+            Category::Roads => "roads",
         }
     }
 
@@ -209,6 +216,8 @@ impl Category {
             Category::Grids => "Ejes",
             Category::Foundations => "Cimentación",
             Category::Masses => "Volúmenes (concepto)",
+            Category::Plots => "Parcelas",
+            Category::Roads => "Viales",
         }
     }
 }

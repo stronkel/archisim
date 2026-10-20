@@ -881,8 +881,8 @@ pub fn build() -> Result<Document, ModelError> {
 
 /// An urbanisation that places the demo house as a module three times:
 /// two side by side (the second mirrored, so their entrances face each
-/// other) and one turned, across the street (I5), and the mass of a block
-/// still to design (I4).
+/// other) and one turned, across the street (I5), the mass of a block
+/// still to design (I4), and the plots and the street (Urbanismo).
 pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::Error>> {
     let text = std::fs::read_to_string(house)?;
     let (text, stamp, module) = archisim_file::read_module(&text)?;
@@ -907,9 +907,60 @@ pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::
             mirror,
         })?;
     }
+    // The two plots on each side of the street, and the street (with its
+    // carriageway, kerbs and sidewalks, no parking).
+    for (name, reference, outline, setback) in [
+        (
+            "Parcela A",
+            "1234501VK4713S",
+            [(-6.0, -2.85), (36.0, -2.85), (36.0, 14.0), (-6.0, 14.0)],
+            3.0,
+        ),
+        (
+            "Parcela B",
+            "1234502VK4713S",
+            [(-8.0, -34.0), (48.0, -34.0), (48.0, -12.15), (-8.0, -12.15)],
+            3.0,
+        ),
+    ] {
+        m.add_plot(archisim_core::NewPlot {
+            name: name.into(),
+            level,
+            outline: outline.iter().map(|(x, y)| Point2::new(*x, *y)).collect(),
+            setback,
+            reference: reference.into(),
+        })?;
+    }
+    let by_category = |m: &Model, c: &str| m.materials().find(|x| x.category == c).map(|x| x.id);
+    let paving = by_category(&m, "ceramic")
+        .or_else(|| by_category(&m, "concrete"))
+        .ok_or(ModelError::InvalidShape("paving missing"))?;
+    let kerb = by_category(&m, "concrete").ok_or(ModelError::InvalidShape("concrete missing"))?;
+    let asphalt = m.add_material(
+        "Aglomerado asfáltico",
+        "asphalt",
+        [96, 96, 100],
+        archisim_core::CutPattern::Solid,
+    );
+    m.add_road(archisim_core::NewRoad {
+        name: "Calle de la Huerta".into(),
+        level,
+        axis: vec![Point2::new(-12.0, -7.5), Point2::new(52.0, -7.5)],
+        section: archisim_core::RoadSection {
+            carriageway: 6.0,
+            parking: 0.0,
+            kerb: 0.15,
+            sidewalk: 1.5,
+            kerb_height: 0.15,
+            depth: 0.4,
+        },
+        top_offset: -0.3,
+        pavement: asphalt,
+        kerb_material: kerb,
+        sidewalk_material: paving,
+    })?;
     // The concept of the block still to build across the street (I4): a
-    // mass of three floors on a plot of 1.800 m².
-    m.set_plot_area(Some(1800.0))?;
+    // mass of three floors on plot B.
     let concrete = m
         .materials()
         .find(|x| x.category == "concept")

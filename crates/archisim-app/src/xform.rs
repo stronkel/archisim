@@ -196,6 +196,49 @@ pub fn transform(
             | Element::Footing(_)
             | Element::Grid(_)
             | Element::Module(_) => {}
+            Element::Plot(id) => {
+                let x = model
+                    .plot(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let outline: Vec<_> = x.outline.iter().map(|p| t.apply(*p)).collect();
+                if copy {
+                    let new = model.add_plot(archisim_core::NewPlot {
+                        name: model.next_plot_name(),
+                        level: x.level,
+                        outline,
+                        setback: x.setback,
+                        reference: String::new(),
+                    })?;
+                    out.insert(Element::Plot(new));
+                } else {
+                    model.edit_plot(id, |p| p.outline = outline)?;
+                    out.insert(*e);
+                }
+            }
+            Element::Road(id) => {
+                let x = model
+                    .road(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let axis: Vec<_> = x.axis.iter().map(|p| t.apply(*p)).collect();
+                if copy {
+                    let new = model.add_road(archisim_core::NewRoad {
+                        name: model.next_road_name(),
+                        level: x.level,
+                        axis,
+                        section: x.section,
+                        top_offset: x.top_offset,
+                        pavement: x.pavement,
+                        kerb_material: x.kerb_material,
+                        sidewalk_material: x.sidewalk_material,
+                    })?;
+                    out.insert(Element::Road(new));
+                } else {
+                    model.edit_road(id, |r| r.axis = axis)?;
+                    out.insert(*e);
+                }
+            }
             Element::Mass(id) => {
                 let mut x = model
                     .mass(id)

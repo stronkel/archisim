@@ -34,6 +34,8 @@ pub(crate) fn begin(model: &Model, style: &ViewStyle) -> Guard {
             .chain(model.railings().map(|r| r.id.0))
             .chain(model.objects().map(|o| o.id.0))
             .chain(model.footings().map(|f| f.id.0))
+            .chain(model.plots().map(|p| p.id.0))
+            .chain(model.roads().map(|r| r.id.0))
     };
     DIMMED.with(|d| {
         let mut d = d.borrow_mut();

@@ -3819,3 +3819,72 @@ fn concept_volumes_are_drawn_pushed_and_converted() {
         .iter()
         .any(|s| matches!(s.owner, archisim_geom::solid::SolidOwner::Mass(_))));
 }
+
+/// Urbanismo: a plot by its corners and a road by its axis, with their
+/// figures; a mass on the plot takes the plot's area and is checked
+/// against its setback.
+#[test]
+fn plots_and_roads_are_drawn() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::{Discipline, Pick};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -20.0), p(50.0, 30.0), 0.0);
+    h.app.set_discipline(Discipline::Site);
+    h.type_text("y");
+    assert_eq!(h.app.tool, Tool::Plot);
+    for c in [
+        p(0.0, 0.0),
+        p(40.0, 0.0),
+        p(40.0, 25.0),
+        p(0.0, 25.0),
+        p(0.0, 0.0),
+    ] {
+        h.click_at(c);
+    }
+    let plot = h.model().plots().next().unwrap();
+    assert!((plot.area() - 1000.0).abs() < 1e-6);
+    assert!((plot.setback - 3.0).abs() < 1e-9);
+    h.frame();
+    h.key(Key::Escape);
+    h.type_text("w");
+    assert_eq!(h.app.tool, Tool::Road);
+    h.click_at(p(-5.0, -10.0));
+    h.click_at(p(45.0, -10.0));
+    h.key(Key::Enter);
+    let road = h.model().roads().next().unwrap();
+    assert!((road.length() - 50.0).abs() < 1e-6);
+    assert_eq!(road.bands().len(), 7);
+    h.frame();
+    // A mass on the plot: its figures use the plot's area; one that
+    // reaches the boundary leaves the setback.
+    h.key(Key::Escape);
+    h.app.pick(Pick::Concept(ConceptPick::Mass));
+    for c in [
+        p(1.0, 1.0),
+        p(21.0, 1.0),
+        p(21.0, 11.0),
+        p(1.0, 11.0),
+        p(1.0, 1.0),
+    ] {
+        h.click_at(c);
+    }
+    let m = h.model().masses().next().unwrap().clone();
+    let f = m.figures(h.model().plot_area());
+    assert!((f.plot_ratio.unwrap() - 0.6).abs() < 1e-9);
+    assert_eq!(
+        h.app.mass_setback(&m.outline()),
+        Some("Se sale del retranqueo")
+    );
+    h.app.ed.selection = [Element::Mass(m.id)].into_iter().collect();
+    h.frame();
+    // Plot and road selected show their properties.
+    h.app.ed.selection = [Element::Road(road_id(&h))].into_iter().collect();
+    h.frame();
+}
+
+fn road_id(h: &Harness) -> archisim_core::RoadId {
+    h.model().roads().next().unwrap().id
+}

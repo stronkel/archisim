@@ -41,6 +41,7 @@ pub enum SolidOwner {
     Footing(archisim_core::FootingId),
     /// A volume of the concept phase.
     Mass(archisim_core::MassId),
+    Road(archisim_core::RoadId),
 }
 
 impl SolidOwner {
@@ -60,6 +61,7 @@ impl SolidOwner {
             SolidOwner::Object(x) => x.0,
             SolidOwner::Footing(x) => x.0,
             SolidOwner::Mass(x) => x.0,
+            SolidOwner::Road(x) => x.0,
         }
     }
 }
@@ -1943,6 +1945,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for m in model.masses() {
         out.extend(mass_solids(model, m.id));
     }
+    for r in model.roads() {
+        out.extend(road_solids(model, r.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -1983,6 +1988,36 @@ pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
     }]
 }
 
+/// The solids of a road: its pavement from the carriageway's top down
+/// its depth, and the kerbs and sidewalks standing their height over it.
+pub fn road_solids(model: &Model, id: archisim_core::RoadId) -> Vec<Solid> {
+    use archisim_core::RoadBand;
+    let Some(r) = model.road(id) else {
+        return Vec::new();
+    };
+    let top = model.level(r.level).map_or(0.0, |l| l.elevation) + r.top_offset;
+    let s = r.section;
+    r.bands()
+        .into_iter()
+        .map(|(band, outline)| {
+            let (material, z0, z1) = match band {
+                RoadBand::Carriageway | RoadBand::Parking => (r.pavement, top - s.depth, top),
+                RoadBand::Kerb => (r.kerb_material, top - s.depth, top + s.kerb_height),
+                RoadBand::Sidewalk => (
+                    r.sidewalk_material,
+                    top + s.kerb_height - 0.2,
+                    top + s.kerb_height,
+                ),
+            };
+            Solid {
+                owner: SolidOwner::Road(id),
+                material,
+                triangles: prism(&outline, z0, z1),
+            }
+        })
+        .collect()
+}
+
 /// Solids of the elements on one level only.
 pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
     let on_level = |owner: SolidOwner| match owner {
@@ -2002,6 +2037,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
         SolidOwner::Footing(f) => model.footing(f).is_some_and(|f| f.level == level),
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
+        SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
     };
     model_solids(model)
         .into_iter()

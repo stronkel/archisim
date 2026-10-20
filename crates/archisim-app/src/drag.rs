@@ -358,7 +358,9 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Footing(_)
             | Element::Grid(_)
             | Element::Module(_)
-            | Element::Mass(_) => {}
+            | Element::Mass(_)
+            | Element::Plot(_)
+            | Element::Road(_) => {}
         }
     }
     v
@@ -908,6 +910,12 @@ pub(crate) fn move_selection(
             Element::Mass(id) => {
                 model.edit_mass(*id, |m| m.map_points(|p| p + d))?;
             }
+            Element::Plot(id) => {
+                model.edit_plot(*id, |x| x.outline.iter_mut().for_each(|p| *p = *p + d))?;
+            }
+            Element::Road(id) => {
+                model.edit_road(*id, |x| x.axis.iter_mut().for_each(|p| *p = *p + d))?;
+            }
             Element::Room(_) | Element::Tag(_) => {
                 // Moved with walls, a room goes whole.
                 let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
@@ -1297,6 +1305,37 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Mass(new));
             }
+            Element::Plot(id) => {
+                let x = model
+                    .plot(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_plot(archisim_core::NewPlot {
+                    name: model.next_plot_name(),
+                    level: x.level,
+                    outline: x.outline.iter().map(|p| *p + d).collect(),
+                    setback: x.setback,
+                    reference: String::new(),
+                })?;
+                copies.insert(Element::Plot(new));
+            }
+            Element::Road(id) => {
+                let x = model
+                    .road(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_road(archisim_core::NewRoad {
+                    name: model.next_road_name(),
+                    level: x.level,
+                    axis: x.axis.iter().map(|p| *p + d).collect(),
+                    section: x.section,
+                    top_offset: x.top_offset,
+                    pavement: x.pavement,
+                    kerb_material: x.kerb_material,
+                    sidewalk_material: x.sidewalk_material,
+                })?;
+                copies.insert(Element::Road(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -1508,6 +1547,8 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Grid(id) => model.grid(id).is_some(),
         Element::Module(id) => model.module(id).is_some(),
         Element::Mass(id) => model.mass(id).is_some(),
+        Element::Plot(id) => model.plot(id).is_some(),
+        Element::Road(id) => model.road(id).is_some(),
     }
 }
 
@@ -1571,6 +1612,8 @@ fn level_of(
             Element::Grid(_) => None,
             Element::Module(id) => model.module(*id).map(|m| m.level),
             Element::Mass(id) => model.mass(*id).map(|m| m.level),
+            Element::Plot(id) => model.plot(*id).map(|p| p.level),
+            Element::Road(id) => model.road(*id).map(|r| r.level),
         }),
     }
 }

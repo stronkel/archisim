@@ -194,7 +194,6 @@ const fn tile(
 }
 
 const SERVICES_LATER: &str = "las herramientas de instalaciones (MEP)";
-const SITE_LATER: &str = "el urbanismo (docs/DISCIPLINAS.md)";
 const TEAM_LATER: &str = "el trabajo en equipo (4.6, carpeta compartida en Google Drive)";
 
 const CONCEPT: &[Tile] = &[
@@ -471,17 +470,17 @@ const SITE: &[Tile] = &[
         "Terreno por puntos de cota: curvas de nivel, sección del terreno y norte",
     ),
     tile(
-        Pick::Later(SITE_LATER),
+        Pick::Tool(Tool::Plot),
         Glyph::Plot,
         "Parcela",
-        "",
+        "Y",
         "Lindes, superficie y retranqueos",
     ),
     tile(
-        Pick::Later(SITE_LATER),
+        Pick::Tool(Tool::Road),
         Glyph::Road,
         "Vial",
-        "",
+        "W",
         "Viales por su eje y una sección tipo: calzada, aparcamiento, bordillo y acera",
     ),
     tile(

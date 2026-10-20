@@ -54,6 +54,7 @@ mod stairs;
 pub mod step;
 pub mod step_read;
 mod terrain;
+mod urban;
 
 pub use import::{differences, import_ifc, ImportError, ImportReport, Imported};
 
@@ -1818,6 +1819,7 @@ impl<'a> Exporter<'a> {
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_footings(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
+        self.write_urban(&materials, site, site_pl);
         self.write_spaces(&storeys);
 
         self.write_user_parameters(project);

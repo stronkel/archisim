@@ -318,6 +318,8 @@ impl ArchiSimApp {
             || self.section_tool.anchor.is_some()
             || self.mass_tool.is_drawing()
             || self.concept.is_drawing()
+            || self.plot_tool.is_drawing()
+            || !self.road_points.is_empty()
             || self.grid_anchor.is_some()
             || self.footing_anchor.is_some()
     }

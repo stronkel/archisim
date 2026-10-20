@@ -388,6 +388,8 @@ impl Editor {
             Element::Grid(id) => model.grid(*id).is_some(),
             Element::Module(id) => model.module(*id).is_some(),
             Element::Mass(id) => model.mass(*id).is_some(),
+            Element::Plot(id) => model.plot(*id).is_some(),
+            Element::Road(id) => model.road(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -614,7 +616,9 @@ impl Editor {
                     | Element::Footing(_)
                     | Element::Grid(_)
                     | Element::Module(_)
-                    | Element::Mass(_)) => remove_element(m, *e)?,
+                    | Element::Mass(_)
+                    | Element::Plot(_)
+                    | Element::Road(_)) => remove_element(m, *e)?,
                     Element::Draft(id) => {
                         m.remove_draft(*id)?;
                     }
@@ -712,7 +716,9 @@ impl Editor {
                         | Element::Footing(_)
                         | Element::Grid(_)
                         | Element::Module(_)
-                        | Element::Mass(_)) => remove_element(m, e)?,
+                        | Element::Mass(_)
+                        | Element::Plot(_)
+                        | Element::Road(_)) => remove_element(m, e)?,
                     },
                     Change::Transform { items, t, copy } => {
                         out.extend(crate::xform::transform(m, &items, &t, copy)?);
@@ -1101,6 +1107,8 @@ impl Editor {
                         | Element::Footing(_)
                         | Element::Module(_)
                         | Element::Mass(_)
+                        | Element::Plot(_)
+                        | Element::Road(_)
                 )
             })
             .collect();
@@ -1124,6 +1132,8 @@ impl Editor {
                     Element::Footing(id) => m.edit_footing(*id, |f| f.level = level)?,
                     Element::Module(id) => m.edit_module(*id, |p| p.level = level)?,
                     Element::Mass(id) => m.edit_mass(*id, |x| x.level = level)?,
+                    Element::Plot(id) => m.edit_plot(*id, |x| x.level = level)?,
+                    Element::Road(id) => m.edit_road(*id, |x| x.level = level)?,
                     _ => {}
                 }
             }
@@ -1334,6 +1344,8 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Grid(id) => m.remove_grid(id).map(drop),
         Element::Module(id) => m.remove_module(id).map(drop),
         Element::Mass(id) => m.remove_mass(id).map(drop),
+        Element::Plot(id) => m.remove_plot(id).map(drop),
+        Element::Road(id) => m.remove_road(id).map(drop),
         _ => Ok(()),
     }
 }

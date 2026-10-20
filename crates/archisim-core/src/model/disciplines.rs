@@ -160,7 +160,10 @@ impl Model {
         {
             return Some(Structure);
         }
-        if self.terrains.contains_key(&TerrainId(id)) {
+        if self.terrains.contains_key(&TerrainId(id))
+            || self.plots.contains_key(&PlotId(id))
+            || self.roads.contains_key(&RoadId(id))
+        {
             return Some(Site);
         }
         if let Some(o) = self.objects.get(&ObjectId(id)) {
