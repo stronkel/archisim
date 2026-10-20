@@ -347,6 +347,15 @@ impl ArchiSimApp {
             {
                 self.library.open = true;
             }
+            if ui
+                .button("Parámetros del proyecto…")
+                .on_hover_text(
+                    "Datos propios de puertas, muros, locales…: resistencia al fuego, acabados, códigos de medición (y compartidos entre proyectos)",
+                )
+                .clicked()
+            {
+                self.params.open = true;
+            }
         });
         self.coord_menu(ui);
         ui.menu_button("Ayuda", |ui| {

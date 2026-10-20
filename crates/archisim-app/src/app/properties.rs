@@ -74,6 +74,9 @@ impl ArchiSimApp {
             [Element::Tag(id)] => self.tag_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
+        if let [e] = selection.as_slice() {
+            self.user_params_group(ui, *e);
+        }
     }
 
     /// The elements of the current level of the same type as `e`.

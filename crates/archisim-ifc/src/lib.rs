@@ -540,6 +540,86 @@ impl<'a> Exporter<'a> {
         self.attach_set(element, guid, qto, qto_name);
     }
 
+    /// The project's parameters (see `archisim_core::UserParameter`): each
+    /// element with its values in the property set of each parameter's
+    /// group (a parameter of the type with its type's value), and their
+    /// definitions on the project (`ArchiSim_Parameters`) so that ArchiSim
+    /// reads them back the same.
+    fn write_user_parameters(&mut self, project: Ref) {
+        let model = self.model;
+        if model.user_parameters().next().is_none() {
+            return;
+        }
+        let defs: Vec<Ref> = model
+            .shared_parameters()
+            .iter()
+            .map(|d| {
+                let text = archisim_core::shared_parameters_text(std::slice::from_ref(d));
+                let line = text.lines().nth(1).unwrap_or_default().to_string();
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE({},$,IFCTEXT({}),$)",
+                    string(&d.def.name),
+                    string(&line)
+                ))
+            })
+            .collect();
+        self.pset(project, &model.project_guid, "ArchiSim_Parameters", &defs);
+        let written = self.w.by_guid();
+        // Every element that has parameters (of its category).
+        let mut ids: Vec<u64> = Vec::new();
+        ids.extend(model.walls().map(|x| x.id.0));
+        ids.extend(model.slabs().map(|x| x.id.0));
+        ids.extend(model.openings().map(|x| x.id.0));
+        ids.extend(model.columns().map(|x| x.id.0));
+        ids.extend(model.beams().map(|x| x.id.0));
+        ids.extend(model.roofs().map(|x| x.id.0));
+        ids.extend(model.stairs().map(|x| x.id.0));
+        ids.extend(model.curtain_walls().map(|x| x.id.0));
+        ids.extend(model.railings().map(|x| x.id.0));
+        ids.extend(model.objects().map(|x| x.id.0));
+        ids.extend(model.rooms().map(|x| x.id.0));
+        for id in ids {
+            let params = model.element_parameters(id);
+            if params.is_empty() {
+                continue;
+            }
+            let Some(guid) = model.element_guid(id) else {
+                continue;
+            };
+            let Some(&element) = written.get(guid.as_str()) else {
+                continue;
+            };
+            let mut groups: BTreeMap<String, Vec<Ref>> = BTreeMap::new();
+            for (p, v) in params {
+                let value = match (&p.kind, &v) {
+                    (archisim_core::UserKind::Bool, archisim_core::Value::Bool(b)) => {
+                        format!("IFCBOOLEAN({})", boolean(*b))
+                    }
+                    (archisim_core::UserKind::Integer, archisim_core::Value::Number(n)) => {
+                        format!("IFCINTEGER({})", *n as i64)
+                    }
+                    (archisim_core::UserKind::Length, archisim_core::Value::Number(n)) => {
+                        format!("IFCLENGTHMEASURE({})", real(*n))
+                    }
+                    (archisim_core::UserKind::Area, archisim_core::Value::Number(n)) => {
+                        format!("IFCAREAMEASURE({})", real(*n))
+                    }
+                    (_, archisim_core::Value::Number(n)) => format!("IFCREAL({})", real(*n)),
+                    (_, archisim_core::Value::Text(t)) => format!("IFCLABEL({})", string(t)),
+                    _ => continue,
+                };
+                let prop = self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE({},$,{value},$)",
+                    string(&p.name)
+                ));
+                groups.entry(p.group.clone()).or_default().push(prop);
+            }
+            for (name, props) in groups {
+                self.pset(element, &guid, &name, &props);
+            }
+        }
+    }
+
     /// A property set from already written `IfcPropertySingleValue`s.
     fn pset(&mut self, element: Ref, guid: &GlobalId, name: &str, props: &[Ref]) {
         let pset = self.w.add(format!(
@@ -627,6 +707,79 @@ impl<'a> Exporter<'a> {
         (set, values_set)
     }
 
+    /// The family's shared parameters (`ifc "Conjunto.Propiedad"` in the
+    /// recipe) among `values`: their properties by property set.
+    fn shared_family_props(
+        &mut self,
+        family: &archisim_core::Family,
+        values: &archisim_core::Values,
+    ) -> BTreeMap<String, Vec<Ref>> {
+        let mut out: BTreeMap<String, Vec<Ref>> = BTreeMap::new();
+        for (name, value) in values {
+            let Some(p) = family.def().param(name) else {
+                continue;
+            };
+            let Some((set, prop)) = p.ifc.clone() else {
+                continue;
+            };
+            let typed = self.typed_value(Some(p.kind.clone()), value);
+            let r = self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE({},$,{typed},$)",
+                string(&prop)
+            ));
+            out.entry(set).or_default().push(r);
+        }
+        out
+    }
+
+    /// The shared parameters of a type, as property sets for its
+    /// `HasPropertySets`.
+    fn shared_type_psets(
+        &mut self,
+        type_guid: &GlobalId,
+        family: &archisim_core::Family,
+        values: &archisim_core::Values,
+    ) -> Vec<Ref> {
+        self.shared_family_props(family, values)
+            .into_iter()
+            .map(|(set, props)| {
+                self.w.add(format!(
+                    "IFCPROPERTYSET({},$,{},$,{})",
+                    string(derived_guid(type_guid, &set).as_str()),
+                    string(&set),
+                    list(&props)
+                ))
+            })
+            .collect()
+    }
+
+    /// A parameter value as an IFC typed value.
+    fn typed_value(
+        &self,
+        kind: Option<archisim_core::ParamKind>,
+        value: &archisim_core::Value,
+    ) -> String {
+        use archisim_core::{ParamKind, Value};
+        match (kind, value) {
+            (Some(ParamKind::Length), Value::Number(x)) => {
+                format!("IFCLENGTHMEASURE({})", real(*x))
+            }
+            (Some(ParamKind::Integer), Value::Number(x)) => {
+                format!("IFCINTEGER({})", x.round() as i64)
+            }
+            (_, Value::Number(x)) => format!("IFCREAL({})", real(*x)),
+            (_, Value::Bool(b)) => format!("IFCBOOLEAN({})", boolean(*b)),
+            (_, Value::Text(t)) => format!("IFCLABEL({})", string(t)),
+            (_, Value::Material(m)) => {
+                let name = self
+                    .model
+                    .material(MaterialId(*m))
+                    .map_or(String::new(), |m| m.name.clone());
+                format!("IFCLABEL({})", string(&name))
+            }
+        }
+    }
+
     /// One `IfcPropertySingleValue` per parameter value, typed by the
     /// parameter's kind: lengths in metres, materials by name.
     fn value_properties(
@@ -708,6 +861,8 @@ impl<'a> Exporter<'a> {
             if let Some(b) = b {
                 props.push(b);
             }
+            let shared = self.shared_type_psets(&t.guid, family, &t.values);
+            props.extend(shared);
         }
         let props = list(&props);
         let description = if t.description.is_empty() {
@@ -989,7 +1144,17 @@ impl<'a> Exporter<'a> {
             )),
         ];
         props.extend(status);
+        // Shared instance parameters of the family: those of its common
+        // set with the rest, the others in their own sets.
+        let mut shared = match (self.model.opening(og.opening), self.model.family(t.family)) {
+            (Some(o), Some(family)) => self.shared_family_props(family, &o.values),
+            _ => BTreeMap::new(),
+        };
+        props.extend(shared.remove(pset_name).unwrap_or_default());
         self.pset(filling, guid, pset_name, &props);
+        for (set, list) in shared {
+            self.pset(filling, guid, &set, &list);
+        }
         // Instance parameters of the family, if it has any.
         if let Some(o) = self.model.opening(og.opening) {
             if !o.values.is_empty() {
@@ -1413,15 +1578,29 @@ impl<'a> Exporter<'a> {
                 .sum();
             let cut = self.void_solids(&voids, &to_local, level_z + base);
             if !cut.is_empty() {
-                kind = "CSG";
-                for (s, band) in solids.iter_mut().zip(zs.windows(2)) {
+                let mut boolean = vec![kind == "Clipping"; solids.len()];
+                for ((s, band), b) in solids.iter_mut().zip(zs.windows(2)).zip(boolean.iter_mut()) {
                     for (v, z0, z1) in &cut {
                         if z1.min(band[1] - base) - z0.max(band[0] - base) > EPSILON {
                             *s = self
                                 .w
                                 .add(format!("IFCBOOLEANRESULT(.DIFFERENCE.,{s},{v})"));
+                            *b = true;
                         }
                     }
+                }
+                if boolean.iter().all(|b| *b) {
+                    kind = "CSG";
+                } else {
+                    // Some bands cut and others not: a CSG representation
+                    // takes only Boolean results, so the cut ones go in
+                    // CSG solids and the whole is a solid model.
+                    for (s, b) in solids.iter_mut().zip(&boolean) {
+                        if *b {
+                            *s = self.w.add(format!("IFCCSGSOLID({s})"));
+                        }
+                    }
+                    kind = "SolidModel";
                 }
             }
             let items = solids
@@ -1622,6 +1801,8 @@ impl<'a> Exporter<'a> {
         self.write_railings(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_spaces(&storeys);
+
+        self.write_user_parameters(project);
 
         for (level, elements) in &contained {
             let (storey, _) = storeys[level];

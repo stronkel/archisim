@@ -139,6 +139,8 @@ impl Exporter<'_> {
                     let (a, b) = self.family_psets(&t.guid, family, &t.values);
                     props.push(a);
                     props.extend(b);
+                    let shared = self.shared_type_psets(&t.guid, family, &t.values);
+                    props.extend(shared);
                 }
                 let element_type = model
                     .family(t.family)

@@ -39,6 +39,10 @@ pub struct ImportReport {
     pub opening_types: usize,
     pub member_types: usize,
     pub materials: usize,
+    /// Parameters of the project written by ArchiSim, and how many values
+    /// of them the elements had.
+    pub parameters: usize,
+    pub parameter_values: usize,
     /// Elements not imported: (what, why) → how many.
     pub skipped: BTreeMap<(String, String), usize>,
     /// Things imported with approximations: message → how many times.
@@ -116,6 +120,13 @@ impl fmt::Display for ImportReport {
             },
             self.materials
         )?;
+        if self.parameters > 0 {
+            writeln!(
+                f,
+                "Parámetros del proyecto: {}, con {} valores.",
+                self.parameters, self.parameter_values
+            )?;
+        }
         if !self.skipped.is_empty() {
             writeln!(f, "\nNo importado:")?;
             for ((what, why), n) in &self.skipped {

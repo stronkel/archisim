@@ -137,6 +137,7 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::DuplicateGuid(g) => format!("el GlobalId {g} está repetido"),
         ModelError::EmptyType => "un tipo necesita al menos una capa".into(),
         ModelError::InUse(what) => format!("está en uso ({what})"),
+        ModelError::InvalidParameter(why) => why.clone(),
         ModelError::CategoryMismatch => {
             "una puerta solo puede cambiarse por otra puerta, y una ventana por otra ventana".into()
         }

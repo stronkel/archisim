@@ -133,6 +133,7 @@ impl<'a> Importer<'a> {
             self.model.set_room(r).map_err(|e| explain(&e))?;
         }
         self.report.rooms += 1;
+        self.sources.push((rid.0, id));
         self.guids
             .rooms
             .push((rid, e.arg(0).as_str().unwrap_or("").to_string()));

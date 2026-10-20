@@ -1213,3 +1213,81 @@ fn georeference_round_trip_and_ifc4() {
     let Imported { model, .. } = import_ifc(&ifc4).unwrap();
     assert_eq!(model.georeference(), m.georeference());
 }
+
+/// Parameters of the project go to IFC in their property sets, with their
+/// definitions on the project, and come back the same: of the element, of
+/// the type, of every kind.
+#[test]
+fn project_parameters_survive_the_round_trip() {
+    use archisim_core::{NewUserParameter, ParamCategory, UserKind, Value};
+    let mut m = model();
+    let fire = m
+        .add_user_parameter(NewUserParameter {
+            name: "Resistencia al fuego".into(),
+            kind: UserKind::Choice(vec!["—".into(), "EI2 30-C5".into(), "EI2 60-C5".into()]),
+            group: "AD5_Datos".into(),
+            categories: vec![ParamCategory::Doors],
+            by_type: true,
+            default: Value::Text("—".into()),
+            description: "DB SI".into(),
+        })
+        .unwrap();
+    let finish = m
+        .add_user_parameter(NewUserParameter {
+            name: "Acabado interior".into(),
+            kind: UserKind::Text,
+            group: "AD5_Acabados".into(),
+            categories: vec![ParamCategory::Walls],
+            by_type: false,
+            default: Value::Text(String::new()),
+            description: String::new(),
+        })
+        .unwrap();
+    let height = m
+        .add_user_parameter(NewUserParameter {
+            name: "Altura libre".into(),
+            kind: UserKind::Length,
+            group: "AD5_Datos".into(),
+            categories: vec![ParamCategory::Walls, ParamCategory::Doors],
+            by_type: false,
+            default: Value::Number(0.0),
+            description: String::new(),
+        })
+        .unwrap();
+    let door = m
+        .openings()
+        .find(|o| m.opening_type(o.opening_type).unwrap().is_door())
+        .unwrap()
+        .clone();
+    m.set_parameter_value(door.opening_type.0, fire, Value::Text("EI2 60-C5".into()))
+        .unwrap();
+    m.set_parameter_value(door.id.0, height, Value::Number(2.05))
+        .unwrap();
+    let wall = m.walls().next().unwrap().id;
+    m.set_parameter_value(
+        wall.0,
+        finish,
+        Value::Text("Pintura plástica \"blanca\"".into()),
+    )
+    .unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("'AD5_Datos'"));
+    assert!(ifc.contains("'ArchiSim_Parameters'"));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+    assert_eq!(report.parameters, 3);
+    // The type's value reaches every door of the type.
+    let d2 = model.openings().find(|o| o.guid == door.guid).unwrap().id;
+    let p = model
+        .user_parameters()
+        .find(|p| p.name == "Resistencia al fuego")
+        .unwrap();
+    assert_eq!(
+        model.element_parameter(d2.0, p.id),
+        Some(Value::Text("EI2 60-C5".into()))
+    );
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        std::fs::write(std::path::Path::new(&dir).join("parametros.ifc"), &ifc).unwrap();
+    }
+}

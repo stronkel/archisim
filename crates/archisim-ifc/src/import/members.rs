@@ -147,6 +147,9 @@ impl<'a> Importer<'a> {
                 "IFCBOOLEANCLIPPINGRESULT" | "IFCBOOLEANRESULT" => {
                     stack.extend(self.deref(item.arg(1)));
                 }
+                "IFCCSGSOLID" => {
+                    stack.extend(self.deref(item.arg(0)));
+                }
                 "IFCMAPPEDITEM" => {
                     let map = self.deref(item.arg(0))?;
                     let rep = self.deref(map.arg(1))?;

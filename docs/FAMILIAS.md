@@ -179,7 +179,7 @@ Después viene la **librería** (2.2): primero completar las cinco familias con 
 ## Pendiente de decidir más adelante
 
 - Editor gráfico de recetas (encima del mismo formato). *En marcha (tanda 5 del 20/10).*
-- Parámetros compartidos entre familias y propiedades de usuario (`ArchiSim_` Psets libres).
+- ~~Parámetros compartidos y propiedades de usuario~~: hechos en v0.34 (abajo).
 - Familias de anotación (etiquetas, fase 3).
 - Importar objetos de otros programas (`IfcFurniture` con malla) como familias fijas, con la importación de segunda vuelta (1.7).
 
@@ -228,3 +228,13 @@ Se guardan y se cargan igual que los tipos de familia (Navegador → clic derech
 - `archisim biblioteca [carpeta]` escribe todos los tipos de la plantilla (o de un proyecto) como ficheros de biblioteca por categoría, para empezar la biblioteca del estudio; `archisim muestrario [carpeta]` deja un muro con todas las puertas y ventanas para verlas en planta, 3D e IFC.
 - Los proyectos con las versiones anteriores de estas familias las ven en **Biblioteca → Familias del proyecto → Actualizar**.
 
+
+## Parámetros del proyecto y compartidos (tanda 3, v0.34)
+
+Los datos propios del estudio que no son de ninguna familia (resistencia al fuego de un muro, acabado de un local, código de la partida…), como los parámetros de proyecto y compartidos de Revit o el gestor de propiedades de ArchiCAD.
+
+- **Vista → Parámetros del proyecto…**: cada parámetro tiene nombre, clase (texto, número, entero, longitud, superficie, sí/no o lista de opciones), **grupo** (es el conjunto de propiedades del IFC: `AD5_Datos`, o uno estándar como `Pset_WallCommon`), las **categorías** a las que se aplica (muros, forjados, puertas, ventanas, pilares, vigas, cubiertas, escaleras, muros cortina, barandillas, objetos, locales), si es **del tipo** o de cada ejemplar, un valor por defecto y una descripción.
+- Se dan en **Propiedades → Parámetros del proyecto** con el elemento seleccionado; los del tipo, en **Tipos y materiales** (y en Propiedades se ven con «(tipo)»: cambiarlos allí cambia el tipo).
+- Salen como **columnas** en las tablas de su categoría, y en el **IFC** en cada elemento, dentro del conjunto de su grupo (los del tipo, con el valor de su tipo). Las definiciones viajan en `ArchiSim_Parameters` del `IfcProject`, así que al reimportar el IFC vuelven los parámetros con sus valores.
+- **Compartidos**: cada parámetro tiene un `GlobalId` fijo. «Guardar como compartidos» los escribe en `Parámetros.asparam` en la carpeta de la biblioteca (texto, una línea por parámetro); «Cargar los compartidos…» los añade a otro proyecto. Dos proyectos con el mismo compartido hablan del mismo dato aunque se renombre.
+- **Parámetros de familia con su sitio en el IFC**: en una receta, `ifc "Pset_DoorCommon.FireRating"` tras un parámetro lo exporta en ese conjunto y propiedad estándar, y sale como columna en la tabla de carpinterías. La puerta abatible lo usa para «Resistencia al fuego».

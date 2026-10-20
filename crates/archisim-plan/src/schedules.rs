@@ -17,7 +17,7 @@ use crate::{num, pt};
 /// A column of a schedule.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
-    pub name: &'static str,
+    pub name: std::borrow::Cow<'static, str>,
     /// Numbers align to the right.
     pub numeric: bool,
 }
@@ -32,7 +32,133 @@ pub struct Table {
 }
 
 const fn col(name: &'static str, numeric: bool) -> Column {
-    Column { name, numeric }
+    Column {
+        name: std::borrow::Cow::Borrowed(name),
+        numeric,
+    }
+}
+
+/// A value of a project parameter as a schedule writes it.
+fn param_text(kind: &archisim_core::UserKind, v: &archisim_core::Value) -> String {
+    use archisim_core::{UserKind, Value};
+    match (kind, v) {
+        (_, Value::Text(t)) => t.clone(),
+        (_, Value::Bool(true)) => "Sí".into(),
+        (_, Value::Bool(false)) => "No".into(),
+        (UserKind::Integer, Value::Number(n)) => format!("{}", *n as i64),
+        (UserKind::Length | UserKind::Area, Value::Number(n)) => dec(*n, 2),
+        (_, Value::Number(n)) => dec(*n, 2),
+        _ => String::new(),
+    }
+}
+
+/// Adds to a schedule of door and window types a column for each shared
+/// parameter of their families (`ifc "…"` in the recipe: the fire rating of
+/// a door…), by its name, with each type's value.
+fn with_shared_family_values(mut t: Table, model: &Model, keys: &[u64]) -> Table {
+    let mut cols: Vec<(String, String)> = Vec::new(); // (IFC property, label)
+    for k in keys {
+        let Some(ot) = model.opening_type(archisim_core::OpeningTypeId(*k)) else {
+            continue;
+        };
+        let Some(f) = model.family(ot.family) else {
+            continue;
+        };
+        for p in &f.def().params {
+            if let Some((_, prop)) = &p.ifc {
+                if !cols.iter().any(|(q, _)| q == prop) {
+                    cols.push((prop.clone(), p.label.clone()));
+                }
+            }
+        }
+    }
+    for (prop, label) in cols {
+        t.columns.push(Column {
+            name: std::borrow::Cow::Owned(label),
+            numeric: false,
+        });
+        for (row, k) in t.rows.iter_mut().zip(keys) {
+            let text = model
+                .opening_type(archisim_core::OpeningTypeId(*k))
+                .and_then(|ot| {
+                    let f = model.family(ot.family)?;
+                    let p = f
+                        .def()
+                        .params
+                        .iter()
+                        .find(|p| p.ifc.as_ref().is_some_and(|(_, q)| *q == prop))?;
+                    ot.values.get(&p.name).map(|v| match v {
+                        archisim_core::Value::Text(t) => t.clone(),
+                        archisim_core::Value::Bool(b) => {
+                            if *b {
+                                "Sí".into()
+                            } else {
+                                "No".into()
+                            }
+                        }
+                        archisim_core::Value::Number(n) => dec(*n, 2),
+                        archisim_core::Value::Material(m) => model
+                            .material(archisim_core::MaterialId(*m))
+                            .map_or(String::new(), |m| m.name.clone()),
+                    })
+                })
+                .unwrap_or_default();
+            row.push(text);
+        }
+        if let Some(tot) = &mut t.totals {
+            tot.push(String::new());
+        }
+    }
+    t
+}
+
+/// Adds to a schedule a column for each project parameter of its
+/// categories (of the type, for schedules by type; of the element, for
+/// those by element), with the value of the type or element of each row.
+fn with_parameters(
+    mut t: Table,
+    model: &Model,
+    keys: &[u64],
+    cats: &[archisim_core::ParamCategory],
+    by_type: bool,
+) -> Table {
+    let params: Vec<&archisim_core::UserParameter> = model
+        .user_parameters()
+        .filter(|p| p.by_type == by_type && p.categories.iter().any(|c| cats.contains(c)))
+        .collect();
+    for p in params {
+        let unit = match p.kind {
+            archisim_core::UserKind::Length => " (m)",
+            archisim_core::UserKind::Area => " (m²)",
+            _ => "",
+        };
+        t.columns.push(Column {
+            name: std::borrow::Cow::Owned(format!("{}{unit}", p.name)),
+            numeric: matches!(
+                p.kind,
+                archisim_core::UserKind::Number
+                    | archisim_core::UserKind::Integer
+                    | archisim_core::UserKind::Length
+                    | archisim_core::UserKind::Area
+            ),
+        });
+        for (row, key) in t.rows.iter_mut().zip(keys) {
+            let v = if by_type {
+                model
+                    .type_parameters(*key)
+                    .into_iter()
+                    .find(|(q, _)| q.id == p.id)
+                    .map(|(_, v)| v)
+            } else {
+                model.element_parameter(*key, p.id)
+            };
+            row.push(v.map(|v| param_text(&p.kind, &v)).unwrap_or_default());
+        }
+        if let Some(tot) = &mut t.totals {
+            tot.push(String::new());
+        }
+    }
+    t
 }
 
 fn dec(v: f64, places: usize) -> String {
@@ -545,6 +671,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
     match kind {
         ScheduleKind::Openings => {
             let mut rows = Vec::new();
+            let mut keys = Vec::new();
             let mut total = 0;
             for t in model.opening_types() {
                 if t.kind == OpeningKind::Void {
@@ -569,6 +696,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     continue;
                 }
                 total += n;
+                keys.push(t.id.0);
                 rows.push(vec![
                     t.mark.clone(),
                     t.name.clone(),
@@ -579,7 +707,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     levels.join(", "),
                 ]);
             }
-            Table {
+            let t = Table {
                 title: format!("CARPINTERÍAS{scope}"),
                 columns: vec![
                     col("Marca", false),
@@ -600,10 +728,22 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     total.to_string(),
                     String::new(),
                 ]),
-            }
+            };
+            let t = with_parameters(
+                t,
+                model,
+                &keys,
+                &[
+                    archisim_core::ParamCategory::Doors,
+                    archisim_core::ParamCategory::Windows,
+                ],
+                true,
+            );
+            with_shared_family_values(t, model, &keys)
         }
         ScheduleKind::Walls => {
             let mut rows = Vec::new();
+            let mut keys = Vec::new();
             let (mut tl, mut ta, mut tv) = (0.0, 0.0, 0.0);
             for t in model.wall_types() {
                 let (mut n, mut l, mut a, mut v) = (0, 0.0, 0.0, 0.0);
@@ -628,6 +768,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                 tl += l;
                 ta += a;
                 tv += v;
+                keys.push(t.id.0);
                 rows.push(vec![
                     t.name.clone(),
                     dec(t.thickness() * 100.0, 1),
@@ -637,7 +778,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     dec(v, 2),
                 ]);
             }
-            Table {
+            let t = Table {
                 title: format!("MUROS{scope}"),
                 columns: vec![
                     col("Tipo", false),
@@ -656,10 +797,18 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     dec(ta, 2),
                     dec(tv, 2),
                 ]),
-            }
+            };
+            with_parameters(
+                t,
+                model,
+                &keys,
+                &[archisim_core::ParamCategory::Walls],
+                true,
+            )
         }
         ScheduleKind::Slabs => {
             let mut rows = Vec::new();
+            let mut keys = Vec::new();
             let (mut ta, mut tv) = (0.0, 0.0);
             for t in model.slab_types() {
                 let (mut n, mut a) = (0, 0.0);
@@ -676,6 +825,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                 let v = a * t.thickness();
                 ta += a;
                 tv += v;
+                keys.push(t.id.0);
                 rows.push(vec![
                     t.name.clone(),
                     dec(t.thickness() * 100.0, 1),
@@ -684,7 +834,7 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     dec(v, 2),
                 ]);
             }
-            Table {
+            let t = Table {
                 title: format!("FORJADOS{scope}"),
                 columns: vec![
                     col("Tipo", false),
@@ -701,7 +851,14 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     dec(ta, 2),
                     dec(tv, 2),
                 ]),
-            }
+            };
+            with_parameters(
+                t,
+                model,
+                &keys,
+                &[archisim_core::ParamCategory::Slabs],
+                true,
+            )
         }
         ScheduleKind::Rooms => {
             let mut rooms: Vec<&archisim_core::Room> =
@@ -750,7 +907,8 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     ]
                 })
                 .collect();
-            Table {
+            let keys: Vec<u64> = rooms.iter().map(|r| r.id.0).collect();
+            let t = Table {
                 title: format!("CUADRO DE SUPERFICIES{scope}"),
                 columns: vec![
                     col("Nº", false),
@@ -785,7 +943,14 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                     String::new(),
                     String::new(),
                 ]),
-            }
+            };
+            with_parameters(
+                t,
+                model,
+                &keys,
+                &[archisim_core::ParamCategory::Rooms],
+                false,
+            )
         }
         ScheduleKind::Structure => {
             let mut rows = Vec::new();
@@ -1029,7 +1194,7 @@ impl Table {
         let pad = 2.0;
         let widths = (0..self.columns.len())
             .map(|i| {
-                let head = text_width(self.columns[i].name, HEAD);
+                let head = text_width(&self.columns[i].name, HEAD);
                 let cells = self
                     .rows
                     .iter()
@@ -1127,7 +1292,7 @@ pub fn draw_table(s: &mut String, t: &Table, at: Point2) {
         }
     };
     for (i, c) in t.columns.iter().enumerate() {
-        cell(&mut texts, i, 1, c.name, HEAD);
+        cell(&mut texts, i, 1, &c.name, HEAD);
     }
     for (r, rowv) in t.rows.iter().chain(t.totals.iter()).enumerate() {
         for (i, v) in rowv.iter().enumerate().take(t.columns.len()) {

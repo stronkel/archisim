@@ -1003,6 +1003,9 @@ impl<'a> Geo<'a> {
                     self.item(e.arg(2), xf, body, depth + 1);
                 }
             }
+            // A CSG solid: its tree (ArchiSim wraps the bands of a wall
+            // that a slab cuts, next to plain ones).
+            "IFCCSGSOLID" => self.item(e.arg(0), xf, body, depth + 1),
             "IFCFACETEDBREP" | "IFCFACETEDBREPWITHVOIDS" => {
                 self.shell(e.arg(0), xf, body);
             }

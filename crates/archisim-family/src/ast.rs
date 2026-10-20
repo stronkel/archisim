@@ -166,6 +166,10 @@ pub struct Param {
     pub section: Option<String>,
     /// Shown in the settings dialog only when this is true.
     pub visible_if: Option<Expr>,
+    /// Where it goes in IFC besides `ArchiSim_FamilyValues` (a shared
+    /// parameter): property set and property, e.g.
+    /// `("Pset_DoorCommon", "FireRating")`.
+    pub ifc: Option<(String, String)>,
     pub line: usize,
 }
 
