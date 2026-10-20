@@ -72,8 +72,6 @@ Tandas 1 y 2 de las cinco pedidas el 20/10 a las 11:31 (pendientes de familias y
 
 ---
 
----
-
 ## 2026-10-20 (mediodía) · Diseño de la interfaz por disciplinas (sin código)
 
 **Hecho**
@@ -94,6 +92,7 @@ Tandas 1 y 2 de las cinco pedidas el 20/10 a las 11:31 (pendientes de familias y
 2. `docs/interfaz/iconos.svg` (se abre con el navegador): ¿algún icono que cambiar?
 3. Las decisiones D17 a D22 del §11.
 
+---
 
 ## 2026-10-20 (tarde) · Librería de AD5, primera vuelta (2.2, v0.32)
 
