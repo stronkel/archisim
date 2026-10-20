@@ -249,17 +249,19 @@ Como el trabajo en equipo de ArchiCAD, con presencia en directo:
 | **I4** | Disciplina Concepto: aristas y caras, empujar, seguir, volumen, masa con edificabilidad, cinta, pintar, convertir a edificio | Sí |
 | **I5** | Módulos: colocar otro `.archisim` varias veces con giro y simetría, actualizar, mediciones por copias, IFC con identificadores por copia | Sí |
 | **I6** | Tamaño de letra grande y misiones de iniciación | No |
-| 4.6 | Trabajo en equipo (§9.2) | Sí |
+| 4.6 | Trabajo en equipo (§9.2): carpeta compartida en Google Drive primero (D20) | Sí |
 
 Las herramientas de Instalaciones (tubería, conducto, rejilla, aparato, iluminación, mecanismo) son un bloque propio de modelado, fuera de este plan de interfaz; mientras no existan, sus fichas se ven apagadas y dicen cuándo llegan.
 
-## 11. Decisiones para Antonio
+## 11. Decisiones de Antonio (20/10/2026)
 
-| # | Decisión | Propuesta |
+| # | Decisión | Decidido |
 |---|---|---|
-| D17 | Orden de los bloques I1–I6 | I1 → I2 → I3, después I5 (masterplans de adosadas y pareadas), I4 e I6 |
-| D18 | Si una tecla de herramienta cambia la disciplina sola | Sí (si no, la columna mostraría herramientas de otra disciplina que la que se usa) |
-| D19 | Atenuación por disciplina activada por defecto | Sí, con interruptor en Preferencias |
-| D20 | Servidor del trabajo en equipo: propio del estudio, en la nube o los dos | Los dos, empezando por el propio |
-| D21 | Reservas por elemento, por zona (planta, ala, fachada) o las dos | Las dos: por zona para el reparto del trabajo, por elemento para cambios puntuales |
-| D22 | Ver el cursor de los compañeros en directo | Opcional, apagado por defecto |
+| D17 | Orden de los bloques | **I1 → I2 → I3 → I5 → I4 → I6** |
+| D18 | Una tecla de herramienta cambia la disciplina sola | **Sí** |
+| D19 | Atenuación por disciplina activada por defecto | **Sí**, con interruptor en Preferencias |
+| D20 | Dónde vive el proyecto compartido | **Los dos, empezando por la nube**: una carpeta compartida de **Google Drive**, que es como trabaja hoy el equipo de AD5; después, un servidor propio |
+| D21 | Reservas | **Por zona y por elemento** |
+| D22 | Cursor de los compañeros en directo | **Opcional, apagado por defecto** |
+
+Consecuencia de D20 para el trabajo en equipo (§9.2): Google Drive sincroniza **ficheros**, no es un servidor que responda al momento. El proyecto compartido será, por tanto, una **carpeta** con el modelo, un fichero de cambios por persona (cada uno escribe solo el suyo, así Drive nunca tiene que mezclar dos versiones del mismo fichero) y los ficheros de reservas. ArchiSim lee los de los demás al recibir y escribe el suyo al publicar. El mismo esquema sirve tal cual en una carpeta de un NAS o un servidor propio, y más adelante se le puede poner un servidor delante para la presencia en directo (cursores, avisos al momento), que con Drive llegará con unos segundos de retraso.
