@@ -5,6 +5,7 @@
 //! is the family language (`archisim-family`), which knows nothing of the
 //! model.
 
+pub mod code;
 pub mod document;
 pub mod drafting;
 pub mod family;
@@ -17,6 +18,7 @@ pub mod rooms;
 pub mod sheets;
 pub mod skeleton;
 
+pub use code::*;
 pub use document::Document;
 pub use drafting::*;
 pub use family::{

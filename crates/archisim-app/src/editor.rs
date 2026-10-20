@@ -882,6 +882,14 @@ impl Editor {
     }
 
     /// The project's data for the title blocks.
+    /// The building's use, accessibility and sprinklers (code checks).
+    pub fn set_code_settings(&mut self, settings: archisim_core::CodeSettings) -> EditResult {
+        self.transact("Uso del edificio (CTE)", |m| {
+            m.set_code_settings(settings);
+            Ok(())
+        })
+    }
+
     pub fn set_info(&mut self, info: archisim_core::ProjectInfo) -> EditResult {
         self.transact("Datos del proyecto", |m| {
             m.set_info(info);

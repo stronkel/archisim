@@ -379,6 +379,11 @@ pub fn difference(a: &[Shape], b: &[Shape]) -> Vec<Shape> {
     shapes(contours(a).overlay(&contours(b), OverlayRule::Difference, FillRule::NonZero))
 }
 
+/// `a` and `b` together.
+pub fn union(a: &[Shape], b: &[Shape]) -> Vec<Shape> {
+    shapes(contours(a).overlay(&contours(b), OverlayRule::Union, FillRule::NonZero))
+}
+
 /// The part of `a` inside `b`.
 pub fn intersection(a: &[Shape], b: &[Shape]) -> Vec<Shape> {
     shapes(contours(a).overlay(&contours(b), OverlayRule::Intersect, FillRule::NonZero))

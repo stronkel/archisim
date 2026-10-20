@@ -131,6 +131,15 @@ impl ArchiSimApp {
                 self.requirements_dialog();
                 ui.close();
             }
+            ui.separator();
+            if ui
+                .button("Comprobación CTE…")
+                .on_hover_text("Evacuación, accesibilidad, escaleras y rampas y superficies según el Código Técnico")
+                .clicked()
+            {
+                self.cte.open = true;
+                ui.close();
+            }
         });
     }
 

@@ -46,6 +46,10 @@ pub struct Room {
     /// Clear height, metres; `None`: up to the level above.
     pub height: Option<f64>,
     pub finishes: Finishes,
+    /// Floor area per occupant for evacuation (CTE DB-SI 3, table 2.1),
+    /// m² per person; `Some(0.0)`: no occupants (plant rooms); `None`:
+    /// the one of its use in the building's use.
+    pub occupancy: Option<f64>,
 }
 
 impl Room {
@@ -230,6 +234,7 @@ impl Model {
                 bounded: spec.bounded,
                 height: None,
                 finishes: Finishes::default(),
+                occupancy: None,
             },
         );
         Ok(id)
@@ -246,6 +251,11 @@ impl Model {
         if let Some(h) = room.height {
             if !h.is_finite() || h <= 0.0 {
                 return Err(ModelError::NonPositive("room height"));
+            }
+        }
+        if let Some(d) = room.occupancy {
+            if !d.is_finite() || d < 0.0 {
+                return Err(ModelError::NotFinite("area per occupant"));
             }
         }
         let outline = Model::normalized_outline(room.outline)?;

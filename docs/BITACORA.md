@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (mediodía) · Comprobación del Código Técnico (4.7, v0.31)
+
+Cuarto bloque de los pedidos el 19/10. La v0.30 (biblioteca de tipos) quedó fusionada en `main` con la integración continua en verde.
+
+**Qué se hizo** (detalle en `docs/CTE.md`)
+- **Datos del edificio** en el proyecto: uso (Residencial Vivienda, Administrativo, Docente…), accesibilidad exigida (ninguna, itinerarios accesibles o vivienda accesible para silla de ruedas) y extinción automática. Cada local puede fijar su **densidad de ocupación** (Propiedades → Ocupación (CTE)). Formato `.archisim` versión 12; los proyectos anteriores se abren como viviendas.
+- **Ocupación** (SI 3, tabla 2.1) desde el uso de cada local.
+- **Evacuación** (SI 3): salidas (puertas al exterior en la planta de acceso, escaleras en las demás), **recorrido más largo** de cada planta andando por dentro de los locales y por sus puertas, con su límite (25/35/50 m, +25 % con rociadores) y el máximo de ocupantes con una salida; **anchura de puertas y pasillos** por las personas que pasan (P/200); hojas de 0,60–1,23 m; puertas abatibles y que **abren hacia la salida** cuando toca. En viviendas, desde la puerta de cada vivienda por las zonas comunes.
+- **Accesibilidad** (SUA 9 y Anejo A): puertas (0,80 y 0,78 m), pasillos (1,20 / 1,10 m) y **círculos de giro** de Ø 1,50 que **descuentan los muebles** colocados, en vestíbulos, aseos accesibles o, en vivienda accesible, estar, dormitorios, cocina, un baño y terrazas (Ø 1,20).
+- **Escaleras y rampas** (SUA 1): la comprobación de cada escalera y la pendiente de los forjados inclinados (12 %, o 10/8/6 % accesibles, tramos de 9 m).
+- **Superficies**: útil por local, uso y planta; construida por planta y del edificio.
+- **Ventana Colaboración → Comprobación CTE…**: los datos del edificio arriba, los resultados por apartado (✖ no cumple, ! aviso, ✔ cumple), «Solo lo que falla», exportar CSV. Un clic en un resultado selecciona el elemento en su planta y, si es un recorrido, lo **dibuja en naranja** hasta la salida.
+- **Orden** `archisim cte proyecto.archisim [informe.csv]`; la demo deja `out/demo-cte.txt` y ahora es «vivienda accesible», para que se vea algo: las P-02 de 80 cm dejan 70 cm libres y no cumplen, y su rampa del 10 % tampoco.
+- Pruebas: oficina de 3 despachos con una salida (recorrido de más de 25 m que no cumple) y con dos (cumple), puertas y pasillo, local sin puerta, sala de más de 50 personas con la puerta en un sentido y en otro, escalera como salida de la planta alta, cama en un dormitorio que quita el círculo de giro, ventana en la app.
+
+**Pendiente**
+- Lo que lista `docs/CTE.md` al final (escaleras protegidas y sectores, anchura de escaleras por ocupación, recorridos alternativos, barandillas por altura de caída, habitabilidad autonómica).
+- Llevar la ocupación al IFC (`Pset_SpaceOccupancyRequirements`).
+- Siguiente bloque: librería de AD5 (2.2). D4 (nombre) sigue pendiente de Antonio.
+
+**Qué debe probar Antonio**
+1. Abre la demo y **Colaboración → Comprobación CTE…**. Con «vivienda accesible» deben salir en rojo las puertas P-02 (0,70 m libres) y la rampa del 10 %; en verde los giros de dormitorios, cocina y estar.
+2. Cambia el **uso** a «Administrativo»: aparece el recorrido de evacuación más largo; púlsalo y mira en la planta el recorrido naranja hasta la salida. ¿Te parece que mide lo que mediría un técnico?
+3. Pon una **cama** (herramienta Objeto) en medio de un dormitorio con «vivienda accesible»: su círculo de giro debe pasar a no cumplir.
+4. Selecciona un local y en **Propiedades → Ocupación (CTE)** escribe otra densidad (p. ej. 2): cambia la ocupación de la planta en la ventana.
+5. Desde la terminal: `cargo run -p archisim-cli -- cte out/demo.archisim out/cte.csv` y abre el CSV en Excel.
+6. Dime qué reglas faltan o qué interpretación no compartes (por ejemplo, qué usos de local debería reconocer o cómo medir la anchura libre de las puertas).
+
+---
+
 ## 2026-10-20 (mañana) · Bloque E de familias: biblioteca de tipos (v0.30)
 
 Tercer bloque de los pedidos el 19/10. La v0.29 (IFC 4.3) quedó fusionada en `main` con la integración continua en verde.

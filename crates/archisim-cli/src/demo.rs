@@ -684,6 +684,13 @@ pub fn build() -> Result<Document, ModelError> {
             northings: 4_474_270.0,
             height: 650.0,
         }))?;
+        // A dwelling for wheelchair users: the code check says what of
+        // the house does not meet it.
+        m.set_code_settings(archisim_core::CodeSettings {
+            building_use: archisim_core::BuildingUse::Dwelling,
+            accessibility: archisim_core::Accessibility::WheelchairDwelling,
+            sprinklers: false,
+        });
         let sheet = m.add_sheet(NewSheet {
             number: "A-01".into(),
             name: "Planta baja".into(),

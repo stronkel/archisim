@@ -3333,3 +3333,59 @@ fn library_window_loads_types() {
     assert_eq!(b.model().opening_types().count(), before + 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The code check window: the building's use is set there (one undoable
+/// step), and a clic on a result selects its element in its plan.
+#[test]
+fn cte_window_checks_the_model() {
+    use archisim_cte::{Status, Subject};
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let room = h
+        .app
+        .ed
+        .transact("r", |m| {
+            m.add_room(archisim_core::NewRoom {
+                level,
+                number: "1".into(),
+                name: "Oficina".into(),
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(6.0, 0.0),
+                    Point2::new(6.0, 4.0),
+                    Point2::new(0.0, 4.0),
+                ],
+                holes: Vec::new(),
+                label: Point2::new(3.0, 2.0),
+                bounded: false,
+            })
+        })
+        .unwrap();
+    h.app
+        .ed
+        .set_code_settings(archisim_core::CodeSettings {
+            building_use: archisim_core::BuildingUse::Administrative,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(h.app.ed.undo_label(), Some("Uso del edificio (CTE)"));
+    h.app.cte.open = true;
+    h.frame();
+    // A room with no door: it cannot be left.
+    let report = h.app.cte.current(&h.app.ed);
+    let fail = report
+        .items
+        .iter()
+        .find(|i| i.status == Status::Fails && i.subject == Subject::Room(room))
+        .expect("no way out")
+        .clone();
+    h.app.cte_pick(&fail);
+    assert!(h.app.ed.selection.contains(&Element::Room(room)));
+    h.frame();
+    // Its occupancy, fixed in its properties.
+    let mut r = h.model().room(room).unwrap().clone();
+    r.occupancy = Some(0.0);
+    h.app.ed.set_room(r, "o").unwrap();
+    let report = h.app.cte.current(&h.app.ed);
+    assert_eq!(report.levels[0].people, 0);
+}

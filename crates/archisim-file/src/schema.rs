@@ -861,6 +861,23 @@ pub(crate) struct Project {
     /// Where the project is on the map (version 11).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub georeference: Option<Georeference>,
+    /// Use, accessibility and sprinklers for the code checks (version
+    /// 12); absent: a dwelling, without either.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<Code>,
+}
+
+/// The building's settings for the code checks (version 12).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Code {
+    /// `dwelling`, `public_residential`, `administrative`, `teaching`,
+    /// `hospital`, `commercial`, `assembly` or `parking`.
+    pub building_use: String,
+    /// `none`, `routes` or `wheelchair_dwelling`.
+    pub accessibility: String,
+    #[serde(default)]
+    pub sprinklers: bool,
 }
 
 /// Map coordinates of the ±0,00 (version 11).
@@ -1144,6 +1161,11 @@ impl ProjectFile {
                     eastings: g.eastings,
                     northings: g.northings,
                     height: g.height,
+                }),
+                code: (p.code != core::CodeSettings::default()).then(|| Code {
+                    building_use: p.code.building_use.code().into(),
+                    accessibility: p.code.accessibility.code().into(),
+                    sprinklers: p.code.sprinklers,
                 }),
             },
             levels: p
@@ -1674,6 +1696,24 @@ impl ProjectFile {
                 northings: g.northings,
                 height: g.height,
             }),
+            code: match &project.code {
+                None => core::CodeSettings::default(),
+                Some(c) => core::CodeSettings {
+                    building_use: core::BuildingUse::from_code(&c.building_use).ok_or_else(
+                        || FileError::Value {
+                            element: "project".into(),
+                            message: format!("unknown building use «{}»", c.building_use),
+                        },
+                    )?,
+                    accessibility: core::Accessibility::from_code(&c.accessibility).ok_or_else(
+                        || FileError::Value {
+                            element: "project".into(),
+                            message: format!("unknown accessibility «{}»", c.accessibility),
+                        },
+                    )?,
+                    sprinklers: c.sprinklers,
+                },
+            },
             wall_roofs: self
                 .wall_roofs
                 .iter()

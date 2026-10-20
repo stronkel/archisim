@@ -1,0 +1,16 @@
+[package]
+name = "archisim-cte"
+description = "Checks of the Spanish building code (CTE): occupancy and evacuation (DB-SI 3), accessibility (DB-SUA), stairs and ramps, and floor areas"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true
+
+[dev-dependencies]
+archisim-library.workspace = true

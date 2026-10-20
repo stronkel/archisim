@@ -1138,6 +1138,8 @@ pub struct ModelParts {
     pub room_usages: Vec<String>,
     /// Where the project is on the map.
     pub georeference: Option<crate::georef::Georeference>,
+    /// Use, accessibility and sprinklers, for the code checks.
+    pub code: crate::code::CodeSettings,
     /// Drawing layers, layer "0" included.
     pub draw_layers: Vec<DrawLayer>,
     pub drafts: Vec<Draft>,
@@ -1213,6 +1215,7 @@ pub struct Model {
     true_north: f64,
     pub(crate) room_usages: Vec<String>,
     pub(crate) georeference: Option<crate::georef::Georeference>,
+    pub(crate) code: crate::code::CodeSettings,
     /// The phase new elements are given (the survey is drawn as
     /// existing). Not saved.
     pub draw_phase: Phase,
@@ -1263,6 +1266,7 @@ impl Model {
             true_north: 0.0,
             room_usages: Vec::new(),
             georeference: None,
+            code: Default::default(),
             draw_phase: Phase::New,
             draw_layers: BTreeMap::from([(LAYER_ZERO, DrawLayer::zero())]),
             drafts: BTreeMap::new(),
@@ -3442,6 +3446,7 @@ impl Model {
             true_north: self.true_north,
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
+            code: self.code,
             draw_layers: self.draw_layers.values().cloned().collect(),
             drafts: self.drafts.values().cloned().collect(),
             graphics: self.graphics,
@@ -3747,6 +3752,7 @@ impl Model {
                 element: "georeference".into(),
                 error,
             })?;
+        model.set_code_settings(parts.code);
         model.restore_phases(parts.phases)?;
 
         model.next_id = ids.iter().max().map_or(1, |m| m + 1);

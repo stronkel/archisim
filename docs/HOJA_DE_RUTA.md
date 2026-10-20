@@ -101,7 +101,7 @@ Hecha en v0.25 (bloques 3A a 3I de `docs/DOCUMENTACION.md`), a falta de que Anto
 | 4.4 ◐ v0.26 | **IDS**: comprobar el modelo contra los requisitos de información del cliente (hecho, 334 casos de buildingSMART); **bSDD** para clasificaciones (falta) | M | — |
 | 4.5 | **Complemento puente para Revit** (C#, API oficial de Revit): llevar tipos y elementos nativos en ambos sentidos | L | — |
 | 4.6 | **Trabajo en equipo**: modelo central, reservas de elementos o zonas, historial | L | — |
-| 4.7 | **Comprobaciones normativas** del CTE: evacuación (DB-SI), accesibilidad (DB-SUA), superficies útiles | L | 2.9 |
+| 4.7 ◐ v0.31 | **Comprobaciones normativas** del CTE: evacuación (DB-SI), accesibilidad (DB-SUA), superficies útiles — hechas ocupación, salidas, recorridos, anchuras y sentido de apertura de puertas y pasillos (SI 3), itinerarios accesibles y vivienda accesible con círculos de giro que descuentan el mobiliario (SUA 9), escaleras y rampas (SUA 1) y superficies útil y construida (`docs/CTE.md`). Falta: escaleras protegidas y sectores (SI 1), anchura de escaleras por ocupación, recorridos alternativos, barandillas por altura de caída, habitabilidad autonómica | L | 2.9 |
 
 Hecho en v0.26 (rama `bloque/colaboracion`): 4.1, 4.3 y la mayor parte de 4.2 y 4.4, con las órdenes `comprobar-ids`, `comparar`, `interferencias`, `bcf` y `demo-coordinacion`. Decisiones nuevas D13 a D16 en `docs/COLABORACION.md`. 4.7 espera a los locales (2.9) en `main`.
 

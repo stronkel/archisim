@@ -106,6 +106,40 @@ impl ArchiSimApp {
                 },
             );
         });
+        let d = {
+            let model = self.ed.model();
+            archisim_cte::occupancy::density(model, model.code_settings().building_use, &r)
+        };
+        group(ui, "room-occupancy", "Ocupación (CTE)", |ui| {
+            let current = r
+                .occupancy
+                .map(|v| format!("{v}").replace('.', ","))
+                .unwrap_or_default();
+            row(
+                ui,
+                "m² por persona",
+                "Densidad de ocupación (DB-SI 3, tabla 2.1). Vacío: la de su uso en el uso del edificio; 0: ocupación nula",
+                |ui, w| {
+                    if let Some(t) = text_edit_committed(
+                        ui,
+                        Id::unique(("room-occupancy", id)),
+                        &current,
+                        w - 8.0,
+                    ) {
+                        let t = t.trim().replace(',', ".");
+                        if t.is_empty() {
+                            new.occupancy = None;
+                        } else if let Ok(v) = t.parse::<f64>() {
+                            if v.is_finite() && v >= 0.0 {
+                                new.occupancy = Some(v);
+                            }
+                        }
+                    }
+                },
+            );
+            let people = archisim_cte::occupancy::occupants(r.area(), &d);
+            text_row(ui, "Ocupantes", &d.source, &format!("{people}"));
+        });
         group(ui, "room-finishes", "Acabados", |ui| {
             for (name, which) in [("Suelo", 0), ("Paredes", 1), ("Techo", 2)] {
                 let current = match which {
