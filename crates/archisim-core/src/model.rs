@@ -18,6 +18,7 @@ mod curtain;
 mod layered_library;
 mod library;
 mod objects;
+mod parameters;
 mod phases;
 mod railings;
 mod roofs;
@@ -29,6 +30,7 @@ pub use curtain::*;
 pub use layered_library::*;
 pub use library::*;
 pub use objects::*;
+pub use parameters::*;
 pub use phases::*;
 pub use railings::*;
 pub use roofs::*;
@@ -812,6 +814,8 @@ pub enum ModelError {
     EmptyName,
     /// The element is still used by others and cannot be removed.
     InUse(String),
+    /// A project parameter or its value is not valid (why, in Spanish).
+    InvalidParameter(String),
     /// A door cannot become a window, or the other way round.
     CategoryMismatch,
     UnknownDimension(DimensionId),
@@ -945,6 +949,7 @@ impl fmt::Display for ModelError {
             ModelError::EmptyType => write!(f, "a type needs at least one layer"),
             ModelError::EmptyName => write!(f, "a name cannot be empty"),
             ModelError::InUse(what) => write!(f, "still in use: {what}"),
+            ModelError::InvalidParameter(why) => f.write_str(why),
             ModelError::CategoryMismatch => {
                 write!(
                     f,
@@ -1148,6 +1153,10 @@ pub struct ModelParts {
     pub beams: Vec<Beam>,
     /// Elements that are not new: (id, phase).
     pub phases: Vec<(u64, Phase)>,
+    /// Parameters of the project and the values given to elements and
+    /// types (by id).
+    pub user_parameters: Vec<UserParameter>,
+    pub parameter_values: Vec<(u64, UserParameterId, Value)>,
     pub sections: Vec<SectionLine>,
     pub roofs: Vec<Roof>,
     /// Walls trimmed under a roof: (wall, roof).
@@ -1227,6 +1236,8 @@ pub struct Model {
     beams: BTreeMap<BeamId, Beam>,
     /// Phases of the elements that are not new, by id.
     phases: BTreeMap<u64, Phase>,
+    user_params: BTreeMap<UserParameterId, UserParameter>,
+    param_values: BTreeMap<u64, BTreeMap<UserParameterId, Value>>,
     sections: BTreeMap<SectionId, SectionLine>,
     roofs: BTreeMap<RoofId, Roof>,
     /// Walls trimmed under a roof (ArchiCAD's "Recortar con cubierta",
@@ -1281,6 +1292,8 @@ impl Model {
             columns: BTreeMap::new(),
             beams: BTreeMap::new(),
             phases: BTreeMap::new(),
+            user_params: BTreeMap::new(),
+            param_values: BTreeMap::new(),
             sections: BTreeMap::new(),
             roofs: BTreeMap::new(),
             wall_roofs: BTreeMap::new(),
@@ -3657,6 +3670,8 @@ impl Model {
             columns: self.columns.values().cloned().collect(),
             beams: self.beams.values().cloned().collect(),
             phases: self.phase_table(),
+            user_parameters: self.user_params.values().cloned().collect(),
+            parameter_values: self.parameter_values(),
             sections: self.sections.values().cloned().collect(),
             roofs: self.roofs.values().cloned().collect(),
             wall_roofs: self.wall_roofs.iter().map(|(w, r)| (*w, *r)).collect(),
@@ -3986,8 +4001,11 @@ impl Model {
             })?;
         model.set_code_settings(parts.code);
         model.restore_phases(parts.phases)?;
+        model.restore_parameters(parts.user_parameters, parts.parameter_values)?;
 
-        model.next_id = ids.iter().max().map_or(1, |m| m + 1);
+        // Parameters take ids from the same counter as the elements.
+        let params = model.user_params.keys().map(|p| p.0);
+        model.next_id = ids.iter().copied().chain(params).max().map_or(1, |m| m + 1);
         Ok(model)
     }
 }

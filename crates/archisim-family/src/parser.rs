@@ -469,6 +469,7 @@ fn params(
             range: None,
             section: section.map(str::to_string),
             visible_if: None,
+            ifc: None,
             line: line.no,
         };
         while !c.at_end() {
@@ -484,6 +485,21 @@ fn params(
                 }
                 "label" => param.label = c.string()?,
                 "visible_if" => param.visible_if = Some(c.expr()?),
+                // `ifc "Pset_DoorCommon.FireRating"`: a shared parameter.
+                "ifc" => {
+                    let text = c.string()?;
+                    match text.split_once('.') {
+                        Some((set, prop)) if !set.is_empty() && !prop.is_empty() => {
+                            param.ifc = Some((set.to_string(), prop.to_string()));
+                        }
+                        _ => {
+                            return Err(syntax(
+                                line.no,
+                                "write it as ifc \"Conjunto.Propiedad\", e.g. ifc \"Pset_DoorCommon.FireRating\"",
+                            ))
+                        }
+                    }
+                }
                 other => {
                     return Err(syntax(
                         line.no,

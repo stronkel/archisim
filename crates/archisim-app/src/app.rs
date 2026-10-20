@@ -267,6 +267,7 @@ pub struct ArchiSimApp {
     pub curtain_types: curtain_types_ui::CurtainTypesWindow,
     /// The library window.
     pub library: library_ui::LibraryWindow,
+    pub params: params_ui::ParamsWindow,
     /// The code check window.
     pub cte: cte_ui::CteWindow,
     /// A topographic survey being imported (its window is open).
@@ -450,6 +451,7 @@ impl ArchiSimApp {
             show_priorities: false,
             curtain_types: Default::default(),
             library: Default::default(),
+            params: Default::default(),
             cte: Default::default(),
             survey_import: None,
             object_library: None,
@@ -1543,6 +1545,7 @@ impl ArchiSimApp {
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
+        self.params_dialog(ctx);
         self.cte_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
@@ -1793,6 +1796,7 @@ mod library_ui;
 mod navigator;
 mod object_gallery;
 mod object_ui;
+mod params_ui;
 mod phases_ui;
 mod plan_ui;
 mod priorities_ui;

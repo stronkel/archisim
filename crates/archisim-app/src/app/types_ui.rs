@@ -831,6 +831,9 @@ impl ArchiSimApp {
                         self.opening_type_editor(ui, OpeningTypeId(id), actions)
                     }
                 }
+                if tab != TypesTab::Materials {
+                    self.type_params_group(ui, id);
+                }
             });
     }
 

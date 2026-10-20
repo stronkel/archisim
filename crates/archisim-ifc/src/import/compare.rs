@@ -626,6 +626,49 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             ));
         }
     }
+    // Parameters of the project, by name, and their values by element.
+    let defs = |m: &Model| -> Vec<String> {
+        let mut v: Vec<String> = m
+            .shared_parameters()
+            .iter()
+            .map(|d| archisim_core::shared_parameters_text(std::slice::from_ref(d)))
+            .collect();
+        v.sort();
+        v
+    };
+    if defs(a) != defs(b) {
+        diff(format!(
+            "parámetros del proyecto: {:?} / {:?}",
+            defs(a),
+            defs(b)
+        ));
+    }
+    let values = |m: &Model| -> Vec<String> {
+        let mut v: Vec<String> = m
+            .walls()
+            .map(|x| x.id.0)
+            .chain(m.openings().map(|x| x.id.0))
+            .chain(m.slabs().map(|x| x.id.0))
+            .chain(m.rooms().map(|x| x.id.0))
+            .chain(m.objects().map(|x| x.id.0))
+            .flat_map(|id| {
+                let g = m
+                    .element_guid(id)
+                    .map(|g| g.to_string())
+                    .unwrap_or_default();
+                m.element_parameters(id)
+                    .into_iter()
+                    .map(move |(p, v)| format!("{g} {} = {v:?}", p.name))
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    let (va, vb) = (values(a), values(b));
+    if va != vb {
+        let only: Vec<&String> = va.iter().filter(|x| !vb.contains(x)).take(5).collect();
+        diff(format!("valores de parámetros distintos, p. ej. {only:?}"));
+    }
     out
 }
 

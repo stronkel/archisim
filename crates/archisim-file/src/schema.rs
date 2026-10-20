@@ -50,6 +50,12 @@ pub(crate) struct ProjectFile {
     /// Phases of the elements that are not new (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub phases: Vec<PhaseOf>,
+    /// Parameters of the project (version 13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub user_parameters: Vec<UserParameter>,
+    /// Values given to elements and types (version 13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parameter_values: Vec<ParameterValue>,
     /// Section and elevation lines (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sections: Vec<Section>,
@@ -500,6 +506,56 @@ pub(crate) enum Phase {
     New,
     Existing,
     Demolished,
+}
+
+/// A parameter of the project (version 13).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UserParameter {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    /// `text`, `number`, `integer`, `length`, `area`, `bool` or `choice`.
+    pub kind: String,
+    /// The options of a `choice`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
+    /// Its IFC property set.
+    pub group: String,
+    pub categories: Vec<String>,
+    pub by_type: bool,
+    /// Text, number or true/false.
+    pub default: serde_json::Value,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+}
+
+/// A value of a parameter given to an element or a type (version 13).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ParameterValue {
+    /// The element or type, by id.
+    pub element: u64,
+    pub parameter: u64,
+    pub value: serde_json::Value,
+}
+
+fn user_value_out(v: &core::Value) -> serde_json::Value {
+    match v {
+        core::Value::Text(t) => serde_json::Value::from(t.as_str()),
+        core::Value::Bool(b) => serde_json::Value::from(*b),
+        core::Value::Number(n) => serde_json::Value::from(*n),
+        core::Value::Material(m) => serde_json::Value::from(*m),
+    }
+}
+
+fn user_value_in(v: &serde_json::Value) -> Option<core::Value> {
+    Some(match v {
+        serde_json::Value::String(t) => core::Value::Text(t.clone()),
+        serde_json::Value::Bool(b) => core::Value::Bool(*b),
+        serde_json::Value::Number(n) => core::Value::Number(n.as_f64()?),
+        _ => return None,
+    })
 }
 
 /// The phase of one element, by its id (version 7).
@@ -1384,6 +1440,34 @@ impl ProjectFile {
                     top_offset: b.top_offset,
                 })
                 .collect(),
+            user_parameters: p
+                .user_parameters
+                .iter()
+                .map(|u| UserParameter {
+                    id: u.id.0,
+                    guid: u.guid.to_string(),
+                    name: u.name.clone(),
+                    kind: u.kind.code().to_string(),
+                    options: match &u.kind {
+                        core::UserKind::Choice(o) => o.clone(),
+                        _ => Vec::new(),
+                    },
+                    group: u.group.clone(),
+                    categories: u.categories.iter().map(|c| c.code().to_string()).collect(),
+                    by_type: u.by_type,
+                    default: user_value_out(&u.default),
+                    description: u.description.clone(),
+                })
+                .collect(),
+            parameter_values: p
+                .parameter_values
+                .iter()
+                .map(|(element, param, v)| ParameterValue {
+                    element: *element,
+                    parameter: param.0,
+                    value: user_value_out(v),
+                })
+                .collect(),
             phases: p
                 .phases
                 .into_iter()
@@ -1577,6 +1661,62 @@ impl ProjectFile {
             member_types: Vec::new(),
             columns: Vec::new(),
             beams: Vec::new(),
+            user_parameters: self
+                .user_parameters
+                .iter()
+                .map(|u| {
+                    let bad = |message: String| FileError::Value {
+                        element: format!("parameter {} «{}»", u.id, u.name),
+                        message,
+                    };
+                    let kind = match u.kind.as_str() {
+                        "text" => core::UserKind::Text,
+                        "number" => core::UserKind::Number,
+                        "integer" => core::UserKind::Integer,
+                        "length" => core::UserKind::Length,
+                        "area" => core::UserKind::Area,
+                        "bool" => core::UserKind::Bool,
+                        "choice" => core::UserKind::Choice(u.options.clone()),
+                        other => return Err(bad(format!("unknown kind «{other}»"))),
+                    };
+                    let categories = u
+                        .categories
+                        .iter()
+                        .map(|c| {
+                            core::ParamCategory::from_code(c)
+                                .ok_or_else(|| bad(format!("unknown category «{c}»")))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(core::UserParameter {
+                        id: core::UserParameterId(u.id),
+                        guid: guid(&format!("parameter {}", u.id), &u.guid)?,
+                        name: u.name.clone(),
+                        kind,
+                        group: u.group.clone(),
+                        categories,
+                        by_type: u.by_type,
+                        default: user_value_in(&u.default).ok_or_else(|| {
+                            bad("its default is not a text, number or yes/no".into())
+                        })?,
+                        description: u.description.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
+            parameter_values: self
+                .parameter_values
+                .iter()
+                .map(|v| {
+                    user_value_in(&v.value)
+                        .map(|x| (v.element, core::UserParameterId(v.parameter), x))
+                        .ok_or_else(|| FileError::Value {
+                            element: format!(
+                                "value of parameter {} of element {}",
+                                v.parameter, v.element
+                            ),
+                            message: "not a text, number or yes/no".into(),
+                        })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
             phases: self
                 .phases
                 .iter()

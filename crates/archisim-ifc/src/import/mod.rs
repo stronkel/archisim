@@ -707,6 +707,96 @@ impl<'a> Importer<'a> {
         None
     }
 
+    /// The project's parameters as ArchiSim writes them (their
+    /// definitions in `ArchiSim_Parameters` on the project) and the values
+    /// of every imported element: a parameter of the type goes to its type,
+    /// from the first of its elements.
+    fn read_parameters(&mut self) {
+        let Some(&project) = self.file.of_kind("IFCPROJECT").first() else {
+            return;
+        };
+        let mut lines = String::new();
+        for s in self.ix.psets.get(&project).cloned().unwrap_or_default() {
+            let Some(set) = self.ent(s) else { continue };
+            if set.kind != "IFCPROPERTYSET" || set.arg(2).as_str() != Some("ArchiSim_Parameters") {
+                continue;
+            }
+            for p in set.arg(4).as_list() {
+                let Some(p) = self.deref(p) else { continue };
+                if let Some(line) = p.arg(2).as_str() {
+                    lines.push_str(line);
+                    lines.push('\n');
+                }
+            }
+        }
+        if lines.is_empty() {
+            return;
+        }
+        let defs = match archisim_core::parse_shared_parameters(&lines) {
+            Ok(d) => d,
+            Err(e) => {
+                self.report.warn(format!(
+                    "Parámetros del proyecto que no se pueden leer: {e}."
+                ));
+                return;
+            }
+        };
+        let n = self.model.load_shared_parameters(&defs);
+        let params: Vec<archisim_core::UserParameter> =
+            self.model.user_parameters().cloned().collect();
+        let mut values = 0;
+        for (id, ifc) in self.sources.clone() {
+            let Some(cat) = self.model.param_target_category(id, false) else {
+                continue;
+            };
+            for p in params.iter().filter(|p| p.categories.contains(&cat)) {
+                let Some(raw) = self.property_own(ifc, &p.group, &p.name) else {
+                    continue;
+                };
+                let v = match &p.kind {
+                    archisim_core::UserKind::Bool => raw.as_bool().map(archisim_core::Value::Bool),
+                    archisim_core::UserKind::Text | archisim_core::UserKind::Choice(_) => raw
+                        .as_str()
+                        .map(|t| archisim_core::Value::Text(t.to_string())),
+                    archisim_core::UserKind::Length => raw
+                        .as_f64()
+                        .map(|x| archisim_core::Value::Number(snap(x * self.geo.length))),
+                    archisim_core::UserKind::Area => raw.as_f64().map(|x| {
+                        archisim_core::Value::Number(snap(x * self.geo.length * self.geo.length))
+                    }),
+                    _ => raw.as_f64().map(archisim_core::Value::Number),
+                };
+                let Some(v) = v else { continue };
+                if v == p.default {
+                    continue;
+                }
+                let target = if p.by_type {
+                    match self.model.type_of_element(id) {
+                        Some(t) => {
+                            let already = self
+                                .model
+                                .type_parameters(t)
+                                .iter()
+                                .any(|(q, x)| q.id == p.id && *x != q.default);
+                            if already {
+                                continue;
+                            }
+                            t
+                        }
+                        None => continue,
+                    }
+                } else {
+                    id
+                };
+                if self.model.set_parameter_value(target, p.id, v).is_ok() {
+                    values += 1;
+                }
+            }
+        }
+        self.report.parameters = n;
+        self.report.parameter_values = values;
+    }
+
     /// Gives every imported element the phase its file says.
     fn read_statuses(&mut self) {
         let mut found = 0;
@@ -2664,6 +2754,7 @@ impl<'a> Importer<'a> {
         self.import_curtain_walls();
         self.import_railings();
         self.import_objects();
+        self.read_parameters();
         self.read_statuses();
         self.count_unsupported();
     }

@@ -747,6 +747,41 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // The studio's own data: a finish for each room and a measurement code
+    // for each wall type (in Propiedades, the schedules and the IFC).
+    doc.transact("Parámetros del proyecto", |m| {
+        use archisim_core::{NewUserParameter, ParamCategory, UserKind, Value};
+        let finish = m.add_user_parameter(NewUserParameter {
+            name: "Acabado de suelo".into(),
+            kind: UserKind::Choice(vec!["Gres".into(), "Tarima".into(), "Microcemento".into()]),
+            group: "AD5_Acabados".into(),
+            categories: vec![ParamCategory::Rooms],
+            by_type: false,
+            default: Value::Text("Gres".into()),
+            description: "Pavimento del local".into(),
+        })?;
+        let code = m.add_user_parameter(NewUserParameter {
+            name: "Código de medición".into(),
+            kind: UserKind::Text,
+            group: "AD5_Mediciones".into(),
+            categories: vec![ParamCategory::Walls],
+            by_type: true,
+            default: Value::Text(String::new()),
+            description: "Partida del presupuesto".into(),
+        })?;
+        let rooms: Vec<(u64, String)> = m.rooms().map(|r| (r.id.0, r.name.clone())).collect();
+        for (id, name) in rooms {
+            if name.contains("Dormitorio") || name.contains("Estar") {
+                m.set_parameter_value(id, finish, Value::Text("Tarima".into()))?;
+            }
+        }
+        let types: Vec<(u64, String)> = m.wall_types().map(|t| (t.id.0, t.name.clone())).collect();
+        for (i, (id, _)) in types.iter().enumerate() {
+            m.set_parameter_value(*id, code, Value::Text(format!("FAB0{}", i + 1)))?;
+        }
+        Ok(())
+    })?;
+
     Ok(doc)
 }
 
@@ -772,7 +807,8 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
-        assert_eq!(doc.undo_label(), Some("Plano"));
+        assert_eq!(doc.undo_label(), Some("Parámetros del proyecto"));
+        assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 2);
         assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 2);

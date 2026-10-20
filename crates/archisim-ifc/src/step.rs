@@ -34,6 +34,20 @@ impl StepWriter {
         self.lines.is_empty()
     }
 
+    /// Every entity whose first attribute is a `GlobalId` (22 characters
+    /// in quotes), by it: where an element of the model was written.
+    pub fn by_guid(&self) -> std::collections::HashMap<String, Ref> {
+        let mut out = std::collections::HashMap::new();
+        for (i, l) in self.lines.iter().enumerate() {
+            let Some(open) = l.find("('") else { continue };
+            let rest = &l[open + 2..];
+            if rest.len() > 23 && rest.as_bytes()[22] == b'\'' {
+                out.entry(rest[..22].to_string()).or_insert(Ref(i + 1));
+            }
+        }
+        out
+    }
+
     /// The DATA section body.
     pub fn data(&self) -> String {
         let mut s = String::new();

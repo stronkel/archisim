@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 6
+  version 7
   description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
@@ -33,6 +33,8 @@ type_params
     panel_material material = "Madera de pino" label "Hoja"
     glass_material material = "Vidrio doble" visible_if transom or side_left or side_right label "Vidrio de la tarja y los fijos"
     subframe_material material = "Madera de pino" visible_if subframe label "Premarco"
+  section "Datos"
+    fire_rating choice("—", "EI2 30-C5", "EI2 60-C5", "EI2 90-C5") = "—" label "Resistencia al fuego" ifc "Pset_DoorCommon.FireRating"
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro"
 

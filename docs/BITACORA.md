@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche) · Familias: parámetros del proyecto y compartidos (v0.34)
+
+Tanda 3 de las cinco pedidas el 20/10 (rama `bloque/parametros`, encima de la de las tandas 1–2).
+
+**Hecho**
+- **Parámetros del proyecto** (como los de proyecto y compartidos de Revit o el gestor de propiedades de ArchiCAD): **Vista → Parámetros del proyecto…**. Cada uno con nombre, clase (texto, número, entero, longitud, superficie, sí/no, lista de opciones), grupo (el conjunto de propiedades del IFC), categorías, si es del tipo o de cada elemento, valor por defecto y descripción.
+- Se rellenan en **Propiedades → Parámetros del proyecto** (cualquier elemento seleccionado solo) y, los del tipo, en **Tipos y materiales**; en Propiedades se ven con «(tipo)».
+- Salen como **columnas en las tablas** de su categoría y en el **IFC** en cada elemento, en el conjunto de su grupo; reimportando el IFC vuelven las definiciones y los valores.
+- **Compartidos**: cada parámetro tiene identidad fija (`GlobalId`). «Guardar como compartidos» escribe `Parámetros.asparam` en la carpeta de la biblioteca; «Cargar los compartidos…» los lleva a otro proyecto.
+- Las recetas pueden poner un parámetro en un conjunto estándar del IFC (`ifc "Pset_DoorCommon.FireRating"`): la puerta abatible tiene ya **Resistencia al fuego** (EI2 30-C5…), que sale en `Pset_DoorCommon` y en la tabla de carpinterías.
+- La demo trae dos de ejemplo: «Acabado de suelo» de los locales (`AD5_Acabados`) y «Código de medición» de los tipos de muro (`AD5_Mediciones`, FAB01…).
+- De paso: el IFC de los muros con huecos tenía una representación «CSG» mal declarada (IfcOpenShell la aceptaba, otros podrían no): ahora es un `IfcCsgSolid` como manda la norma, y el importador la lee.
+- Formato `.archisim` **versión 13** (los proyectos anteriores se abren sin parámetros). Versión 0.34.0.
+
+**Pendiente**
+- Tandas 4 (familias de anotación: etiquetas como recetas, que muestran valores de parámetros) y 5 (importar objetos de otros programas por IFC y editor gráfico de recetas).
+- Los parámetros del tipo van en el IFC en cada elemento (con el valor de su tipo), no en el `IfcWallType`…: así los ve cualquier programa en el elemento. Si preferís en el tipo, como Revit, es un cambio pequeño.
+
+**Qué debe probar Antonio**
+1. Abre la demo y selecciona el **Dormitorio**: al final de Propiedades, «Parámetros del proyecto → Acabado de suelo: Tarima». Cámbialo a Microcemento.
+2. **Vista → Parámetros del proyecto…** → «＋ Nuevo»: crea «Resistencia al fuego» para Muros, del tipo, lista «—, EI 60, EI 120». Abre Tipos y materiales → Muros → Fachada: ponle EI 120.
+3. Navegador → Tablas → Muros: aparecen las columnas «Código de medición» y «Resistencia al fuego».
+4. Exporta el IFC y ábrelo en otro visor (BIMcollab, Solibri, Revit): en un muro, el conjunto `AD5_Mediciones`; en un local, `AD5_Acabados`; en una puerta, `Pset_DoorCommon.FireRating`.
+5. «Guardar como compartidos», abre un proyecto nuevo y «Cargar los compartidos…»: están los mismos.
+
+---
+
 ## 2026-10-20 (tarde) · Familias: lo que faltaba del configurador, tipos multicapa en la biblioteca y familias nuevas (v0.33)
 
 Tandas 1 y 2 de las cinco pedidas el 20/10 a las 11:31 (pendientes de familias y familias nuevas); siguen parámetros compartidos, familias de anotación, importación de objetos y editor gráfico de recetas.

@@ -91,7 +91,7 @@ impl ArchiSimApp {
                         .min_col_width(40.0)
                         .show(ui, |ui| {
                             for c in &table.columns {
-                                ui.label(egui::RichText::new(c.name).strong());
+                                ui.label(egui::RichText::new(c.name.as_ref()).strong());
                             }
                             ui.end_row();
                             for row in table.rows.iter() {
