@@ -19,6 +19,7 @@ Sin código: son decisiones de producto que condicionan lo demás.
 | D5 | **Normas de dibujo de referencia**: tramas, grosores y rotulación (UNE-EN ISO 128, UNE 1-027 para plegado, criterio propio de AD5) | Fija cómo se ven plantas, secciones y planos |
 | D6 | **Plantilla al importar**: añadir siempre la plantilla de ArchiSim a un proyecto importado o solo cuando faltan tipos (hoy: solo cuando faltan) | Comodidad frente a limpieza del proyecto |
 | D8–D12 | **Disciplinas y mediciones** (propuesta del 18/10/2026 en `docs/DISCIPLINAS.md`): un solo modelo con disciplina por elemento, IFC 4.3 para urbanismo, banco de precios de referencia (BCCA), criterio de deducción de huecos y orden de los bloques | Estructura, urbanismo y mediciones con bancos de precios dependen de ellas |
+| D17–D22 | **Interfaz por disciplinas** (diseñada con Antonio el 20/10/2026 en `docs/INTERFAZ.md`): orden de los bloques I1–I6, si una tecla cambia de disciplina, atenuación por defecto, servidor, reservas y cursor del trabajo en equipo | Rehace la caja de herramientas, la barra de modificar y los módulos del masterplan |
 | D7 | **Ficheros reales de prueba**: IFC exportados por Antonio desde sus propios proyectos de ArchiCAD y Revit, para probar la importación (se usan en local, no se suben al repositorio) | La importación solo se ha probado con ficheros sintéticos y de IfcOpenShell/SketchUp |
 
 ## 1. Cierre de la fase 1 (deudas del MVP)
@@ -108,7 +109,7 @@ Hecho en v0.26 (rama `bloque/colaboracion`): 4.1, 4.3 y la mayor parte de 4.2 y 
 ## 5. Transversal (cuando toque)
 
 - **Formato `.archisim`**: migraciones probadas con proyectos de cada versión; guardado más rápido para proyectos grandes.
-- **Interfaz** ✅ v0.16: rediseñada como ArchiCAD con propiedades de Revit (caja de herramientas por secciones, pestañas de vistas con su escala, navegador de vistas, planos y tipos, barra inferior con escala y forzados, tema claro y oscuro). Pendiente: recordar la disposición y el tema entre sesiones, paleta de órdenes (buscar cualquier orden por su nombre), atajos configurables.
+- **Interfaz** ✅ v0.16: rediseñada como ArchiCAD con propiedades de Revit (caja de herramientas por secciones, pestañas de vistas con su escala, navegador de vistas, planos y tipos, barra inferior con escala y forzados, tema claro y oscuro). Pendiente: recordar la disposición y el tema entre sesiones, atajos configurables. **Siguiente rediseño, acordado el 20/10/2026: interfaz por disciplinas** (`docs/INTERFAZ.md`, bloques I1–I6: barra de disciplinas Concepto · Arquitectura · Estructura · Instalaciones · Urbanismo · Documentación · Análisis · Coordinación, fichas de formato fijo con iconos propios, barra contextual de métodos y Modificar, atenuación por disciplina, disciplina Concepto al estilo SketchUp, módulos para masterplans, buscador de órdenes).
 - **Manual de usuario** en español y lista de atajos; **traducción al inglés** de la interfaz antes de abrir el código.
 - **Informes de fallo** con el proyecto adjunto (sin telemetría).
 - **Validación continua**: además de IfcOpenShell, abrir los IFC de cada versión en ArchiCAD y Revit (Antonio) y guardar capturas de referencia.

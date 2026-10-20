@@ -72,6 +72,29 @@ Tandas 1 y 2 de las cinco pedidas el 20/10 a las 11:31 (pendientes de familias y
 
 ---
 
+---
+
+## 2026-10-20 (mediodía) · Diseño de la interfaz por disciplinas (sin código)
+
+**Hecho**
+- Diseño, en conversación con Antonio y a partir de su boceto de hace unos años, de la nueva interfaz: **`docs/INTERFAZ.md`**. Bocetos interactivos revisados con él en varias vueltas.
+- **Barra de disciplinas** como modo de trabajo (cambia las herramientas y atenúa la vista de lo que no es de la disciplina): Concepto · Arquitectura · Estructura · Instalaciones · Urbanismo · Documentación · Análisis · Coordinación.
+- **Fichas de herramientas en formato fijo** (cuatro columnas con icono y nombre, variante B elegida por Antonio) y **Propiedades** debajo, siempre con sitio.
+- **Iconos propios** en lenguaje de dibujo de arquitectura, revisados uno a uno con Antonio (ventana, pilar y cubierta en alzado; barandilla con pasamanos; zapata en sección…): **`docs/interfaz/iconos.svg`**.
+- **Barra contextual fija** bajo las pestañas: métodos de inserción con la herramienta activa (recta, cadena, rectángulo, arco, círculo, spline, elegir línea) y **Modificar** con la selección (mover, copiar, girar, simetría, escala, matriz; desfase, alinear, recortar, alargar, partir, unir), con la forma rápida (arrastrar) y la precisa de Revit (punto base y destino). Los ajustes de cada método, en Propiedades.
+- Pestañas de vistas y **barra inferior segmentada** como en el boceto de Antonio (escala, línea, relleno, texto, cota, con forzados y coordenadas). Tema claro por defecto.
+- Disciplina **Concepto** al estilo SketchUp (aristas y caras, empujar, seguir, volumen, masa con edificabilidad, convertir a edificio) y **Coordinación** (vínculos, **módulos** para viviendas tipo de un masterplan, versiones, interferencias, incidencias, requisitos, equipo, publicar), con las buenas prácticas de ficheros separados frente a un solo proyecto y la propuesta de trabajo en equipo con reservas.
+- Plan por bloques I1–I6 y decisiones D17–D22 en la hoja de ruta. Sin cambios en el programa, el formato `.archisim` ni el IFC.
+
+**Pendiente**
+- Que Antonio decida D17–D22; después, bloque I1.
+
+**Antonio debe revisar**
+1. `docs/INTERFAZ.md` entero, sobre todo §2.6 (barra contextual), §4 (herramientas por disciplina) y §9 (módulos y equipo).
+2. `docs/interfaz/iconos.svg` (se abre con el navegador): ¿algún icono que cambiar?
+3. Las decisiones D17 a D22 del §11.
+
+
 ## 2026-10-20 (tarde) · Librería de AD5, primera vuelta (2.2, v0.32)
 
 Quinto y último bloque de los pedidos el 19/10. La v0.31 (CTE) quedó fusionada en `main` con la integración continua en verde.

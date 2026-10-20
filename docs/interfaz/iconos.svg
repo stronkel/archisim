@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 920" width="1254" height="920" font-family="IBM Plex Sans, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="20" y="26" font-size="15" fill="#1b1e23" font-weight="600">ArchiSim · iconos de herramientas por disciplina (docs/INTERFAZ.md §5) · trazo 1,3 en cuadrícula 20×20</text>
+<text x="20" y="90" font-size="13" fill="#5c6371">Concepto</text>
+<rect x="150" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15L15 4"/><circle cx="3" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="4" r="1.2" fill="currentColor"/></g>
+<text x="192.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Línea</text>
+<rect x="242" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l6-6h9l-6 6z"/></g>
+<text x="284.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Rectángulo</text>
+<rect x="334" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="10" cy="11" rx="7" ry="4"/></g>
+<text x="376.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Círculo</text>
+<rect x="426" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15l5-4h9l-5 4z"/><path d="M8 11V5h9v6M12 15V9" stroke-width="1"/><path d="M14 3v-1M12.5 2.5L14 1l1.5 1.5" stroke-width="1"/></g>
+<text x="468.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Empujar</text>
+<rect x="518" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16c0-6 4-10 12-10"/><rect x="13" y="3" width="4" height="6" stroke-width="1"/></g>
+<text x="560.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Seguir</text>
+<rect x="610" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(628.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14"/><rect x="6" y="6" width="8" height="8" stroke-dasharray="1.6 1.4"/></g>
+<text x="652.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Equidistancia</text>
+<rect x="702" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(720.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l6-4 6 4v7l-6 4-6-4z"/><path d="M4 7l6 4 6-4M10 11v7" stroke-width="1"/></g>
+<text x="744.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Volumen</text>
+<rect x="794" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(812.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l6-3 6 3v10l-6 3-6-3z"/><path d="M4 9.5l6 3 6-3M4 13l6 3 6-3" stroke-width="0.8"/></g>
+<text x="836.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Masa</text>
+<rect x="886" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(904.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15L16 4"/><path d="M5 13l2 2M8 10.5l1.2 1.2M11 8l2 2M14 5.5l1.2 1.2" stroke-width="0.9"/><path d="M2 9l14 0" stroke-dasharray="1.5 1.5" stroke-width="0.8"/></g>
+<text x="928.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Cinta</text>
+<rect x="978" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(996.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l7-7 4 4-7 7z"/><path d="M15 9c1.5 2 1.5 4 0 5" stroke-width="1"/></g>
+<text x="1020.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Pintar</text>
+<rect x="1070" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(1088.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2" stroke-width="1"/><path d="M8 4h11M4 8v11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/><path d="M12 8v11M8 13h11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/></g>
+<text x="1112.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Ejes</text>
+<rect x="1162" y="50" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(1180.0,62) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4-3 4 3v6l-4 3-4-3z" stroke-width="1"/><path d="M12 10h3M14 8.5l1.5 1.5-1.5 1.5" stroke-width="1"/><path d="M16 6v9M19 6v9M16 6h3" stroke-width="1"/></g>
+<text x="1204.0" y="136" font-size="11" fill="#1b1e23" text-anchor="middle">Convertir</text>
+<text x="20" y="200" font-size="13" fill="#5c6371">Arquitectura</text>
+<rect x="150" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h16M2 13h16"/><path d="M5 7l-3 3M9 7l-6 6M13 7l-6 6M17 7l-6 6M18 10l-3 3" stroke-width="0.8"/></g>
+<text x="192.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Muro</text>
+<rect x="242" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13l5-6h11l-5 6z"/><path d="M2 13v2h11l5-6V7"/></g>
+<text x="284.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Forjado</text>
+<rect x="334" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h3M15 16h3M5 16V5"/><path d="M5 5a11 11 0 0 1 10 11" stroke-dasharray="1.5 1.5"/></g>
+<text x="376.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Puerta</text>
+<rect x="426" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14"/><path d="M10 3v14"/><path d="M3 3l7 7-7 7M17 3l-7 7 7 7" stroke-width="0.8" stroke-dasharray="1.6 1.4"/></g>
+<text x="468.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Ventana</text>
+<rect x="518" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12"/><path d="M4 4l12 12M16 4L4 16" stroke-width="0.8"/></g>
+<text x="560.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Abertura</text>
+<rect x="610" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(628.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 11L10 3l9 8"/><path d="M3 9.5L10 4l7 5.5" stroke-width="0.8"/><path d="M4 10v7h12v-7" stroke-width="1"/></g>
+<text x="652.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Cubierta</text>
+<rect x="702" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(720.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v16M16 2v16M4 5h12M4 8h12M4 11h12M4 14h12"/><path d="M10 16V4l-2 2M10 4l2 2" stroke-width="1"/></g>
+<text x="744.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Escalera</text>
+<rect x="794" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(812.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h16"/><path d="M2 9h16" stroke-width="1"/><path d="M5 9v-4M15 9v-4" stroke-width="0.8"/><path d="M4 5v13M10 5v13M16 5v13" stroke-width="1"/><path d="M2 18h16" stroke-width="0.8"/></g>
+<text x="836.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Barandilla</text>
+<rect x="886" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(904.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14"/><path d="M8 3v14M13 3v14M3 8h14M3 13h14" stroke-width="0.9"/></g>
+<text x="928.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Muro cortina</text>
+<rect x="978" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(996.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6" width="10" height="10" rx="2"/><path d="M5 6V4h10v2"/></g>
+<text x="1020.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Objeto</text>
+<rect x="1070" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(1088.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" stroke-dasharray="2 1.5"/><path d="M7 10h6M8 12.5h4" stroke-width="1"/></g>
+<text x="1112.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Local</text>
+<rect x="1162" y="160" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(1180.0,172) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2" stroke-width="1"/><path d="M8 4h11M4 8v11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/><path d="M12 8v11M8 13h11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/></g>
+<text x="1204.0" y="246" font-size="11" fill="#1b1e23" text-anchor="middle">Ejes</text>
+<text x="20" y="310" font-size="13" fill="#5c6371">Estructura</text>
+<rect x="150" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h10M5 17h10"/><path d="M6 3v2h8V3M6 17v-2h8v2" stroke-width="1"/><path d="M8 5v10M12 5v10"/></g>
+<text x="192.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Pilar</text>
+<rect x="242" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h16M2 12h16"/><path d="M2 8v4M18 8v4"/><path d="M2 10h16" stroke-dasharray="2 1.5" stroke-width="0.8"/></g>
+<text x="284.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Viga</text>
+<rect x="334" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13l5-6h11l-5 6z"/><path d="M5 10h10M7 8l-2 4" stroke-width="0.8"/></g>
+<text x="376.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Forjado</text>
+<rect x="426" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h16M2 13h16"/><path d="M2 7l6 6M6 7l6 6M10 7l6 6M14 7l4 4M2 11l2 2" stroke-width="0.8"/></g>
+<text x="468.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Muro de carga</text>
+<rect x="518" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="14" height="5"/><rect x="8" y="3" width="4" height="8"/></g>
+<text x="560.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Zapata</text>
+<rect x="610" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(628.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="16" height="6"/><path d="M5 9v6M9 9v6M13 9v6" stroke-width="0.8" stroke-dasharray="1.5 1.5"/></g>
+<text x="652.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Losa</text>
+<rect x="702" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(720.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12"/><path d="M4 4l12 12M16 4L4 16" stroke-width="0.8"/></g>
+<text x="744.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Abertura</text>
+<rect x="794" y="270" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(812.0,282) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2" stroke-width="1"/><path d="M8 4h11M4 8v11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/><path d="M12 8v11M8 13h11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/></g>
+<text x="836.0" y="356" font-size="11" fill="#1b1e23" text-anchor="middle">Ejes</text>
+<text x="20" y="420" font-size="13" fill="#5c6371">Instalaciones</text>
+<rect x="150" y="380" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,392) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h10a4 4 0 0 1 4 4v6M2 12h10"/></g>
+<text x="192.0" y="466" font-size="11" fill="#1b1e23" text-anchor="middle">Tubería</text>
+<rect x="242" y="380" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,392) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="16" height="8"/><path d="M2 6l16 8M18 6L2 14" stroke-width="0.8"/></g>
+<text x="284.0" y="466" font-size="11" fill="#1b1e23" text-anchor="middle">Conducto</text>
+<rect x="334" y="380" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,392) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10"/><path d="M5 8h10M5 10h10M5 12h10" stroke-width="0.9"/></g>
+<text x="376.0" y="466" font-size="11" fill="#1b1e23" text-anchor="middle">Rejilla</text>
+<rect x="426" y="380" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,392) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h12v3a6 6 0 0 1-12 0z"/><path d="M10 4v3"/></g>
+<text x="468.0" y="466" font-size="11" fill="#1b1e23" text-anchor="middle">Aparato</text>
+<rect x="518" y="380" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,392) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"/><path d="M6 6l8 8M14 6l-8 8" stroke-width="0.9"/></g>
+<text x="560.0" y="466" font-size="11" fill="#1b1e23" text-anchor="middle">Iluminación</text>
+<rect x="610" y="380" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(628.0,392) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12a5 5 0 0 1 10 0z"/><path d="M10 12v5M7 17h6"/></g>
+<text x="652.0" y="466" font-size="11" fill="#1b1e23" text-anchor="middle">Mecanismo</text>
+<text x="20" y="530" font-size="13" fill="#5c6371">Urbanismo</text>
+<rect x="150" y="490" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,502) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15c3-2 4-6 8-6s5 4 8 3M2 11c3-2 4-5 8-5s5 3 8 2" stroke-width="1"/></g>
+<text x="192.0" y="576" font-size="11" fill="#1b1e23" text-anchor="middle">Terreno</text>
+<rect x="242" y="490" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,502) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5l12-2 2 12-14 2z" stroke-dasharray="3 1.5 0.5 1.5"/></g>
+<text x="284.0" y="576" font-size="11" fill="#1b1e23" text-anchor="middle">Parcela</text>
+<rect x="334" y="490" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,502) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h16M2 15h16"/><path d="M2 10h3M8 10h4M15 10h3"/></g>
+<text x="376.0" y="576" font-size="11" fill="#1b1e23" text-anchor="middle">Vial</text>
+<rect x="426" y="490" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,502) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"/><path d="M10 4v12M4 10h12M6 6l8 8M14 6l-8 8" stroke-width="0.7"/></g>
+<text x="468.0" y="576" font-size="11" fill="#1b1e23" text-anchor="middle">Vegetación</text>
+<rect x="518" y="490" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,502) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l6-4 6 4v7l-6 4-6-4z"/><path d="M4 7l6 4 6-4M10 11v7" stroke-width="1"/></g>
+<text x="560.0" y="576" font-size="11" fill="#1b1e23" text-anchor="middle">Forma</text>
+<text x="20" y="640" font-size="13" fill="#5c6371">Documentación</text>
+<rect x="150" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h16M4 8v8M16 8v8"/><path d="M3 13l2-2M15 13l2-2"/></g>
+<text x="192.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Cota</text>
+<rect x="242" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h10M10 12l-3-5h6z"/></g>
+<text x="284.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Cota de nivel</text>
+<rect x="334" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h9l4 3-4 3H3z"/><circle cx="6" cy="10" r="0.8"/></g>
+<text x="376.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Etiqueta</text>
+<rect x="426" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h10M10 5v11M8 16h4"/></g>
+<text x="468.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Texto</text>
+<rect x="518" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v16" stroke-dasharray="3 1.5 0.5 1.5"/><path d="M10 3h5l-2-2M10 17h5l-2 2"/></g>
+<text x="560.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Sección</text>
+<rect x="610" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(628.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="4"/><path d="M10 6L5 10l5 4" fill="currentColor"/></g>
+<text x="652.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Alzado</text>
+<rect x="702" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(720.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12"/><rect x="12" y="12" width="5" height="3" stroke-width="0.8"/></g>
+<text x="744.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Plano</text>
+<rect x="794" y="600" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(812.0,612) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="12"/><path d="M3 8h14M3 12h14M8 4v12" stroke-width="0.9"/></g>
+<text x="836.0" y="686" font-size="11" fill="#1b1e23" text-anchor="middle">Tabla</text>
+<text x="20" y="750" font-size="13" fill="#5c6371">Análisis</text>
+<rect x="150" y="710" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,722) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V5z"/><path d="M7 10l2 2 4-4"/></g>
+<text x="192.0" y="796" font-size="11" fill="#1b1e23" text-anchor="middle">CTE</text>
+<rect x="242" y="710" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,722) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="12" height="16" rx="1"/><path d="M7 6h6M7 10h2M11 10h2M7 14h2M11 14h2" stroke-width="1"/></g>
+<text x="284.0" y="796" font-size="11" fill="#1b1e23" text-anchor="middle">Mediciones</text>
+<text x="20" y="860" font-size="13" fill="#5c6371">Coordinación</text>
+<rect x="150" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(168.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12l4-4"/><path d="M9 6l2-2a3 3 0 0 1 4 4l-2 2M11 14l-2 2a3 3 0 0 1-4-4l2-2"/></g>
+<text x="192.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Vincular</text>
+<rect x="242" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(260.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="6" height="7"/><path d="M2 9l3-3 3 3"/><rect x="12" y="9" width="6" height="7"/><path d="M12 9l3-3 3 3"/><path d="M8 12.5h4" stroke-dasharray="1.5 1.2" stroke-width="0.9"/></g>
+<text x="284.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Módulo</text>
+<rect x="334" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(352.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></g>
+<text x="376.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Versiones</text>
+<rect x="426" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(444.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="9" height="9"/><rect x="8" y="8" width="9" height="9"/></g>
+<text x="468.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Interferencias</text>
+<rect x="518" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(536.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h14v9H9l-4 3v-3H3z"/></g>
+<text x="560.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Incidencias</text>
+<rect x="610" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(628.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="12" height="16" rx="1"/><path d="M7 7l1.5 1.5L11 6M7 12l1.5 1.5L11 11M12 8h2M12 13h2" stroke-width="1"/></g>
+<text x="652.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Requisitos</text>
+<rect x="702" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(720.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="2.5"/><circle cx="14" cy="8" r="2"/><path d="M2 16c0-3 2-5 5-5s5 2 5 5M12 16c0-2 1-4 3-4s3 2 3 4" stroke-width="1"/></g>
+<text x="744.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Equipo</text>
+<rect x="794" y="820" width="84" height="96" rx="10" fill="#f6f7f9"/>
+<g transform="translate(812.0,832) scale(2.4)" fill="none" stroke="#1b1e23" color="#1b1e23" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15a4 4 0 0 1 0-8 5 5 0 0 1 9.5 1.5A3.5 3.5 0 0 1 15 15z"/><path d="M10 9v5M8 11l2-2 2 2" stroke-width="1"/></g>
+<text x="836.0" y="906" font-size="11" fill="#1b1e23" text-anchor="middle">Publicar</text>
+</svg>
