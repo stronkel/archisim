@@ -1,8 +1,8 @@
 family "Puerta abatible"
   category door
   host wall
-  version 4
-  description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada y premarco si se quieren"
+  version 6
+  description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
 
@@ -20,13 +20,18 @@ type_params
   section "Tarja"
     transom bool = no label "Tarja acristalada sobre la puerta"
     transom_height length = 0.40 range 0.10..2.00 visible_if transom label "Tarja: alto"
+  section "Fijos laterales"
+    side_left bool = no label "Fijo lateral izquierdo"
+    side_right bool = no label "Fijo lateral derecho"
+    side_width length = 0.40 range 0.10..2.00 visible_if side_left or side_right label "Fijo lateral: ancho"
+    side_base length = 0.00 range 0.00..1.20 visible_if side_left or side_right label "Fijo lateral: zócalo ciego"
   section "Premarco"
     subframe bool = no label "Premarco"
     subframe_width length = 0.03 range 0.005..0.20 visible_if subframe label "Premarco: anchura"
   section "Materiales"
     frame_material material = "Madera de pino" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
-    glass_material material = "Vidrio doble" visible_if transom label "Vidrio de la tarja"
+    glass_material material = "Vidrio doble" visible_if transom or side_left or side_right label "Vidrio de la tarja y los fijos"
     subframe_material material = "Madera de pino" visible_if subframe label "Premarco"
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro"
@@ -37,18 +42,36 @@ let s = if subframe then subframe_width else 0
 let w = width - 2 * s
 let h = height - s
 let door_height = if transom then h - transom_height else h
-let c0 = -w / 2 + frame_width
-let c1 = w / 2 - frame_width
+# Los fijos laterales, con un montante entre el fijo y la hoja.
+let sl = if side_left then side_width + frame_width else 0
+let sr = if side_right then side_width + frame_width else 0
+let c0 = -w / 2 + frame_width + sl
+let c1 = w / 2 - frame_width - sr
 let active = if leaves == 2 and unequal then active_width else (c1 - c0) / 2
 
-require 2 * frame_width < w and 2 * frame_width < h else "El cerco no deja hueco para la hoja"
+require c1 - c0 > 0.30 and 2 * frame_width < h else "El cerco y los fijos no dejan hueco para la hoja"
 require not transom or door_height > 2 * frame_width + 0.30 else "La tarja no deja sitio a la puerta"
 require not (leaves == 2 and unequal) or active < c1 - c0 - 0.20 else "La hoja activa no deja sitio a la otra (al menos 20 cm)"
+
+# Fijo lateral de «xa» a «xb», hasta «zt», con zócalo ciego de «base» (del
+# material de la hoja) y vidrio encima.
+component sidelight(xa, xb, zt, base, f, d, frame_mat, glass_mat, panel_mat)
+  if base > 0
+    use block(xa, xb, min(0.04, d), 0, base, panel_mat)
+    use block(xa, xb, d, base, base + f, frame_mat)
+  let zg = if base > 0 then base + f else 0
+  use block(xa, xb, min(0.024, d), zg, zt, glass_mat)
 
 body
   if subframe
     use subframe(width, height, s, frame_depth, subframe_material, 0)
   use door_lining(w, h, frame_width, frame_depth, frame_material)
+  if side_left
+    use sidelight(-w / 2 + frame_width, c0 - frame_width, h - frame_width, side_base, frame_width, frame_depth, frame_material, glass_material, panel_material)
+    use block(c0 - frame_width, c0, frame_depth, 0, h - frame_width, frame_material)
+  if side_right
+    use sidelight(c1 + frame_width, w / 2 - frame_width, h - frame_width, side_base, frame_width, frame_depth, frame_material, glass_material, panel_material)
+    use block(c1, c1 + frame_width, frame_depth, 0, h - frame_width, frame_material)
   if transom
     use transom(c0, c1, door_height, h - frame_width, frame_width, frame_depth, frame_material, glass_material)
   # La hoja activa va del lado de la mano.
@@ -66,8 +89,18 @@ plan 1:50
   if subframe
     use frame_cut_plan(-width / 2, -w / 2, frame_depth)
     use frame_cut_plan(w / 2, width / 2, frame_depth)
-  use frame_cut_plan(-w / 2, c0, frame_depth)
-  use frame_cut_plan(c1, w / 2, frame_depth)
+  if side_left
+    use frame_cut_plan(-w / 2, -w / 2 + frame_width, frame_depth)
+    use frame_cut_plan(c0 - frame_width, c0, frame_depth)
+    line (-w / 2 + frame_width, 0) to (c0 - frame_width, 0) pen thin
+  else
+    use frame_cut_plan(-w / 2, c0, frame_depth)
+  if side_right
+    use frame_cut_plan(w / 2 - frame_width, w / 2, frame_depth)
+    use frame_cut_plan(c1, c1 + frame_width, frame_depth)
+    line (c1 + frame_width, 0) to (w / 2 - frame_width, 0) pen thin
+  else
+    use frame_cut_plan(c1, w / 2, frame_depth)
   if leaves == 2
     let left = if hand == "left" then active else c1 - c0 - active
     use door_leaf_plan(c0, 1, left, frame_depth, swing_line)
@@ -76,6 +109,41 @@ plan 1:50
     use door_leaf_plan(c0, 1, c1 - c0, frame_depth, swing_line)
   else
     use door_leaf_plan(c1, -1, c1 - c0, frame_depth, swing_line)
+
+# A 1:20, el cerco con el galce donde cierra la hoja.
+plan 1:20
+  if subframe
+    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
+    use frame_cut_plan(w / 2, width / 2, frame_depth)
+  let lt = min(0.04, frame_depth)
+  use door_jamb_detail(c0 - frame_width, c0, frame_depth, 1, lt)
+  use door_jamb_detail(c1, c1 + frame_width, frame_depth, -1, lt)
+  if side_left
+    use frame_cut_plan(-w / 2, -w / 2 + frame_width, frame_depth)
+    use glass_detail(-w / 2 + frame_width, c0 - frame_width)
+  if side_right
+    use frame_cut_plan(w / 2 - frame_width, w / 2, frame_depth)
+    use glass_detail(c1 + frame_width, w / 2 - frame_width)
+  if leaves == 2
+    let left = if hand == "left" then active else c1 - c0 - active
+    use door_leaf_plan(c0, 1, left, frame_depth, swing_line)
+    use door_leaf_plan(c1, -1, c1 - c0 - left, frame_depth, swing_line)
+  else if hand == "left"
+    use door_leaf_plan(c0, 1, c1 - c0, frame_depth, swing_line)
+  else
+    use door_leaf_plan(c1, -1, c1 - c0, frame_depth, swing_line)
+
+# En alzado, las líneas de apertura de cada hoja (el vértice, en las
+# bisagras).
+elevation
+  let split = if hand == "left" then c0 + active else c1 - active
+  if leaves == 2
+    use side_hung_lines(c0, split, 0, door_height - frame_width, swing_line)
+    use side_hung_lines(c1, split, 0, door_height - frame_width, swing_line)
+  else if hand == "left"
+    use side_hung_lines(c0, c1, 0, door_height - frame_width, swing_line)
+  else
+    use side_hung_lines(c1, c0, 0, door_height - frame_width, swing_line)
 
 # A 1:100, sin cerco y con la hoja como una línea.
 plan 1:100
@@ -95,4 +163,5 @@ outputs
   frame_depth = frame_depth
   frame_material = frame_material
   panel_material = panel_material
+  clear_width = c1 - c0
   operation = if leaves == 2 then "double_swing" else "single_swing"

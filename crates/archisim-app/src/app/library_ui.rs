@@ -2,7 +2,7 @@
 //! load into the project, the families of the project with a newer recipe,
 //! and purging the types no element uses.
 
-use archisim_core::{FamilyTypeRef, Loaded, OnConflict};
+use archisim_core::{FamilyTypeRef, LayeredKind, LayeredRef, Loaded, LoadedLayered, OnConflict};
 use eframe::egui::{self, Ui};
 
 use super::*;
@@ -18,6 +18,8 @@ pub struct LibraryWindow {
     /// A type whose GlobalId the project has with other values: file and
     /// type index, waiting for the user to choose.
     conflict: Option<(usize, usize)>,
+    /// The same for a wall or slab type: its file and index.
+    layered_conflict: Option<(usize, usize)>,
     /// The purge is waiting for confirmation: how many types would go.
     purge: Option<usize>,
 }
@@ -66,7 +68,7 @@ impl ArchiSimApp {
         ui.horizontal(|ui| {
             ui.label("Carpeta:");
             ui.label(egui::RichText::new(lib.dir.to_string_lossy()).monospace())
-                .on_hover_text("Los ficheros .asfam de esta carpeta y de sus subcarpetas");
+                .on_hover_text("Los ficheros .asfam (familias) y .astipos (muros y forjados) de esta carpeta y de sus subcarpetas");
         });
         ui.horizontal(|ui| {
             if ui.button("Cambiar carpeta…").clicked() {
@@ -90,6 +92,7 @@ impl ArchiSimApp {
         ui.separator();
         let filter = self.library.filter.trim().to_lowercase();
         let mut load: Option<(usize, usize)> = None;
+        let mut load_layered: Option<(usize, usize)> = None;
         let mut update: Option<FamilyUpdate> = None;
         let mut purge = false;
         let updates = library::family_updates(self.ed.model(), &lib);
@@ -110,10 +113,10 @@ impl ArchiSimApp {
             .max_height(ui.available_height() - 40.0)
             .show(ui, |ui| {
                 ui.strong("Tipos de la biblioteca");
-                if lib.files.is_empty() {
+                if lib.files.is_empty() && lib.layered.is_empty() {
                     ui.label(
                         egui::RichText::new(
-                            "La carpeta no tiene familias todavía. Para llevar un tipo del proyecto a la biblioteca: Navegador → clic derecho sobre una puerta, ventana u objeto → «Guardar en la biblioteca».",
+                            "La carpeta no tiene familias todavía. Para llevar un tipo del proyecto a la biblioteca: Navegador → clic derecho sobre un tipo de muro, forjado, puerta, ventana u objeto → «Guardar en la biblioteca».",
                         )
                         .weak(),
                     );
@@ -155,6 +158,66 @@ impl ArchiSimApp {
                                                 load = Some((fi, ti));
                                             }
                                             if in_project.contains_key(&t.guid) {
+                                                ui.label(egui::RichText::new("en el proyecto").weak());
+                                            }
+                                        },
+                                    );
+                                });
+                            }
+                        });
+                }
+                let in_project_layered: std::collections::BTreeSet<String> = self
+                    .ed
+                    .model()
+                    .wall_types()
+                    .map(|t| t.guid.to_string())
+                    .chain(self.ed.model().slab_types().map(|t| t.guid.to_string()))
+                    .collect();
+                for (fi, f) in lib.layered.iter().enumerate() {
+                    let matches = |s: &str| filter.is_empty() || s.to_lowercase().contains(&filter);
+                    let shown: Vec<usize> = (0..f.catalog.types.len())
+                        .filter(|&i| matches(&f.catalog.types[i].name))
+                        .collect();
+                    if shown.is_empty() {
+                        continue;
+                    }
+                    let file = f
+                        .path
+                        .file_stem()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let title = format!("{file} · tipos multicapa ({})", f.catalog.types.len());
+                    egui::CollapsingHeader::new(title)
+                        .id_salt(("lib-layered", &f.path))
+                        .default_open(!filter.is_empty())
+                        .show(ui, |ui| {
+                            for &ti in &shown {
+                                let t = &f.catalog.types[ti];
+                                let total: f64 = t.layers.iter().map(|l| l.1).sum();
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new(match t.kind {
+                                        LayeredKind::Wall(_) => "Muro",
+                                        LayeredKind::Slab(_) => "Forjado",
+                                    }).weak());
+                                    ui.label(&t.name).on_hover_text(
+                                        t.layers
+                                            .iter()
+                                            .map(|(m, th, _)| format!("{} mm · {m}", crate::units::fmt_mm(*th)))
+                                            .collect::<Vec<_>>()
+                                            .join("\n"),
+                                    );
+                                    ui.label(egui::RichText::new(format!("{} mm", crate::units::fmt_mm(total))).weak());
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui
+                                                .button("Cargar")
+                                                .on_hover_text("Añadir el tipo al proyecto, con sus capas y sus materiales")
+                                                .clicked()
+                                            {
+                                                load_layered = Some((fi, ti));
+                                            }
+                                            if in_project_layered.contains(&t.guid) {
                                                 ui.label(egui::RichText::new("en el proyecto").weak());
                                             }
                                         },
@@ -206,6 +269,9 @@ impl ArchiSimApp {
         });
         if let Some((fi, ti)) = load {
             self.load_from_library(fi, ti, OnConflict::Ask);
+        }
+        if let Some((fi, ti)) = load_layered {
+            self.load_layered_from_library(fi, ti, OnConflict::Ask);
         }
         if let Some(u) = update {
             match self.ed.update_family(&u) {
@@ -261,18 +327,64 @@ impl ArchiSimApp {
         }
     }
 
-    fn library_conflict(&mut self, ctx: &egui::Context) {
-        let Some((fi, ti)) = self.library.conflict else {
+    /// Loads a wall or slab type of the library into the project.
+    pub(super) fn load_layered_from_library(
+        &mut self,
+        fi: usize,
+        ti: usize,
+        on_conflict: OnConflict,
+    ) {
+        let lib = self.library.library().clone();
+        let Some(file) = lib.layered.get(fi) else {
             return;
         };
-        let name = self
-            .library
-            .library()
-            .files
-            .get(fi)
-            .and_then(|f| f.types.get(ti))
-            .map(|t| t.name.clone())
-            .unwrap_or_default();
+        let Some(t) = file.catalog.types.get(ti) else {
+            return;
+        };
+        let name = t.name.clone();
+        let had = self
+            .ed
+            .model()
+            .wall_types()
+            .map(|w| w.guid.to_string())
+            .chain(self.ed.model().slab_types().map(|s| s.guid.to_string()))
+            .any(|g| g == t.guid);
+        match self.ed.load_layered_type(file, ti, on_conflict) {
+            Ok(LoadedLayered::New(_)) => self.say(format!("Tipo «{name}» cargado en el proyecto.")),
+            Ok(LoadedLayered::AlreadyThere(_)) => {
+                self.say(format!("El proyecto ya tiene el tipo «{name}», igual."))
+            }
+            Ok(LoadedLayered::Replaced(_)) => self.say(format!(
+                "El tipo «{name}» del proyecto ha tomado las capas de la biblioteca."
+            )),
+            Err(_) if had && on_conflict == OnConflict::Ask => {
+                self.library.layered_conflict = Some((fi, ti));
+            }
+            Err(e) => self.complain(format!("No se puede cargar «{name}»: {e}.")),
+        }
+    }
+
+    fn library_conflict(&mut self, ctx: &egui::Context) {
+        let layered = self.library.layered_conflict.is_some();
+        let Some((fi, ti)) = self.library.conflict.or(self.library.layered_conflict) else {
+            return;
+        };
+        let name = if layered {
+            self.library
+                .library()
+                .layered
+                .get(fi)
+                .and_then(|f| f.catalog.types.get(ti))
+                .map(|t| t.name.clone())
+        } else {
+            self.library
+                .library()
+                .files
+                .get(fi)
+                .and_then(|f| f.types.get(ti))
+                .map(|t| t.name.clone())
+        }
+        .unwrap_or_default();
         let mut choice = None;
         egui::Window::new("El tipo ya está en el proyecto")
             .collapsible(false)
@@ -303,8 +415,13 @@ impl ArchiSimApp {
             });
         if let Some(c) = choice {
             self.library.conflict = None;
+            self.library.layered_conflict = None;
             if let Some(c) = c {
-                self.load_from_library(fi, ti, c);
+                if layered {
+                    self.load_layered_from_library(fi, ti, c);
+                } else {
+                    self.load_from_library(fi, ti, c);
+                }
             }
         }
     }
@@ -346,6 +463,21 @@ impl ArchiSimApp {
                 }
             }
         }
+    }
+
+    /// Saves a wall or slab type of the project into the library folder.
+    pub(super) fn save_layered_to_library(&mut self, t: LayeredRef) {
+        let lib = library::scan(&library::library_dir());
+        match library::save_layered_type(&lib, self.ed.model(), t) {
+            Ok(path) => self.say(format!(
+                "Tipo guardado en la biblioteca ({}).",
+                path.file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default()
+            )),
+            Err(e) => self.complain(format!("No se puede guardar en la biblioteca: {e}.")),
+        }
+        self.library.refresh();
     }
 
     /// Saves a type of the project into the library folder.

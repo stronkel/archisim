@@ -691,3 +691,38 @@ fn catalogue_round_trip() {
     assert_eq!(parse(&copy).unwrap().params, def.params);
     assert!(parse(&format!("{recipe}\ncatalog\n  shelf \"x\"\n")).is_err());
 }
+
+#[test]
+fn elevations_draw_opening_lines_in_x_and_z() {
+    let src = "family \"x\"\n  category window\n  host wall\n\ntype_params\n  width length = 1.0\n  height length = 1.2\n\nelevation\n  line (-width / 2, 0) to (width / 2, height / 2) pen thin\n  if hand == \"left\"\n    line (-width / 2, height) to (width / 2, height / 2) pen thin dashed\n";
+    let def = parse(src).unwrap();
+    let t = values(&[
+        ("width", Value::Number(1.0)),
+        ("height", Value::Number(1.2)),
+    ]);
+    let mut b = Values::new();
+    b.insert("hand".into(), Value::Text("left".into()));
+    let marks = def.evaluate_elevation(&t, &Values::new(), &b).unwrap();
+    assert_eq!(marks.len(), 2);
+    assert_eq!(
+        marks[0],
+        Mark::Line {
+            from: [-0.5, 0.0],
+            to: [0.5, 0.6],
+            pen: Pen::Thin,
+            style: LineStyle::Continuous
+        }
+    );
+    // A box is not allowed in an elevation, nor two elevations.
+    assert!(parse(&format!("{src}  box (0, 0, 0) to (1, 1, 1) material 1\n")).is_err());
+    assert!(parse(&format!(
+        "{src}\nelevation\n  line (0, 0) to (1, 1) pen thin\n"
+    ))
+    .is_err());
+    // Without one, nothing is drawn.
+    let bare = parse("family \"y\"\n  category door\n").unwrap();
+    assert_eq!(
+        bare.evaluate_elevation(&Values::new(), &Values::new(), &Values::new()),
+        Ok(Vec::new())
+    );
+}

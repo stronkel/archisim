@@ -1,0 +1,71 @@
+family "Puerta pivotante"
+  category door
+  host wall
+  version 1
+  description "Puerta de una hoja que gira sobre un eje vertical separado de la jamba (pivote), como las de entrada de gran formato"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.60..3.50 label "Hueco de obra: ancho"
+    height length = 2.40 range 1.80..4.00 label "Hueco de obra: alto"
+  section "Pivote"
+    pivot length = 0.25 range 0.05..1.50 label "Eje: distancia a la jamba"
+  section "Cerco"
+    frame_width length = 0.04 range 0.001..0.30 label "Cerco: anchura vista"
+    frame_depth length = 0.08 range 0.001..0.40 label "Cerco: fondo"
+  section "Materiales"
+    frame_material material = "Aluminio lacado" label "Cerco"
+    panel_material material = "Madera de pino" label "Hoja"
+  section "Representación"
+    swing_line linestyle = "continuous" label "Línea del giro"
+
+let f = frame_width
+let c0 = -width / 2 + f
+let c1 = width / 2 - f
+let lw = c1 - c0
+let lt = min(0.06, frame_depth)
+
+require lw > 0.40 else "El cerco no deja hueco para la hoja"
+require pivot < lw / 2 else "El eje tiene que quedar en la mitad de la hoja del lado de la mano"
+
+body
+  use door_lining(width, height, f, frame_depth, frame_material)
+  use block(c0, c1, lt, 0, height - f, panel_material)
+
+# La hoja abierta a 90° atravesando el hueco por el eje (del lado de la
+# mano), con los dos giros: el del lado corto hacia atrás.
+plan 1:50
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  let s = if hand == "left" then 1 else -1
+  let px = if hand == "left" then c0 + pivot else c1 - pivot
+  let far = lw - pivot
+  polygon (px - lt / 2, -pivot) (px + lt / 2, -pivot) (px + lt / 2, far) (px - lt / 2, far) pen frame filled
+  arc center (px, 0) from (px, far) to (px + s * far, 0) pen thin style swing_line
+  arc center (px, 0) from (px, -pivot) to (px - s * pivot, 0) pen thin style swing_line
+
+plan 1:100
+  let s = if hand == "left" then 1 else -1
+  let px = if hand == "left" then c0 + pivot else c1 - pivot
+  let far = lw - pivot
+  line (px, -pivot) to (px, far) pen frame
+  arc center (px, 0) from (px, far) to (px + s * far, 0) pen thin style swing_line
+
+# En alzado, las líneas de apertura hacia el eje y el eje en trazo y punto.
+elevation
+  let px = if hand == "left" then c0 + pivot else c1 - pivot
+  let ox = if hand == "left" then c1 else c0
+  use side_hung_lines(px, ox, 0, height - f, swing_line)
+  line (px, 0) to (px, height - f) pen thin dashdot
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  clear_width = lw - pivot - lt / 2
+  operation = "pivot"

@@ -316,7 +316,10 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     }
     let mut inner: Vec<Line> = openings
         .iter()
-        .flat_map(|o| [o.t0, o.t1])
+        .flat_map(|o| {
+            let (t0, t1) = o.cut_span();
+            [t0, t1]
+        })
         .filter(|t| *t > EPSILON && *t < len - EPSILON)
         .map(|t| Line::new(a + u * t, n))
         .collect();
@@ -444,9 +447,10 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
         }
         let t = (t0 + t1) / 2.0;
         let z = (zs[r] + zs[r + 1]) / 2.0;
-        let in_opening = openings
-            .iter()
-            .any(|o| t > o.t0 && t < o.t1 && z > level + o.sill && z < level + o.head);
+        let in_opening = openings.iter().any(|o| {
+            let (t0, t1) = o.cut_span();
+            t > t0 && t < t1 && z > level + o.sill && z < level + o.head
+        });
         let p = a + u * t + n * off;
         let in_notch = g.notches.iter().any(|nt| {
             z > level + nt.z.0 && z < level + nt.z.1 && {
@@ -1728,6 +1732,77 @@ pub fn opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
             triangles,
         })
         .collect()
+}
+
+/// The opening lines a door or window's recipe draws in elevation, in the
+/// model: each segment twice, on the face of the element its leaves open
+/// to and on the other, and whether its line style is not continuous. The
+/// last value is the horizontal direction the leaves open to (a viewer on
+/// that side sees the lines as drawn; from the other side, they open away).
+pub fn opening_elevation_lines(model: &Model, id: OpeningId) -> (Vec<ElevationLine>, [f64; 2]) {
+    let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
+        return (Vec::new(), [0.0, 0.0]);
+    };
+    let (Ok(ev), Ok(marks)) = (
+        model.evaluate_opening(id),
+        model.opening_elevation_marks(id),
+    ) else {
+        return (Vec::new(), [0.0, 0.0]);
+    };
+    let Some(wall) = model.wall(o.wall) else {
+        return (Vec::new(), [0.0, 0.0]);
+    };
+    let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
+    let z_sill = level + og.sill;
+    let mid = (og.t0 + og.t1) / 2.0;
+    let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
+    let (sx, sy) = match og.opens_to {
+        WallSide::Exterior => (-1.0, 1.0),
+        WallSide::Interior => (1.0, -1.0),
+    };
+    // Just outside the body on each side.
+    let front = ev.parts.iter().map(|p| p.max[1]).fold(0.0_f64, f64::max) + 0.002;
+    let back = ev.parts.iter().map(|p| p.min[1]).fold(0.0_f64, f64::min) - 0.002;
+    let at = |x: f64, y: f64, z: f64| {
+        let p = og.point(mid + sx * x, y_mid + sy * y);
+        [p.x, p.y, z_sill + z]
+    };
+    let mut out = Vec::new();
+    let mut push = |a: [f64; 2], b: [f64; 2], dashed: bool| {
+        out.push(ElevationLine {
+            front: (at(a[0], front, a[1]), at(b[0], front, b[1])),
+            back: (at(a[0], back, a[1]), at(b[0], back, b[1])),
+            dashed,
+        });
+    };
+    for m in &marks {
+        match m {
+            archisim_core::Mark::Line {
+                from, to, style, ..
+            } => push(*from, *to, *style != archisim_core::LineStyle::Continuous),
+            archisim_core::Mark::Polygon { points, style, .. } => {
+                for i in 0..points.len() {
+                    push(
+                        points[i],
+                        points[(i + 1) % points.len()],
+                        *style != archisim_core::LineStyle::Continuous,
+                    );
+                }
+            }
+            archisim_core::Mark::Arc { .. } => {}
+        }
+    }
+    let n = og.n;
+    (out, [n.x * sy, n.y * sy])
+}
+
+/// One opening line of a door or window in elevation (see
+/// [`opening_elevation_lines`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ElevationLine {
+    pub front: (P3, P3),
+    pub back: (P3, P3),
+    pub dashed: bool,
 }
 
 fn sorted(a: f64, b: f64) -> (f64, f64) {
@@ -3054,5 +3129,123 @@ mod junction_tests {
         let under = 6.0 * (0.03 * 2.665 + 0.115 * 2.68);
         assert!((vol(&ws) - full - under).abs() < 1e-9, "{}", vol(&ws));
         assert!(closed(&ws));
+    }
+}
+
+#[cfg(test)]
+mod corner_tests {
+    use super::*;
+    use archisim_core::{Hand, NewOpening, NewWall, Point2, ReferenceLine, Value, WallSide};
+
+    /// Two walls in an L, a window at the corner of each: with «esquina»
+    /// set they reach the corner and the wall is opened through it, so the
+    /// two windows meet with no pier between them.
+    #[test]
+    fn corner_windows_open_the_corner() {
+        use archisim_core::{
+            CutPattern, Layer, LayerFunction, NewOpeningType, OpeningKind, WallFunction,
+            WindowOperation,
+        };
+        let mut m = Model::new("T");
+        let level = m.add_level("P1", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], CutPattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "M",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let wall = |m: &mut Model, a: Point2, b: Point2| {
+            m.add_wall(NewWall {
+                wall_type: wt,
+                level,
+                start: a,
+                end: b,
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap()
+        };
+        let a = wall(&mut m, Point2::new(0.0, 0.0), Point2::new(4.0, 0.0));
+        let b = wall(&mut m, Point2::new(4.0, 0.0), Point2::new(4.0, 4.0));
+        let wid = m
+            .add_opening_type(NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.2,
+                height: 1.2,
+                frame_width: 0.06,
+                frame_depth: 0.07,
+                frame_material: brick,
+                panel_material: glass,
+            })
+            .unwrap();
+        let window = m.opening_type(wid).unwrap().clone();
+        let place = |m: &mut Model, w, along| {
+            m.add_opening(NewOpening {
+                opening_type: window.id,
+                wall: w,
+                along,
+                sill: 0.9,
+                opens_to: WallSide::Interior,
+                hand: Hand::Left,
+                setback: None,
+            })
+            .unwrap()
+        };
+        let before: f64 = wall_solids(&m, a).iter().map(Solid::volume).sum::<f64>()
+            + wall_solids(&m, b).iter().map(Solid::volume).sum::<f64>();
+        let oa = place(&mut m, a, 2.5);
+        let ob = place(&mut m, b, 1.5);
+        let plain: f64 = wall_solids(&m, a).iter().map(Solid::volume).sum::<f64>()
+            + wall_solids(&m, b).iter().map(Solid::volume).sum::<f64>();
+        // The window of the first wall at its end; the second at its start.
+        // Seen from inside (where they open), the end of «a» is on the
+        // right and the start of «b» on the left.
+        let mut va = m.opening(oa).unwrap().values.clone();
+        va.insert("corner".into(), Value::Text("derecha".into()));
+        m.set_opening_values(oa, va).unwrap();
+        let mut vb = m.opening(ob).unwrap().values.clone();
+        vb.insert("corner".into(), Value::Text("izquierda".into()));
+        m.set_opening_values(ob, vb).unwrap();
+        let ga = crate::opening_geometry(&m, oa).unwrap();
+        let gb = crate::opening_geometry(&m, ob).unwrap();
+        assert_eq!((ga.corner, gb.corner), (Some(true), Some(false)));
+        // Snapped: the jamb at the meeting of the walls' middles.
+        assert!((ga.t1 - 4.0).abs() < 1e-9, "{}", ga.t1);
+        assert!(gb.t0.abs() < 1e-9, "{}", gb.t0);
+        // Moving it along the wall keeps it at the corner.
+        m.move_opening(oa, 1.0, 0.9).unwrap();
+        assert!((crate::opening_geometry(&m, oa).unwrap().t1 - 4.0).abs() < 1e-9);
+        // The corner is open: more wall removed than two plain windows,
+        // by the corner's own square (thickness² × window height).
+        let open: f64 = wall_solids(&m, a).iter().map(Solid::volume).sum::<f64>()
+            + wall_solids(&m, b).iter().map(Solid::volume).sum::<f64>();
+        // Each wall is opened from the window's other jamb to its end,
+        // its share of the corner included: between them, the whole
+        // corner is open, with no pier.
+        let t = m.wall_type(wt).unwrap().thickness();
+        let h = window.height;
+        let removed = before - open;
+        assert!(
+            (removed - 2.0 * 1.2 * t * h).abs() < 1e-6,
+            "removed {removed}"
+        );
+        // No jamb on the corner side: no frame piece reaches its edge.
+        let w = window.width;
+        let parts = m.evaluate_opening(oa).unwrap().parts;
+        assert!(parts.iter().all(|p| p.max[0] < w / 2.0 - 1e-9
+            || p.min[2] > 0.01
+            || p.max[2] - p.min[2] < h - 0.01));
+        let _ = plain;
     }
 }

@@ -1,7 +1,7 @@
 family "Puerta corredera empotrada"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta corredera de una hoja que se esconde dentro del muro, en un armazón (cajón) junto al hueco, con cerco"
 
 include "piezas"
@@ -40,6 +40,13 @@ plan 1:50
   line (jamb, -p) to (jamb + s * lw, -p) pen thin dashed
   line (jamb, p) to (jamb + s * lw, p) pen thin dashed
   line (jamb + s * lw, -p) to (jamb + s * lw, p) pen thin dashed
+
+# En alzado, una flecha hacia donde corre la hoja (el lado de la mano).
+elevation
+  let c0 = -width / 2 + frame_width
+  let c1 = width / 2 - frame_width
+  let s = if hand == "left" then -1 else 1
+  use arrow_lines(-s * (c1 - c0) * 0.2, s * (c1 - c0) * 0.2, height / 2)
 
 plan 1:100
   let c0 = -width / 2 + frame_width

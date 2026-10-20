@@ -216,7 +216,39 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
         println!("  {}", path.display());
         n += 1;
     }
-    println!("{n} familias con sus tipos en {}", dir.display());
+    // Wall and slab types, one file for each.
+    for (file, walls) in [("Muros.astipos", true), ("Forjados.astipos", false)] {
+        let mut cat = archisim_core::LayeredCatalog::default();
+        let refs: Vec<archisim_core::LayeredRef> = if walls {
+            model
+                .wall_types()
+                .map(|t| archisim_core::LayeredRef::Wall(t.id))
+                .collect()
+        } else {
+            model
+                .slab_types()
+                .map(|t| archisim_core::LayeredRef::Slab(t.id))
+                .collect()
+        };
+        for r in refs {
+            let (entry, materials) = model.layered_entry(r)?;
+            for m in materials {
+                if !cat.materials.iter().any(|x| x.name == m.name) {
+                    cat.materials.push(m);
+                }
+            }
+            cat.types.push(entry);
+        }
+        let sub = dir.join("Multicapas");
+        std::fs::create_dir_all(&sub)?;
+        let path = sub.join(file);
+        std::fs::write(&path, archisim_core::layered_catalog_text(&cat))?;
+        println!("  {} ({} tipos)", path.display(), cat.types.len());
+    }
+    println!(
+        "{n} familias con sus tipos y los tipos de muro y forjado en {}",
+        dir.display()
+    );
     Ok(())
 }
 

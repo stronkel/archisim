@@ -1323,6 +1323,9 @@ impl ArchiSimApp {
                     archisim_core::DoorOperation::DoubleSwing => "Abatible 2 hojas",
                     archisim_core::DoorOperation::Sliding => "Corredera",
                     archisim_core::DoorOperation::Folding => "Plegable",
+                    archisim_core::DoorOperation::Pivot => "Pivotante",
+                    archisim_core::DoorOperation::Overhead => "Garaje (seccional o basculante)",
+                    archisim_core::DoorOperation::Rolling => "Enrollable",
                 },
                 OpeningKind::Window(w) => match w {
                     archisim_core::WindowOperation::Fixed => "Fija",
@@ -1420,6 +1423,34 @@ impl ArchiSimApp {
                 self.report(r, "Apertura cambiada.");
             }
         });
+        // The family's instance parameters (a corner window's corner…), as
+        // the recipe declares them.
+        let instance: Vec<archisim_core::family::Param> = self
+            .ed
+            .model()
+            .family(ot.family)
+            .map(|f| {
+                let def = f.def();
+                def.params_of(archisim_core::ParamScope::Instance)
+                    .filter(|p| def.is_visible(&p.name, &o.values))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !instance.is_empty() {
+            let mut change: Option<(String, archisim_core::Value)> = None;
+            group(ui, "opening-instance", "Parámetros del ejemplar", |ui| {
+                for p in &instance {
+                    if let Some(v) = instance_param_row(ui, id, p, o.values.get(&p.name)) {
+                        change = Some((p.name.clone(), v));
+                    }
+                }
+            });
+            if let Some((name, v)) = change {
+                let r = self.ed.set_opening_value(id, &name, v);
+                self.report(r, "Parámetro cambiado.");
+            }
+        }
         group(ui, "opening-dimensions", "Dimensiones", |ui| {
             text_row(
                 ui,
@@ -1937,4 +1968,70 @@ fn fmt_percent(v: f64) -> String {
 /// An angle in degrees with one decimal and a decimal comma.
 fn fmt_angle_deg(radians: f64) -> String {
     format!("{:.1}", radians.to_degrees()).replace('.', ",")
+}
+
+/// A row for one instance parameter of a door or window's family: its
+/// name and a field for its kind. Returns the value chosen, if it changed.
+fn instance_param_row(
+    ui: &mut Ui,
+    id: OpeningId,
+    p: &archisim_core::family::Param,
+    current: Option<&archisim_core::Value>,
+) -> Option<archisim_core::Value> {
+    use archisim_core::{ParamKind, Value};
+    let label = match p.kind {
+        ParamKind::Length => format!("{} (mm)", p.label),
+        _ => p.label.clone(),
+    };
+    let field = Id::unique(("op-param", id, p.name.as_str()));
+    row(
+        ui,
+        &label,
+        "Del ejemplar: cada puerta o ventana tiene el suyo",
+        |ui, w| match (&p.kind, current) {
+            (ParamKind::Choice(options), Some(Value::Text(chosen))) => {
+                let mut c = chosen.clone();
+                egui::ComboBox::from_id_salt(field)
+                    .width(w - 8.0)
+                    .selected_text(capitalized(&c))
+                    .show_ui(ui, |ui| {
+                        for o in options {
+                            ui.selectable_value(&mut c, o.clone(), capitalized(o));
+                        }
+                    });
+                (c != *chosen).then_some(Value::Text(c))
+            }
+            (ParamKind::Bool, Some(Value::Bool(b))) => {
+                let mut on = *b;
+                ui.checkbox(&mut on, "")
+                    .changed()
+                    .then_some(Value::Bool(on))
+            }
+            (ParamKind::Length, Some(Value::Number(v))) => {
+                length_field(ui, field, *v, w - 8.0).map(Value::Number)
+            }
+            (ParamKind::Number | ParamKind::Integer, Some(Value::Number(v))) => {
+                let shown = format!("{v}").replace('.', ",");
+                text_edit_committed(ui, field, &shown, w - 8.0)
+                    .and_then(|t| t.trim().replace(',', ".").parse::<f64>().ok())
+                    .map(Value::Number)
+            }
+            (ParamKind::Text, Some(Value::Text(t))) => {
+                text_edit_committed(ui, field, t, w - 8.0).map(Value::Text)
+            }
+            _ => {
+                ui.label(egui::RichText::new("—").weak());
+                None
+            }
+        },
+    )
+}
+
+/// "izquierda" → "Izquierda".
+fn capitalized(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => String::new(),
+    }
 }

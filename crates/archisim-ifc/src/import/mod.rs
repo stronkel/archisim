@@ -2781,6 +2781,7 @@ fn door_from_ifc(op: &str) -> (DoorOperation, Option<Hand>) {
         "FOLDING_TO_LEFT" => (DoorOperation::Folding, Some(Hand::Left)),
         "FOLDING_TO_RIGHT" => (DoorOperation::Folding, Some(Hand::Right)),
         "DOUBLE_DOOR_FOLDING" => (DoorOperation::Folding, None),
+        "ROLLINGUP" => (DoorOperation::Rolling, None),
         _ => (DoorOperation::SingleSwing, None),
     }
 }
@@ -2849,6 +2850,7 @@ fn leaf_operation(op: &str) -> &'static str {
         "BOTTOMHUNG" => "abatible",
         "TOPHUNG" => "proyectante",
         "PIVOTHORIZONTAL" => "basculante",
+        "PIVOTVERTICAL" => "pivotante",
         _ => "practicable",
     }
 }

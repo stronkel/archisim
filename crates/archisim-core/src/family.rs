@@ -85,13 +85,16 @@ impl PartialEq for Family {
 pub const SHARED_PIECES: [(&str, &str); 1] = [("piezas", include_str!("../families/piezas.asfam"))];
 
 /// Recipes of the system families, as written (with their `include`s).
-const SYSTEM_SOURCES: [&str; 7] = [
+const SYSTEM_SOURCES: [&str; 10] = [
     include_str!("../families/puerta_abatible.asfam"),
     include_str!("../families/puerta_corredera.asfam"),
     include_str!("../families/puerta_plegable.asfam"),
     include_str!("../families/puerta_corredera_empotrada.asfam"),
+    include_str!("../families/puerta_pivotante.asfam"),
+    include_str!("../families/puerta_garaje.asfam"),
     include_str!("../families/ventana_practicable.asfam"),
     include_str!("../families/ventana_corredera.asfam"),
+    include_str!("../families/ventana_guillotina.asfam"),
     include_str!("../families/hueco.asfam"),
 ];
 
@@ -126,6 +129,9 @@ pub const SWING_DOOR: &str = "Puerta abatible";
 pub const SLIDING_DOOR: &str = "Puerta corredera";
 pub const FOLDING_DOOR: &str = "Puerta plegable";
 pub const POCKET_DOOR: &str = "Puerta corredera empotrada";
+pub const PIVOT_DOOR: &str = "Puerta pivotante";
+pub const GARAGE_DOOR: &str = "Puerta de garaje";
+pub const SASH_WINDOW: &str = "Ventana de guillotina";
 pub const CASEMENT_WINDOW: &str = "Ventana practicable";
 pub const SLIDING_WINDOW: &str = "Ventana corredera";
 /// Opening with no door or window in it (IFC: an `IfcOpeningElement`
@@ -194,6 +200,9 @@ pub fn legacy_family(kind: OpeningKind) -> (&'static str, Vec<(&'static str, Val
         OpeningKind::Door(DoorOperation::DoubleSwing) => (SWING_DOOR, vec![("leaves", n(2.0))]),
         OpeningKind::Door(DoorOperation::Sliding) => (SLIDING_DOOR, vec![]),
         OpeningKind::Door(DoorOperation::Folding) => (FOLDING_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Pivot) => (PIVOT_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Overhead) => (GARAGE_DOOR, vec![]),
+        OpeningKind::Door(DoorOperation::Rolling) => (GARAGE_DOOR, vec![("kind", t("enrollable"))]),
         OpeningKind::Window(WindowOperation::Fixed) => (
             CASEMENT_WINDOW,
             vec![("leaves", n(1.0)), ("leaf_1", t("fija"))],
@@ -257,6 +266,9 @@ pub fn operation_from_name(category: &str, name: &str) -> Option<OpeningKind> {
         ("door", "double_swing") => OpeningKind::Door(DoorOperation::DoubleSwing),
         ("door", "sliding") => OpeningKind::Door(DoorOperation::Sliding),
         ("door", "folding") => OpeningKind::Door(DoorOperation::Folding),
+        ("door", "pivot") => OpeningKind::Door(DoorOperation::Pivot),
+        ("door", "overhead") => OpeningKind::Door(DoorOperation::Overhead),
+        ("door", "rolling") => OpeningKind::Door(DoorOperation::Rolling),
         ("window", "fixed") => OpeningKind::Window(WindowOperation::Fixed),
         ("window", "single_casement") => OpeningKind::Window(WindowOperation::SingleCasement),
         ("window", "double_casement") => OpeningKind::Window(WindowOperation::DoubleCasement),
@@ -356,8 +368,11 @@ mod tests {
                 SLIDING_DOOR,
                 FOLDING_DOOR,
                 POCKET_DOOR,
+                PIVOT_DOOR,
+                GARAGE_DOOR,
                 CASEMENT_WINDOW,
                 SLIDING_WINDOW,
+                SASH_WINDOW,
                 VOID
             ]
         );
@@ -581,7 +596,11 @@ mod tests {
                 setback: None,
             })
             .unwrap();
-        assert!(m.opening(o).unwrap().values.is_empty());
+        // Its one instance parameter: whether it turns a corner.
+        assert_eq!(
+            m.opening(o).unwrap().values.keys().collect::<Vec<_>>(),
+            ["corner"]
+        );
         let ev = m.evaluate_opening(o).unwrap();
         // Two jambs, two rails, one mullion and two panes.
         assert_eq!(ev.parts.len(), 7);
@@ -656,6 +675,13 @@ mod tests {
                         for &f in &[0.001, 0.05, 0.09] {
                             for &d in &[0.001, 0.03, 0.07, 2.0] {
                                 let mut v = def.defaults(ParamScope::Type);
+                                // Inside each family's own range.
+                                let fit = |name: &str, x: f64| {
+                                    let r = def.param(name).and_then(|p| p.range);
+                                    r.map_or(x, |(lo, hi)| x.clamp(lo, hi))
+                                };
+                                let (w, h) = (fit("width", w), fit("height", h));
+                                let (f, d) = (fit("frame_width", f), fit("frame_depth", d));
                                 v.insert("width".into(), Value::Number(w));
                                 v.insert("height".into(), Value::Number(h));
                                 // Only the parameters the family has.
@@ -706,7 +732,8 @@ mod tests {
                                     }
                                     for hand in [Hand::Left, Hand::Right] {
                                         let b = opening_builtins(side, hand);
-                                        let ev = match def.evaluate(&v, &Values::new(), &b) {
+                                        let inst = def.defaults(ParamScope::Instance);
+                                        let ev = match def.evaluate(&v, &inst, &b) {
                                             Ok(ev) => ev,
                                             // Only the recipe's own rules may refuse.
                                             Err(FamilyError::Requirement { .. }) => continue,
@@ -760,14 +787,16 @@ mod tests {
                                             b.insert("wall_int".into(), Value::Number(-ext / 2.0));
                                             b.insert("sill_height".into(), Value::Number(sill));
                                             let marks = def
-                                                .evaluate_plan(&v, &Values::new(), &b, scale)
+                                                .evaluate_plan(&v, &inst, &b, scale)
                                                 .unwrap_or_else(|e| {
                                                     panic!("{} plan: {e}", fam.name())
                                                 });
                                             assert!(marks.is_empty() == (def.category == "void"));
                                             // Within the opening and, at most,
                                             // a leaf's width beyond a jamb (the
-                                            // pocket of a pocket door).
+                                            // pocket of a pocket door); into
+                                            // the room, as far as a leaf or a
+                                            // garage door's height (its tracks).
                                             for p in mark_points(&marks) {
                                                 assert!(
                                                     p[0].abs() <= 1.5 * w + 0.1,
@@ -775,7 +804,7 @@ mod tests {
                                                     fam.name()
                                                 );
                                                 assert!(
-                                                    p[1].abs() <= w + d + 0.5,
+                                                    p[1].abs() <= w.max(h) + d + 0.5,
                                                     "{} {p:?}",
                                                     fam.name()
                                                 );

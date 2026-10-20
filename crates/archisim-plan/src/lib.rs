@@ -548,7 +548,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
                 .0
                 .iter()
                 .filter(|o| opening_view(o, ops.1) == OpeningView::Cut)
-                .map(|o| (o.t0, o.t1))
+                .map(|o| o.cut_span())
                 .collect();
             wall_pieces(&spans)
         })

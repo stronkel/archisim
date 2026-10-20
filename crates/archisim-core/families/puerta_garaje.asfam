@@ -1,0 +1,111 @@
+family "Puerta de garaje"
+  category door
+  host wall
+  version 1
+  description "Puerta de garaje seccional, basculante o enrollable, con su cerco y, si se quiere, puerta peatonal"
+
+include "piezas"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.50 range 1.00..8.00 label "Hueco de obra: ancho"
+    height length = 2.20 range 1.80..6.00 label "Hueco de obra: alto"
+  section "Funcionamiento"
+    kind choice("seccional", "basculante", "enrollable") = "seccional" label "Funcionamiento"
+    panels integer = 4 range 2..10 visible_if kind == "seccional" label "Nº de paneles"
+    drum_height length = 0.35 range 0.15..0.80 visible_if kind == "enrollable" label "Tambor: alto"
+    wicket bool = no visible_if kind != "enrollable" label "Puerta peatonal en la hoja"
+    wicket_width length = 0.80 range 0.60..1.20 visible_if wicket and kind != "enrollable" label "Puerta peatonal: ancho"
+  section "Cerco"
+    frame_width length = 0.08 range 0.02..0.30 label "Cerco: anchura vista"
+    frame_depth length = 0.10 range 0.03..0.40 label "Cerco: fondo"
+  section "Materiales"
+    frame_material material = "Acero galvanizado" label "Cerco y guías"
+    panel_material material = "Acero galvanizado" label "Hoja"
+  section "Representación"
+    swing_line linestyle = "dashed" label "Recorrido de la hoja"
+
+let f = frame_width
+let c0 = -width / 2 + f
+let c1 = width / 2 - f
+# Lo alto del paso: bajo el dintel o, en las enrollables, bajo el tambor.
+let top = if kind == "enrollable" then height - drum_height else height - f
+
+require c1 - c0 > 0.50 else "El cerco no deja hueco para la puerta"
+require kind != "enrollable" or top > 1.80 else "El tambor no deja paso de 1,80 m"
+require not wicket or kind == "enrollable" or wicket_width < c1 - c0 - 0.40 else "La puerta peatonal no cabe en la hoja"
+
+# Las seccionales y basculantes se recogen bajo el techo, del lado al que
+# abren; la enrollable, en su tambor sobre el paso, del mismo lado.
+body
+  use block(-width / 2, c0, frame_depth, 0, height, frame_material)
+  use block(c1, width / 2, frame_depth, 0, height, frame_material)
+  if kind == "enrollable"
+    use block(c0, c1, frame_depth, top, height, frame_material)
+    use block(c0, c1, 0.02, 0, top, panel_material)
+  else
+    use block(c0, c1, frame_depth, top, height, frame_material)
+    if kind == "seccional"
+      let gap = 0.01
+      let ph = (top - gap * (panels - 1)) / panels
+      repeat i in 0..panels
+        let z = i * (ph + gap)
+        use block(c0, c1, min(0.04, frame_depth), z, z + ph, panel_material)
+    else
+      use block(c0, c1, min(0.04, frame_depth), 0, top, panel_material)
+
+# El cerco cortado, la hoja cerrada y, en discontinua, por dónde va al
+# abrir: guías bajo el techo (seccional), el giro hacia fuera y hacia
+# dentro (basculante) o el tambor (enrollable).
+plan 1:50
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  polygon (c0, -0.02) (c1, -0.02) (c1, 0.02) (c0, 0.02) pen frame filled
+  let y0 = frame_depth / 2
+  if kind == "seccional"
+    polygon (c0, y0) (c1, y0) (c1, y0 + top) (c0, y0 + top) pen thin style swing_line
+  else if kind == "basculante"
+    polygon (c0, y0) (c1, y0) (c1, y0 + top * 0.75) (c0, y0 + top * 0.75) pen thin style swing_line
+    line (c0, -y0) to (c0, -y0 - top * 0.25) pen thin style swing_line
+    line (c1, -y0) to (c1, -y0 - top * 0.25) pen thin style swing_line
+    line (c0, -y0 - top * 0.25) to (c1, -y0 - top * 0.25) pen thin style swing_line
+  else
+    polygon (c0, y0) (c1, y0) (c1, y0 + drum_height * 0.8) (c0, y0 + drum_height * 0.8) pen thin style swing_line
+
+plan 1:100
+  use frame_cut_plan(-width / 2, c0, frame_depth)
+  use frame_cut_plan(c1, width / 2, frame_depth)
+  line (c0, 0) to (c1, 0) pen frame
+  if kind != "enrollable"
+    let y0 = frame_depth / 2
+    let d = if kind == "seccional" then top else top * 0.75
+    polygon (c0, y0) (c1, y0) (c1, y0 + d) (c0, y0 + d) pen thin style swing_line
+
+# En alzado, las juntas de los paneles, la puerta peatonal y una flecha
+# hacia arriba.
+elevation
+  if kind == "seccional"
+    let gap = 0.01
+    let ph = (top - gap * (panels - 1)) / panels
+    repeat i in 1..panels
+      let z = i * (ph + gap) - gap / 2
+      line (c0, z) to (c1, z) pen thin
+  if kind == "enrollable"
+    line (c0, top) to (c1, top) pen thin
+    repeat i in 1..floor(top / 0.25)
+      line (c0, i * 0.25) to (c1, i * 0.25) pen thin dotted
+  if wicket and kind != "enrollable"
+    let wx = if hand == "left" then c0 + 0.30 else c1 - 0.30 - wicket_width
+    polygon (wx, 0.10) (wx + wicket_width, 0.10) (wx + wicket_width, min(2.00, top - 0.10)) (wx, min(2.00, top - 0.10)) pen thin
+  let ax = if wicket and kind != "enrollable" then (if hand == "left" then c1 - (c1 - c0) / 4 else c0 + (c1 - c0) / 4) else 0
+  use arrow_v_lines(ax, top * 0.30, top * 0.70)
+
+outputs
+  opening_width = width
+  opening_height = height
+  frame_width = frame_width
+  frame_depth = frame_depth
+  frame_material = frame_material
+  panel_material = panel_material
+  clear_width = c1 - c0
+  operation = if kind == "enrollable" then "rolling" else "overhead"

@@ -10,7 +10,10 @@
 
 use std::path::{Path, PathBuf};
 
-use archisim_core::{CatalogEntry, FamilyId, FamilyTypeRef, Loaded, Model, OnConflict};
+use archisim_core::{
+    layered_catalog_text, parse_layered_catalog, CatalogEntry, FamilyId, FamilyTypeRef,
+    LayeredCatalog, LayeredKind, LayeredRef, Loaded, LoadedLayered, Model, OnConflict,
+};
 use archisim_family::{Catalog, CatalogMaterial, CatalogType};
 
 use super::{EditResult, Editor};
@@ -27,13 +30,78 @@ pub struct LibraryFile {
     pub materials: Vec<CatalogMaterial>,
 }
 
-/// What the library holds: its files, and the ones it could not read
-/// (path and why).
+/// A file of wall and slab types of the library (`.astipos`).
+#[derive(Debug, Clone)]
+pub struct LayeredFile {
+    pub path: PathBuf,
+    pub catalog: LayeredCatalog,
+}
+
+/// What the library holds: its family files and its files of wall and
+/// slab types, and the ones it could not read (path and why).
 #[derive(Debug, Clone, Default)]
 pub struct Library {
     pub dir: PathBuf,
     pub files: Vec<LibraryFile>,
+    pub layered: Vec<LayeredFile>,
     pub errors: Vec<(PathBuf, String)>,
+}
+
+/// The file wall types (or slab types) are saved into.
+fn layered_file_name(kind: LayeredKind) -> &'static str {
+    match kind {
+        LayeredKind::Wall(_) => "Muros.astipos",
+        LayeredKind::Slab(_) => "Forjados.astipos",
+    }
+}
+
+/// Saves a wall or slab type into the library: into the file that
+/// already has its `GlobalId`, or else into «Muros.astipos» or
+/// «Forjados.astipos» (replacing its entry, or adding it). Returns the
+/// file.
+pub fn save_layered_type(lib: &Library, model: &Model, t: LayeredRef) -> Result<PathBuf, String> {
+    let (entry, materials) = model.layered_entry(t).map_err(|e| e.to_string())?;
+    let existing = lib
+        .layered
+        .iter()
+        .find(|f| f.catalog.types.iter().any(|x| x.guid == entry.guid))
+        .or_else(|| {
+            lib.layered.iter().find(|f| {
+                f.path
+                    .file_name()
+                    .is_some_and(|n| n == layered_file_name(entry.kind))
+            })
+        });
+    let (path, mut catalog) = match existing {
+        Some(f) => (f.path.clone(), f.catalog.clone()),
+        None => (
+            lib.dir.join(layered_file_name(entry.kind)),
+            LayeredCatalog::default(),
+        ),
+    };
+    match catalog.types.iter_mut().find(|x| x.guid == entry.guid) {
+        Some(x) => *x = entry.clone(),
+        None => {
+            if catalog.types.iter().any(|x| x.name == entry.name) {
+                return Err(format!(
+                    "la biblioteca ya tiene otro tipo «{}»: cámbiale el nombre antes de guardarlo",
+                    entry.name
+                ));
+            }
+            catalog.types.push(entry.clone());
+        }
+    }
+    for m in materials {
+        match catalog.materials.iter_mut().find(|x| x.name == m.name) {
+            Some(x) => *x = m,
+            None => catalog.materials.push(m),
+        }
+    }
+    let text = layered_catalog_text(&catalog);
+    parse_layered_catalog(&text)?;
+    std::fs::create_dir_all(&lib.dir).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    Ok(path)
 }
 
 /// Documentos/ArchiSim/Biblioteca in the user's home.
@@ -119,16 +187,27 @@ pub fn scan(dir: &Path) -> Library {
             let p = e.path();
             if p.is_dir() && depth < 3 {
                 pending.push((p, depth + 1));
-            } else if p
-                .extension()
-                .is_some_and(|x| x.eq_ignore_ascii_case("asfam"))
-            {
+            } else if p.extension().is_some_and(|x| {
+                x.eq_ignore_ascii_case("asfam") || x.eq_ignore_ascii_case("astipos")
+            }) {
                 paths.push(p);
             }
         }
     }
     paths.sort();
     for p in paths {
+        if p.extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("astipos"))
+        {
+            let read = std::fs::read_to_string(&p)
+                .map_err(|e| e.to_string())
+                .and_then(|t| parse_layered_catalog(&t.replace("\r\n", "\n")));
+            match read {
+                Ok(catalog) => lib.layered.push(LayeredFile { path: p, catalog }),
+                Err(e) => lib.errors.push((p, e)),
+            }
+            continue;
+        }
         match read_file(&p) {
             Ok(f) => lib.files.push(f),
             Err(e) => lib.errors.push((p, e)),
@@ -293,6 +372,24 @@ impl Editor {
         })
     }
 
+    /// Loads a wall or slab type of a library file into the project.
+    pub fn load_layered_type(
+        &mut self,
+        file: &LayeredFile,
+        index: usize,
+        on_conflict: OnConflict,
+    ) -> EditResult<LoadedLayered> {
+        let t = file
+            .catalog
+            .types
+            .get(index)
+            .ok_or_else(|| "ese tipo ya no está en el fichero".to_string())?
+            .clone();
+        let materials = file.catalog.materials.clone();
+        let label = format!("Cargar «{}» de la biblioteca", t.name);
+        self.transact(&label, |m| m.load_layered_type(&t, &materials, on_conflict))
+    }
+
     /// Replaces a family of the project with a newer recipe.
     pub fn update_family(&mut self, update: &FamilyUpdate) -> EditResult<usize> {
         let label = format!("Actualizar la familia «{}»", update.name);
@@ -375,6 +472,41 @@ mod tests {
         // One undoable step.
         assert!(b.undo().is_some());
         assert!(b.model().opening_type(bt).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A wall type saved from one project loads in another the same.
+    #[test]
+    fn wall_types_go_through_the_library_folder() {
+        let dir = temp_dir("layered");
+        let a = Editor::new_project();
+        let wt = a.model().wall_types().next().unwrap().clone();
+        let path = save_layered_type(&scan(&dir), a.model(), LayeredRef::Wall(wt.id)).unwrap();
+        assert!(path.ends_with("Muros.astipos"));
+        save_layered_type(&scan(&dir), a.model(), LayeredRef::Wall(wt.id)).unwrap();
+        let st = a.model().slab_types().next().unwrap().id;
+        let slabs = save_layered_type(&scan(&dir), a.model(), LayeredRef::Slab(st)).unwrap();
+        assert!(slabs.ends_with("Forjados.astipos"));
+        let lib = scan(&dir);
+        assert!(lib.errors.is_empty(), "{:?}", lib.errors);
+        assert_eq!(lib.layered.len(), 2);
+        let walls = lib
+            .layered
+            .iter()
+            .find(|f| f.path.ends_with("Muros.astipos"))
+            .unwrap();
+        assert_eq!(walls.catalog.types.len(), 1);
+        let mut b = Editor::new_project();
+        // The new project has the same template type: already there.
+        let r = b.load_layered_type(walls, 0, OnConflict::Ask).unwrap();
+        assert!(matches!(
+            r,
+            LoadedLayered::New(_) | LoadedLayered::AlreadyThere(_)
+        ));
+        let LayeredRef::Wall(id) = r.type_ref() else {
+            panic!()
+        };
+        assert_eq!(b.model().wall_type(id).unwrap().guid, wt.guid);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

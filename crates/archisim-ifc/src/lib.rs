@@ -727,10 +727,11 @@ impl<'a> Exporter<'a> {
             OpeningKind::Void => unreachable!("voids have no IFC type"),
             OpeningKind::Door(op) => (
                 self.w.add(format!(
-                    "IFCDOORTYPE({},$,{},{description},$,{props},$,{tag},{element_type},.DOOR.,.{}.,.F.,$)",
+                    "IFCDOORTYPE({},$,{},{description},$,{props},$,{tag},{element_type},.DOOR.,.{}.,.F.,{})",
                     string(t.guid.as_str()),
                     string(&t.name),
-                    door_operation(op, Hand::Right)
+                    door_operation(op, Hand::Right),
+                    door_user_operation(op)
                 )),
                 [("Lining", t.frame_material), ("Panel", t.panel_material)],
             ),
@@ -739,7 +740,7 @@ impl<'a> Exporter<'a> {
                     "IFCWINDOWTYPE({},$,{},{description},$,{props},$,{tag},{element_type},.WINDOW.,.{}.,.F.,$)",
                     string(t.guid.as_str()),
                     string(&t.name),
-                    window_partitioning(t.panels.len())
+                    partitioning_of(model, t)
                 )),
                 [("Framing", t.frame_material), ("Glazing", t.panel_material)],
             ),
@@ -941,14 +942,15 @@ impl<'a> Exporter<'a> {
                 unreachable!("checked above")
             };
             self.w.add(format!(
-                "IFCDOOR({},$,{},$,{},{pl},{shape},{},{},{},.DOOR.,.{}.,$)",
+                "IFCDOOR({},$,{},$,{},{pl},{shape},{},{},{},.DOOR.,.{}.,{})",
                 string(guid.as_str()),
                 string(&name),
                 string(&t.name),
                 string(&tag.to_string()),
                 real(h),
                 real(w),
-                door_operation(op, og.hand)
+                door_operation(op, og.hand),
+                door_user_operation(op)
             ))
         } else {
             self.w.add(format!(
@@ -959,7 +961,7 @@ impl<'a> Exporter<'a> {
                 string(&tag.to_string()),
                 real(h),
                 real(w),
-                window_partitioning(t.panels.len())
+                partitioning_of(self.model, t)
             ))
         };
         self.w.add(format!(
@@ -1684,6 +1686,44 @@ fn door_operation(op: DoorOperation, hand: Hand) -> &'static str {
         (DoorOperation::Sliding, Hand::Right) => "SLIDING_TO_LEFT",
         (DoorOperation::Folding, Hand::Left) => "FOLDING_TO_LEFT",
         (DoorOperation::Folding, Hand::Right) => "FOLDING_TO_RIGHT",
+        (DoorOperation::Rolling, _) => "ROLLINGUP",
+        (DoorOperation::Pivot, _) | (DoorOperation::Overhead, _) => "USERDEFINED",
+    }
+}
+
+/// `UserDefinedOperationType` of a door whose operation IFC does not name:
+/// a pivot door, a sectional or up-and-over garage door.
+fn door_user_operation(op: DoorOperation) -> String {
+    match op {
+        DoorOperation::Pivot => string("PIVOT"),
+        DoorOperation::Overhead => string("OVERHEAD"),
+        _ => "$".to_string(),
+    }
+}
+
+/// `IfcWindowTypePartitioningEnum` value of a window type: what its family
+/// says (`partitioning` in its `ifc` section: a sash window is divided
+/// across), or else by its number of leaves side by side.
+fn partitioning_of(model: &Model, t: &archisim_core::OpeningType) -> &'static str {
+    const KNOWN: [&str; 9] = [
+        "SINGLE_PANEL",
+        "DOUBLE_PANEL_VERTICAL",
+        "DOUBLE_PANEL_HORIZONTAL",
+        "TRIPLE_PANEL_VERTICAL",
+        "TRIPLE_PANEL_BOTTOM",
+        "TRIPLE_PANEL_TOP",
+        "TRIPLE_PANEL_LEFT",
+        "TRIPLE_PANEL_RIGHT",
+        "TRIPLE_PANEL_HORIZONTAL",
+    ];
+    let said = model.opening_type_evaluation(t.id).and_then(|e| {
+        e.ifc
+            .get("partitioning")
+            .and_then(|v| v.as_text().map(str::to_string))
+    });
+    match said.and_then(|s| KNOWN.iter().find(|k| **k == s)) {
+        Some(k) => k,
+        None => window_partitioning(t.panels.len()),
     }
 }
 

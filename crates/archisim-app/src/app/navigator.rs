@@ -18,6 +18,8 @@ use super::*;
 struct TypeRow {
     /// Doors, windows and objects: the type, to save it in the library.
     family_type: Option<archisim_core::FamilyTypeRef>,
+    /// Walls and slabs: the type, to save it in the library.
+    layered: Option<archisim_core::LayeredRef>,
     /// Doors, windows and objects: their family, to group them by it.
     group: Option<String>,
     /// Where the type is edited (columns and beams: in Propiedades).
@@ -28,6 +30,8 @@ struct TypeRow {
     /// Elements of this type in the whole project and on the level.
     count: usize,
     here: Vec<Element>,
+    /// The same in the whole project (every level), when it is not `here`.
+    all: Vec<Element>,
     /// Shown instead of the count (the area of a room).
     value: Option<String>,
 }
@@ -205,8 +209,10 @@ impl ArchiSimApp {
                     name: t.name.clone(),
                     count: m.walls().filter(|w| w.wall_type == t.id).count(),
                     here,
+                    all: m.walls().filter(|w| w.wall_type == t.id).map(|w| Element::Wall(w.id)).collect(),
                     value: None,
                     family_type: None,
+                    layered: Some(archisim_core::LayeredRef::Wall(t.id)),
                     group: None,
                 }
             })
@@ -226,8 +232,10 @@ impl ArchiSimApp {
                     name: t.name.clone(),
                     count: m.slabs().filter(|s| s.slab_type == t.id).count(),
                     here,
+                    all: m.slabs().filter(|s| s.slab_type == t.id).map(|s| Element::Slab(s.id)).collect(),
                     value: None,
                     family_type: None,
+                    layered: Some(archisim_core::LayeredRef::Slab(t.id)),
                     group: None,
                 }
             })
@@ -252,8 +260,10 @@ impl ArchiSimApp {
                         name: t.name.clone(),
                         count: m.openings().filter(|o| o.opening_type == t.id).count(),
                         here,
+                        all: m.openings().filter(|o| o.opening_type == t.id).map(|o| Element::Opening(o.id)).collect(),
                         value: None,
                         family_type: Some(archisim_core::FamilyTypeRef::Opening(t.id)),
+                        layered: None,
                         group: m.family(t.family).map(|f| f.name().to_string()),
                     }
                 })
@@ -278,8 +288,20 @@ impl ArchiSimApp {
                         name: t.name.clone(),
                         count: m.member_type_users(t.id),
                         here,
+                        all: m
+                            .levels()
+                            .iter()
+                            .flat_map(|l| {
+                                crate::pick::of_type_on_level(
+                                    m,
+                                    l.id,
+                                    crate::pick::TypeOf::Member(t.id),
+                                )
+                            })
+                            .collect(),
                         value: None,
                         family_type: None,
+                        layered: None,
                         group: None,
                     }
                 })
@@ -301,8 +323,10 @@ impl ArchiSimApp {
                     } else {
                         Vec::new()
                     },
+                    all: Vec::new(),
                     value: Some(format!("{} tabicas", l.risers())),
                     family_type: None,
+                    layered: None,
                     group: None,
                 }
             })
@@ -321,8 +345,10 @@ impl ArchiSimApp {
                 } else {
                     Vec::new()
                 },
+                all: Vec::new(),
                 value: Some(format!("{} m", fmt_m(c.length()))),
                 family_type: None,
+                layered: None,
                 group: None,
             })
             .collect();
@@ -339,8 +365,10 @@ impl ArchiSimApp {
                 } else {
                     Vec::new()
                 },
+                all: Vec::new(),
                 value: Some(format!("{} m", fmt_m(r.length()))),
                 family_type: None,
+                layered: None,
                 group: None,
             })
             .collect();
@@ -359,8 +387,14 @@ impl ArchiSimApp {
                     .filter(|o| o.object_type == t.id)
                     .map(|o| Element::Object(o.id))
                     .collect(),
+                all: m
+                    .objects()
+                    .filter(|o| o.object_type == t.id)
+                    .map(|o| Element::Object(o.id))
+                    .collect(),
                 value: None,
                 family_type: Some(archisim_core::FamilyTypeRef::Object(t.id)),
+                layered: None,
                 group: m.family(t.family).map(|f| f.name().to_string()),
             })
             .collect::<Vec<TypeRow>>()
@@ -380,8 +414,14 @@ impl ArchiSimApp {
                     .filter(|r| r.roof_type == t.id)
                     .map(|r| Element::Roof(r.id))
                     .collect(),
+                all: m
+                    .roofs()
+                    .filter(|r| r.roof_type == t.id)
+                    .map(|r| Element::Roof(r.id))
+                    .collect(),
                 value: None,
                 family_type: None,
+                layered: None,
                 group: None,
             })
             .collect();
@@ -397,8 +437,10 @@ impl ArchiSimApp {
                 name: s.name.clone(),
                 count: 1,
                 here: vec![Element::Room(s.id)],
+                all: Vec::new(),
                 value: Some(fmt_area(s.area())),
                 family_type: None,
+                layered: None,
                 group: None,
             })
             .collect();
@@ -431,9 +473,11 @@ impl ArchiSimApp {
         let categories = self.type_rows();
         let materials = self.ed.model().materials().count();
         let mut select: Option<(Vec<Element>, String)> = None;
+        let mut select_all: Option<(Vec<Element>, String)> = None;
         let mut edit: Option<(Option<TypesTab>, u64, Vec<Element>)> = None;
         let mut show_types = None;
         let mut to_library = None;
+        let mut layered_to_library = None;
         let mut open_library = false;
         nav_section(ui, "nav-model", "MODELO", |ui| {
             for (name, icon, rows) in &categories {
@@ -488,9 +532,28 @@ impl ArchiSimApp {
                                 select = Some((r.here.clone(), r.name.clone()));
                                 ui.close();
                             }
+                            if r.all.len() > r.here.len()
+                                && ui
+                                    .button(format!("Seleccionar los {} de todo el proyecto", r.all.len()))
+                                    .on_hover_text("En todas las plantas: Propiedades los cambia todos a la vez")
+                                    .clicked()
+                            {
+                                select_all = Some((r.all.clone(), r.name.clone()));
+                                ui.close();
+                            }
                             if ui.button("✎ Editar tipo…").clicked() {
                                 edit = Some((r.tab, r.id, r.here.clone()));
                                 ui.close();
+                            }
+                            if let Some(t) = r.layered {
+                                if ui
+                                    .button("Guardar en la biblioteca")
+                                    .on_hover_text("Llevar el tipo, con sus capas y sus materiales, a la carpeta de la biblioteca (Muros.astipos o Forjados.astipos) para usarlo en otros proyectos")
+                                    .clicked()
+                                {
+                                    layered_to_library = Some(t);
+                                    ui.close();
+                                }
                             }
                             if let Some(t) = r.family_type {
                                 if ui
@@ -551,6 +614,17 @@ impl ArchiSimApp {
                 ));
             }
         }
+        if let Some((found, name)) = select_all {
+            let n = found.len();
+            let on_level = crate::pick::elements_on_level(self.ed.model(), self.ed.level);
+            let here = found.iter().filter(|e| on_level.contains(e)).count();
+            self.set_tool(Tool::Arrow);
+            self.show_plan();
+            self.ed.selection = found.into_iter().collect();
+            self.say(format!(
+                "Seleccionados {n} elementos «{name}» en todo el proyecto ({here} en esta planta): lo que cambies en Propiedades se aplica a todos."
+            ));
+        }
         match edit {
             Some((Some(tab), id, _)) => self.edit_type(tab, id),
             Some((None, _, here)) => {
@@ -569,6 +643,9 @@ impl ArchiSimApp {
         }
         if let Some(t) = to_library {
             self.save_type_to_library(t);
+        }
+        if let Some(t) = layered_to_library {
+            self.save_layered_to_library(t);
         }
         if open_library {
             self.library.open = true;

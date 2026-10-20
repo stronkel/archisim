@@ -155,6 +155,32 @@ impl FamilyDef {
         Ok(run.marks)
     }
 
+    /// Draws the `elevation` marks (opening lines…), in the family's `x`
+    /// and `z` as the two coordinates of each mark; empty if the recipe has
+    /// none.
+    pub fn evaluate_elevation(
+        &self,
+        type_values: &Values,
+        instance_values: &Values,
+        builtins: &Values,
+    ) -> Result<Vec<Mark>, FamilyError> {
+        let Some(symbol) = &self.elevation else {
+            return Ok(Vec::new());
+        };
+        self.check_values(ParamScope::Type, type_values)?;
+        self.check_values(ParamScope::Instance, instance_values)?;
+        let mut base: HashMap<String, Value> = HashMap::new();
+        for (k, v) in builtins.iter().chain(type_values).chain(instance_values) {
+            base.insert(k.clone(), v.clone());
+        }
+        let mut run = Run::new(self, Mode::Plan);
+        let mut env = vec![base];
+        run.exec(&self.prelude, &mut env)?;
+        env.push(HashMap::new());
+        run.exec(&symbol.body, &mut env)?;
+        Ok(run.marks)
+    }
+
     /// Whether a parameter is shown in the settings dialog for these values
     /// (its `visible_if`). Missing values take their default; a condition
     /// that cannot be evaluated shows the parameter.

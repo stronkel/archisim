@@ -771,7 +771,7 @@ mod tests {
         assert_eq!(m.columns().count(), 2);
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
-        assert_eq!(m.opening_types().count(), 21);
+        assert_eq!(m.opening_types().count(), 28);
         assert_eq!(doc.undo_label(), Some("Plano"));
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 2);

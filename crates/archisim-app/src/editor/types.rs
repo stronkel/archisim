@@ -455,8 +455,8 @@ mod tests {
         let c = ed.model().opening_type(copy).unwrap().clone();
         assert_eq!(c.family, door.family);
         assert_eq!(c.values, door.values);
-        // The template has ten door types: the copy takes the next mark.
-        assert_eq!(c.mark, "P-11");
+        // The template has fourteen door types: the copy takes the next mark.
+        assert_eq!(c.mark, "P-15");
 
         let copy_name = ed.model().opening_type(copy).unwrap().name.clone();
         ed.set_opening_type_info(copy, &copy_name, " P-20 ", "Baños")
@@ -469,7 +469,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(err, "la marca «P-20» ya la tiene otro tipo");
         ed.undo();
-        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-11");
+        assert_eq!(ed.model().opening_type(copy).unwrap().mark, "P-15");
 
         // The family's own rule, in its own words: two jambs and the
         // mullion of 620 mm do not fit in 1800 mm.
@@ -506,7 +506,9 @@ mod tests {
                 "Puerta abatible",
                 "Puerta corredera",
                 "Puerta plegable",
-                "Puerta corredera empotrada"
+                "Puerta corredera empotrada",
+                "Puerta pivotante",
+                "Puerta de garaje"
             ]
         );
         // Voids are offered with the windows.
@@ -515,7 +517,7 @@ mod tests {
         let t = ed.model().opening_type(n).unwrap();
         assert_eq!(
             (t.name.as_str(), t.mark.as_str()),
-            ("Ventana practicable (nuevo)", "V-11")
+            ("Ventana practicable (nuevo)", "V-14")
         );
         let n2 = ed.new_opening_type("Ventana practicable").unwrap();
         assert_eq!(

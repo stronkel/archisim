@@ -1,7 +1,7 @@
 family "Ventana corredera"
   category window
   host wall
-  version 3
+  version 4
   description "Ventana o balconera corredera de 2 a 4 hojas, con marco, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -63,6 +63,19 @@ plan 1:50
     let b = a + lw
     let r = if i == 0 or i == 2 then es * q else -es * q
     polygon (k * a, 0) (k * b, 0) (k * b, r) (k * a, r) pen thin filled
+
+# En alzado, una flecha en cada hoja hacia donde corre (las de los
+# extremos hacia el centro).
+elevation
+  let c0 = -w / 2 + frame_width
+  let c1 = w / 2 - frame_width
+  let lw = (c1 - c0) / leaves
+  let zm = height / 2
+  repeat i in 0..leaves
+    let a = c0 + i * lw
+    let m = a + lw / 2
+    let s = if 2 * i + 1 < leaves then 1 else -1
+    use arrow_lines(m - s * lw * 0.25, m + s * lw * 0.25, zm)
 
 plan 1:100
   use frame_cut_plan(-width / 2, width / 2, frame_depth)

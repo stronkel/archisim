@@ -1237,6 +1237,7 @@ impl ArchiSimApp {
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
             (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
+            (Grip::OpeningJamb { .. }, _) => "Ancho del hueco",
             (Grip::TerrainPoint { .. }, _) => "Punto",
             (Grip::DraftPoint { .. }, _) => "Estirar",
         };
@@ -1541,7 +1542,7 @@ impl ArchiSimApp {
                         leaves.push((g.t0, mid));
                         leaves.push((g.t1, mid));
                     }
-                    D::Sliding | D::Folding => {}
+                    D::Sliding | D::Folding | D::Pivot | D::Overhead | D::Rolling => {}
                 }
                 for (hinge, free) in leaves {
                     let r = (free - hinge).abs();

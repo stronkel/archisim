@@ -161,12 +161,15 @@ struct Body {
     height: f64,
     door: bool,
     leaves: usize,
+    /// The recipe's elevation marks (opening lines), in `x` and `z`.
+    marks: Vec<archisim_core::family::Mark>,
 }
 
 fn body(source: &Model, t: &OpeningType) -> Option<Body> {
     let (model, _) = opening_model(source, t)?;
     let o = model.openings().next()?;
     let parts = model.evaluate_opening(o.id).ok()?.parts;
+    let marks = model.opening_elevation_marks(o.id).unwrap_or_default();
     let wall = model.wall(o.wall)?;
     let layers = model.wall_type(wall.wall_type)?.layers.clone();
     let leaves = match t.kind {
@@ -181,6 +184,7 @@ fn body(source: &Model, t: &OpeningType) -> Option<Body> {
         height: t.height,
         door: t.is_door(),
         leaves,
+        marks,
     })
 }
 
@@ -223,7 +227,57 @@ pub fn opening_elevation(source: &Model, t: &OpeningType) -> Option<Drawing> {
     } else {
         d.line([-w, 0.0], [w, 0.0], Pen::Medium, false);
     }
+    // The opening lines the recipe draws in elevation.
+    for m in &b.marks {
+        elevation_mark(&mut d, m);
+    }
     Some(d.pad(0.03))
+}
+
+/// One elevation mark of a recipe as lines of the drawing (arcs in short
+/// segments; any dash pattern drawn dashed).
+fn elevation_mark(d: &mut Drawing, m: &archisim_core::family::Mark) {
+    use archisim_core::family::Mark;
+    use archisim_core::LineStyle;
+    match m {
+        Mark::Line {
+            from, to, style, ..
+        } => d.line(*from, *to, Pen::Thin, *style != LineStyle::Continuous),
+        Mark::Polygon { points, style, .. } => {
+            for i in 0..points.len() {
+                let a = points[i];
+                let b = points[(i + 1) % points.len()];
+                d.line(a, b, Pen::Thin, *style != LineStyle::Continuous);
+            }
+        }
+        Mark::Arc {
+            center,
+            from,
+            to,
+            style,
+            ..
+        } => {
+            let r = ((from[0] - center[0]).powi(2) + (from[1] - center[1]).powi(2)).sqrt();
+            let a0 = (from[1] - center[1]).atan2(from[0] - center[0]);
+            let mut a1 = (to[1] - center[1]).atan2(to[0] - center[0]);
+            // The short way.
+            let tau = std::f64::consts::TAU;
+            while a1 - a0 > std::f64::consts::PI {
+                a1 -= tau;
+            }
+            while a0 - a1 > std::f64::consts::PI {
+                a1 += tau;
+            }
+            let n = 16;
+            let at = |k: usize| {
+                let a = a0 + (a1 - a0) * k as f64 / n as f64;
+                [center[0] + r * a.cos(), center[1] + r * a.sin()]
+            };
+            for k in 0..n {
+                d.line(at(k), at(k + 1), Pen::Thin, *style != LineStyle::Continuous);
+            }
+        }
+    }
 }
 
 /// A door or window cut vertically through the middle of its first leaf
@@ -578,6 +632,33 @@ mod tests {
             let s = curtain_section(&model).unwrap();
             assert!(s.height() > 3.0, "{}", t.name);
             assert!(e.svg(40.0).starts_with("<svg"));
+        }
+    }
+
+    #[test]
+    fn swing_doors_and_casements_show_their_opening_lines() {
+        let m = archisim_library::new_project("p");
+        let lines = |t: &OpeningType| {
+            opening_elevation(&m, t)
+                .unwrap()
+                .items
+                .iter()
+                .filter(|i| matches!(i, Item::Line { pen: Pen::Thin, .. }))
+                .count()
+        };
+        for t in m.opening_types() {
+            let family = m.family(t.family).unwrap().name().to_string();
+            let n = lines(t);
+            match family.as_str() {
+                // Two lines per leaf that turns.
+                "Puerta abatible" => assert!(n >= 2, "{}: {n}", t.name),
+                "Ventana practicable" => {
+                    let turning = t.panels.iter().filter(|p| *p != "FIXEDCASEMENT").count();
+                    assert!(n >= 2 * turning, "{}: {n}", t.name);
+                }
+                "Hueco" => assert_eq!(n, 0, "{}", t.name),
+                _ => {}
+            }
         }
     }
 

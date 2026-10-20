@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (tarde) · Familias: lo que faltaba del configurador, tipos multicapa en la biblioteca y familias nuevas (v0.33)
+
+Tandas 1 y 2 de las cinco pedidas el 20/10 a las 11:31 (pendientes de familias y familias nuevas); siguen parámetros compartidos, familias de anotación, importación de objetos y editor gráfico de recetas.
+
+**Hecho**
+- **Símbolo 1:20 en las recetas**: la puerta abatible dibuja a 1:20 el cerco con el **galce** donde cierra la hoja; la ventana practicable, el perfil de **cada hoja**, los montantes y el **doble vidrio**. Se ven en la planta a 1:20 y en la vista previa de Tipos y materiales (que es 1:20). El resto de familias usan a 1:20 su símbolo de 1:50, como hasta ahora.
+- **Alzado en las recetas** (bloque `elevation`, descrito en `docs/FAMILIAS.md`) con las **líneas de apertura**: el vértice del triángulo señala las bisagras; oscilobatiente con los dos triángulos; abatible y proyectante con el vértice abajo o arriba; basculante y pivotante con un rombo y su eje en trazo y punto; correderas con una flecha; plegable con el zigzag. Salen en la vista previa «Alzado» de los tipos y en **los alzados y secciones del proyecto**: continuas vistas desde el lado al que abren las hojas, **discontinuas** desde el otro (así se ven por fuera las ventanas que abren hacia dentro).
+- **Hoja pivotante** (eje vertical) en la ventana practicable, junto a las seis que había: en planta, la hoja girada atravesando el marco; en IFC, `PIVOTVERTICAL` (también al importar).
+- **Puntos de control de puertas y ventanas** (los *hotspots* de ArchiCAD): con una puerta o ventana seleccionada aparecen dos en sus jambas, en la cara del muro contraria a la que abre (en la otra están las cotas temporales). Arrastrando uno, el hueco se ensancha o se estrecha con la otra jamba quieta. Si el tipo lo usan otras puertas, se hace un tipo propio (con marca nueva) para no cambiarlas.
+- **Seleccionar los ejemplares de todo el proyecto**: Navegador → clic derecho sobre un tipo → «Seleccionar los N de todo el proyecto» (todas las plantas); lo que cambies en Propiedades se aplica a todos.
+- **Tipos de muro y de forjado en la biblioteca**: ficheros `Muros.astipos` y `Forjados.astipos` (texto legible: cada tipo con su `GlobalId`, función y capas, y los materiales con su color y trama). Navegador → clic derecho sobre un tipo de muro o forjado → «Guardar en la biblioteca»; ventana Biblioteca → «Cargar», con la misma regla del `GlobalId` que las puertas (igual: no hace nada; distinto: sustituir o cargar como otro tipo). `archisim biblioteca` los escribe también, en la carpeta `Multicapas`.
+- **Familias nuevas** (tanda 2):
+  - **Puerta de garaje**: seccional (con su nº de paneles), basculante o enrollable (con tambor), puerta peatonal en la hoja si se quiere. En planta, en discontinua, por dónde va al abrir (las guías bajo el techo, el vuelo de la basculante o el tambor). IFC: `ROLLINGUP` la enrollable; las otras, `USERDEFINED` con `OVERHEAD` (IFC no tiene un funcionamiento propio para ellas).
+  - **Puerta pivotante**: una hoja con el eje separado de la jamba («Eje: distancia a la jamba»); en planta la hoja atraviesa el hueco con sus dos giros. IFC `USERDEFINED` con `PIVOT`.
+  - **Ventana de guillotina**: dos hojas que deslizan en vertical en dos planos; se mueve la de abajo o las dos; altura del encuentro. IFC `DOUBLE_PANEL_HORIZONTAL` con `SLIDINGVERTICAL`.
+  - **Fijos laterales** en la puerta abatible: izquierdo, derecho o los dos, con su ancho y zócalo ciego, separados de la hoja por un montante. Para el CTE cuenta el paso libre de la hoja, no el hueco entero (las familias pueden dar ahora la salida `clear_width`).
+  - **Ventana en esquina**: en la ventana practicable, el parámetro del ejemplar «Ventana en esquina» (izquierda o derecha, vista desde donde abre) quita la jamba de ese lado, la lleva al encuentro con el muro contiguo (donde se cruzan los ejes de los dos muros) y abre el muro a través de la esquina, para que se encuentre con la ventana del otro muro sin machón. Sigue a la esquina al mover los muros o cambiar el ancho. Se cambia en **Propiedades → Parámetros del ejemplar**, un grupo nuevo que sale con cualquier familia que tenga parámetros de ejemplar.
+  - Hojas **pivotante** y basculante en la ventana practicable (la basculante ya estaba como opción de hoja).
+  - Siete tipos nuevos en la plantilla: puerta de entrada con fijo lateral 140×215, puerta pivotante 120×240, puertas de garaje seccional 250×220 y enrollable 300×250, ventana de guillotina 90×150, ventana pivotante 80×100 y ventana basculante 100×60. `archisim muestrario` los pone todos en un muro.
+- Familias de sistema: puerta abatible v6, ventana practicable v6, ventana corredera v4, puertas correderas y plegable una versión más (los proyectos anteriores las actualizan desde la ventana Biblioteca).
+- Versión 0.33.0. Sin cambios de formato `.archisim` ni de IFC (demo validada en IFC 4.3 e IFC4; ida y vuelta idéntica salvo la fecha; DXF y PDF validados).
+
+**Pendiente**
+- Tandas 3 a 5 (parámetros compartidos, anotación, importación de objetos y editor gráfico de recetas).
+- La ventana en esquina está en la practicable; la corredera en esquina, si la usáis, sería igual.
+- El símbolo 1:20 de correderas, plegable y huecos (usan el de 1:50).
+
+**Qué debe probar Antonio**
+1. Abre la demo. En la barra inferior pon la planta a **1:20** y acércate a una puerta y a una ventana: el cerco con su galce y las hojas con doble vidrio.
+2. Abre **Alzado Sur** (Navegador → Secciones y alzados): las ventanas tienen sus líneas de apertura **discontinuas** (abren hacia dentro y las ves desde fuera), con el vértice hacia las bisagras. Dime si es la convención que usáis.
+3. **Tipos y materiales → Ventanas → V-01 → Alzado**: líneas de apertura continuas. Cambia la hoja 1 a «oscilobatiente», «proyectante» y «pivotante» y mira el alzado y la planta.
+4. Selecciona una puerta en planta: arrastra el punto de control de una de sus jambas 20 cm. La puerta se ensancha con la otra jamba quieta; si había más puertas de ese tipo, aparece un tipo nuevo («… (2)»).
+5. Navegador → MODELO → Muros → clic derecho sobre «Fachada doble hoja 26,5» → **Guardar en la biblioteca**. Archivo → Nuevo, Vista → Biblioteca…: en «Muros · tipos multicapa» pulsa **Cargar**.
+6. Navegador → Puertas → clic derecho sobre un tipo → «Seleccionar los N de todo el proyecto».
+7. `cargo run -p archisim-cli -- muestrario out/` y abre `out/muestrario.archisim`: puertas de garaje (seccional y enrollable), pivotante, puerta con fijo lateral, guillotina, ventanas pivotante y basculante, en planta, en 3D (F3) y en alzado. Abre `out/muestrario.ifc` en ArchiCAD o Revit y mira cómo leen la puerta de garaje y la pivotante.
+8. **Ventana en esquina**: dibuja dos muros en L, pon una ventana practicable cerca de la esquina en cada uno; selecciona la primera y en **Propiedades → Parámetros del ejemplar → Ventana en esquina** elige el lado de la esquina (si eliges el otro, se va a la otra punta del muro); haz lo mismo con la otra. Mira en planta y en 3D que se encuentran sin machón.
+
+---
+
 ## 2026-10-20 (tarde) · Librería de AD5, primera vuelta (2.2, v0.32)
 
 Quinto y último bloque de los pedidos el 19/10. La v0.31 (CTE) quedó fusionada en `main` con la integración continua en verde.

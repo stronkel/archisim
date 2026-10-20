@@ -624,14 +624,21 @@ mod tests {
             .unwrap();
         let old = m.family(door).unwrap().source.clone();
         // A version with one more parameter.
-        let newer = old.replacen("  version 3", "  version 4", 1).replacen(
-            "  section \"Hojas\"\n",
-            "  section \"Hojas\"\n    handle bool = yes label \"Manilla\"\n",
-            1,
-        );
+        let v = m.family(door).unwrap().version();
+        let newer = old
+            .replacen(
+                &format!("  version {v}"),
+                &format!("  version {}", v + 1),
+                1,
+            )
+            .replacen(
+                "  section \"Hojas\"\n",
+                "  section \"Hojas\"\n    handle bool = yes label \"Manilla\"\n",
+                1,
+            );
         assert_ne!(newer, old);
         assert_eq!(m.update_family(door, &newer).unwrap(), 1);
-        assert_eq!(m.family(door).unwrap().version(), 4);
+        assert_eq!(m.family(door).unwrap().version(), v + 1);
         assert_eq!(
             m.opening_type(t).unwrap().values.get("handle"),
             Some(&Value::Bool(true))
@@ -639,7 +646,7 @@ mod tests {
         // Another family's recipe is refused.
         let window = crate::family::system_family(family::CASEMENT_WINDOW).unwrap();
         assert!(m.update_family(door, &window).is_err());
-        assert_eq!(m.family(door).unwrap().version(), 4);
+        assert_eq!(m.family(door).unwrap().version(), v + 1);
         // Library files of every family with types: they read back.
         let files = m.catalog_files();
         assert!(!files.is_empty());
