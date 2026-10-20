@@ -27,6 +27,9 @@ enum MethodAct {
     /// Slab, roof or room outline: by corners, rectangle or wand.
     Outline(Outline),
     Dim(DimMode),
+    Footing(crate::editor::FootingMode),
+    /// Footings under the columns and walls of the level.
+    FoundLevel,
     Command(&'static str),
     /// The tool draws only like this (a beam by two points).
     Fixed,
@@ -168,6 +171,8 @@ fn element_name(e: &Element) -> &'static str {
         Element::Object(_) => "Objeto",
         Element::Room(_) => "Local",
         Element::Tag(_) => "Etiqueta",
+        Element::Footing(_) => "Cimentación",
+        Element::Grid(_) => "Eje",
     }
 }
 
@@ -251,12 +256,19 @@ impl ArchiSimApp {
                 Tool::CurtainWall => ("Muro cortina", None, "Varita", ""),
                 Tool::Railing => ("Barandilla", None, "Varita", ""),
                 Tool::Object => ("Objeto", None, "Varita", ""),
+                Tool::Grid => ("Eje", None, "Varita", ""),
+                Tool::Footing => return Some(("Cimentación", self.footing_methods())),
                 Tool::Arrow | Tool::Cad => return None,
             };
         let wall = (self.tool == Tool::Wall).then_some(self.wall_tool.mode);
         let line_tool = matches!(
             self.tool,
-            Tool::Beam | Tool::Section | Tool::Stair | Tool::CurtainWall | Tool::Railing
+            Tool::Beam
+                | Tool::Section
+                | Tool::Stair
+                | Tool::CurtainWall
+                | Tool::Railing
+                | Tool::Grid
         );
         let m = |mark, name, hint, act, on| Method {
             mark,
@@ -353,6 +365,48 @@ impl ArchiSimApp {
             ),
         ];
         Some((name, list))
+    }
+
+    fn footing_methods(&self) -> Vec<Method> {
+        use crate::editor::FootingMode;
+        let mode = self.footing_settings.mode;
+        let m = |mark, name, hint, act, on| Method {
+            mark,
+            name,
+            hint,
+            act,
+            on,
+        };
+        vec![
+            m(
+                Mark::Glyph(Glyph::Footing),
+                "Aislada",
+                "Zapata aislada: clic en un pilar (lo sigue) o en su centro",
+                MethodAct::Footing(FootingMode::Pad),
+                mode == FootingMode::Pad,
+            ),
+            m(
+                Mark::Icon(Icon::Wall),
+                "Corrida",
+                "Zapata corrida: clic en un muro (lo sigue) o dos puntos",
+                MethodAct::Footing(FootingMode::Strip),
+                mode == FootingMode::Strip,
+            ),
+            m(
+                Mark::Icon(Icon::GeoSingle),
+                "Viga de atado",
+                "Entre dos puntos; encadena la siguiente",
+                MethodAct::Footing(FootingMode::TieBeam),
+                mode == FootingMode::TieBeam,
+            ),
+            m(
+                Mark::Glyph(Glyph::Raft),
+                "Cimentar planta",
+                "Zapatas bajo todos los pilares y muros rectos de la planta que no la tengan",
+                MethodAct::FoundLevel,
+                false,
+            ),
+        ]
     }
 
     fn dim_methods(&self) -> Vec<Method> {
@@ -458,6 +512,8 @@ impl ArchiSimApp {
                     self.dim_tool.finish();
                 }
             }
+            MethodAct::Footing(mode) => self.set_footing_mode(mode),
+            MethodAct::FoundLevel => self.found_level(),
             MethodAct::Command(name) => self.start_command(name),
             MethodAct::Fixed | MethodAct::None => {}
         }

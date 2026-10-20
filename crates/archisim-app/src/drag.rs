@@ -352,7 +352,11 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
-            Element::Mark(_) | Element::Column(_) | Element::Tag(_) => {}
+            Element::Mark(_)
+            | Element::Column(_)
+            | Element::Tag(_)
+            | Element::Footing(_)
+            | Element::Grid(_) => {}
         }
     }
     v
@@ -887,6 +891,15 @@ pub(crate) fn move_selection(
                 );
                 model.set_draft_shape(*id, moved)?;
             }
+            Element::Footing(id) => {
+                place_footing(model, *id, &|p| p + d, 0.0, selection)?;
+            }
+            Element::Grid(id) => {
+                model.edit_grid(*id, |g| {
+                    g.start = g.start + d;
+                    g.end = g.end + d;
+                })?;
+            }
             Element::Room(_) | Element::Tag(_) => {
                 // Moved with walls, a room goes whole.
                 let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
@@ -1218,6 +1231,33 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Roof(new));
             }
+            Element::Footing(id) => {
+                let f = model
+                    .footing(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_footing(archisim_core::NewFooting {
+                    level: f.level,
+                    kind: f.kind,
+                    material: f.material,
+                    width: f.width,
+                    depth: f.depth,
+                    top_offset: f.top_offset,
+                })?;
+                // The copy is free: it does not go under the same column.
+                place_footing(model, new, &|p| p + d, 0.0, &BTreeSet::new())?;
+                copies.insert(Element::Footing(new));
+            }
+            Element::Grid(id) => {
+                let g = model
+                    .grid(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let (start, end) = (g.start + d, g.end + d);
+                let name = model.next_grid_name(start, end);
+                let new = model.add_grid(archisim_core::NewGrid { name, start, end })?;
+                copies.insert(Element::Grid(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -1369,6 +1409,42 @@ pub fn preview<G: Geo + ?Sized>(
     Ok(out)
 }
 
+/// A footing moved or turned by `map` (and `turn`, radians): it leaves
+/// its column or wall unless that goes with it in `selection`.
+pub(crate) fn place_footing(
+    model: &mut Model,
+    id: archisim_core::FootingId,
+    map: &dyn Fn(Point2) -> Point2,
+    turn: f64,
+    selection: &BTreeSet<Element>,
+) -> Result<(), ModelError> {
+    use archisim_core::FootingKind;
+    model.edit_footing(id, |f| {
+        f.kind = match f.kind {
+            FootingKind::Pad {
+                position,
+                length,
+                rotation,
+                column,
+            } => FootingKind::Pad {
+                position: map(position),
+                length,
+                rotation: rotation + turn,
+                column: column.filter(|c| selection.contains(&Element::Column(*c))),
+            },
+            FootingKind::Strip { start, end, wall } => FootingKind::Strip {
+                start: map(start),
+                end: map(end),
+                wall: wall.filter(|w| selection.contains(&Element::Wall(*w))),
+            },
+            FootingKind::TieBeam { start, end } => FootingKind::TieBeam {
+                start: map(start),
+                end: map(end),
+            },
+        };
+    })
+}
+
 /// Whether the element is in the model.
 fn exists(model: &Model, e: Element) -> bool {
     match e {
@@ -1389,6 +1465,8 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Draft(id) => model.draft(id).is_some(),
         Element::Room(id) => model.room(id).is_some(),
         Element::Tag(id) => model.tag(id).is_some(),
+        Element::Footing(id) => model.footing(id).is_some(),
+        Element::Grid(id) => model.grid(id).is_some(),
     }
 }
 
@@ -1448,6 +1526,8 @@ fn level_of(
             Element::Draft(id) => draft_level(model, *id),
             Element::Room(id) => model.room(*id).map(|r| r.level),
             Element::Tag(id) => model.tag(*id).map(|t| t.level),
+            Element::Footing(id) => model.footing(*id).map(|f| f.level),
+            Element::Grid(_) => None,
         }),
     }
 }

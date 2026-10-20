@@ -620,6 +620,7 @@ impl ArchiSimApp {
             Tool::Section => "Clic: inicio de la sección · Esc: flecha",
             Tool::CurtainWall if self.curtain_anchor.is_some() => "Clic: final del muro cortina (exterior a la izquierda) · Mayús: 45° · Esc: anular",
             Tool::CurtainWall => "Clic: inicio del muro cortina · Esc: flecha",
+            Tool::Grid | Tool::Footing => self.foundation_hint(),
             Tool::Object => "Clic: colocar el objeto (lado de atrás en el punto) · Espacio: girar 90° · Esc: flecha",
             Tool::Railing if self.railing_points.is_empty() => "Clic: inicio de la barandilla · Esc: flecha",
             Tool::Railing => "Clic: siguiente punto · Intro, doble clic o clic derecho: terminar · Esc: quitar el último punto",

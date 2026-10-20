@@ -60,6 +60,7 @@ impl Model {
             || self.curtain_walls.contains_key(&CurtainWallId(id))
             || self.railings.contains_key(&RailingId(id))
             || self.objects.contains_key(&ObjectId(id))
+            || self.footings.contains_key(&FootingId(id))
     }
 
     /// Sets an element's phase. The doors and windows of a wall follow

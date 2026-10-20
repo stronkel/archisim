@@ -72,6 +72,14 @@ typed_id!(
     SectionId
 );
 typed_id!(
+    /// Identifies a [`crate::GridLine`] (a setting-out grid line).
+    GridId
+);
+typed_id!(
+    /// Identifies a [`crate::Footing`].
+    FootingId
+);
+typed_id!(
     /// Identifies a [`crate::Roof`].
     RoofId
 );

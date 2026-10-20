@@ -225,6 +225,84 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Setting-out grids and the foundations (v0.36): strip footings under
+    // the façade walls, pads under the porch columns and a tie beam
+    // between them, their tops under the ground slab.
+    doc.transact("Ejes y cimentación", |m| {
+        use archisim_core::{FootingKind, NewFooting, NewGrid};
+        let c = 0.1325;
+        for (name, a, b) in [
+            ("1", Point2::new(c, -4.2), Point2::new(c, 10.4)),
+            (
+                "2",
+                Point2::new(12.0 - c, -4.2),
+                Point2::new(12.0 - c, 10.4),
+            ),
+            ("A", Point2::new(-1.5, -2.7), Point2::new(13.5, -2.7)),
+            ("B", Point2::new(-1.5, c), Point2::new(13.5, c)),
+            ("C", Point2::new(-1.5, 9.0 - c), Point2::new(13.5, 9.0 - c)),
+        ] {
+            m.add_grid(NewGrid {
+                name: name.into(),
+                start: a,
+                end: b,
+            })?;
+        }
+        let concrete = m
+            .materials()
+            .find(|x| x.category == "concrete")
+            .map(|x| x.id)
+            .ok_or(ModelError::InvalidShape("demo concrete missing"))?;
+        let top = -0.35;
+        let facade_walls: Vec<_> = m
+            .walls_on_level(pb)
+            .filter(|w| w.wall_type == fachada)
+            .map(|w| w.id)
+            .collect();
+        for w in facade_walls {
+            m.add_footing(NewFooting {
+                level: pb,
+                kind: FootingKind::Strip {
+                    start: Point2::new(0.0, 0.0),
+                    end: Point2::new(1.0, 0.0),
+                    wall: Some(w),
+                },
+                material: concrete,
+                width: 0.6,
+                depth: 0.5,
+                top_offset: top,
+            })?;
+        }
+        let columns: Vec<_> = m.columns_on_level(pb).map(|c| c.id).collect();
+        for col in &columns {
+            m.add_footing(NewFooting {
+                level: pb,
+                kind: FootingKind::Pad {
+                    position: Point2::new(0.0, 0.0),
+                    length: 1.2,
+                    rotation: 0.0,
+                    column: Some(*col),
+                },
+                material: concrete,
+                width: 1.2,
+                depth: 0.6,
+                top_offset: top,
+            })?;
+        }
+        m.add_footing(NewFooting {
+            level: pb,
+            kind: FootingKind::TieBeam {
+                start: Point2::new(0.3, -2.7),
+                end: Point2::new(11.7, -2.7),
+            },
+            material: concrete,
+            width: 0.4,
+            depth: 0.4,
+            top_offset: top,
+        })?;
+        Ok(())
+    })?;
+
     // An access ramp to the west door (v0.25): an inclined ground slab
     // rising 10 % from the garden (−0,30) to the floor.
     doc.transact("Rampa", |m| {

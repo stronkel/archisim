@@ -19,6 +19,7 @@ use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
 mod curtain;
+mod foundations;
 pub mod library;
 mod objects;
 mod phases;
@@ -32,6 +33,7 @@ mod terrain;
 mod types;
 
 pub use curtain::CurtainSettings;
+pub use foundations::{FootingMode, FootingSettings};
 pub use objects::ObjectSettings;
 pub use railings::RailingSettings;
 pub use roofs::{slopes_for, RoofKind, RoofSettings};
@@ -372,6 +374,8 @@ impl Editor {
             Element::Draft(id) => model.draft(*id).is_some(),
             Element::Room(id) => model.room(*id).is_some(),
             Element::Tag(id) => model.tag(*id).is_some(),
+            Element::Footing(id) => model.footing(*id).is_some(),
+            Element::Grid(id) => model.grid(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -404,6 +408,9 @@ impl Editor {
                     .map(|t| (t.id, t.at, archisim_plan::rooms::tag_anchor(m, t.target)))
                     .collect();
                 let r = edit(m)?;
+                if m.footings().next().is_some() {
+                    m.footings_follow_hosts();
+                }
                 for (id, at, anchor) in tags {
                     let Some(t) = m.tag(id) else { continue };
                     if t.at != at {
@@ -591,7 +598,9 @@ impl Editor {
                     | Element::Terrain(_)
                     | Element::CurtainWall(_)
                     | Element::Railing(_)
-                    | Element::Object(_)) => remove_element(m, *e)?,
+                    | Element::Object(_)
+                    | Element::Footing(_)
+                    | Element::Grid(_)) => remove_element(m, *e)?,
                     Element::Draft(id) => {
                         m.remove_draft(*id)?;
                     }
@@ -685,7 +694,9 @@ impl Editor {
                         | Element::Terrain(_)
                         | Element::CurtainWall(_)
                         | Element::Railing(_)
-                        | Element::Object(_)) => remove_element(m, e)?,
+                        | Element::Object(_)
+                        | Element::Footing(_)
+                        | Element::Grid(_)) => remove_element(m, e)?,
                     },
                     Change::Transform { items, t, copy } => {
                         out.extend(crate::xform::transform(m, &items, &t, copy)?);
@@ -1297,6 +1308,8 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::CurtainWall(id) => m.remove_curtain_wall(id).map(drop),
         Element::Railing(id) => m.remove_railing(id).map(drop),
         Element::Object(id) => m.remove_object(id).map(drop),
+        Element::Footing(id) => m.remove_footing(id).map(drop),
+        Element::Grid(id) => m.remove_grid(id).map(drop),
         _ => Ok(()),
     }
 }

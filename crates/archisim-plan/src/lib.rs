@@ -28,6 +28,7 @@ pub mod axo;
 pub mod curtain;
 pub(crate) mod dim;
 pub mod drafting;
+pub mod grids;
 pub mod lettering;
 pub mod members;
 pub mod phases;
@@ -436,6 +437,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     for o in model.objects_on_level(level) {
         marker_points.extend(model.object_outline(o.id));
     }
+    if show(archisim_core::Category::Grids) {
+        marker_points.extend(grids::grid_points(model, k));
+    }
+    if show(archisim_core::Category::Foundations) {
+        for f in model.footings_on_level(level) {
+            marker_points.extend(f.outline());
+        }
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -544,6 +553,16 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         }
     }
     s.push_str("</g>\n");
+    if show(archisim_core::Category::Foundations) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        grids::draw_footings(&mut s, model, level, k, &vis);
+    }
+    if show(archisim_core::Category::Grids) {
+        grids::draw_grids(&mut s, model, k);
+    }
     if !reference.is_empty() {
         draw_reference(&mut s, model, &reference, k);
     }
@@ -1940,7 +1959,7 @@ pub(crate) fn pt(p: Point2) -> String {
     format!("{},{}", num(p.x), num(-p.y))
 }
 
-fn path(poly: &[Point2]) -> String {
+pub(crate) fn path(poly: &[Point2]) -> String {
     let mut d = String::new();
     for (i, p) in poly.iter().enumerate() {
         let _ = write!(d, "{}{} ", if i == 0 { "M" } else { "L" }, pt(*p));

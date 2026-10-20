@@ -43,6 +43,7 @@
 //! model twice gives the same file apart from the header timestamp.
 
 mod curtain;
+mod foundations;
 pub mod import;
 mod members;
 mod objects;
@@ -1800,6 +1801,8 @@ impl<'a> Exporter<'a> {
         self.write_curtain_walls(&materials, &storeys, &mut contained);
         self.write_railings(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
+        self.write_footings(&materials, &storeys, &mut contained);
+        self.write_grids(&storeys, &mut contained);
         self.write_spaces(&storeys);
 
         self.write_user_parameters(project);

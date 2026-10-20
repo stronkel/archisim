@@ -129,14 +129,19 @@ pub enum Category {
     Terrain,
     /// The marks of sections and elevations.
     SectionMarks,
+    /// Setting-out grid lines.
+    Grids,
+    /// Footings and tie beams.
+    Foundations,
 }
 
 impl Category {
-    pub const ALL: [Category; 16] = [
+    pub const ALL: [Category; 18] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
         Category::Structure,
+        Category::Foundations,
         Category::Roofs,
         Category::Stairs,
         Category::CurtainWalls,
@@ -146,6 +151,7 @@ impl Category {
         Category::Dimensions,
         Category::LevelMarks,
         Category::SectionMarks,
+        Category::Grids,
         Category::Drafting,
         Category::Rooms,
         Category::Tags,
@@ -169,6 +175,8 @@ impl Category {
             Category::Objects => "objects",
             Category::Terrain => "terrain",
             Category::SectionMarks => "section_marks",
+            Category::Grids => "grids",
+            Category::Foundations => "foundations",
         }
     }
 
@@ -194,6 +202,8 @@ impl Category {
             Category::Objects => "Objetos y mobiliario",
             Category::Terrain => "Terreno",
             Category::SectionMarks => "Marcas de sección",
+            Category::Grids => "Ejes",
+            Category::Foundations => "Cimentación",
         }
     }
 }

@@ -16,6 +16,7 @@ use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MI
 
 mod curtain;
 mod disciplines;
+mod foundations;
 mod layered_library;
 mod library;
 mod objects;
@@ -29,6 +30,7 @@ mod stairs;
 mod structure;
 pub use curtain::*;
 pub use disciplines::*;
+pub use foundations::*;
 pub use layered_library::*;
 pub use library::*;
 pub use objects::*;
@@ -1162,6 +1164,8 @@ pub struct ModelParts {
     pub user_parameters: Vec<UserParameter>,
     pub parameter_values: Vec<(u64, UserParameterId, Value)>,
     pub sections: Vec<SectionLine>,
+    pub grids: Vec<GridLine>,
+    pub footings: Vec<Footing>,
     pub roofs: Vec<Roof>,
     /// Walls trimmed under a roof: (wall, roof).
     pub wall_roofs: Vec<(WallId, RoofId)>,
@@ -1245,6 +1249,8 @@ pub struct Model {
     user_params: BTreeMap<UserParameterId, UserParameter>,
     param_values: BTreeMap<u64, BTreeMap<UserParameterId, Value>>,
     sections: BTreeMap<SectionId, SectionLine>,
+    grids: BTreeMap<GridId, GridLine>,
+    footings: BTreeMap<FootingId, Footing>,
     roofs: BTreeMap<RoofId, Roof>,
     /// Walls trimmed under a roof (ArchiCAD's "Recortar con cubierta",
     /// Revit's "Enlazar parte superior").
@@ -1302,6 +1308,8 @@ impl Model {
             user_params: BTreeMap::new(),
             param_values: BTreeMap::new(),
             sections: BTreeMap::new(),
+            grids: BTreeMap::new(),
+            footings: BTreeMap::new(),
             roofs: BTreeMap::new(),
             wall_roofs: BTreeMap::new(),
             stairs: BTreeMap::new(),
@@ -3681,6 +3689,8 @@ impl Model {
             user_parameters: self.user_params.values().cloned().collect(),
             parameter_values: self.parameter_values(),
             sections: self.sections.values().cloned().collect(),
+            grids: self.grids.values().cloned().collect(),
+            footings: self.footings.values().cloned().collect(),
             roofs: self.roofs.values().cloned().collect(),
             wall_roofs: self.wall_roofs.iter().map(|(w, r)| (*w, *r)).collect(),
             stairs: self.stairs.values().cloned().collect(),
@@ -3975,6 +3985,7 @@ impl Model {
         }
 
         model.restore_members(parts.member_types, parts.columns, parts.beams, &mut claim)?;
+        model.restore_grids_and_footings(parts.grids, parts.footings, &mut claim)?;
         model.restore_roofs(parts.roofs, &mut claim)?;
         for (w, r) in parts.wall_roofs {
             model

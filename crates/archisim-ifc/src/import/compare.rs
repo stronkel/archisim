@@ -323,6 +323,56 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("terreno {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    if a.footings().count() != b.footings().count() {
+        diff(format!(
+            "número de cimentaciones: {} / {}",
+            a.footings().count(),
+            b.footings().count()
+        ));
+    }
+    for s in a.footings() {
+        let Some(t) = b.footings().find(|t| t.guid == s.guid) else {
+            diff(format!("cimentación {} falta", s.guid));
+            continue;
+        };
+        let (os, ot) = (s.outline(), t.outline());
+        let host = |m: &Model, f: &archisim_core::Footing| match f.kind {
+            archisim_core::FootingKind::Pad {
+                column: Some(c), ..
+            } => m.column(c).map(|c| c.guid.to_string()),
+            archisim_core::FootingKind::Strip { wall: Some(w), .. } => {
+                m.wall(w).map(|w| w.guid.to_string())
+            }
+            _ => None,
+        };
+        let same = os.len() == ot.len()
+            && os.iter().zip(&ot).all(|(p, q)| p.distance(*q) <= TOL)
+            && close(s.depth, t.depth)
+            && close(s.top_offset, t.top_offset)
+            && std::mem::discriminant(&s.kind) == std::mem::discriminant(&t.kind)
+            && host(a, s) == host(b, t)
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("cimentación {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
+    let grids = |m: &Model| {
+        let mut v: Vec<(String, [i64; 4])> = m
+            .grids()
+            .map(|g| {
+                let r = |x: f64| (x * 1000.0).round() as i64;
+                (
+                    g.name.clone(),
+                    [r(g.start.x), r(g.start.y), r(g.end.x), r(g.end.y)],
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    if grids(a) != grids(b) {
+        diff(format!("ejes: {:?} / {:?}", grids(a), grids(b)));
+    }
     if a.objects().count() != b.objects().count() {
         diff(format!(
             "número de objetos: {} / {}",

@@ -38,6 +38,7 @@ pub enum SolidOwner {
     CurtainWall(archisim_core::CurtainWallId),
     Railing(archisim_core::RailingId),
     Object(archisim_core::ObjectId),
+    Footing(archisim_core::FootingId),
 }
 
 impl SolidOwner {
@@ -55,6 +56,7 @@ impl SolidOwner {
             SolidOwner::CurtainWall(x) => x.0,
             SolidOwner::Railing(x) => x.0,
             SolidOwner::Object(x) => x.0,
+            SolidOwner::Footing(x) => x.0,
         }
     }
 }
@@ -1932,8 +1934,28 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for o in model.objects() {
         out.extend(object_solids(model, o.id));
     }
+    for f in model.footings() {
+        out.extend(footing_solids(model, f.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
+}
+
+/// The solid of a footing: its outline from its top face down its depth.
+pub fn footing_solids(model: &Model, id: archisim_core::FootingId) -> Vec<Solid> {
+    let Some(f) = model.footing(id) else {
+        return Vec::new();
+    };
+    let outline = f.outline();
+    if outline.len() < 3 {
+        return Vec::new();
+    }
+    let top = model.level(f.level).map_or(0.0, |l| l.elevation) + f.top_offset;
+    vec![Solid {
+        owner: SolidOwner::Footing(id),
+        material: f.material,
+        triangles: prism(&outline, top - f.depth, top),
+    }]
 }
 
 /// Solids of the elements on one level only.
@@ -1953,6 +1975,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),
         SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
+        SolidOwner::Footing(f) => model.footing(f).is_some_and(|f| f.level == level),
     };
     model_solids(model)
         .into_iter()
