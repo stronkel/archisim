@@ -92,7 +92,12 @@ impl ArchiSimApp {
                         self.nav_sheets(ui);
                         nav_section(ui, "nav-tables", "TABLAS", |ui| self.nav_table_rows(ui));
                     }
-                    NavTab::Model => self.nav_model(ui),
+                    NavTab::Model => {
+                        nav_section(ui, "nav-disciplines", "DISCIPLINAS", |ui| {
+                            self.nav_disciplines(ui)
+                        });
+                        self.nav_model(ui);
+                    }
                 }
                 ui.add_space(6.0);
             });

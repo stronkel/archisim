@@ -380,6 +380,12 @@ pub struct ArchiSimApp {
     /// The command line stays shown (Vista); otherwise it shows only while
     /// an order is typed or running.
     pub pin_command_line: bool,
+    /// The discipline worked in greys the rest of the view (Vista).
+    pub attenuate: bool,
+    /// Disciplines hidden in every view, and those that cannot be
+    /// selected (the navigator's eye and lock).
+    pub hidden_disciplines: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
+    pub locked_disciplines: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
     /// The discipline whose tools are shown.
     pub discipline: toolbox::Discipline,
     /// The tab of the navigator shown.
@@ -519,6 +525,9 @@ impl ArchiSimApp {
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
             pin_command_line: false,
+            attenuate: true,
+            hidden_disciplines: Default::default(),
+            locked_disciplines: Default::default(),
             discipline: toolbox::Discipline::default(),
             nav_tab: navigator::NavTab::default(),
             command_search: None,
@@ -949,6 +958,11 @@ impl ArchiSimApp {
         archisim_plan::PlanOptions {
             scale,
             phase_view: self.phase_view,
+            style: archisim_core::ViewStyle {
+                focus: self.screen_focus(),
+                hidden_disciplines: self.hidden_disciplines.clone(),
+                ..Default::default()
+            },
             ..archisim_plan::PlanOptions::default()
         }
     }
@@ -1214,6 +1228,7 @@ impl ArchiSimApp {
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
+        self.drop_locked_from_selection();
         self.keep_tool_types_valid();
         self.receive_files(&ctx);
         self.coord_poll(&ctx);
@@ -1813,6 +1828,7 @@ mod coord_ui;
 mod cte_ui;
 mod curtain_types_ui;
 mod curtain_ui;
+mod discipline_ui;
 mod draft_props;
 mod glyphs;
 mod icons;

@@ -24,6 +24,14 @@ pub struct Vertex {
     pub bias: f32,
 }
 
+/// What the disciplines change in the 3D view: what is greyed and what
+/// is left out.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Disciplines {
+    pub focus: archisim_core::DisciplineFocus,
+    pub hidden: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
+}
+
 /// Selected elements are tinted with this colour (linear RGB).
 const HIGHLIGHT: [f32; 3] = [0.05, 0.35, 0.85];
 /// How see-through glass is (as in the IFC export).
@@ -76,7 +84,7 @@ fn element(owner: SolidOwner) -> Element {
 
 impl Scene {
     pub fn build(model: &Model, selection: &BTreeSet<Element>) -> Self {
-        Self::build_with(model, selection, &[], false)
+        Self::build_with(model, selection, &[], false, &Default::default())
     }
 
     /// The model and, after it, the elements of linked models. With
@@ -87,6 +95,7 @@ impl Scene {
         selection: &BTreeSet<Element>,
         linked: &[LinkedPart],
         isolate: bool,
+        disciplines: &Disciplines,
     ) -> Self {
         let mut s = Scene {
             lo: Vec3::splat(f32::INFINITY),
@@ -95,10 +104,20 @@ impl Scene {
         };
         let mut glass_owners = Vec::new();
         for solid in model_solids(model) {
+            let id = solid.owner.id();
+            if model.hidden_by_discipline(&disciplines.hidden, id) {
+                continue;
+            }
             let owner = Owner::Model(element(solid.owner));
             let mat = model.material(solid.material);
             let [r, g, b] = mat.map_or([200, 200, 200], |m| m.cut_color);
             let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+            if model.dimmed(disciplines.focus, id) {
+                // In light grey, as a reference.
+                let lum = 0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2];
+                let v = 1.0 - (1.0 - lum) * 0.35;
+                rgb = [v, v, v];
+            }
             if selection.contains(&element(solid.owner)) {
                 for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
                     *c = *c * 0.45 + h * 0.55;

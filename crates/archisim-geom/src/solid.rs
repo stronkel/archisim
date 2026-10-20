@@ -40,6 +40,25 @@ pub enum SolidOwner {
     Object(archisim_core::ObjectId),
 }
 
+impl SolidOwner {
+    /// The id of the element.
+    pub fn id(self) -> u64 {
+        match self {
+            SolidOwner::Wall(x) => x.0,
+            SolidOwner::Slab(x) => x.0,
+            SolidOwner::Opening(x) => x.0,
+            SolidOwner::Column(x) => x.0,
+            SolidOwner::Beam(x) => x.0,
+            SolidOwner::Roof(x) => x.0,
+            SolidOwner::Stair(x) => x.0,
+            SolidOwner::Terrain(x) => x.0,
+            SolidOwner::CurtainWall(x) => x.0,
+            SolidOwner::Railing(x) => x.0,
+            SolidOwner::Object(x) => x.0,
+        }
+    }
+}
+
 /// One closed piece of one material.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Solid {

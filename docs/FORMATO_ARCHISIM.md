@@ -1,4 +1,4 @@
-# Formato de proyecto `.archisim` (versión 14)
+# Formato de proyecto `.archisim` (versión 15)
 
 El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensión `.archisim`. Es el equivalente al `.pln` de ArchiCAD o al `.rvt` de Revit, pero legible con cualquier editor de texto y comparable entre versiones (Git, diff).
 
@@ -55,6 +55,7 @@ El proyecto de ArchiSim se guarda en un único fichero de texto JSON con extensi
 | `rooms` | Locales (versión 7; desde la 9, el único tipo de local): `guid`, planta, número, nombre, uso, contorno y huecos, punto del rótulo (`label`), si sigue a los muros (`bounded`), altura libre propia (sin ella, hasta la planta superior), acabados (`floor`, `walls`, `ceiling`) y, desde la versión 12, `occupancy`: m² por persona para la evacuación (0: ocupación nula; sin él, la de su uso) | `IfcSpace` |
 | `tags` | Etiquetas (versión 7): planta, elemento (`{"kind": "opening"/"wall"/"room", "id"}`), posición y si lleva línea de referencia | Etiqueta |
 | `tables` | Tablas colocadas en planos (versión 7): plano, clase (`openings`, `walls`, `slabs`, `rooms` y, desde la versión 10, `structure`, `roofs`, `stairs`, `curtain_walls`), planta (sin ella, todo el edificio) y esquina superior izquierda en el papel (m) | Tabla de planificación / Listado interactivo |
+| `disciplines` | Disciplinas dadas a mano (versión 15, opcional): `id` del elemento y `discipline` (`architecture`, `structure`, `services`, `site`). Sin él, cada elemento tiene la suya: pilares y vigas, estructura; muros y forjados con una capa estructural de hormigón, acero o madera, estructura; terreno, vegetación y vehículos, urbanismo; lo demás, arquitectura | — |
 | `user_parameters` | Parámetros del proyecto (versión 13, opcional): `id`, `guid` (la identidad de un parámetro compartido: el mismo en todos los proyectos que lo cargan), `name`, `kind` (`text`, `number`, `integer`, `length` en metros, `area` en m², `bool`, `choice` con sus `options`), `group` (el conjunto de propiedades del IFC y el grupo en Propiedades), `categories` (`walls`, `slabs`, `doors`, `windows`, `columns`, `beams`, `roofs`, `stairs`, `curtain_walls`, `railings`, `objects`, `rooms`), `by_type` (el valor es del tipo, no de cada elemento), `default` y `description` | Un conjunto de propiedades por grupo en cada elemento (`IfcPropertySet`); las definiciones, en `ArchiSim_Parameters` del `IfcProject` |
 | `parameter_values` | Valores de los parámetros que no son el de por defecto (versión 13): `element` (id del elemento o, si el parámetro es del tipo, del tipo), `parameter` (id) y `value` | — |
 

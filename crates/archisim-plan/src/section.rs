@@ -835,6 +835,7 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
         .pens
         .unwrap_or_else(|| model.graphics.pens(options.scale));
     crate::set_pens(pens);
+    let _greyed = crate::dim::begin(model, &options.style);
     let svg = render_section_inner(model, d, options);
     crate::set_pens(archisim_core::Pens::FINE);
     svg
@@ -902,9 +903,11 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             edges.clear();
         }
     };
-    for f in &d.faces {
+    // One face of what is seen beyond, into `out` (its loose edges into
+    // `edges`, drawn together).
+    let face = |out: &mut String, edges: &mut String, f: &Face| {
         if let Some(dashed) = f.opening_line {
-            flush(&mut s, &mut edges);
+            flush(out, edges);
             let mut dashes = String::new();
             for (a, b) in &f.edges {
                 if visible(&[*a, *b]) {
@@ -918,13 +921,13 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
                     String::new()
                 };
                 let _ = writeln!(
-                    s,
+                    out,
                     r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"{pattern}/>"#,
                     dashes.trim_end(),
                     num(pens().thin * k),
                 );
             }
-            continue;
+            return;
         }
         if f.poly.is_empty() {
             for (a, b) in &f.edges {
@@ -932,37 +935,59 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
                     let _ = write!(edges, "M{} L{} ", pt(*a), pt(*b));
                 }
             }
-            continue;
+            return;
         }
         if !visible(&f.poly) {
-            continue;
+            return;
         }
-        flush(&mut s, &mut edges);
+        flush(out, edges);
         let [r, g, b] = f.fill;
         let _ = writeln!(
-            s,
+            out,
             r#"<path d="{}" fill="rgb({r},{g},{b})" stroke="rgb({r},{g},{b})" stroke-width="{}"/>"#,
             path(&f.poly),
             num(0.15 * k)
         );
+    };
+    for f in &d.faces {
+        if crate::dim::is_hidden(f.owner.id()) {
+            continue;
+        }
+        if crate::dim::is_dimmed(f.owner.id()) {
+            // In grey, on its own.
+            flush(&mut s, &mut edges);
+            let (mut t, mut te) = (String::new(), String::new());
+            face(&mut t, &mut te, f);
+            flush(&mut t, &mut te);
+            s.push_str(&crate::dim::grey(&t));
+        } else {
+            face(&mut s, &mut edges, f);
+        }
     }
     flush(&mut s, &mut edges);
     s.push_str("</g>\n");
 
     // The cut, over everything.
     s.push_str("<g id=\"cut\" stroke-linejoin=\"miter\">\n");
-    for (ci, (mat, loops, _, _)) in d.cuts.iter().enumerate() {
+    for (ci, (mat, loops, _, owner)) in d.cuts.iter().enumerate() {
         let Some(material) = model.material(*mat) else {
             continue;
         };
-        for (li, l) in loops.iter().enumerate() {
-            if !visible(l) {
-                continue;
+        crate::dim::element(&mut s, owner.id(), |s| {
+            for (li, l) in loops.iter().enumerate() {
+                if visible(l) {
+                    fill_cut(s, material, l, &format!("cut-{ci}-{li}"), k);
+                }
             }
-            fill_cut(&mut s, material, l, &format!("cut-{ci}-{li}"), k);
-        }
+        });
     }
-    for (_, loops, flags, _) in &d.cuts {
+    for (_, loops, flags, owner) in &d.cuts {
+        if crate::dim::is_hidden(owner.id()) {
+            continue;
+        }
+        let greyed = crate::dim::is_dimmed(owner.id());
+        let mut t = String::new();
+        let out = if greyed { &mut t } else { &mut s };
         for (l, fl) in loops.iter().zip(flags) {
             if !visible(l) {
                 continue;
@@ -977,13 +1002,16 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
             for (d_, w) in [(thin, pens().thin), (heavy, pens().cut)] {
                 if !d_.is_empty() {
                     let _ = writeln!(
-                        s,
+                        out,
                         r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round"/>"#,
                         d_.trim_end(),
                         num(w * k)
                     );
                 }
             }
+        }
+        if greyed {
+            s.push_str(&crate::dim::grey(&t));
         }
     }
     s.push_str("</g>\n");

@@ -643,6 +643,12 @@ pub(crate) struct Style {
     pub hidden_layers: Vec<u64>,
     #[serde(default = "fine", skip_serializing_if = "is_fine")]
     pub detail: String,
+    /// What is drawn in grey by discipline (version 15).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<String>,
+    /// Disciplines left out (version 15).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hidden_disciplines: Vec<String>,
 }
 
 impl Default for Style {
@@ -651,6 +657,8 @@ impl Default for Style {
             hidden: Vec::new(),
             hidden_layers: Vec::new(),
             detail: fine(),
+            focus: None,
+            hidden_disciplines: Vec::new(),
         }
     }
 }
@@ -669,6 +677,12 @@ impl Style {
             hidden: s.hidden.iter().map(|c| c.code().to_string()).collect(),
             hidden_layers: s.hidden_layers.iter().map(|l| l.0).collect(),
             detail: s.detail.code().into(),
+            focus: (s.focus != core::DisciplineFocus::None).then(|| s.focus.code().to_string()),
+            hidden_disciplines: s
+                .hidden_disciplines
+                .iter()
+                .map(|d| d.code().to_string())
+                .collect(),
         }
     }
 
@@ -693,11 +707,28 @@ impl Style {
                 .collect(),
             detail: core::Detail::from_code(&self.detail)
                 .ok_or_else(|| bad(format!("unknown detail «{}»", self.detail)))?,
+            focus: match &self.focus {
+                None => core::DisciplineFocus::None,
+                Some(c) => core::DisciplineFocus::from_code(c)
+                    .ok_or_else(|| bad(format!("unknown focus «{c}»")))?,
+            },
+            hidden_disciplines: self
+                .hidden_disciplines
+                .iter()
+                .map(|c| {
+                    core::ElementDiscipline::from_code(c)
+                        .ok_or_else(|| bad(format!("unknown discipline «{c}»")))
+                })
+                .collect::<Result<_, _>>()?,
         })
     }
 
     fn is_default(&self) -> bool {
-        self.hidden.is_empty() && self.hidden_layers.is_empty() && self.detail == "fine"
+        self.hidden.is_empty()
+            && self.hidden_layers.is_empty()
+            && self.detail == "fine"
+            && self.focus.is_none()
+            && self.hidden_disciplines.is_empty()
     }
 }
 

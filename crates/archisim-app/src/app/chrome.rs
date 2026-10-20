@@ -329,6 +329,17 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_properties, "Propiedades");
             ui.checkbox(&mut self.show_navigator, "Navegador");
+            if ui
+                .checkbox(&mut self.attenuate, "Atenuar por disciplina")
+                .on_hover_text("En Estructura, Instalaciones, Urbanismo o Concepto, lo que no es de la disciplina se ve en gris")
+                .changed()
+            {
+                if self.attenuate {
+                    self.apply_focus();
+                } else {
+                    self.view_style.focus = archisim_core::DisciplineFocus::None;
+                }
+            }
             ui.checkbox(&mut self.pin_command_line, "Línea de órdenes fija")
                 .on_hover_text("Sin marcar, lo que escribes sale junto al cursor y el paso de la orden en marcha, en la barra bajo las pestañas");
             ui.checkbox(&mut self.keys_autocad, "Teclas de AutoCAD")

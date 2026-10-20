@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use archisim_core::{Axo, Model, Point2};
+use archisim_core::{Axo, DisciplineFocus, Model, Point2};
 use archisim_geom::solid::{model_solids, P3};
 
 use crate::num;
@@ -70,6 +70,8 @@ struct Face {
     fill: [u8; 3],
     /// Which of its three edges (a→b, b→c, c→a) are drawn.
     edges: [bool; 3],
+    /// Of a discipline the view leaves in grey.
+    grey: bool,
 }
 
 /// The picture: faces from far to near, and its extent (picture metres).
@@ -88,8 +90,9 @@ fn key(p: P3) -> [i64; 3] {
     ]
 }
 
-/// The axonometric of every element of the model.
-pub fn axo_drawing(model: &Model, axo: &Axo) -> AxoDrawing {
+/// The axonometric of every element of the model; what `focus` leaves as
+/// reference, in grey.
+pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawing {
     let f = frame(axo);
     // From above, on the left of the eye.
     let light = unit([
@@ -107,6 +110,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo) -> AxoDrawing {
             continue;
         }
         let base = mat.map_or([205, 205, 205], |m| m.cut_color);
+        let grey = model.dimmed(focus, solid.owner.id());
         // Normals of every triangle, and who shares each edge.
         let normals: Vec<P3> = solid
             .triangles
@@ -152,6 +156,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo) -> AxoDrawing {
                 depth,
                 fill,
                 edges,
+                grey,
             });
         }
     }
@@ -165,7 +170,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo) -> AxoDrawing {
 
 /// The part of the picture to show whole at a scale, with some air.
 pub fn axo_extent(model: &Model, axo: &Axo, scale: f64) -> (Point2, Point2) {
-    let d = axo_drawing(model, axo);
+    let d = axo_drawing(model, axo, DisciplineFocus::None);
     let m = 5.0 * scale / 1000.0;
     (d.lo - Point2::new(m, m), d.hi + Point2::new(m, m))
 }
@@ -216,7 +221,14 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
             }
         }
         let [r, g, b] = face.fill;
-        let colour = format!("#{r:02x}{g:02x}{b:02x}");
+        let colour = if face.grey {
+            let v = (255.0 - (255.0 - (0.3 * r as f64 + 0.59 * g as f64 + 0.11 * b as f64)) * 0.38)
+                as u8;
+            format!("#{v:02x}{v:02x}{v:02x}")
+        } else {
+            format!("#{r:02x}{g:02x}{b:02x}")
+        };
+        let ink = if face.grey { "#a9a9a9" } else { "#222" };
         let [p0, p1, p2] = face.pts;
         // The same colour as a thin outline, so the triangles of a face
         // leave no gap between them.
@@ -241,7 +253,7 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
         if !d.is_empty() {
             let _ = writeln!(
                 s,
-                r##"<path d="{d}" fill="none" stroke="#222" stroke-width="{}"/>"##,
+                r##"<path d="{d}" fill="none" stroke="{ink}" stroke-width="{}"/>"##,
                 num(edge)
             );
         }
@@ -296,7 +308,7 @@ mod tests {
             top: WallTop::Unconnected,
         })
         .unwrap();
-        let d = axo_drawing(&m, &Axo::default());
+        let d = axo_drawing(&m, &Axo::default(), DisciplineFocus::None);
         assert!(!d.faces.is_empty());
         assert!(d.hi.x > d.lo.x && d.hi.y > d.lo.y);
         let svg = render_axo(&d, (d.lo, d.hi), 50.0);

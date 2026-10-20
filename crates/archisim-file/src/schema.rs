@@ -50,6 +50,9 @@ pub(crate) struct ProjectFile {
     /// Phases of the elements that are not new (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub phases: Vec<PhaseOf>,
+    /// Disciplines given to elements by hand (version 15).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disciplines: Vec<DisciplineOf>,
     /// Parameters of the project (version 13).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub user_parameters: Vec<UserParameter>,
@@ -506,6 +509,43 @@ pub(crate) enum Phase {
     New,
     Existing,
     Demolished,
+}
+
+/// The discipline given by hand to one element (version 15).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DisciplineOf {
+    pub id: u64,
+    pub discipline: Discipline,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Discipline {
+    Architecture,
+    Structure,
+    Services,
+    Site,
+}
+
+impl Discipline {
+    fn out(d: core::ElementDiscipline) -> Self {
+        match d {
+            core::ElementDiscipline::Architecture => Discipline::Architecture,
+            core::ElementDiscipline::Structure => Discipline::Structure,
+            core::ElementDiscipline::Services => Discipline::Services,
+            core::ElementDiscipline::Site => Discipline::Site,
+        }
+    }
+
+    fn into_core(self) -> core::ElementDiscipline {
+        match self {
+            Discipline::Architecture => core::ElementDiscipline::Architecture,
+            Discipline::Structure => core::ElementDiscipline::Structure,
+            Discipline::Services => core::ElementDiscipline::Services,
+            Discipline::Site => core::ElementDiscipline::Site,
+        }
+    }
 }
 
 /// A parameter of the project (version 13).
@@ -1480,6 +1520,14 @@ impl ProjectFile {
                     },
                 })
                 .collect(),
+            disciplines: p
+                .disciplines
+                .into_iter()
+                .map(|(id, d)| DisciplineOf {
+                    id,
+                    discipline: Discipline::out(d),
+                })
+                .collect(),
             sections: p
                 .sections
                 .into_iter()
@@ -1730,6 +1778,11 @@ impl ProjectFile {
                         },
                     )
                 })
+                .collect(),
+            disciplines: self
+                .disciplines
+                .iter()
+                .map(|d| (d.id, d.discipline.into_core()))
                 .collect(),
             sections: self
                 .sections

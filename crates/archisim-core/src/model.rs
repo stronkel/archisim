@@ -15,6 +15,7 @@ use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
 mod curtain;
+mod disciplines;
 mod layered_library;
 mod library;
 mod objects;
@@ -27,6 +28,7 @@ mod site;
 mod stairs;
 mod structure;
 pub use curtain::*;
+pub use disciplines::*;
 pub use layered_library::*;
 pub use library::*;
 pub use objects::*;
@@ -1153,6 +1155,8 @@ pub struct ModelParts {
     pub beams: Vec<Beam>,
     /// Elements that are not new: (id, phase).
     pub phases: Vec<(u64, Phase)>,
+    /// Elements given a discipline by hand: (id, discipline).
+    pub disciplines: Vec<(u64, ElementDiscipline)>,
     /// Parameters of the project and the values given to elements and
     /// types (by id).
     pub user_parameters: Vec<UserParameter>,
@@ -1236,6 +1240,8 @@ pub struct Model {
     beams: BTreeMap<BeamId, Beam>,
     /// Phases of the elements that are not new, by id.
     phases: BTreeMap<u64, Phase>,
+    /// Disciplines given by hand, by element id.
+    disciplines: BTreeMap<u64, ElementDiscipline>,
     user_params: BTreeMap<UserParameterId, UserParameter>,
     param_values: BTreeMap<u64, BTreeMap<UserParameterId, Value>>,
     sections: BTreeMap<SectionId, SectionLine>,
@@ -1292,6 +1298,7 @@ impl Model {
             columns: BTreeMap::new(),
             beams: BTreeMap::new(),
             phases: BTreeMap::new(),
+            disciplines: BTreeMap::new(),
             user_params: BTreeMap::new(),
             param_values: BTreeMap::new(),
             sections: BTreeMap::new(),
@@ -3670,6 +3677,7 @@ impl Model {
             columns: self.columns.values().cloned().collect(),
             beams: self.beams.values().cloned().collect(),
             phases: self.phase_table(),
+            disciplines: self.discipline_table(),
             user_parameters: self.user_params.values().cloned().collect(),
             parameter_values: self.parameter_values(),
             sections: self.sections.values().cloned().collect(),
@@ -4001,6 +4009,7 @@ impl Model {
             })?;
         model.set_code_settings(parts.code);
         model.restore_phases(parts.phases)?;
+        model.restore_disciplines(parts.disciplines)?;
         model.restore_parameters(parts.user_parameters, parts.parameter_values)?;
 
         // Parameters take ids from the same counter as the elements.
