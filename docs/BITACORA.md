@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (tarde) · Librería de AD5, primera vuelta (2.2, v0.32)
+
+Quinto y último bloque de los pedidos el 19/10. La v0.31 (CTE) quedó fusionada en `main` con la integración continua en verde.
+
+**Qué se hizo** (detalle en `docs/FAMILIAS.md`, «Librería de AD5»)
+- **Puerta abatible**: dos hojas **desiguales** con hoja activa, **tarja** acristalada y **premarco**.
+- **Ventana practicable**: **tarja** fija, **premarco** y **vierteaguas** en 3D.
+- **Ventana corredera**: de **2 a 4 hojas**, con premarco y vierteaguas.
+- **Nueve tipos habituales** en la plantilla, como propuesta para el catálogo de AD5 (puertas de paso de 72,5 y 82,5 —esta cumple la vivienda accesible—, entrada con tarja, dos hojas desiguales, oscilobatiente, practicable con persiana y vierteaguas, balconera con persiana, corredera de 3 hojas, practicable con tarja).
+- `archisim biblioteca [carpeta]`: escribe los tipos de la plantilla como ficheros de biblioteca (Puertas, Ventanas, Mobiliario…), listos para la ventana Biblioteca. `archisim muestrario [carpeta]`: un muro con todas las puertas y ventanas (IFC validado).
+- Un material de un parámetro oculto (el vidrio de la tarja en una puerta sin tarja) ya no cuenta como «en uso».
+- Sin cambios de formato: los proyectos antiguos ofrecen «Actualizar» de estas familias en la ventana Biblioteca.
+
+**Pendiente**
+- El **catálogo real de AD5**: dime qué puertas y ventanas usáis de verdad (medidas, materiales, marcas) y lo cargo.
+- Puerta de garaje, ventana pivotante y basculante, fijos laterales en puertas.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- muestrario out/` y abre `out/muestrario.archisim`: en la planta y en 3D (F3) mira las puertas con tarja y premarco, la de dos hojas desiguales, la corredera de 3 hojas y los vierteaguas. Abre también `out/muestrario.ifc` en ArchiCAD.
+2. En **Tipos y materiales → Puertas**, elige «Puerta de 2 hojas desiguales» y cambia «Hoja activa: ancho» y la mano de una puerta colocada: la hoja grande cambia de lado.
+3. `cargo run -p archisim-cli -- biblioteca` y, en la app, **Vista → Biblioteca… → Cambiar carpeta…** a `out/biblioteca`: salen todas las familias con sus tipos para cargarlas en otro proyecto.
+4. Revisa la lista de nueve tipos: ¿son los que usaríais? ¿Qué cambiarías?
+
+---
+
 ## 2026-10-20 (mediodía) · Comprobación del Código Técnico (4.7, v0.31)
 
 Cuarto bloque de los pedidos el 19/10. La v0.30 (biblioteca de tipos) quedó fusionada en `main` con la integración continua en verde.

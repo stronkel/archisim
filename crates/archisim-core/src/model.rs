@@ -1534,10 +1534,17 @@ impl Model {
             .values()
             .filter(|t| in_layers(&t.layers))
             .map(|t| t.name.clone());
+        // A material of a parameter the type does not show (a transom's
+        // glass on a door without one) is not a use.
         let openings = self
             .opening_types
             .values()
-            .filter(|t| t.values.values().any(|v| *v == Value::Material(id.0)))
+            .filter(|t| {
+                let def = self.families.get(&t.family).map(|f| f.def());
+                t.values.iter().any(|(k, v)| {
+                    *v == Value::Material(id.0) && def.is_none_or(|d| d.is_visible(k, &t.values))
+                })
+            })
             .map(|t| t.name.clone());
         let members = self
             .member_types
@@ -1593,9 +1600,21 @@ impl Model {
                 users.len()
             )));
         }
-        self.materials
+        let removed = self
+            .materials
             .remove(&id)
-            .ok_or(ModelError::UnknownMaterial(id))
+            .ok_or(ModelError::UnknownMaterial(id))?;
+        // Hidden parameters that pointed to it take another one.
+        if let Some(other) = self.materials.keys().next().copied() {
+            for t in self.opening_types.values_mut() {
+                for v in t.values.values_mut() {
+                    if *v == Value::Material(id.0) {
+                        *v = Value::Material(other.0);
+                    }
+                }
+            }
+        }
+        Ok(removed)
     }
 
     // ---- Wall types ---------------------------------------------------
@@ -2519,7 +2538,7 @@ impl Model {
         let keep = base.as_ref().is_some_and(|b| b.kind == spec.kind);
         let mut values = match &base {
             Some(b) => b.values.clone(),
-            None => self.families[&id].def().defaults(ParamScope::Type),
+            None => self.family_defaults(id, ParamScope::Type)?,
         };
         // Only what the family has (a void has no frame).
         let has = |k: &str| self.families[&id].def().param(k).is_some();

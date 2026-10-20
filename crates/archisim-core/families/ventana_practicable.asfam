@@ -1,8 +1,8 @@
 family "Ventana practicable"
   category window
   host wall
-  version 4
-  description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante o basculante; con persiana enrollable y capialzado si se quiere"
+  version 5
+  description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante o basculante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
 
@@ -22,15 +22,29 @@ type_params
   section "Persiana"
     shutter bool = no label "Persiana enrollable con capialzado"
     box_height length = 0.25 range 0.10..0.60 visible_if shutter label "Capialzado: alto"
+  section "Tarja"
+    transom bool = no label "Tarja fija sobre las hojas"
+    transom_height length = 0.40 range 0.10..2.00 visible_if transom label "Tarja: alto"
+  section "Premarco y vierteaguas"
+    subframe bool = no label "Premarco"
+    subframe_width length = 0.03 range 0.005..0.20 visible_if subframe label "Premarco: anchura"
+    sill bool = no label "Vierteaguas"
+    sill_depth length = 0.20 range 0.02..1.00 visible_if sill label "Vierteaguas: vuelo desde el marco"
   section "Materiales"
     frame_material material = "Aluminio lacado" label "Marco"
     panel_material material = "Vidrio doble" label "Vidrio"
+    subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
+    sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
   section "Representación"
     swing_line linestyle = "continuous" label "Línea del giro"
 
-require 2 * frame_width < width and 2 * frame_width < height else "El marco no deja hueco para el vidrio"
-require (leaves + 1) * frame_width < width else "El marco y los montantes no dejan hueco para el vidrio"
-require not shutter or box_height + 2 * frame_width < height else "El capialzado no deja sitio a la ventana"
+# Con premarco, la ventana va dentro de él.
+let s = if subframe then subframe_width else 0
+let w = width - 2 * s
+
+require 2 * frame_width < w and 2 * frame_width < height - 2 * s else "El marco no deja hueco para el vidrio"
+require (leaves + 1) * frame_width < w else "El marco y los montantes no dejan hueco para el vidrio"
+require not shutter or box_height + 2 * frame_width < height - 2 * s else "El capialzado no deja sitio a la ventana"
 
 # Las hojas de la mitad izquierda giran en su jamba izquierda y las de la
 # derecha en la derecha (se encuentran en el centro); una hoja sola, o la
@@ -43,12 +57,27 @@ let side_4 = "RIGHT"
 
 # Con persiana, el capialzado ocupa lo alto del hueco, sobre la ventana.
 let window_height = if shutter then height - box_height else height
+# La ventana, de «z0» a «z1»; las hojas, hasta «zl» (con tarja, debajo de
+# ella).
+let z0 = s
+let z1 = if shutter then window_height else height - s
+let zl = if transom then z1 - transom_height else z1
+
+require not transom or zl - z0 > 2 * frame_width + 0.20 else "La tarja no deja sitio a las hojas"
 
 body
-  use window_frame(width, window_height, frame_width, frame_depth, frame_material)
-  use glazing(width, window_height, frame_width, frame_depth, leaves, frame_material, panel_material)
+  if subframe
+    use subframe(width, height, s, frame_depth, subframe_material, 1)
+  use window_frame_z(w, z0, z1, frame_width, frame_depth, frame_material)
+  use glazing_z(w, z0 + frame_width, zl - frame_width, frame_width, frame_depth, leaves, frame_material, panel_material)
+  if transom
+    use transom(-w / 2 + frame_width, w / 2 - frame_width, zl, z1 - frame_width, frame_width, frame_depth, frame_material, panel_material)
   if shutter
     use block(-width / 2, width / 2, frame_depth, window_height, height, frame_material)
+  if sill
+    # «y» apunta al lado al que abren las hojas; fuera es +y si abren hacia fuera.
+    let out = if opens_to == "exterior" then 1 else -1
+    use window_sill(width, frame_depth, sill_depth, out, sill_material)
 
 # Marco cortado, línea del vidrio, montantes y el giro de cada hoja que se
 # abre hacia el lado (practicable u oscilobatiente). Las fijas, abatibles,
@@ -60,11 +89,14 @@ plan 1:50
   if shutter
     let es = if wall_ext > 0 then 1 else -1
     line (-width / 2, es * (frame_depth / 2 + 0.02)) to (width / 2, es * (frame_depth / 2 + 0.02)) pen thin dashed
-  use frame_cut_plan(-width / 2, width / 2, frame_depth)
+  if subframe
+    use frame_cut_plan(-width / 2, -w / 2, frame_depth)
+    use frame_cut_plan(w / 2, width / 2, frame_depth)
+  use frame_cut_plan(-w / 2, w / 2, frame_depth)
   let f = frame_width
-  let c0 = -width / 2 + f
-  let c1 = width / 2 - f
-  let clear = (width - 2 * f - (leaves - 1) * f) / leaves
+  let c0 = -w / 2 + f
+  let c1 = w / 2 - f
+  let clear = (w - 2 * f - (leaves - 1) * f) / leaves
   line (c0, 0) to (c1, 0) pen thin
   repeat i in 1..leaves
     let m = c0 + i * (clear + f) - f / 2
@@ -91,7 +123,7 @@ plan 1:100
 outputs
   opening_width = width
   opening_height = height
-  frame_width = frame_width
+  frame_width = frame_width + s
   frame_depth = frame_depth
   frame_material = frame_material
   panel_material = panel_material
