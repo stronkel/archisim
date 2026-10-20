@@ -9,6 +9,9 @@
 # the first time, macOS asks to confirm it in System Settings → Privacy &
 # Security → "Open Anyway".
 set -euo pipefail
+# On a failure, say where in the job's annotations (readable from the
+# checks API even when the log is not).
+trap 'echo "::error file=scripts/macos_bundle.sh,line=$LINENO::failed: $BASH_COMMAND"' ERR
 
 cd "$(dirname "$0")/.."
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
@@ -136,5 +139,16 @@ Terminal (sin cuarentena, sin los pasos de abajo):
    clic derecho → Abrir con → ArchiSim.
 TXT
 dmg="$dist/ArchiSim-${version}.dmg"
-hdiutil create -volname "ArchiSim ${version}" -srcfolder "$stage" -ov -format UDZO "$dmg" >/dev/null
+# hdiutil fails now and then on the CI runners ("Resource busy"): try again.
+for attempt in 1 2 3 4 5; do
+    if hdiutil create -volname "ArchiSim ${version}" -srcfolder "$stage" -ov -format UDZO "$dmg" >/dev/null; then
+        break
+    fi
+    if [ "$attempt" = 5 ]; then
+        echo "::error file=scripts/macos_bundle.sh::hdiutil failed five times"
+        exit 1
+    fi
+    echo "hdiutil failed (attempt $attempt), retrying"
+    sleep $((attempt * 5))
+done
 echo "$dmg"
