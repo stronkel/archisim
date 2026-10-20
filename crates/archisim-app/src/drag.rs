@@ -360,7 +360,9 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Module(_)
             | Element::Mass(_)
             | Element::Plot(_)
-            | Element::Road(_) => {}
+            | Element::Road(_)
+            | Element::Run(_)
+            | Element::Device(_) => {}
         }
     }
     v
@@ -916,6 +918,12 @@ pub(crate) fn move_selection(
             Element::Road(id) => {
                 model.edit_road(*id, |x| x.axis.iter_mut().for_each(|p| *p = *p + d))?;
             }
+            Element::Run(id) => {
+                model.edit_run(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
+            }
+            Element::Device(id) => {
+                model.edit_device(*id, |x| x.position = x.position + d)?;
+            }
             Element::Room(_) | Element::Tag(_) => {
                 // Moved with walls, a room goes whole.
                 let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
@@ -1336,6 +1344,22 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Road(new));
             }
+            Element::Run(id) => {
+                let x = model
+                    .run(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_run(crate::xform::run_spec(&x, |p| p + d))?;
+                copies.insert(Element::Run(new));
+            }
+            Element::Device(id) => {
+                let x = model
+                    .device(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_device(crate::xform::device_spec(&x, |p| p + d, 0.0))?;
+                copies.insert(Element::Device(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -1549,6 +1573,8 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Mass(id) => model.mass(id).is_some(),
         Element::Plot(id) => model.plot(id).is_some(),
         Element::Road(id) => model.road(id).is_some(),
+        Element::Run(id) => model.run(id).is_some(),
+        Element::Device(id) => model.device(id).is_some(),
     }
 }
 
@@ -1614,6 +1640,8 @@ fn level_of(
             Element::Mass(id) => model.mass(*id).map(|m| m.level),
             Element::Plot(id) => model.plot(*id).map(|p| p.level),
             Element::Road(id) => model.road(*id).map(|r| r.level),
+            Element::Run(id) => model.run(*id).map(|r| r.level),
+            Element::Device(id) => model.device(*id).map(|d| d.level),
         }),
     }
 }

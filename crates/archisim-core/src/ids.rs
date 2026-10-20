@@ -22,6 +22,14 @@ macro_rules! typed_id {
 }
 
 typed_id!(
+    /// Identifies a [`crate::ServiceRun`] (a pipe or duct).
+    RunId
+);
+typed_id!(
+    /// Identifies a [`crate::ServiceDevice`].
+    DeviceId
+);
+typed_id!(
     /// Identifies a [`crate::Plot`] (a parcel).
     PlotId
 );

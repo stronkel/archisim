@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (madrugada) · Instalaciones
+
+Rama `bloque/instalaciones` (sale de la de Spline y Elegir línea; pull request para Antonio). Formato `.archisim` versión 20 (abre las anteriores tal cual, sin instalaciones).
+
+**Hecho** (las fichas de Instalaciones dejan de estar apagadas)
+- **Tubería** (tecla H) y **Conducto** (tecla D): clic en cada punto del recorrido; doble clic, Intro o clic derecho terminan. En Propiedades, el **sistema** (agua fría, agua caliente, saneamiento, calefacción; impulsión, retorno, extracción de aire), el **diámetro** o el **ancho y alto** del conducto y la **altura del eje** sobre la planta. Valen Spline, Elegir línea y los campos L y ∠.
+- **Aparato**, **Iluminación**, **Enchufe** e **Interruptor**: un clic los coloca, cada uno a su altura habitual (luminaria a 2,60 m, enchufe a 0,30, interruptor a 1,10, equipo a 1,20), que se cambia en Propiedades; Espacio los gira 90°.
+- **En planta**: cada sistema con su color (fría azul, caliente roja, saneamiento marrón…); las tuberías gruesas y los conductos, con sus dos caras; los conductos, a trazos. El sistema y el tamaño se rotulan a lo largo del tramo más largo, sin pisar otros rótulos, otras tuberías ni muros. Símbolos: luminaria (círculo con aspa), enchufe, interruptor y equipo (caja con aspa).
+- **En 3D**, su volumen con el color del sistema; en Mediciones (y BC3), un capítulo **Instalaciones**: metros por sistema y tamaño, y unidades por aparato.
+- Se seleccionan, mueven, copian, giran, cambian de planta y borran como lo demás; son de la disciplina Instalaciones (con ella activa, el resto se ve en gris).
+- **IFC**: cada tramo es un `IfcPipeSegment` o `IfcDuctSegment` con su perfil circular o rectangular; los aparatos, `IfcLightFixture`, `IfcOutlet`, `IfcSwitchingDevice` e `IfcUnitaryEquipment`. Todo va en el `IfcDistributionSystem` de su sistema (agua fría, agua caliente, saneamiento, calefacción, ventilación…, más «Alumbrado» y «Fuerza»), que sirve al edificio. En IFC4, las mismas clases. Se lee de vuelta al importar.
+- La **demo** lleva agua fría, caliente y saneamiento desde la caldera hasta la cocina, la extracción de la campana, una luminaria por zona, enchufes y un interruptor.
+
+**Pendiente**
+- Sin uniones (codos, tes) ni accesorios: cada tramo es recto y se tocan en sus extremos. Sin pendientes en el saneamiento, sin cálculo de caudales ni secciones.
+- Los aparatos son cajas con su clase IFC; aún no hay familias de aparatos (sanitarios conectados, radiadores, rejillas y difusores).
+- En sección y alzado no se dibujan todavía.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes `cargo run -p archisim-cli -- demo out/`). Disciplina **Instalaciones** (la barra de la izquierda): las tuberías de colores a lo largo del muro este y norte de la cocina, con su rótulo; las luminarias en cada zona.
+2. **Tubería**: clic, clic, clic e Intro. En Propiedades cambia el sistema a **Agua caliente** y el diámetro a 20: cambia el color y el rótulo.
+3. **Conducto** → sistema **Impulsión**, 400 × 250, altura 2700: dibújalo por el pasillo; se ve a trazos.
+4. **Iluminación**: clic en el centro de un local; **Enchufe**: Espacio para girarlo y clic junto a un muro.
+5. **F3** (3D) → Caja de sección activa → **Planta activa** y baja **Z máx.** a 2800: las tuberías y las luminarias dentro de la casa.
+6. **Exportar IFC** y ábrelo en tu visor: las tuberías como segmentos de su sistema (en BIMcollab o Solibri, en el árbol de sistemas).
+7. Pestaña **Mediciones**: el capítulo 09 Instalaciones con los metros de cada tubería.
+
+---
+
 ## 2026-10-20 (noche, 7) · Spline, Elegir línea y campos de longitud y ángulo
 
 Rama `bloque/metodos` (sale de la de Urbanismo; pull request para Antonio). Sin cambios de formato ni de IFC.

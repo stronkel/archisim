@@ -110,7 +110,7 @@ impl Scene {
             }
             let owner = Owner::Model(element(solid.owner));
             let mat = model.material(solid.material);
-            let [r, g, b] = mat.map_or([200, 200, 200], |m| m.cut_color);
+            let [r, g, b] = archisim_geom::solid::solid_color(model, &solid);
             let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
             if model.dimmed(disciplines.focus, id) {
                 // In light grey, as a reference.

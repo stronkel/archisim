@@ -42,6 +42,9 @@ pub enum SolidOwner {
     /// A volume of the concept phase.
     Mass(archisim_core::MassId),
     Road(archisim_core::RoadId),
+    /// A pipe or duct.
+    Run(archisim_core::RunId),
+    Device(archisim_core::DeviceId),
 }
 
 impl SolidOwner {
@@ -62,6 +65,8 @@ impl SolidOwner {
             SolidOwner::Footing(x) => x.0,
             SolidOwner::Mass(x) => x.0,
             SolidOwner::Road(x) => x.0,
+            SolidOwner::Run(x) => x.0,
+            SolidOwner::Device(x) => x.0,
         }
     }
 }
@@ -1948,6 +1953,12 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for r in model.roads() {
         out.extend(road_solids(model, r.id));
     }
+    for r in model.runs() {
+        out.extend(run_solids(model, r.id));
+    }
+    for d in model.devices() {
+        out.extend(device_solids(model, d.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -2018,6 +2029,113 @@ pub fn road_solids(model: &Model, id: archisim_core::RoadId) -> Vec<Solid> {
         .collect()
 }
 
+/// A cross-section (counter-clockwise, `x` across to the left, `y` up)
+/// swept along a straight piece from `a` to `b`, with its two ends closed.
+pub fn sweep_segment(section: &[(f64, f64)], a: P3, b: P3) -> Vec<[P3; 3]> {
+    let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    let h = (d[0] * d[0] + d[1] * d[1]).sqrt();
+    if len < EPSILON || h < EPSILON || section.len() < 3 {
+        return Vec::new();
+    }
+    // Across (horizontal, to the left) and up.
+    let u = [-d[1] / h, d[0] / h, 0.0];
+    let v = [0.0, 0.0, 1.0];
+    let at = |o: P3, (x, y): (f64, f64)| {
+        [
+            o[0] + u[0] * x + v[0] * y,
+            o[1] + u[1] * x + v[1] * y,
+            o[2] + u[2] * x + v[2] * y,
+        ]
+    };
+    let n = section.len();
+    let mut tris = Vec::new();
+    for i in 1..n - 1 {
+        // The end faces along the piece; the start, back.
+        tris.push([at(b, section[0]), at(b, section[i]), at(b, section[i + 1])]);
+        tris.push([at(a, section[0]), at(a, section[i + 1]), at(a, section[i])]);
+    }
+    for i in 0..n {
+        let (p, q) = (section[i], section[(i + 1) % n]);
+        tris.push([at(a, p), at(a, q), at(b, q)]);
+        tris.push([at(a, p), at(b, q), at(b, p)]);
+    }
+    tris
+}
+
+/// The solids of a pipe or duct: one piece along each stretch of its
+/// path, round (twelve sides) or rectangular.
+/// Facets of a round pipe or light.
+const ROUND_FACETS: usize = 24;
+
+pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
+    let Some(r) = model.run(id) else {
+        return Vec::new();
+    };
+    let z = model.level(r.level).map_or(0.0, |l| l.elevation) + r.elevation;
+    let section: Vec<(f64, f64)> = if r.is_duct() {
+        let (w, h) = (r.width / 2.0, r.height / 2.0);
+        vec![(-w, -h), (w, -h), (w, h), (-w, h)]
+    } else {
+        // Facets that turn less than the 3D view's crease angle: a round
+        // pipe, not a ribbed one.
+        (0..ROUND_FACETS)
+            .map(|i| {
+                let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                (r.width / 2.0 * a.cos(), r.width / 2.0 * a.sin())
+            })
+            .collect()
+    };
+    let tris: Vec<[P3; 3]> = r
+        .path
+        .windows(2)
+        .flat_map(|w| sweep_segment(&section, [w[0].x, w[0].y, z], [w[1].x, w[1].y, z]))
+        .collect();
+    vec![Solid {
+        owner: SolidOwner::Run(id),
+        material: archisim_core::MaterialId(0),
+        triangles: tris,
+    }]
+}
+
+/// The solid of a device: its box (a light, a disc).
+pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
+    let Some(d) = model.device(id) else {
+        return Vec::new();
+    };
+    let z = model.level(d.level).map_or(0.0, |l| l.elevation) + d.elevation;
+    let outline = if d.kind == archisim_core::DeviceKind::Light {
+        (0..ROUND_FACETS)
+            .map(|i| {
+                let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                d.position + Point2::new(a.cos(), a.sin()) * (d.width / 2.0)
+            })
+            .collect()
+    } else {
+        d.outline()
+    };
+    vec![Solid {
+        owner: SolidOwner::Device(id),
+        material: archisim_core::MaterialId(0),
+        triangles: prism(&outline, z, z + d.height),
+    }]
+}
+
+/// The colour a solid is shown with: a pipe's or duct's that of its
+/// system, a device's a light grey, the rest their material's.
+pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
+    match s.owner {
+        SolidOwner::Run(id) => model.run(id).map_or([150, 150, 150], |r| r.system.color()),
+        SolidOwner::Device(id) => match model.device(id).map(|d| d.kind) {
+            Some(archisim_core::DeviceKind::Light) => [250, 230, 150],
+            _ => [235, 235, 230],
+        },
+        _ => model
+            .material(s.material)
+            .map_or([200, 200, 200], |m| m.cut_color),
+    }
+}
+
 /// Solids of the elements on one level only.
 pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
     let on_level = |owner: SolidOwner| match owner {
@@ -2038,6 +2156,8 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Footing(f) => model.footing(f).is_some_and(|f| f.level == level),
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
         SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
+        SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
+        SolidOwner::Device(d) => model.device(d).is_some_and(|d| d.level == level),
     };
     model_solids(model)
         .into_iter()
@@ -3351,5 +3471,22 @@ mod corner_tests {
             || p.min[2] > 0.01
             || p.max[2] - p.min[2] < h - 0.01));
         let _ = plain;
+    }
+}
+
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    #[test]
+    fn swept_pieces_are_closed_and_outward() {
+        // A 1 × 1 square section along 4 m: 4 m³.
+        let sq = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)];
+        let s = Solid {
+            owner: SolidOwner::Run(archisim_core::RunId(1)),
+            material: archisim_core::MaterialId(0),
+            triangles: sweep_segment(&sq, [0.0, 0.0, 1.0], [0.0, 4.0, 1.0]),
+        };
+        assert!((s.volume() - 4.0).abs() < 1e-9, "{}", s.volume());
     }
 }

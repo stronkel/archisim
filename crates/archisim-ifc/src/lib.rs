@@ -49,6 +49,7 @@ mod members;
 mod objects;
 mod railings;
 mod roofs;
+mod services;
 mod spaces;
 mod stairs;
 pub mod step;
@@ -1820,6 +1821,7 @@ impl<'a> Exporter<'a> {
         self.write_footings(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
         self.write_urban(&materials, site, site_pl);
+        self.write_services(&storeys, &mut contained, building);
         self.write_spaces(&storeys);
 
         self.write_user_parameters(project);

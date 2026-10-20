@@ -180,6 +180,8 @@ fn element_name(e: &Element) -> &'static str {
         Element::Mass(_) => "Volumen",
         Element::Plot(_) => "Parcela",
         Element::Road(_) => "Vial",
+        Element::Run(_) => "Instalación",
+        Element::Device(_) => "Aparato",
     }
 }
 
@@ -291,6 +293,9 @@ impl ArchiSimApp {
                     "",
                 ),
                 Tool::Road => ("Vial", None, "Varita", ""),
+                Tool::Pipe => ("Tubería", None, "Varita", ""),
+                Tool::Duct => ("Conducto", None, "Varita", ""),
+                Tool::Device => ("Aparato", None, "Varita", ""),
                 Tool::Footing => return Some(("Cimentación", self.footing_methods())),
                 Tool::Arrow | Tool::Cad => return None,
             };

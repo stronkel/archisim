@@ -3979,3 +3979,112 @@ fn splines_picked_lines_and_typed_points() {
         .any(|w| w.start.approx_eq(p(0.0, 20.0)) && w.end.approx_eq(p(0.0, 24.0))));
     h.frame();
 }
+
+/// Instalaciones: a cold water pipe and a supply duct drawn by their
+/// points, a light and a socket placed with a click; moved, copied,
+/// deleted, and written to the IFC as segments of their systems.
+#[test]
+fn services_are_drawn() {
+    use super::toolbox::{Discipline, Pick};
+    use archisim_core::{DeviceKind, ServiceSystem};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-2.0, -2.0), p(12.0, 10.0), 0.0);
+    h.app.set_discipline(Discipline::Services);
+    h.app.pick(Pick::Tool(Tool::Pipe));
+    assert_eq!(h.app.tool, Tool::Pipe);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(6.0, 0.0));
+    h.click_at(p(6.0, 4.0));
+    h.key(Key::Enter);
+    let pipe = h.model().runs().next().unwrap().clone();
+    assert_eq!(pipe.system, ServiceSystem::ColdWater);
+    assert!((pipe.length() - 10.0).abs() < 1e-6);
+    assert!((pipe.height - pipe.width).abs() < 1e-12);
+    h.frame();
+    h.key(Key::Escape);
+    h.app.pick(Pick::Tool(Tool::Duct));
+    h.app.service_settings.duct_system = ServiceSystem::ExhaustAir;
+    h.click_at(p(0.0, 8.0));
+    h.click_at(p(10.0, 8.0));
+    h.key(Key::Enter);
+    let duct = h.model().runs().find(|r| r.is_duct()).unwrap().clone();
+    assert_eq!(duct.system, ServiceSystem::ExhaustAir);
+    assert!((duct.elevation - 2.6).abs() < 1e-9);
+    h.frame();
+    h.key(Key::Escape);
+    h.app.pick(Pick::Device(DeviceKind::Light));
+    assert_eq!(h.app.tool, Tool::Device);
+    h.click_at(p(3.0, 3.0));
+    h.app.pick(Pick::Device(DeviceKind::Socket));
+    h.key(Key::Space);
+    h.click_at(p(9.0, 0.0));
+    let light = h
+        .model()
+        .devices()
+        .find(|d| d.kind == DeviceKind::Light)
+        .unwrap()
+        .clone();
+    assert!((light.elevation - 2.6).abs() < 1e-9);
+    let socket = h
+        .model()
+        .devices()
+        .find(|d| d.kind == DeviceKind::Socket)
+        .unwrap()
+        .clone();
+    assert!((socket.elevation - 0.3).abs() < 1e-9);
+    assert!((socket.rotation - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+    h.frame();
+    // Selected, they show their properties and are picked in the plan.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    assert_eq!(
+        crate::pick::pick(h.model(), h.app.ed.level, p(3.0, 0.0), 0.05),
+        Some(Element::Run(pipe.id))
+    );
+    for e in [
+        Element::Run(pipe.id),
+        Element::Run(duct.id),
+        Element::Device(light.id),
+    ] {
+        h.app.ed.selection = [e].into_iter().collect();
+        h.frame();
+    }
+    // Moved and copied as everything else.
+    let t = archisim_draft::Transform::translate(archisim_core::Vec2::new(1.0, 0.0));
+    let sel: std::collections::BTreeSet<Element> =
+        [Element::Run(pipe.id), Element::Device(light.id)]
+            .into_iter()
+            .collect();
+    let mut moved = h.model().clone();
+    crate::xform::transform(&mut moved, &sel, &t, false).unwrap();
+    assert!((moved.run(pipe.id).unwrap().path[0].x - 1.0).abs() < 1e-9);
+    let r = h
+        .app
+        .ed
+        .transact("Copiar", |m| crate::xform::transform(m, &sel, &t, true));
+    assert_eq!(r.unwrap().len(), 2);
+    assert_eq!(h.model().runs().count(), 3);
+    assert_eq!(h.model().devices().count(), 3);
+    // The IFC carries them in their systems, and reads them back.
+    let ifc = archisim_ifc::export_ifc(h.model(), &archisim_ifc::ExportOptions::default());
+    for class in [
+        "IFCPIPESEGMENT(",
+        "IFCDUCTSEGMENT(",
+        "IFCLIGHTFIXTURE(",
+        "IFCOUTLET(",
+        "IFCDISTRIBUTIONSYSTEM(",
+    ] {
+        assert!(ifc.contains(class), "{class}");
+    }
+    let back = archisim_ifc::import_ifc(&ifc).unwrap();
+    assert_eq!(back.model.runs().count(), 3, "{:?}", back.report);
+    assert_eq!(back.model.devices().count(), 3);
+    assert!(archisim_ifc::differences(h.model(), &back.model).is_empty());
+    // Deleted with Supr.
+    h.app.ed.selection = [Element::Device(socket.id)].into_iter().collect();
+    h.key(Key::Delete);
+    assert_eq!(h.model().devices().count(), 2);
+}

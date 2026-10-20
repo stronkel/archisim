@@ -398,6 +398,47 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("parcela {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    let runs = |m: &Model| {
+        let mut v: Vec<RunKey> = m
+            .runs()
+            .map(|r| {
+                let q = |x: f64| (x * 1000.0).round() as i64;
+                (
+                    r.guid.to_string(),
+                    r.system.code().to_string(),
+                    r.path.iter().map(|p| [q(p.x), q(p.y)]).collect(),
+                    [q(r.elevation), q(r.width), q(r.height)],
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    if runs(a) != runs(b) {
+        diff(format!(
+            "tuberías y conductos: {:?} / {:?}",
+            runs(a),
+            runs(b)
+        ));
+    }
+    let devices = |m: &Model| {
+        let mut v: Vec<(String, String, [i64; 3])> = m
+            .devices()
+            .map(|d| {
+                let q = |x: f64| (x * 1000.0).round() as i64;
+                (
+                    d.guid.to_string(),
+                    d.kind.code().to_string(),
+                    [q(d.position.x), q(d.position.y), q(d.elevation)],
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    };
+    if devices(a) != devices(b) {
+        diff(format!("aparatos: {:?} / {:?}", devices(a), devices(b)));
+    }
     if a.roads().count() != b.roads().count() {
         diff(format!(
             "número de viales: {} / {}",
@@ -779,3 +820,6 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
 fn material_name(m: &Model, id: archisim_core::MaterialId) -> Option<&str> {
     m.material(id).map(|x| x.name.as_str())
 }
+
+/// A pipe or duct compared: GUID, system, path and sizes in millimetres.
+type RunKey = (String, String, Vec<[i64; 2]>, [i64; 3]);

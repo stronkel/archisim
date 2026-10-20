@@ -38,6 +38,7 @@ pub mod roofs;
 pub mod rooms;
 pub mod schedules;
 pub mod section;
+pub mod services;
 pub mod sheet;
 pub mod stairs;
 pub mod terrain;
@@ -462,6 +463,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             marker_points.extend(r.outline());
         }
     }
+    if show(archisim_core::Category::Services) {
+        for r in model.runs_on_level(level) {
+            marker_points.extend(r.path.iter().copied());
+        }
+        for d in model.devices_on_level(level) {
+            marker_points.push(d.position);
+        }
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -597,6 +606,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         urban::draw_plots(&mut s, model, level, k, &vis);
+    }
+    if show(archisim_core::Category::Services) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        let walls: Vec<&[Point2]> = geos.iter().map(|g| g.outline.as_slice()).collect();
+        services::draw_services(&mut s, model, level, k, &vis, &walls);
     }
     if show(archisim_core::Category::Grids) {
         grids::draw_grids(&mut s, model, k);

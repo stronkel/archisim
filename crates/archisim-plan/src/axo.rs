@@ -109,7 +109,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
             // Glass would hide what is behind it.
             continue;
         }
-        let base = mat.map_or([205, 205, 205], |m| m.cut_color);
+        let base = archisim_geom::solid::solid_color(model, &solid);
         let grey = model.dimmed(focus, solid.owner.id());
         // Normals of every triangle, and who shares each edge.
         let normals: Vec<P3> = solid

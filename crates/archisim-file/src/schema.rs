@@ -113,6 +113,12 @@ pub(crate) struct ProjectFile {
     /// Roads (version 19).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roads: Vec<Road>,
+    /// Pipes and ducts (version 20).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runs: Vec<Run>,
+    /// Equipment, lights, sockets and switches (version 20).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub devices: Vec<Device>,
     /// Drawing layers (version 7).
     pub draw_layers: Vec<crate::drafting::DrawLayer>,
     /// Lines, arcs, texts and hatches of the views (version 7).
@@ -541,6 +547,38 @@ pub(crate) struct ModuleSource {
     pub path: String,
     pub stamp: String,
     pub content: serde_json::Value,
+}
+
+/// A pipe or duct (version 20).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Run {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub system: String,
+    pub path: Vec<Xy>,
+    pub elevation: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// A device (version 20).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Device {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub kind: String,
+    pub name: String,
+    pub position: Xy,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f64,
+    pub elevation: f64,
+    pub width: f64,
+    pub depth: f64,
+    pub height: f64,
 }
 
 /// A plot (version 19).
@@ -1916,6 +1954,37 @@ impl ProjectFile {
                     sidewalk_material: r.sidewalk_material.0,
                 })
                 .collect(),
+            runs: p
+                .runs
+                .iter()
+                .map(|r| Run {
+                    id: r.id.0,
+                    guid: r.guid.to_string(),
+                    level: r.level.0,
+                    system: r.system.code().into(),
+                    path: r.path.iter().copied().map(xy).collect(),
+                    elevation: r.elevation,
+                    width: r.width,
+                    height: r.height,
+                })
+                .collect(),
+            devices: p
+                .devices
+                .iter()
+                .map(|d| Device {
+                    id: d.id.0,
+                    guid: d.guid.to_string(),
+                    level: d.level.0,
+                    kind: d.kind.code().into(),
+                    name: d.name.clone(),
+                    position: xy(d.position),
+                    rotation: d.rotation,
+                    elevation: d.elevation,
+                    width: d.width,
+                    depth: d.depth,
+                    height: d.height,
+                })
+                .collect(),
             module_sources: p
                 .module_sources
                 .iter()
@@ -2256,6 +2325,8 @@ impl ProjectFile {
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
+            runs: Vec::new(),
+            devices: Vec::new(),
             railings: self
                 .railings
                 .iter()
@@ -2570,6 +2641,43 @@ impl ProjectFile {
                 outline: x.outline.into_iter().map(pt).collect(),
                 setback: x.setback,
                 reference: x.reference,
+            });
+        }
+        for r in self.runs {
+            let element = format!("run {}", r.id);
+            parts.runs.push(core::ServiceRun {
+                id: core::RunId(r.id),
+                guid: guid(&element, &r.guid)?,
+                level: core::LevelId(r.level),
+                system: core::ServiceSystem::from_code(&r.system).ok_or_else(|| {
+                    FileError::Value {
+                        element: element.clone(),
+                        message: format!("«{}» is not a system", r.system),
+                    }
+                })?,
+                path: r.path.into_iter().map(pt).collect(),
+                elevation: r.elevation,
+                width: r.width,
+                height: r.height,
+            });
+        }
+        for d in self.devices {
+            let element = format!("device {} «{}»", d.id, d.name);
+            parts.devices.push(core::ServiceDevice {
+                id: core::DeviceId(d.id),
+                guid: guid(&element, &d.guid)?,
+                level: core::LevelId(d.level),
+                kind: core::DeviceKind::from_code(&d.kind).ok_or_else(|| FileError::Value {
+                    element: element.clone(),
+                    message: format!("«{}» is not a kind of device", d.kind),
+                })?,
+                name: d.name,
+                position: pt(d.position),
+                rotation: d.rotation,
+                elevation: d.elevation,
+                width: d.width,
+                depth: d.depth,
+                height: d.height,
             });
         }
         for r in self.roads {

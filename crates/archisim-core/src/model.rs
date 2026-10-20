@@ -27,6 +27,7 @@ mod phases;
 mod railings;
 mod roofs;
 mod sections;
+mod services;
 mod site;
 mod stairs;
 mod structure;
@@ -44,6 +45,7 @@ pub use phases::*;
 pub use railings::*;
 pub use roofs::*;
 pub use sections::*;
+pub use services::*;
 pub use site::*;
 pub use stairs::*;
 pub use structure::*;
@@ -1192,6 +1194,9 @@ pub struct ModelParts {
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
     pub roads: Vec<Road>,
+    /// Pipes, ducts and devices.
+    pub runs: Vec<ServiceRun>,
+    pub devices: Vec<ServiceDevice>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
     /// The uses rooms of this project are offered (empty: the default
@@ -1284,6 +1289,8 @@ pub struct Model {
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
+    runs: BTreeMap<RunId, ServiceRun>,
+    devices: BTreeMap<DeviceId, ServiceDevice>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     pub(crate) room_usages: Vec<String>,
@@ -1347,6 +1354,8 @@ impl Model {
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
+            runs: BTreeMap::new(),
+            devices: BTreeMap::new(),
             true_north: 0.0,
             room_usages: Vec::new(),
             georeference: None,
@@ -3734,6 +3743,8 @@ impl Model {
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
+            runs: self.runs.values().cloned().collect(),
+            devices: self.devices.values().cloned().collect(),
             true_north: self.true_north,
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
@@ -4037,6 +4048,7 @@ impl Model {
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
+        model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model
             .set_plot_area(parts.plot_area)
             .map_err(|error| RestoreError {
