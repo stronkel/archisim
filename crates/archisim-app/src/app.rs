@@ -261,6 +261,10 @@ pub struct ArchiSimApp {
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
+    /// How the drawing tools take their points (their own way, a spline
+    /// or a picked line), and the spline's points.
+    pub draw_method: methods_ui::DrawMethod,
+    pub spline_points: Vec<Point2>,
     pub module_watch: module_ui::ModuleWatch,
     pub section_tool: section_ui::SectionTool,
     /// The section shown: its drawing (worked out once per revision) and
@@ -502,6 +506,8 @@ impl ArchiSimApp {
             plot_setback: 3.0,
             road_points: Vec::new(),
             road_settings,
+            draw_method: Default::default(),
+            spline_points: Vec::new(),
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_hover: None,
@@ -650,6 +656,8 @@ impl ArchiSimApp {
             self.concept.finish();
             self.plot_tool.finish();
             self.road_points.clear();
+            self.draw_method = Default::default();
+            self.spline_points.clear();
             self.zone_tool.finish();
             self.roof_tool.finish();
             self.stair_tool.points.clear();
@@ -1921,6 +1929,7 @@ mod glyphs;
 mod icons;
 mod levels_ui;
 mod library_ui;
+mod methods_ui;
 mod module_ui;
 mod navigator;
 mod object_gallery;

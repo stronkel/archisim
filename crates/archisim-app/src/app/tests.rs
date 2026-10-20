@@ -1354,8 +1354,10 @@ fn command_line_hidden_and_contextual_bar() {
     assert_eq!(h.app.wall_tool.mode, crate::wall_tool::WallMode::Rectangle);
     let states = h.app.method_states();
     assert!(states.contains(&("Rectángulo", true, true)));
+    // Spline and Elegir línea are there for walls; Polígono, faint.
+    assert!(states.contains(&("Spline", true, false)));
     assert!(
-        states.contains(&("Spline", false, false)),
+        states.contains(&("Polígono", false, false)),
         "faint, not gone"
     );
     h.frame();
@@ -3887,4 +3889,93 @@ fn plots_and_roads_are_drawn() {
 
 fn road_id(h: &Harness) -> archisim_core::RoadId {
     h.model().roads().next().unwrap().id
+}
+
+/// Spline: curved walls through clicked points and a slab with a free
+/// edge. Elegir línea: a room on a closed polyline of the 2D drawing, a
+/// railing along a line. The length and angle fields place the next point.
+#[test]
+fn splines_picked_lines_and_typed_points() {
+    use super::methods_ui::DrawMethod;
+    use archisim_core::{NewDraft, Polyline, Shape as DShape, ViewRef};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -5.0), p(30.0, 25.0), 0.0);
+    // Walls along a spline: two curved walls.
+    h.type_text("m");
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.app.set_draw_method(DrawMethod::Spline);
+    for c in [p(0.0, 0.0), p(5.0, 3.0), p(10.0, 0.0)] {
+        h.click_at(c);
+    }
+    h.key(Key::Enter);
+    assert_eq!(h.model().walls().count(), 2);
+    assert!(h.model().walls().all(|w| w.bulge.abs() > 1e-6));
+    // A slab with a free edge (closed spline).
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("f");
+    h.app.set_draw_method(DrawMethod::Spline);
+    for c in [p(14.0, 0.0), p(24.0, 0.0), p(24.0, 8.0), p(14.0, 8.0)] {
+        h.click_at(c);
+    }
+    h.key(Key::Enter);
+    let slab = h.model().slabs().next().unwrap();
+    assert!(slab.outline.len() >= 24);
+    // A closed polyline of the drawing becomes a room; a line a railing.
+    let level = h.app.ed.level;
+    h.app
+        .ed
+        .transact("Dibujo", |m| {
+            let layer = m.draw_layers()[0].id;
+            m.add_draft(NewDraft::new(
+                ViewRef::Level(level),
+                layer,
+                DShape::Polyline(Polyline {
+                    points: vec![p(0.0, 10.0), p(8.0, 10.0), p(8.0, 16.0), p(0.0, 16.0)],
+                    bulges: vec![0.0; 4],
+                    closed: true,
+                    width: 0.0,
+                }),
+            ))?;
+            m.add_draft(NewDraft::new(
+                ViewRef::Level(level),
+                layer,
+                DShape::Line {
+                    a: p(12.0, 12.0),
+                    b: p(22.0, 12.0),
+                },
+            ))
+            .map(drop)
+        })
+        .unwrap();
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("z");
+    assert_eq!(h.app.tool, Tool::Zone);
+    h.app.room_settings.wand = false;
+    h.app.set_draw_method(DrawMethod::PickLine);
+    h.click_at(p(4.0, 10.0));
+    assert_eq!(h.model().rooms().count(), 1);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("b");
+    assert_eq!(h.app.tool, Tool::Railing);
+    h.app.set_draw_method(DrawMethod::PickLine);
+    h.click_at(p(17.0, 12.0));
+    assert_eq!(h.model().railings().count(), 1);
+    // The length and angle fields: a wall of exactly 4 m at 90°.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("m");
+    h.click_at(p(0.0, 20.0));
+    h.app.point_at(p(0.0, 24.0));
+    h.key(Key::Escape);
+    assert!(h
+        .model()
+        .walls()
+        .any(|w| w.start.approx_eq(p(0.0, 20.0)) && w.end.approx_eq(p(0.0, 24.0))));
+    h.frame();
 }

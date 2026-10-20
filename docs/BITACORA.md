@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche, 7) · Spline, Elegir línea y campos de longitud y ángulo
+
+Rama `bloque/metodos` (sale de la de Urbanismo; pull request para Antonio). Sin cambios de formato ni de IFC.
+
+**Hecho** (los dos métodos que faltaban en la barra contextual, y sus campos)
+- **Spline**: con Muro, Forjado (también sus huecos), Local, Barandilla, Vial, Parcela y los volúmenes de Concepto, los clics son los puntos de una **curva libre** que pasa por ellos (se ve mientras se dibuja). Doble clic, Intro o clic derecho terminan; en un contorno, también un clic en el primer punto. Los **muros** salen como **muros curvos** de verdad (un arco entre cada dos puntos, con su IFC exacto), no como tramitos rectos; los contornos, como polígonos finos.
+- **Elegir línea**: clic en una **línea, polilínea, arco o círculo del dibujo 2D** (también lo que viene de un **DXF** importado) y la herramienta lo sigue: muros con sus arcos, forjados, locales, parcelas, cubiertas y volúmenes sobre una línea cerrada; barandillas, viales y bandas de Seguir a lo largo; vigas, muros cortina, zapatas corridas o vigas de atado y ejes, uno por cada tramo recto.
+- **Campos L y ∠** en la barra contextual mientras se dibuja: enseñan la longitud y el ángulo desde el último punto hasta el cursor; escribe una longitud (mm, o 1,2m · 120cm) o un ángulo (grados) y **Intro** pone el punto ahí, con cualquier herramienta de dibujo.
+- La pastilla de abajo explica cada método mientras está en uso; Esc quita el último punto de la curva o vuelve al método de antes.
+
+**Pendiente**
+- Elegir línea no toma aún aristas de otros elementos (el borde de un forjado o la cara de un muro); solo el dibujo 2D.
+- Los terrenos, las escaleras y las secciones no tienen Spline.
+
+**Qué debe probar Antonio**
+1. Herramienta **Muro** → en la barra contextual, **Spline**. Haz tres o cuatro clics haciendo una ola y Intro: muros curvos. Míralos en 3D.
+2. **Forjado** → Spline: cuatro clics y clic en el primero: un forjado de bordes redondeados.
+3. Importa un DXF con una polilínea cerrada (o dibújala con Línea → Polilínea) y, con **Local** → **Elegir línea**, pincha en ella: el local con ese contorno.
+4. Con **Muro**, haz el primer clic; en el campo **L** escribe 4500 e Intro; en **∠** escribe 90 e Intro: el siguiente tramo va recto hacia arriba.
+
+---
+
 ## 2026-10-20 (noche, 6) · Urbanismo: parcela, vial y forma
 
 Rama `bloque/urbanismo` (sale de la de Concepto; pull request para Antonio). Formato `.archisim` **versión 19**: parcelas y viales. Los proyectos anteriores se abren igual.

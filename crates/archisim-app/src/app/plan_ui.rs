@@ -60,6 +60,7 @@ impl ArchiSimApp {
         self.draw_module_preview(&painter, rect);
         self.draw_concept_preview(&painter, rect);
         self.draw_urban_preview(&painter, rect);
+        self.draw_method_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
@@ -588,7 +589,12 @@ impl ArchiSimApp {
                 _ => {}
             }
         }
-        if enter {
+        if enter
+            && self.draw_method == super::methods_ui::DrawMethod::Spline
+            && !self.spline_points.is_empty()
+        {
+            self.finish_spline();
+        } else if enter {
             let towards = self.cursor.map(|c| c.point).unwrap_or_default();
             match self.tool {
                 Tool::Wall => {
@@ -648,7 +654,9 @@ impl ArchiSimApp {
                 _ => {}
             }
         }
-        if escape {
+        if escape && self.tool != Tool::Cad && self.method_escape() {
+            // The spline or the line picking took it.
+        } else if escape {
             match self.tool {
                 Tool::Wall => {
                     if self.wall_tool.escape() == Escape::Idle {
@@ -790,6 +798,24 @@ impl ArchiSimApp {
             if let Some(pos) = response.interact_pointer_pos() {
                 if self.click_temp_controls(rect, pos) {
                     return;
+                }
+            }
+        }
+        // Spline and Elegir línea take the clicks of any tool that offers
+        // them.
+        if self.draw_method != super::methods_ui::DrawMethod::Normal && self.tool != Tool::Cad {
+            if self.draw_method == super::methods_ui::DrawMethod::Spline
+                && (response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary))
+            {
+                self.finish_spline();
+                return;
+            }
+            if response.clicked_by(PointerButton::Primary) {
+                if let Some(c) = self.cursor {
+                    if self.method_click(c.point) {
+                        return;
+                    }
                 }
             }
         }
@@ -1720,9 +1746,12 @@ impl ArchiSimApp {
 
     /// The point the line being drawn starts from: the last point of the
     /// wall chain, slab outline or dimension, or where a drag started.
-    fn track_anchor(&self) -> Option<Point2> {
+    pub(super) fn track_anchor(&self) -> Option<Point2> {
         if let Some(d) = &self.drag {
             return Some(d.from);
+        }
+        if self.draw_method == super::methods_ui::DrawMethod::Spline {
+            return self.spline_points.last().copied();
         }
         match self.tool {
             Tool::Wall => self.wall_tool.anchor(),
