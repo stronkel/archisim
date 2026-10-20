@@ -54,8 +54,8 @@ const MAX_SIDE_WIDTH: f32 = 520.0;
 /// prompt).
 const COMMAND_LINE_HEIGHT: f32 = 62.0;
 /// Width of the toolbox, with names and with icons only.
-const TOOLBOX_WIDTH: f32 = 124.0;
-const TOOLBOX_COMPACT_WIDTH: f32 = 52.0;
+/// The rail of disciplines, on the far left.
+const RAIL_WIDTH: f32 = 50.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tool {
@@ -376,10 +376,14 @@ pub struct ArchiSimApp {
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
     thumbs: thumbs::Thumbs,
-    /// The toolbox shows icons only.
-    pub compact_toolbox: bool,
-    /// Width of each side of the drawing: tools and properties on the left,
-    /// navigator on the right, so the drawing is centred.
+    /// The discipline whose tools are shown.
+    pub discipline: toolbox::Discipline,
+    /// The tab of the navigator shown.
+    pub nav_tab: navigator::NavTab,
+    /// The command search, while open: what is typed and the result chosen.
+    pub command_search: Option<(String, usize)>,
+    /// Width of each side of the drawing: disciplines, tools and properties
+    /// on the left, navigator on the right, so the drawing is centred.
     pub side_width: f32,
     /// Counts messages, to know when the last one appeared.
     message_serial: u64,
@@ -510,7 +514,9 @@ impl ArchiSimApp {
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
-            compact_toolbox: false,
+            discipline: toolbox::Discipline::default(),
+            nav_tab: navigator::NavTab::default(),
+            command_search: None,
             side_width: SIDE_WIDTH,
             message_serial: 0,
             message_seen: (0, 0.0),
@@ -1202,6 +1208,7 @@ impl ArchiSimApp {
         }
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
+        self.command_search_window(&ctx);
         self.keep_tool_types_valid();
         self.receive_files(&ctx);
         self.coord_poll(&ctx);
@@ -1228,58 +1235,43 @@ impl ArchiSimApp {
             self.plan_scale
         });
         // The drawing stays in the middle of the window: the column on the
-        // right (navigator) is as wide as the two on the left (tools and
-        // properties). Dragging the edge of Properties widens both sides.
-        let tools_w = self.toolbox_width();
-        egui::Panel::left("tools")
+        // right (navigator) is as wide as the two on the left (disciplines,
+        // and tools with properties). Dragging the edge of the tools widens
+        // both sides.
+        egui::Panel::left("disciplines")
             .resizable(false)
-            .exact_size(tools_w)
+            .exact_size(RAIL_WIDTH)
             .frame(
                 egui::Frame::new()
                     .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(6, 0))
+                    .inner_margin(egui::Margin::symmetric(4, 0))
                     .stroke(Stroke::new(1.0, p.line)),
             )
-            .show(ui, |ui| self.toolbox(ui));
+            .show(ui, |ui| self.discipline_rail(ui));
         let column = || {
             egui::Frame::new()
                 .fill(p.panel)
                 .inner_margin(egui::Margin::symmetric(10, 0))
                 .stroke(Stroke::new(1.0, p.line))
         };
-        // Properties beside the tools, as Revit's palette: choosing a tool
-        // and its type is a short move of the mouse.
-        if self.show_properties {
-            let shown = egui::Panel::left("properties")
-                .resizable(true)
-                .default_size(SIDE_WIDTH - tools_w)
-                .min_size(MIN_SIDE_WIDTH - tools_w)
-                .max_size(MAX_SIDE_WIDTH - tools_w)
-                .frame(column())
-                .show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("properties")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            self.properties(ui);
-                            ui.add_space(12.0);
-                        });
-                });
-            self.side_width = tools_w + shown.response.rect.width();
-        }
+        // The tools of the discipline and, below them, Properties, as
+        // Revit's palette: choosing a tool and its type is a short move of
+        // the mouse.
+        let shown = egui::Panel::left("tools")
+            .resizable(true)
+            .default_size(SIDE_WIDTH - RAIL_WIDTH)
+            .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
+            .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
+            .frame(column())
+            .show(ui, |ui| self.tool_column(ui));
+        self.side_width = RAIL_WIDTH + shown.response.rect.width();
         if self.show_navigator {
             let panel = egui::Panel::right("navigator").frame(column());
-            let panel = if self.show_properties {
-                // Mirrors the left side.
-                panel.resizable(false).exact_size(self.side_width)
-            } else {
-                panel
-                    .resizable(true)
-                    .default_size(SIDE_WIDTH)
-                    .min_size(MIN_SIDE_WIDTH)
-                    .max_size(MAX_SIDE_WIDTH)
-            };
-            panel.show(ui, |ui| self.navigator(ui));
+            // Mirrors the left side.
+            panel
+                .resizable(false)
+                .exact_size(self.side_width)
+                .show(ui, |ui| self.navigator(ui));
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
@@ -1360,6 +1352,9 @@ impl ArchiSimApp {
         if consume(cmd, Key::O) {
             self.guarded(Pending::Open(None));
         }
+        if consume(Modifiers::CTRL, Key::Space) {
+            self.open_command_search();
+        }
         if typing {
             return;
         }
@@ -1435,14 +1430,6 @@ impl ArchiSimApp {
         match saved {
             Some(Ok(())) => self.say(format!("Imagen 3D guardada en {}.", path.display())),
             _ => self.complain("No se pudo guardar la imagen 3D."),
-        }
-    }
-
-    fn toolbox_width(&self) -> f32 {
-        if self.compact_toolbox {
-            TOOLBOX_COMPACT_WIDTH
-        } else {
-            TOOLBOX_WIDTH
         }
     }
 
@@ -1790,6 +1777,7 @@ mod cte_ui;
 mod curtain_types_ui;
 mod curtain_ui;
 mod draft_props;
+mod glyphs;
 mod icons;
 mod levels_ui;
 mod library_ui;
@@ -1807,6 +1795,7 @@ mod roof_ui;
 mod room_tool_ui;
 mod room_ui;
 mod schedule_ui;
+mod search_ui;
 mod section_ui;
 mod sheet_ui;
 mod stair_ui;

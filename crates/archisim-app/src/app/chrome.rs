@@ -69,6 +69,8 @@ impl ArchiSimApp {
                 .small()
                 .color(if modified { p.accent } else { p.muted }),
             );
+            ui.add_space(14.0);
+            self.search_field(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 let dark = ui.ctx().global_style().visuals.dark_mode;
@@ -327,7 +329,6 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_properties, "Propiedades");
             ui.checkbox(&mut self.show_navigator, "Navegador");
-            ui.checkbox(&mut self.compact_toolbox, "Herramientas solo con iconos");
             ui.separator();
             if ui.button("Plantas…").clicked() {
                 self.show_levels = true;

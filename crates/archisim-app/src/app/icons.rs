@@ -21,7 +21,6 @@ pub enum Icon {
     Object,
     Room,
     Dimension,
-    Text,
     Tag,
     Hatch,
     Section,
@@ -36,7 +35,6 @@ pub enum Icon {
     Sidebar,
     SidebarRight,
     Close,
-    ChevronLeft,
     ChevronRight,
     ChevronDown,
     Theme,
@@ -249,11 +247,6 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(3.5, 15.5), (6.5, 12.5)], st);
             line(&[(17.5, 15.5), (20.5, 12.5)], st);
         }
-        Icon::Text => {
-            line(&[(5.0, 7.0), (5.0, 4.0), (19.0, 4.0), (19.0, 7.0)], st);
-            line(&[(12.0, 4.0), (12.0, 20.0)], st);
-            line(&[(9.0, 20.0), (15.0, 20.0)], st);
-        }
         Icon::Tag => {
             closed(
                 &[
@@ -358,7 +351,6 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
             line(&[(6.0, 6.0), (18.0, 18.0)], st);
             line(&[(18.0, 6.0), (6.0, 18.0)], st);
         }
-        Icon::ChevronLeft => line(&[(15.0, 6.0), (9.0, 12.0), (15.0, 18.0)], st),
         Icon::ChevronRight => line(&[(9.0, 6.0), (15.0, 12.0), (9.0, 18.0)], st),
         Icon::ChevronDown => line(&[(6.0, 9.0), (12.0, 15.0), (18.0, 9.0)], st),
         Icon::Theme => {
