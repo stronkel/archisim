@@ -386,10 +386,7 @@ pub fn read(bytes: &[u8], files: &dyn Resources, options: Options) -> Result<Mes
                 _ => (0..count as u32).collect(),
             };
             let tris: Vec<[u32; 3]> = match mode {
-                4 => indices
-                    .chunks_exact(3)
-                    .map(|t| [t[0], t[1], t[2]])
-                    .collect(),
+                4 => indices.as_chunks::<3>().0.to_vec(),
                 5 => (0..indices.len().saturating_sub(2))
                     .map(|k| {
                         if k % 2 == 0 {

@@ -53,7 +53,7 @@ impl Texture {
     pub fn average(&self) -> Rgb {
         let mut sum = [0u64; 3];
         let n = (self.width * self.height).max(1) as u64;
-        for p in self.pixels.chunks_exact(3) {
+        for p in self.pixels.as_chunks::<3>().0 {
             for k in 0..3 {
                 sum[k] += p[k] as u64;
             }

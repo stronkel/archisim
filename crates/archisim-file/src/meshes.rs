@@ -132,7 +132,9 @@ pub(crate) fn mesh_in(m: Mesh) -> Result<core::MeshModel, FileError> {
             return Err(bad("vértices"));
         }
         let positions: Vec<[f32; 3]> = p
-            .chunks_exact(12)
+            .as_chunks::<12>()
+            .0
+            .iter()
             .map(|c| {
                 let f = |k: usize| f32::from_le_bytes([c[k], c[k + 1], c[k + 2], c[k + 3]]);
                 [f(0), f(4), f(8)]
@@ -142,7 +144,7 @@ pub(crate) fn mesh_in(m: Mesh) -> Result<core::MeshModel, FileError> {
         if c.len() % 3 != 0 {
             return Err(bad("colores"));
         }
-        let colors = c.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect();
+        let colors = c.as_chunks::<3>().0.to_vec();
         let mut groups = Vec::new();
         for g in l.groups {
             let t = decode(&g.triangles).ok_or_else(|| bad("triángulos"))?;
@@ -150,7 +152,9 @@ pub(crate) fn mesh_in(m: Mesh) -> Result<core::MeshModel, FileError> {
                 return Err(bad("triángulos"));
             }
             let triangles = t
-                .chunks_exact(12)
+                .as_chunks::<12>()
+                .0
+                .iter()
                 .map(|c| {
                     let i = |k: usize| u32::from_le_bytes([c[k], c[k + 1], c[k + 2], c[k + 3]]);
                     [i(0), i(4), i(8)]
