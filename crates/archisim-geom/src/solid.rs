@@ -2136,6 +2136,70 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
     }
 }
 
+/// The paint on a triangle of a wall: the colour of the material painted
+/// on the side it faces, if that side is painted. Faces looking up or down
+/// (the top of the wall) and the ends are left as they are.
+pub fn painted_color(model: &Model, s: &Solid, tri: &[P3; 3]) -> Option<[u8; 3]> {
+    let SolidOwner::Wall(id) = s.owner else {
+        return None;
+    };
+    let w = model.wall(id)?;
+    let paints = [
+        model.face_paint(id, archisim_core::FaceSide::Exterior),
+        model.face_paint(id, archisim_core::FaceSide::Interior),
+    ];
+    if paints.iter().all(Option::is_none) {
+        return None;
+    }
+    let u = [
+        tri[1][0] - tri[0][0],
+        tri[1][1] - tri[0][1],
+        tri[1][2] - tri[0][2],
+    ];
+    let v = [
+        tri[2][0] - tri[0][0],
+        tri[2][1] - tri[0][1],
+        tri[2][2] - tri[0][2],
+    ];
+    let n = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    if len < 1e-12 || (n[2] / len).abs() > 0.5 {
+        return None;
+    }
+    let n = Point2::new(n[0] / len, n[1] / len);
+    // The left of the wall's line (its exterior) where the triangle is.
+    let left = match w.arc() {
+        Some(a) => {
+            let c = Point2::new(
+                (tri[0][0] + tri[1][0] + tri[2][0]) / 3.0,
+                (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0,
+            );
+            let r = (c - a.centre).normalized()?;
+            if a.sweep > 0.0 {
+                r * -1.0
+            } else {
+                r
+            }
+        }
+        None => (w.end - w.start).normalized()?.perp_left(),
+    };
+    let d = n.x * left.x + n.y * left.y;
+    let side = if d > 0.7 {
+        0
+    } else if d < -0.7 {
+        1
+    } else {
+        return None;
+    };
+    paints[side]
+        .and_then(|m| model.material(m))
+        .map(|m| m.cut_color)
+}
+
 /// Solids of the elements on one level only.
 pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
     let on_level = |owner: SolidOwner| match owner {

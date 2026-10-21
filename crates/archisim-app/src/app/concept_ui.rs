@@ -285,15 +285,82 @@ impl ArchiSimApp {
                     }
                 }
             },
-            Tool::Paint => match self.mass_under(p) {
-                Some(id) => {
-                    let mat = self.mass_settings.material;
-                    let r = self.ed.paint_mass(id, mat);
-                    self.report(r, "Volumen pintado.");
+            Tool::Paint => {
+                // In 3D, what is under the cursor; in plan, a volume first.
+                let in_3d = self.mode == ViewMode::ThreeD;
+                let wall_3d = self.cursor3d.and_then(|c| match c.owner {
+                    Some(crate::view3d::scene::Owner::Model(Element::Wall(w))) if in_3d => Some(w),
+                    _ => None,
+                });
+                let mass = if wall_3d.is_some() {
+                    None
+                } else {
+                    self.mass_under(p)
+                };
+                let wall = wall_3d.or_else(|| {
+                    let reach = self.view.to_metres(REACH);
+                    match crate::pick::pick(&self.ed, self.ed.level, p, reach) {
+                        Some(Element::Wall(w)) => Some(w),
+                        _ => None,
+                    }
+                });
+                let mat = self.mass_settings.material;
+                match (mass, wall) {
+                    (Some(id), _) => {
+                        let r = self.ed.paint_mass(id, mat);
+                        self.report(r, "Volumen pintado.");
+                    }
+                    (None, Some(w)) => {
+                        // In 3D, the side the face clicked looks to.
+                        let side = match self.cursor3d.and_then(|c| c.normal) {
+                            Some(n) if wall_3d.is_some() => {
+                                let probe =
+                                    p + archisim_core::Vec2::new(n.x as f64, n.y as f64) * 0.05;
+                                self.wall_side(w, probe)
+                            }
+                            _ => self.wall_side(w, p),
+                        };
+                        let r = self
+                            .ed
+                            .transact("Pintar cara", |m| m.set_face_paint(w, side, Some(mat)));
+                        self.report(
+                            r,
+                            match side {
+                                archisim_core::FaceSide::Exterior => {
+                                    "Cara exterior del muro pintada."
+                                }
+                                archisim_core::FaceSide::Interior => {
+                                    "Cara interior del muro pintada."
+                                }
+                            },
+                        );
+                    }
+                    (None, None) => self
+                        .complain("Haz clic en un volumen o en la cara de un muro para pintarlo."),
                 }
-                None => self.complain("Haz clic en un volumen para pintarlo."),
-            },
+            }
             _ => {}
+        }
+    }
+
+    /// The side of a wall a point is on: to the left of its line, the
+    /// exterior.
+    fn wall_side(&self, w: archisim_core::WallId, p: Point2) -> archisim_core::FaceSide {
+        let Some(wall) = self.ed.model().wall(w) else {
+            return archisim_core::FaceSide::Exterior;
+        };
+        let left = match wall.arc() {
+            Some(a) => {
+                // Inside the circle is the left of a counter-clockwise arc.
+                let inside = p.distance(a.centre) < a.radius;
+                inside == (a.sweep > 0.0)
+            }
+            None => (wall.end - wall.start).cross(p - wall.start) > 0.0,
+        };
+        if left {
+            archisim_core::FaceSide::Exterior
+        } else {
+            archisim_core::FaceSide::Interior
         }
     }
 
@@ -717,7 +784,7 @@ impl ArchiSimApp {
             Tool::MassOffset => "Clic en un volumen: un contorno paralelo encima · Esc: flecha",
             Tool::Tape if self.concept.tape.is_some() => "Clic: segundo punto (mide y deja una guía) · Esc: anular",
             Tool::Tape => "Clic: primer punto · Esc: flecha",
-            Tool::Paint => "Clic en un volumen: le da el material elegido en Propiedades · Esc: flecha",
+            Tool::Paint => "Clic en un volumen o en la cara de un muro (mejor en 3D): le da el material elegido en Propiedades · Esc: flecha",
             _ => "",
         }
     }

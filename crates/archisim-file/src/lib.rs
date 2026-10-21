@@ -870,6 +870,13 @@ mod tests {
         // The first wall is a bearing wall, by hand (version 15).
         m.set_discipline(first, Some(archisim_core::ElementDiscipline::Structure))
             .unwrap();
+        // The first wall's exterior face painted (version 21).
+        {
+            let w = m.walls().next().unwrap().id;
+            let mat = m.materials().last().unwrap().id;
+            m.set_face_paint(w, archisim_core::FaceSide::Exterior, Some(mat))
+                .unwrap();
+        }
         // A loose edge of the concept phase (version 21).
         {
             let level = m.levels()[0].id;

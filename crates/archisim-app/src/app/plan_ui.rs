@@ -195,7 +195,12 @@ impl ArchiSimApp {
         }
     }
 
-    fn track_cursor(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+    pub(super) fn track_cursor(
+        &mut self,
+        ctx: &egui::Context,
+        response: &egui::Response,
+        rect: Rect,
+    ) {
         let Some(pos) = response.hover_pos() else {
             self.cursor = None;
             self.hover = None;
@@ -482,7 +487,7 @@ impl ArchiSimApp {
         self.align_cursor(ctx.input(|i| i.modifiers.shift));
     }
 
-    fn keyboard_in_view(&mut self, ctx: &egui::Context) {
+    pub(super) fn keyboard_in_view(&mut self, ctx: &egui::Context) {
         let (events, enter, escape, backspace, delete, space) = ctx.input(|i| {
             (
                 i.events.clone(),
@@ -814,7 +819,7 @@ impl ArchiSimApp {
             && (self.slab_settings.wand || ctx.input(|i| i.key_down(Key::Space)))
     }
 
-    fn clicks(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+    pub(super) fn clicks(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
         let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
         // The values of the temporary dimensions and the flip arrows come
         // before the tool, as in Revit.
@@ -1819,7 +1824,7 @@ impl ArchiSimApp {
 
     /// The points of what is being drawn (the chain of walls, the corners
     /// of a slab or room…), for the alignment guides.
-    fn drawing_points(&self) -> Vec<Point2> {
+    pub(super) fn drawing_points(&self) -> Vec<Point2> {
         match self.tool {
             Tool::Wall => self.wall_tool.chain(),
             Tool::Slab => self.slab_tool.corners().to_vec(),

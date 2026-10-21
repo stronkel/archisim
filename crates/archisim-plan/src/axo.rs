@@ -144,6 +144,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 });
             }
             let lit = 0.62 + 0.38 * dot(n, light).max(0.0);
+            let base = archisim_geom::solid::painted_color(model, &solid, t).unwrap_or(base);
             let fill = base.map(|c| ((c as f64) * lit).round().clamp(0.0, 255.0) as u8);
             let pts = [f.project(t[0]), f.project(t[1]), f.project(t[2])];
             for p in pts {

@@ -121,7 +121,7 @@ Hecho en v0.26 (rama `bloque/colaboracion`): 4.1, 4.3 y la mayor parte de 4.2 y 
 
 Los siete bloques del 20/10 (I3, ejes y cimentación, módulos, concepto, urbanismo, métodos e instalaciones) se unieron a `main` el 21/10/2026. Antonio los probó: funcionan, con estos cambios.
 
-### 6.1 Correcciones (bloque R, lo primero)
+### 6.1 Correcciones (bloque R) ✅ hechas el 21/10/2026 en `bloque/revision-r`
 
 | # | Qué | Cómo |
 |---|---|---|

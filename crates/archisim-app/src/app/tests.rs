@@ -507,6 +507,9 @@ fn length_fields_commit_on_enter_and_cancel_on_escape() {
 fn the_3d_view_shows_the_model_and_selects_by_clicking() {
     let mut h = Harness::new(Editor::new_project());
     draw_outline(&mut h);
+    // With the arrow (a tool would draw in the 3D view).
+    h.key(Key::Escape);
+    h.key(Key::Escape);
     h.key(Key::F3);
     assert_eq!(h.app.mode, ViewMode::ThreeD);
     h.frame();
@@ -540,11 +543,12 @@ fn the_3d_view_shows_the_model_and_selects_by_clicking() {
     h.button(PointerButton::Primary, false);
     assert!(h.app.v3d.camera.yaw < yaw, "turned");
     assert_eq!(h.app.ed.selection.len(), 1);
-    // Supr deletes from the 3D view too; a tool key goes back to the plan.
+    // Supr deletes from the 3D view too; a tool key takes the tool there
+    // (it draws in the 3D view, R14).
     h.key(Key::Delete);
     assert!(h.model().wall(north).is_none());
     h.type_text("m");
-    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
     assert_eq!(h.app.tool, Tool::Wall);
 }
 
@@ -1134,11 +1138,12 @@ fn view_tabs_keep_their_level_framing_and_scale() {
     h.key(Key::F2);
     assert_eq!(h.app.mode, ViewMode::Plan);
     assert_eq!(h.app.ed.level, first);
-    // A tool key from the 3D view draws in the last plan too.
+    // A tool key from the 3D view draws there (R14).
     h.key(Key::F3);
     h.type_text("m");
-    assert_eq!((h.app.mode, h.app.tool), (ViewMode::Plan, Tool::Wall));
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Wall));
     h.key(Key::Escape);
+    h.key(Key::F2);
     // Ctrl+Tab goes round the tabs.
     let before = h.app.active_tab;
     h.set_modifiers(Modifiers::CTRL);
@@ -4170,4 +4175,160 @@ fn concept_edges_close_into_faces() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+/// Where a model point is on the screen, in the 3D view.
+fn screen_3d(h: &Harness, x: f64, y: f64, z: f64) -> Pos2 {
+    let r = h.app.v3d.canvas;
+    let s = h
+        .app
+        .v3d
+        .camera
+        .project_to_screen(
+            glam::Vec3::new(x as f32, y as f32, z as f32),
+            glam::Vec2::new(r.width(), r.height()),
+        )
+        .unwrap();
+    Pos2::new(r.min.x + s.x, r.min.y + s.y)
+}
+
+/// R14: the tools work in the 3D view. A wall drawn by two clicks on the
+/// ground; a face by its rectangle, pushed up with the mouse; a column
+/// placed; Esc takes the arrow back without leaving the 3D view.
+#[test]
+fn tools_work_in_the_3d_view() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::Pick;
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    // Looking down steeply, so the ground inside is not behind the walls.
+    h.app.v3d.camera.pitch = 1.35;
+    h.frame();
+    let walls = h.model().walls().count();
+    // A wall inside the outline, from (3, 3) to (9, 3), on the level.
+    h.type_text("m");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Wall));
+    h.app.wall_tool.set_mode(crate::wall_tool::WallMode::Single);
+    let a = screen_3d(&h, 3.0, 3.0, 0.0);
+    let b = screen_3d(&h, 9.0, 3.0, 0.0);
+    h.click_screen(a);
+    h.click_screen(b);
+    assert_eq!(h.model().walls().count(), walls + 1);
+    let w = h.model().walls().last().unwrap().clone();
+    let near = |q: Point2, x: f64, y: f64| (q.x - x).abs() < 0.1 && (q.y - y).abs() < 0.1;
+    assert!(
+        (near(w.start, 3.0, 3.0) && near(w.end, 9.0, 3.0))
+            || (near(w.end, 3.0, 3.0) && near(w.start, 9.0, 3.0)),
+        "{:?} {:?}",
+        w.start,
+        w.end
+    );
+    // A face, by its rectangle, then pushed up.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    h.app.choose_method("Rectángulo");
+    h.click_screen(screen_3d(&h, 1.0, 5.0, 0.0));
+    h.click_screen(screen_3d(&h, 4.0, 8.0, 0.0));
+    let face = h.model().masses().next().unwrap().id;
+    assert!(h.model().mass(face).unwrap().is_face());
+    h.app.pick(Pick::Concept(ConceptPick::Push));
+    h.click_screen(screen_3d(&h, 2.5, 6.5, 0.0));
+    assert!(h.app.concept.push.is_some());
+    // Up the screen: higher.
+    let up = screen_3d(&h, 2.5, 6.5, 3.0);
+    h.pos = up;
+    h.events.push(Event::PointerMoved(up));
+    h.frame();
+    h.click_screen(up);
+    let height = h.model().mass(face).unwrap().height;
+    assert!((height - 3.0).abs() < 0.3, "{height}");
+    // A column on the level.
+    let columns = h.model().columns().count();
+    h.type_text("i");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Column));
+    h.click_screen(screen_3d(&h, 8.0, 6.0, 0.0));
+    assert_eq!(h.model().columns().count(), columns + 1);
+    h.key(Key::Escape);
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Arrow));
+}
+
+/// R14: Pintar paints a face of a wall (the side clicked), in the plan or
+/// in the 3D view; the 3D shows the paint on that side only.
+#[test]
+fn wall_faces_are_painted() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::Pick;
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let brick = h.model().materials().last().unwrap().id;
+    h.app.mass_settings.material = brick;
+    h.app.pick(Pick::Concept(ConceptPick::Paint));
+    // The west wall, from (0, 0) to (0, 9): its exterior is to the west.
+    let west = h.model().walls().next().unwrap().clone();
+    let mid = west.point_at(0.5, 0.0);
+    h.click_at(mid + archisim_core::Vec2::new(0.1, 0.0));
+    let painted: Vec<_> = h.model().face_paints().collect();
+    assert_eq!(painted.len(), 1, "{painted:?}");
+    let (w, side, m) = painted[0];
+    assert_eq!((w, m), (west.id, brick));
+    let inside = (west.end - west.start).cross(archisim_core::Vec2::new(0.1, 0.0)) > 0.0;
+    assert_eq!(
+        side,
+        if inside {
+            archisim_core::FaceSide::Exterior
+        } else {
+            archisim_core::FaceSide::Interior
+        }
+    );
+    // In 3D, only that side shows the brick.
+    let model = h.model().clone();
+    let colour = model.material(brick).unwrap().cut_color;
+    let solids = archisim_geom::solid::model_solids(&model);
+    let mut painted_tris = 0;
+    let mut plain = 0;
+    for s in solids
+        .iter()
+        .filter(|s| s.owner == archisim_geom::solid::SolidOwner::Wall(west.id))
+    {
+        for t in &s.triangles {
+            match archisim_geom::solid::painted_color(&model, s, t) {
+                Some(c) => {
+                    assert_eq!(c, colour);
+                    painted_tris += 1;
+                }
+                None => plain += 1,
+            }
+        }
+    }
+    assert!(painted_tris > 0 && plain > painted_tris);
+    // In the 3D view, a click on a face paints it too.
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    assert_eq!(h.app.tool, Tool::Paint);
+    // From the south: the south wall's outer face.
+    h.app.v3d.camera.yaw = -1.3;
+    h.app.v3d.camera.pitch = 0.35;
+    h.frame();
+    h.click_screen(screen_3d(&h, 6.0, -0.01, 1.5));
+    let south = h
+        .model()
+        .walls()
+        .find(|w| w.start.y.abs() < 1e-6 && w.end.y.abs() < 1e-6)
+        .unwrap()
+        .id;
+    assert_eq!(
+        h.model()
+            .face_paint(south, archisim_core::FaceSide::Exterior),
+        Some(brick)
+    );
 }

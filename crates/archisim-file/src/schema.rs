@@ -107,6 +107,9 @@ pub(crate) struct ProjectFile {
     /// Loose edges of the concept phase (version 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edges: Vec<Edge>,
+    /// Paint on the faces of walls (version 21).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub face_paints: Vec<FacePaint>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -619,6 +622,16 @@ pub(crate) struct Road {
     pub pavement: u64,
     pub kerb_material: u64,
     pub sidewalk_material: u64,
+}
+
+/// Paint on a face of a wall (version 21).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FacePaint {
+    pub wall: u64,
+    /// `exterior` or `interior`.
+    pub side: String,
+    pub material: u64,
 }
 
 /// A loose edge of the concept phase (version 21).
@@ -1899,6 +1912,15 @@ impl ProjectFile {
                     values: values_out(&t.values),
                 })
                 .collect(),
+            face_paints: p
+                .face_paints
+                .iter()
+                .map(|(w, s, m)| FacePaint {
+                    wall: w.0,
+                    side: s.code().into(),
+                    material: m.0,
+                })
+                .collect(),
             edges: p
                 .edges
                 .iter()
@@ -2349,6 +2371,7 @@ impl ProjectFile {
             modules: Vec::new(),
             masses: Vec::new(),
             edges: Vec::new(),
+            face_paints: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -2622,6 +2645,15 @@ impl ProjectFile {
                 family: core::FamilyId(t.family),
                 values,
             });
+        }
+        for f in self.face_paints {
+            let side = core::FaceSide::from_code(&f.side).ok_or_else(|| FileError::Value {
+                element: format!("paint of wall {}", f.wall),
+                message: format!("unknown side «{}»", f.side),
+            })?;
+            parts
+                .face_paints
+                .push((core::WallId(f.wall), side, core::MaterialId(f.material)));
         }
         for e in self.edges {
             let element = format!("edge {}", e.id);

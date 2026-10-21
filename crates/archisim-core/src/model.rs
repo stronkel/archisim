@@ -22,6 +22,7 @@ mod layered_library;
 mod library;
 mod modules;
 mod objects;
+mod paint;
 mod parameters;
 mod phases;
 mod railings;
@@ -40,6 +41,7 @@ pub use layered_library::*;
 pub use library::*;
 pub use modules::*;
 pub use objects::*;
+pub use paint::*;
 pub use parameters::*;
 pub use phases::*;
 pub use railings::*;
@@ -1192,6 +1194,8 @@ pub struct ModelParts {
     pub masses: Vec<Mass>,
     /// Loose edges of the concept phase.
     pub edges: Vec<ConceptEdge>,
+    /// Paint on the faces of walls.
+    pub face_paints: Vec<(WallId, FaceSide, MaterialId)>,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1289,6 +1293,7 @@ pub struct Model {
     modules: BTreeMap<ModuleId, ModulePlacement>,
     masses: BTreeMap<MassId, Mass>,
     edges: BTreeMap<EdgeId, ConceptEdge>,
+    face_paints: BTreeMap<(WallId, FaceSide), MaterialId>,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1355,6 +1360,7 @@ impl Model {
             modules: BTreeMap::new(),
             masses: BTreeMap::new(),
             edges: BTreeMap::new(),
+            face_paints: BTreeMap::new(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -3753,6 +3759,7 @@ impl Model {
             modules: self.modules.values().cloned().collect(),
             masses: self.masses.values().cloned().collect(),
             edges: self.edges.values().cloned().collect(),
+            face_paints: self.face_paints().collect(),
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4061,6 +4068,7 @@ impl Model {
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_edges(parts.edges, &mut claim)?;
+        model.restore_face_paints(parts.face_paints)?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model

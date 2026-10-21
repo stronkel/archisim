@@ -6,6 +6,46 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (mediodía) · Bloque R: la revisión de Antonio (R12–R16)
+
+Rama `bloque/revision-r` (pull request para Antonio). Formato `.archisim` versión 21 (abre las anteriores tal cual).
+
+**Hecho**
+- **R12, Arista**: la Línea de Concepto se llama ahora **Arista** y es una línea del modelo, no del dibujo:
+  - abierta (Intro, doble clic o clic derecho), queda como arista suelta, dibujada en planta con un punto en cada extremo y en 3D como línea;
+  - al cerrar el contorno en su primer punto, se hace una cara;
+  - si cierra un contorno con otras aristas que ya están, también se hace la cara, y esas aristas desaparecen dentro de ella (como en SketchUp);
+  - se selecciona, mueve, copia, gira y borra como lo demás, y en Propiedades tiene su altura y su longitud.
+- **R13**: fuera las fichas Rectángulo y Círculo de Concepto. Son métodos de Arista en la barra superior, y sus huecos quedan libres.
+- **R14, la ventana 3D**: las herramientas funcionan también ahí (al pasar de la planta al 3D, la herramienta sigue puesta):
+  - el cursor cae sobre lo que hay debajo (la cara de un muro, un volumen, el terreno) o, si no hay nada, sobre el plano de la planta activa;
+  - fuerza a las esquinas y puntos medios de las aristas del elemento bajo el cursor, y a los mismos puntos que en planta;
+  - se dibujan muros, forjados, locales, volúmenes y aristas, y se colocan pilares, objetos, puertas, ventanas y aparatos, con las mismas teclas (Intro, Esc, longitudes escritas, Espacio para girar);
+  - **Empujar**: clic en la cara y sube o baja el ratón (o escribe la altura); se ve el volumen creciendo con su altura;
+  - **Pintar**: clic en la cara de un muro y se pinta ese lado (exterior o interior) con el material elegido; también en planta, por el lado del muro donde se pincha; en un volumen, el volumen entero;
+  - arrastrar sigue girando la cámara.
+- **R15**: las órdenes de dibujo de la barra inferior (Línea, Relleno, Texto, Cota) muestran sus variantes en la barra superior mientras se dibuja (Línea, Polilínea, **Spline**, Rectángulo, Polígono, Arco, Círculo, Elipse), y después el paso de la orden. Con dibujo 2D seleccionado, la barra Modificar de siempre (copiar, mover, desfase, recortar…).
+- **R16, Spline**:
+  - abierto por defecto en todas las herramientas, y se cierra con un clic en su primer punto;
+  - en Concepto ya no sale un círculo ni hace falta pasar por Camino;
+  - orden nueva **Spline** (SPL) en el dibujo 2D: una polilínea de arcos que pasa por los puntos (C para cerrarla).
+- Al borrar una planta se borran también las cimentaciones, módulos, volúmenes, aristas, parcelas, viales e instalaciones que había en ella (antes se quedaban huérfanos).
+
+**Pendiente**
+- En 3D, los objetos se colocan siempre sobre la planta (no encima de una mesa o de otro forjado). Las aristas no se pueden seleccionar en 3D (sí en planta).
+- Pintar solo pinta caras de muros y volúmenes enteros; no forjados, cubiertas ni objetos. La pintura no va al IFC: es para ver y presentar.
+- Las previsualizaciones en 3D son la línea de lo que se dibuja; la del muro con su grosor solo se ve en planta.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. **Concepto → Arista**: tres clics en planta e Intro (queda una arista abierta); después, desde su último punto, dos clics más hasta su primer punto e Intro: se hace la cara.
+3. **F3** (3D) con **Arista** puesta, método **Rectángulo**: dos clics sobre el terreno. **Empujar**: clic en la cara, sube el ratón y clic (o escribe 9000 e Intro).
+4. En 3D, **Arquitectura → Muro**: dos clics en el suelo. **Puerta**: clic en ese muro.
+5. **Concepto → Pintar**, elige en Propiedades un material (Ladrillo) y, en 3D, clic en la cara de un muro: solo ese lado cambia de color.
+6. **Línea** de la barra inferior: arriba salen Polilínea, Spline, Rectángulo…; elige **Spline**, cuatro clics e Intro.
+
+---
+
 ## 2026-10-21 (mañana) · Unión de los siete bloques y revisión de Antonio
 
 Unidos a `main`, por orden, los pull requests #32 a #38 (I3, ejes y cimentación, módulos, concepto, urbanismo, métodos e instalaciones), todos en verde. Antonio los ha probado: funcionan, con cinco correcciones (R12–R16 en `docs/HOJA_DE_RUTA.md` §6.1): línea de Concepto como arista, fuera las fichas Rectángulo y Círculo de Concepto, herramientas en la ventana 3D, barra contextual para el dibujo 2D de la barra inferior y Spline abierto por defecto (también en el dibujo 2D).

@@ -586,7 +586,8 @@ impl ArchiSimApp {
         if self.mode == ViewMode::Section {
             return "Rueda: zoom · Botón derecho o central: desplazar · Inicio: ajustar · F2: planta · F3: 3D";
         }
-        if self.mode == ViewMode::ThreeD {
+        // A tool in the 3D view: its own hint (arrastrar still turns).
+        if self.mode == ViewMode::ThreeD && !self.tool_in_3d() {
             if self.v3d.section.is_some() {
                 return "Flechas azules: mover las caras de la caja de sección · Arrastrar: girar · Rueda: zoom · Clic: seleccionar · F2: planta";
             }
