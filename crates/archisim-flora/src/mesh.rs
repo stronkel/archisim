@@ -329,22 +329,22 @@ fn tube(m: &mut FloraMesh, b: &Branch, sides: usize, color: Rgb, rings: bool) {
     }
 }
 
-const PHI: f64 = 1.618_033_988_749_895;
-
 fn icosahedron() -> Body {
+    // The golden ratio, computed so that it builds on every toolchain.
+    let phi = (1.0 + 5.0_f64.sqrt()) / 2.0;
     let v = [
-        [-1.0, PHI, 0.0],
-        [1.0, PHI, 0.0],
-        [-1.0, -PHI, 0.0],
-        [1.0, -PHI, 0.0],
-        [0.0, -1.0, PHI],
-        [0.0, 1.0, PHI],
-        [0.0, -1.0, -PHI],
-        [0.0, 1.0, -PHI],
-        [PHI, 0.0, -1.0],
-        [PHI, 0.0, 1.0],
-        [-PHI, 0.0, -1.0],
-        [-PHI, 0.0, 1.0],
+        [-1.0, phi, 0.0],
+        [1.0, phi, 0.0],
+        [-1.0, -phi, 0.0],
+        [1.0, -phi, 0.0],
+        [0.0, -1.0, phi],
+        [0.0, 1.0, phi],
+        [0.0, -1.0, -phi],
+        [0.0, 1.0, -phi],
+        [phi, 0.0, -1.0],
+        [phi, 0.0, 1.0],
+        [-phi, 0.0, -1.0],
+        [-phi, 0.0, 1.0],
     ]
     .map(norm)
     .to_vec();
