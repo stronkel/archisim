@@ -103,6 +103,12 @@ pub enum Tool {
     Plot,
     /// Roads, by their axis.
     Road,
+    /// Pipes, by their path.
+    Pipe,
+    /// Ducts, by their path.
+    Duct,
+    /// Equipment, lights, sockets and switches, by a click.
+    Device,
     /// A 2D drafting or editing command is running (AutoCAD's).
     Cad,
 }
@@ -135,13 +141,17 @@ impl Tool {
                 | Tool::Paint
                 | Tool::Plot
                 | Tool::Road
+                | Tool::Pipe
+                | Tool::Duct
+                | Tool::Device
         )
     }
 
     /// The tool a key selects (with the ArchiCAD keys): M muro, F forjado,
     /// P puerta, V ventana, C cota, I pilar, G viga, Z local, S sección,
     /// T cubierta, E escalera, R terreno, U muro cortina, B barandilla,
-    /// O objeto, X ejes, A cimentación, K módulo, Y parcela, W vial.
+    /// O objeto, X ejes, A cimentación, K módulo, Y parcela, W vial,
+    /// H tubería, D conducto.
     pub(super) fn from_key(text: &str) -> Option<Tool> {
         match text.to_lowercase().as_str() {
             "m" => Some(Tool::Wall),
@@ -164,6 +174,8 @@ impl Tool {
             "k" => Some(Tool::Module),
             "y" => Some(Tool::Plot),
             "w" => Some(Tool::Road),
+            "h" => Some(Tool::Pipe),
+            "d" => Some(Tool::Duct),
             _ => None,
         }
     }
@@ -261,6 +273,9 @@ pub struct ArchiSimApp {
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
+    /// The path of the pipe or duct being drawn.
+    pub run_points: Vec<Point2>,
+    pub service_settings: services_ui::ServiceSettings,
     /// How the drawing tools take their points (their own way, a spline
     /// or a picked line), and the spline's points.
     pub draw_method: methods_ui::DrawMethod,
@@ -506,6 +521,8 @@ impl ArchiSimApp {
             plot_setback: 3.0,
             road_points: Vec::new(),
             road_settings,
+            run_points: Vec::new(),
+            service_settings: services_ui::ServiceSettings::default(),
             draw_method: Default::default(),
             spline_points: Vec::new(),
             section_tool: section_ui::SectionTool::default(),
@@ -1947,6 +1964,7 @@ mod room_ui;
 mod schedule_ui;
 mod search_ui;
 mod section_ui;
+mod services_ui;
 mod sheet_drop;
 mod sheet_ui;
 mod stair_ui;

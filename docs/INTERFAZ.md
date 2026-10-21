@@ -168,7 +168,7 @@ La atenuación es un estilo de vista (`graphics`), así que también se puede us
 
 **Estructura** (8): Pilar · Viga · Forjado (estructural) · Muro de carga · Zapata · Losa · Abertura · Ejes.
 
-**Instalaciones** (5, provisionales hasta que lleguen las herramientas MEP): Tubería · Conducto · Aparato · Iluminación · Mecanismo (enchufes e interruptores). (La «rejilla» que pidió Antonio son los ejes, no la de ventilación; las rejillas y difusores serán un tipo de Aparato.)
+**Instalaciones** (6, hechas en el bloque Instalaciones): Tubería (H) · Conducto (D) · Aparato · Iluminación · Enchufe · Interruptor. (La «rejilla» que pidió Antonio son los ejes, no la de ventilación; las rejillas y difusores serán un tipo de Aparato.)
 
 **Urbanismo** (5): Terreno · Parcela · Vial · Vegetación · Forma.
 
@@ -251,7 +251,7 @@ Como el trabajo en equipo de ArchiCAD, con presencia en directo:
 | **I6** | Tamaño de letra grande y misiones de iniciación | No |
 | 4.6 | Trabajo en equipo (§9.2): carpeta compartida en Google Drive primero (D20) | Sí |
 
-Las herramientas de Instalaciones (tubería, conducto, aparato, iluminación, mecanismo) son un bloque propio de modelado, fuera de este plan de interfaz; mientras no existan, sus fichas se ven apagadas y dicen cuándo llegan.
+Las herramientas de Instalaciones (tubería, conducto, aparato, iluminación, enchufe e interruptor) son un bloque propio de modelado, fuera de este plan de interfaz; están hechas desde el bloque Instalaciones (rama `bloque/instalaciones`).
 
 ## 11. Decisiones de Antonio (20/10/2026)
 

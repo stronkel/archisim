@@ -160,6 +160,9 @@ impl Model {
         {
             return Some(Structure);
         }
+        if self.runs.contains_key(&RunId(id)) || self.devices.contains_key(&DeviceId(id)) {
+            return Some(Services);
+        }
         if self.terrains.contains_key(&TerrainId(id))
             || self.plots.contains_key(&PlotId(id))
             || self.roads.contains_key(&RoadId(id))

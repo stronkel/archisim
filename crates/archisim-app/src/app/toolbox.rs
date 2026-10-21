@@ -148,6 +148,8 @@ pub enum Pick {
     Command(&'static str),
     /// A tool of the Concepto discipline.
     Concept(super::concept_ui::ConceptPick),
+    /// The device tool with a kind of device.
+    Device(archisim_core::DeviceKind),
     /// Not there yet: what brings it.
     Later(&'static str),
 }
@@ -193,7 +195,6 @@ const fn tile(
     }
 }
 
-const SERVICES_LATER: &str = "las herramientas de instalaciones (MEP)";
 const TEAM_LATER: &str = "el trabajo en equipo (4.6, carpeta compartida en Google Drive)";
 
 const CONCEPT: &[Tile] = &[
@@ -425,39 +426,46 @@ const STRUCTURE: &[Tile] = &[
 
 const SERVICES: &[Tile] = &[
     tile(
-        Pick::Later(SERVICES_LATER),
+        Pick::Tool(Tool::Pipe),
         Glyph::Pipe,
         "Tubería",
-        "",
+        "H",
         "Fontanería, saneamiento y calefacción",
     ),
     tile(
-        Pick::Later(SERVICES_LATER),
+        Pick::Tool(Tool::Duct),
         Glyph::Duct,
         "Conducto",
-        "",
+        "D",
         "Climatización y ventilación",
     ),
     tile(
-        Pick::Later(SERVICES_LATER),
+        Pick::Device(archisim_core::DeviceKind::Equipment),
         Glyph::Fixture,
         "Aparato",
         "",
         "Calderas, bombas, máquinas de climatización",
     ),
     tile(
-        Pick::Later(SERVICES_LATER),
+        Pick::Device(archisim_core::DeviceKind::Light),
         Glyph::Light,
         "Iluminación",
         "",
         "Luminarias",
     ),
     tile(
-        Pick::Later(SERVICES_LATER),
+        Pick::Device(archisim_core::DeviceKind::Socket),
         Glyph::Outlet,
-        "Mecanismo",
+        "Enchufe",
         "",
-        "Enchufes e interruptores",
+        "Tomas de corriente",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Switch),
+        Glyph::Outlet,
+        "Interruptor",
+        "",
+        "Interruptores y pulsadores",
     ),
 ];
 
@@ -991,6 +999,7 @@ impl ArchiSimApp {
             Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes && !raft),
             Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft),
             Pick::Concept(c) => Some(self.concept_picked(c)),
+            Pick::Device(k) => Some(self.tool == Tool::Device && self.service_settings.device == k),
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
             Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
@@ -1070,6 +1079,7 @@ impl ArchiSimApp {
             },
             Pick::Action(a) => self.act(a),
             Pick::Concept(c) => self.concept_pick(c),
+            Pick::Device(k) => self.device_pick(k),
             Pick::Command(name) => self.start_command(name),
             Pick::Later(what) => self.say(format!("Esta herramienta llegará con {what}.")),
         }

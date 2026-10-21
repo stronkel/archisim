@@ -50,6 +50,10 @@ pub enum Element {
     /// A plot, picked by its boundary or inside it if nothing else is.
     Plot(archisim_core::PlotId),
     Road(archisim_core::RoadId),
+    /// A pipe or duct, picked by its band.
+    Run(archisim_core::RunId),
+    /// A light, socket, switch or piece of equipment, picked by its box.
+    Device(archisim_core::DeviceId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -127,6 +131,8 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Mass(id) => model.mass(id).map(|m| m.outline()),
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
         Element::Road(id) => model.road(id).map(|r| r.outline()),
+        Element::Run(id) => model.run(id).map(|r| r.outline()),
+        Element::Device(id) => model.device(id).map(|d| d.outline()),
     }
 }
 
@@ -406,6 +412,8 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.modules_on_level(level).map(|m| Element::Module(m.id)));
     v.extend(model.masses_on_level(level).map(|m| Element::Mass(m.id)));
     v.extend(model.roads_on_level(level).map(|r| Element::Road(r.id)));
+    v.extend(model.runs_on_level(level).map(|r| Element::Run(r.id)));
+    v.extend(model.devices_on_level(level).map(|d| Element::Device(d.id)));
     v.extend(model.plots_on_level(level).map(|p| Element::Plot(p.id)));
     v
 }
@@ -444,7 +452,9 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Module(_)
         | Element::Mass(_)
         | Element::Plot(_)
-        | Element::Road(_) => None,
+        | Element::Road(_)
+        | Element::Run(_)
+        | Element::Device(_) => None,
     }
 }
 
@@ -493,6 +503,9 @@ pub fn pick<G: Geo + ?Sized>(
         // In the concept phase the volumes are what is worked on.
         Element::Mass(_) => 2,
         Element::Road(_) => 5,
+        // Under the ceiling, in front of the slab.
+        Element::Run(_) => 2,
+        Element::Device(_) => 1,
         // The ground everything stands on: last.
         Element::Plot(_) => 7,
         Element::Terrain(_) => 6,
@@ -592,6 +605,8 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Footing(id) => Element::Footing(id),
         SolidOwner::Mass(id) => Element::Mass(id),
         SolidOwner::Road(id) => Element::Road(id),
+        SolidOwner::Run(id) => Element::Run(id),
+        SolidOwner::Device(id) => Element::Device(id),
     }
 }
 
@@ -614,6 +629,8 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Footing(id) => SolidOwner::Footing(id),
         Element::Mass(id) => SolidOwner::Mass(id),
         Element::Road(id) => SolidOwner::Road(id),
+        Element::Run(id) => SolidOwner::Run(id),
+        Element::Device(id) => SolidOwner::Device(id),
         _ => return None,
     })
 }

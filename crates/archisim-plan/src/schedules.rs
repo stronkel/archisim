@@ -359,6 +359,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("06", "Cubiertas", roofs(model)),
         ("07", "Escaleras y barandillas", stairs_and_railings(model)),
         ("08", "Muros cortina", curtain_walls(model)),
+        ("09", "Instalaciones", services(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters
@@ -648,6 +649,68 @@ fn curtain_walls(model: &Model) -> Vec<Item> {
             });
         }
     }
+    items
+}
+
+/// Pipes and ducts by system and size, in metres; devices by kind, by
+/// units.
+fn services(model: &Model) -> Vec<Item> {
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let new = |id: u64| model.phase(id) == Phase::New;
+    let mut runs: BTreeMap<(archisim_core::ServiceSystem, String), Vec<Measured>> = BTreeMap::new();
+    for r in model.runs().filter(|r| new(r.id.0)) {
+        let len = r.length();
+        runs.entry((r.system, r.size_text()))
+            .or_default()
+            .push(Measured {
+                comment: format!(
+                    "{} {} · {}",
+                    if r.is_duct() { "Conducto" } else { "Tubería" },
+                    r.id.0,
+                    level_name(r.level)
+                ),
+                units: 1.0,
+                length: len,
+                width: 0.0,
+                height: 0.0,
+                quantity: len,
+            });
+    }
+    let mut items: Vec<Item> = runs
+        .into_iter()
+        .enumerate()
+        .map(|(i, ((system, size), lines))| Item {
+            code: format!("T{:02}", i + 1),
+            unit: "m",
+            summary: format!("{} {size}", system.name()),
+            lines,
+        })
+        .collect();
+    let mut devices: BTreeMap<(archisim_core::DeviceKind, String), Vec<Measured>> = BTreeMap::new();
+    for d in model.devices().filter(|d| new(d.id.0)) {
+        devices
+            .entry((d.kind, d.name.clone()))
+            .or_default()
+            .push(Measured {
+                comment: format!("{} {} · {}", d.name, d.id.0, level_name(d.level)),
+                units: 1.0,
+                length: 0.0,
+                width: d.width,
+                height: d.height,
+                quantity: 1.0,
+            });
+    }
+    items.extend(
+        devices
+            .into_iter()
+            .enumerate()
+            .map(|(i, ((_, name), lines))| Item {
+                code: format!("A{:02}", i + 1),
+                unit: "ud",
+                summary: name,
+                lines,
+            }),
+    );
     items
 }
 

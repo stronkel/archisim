@@ -216,6 +216,36 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Run(id) => {
+                let x = model
+                    .run(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                if copy {
+                    let new = model.add_run(run_spec(&x, |p| t.apply(p)))?;
+                    out.insert(Element::Run(new));
+                } else {
+                    model.edit_run(id, |r| r.path.iter_mut().for_each(|p| *p = t.apply(*p)))?;
+                    out.insert(*e);
+                }
+            }
+            Element::Device(id) => {
+                let x = model
+                    .device(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let turn = t.angle(0.0);
+                if copy {
+                    let new = model.add_device(device_spec(&x, |p| t.apply(p), turn))?;
+                    out.insert(Element::Device(new));
+                } else {
+                    model.edit_device(id, |d| {
+                        d.position = t.apply(d.position);
+                        d.rotation += turn;
+                    })?;
+                    out.insert(*e);
+                }
+            }
             Element::Road(id) => {
                 let x = model
                     .road(id)
@@ -454,6 +484,40 @@ fn room(
     };
     model.set_room(moved)?;
     Ok(Element::Room(id))
+}
+
+/// What makes a copy of a pipe or duct, its path moved by `f`.
+pub fn run_spec(
+    x: &archisim_core::ServiceRun,
+    f: impl Fn(archisim_core::Point2) -> archisim_core::Point2,
+) -> archisim_core::NewRun {
+    archisim_core::NewRun {
+        level: x.level,
+        system: x.system,
+        path: x.path.iter().map(|p| f(*p)).collect(),
+        elevation: x.elevation,
+        width: x.width,
+        height: x.height,
+    }
+}
+
+/// What makes a copy of a device, moved by `f` and turned by `turn`.
+pub fn device_spec(
+    x: &archisim_core::ServiceDevice,
+    f: impl Fn(archisim_core::Point2) -> archisim_core::Point2,
+    turn: f64,
+) -> archisim_core::NewDevice {
+    archisim_core::NewDevice {
+        level: x.level,
+        kind: x.kind,
+        name: x.name.clone(),
+        position: f(x.position),
+        rotation: x.rotation + turn,
+        elevation: x.elevation,
+        width: x.width,
+        depth: x.depth,
+        height: x.height,
+    }
 }
 
 #[cfg(test)]

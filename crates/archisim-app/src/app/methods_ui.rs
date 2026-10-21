@@ -31,7 +31,7 @@ impl ArchiSimApp {
     /// closes (an outline) or not (a path).
     pub(super) fn spline_closes(&self) -> Option<bool> {
         match self.tool {
-            Tool::Wall | Tool::Railing | Tool::Road => Some(false),
+            Tool::Wall | Tool::Railing | Tool::Road | Tool::Pipe | Tool::Duct => Some(false),
             Tool::Mass if self.mass_settings.mode == crate::editor::MassMode::Path => Some(false),
             Tool::Mass => Some(true),
             Tool::Slab if !self.slab_settings.wand => Some(true),
@@ -179,6 +179,10 @@ impl ArchiSimApp {
             Tool::Road => {
                 self.road_points = l.points;
                 self.finish_road();
+            }
+            Tool::Pipe | Tool::Duct => {
+                self.run_points = l.points;
+                self.finish_run();
             }
             // One element along each straight piece.
             Tool::Beam | Tool::CurtainWall | Tool::Footing | Tool::Grid => {
@@ -330,6 +334,8 @@ impl ArchiSimApp {
             Tool::Mass | Tool::Tape => self.concept_click(p),
             Tool::Plot => self.plot_click(p),
             Tool::Road => self.road_click(p),
+            Tool::Pipe | Tool::Duct => self.run_click(p),
+            Tool::Device => self.device_click(p),
             Tool::Terrain => self.terrain_click(p),
             _ => {}
         }

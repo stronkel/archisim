@@ -430,6 +430,83 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Instalaciones: water to the kitchen along the north wall, its
+    // drain, the extract duct of the kitchen hood out through the north
+    // façade, a light in each zone, sockets and a switch.
+    doc.transact("Instalaciones", |m| {
+        use archisim_core::{DeviceKind, NewDevice, NewRun, ServiceSystem};
+        use std::f64::consts::PI;
+        let inner = 0.265;
+        for (system, gap, width, elevation) in [
+            (ServiceSystem::ColdWater, 0.05, 0.025, 0.4),
+            (ServiceSystem::HotWater, 0.1, 0.02, 0.4),
+            (ServiceSystem::Drainage, 0.2, 0.11, 0.15),
+        ] {
+            let (x, y) = (12.0 - inner - gap, 9.0 - inner - gap);
+            m.add_run(NewRun {
+                level: pb,
+                system,
+                path: vec![Point2::new(x, 0.8), Point2::new(x, y), Point2::new(7.0, y)],
+                elevation,
+                width,
+                height: width,
+            })?;
+        }
+        m.add_run(NewRun {
+            level: pb,
+            system: ServiceSystem::ExhaustAir,
+            path: vec![Point2::new(7.45, 8.2), Point2::new(7.45, 9.4)],
+            elevation: 2.3,
+            width: 0.2,
+            height: 0.15,
+        })?;
+        let place = |m: &mut archisim_core::Model,
+                     kind: DeviceKind,
+                     name: &str,
+                     at: Point2,
+                     rotation: f64|
+         -> Result<(), ModelError> {
+            let (width, depth, height, elevation) = kind.defaults();
+            m.add_device(NewDevice {
+                level: pb,
+                kind,
+                name: name.to_string(),
+                position: at,
+                rotation,
+                elevation,
+                width,
+                depth,
+                height,
+            })?;
+            Ok(())
+        };
+        for (x, y) in [(2.5, 6.5), (8.5, 6.5), (2.5, 2.2), (9.5, 2.2)] {
+            place(m, DeviceKind::Light, "Luminaria", Point2::new(x, y), 0.0)?;
+        }
+        for (x, y, r) in [
+            (6.2, 9.0 - inner - 0.02, PI),
+            (8.9, 9.0 - inner - 0.02, PI),
+            (inner + 0.02, 7.6, -PI / 2.0),
+        ] {
+            place(m, DeviceKind::Socket, "Enchufe", Point2::new(x, y), r)?;
+        }
+        place(
+            m,
+            DeviceKind::Switch,
+            "Interruptor",
+            Point2::new(12.0 - inner - 0.02, 4.0),
+            PI / 2.0,
+        )?;
+        place(
+            m,
+            DeviceKind::Equipment,
+            "Caldera",
+            Point2::new(11.4, 0.6),
+            PI,
+        )?;
+        Ok(())
+    })?;
+
     // A guard round the flat roof (v0.25), open where the outdoor stair
     // arrives on the east side.
     doc.transact("Barandilla", |m| {

@@ -60,6 +60,7 @@ impl ArchiSimApp {
         self.draw_module_preview(&painter, rect);
         self.draw_concept_preview(&painter, rect);
         self.draw_urban_preview(&painter, rect);
+        self.draw_services_preview(&painter, rect);
         self.draw_method_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
@@ -116,7 +117,10 @@ impl ArchiSimApp {
             | Tool::MassOffset
             | Tool::Tape
             | Tool::Plot
-            | Tool::Road => CursorIcon::Crosshair,
+            | Tool::Road
+            | Tool::Pipe
+            | Tool::Duct
+            | Tool::Device => CursorIcon::Crosshair,
             Tool::Paint => CursorIcon::PointingHand,
             Tool::Cad => match self.cad_want() {
                 Some(crate::cad::Want::Pick) => CursorIcon::Cell,
@@ -382,10 +386,15 @@ impl ArchiSimApp {
             | Tool::Tape
             | Tool::Paint
             | Tool::Plot
-            | Tool::Road => {
+            | Tool::Road
+            | Tool::Pipe
+            | Tool::Duct
+            | Tool::Device => {
                 let points = match self.tool {
                     Tool::Plot => self.plot_tool.corners().to_vec(),
                     Tool::Road => self.road_points.clone(),
+                    Tool::Pipe | Tool::Duct => self.run_points.clone(),
+                    Tool::Device => Vec::new(),
                     _ => self.concept_points(),
                 };
                 let mut s = self.snap_at(raw, reach, &points, &BTreeSet::new());
@@ -394,6 +403,8 @@ impl ArchiSimApp {
                     Tool::Grid | Tool::Footing => self.foundation_anchor(),
                     Tool::Plot => self.plot_tool.anchor(),
                     Tool::Road => self.road_points.last().copied(),
+                    Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
+                    Tool::Device => None,
                     _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
@@ -539,6 +550,7 @@ impl ArchiSimApp {
                 Tool::PushPull | Tool::MassOffset => self.concept_backspace(),
                 Tool::Plot => self.plot_tool.backspace(),
                 Tool::Road => self.road_points.pop().is_some(),
+                Tool::Pipe | Tool::Duct => self.run_points.pop().is_some(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -575,6 +587,11 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Module => self.turn_module_tool(),
+                Tool::Device => {
+                    let r = &mut self.service_settings.device_rotation;
+                    *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
+                    self.say("Aparato girado 90° (Espacio para seguir girando).");
+                }
                 Tool::Object => {
                     let r = &mut self.object_settings.rotation;
                     *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
@@ -618,6 +635,7 @@ impl ArchiSimApp {
                     SlabOutcome::Nothing => {}
                 },
                 Tool::Road => self.finish_road(),
+                Tool::Pipe | Tool::Duct => self.finish_run(),
                 Tool::Railing => {
                     if let Some(c) = self.cursor {
                         if self.railing_points.len() == 1 {
@@ -689,6 +707,12 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Pipe | Tool::Duct => {
+                    if self.run_points.pop().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Device => self.set_tool(Tool::Arrow),
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -956,6 +980,24 @@ impl ArchiSimApp {
                 }
                 if response.clicked_by(PointerButton::Secondary) {
                     self.plot_tool.finish();
+                }
+            }
+            Tool::Pipe | Tool::Duct => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.finish_run();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.run_click(c.point);
+                    }
+                }
+            }
+            Tool::Device => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.device_click(c.point);
+                    }
                 }
             }
             Tool::Road => {
@@ -1761,6 +1803,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::Tape => self.concept_anchor(),
             Tool::Plot => self.plot_tool.anchor(),
             Tool::Road => self.road_points.last().copied(),
+            Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
             Tool::Section => self.section_tool.anchor,
             Tool::CurtainWall => self.curtain_anchor,
             Tool::Railing => self.railing_points.last().copied(),
@@ -1794,6 +1837,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::Tape => self.concept_points(),
             Tool::Plot => self.plot_tool.corners().to_vec(),
             Tool::Road => self.road_points.clone(),
+            Tool::Pipe | Tool::Duct => self.run_points.clone(),
             _ => Vec::new(),
         }
     }

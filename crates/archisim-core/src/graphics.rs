@@ -138,10 +138,12 @@ pub enum Category {
     /// Plots: boundaries and setbacks.
     Plots,
     Roads,
+    /// Pipes, ducts and devices.
+    Services,
 }
 
 impl Category {
-    pub const ALL: [Category; 21] = [
+    pub const ALL: [Category; 22] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
@@ -156,6 +158,7 @@ impl Category {
         Category::Masses,
         Category::Plots,
         Category::Roads,
+        Category::Services,
         Category::Dimensions,
         Category::LevelMarks,
         Category::SectionMarks,
@@ -188,6 +191,7 @@ impl Category {
             Category::Masses => "masses",
             Category::Plots => "plots",
             Category::Roads => "roads",
+            Category::Services => "services",
         }
     }
 
@@ -218,6 +222,7 @@ impl Category {
             Category::Masses => "Volúmenes (concepto)",
             Category::Plots => "Parcelas",
             Category::Roads => "Viales",
+            Category::Services => "Instalaciones",
         }
     }
 }
