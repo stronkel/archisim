@@ -216,6 +216,20 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Edge(id) => {
+                let x = model
+                    .edge(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let points: Vec<_> = x.points.iter().map(|p| t.apply(*p)).collect();
+                if copy {
+                    let new = model.add_edge(x.level, points, x.elevation)?;
+                    out.insert(Element::Edge(new));
+                } else {
+                    model.edit_edge(id, |e| e.points = points)?;
+                    out.insert(*e);
+                }
+            }
             Element::Run(id) => {
                 let x = model
                     .run(id)

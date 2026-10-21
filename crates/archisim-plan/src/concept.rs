@@ -40,6 +40,36 @@ pub fn draw_masses(
     k: f64,
     visible: &dyn Fn(&[Point2]) -> bool,
 ) {
+    // Loose edges: lines of the model, with a dot at each end (as SketchUp
+    // shows the ends of an edge that closes no face).
+    let edges: Vec<_> = model
+        .edges_on_level(level)
+        .filter(|e| visible(&e.points))
+        .collect();
+    if !edges.is_empty() {
+        s.push_str("<g id=\"edges\">\n");
+        for e in edges {
+            crate::dim::element(s, e.id.0, |s| {
+                let d: Vec<String> = e.points.iter().map(|p| crate::pt(*p)).collect();
+                let _ = writeln!(
+                    s,
+                    r#"<path d="M{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                    d.join(" L"),
+                    num(pens().view * k)
+                );
+                for p in [e.points[0], e.points[e.points.len() - 1]] {
+                    let _ = writeln!(
+                        s,
+                        r#"<circle cx="{}" cy="{}" r="{}" fill="{INK}"/>"#,
+                        num(p.x),
+                        num(-p.y),
+                        num(0.6 * k)
+                    );
+                }
+            });
+        }
+        s.push_str("</g>\n");
+    }
     if model.masses_on_level(level).next().is_none() {
         return;
     }

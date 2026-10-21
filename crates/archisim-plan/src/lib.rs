@@ -452,6 +452,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         for m in model.masses_on_level(level) {
             marker_points.extend(m.outline());
         }
+        for e in model.edges_on_level(level) {
+            marker_points.extend(e.points.iter().copied());
+        }
     }
     if show(archisim_core::Category::Plots) {
         for p in model.plots_on_level(level) {

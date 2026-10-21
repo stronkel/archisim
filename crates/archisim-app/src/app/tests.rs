@@ -3742,8 +3742,10 @@ fn concept_volumes_are_drawn_pushed_and_converted() {
         .view
         .fit_exact(canvas, p(-5.0, -12.0), p(30.0, 16.0), 0.0);
     h.app.set_discipline(Discipline::Concept);
-    h.app.pick(Pick::Concept(ConceptPick::Rect));
+    // Arista, with the rectangle of the contextual bar: a face at once.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
     assert_eq!(h.app.tool, Tool::Mass);
+    h.app.choose_method("Rectángulo");
     h.click_at(p(0.0, 0.0));
     h.click_at(p(10.0, 8.0));
     let face = h.model().masses().next().unwrap().id;
@@ -4087,4 +4089,85 @@ fn services_are_drawn() {
     h.app.ed.selection = [Element::Device(socket.id)].into_iter().collect();
     h.key(Key::Delete);
     assert_eq!(h.model().devices().count(), 2);
+}
+
+/// Arista (R12): lines of the model that stay open, and close into a face
+/// on their first point or with the edges already there; Spline open by
+/// default (R16) and in the 2D drawing; the drawing orders of the bottom
+/// bar show their variants in the contextual bar (R15).
+#[test]
+fn concept_edges_close_into_faces() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::{Discipline, Pick};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -12.0), p(30.0, 16.0), 0.0);
+    h.app.set_discipline(Discipline::Concept);
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    assert_eq!(h.app.method_states()[0].0, "Línea");
+    // An open line: an edge, not a face.
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(6.0, 0.0));
+    h.click_at(p(6.0, 4.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().edges().count(), 1);
+    assert_eq!(h.model().masses().count(), 0);
+    // A second line from its end back to its start: the edges close a
+    // face, and go.
+    h.click_at(p(6.0, 4.0));
+    h.click_at(p(0.0, 4.0));
+    h.click_at(p(0.0, 0.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().edges().count(), 0);
+    let face = h.model().masses().next().unwrap();
+    assert!(face.is_face());
+    assert!((archisim_core::signed_area(&face.outline()).abs() - 24.0).abs() < 1e-6);
+    // Back on its first point: a face at once.
+    h.click_at(p(10.0, 0.0));
+    h.click_at(p(14.0, 0.0));
+    h.click_at(p(14.0, 3.0));
+    h.click_at(p(10.0, 0.0));
+    assert_eq!(h.model().masses().count(), 2);
+    h.frame();
+    // Spline: open by default, an edge; on its first point, a face.
+    h.app.choose_method("Spline");
+    h.click_at(p(0.0, 8.0));
+    h.click_at(p(4.0, 10.0));
+    h.click_at(p(8.0, 8.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().edges().count(), 1);
+    h.app.choose_method("Spline");
+    h.click_at(p(12.0, 8.0));
+    h.click_at(p(16.0, 10.0));
+    h.click_at(p(20.0, 8.0));
+    h.click_at(p(12.0, 8.0));
+    assert_eq!(h.model().masses().count(), 3);
+    // An edge selected shows its properties; deleted with Supr.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let edge = h.model().edges().next().unwrap().id;
+    h.app.ed.selection = [Element::Edge(edge)].into_iter().collect();
+    h.frame();
+    h.key(Key::Delete);
+    assert_eq!(h.model().edges().count(), 0);
+    // The 2D Spline of the bottom bar: a polyline of arcs through the
+    // points; while it runs, its variants are in the contextual bar.
+    h.app.keys_autocad = true;
+    h.app.pick(Pick::Command("SPLINE"));
+    assert_eq!(h.app.tool, Tool::Cad);
+    h.frame();
+    h.click_at(p(0.0, -6.0));
+    h.click_at(p(5.0, -4.0));
+    h.click_at(p(10.0, -6.0));
+    h.key(Key::Enter);
+    let d = h.model().drafts().last().unwrap();
+    match &d.shape {
+        archisim_core::Shape::Polyline(pl) => {
+            assert!(!pl.closed);
+            assert!(pl.bulges.iter().any(|b| b.abs() > 1e-6));
+        }
+        other => panic!("{other:?}"),
+    }
 }

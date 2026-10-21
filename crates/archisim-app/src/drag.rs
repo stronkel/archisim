@@ -362,6 +362,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Plot(_)
             | Element::Road(_)
             | Element::Run(_)
+            | Element::Edge(_)
             | Element::Device(_) => {}
         }
     }
@@ -921,6 +922,9 @@ pub(crate) fn move_selection(
             Element::Run(id) => {
                 model.edit_run(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
             }
+            Element::Edge(id) => {
+                model.edit_edge(*id, |x| x.points.iter_mut().for_each(|p| *p = *p + d))?;
+            }
             Element::Device(id) => {
                 model.edit_device(*id, |x| x.position = x.position + d)?;
             }
@@ -1352,6 +1356,18 @@ pub(crate) fn copy(
                 let new = model.add_run(crate::xform::run_spec(&x, |p| p + d))?;
                 copies.insert(Element::Run(new));
             }
+            Element::Edge(id) => {
+                let x = model
+                    .edge(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_edge(
+                    x.level,
+                    x.points.iter().map(|p| *p + d).collect(),
+                    x.elevation,
+                )?;
+                copies.insert(Element::Edge(new));
+            }
             Element::Device(id) => {
                 let x = model
                     .device(*id)
@@ -1574,6 +1590,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Plot(id) => model.plot(id).is_some(),
         Element::Road(id) => model.road(id).is_some(),
         Element::Run(id) => model.run(id).is_some(),
+        Element::Edge(id) => model.edge(id).is_some(),
         Element::Device(id) => model.device(id).is_some(),
     }
 }
@@ -1641,6 +1658,7 @@ fn level_of(
             Element::Plot(id) => model.plot(*id).map(|p| p.level),
             Element::Road(id) => model.road(*id).map(|r| r.level),
             Element::Run(id) => model.run(*id).map(|r| r.level),
+            Element::Edge(id) => model.edge(*id).map(|e| e.level),
             Element::Device(id) => model.device(*id).map(|d| d.level),
         }),
     }

@@ -104,6 +104,9 @@ pub(crate) struct ProjectFile {
     /// Volumes of the concept phase (version 18).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub masses: Vec<Mass>,
+    /// Loose edges of the concept phase (version 21).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edges: Vec<Edge>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -616,6 +619,18 @@ pub(crate) struct Road {
     pub pavement: u64,
     pub kerb_material: u64,
     pub sidewalk_material: u64,
+}
+
+/// A loose edge of the concept phase (version 21).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Edge {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub points: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub elevation: f64,
 }
 
 /// A volume of the concept phase (version 18).
@@ -1884,6 +1899,17 @@ impl ProjectFile {
                     values: values_out(&t.values),
                 })
                 .collect(),
+            edges: p
+                .edges
+                .iter()
+                .map(|e| Edge {
+                    id: e.id.0,
+                    guid: e.guid.to_string(),
+                    level: e.level.0,
+                    points: e.points.iter().copied().map(xy).collect(),
+                    elevation: e.elevation,
+                })
+                .collect(),
             masses: p
                 .masses
                 .iter()
@@ -2322,6 +2348,7 @@ impl ProjectFile {
             module_sources: Vec::new(),
             modules: Vec::new(),
             masses: Vec::new(),
+            edges: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -2594,6 +2621,16 @@ impl ProjectFile {
                 name: t.name,
                 family: core::FamilyId(t.family),
                 values,
+            });
+        }
+        for e in self.edges {
+            let element = format!("edge {}", e.id);
+            parts.edges.push(core::ConceptEdge {
+                id: core::EdgeId(e.id),
+                guid: guid(&element, &e.guid)?,
+                level: core::LevelId(e.level),
+                points: e.points.into_iter().map(pt).collect(),
+                elevation: e.elevation,
             });
         }
         for m in self.masses {

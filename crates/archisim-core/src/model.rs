@@ -1190,6 +1190,8 @@ pub struct ModelParts {
     /// Volumes of the concept phase, and the plot area their figures are
     /// worked out with.
     pub masses: Vec<Mass>,
+    /// Loose edges of the concept phase.
+    pub edges: Vec<ConceptEdge>,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1286,6 +1288,7 @@ pub struct Model {
     module_sources: BTreeMap<ModuleSourceId, ModuleSource>,
     modules: BTreeMap<ModuleId, ModulePlacement>,
     masses: BTreeMap<MassId, Mass>,
+    edges: BTreeMap<EdgeId, ConceptEdge>,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1351,6 +1354,7 @@ impl Model {
             module_sources: BTreeMap::new(),
             modules: BTreeMap::new(),
             masses: BTreeMap::new(),
+            edges: BTreeMap::new(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -1467,6 +1471,14 @@ impl Model {
         self.curtain_walls.retain(|_, c| c.level != id);
         self.railings.retain(|_, r| r.level != id);
         self.objects.retain(|_, o| o.level != id);
+        self.footings.retain(|_, f| f.level != id);
+        self.modules.retain(|_, m| m.level != id);
+        self.masses.retain(|_, m| m.level != id);
+        self.edges.retain(|_, e| e.level != id);
+        self.plots.retain(|_, p| p.level != id);
+        self.roads.retain(|_, r| r.level != id);
+        self.runs.retain(|_, r| r.level != id);
+        self.devices.retain(|_, d| d.level != id);
         for c in self.curtain_walls.values_mut() {
             if matches!(c.top, WallTop::Level { level, .. } if level == id) {
                 c.top = WallTop::Unconnected;
@@ -3740,6 +3752,7 @@ impl Model {
             module_sources: self.module_sources.values().cloned().collect(),
             modules: self.modules.values().cloned().collect(),
             masses: self.masses.values().cloned().collect(),
+            edges: self.edges.values().cloned().collect(),
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4047,6 +4060,7 @@ impl Model {
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model.restore_masses(parts.masses, &mut claim)?;
+        model.restore_edges(parts.edges, &mut claim)?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model

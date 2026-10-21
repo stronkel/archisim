@@ -32,8 +32,9 @@ impl ArchiSimApp {
     pub(super) fn spline_closes(&self) -> Option<bool> {
         match self.tool {
             Tool::Wall | Tool::Railing | Tool::Road | Tool::Pipe | Tool::Duct => Some(false),
-            Tool::Mass if self.mass_settings.mode == crate::editor::MassMode::Path => Some(false),
-            Tool::Mass => Some(true),
+            // Spline makes an open line (a path, or loose edges); it closes
+            // on its first point.
+            Tool::Mass => Some(false),
             Tool::Slab if !self.slab_settings.wand => Some(true),
             Tool::Zone | Tool::Plot => Some(true),
             _ => None,
@@ -73,12 +74,11 @@ impl ArchiSimApp {
         match self.draw_method {
             DrawMethod::Normal => false,
             DrawMethod::Spline if self.spline_closes().is_some() => {
-                let closes = self.spline_closes() == Some(true);
-                if closes
-                    && self.spline_points.len() >= 3
+                // Open by default; a click on its first point closes it.
+                if self.spline_points.len() >= 3
                     && self.spline_points[0].distance(p) < self.view.to_metres(REACH)
                 {
-                    self.finish_spline();
+                    self.finish_spline_as(true);
                 } else if !self.spline_points.last().is_some_and(|q| q.approx_eq(p)) {
                     self.spline_points.push(p);
                 }
@@ -110,12 +110,20 @@ impl ArchiSimApp {
         }
     }
 
-    /// Ends the spline being drawn and makes the element along it.
+    /// Ends the spline being drawn (Enter, double click) and makes the
+    /// element along it: open, unless the tool only makes outlines.
     pub(super) fn finish_spline(&mut self) {
+        let closes = self.spline_closes() == Some(true);
+        self.finish_spline_as(closes);
+    }
+
+    /// Ends the spline, closed (back to its first point) or open.
+    fn finish_spline_as(&mut self, closes: bool) {
         let pts = std::mem::take(&mut self.spline_points);
-        let Some(closes) = self.spline_closes() else {
+        let Some(outline_only) = self.spline_closes() else {
             return;
         };
+        let closes = closes || outline_only;
         if pts.len() < 2 || (closes && pts.len() < 3) {
             return;
         }
@@ -125,6 +133,13 @@ impl ArchiSimApp {
             if closes {
                 // An outline does not repeat its first point.
                 c.dedup_by(|a, b| a.approx_eq(*b));
+                if c.len() > 1 && c[0].approx_eq(c[c.len() - 1]) {
+                    c.pop();
+                }
+                // A path (a railing, a road, a band) closes on itself.
+                if !self.closed_line_is_outline() {
+                    c.push(c[0]);
+                }
             }
             c
         };
@@ -133,6 +148,16 @@ impl ArchiSimApp {
             closed: closes,
             points,
         });
+    }
+
+    /// Whether a closed line makes an outline with the tool in use (a
+    /// slab, room, plot, roof, face or volume), not a path that goes round.
+    fn closed_line_is_outline(&self) -> bool {
+        match self.tool {
+            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Roof => true,
+            Tool::Mass => self.mass_settings.mode != crate::editor::MassMode::Path,
+            _ => false,
+        }
     }
 
     /// Makes the element of the tool in use along a line.
@@ -166,6 +191,7 @@ impl ArchiSimApp {
                 }
             }
             Tool::Mass => {
+                // Open: a band along it («Seguir») or loose edges (Arista).
                 self.concept.path = l.points;
                 self.finish_path();
             }

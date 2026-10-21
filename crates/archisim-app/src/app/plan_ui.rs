@@ -514,7 +514,7 @@ impl ArchiSimApp {
                     used_text |= match self.tool {
                         Tool::Mass
                             if self.mass_settings.mode != crate::editor::MassMode::Circle
-                                && self.mass_settings.mode != crate::editor::MassMode::Path =>
+                                && !self.mass_line() =>
                         {
                             self.mass_tool.type_char(c)
                         }
@@ -1012,8 +1012,7 @@ impl ArchiSimApp {
                 }
             }
             Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
-                let path = self.tool == Tool::Mass
-                    && self.mass_settings.mode == crate::editor::MassMode::Path;
+                let path = self.mass_line();
                 if path
                     && (response.double_clicked_by(PointerButton::Primary)
                         || response.clicked_by(PointerButton::Secondary))

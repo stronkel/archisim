@@ -34,7 +34,7 @@ mod structure;
 mod terrain;
 mod types;
 
-pub use concept::{circle, snap_height, MassMode, MassSettings, MassWhat};
+pub use concept::{add_mass_in, circle, snap_height, MassMode, MassSettings, MassWhat};
 pub use curtain::CurtainSettings;
 pub use foundations::{FootingMode, FootingSettings};
 pub use modules::ModuleStatus;
@@ -391,6 +391,7 @@ impl Editor {
             Element::Plot(id) => model.plot(*id).is_some(),
             Element::Road(id) => model.road(*id).is_some(),
             Element::Run(id) => model.run(*id).is_some(),
+            Element::Edge(id) => model.edge(*id).is_some(),
             Element::Device(id) => model.device(*id).is_some(),
         });
         if model.level(self.level).is_none() {
@@ -622,6 +623,7 @@ impl Editor {
                     | Element::Plot(_)
                     | Element::Road(_)
                     | Element::Run(_)
+                    | Element::Edge(_)
                     | Element::Device(_)) => remove_element(m, *e)?,
                     Element::Draft(id) => {
                         m.remove_draft(*id)?;
@@ -724,6 +726,7 @@ impl Editor {
                         | Element::Plot(_)
                         | Element::Road(_)
                         | Element::Run(_)
+                        | Element::Edge(_)
                         | Element::Device(_)) => remove_element(m, e)?,
                     },
                     Change::Transform { items, t, copy } => {
@@ -1116,6 +1119,7 @@ impl Editor {
                         | Element::Plot(_)
                         | Element::Road(_)
                         | Element::Run(_)
+                        | Element::Edge(_)
                         | Element::Device(_)
                 )
             })
@@ -1143,6 +1147,7 @@ impl Editor {
                     Element::Plot(id) => m.edit_plot(*id, |x| x.level = level)?,
                     Element::Road(id) => m.edit_road(*id, |x| x.level = level)?,
                     Element::Run(id) => m.edit_run(*id, |x| x.level = level)?,
+                    Element::Edge(id) => m.edit_edge(*id, |x| x.level = level)?,
                     Element::Device(id) => m.edit_device(*id, |x| x.level = level)?,
                     _ => {}
                 }
@@ -1357,6 +1362,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Plot(id) => m.remove_plot(id).map(drop),
         Element::Road(id) => m.remove_road(id).map(drop),
         Element::Run(id) => m.remove_run(id).map(drop),
+        Element::Edge(id) => m.remove_edge(id).map(drop),
         Element::Device(id) => m.remove_device(id).map(drop),
         _ => Ok(()),
     }

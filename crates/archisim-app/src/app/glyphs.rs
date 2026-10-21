@@ -10,8 +10,6 @@ use eframe::egui::{self, Color32, Pos2, Rect, TextureHandle, TextureOptions};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Glyph {
     Edge,
-    FaceRect,
-    FaceCircle,
     PushPull,
     FollowMe,
     FaceOffset,
@@ -90,8 +88,6 @@ impl Glyph {
             Glyph::Edge => {
                 r##"<path d="M3 15L15 4"/><circle cx="3" cy="15" r="1.2" fill="#fff"/><circle cx="15" cy="4" r="1.2" fill="#fff"/>"##
             }
-            Glyph::FaceRect => r##"<path d="M3 13l6-6h9l-6 6z"/>"##,
-            Glyph::FaceCircle => r##"<ellipse cx="10" cy="11" rx="7" ry="4"/>"##,
             Glyph::PushPull => {
                 r##"<path d="M3 15l5-4h9l-5 4z"/><path d="M8 11V5h9v6M12 15V9" stroke-width="1"/><path d="M14 3v-1M12.5 2.5L14 1l1.5 1.5" stroke-width="1"/>"##
             }
@@ -275,8 +271,6 @@ impl Glyph {
     #[cfg(test)]
     pub const ALL: &'static [Glyph] = &[
         Glyph::Edge,
-        Glyph::FaceRect,
-        Glyph::FaceCircle,
         Glyph::PushPull,
         Glyph::FollowMe,
         Glyph::FaceOffset,

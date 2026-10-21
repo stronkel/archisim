@@ -56,6 +56,19 @@ pub struct Mass {
     pub building: Option<MassBuilding>,
 }
 
+/// A loose edge of the concept phase: a line of the model (not of the
+/// drawing), open, as SketchUp leaves them until they close a face.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConceptEdge {
+    pub id: EdgeId,
+    pub guid: GlobalId,
+    pub level: LevelId,
+    /// Its points in plan, two or more.
+    pub points: Vec<Point2>,
+    /// Its height over the level.
+    pub elevation: f64,
+}
+
 /// Data needed to make a mass.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewMass {
@@ -521,6 +534,102 @@ impl Model {
                 let _ = self.remove_slab(SlabId(*id));
             }
         }
+    }
+
+    // ---- Loose edges -------------------------------------------------------
+
+    fn validate_edge(
+        &self,
+        level: LevelId,
+        points: &[Point2],
+        elevation: f64,
+    ) -> Result<(), ModelError> {
+        if !self.levels.contains_key(&level) {
+            return Err(ModelError::UnknownLevel(level));
+        }
+        finite(elevation, "edge elevation")?;
+        for q in points {
+            finite_point(*q, "edge point")?;
+        }
+        if points.len() < 2 || points.windows(2).any(|w| w[0].approx_eq(w[1])) {
+            return Err(ModelError::InvalidShape(
+                "an edge needs two different points or more",
+            ));
+        }
+        Ok(())
+    }
+
+    /// A loose edge (an open line of the model).
+    pub fn add_edge(
+        &mut self,
+        level: LevelId,
+        points: Vec<Point2>,
+        elevation: f64,
+    ) -> Result<EdgeId, ModelError> {
+        self.validate_edge(level, &points, elevation)?;
+        let id = EdgeId(self.take_id());
+        self.edges.insert(
+            id,
+            ConceptEdge {
+                id,
+                guid: GlobalId::new(),
+                level,
+                points,
+                elevation,
+            },
+        );
+        Ok(id)
+    }
+
+    pub fn edit_edge(
+        &mut self,
+        id: EdgeId,
+        edit: impl FnOnce(&mut ConceptEdge),
+    ) -> Result<(), ModelError> {
+        let mut e = self
+            .edges
+            .get(&id)
+            .cloned()
+            .ok_or(ModelError::UnknownElement(id.0))?;
+        edit(&mut e);
+        self.validate_edge(e.level, &e.points, e.elevation)?;
+        self.edges.insert(id, e);
+        Ok(())
+    }
+
+    pub fn remove_edge(&mut self, id: EdgeId) -> Result<ConceptEdge, ModelError> {
+        self.edges
+            .remove(&id)
+            .ok_or(ModelError::UnknownElement(id.0))
+    }
+
+    pub fn edge(&self, id: EdgeId) -> Option<&ConceptEdge> {
+        self.edges.get(&id)
+    }
+
+    pub fn edges(&self) -> impl Iterator<Item = &ConceptEdge> {
+        self.edges.values()
+    }
+
+    pub fn edges_on_level(&self, level: LevelId) -> impl Iterator<Item = &ConceptEdge> {
+        self.edges.values().filter(move |e| e.level == level)
+    }
+
+    pub(super) fn restore_edges(
+        &mut self,
+        edges: Vec<ConceptEdge>,
+        claim: &mut structure::Claim<'_>,
+    ) -> Result<(), RestoreError> {
+        for e in edges {
+            claim(e.id.0, Some(&e.guid))
+                .and_then(|_| self.validate_edge(e.level, &e.points, e.elevation))
+                .map_err(|error| RestoreError {
+                    element: format!("edge {}", e.id.0),
+                    error,
+                })?;
+            self.edges.insert(e.id, e);
+        }
+        Ok(())
     }
 
     pub(super) fn restore_masses(

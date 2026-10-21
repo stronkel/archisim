@@ -52,6 +52,8 @@ pub enum Element {
     Road(archisim_core::RoadId),
     /// A pipe or duct, picked by its band.
     Run(archisim_core::RunId),
+    /// A loose edge of the concept phase, picked by its line.
+    Edge(archisim_core::EdgeId),
     /// A light, socket, switch or piece of equipment, picked by its box.
     Device(archisim_core::DeviceId),
 }
@@ -132,6 +134,9 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
         Element::Road(id) => model.road(id).map(|r| r.outline()),
         Element::Run(id) => model.run(id).map(|r| r.outline()),
+        Element::Edge(id) => model
+            .edge(id)
+            .map(|e| archisim_core::strip(&e.points, -0.005, 0.005)),
         Element::Device(id) => model.device(id).map(|d| d.outline()),
     }
 }
@@ -413,6 +418,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.masses_on_level(level).map(|m| Element::Mass(m.id)));
     v.extend(model.roads_on_level(level).map(|r| Element::Road(r.id)));
     v.extend(model.runs_on_level(level).map(|r| Element::Run(r.id)));
+    v.extend(model.edges_on_level(level).map(|e| Element::Edge(e.id)));
     v.extend(model.devices_on_level(level).map(|d| Element::Device(d.id)));
     v.extend(model.plots_on_level(level).map(|p| Element::Plot(p.id)));
     v
@@ -454,6 +460,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Plot(_)
         | Element::Road(_)
         | Element::Run(_)
+        | Element::Edge(_)
         | Element::Device(_) => None,
     }
 }
@@ -505,6 +512,8 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Road(_) => 5,
         // Under the ceiling, in front of the slab.
         Element::Run(_) => 2,
+        // Lines in front of the faces they may close.
+        Element::Edge(_) => 1,
         Element::Device(_) => 1,
         // The ground everything stands on: last.
         Element::Plot(_) => 7,
