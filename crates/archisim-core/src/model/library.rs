@@ -63,7 +63,10 @@ impl Loaded {
 }
 
 impl Model {
-    fn type_parts(&self, t: FamilyTypeRef) -> Result<(FamilyId, &Values, &GlobalId), ModelError> {
+    pub(super) fn type_parts(
+        &self,
+        t: FamilyTypeRef,
+    ) -> Result<(FamilyId, &Values, &GlobalId), ModelError> {
         match t {
             FamilyTypeRef::Opening(id) => {
                 let ty = self

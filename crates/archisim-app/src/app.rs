@@ -87,6 +87,8 @@ pub enum Tool {
     Grid,
     /// Pads, strips and tie beams.
     Footing,
+    /// Copies of a module (another project).
+    Module,
     /// A 2D drafting or editing command is running (AutoCAD's).
     Cad,
 }
@@ -111,13 +113,14 @@ impl Tool {
                 | Tool::Object
                 | Tool::Grid
                 | Tool::Footing
+                | Tool::Module
         )
     }
 
     /// The tool a key selects (with the ArchiCAD keys): M muro, F forjado,
     /// P puerta, V ventana, C cota, I pilar, G viga, Z local, S sección,
     /// T cubierta, E escalera, R terreno, U muro cortina, B barandilla,
-    /// O objeto, X ejes, A cimentación.
+    /// O objeto, X ejes, A cimentación, K módulo.
     pub(super) fn from_key(text: &str) -> Option<Tool> {
         match text.to_lowercase().as_str() {
             "m" => Some(Tool::Wall),
@@ -137,6 +140,7 @@ impl Tool {
             "o" => Some(Tool::Object),
             "x" => Some(Tool::Grid),
             "a" => Some(Tool::Footing),
+            "k" => Some(Tool::Module),
             _ => None,
         }
     }
@@ -222,6 +226,8 @@ pub struct ArchiSimApp {
     /// The first point of the strip or tie beam being drawn.
     pub footing_anchor: Option<Point2>,
     pub footing_settings: crate::editor::FootingSettings,
+    pub module_tool: module_ui::ModuleTool,
+    pub module_watch: module_ui::ModuleWatch,
     pub section_tool: section_ui::SectionTool,
     /// The section shown: its drawing (worked out once per revision) and
     /// its picture on screen.
@@ -451,6 +457,8 @@ impl ArchiSimApp {
             grid_anchor: None,
             footing_anchor: None,
             footing_settings,
+            module_tool: Default::default(),
+            module_watch: Default::default(),
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_hover: None,
@@ -631,6 +639,8 @@ impl ArchiSimApp {
         self.beam_tool.finish();
         self.grid_anchor = None;
         self.footing_anchor = None;
+        self.module_tool = Default::default();
+        self.module_watch = Default::default();
         self.ed = ed;
         self.drag = None;
         self.wall_tool.finish();
@@ -1857,6 +1867,7 @@ mod glyphs;
 mod icons;
 mod levels_ui;
 mod library_ui;
+mod module_ui;
 mod navigator;
 mod object_gallery;
 mod object_ui;

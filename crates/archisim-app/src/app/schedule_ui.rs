@@ -28,7 +28,7 @@ impl ArchiSimApp {
             self.open_view(TabKind::Schedule(SchedTab::Takeoff));
         }
         for kind in ScheduleKind::ALL {
-            let t = archisim_plan::schedules::table(self.ed.model(), kind, None);
+            let t = archisim_plan::schedules::table(&self.ed.shown(), kind, None);
             let open = active == Some(TabKind::Schedule(SchedTab::Kind(kind)));
             let r = super::widgets::list_row_draggable(
                 ui,
@@ -65,7 +65,8 @@ impl ArchiSimApp {
                 .layout(egui::Layout::top_down(egui::Align::Min)),
         );
         let ui = &mut child;
-        let model = self.ed.model();
+        let shown = self.ed.shown();
+        let model: &archisim_core::Model = &shown;
         let levels: Vec<(Option<LevelId>, String)> =
             std::iter::once((None, "Todo el edificio".to_string()))
                 .chain(model.levels().iter().map(|l| (Some(l.id), l.name.clone())))

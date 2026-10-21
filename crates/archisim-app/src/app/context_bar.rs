@@ -173,6 +173,7 @@ fn element_name(e: &Element) -> &'static str {
         Element::Tag(_) => "Etiqueta",
         Element::Footing(_) => "Cimentación",
         Element::Grid(_) => "Eje",
+        Element::Module(_) => "Módulo",
     }
 }
 
@@ -257,6 +258,7 @@ impl ArchiSimApp {
                 Tool::Railing => ("Barandilla", None, "Varita", ""),
                 Tool::Object => ("Objeto", None, "Varita", ""),
                 Tool::Grid => ("Eje", None, "Varita", ""),
+                Tool::Module => ("Módulo", None, "Varita", ""),
                 Tool::Footing => return Some(("Cimentación", self.footing_methods())),
                 Tool::Arrow | Tool::Cad => return None,
             };

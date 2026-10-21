@@ -111,7 +111,7 @@ impl ArchiSimApp {
             return 100.0;
         };
         let (w, h) = (s.width / 1000.0, s.height / 1000.0);
-        let (lo, hi) = archisim_plan::axo::axo_extent(self.ed.model(), &self.camera_axo(), 100.0);
+        let (lo, hi) = archisim_plan::axo::axo_extent(&self.ed.shown(), &self.camera_axo(), 100.0);
         [50.0, 100.0, 200.0, 250.0, 500.0, 1000.0]
             .into_iter()
             .find(|k| (hi.x - lo.x) / k <= w * 0.5 && (hi.y - lo.y) / k <= h * 0.66)

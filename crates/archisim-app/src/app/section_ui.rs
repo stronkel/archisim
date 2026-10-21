@@ -157,7 +157,8 @@ impl ArchiSimApp {
         if fresh {
             return;
         }
-        let model = self.ed.model();
+        let shown = self.ed.shown();
+        let model: &archisim_core::Model = &shown;
         let Some(sec) = model.section(id) else {
             return;
         };
@@ -292,7 +293,8 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
-        let model = self.ed.model();
+        let shown = self.ed.shown();
+        let model: &archisim_core::Model = &shown;
         let Some(cache) = self.section_cache.as_mut() else {
             return;
         };

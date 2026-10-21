@@ -19,6 +19,7 @@ mod disciplines;
 mod foundations;
 mod layered_library;
 mod library;
+mod modules;
 mod objects;
 mod parameters;
 mod phases;
@@ -33,6 +34,7 @@ pub use disciplines::*;
 pub use foundations::*;
 pub use layered_library::*;
 pub use library::*;
+pub use modules::*;
 pub use objects::*;
 pub use parameters::*;
 pub use phases::*;
@@ -1176,6 +1178,9 @@ pub struct ModelParts {
     pub railings: Vec<Railing>,
     pub object_types: Vec<ObjectType>,
     pub objects: Vec<Object>,
+    /// Module files kept in the project, and the copies placed.
+    pub module_sources: Vec<ModuleSource>,
+    pub modules: Vec<ModulePlacement>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
     /// The uses rooms of this project are offered (empty: the default
@@ -1262,6 +1267,8 @@ pub struct Model {
     railings: BTreeMap<RailingId, Railing>,
     object_types: BTreeMap<ObjectTypeId, ObjectType>,
     objects: BTreeMap<ObjectId, Object>,
+    module_sources: BTreeMap<ModuleSourceId, ModuleSource>,
+    modules: BTreeMap<ModuleId, ModulePlacement>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     pub(crate) room_usages: Vec<String>,
@@ -1319,6 +1326,8 @@ impl Model {
             railings: BTreeMap::new(),
             object_types: BTreeMap::new(),
             objects: BTreeMap::new(),
+            module_sources: BTreeMap::new(),
+            modules: BTreeMap::new(),
             true_north: 0.0,
             room_usages: Vec::new(),
             georeference: None,
@@ -3700,6 +3709,8 @@ impl Model {
             railings: self.railings.values().cloned().collect(),
             object_types: self.object_types.values().cloned().collect(),
             objects: self.objects.values().cloned().collect(),
+            module_sources: self.module_sources.values().cloned().collect(),
+            modules: self.modules.values().cloned().collect(),
             true_north: self.true_north,
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
@@ -4000,6 +4011,7 @@ impl Model {
         model.restore_curtain_walls(parts.curtain_types, parts.curtain_walls, &mut claim)?;
         model.restore_railings(parts.railings, &mut claim)?;
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
+        model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model
             .set_true_north(parts.true_north)
             .map_err(|error| RestoreError {

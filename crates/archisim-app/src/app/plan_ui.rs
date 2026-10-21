@@ -57,6 +57,7 @@ impl ArchiSimApp {
         self.draw_opening_preview(&painter, rect);
         self.draw_member_preview(&painter, rect);
         self.draw_foundation_preview(&painter, rect);
+        self.draw_module_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
@@ -105,7 +106,8 @@ impl ArchiSimApp {
             | Tool::Railing
             | Tool::Object
             | Tool::Grid
-            | Tool::Footing => CursorIcon::Crosshair,
+            | Tool::Footing
+            | Tool::Module => CursorIcon::Crosshair,
             Tool::Cad => match self.cad_want() {
                 Some(crate::cad::Want::Pick) => CursorIcon::Cell,
                 Some(crate::cad::Want::Select) if self.hover.is_some() => CursorIcon::PointingHand,
@@ -359,7 +361,7 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
-            Tool::Column | Tool::Beam | Tool::Grid | Tool::Footing => {
+            Tool::Column | Tool::Beam | Tool::Grid | Tool::Footing | Tool::Module => {
                 let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
                 let anchor = match self.tool {
                     Tool::Beam => self.beam_tool.anchor,
@@ -531,6 +533,7 @@ impl ArchiSimApp {
                         Err(e) => self.complain(format!("No se puede girar: {e}.")),
                     }
                 }
+                Tool::Module => self.turn_module_tool(),
                 Tool::Object => {
                     let r = &mut self.object_settings.rotation;
                     *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
@@ -609,7 +612,7 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Door | Tool::Window | Tool::Column | Tool::Object => {
+                Tool::Door | Tool::Window | Tool::Column | Tool::Object | Tool::Module => {
                     self.set_tool(Tool::Arrow)
                 }
                 Tool::Grid | Tool::Footing => {
@@ -851,6 +854,13 @@ impl ArchiSimApp {
                     }
                 }
             }
+            Tool::Module => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.module_click(c.point);
+                    }
+                }
+            }
             Tool::Grid | Tool::Footing => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
@@ -1045,7 +1055,7 @@ impl ArchiSimApp {
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
             let image = rasterize_with(
-                self.ed.model(),
+                &self.ed.shown(),
                 self.ed.level,
                 size,
                 &archisim_plan::PlanOptions {

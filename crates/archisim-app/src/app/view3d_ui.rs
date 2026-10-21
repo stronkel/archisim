@@ -357,7 +357,7 @@ impl ArchiSimApp {
         v.refresh_scene(
             self.ed.revision(),
             &self.ed.selection,
-            self.ed.model(),
+            &self.ed.shown(),
             self.phase_view,
             &self.coord,
             &disciplines,
@@ -448,7 +448,12 @@ impl ArchiSimApp {
                     self.coord.select_linked_none();
                 }
                 let hit = match owner {
-                    Some(Owner::Model(e)) => Some(e),
+                    // An element of a module's copy: the copy.
+                    Some(Owner::Model(e)) => Some(
+                        crate::pick::solid_of(e)
+                            .and_then(|o| self.ed.model().module_of_flat_id(o.id()))
+                            .map_or(e, Element::Module),
+                    ),
                     _ => None,
                 };
                 match (hit, add) {
@@ -477,7 +482,7 @@ impl ArchiSimApp {
         v.refresh_scene(
             self.ed.revision(),
             &self.ed.selection,
-            self.ed.model(),
+            &self.ed.shown(),
             self.phase_view,
             &self.coord,
             &disciplines,

@@ -32,7 +32,7 @@ impl CteWindow {
     fn report(&mut self, ed: &crate::editor::Editor) -> &Report {
         let rev = ed.revision();
         if self.report.as_ref().is_none_or(|(r, _)| *r != rev) {
-            self.report = Some((rev, archisim_cte::check(ed.model())));
+            self.report = Some((rev, archisim_cte::check(&ed.shown())));
         }
         &self.report.as_ref().expect("just made").1
     }
