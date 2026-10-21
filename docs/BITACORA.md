@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (tarde) · Bloque P, primera parte: estilos de presentación (P1)
+
+Rama `bloque/presentacion` (sobre `bloque/revision-r`; pull request para Antonio). Formato `.archisim` versión 22 (abre las anteriores tal cual).
+
+**Hecho**
+- **Estilos de presentación** (Vista → Estilos de presentación…, o en Propiedades de la planta → Presentación):
+  - papel de color;
+  - paleta de tonos de oscuro a claro: cada color del dibujo pasa al tono de su claridad (la tinta al más oscuro, el papel al más claro); sin paleta, el dibujo conserva sus colores;
+  - muros y pilares cortados macizados en un color, sin capas ni tramas;
+  - grueso de las líneas (× 0,3 a × 2).
+- Cinco estilos de partida en los proyectos nuevos: **AD5** (líneas finas negras, muros negros, colores propios), **Terracota**, **Bosque**, **Azul** y **Monocromo**. En los proyectos que ya existían, «Estilos de partida» en la ventana los añade.
+- Cada pestaña de planta y cada vista de un plano elige su estilo; sirve en pantalla, en el PDF, en el DXF y en las secciones, alzados y axonometrías de los planos.
+- **Biblioteca del estudio**: «Guardar en la biblioteca» y «Cargar de la biblioteca» llevan los estilos a otros proyectos (fichero `Estilos.aspres` en la carpeta de la biblioteca).
+- **Tramas de presentación** nuevas, en los sombreados del dibujo 2D y en los suelos de los locales: adoquín, losa 60×40, piedra irregular (cada piedra distinta), tarima, veta de madera, grava punteada, césped en franjas (bandas de 1,5 m), césped punteado y lámina de agua.
+- **Pavimento en planta** de cada local (Propiedades del local): trama, color, fondo, escala y giro.
+- Los sombreados del dibujo 2D se dibujan ahora **debajo** de muros, objetos y árboles (como un pavimento), no encima.
+- La demo tiene jardín (césped en franjas, piscina y camino de grava), suelos de tarima y gres, y un plano nuevo **A-03 Presentación** con la planta baja a 1:100 en el estilo Bosque.
+
+**Pendiente** (resto del bloque P)
+- P2: copas de árbol y arbustos generados, personas y coches de presentación.
+- P3: sombras arrojadas, recorrido solar, curvas de nivel y cuadros de superficies con estilo.
+- P4: plantillas de lámina y exportación PNG de alta resolución.
+- La paleta cambia todos los colores por su claridad (el agua pasa al tono de su claridad, no queda azul); si hace falta, se puede añadir que ciertos colores se respeten.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y abre `out/demo-planos.pdf`: la tercera hoja (A-03) es la planta en estilo Bosque.
+2. `cargo run --release -p archisim-app -- out/demo.archisim`. Con la planta baja y nada seleccionado, en Propiedades → **Presentación → Estilo** elige AD5, Terracota, Bosque… y mira la planta.
+3. **Vista → Estilos de presentación…**: crea uno (＋ Nuevo), cámbiale el papel, los tonos, el macizado y el grueso de líneas; elige **Usar en la vista activa**.
+4. Selecciona un local (clic en su rótulo) y, en **Pavimento en planta**, marca «Dibujar el suelo» y prueba Tarima, Piedra irregular o Losa.
+5. **Relleno** de la barra inferior: las tramas nuevas (Césped en franjas, Lámina de agua…) están en la lista.
+6. En la ventana de estilos, **Guardar en la biblioteca**; en otro proyecto, **Cargar de la biblioteca**.
+
+---
+
 ## 2026-10-21 (tarde) · Bloque R, segunda vuelta (R17–R21)
 
 Misma rama `bloque/revision-r` y mismo pull request (#39). El formato sigue en la versión 21 (aún no estaba en `main`): las caras pintadas guardan ahora el elemento y la cara, y hay zonas pintadas y aristas con altura por punto.

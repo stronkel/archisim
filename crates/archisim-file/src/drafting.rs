@@ -32,11 +32,11 @@ fn yes() -> bool {
     true
 }
 
-fn hex(c: [u8; 3]) -> String {
+pub(crate) fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
-fn parse_hex(element: &str, text: &str) -> Result<[u8; 3], FileError> {
+pub(crate) fn parse_hex(element: &str, text: &str) -> Result<[u8; 3], FileError> {
     let bad = || FileError::Value {
         element: element.to_string(),
         message: format!("«{text}» is not a colour like #rrggbb"),
@@ -649,6 +649,9 @@ pub(crate) struct Style {
     /// Disciplines left out (version 15).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_disciplines: Vec<String>,
+    /// Presentation style (version 22).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<u64>,
 }
 
 impl Default for Style {
@@ -659,6 +662,7 @@ impl Default for Style {
             detail: fine(),
             focus: None,
             hidden_disciplines: Vec::new(),
+            presentation: None,
         }
     }
 }
@@ -683,6 +687,7 @@ impl Style {
                 .iter()
                 .map(|d| d.code().to_string())
                 .collect(),
+            presentation: s.presentation.map(|p| p.0),
         }
     }
 
@@ -720,6 +725,7 @@ impl Style {
                         .ok_or_else(|| bad(format!("unknown discipline «{c}»")))
                 })
                 .collect::<Result<_, _>>()?,
+            presentation: self.presentation.map(core::PresentationStyleId),
         })
     }
 
@@ -729,6 +735,7 @@ impl Style {
             && self.detail == "fine"
             && self.focus.is_none()
             && self.hidden_disciplines.is_empty()
+            && self.presentation.is_none()
     }
 }
 

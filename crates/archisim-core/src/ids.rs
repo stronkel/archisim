@@ -22,6 +22,10 @@ macro_rules! typed_id {
 }
 
 typed_id!(
+    /// Identifies a [`crate::PresentationStyle`].
+    PresentationStyleId
+);
+typed_id!(
     /// Identifies a [`crate::ConceptEdge`] (a loose edge of the concept phase).
     EdgeId
 );

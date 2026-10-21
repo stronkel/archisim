@@ -113,6 +113,9 @@ pub(crate) struct ProjectFile {
     /// Painted zones of walls' faces (version 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paint_zones: Vec<PaintZoneOf>,
+    /// Presentation styles of the views (version 22).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub presentation_styles: Vec<PresentationStyleOf>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -647,6 +650,51 @@ pub(crate) struct PaintZoneOf {
     pub side: String,
     pub outline: Vec<Xy>,
     pub material: u64,
+}
+
+/// A presentation style (version 22).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PresentationStyleOf {
+    pub id: u64,
+    pub name: String,
+    pub background: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub palette: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poche: Option<String>,
+    pub line_scale: f64,
+}
+
+impl PresentationStyleOf {
+    pub(crate) fn out(s: &core::PresentationStyle) -> Self {
+        use crate::drafting::hex;
+        Self {
+            id: s.id.0,
+            name: s.name.clone(),
+            background: hex(s.background),
+            palette: s.palette.iter().map(|c| hex(*c)).collect(),
+            poche: s.poche.map(hex),
+            line_scale: s.line_scale,
+        }
+    }
+
+    pub(crate) fn into_core(self) -> Result<core::PresentationStyle, FileError> {
+        use crate::drafting::parse_hex;
+        let element = format!("presentation style {}", self.id);
+        Ok(core::PresentationStyle {
+            id: core::PresentationStyleId(self.id),
+            name: self.name,
+            background: parse_hex(&element, &self.background)?,
+            palette: self
+                .palette
+                .iter()
+                .map(|c| parse_hex(&element, c))
+                .collect::<Result<_, _>>()?,
+            poche: self.poche.map(|c| parse_hex(&element, &c)).transpose()?,
+            line_scale: self.line_scale,
+        })
+    }
 }
 
 /// A loose edge of the concept phase (version 21).
@@ -1939,6 +1987,11 @@ impl ProjectFile {
                     material: m.0,
                 })
                 .collect(),
+            presentation_styles: p
+                .presentation_styles
+                .iter()
+                .map(PresentationStyleOf::out)
+                .collect(),
             paint_zones: p
                 .paint_zones
                 .iter()
@@ -2406,6 +2459,7 @@ impl ProjectFile {
             edges: Vec::new(),
             face_paints: Vec::new(),
             paint_zones: Vec::new(),
+            presentation_styles: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -2688,6 +2742,9 @@ impl ProjectFile {
             parts
                 .face_paints
                 .push((f.element, face, core::MaterialId(f.material)));
+        }
+        for st in self.presentation_styles {
+            parts.presentation_styles.push(st.into_core()?);
         }
         for z in self.paint_zones {
             let side = core::FaceSide::from_code(&z.side).ok_or_else(|| FileError::Value {

@@ -97,26 +97,37 @@ fn grey_of(r: u8, g: u8, b: u8) -> u8 {
 
 /// Every `#rrggbb`, `#rgb` and `rgb(r,g,b)` of an SVG fragment, in grey.
 pub fn grey(svg: &str) -> String {
+    map_colours(svg, |[r, g, b]| {
+        let g = grey_of(r, g, b);
+        [g, g, g]
+    })
+}
+
+/// Every colour of an SVG fragment (`#rrggbb`, `#rgb`, `rgb(r,g,b)`,
+/// `"black"` and `"white"`) turned by `f`, written as `#rrggbb`.
+pub fn map_colours(svg: &str, f: impl Fn([u8; 3]) -> [u8; 3]) -> String {
     let b = svg.as_bytes();
     let mut out = String::with_capacity(svg.len());
     let mut i = 0;
     let hex = |c: u8| (c as char).to_digit(16).map(|v| v as u8);
+    let put = |out: &mut String, c: [u8; 3]| {
+        let [r, g, b] = f(c);
+        out.push_str(&format!("#{r:02x}{g:02x}{b:02x}"));
+    };
     while i < b.len() {
         if b[i] == b'#' {
             let six = (1..=6).all(|k| b.get(i + k).and_then(|c| hex(*c)).is_some());
             let after = |n: usize| b.get(i + n).is_none_or(|c| !c.is_ascii_alphanumeric());
             if six && after(7) {
                 let v = |k: usize| hex(b[i + k]).unwrap() * 16 + hex(b[i + k + 1]).unwrap();
-                let g = grey_of(v(1), v(3), v(5));
-                out.push_str(&format!("#{g:02x}{g:02x}{g:02x}"));
+                put(&mut out, [v(1), v(3), v(5)]);
                 i += 7;
                 continue;
             }
             let three = (1..=3).all(|k| b.get(i + k).and_then(|c| hex(*c)).is_some());
             if three && after(4) {
                 let v = |k: usize| hex(b[i + k]).unwrap() * 17;
-                let g = grey_of(v(1), v(2), v(3));
-                out.push_str(&format!("#{g:02x}{g:02x}{g:02x}"));
+                put(&mut out, [v(1), v(2), v(3)]);
                 i += 4;
                 continue;
             }
@@ -130,17 +141,20 @@ pub fn grey(svg: &str) -> String {
                     .map(|v| v.clamp(0.0, 255.0) as u8)
                     .collect();
                 if parts.len() == 3 {
-                    let g = grey_of(parts[0], parts[1], parts[2]);
-                    out.push_str(&format!("rgb({g},{g},{g})"));
+                    put(&mut out, [parts[0], parts[1], parts[2]]);
                     i += end + 1;
                     continue;
                 }
             }
         }
-        if svg[i..].starts_with("\"black\"") {
-            let g = grey_of(0, 0, 0);
-            out.push_str(&format!("\"#{g:02x}{g:02x}{g:02x}\""));
-            i += 7;
+        let word = [("\"black\"", [0, 0, 0]), ("\"white\"", [255, 255, 255])]
+            .into_iter()
+            .find(|(w, _)| svg[i..].starts_with(w));
+        if let Some((w, c)) = word {
+            out.push('"');
+            put(&mut out, c);
+            out.push('"');
+            i += w.len();
             continue;
         }
         let ch = svg[i..].chars().next().unwrap();

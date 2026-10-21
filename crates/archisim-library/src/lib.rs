@@ -60,6 +60,73 @@ pub fn new_project(name: impl Into<String>) -> Model {
     model
 }
 
+/// The presentation styles a project starts with: the studio's («AD5»:
+/// fine black lines, walls cut black, the drawing's own colours) and four
+/// with a palette of their own, after presentation plans of other
+/// studios (solid walls in one colour, soft tones, a tinted paper).
+pub fn presentation_styles() -> Vec<archisim_core::PresentationStyle> {
+    use archisim_core::PresentationStyle;
+    let style = |name: &str, bg: [u8; 3], palette: &[[u8; 3]], poche: [u8; 3], lines: f64| {
+        let mut s = PresentationStyle::new(name);
+        s.background = bg;
+        s.palette = palette.to_vec();
+        s.poche = Some(poche);
+        s.line_scale = lines;
+        s
+    };
+    vec![
+        style("AD5", [255, 255, 255], &[], [28, 28, 28], 0.7),
+        style(
+            "Terracota",
+            [247, 242, 235],
+            &[
+                [74, 44, 34],
+                [178, 96, 70],
+                [226, 192, 164],
+                [247, 242, 235],
+            ],
+            [176, 92, 66],
+            0.8,
+        ),
+        style(
+            "Bosque",
+            [244, 242, 234],
+            &[
+                [34, 52, 44],
+                [88, 122, 94],
+                [172, 192, 162],
+                [244, 242, 234],
+            ],
+            [47, 79, 62],
+            0.8,
+        ),
+        style(
+            "Azul",
+            [245, 247, 250],
+            &[
+                [28, 40, 64],
+                [72, 106, 160],
+                [172, 192, 216],
+                [245, 247, 250],
+            ],
+            [52, 84, 140],
+            0.8,
+        ),
+        style(
+            "Monocromo",
+            [255, 255, 255],
+            &[
+                [24, 24, 24],
+                [120, 120, 120],
+                [205, 205, 205],
+                [255, 255, 255],
+            ],
+            [64, 64, 64],
+            0.9,
+        ),
+    ]
+}
+
 /// Adds the starter materials and types to a model.
 pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     let mut mat = |name: &str, category: &str, color: [u8; 3], pattern| -> MaterialId {
@@ -425,6 +492,9 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     let curtain = add_curtain_types(m)?;
     add_studio_types(m)?;
 
+    for style in presentation_styles() {
+        m.add_presentation_style(style)?;
+    }
     Ok(Library {
         curtain,
         void,

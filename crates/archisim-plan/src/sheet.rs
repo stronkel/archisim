@@ -367,7 +367,10 @@ fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<
         let crop = v
             .crop
             .unwrap_or((d.lo - Point2::new(m, m), d.hi + Point2::new(m, m)));
-        let svg = crate::axo::render_axo(&d, crop, v.scale);
+        let mut svg = crate::axo::render_axo(&d, crop, v.scale);
+        if let Some(p) = crate::presentation::style_of(model, &v.style) {
+            svg = crate::presentation::apply(&svg, p);
+        }
         place_view_svg(s, &svg, v, crop);
         return;
     }
@@ -500,6 +503,7 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
         options.px_per_mm.is_none(),
         &Default::default(),
         false,
+        None,
     );
     s.push_str("</svg>\n");
     s

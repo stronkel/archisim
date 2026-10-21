@@ -416,6 +416,8 @@ pub struct ArchiSimApp {
     pub view_style: archisim_core::ViewStyle,
     /// The graphic standard dialog is open.
     pub show_graphics: bool,
+    /// The «Estilos de presentación» window.
+    pub presentation: presentation_ui::PresentationUi,
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
     /// The view selected on the sheet shown.
@@ -605,6 +607,7 @@ impl ArchiSimApp {
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             view_style: Default::default(),
             show_graphics: false,
+            presentation: Default::default(),
             sheet_image: None,
             sheet_sel: None,
             sheet_hover: None,
@@ -1469,6 +1472,7 @@ impl ArchiSimApp {
         }
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
+        self.presentation_dialog(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -1969,6 +1973,7 @@ mod paint_ui;
 mod params_ui;
 mod phases_ui;
 mod plan_ui;
+mod presentation_ui;
 mod priorities_ui;
 mod properties;
 mod props;

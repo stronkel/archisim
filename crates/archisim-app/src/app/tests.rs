@@ -4406,3 +4406,77 @@ fn faces_are_painted() {
     );
     assert_ne!(h.model().mass(mass).unwrap().material, stone);
 }
+
+/// P1: a presentation style on the active plan (walls solid in its
+/// colour, its paper) and a room's floor drawn with a pattern; the
+/// «Estilos de presentación» window shows and edits them.
+#[test]
+fn presentation_styles_and_floor_fills() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let bosque = h
+        .model()
+        .presentation_styles()
+        .find(|s| s.name == "Bosque")
+        .unwrap()
+        .clone();
+    h.app.view_style.presentation = Some(bosque.id);
+    let level = h.app.ed.level;
+    let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    let [r, g, b] = bosque.poche.unwrap();
+    assert!(
+        svg.contains(&format!("#{r:02x}{g:02x}{b:02x}")),
+        "solid walls"
+    );
+    let [r, g, b] = bosque.background;
+    assert!(
+        svg.contains(&format!("#{r:02x}{g:02x}{b:02x}")),
+        "the paper"
+    );
+    h.frame();
+    // The window, with the style chosen, draws and edits it.
+    h.app.presentation.open = true;
+    h.app.presentation.selected = Some(bosque.id);
+    h.frame();
+    h.frame();
+    let id = h
+        .app
+        .ed
+        .add_presentation_style(archisim_core::PresentationStyle::new("Bosque"))
+        .unwrap();
+    assert_eq!(h.model().presentation_style(id).unwrap().name, "Bosque 2");
+    h.frame();
+    // A room with a wooden floor.
+    let room = h
+        .app
+        .ed
+        .transact("Local", |m| {
+            m.add_room(archisim_core::NewRoom {
+                level,
+                number: "1".into(),
+                name: "Salón".into(),
+                outline: vec![p(1.0, 1.0), p(5.0, 1.0), p(5.0, 4.0), p(1.0, 4.0)],
+                holes: Vec::new(),
+                label: p(3.0, 2.5),
+                bounded: false,
+            })
+        })
+        .unwrap();
+    let mut r = h.model().room(room).unwrap().clone();
+    r.floor_fill = Some(archisim_core::FloorFill {
+        pattern: archisim_core::HatchPattern::Stone,
+        color: [90, 90, 90],
+        background: Some([210, 205, 195]),
+        scale: 1.0,
+        angle: 0.0,
+    });
+    h.app.ed.set_room(r, "Pavimento").unwrap();
+    h.app.ed.selection = [Element::Room(room)].into_iter().collect();
+    h.frame();
+    h.app.view_style.presentation = None;
+    let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(svg.contains("floor-fills"));
+    assert!(svg.contains("#d2cdc3"));
+}

@@ -160,7 +160,7 @@ Referencias de Antonio:
 
 Bloques:
 
-- **P1 Estilos de presentación**: estilos de vista guardables entre proyectos, con:
+- **P1 Estilos de presentación** ✅ (21/10/2026, `bloque/presentacion`): estilos de vista guardables entre proyectos, con:
   - paleta;
   - macizado de muros en color;
   - grosores;

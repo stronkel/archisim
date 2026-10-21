@@ -33,6 +33,7 @@ pub mod grids;
 pub mod lettering;
 pub mod members;
 pub mod phases;
+pub mod presentation;
 pub mod railings;
 pub mod roofs;
 pub mod rooms;
@@ -182,6 +183,16 @@ const MIN_LAYERS_PX: f64 = 4.0;
 /// The colour of a wall drawn as one band.
 const FAR_POCHE: &str = "rgb(150,146,138)";
 
+thread_local! {
+    /// Cut walls and columns filled solid in this colour (a presentation
+    /// style's), without their layers.
+    static POCHE: std::cell::Cell<Option<[u8; 3]>> = const { std::cell::Cell::new(None) };
+}
+
+fn poche() -> Option<[u8; 3]> {
+    POCHE.with(|p| p.get())
+}
+
 /// Whether a wall this thick in paper millimetres is too thin on screen to
 /// draw its layers.
 fn too_small_for_layers(paper_mm: f64) -> bool {
@@ -290,7 +301,12 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     // Ids are the same in the phased copy: what is greyed comes from the
     // model as it is.
     let _greyed = dim::begin(model, &options.style);
-    let svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
+    let look = presentation::style_of(model, &options.style);
+    let _poche = presentation::begin(look);
+    let mut svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
+    if let Some(p) = look {
+        svg = presentation::apply(&svg, p);
+    }
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
     PENS.with(|p| p.set(archisim_core::Pens::FINE));
@@ -553,6 +569,23 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             draw_slab(s, model, slab, si, options.cut_plane, k)
         });
     }
+    if show(archisim_core::Category::Rooms) {
+        rooms::draw_floor_fills(&mut s, model, level, k);
+    }
+    // Hatches of the drawing (pavings, lawn, water) under the elements.
+    if show(archisim_core::Category::Drafting) {
+        drafting::draw_drafts(
+            &mut s,
+            model,
+            archisim_core::ViewRef::Level(level),
+            k,
+            options.viewport,
+            options.viewport.is_none(),
+            &options.style.hidden_layers,
+            false,
+            Some(true),
+        );
+    }
     for roof in model
         .roofs_on_level(level)
         .filter(|_| show(archisim_core::Category::Roofs))
@@ -717,6 +750,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             options.viewport.is_none(),
             &options.style.hidden_layers,
             !show(archisim_core::Category::Dimensions),
+            Some(false),
         );
     }
     if show(archisim_core::Category::Rooms) {
@@ -883,13 +917,16 @@ impl JambDetail {
 /// fill so each cut piece can be found in the drawing.
 fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], id: &str, k: f64) {
     let d = path(polygon);
-    let [r, gg, bb] = mat.cut_color;
+    let [r, gg, bb] = poche().unwrap_or(mat.cut_color);
     // A hairline in the fill colour hides anti-aliasing seams at mitres.
     let _ = writeln!(
         s,
         r#"<path id="{id}" d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
         num(pens().hatch * k)
     );
+    if poche().is_some() {
+        return;
+    }
     // Hatching is real geometry cut to the layer (not SVG patterns or clip
     // paths), so it prints identically everywhere, carries over to PDF/DXF
     // and draws fast on screen.
@@ -943,13 +980,17 @@ fn draw_layers(
     else {
         return;
     };
-    if too_small_for_layers(wall_t / k) {
+    if too_small_for_layers(wall_t / k) || poche().is_some() {
         // Zoomed far out the layers cannot be told apart: the wall is one
-        // grey band (its cut lines are still drawn).
+        // grey band (its cut lines are still drawn). A presentation style
+        // fills it solid in its colour.
+        let fill = poche().map_or(FAR_POCHE.to_string(), |[r, g, b]| {
+            format!("rgb({r},{g},{b})")
+        });
         for piece in pieces {
             let poly = clip_span(&g.outline, a, u, piece.from, piece.to);
             if poly.len() >= 3 {
-                let _ = writeln!(s, r#"<path d="{}" fill="{FAR_POCHE}"/>"#, path(&poly));
+                let _ = writeln!(s, r#"<path d="{}" fill="{fill}"/>"#, path(&poly));
             }
         }
         return;
@@ -1933,7 +1974,10 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
             continue;
         };
         fill_cut(s, mat, &band.polygon, &format!("cut-{gi}-{li}-0"), k);
-        if mat.cut_pattern == CutPattern::Insulation || band.function == LayerFunction::Insulation {
+        if poche().is_none()
+            && (mat.cut_pattern == CutPattern::Insulation
+                || band.function == LayerFunction::Insulation)
+        {
             let t = layer.thickness;
             let mid = (tops[li] + tops[li + 1]) / 2.0;
             let len = arc.radius_at(mid).abs() * arc.sweep.abs();

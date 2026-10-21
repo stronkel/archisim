@@ -216,6 +216,36 @@ pub fn draw_rooms(s: &mut String, model: &Model, level: archisim_core::LevelId, 
     s.push_str("</g>\n");
 }
 
+/// The floors of the rooms of a level that have a floor fill: under
+/// everything cut, like a slab.
+pub fn draw_floor_fills(s: &mut String, model: &Model, level: archisim_core::LevelId, k: f64) {
+    let rooms: Vec<&Room> = model
+        .rooms_on_level(level)
+        .filter(|r| r.floor_fill.is_some())
+        .collect();
+    if rooms.is_empty() {
+        return;
+    }
+    s.push_str("<g id=\"floor-fills\" fill=\"none\">\n");
+    let width = num(pens().hatch * k);
+    for r in rooms {
+        let Some(f) = r.floor_fill else { continue };
+        let ring = |p: &[Point2]| archisim_core::Polyline::straight(p.to_vec(), true);
+        let h = archisim_core::Hatch {
+            loops: std::iter::once(ring(&r.outline))
+                .chain(r.holes.iter().map(|h| ring(h)))
+                .collect(),
+            pattern: f.pattern,
+            scale: f.scale,
+            angle: f.angle,
+            background: f.background,
+        };
+        let color = format!("#{:02x}{:02x}{:02x}", f.color[0], f.color[1], f.color[2]);
+        crate::drafting::draw_hatch(s, &h, &color, &width, k);
+    }
+    s.push_str("</g>\n");
+}
+
 /// The tags of a level.
 pub fn draw_tags(s: &mut String, model: &Model, level: archisim_core::LevelId, k: f64) {
     let tags: Vec<&Tag> = model.tags_on_level(level).collect();

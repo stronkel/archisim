@@ -458,8 +458,18 @@ impl Dxf {
                     };
                     self.hatch(&name, &back, &loops, None);
                 }
-                let pattern = hatch_def(h, k);
-                self.hatch(&name, &look, &loops, pattern);
+                let bands = archisim_draft::hatch::hatch_bands(h);
+                if bands.is_empty() {
+                    let pattern = hatch_def(h, k);
+                    self.hatch(&name, &look, &loops, pattern);
+                } else {
+                    // Mown lawn: its bands as solid fills.
+                    let bands: Vec<Loop> = bands
+                        .into_iter()
+                        .map(|b| loop_points(&Polyline::straight(b, true), MM))
+                        .collect();
+                    self.hatch(&name, &look, &bands, None);
+                }
             }
             Shape::Dim(m) => {
                 // As its pieces: lines and arcs, solid arrowheads, the text.
