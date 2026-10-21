@@ -279,6 +279,109 @@ impl Command for Pline {
     }
 }
 
+// ---- SPLINE -------------------------------------------------------------------
+
+/// A free curve through the points clicked: open (Enter) or closed (C, or a
+/// click on its first point). Kept as a polyline finely following the
+/// curve, as the spline of the model tools.
+#[derive(Default)]
+pub struct SplineCmd {
+    points: Vec<Point2>,
+}
+
+impl SplineCmd {
+    fn polyline(points: &[Point2], closed: bool, st: &CadSettings) -> Option<Polyline> {
+        if points.len() < 2 || (closed && points.len() < 3) {
+            return None;
+        }
+        // The same curve as Arista's spline (Catmull-Rom, finely sampled).
+        let mut pts = crate::spline::catmull_rom(points, closed, 12);
+        pts.dedup_by(|a, b| a.distance(*b) < 1e-9);
+        if closed && pts.len() > 1 && pts[0].distance(pts[pts.len() - 1]) < 1e-9 {
+            pts.pop();
+        }
+        let bulges = vec![0.0; pts.len()];
+        Some(Polyline {
+            points: pts,
+            bulges,
+            closed,
+            width: st.polyline_width,
+        })
+    }
+
+    fn done(&mut self, closed: bool, st: &CadSettings) -> Step {
+        let p = Self::polyline(&self.points, closed, st);
+        self.points.clear();
+        Step::Done(p.map(|p| add("Spline", vec![Shape::Polyline(p)])))
+    }
+}
+
+impl Command for SplineCmd {
+    fn name(&self) -> &'static str {
+        "SPLINE"
+    }
+
+    fn prompt(&self) -> Prompt {
+        if self.points.is_empty() {
+            return Prompt::new("Precise primer punto de la curva", Want::Point);
+        }
+        let mut o = Vec::new();
+        if self.points.len() >= 3 {
+            o.push(opt("C", "Cerrar"));
+        }
+        o.push(opt("H", "desHacer"));
+        Prompt::new("Precise punto siguiente (Intro: terminar)", Want::Point).opts(&o)
+    }
+
+    fn feed(&mut self, input: Input, cx: &Ctx<'_, dyn Geo + '_>, st: &mut CadSettings) -> Step {
+        match input {
+            Input::Point(p) => {
+                if self.points.last().is_some_and(|l| l.distance(p) < 1e-9) {
+                    return Step::Refuse("El punto es el mismo que el anterior.".into());
+                }
+                // Back on its first point: closed.
+                if self.points.len() >= 3 && self.points[0].distance(p) <= 1.5 * cx.k {
+                    return self.done(true, st);
+                }
+                self.points.push(p);
+                Step::Next
+            }
+            Input::Option("C") => {
+                if self.points.len() < 3 {
+                    return Step::Refuse("Faltan puntos para cerrar.".into());
+                }
+                self.done(true, st)
+            }
+            Input::Option("H") => {
+                self.points.pop();
+                Step::Next
+            }
+            Input::Enter => self.done(false, st),
+            _ => Step::Refuse("Precise un punto.".into()),
+        }
+    }
+
+    fn finish(&mut self, _cx: &Ctx<'_, dyn Geo + '_>, st: &mut CadSettings) -> Option<Changes> {
+        let p = Self::polyline(&self.points, false, st);
+        self.points.clear();
+        p.map(|p| add("Spline", vec![Shape::Polyline(p)]))
+    }
+
+    fn preview(&self, cx: &Ctx<'_, dyn Geo + '_>, st: &CadSettings) -> Vec<Shape> {
+        let mut pts = self.points.clone();
+        if pts.last().is_some_and(|l| l.distance(cx.cursor) > 1e-9) {
+            pts.push(cx.cursor);
+        }
+        Self::polyline(&pts, false, st)
+            .map(|p| vec![Shape::Polyline(p)])
+            .unwrap_or_default()
+    }
+
+    fn base(&self) -> Option<Point2> {
+        self.points.last().copied()
+    }
+}
+
 // ---- RECTANG ------------------------------------------------------------------
 
 #[derive(Default)]

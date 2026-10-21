@@ -1,6 +1,8 @@
 //! The Concepto discipline (I4): volumes drawn freely, as in SketchUp.
 //!
-//! Línea, Rectángulo and Círculo make flat faces; Empujar gives a face or
+//! Arista draws lines of the model: left open they stay as loose edges, and
+//! closed (on their first point, or meeting other edges) they make a flat
+//! face; its rectangle and circle methods make a face at once. Empujar gives a face or
 //! volume its height (the mouse up the screen, or a typed value); Volumen
 //! makes a prism of the height set; Masa, one by floors, with its built
 //! area, plot ratio and coverage as it grows; Seguir, a band along a
@@ -18,9 +20,8 @@ use crate::editor::{MassMode, MassWhat};
 /// What a tile of the Concepto discipline takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConceptPick {
+    /// Arista: lines of the model that close into faces.
     Line,
-    Rect,
-    Circle,
     Push,
     Follow,
     Offset,
@@ -37,6 +38,8 @@ pub struct ConceptState {
     pub centre: Option<Point2>,
     /// The points of the path being drawn.
     pub path: Vec<Point2>,
+    /// With Arista in 3D, the height of each point over the level.
+    pub path_z: Vec<f64>,
     /// The mass being pushed, the point where it was taken and its height
     /// then.
     pub push: Option<(MassId, Point2, f64)>,
@@ -102,14 +105,6 @@ impl ArchiSimApp {
                 (s.what, s.mode) = (MassWhat::Face, MassMode::Polygon);
                 Tool::Mass
             }
-            ConceptPick::Rect => {
-                (s.what, s.mode) = (MassWhat::Face, MassMode::Rectangle);
-                Tool::Mass
-            }
-            ConceptPick::Circle => {
-                (s.what, s.mode) = (MassWhat::Face, MassMode::Circle);
-                Tool::Mass
-            }
             ConceptPick::Volume => {
                 s.what = MassWhat::Volume;
                 if s.mode == MassMode::Path {
@@ -146,13 +141,7 @@ impl ArchiSimApp {
         let s = &self.mass_settings;
         match p {
             ConceptPick::Line => {
-                self.tool == Tool::Mass && s.what == MassWhat::Face && s.mode == MassMode::Polygon
-            }
-            ConceptPick::Rect => {
-                self.tool == Tool::Mass && s.what == MassWhat::Face && s.mode == MassMode::Rectangle
-            }
-            ConceptPick::Circle => {
-                self.tool == Tool::Mass && s.what == MassWhat::Face && s.mode == MassMode::Circle
+                self.tool == Tool::Mass && s.what == MassWhat::Face && s.mode != MassMode::Path
             }
             ConceptPick::Follow => self.tool == Tool::Mass && s.mode == MassMode::Path,
             ConceptPick::Volume => {
@@ -180,7 +169,7 @@ impl ArchiSimApp {
     }
 
     /// The mass under `p` on the active level.
-    fn mass_under(&self, p: Point2) -> Option<MassId> {
+    pub(super) fn mass_under(&self, p: Point2) -> Option<MassId> {
         let reach = self.view.to_metres(REACH);
         self.ed
             .model()
@@ -196,8 +185,26 @@ impl ArchiSimApp {
             .map(|m| m.id)
     }
 
+    /// Whether the volume tool is drawing edges (Arista: lines that stay
+    /// open, or close into a face).
+    pub(super) fn drawing_edges(&self) -> bool {
+        self.tool == Tool::Mass
+            && self.mass_settings.what == MassWhat::Face
+            && self.mass_settings.mode == MassMode::Polygon
+    }
+
+    /// Whether the volume tool takes its points as an open line (a path
+    /// or edges), not as a contour.
+    pub(super) fn mass_line(&self) -> bool {
+        self.tool == Tool::Mass
+            && (self.mass_settings.mode == MassMode::Path || self.drawing_edges())
+    }
+
     /// The anchor of what a concept tool is drawing (for tracking).
     pub(super) fn concept_anchor(&self) -> Option<Point2> {
+        if self.mass_line() {
+            return self.concept.path.last().copied();
+        }
         match self.tool {
             Tool::Mass => match self.mass_settings.mode {
                 MassMode::Circle => self.concept.centre,
@@ -211,6 +218,9 @@ impl ArchiSimApp {
 
     /// The points of what a concept tool is drawing (for the guides).
     pub(super) fn concept_points(&self) -> Vec<Point2> {
+        if self.mass_line() {
+            return self.concept.path.clone();
+        }
         match (self.tool, self.mass_settings.mode) {
             (Tool::Mass, MassMode::Path) => self.concept.path.clone(),
             (Tool::Mass, MassMode::Circle) => self.concept.centre.into_iter().collect(),
@@ -277,19 +287,55 @@ impl ArchiSimApp {
                     }
                 }
             },
-            Tool::Paint => match self.mass_under(p) {
-                Some(id) => {
-                    let mat = self.mass_settings.material;
-                    let r = self.ed.paint_mass(id, mat);
-                    self.report(r, "Volumen pintado.");
-                }
-                None => self.complain("Haz clic en un volumen para pintarlo."),
-            },
+            Tool::Paint => self.paint_click(p),
             _ => {}
         }
     }
 
+    /// The side of a wall a point is on: to the left of its line, the
+    /// exterior.
+    pub(super) fn wall_side(&self, w: archisim_core::WallId, p: Point2) -> archisim_core::FaceSide {
+        let Some(wall) = self.ed.model().wall(w) else {
+            return archisim_core::FaceSide::Exterior;
+        };
+        let left = match wall.arc() {
+            Some(a) => {
+                // Inside the circle is the left of a counter-clockwise arc.
+                let inside = p.distance(a.centre) < a.radius;
+                inside == (a.sweep > 0.0)
+            }
+            None => (wall.end - wall.start).cross(p - wall.start) > 0.0,
+        };
+        if left {
+            archisim_core::FaceSide::Exterior
+        } else {
+            archisim_core::FaceSide::Interior
+        }
+    }
+
     fn mass_click(&mut self, p: Point2) {
+        if self.drawing_edges() {
+            let reach = self.view.to_metres(REACH);
+            // In 3D, the height the point is at (up a face).
+            let z = self.point_height();
+            self.concept.path_z.resize(self.concept.path.len(), 0.0);
+            let path = &self.concept.path;
+            let zs = &self.concept.path_z;
+            let flat = zs.iter().all(|h| (h - z).abs() < 1e-3);
+            let same = |i: usize| path[i].distance(p) <= reach && (zs[i] - z).abs() < 1e-3;
+            if path.len() >= 3 && same(0) && flat {
+                // Back on the first point, level: a face at that height.
+                let outline = std::mem::take(&mut self.concept.path);
+                self.concept.path_z.clear();
+                self.build_mass_at(outline, z);
+            } else if !path.is_empty() && same(path.len() - 1) {
+                self.finish_path();
+            } else {
+                self.concept.path.push(p);
+                self.concept.path_z.push(z);
+            }
+            return;
+        }
         match self.mass_settings.mode {
             MassMode::Circle => match self.concept.centre {
                 None => self.concept.centre = Some(p),
@@ -317,6 +363,31 @@ impl ArchiSimApp {
         }
     }
 
+    /// A face (or volume) at a height over the level.
+    fn build_mass_at(&mut self, outline: Vec<Point2>, z: f64) {
+        let keep = self.mass_settings.base_offset;
+        self.mass_settings.base_offset = keep + z;
+        self.build_mass(outline);
+        self.mass_settings.base_offset = keep;
+    }
+
+    /// The height over the level of the point being placed: in 3D, where
+    /// the cursor is; in plan, on the level.
+    pub(super) fn point_height(&self) -> f64 {
+        match (self.mode, self.cursor3d) {
+            (ViewMode::ThreeD, Some(c)) => {
+                let z0 = self
+                    .ed
+                    .model()
+                    .level(self.ed.level)
+                    .map_or(0.0, |l| l.elevation);
+                let h = c.world.z as f64 - z0;
+                (h * 1000.0).round() / 1000.0
+            }
+            _ => 0.0,
+        }
+    }
+
     pub(super) fn build_mass(&mut self, outline: Vec<Point2>) {
         let s = self.mass_settings;
         match self.ed.add_mass_outline(&s, outline) {
@@ -329,10 +400,17 @@ impl ArchiSimApp {
         }
     }
 
-    /// Ends the path of «Seguir» and makes its band.
+    /// Ends the path of «Seguir» and makes its band; with Arista, the
+    /// edges drawn (or the face they close with the edges there).
     pub(super) fn finish_path(&mut self) {
         let path = std::mem::take(&mut self.concept.path);
         if path.len() < 2 {
+            return;
+        }
+        if self.drawing_edges() {
+            let mut zs = std::mem::take(&mut self.concept.path_z);
+            zs.resize(path.len(), 0.0);
+            self.finish_edges(path, zs);
             return;
         }
         let s = self.mass_settings;
@@ -342,6 +420,61 @@ impl ArchiSimApp {
                 self.say_mass(id, "creado");
             }
             Err(e) => self.complain(format!("No se puede crear el volumen: {e}.")),
+        }
+    }
+
+    /// Loose edges drawn: if, with the edges already on the level, they
+    /// close a contour, that contour becomes a face (and the edges that
+    /// made it go); else they stay as an edge.
+    pub(super) fn finish_edges(&mut self, path: Vec<Point2>, heights: Vec<f64>) {
+        let reach = self.view.to_metres(REACH).max(1e-6);
+        let level = self.ed.level;
+        // Level edges close faces with the level edges at their height;
+        // edges up a face stay edges (they divide it, for Pintar).
+        let h0 = heights.first().copied().unwrap_or(0.0);
+        let flat = heights.iter().all(|h| (h - h0).abs() < 1e-3);
+        let edges: Vec<(archisim_core::EdgeId, Vec<Point2>)> = self
+            .ed
+            .model()
+            .edges_on_level(level)
+            .filter(|e| {
+                e.is_flat()
+                    && (e.elevation + e.heights.first().copied().unwrap_or(0.0) - h0).abs() < 1e-3
+            })
+            .map(|e| (e.id, e.points.clone()))
+            .collect();
+        let closed = if flat {
+            close_with_edges(&path, &edges, reach)
+        } else {
+            None
+        };
+        if let Some((outline, used)) = closed {
+            let mut s = self.mass_settings;
+            s.base_offset += h0;
+            let r = self.ed.transact("Crear cara", |m| {
+                for id in &used {
+                    m.remove_edge(*id)?;
+                }
+                crate::editor::add_mass_in(m, &s, level, outline)
+            });
+            match r {
+                Ok(id) => {
+                    self.ed.selection = [Element::Mass(id)].into_iter().collect();
+                    self.say_mass(id, "creada con las aristas");
+                }
+                Err(e) => self.complain(format!("No se puede crear la cara: {e}.")),
+            }
+            return;
+        }
+        let r = self
+            .ed
+            .transact("Crear arista", |m| m.add_edge_3d(level, path, heights, 0.0));
+        match r {
+            Ok(id) => {
+                self.ed.selection = [Element::Edge(id)].into_iter().collect();
+                self.say("Arista del modelo. Cierra un contorno (con esta y otras aristas) y se hace una cara.");
+            }
+            Err(e) => self.complain(format!("No se puede crear la arista: {e}.")),
         }
     }
 
@@ -434,7 +567,7 @@ impl ArchiSimApp {
             self.finish_push(id, h);
         } else if let (Some(id), Some(d)) = (self.concept.offset, v) {
             self.finish_offset(id, d);
-        } else if self.tool == Tool::Mass && self.mass_settings.mode == MassMode::Path {
+        } else if self.mass_line() {
             self.finish_path();
         } else if self.tool == Tool::Mass {
             let towards = self.cursor.map_or(Point2::new(0.0, 0.0), |c| c.point);
@@ -453,10 +586,7 @@ impl ArchiSimApp {
             return;
         }
         if self.concept.is_drawing() {
-            if self.tool == Tool::Mass
-                && self.mass_settings.mode == MassMode::Path
-                && self.concept.path.len() >= 2
-            {
+            if self.mass_line() && self.concept.path.len() >= 2 {
                 self.finish_path();
             }
             self.concept.finish();
@@ -473,6 +603,23 @@ impl ArchiSimApp {
         };
         let ink = Stroke::new(1.5, ACCENT);
         let model = self.ed.model();
+        if self.drawing_edges() {
+            if !self.concept.path.is_empty() {
+                let mut pts = self.concept.path.clone();
+                pts.push(c.point);
+                painter.add(Shape::line(self.polygon(rect, &pts), ink));
+                let first = self.concept.path[0];
+                if pts.len() >= 4 && first.distance(c.point) <= self.view.to_metres(REACH) {
+                    let s = self.view.to_screen(rect, first);
+                    painter.circle_stroke(s, 6.0, Stroke::new(1.5, ACCENT));
+                    self.draw_label(painter, rect, c.point, "Cerrar: cara".to_string());
+                } else {
+                    let len: f64 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
+                    self.draw_label(painter, rect, c.point, format!("L {} mm", fmt_mm(len)));
+                }
+            }
+            return;
+        }
         match self.tool {
             Tool::Mass => match self.mass_settings.mode {
                 MassMode::Circle => {
@@ -603,6 +750,13 @@ impl ArchiSimApp {
     }
 
     pub(super) fn concept_hint(&self) -> &'static str {
+        if self.drawing_edges() {
+            return if self.concept.path.is_empty() {
+                "Arista: clic en el primer punto (líneas del modelo, no del dibujo) · Esc: flecha"
+            } else {
+                "Clic: siguiente punto · Clic en el primero: cara · Doble clic, Intro o Esc: dejar la arista"
+            };
+        }
         match self.tool {
             Tool::Mass => match self.mass_settings.mode {
                 MassMode::Circle if self.concept.centre.is_some() => "Clic: radio · Esc: anular",
@@ -628,7 +782,8 @@ impl ArchiSimApp {
             Tool::MassOffset => "Clic en un volumen: un contorno paralelo encima · Esc: flecha",
             Tool::Tape if self.concept.tape.is_some() => "Clic: segundo punto (mide y deja una guía) · Esc: anular",
             Tool::Tape => "Clic: primer punto · Esc: flecha",
-            Tool::Paint => "Clic en un volumen: le da el material elegido en Propiedades · Esc: flecha",
+            Tool::Paint if self.paint_erase => "Clic en una cara pintada: le quita la pintura · Esc: flecha",
+            Tool::Paint => "Clic en la cara de un muro o de un volumen (mejor en 3D): le da el material elegido · Esc: flecha",
             _ => "",
         }
     }
@@ -642,6 +797,7 @@ impl ArchiSimApp {
             (Tool::Tape, ..) => "Cinta",
             (Tool::Paint, ..) => "Pintar",
             (_, _, MassMode::Path) => "Seguir",
+            (_, MassWhat::Face, MassMode::Polygon) => "Arista",
             (_, MassWhat::Face, _) => "Cara",
             (_, MassWhat::Volume, _) => "Volumen",
             (_, MassWhat::Mass, _) => "Masa",
@@ -662,7 +818,7 @@ impl ArchiSimApp {
                                 w,
                                 s.what,
                                 &[
-                                    (MassWhat::Face, "Cara"),
+                                    (MassWhat::Face, "Arista o cara"),
                                     (MassWhat::Volume, "Volumen"),
                                     (MassWhat::Mass, "Masa por plantas"),
                                 ],
@@ -735,22 +891,44 @@ impl ArchiSimApp {
                 });
             }
             Tool::Paint => {
+                let mut erase = self.paint_erase;
                 group(ui, "tool-paint", "Pintar", |ui| {
                     row(
                         ui,
-                        "Material",
-                        "El que se da al volumen pinchado",
+                        "Hace",
+                        "Pintar la cara pinchada o quitarle la pintura",
                         |ui, w| {
-                            s.material = material_combo(
+                            erase = choice(
                                 ui,
-                                Id::unique("tool-paint-mat"),
-                                model,
-                                s.material,
+                                "tool-paint-erase",
                                 w,
+                                erase,
+                                &[(false, "Pintar"), (true, "Quitar pintura")],
                             );
                         },
                     );
+                    if !erase {
+                        row(
+                            ui,
+                            "Material",
+                            "El que se da a la cara pinchada",
+                            |ui, w| {
+                                s.material = material_combo(
+                                    ui,
+                                    Id::unique("tool-paint-mat"),
+                                    model,
+                                    s.material,
+                                    w,
+                                );
+                            },
+                        );
+                    }
+                    props::note(
+                        ui,
+                        "Pinta la cara pinchada de un muro o de un volumen (en 3D, la que ves). Con aristas dibujadas sobre una fachada, solo la zona que encierran. El material de todo el volumen, en sus Propiedades.",
+                    );
                 });
+                self.paint_erase = erase;
             }
             _ => {
                 props::note(ui, self.concept_hint());
@@ -778,6 +956,38 @@ impl ArchiSimApp {
             let r = self.ed.set_plot_area(plot);
             self.report(r, "Superficie de la parcela cambiada.");
         }
+    }
+
+    pub(super) fn edge_properties(&mut self, ui: &mut Ui, id: archisim_core::EdgeId) {
+        let Some(e) = self.ed.model().edge(id).cloned() else {
+            return;
+        };
+        props::title(ui, "Arista · 1 seleccionada");
+        group(ui, "edge-data", "Arista del modelo", |ui| {
+            self.level_row(
+                ui,
+                ("edge-level", id),
+                "Planta",
+                Some(e.level),
+                &[Element::Edge(id)],
+            );
+            row(ui, "Altura (mm)", "Sobre la planta", |ui, w| {
+                if let Some(v) = length_field(ui, Id::unique(("edge-z", id)), e.elevation, w - 8.0)
+                {
+                    let r = self.ed.transact("Altura de la arista", |m| {
+                        m.edit_edge(id, |x| x.elevation = v)
+                    });
+                    self.report(r, "Altura cambiada.");
+                }
+            });
+            let len: f64 = e.points.windows(2).map(|w| w[0].distance(w[1])).sum();
+            text_row(ui, "Longitud (m)", "", &comma(len, 2));
+            text_row(ui, "Tramos", "", &(e.points.len() - 1).to_string());
+            props::note(
+                ui,
+                "Una línea del modelo, no del dibujo: con Arista, cierra un contorno con ella y se hace una cara.",
+            );
+        });
     }
 
     pub(super) fn mass_properties(&mut self, ui: &mut Ui, id: MassId) {
@@ -958,4 +1168,66 @@ impl ArchiSimApp {
             })
             .collect()
     }
+}
+
+/// Whether a line drawn closes a contour with loose edges already there:
+/// a chain of them from its last point back to its first. Returns the
+/// contour and the edges used. Ends within `reach` count as meeting.
+pub fn close_with_edges(
+    path: &[Point2],
+    edges: &[(archisim_core::EdgeId, Vec<Point2>)],
+    reach: f64,
+) -> Option<(Vec<Point2>, Vec<archisim_core::EdgeId>)> {
+    let (start, end) = (*path.first()?, *path.last()?);
+    if path.len() >= 3 && start.distance(end) <= reach {
+        let mut outline = path.to_vec();
+        outline.pop();
+        return Some((outline, Vec::new()));
+    }
+    // Breadth first over the edges, from the line's end to its start.
+    let mut seen = vec![false; edges.len()];
+    let mut queue: std::collections::VecDeque<(Point2, Vec<(usize, bool)>)> =
+        std::collections::VecDeque::new();
+    queue.push_back((end, Vec::new()));
+    while let Some((at, chain)) = queue.pop_front() {
+        for (i, (_, pts)) in edges.iter().enumerate() {
+            if seen[i] || pts.len() < 2 {
+                continue;
+            }
+            let (a, b) = (pts[0], pts[pts.len() - 1]);
+            let forward = if a.distance(at) <= reach {
+                true
+            } else if b.distance(at) <= reach {
+                false
+            } else {
+                continue;
+            };
+            seen[i] = true;
+            let other = if forward { b } else { a };
+            let mut next = chain.clone();
+            next.push((i, forward));
+            if other.distance(start) <= reach {
+                let mut outline = path.to_vec();
+                for (j, fwd) in &next {
+                    let p = &edges[*j].1;
+                    let mut inner: Vec<Point2> = if *fwd {
+                        p.clone()
+                    } else {
+                        p.iter().rev().copied().collect()
+                    };
+                    // Its first point is the one already there; its last,
+                    // the next edge's first (or the line's start).
+                    inner.remove(0);
+                    inner.pop();
+                    outline.extend(inner);
+                }
+                if outline.len() < 3 {
+                    return None;
+                }
+                return Some((outline, next.iter().map(|(j, _)| edges[*j].0).collect()));
+            }
+            queue.push_back((other, next));
+        }
+    }
+    None
 }

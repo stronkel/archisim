@@ -103,6 +103,34 @@ pub fn default_building_types(
     ))
 }
 
+/// A volume, face or mass by its contour, inside a transaction.
+pub fn add_mass_in(
+    m: &mut Model,
+    s: &MassSettings,
+    level: archisim_core::LevelId,
+    outline: Vec<Point2>,
+) -> Result<MassId, archisim_core::ModelError> {
+    add_mass_shape_in(m, s, level, MassShape::Prism(outline))
+}
+
+fn add_mass_shape_in(
+    m: &mut Model,
+    s: &MassSettings,
+    level: archisim_core::LevelId,
+    shape: MassShape,
+) -> Result<MassId, archisim_core::ModelError> {
+    let (height, floor_height) = s.heights();
+    m.add_mass(NewMass {
+        name: m.next_mass_name(floor_height.is_some()),
+        level,
+        shape,
+        base_offset: s.base_offset,
+        height,
+        floor_height,
+        material: s.material,
+    })
+}
+
 /// A circle as a contour of 32 sides.
 pub fn circle(centre: Point2, radius: f64) -> Vec<Point2> {
     (0..32)
@@ -140,23 +168,12 @@ impl Editor {
 
     fn add_mass_shape(&mut self, s: &MassSettings, shape: MassShape) -> EditResult<MassId> {
         let level = self.level;
-        let (height, floor_height) = s.heights();
         let label = match s.what {
             MassWhat::Face => "Crear cara",
             MassWhat::Volume => "Crear volumen",
             MassWhat::Mass => "Crear masa",
         };
-        self.transact(label, |m| {
-            m.add_mass(NewMass {
-                name: m.next_mass_name(floor_height.is_some()),
-                level,
-                shape,
-                base_offset: s.base_offset,
-                height,
-                floor_height,
-                material: s.material,
-            })
-        })
+        self.transact(label, |m| add_mass_shape_in(m, s, level, shape))
     }
 
     pub fn edit_mass(

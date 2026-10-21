@@ -18,11 +18,11 @@ use super::{ArchiSimApp, Tool};
 use crate::dim_tool::DimMode;
 
 /// What a segment's menu offers to draw.
-struct Variant {
-    mark: Mark,
-    name: &'static str,
-    key: &'static str,
-    pick: Pick,
+pub(super) struct Variant {
+    pub mark: Mark,
+    pub name: &'static str,
+    pub key: &'static str,
+    pub pick: Pick,
 }
 
 const LINES: &[Variant] = &[
@@ -37,6 +37,12 @@ const LINES: &[Variant] = &[
         name: "Polilínea",
         key: "PL",
         pick: Pick::Command("POL"),
+    },
+    Variant {
+        mark: Mark::Glyph(Glyph::Spline),
+        name: "Spline",
+        key: "SPL",
+        pick: Pick::Command("SPLINE"),
     },
     Variant {
         mark: Mark::Icon(Icon::GeoRect),
@@ -136,6 +142,22 @@ const DIMS: &[Variant] = &[
         pick: Pick::Command("ACOARCO"),
     },
 ];
+
+/// The segment of the bottom bar an order belongs to: its name and its
+/// variants (shown as methods in the contextual bar while it runs).
+pub(super) fn segment_of(command: &str) -> Option<(&'static str, &'static [Variant])> {
+    [
+        ("Línea", LINES),
+        ("Relleno", FILLS),
+        ("Texto", TEXTS),
+        ("Cota", DIMS),
+    ]
+    .into_iter()
+    .find(|(_, vs)| {
+        vs.iter()
+            .any(|v| matches!(v.pick, Pick::Command(c) if c == command))
+    })
+}
 
 /// Which segment's menu is being drawn.
 #[derive(Clone, Copy, PartialEq)]

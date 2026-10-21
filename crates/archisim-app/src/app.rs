@@ -256,6 +256,8 @@ pub struct ArchiSimApp {
     pub column_settings: ColumnSettings,
     pub beam_settings: BeamSettings,
     pub beam_tool: structure_ui::BeamTool,
+    /// What the tool would build, for the 3D view (R21).
+    ghost: ghost3d::GhostCache,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -360,6 +362,10 @@ pub struct ArchiSimApp {
     pub message: Option<Message>,
     /// Snapped point under the cursor, in model metres.
     cursor: Option<Snap>,
+    /// Where the cursor is in the 3D view, while a tool works there.
+    cursor3d: Option<tools3d::Cursor3d>,
+    /// Pintar takes the paint off instead (Quitar pintura).
+    paint_erase: bool,
     hover: Option<Element>,
     /// The handle of the selection under the cursor, if any.
     hover_grip: Option<Grip>,
@@ -509,6 +515,7 @@ impl ArchiSimApp {
             column_settings,
             beam_settings,
             beam_tool: structure_ui::BeamTool::default(),
+            ghost: ghost3d::GhostCache::default(),
             grid_anchor: None,
             footing_anchor: None,
             footing_settings,
@@ -568,6 +575,8 @@ impl ArchiSimApp {
             show_reference_lines: false,
             message: None,
             cursor: None,
+            cursor3d: None,
+            paint_erase: false,
             hover: None,
             hover_grip: None,
             drag: None,
@@ -691,10 +700,11 @@ impl ArchiSimApp {
             self.temp_edit = None;
             self.tool = tool;
         }
-        // Drawing happens in plan.
-        // Drawing happens in plan (2D drafting also on sheets).
+        // Drawing happens in plan (2D drafting also on sheets), and the
+        // tools of the model also in the 3D view (R14).
         let on_sheet = matches!(self.mode, ViewMode::Sheet(_));
-        if tool != Tool::Arrow && !(tool == Tool::Cad && on_sheet) {
+        let in_3d = self.mode == ViewMode::ThreeD && self.tool_in_3d();
+        if tool != Tool::Arrow && !(tool == Tool::Cad && on_sheet) && !in_3d {
             self.show_plan();
         }
     }
@@ -1532,13 +1542,16 @@ impl ArchiSimApp {
         if consume(Modifiers::NONE, Key::F3) {
             self.set_mode(ViewMode::ThreeD);
         }
-        if matches!(self.mode, ViewMode::ThreeD | ViewMode::Section) {
+        // With a tool in the 3D view, its keys are the plan's (they come
+        // with the cursor, in `tools_in_3d`).
+        let tool3d = self.mode == ViewMode::ThreeD && self.tool_in_3d();
+        if matches!(self.mode, ViewMode::ThreeD | ViewMode::Section) && !tool3d {
             self.keyboard_in_3d(ctx);
         }
     }
 
-    /// Keys while the 3D view or a section is shown: Esc, Supr, and the tool keys,
-    /// which go back to the plan to draw.
+    /// Keys while the 3D view or a section is shown: Esc, Supr, and the tool
+    /// keys (which draw in the 3D view itself; from a section, in the plan).
     fn keyboard_in_3d(&mut self, ctx: &egui::Context) {
         let (events, escape, delete) = ctx.input(|i| {
             (
@@ -1942,6 +1955,7 @@ mod curtain_ui;
 mod discipline_ui;
 mod draft_props;
 mod foundation_ui;
+mod ghost3d;
 mod glyphs;
 mod icons;
 mod levels_ui;
@@ -1951,6 +1965,7 @@ mod module_ui;
 mod navigator;
 mod object_gallery;
 mod object_ui;
+mod paint_ui;
 mod params_ui;
 mod phases_ui;
 mod plan_ui;
@@ -1976,6 +1991,7 @@ mod terrain_ui;
 pub mod theme;
 mod thumbs;
 mod toolbox;
+mod tools3d;
 mod type_views;
 mod types_ui;
 mod urban_ui;

@@ -201,23 +201,9 @@ const CONCEPT: &[Tile] = &[
     tile(
         Pick::Concept(super::concept_ui::ConceptPick::Line),
         Glyph::Edge,
-        "Línea",
+        "Arista",
         "",
-        "Aristas del modelo, como SketchUp: al cerrar un contorno se crea una cara",
-    ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Rect),
-        Glyph::FaceRect,
-        "Rectángulo",
-        "",
-        "Una cara rectangular para empujar",
-    ),
-    tile(
-        Pick::Concept(super::concept_ui::ConceptPick::Circle),
-        Glyph::FaceCircle,
-        "Círculo",
-        "",
-        "Una cara circular para empujar",
+        "Líneas del modelo (no del dibujo), como en SketchUp: quedan abiertas, y al cerrar un contorno se hace una cara. Rectángulo y círculo, en la barra superior",
     ),
     tile(
         Pick::Concept(super::concept_ui::ConceptPick::Push),

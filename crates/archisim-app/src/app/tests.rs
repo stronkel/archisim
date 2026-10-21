@@ -507,6 +507,9 @@ fn length_fields_commit_on_enter_and_cancel_on_escape() {
 fn the_3d_view_shows_the_model_and_selects_by_clicking() {
     let mut h = Harness::new(Editor::new_project());
     draw_outline(&mut h);
+    // With the arrow (a tool would draw in the 3D view).
+    h.key(Key::Escape);
+    h.key(Key::Escape);
     h.key(Key::F3);
     assert_eq!(h.app.mode, ViewMode::ThreeD);
     h.frame();
@@ -540,11 +543,12 @@ fn the_3d_view_shows_the_model_and_selects_by_clicking() {
     h.button(PointerButton::Primary, false);
     assert!(h.app.v3d.camera.yaw < yaw, "turned");
     assert_eq!(h.app.ed.selection.len(), 1);
-    // Supr deletes from the 3D view too; a tool key goes back to the plan.
+    // Supr deletes from the 3D view too; a tool key takes the tool there
+    // (it draws in the 3D view, R14).
     h.key(Key::Delete);
     assert!(h.model().wall(north).is_none());
     h.type_text("m");
-    assert_eq!(h.app.mode, ViewMode::Plan);
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
     assert_eq!(h.app.tool, Tool::Wall);
 }
 
@@ -1134,11 +1138,12 @@ fn view_tabs_keep_their_level_framing_and_scale() {
     h.key(Key::F2);
     assert_eq!(h.app.mode, ViewMode::Plan);
     assert_eq!(h.app.ed.level, first);
-    // A tool key from the 3D view draws in the last plan too.
+    // A tool key from the 3D view draws there (R14).
     h.key(Key::F3);
     h.type_text("m");
-    assert_eq!((h.app.mode, h.app.tool), (ViewMode::Plan, Tool::Wall));
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Wall));
     h.key(Key::Escape);
+    h.key(Key::F2);
     // Ctrl+Tab goes round the tabs.
     let before = h.app.active_tab;
     h.set_modifiers(Modifiers::CTRL);
@@ -3742,8 +3747,10 @@ fn concept_volumes_are_drawn_pushed_and_converted() {
         .view
         .fit_exact(canvas, p(-5.0, -12.0), p(30.0, 16.0), 0.0);
     h.app.set_discipline(Discipline::Concept);
-    h.app.pick(Pick::Concept(ConceptPick::Rect));
+    // Arista, with the rectangle of the contextual bar: a face at once.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
     assert_eq!(h.app.tool, Tool::Mass);
+    h.app.choose_method("Rectángulo");
     h.click_at(p(0.0, 0.0));
     h.click_at(p(10.0, 8.0));
     let face = h.model().masses().next().unwrap().id;
@@ -3804,7 +3811,11 @@ fn concept_volumes_are_drawn_pushed_and_converted() {
     h.app.mass_settings.material = brick;
     h.app.pick(Pick::Concept(ConceptPick::Paint));
     h.click_at(p(2.0, 2.0));
-    assert_eq!(h.model().mass(face).unwrap().material, brick);
+    // In plan, its top face (R19: one face, not the whole volume).
+    assert_eq!(
+        h.model().face_paint(face.0, archisim_core::FaceRef::Top),
+        Some(brick)
+    );
     h.frame();
     // Convertir: the mass selected becomes walls, slabs and a roof.
     h.key(Key::Escape);
@@ -4087,4 +4098,311 @@ fn services_are_drawn() {
     h.app.ed.selection = [Element::Device(socket.id)].into_iter().collect();
     h.key(Key::Delete);
     assert_eq!(h.model().devices().count(), 2);
+}
+
+/// Arista (R12): lines of the model that stay open, and close into a face
+/// on their first point or with the edges already there; Spline open by
+/// default (R16) and in the 2D drawing; the drawing orders of the bottom
+/// bar show their variants in the contextual bar (R15).
+#[test]
+fn concept_edges_close_into_faces() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::{Discipline, Pick};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -12.0), p(30.0, 16.0), 0.0);
+    h.app.set_discipline(Discipline::Concept);
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    assert_eq!(h.app.method_states()[0].0, "Línea");
+    // An open line: an edge, not a face.
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(6.0, 0.0));
+    h.click_at(p(6.0, 4.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().edges().count(), 1);
+    assert_eq!(h.model().masses().count(), 0);
+    // A second line from its end back to its start: the edges close a
+    // face, and go.
+    h.click_at(p(6.0, 4.0));
+    h.click_at(p(0.0, 4.0));
+    h.click_at(p(0.0, 0.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().edges().count(), 0);
+    let face = h.model().masses().next().unwrap();
+    assert!(face.is_face());
+    assert!((archisim_core::signed_area(&face.outline()).abs() - 24.0).abs() < 1e-6);
+    // Back on its first point: a face at once.
+    h.click_at(p(10.0, 0.0));
+    h.click_at(p(14.0, 0.0));
+    h.click_at(p(14.0, 3.0));
+    h.click_at(p(10.0, 0.0));
+    assert_eq!(h.model().masses().count(), 2);
+    h.frame();
+    // Spline: open by default, an edge; on its first point, a face.
+    h.app.choose_method("Spline");
+    h.click_at(p(0.0, 8.0));
+    h.click_at(p(4.0, 10.0));
+    h.click_at(p(8.0, 8.0));
+    h.key(Key::Enter);
+    assert_eq!(h.model().edges().count(), 1);
+    h.app.choose_method("Spline");
+    h.click_at(p(12.0, 8.0));
+    h.click_at(p(16.0, 10.0));
+    h.click_at(p(20.0, 8.0));
+    h.click_at(p(12.0, 8.0));
+    assert_eq!(h.model().masses().count(), 3);
+    // An edge selected shows its properties; deleted with Supr.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let edge = h.model().edges().next().unwrap().id;
+    h.app.ed.selection = [Element::Edge(edge)].into_iter().collect();
+    h.frame();
+    h.key(Key::Delete);
+    assert_eq!(h.model().edges().count(), 0);
+    // The 2D Spline of the bottom bar: a polyline of arcs through the
+    // points; while it runs, its variants are in the contextual bar.
+    h.app.keys_autocad = true;
+    h.app.pick(Pick::Command("SPLINE"));
+    assert_eq!(h.app.tool, Tool::Cad);
+    h.frame();
+    h.click_at(p(0.0, -6.0));
+    h.click_at(p(5.0, -4.0));
+    h.click_at(p(10.0, -6.0));
+    h.key(Key::Enter);
+    let d = h.model().drafts().last().unwrap();
+    match &d.shape {
+        archisim_core::Shape::Polyline(pl) => {
+            assert!(!pl.closed);
+            // Through the three points, with many in between.
+            assert!(pl.points.len() > 10);
+            for q in [p(0.0, -6.0), p(5.0, -4.0), p(10.0, -6.0)] {
+                assert!(pl.points.iter().any(|x| x.distance(q) < 1e-6));
+            }
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Where a model point is on the screen, in the 3D view.
+fn screen_3d(h: &Harness, x: f64, y: f64, z: f64) -> Pos2 {
+    let r = h.app.v3d.canvas;
+    let s = h
+        .app
+        .v3d
+        .camera
+        .project_to_screen(
+            glam::Vec3::new(x as f32, y as f32, z as f32),
+            glam::Vec2::new(r.width(), r.height()),
+        )
+        .unwrap();
+    Pos2::new(r.min.x + s.x, r.min.y + s.y)
+}
+
+/// R14: the tools work in the 3D view. A wall drawn by two clicks on the
+/// ground; a face by its rectangle, pushed up with the mouse; a column
+/// placed; Esc takes the arrow back without leaving the 3D view.
+#[test]
+fn tools_work_in_the_3d_view() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::Pick;
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    // Looking down steeply, so the ground inside is not behind the walls.
+    h.app.v3d.camera.pitch = 1.35;
+    h.frame();
+    let walls = h.model().walls().count();
+    // A wall inside the outline, from (3, 3) to (9, 3), on the level.
+    h.type_text("m");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Wall));
+    h.app.wall_tool.set_mode(crate::wall_tool::WallMode::Single);
+    let a = screen_3d(&h, 3.0, 3.0, 0.0);
+    let b = screen_3d(&h, 9.0, 3.0, 0.0);
+    assert_eq!(super::ghost3d::ghost_triangles(&h.app), 0);
+    h.click_screen(a);
+    // R21: before the second click, the wall is seen in 3D as it will be.
+    h.pos = b;
+    h.events.push(Event::PointerMoved(b));
+    h.frame();
+    assert!(super::ghost3d::ghost_triangles(&h.app) >= 12);
+    h.click_screen(b);
+    assert_eq!(h.model().walls().count(), walls + 1);
+    let w = h.model().walls().last().unwrap().clone();
+    // A window over that wall is seen before it is placed, too.
+    h.type_text("v");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Window));
+    let on = screen_3d(&h, 6.0, 3.0, 1.0);
+    h.pos = on;
+    h.events.push(Event::PointerMoved(on));
+    h.frame();
+    assert!(h.app.placement.is_some());
+    assert!(super::ghost3d::ghost_triangles(&h.app) > 0);
+    h.key(Key::Escape);
+    let near = |q: Point2, x: f64, y: f64| (q.x - x).abs() < 0.1 && (q.y - y).abs() < 0.1;
+    assert!(
+        (near(w.start, 3.0, 3.0) && near(w.end, 9.0, 3.0))
+            || (near(w.end, 3.0, 3.0) && near(w.start, 9.0, 3.0)),
+        "{:?} {:?}",
+        w.start,
+        w.end
+    );
+    // A face, by its rectangle, then pushed up.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    h.app.choose_method("Rectángulo");
+    h.click_screen(screen_3d(&h, 1.0, 5.0, 0.0));
+    h.click_screen(screen_3d(&h, 4.0, 8.0, 0.0));
+    let face = h.model().masses().next().unwrap().id;
+    assert!(h.model().mass(face).unwrap().is_face());
+    h.app.pick(Pick::Concept(ConceptPick::Push));
+    h.click_screen(screen_3d(&h, 2.5, 6.5, 0.0));
+    assert!(h.app.concept.push.is_some());
+    // Up the screen: higher.
+    let up = screen_3d(&h, 2.5, 6.5, 3.0);
+    h.pos = up;
+    h.events.push(Event::PointerMoved(up));
+    h.frame();
+    h.click_screen(up);
+    let height = h.model().mass(face).unwrap().height;
+    assert!((height - 3.0).abs() < 0.3, "{height}");
+    // A column on the level.
+    let columns = h.model().columns().count();
+    h.type_text("i");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Column));
+    h.click_screen(screen_3d(&h, 8.0, 6.0, 0.0));
+    assert_eq!(h.model().columns().count(), columns + 1);
+    h.key(Key::Escape);
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Arrow));
+}
+
+/// R14, R18–R20: Pintar paints the face clicked: a side of a wall (in
+/// plan, by the side clicked; in 3D, the face seen), one face of a volume,
+/// or the zone of a façade between edges drawn up it in 3D; Quitar
+/// pintura takes it off. The 3D shows the paint on that face only.
+#[test]
+fn faces_are_painted() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::Pick;
+    use archisim_core::{FaceRef, FaceSide};
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let brick = h.model().materials().last().unwrap().id;
+    h.app.mass_settings.material = brick;
+    h.app.pick(Pick::Concept(ConceptPick::Paint));
+    // In plan: the west wall, clicked just east of its line.
+    let west = h.model().walls().next().unwrap().clone();
+    let mid = west.point_at(0.5, 0.0);
+    h.click_at(mid + archisim_core::Vec2::new(0.1, 0.0));
+    let painted: Vec<_> = h.model().face_paints().collect();
+    assert_eq!(painted.len(), 1, "{painted:?}");
+    let (e, face, m) = painted[0];
+    assert_eq!((e, m), (west.id.0, brick));
+    let inside = (west.end - west.start).cross(archisim_core::Vec2::new(0.1, 0.0)) > 0.0;
+    let side = if inside {
+        FaceSide::Exterior
+    } else {
+        FaceSide::Interior
+    };
+    assert_eq!(face, FaceRef::Wall(side));
+    // The 3D shows the brick on that side only.
+    let model = h.model().clone();
+    let colour = model.material(brick).unwrap().cut_color;
+    let mut painted_tris = 0;
+    let mut plain = 0;
+    for s in archisim_geom::solid::model_solids(&model)
+        .iter()
+        .filter(|s| s.owner == archisim_geom::solid::SolidOwner::Wall(west.id))
+    {
+        for t in &s.triangles {
+            match archisim_geom::solid::painted_color(&model, s, t) {
+                Some(c) => {
+                    assert_eq!(c, colour);
+                    painted_tris += 1;
+                }
+                None => plain += 1,
+            }
+        }
+    }
+    assert!(painted_tris > 0 && plain > painted_tris);
+    // Quitar pintura, in plan, on the same side.
+    h.app.paint_erase = true;
+    h.click_at(mid + archisim_core::Vec2::new(0.1, 0.0));
+    assert_eq!(h.model().face_paints().count(), 0);
+    h.app.paint_erase = false;
+
+    // In the 3D view, from the south: the south wall's outer face.
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Paint));
+    h.app.v3d.camera.yaw = -1.3;
+    h.app.v3d.camera.pitch = 0.35;
+    h.frame();
+    h.click_screen(screen_3d(&h, 6.0, -0.01, 1.5));
+    let south = h
+        .model()
+        .walls()
+        .find(|w| w.start.y.abs() < 1e-6 && w.end.y.abs() < 1e-6)
+        .unwrap()
+        .clone();
+    assert_eq!(
+        h.model()
+            .face_paint(south.id.0, FaceRef::Wall(FaceSide::Exterior)),
+        Some(brick)
+    );
+    // An edge drawn up the south façade, at x = 4: Arista, two clicks with
+    // Mayús for the vertical.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    h.click_screen(screen_3d(&h, 4.0, -0.001, 0.05));
+    h.set_modifiers(Modifiers::SHIFT);
+    let top = screen_3d(&h, 4.0, -0.001, 2.95);
+    h.pos = top;
+    h.events.push(Event::PointerMoved(top));
+    h.frame();
+    h.click_screen(top);
+    h.set_modifiers(Modifiers::NONE);
+    h.key(Key::Enter);
+    let edge = h.model().edges().next().unwrap().clone();
+    assert!(!edge.is_flat(), "{edge:?}");
+    assert!((edge.points[0].x - 4.0).abs() < 0.05);
+    // Painting west of it paints only that zone, in a second material.
+    let stone = h.model().materials().find(|m| m.id != brick).unwrap().id;
+    h.app.mass_settings.material = stone;
+    h.app.pick(Pick::Concept(ConceptPick::Paint));
+    h.click_screen(screen_3d(&h, 9.0, -0.01, 1.5));
+    let zones: Vec<_> = h.model().paint_zones().cloned().collect();
+    assert_eq!(zones.len(), 1, "{zones:?}");
+    let area = archisim_core::signed_area(&zones[0].outline).abs();
+    assert!(area > 1.0 && area < south.length() * south.height, "{area}");
+    assert!(!archisim_geom::solid::paint_zone_triangles(h.model()).is_empty());
+    // A volume: only its top is painted.
+    h.key(Key::F2);
+    let settings = crate::editor::MassSettings::new(h.model());
+    let mass = h
+        .app
+        .ed
+        .add_mass_outline(
+            &settings,
+            vec![p(2.0, 2.0), p(5.0, 2.0), p(5.0, 5.0), p(2.0, 5.0)],
+        )
+        .unwrap();
+    assert_eq!(h.app.tool, Tool::Paint);
+    h.click_at(p(3.5, 3.5));
+    assert_eq!(
+        h.model().face_paint(mass.0, FaceRef::Top),
+        Some(stone),
+        "{:?} {:?}",
+        h.app.message.as_ref().map(|m| &m.text),
+        h.app.mode
+    );
+    assert_ne!(h.model().mass(mass).unwrap().material, stone);
 }

@@ -77,6 +77,7 @@ impl ArchiSimApp {
             [Element::Plot(id)] => self.plot_properties(ui, *id),
             [Element::Road(id)] => self.road_properties(ui, *id),
             [Element::Run(id)] => self.run_properties(ui, *id),
+            [Element::Edge(id)] => self.edge_properties(ui, *id),
             [Element::Device(id)] => self.device_properties(ui, *id),
             many => self.many_properties(ui, many),
         }

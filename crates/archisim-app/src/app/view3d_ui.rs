@@ -154,6 +154,55 @@ impl View3dState {
         self.scene.pick_in(ray, self.section.as_ref())
     }
 
+    /// What is under a point of the view: the point hit, its triangle's
+    /// normal and what it belongs to.
+    pub fn hit(&self, pos: Vec2, size: Vec2) -> Option<(glam::Vec3, glam::Vec3, Owner)> {
+        let ray = self.camera.ray(
+            glam::Vec2::new(pos.x, pos.y),
+            glam::Vec2::new(size.x, size.y),
+        );
+        let (d, i) = self.scene.hit_in(ray, self.section.as_ref())?;
+        let [a, b, c] = self.scene.triangles().nth(i)?;
+        let mut n = (b - a).cross(c - a).normalize_or_zero();
+        if n.dot(ray.dir) > 0.0 {
+            n = -n;
+        }
+        Some((ray.origin + ray.dir * d, n, self.scene.owner(i)?))
+    }
+
+    /// The corner or edge midpoint of an element nearest to a point of
+    /// the view, within `reach` points.
+    pub fn snap_vertex(
+        &self,
+        owner: Owner,
+        pos: Vec2,
+        size: Vec2,
+        reach: f32,
+    ) -> Option<(glam::Vec3, bool)> {
+        let gsize = glam::Vec2::new(size.x, size.y);
+        let p = glam::Vec2::new(pos.x, pos.y);
+        let mut best: Option<(f32, glam::Vec3, bool)> = None;
+        for [a, b, c] in self.scene.triangles_of(owner) {
+            for (q, corner) in [
+                (a, true),
+                (b, true),
+                (c, true),
+                ((a + b) / 2.0, false),
+                ((b + c) / 2.0, false),
+                ((c + a) / 2.0, false),
+            ] {
+                if let Some(s) = self.camera.project_to_screen(q, gsize) {
+                    // Corners win over midpoints at the same distance.
+                    let d = s.distance(p) + if corner { 0.0 } else { 2.0 };
+                    if d <= reach && best.is_none_or(|(bd, ..)| d < bd) {
+                        best = Some((d, q, corner));
+                    }
+                }
+            }
+        }
+        best.map(|(_, q, c)| (q, c))
+    }
+
     /// The box around the whole model.
     pub fn model_bounds(&self) -> (glam::Vec3, glam::Vec3) {
         (self.scene.lo, self.scene.hi)
@@ -433,10 +482,18 @@ impl ArchiSimApp {
             }
         }
 
+        // A tool in use draws and places here as in the plan (R14).
+        let tool3d = self.tool_in_3d();
+        if tool3d {
+            self.tools_in_3d(&ctx, &response, rect);
+        } else {
+            self.cursor3d = None;
+        }
+
         // Selection: a click picks what is under the cursor.
-        if response.clicked_by(PointerButton::Primary) {
+        if !tool3d && response.clicked_by(PointerButton::Primary) {
             if let Some(pos) = response.interact_pointer_pos() {
-                let owner = v.pick(pos - rect.min, size);
+                let owner = self.v3d.pick(pos - rect.min, size);
                 let add = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
                 // A linked element: say what it is and mark it.
                 if let Some(Owner::Linked(link, index)) = owner {
@@ -516,6 +573,11 @@ impl ArchiSimApp {
             }
         }
         draw_section_box(&painter, rect, v);
+        self.draw_edges_3d(&painter, rect);
+        if tool3d {
+            self.draw_tool_3d(&painter, rect);
+        }
+        let v = &mut self.v3d;
         draw_north(
             &painter,
             rect,
@@ -531,6 +593,8 @@ impl ArchiSimApp {
                 CursorIcon::Grabbing
             } else if on_handle {
                 CursorIcon::Grab
+            } else if tool3d {
+                CursorIcon::Crosshair
             } else {
                 CursorIcon::Default
             };

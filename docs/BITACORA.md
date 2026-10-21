@@ -6,6 +6,72 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (tarde) · Bloque R, segunda vuelta (R17–R21)
+
+Misma rama `bloque/revision-r` y mismo pull request (#39). El formato sigue en la versión 21 (aún no estaba en `main`): las caras pintadas guardan ahora el elemento y la cara, y hay zonas pintadas y aristas con altura por punto.
+
+**Hecho**
+- **R17**: la **Spline** de la Línea (dibujo 2D) curva como la de Arista: el mismo trazado, que pasa por los puntos con curvas suaves.
+- **R18, Pintar**: la pintura se ve siempre con su color (antes la atenuación de la disciplina la apagaba, y por eso apenas cambiaba). En Propiedades de Pintar hay ahora **Pintar / Quitar pintura**: quitar deja a la vista el material del elemento. En planta se pinta el lado del muro donde se pincha; en 3D, la cara que se ve.
+- **R19**: en un volumen se pinta **solo la cara** pinchada (la de arriba, la de abajo o un lado). Para el volumen entero, su material en Propiedades.
+- **R20, aristas en fachada**: en 3D, Arista se apoya en las caras: con **Mayús** el segundo punto sube en vertical. Una arista dibujada de abajo arriba en una fachada la divide, y **Pintar** pinta solo la zona entre esas aristas (y los bordes del muro). Así se pinta una fachada con dos o más materiales.
+- **R21, vista previa en 3D**: antes del clic se ve, transparente y con sus colores, lo que se va a hacer: muro (con sus capas y uniones), puerta y ventana en su muro, pilar, viga, forjado y objeto.
+
+**Pendiente**
+- Las zonas pintadas son por cara de muro (no siguen a una arista que cruce dos muros) y las aristas inclinadas no dividen zonas (solo las que van por la cara).
+- La vista previa en 3D se dibuja por encima de todo (se ve también si queda detrás de otro elemento).
+- Bloque P (presentación), siguiente en su propia rama.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. **Línea** de la barra inferior → **Spline**, cuatro clics e Intro: la curva es como la de Arista.
+3. **F3**, **Concepto → Pintar** con Ladrillo perforado: clic en la fachada sur. Cambia a ladrillo solo esa cara. En Propiedades, **Quitar pintura** y clic en la misma cara: vuelve el material del muro.
+4. Dibuja un volumen (Arista, Rectángulo, y Empujar) y píntale un lado: solo ese lado cambia.
+5. En 3D, **Arista**: clic abajo en la fachada, **Mayús** y clic arriba, Intro. **Pintar** con Piedra natural a un lado de la arista: solo esa zona.
+6. En 3D, **Muro**: un clic y mueve el ratón: el muro se ve antes del segundo clic. **Ventana**: pasa el ratón por un muro y se ve dónde queda.
+
+---
+
+## 2026-10-21 (mediodía) · Bloque R: la revisión de Antonio (R12–R16)
+
+Rama `bloque/revision-r` (pull request para Antonio). Formato `.archisim` versión 21 (abre las anteriores tal cual).
+
+**Hecho**
+- **R12, Arista**: la Línea de Concepto se llama ahora **Arista** y es una línea del modelo, no del dibujo:
+  - abierta (Intro, doble clic o clic derecho), queda como arista suelta, dibujada en planta con un punto en cada extremo y en 3D como línea;
+  - al cerrar el contorno en su primer punto, se hace una cara;
+  - si cierra un contorno con otras aristas que ya están, también se hace la cara, y esas aristas desaparecen dentro de ella (como en SketchUp);
+  - se selecciona, mueve, copia, gira y borra como lo demás, y en Propiedades tiene su altura y su longitud.
+- **R13**: fuera las fichas Rectángulo y Círculo de Concepto. Son métodos de Arista en la barra superior, y sus huecos quedan libres.
+- **R14, la ventana 3D**: las herramientas funcionan también ahí (al pasar de la planta al 3D, la herramienta sigue puesta):
+  - el cursor cae sobre lo que hay debajo (la cara de un muro, un volumen, el terreno) o, si no hay nada, sobre el plano de la planta activa;
+  - fuerza a las esquinas y puntos medios de las aristas del elemento bajo el cursor, y a los mismos puntos que en planta;
+  - se dibujan muros, forjados, locales, volúmenes y aristas, y se colocan pilares, objetos, puertas, ventanas y aparatos, con las mismas teclas (Intro, Esc, longitudes escritas, Espacio para girar);
+  - **Empujar**: clic en la cara y sube o baja el ratón (o escribe la altura); se ve el volumen creciendo con su altura;
+  - **Pintar**: clic en la cara de un muro y se pinta ese lado (exterior o interior) con el material elegido; también en planta, por el lado del muro donde se pincha; en un volumen, el volumen entero;
+  - arrastrar sigue girando la cámara.
+- **R15**: las órdenes de dibujo de la barra inferior (Línea, Relleno, Texto, Cota) muestran sus variantes en la barra superior mientras se dibuja (Línea, Polilínea, **Spline**, Rectángulo, Polígono, Arco, Círculo, Elipse), y después el paso de la orden. Con dibujo 2D seleccionado, la barra Modificar de siempre (copiar, mover, desfase, recortar…).
+- **R16, Spline**:
+  - abierto por defecto en todas las herramientas, y se cierra con un clic en su primer punto;
+  - en Concepto ya no sale un círculo ni hace falta pasar por Camino;
+  - orden nueva **Spline** (SPL) en el dibujo 2D: una polilínea de arcos que pasa por los puntos (C para cerrarla).
+- Al borrar una planta se borran también las cimentaciones, módulos, volúmenes, aristas, parcelas, viales e instalaciones que había en ella (antes se quedaban huérfanos).
+
+**Pendiente**
+- En 3D, los objetos se colocan siempre sobre la planta (no encima de una mesa o de otro forjado). Las aristas no se pueden seleccionar en 3D (sí en planta).
+- Pintar solo pinta caras de muros y volúmenes enteros; no forjados, cubiertas ni objetos. La pintura no va al IFC: es para ver y presentar.
+- Las previsualizaciones en 3D son la línea de lo que se dibuja; la del muro con su grosor solo se ve en planta.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. **Concepto → Arista**: tres clics en planta e Intro (queda una arista abierta); después, desde su último punto, dos clics más hasta su primer punto e Intro: se hace la cara.
+3. **F3** (3D) con **Arista** puesta, método **Rectángulo**: dos clics sobre el terreno. **Empujar**: clic en la cara, sube el ratón y clic (o escribe 9000 e Intro).
+4. En 3D, **Arquitectura → Muro**: dos clics en el suelo. **Puerta**: clic en ese muro.
+5. **Concepto → Pintar**, elige en Propiedades un material (Ladrillo) y, en 3D, clic en la cara de un muro: solo ese lado cambia de color.
+6. **Línea** de la barra inferior: arriba salen Polilínea, Spline, Rectángulo…; elige **Spline**, cuatro clics e Intro.
+
+---
+
 ## 2026-10-21 (mañana) · Unión de los siete bloques y revisión de Antonio
 
 Unidos a `main`, por orden, los pull requests #32 a #38 (I3, ejes y cimentación, módulos, concepto, urbanismo, métodos e instalaciones), todos en verde. Antonio los ha probado: funcionan, con cinco correcciones (R12–R16 en `docs/HOJA_DE_RUTA.md` §6.1): línea de Concepto como arista, fuera las fichas Rectángulo y Círculo de Concepto, herramientas en la ventana 3D, barra contextual para el dibujo 2D de la barra inferior y Spline abierto por defecto (también en el dibujo 2D).

@@ -143,8 +143,11 @@ impl ArchiSimApp {
                 self.last_plan_tab = i;
             }
             TabKind::ThreeD => {
-                self.set_tool(super::Tool::Arrow);
+                // The tools of the model go on working in 3D (R14).
                 self.mode = ViewMode::ThreeD;
+                if !self.tool_in_3d() {
+                    self.set_tool(super::Tool::Arrow);
+                }
             }
             TabKind::Section(_) => {
                 self.set_tool(super::Tool::Arrow);

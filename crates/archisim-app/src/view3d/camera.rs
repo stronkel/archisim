@@ -55,6 +55,11 @@ impl Camera {
         self.target + self.back() * self.distance
     }
 
+    /// Forward, screen-right and screen-up directions in the model.
+    pub fn screen_axes(&self) -> (Vec3, Vec3, Vec3) {
+        self.basis()
+    }
+
     /// Screen-right and screen-up directions in the model.
     fn basis(&self) -> (Vec3, Vec3, Vec3) {
         let forward = -self.back();

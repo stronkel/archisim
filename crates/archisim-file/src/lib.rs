@@ -46,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 20;
+pub const CURRENT_VERSION: u32 = 21;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -263,8 +263,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // (`masses`, `plot_area`); older ones have none. 18 → 19: plots
             // and roads (`plots`, `roads`); older ones have none. 19 → 20:
             // pipes, ducts and devices (`runs`, `devices`); older ones have
-            // none.
-            9..=19 => {
+            // none. 20 → 21: loose edges of the concept phase (`edges`);
+            // older ones have none.
+            9..=20 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -869,6 +870,43 @@ mod tests {
         // The first wall is a bearing wall, by hand (version 15).
         m.set_discipline(first, Some(archisim_core::ElementDiscipline::Structure))
             .unwrap();
+        // The first wall's exterior face painted (version 21).
+        {
+            let w = m.walls().next().unwrap().id;
+            let mat = m.materials().last().unwrap().id;
+            m.set_face_paint(
+                w.0,
+                archisim_core::FaceRef::Wall(archisim_core::FaceSide::Exterior),
+                Some(mat),
+            )
+            .unwrap();
+            m.set_paint_zone(
+                w,
+                archisim_core::FaceSide::Interior,
+                vec![
+                    archisim_core::Point2::new(0.5, 0.0),
+                    archisim_core::Point2::new(1.5, 0.0),
+                    archisim_core::Point2::new(1.5, 1.0),
+                ],
+                Some(mat),
+            )
+            .unwrap();
+        }
+        // A loose edge of the concept phase (version 21).
+        {
+            let level = m.levels()[0].id;
+            m.add_edge_3d(
+                level,
+                vec![
+                    archisim_core::Point2::new(0.0, -2.0),
+                    archisim_core::Point2::new(3.0, -2.0),
+                    archisim_core::Point2::new(3.0, -4.0),
+                ],
+                vec![0.0, 0.0, 1.5],
+                0.5,
+            )
+            .unwrap();
+        }
         // A pipe, a duct and a light (version 20).
         {
             m.add_run(archisim_core::NewRun {
@@ -1116,7 +1154,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 20", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 21", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1143,7 +1181,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 20"));
+        assert!(to_string(&opened).contains("\"version\": 21"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1314,7 +1352,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 20", "\"version\": 3", 1)
+            .replacen("\"version\": 21", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1376,7 +1414,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 20", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 21", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1819,7 +1857,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 20", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 21", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1831,7 +1869,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 20,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 21,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1877,11 +1915,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 20", "\"version\": 21"),
-            Err(FileError::TooNew { version: 21 })
+            edited("\"version\": 21", "\"version\": 22"),
+            Err(FileError::TooNew { version: 22 })
         ));
         assert!(matches!(
-            edited("\"version\": 20", "\"version\": 0"),
+            edited("\"version\": 21", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

@@ -110,36 +110,40 @@ impl Scene {
             }
             let owner = Owner::Model(element(solid.owner));
             let mat = model.material(solid.material);
-            let [r, g, b] = archisim_geom::solid::solid_color(model, &solid);
-            let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
-            if model.dimmed(disciplines.focus, id) {
-                // In light grey, as a reference.
-                let lum = 0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2];
-                let v = 1.0 - (1.0 - lum) * 0.35;
-                rgb = [v, v, v];
-            }
-            if selection.contains(&element(solid.owner)) {
-                for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
-                    *c = *c * 0.45 + h * 0.55;
-                }
-            }
-            let ghost = isolate && !selection.contains(&element(solid.owner));
+            let dimmed = model.dimmed(disciplines.focus, id);
+            let selected = selection.contains(&element(solid.owner));
+            let ghost = isolate && !selected;
             let is_glass = ghost || mat.is_some_and(|m| m.category == "glass");
             // Doors and windows win where they touch the reveals.
             let opening = matches!(solid.owner, SolidOwner::Opening(_));
-            let color = [
-                rgb[0],
-                rgb[1],
-                rgb[2],
-                if ghost {
-                    GHOST_ALPHA
-                } else if is_glass {
-                    GLASS_ALPHA
-                } else {
-                    1.0
-                },
-            ];
+            let alpha = if ghost {
+                GHOST_ALPHA
+            } else if is_glass {
+                GLASS_ALPHA
+            } else {
+                1.0
+            };
+            let tone = |[r, g, b]: [u8; 3], dim: bool| {
+                let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+                if dim {
+                    // In light grey, as a reference.
+                    let lum = 0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2];
+                    let v = 1.0 - (1.0 - lum) * 0.35;
+                    rgb = [v, v, v];
+                }
+                if selected {
+                    for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
+                        *c = *c * 0.45 + h * 0.55;
+                    }
+                }
+                [rgb[0], rgb[1], rgb[2], alpha]
+            };
+            let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
             for tri in &solid.triangles {
+                // A painted face: its paint, never greyed (it is what is
+                // being worked on).
+                let color = archisim_geom::solid::painted_color(model, &solid, tri)
+                    .map_or(base, |c| tone(c, false));
                 let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
                 let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
                 // Faces looking up give way where another element rests on
@@ -175,6 +179,30 @@ impl Scene {
                     s.owners.push(owner);
                 }
             }
+        }
+        // Painted zones of walls' faces, just off them.
+        for (wall, tri, [r, g, b]) in archisim_geom::solid::paint_zone_triangles(model) {
+            if model.hidden_by_discipline(&disciplines.hidden, wall.0) {
+                continue;
+            }
+            let owner = Owner::Model(Element::Wall(wall));
+            let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+            if selection.contains(&Element::Wall(wall)) {
+                for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
+                    *c = *c * 0.45 + h * 0.55;
+                }
+            }
+            let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+            let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
+            for v in p {
+                s.opaque.push(Vertex {
+                    pos: v.to_array(),
+                    normal: n.to_array(),
+                    color: [rgb[0], rgb[1], rgb[2], 1.0],
+                    bias: -1.0,
+                });
+            }
+            s.owners.push(owner);
         }
         for part in linked {
             let [r, g, b] = part.color;
@@ -255,25 +283,51 @@ impl Scene {
         ray: Ray,
         clip: Option<&super::section_box::SectionBox>,
     ) -> Option<Owner> {
-        let tris = self
-            .opaque
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .chain(self.glass.as_chunks::<3>().0);
-        let mut best: Option<(f32, Owner)> = None;
-        for (i, t) in tris.enumerate() {
-            let [a, b, c] = [t[0].pos, t[1].pos, t[2].pos].map(Vec3::from_array);
+        self.hit_in(ray, clip).map(|(_, i)| self.owners[i])
+    }
+
+    /// The nearest triangle hit by a ray (inside the section box): its
+    /// distance along the ray and its index.
+    pub fn hit_in(
+        &self,
+        ray: Ray,
+        clip: Option<&super::section_box::SectionBox>,
+    ) -> Option<(f32, usize)> {
+        let mut best: Option<(f32, usize)> = None;
+        for (i, [a, b, c]) in self.triangles().enumerate() {
             if let Some(d) = hit(ray, a, b, c) {
                 if clip.is_some_and(|bx| !bx.contains(ray.origin + ray.dir * d)) {
                     continue;
                 }
                 if best.is_none_or(|(bd, _)| d < bd) {
-                    best = Some((d, self.owners[i]));
+                    best = Some((d, i));
                 }
             }
         }
-        best.map(|(_, e)| e)
+        best
+    }
+
+    /// Every triangle, opaque then glass, as points.
+    pub fn triangles(&self) -> impl Iterator<Item = [Vec3; 3]> + '_ {
+        self.opaque
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0)
+            .map(|t| [t[0].pos, t[1].pos, t[2].pos].map(Vec3::from_array))
+    }
+
+    /// What a triangle belongs to.
+    pub fn owner(&self, i: usize) -> Option<Owner> {
+        self.owners.get(i).copied()
+    }
+
+    /// The triangles of one element.
+    pub fn triangles_of(&self, owner: Owner) -> impl Iterator<Item = [Vec3; 3]> + '_ {
+        self.triangles()
+            .zip(&self.owners)
+            .filter(move |(_, o)| **o == owner)
+            .map(|(t, _)| t)
     }
 
     /// The nearest element of the project hit by a ray (none if a linked

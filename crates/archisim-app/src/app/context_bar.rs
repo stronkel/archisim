@@ -181,6 +181,7 @@ fn element_name(e: &Element) -> &'static str {
         Element::Plot(_) => "Parcela",
         Element::Road(_) => "Vial",
         Element::Run(_) => "Instalación",
+        Element::Edge(_) => "Arista",
         Element::Device(_) => "Aparato",
     }
 }
@@ -281,7 +282,14 @@ impl ArchiSimApp {
                 Tool::Object => ("Objeto", None, "Varita", ""),
                 Tool::Grid => ("Eje", None, "Varita", ""),
                 Tool::Module => ("Módulo", None, "Varita", ""),
-                Tool::Mass => return Some(("Volumen", self.mass_methods())),
+                Tool::Mass => {
+                    let title = match self.mass_settings.what {
+                        crate::editor::MassWhat::Face => "Arista",
+                        crate::editor::MassWhat::Volume => "Volumen",
+                        crate::editor::MassWhat::Mass => "Masa",
+                    };
+                    return Some((title, self.mass_methods()));
+                }
                 Tool::PushPull => ("Empujar", None, "Varita", ""),
                 Tool::MassOffset => ("Equidistancia", None, "Varita", ""),
                 Tool::Tape => ("Cinta", None, "Varita", ""),
@@ -441,11 +449,20 @@ impl ArchiSimApp {
             act,
             on,
         };
+        let edges = self.mass_settings.what == crate::editor::MassWhat::Face;
         vec![
             m(
-                Mark::Icon(Icon::GeoPolygon),
-                "Polígono",
-                "Clic en cada esquina; clic en la primera o Intro para cerrar",
+                Mark::Icon(if edges {
+                    Icon::GeoChain
+                } else {
+                    Icon::GeoPolygon
+                }),
+                if edges { "Línea" } else { "Polígono" },
+                if edges {
+                    "Aristas por puntos: quedan abiertas (Intro o doble clic); clic en el primero, o cerrar con otras aristas, hace una cara"
+                } else {
+                    "Clic en cada esquina; clic en la primera o Intro para cerrar"
+                },
                 MethodAct::MassMode(MassMode::Polygon),
                 mode == MassMode::Polygon,
             ),
@@ -644,6 +661,28 @@ impl ArchiSimApp {
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             if self.tool == Tool::Cad {
+                // A drawing order of the bottom bar: its variants, as the
+                // methods of a tool, then its step.
+                let name = self.cad.as_ref().map(|c| c.name()).unwrap_or_default();
+                if let Some((title, variants)) = super::bottom_segments::segment_of(name) {
+                    bar_title(ui, title, &p);
+                    let mut chosen = None;
+                    for v in variants {
+                        let on = matches!(v.pick, super::toolbox::Pick::Command(c) if c == name);
+                        let r = bar_button(ui, v.mark, v.name, on, true, false)
+                            .on_hover_text(format!("{} ({})", v.name, v.key));
+                        if r.clicked() && !on {
+                            chosen = Some(v.pick);
+                        }
+                    }
+                    bar_separator(ui, &p);
+                    if let Some(pick) = chosen {
+                        self.pick(pick);
+                        return;
+                    }
+                    self.order_step_body(ui);
+                    return;
+                }
                 self.order_step(ui);
                 return;
             }
@@ -720,15 +759,24 @@ impl ArchiSimApp {
     /// options; the last answer at the right.
     fn order_step(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
-        let Some(prompt) = self.cad_prompt() else {
+        if self.cad_prompt().is_none() {
             return;
-        };
+        }
         let name = self.cad.as_ref().map(|c| c.name()).unwrap_or_default();
         let title = match TRANSFORM.iter().chain(GEOMETRY).find(|o| o.command == name) {
             Some(o) => format!("Modificar · {}", o.name),
             None => super::toolbox::order_name(name).unwrap_or(name).to_string(),
         };
         bar_title(ui, &title, &p);
+        self.order_step_body(ui);
+    }
+
+    /// What the order running asks, its options and the last answer.
+    fn order_step_body(&mut self, ui: &mut Ui) {
+        let p = Palette::current(ui.ctx());
+        let Some(prompt) = self.cad_prompt() else {
+            return;
+        };
         ui.label(
             egui::RichText::new(&prompt.text)
                 .font(FontId::proportional(12.5))
