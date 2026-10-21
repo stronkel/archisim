@@ -388,6 +388,13 @@ pub struct ArchiSimApp {
     /// The witness end being dragged.
     anchor_drag: Option<(crate::temp_dims::Slot, crate::temp_dims::End)>,
     plan: Option<(PlanKey, TextureHandle)>,
+    /// The sun's shadows of the plan's level, while the model and the
+    /// level do not change (worked out once, not at each redraw).
+    shadow_cache: Option<(
+        u64,
+        LevelId,
+        std::sync::Arc<Vec<archisim_geom::junctions::Shape>>,
+    )>,
     pending: Option<Pending>,
     allow_close: bool,
     fit_requested: bool,
@@ -590,6 +597,7 @@ impl ArchiSimApp {
             temp_anchors: Default::default(),
             anchor_drag: None,
             plan: None,
+            shadow_cache: None,
             pending: None,
             allow_close: false,
             fit_requested: true,

@@ -1201,6 +1201,31 @@ impl ArchiSimApp {
         }
     }
 
+    /// The sun's shadows on the active level, when the view's style casts
+    /// them; kept while the model and the level stay the same.
+    fn plan_shadows(&mut self) -> Option<std::sync::Arc<Vec<archisim_geom::junctions::Shape>>> {
+        let model = self.ed.shown();
+        let casts = archisim_plan::presentation::style_of(&model, &self.view_style)
+            .is_some_and(|p| p.shadows);
+        if !casts {
+            return None;
+        }
+        let (rev, level) = (self.ed.revision(), self.ed.level);
+        if let Some((r, l, sh)) = &self.shadow_cache {
+            if *r == rev && *l == level {
+                return Some(sh.clone());
+            }
+        }
+        let sh = std::sync::Arc::new(
+            model
+                .sun_direction()
+                .map(|sun| archisim_geom::shadow::shadows(&model, level, sun))
+                .unwrap_or_default(),
+        );
+        self.shadow_cache = Some((rev, level, sh.clone()));
+        Some(sh)
+    }
+
     fn draw_plan(&mut self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect) {
         let ppp = ctx.pixels_per_point();
         let size = [
@@ -1224,6 +1249,7 @@ impl ArchiSimApp {
         };
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
+            let shadows = self.plan_shadows();
             let image = rasterize_with(
                 &self.ed.shown(),
                 self.ed.level,
@@ -1237,6 +1263,7 @@ impl ArchiSimApp {
                     thin_lines: key.thin_lines,
                     phase_view: key.phase_view,
                     style: key.style.clone(),
+                    shadows,
                     ..archisim_plan::PlanOptions::default()
                 },
             );

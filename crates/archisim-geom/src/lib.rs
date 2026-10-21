@@ -29,6 +29,7 @@ pub mod index;
 pub mod joins;
 pub mod junctions;
 pub mod room;
+pub mod shadow;
 pub mod solid;
 
 use archisim_core::{

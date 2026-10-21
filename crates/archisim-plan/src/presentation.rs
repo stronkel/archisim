@@ -32,6 +32,46 @@ impl Drop for Guard {
     }
 }
 
+/// How dark the shadows are: their opacity.
+pub const SHADOW_OPACITY: f64 = 0.28;
+
+/// The colour of shadows in a style: its darkest tone, or a soft black.
+pub fn shadow_colour(p: &PresentationStyle) -> archisim_core::Rgb {
+    let lum = |c: &archisim_core::Rgb| 0.3 * c[0] as f64 + 0.59 * c[1] as f64 + 0.11 * c[2] as f64;
+    p.palette
+        .iter()
+        .min_by(|a, b| lum(a).total_cmp(&lum(b)))
+        .copied()
+        .unwrap_or([40, 40, 46])
+}
+
+/// The shadow areas, see-through in the style's shadow colour.
+pub(crate) fn draw_shadows(
+    s: &mut String,
+    shapes: &[archisim_geom::junctions::Shape],
+    p: &PresentationStyle,
+) {
+    use std::fmt::Write;
+    let mut d = String::new();
+    for (outer, holes) in shapes {
+        for ring in std::iter::once(outer).chain(holes) {
+            for (i, q) in ring.iter().enumerate() {
+                d.push(if i == 0 { 'M' } else { 'L' });
+                d.push_str(&crate::pt(*q));
+                d.push(' ');
+            }
+            d.push_str("Z ");
+        }
+    }
+    let [r, g, b] = shadow_colour(p);
+    let _ = writeln!(
+        s,
+        r#"<g id="shadows"><path d="{}" fill="rgb({r},{g},{b})" fill-opacity="{}" fill-rule="evenodd" stroke="none"/></g>"#,
+        d.trim_end(),
+        num(SHADOW_OPACITY)
+    );
+}
+
 /// The SVG of a view in a presentation style: lines `line_scale` times
 /// as heavy, every colour turned to the palette (the paper white to the
 /// style's paper, the solid fill kept), and the paper's colour behind
@@ -208,5 +248,19 @@ mod tests {
         assert!(!styled.contains("rgb(230,120,90)"), "no layers");
         assert!(styled.contains("#2f4f3e"), "solid green walls");
         assert!(styled.contains("#e6d2b4"), "floors still filled");
+        assert!(!styled.contains("id=\"shadows\""));
+        // With shadows: the wall's, on the ground.
+        let mut look = m.presentation_style(id).unwrap().clone();
+        look.shadows = true;
+        m.set_presentation_style(look).unwrap();
+        let shaded = crate::render_plan(&m, l, &o);
+        assert!(shaded.contains("id=\"shadows\""));
+        assert!(shaded.contains("fill-opacity=\"0.28\""));
+        // And in an axonometric of a sheet.
+        let axo = archisim_core::Axo::default();
+        let d = crate::axo::axo_drawing(&m, &axo, archisim_core::DisciplineFocus::None)
+            .with_shadows(&m, &axo, [40, 40, 46]);
+        let svg = crate::axo::render_axo(&d, (d.lo, d.hi), 100.0);
+        assert!(svg.contains("fill-opacity"));
     }
 }

@@ -297,8 +297,10 @@ impl Dxf {
         let round = |v: f64| (v * 1000.0).round() / 1000.0;
         let to = |p: &(f64, f64)| (round(p.0 * mm), round(-p.1 * mm));
         if let Some(f) = it.fill {
-            // White and near-white fills (paper, slabs) are left out.
-            if f.iter().any(|c| *c < 230) {
+            // White and near-white fills (paper, slabs) are left out, and
+            // see-through ones (shadows, canopies): DXF would make them
+            // solid, over what is under them.
+            if f.iter().any(|c| *c < 230) && it.fill_opacity >= 0.995 {
                 let loops: Vec<Loop> = it
                     .subpaths
                     .iter()

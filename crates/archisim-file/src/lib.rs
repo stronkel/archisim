@@ -872,7 +872,13 @@ mod tests {
             st.palette = vec![[60, 30, 20], [240, 230, 220]];
             st.poche = Some([180, 90, 60]);
             st.line_scale = 0.7;
+            st.shadows = true;
             m.add_presentation_style(st).unwrap();
+            m.set_sun(archisim_core::Sun {
+                day: 172,
+                hour: 16.5,
+            })
+            .unwrap();
         }
         // Concrete goes through anything (material intersection priority).
         m.set_material_priority(concrete, Some(990)).unwrap();

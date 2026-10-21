@@ -307,6 +307,9 @@ pub struct PresentationStyle {
     pub poche: Option<crate::Rgb>,
     /// Multiplies the weight of every line.
     pub line_scale: f64,
+    /// Shadows cast by the project's sun on the ground (plans and
+    /// axonometrics).
+    pub shadows: bool,
 }
 
 impl PresentationStyle {
@@ -318,6 +321,7 @@ impl PresentationStyle {
             palette: Vec::new(),
             poche: None,
             line_scale: 1.0,
+            shadows: false,
         }
     }
 
@@ -377,7 +381,11 @@ pub fn presentation_styles_text(styles: &[PresentationStyle]) -> String {
         if let Some(c) = st.poche {
             s.push_str(&format!(" poche {}", hex(c)));
         }
-        s.push_str(&format!(" lines {}\n", st.line_scale));
+        s.push_str(&format!(" lines {}", st.line_scale));
+        if st.shadows {
+            s.push_str(" shadows");
+        }
+        s.push('\n');
     }
     s
 }
@@ -432,6 +440,7 @@ pub fn parse_presentation_styles(text: &str) -> Result<Vec<PresentationStyle>, S
                             .ok_or_else(|| bad("color del macizado"))?,
                     );
                 }
+                "shadows" => st.shadows = true,
                 "lines" => {
                     i += 1;
                     st.line_scale = words
@@ -490,6 +499,7 @@ mod tests {
         a.palette = vec![[34, 52, 44], [88, 122, 94]];
         a.poche = Some([47, 79, 62]);
         a.line_scale = 0.8;
+        a.shadows = true;
         let b = PresentationStyle::new("Técnico");
         let text = presentation_styles_text(&[a.clone(), b.clone()]);
         let back = parse_presentation_styles(&text).unwrap();

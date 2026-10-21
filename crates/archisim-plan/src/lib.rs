@@ -92,6 +92,10 @@ pub struct PlanOptions {
     pub pens: Option<archisim_core::Pens>,
     /// The title under an exported plan (project, level and scale).
     pub title: bool,
+    /// The sun's shadows on this level, if already worked out (the screen
+    /// keeps them while the model does not change); `None`: worked out
+    /// here when the presentation style casts shadows.
+    pub shadows: Option<std::sync::Arc<Vec<archisim_geom::junctions::Shape>>>,
 }
 
 /// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
@@ -113,6 +117,7 @@ impl Default for PlanOptions {
             style: Default::default(),
             pens: None,
             title: true,
+            shadows: None,
         }
     }
 }
@@ -595,6 +600,18 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             false,
             Some(true),
         );
+    }
+    // The sun's shadows on the ground, over the pavings.
+    if let Some(p) = presentation::style_of(model, &options.style).filter(|p| p.shadows) {
+        let cast = match &options.shadows {
+            Some(sh) => Some(sh.clone()),
+            None => model
+                .sun_direction()
+                .map(|sun| std::sync::Arc::new(archisim_geom::shadow::shadows(model, level, sun))),
+        };
+        if let Some(sh) = cast.filter(|sh| !sh.is_empty()) {
+            presentation::draw_shadows(&mut s, &sh, p);
+        }
     }
     for roof in model
         .roofs_on_level(level)

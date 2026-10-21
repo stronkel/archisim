@@ -49,6 +49,11 @@ impl Editor {
         })
     }
 
+    /// When the shadows are cast.
+    pub fn set_sun(&mut self, sun: archisim_core::Sun) -> EditResult {
+        self.transact("Sol de las sombras", |m| m.set_sun(sun))
+    }
+
     /// `name`, or `name 2`, `name 3`… if a style has it.
     fn free_style_name(&self, name: &str) -> String {
         let taken = |n: &str| self.model().presentation_styles().any(|s| s.name == n);

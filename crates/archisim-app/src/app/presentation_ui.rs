@@ -243,6 +243,11 @@ impl ArchiSimApp {
                 });
                 ui.end_row();
 
+                ui.label("Sombras")
+                    .on_hover_text("Del sol del proyecto (día y hora en las propiedades del proyecto, sin nada seleccionado)");
+                ui.checkbox(&mut d.shadows, "arrojadas sobre el suelo");
+                ui.end_row();
+
                 ui.label("Grueso de las líneas");
                 ui.add(
                     egui::Slider::new(&mut d.line_scale, 0.3..=2.0)
@@ -392,5 +397,104 @@ impl ArchiSimApp {
         ui.small_button("Estilos de presentación…")
             .on_hover_text("Crear y cambiar los estilos del proyecto")
             .clicked()
+    }
+
+    /// The sun of the shadows in the project's properties: the day (as
+    /// day/month) and the solar hour.
+    pub(super) fn sun_rows(&mut self, ui: &mut Ui) {
+        let sun = self.ed.model().sun();
+        let (day, month) = day_month(sun.day);
+        let mut changed = None;
+        props::row(
+            ui,
+            "Sol: día",
+            "Día de las sombras en las vistas de presentación (día/mes)",
+            |ui, w| {
+                let shown = format!("{day}/{month}");
+                if let Some(v) =
+                    text_edit_committed(ui, egui::Id::unique("project-sun-day"), &shown, w - 8.0)
+                {
+                    changed = Some(parse_day(&v).map(|d| archisim_core::Sun { day: d, ..sun }));
+                }
+            },
+        );
+        props::row(
+            ui,
+            "Sol: hora solar",
+            "12:00 es mediodía, con el sol al sur",
+            |ui, w| {
+                let h = sun.hour.floor();
+                let shown = format!(
+                    "{:02}:{:02}",
+                    h as u32,
+                    ((sun.hour - h) * 60.0).round() as u32
+                );
+                if let Some(v) =
+                    text_edit_committed(ui, egui::Id::unique("project-sun-hour"), &shown, w - 8.0)
+                {
+                    changed = Some(parse_hour(&v).map(|hour| archisim_core::Sun { hour, ..sun }));
+                }
+            },
+        );
+        match changed {
+            Some(Some(s)) => {
+                let r = self.ed.set_sun(s);
+                self.report(
+                    r,
+                    "Sol cambiado: las sombras de las vistas de presentación lo siguen.",
+                );
+            }
+            Some(None) => self.complain("Escribe el día como 21/3 y la hora como 11:30."),
+            None => {}
+        }
+    }
+}
+
+const MONTH_DAYS: [u16; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/// Day and month of a day of the year.
+fn day_month(n: u16) -> (u16, u16) {
+    let mut left = n.clamp(1, 365);
+    for (m, days) in MONTH_DAYS.iter().enumerate() {
+        if left <= *days {
+            return (left, m as u16 + 1);
+        }
+        left -= days;
+    }
+    (31, 12)
+}
+
+/// A day written as `21/3`; its day of the year.
+fn parse_day(t: &str) -> Option<u16> {
+    let (d, m) = t.trim().split_once('/')?;
+    let (d, m): (u16, usize) = (d.trim().parse().ok()?, m.trim().parse().ok()?);
+    if !(1..=12).contains(&m) || d < 1 || d > MONTH_DAYS[m - 1] {
+        return None;
+    }
+    Some(MONTH_DAYS[..m - 1].iter().sum::<u16>() + d)
+}
+
+/// An hour written as `11:30` or `11`.
+fn parse_hour(t: &str) -> Option<f64> {
+    let t = t.trim().trim_end_matches('h');
+    let (h, m) = t.split_once(':').unwrap_or((t, "0"));
+    let (h, m): (f64, f64) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
+    let v = h + m / 60.0;
+    ((0.0..=24.0).contains(&v) && (0.0..60.0).contains(&m)).then_some(v)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn days_and_hours_are_read_as_written() {
+        assert_eq!(parse_day("21/3"), Some(80));
+        assert_eq!(day_month(80), (21, 3));
+        assert_eq!(day_month(172), (21, 6));
+        assert_eq!(parse_day("30/2"), None);
+        assert_eq!(parse_hour("11:30"), Some(11.5));
+        assert_eq!(parse_hour("16"), Some(16.0));
+        assert_eq!(parse_hour("25"), None);
     }
 }

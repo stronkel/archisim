@@ -362,7 +362,10 @@ fn draw_view_title(s: &mut String, model: &Model, v: &Viewport) {
 /// and cut on the sheet.
 fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<f64>) {
     if let Some(axo) = v.axo {
-        let d = crate::axo::axo_drawing(model, &axo, v.style.focus);
+        let mut d = crate::axo::axo_drawing(model, &axo, v.style.focus);
+        if let Some(p) = crate::presentation::style_of(model, &v.style).filter(|p| p.shadows) {
+            d = d.with_shadows(model, &axo, crate::presentation::shadow_colour(p));
+        }
         let m = 5.0 * v.scale / 1000.0;
         let crop = v
             .crop

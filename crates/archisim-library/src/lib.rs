@@ -72,6 +72,8 @@ pub fn presentation_styles() -> Vec<archisim_core::PresentationStyle> {
         s.palette = palette.to_vec();
         s.poche = Some(poche);
         s.line_scale = lines;
+        // Soft shadows on the coloured ones.
+        s.shadows = !palette.is_empty() && name != "Monocromo";
         s
     };
     vec![

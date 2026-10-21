@@ -664,6 +664,8 @@ pub(crate) struct PresentationStyleOf {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub poche: Option<String>,
     pub line_scale: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shadows: bool,
 }
 
 impl PresentationStyleOf {
@@ -676,6 +678,7 @@ impl PresentationStyleOf {
             palette: s.palette.iter().map(|c| hex(*c)).collect(),
             poche: s.poche.map(hex),
             line_scale: s.line_scale,
+            shadows: s.shadows,
         }
     }
 
@@ -693,6 +696,7 @@ impl PresentationStyleOf {
                 .collect::<Result<_, _>>()?,
             poche: self.poche.map(|c| parse_hex(&element, &c)).transpose()?,
             line_scale: self.line_scale,
+            shadows: self.shadows,
         })
     }
 }
@@ -1319,6 +1323,10 @@ pub(crate) struct Project {
     /// True north, degrees clockwise from the plan's up (version 7).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub true_north: f64,
+    /// The sun of the shadows (version 22): day of the year and solar
+    /// hour; absent: the spring equinox at 11.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sun: Option<[f64; 2]>,
     /// Room uses offered in this project (version 9; `space_usages` in
     /// the version 7 and 8 files of phase 2); absent: the program's
     /// default list.
@@ -1621,6 +1629,7 @@ impl ProjectFile {
                 site_guid: p.site_guid.to_string(),
                 building_guid: p.building_guid.to_string(),
                 true_north: p.true_north.to_degrees(),
+                sun: (p.sun != core::Sun::default()).then_some([p.sun.day as f64, p.sun.hour]),
                 room_usages: p.room_usages,
                 georeference: p.georeference.map(|g| Georeference {
                     crs: g.crs,
@@ -2483,6 +2492,12 @@ impl ProjectFile {
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
             true_north: project.true_north.to_radians(),
+            sun: project
+                .sun
+                .map_or(core::Sun::default(), |[d, h]| core::Sun {
+                    day: d.clamp(0.0, 400.0) as u16,
+                    hour: h,
+                }),
             room_usages: project.room_usages.clone(),
             georeference: project.georeference.as_ref().map(|g| core::Georeference {
                 crs: g.crs.clone(),
