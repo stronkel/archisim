@@ -18,6 +18,7 @@ use crate::pick::Element;
 use crate::units::{explain, explain_file};
 use crate::wall_tool::Piece;
 
+mod concept;
 mod curtain;
 mod foundations;
 pub mod library;
@@ -33,6 +34,7 @@ mod structure;
 mod terrain;
 mod types;
 
+pub use concept::{circle, snap_height, MassMode, MassSettings, MassWhat};
 pub use curtain::CurtainSettings;
 pub use foundations::{FootingMode, FootingSettings};
 pub use modules::ModuleStatus;
@@ -385,6 +387,7 @@ impl Editor {
             Element::Footing(id) => model.footing(*id).is_some(),
             Element::Grid(id) => model.grid(*id).is_some(),
             Element::Module(id) => model.module(*id).is_some(),
+            Element::Mass(id) => model.mass(*id).is_some(),
         });
         if model.level(self.level).is_none() {
             if let Some(l) = model.levels().first() {
@@ -610,7 +613,8 @@ impl Editor {
                     | Element::Object(_)
                     | Element::Footing(_)
                     | Element::Grid(_)
-                    | Element::Module(_)) => remove_element(m, *e)?,
+                    | Element::Module(_)
+                    | Element::Mass(_)) => remove_element(m, *e)?,
                     Element::Draft(id) => {
                         m.remove_draft(*id)?;
                     }
@@ -707,7 +711,8 @@ impl Editor {
                         | Element::Object(_)
                         | Element::Footing(_)
                         | Element::Grid(_)
-                        | Element::Module(_)) => remove_element(m, e)?,
+                        | Element::Module(_)
+                        | Element::Mass(_)) => remove_element(m, e)?,
                     },
                     Change::Transform { items, t, copy } => {
                         out.extend(crate::xform::transform(m, &items, &t, copy)?);
@@ -1093,6 +1098,9 @@ impl Editor {
                         | Element::CurtainWall(_)
                         | Element::Railing(_)
                         | Element::Object(_)
+                        | Element::Footing(_)
+                        | Element::Module(_)
+                        | Element::Mass(_)
                 )
             })
             .collect();
@@ -1113,6 +1121,9 @@ impl Editor {
                     Element::CurtainWall(id) => m.edit_curtain_wall(*id, |c| c.level = level)?,
                     Element::Railing(id) => m.edit_railing(*id, |r| r.level = level)?,
                     Element::Object(id) => m.edit_object(*id, |o| o.level = level)?,
+                    Element::Footing(id) => m.edit_footing(*id, |f| f.level = level)?,
+                    Element::Module(id) => m.edit_module(*id, |p| p.level = level)?,
+                    Element::Mass(id) => m.edit_mass(*id, |x| x.level = level)?,
                     _ => {}
                 }
             }
@@ -1322,6 +1333,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Footing(id) => m.remove_footing(id).map(drop),
         Element::Grid(id) => m.remove_grid(id).map(drop),
         Element::Module(id) => m.remove_module(id).map(drop),
+        Element::Mass(id) => m.remove_mass(id).map(drop),
         _ => Ok(()),
     }
 }

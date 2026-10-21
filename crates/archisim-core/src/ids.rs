@@ -22,6 +22,10 @@ macro_rules! typed_id {
 }
 
 typed_id!(
+    /// Identifies a [`crate::Mass`] (a volume of the concept phase).
+    MassId
+);
+typed_id!(
     /// Identifies a [`crate::ModuleSource`] (a module file kept in the
     /// project).
     ModuleSourceId

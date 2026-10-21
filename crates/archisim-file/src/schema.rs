@@ -101,6 +101,12 @@ pub(crate) struct ProjectFile {
     /// Copies of the modules (version 17).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modules: Vec<Module>,
+    /// Volumes of the concept phase (version 18).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub masses: Vec<Mass>,
+    /// Plot area for the masses' figures, m² (version 18).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plot_area: Option<f64>,
     /// Drawing layers (version 7).
     pub draw_layers: Vec<crate::drafting::DrawLayer>,
     /// Lines, arcs, texts and hatches of the views (version 7).
@@ -529,6 +535,52 @@ pub(crate) struct ModuleSource {
     pub path: String,
     pub stamp: String,
     pub content: serde_json::Value,
+}
+
+/// A volume of the concept phase (version 18).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Mass {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub shape: MassShapeOf,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub base_offset: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_height: Option<f64>,
+    pub material: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub building: Option<MassBuildingOf>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, tag = "kind", rename_all = "snake_case")]
+pub(crate) enum MassShapeOf {
+    Prism { outline: Vec<Xy> },
+    Sweep { path: Vec<Xy>, width: f64 },
+}
+
+/// The building a mass was turned into (version 18).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MassBuildingOf {
+    pub wall_type: u64,
+    pub ground_type: u64,
+    pub floor_type: u64,
+    pub roof_type: u64,
+    pub elements: Vec<u64>,
+    pub made_from: MassFrom,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MassFrom {
+    pub outline: Vec<Xy>,
+    pub base_offset: f64,
+    pub height: f64,
 }
 
 /// A copy of a module (version 17).
@@ -1751,6 +1803,42 @@ impl ProjectFile {
                     values: values_out(&t.values),
                 })
                 .collect(),
+            masses: p
+                .masses
+                .iter()
+                .map(|m| Mass {
+                    id: m.id.0,
+                    guid: m.guid.to_string(),
+                    name: m.name.clone(),
+                    level: m.level.0,
+                    shape: match &m.shape {
+                        core::MassShape::Prism(o) => MassShapeOf::Prism {
+                            outline: o.iter().copied().map(xy).collect(),
+                        },
+                        core::MassShape::Sweep { path, width } => MassShapeOf::Sweep {
+                            path: path.iter().copied().map(xy).collect(),
+                            width: *width,
+                        },
+                    },
+                    base_offset: m.base_offset,
+                    height: m.height,
+                    floor_height: m.floor_height,
+                    material: m.material.0,
+                    building: m.building.as_ref().map(|b| MassBuildingOf {
+                        wall_type: b.wall_type.0,
+                        ground_type: b.ground_type.0,
+                        floor_type: b.floor_type.0,
+                        roof_type: b.roof_type.0,
+                        elements: b.elements.clone(),
+                        made_from: MassFrom {
+                            outline: b.made_from.0.iter().copied().map(xy).collect(),
+                            base_offset: b.made_from.1,
+                            height: b.made_from.2,
+                        },
+                    }),
+                })
+                .collect(),
+            plot_area: p.plot_area,
             module_sources: p
                 .module_sources
                 .iter()
@@ -2087,6 +2175,8 @@ impl ProjectFile {
             objects: Vec::new(),
             module_sources: Vec::new(),
             modules: Vec::new(),
+            masses: Vec::new(),
+            plot_area: None,
             railings: self
                 .railings
                 .iter()
@@ -2356,6 +2446,41 @@ impl ProjectFile {
                 values,
             });
         }
+        for m in self.masses {
+            let element = format!("mass {} «{}»", m.id, m.name);
+            parts.masses.push(core::Mass {
+                id: core::MassId(m.id),
+                guid: guid(&element, &m.guid)?,
+                name: m.name,
+                level: core::LevelId(m.level),
+                shape: match m.shape {
+                    MassShapeOf::Prism { outline } => {
+                        core::MassShape::Prism(outline.into_iter().map(pt).collect())
+                    }
+                    MassShapeOf::Sweep { path, width } => core::MassShape::Sweep {
+                        path: path.into_iter().map(pt).collect(),
+                        width,
+                    },
+                },
+                base_offset: m.base_offset,
+                height: m.height,
+                floor_height: m.floor_height,
+                material: core::MaterialId(m.material),
+                building: m.building.map(|b| core::MassBuilding {
+                    wall_type: core::WallTypeId(b.wall_type),
+                    ground_type: core::SlabTypeId(b.ground_type),
+                    floor_type: core::SlabTypeId(b.floor_type),
+                    roof_type: core::SlabTypeId(b.roof_type),
+                    elements: b.elements,
+                    made_from: (
+                        b.made_from.outline.into_iter().map(pt).collect(),
+                        b.made_from.base_offset,
+                        b.made_from.height,
+                    ),
+                }),
+            });
+        }
+        parts.plot_area = self.plot_area;
         for s in self.module_sources {
             let element = format!("module {} «{}»", s.id, s.name);
             let text: std::sync::Arc<str> = crate::pretty(&s.content).into();

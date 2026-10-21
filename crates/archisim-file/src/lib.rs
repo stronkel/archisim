@@ -46,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 17;
+pub const CURRENT_VERSION: u32 = 18;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -259,8 +259,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // (`disciplines`); in older ones every element has its own.
             // 15 → 16: grid lines and footings (`grids`, `footings`);
             // older ones have none. 16 → 17: modules (`module_sources`,
-            // `modules`); older ones have none.
-            9..=16 => {
+            // `modules`); older ones have none. 17 → 18: concept volumes
+            // (`masses`, `plot_area`); older ones have none.
+            9..=17 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -865,6 +866,43 @@ mod tests {
         // The first wall is a bearing wall, by hand (version 15).
         m.set_discipline(first, Some(archisim_core::ElementDiscipline::Structure))
             .unwrap();
+        // A mass by floors turned into a building, and a band (version 18).
+        {
+            let mat = m.materials().next().unwrap().id;
+            m.set_plot_area(Some(500.0)).unwrap();
+            let mass = m
+                .add_mass(archisim_core::NewMass {
+                    name: "Masa 1".into(),
+                    level: levels[0],
+                    shape: archisim_core::MassShape::Prism(vec![
+                        Point2::new(30.0, 0.0),
+                        Point2::new(40.0, 0.0),
+                        Point2::new(40.0, 8.0),
+                        Point2::new(30.0, 8.0),
+                    ]),
+                    base_offset: 0.0,
+                    height: 6.0,
+                    floor_height: Some(3.0),
+                    material: mat,
+                })
+                .unwrap();
+            let wt = m.wall_types().next().unwrap().id;
+            let st = m.slab_types().next().unwrap().id;
+            m.mass_to_building(mass, wt, st, st, st).unwrap();
+            m.add_mass(archisim_core::NewMass {
+                name: "Pérgola".into(),
+                level: levels[0],
+                shape: archisim_core::MassShape::Sweep {
+                    path: vec![Point2::new(30.0, -3.0), Point2::new(40.0, -3.0)],
+                    width: 1.0,
+                },
+                base_offset: 2.5,
+                height: 0.3,
+                floor_height: None,
+                material: mat,
+            })
+            .unwrap();
+        }
         // A module placed twice, once mirrored (version 17).
         {
             let mut house = Model::new("Tipo");
@@ -1006,7 +1044,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 17", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 18", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1033,7 +1071,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 17"));
+        assert!(to_string(&opened).contains("\"version\": 18"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1204,7 +1242,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 17", "\"version\": 3", 1)
+            .replacen("\"version\": 18", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1266,7 +1304,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 17", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 18", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1709,7 +1747,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 17", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 18", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1721,7 +1759,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 17,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 18,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1767,11 +1805,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 17", "\"version\": 18"),
-            Err(FileError::TooNew { version: 18 })
+            edited("\"version\": 18", "\"version\": 19"),
+            Err(FileError::TooNew { version: 19 })
         ));
         assert!(matches!(
-            edited("\"version\": 17", "\"version\": 0"),
+            edited("\"version\": 18", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

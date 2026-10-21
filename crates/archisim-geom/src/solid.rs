@@ -39,6 +39,8 @@ pub enum SolidOwner {
     Railing(archisim_core::RailingId),
     Object(archisim_core::ObjectId),
     Footing(archisim_core::FootingId),
+    /// A volume of the concept phase.
+    Mass(archisim_core::MassId),
 }
 
 impl SolidOwner {
@@ -57,6 +59,7 @@ impl SolidOwner {
             SolidOwner::Railing(x) => x.0,
             SolidOwner::Object(x) => x.0,
             SolidOwner::Footing(x) => x.0,
+            SolidOwner::Mass(x) => x.0,
         }
     }
 }
@@ -1937,6 +1940,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for f in model.footings() {
         out.extend(footing_solids(model, f.id));
     }
+    for m in model.masses() {
+        out.extend(mass_solids(model, m.id));
+    }
     out.retain(|s| !s.triangles.is_empty());
     out
 }
@@ -1958,6 +1964,25 @@ pub fn footing_solids(model: &Model, id: archisim_core::FootingId) -> Vec<Solid>
     }]
 }
 
+/// The solid of a mass: its outline from its base up its height (a face,
+/// a centimetre thick so that it is seen). None once it is a building.
+pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
+    let Some(m) = model.mass(id) else {
+        return Vec::new();
+    };
+    // Turned into a building: the building shows it.
+    if m.building.is_some() {
+        return Vec::new();
+    }
+    let outline = m.outline();
+    let base = model.level(m.level).map_or(0.0, |l| l.elevation) + m.base_offset;
+    vec![Solid {
+        owner: SolidOwner::Mass(id),
+        material: m.material,
+        triangles: prism(&outline, base, base + m.height.max(0.01)),
+    }]
+}
+
 /// Solids of the elements on one level only.
 pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
     let on_level = |owner: SolidOwner| match owner {
@@ -1976,6 +2001,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
         SolidOwner::Footing(f) => model.footing(f).is_some_and(|f| f.level == level),
+        SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
     };
     model_solids(model)
         .into_iter()

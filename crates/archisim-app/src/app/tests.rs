@@ -3726,3 +3726,96 @@ fn masterplan_places_modules() {
     assert_eq!(h.model().modules().count(), 2);
     assert_eq!(h.model().module_sources().count(), 1);
 }
+
+/// Concepto: a rectangle face pushed up with the mouse, a mass by floors
+/// typed, a parallel contour on top, a band along a path, a guide, a
+/// material, and the mass turned into a building.
+#[test]
+fn concept_volumes_are_drawn_pushed_and_converted() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::{Action, Discipline, Pick};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -12.0), p(30.0, 16.0), 0.0);
+    h.app.set_discipline(Discipline::Concept);
+    h.app.pick(Pick::Concept(ConceptPick::Rect));
+    assert_eq!(h.app.tool, Tool::Mass);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(10.0, 8.0));
+    let face = h.model().masses().next().unwrap().id;
+    assert!(h.model().mass(face).unwrap().is_face());
+    // Empujar: taken, the mouse 4 m up the plan, clicked.
+    h.app.pick(Pick::Concept(ConceptPick::Push));
+    h.click_at(p(5.0, 4.0));
+    h.move_to(p(5.0, 8.0));
+    h.frame();
+    h.click_at(p(5.0, 8.0));
+    assert!((h.model().mass(face).unwrap().height - 4.0).abs() < 1e-6);
+    // Masa: four corners, then pushed to 9 m typed (whole floors).
+    h.app.pick(Pick::Concept(ConceptPick::Mass));
+    for c in [
+        p(14.0, 0.0),
+        p(24.0, 0.0),
+        p(24.0, 10.0),
+        p(14.0, 10.0),
+        p(14.0, 0.0),
+    ] {
+        h.click_at(c);
+    }
+    let mass = h
+        .model()
+        .masses()
+        .find(|m| m.floor_height.is_some())
+        .unwrap()
+        .id;
+    assert_eq!(h.model().mass(mass).unwrap().floors(), 3);
+    h.app.pick(Pick::Concept(ConceptPick::Push));
+    h.click_at(p(19.0, 5.0));
+    h.type_text("12000");
+    h.key(Key::Enter);
+    assert_eq!(h.model().mass(mass).unwrap().floors(), 4);
+    // Equidistancia: 1 m inside, on top.
+    h.app.pick(Pick::Concept(ConceptPick::Offset));
+    h.click_at(p(19.0, 5.0));
+    h.type_text("-1000");
+    h.key(Key::Enter);
+    assert_eq!(h.model().masses().count(), 3);
+    // Seguir: a band along two segments.
+    h.app.pick(Pick::Concept(ConceptPick::Follow));
+    h.click_at(p(0.0, -4.0));
+    h.click_at(p(10.0, -4.0));
+    h.click_at(p(10.0, -8.0));
+    h.key(Key::Enter);
+    assert!(h
+        .model()
+        .masses()
+        .any(|m| matches!(m.shape, archisim_core::MassShape::Sweep { .. })));
+    // Cinta: a guide.
+    h.app.pick(Pick::Concept(ConceptPick::Tape));
+    h.click_at(p(0.0, 12.0));
+    h.click_at(p(24.0, 12.0));
+    assert_eq!(h.model().drafts().count(), 1);
+    // Pintar.
+    let brick = h.model().materials().last().unwrap().id;
+    h.app.mass_settings.material = brick;
+    h.app.pick(Pick::Concept(ConceptPick::Paint));
+    h.click_at(p(2.0, 2.0));
+    assert_eq!(h.model().mass(face).unwrap().material, brick);
+    h.frame();
+    // Convertir: the mass selected becomes walls, slabs and a roof.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Mass(mass)].into_iter().collect();
+    h.frame();
+    h.app.pick(Pick::Action(Action::Convert));
+    assert_eq!(h.model().walls().count(), 16);
+    assert_eq!(h.model().levels().len(), 5);
+    assert!(!h.model().mass(mass).unwrap().building_outdated());
+    h.frame();
+    // The 3D draws the volumes.
+    assert!(archisim_geom::solid::model_solids(h.model())
+        .iter()
+        .any(|s| matches!(s.owner, archisim_geom::solid::SolidOwner::Mass(_))));
+}

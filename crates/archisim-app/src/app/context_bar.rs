@@ -28,6 +28,7 @@ enum MethodAct {
     Outline(Outline),
     Dim(DimMode),
     Footing(crate::editor::FootingMode),
+    MassMode(crate::editor::MassMode),
     /// Footings under the columns and walls of the level.
     FoundLevel,
     Command(&'static str),
@@ -174,6 +175,7 @@ fn element_name(e: &Element) -> &'static str {
         Element::Footing(_) => "Cimentación",
         Element::Grid(_) => "Eje",
         Element::Module(_) => "Módulo",
+        Element::Mass(_) => "Volumen",
     }
 }
 
@@ -259,6 +261,11 @@ impl ArchiSimApp {
                 Tool::Object => ("Objeto", None, "Varita", ""),
                 Tool::Grid => ("Eje", None, "Varita", ""),
                 Tool::Module => ("Módulo", None, "Varita", ""),
+                Tool::Mass => return Some(("Volumen", self.mass_methods())),
+                Tool::PushPull => ("Empujar", None, "Varita", ""),
+                Tool::MassOffset => ("Equidistancia", None, "Varita", ""),
+                Tool::Tape => ("Cinta", None, "Varita", ""),
+                Tool::Paint => ("Pintar", None, "Varita", ""),
                 Tool::Footing => return Some(("Cimentación", self.footing_methods())),
                 Tool::Arrow | Tool::Cad => return None,
             };
@@ -367,6 +374,48 @@ impl ArchiSimApp {
             ),
         ];
         Some((name, list))
+    }
+
+    fn mass_methods(&self) -> Vec<Method> {
+        use crate::editor::MassMode;
+        let mode = self.mass_settings.mode;
+        let m = |mark, name, hint, act, on| Method {
+            mark,
+            name,
+            hint,
+            act,
+            on,
+        };
+        vec![
+            m(
+                Mark::Icon(Icon::GeoPolygon),
+                "Polígono",
+                "Clic en cada esquina; clic en la primera o Intro para cerrar",
+                MethodAct::MassMode(MassMode::Polygon),
+                mode == MassMode::Polygon,
+            ),
+            m(
+                Mark::Icon(Icon::GeoRect),
+                "Rectángulo",
+                "Dos esquinas opuestas",
+                MethodAct::MassMode(MassMode::Rectangle),
+                mode == MassMode::Rectangle,
+            ),
+            m(
+                Mark::Icon(Icon::GeoCircle),
+                "Círculo",
+                "Centro y radio",
+                MethodAct::MassMode(MassMode::Circle),
+                mode == MassMode::Circle,
+            ),
+            m(
+                Mark::Icon(Icon::GeoChain),
+                "Camino",
+                "Seguir: un perfil a lo largo de un camino (doble clic para terminar)",
+                MethodAct::MassMode(MassMode::Path),
+                mode == MassMode::Path,
+            ),
+        ]
     }
 
     fn footing_methods(&self) -> Vec<Method> {
@@ -515,6 +564,7 @@ impl ArchiSimApp {
                 }
             }
             MethodAct::Footing(mode) => self.set_footing_mode(mode),
+            MethodAct::MassMode(mode) => self.set_mass_mode(mode),
             MethodAct::FoundLevel => self.found_level(),
             MethodAct::Command(name) => self.start_command(name),
             MethodAct::Fixed | MethodAct::None => {}

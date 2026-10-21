@@ -357,7 +357,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Tag(_)
             | Element::Footing(_)
             | Element::Grid(_)
-            | Element::Module(_) => {}
+            | Element::Module(_)
+            | Element::Mass(_) => {}
         }
     }
     v
@@ -904,6 +905,9 @@ pub(crate) fn move_selection(
             Element::Module(id) => {
                 model.edit_module(*id, |m| m.position = m.position + d)?;
             }
+            Element::Mass(id) => {
+                model.edit_mass(*id, |m| m.map_points(|p| p + d))?;
+            }
             Element::Room(_) | Element::Tag(_) => {
                 // Moved with walls, a room goes whole.
                 let walls_too = selection.iter().any(|x| matches!(x, Element::Wall(_)));
@@ -1276,6 +1280,23 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Module(new));
             }
+            Element::Mass(id) => {
+                let mut x = model
+                    .mass(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                x.map_points(|p| p + d);
+                let new = model.add_mass(archisim_core::NewMass {
+                    name: model.next_mass_name(x.floor_height.is_some()),
+                    level: x.level,
+                    shape: x.shape,
+                    base_offset: x.base_offset,
+                    height: x.height,
+                    floor_height: x.floor_height,
+                    material: x.material,
+                })?;
+                copies.insert(Element::Mass(new));
+            }
             Element::Section(id) => {
                 let s = model
                     .section(*id)
@@ -1486,6 +1507,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Footing(id) => model.footing(id).is_some(),
         Element::Grid(id) => model.grid(id).is_some(),
         Element::Module(id) => model.module(id).is_some(),
+        Element::Mass(id) => model.mass(id).is_some(),
     }
 }
 
@@ -1548,6 +1570,7 @@ fn level_of(
             Element::Footing(id) => model.footing(*id).map(|f| f.level),
             Element::Grid(_) => None,
             Element::Module(id) => model.module(*id).map(|m| m.level),
+            Element::Mass(id) => model.mass(*id).map(|m| m.level),
         }),
     }
 }

@@ -6,6 +6,38 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche, 5) · Interfaz por disciplinas, bloque I4: Concepto
+
+Rama `bloque/concepto` (sale de la de módulos; pull request para Antonio). Formato `.archisim` **versión 18**: volúmenes de concepto y superficie de la parcela. Los proyectos anteriores se abren igual. Sin cambios en el IFC (los volúmenes no se exportan, como las masas de Revit).
+
+**Hecho** (todas las fichas de Concepto funcionan)
+- **Línea, Rectángulo y Círculo** dibujan **caras** planas (un volumen de altura cero) para empujarlas. En la barra contextual se cambia el contorno: polígono, rectángulo, círculo o camino.
+- **Empujar**: clic en una cara o un volumen y el ratón hacia arriba lo sube (o se escribe la altura y Enter). Junto al cursor, la altura y, en una masa, sus plantas, la superficie construida y la edificabilidad.
+- **Volumen**: un prisma de la altura de Propiedades. **Masa**: un volumen por plantas (3 × 3 m por defecto); al empujarlo va de planta en planta.
+- **Seguir**: un perfil (ancho × alto) a lo largo de un camino (doble clic o Enter para terminar): pérgolas, muros de parcela, marquesinas.
+- **Equidistancia**: clic en un volumen y se dibuja un contorno paralelo dentro o fuera, encima de él, para empujarlo (áticos retranqueados).
+- **Cinta**: mide entre dos puntos y deja una **guía** en la capa «Guías» (discontinua, no se imprime).
+- **Pintar**: da a un volumen el material elegido en Propiedades. La plantilla trae «Volumen de concepto» (azul claro).
+- **Convertir** (o «Convertir en edificio» en Propiedades del volumen): muros exteriores en sus caras (la cara exterior en el contorno), un forjado en cada planta (solera en la baja) y una cubierta plana arriba, creando las plantas que falten. Se acuerda de lo que hizo: si cambias el volumen, Propiedades avisa y **Actualizar el edificio** lo rehace. Convertido, el volumen solo se ve como contorno discontinuo en planta.
+- **Superficies** de cada volumen en Propiedades: huella, construida, edificabilidad (m²/m²) y ocupación (%), con la **superficie de la parcela** que se escribe en las propiedades de las herramientas de Concepto.
+- Los volúmenes se ven en planta (relleno claro de su material, con nombre, plantas y m²), en sección y en 3D; se mueven, copian, giran, escalan y reflejan; la ficha **Forma** de Urbanismo hace también volúmenes (edificios vecinos).
+- La urbanización de la demo trae una masa de tres plantas (1.008 m², edificabilidad 0,56) en una parcela de 1.800 m².
+
+**Pendiente**
+- Empujar se hace desde la planta; en el 3D aún no se arrastran las caras.
+- Las caras no se pegan entre sí como en SketchUp (cada volumen es un prisma propio) ni se empujan caras laterales.
+- Convertir solo hace muros, forjados y cubierta plana (ni huecos ni cubiertas inclinadas).
+- La parcela es una superficie escrita a mano; con el bloque de Urbanismo saldrá de la parcela dibujada.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo, disciplina **Concepto** (la barra de la izquierda). **Rectángulo**: dos clics. **Empujar**: clic en él y sube el ratón; clic para dejarlo.
+2. **Masa**: dibuja un contorno; luego Empujar y escribe 12000 + Enter: cuatro plantas. Mira en Propiedades la superficie construida; escribe la superficie de la parcela en las propiedades de la herramienta y mira la edificabilidad.
+3. **Equidistancia** sobre la masa con −2000 + Enter y empuja esa cara 3000: un ático retranqueado.
+4. Selecciona la masa y pulsa **Convertir**: muros, forjados y cubierta. Cambia sus plantas a 5 y pulsa **Actualizar el edificio**.
+5. Abre `out/demo-masterplan.archisim` (tras `cargo run -p archisim-cli -- demo out/`): la masa «Bloque de viviendas» con sus cifras.
+
+---
+
 ## 2026-10-20 (noche, 4) · Interfaz por disciplinas, bloque I5: módulos
 
 Rama `bloque/modulos` (sale de la de ejes y cimentación; pull request para Antonio). Formato `.archisim` **versión 17**: módulos. Los proyectos anteriores se abren igual.

@@ -133,10 +133,12 @@ pub enum Category {
     Grids,
     /// Footings and tie beams.
     Foundations,
+    /// Volumes of the concept phase.
+    Masses,
 }
 
 impl Category {
-    pub const ALL: [Category; 18] = [
+    pub const ALL: [Category; 19] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
@@ -148,6 +150,7 @@ impl Category {
         Category::Railings,
         Category::Objects,
         Category::Terrain,
+        Category::Masses,
         Category::Dimensions,
         Category::LevelMarks,
         Category::SectionMarks,
@@ -177,6 +180,7 @@ impl Category {
             Category::SectionMarks => "section_marks",
             Category::Grids => "grids",
             Category::Foundations => "foundations",
+            Category::Masses => "masses",
         }
     }
 
@@ -204,6 +208,7 @@ impl Category {
             Category::SectionMarks => "Marcas de sección",
             Category::Grids => "Ejes",
             Category::Foundations => "Cimentación",
+            Category::Masses => "Volúmenes (concepto)",
         }
     }
 }

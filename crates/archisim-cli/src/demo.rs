@@ -881,7 +881,8 @@ pub fn build() -> Result<Document, ModelError> {
 
 /// An urbanisation that places the demo house as a module three times:
 /// two side by side (the second mirrored, so their entrances face each
-/// other) and one turned, across the street (I5).
+/// other) and one turned, across the street (I5), and the mass of a block
+/// still to design (I4).
 pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::Error>> {
     let text = std::fs::read_to_string(house)?;
     let (text, stamp, module) = archisim_file::read_module(&text)?;
@@ -906,6 +907,28 @@ pub fn masterplan(house: &std::path::Path) -> Result<Model, Box<dyn std::error::
             mirror,
         })?;
     }
+    // The concept of the block still to build across the street (I4): a
+    // mass of three floors on a plot of 1.800 m².
+    m.set_plot_area(Some(1800.0))?;
+    let concrete = m
+        .materials()
+        .find(|x| x.category == "concept")
+        .map(|x| x.id)
+        .ok_or(ModelError::InvalidShape("concept material missing"))?;
+    m.add_mass(archisim_core::NewMass {
+        name: "Bloque de viviendas".into(),
+        level,
+        shape: archisim_core::MassShape::Prism(vec![
+            Point2::new(20.0, -30.0),
+            Point2::new(44.0, -30.0),
+            Point2::new(44.0, -16.0),
+            Point2::new(20.0, -16.0),
+        ]),
+        base_offset: 0.0,
+        height: 9.0,
+        floor_height: Some(3.0),
+        material: concrete,
+    })?;
     Ok(m)
 }
 

@@ -316,6 +316,10 @@ impl ArchiSimApp {
             || !self.railing_points.is_empty()
             || self.curtain_anchor.is_some()
             || self.section_tool.anchor.is_some()
+            || self.mass_tool.is_drawing()
+            || self.concept.is_drawing()
+            || self.grid_anchor.is_some()
+            || self.footing_anchor.is_some()
     }
 
     pub(super) fn command_keys(

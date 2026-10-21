@@ -14,6 +14,7 @@ use crate::family::{
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
+mod concept;
 mod curtain;
 mod disciplines;
 mod foundations;
@@ -29,6 +30,7 @@ mod sections;
 mod site;
 mod stairs;
 mod structure;
+pub use concept::*;
 pub use curtain::*;
 pub use disciplines::*;
 pub use foundations::*;
@@ -1181,6 +1183,10 @@ pub struct ModelParts {
     /// Module files kept in the project, and the copies placed.
     pub module_sources: Vec<ModuleSource>,
     pub modules: Vec<ModulePlacement>,
+    /// Volumes of the concept phase, and the plot area their figures are
+    /// worked out with.
+    pub masses: Vec<Mass>,
+    pub plot_area: Option<f64>,
     /// Radians, clockwise from the plan's up.
     pub true_north: f64,
     /// The uses rooms of this project are offered (empty: the default
@@ -1269,6 +1275,8 @@ pub struct Model {
     objects: BTreeMap<ObjectId, Object>,
     module_sources: BTreeMap<ModuleSourceId, ModuleSource>,
     modules: BTreeMap<ModuleId, ModulePlacement>,
+    masses: BTreeMap<MassId, Mass>,
+    plot_area: Option<f64>,
     /// True north: radians, clockwise from the plan's up (+Y).
     true_north: f64,
     pub(crate) room_usages: Vec<String>,
@@ -1328,6 +1336,8 @@ impl Model {
             objects: BTreeMap::new(),
             module_sources: BTreeMap::new(),
             modules: BTreeMap::new(),
+            masses: BTreeMap::new(),
+            plot_area: None,
             true_north: 0.0,
             room_usages: Vec::new(),
             georeference: None,
@@ -3711,6 +3721,8 @@ impl Model {
             objects: self.objects.values().cloned().collect(),
             module_sources: self.module_sources.values().cloned().collect(),
             modules: self.modules.values().cloned().collect(),
+            masses: self.masses.values().cloned().collect(),
+            plot_area: self.plot_area,
             true_north: self.true_north,
             room_usages: self.room_usages.clone(),
             georeference: self.georeference.clone(),
@@ -4012,6 +4024,13 @@ impl Model {
         model.restore_railings(parts.railings, &mut claim)?;
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
+        model.restore_masses(parts.masses, &mut claim)?;
+        model
+            .set_plot_area(parts.plot_area)
+            .map_err(|error| RestoreError {
+                element: "plot area".into(),
+                error,
+            })?;
         model
             .set_true_north(parts.true_north)
             .map_err(|error| RestoreError {
