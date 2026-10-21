@@ -29,7 +29,7 @@ Herramientas nuevas en la sección **Estructura**:
 | **Viga** | Por dos puntos o entre pilares; sección; canto por debajo de la cara superior del forjado | `IfcBeam` |
 | **Forjado estructural** | El forjado actual con su capa estructural marcada: unidireccional, reticular, losa maciza, chapa colaborante (como tipo) | `IfcSlab` con `LoadBearing` |
 | **Muro de carga y de contención** | Los muros actuales con la función estructural marcada; contención con trasdós y drenaje | `IfcWall` con `LoadBearing` |
-| **Cimentación** | **Zapata aislada** bajo un pilar (se coloca con un clic en el pilar y lo sigue), **zapata corrida** bajo un muro (sigue el muro), **losa**, **viga de atado** y de centrado entre zapatas; más adelante encepados y pilotes | `IfcFooting` (`PAD_FOOTING`, `STRIP_FOOTING`, `FOOTING_BEAM`), `IfcPile` |
+| **Cimentación** ✅ (20/10/2026) | **Zapata aislada** bajo un pilar (se coloca con un clic en el pilar y lo sigue), **zapata corrida** bajo un muro (sigue el muro), **losa**, **viga de atado** y de centrado entre zapatas; más adelante encepados y pilotes | `IfcFooting` (`PAD_FOOTING`, `STRIP_FOOTING`, `FOOTING_BEAM`), `IfcPile` |
 
 Reglas de la casa:
 

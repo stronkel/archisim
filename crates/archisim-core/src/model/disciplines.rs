@@ -154,7 +154,10 @@ impl Model {
                 .is_some_and(|t| self.carries(&t.layers));
             return Some(if carries { Structure } else { Architecture });
         }
-        if self.columns.contains_key(&ColumnId(id)) || self.beams.contains_key(&BeamId(id)) {
+        if self.columns.contains_key(&ColumnId(id))
+            || self.beams.contains_key(&BeamId(id))
+            || self.footings.contains_key(&FootingId(id))
+        {
             return Some(Structure);
         }
         if self.terrains.contains_key(&TerrainId(id)) {

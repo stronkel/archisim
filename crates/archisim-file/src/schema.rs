@@ -62,6 +62,12 @@ pub(crate) struct ProjectFile {
     /// Section and elevation lines (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sections: Vec<Section>,
+    /// Setting-out grid lines (version 16).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grids: Vec<Grid>,
+    /// Footings and tie beams (version 16).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub footings: Vec<Footing>,
     /// Pitched roofs (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roofs: Vec<Roof>,
@@ -493,6 +499,109 @@ pub(crate) struct Section {
     /// Draws its heights (version 10; absent: yes).
     #[serde(default = "yes_heights", skip_serializing_if = "is_yes")]
     pub heights: bool,
+}
+
+/// A setting-out grid line (version 16).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Grid {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub start: Xy,
+    pub end: Xy,
+}
+
+/// A footing (version 16): `pad` at a point (under a column), `strip`
+/// along a line (under a wall) or `tie_beam` between two points.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Footing {
+    pub id: u64,
+    pub guid: String,
+    pub level: u64,
+    pub kind: FootingKindOf,
+    pub material: u64,
+    pub width: f64,
+    pub depth: f64,
+    pub top_offset: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, tag = "shape", rename_all = "snake_case")]
+pub(crate) enum FootingKindOf {
+    Pad {
+        position: Xy,
+        length: f64,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        rotation: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        column: Option<u64>,
+    },
+    Strip {
+        start: Xy,
+        end: Xy,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wall: Option<u64>,
+    },
+    TieBeam {
+        start: Xy,
+        end: Xy,
+    },
+}
+
+fn footing_kind_out(k: core::FootingKind) -> FootingKindOf {
+    match k {
+        core::FootingKind::Pad {
+            position,
+            length,
+            rotation,
+            column,
+        } => FootingKindOf::Pad {
+            position: xy(position),
+            length,
+            rotation,
+            column: column.map(|c| c.0),
+        },
+        core::FootingKind::Strip { start, end, wall } => FootingKindOf::Strip {
+            start: xy(start),
+            end: xy(end),
+            wall: wall.map(|w| w.0),
+        },
+        core::FootingKind::TieBeam { start, end } => FootingKindOf::TieBeam {
+            start: xy(start),
+            end: xy(end),
+        },
+    }
+}
+
+fn point_of(p: Xy) -> Point2 {
+    Point2::new(p[0], p[1])
+}
+
+fn footing_kind_in(k: &FootingKindOf) -> core::FootingKind {
+    match *k {
+        FootingKindOf::Pad {
+            position,
+            length,
+            rotation,
+            column,
+        } => core::FootingKind::Pad {
+            position: point_of(position),
+            length,
+            rotation,
+            column: column.map(core::ColumnId),
+        },
+        FootingKindOf::Strip { start, end, wall } => core::FootingKind::Strip {
+            start: point_of(start),
+            end: point_of(end),
+            wall: wall.map(core::WallId),
+        },
+        FootingKindOf::TieBeam { start, end } => core::FootingKind::TieBeam {
+            start: point_of(start),
+            end: point_of(end),
+        },
+    }
 }
 
 fn yes_heights() -> bool {
@@ -1544,6 +1653,31 @@ impl ProjectFile {
                     heights: s.heights,
                 })
                 .collect(),
+            grids: p
+                .grids
+                .into_iter()
+                .map(|g| Grid {
+                    id: g.id.0,
+                    guid: g.guid.to_string(),
+                    name: g.name,
+                    start: xy(g.start),
+                    end: xy(g.end),
+                })
+                .collect(),
+            footings: p
+                .footings
+                .into_iter()
+                .map(|f| Footing {
+                    id: f.id.0,
+                    guid: f.guid.to_string(),
+                    level: f.level.0,
+                    kind: footing_kind_out(f.kind),
+                    material: f.material.0,
+                    width: f.width,
+                    depth: f.depth,
+                    top_offset: f.top_offset,
+                })
+                .collect(),
             roofs: p
                 .roofs
                 .into_iter()
@@ -1800,6 +1934,35 @@ impl ProjectFile {
                     heights: s.heights,
                 })
                 .collect(),
+            grids: self
+                .grids
+                .iter()
+                .map(|g| {
+                    Ok(core::GridLine {
+                        id: core::GridId(g.id),
+                        guid: guid(&format!("grid line {}", g.id), &g.guid)?,
+                        name: g.name.clone(),
+                        start: pt(g.start),
+                        end: pt(g.end),
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
+            footings: self
+                .footings
+                .iter()
+                .map(|f| {
+                    Ok(core::Footing {
+                        id: core::FootingId(f.id),
+                        guid: guid(&format!("footing {}", f.id), &f.guid)?,
+                        level: core::LevelId(f.level),
+                        kind: footing_kind_in(&f.kind),
+                        material: core::MaterialId(f.material),
+                        width: f.width,
+                        depth: f.depth,
+                        top_offset: f.top_offset,
+                    })
+                })
+                .collect::<Result<Vec<_>, FileError>>()?,
             roofs: self
                 .roofs
                 .iter()

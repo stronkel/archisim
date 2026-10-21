@@ -41,6 +41,8 @@ pub struct SectionDrawing {
     /// Height dimensions: the points measured (vertical, along x = the
     /// first point's) and where the dimension line goes (x).
     heights: Vec<(Vec<Point2>, f64)>,
+    /// Grid lines it crosses: distance along its line and name.
+    grids: Vec<(f64, String)>,
     pub lo: Point2,
     pub hi: Point2,
     pub title: String,
@@ -184,6 +186,15 @@ impl SectionDrawing {
 impl SectionDrawing {
     /// How far right of the drawing its level labels reach at a scale
     /// (they start a metre past it), metres.
+    /// How far above its top the grid bubbles reach, model metres.
+    pub fn grids_reach(&self, scale: f64) -> f64 {
+        if self.grids.is_empty() {
+            0.0
+        } else {
+            (2.0 * crate::grids::BUBBLE_RADIUS + 1.0) * scale / 1000.0
+        }
+    }
+
     pub fn labels_reach(&self, scale: f64) -> f64 {
         let k = scale / 1000.0;
         let h = annotate::TEXT_HEIGHT * k;
@@ -407,6 +418,10 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         d.lo = Point2::new(0.0, 0.0);
         d.hi = Point2::new(o.distance(sec.end), 3.0);
     }
+    d.grids = crate::grids::grids_crossing(model, sec.start, sec.end)
+        .into_iter()
+        .filter(|(x, _)| *x >= d.lo.x - 1e-6 && *x <= d.hi.x + 1e-6)
+        .collect();
     d
 }
 
@@ -1016,6 +1031,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
     }
     s.push_str("</g>\n");
 
+    crate::grids::draw_section_grids(&mut s, &d.grids, d.lo.y, d.hi.y, k);
     // Levels.
     if !d.heights.is_empty() {
         s.push_str("<g id=\"heights\">\n");

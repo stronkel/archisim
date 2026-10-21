@@ -194,6 +194,14 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
             layer(grava, 0.150, LayerFunction::Substrate),
         ],
     )?;
+    m.add_slab_type(
+        "Losa de cimentación HA 50",
+        SlabFunction::BaseSlab,
+        vec![
+            layer(hormigon, 0.500, LayerFunction::Structure),
+            layer(hormigon, 0.100, LayerFunction::Substrate),
+        ],
+    )?;
     let floor_slab = m.add_slab_type(
         "Forjado de planta HA 30",
         SlabFunction::Floor,
@@ -1059,7 +1067,7 @@ mod tests {
         assert_eq!(m.levels().len(), 1);
         assert_eq!(m.levels()[0].elevation, 0.0);
         assert_eq!(m.wall_types().count(), 3);
-        assert_eq!(m.slab_types().count(), 4);
+        assert_eq!(m.slab_types().count(), 5);
         // With the studio's: 8 doors and 8 windows more.
         assert_eq!(m.opening_types().filter(|t| t.is_door()).count(), 14);
         assert_eq!(m.opening_types().filter(|t| t.is_window()).count(), 13);

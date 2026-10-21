@@ -192,13 +192,15 @@ pub fn transform(
             | Element::Terrain(_)
             | Element::CurtainWall(_)
             | Element::Railing(_)
-            | Element::Object(_) => {}
+            | Element::Object(_)
+            | Element::Footing(_)
+            | Element::Grid(_) => {}
         }
     }
     Ok(out)
 }
 
-/// The elements of phase 2 (columns, beams, roofs, stairs…) moved, copied
+/// The elements of phase 2 (columns, beams, footings, grid lines, roofs, stairs…) moved, copied
 /// or turned with the 2D editing commands; they are not scaled or
 /// mirrored.
 fn transform_phase_2(
@@ -223,6 +225,8 @@ fn transform_phase_2(
                     | Element::CurtainWall(_)
                     | Element::Railing(_)
                     | Element::Object(_)
+                    | Element::Footing(_)
+                    | Element::Grid(_)
             )
         })
         .collect();
@@ -242,7 +246,7 @@ fn transform_phase_2(
     }
     if t.is_mirror() || (t.factor() - 1.0).abs() > 1e-9 {
         return Err(ModelError::InvalidShape(
-            "columns, beams, roofs, stairs, curtain walls, railings, objects, terrains and sections can be moved, copied or rotated, not scaled or mirrored",
+            "columns, beams, footings, grid lines, roofs, stairs, curtain walls, railings, objects, terrains and sections can be moved, copied or rotated, not scaled or mirrored",
         ));
     }
     // A turn: the copies are made in place and then turned.
@@ -280,6 +284,13 @@ fn transform_phase_2(
                 c.end = t.apply(c.end);
             })?,
             Element::Railing(id) => model.edit_railing(id, |r| pts(&mut r.path))?,
+            Element::Footing(id) => {
+                crate::drag::place_footing(model, id, &|p| t.apply(p), turn, selection)?
+            }
+            Element::Grid(id) => model.edit_grid(id, |g| {
+                g.start = t.apply(g.start);
+                g.end = t.apply(g.end);
+            })?,
             Element::Stair(id) => model.edit_stair(id, |x| pts(&mut x.path))?,
             Element::Roof(id) => model.edit_roof(id, |r| pts(&mut r.outline))?,
             Element::Terrain(id) => model.edit_terrain(id, |x| {

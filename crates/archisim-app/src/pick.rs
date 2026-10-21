@@ -39,6 +39,10 @@ pub enum Element {
     Room(archisim_core::RoomId),
     /// A tag of a door, window, wall or room.
     Tag(archisim_core::TagId),
+    /// A footing or tie beam.
+    Footing(archisim_core::FootingId),
+    /// A setting-out grid line (seen on every level).
+    Grid(archisim_core::GridId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -110,7 +114,20 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         }),
         Element::Room(id) => model.room(id).map(|r| r.outline.clone()),
         Element::Tag(id) => model.tag(id).map(|t| tag_box(model, t, paper_k()).to_vec()),
+        Element::Footing(id) => model.footing(id).map(|f| f.outline()),
+        Element::Grid(id) => model.grid(id).map(grid_outline),
     }
+}
+
+/// A band along a grid line, with its bubbles at both ends.
+fn grid_outline(g: &archisim_core::GridLine) -> Vec<Point2> {
+    let r = archisim_plan::grids::BUBBLE_RADIUS * MM();
+    let u = (g.end - g.start)
+        .normalized()
+        .unwrap_or(Point2::new(1.0, 0.0));
+    let n = u.perp_left() * r;
+    let (a, b) = (g.start - u * (2.0 * r), g.end + u * (2.0 * r));
+    vec![a - n, b - n, b + n, a + n]
 }
 
 /// A thin band round a railing's line, there and back.
@@ -345,6 +362,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
         v.extend(by_wall.remove(&w.id).unwrap_or_default());
     }
     v.extend(model.sections().map(|s| Element::Section(s.id)));
+    v.extend(model.grids().map(|g| Element::Grid(g.id)));
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(
@@ -362,6 +380,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
+    v.extend(
+        model
+            .footings_on_level(level)
+            .map(|f| Element::Footing(f.id)),
+    );
     v.extend(
         model
             .terrains_on_level(level)
@@ -400,7 +423,9 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Terrain(_)
         | Element::CurtainWall(_)
         | Element::Railing(_)
-        | Element::Object(_) => None,
+        | Element::Object(_)
+        | Element::Footing(_)
+        | Element::Grid(_) => None,
     }
 }
 
@@ -428,6 +453,7 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Dimension(_)
         | Element::Mark(_)
         | Element::Section(_)
+        | Element::Grid(_)
         | Element::Draft(_)
         | Element::Tag(_) => 0,
         Element::Opening(_) => 1,
@@ -440,7 +466,9 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Stair(_) => 1,
         Element::Room(_) => 3,
         Element::Slab(_) => 4,
-        Element::Terrain(_) => 5,
+        // Under the floor: after the slab.
+        Element::Footing(_) => 5,
+        Element::Terrain(_) => 6,
     };
     let k = paper_k();
     elements_on_level(model, level)
@@ -534,6 +562,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::CurtainWall(id) => Element::CurtainWall(id),
         SolidOwner::Railing(id) => Element::Railing(id),
         SolidOwner::Object(id) => Element::Object(id),
+        SolidOwner::Footing(id) => Element::Footing(id),
     }
 }
 
@@ -553,6 +582,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::CurtainWall(id) => SolidOwner::CurtainWall(id),
         Element::Railing(id) => SolidOwner::Railing(id),
         Element::Object(id) => SolidOwner::Object(id),
+        Element::Footing(id) => SolidOwner::Footing(id),
         _ => return None,
     })
 }

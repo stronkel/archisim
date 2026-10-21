@@ -56,6 +56,7 @@ impl ArchiSimApp {
         self.draw_slab_preview(&painter, rect);
         self.draw_opening_preview(&painter, rect);
         self.draw_member_preview(&painter, rect);
+        self.draw_foundation_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
@@ -102,7 +103,9 @@ impl ArchiSimApp {
             | Tool::Terrain
             | Tool::CurtainWall
             | Tool::Railing
-            | Tool::Object => CursorIcon::Crosshair,
+            | Tool::Object
+            | Tool::Grid
+            | Tool::Footing => CursorIcon::Crosshair,
             Tool::Cad => match self.cad_want() {
                 Some(crate::cad::Want::Pick) => CursorIcon::Cell,
                 Some(crate::cad::Want::Select) if self.hover.is_some() => CursorIcon::PointingHand,
@@ -356,9 +359,13 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
-            Tool::Column | Tool::Beam => {
+            Tool::Column | Tool::Beam | Tool::Grid | Tool::Footing => {
                 let mut s = self.snap_at(raw, reach, &[], &BTreeSet::new());
-                if let Some(a) = self.beam_tool.anchor.filter(|_| self.tool == Tool::Beam) {
+                let anchor = match self.tool {
+                    Tool::Beam => self.beam_tool.anchor,
+                    _ => self.foundation_anchor(),
+                };
+                if let Some(a) = anchor {
                     if ctx.input(|i| i.modifiers.shift) {
                         s = constrain(a, s);
                     } else {
@@ -605,6 +612,11 @@ impl ArchiSimApp {
                 Tool::Door | Tool::Window | Tool::Column | Tool::Object => {
                     self.set_tool(Tool::Arrow)
                 }
+                Tool::Grid | Tool::Footing => {
+                    if !self.foundation_finish() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -837,6 +849,18 @@ impl ArchiSimApp {
                     if let Some(c) = self.cursor {
                         self.object_click(c.point);
                     }
+                }
+            }
+            Tool::Grid | Tool::Footing => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.foundation_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary)
+                    || response.double_clicked_by(PointerButton::Primary)
+                {
+                    self.foundation_finish();
                 }
             }
             Tool::Railing => {
@@ -1596,6 +1620,7 @@ impl ArchiSimApp {
             Tool::Wall => self.wall_tool.anchor(),
             Tool::Slab => self.slab_tool.anchor(),
             Tool::Beam => self.beam_tool.anchor,
+            Tool::Grid | Tool::Footing => self.foundation_anchor(),
             Tool::Section => self.section_tool.anchor,
             Tool::CurtainWall => self.curtain_anchor,
             Tool::Railing => self.railing_points.last().copied(),
@@ -1625,6 +1650,7 @@ impl ArchiSimApp {
             Tool::Section => self.section_tool.anchor.into_iter().collect(),
             Tool::CurtainWall => self.curtain_anchor.into_iter().collect(),
             Tool::Beam => self.beam_tool.anchor.into_iter().collect(),
+            Tool::Grid | Tool::Footing => self.foundation_anchor().into_iter().collect(),
             _ => Vec::new(),
         }
     }

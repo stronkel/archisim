@@ -70,6 +70,8 @@ impl ArchiSimApp {
             [Element::Object(id)] => self.object_properties(ui, *id),
             [Element::Room(id)] => self.room_properties(ui, *id),
             [Element::Tag(id)] => self.tag_properties(ui, *id),
+            [Element::Footing(id)] => self.footing_properties(ui, *id),
+            [Element::Grid(id)] => self.grid_properties(ui, *id),
             many => self.many_properties(ui, many),
         }
         if let [e] = selection.as_slice() {
@@ -224,6 +226,8 @@ impl ArchiSimApp {
             Tool::CurtainWall => self.curtain_tool_properties(ui),
             Tool::Railing => self.railing_tool_properties(ui),
             Tool::Object => self.object_tool_properties(ui),
+            Tool::Grid => self.grid_tool_properties(ui),
+            Tool::Footing => self.footing_tool_properties(ui),
             Tool::Cad => self.cad_tool_properties(ui),
         }
     }

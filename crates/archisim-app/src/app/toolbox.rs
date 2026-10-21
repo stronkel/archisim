@@ -140,6 +140,8 @@ pub enum Pick {
     LevelMark,
     /// The slab tool drawing holes through slabs.
     SlabHole,
+    /// The slab tool with the raft foundation type.
+    Raft,
     /// An action, not a tool: it opens or makes something.
     Action(Action),
     /// A 2D drafting or editing command (AutoCAD's), by its name.
@@ -188,8 +190,6 @@ const fn tile(
 }
 
 const CONCEPT_LATER: &str = "el bloque I4 (disciplina Concepto)";
-const GRID_LATER: &str = "los ejes y rejillas de replanteo";
-const FOOTING_LATER: &str = "la cimentación (docs/DISCIPLINAS.md)";
 const SERVICES_LATER: &str = "las herramientas de instalaciones (MEP)";
 const SITE_LATER: &str = "el urbanismo (docs/DISCIPLINAS.md)";
 const TEAM_LATER: &str = "el trabajo en equipo (4.6, carpeta compartida en Google Drive)";
@@ -266,10 +266,10 @@ const CONCEPT: &[Tile] = &[
         "Dar un material a una cara",
     ),
     tile(
-        Pick::Later(GRID_LATER),
+        Pick::Tool(Tool::Grid),
         Glyph::Grid,
         "Ejes",
-        "",
+        "X",
         "Ejes de replanteo con su numeración",
     ),
     tile(
@@ -360,10 +360,10 @@ const ARCHITECTURE: &[Tile] = &[
         "Locales (IfcSpace): clic dentro de un recinto (superficie útil), polígono o rectángulo; número, nombre y uso",
     ),
     tile(
-        Pick::Later(GRID_LATER),
+        Pick::Tool(Tool::Grid),
         Glyph::Grid,
         "Ejes",
-        "",
+        "X",
         "Ejes de replanteo con su numeración",
     ),
 ];
@@ -398,19 +398,13 @@ const STRUCTURE: &[Tile] = &[
         "Muros portantes (la herramienta Muro con un tipo portante)",
     ),
     tile(
-        Pick::Later(FOOTING_LATER),
+        Pick::Tool(Tool::Footing),
         Glyph::Footing,
         "Zapata",
-        "",
+        "A",
         "Zapatas aisladas bajo pilares y corridas bajo muros",
     ),
-    tile(
-        Pick::Later(FOOTING_LATER),
-        Glyph::Raft,
-        "Losa",
-        "",
-        "Losa de cimentación",
-    ),
+    tile(Pick::Raft, Glyph::Raft, "Losa", "", "Losa de cimentación"),
     tile(
         Pick::SlabHole,
         Glyph::Opening,
@@ -419,10 +413,10 @@ const STRUCTURE: &[Tile] = &[
         "Huecos en forjados: patinillos, escaleras, lucernarios",
     ),
     tile(
-        Pick::Later(GRID_LATER),
+        Pick::Tool(Tool::Grid),
         Glyph::Grid,
         "Ejes",
-        "",
+        "X",
         "Ejes de replanteo con su numeración",
     ),
 ];
@@ -975,14 +969,25 @@ pub fn search(text: &str) -> Vec<Found> {
     ranked.into_iter().map(|(_, f)| f).collect()
 }
 
+/// The slab type of raft foundations: the first whose name starts with
+/// «Losa de cimentación».
+pub(super) fn raft_type(model: &archisim_core::Model) -> Option<archisim_core::SlabTypeId> {
+    model
+        .slab_types()
+        .find(|t| t.name.to_lowercase().starts_with("losa de cimentación"))
+        .map(|t| t.id)
+}
+
 impl ArchiSimApp {
     /// Whether a tile is the tool in use (`None`: not there yet).
     fn picked(&self, pick: Pick) -> Option<bool> {
         let level_marks = self.dim_settings.mode == DimMode::LevelMark;
         let holes = self.slab_settings.hole;
+        let raft = raft_type(self.ed.model()) == Some(self.slab_settings.slab_type);
         match pick {
             Pick::Tool(Tool::Dimension) => Some(self.tool == Tool::Dimension && !level_marks),
-            Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes),
+            Pick::Tool(Tool::Slab) => Some(self.tool == Tool::Slab && !holes && !raft),
+            Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft),
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
             Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
@@ -1049,6 +1054,17 @@ impl ArchiSimApp {
                 self.slab_settings.hole = true;
                 self.set_tool(Tool::Slab);
             }
+            Pick::Raft => match raft_type(self.ed.model()) {
+                Some(t) => {
+                    self.slab_settings.hole = false;
+                    self.slab_settings.slab_type = t;
+                    self.set_tool(Tool::Slab);
+                    self.say("Losa de cimentación: dibuja su contorno (o varita dentro de los muros).");
+                }
+                None => self.complain(
+                    "El proyecto no tiene un tipo de losa de cimentación: crea un tipo de forjado «Losa de cimentación…» en Tipos y materiales.",
+                ),
+            },
             Pick::Action(a) => self.act(a),
             Pick::Command(name) => self.start_command(name),
             Pick::Later(what) => self.say(format!("Esta herramienta llegará con {what}.")),

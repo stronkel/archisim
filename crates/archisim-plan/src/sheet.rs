@@ -87,7 +87,7 @@ fn drawing_extent(d: &crate::section::SectionDrawing, scale: f64) -> (Point2, Po
     let m = 5.0 * k;
     (
         d.lo - Point2::new(m, m),
-        d.hi + Point2::new(m + d.labels_reach(scale), m),
+        d.hi + Point2::new(m + d.labels_reach(scale), m + d.grids_reach(scale)),
     )
 }
 

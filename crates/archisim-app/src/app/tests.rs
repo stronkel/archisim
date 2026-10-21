@@ -3600,3 +3600,60 @@ fn cte_window_checks_the_model() {
     let report = h.app.cte.current(&h.app.ed);
     assert_eq!(report.levels[0].people, 0);
 }
+
+/// Grid lines by two clicks, named 1, 2… and A, B…; a pad where it is
+/// clicked, a strip under the wall clicked, and the rest of the walls
+/// founded at once from the contextual bar.
+#[test]
+fn grids_and_footings_are_drawn() {
+    use archisim_core::FootingKind;
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("x");
+    assert_eq!(h.app.tool, Tool::Grid);
+    h.click_at(p(-1.0, -1.5));
+    h.click_at(p(-1.0, 10.5));
+    h.click_at(p(-2.0, 4.5));
+    h.click_at(p(14.0, 4.5));
+    let names: Vec<String> = h.model().grids().map(|g| g.name.clone()).collect();
+    assert_eq!(names, ["1", "A"]);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.type_text("a");
+    assert_eq!(h.app.tool, Tool::Footing);
+    h.click_at(p(6.0, 4.5));
+    assert!(matches!(
+        h.model().footings().next().unwrap().kind,
+        FootingKind::Pad { column: None, .. }
+    ));
+    h.app.choose_method("Corrida");
+    h.click_at(p(6.0, 0.0));
+    let strips = |h: &Harness| {
+        h.model()
+            .footings()
+            .filter(|f| matches!(f.kind, FootingKind::Strip { wall: Some(_), .. }))
+            .count()
+    };
+    assert_eq!(strips(&h), 1);
+    // The same wall again: refused.
+    h.click_at(p(7.0, 0.0));
+    assert_eq!(strips(&h), 1);
+    h.app.choose_method("Cimentar planta");
+    assert_eq!(strips(&h), 4);
+    // A tie beam by two points, chained.
+    h.app.choose_method("Viga de atado");
+    h.click_at(p(3.0, -3.0));
+    h.click_at(p(9.0, -3.0));
+    h.key(Key::Escape);
+    assert_eq!(h.model().footings().count(), 6);
+    // Selected, it shows its properties; moved, it goes.
+    h.key(Key::Escape);
+    h.click_at(p(6.0, -3.0));
+    assert!(matches!(
+        h.app.ed.selection.iter().next(),
+        Some(Element::Footing(_))
+    ));
+    h.frame();
+}

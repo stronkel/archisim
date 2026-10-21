@@ -28,6 +28,10 @@ pub struct ImportReport {
     pub stairs: usize,
     /// Terrains written by ArchiSim (`IfcGeographicElement`).
     pub terrains: usize,
+    /// Footings and tie beams (`IfcFooting`).
+    pub footings: usize,
+    /// Setting-out grid lines (axes of `IfcGrid`).
+    pub grids: usize,
     /// Curtain walls written by ArchiSim (`IfcCurtainWall`).
     pub curtain_walls: usize,
     /// Railings written by ArchiSim (`IfcRailing`).
@@ -173,6 +177,12 @@ impl ImportReport {
         if self.railings > 0 {
             members.push_str(&format!(", {} barandillas", self.railings));
         }
+        if self.footings > 0 {
+            members.push_str(&format!(", {} cimentaciones", self.footings));
+        }
+        if self.grids > 0 {
+            members.push_str(&format!(", {} ejes", self.grids));
+        }
         if self.terrains > 0 {
             members.push_str(&format!(", {} terrenos", self.terrains));
         }
@@ -242,7 +252,6 @@ pub const UNSUPPORTED_CLASSES: &[&str] = &[
     "IFCRAILING",
     "IFCCOVERING",
     "IFCCURTAINWALL",
-    "IFCFOOTING",
     "IFCPILE",
     "IFCCHIMNEY",
     "IFCSHADINGDEVICE",

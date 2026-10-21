@@ -31,6 +31,7 @@
 
 mod compare;
 mod curtain;
+mod foundations;
 pub mod geometry;
 mod members;
 mod objects;
@@ -264,6 +265,7 @@ struct GuidPlan {
     roofs: Vec<(archisim_core::RoofId, String)>,
     stairs: Vec<(archisim_core::StairId, String)>,
     terrains: Vec<(archisim_core::TerrainId, String)>,
+    footings: Vec<(archisim_core::FootingId, String)>,
     curtain_walls: Vec<(archisim_core::CurtainWallId, String)>,
     curtain_types: Vec<(archisim_core::CurtainTypeId, String)>,
     railings: Vec<(archisim_core::RailingId, String)>,
@@ -2754,6 +2756,8 @@ impl<'a> Importer<'a> {
         self.import_curtain_walls();
         self.import_railings();
         self.import_objects();
+        self.import_footings();
+        self.import_grids();
         self.read_parameters();
         self.read_statuses();
         self.count_unsupported();
@@ -2800,6 +2804,7 @@ impl<'a> Importer<'a> {
         restore!(roofs, roofs);
         restore!(stairs, stairs);
         restore!(terrains, terrains);
+        restore!(footings, footings);
         restore!(curtain_types, curtain_types);
         restore!(curtain_walls, curtain_walls);
         restore!(railings, railings);

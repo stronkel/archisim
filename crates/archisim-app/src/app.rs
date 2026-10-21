@@ -83,6 +83,10 @@ pub enum Tool {
     Railing,
     /// Furniture, sanitary ware and kitchen units.
     Object,
+    /// Setting-out grid lines, by two points.
+    Grid,
+    /// Pads, strips and tie beams.
+    Footing,
     /// A 2D drafting or editing command is running (AutoCAD's).
     Cad,
 }
@@ -105,13 +109,15 @@ impl Tool {
                 | Tool::CurtainWall
                 | Tool::Railing
                 | Tool::Object
+                | Tool::Grid
+                | Tool::Footing
         )
     }
 
     /// The tool a key selects (with the ArchiCAD keys): M muro, F forjado,
     /// P puerta, V ventana, C cota, I pilar, G viga, Z local, S sección,
     /// T cubierta, E escalera, R terreno, U muro cortina, B barandilla,
-    /// O objeto.
+    /// O objeto, X ejes, A cimentación.
     pub(super) fn from_key(text: &str) -> Option<Tool> {
         match text.to_lowercase().as_str() {
             "m" => Some(Tool::Wall),
@@ -129,6 +135,8 @@ impl Tool {
             "u" => Some(Tool::CurtainWall),
             "b" => Some(Tool::Railing),
             "o" => Some(Tool::Object),
+            "x" => Some(Tool::Grid),
+            "a" => Some(Tool::Footing),
             _ => None,
         }
     }
@@ -209,6 +217,11 @@ pub struct ArchiSimApp {
     pub column_settings: ColumnSettings,
     pub beam_settings: BeamSettings,
     pub beam_tool: structure_ui::BeamTool,
+    /// The first point of the grid line being drawn.
+    pub grid_anchor: Option<Point2>,
+    /// The first point of the strip or tie beam being drawn.
+    pub footing_anchor: Option<Point2>,
+    pub footing_settings: crate::editor::FootingSettings,
     pub section_tool: section_ui::SectionTool,
     /// The section shown: its drawing (worked out once per revision) and
     /// its picture on screen.
@@ -416,6 +429,7 @@ impl ArchiSimApp {
         let door_settings = default_opening_settings(ed.model(), true);
         let window_settings = default_opening_settings(ed.model(), false);
         let (column_settings, beam_settings) = default_member_settings(ed.model());
+        let footing_settings = crate::editor::FootingSettings::new(ed.model());
         let roof_settings = roof_ui::default_roof_settings(ed.model());
         let stair_settings = crate::editor::default_stair_settings(ed.model());
         let level = ed.level;
@@ -434,6 +448,9 @@ impl ArchiSimApp {
             column_settings,
             beam_settings,
             beam_tool: structure_ui::BeamTool::default(),
+            grid_anchor: None,
+            footing_anchor: None,
+            footing_settings,
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_hover: None,
@@ -576,6 +593,8 @@ impl ArchiSimApp {
             self.slab_tool.finish();
             self.dim_tool.finish();
             self.beam_tool.finish();
+            self.grid_anchor = None;
+            self.footing_anchor = None;
             self.zone_tool.finish();
             self.roof_tool.finish();
             self.stair_tool.points.clear();
@@ -608,7 +627,10 @@ impl ArchiSimApp {
         (self.column_settings, self.beam_settings) = default_member_settings(ed.model());
         self.roof_settings = roof_ui::default_roof_settings(ed.model());
         self.stair_settings = crate::editor::default_stair_settings(ed.model());
+        self.footing_settings = crate::editor::FootingSettings::new(ed.model());
         self.beam_tool.finish();
+        self.grid_anchor = None;
+        self.footing_anchor = None;
         self.ed = ed;
         self.drag = None;
         self.wall_tool.finish();
@@ -1830,6 +1852,7 @@ mod curtain_types_ui;
 mod curtain_ui;
 mod discipline_ui;
 mod draft_props;
+mod foundation_ui;
 mod glyphs;
 mod icons;
 mod levels_ui;

@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche, 3) · Ejes y cimentación
+
+Rama `bloque/ejes-cimentacion` (sale de la de I3; pull request para Antonio). Formato `.archisim` **versión 16**: ejes y cimentación. Los proyectos anteriores se abren igual. El IFC lleva ahora `IfcGrid` e `IfcFooting`.
+
+**Hecho**
+- **Ejes** (ficha Ejes en Concepto, Arquitectura y Estructura; tecla **X**): dos clics por eje. Se nombran solos: los que suben, **1, 2, 3…**; los que cruzan, **A, B, C…**. Se ven en todas las plantas, con su burbuja en cada extremo y trazo y punto, y en las secciones que los cortan, en vertical con la burbuja arriba. El nombre y la longitud se cambian en Propiedades. Se mueven, copian y giran como lo demás.
+- **Cimentación** (ficha Zapata en Estructura; tecla **A**), con tres métodos en la barra contextual:
+  - **Aislada**: clic en un pilar y la zapata queda **bajo él y lo sigue** si se mueve o gira; clic en otro sitio, zapata suelta en ese punto. Por defecto 1200 × 1200 × 600 mm.
+  - **Corrida**: clic en un muro y la zapata queda **bajo su eje y lo sigue**; clic fuera, se dibuja por dos puntos. Por defecto 600 × 500 mm.
+  - **Viga de atado**: por dos puntos, encadenadas. Por defecto 400 × 400 mm.
+  - **Cimentar planta**: zapatas bajo todos los pilares y muros rectos de la planta que aún no la tengan.
+  - Cara superior por defecto a −350 mm (bajo la solera), en hormigón. Todo se cambia en Propiedades, también después.
+- **Losa** (ficha en Estructura): la herramienta Forjado con el tipo nuevo de la plantilla **«Losa de cimentación HA 50»** (50 cm + 10 cm de limpieza).
+- En planta, la cimentación se dibuja **a trazos** (está bajo el suelo); en sección se ve cortada; en 3D, con su volumen. Es de Estructura: se resalta al trabajar en esa disciplina.
+- **IFC**: cada zapata es un `IfcFooting` (`PAD_FOOTING`, `STRIP_FOOTING`, `FOOTING_BEAM`) con su material, `Pset_FootingCommon` y cantidades (longitud, ancho, canto, volumen); los ejes, un `IfcGrid` con sus `IfcGridAxis`. Al importar un IFC de otro programa se leen sus zapatas rectangulares y sus ejes. La demo lleva ejes 1–2 y A–C, corridas bajo la fachada, zapatas bajo los pilares del porche y una viga de atado entre ellas.
+
+**Pendiente**
+- Prioridad de la cimentación sobre muros y forjados en los encuentros (hoy se solapan con la solera si se ponen a la misma cota).
+- Zapatas bajo muros curvos, encepados y pilotes; cotas atadas a los ejes.
+- Las mediciones y el BC3 aún no tienen capítulo de cimentación.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`: en la planta baja verás los ejes 1, 2, A, B y C con sus burbujas y, a trazos, las zapatas.
+2. Abre la **Sección A**: los ejes 1 y 2 suben con su burbuja y las zapatas corridas aparecen cortadas bajo los muros.
+3. Pincha **Estructura → Zapata**. Con **Aislada**, clic en un pilar del porche que no tenga zapata (o pon uno nuevo con Pilar); mueve el pilar: la zapata va con él.
+4. Elige **Corrida** y pincha un tabique: queda la zapata bajo su eje. Luego **Cimentar planta**.
+5. Pulsa **X** y dibuja un eje vertical y otro horizontal: deben llamarse 3 y D. Cambia el nombre en Propiedades.
+6. Exporta el IFC y ábrelo en ArchiCAD o Revit: deberían salir como zapatas (cimentación estructural) y como rejilla de ejes.
+
+---
+
 ## 2026-10-20 (noche, 2) · Interfaz por disciplinas, bloque I3
 
 Rama `bloque/interfaz-i3` (pull request para Antonio). Formato `.archisim` **versión 15**: disciplina dada a mano y atenuación de cada vista. Los proyectos anteriores se abren igual. Sin cambios en el IFC.
