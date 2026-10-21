@@ -2947,6 +2947,118 @@ fn lines_rectangles_and_typed_coordinates() {
     assert_eq!(drafts(&h).len(), 4);
 }
 
+/// ArchiCAD's vertices: a double click on an edge of a selected fill or
+/// line adds a vertex there, which drags like any other; a click on it
+/// picks it and Supr takes it away (not the whole fill).
+/// A 3D model from SketchUp (COLLADA, in inches) and a chair from a
+/// catalogue (OBJ with its texture) brought in with File → Importar modelo
+/// 3D: the dialog reads them, the object tool takes the new type, a click
+/// places it; the 3D view shows its triangles with the colours of its
+/// vertices, the plan its outline, and the trees of the library keep their
+/// own drawing in a technical view.
+#[test]
+fn imported_models_are_placed_and_drawn() {
+    let mut h = Harness::new(Editor::new_project());
+    let fixtures =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../archisim-mesh/tests/fixtures");
+    let level = h.app.ed.level;
+    // Dropped on the window: the dialog, with what it read.
+    h.app.open_files(vec![fixtures.join("arbol.dae")]);
+    let imp = h.app.mesh_import.as_ref().expect("the dialog");
+    assert_eq!(imp.name, "arbol");
+    let mesh = imp.read.as_ref().unwrap();
+    let (lo, hi) = mesh.bounds();
+    assert!((hi[2] - lo[2] - 4.0).abs() < 1e-3, "inches read as such");
+    h.app.mesh_import.as_mut().unwrap().kind = archisim_library::imported::ModelKind::Vegetation;
+    h.frame();
+    h.app.import_mesh_now();
+    assert_eq!(h.app.tool, Tool::Object);
+    let t = h.app.object_settings.object_type.unwrap();
+    assert!(h.model().object_type(t).unwrap().mesh.is_some());
+    h.click_at(p(3.0, 3.0));
+    let o = h.model().objects().next().expect("placed").id;
+    // In 3D: the model's own triangles, coloured vertex by vertex.
+    let solids = archisim_geom::solid::object_solids(h.model(), o);
+    let tris: usize = solids.iter().map(|s| s.triangles.len()).sum();
+    assert!(tris > 300, "{tris}");
+    let scene = crate::view3d::scene::Scene::build(h.model(), &BTreeSet::new());
+    assert!(scene.opaque.len() >= tris * 3);
+    // In plan: its outline (the canopy, about 2.5 m across), drawn with
+    // its colour as the trees are.
+    let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(svg.contains("fill-opacity"));
+    let outline = h.model().object_outline(o);
+    assert!((outline[0].distance(outline[1]) - 2.5).abs() < 0.05);
+    // In the IFC: its triangles, once in the type.
+    let ifc = archisim_ifc::export_ifc(h.model(), &Default::default());
+    assert_eq!(ifc.matches("IFCREPRESENTATIONMAP(").count(), 1);
+    assert!(ifc.contains("IFCTRIANGULATEDFACESET("));
+    // Saved and opened, the model comes back.
+    let text = archisim_file::to_string(h.model());
+    let back = archisim_file::from_str(&text).unwrap();
+    assert_eq!(back.meshes().count(), 1);
+    // The chair with its texture: wood colours at its vertices.
+    h.key(Key::Escape);
+    h.app.open_files(vec![fixtures.join("silla.obj")]);
+    h.app.import_mesh_now();
+    let chair = h.app.object_settings.object_type.unwrap();
+    let m = h.model();
+    let mesh = m.mesh(m.object_type(chair).unwrap().mesh.unwrap()).unwrap();
+    let c = mesh.levels[0].colors[0];
+    assert!(c[0] > c[2] + 40, "{c:?}");
+    assert_eq!(
+        m.family(m.object_type(chair).unwrap().family)
+            .unwrap()
+            .def()
+            .category,
+        "furniture"
+    );
+}
+
+#[test]
+fn vertices_added_dragged_and_removed() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    command(&mut h, "rellrect");
+    command(&mut h, "0,0");
+    command(&mut h, "4000,3000");
+    let fill = drafts(&h)[0].clone();
+    let area = |h: &Harness| archisim_draft::area(&drafts(h)[0].shape).unwrap();
+    assert!((area(&h) - 12.0).abs() < 1e-9);
+    h.key(Key::Escape);
+    h.click_at(p(2.0, 1.0));
+    assert!(h.app.ed.selection.contains(&Element::Draft(fill.id)));
+    // Double click on the top edge: a fifth corner, the area unchanged.
+    h.move_to(p(2.0, 3.0));
+    for _ in 0..2 {
+        h.button(PointerButton::Primary, true);
+        h.button(PointerButton::Primary, false);
+    }
+    h.frame();
+    let corners = |h: &Harness| match &drafts(h)[0].shape {
+        archisim_core::Shape::Hatch(x) => x.loops[0].points.len(),
+        _ => 0,
+    };
+    assert_eq!(corners(&h), 5);
+    assert!((area(&h) - 12.0).abs() < 1e-9);
+    // Dragged up a metre: a gable, two square metres more.
+    h.time += 1.0;
+    h.drag(p(2.0, 3.0), p(2.0, 4.0));
+    assert!((area(&h) - 14.0).abs() < 1e-6, "{}", area(&h));
+    // Picked with a click and taken away with Supr: back to the rectangle,
+    // still there and still selected.
+    h.click_at(p(2.0, 4.0));
+    assert!(h.app.vertex.is_some());
+    h.key(Key::Delete);
+    assert_eq!(drafts(&h).len(), 1);
+    assert_eq!(corners(&h), 4);
+    assert!((area(&h) - 12.0).abs() < 1e-9);
+    // With no vertex picked, Supr deletes the fill as before.
+    h.click_at(p(2.0, 1.0));
+    h.key(Key::Delete);
+    assert!(drafts(&h).is_empty());
+}
+
 #[test]
 fn offset_trim_hatch_and_move() {
     let mut h = Harness::new(Editor::new_project());
@@ -4480,11 +4592,18 @@ fn presentation_styles_and_floor_fills() {
     assert!(svg.contains("floor-fills"));
     assert!(svg.contains("#d2cdc3"));
     // P2: trees drawn as see-through canopies in a presentation view, each
-    // its own; in the technical one, with the family's line symbol.
+    // its own; in the technical one too since v0.36 (their own drawing by
+    // default), unless the type says «según el estilo».
     h.app
         .ed
         .transact("Árboles", |m| {
             let t = archisim_library::add_object_entry(m, "Árbol en flor 5 m")?;
+            let mut v = m.object_type(t).unwrap().values.clone();
+            v.insert(
+                "plan_drawing".into(),
+                archisim_core::Value::Text("según el estilo".into()),
+            );
+            m.set_object_type_values(t, v)?;
             for x in [20.0, 30.0] {
                 m.add_object(archisim_core::NewObject {
                     level,

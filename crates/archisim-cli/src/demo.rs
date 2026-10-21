@@ -606,6 +606,32 @@ pub fn build() -> Result<Document, ModelError> {
                 base_offset,
             })?;
         }
+        // A tree brought from SketchUp (a COLLADA file, v0.36), by the
+        // gate.
+        let dae = archisim_mesh::read(
+            include_bytes!("../../archisim-mesh/tests/fixtures/arbol.dae"),
+            "dae",
+            &archisim_mesh::NoResources,
+            Default::default(),
+        )
+        .map_err(|e| ModelError::InvalidMesh(e.to_string()))?;
+        let tree = archisim_library::imported::import_mesh(
+            m,
+            dae,
+            "Árbol importado",
+            "arbol.dae",
+            archisim_library::imported::ModelKind::Vegetation,
+        )
+        .map_err(ModelError::InvalidMesh)?;
+        let at = Point2::new(8.0, -7.0);
+        let base_offset = ground(m, at);
+        m.add_object(archisim_core::NewObject {
+            level: pb,
+            object_type: tree.object_type,
+            position: at,
+            rotation: 0.0,
+            base_offset,
+        })?;
         Ok(())
     })?;
 
@@ -1175,7 +1201,9 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        assert_eq!(m.objects().count(), 16);
+        // Sixteen of the library and one brought from SketchUp.
+        assert_eq!(m.objects().count(), 17);
+        assert_eq!(m.meshes().count(), 1);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);

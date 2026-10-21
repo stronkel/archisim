@@ -177,6 +177,13 @@ impl ArchiSimApp {
                 self.guarded(Pending::Import(None));
             }
             if ui
+                .button("Importar modelo 3D (OBJ, glTF, DAE)…")
+                .on_hover_text("Un modelo de SketchUp, Blender o un fabricante, como tipo de objeto: con sus materiales y texturas, y su contorno en planta")
+                .clicked()
+            {
+                self.pick_mesh();
+            }
+            if ui
                 .button("Importar topografía (DXF, CSV)…")
                 .on_hover_text("Puntos con cota y curvas de nivel de un levantamiento, en el terreno de la planta")
                 .clicked()

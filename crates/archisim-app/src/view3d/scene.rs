@@ -139,11 +139,18 @@ impl Scene {
                 [rgb[0], rgb[1], rgb[2], alpha]
             };
             let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
-            for tri in &solid.triangles {
+            // A model brought from another program: the colours of its
+            // vertices (its textures).
+            let corners = archisim_geom::solid::solid_vertex_colors(model, &solid);
+            for (i, tri) in solid.triangles.iter().enumerate() {
                 // A painted face: its paint, never greyed (it is what is
                 // being worked on).
                 let color = archisim_geom::solid::painted_color(model, &solid, tri)
                     .map_or(base, |c| tone(c, false));
+                let colors = match corners.as_ref().and_then(|c| c.get(i)) {
+                    Some(c) => c.map(|c| tone(c, dimmed)),
+                    None => [color; 3],
+                };
                 let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
                 let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
                 // Faces looking up give way where another element rests on
@@ -165,7 +172,7 @@ impl Scene {
                 } else {
                     &mut s.opaque
                 };
-                for v in p {
+                for (v, color) in p.into_iter().zip(colors) {
                     target.push(Vertex {
                         pos: v.to_array(),
                         normal: n.to_array(),

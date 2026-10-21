@@ -177,6 +177,8 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::EmptyName => "el nombre no puede quedar vacío".into(),
         ModelError::UnknownObjectType(_) => "el tipo de objeto ya no existe".into(),
         ModelError::UnknownObject(_) => "el objeto ya no existe".into(),
+        ModelError::UnknownMesh(_) => "el modelo 3D ya no está en el proyecto".into(),
+        ModelError::InvalidMesh(why) => format!("el modelo 3D no es válido: {why}"),
         ModelError::NotAnObject(name) => {
             format!("la familia «{name}» no hace objetos (es una puerta, una ventana o va en un muro)")
         }

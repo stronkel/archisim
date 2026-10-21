@@ -68,7 +68,7 @@ impl ArchiSimApp {
         ui.horizontal(|ui| {
             ui.label("Carpeta:");
             ui.label(egui::RichText::new(lib.dir.to_string_lossy()).monospace())
-                .on_hover_text("Los ficheros .asfam (familias) y .astipos (muros y forjados) de esta carpeta y de sus subcarpetas");
+                .on_hover_text("Los ficheros .asfam (familias), .astipos (muros y forjados) y los modelos 3D (.obj, .gltf, .glb, .dae, que salen en la galería de objetos) de esta carpeta y de sus subcarpetas");
         });
         ui.horizontal(|ui| {
             if ui.button("Cambiar carpeta…").clicked() {
@@ -500,6 +500,30 @@ impl ArchiSimApp {
 
     /// Saves a type of the project into the library folder.
     pub(super) fn save_type_to_library(&mut self, t: FamilyTypeRef) {
+        // A type with a 3D model: the model as a .glb, in a folder of its
+        // kind (the gallery shows it from there).
+        if let FamilyTypeRef::Object(id) = t {
+            let model = self.ed.model();
+            if let Some((glb, kind)) = archisim_library::imported::export_glb(model, id) {
+                let name = model
+                    .object_type(id)
+                    .map(|t| t.name.replace(['/', '\\', ':'], "-"))
+                    .unwrap_or_default();
+                let dir = library::library_dir().join("Modelos 3D").join(kind.label());
+                let path = dir.join(format!("{name}.glb"));
+                let r = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(&path, glb));
+                match r {
+                    Ok(()) => self.say(format!(
+                        "Modelo 3D «{name}» guardado en la biblioteca (Modelos 3D/{}/{name}.glb).",
+                        kind.label()
+                    )),
+                    Err(e) => self.complain(format!("No se puede guardar en la biblioteca: {e}.")),
+                }
+                self.folder_objects = None;
+                self.library.refresh();
+                return;
+            }
+        }
         let lib = library::scan(&library::library_dir());
         let result = self.ed.catalog_entry(t).and_then(|(entry, version)| {
             library::save_type(&lib, &entry, version).map(|p| (entry, p))

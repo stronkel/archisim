@@ -95,6 +95,7 @@ impl Editor {
         let name = super::types::copy_name(&t.name, &taken);
         self.transact("Duplicar tipo de objeto", |m| {
             let new = m.add_object_type(name, t.family, t.values.clone())?;
+            m.set_object_type_mesh(new, t.mesh)?;
             m.edit_object(id, |o| o.object_type = new)?;
             Ok(new)
         })
@@ -119,6 +120,23 @@ impl Editor {
         values.insert(name.to_string(), value);
         self.transact("Modificar tipo de objeto", |m| {
             m.set_object_type_values(id, values)
+        })
+    }
+}
+
+impl Editor {
+    /// A 3D model from another program as a new object type of the
+    /// project (one undoable step).
+    pub fn import_mesh(
+        &mut self,
+        mesh: archisim_mesh::Mesh,
+        name: &str,
+        source: &str,
+        kind: archisim_library::imported::ModelKind,
+    ) -> EditResult<archisim_library::imported::Imported> {
+        self.transact("Importar modelo 3D", |m| {
+            archisim_library::imported::import_mesh(m, mesh, name, source, kind)
+                .map_err(archisim_core::ModelError::InvalidMesh)
         })
     }
 }

@@ -377,6 +377,10 @@ pub struct ArchiSimApp {
     hover: Option<Element>,
     /// The handle of the selection under the cursor, if any.
     hover_grip: Option<Grip>,
+    /// A vertex picked with a click (Supr takes it away): `vertex_ui`.
+    vertex: Option<Grip>,
+    /// A 3D model being brought in (its dialog): `mesh_ui`.
+    pub mesh_import: Option<mesh_ui::MeshImport>,
     /// Moving, copying or stretching the selection with the mouse.
     pub drag: Option<DragState>,
     /// What the drag would give at the last cursor position: the outlines
@@ -599,6 +603,8 @@ impl ArchiSimApp {
             paint_erase: false,
             hover: None,
             hover_grip: None,
+            vertex: None,
+            mesh_import: None,
             drag: None,
             drag_preview: None,
             wand_preview: None,
@@ -893,6 +899,13 @@ impl ArchiSimApp {
                 .selection
                 .iter()
                 .any(|e| matches!(e, Element::Terrain(_)));
+        // 3D models: the dialog to bring one in.
+        let (models, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths
+            .into_iter()
+            .partition(|p| archisim_mesh::is_model_file(p));
+        if let Some(m) = models.first() {
+            self.mesh_import = Some(mesh_ui::MeshImport::new(m));
+        }
         let (cad, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|p| {
             p.extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("dxf") || e.eq_ignore_ascii_case("dwg"))
@@ -1205,7 +1218,7 @@ impl ArchiSimApp {
     }
 
     fn delete(&mut self) {
-        if self.delete_terrain_points() {
+        if self.delete_terrain_points() || self.delete_vertex() {
             return;
         }
         match self.ed.delete_selection() {
@@ -1729,6 +1742,7 @@ impl ArchiSimApp {
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
+        self.mesh_import_dialog(ctx);
         self.params_dialog(ctx);
         self.cte_dialog(ctx);
         self.coord_dialog(ctx);
@@ -1985,6 +1999,7 @@ mod hatch_ui;
 mod icons;
 mod levels_ui;
 mod library_ui;
+mod mesh_ui;
 mod methods_ui;
 mod module_ui;
 mod navigator;
@@ -2021,6 +2036,7 @@ mod tools3d;
 mod type_views;
 mod types_ui;
 mod urban_ui;
+mod vertex_ui;
 mod view3d_ui;
 mod widgets;
 pub use tabs::{TabKind, ViewTab};

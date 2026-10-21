@@ -20,6 +20,7 @@ mod disciplines;
 mod foundations;
 mod layered_library;
 mod library;
+mod meshes;
 mod modules;
 mod objects;
 mod paint;
@@ -41,6 +42,7 @@ pub use disciplines::*;
 pub use foundations::*;
 pub use layered_library::*;
 pub use library::*;
+pub use meshes::*;
 pub use modules::*;
 pub use objects::*;
 pub use paint::*;
@@ -879,6 +881,9 @@ pub enum ModelError {
     UnknownRailing(RailingId),
     UnknownObjectType(ObjectTypeId),
     UnknownObject(ObjectId),
+    UnknownMesh(MeshId),
+    /// A 3D model that cannot be kept (no faces, indices out of range…).
+    InvalidMesh(String),
     /// The family does not make objects (it is a door, a window, or goes in
     /// a wall).
     NotAnObject(String),
@@ -1019,6 +1024,8 @@ impl fmt::Display for ModelError {
             ModelError::UnknownRailing(id) => write!(f, "unknown railing {id}"),
             ModelError::UnknownObjectType(id) => write!(f, "unknown object type {id}"),
             ModelError::UnknownObject(id) => write!(f, "unknown object {id}"),
+            ModelError::UnknownMesh(id) => write!(f, "unknown 3D model {id}"),
+            ModelError::InvalidMesh(why) => write!(f, "3D model not valid: {why}"),
             ModelError::NotAnObject(name) => {
                 write!(f, "the family «{name}» does not make objects placed on a level")
             }
@@ -1191,6 +1198,9 @@ pub struct ModelParts {
     pub curtain_types: Vec<CurtainWallType>,
     pub curtain_walls: Vec<CurtainWall>,
     pub railings: Vec<Railing>,
+    /// 3D models brought from other programs, before the types that
+    /// show them.
+    pub meshes: Vec<MeshModel>,
     pub object_types: Vec<ObjectType>,
     pub objects: Vec<Object>,
     /// Module files kept in the project, and the copies placed.
@@ -1300,6 +1310,7 @@ pub struct Model {
     curtain_types: BTreeMap<CurtainTypeId, CurtainWallType>,
     curtain_walls: BTreeMap<CurtainWallId, CurtainWall>,
     railings: BTreeMap<RailingId, Railing>,
+    meshes: BTreeMap<MeshId, MeshModel>,
     object_types: BTreeMap<ObjectTypeId, ObjectType>,
     objects: BTreeMap<ObjectId, Object>,
     module_sources: BTreeMap<ModuleSourceId, ModuleSource>,
@@ -1370,6 +1381,7 @@ impl Model {
             curtain_types: BTreeMap::new(),
             curtain_walls: BTreeMap::new(),
             railings: BTreeMap::new(),
+            meshes: BTreeMap::new(),
             object_types: BTreeMap::new(),
             objects: BTreeMap::new(),
             module_sources: BTreeMap::new(),
@@ -3772,6 +3784,7 @@ impl Model {
             curtain_types: self.curtain_types.values().cloned().collect(),
             curtain_walls: self.curtain_walls.values().cloned().collect(),
             railings: self.railings.values().cloned().collect(),
+            meshes: self.meshes.values().cloned().collect(),
             object_types: self.object_types.values().cloned().collect(),
             objects: self.objects.values().cloned().collect(),
             module_sources: self.module_sources.values().cloned().collect(),
@@ -4086,6 +4099,7 @@ impl Model {
         model.restore_terrains(parts.terrains, &mut claim)?;
         model.restore_curtain_walls(parts.curtain_types, parts.curtain_walls, &mut claim)?;
         model.restore_railings(parts.railings, &mut claim)?;
+        model.restore_meshes(parts.meshes, &mut claim)?;
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model.restore_masses(parts.masses, &mut claim)?;

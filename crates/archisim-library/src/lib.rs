@@ -695,6 +695,7 @@ pub enum StudioValue {
 use StudioValue::{B, N, T};
 
 pub mod extended;
+pub mod imported;
 
 /// Adds the studio's usual door and window types, with the materials they
 /// need (a subframe of galvanised steel, a stone sill).

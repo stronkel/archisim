@@ -1075,12 +1075,24 @@ impl ArchiSimApp {
                 }
             }
             Tool::Arrow => {
-                // Double click on a section or elevation mark: its view.
+                // Double click on a section or elevation mark: its view;
+                // on an edge of a selected line, fill or slab: a vertex.
                 if response.double_clicked_by(PointerButton::Primary) {
                     if let Some(Element::Section(id)) = self.hover {
                         self.open_view(TabKind::Section(id));
                         return;
                     }
+                    let at = response
+                        .interact_pointer_pos()
+                        .map(|p| self.view.to_model(rect, p));
+                    if at.is_some_and(|a| self.vertex_double_click(a)) {
+                        return;
+                    }
+                }
+                // A click on a vertex of the selection picks it (Supr
+                // takes it away) and keeps the selection.
+                if response.clicked_by(PointerButton::Primary) && !shift && self.vertex_click() {
+                    return;
                 }
                 let on_terrain = response.clicked_by(PointerButton::Primary)
                     && response
@@ -1384,8 +1396,13 @@ impl ArchiSimApp {
     fn draw_hotspots(&self, painter: &egui::Painter, rect: Rect) {
         for h in hotspots(self.ed.model(), &self.ed.selection) {
             let c = self.view.to_screen(rect, h.point);
-            let hot = self.hover_grip == Some(h.grip)
+            let picked = self.picked_vertex() == Some(h.grip);
+            let hot = picked
+                || self.hover_grip == Some(h.grip)
                 || self.drag.as_ref().is_some_and(|d| d.grip == h.grip);
+            if picked {
+                painter.circle_stroke(c, 9.0, Stroke::new(1.5, ACCENT));
+            }
             let fill = if hot { ACCENT } else { Color32::BLACK };
             match h.grip {
                 Grip::SlabEdge { .. } => {

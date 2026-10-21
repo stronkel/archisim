@@ -1,7 +1,7 @@
 family "Árbol"
   category site
   host none
-  version 4
+  version 5
   description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
   folder "Vegetación"
 
@@ -15,13 +15,14 @@ type_params
     leaves material = "Vegetación" label "Copa"
     bark   material = "Corteza" label "Tronco"
   section "Presentación"
+    plan_drawing choice("presentación", "según el estilo", "técnico") = "presentación" label "Dibujo en planta"
     shape choice("lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "lóbulos" label "Copa en presentación"
     look choice("transparente", "rellena", "contorno") = "transparente" label "Relleno de la copa"
     opacity number = 0.55 range 0.10..1.00 label "Opacidad de la copa"
 
 instance_params
   section "Dibujo"
-    drawing choice("según el estilo", "técnico", "presentación") = "según el estilo" label "Dibujo en planta"
+    drawing choice("del tipo", "presentación", "según el estilo", "técnico") = "del tipo" label "Dibujo en planta"
     shape_own choice("del tipo", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "del tipo" label "Copa"
     look_own choice("del tipo", "transparente", "rellena", "contorno") = "del tipo" label "Relleno"
     opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"
@@ -195,6 +196,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de olivo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.6
@@ -205,6 +207,7 @@ catalog
     trunk = 0.35
     leaves = "Copa de acebuche"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.6
@@ -215,6 +218,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de encina"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.6
@@ -225,6 +229,7 @@ catalog
     trunk = 0.7
     leaves = "Copa de alcornoque"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.55
@@ -235,6 +240,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de algarrobo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "rellena"
     opacity = 0.6
@@ -245,6 +251,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de pino piñonero"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "acuarela"
     look = "transparente"
     opacity = 0.6
@@ -255,6 +262,7 @@ catalog
     trunk = 0.45
     leaves = "Copa de pino carrasco"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "conífera"
     look = "transparente"
     opacity = 0.6
@@ -265,6 +273,7 @@ catalog
     trunk = 0.3
     leaves = "Copa de ciprés"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "círculo"
     look = "rellena"
     opacity = 1
@@ -275,6 +284,7 @@ catalog
     trunk = 0.3
     leaves = "Copa de ciprés de arizona"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "conífera"
     look = "rellena"
     opacity = 0.8
@@ -285,6 +295,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de palmera datilera"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "palmera"
     look = "transparente"
     opacity = 0.7
@@ -295,6 +306,7 @@ catalog
     trunk = 0.9
     leaves = "Copa de palmera canaria"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "palmera"
     look = "transparente"
     opacity = 0.7
@@ -305,6 +317,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de washingtonia"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "palmera"
     look = "transparente"
     opacity = 0.7
@@ -315,6 +328,7 @@ catalog
     trunk = 0.3
     leaves = "Copa de palmito"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "palmera"
     look = "rellena"
     opacity = 0.8
@@ -325,6 +339,7 @@ catalog
     trunk = 0.25
     leaves = "Copa de naranjo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "círculo"
     look = "rellena"
     opacity = 0.85
@@ -335,6 +350,7 @@ catalog
     trunk = 0.25
     leaves = "Copa de limonero"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "círculo"
     look = "rellena"
     opacity = 0.85
@@ -345,6 +361,7 @@ catalog
     trunk = 0.3
     leaves = "Copa de almendro en flor"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "acuarela"
     look = "transparente"
     opacity = 0.6
@@ -355,6 +372,7 @@ catalog
     trunk = 0.4
     leaves = "Copa de jacaranda"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "acuarela"
     look = "transparente"
     opacity = 0.6
@@ -365,6 +383,7 @@ catalog
     trunk = 0.3
     leaves = "Copa de árbol del amor"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "acuarela"
     look = "transparente"
     opacity = 0.6
@@ -375,6 +394,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de tipuana"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.5
@@ -385,6 +405,7 @@ catalog
     trunk = 0.7
     leaves = "Copa de plátano de sombra"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "ramas"
     look = "transparente"
     opacity = 0.5
@@ -395,6 +416,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de almez"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "ramas"
     look = "transparente"
     opacity = 0.55
@@ -405,6 +427,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de morera"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.55
@@ -415,6 +438,7 @@ catalog
     trunk = 0.9
     leaves = "Copa de ficus"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "rellena"
     opacity = 0.7
@@ -425,6 +449,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de magnolio"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "rellena"
     opacity = 0.75
@@ -435,6 +460,7 @@ catalog
     trunk = 0.45
     leaves = "Copa de grevillea"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.55
@@ -445,6 +471,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de sauce llorón"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.5
@@ -455,6 +482,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de álamo blanco"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.5
@@ -465,6 +493,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de chopo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "círculo"
     look = "transparente"
     opacity = 0.55
@@ -475,6 +504,7 @@ catalog
     trunk = 0.5
     leaves = "Copa de fresno"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "ramas"
     look = "transparente"
     opacity = 0.5
@@ -485,6 +515,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de olmo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.55
@@ -495,6 +526,7 @@ catalog
     trunk = 0.3
     leaves = "Copa de abedul"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.5
@@ -505,6 +537,7 @@ catalog
     trunk = 0.4
     leaves = "Copa de arce rojo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "follaje"
     look = "transparente"
     opacity = 0.55
@@ -515,6 +548,7 @@ catalog
     trunk = 0.45
     leaves = "Copa de liquidámbar"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.55
@@ -525,6 +559,7 @@ catalog
     trunk = 0.4
     leaves = "Copa de ginkgo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "acuarela"
     look = "transparente"
     opacity = 0.55
@@ -535,6 +570,7 @@ catalog
     trunk = 0.7
     leaves = "Copa de castaño de indias"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "rellena"
     opacity = 0.7
@@ -545,6 +581,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de tilo"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "lóbulos"
     look = "transparente"
     opacity = 0.55
@@ -555,6 +592,7 @@ catalog
     trunk = 0.6
     leaves = "Copa de drago"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "palmera"
     look = "rellena"
     opacity = 0.8
@@ -565,6 +603,7 @@ catalog
     trunk = 0.12
     leaves = "Copa de árbol joven"
     bark = "Corteza"
+    plan_drawing = "presentación"
     shape = "ramas"
     look = "transparente"
     opacity = 0.45

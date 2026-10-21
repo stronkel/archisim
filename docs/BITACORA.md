@@ -6,6 +6,42 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (noche, 2) · Modelos 3D (L1–L2), vértices y árboles con su copa
+
+Rama `bloque/mallas` (sobre `main` con #41), pull request para Antonio. Formato `.archisim` versión 24 (abre las anteriores tal cual). v0.36.
+
+**Hecho**
+- **Árboles con su copa por defecto**: los árboles de la biblioteca se dibujan con su copa (forma, relleno, opacidad, color) en cualquier vista, también en las técnicas, así que lo que se cambia se ve enseguida. En el tipo, «Dibujo en planta»: presentación (por defecto), según el estilo o técnico; en cada árbol, «del tipo» o uno propio.
+- **Vértices como en ArchiCAD**: con una línea, polilínea, relleno o forjado seleccionado, **doble clic en una arista** añade un vértice allí, que se arrastra como cualquier otro. Un **clic en un vértice** lo elige (se ve con un círculo azul) y **Supr** quita solo ese vértice, no el elemento. En arcos, el vértice parte el arco en dos de la misma circunferencia.
+- **Importar modelos 3D** (L1): Archivo → **Importar modelo 3D (OBJ, glTF, DAE)…**, o soltar el fichero en la ventana. Lee:
+  - **COLLADA (.dae)**, lo que exporta SketchUp (también el gratuito): componentes, pulgadas y eje Z;
+  - **OBJ** con su **MTL** y texturas;
+  - **glTF** y **GLB** (Blender, catálogos).
+  El diálogo dice medidas, caras y materiales, y pide nombre, qué es (mobiliario, cocina, sanitarios, vegetación, mobiliario urbano, personas, vehículos), unidades y eje vertical. Pasa a ser un **tipo de objeto**: su 3D es el del modelo con sus materiales (uno del proyecto por cada uno) y los colores de sus texturas; su planta, el **contorno visto desde arriba**; la altura del tipo lo escala entero. Los muebles se colocan por el centro de su espalda; árboles, personas y mobiliario urbano, por el centro de su base.
+- **Niveles de detalle** (L2): cada modelo guarda tres versiones (el modelo, unas 4.000 caras y unas 600). Con muchos modelos en el proyecto (más de 400.000 caras), todas las vistas toman la más ligera que cabe, para que un plan con cientos de árboles siga yendo fluido. En Propiedades → «Modelo 3D»: fichero, caras de cada versión y la que se está viendo.
+- **IFC**: el modelo va una sola vez en el tipo (`IfcRepresentationMap` con un `IfcTriangulatedFaceSet` por material, con su color y el de cada cara) y cada objeto lo coloca; con la clase de lo que es (`IfcFurniture`, `IfcGeographicElement` VEGETATION, `IfcVehicle`…). Valida en IFC 4.3 e IFC4.
+- **Biblioteca**: los `.obj`, `.gltf`, `.glb` y `.dae` de la carpeta de la biblioteca salen en la galería de objetos (por la carpeta en la que están: «Vegetación», «Cocina»…) y se cargan al elegirlos. «Guardar en la biblioteca» de un tipo con modelo lo guarda como `.glb` en `Modelos 3D/<qué es>/`, que también abre cualquier otro programa.
+- La demo lleva un árbol importado de un fichero de SketchUp de prueba (junto a la entrada) y sale en la planta, el 3D, la lámina A-03 y el IFC.
+
+**Pendiente**
+- Las texturas se ven como colores en los vértices (en 3D no hay todavía texturas de verdad: va con M3).
+- Un modelo como volumen de Concepto (para encajes de SketchUp) no está aún.
+- Al reimportar el IFC, un objeto con modelo 3D vuelve con la caja de su familia (el modelo no viaja de vuelta).
+- Los modelos dentro de módulos (I5) no se copian.
+- La carpeta de la biblioteca con muchos modelos pesados tarda la primera vez que se abre la galería (luego se recuerdan).
+- El `.skp` de SketchUp no se puede leer (formato cerrado): hay que exportar a DAE.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. En la planta, los árboles se ven con su copa aunque la vista sea técnica. Seleccione uno y cambie «Copa en presentación» del tipo: se ve al momento. Pruebe «Dibujo en planta: según el estilo» y cambie el estilo de la vista.
+3. Vista 3D (F3): delante de la entrada está el árbol importado de SketchUp (copa redonda y tronco).
+4. Exporte desde SketchUp un árbol, una silla y un coche como **COLLADA (.dae)** (Archivo → Exportar → Modelo 3D) y llévelos a ArchiSim con Archivo → Importar modelo 3D. Mire medidas, unidades y eje en el diálogo, impórtelos y colóquelos. Mire el 3D, la planta (técnica y en estilo Bosque) y Propiedades → «Modelo 3D». Si tiene modelos en OBJ o glTF de catálogos, pruébelos también.
+5. Ponga algunos de esos ficheros en la carpeta de la biblioteca, dentro de una carpeta «Vegetación» o «Cocina», y abra la galería de Objetos o de Vegetación: deben salir con su planta.
+6. Exporte el IFC y ábralo en otro visor: los modelos deben salir con sus colores.
+7. Dibuje un relleno rectangular, selecciónelo, haga **doble clic en una arista**: arrastre el vértice nuevo. Haga clic en ese vértice y pulse **Supr**: vuelve el rectángulo. Pruebe lo mismo con una polilínea y con un forjado.
+
+---
+
 ## 2026-10-21 (noche) · Vegetación, mobiliario urbano y rellenos
 
 Rama `bloque/vegetacion` (sobre `main` con #39 y #40), pull request para Antonio. Formato `.archisim` versión 23 (abre las anteriores tal cual).
