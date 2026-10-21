@@ -20,6 +20,7 @@ archisim-plan.workspace = true
 archisim-export.workspace = true
 archisim-file.workspace = true
 archisim-library.workspace = true
+archisim-mesh.workspace = true
 archisim-ids.workspace = true
 archisim-bcf.workspace = true
 archisim-coord.workspace = true

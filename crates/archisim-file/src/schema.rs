@@ -89,6 +89,10 @@ pub(crate) struct ProjectFile {
     /// Loose railings (version 7).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub railings: Vec<Railing>,
+    /// 3D models brought from other programs (version 24), before the
+    /// object types that show them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meshes: Vec<crate::meshes::Mesh>,
     /// Object types (version 7): a family with no wall and its values.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub object_types: Vec<ObjectType>,
@@ -165,6 +169,9 @@ pub(crate) struct ObjectType {
     pub name: String,
     pub family: u64,
     pub values: ParamValues,
+    /// The 3D model it shows (version 24).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mesh: Option<u64>,
 }
 
 /// An object (version 7): its type, level, insertion point, turn
@@ -1988,8 +1995,10 @@ impl ProjectFile {
                     name: t.name.clone(),
                     family: t.family.0,
                     values: values_out(&t.values),
+                    mesh: t.mesh.map(|m| m.0),
                 })
                 .collect(),
+            meshes: p.meshes.iter().map(crate::meshes::mesh_out).collect(),
             face_paints: p
                 .face_paints
                 .iter()
@@ -2464,6 +2473,7 @@ impl ProjectFile {
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
+            meshes: Vec::new(),
             object_types: Vec::new(),
             objects: Vec::new(),
             module_sources: Vec::new(),
@@ -2751,7 +2761,11 @@ impl ProjectFile {
                 name: t.name,
                 family: core::FamilyId(t.family),
                 values,
+                mesh: t.mesh.map(core::MeshId),
             });
+        }
+        for m in self.meshes {
+            parts.meshes.push(crate::meshes::mesh_in(m)?);
         }
         for f in self.face_paints {
             let face = core::FaceRef::from_code(&f.face).ok_or_else(|| FileError::Value {

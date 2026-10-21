@@ -55,6 +55,8 @@ pub enum ObjectPick {
     Library(&'static str),
     /// A type of a file of the library folder: file and type.
     Folder(usize, usize),
+    /// A 3D model file of the library folder, by its index.
+    FolderModel(usize),
 }
 
 /// The object types of the library folder, loaded into a model of their
@@ -65,6 +67,89 @@ pub struct FolderObjects {
     model: archisim_core::Model,
     /// File, type in it, the type in `model`, its `GlobalId`.
     types: Vec<(usize, usize, ObjectTypeId, String)>,
+    /// 3D model files (OBJ, glTF, DAE) of the folder, each brought into a
+    /// model of its own.
+    models: Vec<FolderModel>,
+}
+
+/// A 3D model file of the library folder.
+#[derive(Clone)]
+pub struct FolderModel {
+    pub path: std::path::PathBuf,
+    pub kind: archisim_library::imported::ModelKind,
+    pub model: std::sync::Arc<archisim_core::Model>,
+    pub object_type: ObjectTypeId,
+}
+
+/// Models already read from the library folder, by file and the time it
+/// was changed: a folder is looked at again every half minute, a model
+/// read once.
+type ModelCache = std::sync::Mutex<
+    std::collections::HashMap<std::path::PathBuf, (std::time::SystemTime, Option<FolderModel>)>,
+>;
+
+fn model_cache() -> &'static ModelCache {
+    static CACHE: std::sync::OnceLock<ModelCache> = std::sync::OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// The 3D model files under `dir` (four folders deep at most).
+fn model_files(dir: &std::path::Path, depth: usize, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = rd.flatten().map(|e| e.path()).collect();
+    entries.sort();
+    for p in entries {
+        if p.is_dir() && depth < 4 {
+            model_files(&p, depth + 1, out);
+        } else if archisim_mesh::is_model_file(&p) {
+            out.push(p);
+        }
+    }
+}
+
+/// The kind of a model by the folders it is in and its name.
+pub fn kind_of(path: &std::path::Path) -> archisim_library::imported::ModelKind {
+    let words: String = path
+        .iter()
+        .rev()
+        .take(4)
+        .map(|c| c.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(" ");
+    archisim_library::imported::ModelKind::from_folder(&words)
+}
+
+/// A model of the folder, read now or taken from the cache.
+fn folder_model(path: &std::path::Path) -> Option<FolderModel> {
+    let changed = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    if let Some((t, m)) = model_cache().lock().ok()?.get(path) {
+        if *t == changed {
+            return m.clone();
+        }
+    }
+    let kind = kind_of(path);
+    let made = archisim_mesh::read_file(path, Default::default())
+        .ok()
+        .and_then(|mesh| {
+            let mut model = archisim_core::Model::new("Modelo de la biblioteca");
+            model.add_level("Planta baja", 0.0);
+            let name = path.file_stem()?.to_string_lossy().replace(['_', '-'], " ");
+            let source = path.file_name()?.to_string_lossy().into_owned();
+            let r = archisim_library::imported::import_mesh(&mut model, mesh, &name, &source, kind)
+                .ok()?;
+            Some(FolderModel {
+                path: path.to_path_buf(),
+                kind,
+                model: std::sync::Arc::new(model),
+                object_type: r.object_type,
+            })
+        });
+    if let Ok(mut c) = model_cache().lock() {
+        c.insert(path.to_path_buf(), (changed, made.clone()));
+    }
+    made
 }
 
 impl FolderObjects {
@@ -88,11 +173,15 @@ impl FolderObjects {
                 }
             }
         }
+        let mut files = Vec::new();
+        model_files(&lib.dir, 0, &mut files);
+        let models = files.iter().filter_map(|p| folder_model(p)).collect();
         Self {
             read: std::time::Instant::now(),
             lib,
             model,
             types,
+            models,
         }
     }
 }
@@ -261,6 +350,44 @@ impl ArchiSimApp {
                     note: format!("{size} · {family} · biblioteca del estudio"),
                     category,
                     folder,
+                    thumb,
+                });
+            }
+        }
+        // The folder's 3D models, not in the project (by their name).
+        {
+            let project = self.ed.model();
+            let fo = self.folder_objects.as_ref().expect("just read");
+            let thumbs = &mut self.thumbs;
+            for (i, fm) in fo.models.iter().enumerate() {
+                let Some(t) = fm.model.object_type(fm.object_type) else {
+                    continue;
+                };
+                if project.object_types().any(|x| x.name == t.name) {
+                    continue;
+                }
+                let def = fm.model.family(t.family).map(|f| f.def());
+                let category = def.map_or("Mobiliario", |d| category_name(&d.category));
+                let size = fm
+                    .model
+                    .object_type_box(t.id)
+                    .map(|(lo, hi)| size_note(lo, hi))
+                    .unwrap_or_default();
+                let file = fm
+                    .path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let m = &fm.model;
+                let thumb = thumbs.get(ctx, format!("objmesh:{}:{sig}", fm.path.display()), || {
+                    crate::type_preview::object_model(m, t)
+                });
+                items.push(Item {
+                    pick: ObjectPick::FolderModel(i),
+                    name: t.name.clone(),
+                    note: format!("{size} · modelo 3D ({file}) · biblioteca del estudio"),
+                    category,
+                    folder: "Modelos 3D".into(),
                     thumb,
                 });
             }
@@ -537,6 +664,38 @@ impl ArchiSimApp {
                             archisim_core::FamilyTypeRef::Object(t) => Some(t),
                             _ => None,
                         }
+                    }
+                    Err(e) => {
+                        self.complain(format!("No se puede cargar «{name}»: {e}."));
+                        None
+                    }
+                }
+            }
+            ObjectPick::FolderModel(i) => {
+                let fm = self.folder_objects.as_ref()?.models.get(i)?.clone();
+                let name = fm
+                    .model
+                    .object_type(fm.object_type)
+                    .map(|t| t.name.clone())
+                    .unwrap_or_default();
+                let source = fm
+                    .path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let mesh = match archisim_mesh::read_file(&fm.path, Default::default()) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        self.complain(format!("No se puede leer «{source}»: {e}."));
+                        return None;
+                    }
+                };
+                match self.ed.import_mesh(mesh, &name, &source, fm.kind) {
+                    Ok(r) => {
+                        self.say(format!(
+                            "«{name}» (modelo 3D) cargado de la biblioteca en el proyecto."
+                        ));
+                        Some(r.object_type)
                     }
                     Err(e) => {
                         self.complain(format!("No se puede cargar «{name}»: {e}."));

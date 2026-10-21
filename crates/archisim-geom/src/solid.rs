@@ -1099,6 +1099,9 @@ pub fn loose_railing_bars(model: &Model, id: archisim_core::RailingId) -> Vec<Ba
 /// Solids of an object (furniture, sanitary ware…): the 3D body of its
 /// family, one solid per material, turned and placed.
 pub fn object_solids(model: &Model, id: archisim_core::ObjectId) -> Vec<Solid> {
+    if let Some(solids) = object_mesh_solids(model, id) {
+        return solids;
+    }
     let (Some(o), Ok(ev)) = (model.object(id), model.evaluate_object(id)) else {
         return Vec::new();
     };
@@ -1126,6 +1129,51 @@ pub fn object_solids(model: &Model, id: archisim_core::ObjectId) -> Vec<Solid> {
             triangles,
         })
         .collect()
+}
+
+/// Solids of an object whose type shows a 3D model: one per material of
+/// the version the views take ([`Model::object_mesh`]), scaled to the
+/// type's height, turned and placed. `None` for an object without a model.
+pub fn object_mesh_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Solid>> {
+    let o = model.object(id)?;
+    let (_, k, level) = model.object_mesh(id)?;
+    let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+    let place = |p: [f32; 3]| -> P3 {
+        let q = o.to_plan(p[0] as f64 * k, p[1] as f64 * k);
+        [q.x, q.y, z0 + p[2] as f64 * k]
+    };
+    Some(
+        level
+            .groups
+            .iter()
+            .map(|g| Solid {
+                owner: SolidOwner::Object(id),
+                material: g.material,
+                triangles: g
+                    .triangles
+                    .iter()
+                    .map(|t| t.map(|i| place(level.positions[i as usize])))
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
+/// The colours of the corners of each triangle of a solid of
+/// [`object_mesh_solids`] (its textures), in the same order; `None` for
+/// any other solid.
+pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>> {
+    let SolidOwner::Object(id) = s.owner else {
+        return None;
+    };
+    let (_, _, level) = model.object_mesh(id)?;
+    let g = level.groups.iter().find(|g| g.material == s.material)?;
+    Some(
+        g.triangles
+            .iter()
+            .map(|t| t.map(|i| level.colors[i as usize]))
+            .collect(),
+    )
 }
 
 /// Solids of a loose railing: its bars, each a closed box, as one solid.

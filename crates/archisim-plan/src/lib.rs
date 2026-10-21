@@ -1735,14 +1735,10 @@ fn draw_objects(
         }
         let size = outline[0].distance(outline[2]);
         // The object's own choice («Dibujo en planta»), else the view's.
-        let drawing = model
-            .object_values(o.id)
-            .get("drawing")
-            .and_then(|v| v.as_text().map(String::from));
-        let presenting = match drawing.as_deref() {
-            Some("técnico") => false,
-            Some("presentación") => true,
-            _ => presentation_view(),
+        let presenting = match model.object_drawing(o.id) {
+            archisim_core::ObjectDrawing::Technical => false,
+            archisim_core::ObjectDrawing::Presentation => true,
+            archisim_core::ObjectDrawing::ByStyle => presentation_view(),
         };
         let presented = presenting
             .then(|| model.object_presentation_symbol(o.id))

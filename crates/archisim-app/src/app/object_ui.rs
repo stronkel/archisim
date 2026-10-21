@@ -246,6 +246,37 @@ impl ArchiSimApp {
                 Err(e) => self.complain(format!("No se puede duplicar: {e}.")),
             }
         }
+        if let Some((mesh, k, shown)) = self.ed.model().object_mesh(id) {
+            let levels = mesh
+                .levels
+                .iter()
+                .map(|l| l.triangle_count().to_string())
+                .collect::<Vec<_>>()
+                .join(" / ");
+            let source = mesh.source.clone();
+            let showing = shown.triangle_count();
+            group(ui, "object-mesh", "Modelo 3D", |ui| {
+                props::text_row(ui, "Fichero", "De donde se importó", &source);
+                props::text_row(
+                    ui,
+                    "Caras",
+                    "Del modelo y de sus versiones más ligeras, para verlo de lejos",
+                    &levels,
+                );
+                props::text_row(
+                    ui,
+                    "En las vistas",
+                    "Con muchos modelos en el proyecto, todos se ven con una versión más ligera",
+                    &showing.to_string(),
+                );
+                props::text_row(
+                    ui,
+                    "Escala",
+                    "La altura del tipo sobre la del modelo",
+                    &format!("{k:.3}").replace('.', ","),
+                );
+            });
+        }
         group(ui, "object-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &o.guid.to_string());
         });

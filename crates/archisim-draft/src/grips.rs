@@ -244,6 +244,144 @@ pub fn move_grip(shape: &Shape, index: usize, to: Point2) -> Shape {
     }
 }
 
+// ---- Vertices: added on an edge, removed one by one (as ArchiCAD) --------
+
+/// A polyline with a new vertex on its segment nearest to `at`: the
+/// polyline, the new vertex's index and how far `at` was from the segment.
+/// `None` when `at` is on an existing vertex (nothing to add).
+fn insert_in(p: &Polyline, at: Point2) -> Option<(Polyline, usize, f64)> {
+    let segs = polyline_segs(p);
+    let (i, (t, q), d) = segs
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let n = s.nearest(at);
+            (i, n, n.1.distance(at))
+        })
+        .min_by(|a, b| a.2.total_cmp(&b.2))?;
+    let s = segs[i];
+    let len = s.length();
+    if len < 1e-9 || t * len < 1e-6 || (1.0 - t) * len < 1e-6 {
+        return None;
+    }
+    let mut out = p.clone();
+    out.bulges.resize(out.points.len(), 0.0);
+    out.bulges[i] = s.sub(0.0, t).bulge();
+    out.points.insert(i + 1, q);
+    out.bulges.insert(i + 1, s.sub(t, 1.0).bulge());
+    Some((out, i + 1, d))
+}
+
+/// A polyline without vertex `i` (the two segments that met there become
+/// one; two arcs, one arc of both sweeps). `None` if it would be left with
+/// too few points (two on an open one, three on a closed one).
+fn remove_in(p: &Polyline, i: usize) -> Option<Polyline> {
+    let n = p.points.len();
+    if i >= n || n <= if p.closed { 3 } else { 2 } {
+        return None;
+    }
+    let mut out = p.clone();
+    out.bulges.resize(n, 0.0);
+    let sweep = |b: f64| 4.0 * b.atan();
+    if !p.closed && i == 0 {
+        // The first segment goes with it.
+    } else if !p.closed && i == n - 1 {
+        out.bulges[i - 1] = 0.0;
+    } else {
+        let prev = (i + n - 1) % n;
+        let joined = sweep(out.bulges[prev]) + sweep(out.bulges[i]);
+        out.bulges[prev] = if out.bulges[prev].abs() < 1e-12 && out.bulges[i].abs() < 1e-12 {
+            0.0
+        } else {
+            (joined / 4.0).tan()
+        };
+    }
+    out.points.remove(i);
+    out.bulges.remove(i);
+    Some(out)
+}
+
+/// `shape` with a new vertex on its edge nearest to `at`, within `reach`:
+/// the shape and the index of the new vertex's grip (to drag it at once).
+/// A line becomes a polyline of two segments. Circles, arcs, ellipses,
+/// texts and dimensions have no vertices to add.
+pub fn insert_vertex(shape: &Shape, at: Point2, reach: f64) -> Option<(Shape, usize)> {
+    match shape {
+        Shape::Line { a, b } => {
+            let p = Polyline::straight(vec![*a, *b], false);
+            let (q, i, d) = insert_in(&p, at)?;
+            (d <= reach).then_some((Shape::Polyline(q), i))
+        }
+        Shape::Polyline(p) => {
+            let (q, i, d) = insert_in(p, at)?;
+            (d <= reach).then_some((Shape::Polyline(q), i))
+        }
+        Shape::Hatch(h) => {
+            let mut offset = 0;
+            let mut best: Option<(usize, Polyline, usize, f64)> = None;
+            for (k, l) in h.loops.iter().enumerate() {
+                if let Some((q, i, d)) = insert_in(l, at) {
+                    if best.as_ref().is_none_or(|b| d < b.3) {
+                        best = Some((k, q, offset + i, d));
+                    }
+                }
+                offset += l.points.len();
+            }
+            let (k, q, index, d) = best?;
+            if d > reach {
+                return None;
+            }
+            let mut out = h.clone();
+            out.loops[k] = q;
+            Some((Shape::Hatch(out), index))
+        }
+        _ => None,
+    }
+}
+
+/// Whether grip `index` of `shape` is a vertex that can be removed.
+pub fn is_vertex(shape: &Shape, index: usize) -> bool {
+    match shape {
+        Shape::Polyline(p) => index < p.points.len(),
+        Shape::Hatch(h) => index < h.loops.iter().map(|l| l.points.len()).sum(),
+        _ => false,
+    }
+}
+
+/// `shape` without the vertex of grip `index`; `None` if it is not a
+/// vertex or the shape would be left with too few (an open polyline of two
+/// points becomes a line).
+pub fn remove_vertex(shape: &Shape, index: usize) -> Option<Shape> {
+    match shape {
+        Shape::Polyline(p) => {
+            if !p.closed && p.points.len() == 2 {
+                return None;
+            }
+            let q = remove_in(p, index)?;
+            if !q.closed && q.points.len() == 2 && q.is_straight() && q.width == 0.0 {
+                return Some(Shape::Line {
+                    a: q.points[0],
+                    b: q.points[1],
+                });
+            }
+            Some(Shape::Polyline(q))
+        }
+        Shape::Hatch(h) => {
+            let mut i = index;
+            for (k, l) in h.loops.iter().enumerate() {
+                if i < l.points.len() {
+                    let mut out = h.clone();
+                    out.loops[k] = remove_in(l, i)?;
+                    return Some(Shape::Hatch(out));
+                }
+                i -= l.points.len();
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 /// The angle of the line from `a` to `b` (helper for rotation grips).
 pub fn angle(a: Point2, b: Point2) -> f64 {
     angle_of(b - a)
@@ -310,5 +448,67 @@ mod tests {
             panic!()
         };
         assert!(centre.y > 0.0);
+    }
+
+    #[test]
+    fn vertices_are_added_on_edges_and_removed() {
+        // A line becomes a polyline with the new vertex in the middle.
+        let line = Shape::Line {
+            a: p(0.0, 0.0),
+            b: p(4.0, 0.0),
+        };
+        let (s, i) = insert_vertex(&line, p(1.0, 0.05), 0.1).unwrap();
+        let Shape::Polyline(q) = &s else { panic!() };
+        assert_eq!(i, 1);
+        assert_eq!(q.points.len(), 3);
+        assert!(q.points[1].approx_eq(p(1.0, 0.0)));
+        // Too far from the edge: nothing.
+        assert!(insert_vertex(&line, p(1.0, 1.0), 0.1).is_none());
+        // Dragging it makes a corner; removing it gives the line back.
+        let moved = move_grip(&s, 1, p(1.0, 2.0));
+        assert!(is_vertex(&moved, 1));
+        assert_eq!(remove_vertex(&moved, 1), Some(line.clone()));
+        // A closed hatch: the new corner on the side clicked, in order.
+        let h = Shape::Hatch(archisim_core::Hatch {
+            loops: vec![Polyline::straight(
+                vec![p(0.0, 0.0), p(4.0, 0.0), p(4.0, 3.0), p(0.0, 3.0)],
+                true,
+            )],
+            pattern: archisim_core::HatchPattern::Solid,
+            scale: 1.0,
+            angle: 0.0,
+            background: None,
+            opacity: 1.0,
+        });
+        let (h2, i) = insert_vertex(&h, p(2.0, 3.0), 0.1).unwrap();
+        assert_eq!(i, 3);
+        let a0 = crate::area(&h).unwrap();
+        let h3 = move_grip(&h2, i, p(2.0, 4.0));
+        assert!((crate::area(&h3).unwrap() - (a0 + 2.0)).abs() < 1e-9);
+        let back = remove_vertex(&h3, i).unwrap();
+        assert!((crate::area(&back).unwrap() - a0).abs() < 1e-9);
+        // A triangle keeps its three corners.
+        let Shape::Hatch(t) = &back else { panic!() };
+        let tri = Shape::Hatch(archisim_core::Hatch {
+            loops: vec![Polyline::straight(t.loops[0].points[..3].to_vec(), true)],
+            ..t.clone()
+        });
+        assert!(remove_vertex(&tri, 0).is_none());
+        // A vertex on an arc splits it into two arcs of the same circle.
+        let arc = Shape::Polyline(Polyline {
+            points: vec![p(1.0, 0.0), p(-1.0, 0.0)],
+            bulges: vec![1.0, 0.0],
+            closed: false,
+            width: 0.0,
+        });
+        let (s, i) = insert_vertex(&arc, p(0.0, 1.0), 0.1).unwrap();
+        let Shape::Polyline(q) = &s else { panic!() };
+        assert!(q.points[i].approx_eq(p(0.0, 1.0)));
+        let quarter = (std::f64::consts::FRAC_PI_2 / 4.0).tan();
+        assert!((q.bulges[0] - quarter).abs() < 1e-9 && (q.bulges[1] - quarter).abs() < 1e-9);
+        let Some(Shape::Polyline(r)) = remove_vertex(&s, i) else {
+            panic!()
+        };
+        assert!((r.bulges[0] - 1.0).abs() < 1e-9);
     }
 }

@@ -1,7 +1,7 @@
 family "Árbol"
   category site
   host none
-  version 4
+  version 5
   description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
   folder "Vegetación"
 
@@ -15,13 +15,14 @@ type_params
     leaves material = "Vegetación" label "Copa"
     bark   material = "Corteza" label "Tronco"
   section "Presentación"
+    plan_drawing choice("presentación", "según el estilo", "técnico") = "presentación" label "Dibujo en planta"
     shape choice("lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "lóbulos" label "Copa en presentación"
     look choice("transparente", "rellena", "contorno") = "transparente" label "Relleno de la copa"
     opacity number = 0.55 range 0.10..1.00 label "Opacidad de la copa"
 
 instance_params
   section "Dibujo"
-    drawing choice("según el estilo", "técnico", "presentación") = "según el estilo" label "Dibujo en planta"
+    drawing choice("del tipo", "presentación", "según el estilo", "técnico") = "del tipo" label "Dibujo en planta"
     shape_own choice("del tipo", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "del tipo" label "Copa"
     look_own choice("del tipo", "transparente", "rellena", "contorno") = "del tipo" label "Relleno"
     opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"

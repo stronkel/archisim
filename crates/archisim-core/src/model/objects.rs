@@ -31,6 +31,9 @@ pub struct ObjectType {
     pub family: FamilyId,
     /// Value of every type parameter of the family.
     pub values: Values,
+    /// A 3D model shown instead of the family's boxes (scaled to the
+    /// type's height).
+    pub mesh: Option<MeshId>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +71,17 @@ impl Object {
             self.position.y + x * s + y * c,
         )
     }
+}
+
+/// How an object is drawn in plan ([`Model::object_drawing`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectDrawing {
+    /// Its drawing of presentation (the canopy of a tree) in every view.
+    Presentation,
+    /// Its technical symbol for the scale in every view.
+    Technical,
+    /// As the view's style says.
+    ByStyle,
 }
 
 impl Model {
@@ -120,6 +134,33 @@ impl Model {
         v
     }
 
+    /// How an object is drawn in plan: its own «Dibujo en planta», or its
+    /// type's when it says «del tipo». Objects whose family has no such
+    /// choice follow the view's style.
+    pub fn object_drawing(&self, id: ObjectId) -> ObjectDrawing {
+        let own = self
+            .object_values(id)
+            .get("drawing")
+            .and_then(|v| v.as_text().map(String::from));
+        let of_type = || {
+            let o = self.objects.get(&id)?;
+            let t = self.object_types.get(&o.object_type)?;
+            let mut v = self.family_defaults(t.family, ParamScope::Type).ok()?;
+            v.extend(t.values.clone());
+            v.get("plan_drawing")
+                .and_then(|v| v.as_text().map(String::from))
+        };
+        let choice = match own.as_deref() {
+            None | Some("del tipo") => of_type(),
+            Some(_) => own,
+        };
+        match choice.as_deref() {
+            Some("presentación") => ObjectDrawing::Presentation,
+            Some("técnico") => ObjectDrawing::Technical,
+            _ => ObjectDrawing::ByStyle,
+        }
+    }
+
     /// Sets an object's own instance values (checked against its family).
     pub fn set_object_values(&mut self, id: ObjectId, values: Values) -> Result<(), ModelError> {
         let o = self.objects.get(&id).ok_or(ModelError::UnknownObject(id))?;
@@ -155,6 +196,7 @@ impl Model {
                 name: name.into(),
                 family,
                 values,
+                mesh: None,
             },
         );
         Ok(id)
@@ -393,6 +435,10 @@ impl Model {
             let name = format!("object type {} «{}»", t.id.0, t.name);
             claim(t.id.0, Some(&t.guid))
                 .and_then(|_| self.check_object_type(t.family, &t.values))
+                .and_then(|_| match t.mesh {
+                    Some(m) if !self.meshes.contains_key(&m) => Err(ModelError::UnknownMesh(m)),
+                    _ => Ok(()),
+                })
                 .map_err(|error| RestoreError {
                     element: name,
                     error,

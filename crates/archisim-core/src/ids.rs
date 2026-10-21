@@ -22,6 +22,11 @@ macro_rules! typed_id {
 }
 
 typed_id!(
+    /// Identifies a [`crate::MeshModel`] (a 3D model brought from another
+    /// program).
+    MeshId
+);
+typed_id!(
     /// Identifies a [`crate::PresentationStyle`].
     PresentationStyleId
 );
