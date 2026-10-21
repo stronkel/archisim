@@ -28,7 +28,9 @@ pub fn png(svg: &str, dpi: f64) -> Result<Vec<u8>, String> {
     // Opaque on white: the premultiplied colours are the colours.
     let rgb: Vec<u8> = pixmap
         .data()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .flat_map(|p| [p[0], p[1], p[2]])
         .collect();
     Ok(encode_rgb(w, h, &rgb, dpi))
