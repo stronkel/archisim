@@ -240,6 +240,10 @@ pub struct ViewStyle {
     pub hidden: BTreeSet<Category>,
     pub hidden_layers: BTreeSet<DrawLayerId>,
     pub detail: Detail,
+    /// What is drawn in grey, by discipline.
+    pub focus: crate::DisciplineFocus,
+    /// Disciplines left out of the view (the navigator's eye).
+    pub hidden_disciplines: BTreeSet<crate::ElementDiscipline>,
 }
 
 impl ViewStyle {

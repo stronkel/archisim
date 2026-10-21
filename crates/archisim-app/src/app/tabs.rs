@@ -132,6 +132,7 @@ impl ArchiSimApp {
                 self.plan_scale = tab.scale;
                 self.cut_plane = tab.cut_plane;
                 self.view_style = tab.style;
+                self.apply_focus();
                 if !tab.fitted {
                     self.fit_requested = true;
                 }

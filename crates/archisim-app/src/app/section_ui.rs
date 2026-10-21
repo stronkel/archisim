@@ -35,6 +35,8 @@ pub struct SectionKey {
     size: [usize; 2],
     scale: f64,
     thin_lines: bool,
+    focus: archisim_core::DisciplineFocus,
+    hidden: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
 }
 
 /// The drawing of the section shown, worked out once per revision of the
@@ -287,6 +289,8 @@ impl ArchiSimApp {
             size,
             scale: self.plan_scale,
             thin_lines: self.thin_lines,
+            focus: self.screen_focus(),
+            hidden: self.hidden_disciplines.clone(),
         };
         let model = self.ed.model();
         let Some(cache) = self.section_cache.as_mut() else {
@@ -299,6 +303,11 @@ impl ArchiSimApp {
                 scale: key.scale,
                 thin_lines: key.thin_lines,
                 px_per_mm: Some(px_per_m * key.scale / 1000.0),
+                style: archisim_core::ViewStyle {
+                    focus: key.focus,
+                    hidden_disciplines: key.hidden.clone(),
+                    ..Default::default()
+                },
                 ..archisim_plan::PlanOptions::default()
             };
             let svg = render_section(model, &cache.drawing, &options);

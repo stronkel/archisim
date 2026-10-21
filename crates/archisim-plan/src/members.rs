@@ -152,7 +152,7 @@ pub(crate) fn draw_members(
         if poly.is_empty() || !visible(&poly) {
             continue;
         }
-        match v {
+        crate::dim::element(s, b.id.0, |s| match v {
             MemberView::Cut => {
                 let mat = model.member_type(b.member_type).map(|t| t.material);
                 if let Some(mat) = mat {
@@ -160,14 +160,14 @@ pub(crate) fn draw_members(
                 }
             }
             MemberView::Above | MemberView::Below => outline(s, &poly, pens().view, true, k),
-        }
+        });
     }
     for (c, v) in plan_columns(model, level, cut_plane) {
         let poly = column_outline(model, c);
         if poly.is_empty() || !visible(&poly) {
             continue;
         }
-        match v {
+        crate::dim::element(s, c.id.0, |s| match v {
             MemberView::Cut => {
                 let mat = model.member_type(c.member_type).map(|t| t.material);
                 if let Some(mat) = mat {
@@ -188,7 +188,7 @@ pub(crate) fn draw_members(
             }
             MemberView::Below => outline(s, &poly, pens().view, false, k),
             MemberView::Above => outline(s, &poly, pens().view, true, k),
-        }
+        });
     }
     s.push_str("</g>\n");
 }

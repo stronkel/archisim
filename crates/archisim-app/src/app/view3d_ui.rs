@@ -48,6 +48,7 @@ pub struct View3dState {
         BTreeSet<Element>,
         archisim_plan::phases::PhaseView,
         u64,
+        crate::view3d::scene::Disciplines,
     )>,
     gpu: Option<Gpu>,
     /// What the last picture was drawn with.
@@ -110,8 +111,15 @@ impl View3dState {
         model: &archisim_core::Model,
         phases: archisim_plan::phases::PhaseView,
         coord: &crate::coord::Coord,
+        disciplines: &crate::view3d::scene::Disciplines,
     ) {
-        let key = (revision, selection.clone(), phases, coord.serial);
+        let key = (
+            revision,
+            selection.clone(),
+            phases,
+            coord.serial,
+            disciplines.clone(),
+        );
         if self.scene_key.as_ref() != Some(&key) {
             let parts = coord.parts();
             let linked: Vec<LinkedPart> = parts
@@ -130,6 +138,7 @@ impl View3dState {
                 selection,
                 &linked,
                 coord.isolate,
+                disciplines,
             );
             self.scene_key = Some(key);
             self.scene_serial += 1;
@@ -240,7 +249,13 @@ impl View3dState {
     ) {
         let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        let wanted = Some((key, BTreeSet::new(), Default::default(), 0));
+        let wanted = Some((
+            key,
+            BTreeSet::new(),
+            Default::default(),
+            0,
+            Default::default(),
+        ));
         if self.scene_key != wanted {
             self.scene =
                 build().map_or_else(Scene::default, |m| Scene::build(&m, &BTreeSet::new()));
@@ -334,12 +349,18 @@ impl ArchiSimApp {
         let painter = ui.painter_at(rect);
         let v = &mut self.v3d;
         v.canvas = rect;
+        let disciplines = crate::view3d::scene::Disciplines {
+            focus: self.screen_focus(),
+            hidden: self.hidden_disciplines.clone(),
+        };
+        let v = &mut self.v3d;
         v.refresh_scene(
             self.ed.revision(),
             &self.ed.selection,
             self.ed.model(),
             self.phase_view,
             &self.coord,
+            &disciplines,
         );
         let size = rect.size();
         if v.fit_requested && size.x > 50.0 && size.y > 50.0 {
@@ -448,6 +469,10 @@ impl ArchiSimApp {
                 }
             }
         }
+        let disciplines = crate::view3d::scene::Disciplines {
+            focus: self.screen_focus(),
+            hidden: self.hidden_disciplines.clone(),
+        };
         let v = &mut self.v3d;
         v.refresh_scene(
             self.ed.revision(),
@@ -455,6 +480,7 @@ impl ArchiSimApp {
             self.ed.model(),
             self.phase_view,
             &self.coord,
+            &disciplines,
         );
 
         // The picture.

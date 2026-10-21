@@ -67,6 +67,8 @@ pub enum Glyph {
     Publish,
     /// The magnifier of the command search.
     Search,
+    Eye,
+    Lock,
     Spline,
     PickLine,
     Align,
@@ -256,6 +258,12 @@ impl Glyph {
             Glyph::Line => {
                 r##"<path d="M3 16L17 4"/><circle cx="3" cy="16" r="1.3" fill="#fff" stroke="none"/><circle cx="17" cy="4" r="1.3" fill="#fff" stroke="none"/>"##
             }
+            Glyph::Eye => {
+                r##"<path d="M2 10c2.5-4 5-6 8-6s5.5 2 8 6c-2.5 4-5 6-8 6s-5.5-2-8-6z"/><circle cx="10" cy="10" r="2.5"/>"##
+            }
+            Glyph::Lock => {
+                r##"<rect x="4.5" y="9" width="11" height="8" rx="1"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>"##
+            }
             Glyph::Search => r##"<circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.6 12.6L17 17"/>"##,
             Glyph::Publish => {
                 r##"<path d="M5 15a4 4 0 0 1 0-8 5 5 0 0 1 9.5 1.5A3.5 3.5 0 0 1 15 15z"/><path d="M10 9v5M8 11l2-2 2 2" stroke-width="1"/>"##
@@ -323,6 +331,8 @@ impl Glyph {
         Glyph::Team,
         Glyph::Publish,
         Glyph::Search,
+        Glyph::Eye,
+        Glyph::Lock,
         Glyph::Spline,
         Glyph::PickLine,
         Glyph::Align,

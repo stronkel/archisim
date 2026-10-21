@@ -1255,6 +1255,76 @@ fn disciplines_keys_and_command_search() {
     assert_eq!(h.model().walls().count(), 4);
 }
 
+/// Working in Structure greys the rest of the plan; a discipline hidden
+/// in the navigator leaves the views; one locked cannot be selected; an
+/// element can be given another discipline in Properties.
+#[test]
+fn disciplines_grey_hide_and_lock() {
+    use super::toolbox::Discipline;
+    use archisim_core::{DisciplineFocus, ElementDiscipline};
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    assert_eq!(h.app.view_style.focus, DisciplineFocus::None);
+    h.app.set_discipline(Discipline::Structure);
+    h.frame();
+    assert_eq!(
+        h.app.view_style.focus,
+        DisciplineFocus::Only(ElementDiscipline::Structure)
+    );
+    h.app.set_discipline(Discipline::Concept);
+    assert_eq!(h.app.view_style.focus, DisciplineFocus::Volumes);
+    h.app.set_discipline(Discipline::Architecture);
+    assert_eq!(h.app.view_style.focus, DisciplineFocus::None);
+    // Attenuation off: the discipline does not change the view.
+    h.app.attenuate = false;
+    h.app.set_discipline(Discipline::Structure);
+    assert_eq!(h.app.view_style.focus, DisciplineFocus::None);
+    h.app.attenuate = true;
+    h.app.set_discipline(Discipline::Architecture);
+    // The walls of the template's façade: architecture (brick), so the
+    // eye of Architecture hides them in every tab.
+    let w = h.model().walls().next().unwrap().id;
+    assert_eq!(
+        h.model().discipline(w.0),
+        Some(ElementDiscipline::Architecture)
+    );
+    h.app
+        .toggle_hidden_discipline(ElementDiscipline::Architecture);
+    assert!(h
+        .app
+        .view_style
+        .hidden_disciplines
+        .contains(&ElementDiscipline::Architecture));
+    h.frame();
+    h.app
+        .toggle_hidden_discipline(ElementDiscipline::Architecture);
+    // Locked: a click selects nothing of it.
+    h.app
+        .locked_disciplines
+        .insert(ElementDiscipline::Architecture);
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    h.frame();
+    assert!(h.app.ed.selection.is_empty());
+    h.app.locked_disciplines.clear();
+    // By hand: a bearing brick wall.
+    h.app
+        .ed
+        .set_discipline(&[w.0], Some(ElementDiscipline::Structure))
+        .unwrap();
+    assert_eq!(
+        h.model().discipline(w.0),
+        Some(ElementDiscipline::Structure)
+    );
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    h.frame();
+    h.app.ed.undo();
+    assert_eq!(
+        h.model().discipline(w.0),
+        Some(ElementDiscipline::Architecture)
+    );
+}
+
 /// The command line is hidden until an order is typed; the step of a
 /// running order is in the contextual bar, and the bar's methods change
 /// how the tool draws.

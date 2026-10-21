@@ -73,6 +73,7 @@ impl ArchiSimApp {
             many => self.many_properties(ui, many),
         }
         if let [e] = selection.as_slice() {
+            self.discipline_group(ui, *e);
             self.user_params_group(ui, *e);
         }
     }

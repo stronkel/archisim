@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche, 2) · Interfaz por disciplinas, bloque I3
+
+Rama `bloque/interfaz-i3` (pull request para Antonio). Formato `.archisim` **versión 15**: disciplina dada a mano y atenuación de cada vista. Los proyectos anteriores se abren igual. Sin cambios en el IFC.
+
+**Hecho**
+- **Cada elemento tiene su disciplina.** Sin tocar nada:
+  - pilares y vigas son Estructura;
+  - muros y forjados son Estructura si tienen una capa estructural de **hormigón, acero o madera**;
+  - un muro de ladrillo es Arquitectura, porque en un edificio con estructura de pórticos cierra y no carga;
+  - terreno, vegetación y vehículos son Urbanismo;
+  - lo demás es Arquitectura.
+- **Disciplina a mano:** en Propiedades → **Disciplina**, «Automática (…)» o la que quieras (por ejemplo, un muro de carga de ladrillo).
+- **Atenuación**: al trabajar en **Estructura**, **Instalaciones** o **Urbanismo**, lo que no es de esa disciplina se ve en **gris**; en **Concepto**, todo el edificio en gris.
+  - Vale en planta, sección y 3D.
+  - Es un ajuste de la vista: en Propiedades → Visibilidad → **Atenuación** se elige también para cada vista colocada en un plano, y sale en el PDF y el DXF.
+  - **Vista → Atenuar por disciplina** la apaga.
+- **Navegador → Modelo → Disciplinas**: cada disciplina con su número de elementos, un **ojo**, que la oculta en todas las vistas, y un **candado**, que hace que se vea pero no se pueda seleccionar.
+
+**Pendiente**
+- El ojo y el candado no se guardan en el proyecto: duran la sesión.
+- Los planos no copian solos la atenuación de la pestaña al colocar una vista: se elige en la vista colocada.
+
+**Qué debe probar Antonio**
+1. Abre la demo y pincha **Estructura** en la barra de la izquierda: los tabiques y la fachada de ladrillo se ven en gris; forjados, pilares y vigas, a su color. Pulsa F3: el 3D igual.
+2. Pincha **Concepto**: todo en gris. Vuelve a **Arquitectura**: todo normal.
+3. Selecciona un muro de fachada: Propiedades → Disciplina → Estructura. Vuelve a Estructura y míralo resaltado.
+4. Navegador → **Modelo** → Disciplinas: apaga el ojo de Urbanismo (desaparecen terreno y árboles) y pon el candado a Arquitectura (los muros ya no se seleccionan).
+5. En el plano A-01, selecciona la planta y en Visibilidad → Atenuación elige «Resaltar estructura»; exporta el PDF.
+
+---
+
 ## 2026-10-20 (noche) · Interfaz por disciplinas, bloque I2 (v0.35)
 
 Bloque I2 de `docs/INTERFAZ.md` y lo que pidió Antonio al probar I1, en la rama `bloque/interfaz-i2` (pull request para Antonio). Formato `.archisim` **versión 14** (vistas 3D en planos); los proyectos anteriores se abren igual. Sin cambios en el IFC.

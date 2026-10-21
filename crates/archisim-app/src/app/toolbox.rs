@@ -1022,7 +1022,7 @@ impl ArchiSimApp {
     pub(super) fn pick(&mut self, pick: Pick) {
         if !self.discipline.offers(pick) {
             if let Some(d) = Discipline::home(pick) {
-                self.discipline = d;
+                self.set_discipline(d);
             }
         }
         match pick {
@@ -1111,7 +1111,7 @@ impl ArchiSimApp {
                 if r.on_hover_text(format!("{} — {}", d.name(), d.purpose()))
                     .clicked()
                 {
-                    self.discipline = d;
+                    self.set_discipline(d);
                 }
             }
         });

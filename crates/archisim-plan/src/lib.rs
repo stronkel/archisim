@@ -26,6 +26,7 @@
 pub mod annotate;
 pub mod axo;
 pub mod curtain;
+pub(crate) mod dim;
 pub mod drafting;
 pub mod lettering;
 pub mod members;
@@ -282,6 +283,9 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     PENS.with(|p| p.set(pens));
     DETAIL.with(|d| d.set(options.style.detail));
     let phased = phases::phase_model(model, options.phase_view);
+    // Ids are the same in the phased copy: what is greyed comes from the
+    // model as it is.
+    let _greyed = dim::begin(model, &options.style);
     let svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
@@ -497,10 +501,12 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .terrains_on_level(level)
         .filter(|_| show(archisim_core::Category::Terrain))
     {
-        terrain::draw_terrain(&mut s, t, k);
+        dim::element(&mut s, t.id.0, |s| terrain::draw_terrain(s, t, k));
     }
     for (si, slab) in slabs.iter().enumerate() {
-        draw_slab(&mut s, model, slab, si, options.cut_plane, k);
+        dim::element(&mut s, slab.id.0, |s| {
+            draw_slab(s, model, slab, si, options.cut_plane, k)
+        });
     }
     for roof in model
         .roofs_on_level(level)
@@ -508,7 +514,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     {
         let (lo, hi) = bounds(&roof.eaves());
         if visible(lo, hi) {
-            roofs::draw_roof(&mut s, roof, k);
+            dim::element(&mut s, roof.id.0, |s| roofs::draw_roof(s, roof, k));
         }
     }
     for stair in model
@@ -518,7 +524,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let pts = stairs::stair_points(stair);
         let (lo, hi) = bounds(&pts);
         if visible(lo, hi) {
-            stairs::draw_stair(&mut s, stair, options.cut_plane, k);
+            dim::element(&mut s, stair.id.0, |s| {
+                stairs::draw_stair(s, stair, options.cut_plane, k)
+            });
         }
     }
     // Stairs arriving at this level, seen from above through their hole:
@@ -530,7 +538,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let pts = stairs::stair_points(stair);
         let (lo, hi) = bounds(&pts);
         if visible(lo, hi) {
-            stairs::draw_stair(&mut s, stair, rise + options.cut_plane, k);
+            dim::element(&mut s, stair.id.0, |s| {
+                stairs::draw_stair(s, stair, rise + options.cut_plane, k)
+            });
         }
     }
     s.push_str("</g>\n");
@@ -562,7 +572,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             .filter(|o| opening_view(o, cuts[gi]) == OpeningView::Cut)
             .cloned()
             .collect();
-        draw_layers(&mut s, model, g, gi, &pieces[gi], &cut, cuts[gi], k);
+        dim::element(&mut s, g.wall.0, |s| {
+            draw_layers(s, model, g, gi, &pieces[gi], &cut, cuts[gi], k)
+        });
     }
     s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
     for (ops, cut) in openings.iter().zip(&cuts) {
@@ -570,17 +582,17 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             if !show(archisim_core::Category::Openings) {
                 continue;
             }
-            match opening_view(o, *cut) {
-                OpeningView::Cut => draw_opening(&mut s, model, o, options.scale, k),
-                OpeningView::Above => draw_opening_above(&mut s, o, k),
+            dim::element(&mut s, o.opening.0, |s| match opening_view(o, *cut) {
+                OpeningView::Cut => draw_opening(s, model, o, options.scale, k),
+                OpeningView::Above => draw_opening_above(s, o, k),
                 OpeningView::Below => {}
-            }
+            });
         }
     }
     // Cut lines go last so frames and sill boards never cover the jambs.
     s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
     for ((g, p), cut) in geos.iter().zip(&pieces).zip(&cuts) {
-        draw_cut_lines(&mut s, g, p, *cut, k);
+        dim::element(&mut s, g.wall.0, |s| draw_cut_lines(s, g, p, *cut, k));
     }
     s.push_str("</g>\n");
     // Columns and beams on top: the structure goes through the walls.
@@ -600,7 +612,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .filter(|_| show(archisim_core::Category::CurtainWalls))
     {
         if poly_visible(&curtain::curtain_points(model, c)) {
-            curtain::draw_curtain_wall(&mut s, model, c, options.cut_plane, k);
+            dim::element(&mut s, c.id.0, |s| {
+                curtain::draw_curtain_wall(s, model, c, options.cut_plane, k)
+            });
         }
     }
     s.push_str("</g>\n<g id=\"railings\">\n");
@@ -609,7 +623,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .filter(|_| show(archisim_core::Category::Railings))
     {
         if poly_visible(&r.path) {
-            railings::draw_railing(&mut s, r, options.cut_plane, k);
+            dim::element(&mut s, r.id.0, |s| {
+                railings::draw_railing(s, r, options.cut_plane, k)
+            });
         }
     }
     s.push_str("</g>\n");
@@ -1577,7 +1593,7 @@ fn draw_objects(
         } else {
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
-        match marks {
+        dim::element(s, o.id.0, |s| match marks {
             Ok(marks) => draw_marks(s, marks, &|p| o.to_plan(p[0], p[1]), k),
             Err(()) => {
                 let _ = writeln!(
@@ -1587,7 +1603,7 @@ fn draw_objects(
                     num(pens().view * k)
                 );
             }
-        }
+        });
     }
     s.push_str("</g>\n");
 }

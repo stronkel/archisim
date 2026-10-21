@@ -41,3 +41,17 @@ impl Editor {
         Ok(ids.len())
     }
 }
+
+impl Editor {
+    /// Gives elements a discipline by hand (`None`: their own back).
+    pub fn set_discipline(
+        &mut self,
+        ids: &[u64],
+        discipline: Option<archisim_core::ElementDiscipline>,
+    ) -> EditResult<()> {
+        self.transact("Cambiar disciplina", |m| {
+            ids.iter()
+                .try_for_each(|id| m.set_discipline(*id, discipline))
+        })
+    }
+}

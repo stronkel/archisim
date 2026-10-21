@@ -630,6 +630,18 @@ impl ArchiSimApp {
                     style.detail = combo(ui, "view-detail", w, style.detail, &opts);
                 },
             );
+            row(
+                ui,
+                "Atenuación",
+                "Qué disciplina se ve a su color; lo demás, en gris (también al imprimir). Con «Atenuar por disciplina» (Vista), la pone la disciplina en la que trabajas",
+                |ui, w| {
+                    let opts: Vec<_> = archisim_core::DisciplineFocus::ALL
+                        .iter()
+                        .map(|f| (*f, f.label().to_string()))
+                        .collect();
+                    style.focus = combo(ui, "view-focus", w, style.focus, &opts);
+                },
+            );
             for c in archisim_core::Category::ALL {
                 row(ui, c.label(), "", |ui, _| {
                     let mut on = style.shows(c);
