@@ -29,6 +29,8 @@ enum MethodAct {
     Dim(DimMode),
     Footing(crate::editor::FootingMode),
     MassMode(crate::editor::MassMode),
+    Spline,
+    PickLine,
     /// Footings under the columns and walls of the level.
     FoundLevel,
     Command(&'static str),
@@ -218,6 +220,20 @@ impl ArchiSimApp {
     /// The insertion methods of the tool in use (all drawing tools show
     /// the same row; what does not apply is shown faint).
     fn methods(&self) -> Option<(&'static str, Vec<Method>)> {
+        let (name, mut list) = self.tool_methods()?;
+        // With a spline or a picked line, the tool's own way is not the one
+        // in use.
+        if self.draw_method != super::methods_ui::DrawMethod::Normal {
+            for m in &mut list {
+                if !matches!(m.act, MethodAct::Spline | MethodAct::PickLine) {
+                    m.on = false;
+                }
+            }
+        }
+        Some((name, list))
+    }
+
+    fn tool_methods(&self) -> Option<(&'static str, Vec<Method>)> {
         let outline = |wand: bool, mode: SlabMode| match (wand, mode) {
             (true, _) => Outline::Wand,
             (false, SlabMode::Rectangle) => Outline::Rectangle,
@@ -368,22 +384,46 @@ impl ArchiSimApp {
                 outline_act(Outline::Wand),
                 current == Some(Outline::Wand),
             ),
+        ];
+        let mut list = list;
+        list.extend(self.curve_methods());
+        Some((name, list))
+    }
+
+    /// Spline and Elegir línea, for every tool that takes them.
+    fn curve_methods(&self) -> Vec<Method> {
+        use super::methods_ui::DrawMethod;
+        let m = |mark, name, hint, act, on| Method {
+            mark,
+            name,
+            hint,
+            act,
+            on,
+        };
+        vec![
             m(
                 Mark::Glyph(Glyph::Spline),
                 "Spline",
-                "Curva libre (llegará con los muros y bordes por curva libre)",
-                MethodAct::None,
-                false,
+                "Curva libre por puntos: muros curvos, bordes de forjados, locales, barandillas, viales",
+                if self.spline_closes().is_some() {
+                    MethodAct::Spline
+                } else {
+                    MethodAct::None
+                },
+                self.draw_method == DrawMethod::Spline,
             ),
             m(
                 Mark::Glyph(Glyph::PickLine),
                 "Elegir línea",
-                "Seguir una línea existente del dibujo 2D o de un DXF (llegará pronto)",
-                MethodAct::None,
-                false,
+                "Seguir una línea, polilínea, arco o círculo del dibujo 2D o de un DXF importado",
+                if self.picks_lines() {
+                    MethodAct::PickLine
+                } else {
+                    MethodAct::None
+                },
+                self.draw_method == DrawMethod::PickLine,
             ),
-        ];
-        Some((name, list))
+        ]
     }
 
     fn mass_methods(&self) -> Vec<Method> {
@@ -426,6 +466,9 @@ impl ArchiSimApp {
                 mode == MassMode::Path,
             ),
         ]
+        .into_iter()
+        .chain(self.curve_methods())
+        .collect()
     }
 
     fn footing_methods(&self) -> Vec<Method> {
@@ -468,6 +511,9 @@ impl ArchiSimApp {
                 false,
             ),
         ]
+        .into_iter()
+        .chain(self.curve_methods())
+        .collect()
     }
 
     fn dim_methods(&self) -> Vec<Method> {
@@ -579,6 +625,8 @@ impl ArchiSimApp {
             }
             MethodAct::Footing(mode) => self.set_footing_mode(mode),
             MethodAct::MassMode(mode) => self.set_mass_mode(mode),
+            MethodAct::Spline => self.set_draw_method(super::methods_ui::DrawMethod::Spline),
+            MethodAct::PickLine => self.set_draw_method(super::methods_ui::DrawMethod::PickLine),
             MethodAct::FoundLevel => self.found_level(),
             MethodAct::Command(name) => self.start_command(name),
             MethodAct::Fixed | MethodAct::None => {}
@@ -596,7 +644,8 @@ impl ArchiSimApp {
             }
             if let Some((name, methods)) = self.methods() {
                 bar_title(ui, name, &p);
-                let named = names_fit(ui, methods.iter().map(|m| m.name), ui.available_width());
+                let room = ui.available_width() - 150.0;
+                let named = names_fit(ui, methods.iter().map(|m| m.name), room);
                 let mut chosen = None;
                 for m in &methods {
                     let enabled = m.act != MethodAct::None;
@@ -613,6 +662,7 @@ impl ArchiSimApp {
                 if let Some(act) = chosen {
                     self.apply_method(act);
                 }
+                self.length_angle_fields(ui);
                 return;
             }
             // Modificar: with the selection, or grey without it.

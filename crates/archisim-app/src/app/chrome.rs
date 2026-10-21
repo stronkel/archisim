@@ -595,6 +595,21 @@ impl ArchiSimApp {
         if matches!(self.mode, ViewMode::Sheet(_)) && self.tool != Tool::Cad {
             return "Clic: seleccionar vista o dibujo · Arrastrar vista: colocarla · Doble clic: abrir su planta · L, TX…: dibujar en el plano · Supr: quitar";
         }
+        if self.tool != Tool::Cad && self.tool != Tool::Arrow {
+            use super::methods_ui::DrawMethod;
+            match self.draw_method {
+                DrawMethod::Spline if self.spline_points.is_empty() => {
+                    return "Spline: clic en el primer punto de la curva · Esc: volver al método de antes"
+                }
+                DrawMethod::Spline => {
+                    return "Clic: siguiente punto de la curva · L y ∠ arriba: punto exacto · Doble clic, Intro o clic derecho: terminar · Esc: quitar el último"
+                }
+                DrawMethod::PickLine => {
+                    return "Clic en una línea, polilínea, arco o círculo del dibujo 2D (o de un DXF) · Esc: volver al método de antes"
+                }
+                DrawMethod::Normal => {}
+            }
+        }
         match self.tool {
             Tool::Arrow if self.drag.is_some() => "Soltar: terminar · Ctrl: copiar · Mayús: 45° · Distancia + Intro: exacto · Esc: cancelar",
             Tool::Arrow if self.temp_edit.is_some() => "Escribe la medida (mm, o 1,2m · 120cm) · Intro: aplicar · Esc: dejarla",

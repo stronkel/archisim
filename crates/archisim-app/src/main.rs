@@ -22,6 +22,7 @@ mod pick;
 mod plan_image;
 mod slab_tool;
 mod snap;
+mod spline;
 mod temp_dims;
 mod type_drawing;
 mod type_preview;

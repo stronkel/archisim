@@ -90,7 +90,7 @@ pub fn profile_text(p: Profile) -> String {
 }
 
 /// Degrees with a decimal comma.
-fn fmt_deg(a: f64) -> String {
+pub(super) fn fmt_deg(a: f64) -> String {
     let d = (a.to_degrees() * 100.0).round() / 100.0;
     format!("{d}").replace('.', ",")
 }
