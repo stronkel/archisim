@@ -590,6 +590,10 @@ pub fn build() -> Result<Document, ModelError> {
             ("Arbusto 120", -1.4, 10.2, 0.0),
             ("Persona", -2.2, 7.6, -FRAC_PI_2),
             ("Turismo", 15.0, -6.5, 0.0),
+            // Species for the presentation plan: blossom by the pool, a
+            // pine to the east.
+            ("Árbol en flor 5 m", -2.6, 11.0, 0.0),
+            ("Pino 10 m", 17.5, 4.0, 0.0),
         ] {
             let object_type = ty(m, name)?;
             let at = Point2::new(x, y);
@@ -718,6 +722,64 @@ pub fn build() -> Result<Document, ModelError> {
             }),
         ))?;
         m.add_draft(NewDraft::new(view, urb, Shape::Polyline(terrace)))?;
+        // The garden to the west, for the presentation plan: lawn in mown
+        // stripes round a pool, and a gravel path along the south façade.
+        let jardin = m.add_draw_layer(DrawLayer::new(
+            "Jardín",
+            [90, 140, 70],
+            0.13,
+            LineStyle::Continuous,
+        ))?;
+        let rect = |x0: f64, y0: f64, x1: f64, y1: f64| {
+            Polyline::straight(
+                vec![
+                    Point2::new(x0, y0),
+                    Point2::new(x1, y0),
+                    Point2::new(x1, y1),
+                    Point2::new(x0, y1),
+                ],
+                true,
+            )
+        };
+        let pool = rect(-5.6, 5.0, -4.2, 10.0);
+        for (loops, pattern, color, background, angle) in [
+            (
+                vec![rect(-6.0, -2.4, -0.2, 12.0), pool.clone()],
+                HatchPattern::LawnStripes,
+                [150, 190, 110],
+                [172, 206, 134],
+                std::f64::consts::FRAC_PI_2,
+            ),
+            (
+                vec![pool.clone()],
+                HatchPattern::Water,
+                [40, 150, 190],
+                [182, 226, 236],
+                0.0,
+            ),
+            (
+                vec![rect(0.0, -2.4, 12.0, -0.4)],
+                HatchPattern::GravelDots,
+                [120, 112, 100],
+                [228, 222, 210],
+                0.0,
+            ),
+        ] {
+            let mut d = NewDraft::new(
+                view,
+                jardin,
+                Shape::Hatch(Hatch {
+                    loops,
+                    pattern,
+                    scale: 1.0,
+                    angle,
+                    background: Some(background),
+                }),
+            );
+            d.color = Some(color);
+            m.add_draft(d)?;
+        }
+        m.add_draft(NewDraft::new(view, jardin, Shape::Polyline(pool)))?;
         m.add_draft(NewDraft::new(
             view,
             textos,
@@ -799,6 +861,24 @@ pub fn build() -> Result<Document, ModelError> {
                     walls: "Pintura plástica lisa".into(),
                     ceiling: "Falso techo de placa de yeso".into(),
                 };
+                // The floor drawn in plan: boards or tiles.
+                r.floor_fill = Some(if floor == wood {
+                    archisim_core::FloorFill {
+                        pattern: archisim_core::HatchPattern::Decking,
+                        color: [168, 128, 86],
+                        background: Some([236, 220, 194]),
+                        scale: 1.0,
+                        angle: 0.0,
+                    }
+                } else {
+                    archisim_core::FloorFill {
+                        pattern: archisim_core::HatchPattern::Tiles,
+                        color: [160, 160, 156],
+                        background: Some([238, 238, 234]),
+                        scale: 2.0,
+                        angle: 0.0,
+                    }
+                });
                 m.set_room(r)?;
             }
         }
@@ -915,6 +995,24 @@ pub fn build() -> Result<Document, ModelError> {
             crop: Some(crop),
             centre: Point2::new(0.42, 0.3 - half.y.min(0.1)),
         })?;
+        // A presentation board on A3 in the «Bosque» style: the title,
+        // the ground floor, the 3D view and a section, the rooms' areas and
+        // the sun's path.
+        let look = m
+            .presentation_styles()
+            .find(|s| s.name == "Bosque")
+            .map(|s| s.id);
+        archisim_plan::layout::add_presentation_sheet(
+            m,
+            &archisim_plan::layout::PresentationSheet {
+                number: "A-03".into(),
+                name: "Presentación".into(),
+                width: 420.0,
+                height: 297.0,
+                level: pb,
+                style: look,
+            },
+        )?;
         Ok(())
     })?;
 
@@ -1075,7 +1173,7 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        assert_eq!(m.objects().count(), 14);
+        assert_eq!(m.objects().count(), 16);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);
@@ -1085,14 +1183,15 @@ mod tests {
         assert_eq!(doc.undo_label(), Some("Parámetros del proyecto"));
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
-        assert_eq!(m.sheets().len(), 2);
-        assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 2);
+        assert_eq!(m.sheets().len(), 3);
+        assert!(m.viewports().any(|v| v.style.presentation.is_some()));
+        assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 3);
         assert_eq!(m.rooms().count(), 4);
         assert_eq!(m.tags().count(), 9);
         let total: f64 = m.rooms().map(|r| r.area()).sum();
         assert!(total > 90.0 && total < 108.0, "{total}");
-        assert_eq!(m.drafts().count(), 7);
-        assert_eq!(m.draw_layers().len(), 4);
+        assert_eq!(m.drafts().count(), 32);
+        assert_eq!(m.draw_layers().len(), 6);
         assert_eq!(m.dimensions().count(), 4);
         assert!(m
             .dimensions()

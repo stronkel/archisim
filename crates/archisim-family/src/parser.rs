@@ -15,7 +15,7 @@ pub const BUILTINS: [&str; 2] = ["opens_to", "hand"];
 /// Names the program also provides to plan symbols of wall-hosted
 /// families, in the family's axes: where the wall's exterior and interior
 /// faces are (`y`, metres) and the sill height above the level.
-pub const PLAN_BUILTINS: [&str; 3] = ["wall_ext", "wall_int", "sill_height"];
+pub const PLAN_BUILTINS: [&str; 4] = ["wall_ext", "wall_int", "sill_height", "seed"];
 
 /// Reads a recipe. Every `include` must have been expanded first (see
 /// [`expand_includes`]).
@@ -34,6 +34,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
         body: Vec::new(),
         plans: Vec::new(),
         elevation: None,
+        presentation: None,
         outputs: Vec::new(),
         ifc: Vec::new(),
         catalog: Catalog::default(),
@@ -100,6 +101,26 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
                         line: line.no,
                     },
                 );
+            }
+            "plan" if c.peek_ident("presentation") => {
+                // `plan presentation`: the symbol of presentation views.
+                c.ident()?;
+                c.end()?;
+                if def.presentation.is_some() {
+                    return Err(syntax(
+                        line.no,
+                        "only one «plan presentation» block is allowed",
+                    ));
+                }
+                let body = statements(&line.children)?;
+                if let Some(bad) = first_where(&body, &|s| matches!(s, Stmt::Box { .. })) {
+                    return Err(syntax(bad, "a plan symbol draws lines, not boxes"));
+                }
+                def.presentation = Some(PlanSymbol {
+                    scale: 0.0,
+                    body,
+                    line: line.no,
+                });
             }
             "plan" => {
                 // `plan 1:50`
@@ -736,15 +757,40 @@ fn statement(line: &Line) -> Result<Stmt, FamilyError> {
             }
             let pen = c.pen()?;
             let style = c.style()?;
-            let filled = c.peek_ident("filled");
-            if filled {
-                c.ident()?;
-            }
+            let (filled, tint, opacity) = c.fill()?;
             Stmt::Polygon {
                 points,
                 pen,
                 style,
                 filled,
+                tint,
+                opacity,
+                line: no,
+            }
+        }
+        "cloud" => {
+            // `cloud center (x, y) radius r lobes n jitter j pen P …`
+            c.keyword("center")?;
+            let center = c.pair()?;
+            c.keyword("radius")?;
+            let radius = c.expr()?;
+            c.keyword("lobes")?;
+            let lobes = c.expr()?;
+            c.keyword("jitter")?;
+            let jitter = c.expr()?;
+            let pen = c.pen()?;
+            let style = c.style()?;
+            let (filled, tint, opacity) = c.fill()?;
+            Stmt::Cloud {
+                center,
+                radius,
+                lobes,
+                jitter,
+                pen,
+                style,
+                filled,
+                tint,
+                opacity,
                 line: no,
             }
         }
@@ -815,6 +861,7 @@ pub(crate) fn stmt_line(s: &Stmt) -> usize {
         | Stmt::Let { line, .. }
         | Stmt::Line { line, .. }
         | Stmt::Polygon { line, .. }
+        | Stmt::Cloud { line, .. }
         | Stmt::Arc { line, .. } => *line,
         Stmt::Require(r) => r.line,
     }
@@ -866,13 +913,14 @@ fn check_names(def: &FamilyDef) -> Result<(), FamilyError> {
                 | Stmt::Require(_)
                 | Stmt::Line { .. }
                 | Stmt::Polygon { .. }
+                | Stmt::Cloud { .. }
                 | Stmt::Arc { .. } => {}
             }
         }
         Ok(())
     }
     walk(def, &def.body, &mut Vec::new())?;
-    for p in &def.plans {
+    for p in def.plans.iter().chain(&def.presentation) {
         walk(def, &p.body, &mut Vec::new())?;
     }
     for comp in def.components.values() {
@@ -931,6 +979,26 @@ impl<'a> Cursor<'a> {
                 Ok(s)
             }
             _ => self.err("a name"),
+        }
+    }
+
+    /// What fills an outline: `filled` (white), `tint M` (the colour of
+    /// material M) and `opacity a`, in any order.
+    fn fill(&mut self) -> Result<(bool, Option<Expr>, Option<Expr>), FamilyError> {
+        let (mut filled, mut tint, mut opacity) = (false, None, None);
+        loop {
+            if self.peek_ident("filled") {
+                self.ident()?;
+                filled = true;
+            } else if self.peek_ident("tint") {
+                self.ident()?;
+                tint = Some(self.expr()?);
+            } else if self.peek_ident("opacity") {
+                self.ident()?;
+                opacity = Some(self.expr()?);
+            } else {
+                return Ok((filled, tint, opacity));
+            }
         }
     }
 

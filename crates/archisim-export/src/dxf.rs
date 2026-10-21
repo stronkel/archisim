@@ -297,8 +297,10 @@ impl Dxf {
         let round = |v: f64| (v * 1000.0).round() / 1000.0;
         let to = |p: &(f64, f64)| (round(p.0 * mm), round(-p.1 * mm));
         if let Some(f) = it.fill {
-            // White and near-white fills (paper, slabs) are left out.
-            if f.iter().any(|c| *c < 230) {
+            // White and near-white fills (paper, slabs) are left out, and
+            // see-through ones (shadows, canopies): DXF would make them
+            // solid, over what is under them.
+            if f.iter().any(|c| *c < 230) && it.fill_opacity >= 0.995 {
                 let loops: Vec<Loop> = it
                     .subpaths
                     .iter()
@@ -458,8 +460,18 @@ impl Dxf {
                     };
                     self.hatch(&name, &back, &loops, None);
                 }
-                let pattern = hatch_def(h, k);
-                self.hatch(&name, &look, &loops, pattern);
+                let bands = archisim_draft::hatch::hatch_bands(h);
+                if bands.is_empty() {
+                    let pattern = hatch_def(h, k);
+                    self.hatch(&name, &look, &loops, pattern);
+                } else {
+                    // Mown lawn: its bands as solid fills.
+                    let bands: Vec<Loop> = bands
+                        .into_iter()
+                        .map(|b| loop_points(&Polyline::straight(b, true), MM))
+                        .collect();
+                    self.hatch(&name, &look, &bands, None);
+                }
             }
             Shape::Dim(m) => {
                 // As its pieces: lines and arcs, solid arrowheads, the text.

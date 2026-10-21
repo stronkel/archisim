@@ -801,6 +801,7 @@ impl ArchiSimApp {
                 }
             });
             self.north_row(ui);
+            self.sun_rows(ui);
             text_row(ui, "Fichero", "", &self.ed.display_name());
             text_row(
                 ui,

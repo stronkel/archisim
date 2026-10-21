@@ -203,6 +203,7 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownSheet(_) => "el plano ya no existe".into(),
         ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
         ModelError::UnknownRoom(_) => "el local ya no existe".into(),
+        ModelError::UnknownPresentationStyle(_) => "el estilo de presentación ya no existe".into(),
         ModelError::UnknownTag(_) => "la etiqueta ya no existe".into(),
         ModelError::UnknownTable(_) => "la tabla ya no está en el plano".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),
@@ -313,6 +314,8 @@ pub fn explain_room(e: &archisim_geom::RoomError) -> String {
 /// Spanish name of the quantity named in a [`ModelError`].
 fn es_what(what: &str) -> String {
     match what {
+        "presentation style" => "el grueso de las líneas del estilo",
+        "floor fill scale" => "la escala del pavimento",
         "wall height" => "la altura del muro",
         "wall start" => "el inicio del muro",
         "wall end" => "el final del muro",

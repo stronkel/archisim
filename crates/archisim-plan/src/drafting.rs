@@ -86,7 +86,9 @@ fn in_view(shape: &Shape, k: f64, viewport: Option<(Point2, Point2)>) -> bool {
 
 /// Draws the drafting elements of a view. `k`: drawing units per paper
 /// millimetre. `printing`: leave out layers that are not printed. Hatches
-/// go first so lines and texts are drawn over them.
+/// go first so lines and texts are drawn over them. `hatches`: only the
+/// hatches (`Some(true)`, drawn under the elements, as pavings), only the
+/// rest (`Some(false)`) or everything.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_drafts(
     s: &mut String,
@@ -97,9 +99,11 @@ pub fn draw_drafts(
     printing: bool,
     hidden_layers: &std::collections::BTreeSet<archisim_core::DrawLayerId>,
     hide_dims: bool,
+    hatches: Option<bool>,
 ) {
     let shown: Vec<&Draft> = model
         .drafts_in(view)
+        .filter(|d| hatches.is_none_or(|h| h == matches!(d.shape, Shape::Hatch(_))))
         .filter(|d| model.draft_visible(d) && !hidden_layers.contains(&d.layer))
         .filter(|d| !(hide_dims && matches!(d.shape, Shape::Dim(_))))
         .filter(|d| !printing || model.draw_layer(d.layer).is_none_or(|l| l.printable))
@@ -210,55 +214,7 @@ pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
                 num(archisim_draft::font::STROKE * t.height * k)
             );
         }
-        Shape::Hatch(h) => {
-            let polys = hatch::hatch_polygons(h);
-            let mut outline = String::new();
-            for p in &polys {
-                outline.push_str(&points_path(p, true));
-                outline.push(' ');
-            }
-            let outline = outline.trim_end();
-            if let Some(bg) = h.background {
-                let _ = writeln!(
-                    s,
-                    r#"<path d="{outline}" fill="{}" fill-rule="evenodd" stroke="none"/>"#,
-                    hex(bg)
-                );
-            }
-            let lines = if h.pattern == archisim_core::HatchPattern::Solid {
-                None
-            } else {
-                hatch::hatch_lines(h, k)
-            };
-            match lines {
-                Some(lines) => {
-                    let mut path = String::new();
-                    for (a, b) in lines {
-                        let b = if a.approx_eq(b) {
-                            // A dot: a very short line with round caps.
-                            b + Point2::new(k * 0.01, 0.0)
-                        } else {
-                            b
-                        };
-                        let _ = write!(path, "M{} L{} ", pt(a), pt(b));
-                    }
-                    if !path.is_empty() {
-                        let _ = writeln!(
-                            s,
-                            r#"<path d="{}" stroke="{color}" stroke-width="{width}" stroke-linecap="round"/>"#,
-                            path.trim_end()
-                        );
-                    }
-                }
-                None => {
-                    // Solid, or too dense to draw line by line.
-                    let _ = writeln!(
-                        s,
-                        r#"<path d="{outline}" fill="{color}" fill-rule="evenodd" stroke="none"/>"#
-                    );
-                }
-            }
-        }
+        Shape::Hatch(h) => draw_hatch(s, h, &color, &width, k),
         Shape::Dim(m) => {
             let dd = archisim_draft::dims::drawing(m, k, crate::pens().text);
             stroke(s, &segs_path(&dd.segs, false));
@@ -284,6 +240,77 @@ pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
                 r#"<path d="{}" stroke="{color}" stroke-width="{}" stroke-linecap="round"/>"#,
                 path.trim_end(),
                 num(archisim_draft::font::STROKE * dd.text.height * k)
+            );
+        }
+    }
+}
+
+/// Draws a hatch: its background, its bands, its pattern lines (or a
+/// solid fill) in `color`, lines `width` wide.
+pub(crate) fn draw_hatch(
+    s: &mut String,
+    h: &archisim_core::Hatch,
+    color: &str,
+    width: &str,
+    k: f64,
+) {
+    let polys = hatch::hatch_polygons(h);
+    let mut outline = String::new();
+    for p in &polys {
+        outline.push_str(&points_path(p, true));
+        outline.push(' ');
+    }
+    let outline = outline.trim_end();
+    if let Some(bg) = h.background {
+        let _ = writeln!(
+            s,
+            r#"<path d="{outline}" fill="{}" fill-rule="evenodd" stroke="none"/>"#,
+            hex(bg)
+        );
+    }
+    let bands = hatch::hatch_bands(h);
+    if !bands.is_empty() {
+        let mut d = String::new();
+        for b in &bands {
+            d.push_str(&points_path(b, true));
+            d.push(' ');
+        }
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{color}" fill-rule="evenodd" stroke="none"/>"#,
+            d.trim_end()
+        );
+    }
+    let lines = if h.pattern == archisim_core::HatchPattern::Solid {
+        None
+    } else {
+        hatch::hatch_lines(h, k)
+    };
+    match lines {
+        Some(lines) => {
+            let mut path = String::new();
+            for (a, b) in lines {
+                let b = if a.approx_eq(b) {
+                    // A dot: a very short line with round caps.
+                    b + Point2::new(k * 0.01, 0.0)
+                } else {
+                    b
+                };
+                let _ = write!(path, "M{} L{} ", pt(a), pt(b));
+            }
+            if !path.is_empty() {
+                let _ = writeln!(
+                    s,
+                    r#"<path d="{}" stroke="{color}" stroke-width="{width}" stroke-linecap="round"/>"#,
+                    path.trim_end()
+                );
+            }
+        }
+        None => {
+            // Solid, or too dense to draw line by line.
+            let _ = writeln!(
+                s,
+                r#"<path d="{outline}" fill="{color}" fill-rule="evenodd" stroke="none"/>"#
             );
         }
     }

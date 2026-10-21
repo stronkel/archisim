@@ -105,6 +105,46 @@ impl ArchiSimApp {
         }
     }
 
+    /// A presentation board of the active level on A3: title, plan, 3D
+    /// view, section, areas and the sun, in the active view's style (or
+    /// the studio's, AD5).
+    pub(super) fn new_presentation_sheet(&mut self) {
+        let model = self.ed.model();
+        let number = model.next_sheet_number();
+        let style = self.view_style.presentation.or_else(|| {
+            model
+                .presentation_styles()
+                .find(|s| s.name == "AD5")
+                .or_else(|| model.presentation_styles().next())
+                .map(|s| s.id)
+        });
+        let level = self.ed.level;
+        let level_name = model
+            .level(level)
+            .map(|l| l.name.clone())
+            .unwrap_or_default();
+        let spec = archisim_plan::layout::PresentationSheet {
+            number: number.clone(),
+            name: format!("Presentación {}", level_name.to_lowercase()),
+            width: 420.0,
+            height: 297.0,
+            level,
+            style,
+        };
+        let r = self.ed.transact("Plano de presentación", |m| {
+            archisim_plan::layout::add_presentation_sheet(m, &spec)
+        });
+        match r {
+            Ok(id) => {
+                self.say(format!(
+                    "Plano {number} de presentación creado: muévelo, cambia sus vistas o su estilo en sus propiedades."
+                ));
+                self.open_view(TabKind::Sheet(id));
+            }
+            Err(e) => self.complain(format!("No se puede: {e}.")),
+        }
+    }
+
     /// The sheet in the central area.
     pub(super) fn sheet_view(&mut self, ui: &mut Ui, id: SheetId) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
@@ -628,6 +668,25 @@ impl ArchiSimApp {
             row(ui, "Marco y cajetín", "", |ui, _| {
                 ui.checkbox(&mut new.title_block, "");
             });
+            let styles: Vec<(Option<archisim_core::PresentationStyleId>, String)> =
+                std::iter::once((None, "Técnica (sin estilo)".to_string()))
+                    .chain(
+                        self.ed
+                            .model()
+                            .presentation_styles()
+                            .map(|s| (Some(s.id), s.name.clone())),
+                    )
+                    .collect();
+            row(
+                ui,
+                "Presentación",
+                "Papel, cajetín, tablas y textos del plano en un estilo de presentación (cada vista tiene el suyo)",
+                |ui, w| {
+                    let refs: Vec<(Option<archisim_core::PresentationStyleId>, &str)> =
+                        styles.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                    new.presentation = choice(ui, "sheet-presentation", w, new.presentation, &refs);
+                },
+            );
         });
         if new != sheet {
             let r = self.ed.set_sheet(new);

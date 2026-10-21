@@ -6,6 +6,47 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (tarde) · Bloque P: presentación (P1–P4)
+
+Rama `bloque/presentacion` (sobre `bloque/revision-r`), pull request #40 para Antonio. Formato `.archisim` versión 22 (abre las anteriores tal cual).
+
+**Hecho**
+- **P1, estilos de presentación** (Vista → Estilos de presentación…, o Propiedades de la vista → Presentación). Cada estilo tiene:
+  - papel de color;
+  - paleta de tonos de oscuro a claro (cada color del dibujo pasa al tono de su claridad; sin paleta, los colores propios);
+  - muros y pilares cortados macizados en un color;
+  - grueso de las líneas;
+  - sombras.
+  - De partida: **AD5** (líneas finas negras, muros negros, colores propios), **Terracota**, **Bosque**, **Azul** y **Monocromo**; «Estilos de partida» los añade a proyectos antiguos. Biblioteca del estudio: «Guardar / Cargar de la biblioteca» (`Estilos.aspres`).
+  - **Tramas nuevas** en sombreados y suelos: adoquín, losa, piedra irregular (cada piedra distinta), tarima, veta de madera, grava punteada, césped en franjas, césped punteado y lámina de agua.
+  - **Pavimento en planta** de cada local (Propiedades del local). Los sombreados 2D se dibujan debajo de muros, objetos y árboles.
+- **P2, vegetación y figuras**: en las vistas con estilo, los árboles se dibujan como copas de lóbulos irregulares, cada uno distinto, transparentes, rellenas o solo contorno (tipo → «Copa en presentación») y del color de su especie. También arbustos, setos, personas y coches rellenos. Especies nuevas en la biblioteca: árbol en flor, otoñal y pino. El PDF dibuja las transparencias.
+- **P3, sombras**: el sol del proyecto (Propiedades del proyecto, sin nada seleccionado: «Sol: día» y «Sol: hora solar»), desde la latitud de la georreferencia y el norte. Los estilos con sombras las dibujan sobre el suelo de la planta (no dentro de los forjados) y sobre el terreno de las axonometrías de los planos. Las curvas de nivel ya estaban y toman la paleta.
+- **P4, láminas**: **+ Plano de presentación** en el Navegador (Planos) hace una lámina A3 de la planta activa:
+  - título del proyecto con emplazamiento, fase y fecha;
+  - la planta, la vista 3D y una sección a las escalas que caben;
+  - el cuadro de superficies útiles;
+  - el recorrido solar con el norte (solsticios, equinoccio, horas y el sol de las sombras);
+  - todo en el estilo de la vista. Cada plano puede tener su propio estilo (Propiedades del plano → Presentación: papel, cajetín, tablas y textos). **Exportar plano → PNG** (200 ppp).
+- La demo tiene jardín (césped, piscina, grava, árbol en flor y pino), suelos de tarima y gres, y la lámina **A-03 Presentación** en estilo Bosque, también en `out/demo-plano-a-03.png`.
+
+**Pendiente**
+- En el DXF no hay transparencias: las sombras no salen y las copas solo con su contorno.
+- La paleta cambia todos los colores por su claridad (el agua pasa al tono de su claridad, no queda azul); si hace falta, se puede añadir que ciertos colores se respeten.
+- Las sombras de los árboles salen escalonadas (su 3D son cajas), y solo caen sobre el suelo, no sobre fachadas ni cubiertas. Mejorará con la librería 3D (L1–L3).
+- Secciones con fondo de vegetación y diagramas de concurso más elaborados, si Antonio los quiere.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/`: abre `out/demo-planos.pdf` (tercera hoja) y `out/demo-plano-a-03.png`.
+2. `cargo run --release -p archisim-app -- out/demo.archisim`. Con la planta baja y nada seleccionado, en Propiedades → **Presentación → Estilo** elige AD5, Terracota o Bosque: muros macizados, copas de colores y sombras.
+3. En las mismas propiedades del proyecto, cambia **Sol: día** (21/12) y **Sol: hora solar** (16:00): las sombras se alargan y giran.
+4. **Vista → Estilos de presentación…**: crea uno, cámbiale papel, tonos, macizado, sombras y grueso; **Usar en la vista activa**.
+5. Selecciona un árbol y, en su tipo, «Copa en presentación»: transparente, rellena o contorno.
+6. Selecciona un local y, en **Pavimento en planta**, prueba Tarima, Piedra irregular o Losa.
+7. Navegador → Planos → **+ Plano de presentación**; después Archivo → Exportar plano en **PNG**.
+
+---
+
 ## 2026-10-21 (tarde) · Bloque R, segunda vuelta (R17–R21)
 
 Misma rama `bloque/revision-r` y mismo pull request (#39). El formato sigue en la versión 21 (aún no estaba en `main`): las caras pintadas guardan ahora el elemento y la cara, y hay zonas pintadas y aristas con altura por punto.

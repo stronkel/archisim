@@ -34,6 +34,10 @@ pub struct FamilyDef {
     /// leaves open to (opening lines), in `x` and `z`; `None` if the
     /// recipe has no `elevation` block.
     pub elevation: Option<PlanSymbol>,
+    /// The plan symbol of presentation drawings (coloured, see-through
+    /// canopies…), drawn instead of the scale ones in a view with a
+    /// presentation style; `None` if the recipe has no `plan presentation`.
+    pub presentation: Option<PlanSymbol>,
     /// Values read by the rest of the program (rough opening, frame…).
     pub outputs: Vec<Output>,
     /// IFC data (class, predefined type…).
@@ -332,12 +336,30 @@ pub enum Stmt {
         line: usize,
     },
     /// A closed plan outline, filled white (it hides what is under it) or
-    /// not.
+    /// not; or tinted with a material's colour (`tint`), see-through as
+    /// much as its `opacity`.
     Polygon {
         points: Vec<[Expr; 2]>,
         pen: Pen,
         style: Expr,
         filled: bool,
+        tint: Option<Expr>,
+        opacity: Option<Expr>,
+        line: usize,
+    },
+    /// A cloud: a closed outline of `lobes` bulges round `center`, each a
+    /// little different (by the program's `seed`), as a tree's canopy
+    /// drawn by hand. Filled and tinted as a polygon.
+    Cloud {
+        center: [Expr; 2],
+        radius: Expr,
+        lobes: Expr,
+        jitter: Expr,
+        pen: Pen,
+        style: Expr,
+        filled: bool,
+        tint: Option<Expr>,
+        opacity: Option<Expr>,
         line: usize,
     },
     /// A plan arc around `center`, from one point to another, the short way.
@@ -356,7 +378,7 @@ impl Stmt {
     pub fn is_plan_mark(&self) -> bool {
         matches!(
             self,
-            Stmt::Line { .. } | Stmt::Polygon { .. } | Stmt::Arc { .. }
+            Stmt::Line { .. } | Stmt::Polygon { .. } | Stmt::Arc { .. } | Stmt::Cloud { .. }
         )
     }
 }

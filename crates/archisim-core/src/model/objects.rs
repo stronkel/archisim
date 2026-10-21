@@ -245,6 +245,33 @@ impl Model {
             .map_err(ModelError::Family)
     }
 
+    /// The presentation symbol of a placed object (its family's `plan
+    /// presentation`), each object a little different by its id; `None` if
+    /// the family has none.
+    pub fn object_presentation_symbol(
+        &self,
+        id: ObjectId,
+    ) -> Option<Result<Vec<Mark>, ModelError>> {
+        let o = self.objects.get(&id)?;
+        let t = self.object_types.get(&o.object_type)?;
+        let family = self.object_family(t.family).ok()?;
+        // A number from 0 to 1 that stays with the object.
+        let seed = {
+            let mut h = id.0.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            h ^= h >> 31;
+            h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            h ^= h >> 29;
+            (h >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let builtins: Values = [("seed".to_string(), crate::family::Value::Number(seed))]
+            .into_iter()
+            .collect();
+        family
+            .def()
+            .evaluate_presentation(&t.values, &Values::new(), &builtins)
+            .map(|r| r.map_err(ModelError::Family))
+    }
+
     /// The box of an object type in plan, in the family's axes: lowest and
     /// highest `x` and `y` of its parts.
     pub fn object_type_box(&self, id: ObjectTypeId) -> Option<([f64; 2], [f64; 2])> {

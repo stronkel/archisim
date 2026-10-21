@@ -163,6 +163,79 @@ impl ArchiSimApp {
                 });
             }
         });
+        group(ui, "room-floor-fill", "Pavimento en planta", |ui| {
+            let mut on = r.floor_fill.is_some();
+            row(
+                ui,
+                "Dibujar el suelo",
+                "Rellena el local en planta con una trama y sus colores (tarima, baldosa, césped…)",
+                |ui, _| {
+                    if ui.checkbox(&mut on, "").changed() {
+                        new.floor_fill = on.then_some(archisim_core::FloorFill {
+                            pattern: archisim_core::HatchPattern::Decking,
+                            color: [168, 128, 86],
+                            background: Some([236, 220, 194]),
+                            scale: 1.0,
+                            angle: 0.0,
+                        });
+                    }
+                },
+            );
+            let Some(mut f) = new.floor_fill else { return };
+            row(ui, "Trama", "", |ui, w| {
+                let opts: Vec<(archisim_core::HatchPattern, &str)> =
+                    archisim_core::HatchPattern::ALL
+                        .iter()
+                        .map(|p| (*p, p.label()))
+                        .collect();
+                f.pattern = props::choice(ui, "room-fill-pattern", w, f.pattern, &opts);
+            });
+            row(
+                ui,
+                "Color",
+                "De las líneas de la trama (o del relleno)",
+                |ui, _| {
+                    ui.color_edit_button_srgb(&mut f.color);
+                },
+            );
+            row(ui, "Fondo", "Color detrás de la trama", |ui, _| {
+                ui.horizontal(|ui| {
+                    let mut bg = f.background.is_some();
+                    if ui.checkbox(&mut bg, "").changed() {
+                        f.background = bg.then_some(f.background.unwrap_or([240, 240, 236]));
+                    }
+                    if let Some(c) = &mut f.background {
+                        ui.color_edit_button_srgb(c);
+                    }
+                });
+            });
+            row(
+                ui,
+                "Escala",
+                "Multiplica el tamaño de la trama",
+                |ui, _| {
+                    ui.add(
+                        egui::DragValue::new(&mut f.scale)
+                            .range(0.1..=20.0)
+                            .speed(0.05),
+                    );
+                },
+            );
+            row(ui, "Giro (°)", "", |ui, _| {
+                let mut deg = f.angle.to_degrees();
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut deg)
+                            .range(-360.0..=360.0)
+                            .speed(1.0),
+                    )
+                    .changed()
+                {
+                    f.angle = deg.to_radians();
+                }
+            });
+            new.floor_fill = Some(f);
+        });
         let center = archisim_core::label_center(&r.outline);
         if r.label.distance(center) > 1e-6 && ui.button("Rótulo al centro").clicked() {
             new.label = center;

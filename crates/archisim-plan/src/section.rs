@@ -851,8 +851,13 @@ pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) 
         .unwrap_or_else(|| model.graphics.pens(options.scale));
     crate::set_pens(pens);
     let _greyed = crate::dim::begin(model, &options.style);
-    let svg = render_section_inner(model, d, options);
+    let look = crate::presentation::style_of(model, &options.style);
+    let _poche = crate::presentation::begin(look);
+    let mut svg = render_section_inner(model, d, options);
     crate::set_pens(archisim_core::Pens::FINE);
+    if let Some(p) = look {
+        svg = crate::presentation::apply(&svg, p);
+    }
     svg
 }
 

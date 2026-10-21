@@ -25,6 +25,7 @@ pub mod library;
 mod modules;
 mod objects;
 mod phases;
+mod presentation;
 mod railings;
 mod roofs;
 mod room_tool;
@@ -312,6 +313,7 @@ impl Editor {
         let bytes = match (extension(path).as_str(), sheets) {
             ("dxf", [id]) => archisim_export::dxf::sheet_dxf(model, *id)?.into_bytes(),
             ("svg", [id]) => svg(*id).into_bytes(),
+            ("png", [id]) => archisim_export::png::png(&svg(*id), 200.0)?,
             ("pdf", _) => {
                 let pages: Vec<(String, String)> = sheets
                     .iter()
@@ -326,7 +328,7 @@ impl Editor {
                     .collect();
                 archisim_export::pdf::pdf(&pages, &model.project_name)?
             }
-            _ => return Err("los planos se exportan en PDF, DXF o SVG (uno a uno)".into()),
+            _ => return Err("los planos se exportan en PDF, DXF, SVG o PNG (uno a uno)".into()),
         };
         std::fs::write(path, bytes).map_err(|e| format!("no se pudo escribir el plano: {e}"))
     }

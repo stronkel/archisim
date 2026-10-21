@@ -258,10 +258,29 @@ pub enum HatchPattern {
     Grass,
     /// Timber grain.
     Wood,
+    /// Paving setts, 20 × 10 cm in stretcher bond (real size).
+    Cobbles,
+    /// Stone or concrete slabs, 60 × 40 cm in stretcher bond (real size).
+    Slabs,
+    /// Crazy paving: irregular stones of about 40 cm (real size).
+    Stone,
+    /// Decking: boards 14,5 cm wide with staggered joints (real size).
+    Decking,
+    /// Wood grain: wavy lines, each different.
+    WoodGrain,
+    /// Gravel as scattered dots.
+    GravelDots,
+    /// Lawn in mown stripes 1,5 m wide (real size): the pattern colour
+    /// over the background, in alternate bands.
+    LawnStripes,
+    /// Lawn as scattered dots.
+    LawnDots,
+    /// A sheet of water: short ripples.
+    Water,
 }
 
 impl HatchPattern {
-    pub const ALL: [HatchPattern; 13] = [
+    pub const ALL: [HatchPattern; 22] = [
         HatchPattern::Solid,
         HatchPattern::Lines,
         HatchPattern::Grid,
@@ -275,6 +294,15 @@ impl HatchPattern {
         HatchPattern::Earth,
         HatchPattern::Grass,
         HatchPattern::Wood,
+        HatchPattern::Cobbles,
+        HatchPattern::Slabs,
+        HatchPattern::Stone,
+        HatchPattern::Decking,
+        HatchPattern::WoodGrain,
+        HatchPattern::GravelDots,
+        HatchPattern::LawnStripes,
+        HatchPattern::LawnDots,
+        HatchPattern::Water,
     ];
 
     pub fn code(self) -> &'static str {
@@ -292,6 +320,15 @@ impl HatchPattern {
             HatchPattern::Earth => "earth",
             HatchPattern::Grass => "grass",
             HatchPattern::Wood => "wood",
+            HatchPattern::Cobbles => "cobbles",
+            HatchPattern::Slabs => "slabs",
+            HatchPattern::Stone => "stone",
+            HatchPattern::Decking => "decking",
+            HatchPattern::WoodGrain => "wood_grain",
+            HatchPattern::GravelDots => "gravel_dots",
+            HatchPattern::LawnStripes => "lawn_stripes",
+            HatchPattern::LawnDots => "lawn_dots",
+            HatchPattern::Water => "water",
         }
     }
 
@@ -314,13 +351,48 @@ impl HatchPattern {
             HatchPattern::Earth => "Terreno",
             HatchPattern::Grass => "Césped",
             HatchPattern::Wood => "Madera",
+            HatchPattern::Cobbles => "Adoquín",
+            HatchPattern::Slabs => "Losa 60×40",
+            HatchPattern::Stone => "Piedra irregular",
+            HatchPattern::Decking => "Tarima",
+            HatchPattern::WoodGrain => "Veta de madera",
+            HatchPattern::GravelDots => "Grava punteada",
+            HatchPattern::LawnStripes => "Césped en franjas",
+            HatchPattern::LawnDots => "Césped punteado",
+            HatchPattern::Water => "Lámina de agua",
         }
     }
 
     /// Patterns drawn at their real size in the model (bricks, tiles), as
     /// Revit's model patterns; the others keep their size on paper.
     pub fn is_model_scale(self) -> bool {
-        matches!(self, HatchPattern::Brick | HatchPattern::Tiles)
+        matches!(
+            self,
+            HatchPattern::Brick
+                | HatchPattern::Tiles
+                | HatchPattern::Cobbles
+                | HatchPattern::Slabs
+                | HatchPattern::Stone
+                | HatchPattern::Decking
+                | HatchPattern::LawnStripes
+        )
+    }
+
+    /// Presentation patterns (textures for plans and site plans), after
+    /// the technical ones in lists.
+    pub fn is_presentation(self) -> bool {
+        matches!(
+            self,
+            HatchPattern::Cobbles
+                | HatchPattern::Slabs
+                | HatchPattern::Stone
+                | HatchPattern::Decking
+                | HatchPattern::WoodGrain
+                | HatchPattern::GravelDots
+                | HatchPattern::LawnStripes
+                | HatchPattern::LawnDots
+                | HatchPattern::Water
+        )
     }
 }
 

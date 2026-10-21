@@ -615,6 +615,14 @@ impl ArchiSimApp {
     /// layers (Revit's visibility/graphics), and the project's pen table.
     pub(super) fn visibility_group(&mut self, ui: &mut Ui) {
         let layers: Vec<(DrawLayerId, String)> = self.layer_options();
+        let mut open_styles = false;
+        group(ui, "view-presentation", "Presentación", |ui| {
+            open_styles = self.presentation_row(ui);
+        });
+        if open_styles {
+            self.presentation.open = true;
+            self.presentation.selected = self.view_style.presentation;
+        }
         let style = &mut self.view_style;
         let mut open_graphics = false;
         group(ui, "view-visibility", "Visibilidad", |ui| {

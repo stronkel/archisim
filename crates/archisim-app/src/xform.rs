@@ -482,6 +482,7 @@ fn room(
         if let Some(mut n) = model.room(new).cloned() {
             n.height = r.height;
             n.finishes = r.finishes.clone();
+            n.floor_fill = r.floor_fill;
             model.set_room(n)?;
         }
         return Ok(Element::Room(new));

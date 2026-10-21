@@ -25,6 +25,7 @@ mod objects;
 mod paint;
 mod parameters;
 mod phases;
+mod presentation;
 mod railings;
 mod roofs;
 mod sections;
@@ -32,6 +33,7 @@ mod services;
 mod site;
 mod stairs;
 mod structure;
+mod sun;
 mod urban;
 pub use concept::*;
 pub use curtain::*;
@@ -51,6 +53,7 @@ pub use services::*;
 pub use site::*;
 pub use stairs::*;
 pub use structure::*;
+pub use sun::*;
 pub use urban::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
@@ -900,6 +903,7 @@ pub enum ModelError {
     UnknownSheet(SheetId),
     UnknownViewport(ViewportId),
     UnknownRoom(RoomId),
+    UnknownPresentationStyle(PresentationStyleId),
     UnknownTag(TagId),
     UnknownTable(TableId),
     /// A drafting element or annotation is not well formed.
@@ -1055,6 +1059,9 @@ impl fmt::Display for ModelError {
             ModelError::UnknownSheet(id) => write!(f, "sheet {id} does not exist"),
             ModelError::UnknownViewport(id) => write!(f, "view {id} on a sheet does not exist"),
             ModelError::UnknownRoom(id) => write!(f, "room {id} does not exist"),
+            ModelError::UnknownPresentationStyle(id) => {
+                write!(f, "presentation style {id} does not exist")
+            }
             ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
             ModelError::UnknownTable(id) => write!(f, "schedule {id} on a sheet does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
@@ -1198,6 +1205,10 @@ pub struct ModelParts {
     /// walls' faces.
     pub face_paints: Vec<(u64, FaceRef, MaterialId)>,
     pub paint_zones: Vec<PaintZone>,
+    /// How views can be presented.
+    pub presentation_styles: Vec<crate::graphics::PresentationStyle>,
+    /// When the shadows of presentation drawings are cast.
+    pub sun: Sun,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1297,6 +1308,8 @@ pub struct Model {
     edges: BTreeMap<EdgeId, ConceptEdge>,
     face_paints: BTreeMap<(u64, FaceRef), MaterialId>,
     paint_zones: Vec<PaintZone>,
+    presentation_styles: BTreeMap<PresentationStyleId, crate::graphics::PresentationStyle>,
+    sun: Sun,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1365,6 +1378,8 @@ impl Model {
             edges: BTreeMap::new(),
             face_paints: BTreeMap::new(),
             paint_zones: Vec::new(),
+            presentation_styles: BTreeMap::new(),
+            sun: Sun::default(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -3765,6 +3780,8 @@ impl Model {
             edges: self.edges.values().cloned().collect(),
             face_paints: self.face_paints().collect(),
             paint_zones: self.paint_zones().cloned().collect(),
+            presentation_styles: self.presentation_styles.values().cloned().collect(),
+            sun: self.sun,
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4074,6 +4091,11 @@ impl Model {
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_edges(parts.edges, &mut claim)?;
         model.restore_paint(parts.face_paints, parts.paint_zones)?;
+        model.restore_presentation_styles(parts.presentation_styles, &mut claim)?;
+        model.set_sun(parts.sun).map_err(|error| RestoreError {
+            element: "sun".into(),
+            error,
+        })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model

@@ -388,6 +388,13 @@ pub struct ArchiSimApp {
     /// The witness end being dragged.
     anchor_drag: Option<(crate::temp_dims::Slot, crate::temp_dims::End)>,
     plan: Option<(PlanKey, TextureHandle)>,
+    /// The sun's shadows of the plan's level, while the model and the
+    /// level do not change (worked out once, not at each redraw).
+    shadow_cache: Option<(
+        u64,
+        LevelId,
+        std::sync::Arc<Vec<archisim_geom::junctions::Shape>>,
+    )>,
     pending: Option<Pending>,
     allow_close: bool,
     fit_requested: bool,
@@ -416,6 +423,8 @@ pub struct ArchiSimApp {
     pub view_style: archisim_core::ViewStyle,
     /// The graphic standard dialog is open.
     pub show_graphics: bool,
+    /// The «Estilos de presentación» window.
+    pub presentation: presentation_ui::PresentationUi,
     /// The sheet picture and what it was drawn for.
     sheet_image: Option<(sheet_ui::SheetKey, egui::TextureHandle)>,
     /// The view selected on the sheet shown.
@@ -588,6 +597,7 @@ impl ArchiSimApp {
             temp_anchors: Default::default(),
             anchor_drag: None,
             plan: None,
+            shadow_cache: None,
             pending: None,
             allow_close: false,
             fit_requested: true,
@@ -605,6 +615,7 @@ impl ArchiSimApp {
             cut_plane: archisim_plan::PlanOptions::default().cut_plane,
             view_style: Default::default(),
             show_graphics: false,
+            presentation: Default::default(),
             sheet_image: None,
             sheet_sel: None,
             sheet_hover: None,
@@ -1112,7 +1123,8 @@ impl ArchiSimApp {
         if !all {
             d = d
                 .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
-                .add_filter("SVG", &["svg"]);
+                .add_filter("SVG", &["svg"])
+                .add_filter("PNG (imagen a 200 ppp)", &["png"]);
         }
         d = d.set_file_name(name);
         if let Some(dir) = self.start_dir() {
@@ -1469,6 +1481,7 @@ impl ArchiSimApp {
         }
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
+        self.presentation_dialog(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -1969,6 +1982,7 @@ mod paint_ui;
 mod params_ui;
 mod phases_ui;
 mod plan_ui;
+mod presentation_ui;
 mod priorities_ui;
 mod properties;
 mod props;

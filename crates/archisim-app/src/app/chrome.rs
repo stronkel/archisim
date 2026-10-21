@@ -351,6 +351,13 @@ impl ArchiSimApp {
             if ui.button("Tipos y materiales…").clicked() {
                 self.types.open = true;
             }
+            if ui
+                .button("Estilos de presentación…")
+                .on_hover_text("Papel, paleta, muros macizados y grueso de líneas de las vistas de presentación")
+                .clicked()
+            {
+                self.presentation.open = true;
+            }
             if ui.button("Tipos de muro cortina…").clicked() {
                 self.open_curtain_types(None, None);
             }

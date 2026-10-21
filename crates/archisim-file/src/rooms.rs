@@ -45,6 +45,46 @@ pub(crate) struct Room {
     /// m² per occupant (version 12); absent: from its use.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub occupancy: Option<f64>,
+    /// How its floor is drawn in plan (version 22).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor_fill: Option<FloorFill>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FloorFill {
+    pub pattern: String,
+    pub color: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+    pub scale: f64,
+    #[serde(default)]
+    pub angle: f64,
+}
+
+fn fill_out(f: &core::FloorFill) -> FloorFill {
+    use crate::drafting::hex;
+    FloorFill {
+        pattern: f.pattern.code().into(),
+        color: hex(f.color),
+        background: f.background.map(hex),
+        scale: f.scale,
+        angle: f.angle,
+    }
+}
+
+fn fill_in(element: &str, f: FloorFill) -> Result<core::FloorFill, FileError> {
+    use crate::drafting::parse_hex;
+    Ok(core::FloorFill {
+        pattern: core::HatchPattern::from_code(&f.pattern).ok_or_else(|| FileError::Value {
+            element: element.to_string(),
+            message: format!("unknown pattern «{}»", f.pattern),
+        })?,
+        color: parse_hex(element, &f.color)?,
+        background: f.background.map(|b| parse_hex(element, &b)).transpose()?,
+        scale: f.scale,
+        angle: f.angle,
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -94,6 +134,7 @@ pub(crate) fn rooms_out(rooms: &[core::Room]) -> Vec<Room> {
             walls: r.finishes.walls.clone(),
             ceiling: r.finishes.ceiling.clone(),
             occupancy: r.occupancy,
+            floor_fill: r.floor_fill.as_ref().map(fill_out),
         })
         .collect()
 }
@@ -128,6 +169,10 @@ pub(crate) fn rooms_in(rooms: Vec<Room>) -> Result<Vec<core::Room>, FileError> {
                     ceiling: r.ceiling,
                 },
                 occupancy: r.occupancy,
+                floor_fill: r
+                    .floor_fill
+                    .map(|f| fill_in(&format!("room {}", r.id), f))
+                    .transpose()?,
             })
         })
         .collect()

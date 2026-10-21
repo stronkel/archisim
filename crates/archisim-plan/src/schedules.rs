@@ -1015,6 +1015,26 @@ pub fn table(model: &Model, kind: ScheduleKind, level: Option<LevelId>) -> Table
                 false,
             )
         }
+        ScheduleKind::RoomAreas => {
+            let mut rooms: Vec<&archisim_core::Room> =
+                model.rooms().filter(|r| on(Some(r.level))).collect();
+            let elev = |l: LevelId| model.level(l).map_or(0.0, |l| l.elevation);
+            rooms.sort_by(|a, b| {
+                elev(a.level)
+                    .total_cmp(&elev(b.level))
+                    .then_with(|| natural(&a.number).cmp(&natural(&b.number)))
+            });
+            let total: f64 = rooms.iter().map(|r| r.area()).sum();
+            Table {
+                title: format!("SUPERFICIES ÚTILES{scope}"),
+                columns: vec![col("Nº", false), col("Local", false), col("m²", true)],
+                rows: rooms
+                    .iter()
+                    .map(|r| vec![r.number.clone(), r.name.clone(), dec(r.area(), 2)])
+                    .collect(),
+                totals: Some(vec!["Total".into(), String::new(), dec(total, 2)]),
+            }
+        }
         ScheduleKind::Structure => {
             let mut rows = Vec::new();
             let (mut tl, mut tv) = (0.0, 0.0);

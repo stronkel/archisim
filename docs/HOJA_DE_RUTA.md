@@ -160,16 +160,16 @@ Referencias de Antonio:
 
 Bloques:
 
-- **P1 Estilos de presentación**: estilos de vista guardables entre proyectos, con:
+- **P1 Estilos de presentación** ✅ (21/10/2026, `bloque/presentacion`): estilos de vista guardables entre proyectos, con:
   - paleta;
   - macizado de muros en color;
   - grosores;
   - fondo;
   - tramas con textura (adoquín, losa, piedra irregular, madera, tarima, grava punteada, césped en franjas o punteado, agua);
   - un estilo «AD5» y tres o cuatro de presentación de partida.
-- **P2 Vegetación y figuras**: copas de árbol y arbustos generados (cada uno distinto, como pinceles), por especie y color, transparentes o rellenas; personas, coches y mobiliario de presentación como símbolo de escala en las recetas.
-- **P3 Sombras y diagramas**: sombras arrojadas en planta y en axonometría desde el sol del proyecto, recorrido solar, curvas de nivel, cuadros de superficies con estilo.
-- **P4 Láminas**: plantillas de lámina de presentación (título, paleta, diagramas, vistas, imágenes) y exportación PNG de alta resolución.
+- **P2 Vegetación y figuras** ✅ (21/10/2026): copas de árbol y arbustos generados (cada uno distinto, como pinceles), por especie y color, transparentes o rellenas; personas, coches y mobiliario de presentación como símbolo de escala en las recetas.
+- **P3 Sombras y diagramas** ✅ (21/10/2026; las curvas de nivel ya estaban y toman la paleta): sombras arrojadas en planta y en axonometría desde el sol del proyecto, recorrido solar, curvas de nivel, cuadros de superficies con estilo.
+- **P4 Láminas** ✅ (21/10/2026): plantillas de lámina de presentación (título, paleta, diagramas, vistas, imágenes) y exportación PNG de alta resolución.
 
 ### 6.4 Modelado de formas (Concepto, para visualización)
 

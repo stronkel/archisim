@@ -172,10 +172,18 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 
 ### Dibujo 2D, capas y estilos de vista (fase 3, v0.25)
 
-- **Elementos 2D** en plantas y planos: líneas, polilíneas (con arcos y grosor), rectángulos, polígonos, arcos, círculos, elipses, puntos, textos de una o varias líneas (alturas en mm de papel, 9 justificaciones), sombreados por recinto o contorno con tramas propias (líneas, cuadrícula, diagonal, ladrillo, hormigón, grava, baldosa, tierra, césped, madera, sólido) y fondo, directrices y nubes de revisión. Cada uno en una **capa** (color, grosor, tipo de línea; visible, bloqueada, imprimible) o con su estilo propio.
+- **Elementos 2D** en plantas y planos: líneas, polilíneas (con arcos y grosor), rectángulos, polígonos, arcos, círculos, elipses, puntos, textos de una o varias líneas (alturas en mm de papel, 9 justificaciones), sombreados por recinto o contorno con tramas propias (líneas, cuadrícula, diagonal, ladrillo, hormigón, grava, baldosa, tierra, césped, madera, sólido; y, para presentación, adoquín, losa, piedra irregular, tarima, veta de madera, grava punteada, césped en franjas, césped punteado y lámina de agua) y fondo, directrices y nubes de revisión. Cada uno en una **capa** (color, grosor, tipo de línea; visible, bloqueada, imprimible) o con su estilo propio.
 - **Edición al estilo AutoCAD**: desplazar, copiar, girar, escalar, simetría, alinear, desfase, recortar y alargar (Mayús invierte), empalme y chaflán (también de polilíneas), matriz rectangular y polar, partir, juntar, descomponer, estirar, longitud, borrar, igualar propiedades, dividir; consultas de distancia, área y lista. Las órdenes de transformación valen también para muros, forjados, cotas y locales.
 - **Forzados a objeto**: punto final, medio, centro, cuadrante, nodo, intersección, perpendicular y tangente, sobre el dibujo 2D y sobre las caras de muros y aristas de forjados.
 - **Normas gráficas** del proyecto: plumillas finas (1:20, 1:50) y gruesas (desde 1:100) para corte, carpintería, vista, capas, tramas, cotas y textos. Cada vista oculta las categorías y capas que quiera y tiene su **nivel de detalle** (bajo, medio, alto).
+
+### Presentación (bloque P)
+
+- **Estilos de presentación** (P1): papel de color, paleta de cuatro o cinco tonos a la que pasan los colores del dibujo por su claridad, muros y pilares cortados macizados en un color y grueso de las líneas. Cada planta, sección o vista de un plano elige el suyo; se guardan en el proyecto y en la biblioteca del estudio (`Estilos.aspres`). De partida: AD5, Terracota, Bosque, Azul y Monocromo.
+- **Pavimentos en planta**: cada local puede dibujar su suelo con una trama, su color y su fondo.
+- **Vegetación y figuras de presentación** (P2): las familias pueden traer un símbolo `plan presentation` (copas de lóbulos irregulares, cada árbol distinto, transparentes o rellenas del color de su especie; personas y coches rellenos).
+- **Sombras** (P3) del sol del proyecto (día y hora solar, latitud de la georreferencia, norte) sobre el suelo de las plantas y en las axonometrías de los planos.
+- **Láminas de presentación** (P4): plano A3 de la planta activa con título, planta, 3D, sección, superficies útiles y recorrido solar a las escalas que caben, en el estilo de la vista; cada plano puede tener su propio estilo; exportación PNG (200 ppp).
 
 ### Locales y etiquetas (v0.25)
 

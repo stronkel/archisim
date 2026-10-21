@@ -144,8 +144,36 @@ fn content(tree: &resvg::usvg::Tree, hpt: f64, pt_per_px: f64) -> (String, Vec<f
         num(-pt_per_px),
         num(hpt)
     );
-    let alphas = Vec::new();
-    for it in paths::items(tree) {
+    // Opacities as graphics states: /A0 is solid, the others as the
+    // drawing asks (rounded to a hundredth).
+    let mut alphas: Vec<f64> = Vec::new();
+    let items = paths::items(tree);
+    let see_through = items
+        .iter()
+        .any(|it| it.fill.is_some() && it.fill_opacity < 0.995);
+    if see_through {
+        alphas.push(1.0);
+    }
+    let mut current = 0;
+    for it in items {
+        if see_through {
+            let a = if it.fill.is_some() {
+                (it.fill_opacity * 100.0).round() / 100.0
+            } else {
+                1.0
+            };
+            let k = match alphas.iter().position(|x| (x - a).abs() < 1e-9) {
+                Some(k) => k,
+                None => {
+                    alphas.push(a);
+                    alphas.len() - 1
+                }
+            };
+            if k != current {
+                let _ = writeln!(s, "/A{k} gs");
+                current = k;
+            }
+        }
         draw(&mut s, &it);
     }
     (s, alphas)

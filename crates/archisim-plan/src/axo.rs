@@ -72,6 +72,8 @@ struct Face {
     edges: [bool; 3],
     /// Of a discipline the view leaves in grey.
     grey: bool,
+    /// Lies on the ground (no higher than the lowest level and flat).
+    on_ground: bool,
 }
 
 /// The picture: faces from far to near, and its extent (picture metres).
@@ -79,6 +81,31 @@ pub struct AxoDrawing {
     faces: Vec<Face>,
     pub lo: Point2,
     pub hi: Point2,
+    /// The sun's shadows on the ground, in the picture (rings, even-odd),
+    /// drawn after the first `ground` faces (those lying on the ground).
+    shadows: Vec<Vec<Point2>>,
+    ground: usize,
+    shadow_rgb: [u8; 3],
+}
+
+impl AxoDrawing {
+    /// Adds the sun's shadows on the ground of the lowest level: between
+    /// what lies on the ground and what stands on it.
+    pub fn with_shadows(mut self, model: &Model, axo: &Axo, rgb: [u8; 3]) -> Self {
+        let levels = model.levels();
+        let (Some(sun), Some(level)) = (model.sun_direction(), levels.first()) else {
+            return self;
+        };
+        let f = frame(axo);
+        let z = level.elevation;
+        self.shadows = archisim_geom::shadow::shadows(model, level.id, sun)
+            .into_iter()
+            .flat_map(|(o, hs)| std::iter::once(o).chain(hs))
+            .map(|ring| ring.iter().map(|p| f.project([p.x, p.y, z])).collect())
+            .collect();
+        self.shadow_rgb = rgb;
+        self
+    }
 }
 
 /// A vertex rounded to a tenth of a millimetre, to find shared edges.
@@ -101,6 +128,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         0.9,
     ]);
     let mut faces = Vec::new();
+    let ground_z = model.levels().first().map_or(0.0, |l| l.elevation) + 0.02;
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     for solid in model_solids(model) {
@@ -158,6 +186,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 fill,
                 edges,
                 grey,
+                on_ground: t.iter().all(|p| p[2] <= ground_z) && n[2] > 0.9,
             });
         }
     }
@@ -166,7 +195,19 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         hi = Point2::new(5.0, 5.0);
     }
     faces.sort_by(|a, b| a.depth.total_cmp(&b.depth));
-    AxoDrawing { faces, lo, hi }
+    // What lies on the ground goes first, so shadows fall on it and under
+    // what stands on it.
+    let (mut low, high): (Vec<Face>, Vec<Face>) = faces.into_iter().partition(|f| f.on_ground);
+    let ground = low.len();
+    low.extend(high);
+    AxoDrawing {
+        faces: low,
+        lo,
+        hi,
+        shadows: Vec::new(),
+        ground,
+        shadow_rgb: [40, 40, 46],
+    }
 }
 
 /// The part of the picture to show whole at a scale, with some air.
@@ -198,7 +239,10 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
         r#"<g class="axo" stroke-linejoin="round" stroke-linecap="round">"#
     );
     let inside = |p: &Point2| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
-    for face in &d.faces {
+    for (i, face) in d.faces.iter().enumerate() {
+        if i == d.ground && !d.shadows.is_empty() {
+            draw_axo_shadows(&mut s, d);
+        }
         if !face.pts.iter().any(inside) {
             // Wholly outside the crop (a tree of the far corner).
             let (a, b) = (
@@ -259,8 +303,33 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
             );
         }
     }
+    if d.ground >= d.faces.len() && !d.shadows.is_empty() {
+        draw_axo_shadows(&mut s, d);
+    }
     s.push_str("</g>\n</svg>\n");
     s
+}
+
+fn draw_axo_shadows(s: &mut String, d: &AxoDrawing) {
+    let mut path = String::new();
+    for ring in &d.shadows {
+        for (i, p) in ring.iter().enumerate() {
+            let _ = write!(
+                path,
+                "{}{} {}",
+                if i == 0 { "M" } else { "L" },
+                num(p.x),
+                num(-p.y)
+            );
+        }
+        path.push('Z');
+    }
+    let [r, g, b] = d.shadow_rgb;
+    let _ = writeln!(
+        s,
+        r#"<path d="{path}" fill="rgb({r},{g},{b})" fill-opacity="{}" fill-rule="evenodd" stroke="none"/>"#,
+        num(crate::presentation::SHADOW_OPACITY)
+    );
 }
 
 #[cfg(test)]

@@ -30,9 +30,11 @@ pub mod curtain;
 pub(crate) mod dim;
 pub mod drafting;
 pub mod grids;
+pub mod layout;
 pub mod lettering;
 pub mod members;
 pub mod phases;
+pub mod presentation;
 pub mod railings;
 pub mod roofs;
 pub mod rooms;
@@ -91,6 +93,10 @@ pub struct PlanOptions {
     pub pens: Option<archisim_core::Pens>,
     /// The title under an exported plan (project, level and scale).
     pub title: bool,
+    /// The sun's shadows on this level, if already worked out (the screen
+    /// keeps them while the model does not change); `None`: worked out
+    /// here when the presentation style casts shadows.
+    pub shadows: Option<std::sync::Arc<Vec<archisim_geom::junctions::Shape>>>,
 }
 
 /// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
@@ -112,6 +118,7 @@ impl Default for PlanOptions {
             style: Default::default(),
             pens: None,
             title: true,
+            shadows: None,
         }
     }
 }
@@ -181,6 +188,26 @@ const MIN_LAYERS_PX: f64 = 4.0;
 
 /// The colour of a wall drawn as one band.
 const FAR_POCHE: &str = "rgb(150,146,138)";
+
+thread_local! {
+    /// Cut walls and columns filled solid in this colour (a presentation
+    /// style's), without their layers.
+    static POCHE: std::cell::Cell<Option<[u8; 3]>> = const { std::cell::Cell::new(None) };
+}
+
+fn poche() -> Option<[u8; 3]> {
+    POCHE.with(|p| p.get())
+}
+
+thread_local! {
+    /// The view being drawn has a presentation style: families draw their
+    /// `plan presentation` symbol, where they have one.
+    static PRESENTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn presentation_view() -> bool {
+    PRESENTING.with(|p| p.get())
+}
 
 /// Whether a wall this thick in paper millimetres is too thin on screen to
 /// draw its layers.
@@ -290,7 +317,12 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     // Ids are the same in the phased copy: what is greyed comes from the
     // model as it is.
     let _greyed = dim::begin(model, &options.style);
-    let svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
+    let look = presentation::style_of(model, &options.style);
+    let _poche = presentation::begin(look);
+    let mut svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
+    if let Some(p) = look {
+        svg = presentation::apply(&svg, p);
+    }
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
     PENS.with(|p| p.set(archisim_core::Pens::FINE));
@@ -553,6 +585,35 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             draw_slab(s, model, slab, si, options.cut_plane, k)
         });
     }
+    if show(archisim_core::Category::Rooms) {
+        rooms::draw_floor_fills(&mut s, model, level, k);
+    }
+    // Hatches of the drawing (pavings, lawn, water) under the elements.
+    if show(archisim_core::Category::Drafting) {
+        drafting::draw_drafts(
+            &mut s,
+            model,
+            archisim_core::ViewRef::Level(level),
+            k,
+            options.viewport,
+            options.viewport.is_none(),
+            &options.style.hidden_layers,
+            false,
+            Some(true),
+        );
+    }
+    // The sun's shadows on the ground, over the pavings.
+    if let Some(p) = presentation::style_of(model, &options.style).filter(|p| p.shadows) {
+        let cast = match &options.shadows {
+            Some(sh) => Some(sh.clone()),
+            None => model
+                .sun_direction()
+                .map(|sun| std::sync::Arc::new(archisim_geom::shadow::shadows(model, level, sun))),
+        };
+        if let Some(sh) = cast.filter(|sh| !sh.is_empty()) {
+            presentation::draw_shadows(&mut s, &sh, p);
+        }
+    }
     for roof in model
         .roofs_on_level(level)
         .filter(|_| show(archisim_core::Category::Roofs))
@@ -717,6 +778,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             options.viewport.is_none(),
             &options.style.hidden_layers,
             !show(archisim_core::Category::Dimensions),
+            Some(false),
         );
     }
     if show(archisim_core::Category::Rooms) {
@@ -883,13 +945,16 @@ impl JambDetail {
 /// fill so each cut piece can be found in the drawing.
 fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], id: &str, k: f64) {
     let d = path(polygon);
-    let [r, gg, bb] = mat.cut_color;
+    let [r, gg, bb] = poche().unwrap_or(mat.cut_color);
     // A hairline in the fill colour hides anti-aliasing seams at mitres.
     let _ = writeln!(
         s,
         r#"<path id="{id}" d="{d}" fill="rgb({r},{gg},{bb})" stroke="rgb({r},{gg},{bb})" stroke-width="{}"/>"#,
         num(pens().hatch * k)
     );
+    if poche().is_some() {
+        return;
+    }
     // Hatching is real geometry cut to the layer (not SVG patterns or clip
     // paths), so it prints identically everywhere, carries over to PDF/DXF
     // and draws fast on screen.
@@ -943,13 +1008,17 @@ fn draw_layers(
     else {
         return;
     };
-    if too_small_for_layers(wall_t / k) {
+    if too_small_for_layers(wall_t / k) || poche().is_some() {
         // Zoomed far out the layers cannot be told apart: the wall is one
-        // grey band (its cut lines are still drawn).
+        // grey band (its cut lines are still drawn). A presentation style
+        // fills it solid in its colour.
+        let fill = poche().map_or(FAR_POCHE.to_string(), |[r, g, b]| {
+            format!("rgb({r},{g},{b})")
+        });
         for piece in pieces {
             let poly = clip_span(&g.outline, a, u, piece.from, piece.to);
             if poly.len() >= 3 {
-                let _ = writeln!(s, r#"<path d="{}" fill="{FAR_POCHE}"/>"#, path(&poly));
+                let _ = writeln!(s, r#"<path d="{}" fill="{fill}"/>"#, path(&poly));
             }
         }
         return;
@@ -1665,13 +1734,18 @@ fn draw_objects(
             continue;
         }
         let size = outline[0].distance(outline[2]);
+        let presented = presentation_view()
+            .then(|| model.object_presentation_symbol(o.id))
+            .flatten();
         let marks = if too_small_for_symbol(size * 1000.0 / scale) {
             Err(())
+        } else if let Some(m) = presented {
+            m.map_err(|_| ())
         } else {
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
         dim::element(s, o.id.0, |s| match marks {
-            Ok(marks) => draw_marks(s, marks, &|p| o.to_plan(p[0], p[1]), k),
+            Ok(marks) => draw_marks(s, model, marks, &|p| o.to_plan(p[0], p[1]), k),
             Err(()) => {
                 let _ = writeln!(
                     s,
@@ -1717,12 +1791,18 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
         return;
     };
     let world = |p: [f64; 2]| o.point(mid + sx * p[0], y_mid + sy * p[1]);
-    draw_marks(s, marks, &world, k);
+    draw_marks(s, model, marks, &world, k);
 }
 
 /// The marks of a family's plan symbol, through `world` (family axes to
 /// plan).
-fn draw_marks(s: &mut String, marks: Vec<Mark>, world: &dyn Fn([f64; 2]) -> Point2, k: f64) {
+fn draw_marks(
+    s: &mut String,
+    model: &Model,
+    marks: Vec<Mark>,
+    world: &dyn Fn([f64; 2]) -> Point2,
+    k: f64,
+) {
     for mark in marks {
         match mark {
             Mark::Line {
@@ -1745,13 +1825,28 @@ fn draw_marks(s: &mut String, marks: Vec<Mark>, world: &dyn Fn([f64; 2]) -> Poin
                 pen,
                 style,
                 filled,
+                tint,
+                opacity,
             } => {
                 let pts: Vec<Point2> = points.into_iter().map(world).collect();
+                // Tinted: the material's colour, see-through as asked.
+                let fill = match tint.and_then(|m| model.material(archisim_core::MaterialId(m))) {
+                    Some(m) => {
+                        let [r, g, b] = m.cut_color;
+                        let see = if opacity < 1.0 {
+                            format!(r#" fill-opacity="{}""#, num(opacity))
+                        } else {
+                            String::new()
+                        };
+                        format!("rgb({r},{g},{b})\"{see}")
+                    }
+                    None if filled => "white\"".to_string(),
+                    None => "none\"".to_string(),
+                };
                 let _ = writeln!(
                     s,
-                    r#"<path d="{}" fill="{}" stroke="{INK}" stroke-width="{}"{}/>"#,
+                    r#"<path d="{}" fill="{fill} stroke="{INK}" stroke-width="{}"{}/>"#,
                     path(&pts),
-                    if filled { "white" } else { "none" },
                     num(pen_weight(pen) * k),
                     dash_attr(style, k)
                 );
@@ -1933,7 +2028,10 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
             continue;
         };
         fill_cut(s, mat, &band.polygon, &format!("cut-{gi}-{li}-0"), k);
-        if mat.cut_pattern == CutPattern::Insulation || band.function == LayerFunction::Insulation {
+        if poche().is_none()
+            && (mat.cut_pattern == CutPattern::Insulation
+                || band.function == LayerFunction::Insulation)
+        {
             let t = layer.thickness;
             let mid = (tops[li] + tops[li + 1]) / 2.0;
             let len = arc.radius_at(mid).abs() * arc.sweep.abs();

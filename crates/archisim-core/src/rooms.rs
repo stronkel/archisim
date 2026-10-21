@@ -24,6 +24,27 @@ pub struct Finishes {
     pub ceiling: String,
 }
 
+/// The floor of a room drawn in plan with a pattern and colours (Revit's
+/// colour fill, the textured pavings of a presentation plan).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FloorFill {
+    pub pattern: crate::drafting::HatchPattern,
+    /// Colour of the pattern's lines (or of a solid fill).
+    pub color: crate::drafting::Rgb,
+    /// Colour behind the pattern; `None`: transparent.
+    pub background: Option<crate::drafting::Rgb>,
+    /// Multiplies the pattern's size.
+    pub scale: f64,
+    /// Turns the pattern, radians.
+    pub angle: f64,
+}
+
+impl FloorFill {
+    pub fn is_valid(&self) -> bool {
+        self.scale.is_finite() && self.scale > 0.0 && self.angle.is_finite()
+    }
+}
+
 /// A room of a level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Room {
@@ -50,6 +71,8 @@ pub struct Room {
     /// m² per person; `Some(0.0)`: no occupants (plant rooms); `None`:
     /// the one of its use in the building's use.
     pub occupancy: Option<f64>,
+    /// How its floor is drawn in plan; `None`: not filled.
+    pub floor_fill: Option<FloorFill>,
 }
 
 impl Room {
@@ -235,6 +258,7 @@ impl Model {
                 height: None,
                 finishes: Finishes::default(),
                 occupancy: None,
+                floor_fill: None,
             },
         );
         Ok(id)
@@ -257,6 +281,9 @@ impl Model {
             if !d.is_finite() || d < 0.0 {
                 return Err(ModelError::NotFinite("area per occupant"));
             }
+        }
+        if room.floor_fill.is_some_and(|f| !f.is_valid()) {
+            return Err(ModelError::NonPositive("floor fill scale"));
         }
         let outline = Model::normalized_outline(room.outline)?;
         let holes = room

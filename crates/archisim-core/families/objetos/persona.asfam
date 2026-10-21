@@ -1,7 +1,7 @@
 family "Persona"
   category people
   host none
-  version 1
+  version 2
   description "Figura humana de pie, para dar escala; mira hacia delante"
   folder "Personas"
 
@@ -35,6 +35,14 @@ plan 1:50
     let t1 = 6.283185307 * (i + 1) / 16
     line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
   line (0, r) to (0, r + 0.04 * h) pen thin
+
+plan presentation
+  # Shoulders and head seen from above, filled in the figure's colour.
+  let h = height
+  let a = 0.17 * h
+  let b = 0.065 * h
+  polygon (a, 0) (a * 0.71, b * 0.71) (0, b) (-a * 0.71, b * 0.71) (-a, 0) (-a * 0.71, -b * 0.71) (0, -b) (a * 0.71, -b * 0.71) pen thin tint mat opacity 0.85
+  cloud center (0, 0) radius 0.055 * h lobes 6 jitter 0 pen thin tint mat
 
 outputs
   ifc_class = "IfcBuildingElementProxy"

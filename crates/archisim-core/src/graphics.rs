@@ -273,6 +273,8 @@ pub struct ViewStyle {
     pub focus: crate::DisciplineFocus,
     /// Disciplines left out of the view (the navigator's eye).
     pub hidden_disciplines: BTreeSet<crate::ElementDiscipline>,
+    /// How it is presented: colours, solid walls, line weights.
+    pub presentation: Option<crate::PresentationStyleId>,
 }
 
 impl ViewStyle {
@@ -283,6 +285,179 @@ impl ViewStyle {
     pub fn shows_layer(&self, l: DrawLayerId) -> bool {
         !self.hidden_layers.contains(&l)
     }
+}
+
+/// How a view is presented (the look of a presentation plan, as the
+/// graphic overrides of ArchiCAD or Revit's view templates): the paper,
+/// a palette the drawing's colours are turned to, walls and columns cut
+/// solid in a colour, and the weight of the lines. It changes only how the
+/// view is drawn.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PresentationStyle {
+    pub id: crate::PresentationStyleId,
+    pub name: String,
+    /// Colour of the paper.
+    pub background: crate::Rgb,
+    /// The tones of the drawing, from dark to light: every colour is
+    /// turned to the tone of its lightness (the dark lines to the first,
+    /// light fills to the last). Empty: the drawing keeps its colours.
+    pub palette: Vec<crate::Rgb>,
+    /// Cut walls and columns filled with this colour, without their
+    /// layers; `None`: as the plan draws them.
+    pub poche: Option<crate::Rgb>,
+    /// Multiplies the weight of every line.
+    pub line_scale: f64,
+    /// Shadows cast by the project's sun on the ground (plans and
+    /// axonometrics).
+    pub shadows: bool,
+}
+
+impl PresentationStyle {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: crate::PresentationStyleId(0),
+            name: name.into(),
+            background: [255, 255, 255],
+            palette: Vec::new(),
+            poche: None,
+            line_scale: 1.0,
+            shadows: false,
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        !self.name.trim().is_empty()
+            && self.line_scale.is_finite()
+            && self.line_scale > 0.0
+            && self.line_scale <= 10.0
+            && self.palette.len() <= 8
+    }
+
+    /// The tone a colour is turned to, by its lightness.
+    pub fn tone(&self, c: crate::Rgb) -> crate::Rgb {
+        let p = &self.palette;
+        if p.is_empty() {
+            return c;
+        }
+        if p.len() == 1 {
+            return p[0];
+        }
+        let lum =
+            |c: crate::Rgb| (0.3 * c[0] as f64 + 0.59 * c[1] as f64 + 0.11 * c[2] as f64) / 255.0;
+        // The palette sorted by lightness, spread over 0..1.
+        let mut tones = p.clone();
+        tones.sort_by(|a, b| lum(*a).total_cmp(&lum(*b)));
+        let t = lum(c) * (tones.len() - 1) as f64;
+        let i = (t.floor() as usize).min(tones.len() - 2);
+        let f = t - i as f64;
+        let (a, b) = (tones[i], tones[i + 1]);
+        let mix = |x: u8, y: u8| (x as f64 + (y as f64 - x as f64) * f).round() as u8;
+        [mix(a[0], b[0]), mix(a[1], b[1]), mix(a[2], b[2])]
+    }
+}
+
+/// The text of a file of presentation styles (`.aspres`, in the library
+/// folder, to take them to other projects), one line per style:
+///
+/// ```text
+/// style "Bosque" paper #f4f2ea palette #22342c #587a5e poche #2f4f3e lines 0.8
+/// ```
+pub fn presentation_styles_text(styles: &[PresentationStyle]) -> String {
+    let hex = |c: crate::Rgb| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
+    let mut s = String::from("# Estilos de presentación de ArchiSim\n");
+    for st in styles {
+        s.push_str(&format!(
+            "style \"{}\" paper {}",
+            st.name.replace('"', "'"),
+            hex(st.background)
+        ));
+        if !st.palette.is_empty() {
+            s.push_str(" palette");
+            for c in &st.palette {
+                s.push(' ');
+                s.push_str(&hex(*c));
+            }
+        }
+        if let Some(c) = st.poche {
+            s.push_str(&format!(" poche {}", hex(c)));
+        }
+        s.push_str(&format!(" lines {}", st.line_scale));
+        if st.shadows {
+            s.push_str(" shadows");
+        }
+        s.push('\n');
+    }
+    s
+}
+
+/// Reads a file of presentation styles (see [`presentation_styles_text`]).
+pub fn parse_presentation_styles(text: &str) -> Result<Vec<PresentationStyle>, String> {
+    let colour = |w: &str| -> Option<crate::Rgb> {
+        let h = w.strip_prefix('#')?;
+        if h.len() != 6 || !h.is_ascii() {
+            return None;
+        }
+        let v = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+        Some([v(0)?, v(2)?, v(4)?])
+    };
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let bad = |what: &str| format!("línea {}: {what}", n + 1);
+        let rest = line
+            .strip_prefix("style \"")
+            .ok_or_else(|| bad("debe empezar por style \"nombre\""))?;
+        let end = rest
+            .find('"')
+            .ok_or_else(|| bad("falta la comilla del nombre"))?;
+        let mut st = PresentationStyle::new(&rest[..end]);
+        let words: Vec<&str> = rest[end + 1..].split_whitespace().collect();
+        let mut i = 0;
+        while i < words.len() {
+            match words[i] {
+                "paper" => {
+                    i += 1;
+                    st.background = words
+                        .get(i)
+                        .and_then(|w| colour(w))
+                        .ok_or_else(|| bad("color del papel"))?;
+                }
+                "palette" => {
+                    while let Some(c) = words.get(i + 1).and_then(|w| colour(w)) {
+                        st.palette.push(c);
+                        i += 1;
+                    }
+                }
+                "poche" => {
+                    i += 1;
+                    st.poche = Some(
+                        words
+                            .get(i)
+                            .and_then(|w| colour(w))
+                            .ok_or_else(|| bad("color del macizado"))?,
+                    );
+                }
+                "shadows" => st.shadows = true,
+                "lines" => {
+                    i += 1;
+                    st.line_scale = words
+                        .get(i)
+                        .and_then(|w| w.parse().ok())
+                        .ok_or_else(|| bad("grosor de las líneas"))?;
+                }
+                w => return Err(bad(&format!("no se entiende «{w}»"))),
+            }
+            i += 1;
+        }
+        if !st.is_valid() {
+            return Err(bad("estilo no válido"));
+        }
+        out.push(st);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -301,5 +476,34 @@ mod tests {
         for c in Category::ALL {
             assert_eq!(Category::from_code(c.code()), Some(c));
         }
+    }
+
+    #[test]
+    fn palette_tones_by_lightness() {
+        let mut s = PresentationStyle::new("Terracota");
+        assert_eq!(s.tone([10, 20, 30]), [10, 20, 30]);
+        s.palette = vec![[250, 240, 230], [60, 30, 20], [190, 100, 70]];
+        assert_eq!(s.tone([0, 0, 0]), [60, 30, 20]);
+        assert_eq!(s.tone([255, 255, 255]), [250, 240, 230]);
+        let mid = s.tone([128, 128, 128]);
+        assert!(mid[0] > 150 && mid[0] < 220, "{mid:?}");
+        assert!(s.is_valid());
+        s.line_scale = 0.0;
+        assert!(!s.is_valid());
+    }
+
+    #[test]
+    fn styles_go_to_a_file_and_back() {
+        let mut a = PresentationStyle::new("Bosque");
+        a.background = [244, 242, 234];
+        a.palette = vec![[34, 52, 44], [88, 122, 94]];
+        a.poche = Some([47, 79, 62]);
+        a.line_scale = 0.8;
+        a.shadows = true;
+        let b = PresentationStyle::new("Técnico");
+        let text = presentation_styles_text(&[a.clone(), b.clone()]);
+        let back = parse_presentation_styles(&text).unwrap();
+        assert_eq!(back, vec![a, b]);
+        assert!(parse_presentation_styles("style \"X\" paper rojo").is_err());
     }
 }
