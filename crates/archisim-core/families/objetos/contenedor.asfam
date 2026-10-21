@@ -1,0 +1,29 @@
+family "Contenedor de residuos"
+  category street
+  host none
+  version 1
+  description "Contenedor de residuos con tapa; el punto de inserción es el centro de la trasera y la tapa abre hacia delante"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.40 range 0.50..3.00 label "Ancho"
+    depth  length = 0.90 range 0.40..2.00 label "Fondo"
+    height length = 1.30 range 0.80..2.00 label "Altura"
+  section "Materiales"
+    mat material = "Plástico verde" label "Contenedor"
+
+body
+  box (-width / 2, 0, 0.1) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth * 0.35) to (width / 2, depth * 0.35) pen thin
+
+plan presentation
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat
+  line (-width / 2, depth * 0.35) to (width / 2, depth * 0.35) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

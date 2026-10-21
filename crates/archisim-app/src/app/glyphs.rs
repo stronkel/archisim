@@ -45,6 +45,7 @@ pub enum Glyph {
     Plot,
     Road,
     Tree,
+    StreetLamp,
     Dimension,
     LevelMark,
     Tag,
@@ -180,6 +181,9 @@ impl Glyph {
             Glyph::Road => r##"<path d="M2 5h16M2 15h16"/><path d="M2 10h3M8 10h4M15 10h3"/>"##,
             Glyph::Tree => {
                 r##"<circle cx="10" cy="10" r="6"/><path d="M10 4v12M4 10h12M6 6l8 8M14 6l-8 8" stroke-width="0.7"/>"##
+            }
+            Glyph::StreetLamp => {
+                r##"<path d="M7 17h6M10 17V4M10 4h4.5M12.5 4v1.5h4v-1.5"/><path d="M11 7l3.5 3" stroke-width="0.6"/>"##
             }
             Glyph::Dimension => {
                 r##"<path d="M2 12h16M4 8v8M16 8v8"/><path d="M3 13l2-2M15 13l2-2"/>"##

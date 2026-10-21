@@ -239,6 +239,7 @@ pub fn draw_floor_fills(s: &mut String, model: &Model, level: archisim_core::Lev
             scale: f.scale,
             angle: f.angle,
             background: f.background,
+            opacity: 1.0,
         };
         let color = format!("#{:02x}{:02x}{:02x}", f.color[0], f.color[1], f.color[2]);
         crate::drafting::draw_hatch(s, &h, &color, &width, k);

@@ -204,14 +204,31 @@ pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Mo
     }
     let family = m.add_family(&source.family(t.family)?.source).ok()?;
     let ot = m.add_object_type(t.name.clone(), family, values).ok()?;
-    m.add_object(archisim_core::NewObject {
-        level,
-        object_type: ot,
-        position: Point2::new(0.0, 0.0),
-        rotation: 0.0,
-        base_offset: 0.0,
-    })
-    .ok()?;
+    let id = m
+        .add_object(archisim_core::NewObject {
+            level,
+            object_type: ot,
+            position: Point2::new(0.0, 0.0),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .ok()?;
+    // Trees and the like show their drawing of presentation (the form of
+    // the canopy is what tells one from another), when they have one.
+    let presented = m.object_presentation_symbol(id).is_some_and(|r| r.is_ok());
+    let has_choice = m.family(family).is_some_and(|f| {
+        f.def()
+            .params_of(archisim_core::family::ParamScope::Instance)
+            .any(|p| p.name == "drawing")
+    });
+    if presented && has_choice {
+        let mut v = archisim_core::Values::new();
+        v.insert(
+            "drawing".into(),
+            archisim_core::Value::Text("presentación".into()),
+        );
+        let _ = m.set_object_values(id, v);
+    }
     Some((m, level))
 }
 

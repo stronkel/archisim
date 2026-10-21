@@ -182,6 +182,9 @@ pub(crate) struct Object {
     pub rotation: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub base_offset: f64,
+    /// Its own instance values (version 23): how a tree's canopy is drawn…
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub values: ParamValues,
 }
 
 /// A railing (version 7): its line, foot, height, post spacing and
@@ -2163,6 +2166,7 @@ impl ProjectFile {
                     position: xy(o.position),
                     rotation: o.rotation,
                     base_offset: o.base_offset,
+                    values: values_out(&o.values),
                 })
                 .collect(),
             railings: p
@@ -2924,6 +2928,12 @@ impl ProjectFile {
         }
         for o in self.objects {
             let element = format!("object {}", o.id);
+            let family = parts
+                .object_types
+                .iter()
+                .find(|t| t.id.0 == o.object_type)
+                .and_then(|t| parts.families.iter().find(|f| f.id == t.family));
+            let values = values_in(family, core::ParamScope::Instance, o.values, &element)?;
             parts.objects.push(core::Object {
                 id: core::ObjectId(o.id),
                 guid: guid(&element, &o.guid)?,
@@ -2932,6 +2942,7 @@ impl ProjectFile {
                 position: pt(o.position),
                 rotation: o.rotation,
                 base_offset: o.base_offset,
+                values,
             });
         }
 

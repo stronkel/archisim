@@ -1098,9 +1098,10 @@ impl<'a> Cursor<'a> {
             "view" => Ok(Pen::View),
             "thin" => Ok(Pen::Thin),
             "hatch" => Ok(Pen::Hatch),
+            "none" => Ok(Pen::None),
             other => Err(syntax(
                 no,
-                format!("unknown pen «{other}» (cut, frame, view, thin or hatch)"),
+                format!("unknown pen «{other}» (cut, frame, view, thin, hatch or none)"),
             )),
         }
     }

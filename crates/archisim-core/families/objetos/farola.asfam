@@ -1,0 +1,49 @@
+family "Farola"
+  category street
+  host none
+  version 1
+  description "Farola de báculo con su luminaria; el punto de inserción es el centro del poste y el brazo sale hacia delante"
+  folder "Alumbrado"
+
+type_params
+  section "Dimensiones"
+    height length = 4.50 range 0.40..16.00 label "Altura"
+    arm    length = 0.80 range 0.00..3.00 label "Vuelo del brazo"
+    pole   length = 0.12 range 0.05..0.40 label "Diámetro del poste"
+    lamp   length = 0.50 range 0.15..1.50 label "Largo de la luminaria"
+  section "Materiales"
+    mat   material = "Metal lacado" label "Poste"
+    light material = "Luz" label "Luz"
+  section "Presentación"
+    glow length = 3.00 range 0.00..20.00 label "Radio del círculo de luz"
+
+body
+  let p = pole / 2
+  box (-p * 1.6, -p * 1.6, 0) to (p * 1.6, p * 1.6, 0.4) material mat
+  box (-p, -p, 0) to (p, p, height) material mat
+  if arm > 0
+    box (-p * 0.6, 0, height - 0.08) to (p * 0.6, arm, height) material mat
+  box (-0.12, arm - lamp / 2, height - 0.16) to (0.12, arm + lamp / 2, height - 0.04) material light
+
+plan 1:50
+  let p = pole / 2
+  repeat i in 0..12
+    let t0 = 6.283185307 * i / 12
+    let t1 = 6.283185307 * (i + 1) / 12
+    line (p * 1.6 * cos(t0), p * 1.6 * sin(t0)) to (p * 1.6 * cos(t1), p * 1.6 * sin(t1)) pen view
+  if arm > 0
+    line (0, p * 1.6) to (0, arm - lamp / 2) pen thin
+  polygon (-0.12, arm - lamp / 2) (0.12, arm - lamp / 2) (0.12, arm + lamp / 2) (-0.12, arm + lamp / 2) pen view
+
+plan presentation
+  # The pool of light on the ground, and the lamp over it.
+  if glow > 0
+    cloud center (0, arm) radius glow lobes 24 jitter 0 pen thin tint light opacity 0.22
+  cloud center (0, 0) radius pole * 0.8 lobes 6 jitter 0 pen thin tint mat
+  if arm > 0
+    line (0, pole) to (0, arm - lamp / 2) pen view
+  polygon (-0.12, arm - lamp / 2) (0.12, arm - lamp / 2) (0.12, arm + lamp / 2) (-0.12, arm + lamp / 2) pen thin tint mat
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

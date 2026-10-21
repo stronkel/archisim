@@ -239,3 +239,12 @@ Los datos propios del estudio que no son de ninguna familia (resistencia al fueg
 - Salen como **columnas** en las tablas de su categoría, y en el **IFC** en cada elemento, dentro del conjunto de su grupo (los del tipo, con el valor de su tipo). Las definiciones viajan en `ArchiSim_Parameters` del `IfcProject`, así que al reimportar el IFC vuelven los parámetros con sus valores.
 - **Compartidos**: cada parámetro tiene un `GlobalId` fijo. «Guardar como compartidos» los escribe en `Parámetros.asparam` en la carpeta de la biblioteca (texto, una línea por parámetro); «Cargar los compartidos…» los añade a otro proyecto. Dos proyectos con el mismo compartido hablan del mismo dato aunque se renombre.
 - **Parámetros de familia con su sitio en el IFC**: en una receta, `ifc "Pset_DoorCommon.FireRating"` tras un parámetro lo exporta en ese conjunto y propiedad estándar, y sale como columna en la tabla de carpinterías. La puerta abatible lo usa para «Resistencia al fuego».
+
+
+## Vegetación y mobiliario urbano (v0.35)
+
+- **Plumas**: `pen none` dibuja un contorno sin línea (solo su relleno, con `tint` y `opacity`): las copas «rellenas» sin borde.
+- **Árbol v4**: en el tipo, «Copa en presentación» con siete formas (`lóbulos`, `círculo`, `acuarela`, `ramas`, `follaje`, `palmera`, `conífera`), «Relleno de la copa» (transparente, rellena, contorno) y «Opacidad de la copa». Y **parámetros de ejemplar** (sección Dibujo): «Dibujo en planta» (según el estilo de la vista, siempre técnico o siempre de presentación), forma, relleno y opacidad propios, y un color de copa propio. Así cada árbol se puede dibujar a mano, sin depender del estilo de la vista.
+- Los parámetros de ejemplar de una familia de objeto se ven en Propiedades → «Este objeto» y se guardan en el objeto (`values`, formato versión 23); `visible_if` oculta los que no vienen al caso.
+- **Mobiliario urbano** (categoría `street`, disciplina Urbanismo): farola (de báculo o de jardín, con el círculo de luz en presentación), buzón, papelera, bolardo, fuente de beber, aparcabicis (plazas), contenedor de residuos, señal de tráfico, jardinera, alcorque y banco. Se exportan como `IfcFurniture` `USERDEFINED`.
+- **Biblioteca ampliada**: `archisim biblioteca --ampliada [carpeta]` escribe unos 80 tipos (38 árboles, 14 arbustos y setos y 31 de calle, personas y vehículos) con `GlobalId` fijos, por carpetas; también Biblioteca → «Instalar la biblioteca ampliada». En el repositorio, en `biblioteca-ampliada/`.

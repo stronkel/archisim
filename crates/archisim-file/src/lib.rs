@@ -46,7 +46,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 22;
+pub const CURRENT_VERSION: u32 = 23;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -266,8 +266,10 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // none. 20 → 21: loose edges of the concept phase (`edges`);
             // older ones have none. 21 → 22: presentation styles
             // (`presentation_styles`, a view's `presentation`) and rooms'
-            // `floor_fill`; older ones have none.
-            9..=21 => {
+            // `floor_fill`; older ones have none. 22 → 23: objects' own
+            // values (`values`) and hatches' `opacity`; older ones have
+            // none (solid).
+            9..=22 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -866,6 +868,38 @@ mod tests {
             angle: 0.5,
         });
         m.set_room(r).unwrap();
+        // A tree drawn its own way (version 23).
+        {
+            let f = m.system_family("Árbol").unwrap();
+            let values = m
+                .family_defaults(f, archisim_core::ParamScope::Type)
+                .unwrap();
+            let t = m.add_object_type("Árbol", f, values).unwrap();
+            let o = m
+                .add_object(archisim_core::NewObject {
+                    level: levels[0],
+                    object_type: t,
+                    position: Point2::new(-3.0, 2.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })
+                .unwrap();
+            let own: archisim_core::Values = [
+                (
+                    "shape_own".to_string(),
+                    archisim_core::Value::Text("acuarela".into()),
+                ),
+                ("opacity_own".to_string(), archisim_core::Value::Number(0.4)),
+                ("color_own".to_string(), archisim_core::Value::Bool(true)),
+                (
+                    "leaves_own".to_string(),
+                    archisim_core::Value::Material(m.materials().next().unwrap().id.0),
+                ),
+            ]
+            .into_iter()
+            .collect();
+            m.set_object_values(o, own).unwrap();
+        }
         // A presentation style (version 22).
         {
             let mut st = archisim_core::PresentationStyle::new("Terracota");
@@ -1178,7 +1212,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 22", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 23", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1205,7 +1239,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 22"));
+        assert!(to_string(&opened).contains("\"version\": 23"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1376,7 +1410,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 22", "\"version\": 3", 1)
+            .replacen("\"version\": 23", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1438,7 +1472,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 22", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 23", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -1579,6 +1613,7 @@ mod tests {
                 scale: 1.5,
                 angle: 0.1,
                 background: Some([250, 250, 240]),
+                opacity: 0.6,
             }),
         ];
         for (i, s) in shapes.into_iter().enumerate() {
@@ -1881,7 +1916,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 22", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 23", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -1893,7 +1928,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 22,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 23,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -1939,11 +1974,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 22", "\"version\": 23"),
-            Err(FileError::TooNew { version: 23 })
+            edited("\"version\": 23", "\"version\": 24"),
+            Err(FileError::TooNew { version: 24 })
         ));
         assert!(matches!(
-            edited("\"version\": 22", "\"version\": 0"),
+            edited("\"version\": 23", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

@@ -183,12 +183,14 @@ impl ArchiSimApp {
             );
             let Some(mut f) = new.floor_fill else { return };
             row(ui, "Trama", "", |ui, w| {
-                let opts: Vec<(archisim_core::HatchPattern, &str)> =
-                    archisim_core::HatchPattern::ALL
-                        .iter()
-                        .map(|p| (*p, p.label()))
-                        .collect();
-                f.pattern = props::choice(ui, "room-fill-pattern", w, f.pattern, &opts);
+                f.pattern = super::hatch_ui::pattern_picker(
+                    ui,
+                    "room-fill-pattern",
+                    w,
+                    f.pattern,
+                    f.color,
+                    f.background,
+                );
             });
             row(
                 ui,

@@ -167,6 +167,9 @@ pub(crate) enum Shape {
         angle: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         background: Option<String>,
+        /// Version 23; absent: solid.
+        #[serde(default = "one", skip_serializing_if = "is_one")]
+        opacity: f64,
     },
     AngleDim {
         centre: Xy,
@@ -245,6 +248,7 @@ impl Shape {
                 scale: h.scale,
                 angle: h.angle,
                 background: h.background.map(hex),
+                opacity: h.opacity,
             },
             core::Shape::Dim(m) => match *m {
                 core::Measure::Angle {
@@ -354,6 +358,7 @@ impl Shape {
                 scale,
                 angle,
                 background,
+                opacity,
             } => core::Shape::Hatch(core::Hatch {
                 loops: loops.into_iter().map(Polyline::into_core).collect(),
                 pattern: core::HatchPattern::from_code(&pattern)
@@ -361,6 +366,7 @@ impl Shape {
                 scale,
                 angle,
                 background: background.map(|b| parse_hex(element, &b)).transpose()?,
+                opacity: opacity.clamp(0.05, 1.0),
             }),
             Shape::AngleDim {
                 centre,
@@ -880,4 +886,12 @@ pub(crate) fn tables_in(t: Vec<Table>) -> Result<Vec<core::SheetTable>, FileErro
             })
         })
         .collect()
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+fn is_one(v: &f64) -> bool {
+    (*v - 1.0).abs() < 1e-12
 }

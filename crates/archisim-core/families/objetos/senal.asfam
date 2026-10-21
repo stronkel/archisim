@@ -1,0 +1,30 @@
+family "Señal de tráfico"
+  category street
+  host none
+  version 1
+  description "Señal sobre poste; el punto de inserción es el centro del poste y la cara mira hacia delante"
+  folder "Señalización"
+
+type_params
+  section "Dimensiones"
+    height length = 2.60 range 1.50..5.00 label "Altura total"
+    plate  length = 0.60 range 0.30..1.50 label "Ancho de la placa"
+  section "Materiales"
+    mat   material = "Metal lacado" label "Poste"
+    face  material = "Metal lacado" label "Placa"
+
+body
+  box (-0.04, -0.04, 0) to (0.04, 0.04, height - plate) material mat
+  box (-plate / 2, 0.04, height - plate) to (plate / 2, 0.06, height) material face
+
+plan 1:50
+  polygon (-0.04, -0.04) (0.04, -0.04) (0.04, 0.04) (-0.04, 0.04) pen view
+  line (-plate / 2, 0.05) to (plate / 2, 0.05) pen view
+
+plan presentation
+  polygon (-0.04, -0.04) (0.04, -0.04) (0.04, 0.04) (-0.04, 0.04) pen thin tint mat
+  polygon (-plate / 2, 0.04) (plate / 2, 0.04) (plate / 2, 0.07) (-plate / 2, 0.07) pen thin tint face
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

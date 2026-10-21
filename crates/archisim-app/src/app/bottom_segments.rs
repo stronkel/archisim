@@ -4,7 +4,7 @@
 //! segment starts its order with a click; its arrow opens the variants and
 //! the settings of what is drawn next.
 
-use archisim_core::{HatchPattern, LineStyle};
+use archisim_core::LineStyle;
 use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, Ui, Vec2};
 
 use super::context_bar::paint_mark;
@@ -76,12 +76,50 @@ const LINES: &[Variant] = &[
     },
 ];
 
-const FILLS: &[Variant] = &[Variant {
-    mark: Mark::Glyph(Glyph::Hatch),
-    name: "Sombreado",
-    key: "SB",
-    pick: Pick::Command("SOMBCONT"),
-}];
+const FILLS: &[Variant] = &[
+    Variant {
+        mark: Mark::Icon(Icon::GeoRect),
+        name: "Rectángulo",
+        key: "RELLRECT",
+        pick: Pick::Command("RELLRECT"),
+    },
+    Variant {
+        mark: Mark::Icon(Icon::Pline),
+        name: "Polígono",
+        key: "RELLPOLIG",
+        pick: Pick::Command("RELLPOLIG"),
+    },
+    Variant {
+        mark: Mark::Glyph(Glyph::Spline),
+        name: "Spline",
+        key: "RELLSPLINE",
+        pick: Pick::Command("RELLSPLINE"),
+    },
+    Variant {
+        mark: Mark::Icon(Icon::GeoPolygon),
+        name: "Polígono regular",
+        key: "RELLREGULAR",
+        pick: Pick::Command("RELLREGULAR"),
+    },
+    Variant {
+        mark: Mark::Icon(Icon::GeoCircle),
+        name: "Círculo",
+        key: "RELLCIRC",
+        pick: Pick::Command("RELLCIRC"),
+    },
+    Variant {
+        mark: Mark::Icon(Icon::Ellipse),
+        name: "Elipse",
+        key: "RELLELIPSE",
+        pick: Pick::Command("RELLELIPSE"),
+    },
+    Variant {
+        mark: Mark::Glyph(Glyph::Hatch),
+        name: "Por recinto o contorno",
+        key: "SB",
+        pick: Pick::Command("SOMBCONT"),
+    },
+];
 
 const TEXTS: &[Variant] = &[
     Variant {
@@ -319,14 +357,30 @@ impl ArchiSimApp {
             }
             Seg::Fill => {
                 setting(ui, "Trama", |ui| {
-                    egui::ComboBox::from_id_salt("seg-hatch")
-                        .width(130.0)
-                        .selected_text(st.hatch_pattern.label())
-                        .show_ui(ui, |ui| {
-                            for pat in HatchPattern::ALL {
-                                ui.selectable_value(&mut st.hatch_pattern, pat, pat.label());
-                            }
-                        });
+                    let ink = st.color.unwrap_or([40, 40, 40]);
+                    st.hatch_pattern = super::hatch_ui::pattern_picker_inline(
+                        ui,
+                        "seg-hatch",
+                        220.0,
+                        st.hatch_pattern,
+                        ink,
+                        st.hatch_background,
+                    );
+                });
+                let ink = st.color.unwrap_or([40, 40, 40]);
+                if let Some(p) = super::hatch_ui::inline_grid(
+                    ui,
+                    "seg-hatch",
+                    st.hatch_pattern,
+                    ink,
+                    st.hatch_background,
+                ) {
+                    st.hatch_pattern = p;
+                }
+                setting(ui, "Opacidad", |ui| {
+                    if let Some(v) = super::hatch_ui::opacity_slider(ui, st.hatch_opacity, 160.0) {
+                        st.hatch_opacity = v;
+                    }
                 });
                 setting(ui, "Escala", |ui| {
                     ui.add(

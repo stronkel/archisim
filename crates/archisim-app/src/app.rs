@@ -305,6 +305,11 @@ pub struct ArchiSimApp {
     pub guides: Vec<(Point2, Point2)>,
     pub railing_settings: crate::editor::RailingSettings,
     pub object_settings: crate::editor::ObjectSettings,
+    /// Part of the library the object tool offers (Vegetación, Mobiliario
+    /// urbano); `None`: all of it.
+    pub object_scope: Option<object_gallery::ObjectScope>,
+    /// The object card being drawn is the tool's (it keeps to its scope).
+    scoped_card: bool,
     /// Points of the railing being drawn.
     pub railing_points: Vec<Point2>,
     /// Survey points of the terrain being drawn.
@@ -349,6 +354,9 @@ pub struct ArchiSimApp {
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
+    /// The object types of the library folder (the studio's and the
+    /// extended library), for the gallery: read again now and then.
+    pub folder_objects: Option<object_gallery::FolderObjects>,
     pub priorities_all: bool,
     pub priority_drag: Option<(archisim_core::MaterialId, u16)>,
     /// A level waiting for confirmation before being deleted with its
@@ -555,6 +563,8 @@ impl ArchiSimApp {
             guides: Vec::new(),
             railing_settings: Default::default(),
             object_settings: Default::default(),
+            object_scope: None,
+            scoped_card: false,
             railing_points: Vec::new(),
             terrain_points: Vec::new(),
             terrain_lines: Vec::new(),
@@ -576,6 +586,7 @@ impl ArchiSimApp {
             cte: Default::default(),
             survey_import: None,
             object_library: None,
+            folder_objects: None,
             priorities_all: false,
             priority_drag: None,
             level_to_delete: None,
@@ -1970,6 +1981,7 @@ mod draft_props;
 mod foundation_ui;
 mod ghost3d;
 mod glyphs;
+mod hatch_ui;
 mod icons;
 mod levels_ui;
 mod library_ui;

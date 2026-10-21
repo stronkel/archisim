@@ -719,6 +719,7 @@ pub fn build() -> Result<Document, ModelError> {
                 scale: 1.0,
                 angle: 0.0,
                 background: None,
+                opacity: 1.0,
             }),
         ))?;
         m.add_draft(NewDraft::new(view, urb, Shape::Polyline(terrace)))?;
@@ -774,6 +775,7 @@ pub fn build() -> Result<Document, ModelError> {
                     scale: 1.0,
                     angle,
                     background: Some(background),
+                    opacity: 1.0,
                 }),
             );
             d.color = Some(color);

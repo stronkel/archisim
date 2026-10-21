@@ -82,6 +82,24 @@ impl ArchiSimApp {
             }
             if ui.button("Volver a leer").clicked() {
                 self.library.refresh();
+                self.folder_objects = None;
+            }
+            if ui
+                .button("Instalar la biblioteca ampliada")
+                .on_hover_text("Más de ochenta árboles, arbustos, mobiliario urbano, personas y vehículos, en la subcarpeta «Ampliada»; salen en las galerías de objetos")
+                .clicked()
+            {
+                match crate::editor::library::install_extended(&lib.dir) {
+                    Ok(n) => {
+                        self.say(format!(
+                            "Biblioteca ampliada instalada: {n} tipos en {}.",
+                            lib.dir.join("Ampliada").display()
+                        ));
+                        self.library.refresh();
+                        self.folder_objects = None;
+                    }
+                    Err(e) => self.complain(format!("No se puede instalar: {e}.")),
+                }
             }
         });
         ui.add_space(4.0);

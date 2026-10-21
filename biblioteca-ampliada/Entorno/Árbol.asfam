@@ -1,0 +1,570 @@
+family "Árbol"
+  category site
+  host none
+  version 4
+  description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
+  folder "Vegetación"
+
+type_params
+  section "Dimensiones"
+    height  length = 6.00 range 1.50..30.00 label "Altura total"
+    crown   length = 4.00 range 0.80..20.00 label "Diámetro de la copa"
+    trunk_h length = 2.00 range 0.30..25.00 label "Altura del tronco"
+    trunk   length = 0.30 range 0.05..2.00 label "Diámetro del tronco"
+  section "Materiales"
+    leaves material = "Vegetación" label "Copa"
+    bark   material = "Corteza" label "Tronco"
+  section "Presentación"
+    shape choice("lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "lóbulos" label "Copa en presentación"
+    look choice("transparente", "rellena", "contorno") = "transparente" label "Relleno de la copa"
+    opacity number = 0.55 range 0.10..1.00 label "Opacidad de la copa"
+
+instance_params
+  section "Dibujo"
+    drawing choice("según el estilo", "técnico", "presentación") = "según el estilo" label "Dibujo en planta"
+    shape_own choice("del tipo", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "del tipo" label "Copa"
+    look_own choice("del tipo", "transparente", "rellena", "contorno") = "del tipo" label "Relleno"
+    opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"
+    color_own bool = false label "Color propio"
+    leaves_own material = "Vegetación" visible_if color_own label "Color de la copa"
+
+require trunk_h < height - 0.3 else "La copa necesita sitio por encima del tronco"
+require trunk < crown else "El tronco no puede ser más ancho que la copa"
+
+body
+  box (-trunk / 2, -trunk / 2, 0) to (trunk / 2, trunk / 2, trunk_h) material bark
+  let h = height - trunk_h
+  let r = crown / 2
+  repeat i in 0..6
+    let m = (i + 0.5) / 3 - 1
+    let a = r * sqrt(1 - m * m)
+    let b = a * 0.6
+    let z0 = trunk_h + h * i / 6
+    let z1 = trunk_h + h * (i + 1) / 6
+    box (-a, -b, z0) to (a, b, z1) material leaves
+    box (-b, -a, z0) to (b, -b, z1) material leaves
+    box (-b, b, z0) to (b, a, z1) material leaves
+
+plan 1:50
+  let r = crown / 2
+  repeat i in 0..36
+    let t0 = 6.283185307 * i / 36
+    let t1 = 6.283185307 * (i + 1) / 36
+    let k0 = if floor(i / 2) * 2 == i then 1 else 0.94
+    let k1 = if floor(i / 2) * 2 == i then 0.94 else 1
+    line (r * k0 * cos(t0), r * k0 * sin(t0)) to (r * k1 * cos(t1), r * k1 * sin(t1)) pen view
+  repeat i in 0..12
+    let t = 6.283185307 * i / 12
+    line (trunk / 2 * cos(t), trunk / 2 * sin(t)) to (r * 0.6 * cos(t), r * 0.6 * sin(t)) pen thin
+  arc center (0, 0) from (trunk / 2, 0) to (0, trunk / 2) pen view
+  arc center (0, 0) from (0, trunk / 2) to (-trunk / 2, 0) pen view
+  arc center (0, 0) from (-trunk / 2, 0) to (0, -trunk / 2) pen view
+  arc center (0, 0) from (0, -trunk / 2) to (trunk / 2, 0) pen view
+
+plan presentation
+  # How it is drawn: the tree's own choices, or its type's.
+  let r = crown / 2
+  let form = if shape_own == "del tipo" then shape else shape_own
+  let fill = if look_own == "del tipo" then look else look_own
+  let op0 = if opacity_own > 0 then opacity_own else opacity
+  let op = if fill == "rellena" then 1 else op0
+  let c = if color_own then leaves_own else leaves
+  let outline = fill == "contorno"
+  let turn = 6.283185307 * rand(seed * 101)
+  if form == "lóbulos"
+    if outline
+      cloud center (0, 0) radius r lobes 11 jitter 0.14 pen view
+      cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin
+    else
+      cloud center (0, 0) radius r lobes 11 jitter 0.14 pen thin tint c opacity op
+      cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin tint c opacity op * 0.5
+    repeat i in 0..5
+      let t = 6.283185307 * (i + 0.6 * rand(seed * 31 + i)) / 5
+      line (0, 0) to (r * 0.5 * cos(t), r * 0.5 * sin(t)) pen thin
+  if form == "círculo"
+    if outline
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen view
+    else
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen thin tint c opacity op
+  if form == "acuarela"
+    # Washes of colour laid one over another, without lines.
+    repeat i in 0..4
+      let a = turn + 6.283185307 * i / 4
+      let d = r * 0.16 * rand(seed * 17 + i)
+      let rr = r * (0.72 + 0.24 * rand(seed * 29 + i))
+      if outline
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 9 jitter 0.2 pen thin
+      else
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 9 jitter 0.2 pen none tint c opacity op * 0.45
+    cloud center (r * 0.15, -r * 0.18) radius r * 0.42 lobes 7 jitter 0.22 pen none tint c opacity op * 0.4
+  if form == "ramas"
+    # The classic tree of plans: its crown and the branches seen through.
+    if outline
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen view
+    else
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen view tint c opacity op
+    repeat i in 0..7
+      let a = turn + 6.283185307 * (i + 0.4 * rand(seed * 37 + i)) / 7
+      line (0, 0) to (r * 0.82 * cos(a), r * 0.82 * sin(a)) pen thin
+      line (r * 0.42 * cos(a), r * 0.42 * sin(a)) to (r * 0.7 * cos(a + 0.3), r * 0.7 * sin(a + 0.3)) pen thin
+      line (r * 0.55 * cos(a), r * 0.55 * sin(a)) to (r * 0.78 * cos(a - 0.25), r * 0.78 * sin(a - 0.25)) pen thin
+  if form == "follaje"
+    # Clusters of leaves, each its own size and place.
+    if outline
+      cloud center (0, 0) radius r lobes 14 jitter 0.12 pen thin
+    repeat i in 0..9
+      let a = turn + 6.283185307 * i / 9
+      let d = r * (0.25 + 0.38 * rand(seed * 41 + i))
+      let rr = r * (0.3 + 0.16 * rand(seed * 43 + i))
+      if outline
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 7 jitter 0.2 pen thin
+      else
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 7 jitter 0.2 pen thin tint c opacity op * 0.7
+    if not outline
+      cloud center (0, 0) radius r * 0.34 lobes 7 jitter 0.2 pen none tint c opacity op * 0.6
+  if form == "palmera"
+    # Fronds from the top of the trunk.
+    repeat i in 0..9
+      let a = turn + 6.283185307 * (i + 0.3 * rand(seed * 47 + i)) / 9
+      let l = r * (0.85 + 0.15 * rand(seed * 53 + i))
+      let w = r * 0.16
+      let px = -sin(a)
+      let py = cos(a)
+      if outline
+        polygon (0, 0) (l * 0.5 * cos(a) + w * px, l * 0.5 * sin(a) + w * py) (l * cos(a), l * sin(a)) (l * 0.5 * cos(a) - w * px, l * 0.5 * sin(a) - w * py) pen thin
+      else
+        polygon (0, 0) (l * 0.5 * cos(a) + w * px, l * 0.5 * sin(a) + w * py) (l * cos(a), l * sin(a)) (l * 0.5 * cos(a) - w * px, l * 0.5 * sin(a) - w * py) pen thin tint c opacity op
+      line (0, 0) to (l * cos(a), l * sin(a)) pen thin
+  if form == "conífera"
+    # Rings of needles, darker to the middle.
+    repeat i in 0..3
+      let rr = r * (1 - i * 0.3)
+      if outline
+        cloud center (0, 0) radius rr lobes 18 - i * 4 jitter 0.12 pen thin
+      else
+        cloud center (0, 0) radius rr lobes 18 - i * 4 jitter 0.12 pen thin tint c opacity op * 0.6
+  cloud center (0, 0) radius max(trunk / 2, r * 0.06) lobes 6 jitter 0 pen thin tint bark
+
+outputs
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "VEGETATION"
+catalog
+  material "Copa de olivo" category "vegetation" color 150 164 122
+  material "Corteza" category "wood" color 112 86 62
+  material "Copa de acebuche" category "vegetation" color 138 152 110
+  material "Copa de encina" category "vegetation" color 86 112 74
+  material "Copa de alcornoque" category "vegetation" color 96 120 80
+  material "Copa de algarrobo" category "vegetation" color 74 106 70
+  material "Copa de pino piñonero" category "vegetation" color 92 128 86
+  material "Copa de pino carrasco" category "vegetation" color 104 136 92
+  material "Copa de ciprés" category "vegetation" color 52 86 64
+  material "Copa de ciprés de arizona" category "vegetation" color 110 140 130
+  material "Copa de palmera datilera" category "vegetation" color 128 158 96
+  material "Copa de palmera canaria" category "vegetation" color 104 146 84
+  material "Copa de washingtonia" category "vegetation" color 120 150 90
+  material "Copa de palmito" category "vegetation" color 130 160 100
+  material "Copa de naranjo" category "vegetation" color 72 120 70
+  material "Copa de limonero" category "vegetation" color 96 138 74
+  material "Copa de almendro en flor" category "vegetation" color 240 206 214
+  material "Copa de jacaranda" category "vegetation" color 150 132 200
+  material "Copa de árbol del amor" category "vegetation" color 214 136 176
+  material "Copa de tipuana" category "vegetation" color 212 196 90
+  material "Copa de plátano de sombra" category "vegetation" color 118 156 86
+  material "Copa de almez" category "vegetation" color 104 146 84
+  material "Copa de morera" category "vegetation" color 110 158 80
+  material "Copa de ficus" category "vegetation" color 56 100 62
+  material "Copa de magnolio" category "vegetation" color 64 104 70
+  material "Copa de grevillea" category "vegetation" color 130 150 110
+  material "Copa de sauce llorón" category "vegetation" color 150 184 108
+  material "Copa de álamo blanco" category "vegetation" color 170 192 150
+  material "Copa de chopo" category "vegetation" color 124 162 92
+  material "Copa de fresno" category "vegetation" color 124 164 96
+  material "Copa de olmo" category "vegetation" color 98 140 82
+  material "Copa de abedul" category "vegetation" color 160 190 110
+  material "Copa de arce rojo" category "vegetation" color 196 84 64
+  material "Copa de liquidámbar" category "vegetation" color 214 128 70
+  material "Copa de ginkgo" category "vegetation" color 226 200 92
+  material "Copa de castaño de indias" category "vegetation" color 84 128 74
+  material "Copa de tilo" category "vegetation" color 128 168 96
+  material "Copa de drago" category "vegetation" color 90 128 96
+  material "Copa de árbol joven" category "vegetation" color 132 170 100
+  type "Olivo" guid "0M12ppTxAQRyP9Kgx6Lrp6"
+    height = 5
+    crown = 5
+    trunk_h = 1.5
+    trunk = 0.5
+    leaves = "Copa de olivo"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.6
+  type "Acebuche" guid "2npOBXjuoMCjyERHEuvqLH"
+    height = 4
+    crown = 4
+    trunk_h = 1.2
+    trunk = 0.35
+    leaves = "Copa de acebuche"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.6
+  type "Encina" guid "3i4gj4FiG7YFnED5jgaKtd"
+    height = 9
+    crown = 8
+    trunk_h = 2.5
+    trunk = 0.6
+    leaves = "Copa de encina"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.6
+  type "Alcornoque" guid "2ODk4HT1H$fsjrCoKZayzK"
+    height = 10
+    crown = 9
+    trunk_h = 3
+    trunk = 0.7
+    leaves = "Copa de alcornoque"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.55
+  type "Algarrobo" guid "2$C16dxVpGTArBDae798oo"
+    height = 7
+    crown = 7
+    trunk_h = 2
+    trunk = 0.5
+    leaves = "Copa de algarrobo"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "rellena"
+    opacity = 0.6
+  type "Pino piñonero" guid "3ZO$IqGsmLlxI33nJwkIRp"
+    height = 14
+    crown = 11
+    trunk_h = 7
+    trunk = 0.6
+    leaves = "Copa de pino piñonero"
+    bark = "Corteza"
+    shape = "acuarela"
+    look = "transparente"
+    opacity = 0.6
+  type "Pino carrasco" guid "1VYzxMjlwtM6QiN74bVDur"
+    height = 12
+    crown = 7
+    trunk_h = 4
+    trunk = 0.45
+    leaves = "Copa de pino carrasco"
+    bark = "Corteza"
+    shape = "conífera"
+    look = "transparente"
+    opacity = 0.6
+  type "Ciprés" guid "3JRCzQiJL5Zck0pYlCI6j4"
+    height = 10
+    crown = 1.8
+    trunk_h = 0.6
+    trunk = 0.3
+    leaves = "Copa de ciprés"
+    bark = "Corteza"
+    shape = "círculo"
+    look = "rellena"
+    opacity = 1
+  type "Ciprés de Arizona" guid "31FNaxB9Q4o4$RsSnjTUDt"
+    height = 8
+    crown = 3.5
+    trunk_h = 0.8
+    trunk = 0.3
+    leaves = "Copa de ciprés de arizona"
+    bark = "Corteza"
+    shape = "conífera"
+    look = "rellena"
+    opacity = 0.8
+  type "Palmera datilera" guid "0P2zU1MW5fDSglP0V9nfPz"
+    height = 15
+    crown = 7
+    trunk_h = 12
+    trunk = 0.6
+    leaves = "Copa de palmera datilera"
+    bark = "Corteza"
+    shape = "palmera"
+    look = "transparente"
+    opacity = 0.7
+  type "Palmera canaria" guid "1ZFiSl9XhIqei2l19Ws7wc"
+    height = 12
+    crown = 9
+    trunk_h = 8
+    trunk = 0.9
+    leaves = "Copa de palmera canaria"
+    bark = "Corteza"
+    shape = "palmera"
+    look = "transparente"
+    opacity = 0.7
+  type "Washingtonia" guid "3jJhpbAVlCT9D2CW31s1r9"
+    height = 18
+    crown = 4
+    trunk_h = 16
+    trunk = 0.5
+    leaves = "Copa de washingtonia"
+    bark = "Corteza"
+    shape = "palmera"
+    look = "transparente"
+    opacity = 0.7
+  type "Palmito" guid "2r7ndiu3L5ZY8TVTzZewjv"
+    height = 2
+    crown = 2.5
+    trunk_h = 0.6
+    trunk = 0.3
+    leaves = "Copa de palmito"
+    bark = "Corteza"
+    shape = "palmera"
+    look = "rellena"
+    opacity = 0.8
+  type "Naranjo" guid "0XkWr9jpL5Zbmi6ucTIcaE"
+    height = 4
+    crown = 3.5
+    trunk_h = 1
+    trunk = 0.25
+    leaves = "Copa de naranjo"
+    bark = "Corteza"
+    shape = "círculo"
+    look = "rellena"
+    opacity = 0.85
+  type "Limonero" guid "2vt45YpeoM8GZ8VpbBiCD0"
+    height = 4
+    crown = 3.5
+    trunk_h = 1
+    trunk = 0.25
+    leaves = "Copa de limonero"
+    bark = "Corteza"
+    shape = "círculo"
+    look = "rellena"
+    opacity = 0.85
+  type "Almendro en flor" guid "3TzAcnXbry4T7wEgYahrQ5"
+    height = 5
+    crown = 5
+    trunk_h = 1.4
+    trunk = 0.3
+    leaves = "Copa de almendro en flor"
+    bark = "Corteza"
+    shape = "acuarela"
+    look = "transparente"
+    opacity = 0.6
+  type "Jacaranda" guid "3ufpdmE$onW5YoL$0eZg7I"
+    height = 9
+    crown = 8
+    trunk_h = 2.5
+    trunk = 0.4
+    leaves = "Copa de jacaranda"
+    bark = "Corteza"
+    shape = "acuarela"
+    look = "transparente"
+    opacity = 0.6
+  type "Árbol del amor" guid "11SZdG6VSvez0HprUXtjJ_"
+    height = 6
+    crown = 6
+    trunk_h = 1.8
+    trunk = 0.3
+    leaves = "Copa de árbol del amor"
+    bark = "Corteza"
+    shape = "acuarela"
+    look = "transparente"
+    opacity = 0.6
+  type "Tipuana" guid "2agCgrvZL5ZZFsCLFcXMl9"
+    height = 12
+    crown = 12
+    trunk_h = 3
+    trunk = 0.6
+    leaves = "Copa de tipuana"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.5
+  type "Plátano de sombra" guid "25inNAS5pUc$I6CpCUhcxy"
+    height = 18
+    crown = 14
+    trunk_h = 3.5
+    trunk = 0.7
+    leaves = "Copa de plátano de sombra"
+    bark = "Corteza"
+    shape = "ramas"
+    look = "transparente"
+    opacity = 0.5
+  type "Almez" guid "0iUKy5HBAQRyP9M2v0uvGm"
+    height = 12
+    crown = 10
+    trunk_h = 3
+    trunk = 0.5
+    leaves = "Copa de almez"
+    bark = "Corteza"
+    shape = "ramas"
+    look = "transparente"
+    opacity = 0.55
+  type "Morera" guid "3yrrYhAyG7YFmnaGON1OP9"
+    height = 8
+    crown = 9
+    trunk_h = 2.2
+    trunk = 0.5
+    leaves = "Copa de morera"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.55
+  type "Ficus" guid "1xAY26ChAQRyP9QtE2Uq79"
+    height = 12
+    crown = 14
+    trunk_h = 2.5
+    trunk = 0.9
+    leaves = "Copa de ficus"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "rellena"
+    opacity = 0.7
+  type "Magnolio" guid "06vRZ0beoM7T1yzKcIFJ0z"
+    height = 12
+    crown = 8
+    trunk_h = 2
+    trunk = 0.5
+    leaves = "Copa de magnolio"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "rellena"
+    opacity = 0.75
+  type "Grevillea" guid "3LCMfCL$puxtAsxVn0CXlu"
+    height = 14
+    crown = 7
+    trunk_h = 3
+    trunk = 0.45
+    leaves = "Copa de grevillea"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.55
+  type "Sauce llorón" guid "0SnwhqHT3fTQOr$nQyoa6Z"
+    height = 10
+    crown = 10
+    trunk_h = 2
+    trunk = 0.5
+    leaves = "Copa de sauce llorón"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.5
+  type "Álamo blanco" guid "11bgu$P_q7SPZTbwv45z5H"
+    height = 18
+    crown = 9
+    trunk_h = 3.5
+    trunk = 0.6
+    leaves = "Copa de álamo blanco"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.5
+  type "Chopo" guid "159K3mRRAQRyP9NbmZ$GME"
+    height = 20
+    crown = 6
+    trunk_h = 3
+    trunk = 0.5
+    leaves = "Copa de chopo"
+    bark = "Corteza"
+    shape = "círculo"
+    look = "transparente"
+    opacity = 0.55
+  type "Fresno" guid "1_Cx5lqCG7YFnNLXSvAzU6"
+    height = 15
+    crown = 10
+    trunk_h = 3
+    trunk = 0.5
+    leaves = "Copa de fresno"
+    bark = "Corteza"
+    shape = "ramas"
+    look = "transparente"
+    opacity = 0.5
+  type "Olmo" guid "2WgvJ1OZ5KChty_sBaDSM6"
+    height = 16
+    crown = 12
+    trunk_h = 3
+    trunk = 0.6
+    leaves = "Copa de olmo"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.55
+  type "Abedul" guid "0kPKClWiG7YFm$adnZzAIM"
+    height = 14
+    crown = 6
+    trunk_h = 2.5
+    trunk = 0.3
+    leaves = "Copa de abedul"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.5
+  type "Arce rojo" guid "1HdL3Mo$pGw4VyXf3Sa0lc"
+    height = 12
+    crown = 8
+    trunk_h = 2.5
+    trunk = 0.4
+    leaves = "Copa de arce rojo"
+    bark = "Corteza"
+    shape = "follaje"
+    look = "transparente"
+    opacity = 0.55
+  type "Liquidámbar" guid "3TcZBnwDefFQ5B1j2k_uHj"
+    height = 15
+    crown = 8
+    trunk_h = 2.5
+    trunk = 0.45
+    leaves = "Copa de liquidámbar"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.55
+  type "Ginkgo" guid "0ivkGhWSG7YFnK$xIN3ysW"
+    height = 15
+    crown = 7
+    trunk_h = 3
+    trunk = 0.4
+    leaves = "Copa de ginkgo"
+    bark = "Corteza"
+    shape = "acuarela"
+    look = "transparente"
+    opacity = 0.55
+  type "Castaño de Indias" guid "1xvwaobB2Q9ZA5HYNWAjCd"
+    height = 18
+    crown = 12
+    trunk_h = 3
+    trunk = 0.7
+    leaves = "Copa de castaño de indias"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "rellena"
+    opacity = 0.7
+  type "Tilo" guid "2WQKRPFp5KChty_qwIqIxd"
+    height = 16
+    crown = 11
+    trunk_h = 3
+    trunk = 0.6
+    leaves = "Copa de tilo"
+    bark = "Corteza"
+    shape = "lóbulos"
+    look = "transparente"
+    opacity = 0.55
+  type "Drago" guid "1aSklD$hAQRyP9PT$EukuW"
+    height = 6
+    crown = 4.5
+    trunk_h = 2.5
+    trunk = 0.6
+    leaves = "Copa de drago"
+    bark = "Corteza"
+    shape = "palmera"
+    look = "rellena"
+    opacity = 0.8
+  type "Árbol joven" guid "0UIGOD4F2QYQGvLWRcvr4U"
+    height = 3.5
+    crown = 2
+    trunk_h = 1.8
+    trunk = 0.12
+    leaves = "Copa de árbol joven"
+    bark = "Corteza"
+    shape = "ramas"
+    look = "transparente"
+    opacity = 0.45

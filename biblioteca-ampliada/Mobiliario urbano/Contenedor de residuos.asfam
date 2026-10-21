@@ -1,0 +1,60 @@
+family "Contenedor de residuos"
+  category street
+  host none
+  version 1
+  description "Contenedor de residuos con tapa; el punto de inserción es el centro de la trasera y la tapa abre hacia delante"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.40 range 0.50..3.00 label "Ancho"
+    depth  length = 0.90 range 0.40..2.00 label "Fondo"
+    height length = 1.30 range 0.80..2.00 label "Altura"
+  section "Materiales"
+    mat material = "Plástico verde" label "Contenedor"
+
+body
+  box (-width / 2, 0, 0.1) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth * 0.35) to (width / 2, depth * 0.35) pen thin
+
+plan presentation
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat
+  line (-width / 2, depth * 0.35) to (width / 2, depth * 0.35) pen thin
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
+catalog
+  material "Plástico amarillo" category "other" color 232 196 52
+  material "Plástico azul" category "other" color 52 100 170
+  material "Plástico verde" category "plastic" color 62 112 74
+  material "Plástico gris" category "other" color 110 114 118
+  material "Plástico marrón" category "other" color 120 84 56
+  type "Contenedor amarillo" guid "2Fva_ZLdGzeKwIcWclSMVF"
+    width = 1.4
+    depth = 0.9
+    height = 1.3
+    mat = "Plástico amarillo"
+  type "Contenedor azul" guid "3o$Kt1rsAWpkfylH4h0WnW"
+    width = 1.4
+    depth = 0.9
+    height = 1.3
+    mat = "Plástico azul"
+  type "Contenedor verde vidrio" guid "3QjT2OuWoFEuMSSsc9ikCt"
+    width = 1.2
+    depth = 1.2
+    height = 1.6
+    mat = "Plástico verde"
+  type "Contenedor gris" guid "3p3DYwRcAWpkfylHO3oNnB"
+    width = 1.4
+    depth = 0.9
+    height = 1.3
+    mat = "Plástico gris"
+  type "Contenedor marrón orgánico" guid "1B0ONOPo8oMytqTL0zPxFf"
+    width = 1.4
+    depth = 0.9
+    height = 1.3
+    mat = "Plástico marrón"

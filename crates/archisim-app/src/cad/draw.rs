@@ -1080,6 +1080,7 @@ impl HatchCmd {
             scale: st.hatch_scale,
             angle: st.hatch_angle.to_radians(),
             background: st.hatch_background,
+            opacity: st.hatch_opacity,
         })
     }
 }
@@ -1319,6 +1320,7 @@ pub fn arrowhead(tip: Point2, from: Point2, k: f64) -> Option<Shape> {
         scale: 1.0,
         angle: 0.0,
         background: None,
+        opacity: 1.0,
     }))
 }
 
@@ -1397,5 +1399,109 @@ impl Command for Leader {
 
     fn base(&self) -> Option<Point2> {
         self.points.last().copied()
+    }
+}
+
+// ---- Fills drawn directly (Relleno: rectangle, polygon, circle…) ---------------
+
+/// A drawing order whose closed shape becomes a hatch with the current
+/// pattern, scale, angle, background and opacity, instead of a line: the
+/// fill is drawn at once, without a boundary first.
+pub struct Filled {
+    name: &'static str,
+    label: &'static str,
+    inner: Box<dyn Command>,
+}
+
+impl Filled {
+    pub fn new(name: &'static str, label: &'static str, inner: Box<dyn Command>) -> Self {
+        Self { name, label, inner }
+    }
+
+    /// The hatch a drawn shape becomes (an open polyline or spline is
+    /// closed back to its first point).
+    fn fill(shape: &Shape, st: &CadSettings) -> Option<Shape> {
+        let ring = match shape {
+            Shape::Polyline(p) if !p.closed && p.points.len() >= 3 => Some(Polyline {
+                closed: true,
+                width: 0.0,
+                ..p.clone()
+            }),
+            s => closed_loop(s),
+        }?;
+        Some(Shape::Hatch(Hatch {
+            loops: vec![ring],
+            pattern: st.hatch_pattern,
+            scale: st.hatch_scale,
+            angle: st.hatch_angle.to_radians(),
+            background: st.hatch_background,
+            opacity: st.hatch_opacity,
+        }))
+    }
+
+    fn filled(&self, c: Changes, st: &CadSettings) -> Option<Changes> {
+        let changes: Vec<Change> = c
+            .changes
+            .into_iter()
+            .filter_map(|ch| match ch {
+                Change::Add(s) => Self::fill(&s, st).map(Change::Add),
+                other => Some(other),
+            })
+            .collect();
+        (!changes.is_empty()).then_some(Changes {
+            label: self.label,
+            changes,
+        })
+    }
+
+    fn map(&self, step: Step, st: &CadSettings) -> Step {
+        match step {
+            Step::Apply(c) => match self.filled(c, st) {
+                Some(c) => Step::Apply(c),
+                None => Step::Refuse("El contorno no se cierra: no hay nada que rellenar.".into()),
+            },
+            Step::Done(Some(c)) => match self.filled(c, st) {
+                Some(c) => Step::Done(Some(c)),
+                None => Step::Refuse("El contorno no se cierra: no hay nada que rellenar.".into()),
+            },
+            other => other,
+        }
+    }
+}
+
+impl Command for Filled {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn prompt(&self) -> Prompt {
+        self.inner.prompt()
+    }
+
+    fn start(&mut self, cx: &Ctx<'_, dyn Geo + '_>, st: &mut CadSettings) -> Step {
+        let s = self.inner.start(cx, st);
+        self.map(s, st)
+    }
+
+    fn feed(&mut self, input: Input, cx: &Ctx<'_, dyn Geo + '_>, st: &mut CadSettings) -> Step {
+        let s = self.inner.feed(input, cx, st);
+        self.map(s, st)
+    }
+
+    fn finish(&mut self, cx: &Ctx<'_, dyn Geo + '_>, st: &mut CadSettings) -> Option<Changes> {
+        let c = self.inner.finish(cx, st)?;
+        self.filled(c, st)
+    }
+
+    fn preview(&self, cx: &Ctx<'_, dyn Geo + '_>, st: &CadSettings) -> Vec<Shape> {
+        let shapes = self.inner.preview(cx, st);
+        let mut out: Vec<Shape> = shapes.iter().filter_map(|s| Self::fill(s, st)).collect();
+        // The outline too, so the shape being drawn is seen.
+        out.extend(shapes);
+        out
+    }
+
+    fn base(&self) -> Option<Point2> {
+        self.inner.base()
     }
 }

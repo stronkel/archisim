@@ -1,0 +1,40 @@
+family "Alcorque"
+  category street
+  host none
+  version 1
+  description "Alcorque cuadrado con rejilla, para un árbol de calle; el punto de inserción es su centro"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width length = 1.20 range 0.60..3.00 label "Lado"
+  section "Materiales"
+    mat material = "Metal lacado" label "Rejilla"
+
+body
+  box (-width / 2, -width / 2, 0) to (width / 2, width / 2, 0.02) material mat
+
+plan 1:50
+  let w = width / 2
+  polygon (-w, -w) (w, -w) (w, w) (-w, w) pen view
+  repeat i in 1..6
+    let x = -w + i * width / 6
+    line (x, -w) to (x, w) pen thin
+  cloud center (0, 0) radius w * 0.35 lobes 16 jitter 0 pen thin filled
+
+plan presentation
+  let w = width / 2
+  polygon (-w, -w) (w, -w) (w, w) (-w, w) pen thin tint mat opacity 0.4
+  repeat i in 1..6
+    let x = -w + i * width / 6
+    line (x, -w) to (x, w) pen thin
+  cloud center (0, 0) radius w * 0.35 lobes 16 jitter 0 pen thin filled
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
+catalog
+  material "Metal lacado" category "metal" color 86 92 100
+  type "Alcorque 150" guid "15ye$5zZfYWPGvremczPvp"
+    width = 1.5
+    mat = "Metal lacado"

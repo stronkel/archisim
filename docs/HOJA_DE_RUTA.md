@@ -140,7 +140,7 @@ Los siete bloques del 20/10 (I3, ejes y cimentación, módulos, concepto, urbani
 
 - **L1**: importar mallas **glTF, OBJ y Collada (.dae)** (lo que exporta SketchUp, también el gratuito) con materiales y texturas: como objeto de librería o como volumen de Concepto. El `.skp` no se lee (formato cerrado).
 - **L2**: los objetos de librería llevan, además de su símbolo de planta de la receta, **un modelo 3D por niveles de detalle** (el lejano, ligero). IFC: `IfcTriangulatedFaceSet` con su color o textura.
-- **L3**: **biblioteca básica integrada** (sanitarios, cocina, mobiliario de salón, comedor y dormitorio, vegetación, personas, coches) y **biblioteca ampliada como descarga** (varios modelos por objeto: marcas y estéticas). Fuentes: CC0 (Poly Haven, Kenney…) y fabricantes que permitan redistribuir.
+- **L3**: **biblioteca básica integrada** (sanitarios, cocina, mobiliario de salón, comedor y dormitorio, vegetación, personas, coches) y **biblioteca ampliada como descarga** (varios modelos por objeto: marcas y estéticas). Fuentes: CC0 (Poly Haven, Kenney…) y fabricantes que permitan redistribuir. *Primera vuelta (v0.35, sin modelos 3D nuevos)*: biblioteca ampliada de recetas (38 árboles, 14 arbustos y setos, 31 de mobiliario urbano, personas y vehículos) que se instala en la carpeta de la biblioteca y aparece en las galerías; los modelos 3D de malla quedan para L1–L2.
 
 ### 6.3 Presentación (D24)
 

@@ -35,7 +35,12 @@ impl Editor {
         let outdoors = model
             .object_type(object_type)
             .and_then(|t| model.family(t.family))
-            .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people" | "vehicle"));
+            .is_some_and(|f| {
+                matches!(
+                    f.def().category.as_str(),
+                    "site" | "street" | "people" | "vehicle"
+                )
+            });
         let ground = outdoors
             .then(|| {
                 let elevation = model.level(level)?.elevation;
@@ -96,6 +101,11 @@ impl Editor {
     }
 
     /// Changes one value of an object type: every object of it follows.
+    /// Sets an object's own instance values.
+    pub fn set_object_values(&mut self, id: ObjectId, values: archisim_core::Values) -> EditResult {
+        self.transact("Modificar objeto", |m| m.set_object_values(id, values))
+    }
+
     pub fn set_object_type_value(
         &mut self,
         id: ObjectTypeId,

@@ -6,7 +6,7 @@ use archisim_core::{ObjectId, ObjectTypeId, ParamKind, ParamScope, Value};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
-use super::props::{self, group, row, text_row};
+use super::props::{self, group, row};
 use super::structure_ui::angle_field;
 use super::*;
 
@@ -73,9 +73,22 @@ impl ArchiSimApp {
     }
 
     pub(super) fn object_tool_properties(&mut self, ui: &mut Ui) {
-        props::title(ui, "Herramienta Objeto · lo que vas a colocar");
+        let (title, salt) = match self.object_scope {
+            Some(s) => (
+                format!("Herramienta {} · lo que vas a colocar", s.title()),
+                format!("tool-object-{s:?}"),
+            ),
+            None => (
+                "Herramienta Objeto · lo que vas a colocar".to_string(),
+                "tool-object".to_string(),
+            ),
+        };
+        props::title(ui, &title);
         let current = self.tool_object_type();
-        if let Some(pick) = self.object_card(ui, "tool-object", current) {
+        self.scoped_card = true;
+        let card = self.object_card(ui, &salt, current);
+        self.scoped_card = false;
+        if let Some(pick) = card {
             if let Some(t) = self.object_pick_type(pick) {
                 self.object_settings.object_type = Some(t);
             }
@@ -174,6 +187,34 @@ impl ArchiSimApp {
             );
         });
         if let Some(def) = family {
+            let materials: Vec<(u64, String)> = self
+                .ed
+                .model()
+                .materials()
+                .map(|m| (m.id.0, m.name.clone()))
+                .collect();
+            // This object's own choices (how a tree's canopy is drawn…).
+            let own = self.ed.model().object_values(id);
+            if def.params_of(ParamScope::Instance).next().is_some() {
+                group(ui, "object-own-values", "Este objeto", |ui| {
+                    props::note(ui, "Solo cambia este objeto, no su tipo.");
+                    for p in def.params_of(ParamScope::Instance) {
+                        if !def.is_visible(&p.name, &own) {
+                            continue;
+                        }
+                        let Some(cur) = own.get(&p.name) else {
+                            continue;
+                        };
+                        let salt = format!("object-iv-{}-{}", id.0, p.name);
+                        if let Some(v) = param_row(ui, &salt, p, cur, &materials) {
+                            let mut values = o.values.clone();
+                            values.insert(p.name.clone(), v);
+                            let r = self.ed.set_object_values(id, values);
+                            self.report(r, "Objeto cambiado.");
+                        }
+                    }
+                });
+            }
             let title = format!("Tipo · {}", def.name);
             group(ui, "object-type-values", &title, |ui| {
                 props::note(
@@ -185,74 +226,16 @@ impl ArchiSimApp {
                     },
                 );
                 for p in def.params_of(ParamScope::Type) {
-                    let label = if p.label.is_empty() {
-                        p.name.clone()
-                    } else {
-                        p.label.clone()
+                    if !def.is_visible(&p.name, &t.values) {
+                        continue;
+                    }
+                    let Some(cur) = t.values.get(&p.name) else {
+                        continue;
                     };
-                    match (&p.kind, t.values.get(&p.name)) {
-                        (ParamKind::Length, Some(Value::Number(x))) => {
-                            row(ui, &format!("{label} (mm)"), "", |ui, w| {
-                                if let Some(v) = length_field(
-                                    ui,
-                                    Id::unique(("object-tv", t.id.0, p.name.as_str())),
-                                    *x,
-                                    w - 8.0,
-                                ) {
-                                    let r = self.ed.set_object_type_value(
-                                        t.id,
-                                        &p.name,
-                                        Value::Number(v),
-                                    );
-                                    self.report(r, "Tipo de objeto cambiado.");
-                                }
-                            });
-                        }
-                        (ParamKind::Integer, Some(Value::Number(x))) => {
-                            let shown = format!("{}", x.round() as i64);
-                            row(ui, &label, "", |ui, w| {
-                                if let Some(v) = text_edit_committed(
-                                    ui,
-                                    Id::unique(("object-tv", t.id.0, p.name.as_str())),
-                                    &shown,
-                                    w - 8.0,
-                                ) {
-                                    match v.trim().parse::<i64>() {
-                                        Ok(n) => {
-                                            let r = self.ed.set_object_type_value(
-                                                t.id,
-                                                &p.name,
-                                                Value::Number(n as f64),
-                                            );
-                                            self.report(r, "Tipo de objeto cambiado.");
-                                        }
-                                        Err(_) => self.complain("Escribe un número entero."),
-                                    }
-                                }
-                            });
-                        }
-                        (ParamKind::Bool, Some(Value::Bool(b))) => {
-                            row(ui, &label, "", |ui, _| {
-                                let mut on = *b;
-                                if ui.checkbox(&mut on, "").changed() {
-                                    let r = self.ed.set_object_type_value(
-                                        t.id,
-                                        &p.name,
-                                        Value::Bool(on),
-                                    );
-                                    self.report(r, "Tipo de objeto cambiado.");
-                                }
-                            });
-                        }
-                        (ParamKind::Material, Some(Value::Material(m))) => {
-                            let name = self
-                                .ed
-                                .model()
-                                .material(archisim_core::MaterialId(*m))
-                                .map_or(String::new(), |m| m.name.clone());
-                            text_row(ui, &label, "En Tipos y materiales", &name);
-                        }
-                        _ => {}
+                    let salt = format!("object-tv-{}-{}", t.id.0, p.name);
+                    if let Some(v) = param_row(ui, &salt, p, cur, &materials) {
+                        let r = self.ed.set_object_type_value(t.id, &p.name, v);
+                        self.report(r, "Tipo de objeto cambiado.");
                     }
                 }
             });
@@ -267,4 +250,74 @@ impl ArchiSimApp {
             props::id_row(ui, "GlobalId", &o.guid.to_string());
         });
     }
+}
+
+/// A row editing one family parameter; the new value when it changes.
+fn param_row(
+    ui: &mut Ui,
+    salt: &str,
+    p: &archisim_core::family::Param,
+    cur: &Value,
+    materials: &[(u64, String)],
+) -> Option<Value> {
+    let label = if p.label.is_empty() {
+        p.name.clone()
+    } else {
+        p.label.clone()
+    };
+    let id = Id::unique(("param", salt.to_string()));
+    let mut out = None;
+    match (&p.kind, cur) {
+        (ParamKind::Length, Value::Number(x)) => {
+            row(ui, &format!("{label} (mm)"), "", |ui, w| {
+                if let Some(v) = length_field(ui, id, *x, w - 8.0) {
+                    out = Some(Value::Number(v));
+                }
+            });
+        }
+        (ParamKind::Integer | ParamKind::Number, Value::Number(x)) => {
+            let integer = p.kind == ParamKind::Integer;
+            let (lo, hi) = p.range.unwrap_or((f64::MIN, f64::MAX));
+            row(ui, &label, "", |ui, _| {
+                let mut v = *x;
+                let drag = egui::DragValue::new(&mut v)
+                    .range(lo..=hi)
+                    .speed(if integer { 0.2 } else { 0.01 })
+                    .max_decimals(if integer { 0 } else { 2 });
+                if ui.add(drag).changed() {
+                    out = Some(Value::Number(if integer { v.round() } else { v }));
+                }
+            });
+        }
+        (ParamKind::Bool, Value::Bool(b)) => {
+            row(ui, &label, "", |ui, _| {
+                let mut on = *b;
+                if ui.checkbox(&mut on, "").changed() {
+                    out = Some(Value::Bool(on));
+                }
+            });
+        }
+        (ParamKind::Choice(opts), Value::Text(t)) => {
+            row(ui, &label, "", |ui, w| {
+                let refs: Vec<(&str, &str)> =
+                    opts.iter().map(|o| (o.as_str(), o.as_str())).collect();
+                let v = props::choice(ui, salt, w, t.as_str(), &refs);
+                if v != t.as_str() {
+                    out = Some(Value::Text(v.to_string()));
+                }
+            });
+        }
+        (ParamKind::Material, Value::Material(m)) => {
+            row(ui, &label, "", |ui, w| {
+                let refs: Vec<(u64, &str)> =
+                    materials.iter().map(|(a, b)| (*a, b.as_str())).collect();
+                let v = props::choice(ui, salt, w, *m, &refs);
+                if v != *m {
+                    out = Some(Value::Material(v));
+                }
+            });
+        }
+        _ => {}
+    }
+    out
 }

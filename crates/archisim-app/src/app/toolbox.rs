@@ -150,6 +150,9 @@ pub enum Pick {
     Concept(super::concept_ui::ConceptPick),
     /// The device tool with a kind of device.
     Device(archisim_core::DeviceKind),
+    /// The object tool with only part of the library (vegetation, street
+    /// furniture).
+    Objects(super::object_gallery::ObjectScope),
     /// Not there yet: what brings it.
     Later(&'static str),
 }
@@ -478,11 +481,18 @@ const SITE: &[Tile] = &[
         "Viales por su eje y una sección tipo: calzada, aparcamiento, bordillo y acera",
     ),
     tile(
-        Pick::Tool(Tool::Object),
+        Pick::Objects(super::object_gallery::ObjectScope::Vegetation),
         Glyph::Tree,
         "Vegetación",
-        "O",
-        "Árboles y arbustos (y vehículos): la herramienta Objeto, con la librería de vegetación",
+        "",
+        "Árboles, arbustos y setos (y personas y vehículos): la herramienta Objeto con la librería del entorno",
+    ),
+    tile(
+        Pick::Objects(super::object_gallery::ObjectScope::Street),
+        Glyph::StreetLamp,
+        "Mobiliario urbano",
+        "",
+        "Farolas, bancos, papeleras, buzones, bolardos, fuentes, aparcabicis, contenedores, señales, jardineras y alcorques",
     ),
     tile(
         Pick::Concept(super::concept_ui::ConceptPick::Volume),
@@ -986,6 +996,10 @@ impl ArchiSimApp {
             Pick::Raft => Some(self.tool == Tool::Slab && !holes && raft),
             Pick::Concept(c) => Some(self.concept_picked(c)),
             Pick::Device(k) => Some(self.tool == Tool::Device && self.service_settings.device == k),
+            Pick::Objects(s) => Some(self.tool == Tool::Object && self.object_scope == Some(s)),
+            Pick::Tool(Tool::Object) => {
+                Some(self.tool == Tool::Object && self.object_scope.is_none())
+            }
             Pick::Tool(t) => Some(self.tool == t),
             Pick::LevelMark => Some(self.tool == Tool::Dimension && level_marks),
             Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
@@ -1040,6 +1054,10 @@ impl ArchiSimApp {
                 self.slab_settings.hole = false;
                 self.set_tool(Tool::Slab);
             }
+            Pick::Tool(Tool::Object) => {
+                self.object_scope = None;
+                self.set_tool(Tool::Object);
+            }
             Pick::Tool(t) => self.set_tool(t),
             Pick::LevelMark => {
                 if self.dim_settings.mode != DimMode::LevelMark {
@@ -1066,6 +1084,7 @@ impl ArchiSimApp {
             Pick::Action(a) => self.act(a),
             Pick::Concept(c) => self.concept_pick(c),
             Pick::Device(k) => self.device_pick(k),
+            Pick::Objects(scope) => self.objects_pick(scope),
             Pick::Command(name) => self.start_command(name),
             Pick::Later(what) => self.say(format!("Esta herramienta llegará con {what}.")),
         }

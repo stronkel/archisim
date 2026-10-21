@@ -1,0 +1,32 @@
+family "Fuente de beber"
+  category street
+  host none
+  version 1
+  description "Fuente de agua potable de pie; el punto de inserción es el centro de la trasera y el caño mira hacia delante"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.35 range 0.20..1.00 label "Ancho"
+    depth  length = 0.35 range 0.20..1.00 label "Fondo"
+    height length = 1.00 range 0.60..1.40 label "Altura"
+  section "Materiales"
+    mat   material = "Metal lacado" label "Cuerpo"
+    water material = "Agua" label "Agua"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height - 0.1) material mat
+  box (-width / 2, 0, height - 0.1) to (width / 2, depth, height) material water
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  cloud center (0, depth / 2) radius min(width, depth) * 0.3 lobes 12 jitter 0 pen thin
+
+plan presentation
+  cloud center (0, depth / 2 + 0.25) radius 0.55 lobes 20 jitter 0 pen thin tint water opacity 0.3
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat
+  cloud center (0, depth / 2) radius min(width, depth) * 0.3 lobes 12 jitter 0 pen thin tint water
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
