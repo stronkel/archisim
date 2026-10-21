@@ -34,7 +34,7 @@ impl ObjectScope {
     /// The type the tool starts with.
     pub fn first(self) -> &'static str {
         match self {
-            ObjectScope::Vegetation => "Árbol de hoja caduca 6 m",
+            ObjectScope::Vegetation => "Olivo",
             ObjectScope::Street => "Farola 4,5 m",
         }
     }
@@ -301,6 +301,45 @@ impl ArchiSimApp {
                     note: format!("{size} · {family} · biblioteca"),
                     category,
                     folder,
+                    thumb,
+                });
+            }
+        }
+        // The plants ArchiSim grows, not in the project.
+        {
+            let have: std::collections::HashSet<String> = self
+                .ed
+                .model()
+                .object_types()
+                .map(|t| t.name.clone())
+                .collect();
+            let lib = self
+                .flora_library
+                .get_or_insert_with(
+                    || std::sync::Arc::new(archisim_library::flora::flora_library()),
+                )
+                .clone();
+            let thumbs = &mut self.thumbs;
+            for e in archisim_library::flora::FLORA_CATALOGUE {
+                if have.contains(e.name) {
+                    continue;
+                }
+                let Some(t) = lib.object_types().find(|t| t.name == e.name) else {
+                    continue;
+                };
+                let size = lib
+                    .object_type_box(t.id)
+                    .map(|(lo, hi)| size_note(lo, hi))
+                    .unwrap_or_default();
+                let thumb = thumbs.get(ctx, format!("flora:{}", e.name), || {
+                    crate::type_preview::object_model(&lib, t)
+                });
+                items.push(Item {
+                    pick: ObjectPick::Library(e.name),
+                    name: e.name.to_string(),
+                    note: format!("{size} · planta generada · {}", e.group),
+                    category: "Entorno",
+                    folder: e.group.to_string(),
                     thumb,
                 });
             }

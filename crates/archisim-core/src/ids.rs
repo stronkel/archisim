@@ -51,6 +51,11 @@ typed_id!(
     RoadId
 );
 typed_id!(
+    /// Identifies a [`crate::Planting`] (plants spread along a line or over
+    /// an area).
+    PlantingId
+);
+typed_id!(
     /// Identifies a [`crate::Mass`] (a volume of the concept phase).
     MassId
 );

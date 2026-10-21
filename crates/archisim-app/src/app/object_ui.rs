@@ -6,7 +6,7 @@ use archisim_core::{ObjectId, ObjectTypeId, ParamKind, ParamScope, Value};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
-use super::props::{self, group, row};
+use super::props::{self, group, row, text_row};
 use super::structure_ui::angle_field;
 use super::*;
 
@@ -158,6 +158,9 @@ impl ArchiSimApp {
             }
         }
         ui.add_space(6.0);
+        if self.ed.model().type_grows(t.id) {
+            self.plant_group(ui, id, &o);
+        }
         group(ui, "object-data", "Objeto", |ui| {
             row(ui, "Giro (°)", "Espacio: +90°", |ui, w| {
                 if let Some(a) =
@@ -283,8 +286,70 @@ impl ArchiSimApp {
     }
 }
 
+impl ArchiSimApp {
+    /// A plant grown by ArchiSim: another plant of its species with a
+    /// click, its planting, the vivero.
+    fn plant_group(&mut self, ui: &mut Ui, id: ObjectId, o: &archisim_core::Object) {
+        let planting = self.ed.model().planting_of(id);
+        group(ui, "object-plant", "Planta", |ui| {
+            if let Some(look) = self.ed.model().plant_look(id) {
+                let plant = archisim_core::flora::plant(&look.species, look.seed, look.variation);
+                text_row(
+                    ui,
+                    "Tamaño",
+                    "Alto y ancho de esta planta, como ha crecido",
+                    &format!("{:.2} × {:.2} m", plant.height, plant.radius * 2.0).replace('.', ","),
+                );
+            }
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .button("🎲 Otra planta")
+                    .on_hover_text("La misma especie, crecida de otra manera (otra semilla)")
+                    .clicked()
+                {
+                    let mut values = o.values.clone();
+                    let old = values
+                        .get("plant_seed")
+                        .and_then(|v| v.as_number())
+                        .unwrap_or(0.0) as u64;
+                    let t = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_nanos() as u64)
+                        .unwrap_or(1);
+                    let seed = archisim_core::flora::seed_of(old ^ t, id.0) % 999_983 + 1;
+                    values.insert("plant_seed".into(), Value::Number(seed as f64));
+                    let r = self.ed.set_object_values(id, values);
+                    self.report(r, "Otra planta de la misma especie.");
+                }
+                if ui
+                    .button("Vivero…")
+                    .on_hover_text("La especie con todos sus parámetros y su vista 3D")
+                    .clicked()
+                {
+                    self.open_vivero(Some(o.object_type), o.values.clone());
+                }
+            });
+            if let Some(pid) = planting {
+                let name = self
+                    .ed
+                    .model()
+                    .planting(pid)
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+                props::note(
+                    ui,
+                    &format!("Es de «{name}»: si cambias la plantación, sus plantas se rehacen."),
+                );
+                if ui.button("Seleccionar la plantación").clicked() {
+                    self.ed.selection = [Element::Planting(pid)].into_iter().collect();
+                }
+            }
+        });
+    }
+}
+
 /// A row editing one family parameter; the new value when it changes.
-fn param_row(
+pub(super) fn param_row(
     ui: &mut Ui,
     salt: &str,
     p: &archisim_core::family::Param,
@@ -349,6 +414,55 @@ fn param_row(
             });
         }
         _ => {}
+    }
+    out
+}
+
+/// As [`param_row`], with sliders for numbers and lengths with a range
+/// (the vivero's way: moved and seen at once).
+pub(super) fn param_slider_row(
+    ui: &mut Ui,
+    salt: &str,
+    p: &archisim_core::family::Param,
+    cur: &Value,
+    materials: &[(u64, String)],
+) -> Option<Value> {
+    let (Some((lo, hi)), Value::Number(x)) = (p.range, cur) else {
+        return param_row(ui, salt, p, cur, materials);
+    };
+    let label = if p.label.is_empty() {
+        p.name.clone()
+    } else {
+        p.label.clone()
+    };
+    let mut out = None;
+    match p.kind {
+        ParamKind::Length => {
+            row(ui, &format!("{label} (m)"), "", |ui, w| {
+                let mut v = *x;
+                ui.spacing_mut().slider_width = (w - 70.0).max(60.0);
+                let s = egui::Slider::new(&mut v, lo..=hi)
+                    .max_decimals(2)
+                    .logarithmic(hi / lo.max(1e-3) > 50.0);
+                if ui.add(s).changed() {
+                    out = Some(Value::Number((v * 1000.0).round() / 1000.0));
+                }
+            });
+        }
+        ParamKind::Integer | ParamKind::Number => {
+            let integer = p.kind == ParamKind::Integer;
+            row(ui, &label, "", |ui, w| {
+                let mut v = *x;
+                ui.spacing_mut().slider_width = (w - 70.0).max(60.0);
+                let s =
+                    egui::Slider::new(&mut v, lo..=hi).max_decimals(if integer { 0 } else { 2 });
+                let s = if integer { s.step_by(1.0) } else { s };
+                if ui.add(s).changed() {
+                    out = Some(Value::Number(if integer { v.round() } else { v }));
+                }
+            });
+        }
+        _ => return param_row(ui, salt, p, cur, materials),
     }
     out
 }

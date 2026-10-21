@@ -178,7 +178,10 @@ impl Exporter<'_> {
                 real(o.rotation.sin())
             ));
             let pl = self.placement(Some(storey_pl), at, Some(x));
-            let rep = if let Some(&map) = mapped.get(&t.id) {
+            let plant = self.plant_body(o.id);
+            let rep = if let Some(rep) = plant {
+                rep
+            } else if let Some(&map) = mapped.get(&t.id) {
                 let op = self.w.add(format!(
                     "IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,{},$,$)",
                     self.origin
@@ -216,15 +219,25 @@ impl Exporter<'_> {
                 "{element_entity}({},$,{name},$,{object_type},{pl},{shape},$,.{predefined}.)",
                 string(o.guid.as_str()),
             ));
-            let first_material = match model.object_mesh(o.id) {
-                Some((_, _, level)) => level.groups.first().map(|g| g.material),
-                None => ev.parts.first().map(|p| MaterialId(p.material)),
+            let first_material = match (model.plant_look(o.id), model.object_mesh(o.id)) {
+                (Some(l), _) => Some(l.materials.leaves),
+                (None, Some((_, _, level))) => level.groups.first().map(|g| g.material),
+                (None, None) => ev.parts.first().map(|p| MaterialId(p.material)),
             };
             if let Some(m) = first_material.and_then(|m| materials.get(&m)) {
                 self.w.add(format!(
                     "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",
                     string(derived_guid(&o.guid, "material").as_str())
                 ));
+            }
+            // Its own values of the family's instance parameters.
+            if !o.values.is_empty() {
+                if let Some(family) = model.family(t.family) {
+                    let values = self.value_properties(family, &o.values);
+                    if !values.is_empty() {
+                        self.pset(el, &o.guid, "ArchiSim_FamilyValues", &values);
+                    }
+                }
             }
             let status: Vec<Ref> = self.status_prop(o.id.0).into_iter().collect();
             if !status.is_empty() {
@@ -265,20 +278,50 @@ impl Exporter<'_> {
         let model = self.model;
         let (mesh, k, _) = model.object_mesh(object)?;
         let level = mesh.level_under(IFC_TRIANGLES)?;
+        let groups: Vec<(MaterialId, &[[u32; 3]])> = level
+            .groups
+            .iter()
+            .map(|g| (g.material, g.triangles.as_slice()))
+            .collect();
+        let items = self.tessellation(&level.positions, &level.colors, &groups, k);
+        if items.is_empty() {
+            return None;
+        }
+        let rep = self.w.add(format!(
+            "IFCSHAPEREPRESENTATION({},'Body','Tessellation',{})",
+            self.body_ctx,
+            list(&items)
+        ));
+        let origin = self
+            .w
+            .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
+        Some(self.w.add(format!("IFCREPRESENTATIONMAP({origin},{rep})")))
+    }
+
+    /// Triangulated face sets of a mesh: one per material, with the
+    /// vertices it uses (scaled by `k`), styled with its material and, if
+    /// its faces differ in colour, with the colour of each face.
+    pub(crate) fn tessellation(
+        &mut self,
+        positions: &[[f32; 3]],
+        colors: &[[u8; 3]],
+        groups: &[(MaterialId, &[[u32; 3]])],
+        k: f64,
+    ) -> Vec<Ref> {
         let mut items = Vec::new();
-        for g in &level.groups {
-            if g.triangles.is_empty() {
+        for &(material, triangles) in groups {
+            if triangles.is_empty() {
                 continue;
             }
             // Only the vertices this material uses, renumbered.
             let mut index = std::collections::HashMap::new();
             let mut pts = Vec::new();
             let mut faces = Vec::new();
-            for t in &g.triangles {
+            for t in triangles {
                 let f = t.map(|i| {
                     let n = index.len() + 1;
                     *index.entry(i).or_insert_with(|| {
-                        let p = level.positions[i as usize];
+                        let p = positions[i as usize];
                         pts.push(format!(
                             "({},{},{})",
                             real(p[0] as f64 * k),
@@ -297,16 +340,16 @@ impl Exporter<'_> {
                 "IFCTRIANGULATEDFACESET({list3},$,$,({}),$)",
                 faces.join(",")
             ));
-            if let Some(&style) = self.styles.get(&g.material) {
+            if let Some(&style) = self.styles.get(&material) {
                 self.w.add(format!("IFCSTYLEDITEM({body},({style}),$)"));
             }
             // The colour of each face (the average of its corners), on a
             // short palette.
             let mut palette: Vec<[u8; 3]> = Vec::new();
             let mut which = Vec::new();
-            for t in &g.triangles {
+            for t in triangles {
                 let c = [0, 1, 2].map(|k| {
-                    let s: u32 = t.iter().map(|&i| level.colors[i as usize][k] as u32).sum();
+                    let s: u32 = t.iter().map(|&i| colors[i as usize][k] as u32).sum();
                     ((s / 3) as u8) & 0xF8
                 });
                 let n = match palette.iter().position(|p| *p == c) {
@@ -340,17 +383,36 @@ impl Exporter<'_> {
             }
             items.push(body);
         }
+        items
+    }
+
+    /// The body of a plant grown by ArchiSim: its own triangles (every
+    /// plant is different), at a level of detail light enough for the
+    /// number of plants in the project.
+    fn plant_body(&mut self, object: archisim_core::ObjectId) -> Option<Ref> {
+        let model = self.model;
+        let plants = model
+            .objects()
+            .filter(|o| model.type_grows(o.object_type))
+            .count();
+        let lod = if plants <= 20 {
+            archisim_core::flora::Lod::Full
+        } else if plants <= 100 {
+            archisim_core::flora::Lod::Medium
+        } else {
+            archisim_core::flora::Lod::Low
+        };
+        let (mesh, parts) = model.plant_mesh(object, lod)?;
+        let groups: Vec<(MaterialId, &[[u32; 3]])> =
+            parts.iter().map(|(m, t)| (*m, t.as_slice())).collect();
+        let items = self.tessellation(&mesh.positions, &mesh.colors, &groups, 1.0);
         if items.is_empty() {
             return None;
         }
-        let rep = self.w.add(format!(
+        Some(self.w.add(format!(
             "IFCSHAPEREPRESENTATION({},'Body','Tessellation',{})",
             self.body_ctx,
             list(&items)
-        ));
-        let origin = self
-            .w
-            .add(format!("IFCAXIS2PLACEMENT3D({},$,$)", self.origin));
-        Some(self.w.add(format!("IFCREPRESENTATIONMAP({origin},{rep})")))
+        )))
     }
 }

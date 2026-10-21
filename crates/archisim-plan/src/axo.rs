@@ -131,7 +131,10 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
     let ground_z = model.levels().first().map_or(0.0, |l| l.elevation) + 0.02;
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for solid in model_solids(model) {
+    let solids = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
+        model_solids(model)
+    });
+    for solid in solids {
         let mat = model.material(solid.material);
         if mat.is_some_and(|m| m.category == "glass") {
             // Glass would hide what is behind it.
@@ -139,6 +142,13 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         }
         let base = archisim_geom::solid::solid_color(model, &solid);
         let grey = model.dimmed(focus, solid.owner.id());
+        // The leaves of a plant: their outline, not every facet.
+        let soft = match solid.owner {
+            archisim_geom::solid::SolidOwner::Object(o) => model
+                .plant_look(o)
+                .is_some_and(|l| solid.material != l.materials.bark),
+            _ => false,
+        };
         // Normals of every triangle, and who shares each edge.
         let normals: Vec<P3> = solid
             .triangles
@@ -167,7 +177,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 *drawn = by_edge.get(&k).is_none_or(|others| {
                     others.iter().filter(|&&j| j != i).all(|&j| {
                         let m = normals[j];
-                        dot(m, f.toward) <= 1e-9 || dot(m, n) < 0.985
+                        dot(m, f.toward) <= 1e-9 || (!soft && dot(m, n) < 0.985)
                     })
                 });
             }

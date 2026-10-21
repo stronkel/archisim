@@ -1741,7 +1741,7 @@ fn draw_objects(
             archisim_core::ObjectDrawing::ByStyle => presentation_view(),
         };
         let presented = presenting
-            .then(|| model.object_presentation_symbol(o.id))
+            .then(|| model.object_presentation_symbol(o.id, scale))
             .flatten();
         let marks = if too_small_for_symbol(size * 1000.0 / scale) {
             Err(())

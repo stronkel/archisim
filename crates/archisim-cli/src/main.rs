@@ -14,6 +14,7 @@ mod colaboracion;
 mod demo;
 mod grande;
 mod muestrario;
+mod vivero;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -60,6 +61,10 @@ Uso:
       ./biblioteca-ampliada. Se copia dentro de la carpeta de la
       biblioteca de la aplicación.
 
+  archisim vivero [carpeta]
+      Todas las especies de vegetación que ArchiSim genera, plantadas por
+      grupos, con un paseo y un arriate: vivero.archisim, vivero.ifc y
+      plantas 1:200 de presentación y técnica. Carpeta por defecto: ./out
   archisim muestrario [carpeta]
       Un muro con todas las puertas y ventanas de la plantilla, para verlas
       en planta, en 3D y en IFC: muestrario.archisim, muestrario.ifc y
@@ -135,6 +140,10 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("vivero") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(vivero::write(&dir))
+        }
         Some("muestrario") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(muestrario::write(&dir))

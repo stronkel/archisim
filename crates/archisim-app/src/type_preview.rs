@@ -215,7 +215,9 @@ pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Mo
         .ok()?;
     // Trees and the like show their drawing of presentation (the form of
     // the canopy is what tells one from another), when they have one.
-    let presented = m.object_presentation_symbol(id).is_some_and(|r| r.is_ok());
+    let presented = m
+        .object_presentation_symbol(id, 20.0)
+        .is_some_and(|r| r.is_ok());
     let has_choice = m.family(family).is_some_and(|f| {
         f.def()
             .params_of(archisim_core::family::ParamScope::Instance)

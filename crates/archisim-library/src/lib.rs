@@ -695,6 +695,7 @@ pub enum StudioValue {
 use StudioValue::{B, N, T};
 
 pub mod extended;
+pub mod flora;
 pub mod imported;
 
 /// Adds the studio's usual door and window types, with the materials they
@@ -944,7 +945,9 @@ pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, Model
         return Ok(t.id);
     }
     let Some((name, family, sizes)) = OBJECT_CATALOGUE.iter().find(|e| e.0 == name) else {
-        return Err(ModelError::NotAnObject(name.to_string()));
+        // A species of the plants ArchiSim grows.
+        return flora::add_flora_entry(m, name)?
+            .ok_or_else(|| ModelError::NotAnObject(name.to_string()));
     };
     object_materials(m);
     let f = m.system_family(family)?;

@@ -2564,7 +2564,6 @@ impl<'a> Importer<'a> {
     /// Instance parameters written by ArchiSim (`ArchiSim_FamilyValues` on
     /// the door or window itself), for families that have them.
     fn instance_values(&mut self, filling: u64, oid: archisim_core::OpeningId) {
-        use archisim_core::{ParamKind, Value as V};
         let Some(o) = self.model.opening(oid) else {
             return;
         };
@@ -2574,10 +2573,28 @@ impl<'a> Importer<'a> {
         let Some(def) = self.model.family(t.family).map(|f| f.def().clone()) else {
             return;
         };
-        let mut values = o.values.clone();
+        let base = o.values.clone();
+        if let Some(values) = self.read_instance_values(filling, &def, base) {
+            if self.model.set_opening_values(oid, values).is_err() {
+                self.report
+                    .warn("Algún parámetro de ejemplar de una puerta o ventana no es válido: se deja el de la familia.");
+            }
+        }
+    }
+
+    /// The instance parameters of a family written by ArchiSim on an
+    /// element (`ArchiSim_FamilyValues`), over `base`; `None` if it has
+    /// none.
+    pub(super) fn read_instance_values(
+        &mut self,
+        element: u64,
+        def: &archisim_core::FamilyDef,
+        mut values: archisim_core::Values,
+    ) -> Option<archisim_core::Values> {
+        use archisim_core::{ParamKind, Value as V};
         let mut changed = false;
         for p in def.params_of(archisim_core::ParamScope::Instance) {
-            let Some(raw) = self.property_own(filling, "ArchiSim_FamilyValues", &p.name) else {
+            let Some(raw) = self.property_own(element, "ArchiSim_FamilyValues", &p.name) else {
                 continue;
             };
             let value = match &p.kind {
@@ -2595,10 +2612,7 @@ impl<'a> Importer<'a> {
                 changed = true;
             }
         }
-        if changed && self.model.set_opening_values(oid, values).is_err() {
-            self.report
-                .warn("Algún parámetro de ejemplar de una puerta o ventana no es válido: se deja el de la familia.");
-        }
+        changed.then_some(values)
     }
 
     /// Rebuilds a door or window type from ArchiSim's family data: the

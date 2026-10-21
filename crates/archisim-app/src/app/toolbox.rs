@@ -172,6 +172,8 @@ pub enum Action {
     Clashes,
     Issues,
     Requirements,
+    /// The vivero: species of plants with their sliders and 3D.
+    Vivero,
 }
 
 pub struct Tile {
@@ -485,7 +487,21 @@ const SITE: &[Tile] = &[
         Glyph::Tree,
         "Vegetación",
         "",
-        "Árboles, arbustos y setos (y personas y vehículos): la herramienta Objeto con la librería del entorno",
+        "Árboles, palmeras, arbustos y matas que crecen cada uno distinto (y personas y vehículos)",
+    ),
+    tile(
+        Pick::Tool(Tool::Planting),
+        Glyph::Planting,
+        "Plantación",
+        "J",
+        "Plantas a lo largo de una línea o spline, o dentro de un contorno: cuántas, más o menos regulares y variadas",
+    ),
+    tile(
+        Pick::Action(Action::Vivero),
+        Glyph::Nursery,
+        "Vivero",
+        "",
+        "Las especies de vegetación con todos sus parámetros, en 3D y en planta: crear y ajustar especies",
     ),
     tile(
         Pick::Objects(super::object_gallery::ObjectScope::Street),
@@ -1005,6 +1021,7 @@ impl ArchiSimApp {
             Pick::SlabHole => Some(self.tool == Tool::Slab && holes),
             Pick::Action(a) => Some(match a {
                 Action::Cte => self.cte.open,
+                Action::Vivero => self.vivero.open,
                 Action::Schedule => matches!(
                     self.tabs.get(self.active_tab).map(|t| t.kind),
                     Some(TabKind::Schedule(SchedTab::Kind(_)))
@@ -1109,6 +1126,7 @@ impl ArchiSimApp {
             }
             Action::Takeoff => self.open_view(TabKind::Schedule(SchedTab::Takeoff)),
             Action::Cte => self.cte.open = true,
+            Action::Vivero => self.open_vivero(None, Default::default()),
             Action::Link => self.link_ifc_dialog(),
             Action::Versions => coord_tab(self, CoordTab::Links),
             Action::Clashes => {

@@ -103,6 +103,8 @@ pub enum Tool {
     Plot,
     /// Roads, by their axis.
     Road,
+    /// Plants along a line or over an area.
+    Planting,
     /// Pipes, by their path.
     Pipe,
     /// Ducts, by their path.
@@ -141,6 +143,7 @@ impl Tool {
                 | Tool::Paint
                 | Tool::Plot
                 | Tool::Road
+                | Tool::Planting
                 | Tool::Pipe
                 | Tool::Duct
                 | Tool::Device
@@ -151,6 +154,7 @@ impl Tool {
     /// P puerta, V ventana, C cota, I pilar, G viga, Z local, S sección,
     /// T cubierta, E escalera, R terreno, U muro cortina, B barandilla,
     /// O objeto, X ejes, A cimentación, K módulo, Y parcela, W vial,
+    /// J plantación (jardín),
     /// H tubería, D conducto.
     pub(super) fn from_key(text: &str) -> Option<Tool> {
         match text.to_lowercase().as_str() {
@@ -174,6 +178,7 @@ impl Tool {
             "k" => Some(Tool::Module),
             "y" => Some(Tool::Plot),
             "w" => Some(Tool::Road),
+            "j" => Some(Tool::Planting),
             "h" => Some(Tool::Pipe),
             "d" => Some(Tool::Duct),
             _ => None,
@@ -275,6 +280,9 @@ pub struct ArchiSimApp {
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
+    /// The line of the planting being drawn and what the tool plants.
+    pub planting_points: Vec<Point2>,
+    pub planting_settings: planting_ui::PlantingSettings,
     /// The path of the pipe or duct being drawn.
     pub run_points: Vec<Point2>,
     pub service_settings: services_ui::ServiceSettings,
@@ -344,6 +352,7 @@ pub struct ArchiSimApp {
     pub show_priorities: bool,
     /// The curtain wall types window.
     pub curtain_types: curtain_types_ui::CurtainTypesWindow,
+    pub vivero: vivero_ui::ViveroWindow,
     /// The library window.
     pub library: library_ui::LibraryWindow,
     pub params: params_ui::ParamsWindow,
@@ -354,6 +363,8 @@ pub struct ArchiSimApp {
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
+    /// Every species of plants of the library, for the gallery.
+    pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
     /// extended library), for the gallery: read again now and then.
     pub folder_objects: Option<object_gallery::FolderObjects>,
@@ -549,6 +560,8 @@ impl ArchiSimApp {
             plot_setback: 3.0,
             road_points: Vec::new(),
             road_settings,
+            planting_points: Vec::new(),
+            planting_settings: Default::default(),
             run_points: Vec::new(),
             service_settings: services_ui::ServiceSettings::default(),
             draw_method: Default::default(),
@@ -585,11 +598,13 @@ impl ArchiSimApp {
             show_levels: false,
             show_priorities: false,
             curtain_types: Default::default(),
+            vivero: Default::default(),
             library: Default::default(),
             params: Default::default(),
             cte: Default::default(),
             survey_import: None,
             object_library: None,
+            flora_library: None,
             folder_objects: None,
             priorities_all: false,
             priority_drag: None,
@@ -710,6 +725,7 @@ impl ArchiSimApp {
             self.concept.finish();
             self.plot_tool.finish();
             self.road_points.clear();
+            self.planting_points.clear();
             self.draw_method = Default::default();
             self.spline_points.clear();
             self.zone_tool.finish();
@@ -757,6 +773,8 @@ impl ArchiSimApp {
         self.plot_tool.finish();
         self.road_points.clear();
         self.road_settings = urban_ui::RoadSettings::new(ed.model());
+        self.planting_points.clear();
+        self.planting_settings = Default::default();
         self.ed = ed;
         self.drag = None;
         self.wall_tool.finish();
@@ -1739,6 +1757,7 @@ impl ArchiSimApp {
         self.levels_dialog(ctx);
         self.priorities_dialog(ctx);
         self.curtain_types_dialog(ctx);
+        self.vivero_dialog(ctx);
         self.survey_dialog(ctx);
         self.types_dialog(ctx);
         self.library_dialog(ctx);
@@ -2009,6 +2028,7 @@ mod paint_ui;
 mod params_ui;
 mod phases_ui;
 mod plan_ui;
+mod planting_ui;
 mod presentation_ui;
 mod priorities_ui;
 mod properties;
@@ -2038,6 +2058,7 @@ mod types_ui;
 mod urban_ui;
 mod vertex_ui;
 mod view3d_ui;
+mod vivero_ui;
 mod widgets;
 pub use tabs::{TabKind, ViewTab};
 pub use types_ui::{TypesDialog, TypesTab};

@@ -1099,6 +1099,9 @@ pub fn loose_railing_bars(model: &Model, id: archisim_core::RailingId) -> Vec<Ba
 /// Solids of an object (furniture, sanitary ware…): the 3D body of its
 /// family, one solid per material, turned and placed.
 pub fn object_solids(model: &Model, id: archisim_core::ObjectId) -> Vec<Solid> {
+    if let Some(solids) = plant_solids(model, id) {
+        return solids;
+    }
     if let Some(solids) = object_mesh_solids(model, id) {
         return solids;
     }
@@ -1159,13 +1162,80 @@ pub fn object_mesh_solids(model: &Model, id: archisim_core::ObjectId) -> Option<
     )
 }
 
+thread_local! {
+    /// The most detail drawings ask of plants (sections, axonometries and
+    /// shadows do not need every leaf).
+    static PLANT_CAP: std::cell::Cell<Option<archisim_core::flora::Lod>> =
+        const { std::cell::Cell::new(None) };
+}
+
+fn coarseness(l: archisim_core::flora::Lod) -> usize {
+    archisim_core::flora::Lod::ALL
+        .iter()
+        .position(|x| *x == l)
+        .unwrap_or(0)
+}
+
+/// The level of detail of the plants: the views', no finer than asked by
+/// [`with_plant_detail`].
+fn plant_lod(model: &Model) -> archisim_core::flora::Lod {
+    let base = model.plant_detail();
+    match PLANT_CAP.with(|c| c.get()) {
+        Some(cap) if coarseness(cap) > coarseness(base) => cap,
+        _ => base,
+    }
+}
+
+/// Runs `f` with the plants at most this detailed (a section or a shadow
+/// needs their masses, not their leaves).
+pub fn with_plant_detail<T>(lod: archisim_core::flora::Lod, f: impl FnOnce() -> T) -> T {
+    let old = PLANT_CAP.with(|c| c.replace(Some(lod)));
+    let out = f();
+    PLANT_CAP.with(|c| c.set(old));
+    out
+}
+
+/// Solids of a plant grown by ArchiSim: one per material, at the level of
+/// detail the views take ([`Model::plant_detail`]), turned and placed.
+/// `None` for an object that is not a plant.
+pub fn plant_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Solid>> {
+    let o = model.object(id)?;
+    let (mesh, parts) = model.plant_mesh(id, plant_lod(model))?;
+    let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+    let place = |p: [f32; 3]| -> P3 {
+        let q = o.to_plan(p[0] as f64, p[1] as f64);
+        [q.x, q.y, z0 + p[2] as f64]
+    };
+    Some(
+        parts
+            .iter()
+            .map(|(material, tris)| Solid {
+                owner: SolidOwner::Object(id),
+                material: *material,
+                triangles: tris
+                    .iter()
+                    .map(|t| t.map(|i| place(mesh.positions[i as usize])))
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
 /// The colours of the corners of each triangle of a solid of
-/// [`object_mesh_solids`] (its textures), in the same order; `None` for
-/// any other solid.
+/// [`object_mesh_solids`] (its textures) or of [`plant_solids`], in the
+/// same order; `None` for any other solid.
 pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>> {
     let SolidOwner::Object(id) = s.owner else {
         return None;
     };
+    if let Some((mesh, parts)) = model.plant_mesh(id, plant_lod(model)) {
+        let (_, tris) = parts.iter().find(|(m, _)| *m == s.material)?;
+        return Some(
+            tris.iter()
+                .map(|t| t.map(|i| mesh.colors[i as usize]))
+                .collect(),
+        );
+    }
     let (_, _, level) = model.object_mesh(id)?;
     let g = level.groups.iter().find(|g| g.material == s.material)?;
     Some(

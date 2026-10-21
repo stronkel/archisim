@@ -6,6 +6,41 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (noche, 3) · Vegetación generada: vivero y plantaciones
+
+Rama `bloque/vivero` (sobre `bloque/mallas`, #42), pull request para Antonio. Formato `.archisim` versión 25 (abre las anteriores tal cual). v0.37. Diseño en `docs/VEGETACION.md`.
+
+**Hecho**
+- **Los árboles crecen** (crate nuevo `archisim-flora`, sin dependencias, sin código de nadie): de una especie y una semilla salen el tronco o troncos (inclinados y retorcidos), las ramas por órdenes dentro de la forma de la copa, las matas de hojas, flores y frutos; en las palmeras, el estípite con anillos y las frondas pinnadas o en abanico; en gramíneas, pitas y yucas, sus hojas en roseta. La misma semilla da siempre la misma planta; cada planta del proyecto, la suya (sacada de su `GlobalId`: una copia es otra planta).
+- **Familia de sistema «Vegetación»**: cada especie es un tipo con altura, ancho, tronco, fuste, porte (árbol, conífera, palmera, arbusto, mata, gramínea, roseta), forma de copa (11), troncos, inclinación, tortuosidad, ramas, ángulo, caída, follaje (9), densidad, matas, frondas, floración, fruto y sus colores. Cada planta, su semilla, su alto y ancho propios y su variación.
+- **3D** en tres niveles de detalle (entera / ligera / muy ligera) según cuántas plantas tenga el proyecto; las hojas, redondeadas y sin aristas entre sus caras. **IFC**: cada planta con su malla (`IfcTriangulatedFaceSet` con colores) y sus valores, que vuelven idénticos al importar.
+- **Planta** en 13 estilos sacados de la propia planta (círculo, contorno, dentado, nube, a mano, ramas, hojas, ramas y hojas, follaje, punteado, radial, frondas, acuarela), en líneas, transparente, rellena o solo color, con flores y frutos de su color; se simplifica sola a escalas pequeñas.
+- **Biblioteca**: 64 especies integradas (pino piñonero, olivo, acebuche, encina, alcornoque, eucalipto, castaño, jacaranda, ciprés, naranjo, almez, palmeras, romero, lentisco, retamas, almajo, salicornia… y de clima templado y cálido), en la galería de Vegetación (Entorno › su grupo). Vegetación empieza ahora con un olivo.
+- **Vivero** (Urbanismo, o «Vivero…» en una planta): especies del proyecto, todos sus parámetros con deslizadores, la planta en 3D y en planta técnica y de presentación al momento, «🎲 Otro ejemplar», variación, duplicar especie y traer de la biblioteca.
+- **Plantación** (Urbanismo, tecla J): por clics, Spline o Elegir línea; a lo largo de la línea o dentro del contorno; número de plantas, especies mezcladas, variación de tamaño y de forma, irregularidad y azar. Se ven las plantas antes de plantar; luego, la plantación se cambia en Propiedades y sus plantas se rehacen; moverla, copiarla o borrarla lleva sus plantas. Su línea se ve verde discontinua en pantalla (no se imprime).
+- **Tirador** en el borde de la copa de una planta seleccionada: su ancho; con Ctrl, alto y ancho en proporción. En sus Propiedades, «🎲 Otra planta».
+- La demo tiene olivo, encina, almendro en flor, palmera datilera, romero, lavanda y una hilera de 8 cipreses (plantación). `archisim vivero out/` planta todas las especies (y un paseo y un arriate) en `vivero.archisim`, `vivero.ifc` y plantas 1:200 de presentación y técnica.
+
+**Pendiente**
+- Tiradores en 3D (alto y ancho arrastrando en la vista 3D).
+- En secciones y alzados, las palmeras salen como trazos sueltos y las copas sin contorno.
+- Hojas con textura (M3): hoy las matas son cuerpos facetados de color, redondeados al sombrear.
+- Setos como masa continua en planta; estaciones (caducas en invierno, otoño).
+- Una planta movida a mano dentro de una plantación vuelve a su sitio al cambiar la plantación.
+- Las medidas y colores de las 64 especies son una propuesta: Antonio las corrige en el Vivero.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`: en la planta, la hilera de cipreses, el olivo, la encina, el almendro en flor y la palmera; F3 para verlos en 3D.
+2. Urbanismo → **Vivero**: elige el Olivo y mueve **Tortuosidad**, **Inclinación**, **Forma de la copa** y **Densidad**: el 3D y las dos plantas cambian al momento, y también los olivos del proyecto. Pulsa **🎲 Otro ejemplar** varias veces. Trae de la biblioteca el **Pino piñonero** y la **Palmera canaria**.
+3. Urbanismo → **Vegetación**: abre la galería (Entorno › Árboles mediterráneos, Palmeras, Arbustos…) y coloca varias especies. Selecciona una: arrastra el **tirador** del borde de la copa (con Ctrl, también crece en altura) y pulsa **🎲 Otra planta**.
+4. Urbanismo → **Plantación**: tres clics en curva y doble clic (o clic derecho): se plantan 8 olivos. En Propiedades, cambia el **Número de plantas**, la **Irregularidad**, la **Variación de tamaño** y pulsa **🎲 Otro**. Elige otra especie en la galería con **Mayús** para mezclarla.
+5. Plantación con **Distribución: Dentro del contorno** y cuatro clics: un bosquete. Y otra con el método **Spline** de la barra de arriba.
+6. Propiedades de una planta → «Este ejemplar» y «Dibujo»: prueba los estilos (nube, follaje, ramas, punteado, acuarela) y los colores; y en la vista, Presentación → Bosque.
+7. Exporta el IFC y ábrelo en ArchiCAD o Revit: cada árbol con su forma y sus colores (`IfcGeographicElement`).
+8. `cargo run -p archisim-cli -- vivero out/` y abre `out/vivero-presentacion.svg`: todas las especies, para corregir medidas y colores.
+
+---
+
 ## 2026-10-21 (noche, 2) · Modelos 3D (L1–L2), vértices y árboles con su copa
 
 Rama `bloque/mallas` (sobre `main` con #41), pull request para Antonio. Formato `.archisim` versión 24 (abre las anteriores tal cual). v0.36.

@@ -60,6 +60,7 @@ impl ArchiSimApp {
         self.draw_module_preview(&painter, rect);
         self.draw_concept_preview(&painter, rect);
         self.draw_urban_preview(&painter, rect);
+        self.draw_planting_preview(&painter, rect);
         self.draw_services_preview(&painter, rect);
         self.draw_method_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
@@ -118,6 +119,7 @@ impl ArchiSimApp {
             | Tool::Tape
             | Tool::Plot
             | Tool::Road
+            | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
             | Tool::Device => CursorIcon::Crosshair,
@@ -392,12 +394,14 @@ impl ArchiSimApp {
             | Tool::Paint
             | Tool::Plot
             | Tool::Road
+            | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
             | Tool::Device => {
                 let points = match self.tool {
                     Tool::Plot => self.plot_tool.corners().to_vec(),
                     Tool::Road => self.road_points.clone(),
+                    Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
                     Tool::Device => Vec::new(),
                     _ => self.concept_points(),
@@ -408,6 +412,7 @@ impl ArchiSimApp {
                     Tool::Grid | Tool::Footing => self.foundation_anchor(),
                     Tool::Plot => self.plot_tool.anchor(),
                     Tool::Road => self.road_points.last().copied(),
+                    Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
                     Tool::Device => None,
                     _ => self.concept_anchor(),
@@ -555,6 +560,7 @@ impl ArchiSimApp {
                 Tool::PushPull | Tool::MassOffset => self.concept_backspace(),
                 Tool::Plot => self.plot_tool.backspace(),
                 Tool::Road => self.road_points.pop().is_some(),
+                Tool::Planting => self.planting_points.pop().is_some(),
                 Tool::Pipe | Tool::Duct => self.run_points.pop().is_some(),
                 _ => false,
             };
@@ -640,6 +646,7 @@ impl ArchiSimApp {
                     SlabOutcome::Nothing => {}
                 },
                 Tool::Road => self.finish_road(),
+                Tool::Planting => self.finish_planting(false),
                 Tool::Pipe | Tool::Duct => self.finish_run(),
                 Tool::Railing => {
                     if let Some(c) = self.cursor {
@@ -709,6 +716,11 @@ impl ArchiSimApp {
                 }
                 Tool::Road => {
                     if self.road_points.pop().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Planting => {
+                    if self.planting_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -1002,6 +1014,17 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.device_click(c.point);
+                    }
+                }
+            }
+            Tool::Planting => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.finish_planting(false);
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.planting_click(c.point);
                     }
                 }
             }
@@ -1851,6 +1874,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::Tape => self.concept_anchor(),
             Tool::Plot => self.plot_tool.anchor(),
             Tool::Road => self.road_points.last().copied(),
+            Tool::Planting => self.planting_points.last().copied(),
             Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
             Tool::Section => self.section_tool.anchor,
             Tool::CurtainWall => self.curtain_anchor,
@@ -1885,6 +1909,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::Tape => self.concept_points(),
             Tool::Plot => self.plot_tool.corners().to_vec(),
             Tool::Road => self.road_points.clone(),
+            Tool::Planting => self.planting_points.clone(),
             Tool::Pipe | Tool::Duct => self.run_points.clone(),
             _ => Vec::new(),
         }

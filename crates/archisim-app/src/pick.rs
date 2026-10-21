@@ -50,6 +50,8 @@ pub enum Element {
     /// A plot, picked by its boundary or inside it if nothing else is.
     Plot(archisim_core::PlotId),
     Road(archisim_core::RoadId),
+    /// Plants along a line or over an area, picked by its line.
+    Planting(archisim_core::PlantingId),
     /// A pipe or duct, picked by its band.
     Run(archisim_core::RunId),
     /// A loose edge of the concept phase, picked by its line.
@@ -133,6 +135,10 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Mass(id) => model.mass(id).map(|m| m.outline()),
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
         Element::Road(id) => model.road(id).map(|r| r.outline()),
+        Element::Planting(id) => model.planting(id).map(|p| {
+            let line = archisim_core::planting_line(&p.path, p.closed, p.smooth);
+            archisim_core::strip(&line, -0.25, 0.25)
+        }),
         Element::Run(id) => model.run(id).map(|r| r.outline()),
         Element::Edge(id) => model
             .edge(id)
@@ -417,6 +423,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.modules_on_level(level).map(|m| Element::Module(m.id)));
     v.extend(model.masses_on_level(level).map(|m| Element::Mass(m.id)));
     v.extend(model.roads_on_level(level).map(|r| Element::Road(r.id)));
+    v.extend(
+        model
+            .plantings_on_level(level)
+            .map(|p| Element::Planting(p.id)),
+    );
     v.extend(model.runs_on_level(level).map(|r| Element::Run(r.id)));
     v.extend(model.edges_on_level(level).map(|e| Element::Edge(e.id)));
     v.extend(model.devices_on_level(level).map(|d| Element::Device(d.id)));
@@ -459,6 +470,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Mass(_)
         | Element::Plot(_)
         | Element::Road(_)
+        | Element::Planting(_)
         | Element::Run(_)
         | Element::Edge(_)
         | Element::Device(_) => None,
@@ -510,6 +522,8 @@ pub fn pick<G: Geo + ?Sized>(
         // In the concept phase the volumes are what is worked on.
         Element::Mass(_) => 2,
         Element::Road(_) => 5,
+        // Its line, under the plants it made.
+        Element::Planting(_) => 4,
         // Under the ceiling, in front of the slab.
         Element::Run(_) => 2,
         // Lines in front of the faces they may close.

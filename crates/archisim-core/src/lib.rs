@@ -5,6 +5,7 @@
 //! is the family language (`archisim-family`), which knows nothing of the
 //! model.
 
+pub use archisim_flora as flora;
 pub mod code;
 pub mod document;
 pub mod drafting;

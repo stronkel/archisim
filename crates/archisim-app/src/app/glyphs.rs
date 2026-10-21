@@ -45,6 +45,10 @@ pub enum Glyph {
     Plot,
     Road,
     Tree,
+    /// Plants along a curve: three crowns on a dashed line.
+    Planting,
+    /// A sprout in a pot: the species of plants.
+    Nursery,
     StreetLamp,
     Dimension,
     LevelMark,
@@ -182,6 +186,12 @@ impl Glyph {
             Glyph::Tree => {
                 r##"<circle cx="10" cy="10" r="6"/><path d="M10 4v12M4 10h12M6 6l8 8M14 6l-8 8" stroke-width="0.7"/>"##
             }
+            Glyph::Planting => {
+                r##"<path d="M2 15c4-6 12-6 16-1" stroke-dasharray="1.5 1.2" stroke-width="0.7"/><circle cx="4.5" cy="11.5" r="2.5"/><circle cx="10" cy="9" r="3"/><circle cx="15.5" cy="11.5" r="2.5"/>"##
+            }
+            Glyph::Nursery => {
+                r##"<path d="M6 12h8l-1.2 5H7.2z"/><path d="M10 12V7"/><path d="M10 9c-3 0-4-2-4-4 2.5 0 4 1.5 4 4zM10 8c0-3 1.5-4.5 4.5-4.5 0 3-1.5 4.5-4.5 4.5z"/>"##
+            }
             Glyph::StreetLamp => {
                 r##"<path d="M7 17h6M10 17V4M10 4h4.5M12.5 4v1.5h4v-1.5"/><path d="M11 7l3.5 3" stroke-width="0.6"/>"##
             }
@@ -310,6 +320,8 @@ impl Glyph {
         Glyph::Plot,
         Glyph::Road,
         Glyph::Tree,
+        Glyph::Planting,
+        Glyph::Nursery,
         Glyph::Dimension,
         Glyph::LevelMark,
         Glyph::Tag,

@@ -76,6 +76,20 @@ impl<'a> Importer<'a> {
                 base_offset: snap(z - elev),
             })
             .map_err(|e| explain(&e))?;
+        // Its own values (a plant's seed and size…).
+        let def = self
+            .model
+            .object_type(tid)
+            .and_then(|t| self.model.family(t.family))
+            .map(|f| f.def().clone());
+        if let Some(def) = def {
+            if let Some(values) = self.read_instance_values(id, &def, Default::default()) {
+                if self.model.set_object_values(oid, values).is_err() {
+                    self.report
+                        .warn("Algún parámetro de ejemplar de un objeto no es válido: se deja el de la familia.");
+                }
+            }
+        }
         self.object_ids.insert(id);
         self.report.objects += 1;
         self.sources.push((oid.0, id));
