@@ -38,12 +38,16 @@ pub enum Mark {
         pen: Pen,
         style: LineStyle,
     },
-    /// Closed outline; `filled` hides what is drawn under it (white).
+    /// Closed outline; `filled` hides what is drawn under it (white), or
+    /// with `tint` in that material's colour, `opacity` from 0 (clear) to
+    /// 1 (solid).
     Polygon {
         points: Vec<[f64; 2]>,
         pen: Pen,
         style: LineStyle,
         filled: bool,
+        tint: Option<u64>,
+        opacity: f64,
     },
     /// Arc around `center` from `from` to `to`, the short way; the radius
     /// is the distance from the centre to `from`.
@@ -147,12 +151,41 @@ impl FamilyDef {
         for (k, v) in builtins.iter().chain(type_values).chain(instance_values) {
             base.insert(k.clone(), v.clone());
         }
+        base.entry("seed".into()).or_insert(Value::Number(0.5));
         let mut run = Run::new(self, Mode::Plan);
         let mut env = vec![base];
         run.exec(&self.prelude, &mut env)?;
         env.push(HashMap::new());
         run.exec(&symbol.body, &mut env)?;
         Ok(run.marks)
+    }
+
+    /// Draws the `plan presentation` symbol (for views with a presentation
+    /// style); `None` if the recipe has none. `builtins` as for
+    /// [`FamilyDef::evaluate_plan`], with `seed` (0 to 1) to make each
+    /// element a little different.
+    pub fn evaluate_presentation(
+        &self,
+        type_values: &Values,
+        instance_values: &Values,
+        builtins: &Values,
+    ) -> Option<Result<Vec<Mark>, FamilyError>> {
+        let symbol = self.presentation.as_ref()?;
+        Some((|| {
+            self.check_values(ParamScope::Type, type_values)?;
+            self.check_values(ParamScope::Instance, instance_values)?;
+            let mut base: HashMap<String, Value> = HashMap::new();
+            for (k, v) in builtins.iter().chain(type_values).chain(instance_values) {
+                base.insert(k.clone(), v.clone());
+            }
+            base.entry("seed".into()).or_insert(Value::Number(0.5));
+            let mut run = Run::new(self, Mode::Plan);
+            let mut env = vec![base];
+            run.exec(&self.prelude, &mut env)?;
+            env.push(HashMap::new());
+            run.exec(&symbol.body, &mut env)?;
+            Ok(run.marks)
+        })())
     }
 
     /// Draws the `elevation` marks (opening lines…), in the family's `x`
@@ -328,6 +361,48 @@ impl<'a> Run<'a> {
         }
     }
 
+    /// The material and opacity of a tinted outline (opacity 1 without
+    /// one).
+    fn tint(
+        &mut self,
+        tint: &Option<Expr>,
+        opacity: &Option<Expr>,
+        env: &[HashMap<String, Value>],
+        line: usize,
+    ) -> Result<(Option<u64>, f64), FamilyError> {
+        let material = match tint {
+            None => None,
+            Some(e) => match self.eval(e, env, line)? {
+                Value::Material(m) => Some(m),
+                other => {
+                    return Err(eval_err(
+                        line,
+                        format!("«tint» takes a material, not a {}", other.kind_name()),
+                    ))
+                }
+            },
+        };
+        let opacity = match opacity {
+            None => 1.0,
+            Some(e) => self.number(e, env, line)?,
+        };
+        if !(0.0..=1.0).contains(&opacity) {
+            return Err(eval_err(line, "the opacity goes from 0 to 1"));
+        }
+        Ok((material, opacity))
+    }
+
+    /// The `seed` the program gives each element (0,5 without one).
+    fn seed(&self, env: &[HashMap<String, Value>]) -> f64 {
+        env.iter()
+            .rev()
+            .find_map(|f| match f.get("seed") {
+                Some(Value::Number(n)) => Some(*n),
+                _ => None,
+            })
+            .unwrap_or(0.5)
+    }
+
     fn push_mark(&mut self, mark: Mark, line: usize) -> Result<(), FamilyError> {
         if self.mode != Mode::Plan {
             return Err(eval_err(
@@ -400,6 +475,8 @@ impl<'a> Run<'a> {
                     pen,
                     style,
                     filled,
+                    tint,
+                    opacity,
                     line,
                 } => {
                     self.tick(*line)?;
@@ -407,11 +484,53 @@ impl<'a> Run<'a> {
                     for p in points {
                         pts.push(self.point(p, env, *line)?);
                     }
+                    let (tint, opacity) = self.tint(tint, opacity, env, *line)?;
                     let mark = Mark::Polygon {
                         points: pts,
                         pen: *pen,
                         style: self.line_style(style, env, *line)?,
                         filled: *filled,
+                        tint,
+                        opacity,
+                    };
+                    self.push_mark(mark, *line)?;
+                }
+                Stmt::Cloud {
+                    center,
+                    radius,
+                    lobes,
+                    jitter,
+                    pen,
+                    style,
+                    filled,
+                    tint,
+                    opacity,
+                    line,
+                } => {
+                    self.tick(*line)?;
+                    let c = self.point(center, env, *line)?;
+                    let r = self.number(radius, env, *line)?;
+                    let n = self.number(lobes, env, *line)?.round();
+                    let j = self.number(jitter, env, *line)?;
+                    if r.is_nan()
+                        || r <= 0.0
+                        || !(3.0..=64.0).contains(&n)
+                        || !(0.0..=0.5).contains(&j)
+                    {
+                        return Err(eval_err(
+                            *line,
+                            "a cloud needs a radius, 3 to 64 lobes and a jitter from 0 to 0,5",
+                        ));
+                    }
+                    let seed = self.seed(env);
+                    let (tint, opacity) = self.tint(tint, opacity, env, *line)?;
+                    let mark = Mark::Polygon {
+                        points: cloud(c, r, n as usize, j, seed),
+                        pen: *pen,
+                        style: self.line_style(style, env, *line)?,
+                        filled: *filled,
+                        tint,
+                        opacity,
                     };
                     self.push_mark(mark, *line)?;
                 }
@@ -705,10 +824,60 @@ impl<'a> Run<'a> {
                     "sin" => one(&nums)?.sin(),
                     "cos" => one(&nums)?.cos(),
                     "tan" => one(&nums)?.tan(),
+                    // The same number in [0, 1) for the same value: to make
+                    // each tree a little different, with `seed`.
+                    "rand" => noise(one(&nums)?),
                     other => return Err(eval_err(line, format!("unknown function «{other}»"))),
                 };
                 finite(r)
             }
         }
     }
+}
+
+/// A number in [0, 1) that is always the same for the same `x`.
+pub(crate) fn noise(x: f64) -> f64 {
+    let mut h = x.to_bits() ^ 0x9E37_79B9_7F4A_7C15;
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xFF51_AFD7_ED55_8CCD);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xC4CE_B9FE_1A85_EC53);
+    h ^= h >> 33;
+    (h >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// The outline of a cloud: `lobes` bulges round `c`, each of its own size
+/// and width (by `seed`), the outline going in and out by about `jitter`
+/// of the radius. Counter-clockwise.
+pub(crate) fn cloud(c: [f64; 2], r: f64, lobes: usize, jitter: f64, seed: f64) -> Vec<[f64; 2]> {
+    use std::f64::consts::TAU;
+    let k = |i: usize, w: f64| noise(seed * 7919.0 + i as f64 * 13.0 + w);
+    // Where each lobe starts, unevenly round the circle.
+    let mut starts: Vec<f64> = (0..lobes)
+        .map(|i| (i as f64 + 0.35 * (k(i, 0.1) - 0.5)) / lobes as f64 * TAU)
+        .collect();
+    let turn = k(0, 0.7) * TAU;
+    for a in &mut starts {
+        *a += turn;
+    }
+    let mut out = Vec::new();
+    for i in 0..lobes {
+        let a0 = starts[i];
+        let a1 = if i + 1 < lobes {
+            starts[i + 1]
+        } else {
+            starts[0] + TAU
+        };
+        // The lobe bulges out from the inner radius by its own amount.
+        let inner = r * (1.0 - jitter * (0.6 + 0.8 * k(i, 0.3)));
+        let bulge = r * jitter * (0.8 + 0.9 * k(i, 0.5));
+        let steps = 6;
+        for s in 0..steps {
+            let t = s as f64 / steps as f64;
+            let a = a0 + (a1 - a0) * t;
+            let rr = inner + bulge * (std::f64::consts::PI * t).sin();
+            out.push([c[0] + rr * a.cos(), c[1] + rr * a.sin()]);
+        }
+    }
+    out
 }

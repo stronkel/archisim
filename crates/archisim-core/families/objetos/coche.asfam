@@ -1,7 +1,7 @@
 family "Turismo"
   category vehicle
   host none
-  version 2
+  version 3
   description "Coche de turismo; el punto de inserción es el centro de la trasera y mira hacia delante"
   folder "Turismos"
 
@@ -31,6 +31,15 @@ plan 1:50
   polygon (-w + 0.12, 0.24 * length) (w - 0.12, 0.24 * length) (w - 0.12, 0.80 * length) (-w + 0.12, 0.80 * length) pen thin
   line (-w + 0.12, 0.66 * length) to (w - 0.12, 0.66 * length) pen thin
   line (-w + 0.12, 0.32 * length) to (w - 0.12, 0.32 * length) pen thin
+
+plan presentation
+  # The body filled in its colour, the glass lighter, as a presentation
+  # plan shows cars: for scale, without detail.
+  let w = width / 2
+  let c = 0.25
+  polygon (-w + c, 0) (w - c, 0) (w, c) (w, length - c * 1.6) (w - c * 1.3, length) (-w + c * 1.3, length) (-w, length - c * 1.6) (-w, c) pen thin tint body_mat
+  polygon (-w + 0.12, 0.24 * length) (w - 0.12, 0.24 * length) (w - 0.12, 0.80 * length) (-w + 0.12, 0.80 * length) pen thin filled
+  polygon (-w + 0.2, 0.36 * length) (w - 0.2, 0.36 * length) (w - 0.2, 0.62 * length) (-w + 0.2, 0.62 * length) pen thin tint body_mat opacity 0.6
 
 outputs
   ifc_class = "IfcVehicle"

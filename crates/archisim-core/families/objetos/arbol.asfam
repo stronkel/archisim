@@ -1,7 +1,7 @@
 family "Árbol"
   category site
   host none
-  version 2
+  version 3
   description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
   folder "Vegetación"
 
@@ -14,6 +14,8 @@ type_params
   section "Materiales"
     leaves material = "Vegetación" label "Copa"
     bark   material = "Corteza" label "Tronco"
+  section "Presentación"
+    look choice("transparente", "rellena", "contorno") = "transparente" label "Copa en presentación"
 
 require trunk_h < height - 0.3 else "La copa necesita sitio por encima del tronco"
 require trunk < crown else "El tronco no puede ser más ancho que la copa"
@@ -47,6 +49,22 @@ plan 1:50
   arc center (0, 0) from (0, trunk / 2) to (-trunk / 2, 0) pen view
   arc center (0, 0) from (-trunk / 2, 0) to (0, -trunk / 2) pen view
   arc center (0, 0) from (0, -trunk / 2) to (trunk / 2, 0) pen view
+
+plan presentation
+  # A canopy drawn as by hand, each tree its own (by its seed); a smaller
+  # one inside gives it body, and a few branches and the trunk show through.
+  let r = crown / 2
+  let op = if look == "rellena" then 1 else 0.55
+  if look == "contorno"
+    cloud center (0, 0) radius r lobes 11 jitter 0.14 pen view
+    cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin
+  else
+    cloud center (0, 0) radius r lobes 11 jitter 0.14 pen thin tint leaves opacity op
+    cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin tint leaves opacity 0.3
+  repeat i in 0..5
+    let t = 6.283185307 * (i + 0.6 * rand(seed * 31 + i)) / 5
+    line (0, 0) to (r * 0.5 * cos(t), r * 0.5 * sin(t)) pen thin
+  cloud center (0, 0) radius max(trunk / 2, r * 0.06) lobes 6 jitter 0 pen thin tint bark
 
 outputs
   ifc_class = "IfcGeographicElement"

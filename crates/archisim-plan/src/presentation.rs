@@ -19,6 +19,7 @@ pub fn style_of<'a>(model: &'a Model, style: &ViewStyle) -> Option<&'a Presentat
 /// follows; the guard clears it.
 pub(crate) fn begin(p: Option<&PresentationStyle>) -> Guard {
     crate::POCHE.with(|c| c.set(p.and_then(|p| p.poche)));
+    crate::PRESENTING.with(|c| c.set(p.is_some()));
     Guard
 }
 
@@ -27,6 +28,7 @@ pub(crate) struct Guard;
 impl Drop for Guard {
     fn drop(&mut self) {
         crate::POCHE.with(|c| c.set(None));
+        crate::PRESENTING.with(|c| c.set(false));
     }
 }
 

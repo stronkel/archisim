@@ -590,6 +590,10 @@ pub fn build() -> Result<Document, ModelError> {
             ("Arbusto 120", -1.4, 10.2, 0.0),
             ("Persona", -2.2, 7.6, -FRAC_PI_2),
             ("Turismo", 15.0, -6.5, 0.0),
+            // Species for the presentation plan: blossom by the pool, a
+            // pine to the east.
+            ("Árbol en flor 5 m", -2.6, 11.0, 0.0),
+            ("Pino 10 m", 17.5, 4.0, 0.0),
         ] {
             let object_type = ty(m, name)?;
             let at = Point2::new(x, y);
@@ -1177,7 +1181,7 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        assert_eq!(m.objects().count(), 14);
+        assert_eq!(m.objects().count(), 16);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());
         assert_eq!(m.columns().count(), 2);

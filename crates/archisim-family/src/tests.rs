@@ -522,7 +522,9 @@ fn plan_symbols_draw_lines_outlines_and_arcs() {
             ],
             pen: Pen::Frame,
             style: LineStyle::Continuous,
-            filled: true
+            filled: true,
+            tint: None,
+            opacity: 1.0,
         }
     );
     assert_eq!(
@@ -725,4 +727,75 @@ fn elevations_draw_opening_lines_in_x_and_z() {
         bare.evaluate_elevation(&Values::new(), &Values::new(), &Values::new()),
         Ok(Vec::new())
     );
+}
+
+/// P2: a presentation symbol with a tinted, see-through cloud, each
+/// element a little different by the `seed` the program gives it.
+#[test]
+fn presentation_symbols_have_clouds_tints_and_seeds() {
+    let src = r#"family "Copa"
+  category site
+  host none
+  version 1
+
+type_params
+  crown length = 4.00 range 1..10 label "Copa"
+  leaves material = "Vegetación" label "Hojas"
+
+body
+  box (-0.1, -0.1, 0) to (0.1, 0.1, 2) material leaves
+
+plan 1:50
+  line (0, 0) to (crown / 2, 0) pen view
+
+plan presentation
+  cloud center (0, 0) radius crown / 2 lobes 9 jitter 0.15 pen thin tint leaves opacity 0.6
+  polygon (0, 0) (0.1, 0) (0, 0.1) pen thin tint leaves
+  let k = rand(seed)
+  line (0, 0) to (k, 0) pen thin
+"#;
+    let def = parse(src).unwrap();
+    assert!(def.presentation.is_some());
+    assert_eq!(def.plan_for(50.0).unwrap().scale, 50.0);
+    let mut t = def.defaults(ParamScope::Type);
+    t.insert("leaves".into(), Value::Material(7));
+    let seeded = |s: f64| {
+        let b: Values = [("seed".to_string(), Value::Number(s))]
+            .into_iter()
+            .collect();
+        def.evaluate_presentation(&t, &Values::new(), &b)
+            .unwrap()
+            .unwrap()
+    };
+    let a = seeded(0.1);
+    let b = seeded(0.8);
+    let Mark::Polygon {
+        points,
+        tint,
+        opacity,
+        ..
+    } = &a[0]
+    else {
+        panic!("{:?}", a[0]);
+    };
+    assert_eq!((*tint, *opacity), (Some(7), 0.6));
+    assert!(points.len() >= 27);
+    for p in points {
+        let r = (p[0] * p[0] + p[1] * p[1]).sqrt();
+        assert!(r > 1.4 && r < 2.7, "{r}");
+    }
+    assert_ne!(a[0], b[0], "each tree its own canopy");
+    assert_eq!(a[0], seeded(0.1)[0], "the same tree, the same canopy");
+    assert!(matches!(&a[1], Mark::Polygon { tint: Some(7), opacity, .. } if *opacity == 1.0));
+    // Without a presentation block, nothing.
+    let plain = parse(&src.replace("plan presentation", "plan 1:100")).unwrap();
+    assert!(plain
+        .evaluate_presentation(&t, &Values::new(), &Values::new())
+        .is_none());
+    // A wrong opacity is explained.
+    let bad = parse(&src.replace("opacity 0.6", "opacity 2")).unwrap();
+    assert!(bad
+        .evaluate_presentation(&t, &Values::new(), &Values::new())
+        .unwrap()
+        .is_err());
 }

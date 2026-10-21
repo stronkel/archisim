@@ -4479,4 +4479,41 @@ fn presentation_styles_and_floor_fills() {
     let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
     assert!(svg.contains("floor-fills"));
     assert!(svg.contains("#d2cdc3"));
+    // P2: trees drawn as see-through canopies in a presentation view, each
+    // its own; in the technical one, with the family's line symbol.
+    h.app
+        .ed
+        .transact("Árboles", |m| {
+            let t = archisim_library::add_object_entry(m, "Árbol en flor 5 m")?;
+            for x in [20.0, 30.0] {
+                m.add_object(archisim_core::NewObject {
+                    level,
+                    object_type: t,
+                    position: p(x, 3.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let technical = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(!technical.contains("fill-opacity"));
+    let ad5 = h
+        .model()
+        .presentation_styles()
+        .find(|s| s.name == "AD5")
+        .unwrap()
+        .id;
+    h.app.view_style.presentation = Some(ad5);
+    let shown = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(shown.contains("fill-opacity"), "see-through canopies");
+    assert!(shown.contains("#e2a0b6"), "the blossom's colour");
+    let ids: Vec<_> = h.model().objects().map(|o| o.id).collect();
+    let canopy = |id| match &h.model().object_presentation_symbol(id).unwrap().unwrap()[0] {
+        archisim_core::Mark::Polygon { points, .. } => points.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert_ne!(canopy(ids[0]), canopy(ids[1]), "each tree its own canopy");
+    h.frame();
 }

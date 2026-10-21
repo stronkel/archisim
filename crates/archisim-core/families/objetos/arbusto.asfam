@@ -1,7 +1,7 @@
 family "Arbusto"
   category site
   host none
-  version 2
+  version 3
   description "Arbusto o mata redondeada; el punto de inserción es su centro"
   folder "Vegetación"
 
@@ -11,6 +11,8 @@ type_params
     height length = 1.00 range 0.20..4.00 label "Altura"
   section "Materiales"
     leaves material = "Vegetación" label "Follaje"
+  section "Presentación"
+    look choice("transparente", "rellena", "contorno") = "rellena" label "Follaje en presentación"
 
 body
   let r = width / 2
@@ -34,6 +36,15 @@ plan 1:50
     line (r * k0 * cos(t0), r * k0 * sin(t0)) to (r * k1 * cos(t1), r * k1 * sin(t1)) pen view
   line (-r * 0.2, 0) to (r * 0.2, 0) pen thin
   line (0, -r * 0.2) to (0, r * 0.2) pen thin
+
+plan presentation
+  let r = width / 2
+  let op = if look == "rellena" then 1 else 0.6
+  if look == "contorno"
+    cloud center (0, 0) radius r lobes 7 jitter 0.2 pen view
+  else
+    cloud center (0, 0) radius r lobes 7 jitter 0.2 pen thin tint leaves opacity op
+    cloud center (-r * 0.15, r * 0.15) radius r * 0.45 lobes 5 jitter 0.15 pen thin tint leaves opacity 0.35
 
 outputs
   ifc_class = "IfcGeographicElement"

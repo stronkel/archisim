@@ -193,6 +193,16 @@ fn poche() -> Option<[u8; 3]> {
     POCHE.with(|p| p.get())
 }
 
+thread_local! {
+    /// The view being drawn has a presentation style: families draw their
+    /// `plan presentation` symbol, where they have one.
+    static PRESENTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn presentation_view() -> bool {
+    PRESENTING.with(|p| p.get())
+}
+
 /// Whether a wall this thick in paper millimetres is too thin on screen to
 /// draw its layers.
 fn too_small_for_layers(paper_mm: f64) -> bool {
@@ -1706,13 +1716,18 @@ fn draw_objects(
             continue;
         }
         let size = outline[0].distance(outline[2]);
+        let presented = presentation_view()
+            .then(|| model.object_presentation_symbol(o.id))
+            .flatten();
         let marks = if too_small_for_symbol(size * 1000.0 / scale) {
             Err(())
+        } else if let Some(m) = presented {
+            m.map_err(|_| ())
         } else {
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
         dim::element(s, o.id.0, |s| match marks {
-            Ok(marks) => draw_marks(s, marks, &|p| o.to_plan(p[0], p[1]), k),
+            Ok(marks) => draw_marks(s, model, marks, &|p| o.to_plan(p[0], p[1]), k),
             Err(()) => {
                 let _ = writeln!(
                     s,
@@ -1758,12 +1773,18 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
         return;
     };
     let world = |p: [f64; 2]| o.point(mid + sx * p[0], y_mid + sy * p[1]);
-    draw_marks(s, marks, &world, k);
+    draw_marks(s, model, marks, &world, k);
 }
 
 /// The marks of a family's plan symbol, through `world` (family axes to
 /// plan).
-fn draw_marks(s: &mut String, marks: Vec<Mark>, world: &dyn Fn([f64; 2]) -> Point2, k: f64) {
+fn draw_marks(
+    s: &mut String,
+    model: &Model,
+    marks: Vec<Mark>,
+    world: &dyn Fn([f64; 2]) -> Point2,
+    k: f64,
+) {
     for mark in marks {
         match mark {
             Mark::Line {
@@ -1786,13 +1807,28 @@ fn draw_marks(s: &mut String, marks: Vec<Mark>, world: &dyn Fn([f64; 2]) -> Poin
                 pen,
                 style,
                 filled,
+                tint,
+                opacity,
             } => {
                 let pts: Vec<Point2> = points.into_iter().map(world).collect();
+                // Tinted: the material's colour, see-through as asked.
+                let fill = match tint.and_then(|m| model.material(archisim_core::MaterialId(m))) {
+                    Some(m) => {
+                        let [r, g, b] = m.cut_color;
+                        let see = if opacity < 1.0 {
+                            format!(r#" fill-opacity="{}""#, num(opacity))
+                        } else {
+                            String::new()
+                        };
+                        format!("rgb({r},{g},{b})\"{see}")
+                    }
+                    None if filled => "white\"".to_string(),
+                    None => "none\"".to_string(),
+                };
                 let _ = writeln!(
                     s,
-                    r#"<path d="{}" fill="{}" stroke="{INK}" stroke-width="{}"{}/>"#,
+                    r#"<path d="{}" fill="{fill} stroke="{INK}" stroke-width="{}"{}/>"#,
                     path(&pts),
-                    if filled { "white" } else { "none" },
                     num(pen_weight(pen) * k),
                     dash_attr(style, k)
                 );

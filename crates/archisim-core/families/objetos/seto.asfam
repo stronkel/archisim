@@ -1,7 +1,7 @@
 family "Seto"
   category site
   host none
-  version 2
+  version 3
   description "Seto recortado, en línea"
   folder "Vegetación"
 
@@ -24,6 +24,14 @@ plan 1:50
     let x0 = -width / 2 + i * step
     line (x0, depth * 0.3) to (x0 + step / 2, depth * 0.7) pen thin
     line (x0 + step / 2, depth * 0.7) to (x0 + step, depth * 0.3) pen thin
+
+plan presentation
+  # Clouds along it, overlapping, in the colour of its leaves.
+  let n = max(2, round(width / (depth * 0.9)))
+  let step = width / n
+  repeat i in 0..n
+    let x = -width / 2 + (i + 0.5) * step
+    cloud center (x, depth / 2) radius max(step, depth) * 0.62 lobes 6 jitter 0.18 pen thin tint leaves opacity 0.8
 
 outputs
   ifc_class = "IfcGeographicElement"
