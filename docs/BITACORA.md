@@ -6,6 +6,16 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (mañana) · Unión de los siete bloques y revisión de Antonio
+
+Unidos a `main`, por orden, los pull requests #32 a #38 (I3, ejes y cimentación, módulos, concepto, urbanismo, métodos e instalaciones), todos en verde. Antonio los ha probado: funcionan, con cinco correcciones (R12–R16 en `docs/HOJA_DE_RUTA.md` §6.1): línea de Concepto como arista, fuera las fichas Rectángulo y Círculo de Concepto, herramientas en la ventana 3D, barra contextual para el dibujo 2D de la barra inferior y Spline abierto por defecto (también en el dibujo 2D).
+
+Decididas D23 (librería 3D: modelos de uso libre, básica integrada y ampliada como descarga, varios modelos por objeto) y D24 (estilos de presentación, con láminas de AD5 y de otros estudios como referencia). Bloques nuevos apuntados en §6: P1–P4 (presentación), L1–L3 (librería 3D e importar glTF/OBJ/Collada de SketchUp) y M1–M3 (modelado de formas). Las láminas de referencia no se suben al repositorio (son proyectos reales y trabajos de otros).
+
+**Siguiente**: bloque R (R12–R16), en su rama y pull request.
+
+---
+
 ## 2026-10-21 (madrugada) · Instalaciones
 
 Rama `bloque/instalaciones` (sale de la de Spline y Elegir línea; pull request para Antonio). Formato `.archisim` versión 20 (abre las anteriores tal cual, sin instalaciones).

@@ -20,6 +20,8 @@ Sin código: son decisiones de producto que condicionan lo demás.
 | D6 | **Plantilla al importar**: añadir siempre la plantilla de ArchiSim a un proyecto importado o solo cuando faltan tipos (hoy: solo cuando faltan) | Comodidad frente a limpieza del proyecto |
 | D8–D12 | **Disciplinas y mediciones** (propuesta del 18/10/2026 en `docs/DISCIPLINAS.md`): un solo modelo con disciplina por elemento, IFC 4.3 para urbanismo, banco de precios de referencia (BCCA), criterio de deducción de huecos y orden de los bloques | Estructura, urbanismo y mediciones con bancos de precios dependen de ellas |
 | D17–D22 ✅ | **Interfaz por disciplinas** — decididas el 20/10/2026 (`docs/INTERFAZ.md` §11): bloques I1 → I2 → I3 → I5 → I4 → I6; las teclas cambian de disciplina; atenuación activada; trabajo en equipo primero en una carpeta de Google Drive y después en servidor propio; reservas por zona y por elemento; cursor de los compañeros opcional y apagado | Rehace la caja de herramientas, la barra de modificar y los módulos del masterplan |
+| D23 ✅ | **Librería 3D** — decidida el 21/10/2026: objetos con modelo 3D detallado (malla con texturas y niveles de detalle) además de su símbolo de planta paramétrico; modelos de uso libre (CC0 o que permitan redistribuir, nunca `.rfa` ni `.gsm`); **una biblioteca básica con lo imprescindible integrada** y el resto como **descarga aparte**, con **varios modelos de cada objeto** para comparar marcas y estética | Fija de dónde salen los objetos y cuánto pesa el programa |
+| D24 ✅ | **Estilos de presentación** — 21/10/2026: Antonio manda láminas de AD5 (planta de vivienda 1:50 y planta general 1:200) y de otros estudios como referencia (ver §6.3). Se hacen estilos de vista de presentación aplicables con un clic | Planos de concurso y de cliente sin pasar por Illustrator |
 | D7 | **Ficheros reales de prueba**: IFC exportados por Antonio desde sus propios proyectos de ArchiCAD y Revit, para probar la importación (se usan en local, no se suben al repositorio) | La importación solo se ha probado con ficheros sintéticos y de IfcOpenShell/SketchUp |
 
 ## 1. Cierre de la fase 1 (deudas del MVP)
@@ -114,6 +116,65 @@ Hecho en v0.26 (rama `bloque/colaboracion`): 4.1, 4.3 y la mayor parte de 4.2 y 
 - **Manual de usuario** en español y lista de atajos; **traducción al inglés** de la interfaz antes de abrir el código.
 - **Informes de fallo** con el proyecto adjunto (sin telemetría).
 - **Validación continua**: además de IfcOpenShell, abrir los IFC de cada versión en ArchiCAD y Revit (Antonio) y guardar capturas de referencia.
+
+## 6. Revisión de Antonio del 21/10/2026 y bloques nuevos
+
+Los siete bloques del 20/10 (I3, ejes y cimentación, módulos, concepto, urbanismo, métodos e instalaciones) se unieron a `main` el 21/10/2026. Antonio los probó: funcionan, con estos cambios.
+
+### 6.1 Correcciones (bloque R, lo primero)
+
+| # | Qué | Cómo |
+|---|---|---|
+| R12 | En Concepto, al elegir **Línea** salta a polígono, y se confunde con la línea de dibujo 2D de la barra inferior | La línea de Concepto es una **arista del modelo**: puede quedar abierta (una arista suelta, como en SketchUp) y solo forma cara al cerrarse. Nombre y pastilla que lo digan («Arista»), distinto de «Línea de dibujo» |
+| R13 | **Rectángulo** y **Círculo** de Concepto repiten lo que ya hace Línea con los métodos de la barra contextual, y ocupan fichas | Se quitan como fichas: son métodos de Arista. Los huecos quedan para las herramientas de aristas, intersecciones y modelado de §6.4 |
+| R14 | **No se puede trabajar en la ventana 3D**: dibujar muros y forjados, colocar objetos, dibujar y empujar volúmenes de Concepto, pintar caras | Herramientas en 3D: puntos sobre el plano de la planta activa o sobre la cara que hay bajo el cursor, con forzados 3D (vértices, aristas, puntos medios, caras); **Empujar** y **Pintar** directamente sobre las caras en 3D; colocar objetos y aparatos sobre suelos y caras |
+| R15 | Las herramientas de dibujo de la barra inferior (Línea, Relleno, Texto, Cota) **no tienen la barra contextual**: ni Modificar (copiar, mover, desfase…) ni los métodos (recta, polilínea, polígono, spline…) | Las órdenes de dibujo 2D usan la misma barra contextual que las de modelo: sus métodos y la barra Modificar |
+| R16 | **Spline** resulta raro: en Concepto sale un círculo cerrado que se deforma y hay que pasar por «Camino» para una curva abierta; en el dibujo 2D no hay Spline | Spline abierto por defecto en todas las herramientas; se cierra al pinchar en el primer punto (o con un botón «Cerrar»); sin pasar por Camino. Spline también para el dibujo 2D (polilínea curva) |
+
+### 6.2 Librería 3D (D23)
+
+- **L1**: importar mallas **glTF, OBJ y Collada (.dae)** (lo que exporta SketchUp, también el gratuito) con materiales y texturas: como objeto de librería o como volumen de Concepto. El `.skp` no se lee (formato cerrado).
+- **L2**: los objetos de librería llevan, además de su símbolo de planta de la receta, **un modelo 3D por niveles de detalle** (el lejano, ligero). IFC: `IfcTriangulatedFaceSet` con su color o textura.
+- **L3**: **biblioteca básica integrada** (sanitarios, cocina, mobiliario de salón, comedor y dormitorio, vegetación, personas, coches) y **biblioteca ampliada como descarga** (varios modelos por objeto: marcas y estéticas). Fuentes: CC0 (Poly Haven, Kenney…) y fabricantes que permitan redistribuir.
+
+### 6.3 Presentación (D24)
+
+Referencias de Antonio:
+
+- **AD5**: plantas a 1:50 y 1:200 de líneas finas negras, césped en franjas verdes, vegetación en círculos de colores por especie, lámina de agua en cian rayada, tarima en lamas, mobiliario y coches en línea, cuadro de superficies y cajetín propio.
+- **Otros estudios**:
+  - muros macizados en un color (verde oscuro, terracota, azul);
+  - pavimentos con textura (adoquín irregular, baldosa, veta de madera, tarima);
+  - suelo exterior punteado o en trama de lamas;
+  - árboles en copa transparente con punto de tronco, y follaje dibujado a mano;
+  - **sombras arrojadas** suaves, curvas de nivel y recorrido solar;
+  - una paleta de cuatro o cinco tonos por lámina;
+  - axonometrías con colores suaves, personas y árboles;
+  - secciones con fondo de vegetación;
+  - láminas de concurso con título, diagramas, planta, sección y render.
+
+Bloques:
+
+- **P1 Estilos de presentación**: estilos de vista guardables entre proyectos, con:
+  - paleta;
+  - macizado de muros en color;
+  - grosores;
+  - fondo;
+  - tramas con textura (adoquín, losa, piedra irregular, madera, tarima, grava punteada, césped en franjas o punteado, agua);
+  - un estilo «AD5» y tres o cuatro de presentación de partida.
+- **P2 Vegetación y figuras**: copas de árbol y arbustos generados (cada uno distinto, como pinceles), por especie y color, transparentes o rellenas; personas, coches y mobiliario de presentación como símbolo de escala en las recetas.
+- **P3 Sombras y diagramas**: sombras arrojadas en planta y en axonometría desde el sol del proyecto, recorrido solar, curvas de nivel, cuadros de superficies con estilo.
+- **P4 Láminas**: plantillas de lámina de presentación (título, paleta, diagramas, vistas, imágenes) y exportación PNG de alta resolución.
+
+### 6.4 Modelado de formas (Concepto, para visualización)
+
+- **M1**: primitivas (esfera, cilindro, cono, revolución de un perfil), redondeo y chaflán de aristas.
+- **M2**: operaciones entre volúmenes (unir, restar, intersecar), intersección de caras y aristas sueltas sobre caras.
+- **M3**: texturas por cara y materiales de visualización.
+
+### Orden propuesto
+
+R12–R16 → P1–P4 → L1–L3 → M1–M3. L1 (importar mallas) puede adelantarse a P si hace falta para traer modelos de SketchUp.
 
 ## Propuesta de orden
 
