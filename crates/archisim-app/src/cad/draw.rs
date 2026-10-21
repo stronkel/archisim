@@ -282,7 +282,8 @@ impl Command for Pline {
 // ---- SPLINE -------------------------------------------------------------------
 
 /// A free curve through the points clicked: open (Enter) or closed (C, or a
-/// click on its first point). Kept as a polyline of arcs through them.
+/// click on its first point). Kept as a polyline finely following the
+/// curve, as the spline of the model tools.
 #[derive(Default)]
 pub struct SplineCmd {
     points: Vec<Point2>,
@@ -293,13 +294,13 @@ impl SplineCmd {
         if points.len() < 2 || (closed && points.len() < 3) {
             return None;
         }
-        let pieces = crate::spline::spline_arcs(points, closed);
-        let mut pts: Vec<Point2> = pieces.iter().map(|(a, _, _)| *a).collect();
-        let mut bulges: Vec<f64> = pieces.iter().map(|(_, _, b)| *b).collect();
-        if !closed {
-            pts.push(pieces.last()?.1);
-            bulges.push(0.0);
+        // The same curve as Arista's spline (Catmull-Rom, finely sampled).
+        let mut pts = crate::spline::catmull_rom(points, closed, 12);
+        pts.dedup_by(|a, b| a.distance(*b) < 1e-9);
+        if closed && pts.len() > 1 && pts[0].distance(pts[pts.len() - 1]) < 1e-9 {
+            pts.pop();
         }
+        let bulges = vec![0.0; pts.len()];
         Some(Polyline {
             points: pts,
             bulges,

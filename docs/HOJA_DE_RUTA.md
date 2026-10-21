@@ -130,6 +130,11 @@ Los siete bloques del 20/10 (I3, ejes y cimentación, módulos, concepto, urbani
 | R14 | **No se puede trabajar en la ventana 3D**: dibujar muros y forjados, colocar objetos, dibujar y empujar volúmenes de Concepto, pintar caras | Herramientas en 3D: puntos sobre el plano de la planta activa o sobre la cara que hay bajo el cursor, con forzados 3D (vértices, aristas, puntos medios, caras); **Empujar** y **Pintar** directamente sobre las caras en 3D; colocar objetos y aparatos sobre suelos y caras |
 | R15 | Las herramientas de dibujo de la barra inferior (Línea, Relleno, Texto, Cota) **no tienen la barra contextual**: ni Modificar (copiar, mover, desfase…) ni los métodos (recta, polilínea, polígono, spline…) | Las órdenes de dibujo 2D usan la misma barra contextual que las de modelo: sus métodos y la barra Modificar |
 | R16 | **Spline** resulta raro: en Concepto sale un círculo cerrado que se deforma y hay que pasar por «Camino» para una curva abierta; en el dibujo 2D no hay Spline | Spline abierto por defecto en todas las herramientas; se cierra al pinchar en el primer punto (o con un botón «Cerrar»); sin pasar por Camino. Spline también para el dibujo 2D (polilínea curva) |
+| R17 | El Spline de Línea (dibujo 2D) no curva igual que el de Arista | El mismo trazado (Catmull-Rom) en las dos: curvas naturales que pasan por los puntos |
+| R18 | Al pintar un muro apenas cambia, y no se puede volver al material original | La pintura se ve siempre con su color (también con la disciplina atenuada); **Quitar pintura** en Propiedades de Pintar |
+| R19 | Pintar una cara de un volumen pinta el volumen entero | Solo la cara pinchada (tapa, base o un lado); el volumen entero, cambiando su material en Propiedades |
+| R20 | En 3D las aristas solo se apoyan en la planta: no se puede levantar una arista en una fachada para pintarla por zonas | Aristas en 3D sobre las caras (con Mayús, en vertical); Pintar pinta la zona de la fachada que cierran esas aristas |
+| R21 | Al dibujar en 3D no se ve el muro, la puerta o la ventana antes de colocarlos | Vista previa en 3D de muros, puertas, ventanas, pilares, vigas, forjados y objetos, tal como quedarán |
 
 ### 6.2 Librería 3D (D23)
 
@@ -174,7 +179,7 @@ Bloques:
 
 ### Orden propuesto
 
-R12–R16 → P1–P4 → L1–L3 → M1–M3. L1 (importar mallas) puede adelantarse a P si hace falta para traer modelos de SketchUp.
+R12–R21 → P1–P4 → L1–L3 → M1–M3. L1 (importar mallas) puede adelantarse a P si hace falta para traer modelos de SketchUp.
 
 ## Propuesta de orden
 

@@ -123,9 +123,9 @@ impl Scene {
             } else {
                 1.0
             };
-            let tone = |[r, g, b]: [u8; 3]| {
+            let tone = |[r, g, b]: [u8; 3], dim: bool| {
                 let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
-                if dimmed {
+                if dim {
                     // In light grey, as a reference.
                     let lum = 0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2];
                     let v = 1.0 - (1.0 - lum) * 0.35;
@@ -138,11 +138,12 @@ impl Scene {
                 }
                 [rgb[0], rgb[1], rgb[2], alpha]
             };
-            let base = tone(archisim_geom::solid::solid_color(model, &solid));
+            let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
             for tri in &solid.triangles {
-                // A painted face of a wall: its paint.
-                let color =
-                    archisim_geom::solid::painted_color(model, &solid, tri).map_or(base, tone);
+                // A painted face: its paint, never greyed (it is what is
+                // being worked on).
+                let color = archisim_geom::solid::painted_color(model, &solid, tri)
+                    .map_or(base, |c| tone(c, false));
                 let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
                 let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
                 // Faces looking up give way where another element rests on
@@ -178,6 +179,30 @@ impl Scene {
                     s.owners.push(owner);
                 }
             }
+        }
+        // Painted zones of walls' faces, just off them.
+        for (wall, tri, [r, g, b]) in archisim_geom::solid::paint_zone_triangles(model) {
+            if model.hidden_by_discipline(&disciplines.hidden, wall.0) {
+                continue;
+            }
+            let owner = Owner::Model(Element::Wall(wall));
+            let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+            if selection.contains(&Element::Wall(wall)) {
+                for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
+                    *c = *c * 0.45 + h * 0.55;
+                }
+            }
+            let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+            let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
+            for v in p {
+                s.opaque.push(Vertex {
+                    pos: v.to_array(),
+                    normal: n.to_array(),
+                    color: [rgb[0], rgb[1], rgb[2], 1.0],
+                    bias: -1.0,
+                });
+            }
+            s.owners.push(owner);
         }
         for part in linked {
             let [r, g, b] = part.color;

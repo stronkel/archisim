@@ -1194,8 +1194,10 @@ pub struct ModelParts {
     pub masses: Vec<Mass>,
     /// Loose edges of the concept phase.
     pub edges: Vec<ConceptEdge>,
-    /// Paint on the faces of walls.
-    pub face_paints: Vec<(WallId, FaceSide, MaterialId)>,
+    /// Paint on the faces of walls and volumes, and painted zones of
+    /// walls' faces.
+    pub face_paints: Vec<(u64, FaceRef, MaterialId)>,
+    pub paint_zones: Vec<PaintZone>,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1293,7 +1295,8 @@ pub struct Model {
     modules: BTreeMap<ModuleId, ModulePlacement>,
     masses: BTreeMap<MassId, Mass>,
     edges: BTreeMap<EdgeId, ConceptEdge>,
-    face_paints: BTreeMap<(WallId, FaceSide), MaterialId>,
+    face_paints: BTreeMap<(u64, FaceRef), MaterialId>,
+    paint_zones: Vec<PaintZone>,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1361,6 +1364,7 @@ impl Model {
             masses: BTreeMap::new(),
             edges: BTreeMap::new(),
             face_paints: BTreeMap::new(),
+            paint_zones: Vec::new(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -3760,6 +3764,7 @@ impl Model {
             masses: self.masses.values().cloned().collect(),
             edges: self.edges.values().cloned().collect(),
             face_paints: self.face_paints().collect(),
+            paint_zones: self.paint_zones().cloned().collect(),
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4068,7 +4073,7 @@ impl Model {
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_edges(parts.edges, &mut claim)?;
-        model.restore_face_paints(parts.face_paints)?;
+        model.restore_paint(parts.face_paints, parts.paint_zones)?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model

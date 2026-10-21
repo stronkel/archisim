@@ -2136,21 +2136,84 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
     }
 }
 
-/// The paint on a triangle of a wall: the colour of the material painted
-/// on the side it faces, if that side is painted. Faces looking up or down
-/// (the top of the wall) and the ends are left as they are.
-pub fn painted_color(model: &Model, s: &Solid, tri: &[P3; 3]) -> Option<[u8; 3]> {
-    let SolidOwner::Wall(id) = s.owner else {
-        return None;
-    };
-    let w = model.wall(id)?;
-    let paints = [
-        model.face_paint(id, archisim_core::FaceSide::Exterior),
-        model.face_paint(id, archisim_core::FaceSide::Interior),
-    ];
-    if paints.iter().all(Option::is_none) {
+/// The face of an element a point with that normal is on: a side of a
+/// wall (faces looking up or down, and the ends, are none); the top, the
+/// bottom or a side of a volume.
+pub fn face_of(
+    model: &Model,
+    owner: SolidOwner,
+    at: P3,
+    normal: P3,
+) -> Option<archisim_core::FaceRef> {
+    use archisim_core::{FaceRef, FaceSide};
+    let len = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+    if len < 1e-12 {
         return None;
     }
+    let n = [normal[0] / len, normal[1] / len, normal[2] / len];
+    let c = Point2::new(at[0], at[1]);
+    let flat = Point2::new(n[0], n[1]);
+    match owner {
+        SolidOwner::Wall(id) => {
+            if n[2].abs() > 0.5 {
+                return None;
+            }
+            let w = model.wall(id)?;
+            let left = match w.arc() {
+                Some(a) => {
+                    let r = (c - a.centre).normalized()?;
+                    if a.sweep > 0.0 {
+                        r * -1.0
+                    } else {
+                        r
+                    }
+                }
+                None => (w.end - w.start).normalized()?.perp_left(),
+            };
+            let d = flat.x * left.x + flat.y * left.y;
+            if d > 0.7 {
+                Some(FaceRef::Wall(FaceSide::Exterior))
+            } else if d < -0.7 {
+                Some(FaceRef::Wall(FaceSide::Interior))
+            } else {
+                None
+            }
+        }
+        SolidOwner::Mass(id) => {
+            if n[2] > 0.5 {
+                return Some(FaceRef::Top);
+            }
+            if n[2] < -0.5 {
+                return Some(FaceRef::Bottom);
+            }
+            let o = model.mass(id)?.outline();
+            // The side under the point, facing the same way.
+            (0..o.len())
+                .filter_map(|i| {
+                    let (a, b) = (o[i], o[(i + 1) % o.len()]);
+                    let u = (b - a).normalized()?;
+                    let along = (c - a).x * u.x + (c - a).y * u.y;
+                    let len = a.distance(b);
+                    let across = ((c - a).x * u.y - (c - a).y * u.x).abs();
+                    let facing = (flat.x * u.y - flat.y * u.x).abs();
+                    (along > -1e-3 && along < len + 1e-3 && facing > 0.7).then_some((across, i))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+                .filter(|(d, _)| *d < 0.05)
+                .map(|(_, i)| FaceRef::Side(i))
+        }
+        _ => None,
+    }
+}
+
+/// The paint on a triangle of a wall or a volume: the colour of the
+/// material painted on the face it is part of, if that face is painted.
+pub fn painted_color(model: &Model, s: &Solid, tri: &[P3; 3]) -> Option<[u8; 3]> {
+    let element = match s.owner {
+        SolidOwner::Wall(id) => id.0,
+        SolidOwner::Mass(id) => id.0,
+        _ => return None,
+    };
     let u = [
         tri[1][0] - tri[0][0],
         tri[1][1] - tri[0][1],
@@ -2166,38 +2229,69 @@ pub fn painted_color(model: &Model, s: &Solid, tri: &[P3; 3]) -> Option<[u8; 3]>
         u[2] * v[0] - u[0] * v[2],
         u[0] * v[1] - u[1] * v[0],
     ];
-    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-    if len < 1e-12 || (n[2] / len).abs() > 0.5 {
-        return None;
-    }
-    let n = Point2::new(n[0] / len, n[1] / len);
-    // The left of the wall's line (its exterior) where the triangle is.
-    let left = match w.arc() {
-        Some(a) => {
-            let c = Point2::new(
-                (tri[0][0] + tri[1][0] + tri[2][0]) / 3.0,
-                (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0,
-            );
-            let r = (c - a.centre).normalized()?;
-            if a.sweep > 0.0 {
-                r * -1.0
-            } else {
-                r
-            }
-        }
-        None => (w.end - w.start).normalized()?.perp_left(),
-    };
-    let d = n.x * left.x + n.y * left.y;
-    let side = if d > 0.7 {
-        0
-    } else if d < -0.7 {
-        1
-    } else {
-        return None;
-    };
-    paints[side]
+    let c = [
+        (tri[0][0] + tri[1][0] + tri[2][0]) / 3.0,
+        (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0,
+        (tri[0][2] + tri[1][2] + tri[2][2]) / 3.0,
+    ];
+    let face = face_of(model, s.owner, c, n)?;
+    model
+        .face_paint(element, face)
         .and_then(|m| model.material(m))
         .map(|m| m.cut_color)
+}
+
+/// How far a painted zone stands off its wall's face, so it is seen over it.
+const ZONE_OFFSET: f64 = 0.002;
+
+/// The triangles of the painted zones of walls' faces, just off the face,
+/// with the wall they are on and their colour.
+pub fn paint_zone_triangles(model: &Model) -> Vec<(archisim_core::WallId, [P3; 3], [u8; 3])> {
+    let mut out = Vec::new();
+    for z in model.paint_zones() {
+        let Some(w) = model.wall(z.wall) else {
+            continue;
+        };
+        let Some(t) = model.wall_type(w.wall_type) else {
+            continue;
+        };
+        let Some(colour) = model.material(z.material).map(|m| m.cut_color) else {
+            continue;
+        };
+        let (ext, int) = w.face_offsets(t.thickness());
+        let off = match z.side {
+            archisim_core::FaceSide::Exterior => ext + ZONE_OFFSET,
+            archisim_core::FaceSide::Interior => int - ZONE_OFFSET,
+        };
+        let len = w.length().max(1e-9);
+        let base = model.level(w.level).map_or(0.0, |l| l.elevation) + w.base_offset;
+        let at = |p: Point2| -> P3 {
+            let q = w.point_at((p.x / len).clamp(0.0, 1.0), off);
+            [q.x, q.y, base + p.y]
+        };
+        let sign = match z.side {
+            archisim_core::FaceSide::Exterior => 1.0,
+            archisim_core::FaceSide::Interior => -1.0,
+        };
+        for [a, b, c] in triangulate(&z.outline) {
+            let (pa, pb, pc) = (at(z.outline[a]), at(z.outline[b]), at(z.outline[c]));
+            // Out of the wall on its side, where the triangle is.
+            let f =
+                ((z.outline[a].x + z.outline[b].x + z.outline[c].x) / 3.0 / len).clamp(0.0, 1.0);
+            let out_dir = (w.point_at(f, 1.0) - w.point_at(f, 0.0)) * sign;
+            let u = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+            let v = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+            let nx = u[1] * v[2] - u[2] * v[1];
+            let ny = u[2] * v[0] - u[0] * v[2];
+            let tri = if nx * out_dir.x + ny * out_dir.y < 0.0 {
+                [pa, pc, pb]
+            } else {
+                [pa, pb, pc]
+            };
+            out.push((z.wall, tri, colour));
+        }
+    }
+    out
 }
 
 /// Solids of the elements on one level only.
@@ -2233,6 +2327,55 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
 mod tests {
     use super::*;
     use crate::wall_geometry;
+
+    /// R19: painting one face of a volume colours that face only.
+    #[test]
+    fn one_face_of_a_volume_is_painted() {
+        use archisim_core::{FaceRef, MassShape, NewMass};
+        let mut m = Model::new("T");
+        let level = m.add_level("P1", 0.0);
+        let mat = m.add_material("Hormigón", "concrete", [180, 180, 180], CutPattern::Solid);
+        let red = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let id = m
+            .add_mass(NewMass {
+                name: "V".into(),
+                level,
+                shape: MassShape::Prism(vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(4.0, 0.0),
+                    Point2::new(4.0, 3.0),
+                    Point2::new(0.0, 3.0),
+                ]),
+                base_offset: 0.0,
+                height: 2.0,
+                floor_height: None,
+                material: mat,
+            })
+            .unwrap();
+        // The south side, hit from outside.
+        let face = face_of(&m, SolidOwner::Mass(id), [2.0, 0.0, 1.0], [0.0, -1.0, 0.0]);
+        assert_eq!(face, Some(FaceRef::Side(0)));
+        m.set_face_paint(id.0, FaceRef::Side(0), Some(red)).unwrap();
+        let colour = m.material(red).unwrap().cut_color;
+        let solids = model_solids(&m);
+        let s = solids
+            .iter()
+            .find(|s| s.owner == SolidOwner::Mass(id))
+            .unwrap();
+        let (mut painted, mut plain) = (0, 0);
+        for t in &s.triangles {
+            match painted_color(&m, s, t) {
+                Some(c) => {
+                    assert_eq!(c, colour);
+                    // Every painted triangle lies on y = 0.
+                    assert!(t.iter().all(|p| p[1].abs() < 1e-9), "{t:?}");
+                    painted += 1;
+                }
+                None => plain += 1,
+            }
+        }
+        assert!(painted >= 2 && plain >= 10, "{painted} {plain}");
+    }
 
     /// The door and window solids as ArchiSim built them before families,
     /// kept to check that the system families reproduce them exactly.

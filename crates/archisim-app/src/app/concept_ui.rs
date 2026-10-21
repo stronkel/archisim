@@ -38,6 +38,8 @@ pub struct ConceptState {
     pub centre: Option<Point2>,
     /// The points of the path being drawn.
     pub path: Vec<Point2>,
+    /// With Arista in 3D, the height of each point over the level.
+    pub path_z: Vec<f64>,
     /// The mass being pushed, the point where it was taken and its height
     /// then.
     pub push: Option<(MassId, Point2, f64)>,
@@ -167,7 +169,7 @@ impl ArchiSimApp {
     }
 
     /// The mass under `p` on the active level.
-    fn mass_under(&self, p: Point2) -> Option<MassId> {
+    pub(super) fn mass_under(&self, p: Point2) -> Option<MassId> {
         let reach = self.view.to_metres(REACH);
         self.ed
             .model()
@@ -285,67 +287,14 @@ impl ArchiSimApp {
                     }
                 }
             },
-            Tool::Paint => {
-                // In 3D, what is under the cursor; in plan, a volume first.
-                let in_3d = self.mode == ViewMode::ThreeD;
-                let wall_3d = self.cursor3d.and_then(|c| match c.owner {
-                    Some(crate::view3d::scene::Owner::Model(Element::Wall(w))) if in_3d => Some(w),
-                    _ => None,
-                });
-                let mass = if wall_3d.is_some() {
-                    None
-                } else {
-                    self.mass_under(p)
-                };
-                let wall = wall_3d.or_else(|| {
-                    let reach = self.view.to_metres(REACH);
-                    match crate::pick::pick(&self.ed, self.ed.level, p, reach) {
-                        Some(Element::Wall(w)) => Some(w),
-                        _ => None,
-                    }
-                });
-                let mat = self.mass_settings.material;
-                match (mass, wall) {
-                    (Some(id), _) => {
-                        let r = self.ed.paint_mass(id, mat);
-                        self.report(r, "Volumen pintado.");
-                    }
-                    (None, Some(w)) => {
-                        // In 3D, the side the face clicked looks to.
-                        let side = match self.cursor3d.and_then(|c| c.normal) {
-                            Some(n) if wall_3d.is_some() => {
-                                let probe =
-                                    p + archisim_core::Vec2::new(n.x as f64, n.y as f64) * 0.05;
-                                self.wall_side(w, probe)
-                            }
-                            _ => self.wall_side(w, p),
-                        };
-                        let r = self
-                            .ed
-                            .transact("Pintar cara", |m| m.set_face_paint(w, side, Some(mat)));
-                        self.report(
-                            r,
-                            match side {
-                                archisim_core::FaceSide::Exterior => {
-                                    "Cara exterior del muro pintada."
-                                }
-                                archisim_core::FaceSide::Interior => {
-                                    "Cara interior del muro pintada."
-                                }
-                            },
-                        );
-                    }
-                    (None, None) => self
-                        .complain("Haz clic en un volumen o en la cara de un muro para pintarlo."),
-                }
-            }
+            Tool::Paint => self.paint_click(p),
             _ => {}
         }
     }
 
     /// The side of a wall a point is on: to the left of its line, the
     /// exterior.
-    fn wall_side(&self, w: archisim_core::WallId, p: Point2) -> archisim_core::FaceSide {
+    pub(super) fn wall_side(&self, w: archisim_core::WallId, p: Point2) -> archisim_core::FaceSide {
         let Some(wall) = self.ed.model().wall(w) else {
             return archisim_core::FaceSide::Exterior;
         };
@@ -367,15 +316,23 @@ impl ArchiSimApp {
     fn mass_click(&mut self, p: Point2) {
         if self.drawing_edges() {
             let reach = self.view.to_metres(REACH);
+            // In 3D, the height the point is at (up a face).
+            let z = self.point_height();
+            self.concept.path_z.resize(self.concept.path.len(), 0.0);
             let path = &self.concept.path;
-            if path.len() >= 3 && path[0].distance(p) <= reach {
-                // Back on the first point: a face.
+            let zs = &self.concept.path_z;
+            let flat = zs.iter().all(|h| (h - z).abs() < 1e-3);
+            let same = |i: usize| path[i].distance(p) <= reach && (zs[i] - z).abs() < 1e-3;
+            if path.len() >= 3 && same(0) && flat {
+                // Back on the first point, level: a face at that height.
                 let outline = std::mem::take(&mut self.concept.path);
-                self.build_mass(outline);
-            } else if path.last().is_some_and(|l| l.approx_eq(p)) {
+                self.concept.path_z.clear();
+                self.build_mass_at(outline, z);
+            } else if !path.is_empty() && same(path.len() - 1) {
                 self.finish_path();
             } else {
                 self.concept.path.push(p);
+                self.concept.path_z.push(z);
             }
             return;
         }
@@ -406,6 +363,31 @@ impl ArchiSimApp {
         }
     }
 
+    /// A face (or volume) at a height over the level.
+    fn build_mass_at(&mut self, outline: Vec<Point2>, z: f64) {
+        let keep = self.mass_settings.base_offset;
+        self.mass_settings.base_offset = keep + z;
+        self.build_mass(outline);
+        self.mass_settings.base_offset = keep;
+    }
+
+    /// The height over the level of the point being placed: in 3D, where
+    /// the cursor is; in plan, on the level.
+    pub(super) fn point_height(&self) -> f64 {
+        match (self.mode, self.cursor3d) {
+            (ViewMode::ThreeD, Some(c)) => {
+                let z0 = self
+                    .ed
+                    .model()
+                    .level(self.ed.level)
+                    .map_or(0.0, |l| l.elevation);
+                let h = c.world.z as f64 - z0;
+                (h * 1000.0).round() / 1000.0
+            }
+            _ => 0.0,
+        }
+    }
+
     pub(super) fn build_mass(&mut self, outline: Vec<Point2>) {
         let s = self.mass_settings;
         match self.ed.add_mass_outline(&s, outline) {
@@ -426,7 +408,9 @@ impl ArchiSimApp {
             return;
         }
         if self.drawing_edges() {
-            self.finish_edges(path);
+            let mut zs = std::mem::take(&mut self.concept.path_z);
+            zs.resize(path.len(), 0.0);
+            self.finish_edges(path, zs);
             return;
         }
         let s = self.mass_settings;
@@ -442,17 +426,31 @@ impl ArchiSimApp {
     /// Loose edges drawn: if, with the edges already on the level, they
     /// close a contour, that contour becomes a face (and the edges that
     /// made it go); else they stay as an edge.
-    pub(super) fn finish_edges(&mut self, path: Vec<Point2>) {
+    pub(super) fn finish_edges(&mut self, path: Vec<Point2>, heights: Vec<f64>) {
         let reach = self.view.to_metres(REACH).max(1e-6);
         let level = self.ed.level;
+        // Level edges close faces with the level edges at their height;
+        // edges up a face stay edges (they divide it, for Pintar).
+        let h0 = heights.first().copied().unwrap_or(0.0);
+        let flat = heights.iter().all(|h| (h - h0).abs() < 1e-3);
         let edges: Vec<(archisim_core::EdgeId, Vec<Point2>)> = self
             .ed
             .model()
             .edges_on_level(level)
+            .filter(|e| {
+                e.is_flat()
+                    && (e.elevation + e.heights.first().copied().unwrap_or(0.0) - h0).abs() < 1e-3
+            })
             .map(|e| (e.id, e.points.clone()))
             .collect();
-        if let Some((outline, used)) = close_with_edges(&path, &edges, reach) {
-            let s = self.mass_settings;
+        let closed = if flat {
+            close_with_edges(&path, &edges, reach)
+        } else {
+            None
+        };
+        if let Some((outline, used)) = closed {
+            let mut s = self.mass_settings;
+            s.base_offset += h0;
             let r = self.ed.transact("Crear cara", |m| {
                 for id in &used {
                     m.remove_edge(*id)?;
@@ -470,7 +468,7 @@ impl ArchiSimApp {
         }
         let r = self
             .ed
-            .transact("Crear arista", |m| m.add_edge(level, path, 0.0));
+            .transact("Crear arista", |m| m.add_edge_3d(level, path, heights, 0.0));
         match r {
             Ok(id) => {
                 self.ed.selection = [Element::Edge(id)].into_iter().collect();
@@ -784,7 +782,8 @@ impl ArchiSimApp {
             Tool::MassOffset => "Clic en un volumen: un contorno paralelo encima · Esc: flecha",
             Tool::Tape if self.concept.tape.is_some() => "Clic: segundo punto (mide y deja una guía) · Esc: anular",
             Tool::Tape => "Clic: primer punto · Esc: flecha",
-            Tool::Paint => "Clic en un volumen o en la cara de un muro (mejor en 3D): le da el material elegido en Propiedades · Esc: flecha",
+            Tool::Paint if self.paint_erase => "Clic en una cara pintada: le quita la pintura · Esc: flecha",
+            Tool::Paint => "Clic en la cara de un muro o de un volumen (mejor en 3D): le da el material elegido · Esc: flecha",
             _ => "",
         }
     }
@@ -892,22 +891,44 @@ impl ArchiSimApp {
                 });
             }
             Tool::Paint => {
+                let mut erase = self.paint_erase;
                 group(ui, "tool-paint", "Pintar", |ui| {
                     row(
                         ui,
-                        "Material",
-                        "El que se da al volumen pinchado",
+                        "Hace",
+                        "Pintar la cara pinchada o quitarle la pintura",
                         |ui, w| {
-                            s.material = material_combo(
+                            erase = choice(
                                 ui,
-                                Id::unique("tool-paint-mat"),
-                                model,
-                                s.material,
+                                "tool-paint-erase",
                                 w,
+                                erase,
+                                &[(false, "Pintar"), (true, "Quitar pintura")],
                             );
                         },
                     );
+                    if !erase {
+                        row(
+                            ui,
+                            "Material",
+                            "El que se da a la cara pinchada",
+                            |ui, w| {
+                                s.material = material_combo(
+                                    ui,
+                                    Id::unique("tool-paint-mat"),
+                                    model,
+                                    s.material,
+                                    w,
+                                );
+                            },
+                        );
+                    }
+                    props::note(
+                        ui,
+                        "Pinta la cara pinchada de un muro o de un volumen (en 3D, la que ves). Con aristas dibujadas sobre una fachada, solo la zona que encierran. El material de todo el volumen, en sus Propiedades.",
+                    );
                 });
+                self.paint_erase = erase;
             }
             _ => {
                 props::note(ui, self.concept_hint());

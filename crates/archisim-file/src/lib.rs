@@ -874,19 +874,35 @@ mod tests {
         {
             let w = m.walls().next().unwrap().id;
             let mat = m.materials().last().unwrap().id;
-            m.set_face_paint(w, archisim_core::FaceSide::Exterior, Some(mat))
-                .unwrap();
+            m.set_face_paint(
+                w.0,
+                archisim_core::FaceRef::Wall(archisim_core::FaceSide::Exterior),
+                Some(mat),
+            )
+            .unwrap();
+            m.set_paint_zone(
+                w,
+                archisim_core::FaceSide::Interior,
+                vec![
+                    archisim_core::Point2::new(0.5, 0.0),
+                    archisim_core::Point2::new(1.5, 0.0),
+                    archisim_core::Point2::new(1.5, 1.0),
+                ],
+                Some(mat),
+            )
+            .unwrap();
         }
         // A loose edge of the concept phase (version 21).
         {
             let level = m.levels()[0].id;
-            m.add_edge(
+            m.add_edge_3d(
                 level,
                 vec![
                     archisim_core::Point2::new(0.0, -2.0),
                     archisim_core::Point2::new(3.0, -2.0),
                     archisim_core::Point2::new(3.0, -4.0),
                 ],
+                vec![0.0, 0.0, 1.5],
                 0.5,
             )
             .unwrap();

@@ -65,8 +65,27 @@ pub struct ConceptEdge {
     pub level: LevelId,
     /// Its points in plan, two or more.
     pub points: Vec<Point2>,
+    /// The height of each point over `elevation` (an edge drawn up a
+    /// face in 3D); all zero for one lying on the level.
+    pub heights: Vec<f64>,
     /// Its height over the level.
     pub elevation: f64,
+}
+
+impl ConceptEdge {
+    /// Point `i` and its height over the level.
+    pub fn point_3d(&self, i: usize) -> (Point2, f64) {
+        (
+            self.points[i],
+            self.elevation + self.heights.get(i).copied().unwrap_or(0.0),
+        )
+    }
+
+    /// Whether it lies flat (every point at the same height).
+    pub fn is_flat(&self) -> bool {
+        let h0 = self.heights.first().copied().unwrap_or(0.0);
+        self.heights.iter().all(|h| (h - h0).abs() < 1e-6)
+    }
 }
 
 /// Data needed to make a mass.
@@ -542,6 +561,7 @@ impl Model {
         &self,
         level: LevelId,
         points: &[Point2],
+        heights: &[f64],
         elevation: f64,
     ) -> Result<(), ModelError> {
         if !self.levels.contains_key(&level) {
@@ -551,7 +571,18 @@ impl Model {
         for q in points {
             finite_point(*q, "edge point")?;
         }
-        if points.len() < 2 || points.windows(2).any(|w| w[0].approx_eq(w[1])) {
+        if heights.len() != points.len() {
+            return Err(ModelError::InvalidShape(
+                "an edge needs a height for each point",
+            ));
+        }
+        for h in heights {
+            finite(*h, "edge height")?;
+        }
+        let same = |i: usize| {
+            points[i].approx_eq(points[i + 1]) && (heights[i] - heights[i + 1]).abs() < 1e-6
+        };
+        if points.len() < 2 || (0..points.len() - 1).any(same) {
             return Err(ModelError::InvalidShape(
                 "an edge needs two different points or more",
             ));
@@ -559,14 +590,26 @@ impl Model {
         Ok(())
     }
 
-    /// A loose edge (an open line of the model).
+    /// A loose edge (an open line of the model) lying on the level.
     pub fn add_edge(
         &mut self,
         level: LevelId,
         points: Vec<Point2>,
         elevation: f64,
     ) -> Result<EdgeId, ModelError> {
-        self.validate_edge(level, &points, elevation)?;
+        let heights = vec![0.0; points.len()];
+        self.add_edge_3d(level, points, heights, elevation)
+    }
+
+    /// A loose edge with a height for each point (drawn up a face).
+    pub fn add_edge_3d(
+        &mut self,
+        level: LevelId,
+        points: Vec<Point2>,
+        heights: Vec<f64>,
+        elevation: f64,
+    ) -> Result<EdgeId, ModelError> {
+        self.validate_edge(level, &points, &heights, elevation)?;
         let id = EdgeId(self.take_id());
         self.edges.insert(
             id,
@@ -575,6 +618,7 @@ impl Model {
                 guid: GlobalId::new(),
                 level,
                 points,
+                heights,
                 elevation,
             },
         );
@@ -592,7 +636,10 @@ impl Model {
             .cloned()
             .ok_or(ModelError::UnknownElement(id.0))?;
         edit(&mut e);
-        self.validate_edge(e.level, &e.points, e.elevation)?;
+        if e.heights.len() != e.points.len() {
+            e.heights.resize(e.points.len(), 0.0);
+        }
+        self.validate_edge(e.level, &e.points, &e.heights, e.elevation)?;
         self.edges.insert(id, e);
         Ok(())
     }
@@ -622,7 +669,7 @@ impl Model {
     ) -> Result<(), RestoreError> {
         for e in edges {
             claim(e.id.0, Some(&e.guid))
-                .and_then(|_| self.validate_edge(e.level, &e.points, e.elevation))
+                .and_then(|_| self.validate_edge(e.level, &e.points, &e.heights, e.elevation))
                 .map_err(|error| RestoreError {
                     element: format!("edge {}", e.id.0),
                     error,

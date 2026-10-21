@@ -3811,7 +3811,11 @@ fn concept_volumes_are_drawn_pushed_and_converted() {
     h.app.mass_settings.material = brick;
     h.app.pick(Pick::Concept(ConceptPick::Paint));
     h.click_at(p(2.0, 2.0));
-    assert_eq!(h.model().mass(face).unwrap().material, brick);
+    // In plan, its top face (R19: one face, not the whole volume).
+    assert_eq!(
+        h.model().face_paint(face.0, archisim_core::FaceRef::Top),
+        Some(brick)
+    );
     h.frame();
     // Convertir: the mass selected becomes walls, slabs and a roof.
     h.key(Key::Escape);
@@ -4171,7 +4175,11 @@ fn concept_edges_close_into_faces() {
     match &d.shape {
         archisim_core::Shape::Polyline(pl) => {
             assert!(!pl.closed);
-            assert!(pl.bulges.iter().any(|b| b.abs() > 1e-6));
+            // Through the three points, with many in between.
+            assert!(pl.points.len() > 10);
+            for q in [p(0.0, -6.0), p(5.0, -4.0), p(10.0, -6.0)] {
+                assert!(pl.points.iter().any(|x| x.distance(q) < 1e-6));
+            }
         }
         other => panic!("{other:?}"),
     }
@@ -4217,10 +4225,26 @@ fn tools_work_in_the_3d_view() {
     h.app.wall_tool.set_mode(crate::wall_tool::WallMode::Single);
     let a = screen_3d(&h, 3.0, 3.0, 0.0);
     let b = screen_3d(&h, 9.0, 3.0, 0.0);
+    assert_eq!(super::ghost3d::ghost_triangles(&h.app), 0);
     h.click_screen(a);
+    // R21: before the second click, the wall is seen in 3D as it will be.
+    h.pos = b;
+    h.events.push(Event::PointerMoved(b));
+    h.frame();
+    assert!(super::ghost3d::ghost_triangles(&h.app) >= 12);
     h.click_screen(b);
     assert_eq!(h.model().walls().count(), walls + 1);
     let w = h.model().walls().last().unwrap().clone();
+    // A window over that wall is seen before it is placed, too.
+    h.type_text("v");
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Window));
+    let on = screen_3d(&h, 6.0, 3.0, 1.0);
+    h.pos = on;
+    h.events.push(Event::PointerMoved(on));
+    h.frame();
+    assert!(h.app.placement.is_some());
+    assert!(super::ghost3d::ghost_triangles(&h.app) > 0);
+    h.key(Key::Escape);
     let near = |q: Point2, x: f64, y: f64| (q.x - x).abs() < 0.1 && (q.y - y).abs() < 0.1;
     assert!(
         (near(w.start, 3.0, 3.0) && near(w.end, 9.0, 3.0))
@@ -4258,12 +4282,15 @@ fn tools_work_in_the_3d_view() {
     assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Arrow));
 }
 
-/// R14: Pintar paints a face of a wall (the side clicked), in the plan or
-/// in the 3D view; the 3D shows the paint on that side only.
+/// R14, R18–R20: Pintar paints the face clicked: a side of a wall (in
+/// plan, by the side clicked; in 3D, the face seen), one face of a volume,
+/// or the zone of a façade between edges drawn up it in 3D; Quitar
+/// pintura takes it off. The 3D shows the paint on that face only.
 #[test]
-fn wall_faces_are_painted() {
+fn faces_are_painted() {
     use super::concept_ui::ConceptPick;
     use super::toolbox::Pick;
+    use archisim_core::{FaceRef, FaceSide};
     let mut h = Harness::new(Editor::new_project());
     draw_outline(&mut h);
     h.key(Key::Escape);
@@ -4271,30 +4298,27 @@ fn wall_faces_are_painted() {
     let brick = h.model().materials().last().unwrap().id;
     h.app.mass_settings.material = brick;
     h.app.pick(Pick::Concept(ConceptPick::Paint));
-    // The west wall, from (0, 0) to (0, 9): its exterior is to the west.
+    // In plan: the west wall, clicked just east of its line.
     let west = h.model().walls().next().unwrap().clone();
     let mid = west.point_at(0.5, 0.0);
     h.click_at(mid + archisim_core::Vec2::new(0.1, 0.0));
     let painted: Vec<_> = h.model().face_paints().collect();
     assert_eq!(painted.len(), 1, "{painted:?}");
-    let (w, side, m) = painted[0];
-    assert_eq!((w, m), (west.id, brick));
+    let (e, face, m) = painted[0];
+    assert_eq!((e, m), (west.id.0, brick));
     let inside = (west.end - west.start).cross(archisim_core::Vec2::new(0.1, 0.0)) > 0.0;
-    assert_eq!(
-        side,
-        if inside {
-            archisim_core::FaceSide::Exterior
-        } else {
-            archisim_core::FaceSide::Interior
-        }
-    );
-    // In 3D, only that side shows the brick.
+    let side = if inside {
+        FaceSide::Exterior
+    } else {
+        FaceSide::Interior
+    };
+    assert_eq!(face, FaceRef::Wall(side));
+    // The 3D shows the brick on that side only.
     let model = h.model().clone();
     let colour = model.material(brick).unwrap().cut_color;
-    let solids = archisim_geom::solid::model_solids(&model);
     let mut painted_tris = 0;
     let mut plain = 0;
-    for s in solids
+    for s in archisim_geom::solid::model_solids(&model)
         .iter()
         .filter(|s| s.owner == archisim_geom::solid::SolidOwner::Wall(west.id))
     {
@@ -4309,13 +4333,17 @@ fn wall_faces_are_painted() {
         }
     }
     assert!(painted_tris > 0 && plain > painted_tris);
-    // In the 3D view, a click on a face paints it too.
+    // Quitar pintura, in plan, on the same side.
+    h.app.paint_erase = true;
+    h.click_at(mid + archisim_core::Vec2::new(0.1, 0.0));
+    assert_eq!(h.model().face_paints().count(), 0);
+    h.app.paint_erase = false;
+
+    // In the 3D view, from the south: the south wall's outer face.
     h.key(Key::F3);
     h.frame();
     h.frame();
-    assert_eq!(h.app.mode, ViewMode::ThreeD);
-    assert_eq!(h.app.tool, Tool::Paint);
-    // From the south: the south wall's outer face.
+    assert_eq!((h.app.mode, h.app.tool), (ViewMode::ThreeD, Tool::Paint));
     h.app.v3d.camera.yaw = -1.3;
     h.app.v3d.camera.pitch = 0.35;
     h.frame();
@@ -4325,10 +4353,56 @@ fn wall_faces_are_painted() {
         .walls()
         .find(|w| w.start.y.abs() < 1e-6 && w.end.y.abs() < 1e-6)
         .unwrap()
-        .id;
+        .clone();
     assert_eq!(
         h.model()
-            .face_paint(south, archisim_core::FaceSide::Exterior),
+            .face_paint(south.id.0, FaceRef::Wall(FaceSide::Exterior)),
         Some(brick)
     );
+    // An edge drawn up the south façade, at x = 4: Arista, two clicks with
+    // Mayús for the vertical.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    h.click_screen(screen_3d(&h, 4.0, -0.001, 0.05));
+    h.set_modifiers(Modifiers::SHIFT);
+    let top = screen_3d(&h, 4.0, -0.001, 2.95);
+    h.pos = top;
+    h.events.push(Event::PointerMoved(top));
+    h.frame();
+    h.click_screen(top);
+    h.set_modifiers(Modifiers::NONE);
+    h.key(Key::Enter);
+    let edge = h.model().edges().next().unwrap().clone();
+    assert!(!edge.is_flat(), "{edge:?}");
+    assert!((edge.points[0].x - 4.0).abs() < 0.05);
+    // Painting west of it paints only that zone, in a second material.
+    let stone = h.model().materials().find(|m| m.id != brick).unwrap().id;
+    h.app.mass_settings.material = stone;
+    h.app.pick(Pick::Concept(ConceptPick::Paint));
+    h.click_screen(screen_3d(&h, 9.0, -0.01, 1.5));
+    let zones: Vec<_> = h.model().paint_zones().cloned().collect();
+    assert_eq!(zones.len(), 1, "{zones:?}");
+    let area = archisim_core::signed_area(&zones[0].outline).abs();
+    assert!(area > 1.0 && area < south.length() * south.height, "{area}");
+    assert!(!archisim_geom::solid::paint_zone_triangles(h.model()).is_empty());
+    // A volume: only its top is painted.
+    h.key(Key::F2);
+    let settings = crate::editor::MassSettings::new(h.model());
+    let mass = h
+        .app
+        .ed
+        .add_mass_outline(
+            &settings,
+            vec![p(2.0, 2.0), p(5.0, 2.0), p(5.0, 5.0), p(2.0, 5.0)],
+        )
+        .unwrap();
+    assert_eq!(h.app.tool, Tool::Paint);
+    h.click_at(p(3.5, 3.5));
+    assert_eq!(
+        h.model().face_paint(mass.0, FaceRef::Top),
+        Some(stone),
+        "{:?} {:?}",
+        h.app.message.as_ref().map(|m| &m.text),
+        h.app.mode
+    );
+    assert_ne!(h.model().mass(mass).unwrap().material, stone);
 }

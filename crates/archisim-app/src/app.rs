@@ -256,6 +256,8 @@ pub struct ArchiSimApp {
     pub column_settings: ColumnSettings,
     pub beam_settings: BeamSettings,
     pub beam_tool: structure_ui::BeamTool,
+    /// What the tool would build, for the 3D view (R21).
+    ghost: ghost3d::GhostCache,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -362,6 +364,8 @@ pub struct ArchiSimApp {
     cursor: Option<Snap>,
     /// Where the cursor is in the 3D view, while a tool works there.
     cursor3d: Option<tools3d::Cursor3d>,
+    /// Pintar takes the paint off instead (Quitar pintura).
+    paint_erase: bool,
     hover: Option<Element>,
     /// The handle of the selection under the cursor, if any.
     hover_grip: Option<Grip>,
@@ -511,6 +515,7 @@ impl ArchiSimApp {
             column_settings,
             beam_settings,
             beam_tool: structure_ui::BeamTool::default(),
+            ghost: ghost3d::GhostCache::default(),
             grid_anchor: None,
             footing_anchor: None,
             footing_settings,
@@ -571,6 +576,7 @@ impl ArchiSimApp {
             message: None,
             cursor: None,
             cursor3d: None,
+            paint_erase: false,
             hover: None,
             hover_grip: None,
             drag: None,
@@ -1949,6 +1955,7 @@ mod curtain_ui;
 mod discipline_ui;
 mod draft_props;
 mod foundation_ui;
+mod ghost3d;
 mod glyphs;
 mod icons;
 mod levels_ui;
@@ -1958,6 +1965,7 @@ mod module_ui;
 mod navigator;
 mod object_gallery;
 mod object_ui;
+mod paint_ui;
 mod params_ui;
 mod phases_ui;
 mod plan_ui;

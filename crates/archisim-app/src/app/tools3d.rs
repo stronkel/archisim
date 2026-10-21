@@ -110,6 +110,25 @@ impl ArchiSimApp {
                     world = ray.origin + ray.dir * t;
                 }
             }
+        } else if let (true, true, Some(prev)) = (
+            self.drawing_edges(),
+            ctx.input(|i| i.modifiers.shift),
+            self.concept.path.last().copied(),
+        ) {
+            // Arista with Mayús: straight up or down from the last point.
+            let h = self.concept.path_z.last().copied().unwrap_or(0.0) as f32;
+            let from = glam::Vec3::new(prev.x as f32, prev.y as f32, z + h);
+            let mut n = self.v3d.camera.forward();
+            n.z = 0.0;
+            let n = n.normalize_or(glam::Vec3::X);
+            let denom = ray.dir.dot(n);
+            if denom.abs() > 1e-6 {
+                let t = (from - ray.origin).dot(n) / denom;
+                if t > 0.0 {
+                    let q = ray.origin + ray.dir * t;
+                    world = glam::Vec3::new(from.x, from.y, q.z);
+                }
+            }
         } else if let Some(o) = owner {
             // The corners and edge midpoints of what is under the cursor.
             if let Some((v, _)) = self.v3d.snap_vertex(o, local, size, VERTEX_REACH) {
@@ -156,7 +175,9 @@ impl ArchiSimApp {
             normal,
         });
         let plan_view = std::mem::replace(&mut self.view, local_view);
-        if pushing {
+        // Empujar, and Arista (whose points keep their height, up a face):
+        // the point under the cursor as it is.
+        if pushing || self.drawing_edges() {
             self.cursor = Some(crate::snap::Snap::at(raw, crate::snap::SnapKind::Free));
         } else {
             self.track_cursor(ctx, response, rect);
@@ -193,6 +214,7 @@ impl ArchiSimApp {
         let Some(c) = self.cursor3d else {
             return;
         };
+        self.draw_ghost_3d(painter, rect);
         let size = glam::Vec2::new(rect.width(), rect.height());
         let to_screen = |p: glam::Vec3| {
             self.v3d
@@ -244,6 +266,24 @@ impl ArchiSimApp {
             .into_iter()
             .map(|p| glam::Vec3::new(p.x as f32, p.y as f32, z))
             .collect();
+        if self.drawing_edges() {
+            pts = self
+                .concept
+                .path
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let h = self.concept.path_z.get(i).copied().unwrap_or(0.0) as f32;
+                    glam::Vec3::new(p.x as f32, p.y as f32, z + h)
+                })
+                .collect();
+            if !pts.is_empty() {
+                pts.push(c.world);
+                let screen: Vec<Pos2> = pts.iter().filter_map(|p| to_screen(*p)).collect();
+                painter.add(Shape::line(screen, ink));
+                pts.clear();
+            }
+        }
         if self.draw_method == super::methods_ui::DrawMethod::Spline {
             pts = self
                 .spline_points
@@ -307,13 +347,17 @@ impl ArchiSimApp {
                     Color32::from_gray(40)
                 },
             );
-            let pts: Vec<Pos2> = e
-                .points
-                .iter()
-                .filter_map(|p| {
+            let level_z = model.level(e.level).map_or(0.0, |l| l.elevation);
+            let _ = z;
+            let pts: Vec<Pos2> = (0..e.points.len())
+                .filter_map(|i| {
+                    let (p, h) = e.point_3d(i);
                     self.v3d
                         .camera
-                        .project_to_screen(glam::Vec3::new(p.x as f32, p.y as f32, z as f32), size)
+                        .project_to_screen(
+                            glam::Vec3::new(p.x as f32, p.y as f32, (level_z + h) as f32),
+                            size,
+                        )
                         .map(|s| Pos2::new(rect.min.x + s.x, rect.min.y + s.y))
                 })
                 .collect();

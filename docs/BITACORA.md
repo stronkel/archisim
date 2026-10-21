@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (tarde) · Bloque R, segunda vuelta (R17–R21)
+
+Misma rama `bloque/revision-r` y mismo pull request (#39). El formato sigue en la versión 21 (aún no estaba en `main`): las caras pintadas guardan ahora el elemento y la cara, y hay zonas pintadas y aristas con altura por punto.
+
+**Hecho**
+- **R17**: la **Spline** de la Línea (dibujo 2D) curva como la de Arista: el mismo trazado, que pasa por los puntos con curvas suaves.
+- **R18, Pintar**: la pintura se ve siempre con su color (antes la atenuación de la disciplina la apagaba, y por eso apenas cambiaba). En Propiedades de Pintar hay ahora **Pintar / Quitar pintura**: quitar deja a la vista el material del elemento. En planta se pinta el lado del muro donde se pincha; en 3D, la cara que se ve.
+- **R19**: en un volumen se pinta **solo la cara** pinchada (la de arriba, la de abajo o un lado). Para el volumen entero, su material en Propiedades.
+- **R20, aristas en fachada**: en 3D, Arista se apoya en las caras: con **Mayús** el segundo punto sube en vertical. Una arista dibujada de abajo arriba en una fachada la divide, y **Pintar** pinta solo la zona entre esas aristas (y los bordes del muro). Así se pinta una fachada con dos o más materiales.
+- **R21, vista previa en 3D**: antes del clic se ve, transparente y con sus colores, lo que se va a hacer: muro (con sus capas y uniones), puerta y ventana en su muro, pilar, viga, forjado y objeto.
+
+**Pendiente**
+- Las zonas pintadas son por cara de muro (no siguen a una arista que cruce dos muros) y las aristas inclinadas no dividen zonas (solo las que van por la cara).
+- La vista previa en 3D se dibuja por encima de todo (se ve también si queda detrás de otro elemento).
+- Bloque P (presentación), siguiente en su propia rama.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y `cargo run --release -p archisim-app -- out/demo.archisim`.
+2. **Línea** de la barra inferior → **Spline**, cuatro clics e Intro: la curva es como la de Arista.
+3. **F3**, **Concepto → Pintar** con Ladrillo perforado: clic en la fachada sur. Cambia a ladrillo solo esa cara. En Propiedades, **Quitar pintura** y clic en la misma cara: vuelve el material del muro.
+4. Dibuja un volumen (Arista, Rectángulo, y Empujar) y píntale un lado: solo ese lado cambia.
+5. En 3D, **Arista**: clic abajo en la fachada, **Mayús** y clic arriba, Intro. **Pintar** con Piedra natural a un lado de la arista: solo esa zona.
+6. En 3D, **Muro**: un clic y mueve el ratón: el muro se ve antes del segundo clic. **Ventana**: pasa el ratón por un muro y se ve dónde queda.
+
+---
+
 ## 2026-10-21 (mediodía) · Bloque R: la revisión de Antonio (R12–R16)
 
 Rama `bloque/revision-r` (pull request para Antonio). Formato `.archisim` versión 21 (abre las anteriores tal cual).

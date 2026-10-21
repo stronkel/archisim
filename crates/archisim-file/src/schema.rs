@@ -107,9 +107,12 @@ pub(crate) struct ProjectFile {
     /// Loose edges of the concept phase (version 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edges: Vec<Edge>,
-    /// Paint on the faces of walls (version 21).
+    /// Paint on the faces of walls and volumes (version 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub face_paints: Vec<FacePaint>,
+    /// Painted zones of walls' faces (version 21).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paint_zones: Vec<PaintZoneOf>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -628,9 +631,21 @@ pub(crate) struct Road {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FacePaint {
+    pub element: u64,
+    /// A wall's `exterior` or `interior`; a volume's `top`, `bottom` or
+    /// `side 2` (the side on the edge from corner 2 to 3).
+    pub face: String,
+    pub material: u64,
+}
+
+/// A painted zone of a wall's face (version 21): its outline in metres
+/// along the wall (x) and up from the level (y).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PaintZoneOf {
     pub wall: u64,
-    /// `exterior` or `interior`.
     pub side: String,
+    pub outline: Vec<Xy>,
     pub material: u64,
 }
 
@@ -642,6 +657,9 @@ pub(crate) struct Edge {
     pub guid: String,
     pub level: u64,
     pub points: Vec<Xy>,
+    /// The height of each point (an edge drawn up a face); none, flat.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub heights: Vec<f64>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub elevation: f64,
 }
@@ -1915,10 +1933,20 @@ impl ProjectFile {
             face_paints: p
                 .face_paints
                 .iter()
-                .map(|(w, s, m)| FacePaint {
-                    wall: w.0,
-                    side: s.code().into(),
+                .map(|(e, f, m)| FacePaint {
+                    element: *e,
+                    face: f.code(),
                     material: m.0,
+                })
+                .collect(),
+            paint_zones: p
+                .paint_zones
+                .iter()
+                .map(|z| PaintZoneOf {
+                    wall: z.wall.0,
+                    side: z.side.code().into(),
+                    outline: z.outline.iter().copied().map(xy).collect(),
+                    material: z.material.0,
                 })
                 .collect(),
             edges: p
@@ -1929,6 +1957,11 @@ impl ProjectFile {
                     guid: e.guid.to_string(),
                     level: e.level.0,
                     points: e.points.iter().copied().map(xy).collect(),
+                    heights: if e.heights.iter().all(|h| h.abs() < 1e-12) {
+                        Vec::new()
+                    } else {
+                        e.heights.clone()
+                    },
                     elevation: e.elevation,
                 })
                 .collect(),
@@ -2372,6 +2405,7 @@ impl ProjectFile {
             masses: Vec::new(),
             edges: Vec::new(),
             face_paints: Vec::new(),
+            paint_zones: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -2647,13 +2681,25 @@ impl ProjectFile {
             });
         }
         for f in self.face_paints {
-            let side = core::FaceSide::from_code(&f.side).ok_or_else(|| FileError::Value {
-                element: format!("paint of wall {}", f.wall),
-                message: format!("unknown side «{}»", f.side),
+            let face = core::FaceRef::from_code(&f.face).ok_or_else(|| FileError::Value {
+                element: format!("paint of element {}", f.element),
+                message: format!("unknown face «{}»", f.face),
             })?;
             parts
                 .face_paints
-                .push((core::WallId(f.wall), side, core::MaterialId(f.material)));
+                .push((f.element, face, core::MaterialId(f.material)));
+        }
+        for z in self.paint_zones {
+            let side = core::FaceSide::from_code(&z.side).ok_or_else(|| FileError::Value {
+                element: format!("painted zone of wall {}", z.wall),
+                message: format!("unknown side «{}»", z.side),
+            })?;
+            parts.paint_zones.push(core::PaintZone {
+                wall: core::WallId(z.wall),
+                side,
+                outline: z.outline.into_iter().map(pt).collect(),
+                material: core::MaterialId(z.material),
+            });
         }
         for e in self.edges {
             let element = format!("edge {}", e.id);
@@ -2661,6 +2707,11 @@ impl ProjectFile {
                 id: core::EdgeId(e.id),
                 guid: guid(&element, &e.guid)?,
                 level: core::LevelId(e.level),
+                heights: if e.heights.is_empty() {
+                    vec![0.0; e.points.len()]
+                } else {
+                    e.heights
+                },
                 points: e.points.into_iter().map(pt).collect(),
                 elevation: e.elevation,
             });
