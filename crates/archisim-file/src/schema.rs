@@ -107,6 +107,12 @@ pub(crate) struct ProjectFile {
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
+    /// Plots (version 19).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plots: Vec<Plot>,
+    /// Roads (version 19).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roads: Vec<Road>,
     /// Drawing layers (version 7).
     pub draw_layers: Vec<crate::drafting::DrawLayer>,
     /// Lines, arcs, texts and hatches of the views (version 7).
@@ -535,6 +541,43 @@ pub(crate) struct ModuleSource {
     pub path: String,
     pub stamp: String,
     pub content: serde_json::Value,
+}
+
+/// A plot (version 19).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Plot {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub setback: f64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reference: String,
+}
+
+/// A road (version 19): its axis and cross-section.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Road {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub axis: Vec<Xy>,
+    pub carriageway: f64,
+    pub parking: f64,
+    pub kerb: f64,
+    pub sidewalk: f64,
+    pub kerb_height: f64,
+    pub depth: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub top_offset: f64,
+    pub pavement: u64,
+    pub kerb_material: u64,
+    pub sidewalk_material: u64,
 }
 
 /// A volume of the concept phase (version 18).
@@ -1839,6 +1882,40 @@ impl ProjectFile {
                 })
                 .collect(),
             plot_area: p.plot_area,
+            plots: p
+                .plots
+                .iter()
+                .map(|x| Plot {
+                    id: x.id.0,
+                    guid: x.guid.to_string(),
+                    name: x.name.clone(),
+                    level: x.level.0,
+                    outline: x.outline.iter().copied().map(xy).collect(),
+                    setback: x.setback,
+                    reference: x.reference.clone(),
+                })
+                .collect(),
+            roads: p
+                .roads
+                .iter()
+                .map(|r| Road {
+                    id: r.id.0,
+                    guid: r.guid.to_string(),
+                    name: r.name.clone(),
+                    level: r.level.0,
+                    axis: r.axis.iter().copied().map(xy).collect(),
+                    carriageway: r.section.carriageway,
+                    parking: r.section.parking,
+                    kerb: r.section.kerb,
+                    sidewalk: r.section.sidewalk,
+                    kerb_height: r.section.kerb_height,
+                    depth: r.section.depth,
+                    top_offset: r.top_offset,
+                    pavement: r.pavement.0,
+                    kerb_material: r.kerb_material.0,
+                    sidewalk_material: r.sidewalk_material.0,
+                })
+                .collect(),
             module_sources: p
                 .module_sources
                 .iter()
@@ -2177,6 +2254,8 @@ impl ProjectFile {
             modules: Vec::new(),
             masses: Vec::new(),
             plot_area: None,
+            plots: Vec::new(),
+            roads: Vec::new(),
             railings: self
                 .railings
                 .iter()
@@ -2481,6 +2560,40 @@ impl ProjectFile {
             });
         }
         parts.plot_area = self.plot_area;
+        for x in self.plots {
+            let element = format!("plot {} «{}»", x.id, x.name);
+            parts.plots.push(core::Plot {
+                id: core::PlotId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                outline: x.outline.into_iter().map(pt).collect(),
+                setback: x.setback,
+                reference: x.reference,
+            });
+        }
+        for r in self.roads {
+            let element = format!("road {} «{}»", r.id, r.name);
+            parts.roads.push(core::Road {
+                id: core::RoadId(r.id),
+                guid: guid(&element, &r.guid)?,
+                name: r.name,
+                level: core::LevelId(r.level),
+                axis: r.axis.into_iter().map(pt).collect(),
+                section: core::RoadSection {
+                    carriageway: r.carriageway,
+                    parking: r.parking,
+                    kerb: r.kerb,
+                    sidewalk: r.sidewalk,
+                    kerb_height: r.kerb_height,
+                    depth: r.depth,
+                },
+                top_offset: r.top_offset,
+                pavement: core::MaterialId(r.pavement),
+                kerb_material: core::MaterialId(r.kerb_material),
+                sidewalk_material: core::MaterialId(r.sidewalk_material),
+            });
+        }
         for s in self.module_sources {
             let element = format!("module {} «{}»", s.id, s.name);
             let text: std::sync::Arc<str> = crate::pretty(&s.content).into();

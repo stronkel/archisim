@@ -59,6 +59,7 @@ impl ArchiSimApp {
         self.draw_foundation_preview(&painter, rect);
         self.draw_module_preview(&painter, rect);
         self.draw_concept_preview(&painter, rect);
+        self.draw_urban_preview(&painter, rect);
         self.draw_space_preview(&painter, rect);
         self.draw_section_preview(&painter, rect);
         self.draw_roof_preview(&painter, rect);
@@ -112,7 +113,9 @@ impl ArchiSimApp {
             | Tool::Mass
             | Tool::PushPull
             | Tool::MassOffset
-            | Tool::Tape => CursorIcon::Crosshair,
+            | Tool::Tape
+            | Tool::Plot
+            | Tool::Road => CursorIcon::Crosshair,
             Tool::Paint => CursorIcon::PointingHand,
             Tool::Cad => match self.cad_want() {
                 Some(crate::cad::Want::Pick) => CursorIcon::Cell,
@@ -376,12 +379,20 @@ impl ArchiSimApp {
             | Tool::PushPull
             | Tool::MassOffset
             | Tool::Tape
-            | Tool::Paint => {
-                let points = self.concept_points();
+            | Tool::Paint
+            | Tool::Plot
+            | Tool::Road => {
+                let points = match self.tool {
+                    Tool::Plot => self.plot_tool.corners().to_vec(),
+                    Tool::Road => self.road_points.clone(),
+                    _ => self.concept_points(),
+                };
                 let mut s = self.snap_at(raw, reach, &points, &BTreeSet::new());
                 let anchor = match self.tool {
                     Tool::Beam => self.beam_tool.anchor,
                     Tool::Grid | Tool::Footing => self.foundation_anchor(),
+                    Tool::Plot => self.plot_tool.anchor(),
+                    Tool::Road => self.road_points.last().copied(),
                     _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
@@ -496,6 +507,7 @@ impl ArchiSimApp {
                             self.mass_tool.type_char(c)
                         }
                         Tool::PushPull | Tool::MassOffset => self.concept_type(c),
+                        Tool::Plot => self.plot_tool.type_char(c),
                         Tool::Wall => self.wall_tool.type_char(c),
                         Tool::Slab => self.slab_tool.type_char(c),
                         Tool::Zone => self.zone_tool.type_char(c),
@@ -524,6 +536,8 @@ impl ArchiSimApp {
                 Tool::Terrain => self.terrain_back(),
                 Tool::Mass => self.mass_tool.backspace(),
                 Tool::PushPull | Tool::MassOffset => self.concept_backspace(),
+                Tool::Plot => self.plot_tool.backspace(),
+                Tool::Road => self.road_points.pop().is_some(),
                 _ => false,
             };
         if !edited_length && (delete || backspace) && !drawing {
@@ -591,6 +605,13 @@ impl ArchiSimApp {
                 },
                 Tool::Terrain => self.finish_terrain(),
                 Tool::Mass | Tool::PushPull | Tool::MassOffset => self.concept_enter(),
+                Tool::Plot => match self.plot_tool.enter(towards) {
+                    SlabOutcome::Build(outline) => self.build_plot(outline),
+                    SlabOutcome::Invalid => self
+                        .complain("La linde necesita al menos tres esquinas y no puede cruzarse."),
+                    SlabOutcome::Nothing => {}
+                },
+                Tool::Road => self.finish_road(),
                 Tool::Railing => {
                     if let Some(c) = self.cursor {
                         if self.railing_points.len() == 1 {
@@ -649,6 +670,16 @@ impl ArchiSimApp {
                 }
                 Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
                     self.concept_escape()
+                }
+                Tool::Plot => {
+                    if !self.plot_tool.escape() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Road => {
+                    if self.road_points.pop().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
                 }
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
@@ -888,6 +919,27 @@ impl ArchiSimApp {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.module_click(c.point);
+                    }
+                }
+            }
+            Tool::Plot => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.plot_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.plot_tool.finish();
+                }
+            }
+            Tool::Road => {
+                if response.double_clicked_by(PointerButton::Primary)
+                    || response.clicked_by(PointerButton::Secondary)
+                {
+                    self.finish_road();
+                } else if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.road_click(c.point);
                     }
                 }
             }
@@ -1678,6 +1730,8 @@ impl ArchiSimApp {
             Tool::Beam => self.beam_tool.anchor,
             Tool::Grid | Tool::Footing => self.foundation_anchor(),
             Tool::Mass | Tool::Tape => self.concept_anchor(),
+            Tool::Plot => self.plot_tool.anchor(),
+            Tool::Road => self.road_points.last().copied(),
             Tool::Section => self.section_tool.anchor,
             Tool::CurtainWall => self.curtain_anchor,
             Tool::Railing => self.railing_points.last().copied(),
@@ -1709,6 +1763,8 @@ impl ArchiSimApp {
             Tool::Beam => self.beam_tool.anchor.into_iter().collect(),
             Tool::Grid | Tool::Footing => self.foundation_anchor().into_iter().collect(),
             Tool::Mass | Tool::Tape => self.concept_points(),
+            Tool::Plot => self.plot_tool.corners().to_vec(),
+            Tool::Road => self.road_points.clone(),
             _ => Vec::new(),
         }
     }

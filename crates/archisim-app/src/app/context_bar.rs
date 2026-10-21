@@ -176,6 +176,8 @@ fn element_name(e: &Element) -> &'static str {
         Element::Grid(_) => "Eje",
         Element::Module(_) => "Módulo",
         Element::Mass(_) => "Volumen",
+        Element::Plot(_) => "Parcela",
+        Element::Road(_) => "Vial",
     }
 }
 
@@ -266,6 +268,13 @@ impl ArchiSimApp {
                 Tool::MassOffset => ("Equidistancia", None, "Varita", ""),
                 Tool::Tape => ("Cinta", None, "Varita", ""),
                 Tool::Paint => ("Pintar", None, "Varita", ""),
+                Tool::Plot => (
+                    "Parcela",
+                    Some(outline(false, self.plot_tool.mode)),
+                    "Varita",
+                    "",
+                ),
+                Tool::Road => ("Vial", None, "Varita", ""),
                 Tool::Footing => return Some(("Cimentación", self.footing_methods())),
                 Tool::Arrow | Tool::Cad => return None,
             };
@@ -297,6 +306,7 @@ impl ArchiSimApp {
             Some(_) if o == Outline::Wand && self.tool == Tool::Slab && self.slab_settings.hole => {
                 MethodAct::None
             }
+            Some(_) if o == Outline::Wand && self.tool == Tool::Plot => MethodAct::None,
             Some(_) => MethodAct::Outline(o),
             None => MethodAct::None,
         };
@@ -555,6 +565,10 @@ impl ArchiSimApp {
                 Tool::Slab => set_outline(&mut self.slab_settings.wand, &mut self.slab_tool, o),
                 Tool::Roof => set_outline(&mut self.roof_settings.wand, &mut self.roof_tool, o),
                 Tool::Zone => set_outline(&mut self.room_settings.wand, &mut self.zone_tool, o),
+                Tool::Plot => {
+                    let mut wand = false;
+                    set_outline(&mut wand, &mut self.plot_tool, o)
+                }
                 _ => {}
             },
             MethodAct::Dim(mode) => {

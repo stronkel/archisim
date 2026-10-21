@@ -32,6 +32,8 @@ pub struct ImportReport {
     pub footings: usize,
     /// Setting-out grid lines (axes of `IfcGrid`).
     pub grids: usize,
+    pub plots: usize,
+    pub roads: usize,
     /// Curtain walls written by ArchiSim (`IfcCurtainWall`).
     pub curtain_walls: usize,
     /// Railings written by ArchiSim (`IfcRailing`).
@@ -179,6 +181,12 @@ impl ImportReport {
         }
         if self.footings > 0 {
             members.push_str(&format!(", {} cimentaciones", self.footings));
+        }
+        if self.plots > 0 {
+            members.push_str(&format!(", {} parcelas", self.plots));
+        }
+        if self.roads > 0 {
+            members.push_str(&format!(", {} viales", self.roads));
         }
         if self.grids > 0 {
             members.push_str(&format!(", {} ejes", self.grids));

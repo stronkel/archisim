@@ -895,7 +895,7 @@ impl ArchiSimApp {
             text_row(
                 ui,
                 "Edificabilidad",
-                "Construida entre la superficie de la parcela (en las propiedades de la herramienta Masa)",
+                "Construida entre la superficie de la parcela: la de las parcelas dibujadas o la escrita en las propiedades de las herramientas de Concepto",
                 &f.plot_ratio.map_or("— (sin parcela)".into(), |r| format!("{} m²/m²", comma(r, 2))),
             );
             text_row(
@@ -905,6 +905,14 @@ impl ArchiSimApp {
                 &f.coverage
                     .map_or("—".into(), |c| format!("{} %", comma(c * 100.0, 1))),
             );
+            if let Some(check) = self.mass_setback(&m.outline()) {
+                text_row(
+                    ui,
+                    "Parcela",
+                    "Si el volumen queda dentro del retranqueo de la parcela en la que está",
+                    check,
+                );
+            }
         });
         if matches!(m.shape, MassShape::Prism(_)) && !m.is_face() {
             group(ui, "mass-building", "Edificio", |ui| {

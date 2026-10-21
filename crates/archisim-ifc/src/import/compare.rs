@@ -373,6 +373,60 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
     if grids(a) != grids(b) {
         diff(format!("ejes: {:?} / {:?}", grids(a), grids(b)));
     }
+    if a.plots().count() != b.plots().count() {
+        diff(format!(
+            "número de parcelas: {} / {}",
+            a.plots().count(),
+            b.plots().count()
+        ));
+    }
+    for s in a.plots() {
+        let Some(t) = b.plots().find(|t| t.guid == s.guid) else {
+            diff(format!("parcela {} falta", s.guid));
+            continue;
+        };
+        let same = s.outline.len() == t.outline.len()
+            && s.outline
+                .iter()
+                .zip(&t.outline)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && close(s.setback, t.setback)
+            && s.name == t.name
+            && s.reference == t.reference
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("parcela {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
+    if a.roads().count() != b.roads().count() {
+        diff(format!(
+            "número de viales: {} / {}",
+            a.roads().count(),
+            b.roads().count()
+        ));
+    }
+    for s in a.roads() {
+        let Some(t) = b.roads().find(|t| t.guid == s.guid) else {
+            diff(format!("vial {} falta", s.guid));
+            continue;
+        };
+        let (x, y) = (s.section, t.section);
+        let same = s.axis.len() == t.axis.len()
+            && s.axis
+                .iter()
+                .zip(&t.axis)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && close(x.carriageway, y.carriageway)
+            && close(x.parking, y.parking)
+            && close(x.kerb, y.kerb)
+            && close(x.sidewalk, y.sidewalk)
+            && close(s.top_offset, t.top_offset)
+            && s.name == t.name
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("vial {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     if a.objects().count() != b.objects().count() {
         diff(format!(
             "número de objetos: {} / {}",

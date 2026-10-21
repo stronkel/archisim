@@ -140,37 +140,46 @@ impl Mass {
 
 /// A band `width` wide along a path, mitred at its corners.
 fn band(path: &[Point2], width: f64) -> Vec<Point2> {
-    if path.len() < 2 {
-        return Vec::new();
-    }
-    let h = width / 2.0;
+    strip(path, -width / 2.0, width / 2.0)
+}
+
+/// A path moved `d` to its left (negative: to its right), its segments
+/// parallel and meeting at mitred corners (a mitre at most five times as
+/// long as `d`).
+pub fn offset_path(path: &[Point2], d: f64) -> Option<Vec<Point2>> {
     let n = path.len();
+    if n < 2 {
+        return None;
+    }
     let dir = |i: usize| (path[i + 1] - path[i]).normalized();
-    let offset = |side: f64| -> Option<Vec<Point2>> {
-        let mut out = Vec::with_capacity(n);
-        for (i, &p) in path.iter().enumerate() {
-            let q = match (
-                i.checked_sub(1).and_then(dir),
-                (i + 1 < n).then(|| dir(i)).flatten(),
-            ) {
-                (None, Some(d)) | (Some(d), None) => p + d.perp_left() * (h * side),
-                (Some(a), Some(b)) => {
-                    let m = (a.perp_left() + b.perp_left()).normalized()?;
-                    let cos = m.x * a.perp_left().x + m.y * a.perp_left().y;
-                    p + m * (h * side / cos.max(0.2))
-                }
-                (None, None) => return None,
-            };
-            out.push(q);
-        }
-        Some(out)
-    };
-    let (Some(left), Some(mut right)) = (offset(1.0), offset(-1.0)) else {
+    let mut out = Vec::with_capacity(n);
+    for (i, &p) in path.iter().enumerate() {
+        let q = match (
+            i.checked_sub(1).and_then(dir),
+            (i + 1 < n).then(|| dir(i)).flatten(),
+        ) {
+            (None, Some(u)) | (Some(u), None) => p + u.perp_left() * d,
+            (Some(a), Some(b)) => {
+                let m = (a.perp_left() + b.perp_left()).normalized()?;
+                let cos = m.x * a.perp_left().x + m.y * a.perp_left().y;
+                p + m * (d / cos.max(0.2))
+            }
+            (None, None) => return None,
+        };
+        out.push(q);
+    }
+    Some(out)
+}
+
+/// The strip between the offsets `a` and `b` of a path (`a` < `b`, to
+/// its left), counter-clockwise.
+pub fn strip(path: &[Point2], a: f64, b: f64) -> Vec<Point2> {
+    let (Some(near), Some(mut far)) = (offset_path(path, a), offset_path(path, b)) else {
         return Vec::new();
     };
-    right.reverse();
-    let mut out = right;
-    out.extend(left);
+    far.reverse();
+    let mut out = near;
+    out.extend(far);
     if signed_area(&out) < 0.0 {
         out.reverse();
     }
@@ -352,8 +361,17 @@ impl Model {
             .unwrap_or_default()
     }
 
-    /// The plot area the plot ratio and coverage are worked out with, m².
+    /// The plot area the plot ratio and coverage are worked out with, m²:
+    /// the one written by hand or, without it, that of the plots drawn.
     pub fn plot_area(&self) -> Option<f64> {
+        self.plot_area.or_else(|| {
+            let a: f64 = self.plots().map(|p| p.area()).sum();
+            (a > EPSILON).then_some(a)
+        })
+    }
+
+    /// The plot area written by hand.
+    pub fn manual_plot_area(&self) -> Option<f64> {
         self.plot_area
     }
 

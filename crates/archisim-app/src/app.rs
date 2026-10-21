@@ -99,6 +99,10 @@ pub enum Tool {
     Tape,
     /// Gives a volume a material.
     Paint,
+    /// Plots, by their boundary.
+    Plot,
+    /// Roads, by their axis.
+    Road,
     /// A 2D drafting or editing command is running (AutoCAD's).
     Cad,
 }
@@ -129,13 +133,15 @@ impl Tool {
                 | Tool::MassOffset
                 | Tool::Tape
                 | Tool::Paint
+                | Tool::Plot
+                | Tool::Road
         )
     }
 
     /// The tool a key selects (with the ArchiCAD keys): M muro, F forjado,
     /// P puerta, V ventana, C cota, I pilar, G viga, Z local, S sección,
     /// T cubierta, E escalera, R terreno, U muro cortina, B barandilla,
-    /// O objeto, X ejes, A cimentación, K módulo.
+    /// O objeto, X ejes, A cimentación, K módulo, Y parcela, W vial.
     pub(super) fn from_key(text: &str) -> Option<Tool> {
         match text.to_lowercase().as_str() {
             "m" => Some(Tool::Wall),
@@ -156,6 +162,8 @@ impl Tool {
             "x" => Some(Tool::Grid),
             "a" => Some(Tool::Footing),
             "k" => Some(Tool::Module),
+            "y" => Some(Tool::Plot),
+            "w" => Some(Tool::Road),
             _ => None,
         }
     }
@@ -247,6 +255,12 @@ pub struct ArchiSimApp {
     pub mass_tool: SlabTool,
     pub mass_settings: crate::editor::MassSettings,
     pub concept: concept_ui::ConceptState,
+    /// The boundary of the plot being drawn and the setback of the next.
+    pub plot_tool: SlabTool,
+    pub plot_setback: f64,
+    /// The axis of the road being drawn and what the road tool draws.
+    pub road_points: Vec<Point2>,
+    pub road_settings: urban_ui::RoadSettings,
     pub module_watch: module_ui::ModuleWatch,
     pub section_tool: section_ui::SectionTool,
     /// The section shown: its drawing (worked out once per revision) and
@@ -457,6 +471,7 @@ impl ArchiSimApp {
         let (column_settings, beam_settings) = default_member_settings(ed.model());
         let footing_settings = crate::editor::FootingSettings::new(ed.model());
         let mass_settings = crate::editor::MassSettings::new(ed.model());
+        let road_settings = urban_ui::RoadSettings::new(ed.model());
         let roof_settings = roof_ui::default_roof_settings(ed.model());
         let stair_settings = crate::editor::default_stair_settings(ed.model());
         let level = ed.level;
@@ -483,6 +498,10 @@ impl ArchiSimApp {
             mass_tool: SlabTool::default(),
             mass_settings,
             concept: Default::default(),
+            plot_tool: SlabTool::default(),
+            plot_setback: 3.0,
+            road_points: Vec::new(),
+            road_settings,
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_hover: None,
@@ -629,6 +648,8 @@ impl ArchiSimApp {
             self.footing_anchor = None;
             self.mass_tool.finish();
             self.concept.finish();
+            self.plot_tool.finish();
+            self.road_points.clear();
             self.zone_tool.finish();
             self.roof_tool.finish();
             self.stair_tool.points.clear();
@@ -670,6 +691,9 @@ impl ArchiSimApp {
         self.mass_settings = crate::editor::MassSettings::new(ed.model());
         self.mass_tool.finish();
         self.concept.finish();
+        self.plot_tool.finish();
+        self.road_points.clear();
+        self.road_settings = urban_ui::RoadSettings::new(ed.model());
         self.ed = ed;
         self.drag = None;
         self.wall_tool.finish();
@@ -1927,6 +1951,7 @@ mod thumbs;
 mod toolbox;
 mod type_views;
 mod types_ui;
+mod urban_ui;
 mod view3d_ui;
 mod widgets;
 pub use tabs::{TabKind, ViewTab};

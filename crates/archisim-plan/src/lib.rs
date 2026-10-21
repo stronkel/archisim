@@ -41,6 +41,7 @@ pub mod section;
 pub mod sheet;
 pub mod stairs;
 pub mod terrain;
+pub mod urban;
 
 use std::fmt::Write as _;
 
@@ -451,6 +452,16 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             marker_points.extend(m.outline());
         }
     }
+    if show(archisim_core::Category::Plots) {
+        for p in model.plots_on_level(level) {
+            marker_points.extend(p.outline.iter().copied());
+        }
+    }
+    if show(archisim_core::Category::Roads) {
+        for r in model.roads_on_level(level) {
+            marker_points.extend(r.outline());
+        }
+    }
     let all_points = all_points
         .chain(annotation_points.iter())
         .chain(marker_points.iter())
@@ -518,6 +529,13 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     {
         dim::element(&mut s, t.id.0, |s| terrain::draw_terrain(s, t, k));
     }
+    if show(archisim_core::Category::Roads) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        urban::draw_roads(&mut s, model, level, k, &vis);
+    }
     for (si, slab) in slabs.iter().enumerate() {
         dim::element(&mut s, slab.id.0, |s| {
             draw_slab(s, model, slab, si, options.cut_plane, k)
@@ -572,6 +590,13 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         concept::draw_masses(&mut s, model, level, k, &vis);
+    }
+    if show(archisim_core::Category::Plots) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        urban::draw_plots(&mut s, model, level, k, &vis);
     }
     if show(archisim_core::Category::Grids) {
         grids::draw_grids(&mut s, model, k);

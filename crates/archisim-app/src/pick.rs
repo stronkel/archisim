@@ -47,6 +47,9 @@ pub enum Element {
     Module(archisim_core::ModuleId),
     /// A volume of the concept phase.
     Mass(archisim_core::MassId),
+    /// A plot, picked by its boundary or inside it if nothing else is.
+    Plot(archisim_core::PlotId),
+    Road(archisim_core::RoadId),
 }
 
 /// Whether a closed polygon contains a point (ray casting).
@@ -122,6 +125,8 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Grid(id) => model.grid(id).map(grid_outline),
         Element::Module(id) => Some(model.module_outline(id)).filter(|o| o.len() > 2),
         Element::Mass(id) => model.mass(id).map(|m| m.outline()),
+        Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
+        Element::Road(id) => model.road(id).map(|r| r.outline()),
     }
 }
 
@@ -400,6 +405,8 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.rooms_on_level(level).map(|r| Element::Room(r.id)));
     v.extend(model.modules_on_level(level).map(|m| Element::Module(m.id)));
     v.extend(model.masses_on_level(level).map(|m| Element::Mass(m.id)));
+    v.extend(model.roads_on_level(level).map(|r| Element::Road(r.id)));
+    v.extend(model.plots_on_level(level).map(|p| Element::Plot(p.id)));
     v
 }
 
@@ -435,7 +442,9 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Footing(_)
         | Element::Grid(_)
         | Element::Module(_)
-        | Element::Mass(_) => None,
+        | Element::Mass(_)
+        | Element::Plot(_)
+        | Element::Road(_) => None,
     }
 }
 
@@ -483,6 +492,9 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Module(_) => 5,
         // In the concept phase the volumes are what is worked on.
         Element::Mass(_) => 2,
+        Element::Road(_) => 5,
+        // The ground everything stands on: last.
+        Element::Plot(_) => 7,
         Element::Terrain(_) => 6,
     };
     let k = paper_k();
@@ -579,6 +591,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Object(id) => Element::Object(id),
         SolidOwner::Footing(id) => Element::Footing(id),
         SolidOwner::Mass(id) => Element::Mass(id),
+        SolidOwner::Road(id) => Element::Road(id),
     }
 }
 
@@ -600,6 +613,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Object(id) => SolidOwner::Object(id),
         Element::Footing(id) => SolidOwner::Footing(id),
         Element::Mass(id) => SolidOwner::Mass(id),
+        Element::Road(id) => SolidOwner::Road(id),
         _ => return None,
     })
 }

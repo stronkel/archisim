@@ -622,6 +622,7 @@ impl ArchiSimApp {
             Tool::CurtainWall => "Clic: inicio del muro cortina · Esc: flecha",
             Tool::Grid | Tool::Footing => self.foundation_hint(),
             Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
+            Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Module => "Clic: colocar una copia (su origen en el punto) · Espacio: girar 90° · Propiedades: simetría · Esc: flecha",
             Tool::Object => "Clic: colocar el objeto (lado de atrás en el punto) · Espacio: girar 90° · Esc: flecha",
             Tool::Railing if self.railing_points.is_empty() => "Clic: inicio de la barandilla · Esc: flecha",

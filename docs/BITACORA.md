@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-20 (noche, 6) · Urbanismo: parcela, vial y forma
+
+Rama `bloque/urbanismo` (sale de la de Concepto; pull request para Antonio). Formato `.archisim` **versión 19**: parcelas y viales. Los proyectos anteriores se abren igual.
+
+**Hecho**
+- **Parcela** (Urbanismo → Parcela, tecla **Y**): la linde por sus esquinas (o rectángulo, en la barra contextual), con su **retranqueo** (3 m por defecto). En planta, la linde en trazo y dos puntos, el retranqueo discontinuo dentro y, en el centro, nombre, superficie y referencia catastral. En Propiedades: nombre, referencia catastral, retranqueo, superficie, perímetro, área edificable y la edificabilidad de las masas que tiene encima.
+- **Las masas toman la superficie de las parcelas**: sin escribirla a mano, la edificabilidad y la ocupación salen de las parcelas dibujadas. Propiedades de la masa dice si queda **dentro del retranqueo** o se sale.
+- **Vial** (tecla **W**): el eje por puntos (doble clic o Enter para terminar) con una **sección tipo** en Propiedades: calzada (6 m), aparcamiento (2,20 m a cada lado; 0 para quitarlo), bordillo y acera; altura del bordillo, firme y rasante; materiales de calzada, bordillo y acera. En planta: calzada y aparcamiento con sus plazas cada 2,50 m, bordillos, aceras y el eje; en 3D, la calzada con su firme y las aceras subidas sobre el bordillo. Propiedades mide la longitud y los m² de calzada, aparcamiento y acera.
+- **Forma** (ya en la entrega anterior): volúmenes del entorno con la herramienta Volumen.
+- **IFC**: cada parcela es un `IfcSite` dentro del emplazamiento con su linde, la referencia catastral (`LandTitleNumber`) y su superficie; cada vial, en IFC 4.3, un `IfcRoad` con `IfcPavement` (calzada, aparcamiento y aceras) e `IfcKerb`; en IFC4 (que no tiene esas clases) van como objetos genéricos en el emplazamiento. Las parcelas y los viales se leen de vuelta al importar (las parcelas, de cualquier programa).
+- La urbanización de la demo trae dos parcelas con su referencia catastral y la «Calle de la Huerta» entre ellas.
+
+**Pendiente**
+- Los viales no tienen aún curvas ni cruces (cada tramo es recto y los encuentros se solapan) ni pendiente longitudinal.
+- La parcela no sale todavía en las mediciones ni en un capítulo «Urbanización» del BC3; tampoco los viales.
+- Zonas verdes y pavimentos exteriores por contorno, mobiliario urbano.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y abre `out/demo-masterplan.archisim`: dos parcelas (A y B) con su linde, retranqueo y referencia, y la calle entre ellas.
+2. Pincha la masa «Bloque de viviendas»: en Propiedades, la edificabilidad sale ahora de las parcelas y dice si está dentro del retranqueo.
+3. Pulsa **Y** y dibuja una parcela; cambia su retranqueo y su referencia catastral en Propiedades.
+4. Pulsa **W**, pon el aparcamiento a 0 en Propiedades y dibuja un vial con dos tramos; míralo en 3D (F3).
+5. Abre `out/demo-masterplan.ifc` en ArchiCAD o Revit: las parcelas como emplazamientos y la calle como vial con su pavimento y bordillos.
+
+---
+
 ## 2026-10-20 (noche, 5) · Interfaz por disciplinas, bloque I4: Concepto
 
 Rama `bloque/concepto` (sale de la de módulos; pull request para Antonio). Formato `.archisim` **versión 18**: volúmenes de concepto y superficie de la parcela. Los proyectos anteriores se abren igual. Sin cambios en el IFC (los volúmenes no se exportan, como las masas de Revit).

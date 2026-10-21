@@ -192,6 +192,10 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     archisim_file::save(&master, &master_path)?;
     let ifc_path = dir.join("demo-masterplan.ifc");
     std::fs::write(&ifc_path, ifc_text(&master, "demo-masterplan", None))?;
+    std::fs::write(
+        dir.join("demo-masterplan-ifc4.ifc"),
+        ifc_text_in(&master, "demo-masterplan", None, archisim_ifc::Schema::Ifc4),
+    )?;
     println!(
         "  Urbanización con {} copias de la vivienda: {} y {}",
         master.modules().count(),
