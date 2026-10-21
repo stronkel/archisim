@@ -16,6 +16,8 @@ pub struct Item {
     pub fill: Option<[u8; 3]>,
     /// How opaque the fill is, 0 to 1 (see-through canopies).
     pub fill_opacity: f64,
+    /// How opaque the stroke is.
+    pub stroke_opacity: f64,
     /// Stroke colour and width (user units), if stroked.
     pub stroke: Option<([u8; 3], f64)>,
     /// Dash pattern in user units.
@@ -171,6 +173,7 @@ fn walk(
                 .sqrt();
             let fill = p.fill().map(|f| color(f.paint()));
             let fill_opacity = p.fill().map_or(1.0, |f| f.opacity().get() as f64);
+            let stroke_opacity = p.stroke().map_or(1.0, |f| f.opacity().get() as f64);
             let even_odd = p
                 .fill()
                 .is_some_and(|f| f.rule() == usvg::FillRule::EvenOdd);
@@ -187,6 +190,7 @@ fn walk(
                 subpaths,
                 fill,
                 fill_opacity,
+                stroke_opacity,
                 stroke,
                 dashes,
                 even_odd,

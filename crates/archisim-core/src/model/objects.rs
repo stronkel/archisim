@@ -13,11 +13,12 @@ use super::*;
 /// Families whose objects ArchiSim places on a level: furniture, sanitary
 /// ware, kitchen units, the site (vegetation, street furniture), people
 /// and vehicles.
-pub const OBJECT_CATEGORIES: [&str; 6] = [
+pub const OBJECT_CATEGORIES: [&str; 7] = [
     "furniture",
     "sanitary",
     "kitchen",
     "site",
+    "street",
     "people",
     "vehicle",
 ];
@@ -43,6 +44,9 @@ pub struct Object {
     /// Turn of the family's `x` axis from the plan's, counter-clockwise.
     pub rotation: f64,
     pub base_offset: f64,
+    /// Its own values of the family's instance parameters (how a tree's
+    /// canopy is drawn…); those left out take the family's default.
+    pub values: Values,
 }
 
 /// Data needed to place an object.
@@ -90,10 +94,48 @@ impl Model {
                 }
             }
         }
+        let instance = self.family_defaults(family, ParamScope::Instance)?;
         fam.def()
-            .evaluate(values, &Values::new(), &Values::new())
+            .evaluate(values, &instance, &Values::new())
             .map(|_| ())
             .map_err(ModelError::Family)
+    }
+
+    /// An object's instance values: its own over the family's defaults.
+    pub fn object_values(&self, id: ObjectId) -> Values {
+        let Some(o) = self.objects.get(&id) else {
+            return Values::new();
+        };
+        let Some(family) = self.object_types.get(&o.object_type).map(|t| t.family) else {
+            return Values::new();
+        };
+        let Ok(mut v) = self.family_defaults(family, ParamScope::Instance) else {
+            return Values::new();
+        };
+        for (k, x) in &o.values {
+            if v.contains_key(k) {
+                v.insert(k.clone(), x.clone());
+            }
+        }
+        v
+    }
+
+    /// Sets an object's own instance values (checked against its family).
+    pub fn set_object_values(&mut self, id: ObjectId, values: Values) -> Result<(), ModelError> {
+        let o = self.objects.get(&id).ok_or(ModelError::UnknownObject(id))?;
+        let t = self
+            .object_types
+            .get(&o.object_type)
+            .ok_or(ModelError::UnknownObjectType(o.object_type))?;
+        let def = self.object_family(t.family)?.def();
+        let mut all = self.family_defaults(t.family, ParamScope::Instance)?;
+        all.extend(values.clone());
+        def.evaluate(&t.values, &all, &Values::new())
+            .map_err(ModelError::Family)?;
+        if let Some(o) = self.objects.get_mut(&id) {
+            o.values = values;
+        }
+        Ok(())
     }
 
     /// A new object type of a family (furniture, sanitary or kitchen).
@@ -133,6 +175,28 @@ impl Model {
         if let Some(t) = self.object_types.get_mut(&id) {
             t.values = values;
         }
+        Ok(())
+    }
+
+    /// Gives an object type a `GlobalId` of its own choosing (a library
+    /// made always the same, as the extended library is).
+    pub fn set_object_type_guid(
+        &mut self,
+        id: ObjectTypeId,
+        guid: GlobalId,
+    ) -> Result<(), ModelError> {
+        if self
+            .object_types
+            .values()
+            .any(|t| t.id != id && t.guid == guid)
+        {
+            return Err(ModelError::DuplicateGuid(guid.to_string()));
+        }
+        let t = self
+            .object_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownObjectType(id))?;
+        t.guid = guid;
         Ok(())
     }
 
@@ -177,6 +241,7 @@ impl Model {
                 position: spec.position,
                 rotation: spec.rotation,
                 base_offset: spec.base_offset,
+                values: Values::new(),
             },
         );
         self.stamp_phase(id.0);
@@ -225,9 +290,10 @@ impl Model {
             .object_types
             .get(&o.object_type)
             .ok_or(ModelError::UnknownObjectType(o.object_type))?;
+        let values = self.object_values(id);
         self.object_family(t.family)?
             .def()
-            .evaluate(&t.values, &Values::new(), &Values::new())
+            .evaluate(&t.values, &values, &Values::new())
             .map_err(ModelError::Family)
     }
 
@@ -241,7 +307,7 @@ impl Model {
             .ok_or(ModelError::UnknownObjectType(o.object_type))?;
         self.object_family(t.family)?
             .def()
-            .evaluate_plan(&t.values, &Values::new(), &Values::new(), scale)
+            .evaluate_plan(&t.values, &self.object_values(id), &Values::new(), scale)
             .map_err(ModelError::Family)
     }
 
@@ -268,7 +334,7 @@ impl Model {
             .collect();
         family
             .def()
-            .evaluate_presentation(&t.values, &Values::new(), &builtins)
+            .evaluate_presentation(&t.values, &self.object_values(id), &builtins)
             .map(|r| r.map_err(ModelError::Family))
     }
 
@@ -276,11 +342,12 @@ impl Model {
     /// highest `x` and `y` of its parts.
     pub fn object_type_box(&self, id: ObjectTypeId) -> Option<([f64; 2], [f64; 2])> {
         let t = self.object_types.get(&id)?;
+        let instance = self.family_defaults(t.family, ParamScope::Instance).ok()?;
         let ev = self
             .object_family(t.family)
             .ok()?
             .def()
-            .evaluate(&t.values, &Values::new(), &Values::new())
+            .evaluate(&t.values, &instance, &Values::new())
             .ok()?;
         let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
         for p in &ev.parts {
@@ -360,6 +427,67 @@ fn spec_of(o: &Object) -> NewObject {
 mod tests {
     use super::*;
 
+    /// Every way of drawing a tree's canopy draws, as the tree's own
+    /// choice or its type's.
+    #[test]
+    fn every_canopy_draws() {
+        let mut m = Model::new("t");
+        let pb = m.add_level("PB", 0.0);
+        m.add_material(
+            "Vegetación",
+            "vegetation",
+            [126, 164, 98],
+            CutPattern::Solid,
+        );
+        m.add_material("Corteza", "wood", [112, 86, 62], CutPattern::Solid);
+        let f = m.system_family("Árbol").unwrap();
+        let values = m.family_defaults(f, ParamScope::Type).unwrap();
+        let t = m.add_object_type("Árbol", f, values).unwrap();
+        let o = m
+            .add_object(NewObject {
+                level: pb,
+                object_type: t,
+                position: Point2::new(0.0, 0.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        for shape in [
+            "lóbulos",
+            "círculo",
+            "acuarela",
+            "ramas",
+            "follaje",
+            "palmera",
+            "conífera",
+        ] {
+            for look in ["transparente", "rellena", "contorno"] {
+                let v: Values = [
+                    ("shape_own".to_string(), Value::Text(shape.into())),
+                    ("look_own".to_string(), Value::Text(look.into())),
+                    ("opacity_own".to_string(), Value::Number(0.8)),
+                ]
+                .into_iter()
+                .collect();
+                m.set_object_values(o, v).unwrap();
+                let marks = m.object_presentation_symbol(o).unwrap().unwrap();
+                assert!(marks.len() >= 2, "{shape} {look}");
+                let tinted = marks
+                    .iter()
+                    .any(|k| matches!(k, Mark::Polygon { tint: Some(_), .. }));
+                assert!(tinted, "the trunk at least: {shape} {look}");
+            }
+        }
+        assert!(m
+            .set_object_values(
+                o,
+                [("shape_own".to_string(), Value::Text("cuadrada".into()))]
+                    .into_iter()
+                    .collect()
+            )
+            .is_err());
+    }
+
     #[test]
     fn every_object_family_places_and_draws() {
         let mut m = Model::new("t");
@@ -386,7 +514,16 @@ mod tests {
             let category = m.family(f).unwrap().def().category.clone();
             // Trees, shrubs and people stand on their point.
             let centred = name == "Mesa" || category == "people" || {
-                category == "site" && name != "Seto" && name != "Banco"
+                (category == "site" && name != "Seto")
+                    || matches!(
+                        name.as_str(),
+                        "Farola"
+                            | "Papelera"
+                            | "Bolardo"
+                            | "Alcorque"
+                            | "Aparcabicis"
+                            | "Señal de tráfico"
+                    )
             };
             for p in &ev.parts {
                 // On the floor; against the wall (nothing behind the

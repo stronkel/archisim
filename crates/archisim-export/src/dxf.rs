@@ -485,6 +485,7 @@ impl Dxf {
                         scale: 1.0,
                         angle: 0.0,
                         background: None,
+                        opacity: 1.0,
                     }));
                 }
                 parts.push(Shape::Text(dd.text));
@@ -1016,6 +1017,7 @@ mod tests {
                 scale: 1.0,
                 angle: 0.0,
                 background: None,
+                opacity: 1.0,
             }),
         ))
         .unwrap();

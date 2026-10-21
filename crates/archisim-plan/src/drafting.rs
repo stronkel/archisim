@@ -254,6 +254,21 @@ pub(crate) fn draw_hatch(
     width: &str,
     k: f64,
 ) {
+    if h.opacity < 0.999 {
+        // See-through: every path of the hatch at its opacity.
+        let mut t = String::new();
+        draw_hatch_paths(&mut t, h, color, width, k);
+        let a = num(h.opacity.clamp(0.05, 1.0));
+        s.push_str(&t.replace(
+            "/>\n",
+            &format!(r#" fill-opacity="{a}" stroke-opacity="{a}"/>"#).replace("/>", "/>\n"),
+        ));
+        return;
+    }
+    draw_hatch_paths(s, h, color, width, k);
+}
+
+fn draw_hatch_paths(s: &mut String, h: &archisim_core::Hatch, color: &str, width: &str, k: f64) {
     let polys = hatch::hatch_polygons(h);
     let mut outline = String::new();
     for p in &polys {

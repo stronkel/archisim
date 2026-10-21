@@ -4583,3 +4583,93 @@ fn presentation_boards() {
         .unwrap();
     assert_eq!(h.model().sun().day, 355);
 }
+
+/// Antonio's review of the P block: Vegetación and Mobiliario urbano open
+/// on their own part of the library; a tree's canopy is chosen tree by
+/// tree; fills are drawn directly (rectangle, polygon, circle…) with
+/// their opacity.
+#[test]
+fn vegetation_street_furniture_and_direct_fills() {
+    use super::object_gallery::ObjectScope;
+    use super::toolbox::Pick;
+    let mut h = Harness::new(Editor::new_project());
+    // Vegetación: the object tool with a tree, not furniture.
+    h.app.pick(Pick::Objects(ObjectScope::Vegetation));
+    h.frame();
+    assert_eq!(h.app.tool, Tool::Object);
+    let t = h.app.object_settings.object_type.unwrap();
+    assert_eq!(
+        h.model().object_type(t).unwrap().name,
+        "Árbol de hoja caduca 6 m"
+    );
+    h.click_at(p(2.0, 2.0));
+    let tree = h.model().objects().last().unwrap().id;
+    // Mobiliario urbano: a street lamp.
+    h.app.pick(Pick::Objects(ObjectScope::Street));
+    h.frame();
+    let t = h.app.object_settings.object_type.unwrap();
+    assert_eq!(h.model().object_type(t).unwrap().name, "Farola 4,5 m");
+    assert_eq!(h.app.object_type_category(t), Some("Mobiliario urbano"));
+    h.click_at(p(6.0, 2.0));
+    assert_eq!(h.model().objects().count(), 2);
+    // The tree drawn its own way, in a technical plan too.
+    let own: archisim_core::Values = [
+        (
+            "drawing".to_string(),
+            archisim_core::Value::Text("presentación".into()),
+        ),
+        (
+            "shape_own".to_string(),
+            archisim_core::Value::Text("acuarela".into()),
+        ),
+        (
+            "opacity_own".to_string(),
+            archisim_core::Value::Number(0.35),
+        ),
+    ]
+    .into_iter()
+    .collect();
+    h.app.ed.set_object_values(tree, own).unwrap();
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Object(tree)].into_iter().collect();
+    h.frame();
+    let level = h.app.ed.level;
+    let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(svg.contains("fill-opacity"), "washes");
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    // A fill drawn as a rectangle, half see-through, in one go.
+    h.app.keys_autocad = true;
+    h.app.cad_settings.hatch_pattern = archisim_core::HatchPattern::Stone;
+    h.app.cad_settings.hatch_opacity = 0.5;
+    h.app.start_command("RELLRECT");
+    h.click_at(p(10.0, 0.0));
+    h.click_at(p(14.0, 3.0));
+    h.frame();
+    let fill = h
+        .model()
+        .drafts()
+        .find_map(|d| match &d.shape {
+            archisim_core::Shape::Hatch(x) => Some(x.clone()),
+            _ => None,
+        })
+        .expect("a fill");
+    assert_eq!(fill.pattern, archisim_core::HatchPattern::Stone);
+    assert!((fill.opacity - 0.5).abs() < 1e-9);
+    assert!((archisim_core::signed_area(&fill.loops[0].points).abs() - 12.0).abs() < 1e-6);
+    // A polygon fill: three clicks and Enter.
+    h.app.start_command("RELLPOLIG");
+    h.click_at(p(10.0, 5.0));
+    h.click_at(p(14.0, 5.0));
+    h.click_at(p(12.0, 8.0));
+    h.key(Key::Enter);
+    h.frame();
+    let fills = h
+        .model()
+        .drafts()
+        .filter(|d| matches!(d.shape, archisim_core::Shape::Hatch(_)))
+        .count();
+    assert_eq!(fills, 2);
+    let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
+    assert!(svg.contains("fill-opacity=\"0.5\""));
+}

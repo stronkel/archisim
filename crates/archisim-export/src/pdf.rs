@@ -148,20 +148,21 @@ fn content(tree: &resvg::usvg::Tree, hpt: f64, pt_per_px: f64) -> (String, Vec<f
     // drawing asks (rounded to a hundredth).
     let mut alphas: Vec<f64> = Vec::new();
     let items = paths::items(tree);
-    let see_through = items
-        .iter()
-        .any(|it| it.fill.is_some() && it.fill_opacity < 0.995);
+    let alpha = |it: &Item| {
+        if it.fill.is_some() {
+            it.fill_opacity
+        } else {
+            it.stroke_opacity
+        }
+    };
+    let see_through = items.iter().any(|it| alpha(it) < 0.995);
     if see_through {
         alphas.push(1.0);
     }
     let mut current = 0;
     for it in items {
         if see_through {
-            let a = if it.fill.is_some() {
-                (it.fill_opacity * 100.0).round() / 100.0
-            } else {
-                1.0
-            };
+            let a = (alpha(&it) * 100.0).round() / 100.0;
             let k = match alphas.iter().position(|x| (x - a).abs() < 1e-9) {
                 Some(k) => k,
                 None => {

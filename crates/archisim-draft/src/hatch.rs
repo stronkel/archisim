@@ -556,6 +556,7 @@ mod tests {
             scale: 1.0,
             angle: 0.0,
             background: None,
+            opacity: 1.0,
         }
     }
 

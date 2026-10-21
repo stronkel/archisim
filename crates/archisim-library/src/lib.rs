@@ -694,6 +694,8 @@ pub enum StudioValue {
 }
 use StudioValue::{B, N, T};
 
+pub mod extended;
+
 /// Adds the studio's usual door and window types, with the materials they
 /// need (a subframe of galvanised steel, a stone sill).
 pub fn add_studio_types(m: &mut Model) -> Result<Vec<OpeningTypeId>, ModelError> {
@@ -741,7 +743,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 33] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 47] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -823,6 +825,26 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 33] = [
             ("trunk", 0.4),
         ],
     ),
+    (
+        "Olivo 5 m",
+        "Árbol",
+        &[
+            ("height", 5.0),
+            ("crown", 5.0),
+            ("trunk_h", 1.6),
+            ("trunk", 0.45),
+        ],
+    ),
+    (
+        "Ciprés 8 m",
+        "Árbol",
+        &[
+            ("height", 8.0),
+            ("crown", 1.4),
+            ("trunk_h", 0.6),
+            ("trunk", 0.25),
+        ],
+    ),
     ("Arbusto 120", "Arbusto", &[]),
     ("Seto 3 m", "Seto", &[]),
     ("Banco con respaldo", "Banco", &[]),
@@ -835,26 +857,72 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 33] = [
         &[("length", 5.20), ("width", 2.0), ("height", 2.0)],
     ),
     ("Bicicleta", "Bicicleta", &[]),
+    ("Farola 4,5 m", "Farola", &[]),
+    (
+        "Farola de vial 9 m",
+        "Farola",
+        &[
+            ("height", 9.0),
+            ("arm", 1.6),
+            ("pole", 0.18),
+            ("lamp", 0.7),
+            ("glow", 7.0),
+        ],
+    ),
+    (
+        "Baliza de jardín",
+        "Farola",
+        &[
+            ("height", 0.9),
+            ("arm", 0.0),
+            ("pole", 0.15),
+            ("lamp", 0.15),
+            ("glow", 1.2),
+        ],
+    ),
+    ("Buzón", "Buzón", &[]),
+    ("Papelera", "Papelera", &[]),
+    ("Bolardo", "Bolardo", &[]),
+    ("Fuente de beber", "Fuente de beber", &[]),
+    ("Aparcabicis 5 plazas", "Aparcabicis", &[]),
+    ("Contenedor de residuos", "Contenedor de residuos", &[]),
+    ("Señal de tráfico", "Señal de tráfico", &[]),
+    ("Jardinera 120", "Jardinera", &[]),
+    ("Alcorque 120", "Alcorque", &[]),
 ];
 
 /// The leaves of each species (a material of [`object_materials`]) and
 /// how the canopy is drawn in presentation plans, where it is not the
 /// family's own.
-const SPECIES: &[(&str, &str, &str)] = &[
-    ("Palmera", "Copa clara", "transparente"),
-    ("Árbol en flor 5 m", "Copa en flor", "transparente"),
-    ("Árbol otoñal 8 m", "Copa otoñal", "transparente"),
-    ("Pino 10 m", "Copa oscura", "rellena"),
+const SPECIES: &[(&str, &str, &str, &str)] = &[
+    ("Árbol grande 12 m", "Vegetación", "ramas", "transparente"),
+    ("Palmera", "Copa clara", "palmera", "transparente"),
+    (
+        "Árbol en flor 5 m",
+        "Copa en flor",
+        "acuarela",
+        "transparente",
+    ),
+    ("Árbol otoñal 8 m", "Copa otoñal", "follaje", "transparente"),
+    ("Pino 10 m", "Copa oscura", "conífera", "rellena"),
+    ("Olivo 5 m", "Copa olivo", "follaje", "transparente"),
+    ("Ciprés 8 m", "Copa oscura", "círculo", "rellena"),
 ];
 
 /// The materials the library's objects ask for by name, added if the
 /// project has none of that name.
 fn object_materials(m: &mut Model) {
     for (name, category, color) in [
+        ("Metal lacado", "metal", [86, 92, 100]),
+        ("Hormigón prefabricado", "concrete", [196, 192, 184]),
+        ("Plástico verde", "plastic", [62, 112, 74]),
+        ("Agua", "water", [128, 192, 222]),
+        ("Luz", "other", [255, 226, 150]),
         ("Copa clara", "vegetation", [176, 204, 120]),
         ("Copa oscura", "vegetation", [70, 112, 82]),
         ("Copa otoñal", "vegetation", [214, 150, 74]),
         ("Copa en flor", "vegetation", [226, 160, 182]),
+        ("Copa olivo", "vegetation", [150, 164, 122]),
         ("Porcelana", "ceramic", [244, 244, 240]),
         ("Madera de pino", "wood", [196, 160, 112]),
         ("Vegetación", "vegetation", [126, 164, 98]),
@@ -883,10 +951,11 @@ pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, Model
     for (k, v) in sizes.iter() {
         values.insert((*k).into(), Value::Number(*v));
     }
-    if let Some((_, leaves, look)) = SPECIES.iter().find(|e| e.0 == *name) {
+    if let Some((_, leaves, shape, look)) = SPECIES.iter().find(|e| e.0 == *name) {
         if let Some(mat) = m.materials().find(|x| x.name == *leaves) {
             values.insert("leaves".into(), Value::Material(mat.id.0));
         }
+        values.insert("shape".into(), Value::Text((*shape).into()));
         values.insert("look".into(), Value::Text((*look).into()));
     }
     m.add_object_type(*name, f, values)

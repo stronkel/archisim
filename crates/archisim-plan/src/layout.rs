@@ -357,6 +357,7 @@ pub fn sun_path(m: &Model, c: Point2, r: f64) -> Vec<(Shape, bool)> {
                 scale: 1.0,
                 angle: 0.0,
                 background: None,
+                opacity: 1.0,
             }),
             false,
         ));

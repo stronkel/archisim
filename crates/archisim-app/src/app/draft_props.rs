@@ -3,7 +3,7 @@
 //! layer manager).
 
 use archisim_core::{
-    DraftId, DrawLayer, DrawLayerId, HatchPattern, LineStyle, Rgb, Shape, TextAlign, LINE_WEIGHTS,
+    DraftId, DrawLayer, DrawLayerId, LineStyle, Rgb, Shape, TextAlign, LINE_WEIGHTS,
 };
 use eframe::egui::{self, Ui};
 
@@ -143,11 +143,20 @@ impl ArchiSimApp {
         });
         group(ui, "cad-hatch", "Sombreado", |ui| {
             row(ui, "Patrón", "", |ui, w| {
-                let opts: Vec<_> = HatchPattern::ALL
-                    .iter()
-                    .map(|p| (*p, p.label().to_string()))
-                    .collect();
-                st.hatch_pattern = combo(ui, "cad-pattern", w, st.hatch_pattern, &opts);
+                let ink = st.color.unwrap_or([40, 40, 40]);
+                st.hatch_pattern = super::hatch_ui::pattern_picker(
+                    ui,
+                    "cad-pattern",
+                    w,
+                    st.hatch_pattern,
+                    ink,
+                    st.hatch_background,
+                );
+            });
+            row(ui, "Opacidad", "", |ui, w| {
+                if let Some(v) = super::hatch_ui::opacity_slider(ui, st.hatch_opacity, w - 8.0) {
+                    st.hatch_opacity = v;
+                }
             });
             row(ui, "Escala", "", |ui, _w| {
                 ui.add(
@@ -403,13 +412,22 @@ impl ArchiSimApp {
             }
             Shape::Hatch(h) => {
                 let mut new = h.clone();
+                let ink = self.ed.model().draft_look(&first).color;
                 group(ui, "draft-hatch", "Sombreado", |ui| {
                     row(ui, "Patrón", "", |ui, w| {
-                        let opts: Vec<_> = HatchPattern::ALL
-                            .iter()
-                            .map(|p| (*p, p.label().to_string()))
-                            .collect();
-                        new.pattern = combo(ui, "draft-pattern", w, new.pattern, &opts);
+                        new.pattern = super::hatch_ui::pattern_picker(
+                            ui,
+                            "draft-pattern",
+                            w,
+                            new.pattern,
+                            ink,
+                            new.background,
+                        );
+                    });
+                    row(ui, "Opacidad", "", |ui, w| {
+                        if let Some(v) = super::hatch_ui::opacity_slider(ui, new.opacity, w - 8.0) {
+                            new.opacity = v;
+                        }
                     });
                     row(ui, "Escala", "", |ui, _w| {
                         ui.add(

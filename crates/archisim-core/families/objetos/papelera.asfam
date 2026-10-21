@@ -1,0 +1,37 @@
+family "Papelera"
+  category street
+  host none
+  version 1
+  description "Papelera de calle; el punto de inserción es su centro"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.40 range 0.20..1.00 label "Diámetro"
+    height length = 0.90 range 0.40..1.40 label "Altura"
+  section "Materiales"
+    mat material = "Metal lacado" label "Papelera"
+
+body
+  let r = width / 2
+  box (-r * 0.85, -r * 0.85, 0.12) to (r * 0.85, r * 0.85, height) material mat
+  box (-0.03, -0.03, 0) to (0.03, 0.03, 0.12) material mat
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * 0.75 * cos(t0), r * 0.75 * sin(t0)) to (r * 0.75 * cos(t1), r * 0.75 * sin(t1)) pen thin
+
+plan presentation
+  cloud center (0, 0) radius width / 2 lobes 16 jitter 0 pen thin tint mat
+  cloud center (0, 0) radius width * 0.36 lobes 16 jitter 0 pen thin filled
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

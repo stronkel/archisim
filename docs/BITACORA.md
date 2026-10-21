@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-21 (noche) · Vegetación, mobiliario urbano y rellenos
+
+Rama `bloque/vegetacion` (sobre `main` con #39 y #40), pull request para Antonio. Formato `.archisim` versión 23 (abre las anteriores tal cual).
+
+**Hecho**
+- **Vegetación** (Urbanismo) abre directamente los árboles, sin pasar por los muebles; la galería solo enseña Entorno, Gente y Vehículos, y sus miniaturas dibujan cada copa como en presentación, así que se distingue cada especie a simple vista.
+- **Mobiliario urbano** (Urbanismo, herramienta nueva): farola de báculo, farola de vial, baliza de jardín, buzón, papelera, bolardo, fuente de beber, aparcabicis, contenedor de residuos, señal de tráfico, jardinera, alcorque y banco; cada uno con planta técnica (1:50) y de presentación (la farola, con su círculo de luz). IFC: `IfcFurniture`.
+- **Dibujo de cada árbol**: en el tipo, «Copa en presentación» con siete formas (lóbulos, círculo, acuarela, ramas, follaje, palmera, conífera), relleno (transparente, rellena, contorno) y opacidad. En el **propio árbol** (Propiedades → «Este objeto»): «Dibujo en planta» según el estilo, siempre técnico o siempre de presentación; y forma, relleno, opacidad y color propios. Así se controla el dibujo árbol a árbol sin depender del estilo de la vista.
+- **Biblioteca ampliada**: 83 tipos (38 árboles —plátano, encina, alcornoque, olivo, jacaranda, ciprés, palmera datilera…—, 14 arbustos y setos, y farolas, personas y vehículos variados) con `GlobalId` fijos. Biblioteca → «Instalar la biblioteca ampliada» los copia a la carpeta de la biblioteca, en `Ampliada/`; desde ese momento salen en las galerías de Vegetación y Mobiliario urbano y se cargan al elegirlos. También `archisim biblioteca --ampliada [carpeta]`, y en el repositorio en `biblioteca-ampliada/`.
+- **Rellenos directos**: el segmento **Relleno** de la barra inferior tiene las mismas variantes que Línea: rectángulo, polígono, spline, polígono regular, círculo y elipse (órdenes RELLRECT, RELLPOLIG, RELLSPLINE, RELLREGULAR, RELLCIRC, RELLELIPSE), y «Por recinto o contorno» (SB) como antes. Se dibuja y queda relleno, sin contorno previo.
+- **Trama a la vista**: al elegir la trama (barra inferior, propiedades del sombreado y pavimento de los locales) se ve su dibujo junto al nombre, y al pulsar, una cuadrícula con todas, técnicas y de presentación.
+- **Opacidad del relleno**: deslizador de 5 a 100 % en la barra inferior y en las propiedades del sombreado; sale en pantalla, SVG y PDF.
+
+**Pendiente**
+- Los árboles nuevos son recetas (planta y 3D sencillo de cajas); los modelos 3D de malla bonitos llegan con L1–L2 (importar glTF/OBJ y niveles de detalle).
+- En el DXF los rellenos semitransparentes no salen (el DXF no tiene transparencia de sombreado de forma fiable): solo su contorno.
+- El deslizador de opacidad en Propiedades es corto (la paleta es estrecha); el número se puede teclear.
+- Las especies y tamaños de la biblioteca ampliada son una propuesta: Antonio puede corregir nombres, diámetros y colores.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes, `cargo run -p archisim-cli -- demo out/`).
+2. Urbanismo → **Vegetación**: debe salir directamente un árbol, y al pulsar su nombre, la galería de árboles con cada copa dibujada distinta. Coloque un par.
+3. Seleccione un árbol → Propiedades → **Este objeto** → «Dibujo en planta: presentación»: ese árbol se dibuja relleno aunque la vista sea técnica. Pruebe forma (acuarela, palmera…), opacidad y color propio. Más abajo, en el tipo, «Copa en presentación» cambia todos los de ese tipo.
+4. Urbanismo → **Mobiliario urbano**: farolas, bancos, papeleras, bolardos… Póngalos junto al vial y mírelos también en un estilo de presentación (Propiedades de la vista → Presentación → Bosque).
+5. Vista → Biblioteca… → **Instalar la biblioteca ampliada**; vuelva a Vegetación: en la galería aparecen las especies nuevas (encina, plátano, jacaranda…). Elija una y colóquela.
+6. Barra inferior → flecha de **Relleno** → Trama: elija «Tarima» viendo la cuadrícula, baje la opacidad a 40 % y pulse **Rectángulo**; dos clics en la planta y queda el relleno hecho. Pruebe Círculo y Polígono.
+7. Seleccione el relleno: en Propiedades → Sombreado se ve la trama con su dibujo y la opacidad; cámbielas.
+8. Exporte la planta a PDF y mire que el relleno semitransparente y los árboles salen igual que en pantalla.
+
+---
+
 ## 2026-10-21 (tarde) · Bloque P: presentación (P1–P4)
 
 Rama `bloque/presentacion` (sobre `bloque/revision-r`), pull request #40 para Antonio. Formato `.archisim` versión 22 (abre las anteriores tal cual).

@@ -13,20 +13,97 @@ use super::thumbs::Thumb;
 use super::ArchiSimApp;
 use crate::units::fmt_mm;
 
+/// Part of the library a tool offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ObjectScope {
+    /// Trees, shrubs and hedges, with people and vehicles.
+    Vegetation,
+    /// Street furniture.
+    Street,
+}
+
+impl ObjectScope {
+    /// The gallery categories it shows, the first open.
+    pub fn categories(self) -> &'static [&'static str] {
+        match self {
+            ObjectScope::Vegetation => &["Entorno", "Gente", "Vehículos"],
+            ObjectScope::Street => &["Mobiliario urbano"],
+        }
+    }
+
+    /// The type the tool starts with.
+    pub fn first(self) -> &'static str {
+        match self {
+            ObjectScope::Vegetation => "Árbol de hoja caduca 6 m",
+            ObjectScope::Street => "Farola 4,5 m",
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            ObjectScope::Vegetation => "Vegetación",
+            ObjectScope::Street => "Mobiliario urbano",
+        }
+    }
+}
+
 /// What is chosen in the gallery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectPick {
     Project(ObjectTypeId),
     /// A type of the library, by its name.
     Library(&'static str),
+    /// A type of a file of the library folder: file and type.
+    Folder(usize, usize),
+}
+
+/// The object types of the library folder, loaded into a model of their
+/// own for their pictures.
+pub struct FolderObjects {
+    read: std::time::Instant,
+    lib: crate::editor::library::Library,
+    model: archisim_core::Model,
+    /// File, type in it, the type in `model`, its `GlobalId`.
+    types: Vec<(usize, usize, ObjectTypeId, String)>,
+}
+
+impl FolderObjects {
+    fn read() -> Self {
+        let lib = crate::editor::library::scan(&crate::editor::library::library_dir());
+        let mut model = archisim_core::Model::new("Carpeta de la biblioteca");
+        model.add_level("Planta baja", 0.0);
+        let mut types = Vec::new();
+        for (fi, f) in lib.files.iter().enumerate() {
+            for (ti, t) in f.types.iter().enumerate() {
+                let loaded = model.load_catalog_type(
+                    &f.text,
+                    t,
+                    &f.materials,
+                    archisim_core::OnConflict::Rename,
+                );
+                if let Ok(l) = loaded {
+                    if let archisim_core::FamilyTypeRef::Object(id) = l.type_ref() {
+                        types.push((fi, ti, id, t.guid.clone()));
+                    }
+                }
+            }
+        }
+        Self {
+            read: std::time::Instant::now(),
+            lib,
+            model,
+            types,
+        }
+    }
 }
 
 /// The gallery's categories: their name and the family categories in
 /// them.
-const CATEGORIES: [(&str, &[&str]); 5] = [
+const CATEGORIES: [(&str, &[&str]); 6] = [
     ("Mobiliario", &["furniture", "kitchen"]),
     ("Sanitarios", &["sanitary"]),
     ("Entorno", &["site"]),
+    ("Mobiliario urbano", &["street"]),
     ("Gente", &["people"]),
     ("Vehículos", &["vehicle"]),
 ];
@@ -139,7 +216,94 @@ impl ArchiSimApp {
                 });
             }
         }
+        // The library folder's, not in the project (by their GlobalId).
+        if self
+            .folder_objects
+            .as_ref()
+            .is_none_or(|f| f.read.elapsed() > std::time::Duration::from_secs(30))
+        {
+            self.folder_objects = Some(FolderObjects::read());
+        }
+        {
+            let project = self.ed.model();
+            let have: std::collections::HashSet<String> =
+                project.object_types().map(|t| t.guid.to_string()).collect();
+            let names: std::collections::HashSet<&str> =
+                items.iter().map(|i| i.name.as_str()).collect();
+            let names: std::collections::HashSet<String> =
+                names.into_iter().map(String::from).collect();
+            let fo = self.folder_objects.as_ref().expect("just read");
+            let thumbs = &mut self.thumbs;
+            for (fi, ti, id, guid) in &fo.types {
+                let Some(t) = fo.model.object_type(*id) else {
+                    continue;
+                };
+                if have.contains(guid) || names.contains(&t.name) {
+                    continue;
+                }
+                let def = fo.model.family(t.family).map(|f| f.def());
+                let (category, folder, family) = def
+                    .map_or(("Mobiliario", String::new(), String::new()), |d| {
+                        (category_name(&d.category), d.folder.clone(), d.name.clone())
+                    });
+                let size = fo
+                    .model
+                    .object_type_box(t.id)
+                    .map(|(lo, hi)| size_note(lo, hi))
+                    .unwrap_or_default();
+                let lib_model = &fo.model;
+                let thumb = thumbs.get(ctx, format!("objdir:{guid}:{sig}"), || {
+                    crate::type_preview::object_model(lib_model, t)
+                });
+                items.push(Item {
+                    pick: ObjectPick::Folder(*fi, *ti),
+                    name: t.name.clone(),
+                    note: format!("{size} · {family} · biblioteca del estudio"),
+                    category,
+                    folder,
+                    thumb,
+                });
+            }
+        }
+        if let Some(scope) = self.object_scope.filter(|_| self.scoped_card) {
+            items.retain(|i| scope.categories().contains(&i.category));
+        }
         items
+    }
+
+    /// The gallery category of a project's object type.
+    pub(super) fn object_type_category(&self, t: ObjectTypeId) -> Option<&'static str> {
+        let m = self.ed.model();
+        let ty = m.object_type(t)?;
+        Some(category_name(&m.family(ty.family)?.def().category))
+    }
+
+    /// The object tool with part of the library: its first type, unless
+    /// the one chosen is already of it.
+    pub(super) fn objects_pick(&mut self, scope: ObjectScope) {
+        self.object_scope = Some(scope);
+        let fits = self
+            .object_settings
+            .object_type
+            .and_then(|t| self.object_type_category(t))
+            .is_some_and(|c| scope.categories().contains(&c));
+        if !fits {
+            let name = scope.first();
+            let have = self
+                .ed
+                .model()
+                .object_types()
+                .find(|t| t.name == name)
+                .map(|t| t.id);
+            let t = match have {
+                Some(t) => Some(t),
+                None => self.object_pick_type(ObjectPick::Library(name)),
+            };
+            if t.is_some() {
+                self.object_settings.object_type = t;
+            }
+        }
+        self.set_tool(super::Tool::Object);
     }
 
     /// The object type card: the picture of the current type, its
@@ -214,7 +378,14 @@ impl ArchiSimApp {
             .width(640.0)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| {
-                let mut place: Place = ui.ctx().data(|d| d.get_temp(place_id)).unwrap_or_default();
+                let opening = self
+                    .object_scope
+                    .filter(|_| self.scoped_card)
+                    .map(|s| s.categories()[0]);
+                let mut place: Place = ui.ctx().data(|d| d.get_temp(place_id)).unwrap_or(Place {
+                    category: opening,
+                    folder: None,
+                });
                 let mut query: String =
                     ui.ctx().data(|d| d.get_temp(search_id)).unwrap_or_default();
                 ui.add(
@@ -349,6 +520,30 @@ impl ArchiSimApp {
     pub(super) fn object_pick_type(&mut self, pick: ObjectPick) -> Option<ObjectTypeId> {
         match pick {
             ObjectPick::Project(t) => Some(t),
+            ObjectPick::Folder(fi, ti) => {
+                let file = self.folder_objects.as_ref()?.lib.files.get(fi)?.clone();
+                let name = file
+                    .types
+                    .get(ti)
+                    .map(|t| t.name.clone())
+                    .unwrap_or_default();
+                match self
+                    .ed
+                    .load_library_type(&file, ti, archisim_core::OnConflict::Rename)
+                {
+                    Ok(l) => {
+                        self.say(format!("«{name}» cargado de la biblioteca en el proyecto."));
+                        match l.type_ref() {
+                            archisim_core::FamilyTypeRef::Object(t) => Some(t),
+                            _ => None,
+                        }
+                    }
+                    Err(e) => {
+                        self.complain(format!("No se puede cargar «{name}»: {e}."));
+                        None
+                    }
+                }
+            }
             ObjectPick::Library(name) => match self.ed.library_object_type(name) {
                 Ok(t) => {
                     self.say(format!("«{name}» cargado de la biblioteca en el proyecto."));

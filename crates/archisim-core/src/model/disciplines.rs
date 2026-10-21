@@ -175,11 +175,13 @@ impl Model {
                 .and_then(|t| self.family(t.family))
                 .map(|f| f.def().category.clone())
                 .unwrap_or_default();
-            return Some(if matches!(category.as_str(), "site" | "vehicle") {
-                Site
-            } else {
-                Architecture
-            });
+            return Some(
+                if matches!(category.as_str(), "site" | "street" | "vehicle") {
+                    Site
+                } else {
+                    Architecture
+                },
+            );
         }
         if self.openings.contains_key(&OpeningId(id))
             || self.roofs.contains_key(&RoofId(id))

@@ -1,0 +1,41 @@
+family "Bolardo"
+  category street
+  host none
+  version 1
+  description "Bolardo o pilona; el punto de inserción es su centro"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.15 range 0.06..0.60 label "Diámetro"
+    height length = 0.80 range 0.30..1.50 label "Altura"
+  section "Materiales"
+    mat material = "Metal lacado" label "Bolardo"
+
+body
+  box (-width / 2, -width / 2, 0) to (width / 2, width / 2, height) material mat
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..12
+    let t0 = 6.283185307 * i / 12
+    let t1 = 6.283185307 * (i + 1) / 12
+    line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
+
+plan presentation
+  cloud center (0, 0) radius width / 2 lobes 12 jitter 0 pen thin tint mat
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
+catalog
+  material "Hormigón prefabricado" category "concrete" color 196 192 184
+  material "Fundición negra" category "other" color 40 42 46
+  type "Bolardo de hormigón" guid "03gHfsyU6v1bbz6wZOpaNJ"
+    width = 0.35
+    height = 0.5
+    mat = "Hormigón prefabricado"
+  type "Bolardo de fundición" guid "026HGOJgtxZxktvFXIvbvF"
+    width = 0.12
+    height = 0.9
+    mat = "Fundición negra"

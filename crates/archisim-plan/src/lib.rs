@@ -1734,7 +1734,17 @@ fn draw_objects(
             continue;
         }
         let size = outline[0].distance(outline[2]);
-        let presented = presentation_view()
+        // The object's own choice («Dibujo en planta»), else the view's.
+        let drawing = model
+            .object_values(o.id)
+            .get("drawing")
+            .and_then(|v| v.as_text().map(String::from));
+        let presenting = match drawing.as_deref() {
+            Some("técnico") => false,
+            Some("presentación") => true,
+            _ => presentation_view(),
+        };
+        let presented = presenting
             .then(|| model.object_presentation_symbol(o.id))
             .flatten();
         let marks = if too_small_for_symbol(size * 1000.0 / scale) {
@@ -1804,6 +1814,12 @@ fn draw_marks(
     k: f64,
 ) {
     for mark in marks {
+        if matches!(
+            mark,
+            Mark::Line { pen: Pen::None, .. } | Mark::Arc { pen: Pen::None, .. }
+        ) {
+            continue;
+        }
         match mark {
             Mark::Line {
                 from,
@@ -1843,6 +1859,14 @@ fn draw_marks(
                     None if filled => "white\"".to_string(),
                     None => "none\"".to_string(),
                 };
+                if pen == Pen::None {
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" fill="{fill} stroke="none"/>"#,
+                        path(&pts)
+                    );
+                    continue;
+                }
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="{fill} stroke="{INK}" stroke-width="{}"{}/>"#,
@@ -1905,6 +1929,7 @@ fn pen_weight(pen: Pen) -> f64 {
         Pen::View => pens().view,
         Pen::Thin => pens().thin,
         Pen::Hatch => pens().hatch,
+        Pen::None => 0.0,
     }
 }
 

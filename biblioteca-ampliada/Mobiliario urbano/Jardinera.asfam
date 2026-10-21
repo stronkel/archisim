@@ -1,0 +1,49 @@
+family "Jardinera"
+  category street
+  host none
+  version 1
+  description "Jardinera con plantas; el punto de inserción es el centro de la trasera"
+  folder "Mobiliario urbano"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.40..6.00 label "Largo"
+    depth  length = 0.50 range 0.30..2.00 label "Ancho"
+    height length = 0.50 range 0.20..1.20 label "Altura"
+  section "Materiales"
+    mat    material = "Hormigón prefabricado" label "Jardinera"
+    leaves material = "Vegetación" label "Plantas"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+  box (-width / 2 + 0.06, 0.06, height) to (width / 2 - 0.06, depth - 0.06, height + 0.3) material leaves
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  polygon (-width / 2 + 0.06, 0.06) (width / 2 - 0.06, 0.06) (width / 2 - 0.06, depth - 0.06) (-width / 2 + 0.06, depth - 0.06) pen thin
+
+plan presentation
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat
+  let n = max(1, round(width / depth))
+  repeat i in 0..n
+    let x = -width / 2 + (i + 0.5) * width / n
+    cloud center (x, depth / 2) radius min(width / n, depth) * 0.46 lobes 7 jitter 0.2 pen thin tint leaves
+
+outputs
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
+catalog
+  material "Hormigón prefabricado" category "concrete" color 196 192 184
+  material "Vegetación" category "vegetation" color 126 164 98
+  type "Jardinera larga 3 m" guid "0$bEcrzi$3V6plQHTVs_o0"
+    width = 3
+    depth = 0.7
+    height = 0.5
+    mat = "Hormigón prefabricado"
+    leaves = "Vegetación"
+  type "Jardinera cuadrada 80" guid "2zzCgsG2shTWzEOKxiXIEa"
+    width = 0.8
+    depth = 0.8
+    height = 0.6
+    mat = "Hormigón prefabricado"
+    leaves = "Vegetación"

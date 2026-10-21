@@ -266,6 +266,7 @@ mod tests {
             scale: 1.0,
             angle: 0.0,
             background: None,
+            opacity: 1.0,
         });
         assert!((area(&hatch).unwrap() - 7.0).abs() < 1e-9);
         assert!(

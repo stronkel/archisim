@@ -288,6 +288,7 @@ mod tests {
             scale: 1.0,
             angle: 0.0,
             background: None,
+            opacity: 1.0,
         });
         let a = crate::area(&hatch).unwrap();
         assert!((a - (100.0 - std::f64::consts::PI)).abs() < 1e-9, "{a}");

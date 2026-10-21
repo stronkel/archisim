@@ -1,7 +1,7 @@
 family "Árbol"
   category site
   host none
-  version 3
+  version 4
   description "Árbol de copa redondeada con su tronco; el punto de inserción es el centro del tronco"
   folder "Vegetación"
 
@@ -9,13 +9,24 @@ type_params
   section "Dimensiones"
     height  length = 6.00 range 1.50..30.00 label "Altura total"
     crown   length = 4.00 range 0.80..20.00 label "Diámetro de la copa"
-    trunk_h length = 2.00 range 0.30..10.00 label "Altura del tronco"
+    trunk_h length = 2.00 range 0.30..25.00 label "Altura del tronco"
     trunk   length = 0.30 range 0.05..2.00 label "Diámetro del tronco"
   section "Materiales"
     leaves material = "Vegetación" label "Copa"
     bark   material = "Corteza" label "Tronco"
   section "Presentación"
-    look choice("transparente", "rellena", "contorno") = "transparente" label "Copa en presentación"
+    shape choice("lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "lóbulos" label "Copa en presentación"
+    look choice("transparente", "rellena", "contorno") = "transparente" label "Relleno de la copa"
+    opacity number = 0.55 range 0.10..1.00 label "Opacidad de la copa"
+
+instance_params
+  section "Dibujo"
+    drawing choice("según el estilo", "técnico", "presentación") = "según el estilo" label "Dibujo en planta"
+    shape_own choice("del tipo", "lóbulos", "círculo", "acuarela", "ramas", "follaje", "palmera", "conífera") = "del tipo" label "Copa"
+    look_own choice("del tipo", "transparente", "rellena", "contorno") = "del tipo" label "Relleno"
+    opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"
+    color_own bool = false label "Color propio"
+    leaves_own material = "Vegetación" visible_if color_own label "Color de la copa"
 
 require trunk_h < height - 0.3 else "La copa necesita sitio por encima del tronco"
 require trunk < crown else "El tronco no puede ser más ancho que la copa"
@@ -51,19 +62,87 @@ plan 1:50
   arc center (0, 0) from (0, -trunk / 2) to (trunk / 2, 0) pen view
 
 plan presentation
-  # A canopy drawn as by hand, each tree its own (by its seed); a smaller
-  # one inside gives it body, and a few branches and the trunk show through.
+  # How it is drawn: the tree's own choices, or its type's.
   let r = crown / 2
-  let op = if look == "rellena" then 1 else 0.55
-  if look == "contorno"
-    cloud center (0, 0) radius r lobes 11 jitter 0.14 pen view
-    cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin
-  else
-    cloud center (0, 0) radius r lobes 11 jitter 0.14 pen thin tint leaves opacity op
-    cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin tint leaves opacity 0.3
-  repeat i in 0..5
-    let t = 6.283185307 * (i + 0.6 * rand(seed * 31 + i)) / 5
-    line (0, 0) to (r * 0.5 * cos(t), r * 0.5 * sin(t)) pen thin
+  let form = if shape_own == "del tipo" then shape else shape_own
+  let fill = if look_own == "del tipo" then look else look_own
+  let op0 = if opacity_own > 0 then opacity_own else opacity
+  let op = if fill == "rellena" then 1 else op0
+  let c = if color_own then leaves_own else leaves
+  let outline = fill == "contorno"
+  let turn = 6.283185307 * rand(seed * 101)
+  if form == "lóbulos"
+    if outline
+      cloud center (0, 0) radius r lobes 11 jitter 0.14 pen view
+      cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin
+    else
+      cloud center (0, 0) radius r lobes 11 jitter 0.14 pen thin tint c opacity op
+      cloud center (r * 0.12, -r * 0.12) radius r * 0.6 lobes 8 jitter 0.12 pen thin tint c opacity op * 0.5
+    repeat i in 0..5
+      let t = 6.283185307 * (i + 0.6 * rand(seed * 31 + i)) / 5
+      line (0, 0) to (r * 0.5 * cos(t), r * 0.5 * sin(t)) pen thin
+  if form == "círculo"
+    if outline
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen view
+    else
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen thin tint c opacity op
+  if form == "acuarela"
+    # Washes of colour laid one over another, without lines.
+    repeat i in 0..4
+      let a = turn + 6.283185307 * i / 4
+      let d = r * 0.16 * rand(seed * 17 + i)
+      let rr = r * (0.72 + 0.24 * rand(seed * 29 + i))
+      if outline
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 9 jitter 0.2 pen thin
+      else
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 9 jitter 0.2 pen none tint c opacity op * 0.45
+    cloud center (r * 0.15, -r * 0.18) radius r * 0.42 lobes 7 jitter 0.22 pen none tint c opacity op * 0.4
+  if form == "ramas"
+    # The classic tree of plans: its crown and the branches seen through.
+    if outline
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen view
+    else
+      cloud center (0, 0) radius r lobes 32 jitter 0 pen view tint c opacity op
+    repeat i in 0..7
+      let a = turn + 6.283185307 * (i + 0.4 * rand(seed * 37 + i)) / 7
+      line (0, 0) to (r * 0.82 * cos(a), r * 0.82 * sin(a)) pen thin
+      line (r * 0.42 * cos(a), r * 0.42 * sin(a)) to (r * 0.7 * cos(a + 0.3), r * 0.7 * sin(a + 0.3)) pen thin
+      line (r * 0.55 * cos(a), r * 0.55 * sin(a)) to (r * 0.78 * cos(a - 0.25), r * 0.78 * sin(a - 0.25)) pen thin
+  if form == "follaje"
+    # Clusters of leaves, each its own size and place.
+    if outline
+      cloud center (0, 0) radius r lobes 14 jitter 0.12 pen thin
+    repeat i in 0..9
+      let a = turn + 6.283185307 * i / 9
+      let d = r * (0.25 + 0.38 * rand(seed * 41 + i))
+      let rr = r * (0.3 + 0.16 * rand(seed * 43 + i))
+      if outline
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 7 jitter 0.2 pen thin
+      else
+        cloud center (d * cos(a), d * sin(a)) radius rr lobes 7 jitter 0.2 pen thin tint c opacity op * 0.7
+    if not outline
+      cloud center (0, 0) radius r * 0.34 lobes 7 jitter 0.2 pen none tint c opacity op * 0.6
+  if form == "palmera"
+    # Fronds from the top of the trunk.
+    repeat i in 0..9
+      let a = turn + 6.283185307 * (i + 0.3 * rand(seed * 47 + i)) / 9
+      let l = r * (0.85 + 0.15 * rand(seed * 53 + i))
+      let w = r * 0.16
+      let px = -sin(a)
+      let py = cos(a)
+      if outline
+        polygon (0, 0) (l * 0.5 * cos(a) + w * px, l * 0.5 * sin(a) + w * py) (l * cos(a), l * sin(a)) (l * 0.5 * cos(a) - w * px, l * 0.5 * sin(a) - w * py) pen thin
+      else
+        polygon (0, 0) (l * 0.5 * cos(a) + w * px, l * 0.5 * sin(a) + w * py) (l * cos(a), l * sin(a)) (l * 0.5 * cos(a) - w * px, l * 0.5 * sin(a) - w * py) pen thin tint c opacity op
+      line (0, 0) to (l * cos(a), l * sin(a)) pen thin
+  if form == "conífera"
+    # Rings of needles, darker to the middle.
+    repeat i in 0..3
+      let rr = r * (1 - i * 0.3)
+      if outline
+        cloud center (0, 0) radius rr lobes 18 - i * 4 jitter 0.12 pen thin
+      else
+        cloud center (0, 0) radius rr lobes 18 - i * 4 jitter 0.12 pen thin tint c opacity op * 0.6
   cloud center (0, 0) radius max(trunk / 2, r * 0.06) lobes 6 jitter 0 pen thin tint bark
 
 outputs

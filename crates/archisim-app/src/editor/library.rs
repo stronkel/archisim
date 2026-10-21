@@ -170,6 +170,30 @@ pub fn read_file(path: &Path) -> Result<LibraryFile, String> {
     })
 }
 
+/// Writes the extended library (`archisim_library::extended`) into the
+/// «Ampliada» subfolder of the library: one file per family, in folders
+/// by category. Returns how many types.
+pub fn install_extended(dir: &Path) -> Result<usize, String> {
+    let mut model = Model::new("Biblioteca ampliada");
+    model.add_level("Planta baja", 0.0);
+    let n =
+        archisim_library::extended::add_extended_library(&mut model).map_err(|e| e.to_string())?;
+    let base = dir.join("Ampliada");
+    for (category, family, text) in model.catalog_files() {
+        let folder = match category.as_str() {
+            "site" => "Entorno",
+            "street" => "Mobiliario urbano",
+            "people" => "Personas",
+            "vehicle" => "Vehículos",
+            _ => "Otros",
+        };
+        let sub = base.join(folder);
+        std::fs::create_dir_all(&sub).map_err(|e| e.to_string())?;
+        std::fs::write(sub.join(file_name(&family)), text).map_err(|e| e.to_string())?;
+    }
+    Ok(n)
+}
+
 /// Reads every `.asfam` of a folder and its subfolders (one level of
 /// folders is how people sort them: Puertas, Ventanas, Mobiliario…).
 pub fn scan(dir: &Path) -> Library {

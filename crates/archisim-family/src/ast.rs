@@ -209,6 +209,8 @@ pub enum Pen {
     Thin,
     /// Hatching.
     Hatch,
+    /// No line: only the fill (watercolour washes of a canopy).
+    None,
 }
 
 /// How a plan line is drawn: continuous or with one of the usual dash

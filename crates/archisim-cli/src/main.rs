@@ -54,6 +54,12 @@ Uso:
       (Puertas, Ventanas, Mobiliario…). Es lo que lee la ventana
       Biblioteca de la aplicación. Carpeta por defecto: ./out/biblioteca
 
+  archisim biblioteca --ampliada [carpeta]
+      Escribe la biblioteca ampliada (más de ochenta árboles, arbustos,
+      mobiliario urbano, personas y vehículos) en la carpeta, por defecto
+      ./biblioteca-ampliada. Se copia dentro de la carpeta de la
+      biblioteca de la aplicación.
+
   archisim muestrario [carpeta]
       Un muro con todas las puertas y ventanas de la plantilla, para verlas
       en planta, en 3D y en IFC: muestrario.archisim, muestrario.ifc y
@@ -133,6 +139,11 @@ fn main() -> ExitCode {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(muestrario::write(&dir))
         }
+        Some("biblioteca") if args.iter().any(|a| a == "--ampliada") => {
+            let rest: Vec<&String> = args[1..].iter().filter(|a| *a != "--ampliada").collect();
+            let dir = PathBuf::from(rest.first().map_or("biblioteca-ampliada", |s| s.as_str()));
+            report(run_extended_library(&dir))
+        }
         Some("biblioteca") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out/biblioteca"));
             report(run_library(&dir, args.get(2).map(Path::new)))
@@ -205,27 +216,27 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
-    let model = match project {
-        Some(p) => {
-            archisim_file::open(p).map_err(|e| format!("no se puede abrir {}: {e}", p.display()))?
-        }
-        None => archisim_library::new_project("Plantilla"),
-    };
+fn run_extended_library(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut model = archisim_core::Model::new("Biblioteca ampliada");
+    model.add_level("Planta baja", 0.0);
+    let n = archisim_library::extended::add_extended_library(&mut model)?;
+    let files = write_library_files(&model, dir)?;
+    println!(
+        "Biblioteca ampliada: {n} tipos en {files} ficheros, en {}",
+        dir.display()
+    );
+    Ok(())
+}
+
+/// Writes the family types of a model as library files in folders by
+/// category; returns how many files.
+fn write_library_files(
+    model: &archisim_core::Model,
+    dir: &Path,
+) -> Result<usize, Box<dyn std::error::Error>> {
     let mut n = 0;
     for (category, family, text) in model.catalog_files() {
-        let folder = match category.as_str() {
-            "door" => "Puertas",
-            "window" => "Ventanas",
-            "void" => "Huecos",
-            "furniture" => "Mobiliario",
-            "sanitary" => "Sanitarios",
-            "kitchen" => "Cocina",
-            "site" => "Entorno",
-            "people" => "Personas",
-            "vehicle" => "Vehículos",
-            _ => "Otros",
-        };
+        let folder = library_folder(&category);
         let sub = dir.join(folder);
         std::fs::create_dir_all(&sub)?;
         let path = sub.join(format!("{}.asfam", family.replace(['/', '\\', ':'], "-")));
@@ -233,6 +244,33 @@ fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::er
         println!("  {}", path.display());
         n += 1;
     }
+    Ok(n)
+}
+
+fn library_folder(category: &str) -> &'static str {
+    match category {
+        "door" => "Puertas",
+        "window" => "Ventanas",
+        "void" => "Huecos",
+        "furniture" => "Mobiliario",
+        "sanitary" => "Sanitarios",
+        "kitchen" => "Cocina",
+        "site" => "Entorno",
+        "street" => "Mobiliario urbano",
+        "people" => "Personas",
+        "vehicle" => "Vehículos",
+        _ => "Otros",
+    }
+}
+
+fn run_library(dir: &Path, project: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let model = match project {
+        Some(p) => {
+            archisim_file::open(p).map_err(|e| format!("no se puede abrir {}: {e}", p.display()))?
+        }
+        None => archisim_library::new_project("Plantilla"),
+    };
+    let n = write_library_files(&model, dir)?;
     // Wall and slab types, one file for each.
     for (file, walls) in [("Muros.astipos", true), ("Forjados.astipos", false)] {
         let mut cat = archisim_core::LayeredCatalog::default();

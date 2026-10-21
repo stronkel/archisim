@@ -409,6 +409,9 @@ pub struct Hatch {
     pub angle: f64,
     /// Background colour behind the pattern (none: transparent).
     pub background: Option<Rgb>,
+    /// How opaque the hatch is, its background and its pattern: 1 solid,
+    /// down to 0,05 (see-through, over what is under it).
+    pub opacity: f64,
 }
 
 /// What a drafted dimension measures (AutoCAD's angular, radius,
@@ -1222,6 +1225,7 @@ mod tests {
                 scale: 1.0,
                 angle: 0.0,
                 background: None,
+                opacity: 1.0,
             }),
             Shape::Point {
                 at: Point2::new(f64::NAN, 0.0),
