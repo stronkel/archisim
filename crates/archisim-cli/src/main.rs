@@ -439,6 +439,17 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             sheet.size_name(),
             path.display()
         );
+        if sheet.presentation.is_some() {
+            // Presentation boards also as an image, for screens and the web.
+            let png = dir.join(format!("{stem}-plano-{}.png", slug(&sheet.number)));
+            let svg = std::fs::read_to_string(&path)?;
+            std::fs::write(&png, archisim_export::png::png(&svg, 200.0)?)?;
+            println!(
+                "  Plano {} en PNG (200 ppp): {}",
+                sheet.number,
+                png.display()
+            );
+        }
         let dxf = dir.join(format!("{stem}-plano-{}.dxf", slug(&sheet.number)));
         std::fs::write(&dxf, archisim_export::dxf::sheet_dxf(model, sheet.id)?)?;
         println!(

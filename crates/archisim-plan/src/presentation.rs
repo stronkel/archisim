@@ -97,6 +97,23 @@ pub fn apply(svg: &str, p: &PresentationStyle) -> String {
     out
 }
 
+/// A fragment of a drawing (a sheet's title block, tables, texts) in a
+/// presentation style: its lines and colours, without paper of its own.
+pub fn apply_fragment(svg: &str, p: &PresentationStyle) -> String {
+    let scaled = if (p.line_scale - 1.0).abs() > 1e-9 {
+        scale_strokes(svg, p.line_scale)
+    } else {
+        svg.to_string()
+    };
+    crate::dim::map_colours(&scaled, |c| {
+        if c == [255, 255, 255] {
+            p.background
+        } else {
+            p.tone(c)
+        }
+    })
+}
+
 /// A rectangle of the paper's colour over the whole view box, behind
 /// everything (after the opening `<svg …>`).
 fn paper(svg: &mut String, c: archisim_core::Rgb) {

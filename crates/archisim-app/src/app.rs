@@ -1123,7 +1123,8 @@ impl ArchiSimApp {
         if !all {
             d = d
                 .add_filter("DXF (para AutoCAD y otros CAD)", &["dxf"])
-                .add_filter("SVG", &["svg"]);
+                .add_filter("SVG", &["svg"])
+                .add_filter("PNG (imagen a 200 ppp)", &["png"]);
         }
         d = d.set_file_name(name);
         if let Some(dir) = self.start_dir() {

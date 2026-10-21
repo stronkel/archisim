@@ -632,6 +632,9 @@ pub(crate) struct Sheet {
     pub title_block: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub revision: String,
+    /// Presentation style of the sheet itself (version 22).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -777,6 +780,7 @@ pub(crate) fn sheets_out(sheets: &[core::Sheet]) -> Vec<Sheet> {
             height: s.height,
             title_block: s.title_block,
             revision: s.revision.clone(),
+            presentation: s.presentation.map(|p| p.0),
         })
         .collect()
 }
@@ -792,6 +796,7 @@ pub(crate) fn sheets_in(sheets: Vec<Sheet>) -> Vec<core::Sheet> {
             height: s.height,
             title_block: s.title_block,
             revision: s.revision,
+            presentation: s.presentation.map(core::PresentationStyleId),
         })
         .collect()
 }

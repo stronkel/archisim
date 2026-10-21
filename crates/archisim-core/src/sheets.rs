@@ -54,6 +54,9 @@ pub struct Sheet {
     pub title_block: bool,
     /// Revision shown in the title block ("0", "A"…).
     pub revision: String,
+    /// How the sheet itself is presented (paper, title block, tables and
+    /// texts); each view on it keeps its own style.
+    pub presentation: Option<crate::PresentationStyleId>,
 }
 
 impl Sheet {
@@ -205,6 +208,7 @@ impl Model {
                 height: spec.height,
                 title_block: true,
                 revision: String::new(),
+                presentation: None,
             },
         );
         Ok(id)
@@ -423,6 +427,8 @@ pub enum ScheduleKind {
     Slabs,
     /// Rooms: areas, heights and finishes ("cuadro de superficies").
     Rooms,
+    /// Rooms and their areas only, for presentation boards.
+    RoomAreas,
     /// Columns and beams by type: number, length, volume.
     Structure,
     /// Pitched roofs by type: area in plan and of the slopes.
@@ -434,11 +440,12 @@ pub enum ScheduleKind {
 }
 
 impl ScheduleKind {
-    pub const ALL: [ScheduleKind; 8] = [
+    pub const ALL: [ScheduleKind; 9] = [
         ScheduleKind::Openings,
         ScheduleKind::Walls,
         ScheduleKind::Slabs,
         ScheduleKind::Rooms,
+        ScheduleKind::RoomAreas,
         ScheduleKind::Structure,
         ScheduleKind::Roofs,
         ScheduleKind::Stairs,
@@ -451,6 +458,7 @@ impl ScheduleKind {
             ScheduleKind::Walls => "walls",
             ScheduleKind::Slabs => "slabs",
             ScheduleKind::Rooms => "rooms",
+            ScheduleKind::RoomAreas => "room_areas",
             ScheduleKind::Structure => "structure",
             ScheduleKind::Roofs => "roofs",
             ScheduleKind::Stairs => "stairs",
@@ -468,6 +476,7 @@ impl ScheduleKind {
             ScheduleKind::Walls => "Muros",
             ScheduleKind::Slabs => "Forjados",
             ScheduleKind::Rooms => "Cuadro de superficies",
+            ScheduleKind::RoomAreas => "Superficies (presentación)",
             ScheduleKind::Structure => "Pilares y vigas",
             ScheduleKind::Roofs => "Cubiertas",
             ScheduleKind::Stairs => "Escaleras",

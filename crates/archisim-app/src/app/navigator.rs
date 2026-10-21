@@ -218,13 +218,24 @@ impl ArchiSimApp {
     fn nav_sheets(&mut self, ui: &mut Ui) {
         let active = self.tabs.get(self.active_tab).map(|t| t.kind);
         let mut new = false;
+        let mut presentation = false;
         let mut open = None;
         nav_section(ui, "nav-sheets", "PLANOS", |ui| {
             sub_header(ui, "Planos", Some(("+ Nuevo plano", &mut new)));
             open = self.nav_sheet_rows(ui, active);
+            if ui
+                .small_button("+ Plano de presentación")
+                .on_hover_text("Lámina A3 de la planta activa: título, planta, 3D, sección, superficies y recorrido solar, en el estilo de la vista")
+                .clicked()
+            {
+                presentation = true;
+            }
         });
         if new {
             self.new_sheet();
+        }
+        if presentation {
+            self.new_presentation_sheet();
         }
         if let Some(kind) = open {
             self.open_view(kind);

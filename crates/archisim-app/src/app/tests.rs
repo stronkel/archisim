@@ -4517,3 +4517,69 @@ fn presentation_styles_and_floor_fills() {
     assert_ne!(canopy(ids[0]), canopy(ids[1]), "each tree its own canopy");
     h.frame();
 }
+
+/// P3–P4: a presentation board of the level (title, plan, 3D view,
+/// areas and the sun's path) in the view's style, with shadows; it goes
+/// out as PNG.
+#[test]
+fn presentation_boards() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    let bosque = h
+        .model()
+        .presentation_styles()
+        .find(|s| s.name == "Bosque")
+        .unwrap()
+        .clone();
+    assert!(bosque.shadows);
+    h.app.view_style.presentation = Some(bosque.id);
+    h.frame();
+    let sheets = h.model().sheets().len();
+    h.app.new_presentation_sheet();
+    h.frame();
+    assert_eq!(h.model().sheets().len(), sheets + 1);
+    let sheet = (*h.model().sheets().last().unwrap()).clone();
+    assert_eq!(sheet.presentation, Some(bosque.id));
+    assert_eq!(h.app.mode, ViewMode::Sheet(sheet.id));
+    let views: Vec<_> = h.model().viewports_on(sheet.id).collect();
+    assert!(views.len() >= 2, "plan and 3D");
+    assert!(views
+        .iter()
+        .all(|v| v.style.presentation == Some(bosque.id)));
+    assert!(h
+        .model()
+        .drafts_in(archisim_core::ViewRef::Sheet(sheet.id))
+        .any(|d| matches!(&d.shape, archisim_core::Shape::Text(t) if t.content == "N")));
+    let svg = archisim_plan::sheet::render_sheet(
+        h.model(),
+        sheet.id,
+        &archisim_plan::sheet::SheetOptions::default(),
+    );
+    let [r, g, b] = bosque.background;
+    assert!(
+        svg.contains(&format!("rgb({r},{g},{b})")),
+        "the sheet's paper"
+    );
+    assert!(svg.contains("fill-opacity"), "shadows");
+    // As an image.
+    let dir = std::env::temp_dir().join(format!("archisim-png-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let png = dir.join("lamina.png");
+    h.app.ed.export_sheets(&png, &[sheet.id]).unwrap();
+    let bytes = std::fs::read(&png).unwrap();
+    assert_eq!(&bytes[1..4], b"PNG");
+    // A3 at 200 dpi.
+    assert_eq!(u32::from_be_bytes(bytes[16..20].try_into().unwrap()), 3307);
+    let _ = std::fs::remove_dir_all(&dir);
+    // The sun is the project's: day and hour.
+    h.app
+        .ed
+        .set_sun(archisim_core::Sun {
+            day: 355,
+            hour: 12.0,
+        })
+        .unwrap();
+    assert_eq!(h.model().sun().day, 355);
+}

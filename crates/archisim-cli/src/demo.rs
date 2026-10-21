@@ -995,32 +995,24 @@ pub fn build() -> Result<Document, ModelError> {
             crop: Some(crop),
             centre: Point2::new(0.42, 0.3 - half.y.min(0.1)),
         })?;
-        // A presentation plan on A3: the ground floor at 1:100 in the
-        // «Bosque» style (walls solid green, soft tones, tinted paper).
-        let sheet3 = m.add_sheet(NewSheet {
-            number: "A-03".into(),
-            name: "Presentación".into(),
-            width: 420.0,
-            height: 297.0,
-        })?;
-        let v = m.add_viewport(NewViewport {
-            sheet: sheet3,
-            level: pb,
-            section: None,
-            axo: None,
-            scale: 100.0,
-            cut_plane: 1.0,
-            crop: None,
-            centre: Point2::new(0.17, 0.155),
-        })?;
+        // A presentation board on A3 in the «Bosque» style: the title,
+        // the ground floor, the 3D view and a section, the rooms' areas and
+        // the sun's path.
         let look = m
             .presentation_styles()
             .find(|s| s.name == "Bosque")
             .map(|s| s.id);
-        if let Some(mut vp) = m.viewport(v).cloned() {
-            vp.style.presentation = look;
-            m.set_viewport(vp)?;
-        }
+        archisim_plan::layout::add_presentation_sheet(
+            m,
+            &archisim_plan::layout::PresentationSheet {
+                number: "A-03".into(),
+                name: "Presentación".into(),
+                width: 420.0,
+                height: 297.0,
+                level: pb,
+                style: look,
+            },
+        )?;
         Ok(())
     })?;
 
@@ -1193,13 +1185,13 @@ mod tests {
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 3);
         assert!(m.viewports().any(|v| v.style.presentation.is_some()));
-        assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 2);
+        assert_eq!(m.viewports().filter(|v| v.section.is_some()).count(), 3);
         assert_eq!(m.rooms().count(), 4);
         assert_eq!(m.tags().count(), 9);
         let total: f64 = m.rooms().map(|r| r.area()).sum();
         assert!(total > 90.0 && total < 108.0, "{total}");
-        assert_eq!(m.drafts().count(), 11);
-        assert_eq!(m.draw_layers().len(), 5);
+        assert_eq!(m.drafts().count(), 32);
+        assert_eq!(m.draw_layers().len(), 6);
         assert_eq!(m.dimensions().count(), 4);
         assert!(m
             .dimensions()

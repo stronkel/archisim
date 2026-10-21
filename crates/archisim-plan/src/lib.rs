@@ -30,6 +30,7 @@ pub mod curtain;
 pub(crate) mod dim;
 pub mod drafting;
 pub mod grids;
+pub mod layout;
 pub mod lettering;
 pub mod members;
 pub mod phases;

@@ -64,6 +64,11 @@ impl Model {
                 v.style.presentation = None;
             }
         }
+        for s in self.sheets.values_mut() {
+            if s.presentation == Some(id) {
+                s.presentation = None;
+            }
+        }
         Ok(())
     }
 

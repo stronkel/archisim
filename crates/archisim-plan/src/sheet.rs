@@ -456,14 +456,19 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
         num(vw),
         num(vh)
     );
-    // The paper.
+    // The paper, in the colour of the sheet's presentation style.
+    let look = sheet.presentation.and_then(|p| model.presentation_style(p));
+    let [pr, pg, pb] = look.map_or([255, 255, 255], |p| p.background);
     let _ = writeln!(
         s,
-        r#"<rect class="paper" x="0" y="{}" width="{}" height="{}" fill="white"/>"#,
+        r#"<rect class="paper" x="0" y="{}" width="{}" height="{}" fill="rgb({pr},{pg},{pb})"/>"#,
         num(-h),
         num(w),
         num(h)
     );
+    // What is the sheet's own (view titles, tables, title block, drafting)
+    // goes in `own`, styled at the end; the views keep their style.
+    let mut own = String::new();
     let visible = |a: Point2, b: Point2| match options.region {
         Some((lo, hi)) => !(a.x > hi.x || a.y > hi.y || b.x < lo.x || b.y < lo.y),
         None => true,
@@ -474,40 +479,42 @@ pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> Strin
             draw_viewport(&mut s, model, v, options.px_per_mm);
         }
         if v.show_title {
-            s.push_str("<g id=\"view-titles\">\n");
-            draw_view_title(&mut s, model, v);
-            s.push_str("</g>\n");
+            own.push_str("<g id=\"view-titles\">\n");
+            draw_view_title(&mut own, model, v);
+            own.push_str("</g>\n");
         }
     }
     let tables: Vec<&archisim_core::SheetTable> = model.tables_on(id).collect();
     if !tables.is_empty() {
-        s.push_str("<g id=\"tables\">\n");
+        own.push_str("<g id=\"tables\">\n");
         for t in tables {
             let table = crate::schedules::table(model, t.kind, t.level);
-            crate::schedules::draw_table(&mut s, &table, t.at);
+            crate::schedules::draw_table(&mut own, &table, t.at);
         }
-        s.push_str("</g>\n");
+        own.push_str("</g>\n");
     }
     if sheet.title_block {
-        s.push_str("<g id=\"title-block\">\n");
-        draw_frame(&mut s, model, sheet);
-        s.push_str("</g>\n");
+        own.push_str("<g id=\"title-block\">\n");
+        draw_frame(&mut own, model, sheet);
+        own.push_str("</g>\n");
     }
-    if options.without_drafts {
-        s.push_str("</svg>\n");
-        return s;
+    if !options.without_drafts {
+        crate::drafting::draw_drafts(
+            &mut own,
+            model,
+            ViewRef::Sheet(id),
+            MM,
+            options.region,
+            options.px_per_mm.is_none(),
+            &Default::default(),
+            false,
+            None,
+        );
     }
-    crate::drafting::draw_drafts(
-        &mut s,
-        model,
-        ViewRef::Sheet(id),
-        MM,
-        options.region,
-        options.px_per_mm.is_none(),
-        &Default::default(),
-        false,
-        None,
-    );
+    match look {
+        Some(p) => s.push_str(&crate::presentation::apply_fragment(&own, p)),
+        None => s.push_str(&own),
+    }
     s.push_str("</svg>\n");
     s
 }

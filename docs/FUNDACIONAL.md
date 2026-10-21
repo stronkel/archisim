@@ -181,6 +181,9 @@ Como ArchiCAD en la disposición, con las propiedades como Revit (v0.16):
 
 - **Estilos de presentación** (P1): papel de color, paleta de cuatro o cinco tonos a la que pasan los colores del dibujo por su claridad, muros y pilares cortados macizados en un color y grueso de las líneas. Cada planta, sección o vista de un plano elige el suyo; se guardan en el proyecto y en la biblioteca del estudio (`Estilos.aspres`). De partida: AD5, Terracota, Bosque, Azul y Monocromo.
 - **Pavimentos en planta**: cada local puede dibujar su suelo con una trama, su color y su fondo.
+- **Vegetación y figuras de presentación** (P2): las familias pueden traer un símbolo `plan presentation` (copas de lóbulos irregulares, cada árbol distinto, transparentes o rellenas del color de su especie; personas y coches rellenos).
+- **Sombras** (P3) del sol del proyecto (día y hora solar, latitud de la georreferencia, norte) sobre el suelo de las plantas y en las axonometrías de los planos.
+- **Láminas de presentación** (P4): plano A3 de la planta activa con título, planta, 3D, sección, superficies útiles y recorrido solar a las escalas que caben, en el estilo de la vista; cada plano puede tener su propio estilo; exportación PNG (200 ppp).
 
 ### Locales y etiquetas (v0.25)
 
