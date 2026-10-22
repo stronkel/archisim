@@ -176,6 +176,7 @@ fn element_name(e: &Element) -> &'static str {
         Element::Tag(_) => "Etiqueta",
         Element::Footing(_) => "Cimentación",
         Element::Grid(_) => "Eje",
+        Element::RefPlane(_) => "Plano de referencia",
         Element::Module(_) => "Módulo",
         Element::Mass(_) => "Volumen",
         Element::Plot(_) => "Parcela",
@@ -282,6 +283,7 @@ impl ArchiSimApp {
                 Tool::Railing => ("Barandilla", None, "Varita", ""),
                 Tool::Object => ("Objeto", None, "Varita", ""),
                 Tool::Grid => ("Eje", None, "Varita", ""),
+                Tool::RefPlane => ("Plano de referencia", None, "Varita", ""),
                 Tool::Module => ("Módulo", None, "Varita", ""),
                 Tool::Mass => {
                     let title = match self.mass_settings.what {
@@ -318,6 +320,7 @@ impl ArchiSimApp {
                 | Tool::CurtainWall
                 | Tool::Railing
                 | Tool::Grid
+                | Tool::RefPlane
         );
         let m = |mark, name, hint, act, on| Method {
             mark,
@@ -364,7 +367,7 @@ impl ArchiSimApp {
             m(
                 Mark::Icon(Icon::GeoRect),
                 "Rectángulo",
-                "Dos esquinas opuestas (o la primera y su tamaño: 6000x4000)",
+                "Dos esquinas opuestas (o la primera y su tamaño: 6x4 en metros)",
                 match wall {
                     Some(_) => wall_act(WallMode::Rectangle),
                     None => outline_act(Outline::Rectangle),

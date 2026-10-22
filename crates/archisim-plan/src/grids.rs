@@ -43,7 +43,7 @@ fn bubble(s: &mut String, c: Point2, name: &str, k: f64) {
     let h = NAME_SIZE * k;
     let _ = writeln!(
         s,
-        r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+        r#"<path d="{}" {}/>"#,
         text_path(
             name,
             c - Point2::new(0.0, h / 2.0),
@@ -51,7 +51,7 @@ fn bubble(s: &mut String, c: Point2, name: &str, k: f64) {
             h,
             Align::Centre
         ),
-        num(crate::lettering::STROKE * h)
+        crate::lettering::paint(h, INK)
     );
 }
 

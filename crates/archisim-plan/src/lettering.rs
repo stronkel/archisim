@@ -13,8 +13,10 @@ use std::fmt::Write as _;
 
 use archisim_core::Point2;
 
+use archisim_core::TextFont;
 use archisim_draft::font::{glyph, GAP};
-pub use archisim_draft::font::{text_width, STROKE};
+pub use archisim_draft::font::{text_width, use_font, STROKE};
+use archisim_draft::outline::Seg;
 
 /// How a text sits on its anchor point.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +32,14 @@ pub enum Align {
 /// coordinates. The y axis is flipped for SVG, like every plan coordinate.
 pub fn text_path(text: &str, at: Point2, dir: Point2, h: f64, align: Align) -> String {
     let up = dir.perp_left();
+    if archisim_draft::font::current() == TextFont::Sans {
+        let start = match align {
+            Align::Left => 0.0,
+            Align::Centre => -text_width(text, h) / 2.0,
+        };
+        let segs = archisim_draft::outline::line(text, h, |x, y| at + dir * (start + x) + up * y);
+        return outline_path(&segs);
+    }
     let start = match align {
         Align::Left => 0.0,
         Align::Centre => -text_width(text, h) / 2.0,
@@ -57,6 +67,56 @@ pub fn text_path(text: &str, at: Point2, dir: Point2, h: f64, align: Align) -> S
     d.trim_end().to_string()
 }
 
+/// SVG path data of a text of the drawing (several lines, any angle and
+/// alignment), in the lettering in use: `k` turns paper millimetres into
+/// drawing units. Paint it with [`paint`] at `t.height * k`.
+pub fn text_d(t: &archisim_core::Text, k: f64) -> String {
+    if archisim_draft::font::current() == TextFont::Sans {
+        return outline_path(&archisim_draft::font::text_outline(t, k));
+    }
+    let mut d = String::new();
+    for st in archisim_draft::font::text_strokes(t, k) {
+        for (i, p) in st.iter().enumerate() {
+            let _ = write!(
+                d,
+                "{}{},{} ",
+                if i == 0 { "M" } else { "L" },
+                num(p.x),
+                num(-p.y)
+            );
+        }
+    }
+    d.trim_end().to_string()
+}
+
+/// SVG path data of outlines (y flipped, like every plan coordinate).
+pub fn outline_path(segs: &[Seg]) -> String {
+    let mut d = String::new();
+    let p = |q: Point2| format!("{},{}", num(q.x), num(-q.y));
+    for s in segs {
+        let _ = match *s {
+            Seg::Move(a) => write!(d, "M{} ", p(a)),
+            Seg::Line(a) => write!(d, "L{} ", p(a)),
+            Seg::Quad(c, a) => write!(d, "Q{} {} ", p(c), p(a)),
+            Seg::Cubic(c1, c2, a) => write!(d, "C{} {} {} ", p(c1), p(c2), p(a)),
+            Seg::Close => write!(d, "Z "),
+        };
+    }
+    d.trim_end().to_string()
+}
+
+/// The paint of a text of height `h` in `color`: filled outlines in the
+/// sans lettering, round strokes in the technical one.
+pub fn paint(h: f64, color: &str) -> String {
+    match archisim_draft::font::current() {
+        TextFont::Sans => format!(r#"fill="{color}" stroke="none""#),
+        TextFont::Technical => format!(
+            r#"fill="none" stroke="{color}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round""#,
+            num(STROKE * h)
+        ),
+    }
+}
+
 fn num(v: f64) -> String {
     let v = (v * 1e6).round() / 1e6;
     if v == 0.0 {
@@ -81,6 +141,7 @@ mod tests {
     /// With `ARCHISIM_GLYPHS=file.svg`, writes every glyph to look at them.
     #[test]
     fn glyph_sheet() {
+        let _f = use_font(TextFont::Technical);
         let Some(path) = std::env::var_os("ARCHISIM_GLYPHS") else {
             return;
         };
@@ -99,6 +160,7 @@ mod tests {
 
     #[test]
     fn widths_and_alignment() {
+        let _f = use_font(TextFont::Technical);
         let w = text_width("3,45", 0.1);
         assert!(w > 0.15 && w < 0.3, "{w}");
         // Centred text is symmetric about its anchor.
@@ -119,5 +181,19 @@ mod tests {
         assert!(((lo + hi) / 2.0 - 10.0).abs() < 1e-3, "{lo} {hi}");
         // Unknown characters are skipped.
         assert_eq!(text_width("\u{1F600}", 1.0), 0.0);
+        // The sans lettering: filled outlines, about as wide.
+        drop(_f);
+        let _s = use_font(TextFont::Sans);
+        let sans = text_width("3,45", 0.1);
+        assert!((sans - w).abs() < w * 0.5, "{sans} {w}");
+        let d = text_path(
+            "88",
+            Point2::new(10.0, 0.0),
+            Point2::new(1.0, 0.0),
+            0.1,
+            Align::Left,
+        );
+        assert!(d.contains('Q') && d.contains('Z'), "{d}");
+        assert!(paint(0.1, "#000").starts_with("fill=\"#000\""));
     }
 }

@@ -344,7 +344,10 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
             ui.checkbox(&mut self.show_grid, "Rejilla");
-            ui.checkbox(&mut self.thin_lines, "Líneas finas");
+            ui.checkbox(&mut self.thin_lines, "Líneas finas (sin marcar: grosor real)");
+            if ui.button("Visibilidad y gráficos…").clicked() {
+                self.views.vg_open = true;
+            }
             ui.checkbox(&mut self.show_underlay, "Calco de la planta inferior");
             ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.separator();
@@ -364,6 +367,7 @@ impl ArchiSimApp {
             ui.checkbox(&mut self.pin_command_line, "Línea de órdenes fija")
                 .on_hover_text("Sin marcar, lo que escribes sale junto al cursor y el paso de la orden en marcha, en la barra bajo las pestañas");
             super::missions_ui::text_size_row(ui, &mut self.prefs.text_size);
+            super::missions_ui::units_row(ui, &mut self.prefs.units);
             ui.checkbox(&mut self.keys_autocad, "Teclas de AutoCAD")
                 .on_hover_text("Marcado: se escribe la orden y se pulsa Intro (L, PL, M de muro…). Sin marcar: M, F, P, V, C y N cambian de herramienta al momento, como en ArchiCAD");
             ui.separator();
@@ -658,7 +662,7 @@ impl ArchiSimApp {
             Tool::Wall => self.wall_hint(),
             Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Clic: dentro de un recinto de muros · Esc: flecha",
             Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina · Espacio + clic: varita mágica · Esc: flecha",
-            Tool::Slab if self.slab_tool.mode == SlabMode::Rectangle => "Clic: esquina opuesta · Ancho x fondo (6000x4000) + Intro: exacto · Esc: anular",
+            Tool::Slab if self.slab_tool.mode == SlabMode::Rectangle => "Clic: esquina opuesta · Ancho x fondo (6x4 en metros) + Intro: exacto · Esc: anular",
             Tool::Slab => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Longitud + Intro: exacto · Esc: quitar la última",
             Tool::Door | Tool::Window => "Clic sobre un muro: colocar, centrada en el cursor, abriendo hacia ese lado · Espacio: cambiar la mano · Esc: flecha",
             Tool::Dimension => self.dim_hint(),
@@ -672,7 +676,7 @@ impl ArchiSimApp {
             Tool::Section => "Clic: inicio de la sección · Esc: flecha",
             Tool::CurtainWall if self.curtain_anchor.is_some() => "Clic: final del muro cortina (exterior a la izquierda) · Mayús: 45° · Esc: anular",
             Tool::CurtainWall => "Clic: inicio del muro cortina · Esc: flecha",
-            Tool::Grid | Tool::Footing => self.foundation_hint(),
+            Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_hint(),
             Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Planting => self.planting_hint(),
@@ -705,7 +709,7 @@ impl ArchiSimApp {
             };
         }
         match t.mode {
-            WallMode::Rectangle => "Clic: esquina opuesta · Ancho x fondo (6000x4000) + Intro: exacto · Esc: anular",
+            WallMode::Rectangle => "Clic: esquina opuesta · Ancho x fondo (6x4 en metros) + Intro: exacto · Esc: anular",
             WallMode::Circle => "Clic: un punto de la línea de referencia · Radio + Intro: exacto · Esc: anular",
             WallMode::Arc if t.arc_end().is_some() => "Clic: punto por el que pasa el arco · Radio + Intro: exacto · Esc: otro final",
             WallMode::Arc => "Clic: final del arco · Cuerda + Intro: exacta · Mayús: 45° · Intro/Esc: terminar",

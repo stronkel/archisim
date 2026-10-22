@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Point2, Roof};
 
-use crate::lettering::{text_path, Align, STROKE};
+use crate::lettering::{text_path, Align};
 use crate::{annotate, num, path, pens, pt, INK, SLAB_COVER};
 
 /// Every point of the roof that the plan must show.
@@ -78,9 +78,9 @@ pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
         let at = c + read.perp_left() * (1.2 * k);
         let _ = writeln!(
             s,
-            r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            r#"<path d="{}" {}/>"#,
             text_path(&text, at, read, th, Align::Centre),
-            num(STROKE * th)
+            crate::lettering::paint(th, INK)
         );
     }
     s.push_str("</g>\n");

@@ -43,6 +43,8 @@ pub enum Element {
     Footing(archisim_core::FootingId),
     /// A setting-out grid line (seen on every level).
     Grid(archisim_core::GridId),
+    /// A reference plane (seen on every level).
+    RefPlane(archisim_core::RefPlaneId),
     /// A copy of a module, picked anywhere inside its box.
     Module(archisim_core::ModuleId),
     /// A volume of the concept phase.
@@ -131,6 +133,9 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
         Element::Tag(id) => model.tag(id).map(|t| tag_box(model, t, paper_k()).to_vec()),
         Element::Footing(id) => model.footing(id).map(|f| f.outline()),
         Element::Grid(id) => model.grid(id).map(grid_outline),
+        Element::RefPlane(id) => model
+            .ref_plane(id)
+            .map(|r| archisim_core::strip(&[r.start, r.end], -0.05, 0.05)),
         Element::Module(id) => Some(model.module_outline(id)).filter(|o| o.len() > 2),
         Element::Mass(id) => model.mass(id).map(|m| m.outline()),
         Element::Plot(id) => model.plot(id).map(|p| p.outline.clone()),
@@ -391,6 +396,7 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     }
     v.extend(model.sections().map(|s| Element::Section(s.id)));
     v.extend(model.grids().map(|g| Element::Grid(g.id)));
+    v.extend(model.ref_planes().map(|r| Element::RefPlane(r.id)));
     v.extend(model.columns_on_level(level).map(|c| Element::Column(c.id)));
     v.extend(model.walls_on_level(level).map(|w| Element::Wall(w.id)));
     v.extend(
@@ -466,6 +472,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Object(_)
         | Element::Footing(_)
         | Element::Grid(_)
+        | Element::RefPlane(_)
         | Element::Module(_)
         | Element::Mass(_)
         | Element::Plot(_)
@@ -502,6 +509,7 @@ pub fn pick<G: Geo + ?Sized>(
         | Element::Mark(_)
         | Element::Section(_)
         | Element::Grid(_)
+        | Element::RefPlane(_)
         | Element::Draft(_)
         | Element::Tag(_) => 0,
         Element::Opening(_) => 1,

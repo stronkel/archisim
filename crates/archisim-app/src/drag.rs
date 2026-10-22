@@ -58,6 +58,11 @@ pub enum Grip {
         railing: archisim_core::RailingId,
         index: usize,
     },
+    /// An end of a reference plane.
+    RefPlaneEnd {
+        plane: archisim_core::RefPlaneId,
+        start: bool,
+    },
     /// A point of a road's axis.
     RoadPoint {
         road: archisim_core::RoadId,
@@ -258,6 +263,16 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::RefPlane(id) => {
+                if let Some(r) = model.ref_plane(*id) {
+                    for (start, point) in [(true, r.start), (false, r.end)] {
+                        v.push(Hotspot {
+                            grip: Grip::RefPlaneEnd { plane: *id, start },
+                            point,
+                        });
+                    }
+                }
+            }
             Element::Road(id) => {
                 if let Some(r) = model.road(*id) {
                     for (index, point) in r.axis.iter().enumerate() {
@@ -438,6 +453,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
         Grip::RoadPoint { road, .. } => [Element::Road(road)].into_iter().collect(),
+        Grip::RefPlaneEnd { plane, .. } => [Element::RefPlane(plane)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
         Grip::OpeningJamb { opening, .. } => [Element::Opening(opening)].into_iter().collect(),
@@ -641,6 +657,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
         Grip::RoadPoint { .. } => "Mover punto del eje del vial",
+        Grip::RefPlaneEnd { .. } => "Estirar plano de referencia",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
         Grip::OpeningJamb { .. } => "Estirar hueco",
@@ -757,6 +774,15 @@ pub fn apply(
             .edit_railing(railing, |r| {
                 if let Some(p) = r.path.get_mut(index) {
                     *p = drag.to;
+                }
+            })
+            .map(|_| None),
+        Grip::RefPlaneEnd { plane, start } => model
+            .edit_ref_plane(plane, |r| {
+                if start {
+                    r.start = drag.to;
+                } else {
+                    r.end = drag.to;
                 }
             })
             .map(|_| None),
@@ -978,6 +1004,12 @@ pub(crate) fn move_selection(
                 model.edit_grid(*id, |g| {
                     g.start = g.start + d;
                     g.end = g.end + d;
+                })?;
+            }
+            Element::RefPlane(id) => {
+                model.edit_ref_plane(*id, |r| {
+                    r.start = r.start + d;
+                    r.end = r.end + d;
                 })?;
             }
             Element::Module(id) => {
@@ -1362,6 +1394,14 @@ pub(crate) fn copy(
                 let new = model.add_grid(archisim_core::NewGrid { name, start, end })?;
                 copies.insert(Element::Grid(new));
             }
+            Element::RefPlane(id) => {
+                let r = model
+                    .ref_plane(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let new = model.add_ref_plane("", r.start + d, r.end + d)?;
+                copies.insert(Element::RefPlane(new));
+            }
             Element::Module(id) => {
                 let p = model
                     .module(*id)
@@ -1665,6 +1705,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Tag(id) => model.tag(id).is_some(),
         Element::Footing(id) => model.footing(id).is_some(),
         Element::Grid(id) => model.grid(id).is_some(),
+        Element::RefPlane(id) => model.ref_plane(id).is_some(),
         Element::Module(id) => model.module(id).is_some(),
         Element::Mass(id) => model.mass(id).is_some(),
         Element::Plot(id) => model.plot(id).is_some(),
@@ -1709,6 +1750,7 @@ fn level_of(
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
         Grip::RoadPoint { road, .. } => model.road(road).map(|r| r.level),
+        Grip::RefPlaneEnd { .. } => None,
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
         Grip::OpeningJamb { opening, .. } => {
@@ -1734,7 +1776,7 @@ fn level_of(
             Element::Room(id) => model.room(*id).map(|r| r.level),
             Element::Tag(id) => model.tag(*id).map(|t| t.level),
             Element::Footing(id) => model.footing(*id).map(|f| f.level),
-            Element::Grid(_) => None,
+            Element::Grid(_) | Element::RefPlane(_) => None,
             Element::Module(id) => model.module(*id).map(|m| m.level),
             Element::Mass(id) => model.mass(*id).map(|m| m.level),
             Element::Plot(id) => model.plot(*id).map(|p| p.level),

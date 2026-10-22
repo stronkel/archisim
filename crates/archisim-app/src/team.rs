@@ -34,6 +34,7 @@ pub fn raw_id(e: Element) -> u64 {
         Element::Tag(i) => i.0,
         Element::Footing(i) => i.0,
         Element::Grid(i) => i.0,
+        Element::RefPlane(i) => i.0,
         Element::Module(i) => i.0,
         Element::Mass(i) => i.0,
         Element::Plot(i) => i.0,

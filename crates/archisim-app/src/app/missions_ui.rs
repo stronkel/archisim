@@ -130,6 +130,7 @@ impl ArchiSimApp {
     pub(super) fn sync_prefs(&mut self, ctx: &egui::Context) {
         self.prefs.dark = self.dark;
         self.prefs.keys_autocad = self.keys_autocad;
+        crate::units::set_unit(self.prefs.units);
         let zoom = self.prefs.text_size.zoom();
         if (zoom - self.applied_zoom).abs() > 1e-3 {
             ctx.set_zoom_factor(zoom);
@@ -411,6 +412,20 @@ impl ArchiSimApp {
             self.start_mission(i);
         }
     }
+}
+
+/// Metros · Centímetros · Milímetros.
+pub(super) fn units_row(ui: &mut egui::Ui, units: &mut crate::units::LengthUnit) {
+    ui.horizontal(|ui| {
+        ui.label("Unidades");
+        for u in crate::units::LengthUnit::ALL {
+            ui.selectable_value(units, u, u.name());
+        }
+    })
+    .response
+    .on_hover_text(
+        "En las que se ven y se escriben las medidas (también se puede escribir 270cm o 2700mm)",
+    );
 }
 
 /// Normal · Grande · Muy grande.

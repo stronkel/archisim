@@ -1104,6 +1104,60 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Saved plans of the ground floor for each job (block 2 of Antonio's
+    // review): AD5's look, masonry, surfaces and the ceilings; and a
+    // reference plane on the house's axis.
+    doc.transact("Vistas guardadas", |m| {
+        use archisim_core::{Category as C, PlanKind, PlanView, PlanViewId, ViewStyle};
+        let pb = m.levels()[0].id;
+        let view = |name: &str, kind: PlanKind, style: ViewStyle| PlanView {
+            id: PlanViewId(0),
+            name: name.into(),
+            level: pb,
+            kind,
+            scale: 50.0,
+            cut_plane: 1.1,
+            style,
+        };
+        m.add_plan_view(view("Planta baja — AD5", PlanKind::Floor, ViewStyle::ad5()))?;
+        let mut masonry = ViewStyle::default();
+        for c in [
+            C::Objects,
+            C::Vegetation,
+            C::Services,
+            C::Terrain,
+            C::Roads,
+            C::Plots,
+            C::Rooms,
+            C::Tags,
+        ] {
+            masonry.hidden.insert(c);
+        }
+        m.add_plan_view(view("Planta baja — albañilería", PlanKind::Floor, masonry))?;
+        let mut surfaces = ViewStyle::ad5();
+        for c in [
+            C::Objects,
+            C::Vegetation,
+            C::Services,
+            C::Dimensions,
+            C::Tags,
+        ] {
+            surfaces.hidden.insert(c);
+        }
+        m.add_plan_view(view("Planta baja — superficies", PlanKind::Floor, surfaces))?;
+        m.add_plan_view(view(
+            "Planta baja — techos",
+            PlanKind::Ceiling,
+            ViewStyle::default(),
+        ))?;
+        m.add_ref_plane(
+            "Eje de la casa",
+            Point2::new(6.0, -1.5),
+            Point2::new(6.0, 10.5),
+        )?;
+        Ok(())
+    })?;
+
     Ok(doc)
 }
 

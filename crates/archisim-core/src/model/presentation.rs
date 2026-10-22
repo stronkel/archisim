@@ -69,6 +69,7 @@ impl Model {
                 s.presentation = None;
             }
         }
+        self.forget_presentation(id);
         Ok(())
     }
 

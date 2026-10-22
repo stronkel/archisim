@@ -119,7 +119,7 @@ pub fn draw_masses(
             let h = LABEL * k;
             let _ = writeln!(
                 s,
-                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                r#"<path d="{}" {}/>"#,
                 text_path(
                     &label,
                     centre - Point2::new(0.0, h / 2.0),
@@ -127,7 +127,7 @@ pub fn draw_masses(
                     h,
                     Align::Centre
                 ),
-                num(crate::lettering::STROKE * h)
+                crate::lettering::paint(h, INK)
             );
         });
     }

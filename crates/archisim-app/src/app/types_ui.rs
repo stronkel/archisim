@@ -528,8 +528,8 @@ impl ArchiSimApp {
                                 name: t.name.clone(),
                                 badge: String::new(),
                                 detail: format!(
-                                    "{} mm · {n} muro{}",
-                                    fmt_mm(t.thickness()),
+                                    "{} · {n} muro{}",
+                                    crate::units::fmt_len(t.thickness()),
                                     plural(n)
                                 ),
                                 thumb,
@@ -563,8 +563,8 @@ impl ArchiSimApp {
                                 name: t.name.clone(),
                                 badge: String::new(),
                                 detail: format!(
-                                    "{} mm · {n} forjado{}",
-                                    fmt_mm(t.thickness()),
+                                    "{} · {n} forjado{}",
+                                    crate::units::fmt_len(t.thickness()),
                                     plural(n)
                                 ),
                                 thumb,
@@ -1341,7 +1341,7 @@ impl ArchiSimApp {
                 ui,
                 "Espesor total",
                 "",
-                &format!("{} mm", fmt_mm(t.thickness())),
+                &crate::units::fmt_len(t.thickness()),
             );
             props::text_row(ui, "Muros de este tipo", "", &users.to_string());
             props::id_row(ui, "GlobalId", t.guid.as_str());
@@ -1396,12 +1396,7 @@ impl ArchiSimApp {
                     }
                 },
             );
-            props::text_row(
-                ui,
-                "Canto total",
-                "",
-                &format!("{} mm", fmt_mm(t.thickness())),
-            );
+            props::text_row(ui, "Canto total", "", &crate::units::fmt_len(t.thickness()));
             props::text_row(ui, "Forjados de este tipo", "", &users.to_string());
             props::id_row(ui, "GlobalId", t.guid.as_str());
         });

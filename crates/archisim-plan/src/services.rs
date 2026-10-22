@@ -131,9 +131,9 @@ pub fn draw_services(
                     let at = centre - n * (h / 2.0);
                     let _ = writeln!(
                         s,
-                        r#"<path d="{}" fill="none" stroke="{colour}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                        r#"<path d="{}" {}/>"#,
                         text_path(&text, at, u, h, Align::Centre),
-                        num(crate::lettering::STROKE * h)
+                        crate::lettering::paint(h, &colour)
                     );
                 }
             }
@@ -214,7 +214,7 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
             let h = 2.0 * k;
             let _ = writeln!(
                 s,
-                r#"<path d="{}" fill="none" stroke="{ink}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                r#"<path d="{}" {}/>"#,
                 text_path(
                     &d.name,
                     c - Point2::new(0.0, d.depth / 2.0 + 1.5 * h),
@@ -222,7 +222,7 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
                     h,
                     Align::Centre
                 ),
-                num(crate::lettering::STROKE * h)
+                crate::lettering::paint(h, ink)
             );
         }
     }

@@ -7,7 +7,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Point2, Terrain};
 
-use crate::lettering::{text_path, Align, STROKE};
+use crate::lettering::{text_path, Align};
 use crate::{annotate, num, pens, pt, INK};
 
 /// Colour of the contour lines.
@@ -60,9 +60,9 @@ pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
                 let mid = (*a + *b) * 0.5 + dir.perp_left() * (0.6 * k);
                 let _ = writeln!(
                     s,
-                    r#"<path d="{}" fill="none" stroke="{CONTOUR}" stroke-width="{}" stroke-linejoin="round"/>"#,
+                    r#"<path d="{}" {}/>"#,
                     text_path(&height(z), mid, dir, th, Align::Centre),
-                    num(STROKE * th)
+                    crate::lettering::paint(th, CONTOUR)
                 );
             }
         }
@@ -86,7 +86,7 @@ pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
         let q = p.at;
         let _ = writeln!(
             s,
-            r#"<path d="M{} L{} M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/>"#,
+            r#"<path d="M{} L{} M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="{}" {}/>"#,
             pt(q - Point2::new(c, 0.0)),
             pt(q + Point2::new(c, 0.0)),
             pt(q - Point2::new(0.0, c)),
@@ -99,7 +99,7 @@ pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
                 th,
                 Align::Left
             ),
-            num(STROKE * th)
+            crate::lettering::paint(th, INK)
         );
     }
     s.push_str("</g>\n");
@@ -115,7 +115,7 @@ pub fn draw_north(s: &mut String, at: Point2, angle: f64, k: f64) {
     let tail = at - up * r;
     let _ = writeln!(
         s,
-        r#"<g class="north"><circle cx="{}" cy="{}" r="{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="M{} L{} L{} Z" fill="{INK}" stroke="none"/><path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="round"/></g>"#,
+        r#"<g class="north"><circle cx="{}" cy="{}" r="{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="M{} L{} L{} Z" fill="{INK}" stroke="none"/><path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/><path d="{}" {}/></g>"#,
         num(at.x),
         num(-at.y),
         num(r),
@@ -133,6 +133,6 @@ pub fn draw_north(s: &mut String, at: Point2, angle: f64, k: f64) {
             2.5 * k,
             Align::Centre
         ),
-        num(STROKE * 2.5 * k)
+        crate::lettering::paint(2.5 * k, INK)
     );
 }

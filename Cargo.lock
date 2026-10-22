@@ -312,6 +312,7 @@ name = "archisim-draft"
 version = "0.41.1"
 dependencies = [
  "archisim-core",
+ "ttf-parser",
 ]
 
 [[package]]

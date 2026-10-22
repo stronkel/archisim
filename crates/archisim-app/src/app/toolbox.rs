@@ -420,6 +420,13 @@ const STRUCTURE: &[Tile] = &[
         "X",
         "Ejes de replanteo con su numeración",
     ),
+    tile(
+        Pick::Tool(Tool::RefPlane),
+        Glyph::RefPlane,
+        "Plano ref.",
+        "Q",
+        "Planos de referencia: líneas para dibujar contra ellas, en todas las plantas",
+    ),
 ];
 
 const SERVICES: &[Tile] = &[
@@ -582,6 +589,13 @@ const DOCUMENTATION: &[Tile] = &[
         "Tabla",
         "",
         "Tablas de planificación: carpintería, muros, forjados, locales, estructura…",
+    ),
+    tile(
+        Pick::Tool(Tool::RefPlane),
+        Glyph::RefPlane,
+        "Plano ref.",
+        "Q",
+        "Planos de referencia: líneas para dibujar contra ellas, en todas las plantas",
     ),
 ];
 

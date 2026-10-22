@@ -56,6 +56,8 @@ pub struct Prefs {
     pub text_size: TextSize,
     pub dark: bool,
     pub keys_autocad: bool,
+    /// The unit lengths are shown and typed in.
+    pub units: crate::units::LengthUnit,
     /// Ids of the missions done.
     pub missions_done: Vec<String>,
     /// The welcome card offering the missions was answered.
@@ -68,6 +70,7 @@ impl Default for Prefs {
             text_size: TextSize::Normal,
             dark: false,
             keys_autocad: true,
+            units: crate::units::LengthUnit::Metre,
             missions_done: Vec::new(),
             welcomed: false,
         }
@@ -100,6 +103,7 @@ impl Prefs {
             "tamaño_letra": self.text_size.key(),
             "tema_oscuro": self.dark,
             "teclas_autocad": self.keys_autocad,
+            "unidades": self.units.symbol(),
             "misiones_hechas": self.missions_done,
             "bienvenida": self.welcomed,
         });
@@ -121,6 +125,11 @@ impl Prefs {
                 .map_or(d.text_size, TextSize::from_key),
             dark: flag("tema_oscuro", d.dark),
             keys_autocad: flag("teclas_autocad", d.keys_autocad),
+            units: v
+                .get("unidades")
+                .and_then(|x| x.as_str())
+                .and_then(crate::units::LengthUnit::from_symbol)
+                .unwrap_or(d.units),
             missions_done: v
                 .get("misiones_hechas")
                 .and_then(|x| x.as_array())
@@ -140,6 +149,7 @@ impl Prefs {
         if cfg!(test) {
             return Prefs {
                 welcomed: true,
+                units: crate::units::LengthUnit::Millimetre,
                 ..Default::default()
             };
         }
@@ -175,6 +185,7 @@ mod tests {
             text_size: TextSize::Larger,
             dark: true,
             keys_autocad: false,
+            units: crate::units::LengthUnit::Centimetre,
             missions_done: vec!["muro".into(), "plano".into()],
             welcomed: true,
         };

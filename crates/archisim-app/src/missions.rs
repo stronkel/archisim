@@ -94,7 +94,7 @@ pub const MISSIONS: &[Mission] = &[
                 |o, _| o.tool == Some(Tool::Wall) && o.wall_rectangle,
             ),
             step(
-                "Haz clic en una esquina de la planta y otro en la opuesta. Para medidas exactas, tras el primer clic teclea 8000x6000 e Intro.",
+                "Haz clic en una esquina de la planta y otro en la opuesta. Para medidas exactas, tras el primer clic teclea 8x6 (metros) e Intro.",
                 "",
                 |o, s| o.walls >= s.walls + 4,
             ),

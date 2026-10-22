@@ -29,6 +29,8 @@ pub struct PlanKey {
     pub phase_view: archisim_plan::phases::PhaseView,
     /// What the view shows.
     pub style: archisim_core::ViewStyle,
+    /// A reflected ceiling plan.
+    pub ceiling: bool,
 }
 
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,

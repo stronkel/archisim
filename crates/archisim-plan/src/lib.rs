@@ -33,6 +33,7 @@ pub mod grids;
 pub mod layout;
 pub mod lettering;
 pub mod members;
+pub mod overrides;
 pub mod phases;
 pub mod presentation;
 pub mod railings;
@@ -97,6 +98,10 @@ pub struct PlanOptions {
     /// keeps them while the model does not change); `None`: worked out
     /// here when the presentation style casts shadows.
     pub shadows: Option<std::sync::Arc<Vec<archisim_geom::junctions::Shape>>>,
+    /// A reflected ceiling plan: the ceiling above (the slabs of the next
+    /// level), lights and ducts, doors and windows without their swings,
+    /// no furniture, stairs or ground.
+    pub ceiling: bool,
 }
 
 /// Width of a hairline on paper, in millimetres, for [`PlanOptions::thin_lines`]
@@ -119,6 +124,7 @@ impl Default for PlanOptions {
             pens: None,
             title: true,
             shadows: None,
+            ceiling: false,
         }
     }
 }
@@ -303,6 +309,7 @@ pub fn level_below(model: &Model, level: LevelId) -> Option<LevelId> {
 
 /// Renders the plan of one level as an SVG document.
 pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> String {
+    let _font = lettering::use_font(model.graphics.font);
     let coarse = options
         .px_per_mm
         .is_some_and(|px| px * HATCH_SPACING < MIN_HATCH_PX);
@@ -319,10 +326,13 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
     let _greyed = dim::begin(model, &options.style);
     let look = presentation::style_of(model, &options.style);
     let _poche = presentation::begin(look);
+    let _layers = overrides::begin(&options.style);
     let mut svg = render_plan_inner(phased.as_ref().unwrap_or(model), level, options);
     if let Some(p) = look {
         svg = presentation::apply(&svg, p);
     }
+    // Each category's own graphics, over the presentation style.
+    svg = overrides::apply(&svg, &options.style);
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
     PENS.with(|p| p.set(archisim_core::Pens::FINE));
@@ -359,8 +369,38 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         })
     };
     // Walls of this level, then those of other levels it cuts, each with
-    // the height of the cut above its own level.
-    let show = |c: archisim_core::Category| options.style.shows(c);
+    // the height of the cut above its own level. A ceiling plan leaves out
+    // what is on the floor.
+    let ceiling = options.ceiling;
+    let show = |c: archisim_core::Category| {
+        use archisim_core::Category as C;
+        options.style.shows(c)
+            && !(ceiling
+                && matches!(
+                    c,
+                    C::Objects
+                        | C::Vegetation
+                        | C::Stairs
+                        | C::Terrain
+                        | C::Roads
+                        | C::Plots
+                        | C::Railings
+                        | C::Foundations
+                        | C::Masses
+                ))
+    };
+    // The ceiling over a level: the slabs of the next level up.
+    let slab_level = if ceiling {
+        let here = model.level(level).map_or(0.0, |l| l.elevation);
+        model
+            .levels()
+            .into_iter()
+            .filter(|l| l.elevation > here + EPSILON)
+            .min_by(|a, b| a.elevation.total_cmp(&b.elevation))
+            .map(|l| l.id)
+    } else {
+        Some(level)
+    };
     let mut geos: Vec<WallGeometry> = model
         .walls_on_level(level)
         .filter(|_| show(archisim_core::Category::Walls))
@@ -383,8 +423,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .filter(|id| wall_visible(**id))
         .filter_map(|id| wall_geometry_in(&idx, *id))
         .collect();
-    let slabs: Vec<&Slab> = model
-        .slabs_on_level(level)
+    let slabs: Vec<&Slab> = slab_level
+        .into_iter()
+        .flat_map(|l| model.slabs_on_level(l))
         .filter(|_| show(archisim_core::Category::Slabs))
         .filter(|s| {
             let lo = s
@@ -571,25 +612,39 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .terrains_on_level(level)
         .filter(|_| show(archisim_core::Category::Terrain))
     {
-        dim::element(&mut s, t.id.0, |s| terrain::draw_terrain(s, t, k));
+        overrides::group(&mut s, archisim_core::Category::Terrain, |s| {
+            dim::element(s, t.id.0, |s| terrain::draw_terrain(s, t, k))
+        });
     }
     if show(archisim_core::Category::Roads) {
         let vis = |poly: &[Point2]| {
             let (lo, hi) = bounds(poly);
             visible(lo, hi)
         };
-        urban::draw_roads(&mut s, model, level, k, &vis);
-    }
-    for (si, slab) in slabs.iter().enumerate() {
-        dim::element(&mut s, slab.id.0, |s| {
-            draw_slab(s, model, slab, si, options.cut_plane, k)
+        overrides::group(&mut s, archisim_core::Category::Roads, |s| {
+            urban::draw_roads(s, model, level, k, &vis)
         });
     }
-    if show(archisim_core::Category::Rooms) {
-        rooms::draw_floor_fills(&mut s, model, level, k);
+    overrides::open(&mut s, archisim_core::Category::Slabs);
+    for (si, slab) in slabs.iter().enumerate() {
+        // Seen from below, the ceiling reads as a surface.
+        let cut = if ceiling {
+            f64::INFINITY
+        } else {
+            options.cut_plane
+        };
+        dim::element(&mut s, slab.id.0, |s| draw_slab(s, model, slab, si, cut, k));
     }
-    // Hatches of the drawing (pavings, lawn, water) under the elements.
-    if show(archisim_core::Category::Drafting) {
+    overrides::close(&mut s);
+    if show(archisim_core::Category::Rooms) && !ceiling {
+        overrides::group(&mut s, archisim_core::Category::Rooms, |s| {
+            rooms::draw_floor_fills(s, model, level, k)
+        });
+    }
+    // Hatches of the drawing (pavings, lawn, water) under the elements;
+    // not in a ceiling plan, they are on the floor.
+    if show(archisim_core::Category::Drafting) && !ceiling {
+        overrides::open(&mut s, archisim_core::Category::Drafting);
         drafting::draw_drafts(
             &mut s,
             model,
@@ -601,6 +656,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             false,
             Some(true),
         );
+        overrides::close(&mut s);
     }
     // The sun's shadows on the ground, over the pavings.
     if let Some(p) = presentation::style_of(model, &options.style).filter(|p| p.shadows) {
@@ -614,6 +670,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             presentation::draw_shadows(&mut s, &sh, p);
         }
     }
+    overrides::open(&mut s, archisim_core::Category::Roofs);
     for roof in model
         .roofs_on_level(level)
         .filter(|_| show(archisim_core::Category::Roofs))
@@ -623,6 +680,8 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             dim::element(&mut s, roof.id.0, |s| roofs::draw_roof(s, roof, k));
         }
     }
+    overrides::close(&mut s);
+    overrides::open(&mut s, archisim_core::Category::Stairs);
     for stair in model
         .stairs_on_level(level)
         .filter(|_| show(archisim_core::Category::Stairs))
@@ -649,27 +708,34 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             });
         }
     }
+    overrides::close(&mut s);
     s.push_str("</g>\n");
     if show(archisim_core::Category::Foundations) {
         let vis = |poly: &[Point2]| {
             let (lo, hi) = bounds(poly);
             visible(lo, hi)
         };
-        grids::draw_footings(&mut s, model, level, k, &vis);
+        overrides::group(&mut s, archisim_core::Category::Foundations, |s| {
+            grids::draw_footings(s, model, level, k, &vis)
+        });
     }
     if show(archisim_core::Category::Masses) {
         let vis = |poly: &[Point2]| {
             let (lo, hi) = bounds(poly);
             visible(lo, hi)
         };
-        concept::draw_masses(&mut s, model, level, k, &vis);
+        overrides::group(&mut s, archisim_core::Category::Masses, |s| {
+            concept::draw_masses(s, model, level, k, &vis)
+        });
     }
     if show(archisim_core::Category::Plots) {
         let vis = |poly: &[Point2]| {
             let (lo, hi) = bounds(poly);
             visible(lo, hi)
         };
-        urban::draw_plots(&mut s, model, level, k, &vis);
+        overrides::group(&mut s, archisim_core::Category::Plots, |s| {
+            urban::draw_plots(s, model, level, k, &vis)
+        });
     }
     if show(archisim_core::Category::Services) {
         let vis = |poly: &[Point2]| {
@@ -677,10 +743,14 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             visible(lo, hi)
         };
         let walls: Vec<&[Point2]> = geos.iter().map(|g| g.outline.as_slice()).collect();
-        services::draw_services(&mut s, model, level, k, &vis, &walls);
+        overrides::group(&mut s, archisim_core::Category::Services, |s| {
+            services::draw_services(s, model, level, k, &vis, &walls)
+        });
     }
     if show(archisim_core::Category::Grids) {
-        grids::draw_grids(&mut s, model, k);
+        overrides::group(&mut s, archisim_core::Category::Grids, |s| {
+            grids::draw_grids(s, model, k)
+        });
     }
     if !reference.is_empty() {
         draw_reference(&mut s, model, &reference, k);
@@ -703,6 +773,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         })
         .collect();
 
+    overrides::open(&mut s, archisim_core::Category::Walls);
     s.push_str("<g id=\"poche\">\n");
     for (gi, g) in geos.iter().enumerate() {
         let cut: Vec<OpeningGeometry> = openings[gi]
@@ -714,13 +785,17 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             draw_layers(s, model, g, gi, &pieces[gi], &cut, cuts[gi], k)
         });
     }
-    s.push_str("</g>\n<g id=\"openings\" stroke-linejoin=\"miter\">\n");
+    s.push_str("</g>\n");
+    overrides::close(&mut s);
+    overrides::open(&mut s, archisim_core::Category::Openings);
+    s.push_str("<g id=\"openings\" stroke-linejoin=\"miter\">\n");
     for (ops, cut) in openings.iter().zip(&cuts) {
         for o in ops {
             if !show(archisim_core::Category::Openings) {
                 continue;
             }
             dim::element(&mut s, o.opening.0, |s| match opening_view(o, *cut) {
+                OpeningView::Cut if ceiling => draw_opening_above(s, o, k),
                 OpeningView::Cut => draw_opening(s, model, o, options.scale, k),
                 OpeningView::Above => draw_opening_above(s, o, k),
                 OpeningView::Below => {}
@@ -728,22 +803,27 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         }
     }
     // Cut lines go last so frames and sill boards never cover the jambs.
-    s.push_str("</g>\n<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
+    s.push_str("</g>\n");
+    overrides::close(&mut s);
+    overrides::open(&mut s, archisim_core::Category::Walls);
+    s.push_str("<g id=\"cut-lines\" fill=\"none\" stroke-linecap=\"square\">\n");
     for ((g, p), cut) in geos.iter().zip(&pieces).zip(&cuts) {
         dim::element(&mut s, g.wall.0, |s| draw_cut_lines(s, g, p, *cut, k));
     }
     s.push_str("</g>\n");
+    overrides::close(&mut s);
     // Columns and beams on top: the structure goes through the walls.
     let poly_visible = |poly: &[Point2]| {
         let (lo, hi) = bounds(poly);
         visible(lo, hi)
     };
-    if show(archisim_core::Category::Objects) {
-        draw_objects(&mut s, model, level, options.scale, k, &poly_visible);
-    }
+    draw_objects(&mut s, model, level, options.scale, k, &poly_visible, &show);
     if show(archisim_core::Category::Structure) {
-        members::draw_members(&mut s, model, level, options.cut_plane, k, &poly_visible);
+        overrides::group(&mut s, archisim_core::Category::Structure, |s| {
+            members::draw_members(s, model, level, options.cut_plane, k, &poly_visible)
+        });
     }
+    overrides::open(&mut s, archisim_core::Category::CurtainWalls);
     s.push_str("<g id=\"curtain-walls\">\n");
     for c in model
         .curtain_walls_on_level(level)
@@ -755,7 +835,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             });
         }
     }
-    s.push_str("</g>\n<g id=\"railings\">\n");
+    s.push_str("</g>\n");
+    overrides::close(&mut s);
+    overrides::open(&mut s, archisim_core::Category::Railings);
+    s.push_str("<g id=\"railings\">\n");
     for r in model
         .railings_on_level(level)
         .filter(|_| show(archisim_core::Category::Railings))
@@ -767,8 +850,10 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         }
     }
     s.push_str("</g>\n");
+    overrides::close(&mut s);
 
     if show(archisim_core::Category::Drafting) {
+        overrides::open(&mut s, archisim_core::Category::Drafting);
         drafting::draw_drafts(
             &mut s,
             model,
@@ -780,22 +865,38 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             !show(archisim_core::Category::Dimensions),
             Some(false),
         );
+        overrides::close(&mut s);
     }
     if show(archisim_core::Category::Rooms) {
-        rooms::draw_rooms(&mut s, model, level, k);
+        overrides::group(&mut s, archisim_core::Category::Rooms, |s| {
+            rooms::draw_rooms(s, model, level, k)
+        });
     }
     if show(archisim_core::Category::Tags) {
-        rooms::draw_tags(&mut s, model, level, k);
+        overrides::group(&mut s, archisim_core::Category::Tags, |s| {
+            rooms::draw_tags(s, model, level, k)
+        });
+    }
+    if show(archisim_core::Category::RefPlanes) {
+        overrides::group(&mut s, archisim_core::Category::RefPlanes, |s| {
+            draw_ref_planes(s, model, k)
+        });
     }
     s.push_str("<g id=\"annotations\">\n");
+    overrides::open(&mut s, archisim_core::Category::Dimensions);
     for d in &dimensions {
         annotate::draw_dimension(&mut s, d, k);
     }
+    overrides::close(&mut s);
+    overrides::open(&mut s, archisim_core::Category::LevelMarks);
     for m in &marks {
         annotate::draw_elevation_mark(&mut s, model, m, k);
     }
+    overrides::close(&mut s);
     if show(archisim_core::Category::SectionMarks) {
-        section::draw_markers(&mut s, model, k);
+        overrides::group(&mut s, archisim_core::Category::SectionMarks, |s| {
+            section::draw_markers(s, model, k)
+        });
     }
     s.push_str("</g>\n");
 
@@ -844,13 +945,55 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         );
         let _ = writeln!(
             s,
-            r#"<path class="title" d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            r#"<path class="title" d="{}" {}/>"#,
             lettering::text_path(&text, at, Point2::new(1.0, 0.0), h, lettering::Align::Left),
-            num(lettering::STROKE * h)
+            crate::lettering::paint(h, INK)
         );
     }
     s.push_str("</svg>\n");
     s
+}
+
+/// Colour of reference planes.
+pub const REF_PLANE_INK: &str = "#2f8f5b";
+
+/// The reference planes: thin dash-dot green lines with their name at the
+/// start, as Revit draws them.
+fn draw_ref_planes(s: &mut String, model: &Model, k: f64) {
+    let planes: Vec<_> = model.ref_planes().collect();
+    if planes.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        s,
+        r#"<g id="reference-planes" fill="none" stroke="{REF_PLANE_INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}">"#,
+        num(pens().thin * k),
+        num(6.0 * k),
+        num(1.2 * k),
+        num(0.6 * k),
+        num(1.2 * k)
+    );
+    for r in planes {
+        let (a, b) = (r.start, r.end);
+        let _ = writeln!(s, r#"<path d="M{} L{}"/>"#, pt(a), pt(b));
+        let Some(u) = (b - a).normalized() else {
+            continue;
+        };
+        let read = if u.x < -1e-9 || (u.x.abs() < 1e-9 && u.y < 0.0) {
+            u * -1.0
+        } else {
+            u
+        };
+        let h = pens().text * 0.8 * k;
+        let at = a + u * (1.5 * k) + read.perp_left() * (0.8 * k);
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" {} stroke-dasharray="none"/>"#,
+            lettering::text_path(&r.name, at, read, h, lettering::Align::Left),
+            lettering::paint(h, REF_PLANE_INK)
+        );
+    }
+    s.push_str("</g>\n");
 }
 
 /// Colour of the reference level drawn underneath.
@@ -967,14 +1110,19 @@ fn fill_cut(s: &mut String, mat: &archisim_core::Material, polygon: &[Point2], i
     if !hatch.is_empty() {
         let _ = writeln!(
             s,
-            r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+            r#"<path {}d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+            overrides::PATTERN,
             num(pens().hatch * k)
         );
     }
     if mat.cut_pattern == CutPattern::Dots {
         let dots = hatch_dots(polygon, sp, pens().hatch * k * 1.2);
         if !dots.is_empty() {
-            let _ = writeln!(s, r#"<path d="{dots}" fill="{INK}"/>"#);
+            let _ = writeln!(
+                s,
+                r#"<path {}d="{dots}" fill="{INK}"/>"#,
+                overrides::PATTERN
+            );
         }
     }
 }
@@ -1091,7 +1239,8 @@ fn draw_layers(
                 if !zz.is_empty() {
                     let _ = writeln!(
                         s,
-                        r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                        r#"<path {}d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                        overrides::PATTERN,
                         num(pens().hatch * k)
                     );
                 }
@@ -1103,7 +1252,25 @@ fn draw_layers(
     // layer stops short of a jamb, the boundary stops with it. At a
     // T-junction the layer that goes further into the other wall draws it.
     let tee_end = matches!(g.start_cut, EndCut::Tee(_)) || matches!(g.end_cut, EndCut::Tee(_));
+    let shown = |li: usize| match overrides::layer_lines() {
+        archisim_core::LayerLines::All => true,
+        archisim_core::LayerLines::None => false,
+        // The outline of what is between the leaves (air and insulation
+        // together), not the lines inside it.
+        archisim_core::LayerLines::Cavity => {
+            let cavity = |i: usize| {
+                matches!(
+                    wtype.layers[i].function,
+                    LayerFunction::AirGap | LayerFunction::Insulation
+                )
+            };
+            cavity(li) != cavity(li + 1)
+        }
+    };
     for li in 0..wtype.layers.len().saturating_sub(1) {
+        if !shown(li) {
+            continue;
+        }
         let owners: &[usize] = if jamb.cut_back(li + 1) {
             &[li + 1]
         } else if tee_end {
@@ -1287,7 +1454,8 @@ fn draw_slab(s: &mut String, model: &Model, slab: &Slab, si: usize, cut_plane: f
             if !hatch.is_empty() {
                 let _ = writeln!(
                     s,
-                    r#"<path d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    r#"<path {}d="{hatch}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                    overrides::PATTERN,
                     num(pens().hatch * k)
                 );
             }
@@ -1350,9 +1518,9 @@ fn draw_slope_arrow(s: &mut String, slab: &Slab, slope: &archisim_core::SlabSlop
     let mid = a + (b - a) * 0.5 + read.perp_left() * (1.0 * k);
     let _ = writeln!(
         s,
-        r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
+        r#"<path d="{}" {}/></g>"#,
         lettering::text_path(&text, mid, read, th, lettering::Align::Centre),
-        num(lettering::STROKE * th)
+        crate::lettering::paint(th, INK)
     );
 }
 
@@ -1719,6 +1887,20 @@ fn line(s: &mut String, p: Point2, q: Point2, weight: f64, k: f64) {
 /// Objects of a level (furniture, sanitary ware…): the plan symbol of
 /// their family for the drawing scale, turned and placed. Too small to
 /// see: just their box.
+/// The category of an object in a view: the garden's plants are
+/// vegetation, the rest objects.
+pub fn object_category(model: &Model, o: &archisim_core::Object) -> archisim_core::Category {
+    let site = model
+        .object_type(o.object_type)
+        .and_then(|t| model.family(t.family))
+        .is_some_and(|f| f.def().category == "site");
+    if site {
+        archisim_core::Category::Vegetation
+    } else {
+        archisim_core::Category::Objects
+    }
+}
+
 fn draw_objects(
     s: &mut String,
     model: &Model,
@@ -1726,9 +1908,14 @@ fn draw_objects(
     scale: f64,
     k: f64,
     visible: &dyn Fn(&[Point2]) -> bool,
+    shows: &dyn Fn(archisim_core::Category) -> bool,
 ) {
     s.push_str("<g id=\"objects\">\n");
     for o in model.objects_on_level(level) {
+        let category = object_category(model, o);
+        if !shows(category) {
+            continue;
+        }
         let outline = model.object_outline(o.id);
         if outline.is_empty() || !visible(&outline) {
             continue;
@@ -1750,6 +1937,7 @@ fn draw_objects(
         } else {
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
+        overrides::open(s, category);
         dim::element(s, o.id.0, |s| match marks {
             Ok(marks) => draw_marks(s, model, marks, &|p| o.to_plan(p[0], p[1]), k),
             Err(()) => {
@@ -1761,6 +1949,7 @@ fn draw_objects(
                 );
             }
         });
+        overrides::close(s);
     }
     s.push_str("</g>\n");
 }

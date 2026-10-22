@@ -33,8 +33,8 @@ impl Command for Dist {
             (Some(a), Input::Point(b)) => {
                 let d = b - a;
                 Step::SayDone(format!(
-                    "Distancia = {} mm · ángulo {} · ΔX = {} · ΔY = {}",
-                    fmt_mm(d.length()),
+                    "Distancia = {} · ángulo {} · ΔX = {} · ΔY = {}",
+                    crate::units::fmt_len(d.length()),
                     fmt_angle(angle_of(d)),
                     fmt_mm(d.x),
                     fmt_mm(d.y)
@@ -67,9 +67,9 @@ pub struct AreaCmd {
 
 fn report(area: f64, perimeter: f64) -> String {
     format!(
-        "Área = {} · Perímetro = {} mm",
+        "Área = {} · Perímetro = {}",
         fmt_area(area),
-        fmt_mm(perimeter)
+        crate::units::fmt_len(perimeter)
     )
 }
 
@@ -164,7 +164,7 @@ impl List {
             let mut s = format!("{} · capa «{layer}»", d.shape.label());
             let len = archisim_draft::length(&d.shape);
             if len > 0.0 {
-                s.push_str(&format!(" · longitud {} mm", fmt_mm(len)));
+                s.push_str(&format!(" · longitud {}", crate::units::fmt_len(len)));
             }
             if let Some(a) = archisim_draft::area(&d.shape) {
                 s.push_str(&format!(" · área {}", fmt_area(a)));

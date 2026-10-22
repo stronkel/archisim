@@ -105,6 +105,8 @@ impl ArchiSimApp {
     }
 
     fn nav_views(&mut self, ui: &mut Ui) {
+        /// A saved view of a level: id, name and whether it is a ceiling plan.
+        type SavedRow = (archisim_core::PlanViewId, String, bool);
         let levels: Vec<(LevelId, String, f64)> = self
             .ed
             .model()
@@ -114,6 +116,31 @@ impl ArchiSimApp {
             .map(|l| (l.id, l.name.clone(), l.elevation))
             .collect();
         let active = self.tabs.get(self.active_tab).map(|t| t.kind);
+        let active_saved = self.active_saved();
+        let saved_views: Vec<(LevelId, Vec<SavedRow>)> = levels
+            .iter()
+            .map(|(l, _, _)| {
+                (
+                    *l,
+                    self.ed
+                        .model()
+                        .plan_views_of(*l)
+                        .into_iter()
+                        .map(|v| {
+                            (
+                                v.id,
+                                v.name.clone(),
+                                v.kind == archisim_core::PlanKind::Ceiling,
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let mut open_saved = None;
+        let mut duplicate: Option<(LevelId, archisim_core::PlanKind)> = None;
+        let mut delete_view = None;
+        let mut rename_view: Option<(archisim_core::PlanViewId, String)> = None;
         let mut open = None;
         let mut levels_dialog = false;
         let mut make_elevations = false;
@@ -141,10 +168,10 @@ impl ArchiSimApp {
                     None,
                     name,
                     &fmt_level(*elevation),
-                    active == Some(kind),
+                    active == Some(kind) && active_saved.is_none(),
                     10.0,
                 )
-                .on_hover_text("Abrir la planta; arrástrala a un plano para colocarla a su escala");
+                .on_hover_text("Abrir la planta; arrástrala a un plano para colocarla a su escala. Clic derecho: guardar una vista de ella");
                 // The missions point at the lowest level, and at the top
                 // one for «abre la planta nueva».
                 if i + 1 == levels.len() {
@@ -157,6 +184,66 @@ impl ArchiSimApp {
                     open = Some(kind);
                 }
                 super::sheet_drop::drag_source(ui, &r, super::sheet_drop::Drop::Level(*id), name);
+                r.context_menu(|ui| {
+                    if ui.button("Guardar una vista de esta planta").clicked() {
+                        duplicate = Some((*id, archisim_core::PlanKind::Floor));
+                        ui.close();
+                    }
+                    if ui.button("Planta de techos").clicked() {
+                        duplicate = Some((*id, archisim_core::PlanKind::Ceiling));
+                        ui.close();
+                    }
+                });
+                // Its saved views, under it.
+                let views = saved_views
+                    .iter()
+                    .find(|(l, _)| l == id)
+                    .map(|(_, v)| v.as_slice())
+                    .unwrap_or(&[]);
+                for (vid, vname, ceiling) in views {
+                    let r = super::widgets::list_row_draggable(
+                        ui,
+                        Some(Icon::Plan),
+                        None,
+                        vname,
+                        if *ceiling { "techos" } else { "" },
+                        active_saved == Some(*vid),
+                        26.0,
+                    )
+                    .on_hover_text("Vista guardada: su escala, plano de corte y gráficos. Clic derecho: renombrar o borrar");
+                    super::missions_ui::mark(ui.ctx(), format!("nav:view:{vname}"), r.rect);
+                    if r.clicked() {
+                        open_saved = Some(*vid);
+                    }
+                    super::sheet_drop::drag_source(
+                        ui,
+                        &r,
+                        super::sheet_drop::Drop::View(*vid),
+                        vname,
+                    );
+                    r.context_menu(|ui| {
+                        let edit_id = egui::Id::unique(("rename-view", vid.0));
+                        let mut text: String = ui
+                            .ctx()
+                            .data(|d| d.get_temp(edit_id))
+                            .unwrap_or_else(|| vname.clone());
+                        ui.label("Nombre:");
+                        let resp = ui.text_edit_singleline(&mut text);
+                        ui.ctx().data_mut(|d| d.insert_temp(edit_id, text.clone()));
+                        if (resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                            || ui.button("Renombrar").clicked()
+                        {
+                            rename_view = Some((*vid, text.clone()));
+                            ui.ctx().data_mut(|d| d.remove_temp::<String>(edit_id));
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Borrar vista").clicked() {
+                            delete_view = Some(*vid);
+                            ui.close();
+                        }
+                    });
+                }
             }
             sub_header(ui, "3D", None);
             let r = super::widgets::list_row_draggable(
@@ -215,6 +302,19 @@ impl ArchiSimApp {
         });
         if levels_dialog {
             self.show_levels = true;
+        }
+        if let Some(id) = open_saved {
+            self.open_saved_view(id);
+        }
+        if let Some((level, kind)) = duplicate {
+            self.open_view(TabKind::Plan(level));
+            self.duplicate_view(kind);
+        }
+        if let Some((id, name)) = rename_view {
+            self.rename_view(id, &name);
+        }
+        if let Some(id) = delete_view {
+            self.delete_view(id);
         }
         if make_elevations {
             self.create_elevations();

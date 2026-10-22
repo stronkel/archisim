@@ -101,7 +101,10 @@ impl ArchiSimApp {
             painter,
             rect,
             c.point,
-            format!("Muro cortina   L {} mm   {bays} paños", fmt_mm(len)),
+            format!(
+                "Muro cortina   L {}   {bays} paños",
+                crate::units::fmt_len(len)
+            ),
         );
     }
 
