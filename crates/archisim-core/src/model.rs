@@ -30,6 +30,7 @@ mod parameters;
 mod phases;
 mod plantings;
 mod presentation;
+mod prices;
 mod props;
 mod railings;
 mod roofs;
@@ -57,6 +58,7 @@ pub use paint::*;
 pub use parameters::*;
 pub use phases::*;
 pub use plantings::*;
+pub use prices::*;
 pub use railings::*;
 pub use roofs::*;
 pub use sections::*;
@@ -1250,6 +1252,8 @@ pub struct ModelParts {
     pub ref_planes: Vec<RefPlane>,
     /// When the shadows of presentation drawings are cast.
     pub sun: Sun,
+    /// Prices of the budget's items, by their keys.
+    pub prices: Vec<(String, PriceConcept)>,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1363,6 +1367,7 @@ pub struct Model {
     view_templates: BTreeMap<ViewTemplateId, ViewTemplate>,
     ref_planes: BTreeMap<RefPlaneId, RefPlane>,
     sun: Sun,
+    prices: BTreeMap<String, PriceConcept>,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1441,6 +1446,7 @@ impl Model {
             view_templates: BTreeMap::new(),
             ref_planes: BTreeMap::new(),
             sun: Sun::default(),
+            prices: BTreeMap::new(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -3880,6 +3886,11 @@ impl Model {
             view_templates: self.view_templates.values().cloned().collect(),
             ref_planes: self.ref_planes.values().cloned().collect(),
             sun: self.sun,
+            prices: self
+                .prices
+                .iter()
+                .map(|(k, c)| (k.clone(), c.clone()))
+                .collect(),
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4205,6 +4216,14 @@ impl Model {
             element: "sun".into(),
             error,
         })?;
+        for (key, concept) in parts.prices {
+            model
+                .set_price(&key, Some(concept))
+                .map_err(|error| RestoreError {
+                    element: format!("price of {key}"),
+                    error,
+                })?;
+        }
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;

@@ -265,6 +265,7 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(dir)?;
     let project = dir.join(format!("demo.{}", archisim_file::EXTENSION));
     archisim_file::save(doc.model(), &project)?;
+    std::fs::write(dir.join("banco-ejemplo.bc3"), demo::EXAMPLE_BANK)?;
     summary(doc.model());
     println!("  Proyecto: {}", project.display());
     export_all(doc.model(), dir, "demo")?;
@@ -625,7 +626,19 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         &bc3,
         archisim_export::bc3::bc3(model, &date, env!("CARGO_PKG_VERSION")),
     )?;
-    println!("  Mediciones en BC3 (FIEBDC-3): {}", bc3.display());
+    let (priced, pem) = archisim_plan::schedules::measurements(model)
+        .iter()
+        .flat_map(|c| &c.2)
+        .filter_map(|i| model.price_of(&i.key).map(|c| c.price * i.total()))
+        .fold((0, 0.0), |(n, t), a| (n + 1, t + a));
+    if priced > 0 {
+        println!(
+            "  Presupuesto en BC3 (FIEBDC-3): {} ({priced} partidas con precio, ejecución material {pem:.2} €)",
+            bc3.display()
+        );
+    } else {
+        println!("  Mediciones en BC3 (FIEBDC-3): {}", bc3.display());
+    }
     if !model.sheets().is_empty() {
         let pdf = dir.join(format!("{stem}-planos.pdf"));
         std::fs::write(&pdf, sheets_pdf(model)?)?;

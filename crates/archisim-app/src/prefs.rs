@@ -64,6 +64,8 @@ pub struct Prefs {
     pub welcomed: bool,
     /// Projects opened or saved lately, the last first.
     pub recent: Vec<String>,
+    /// The price bank (BC3) opened last, opened again when needed.
+    pub price_bank: Option<String>,
 }
 
 impl Default for Prefs {
@@ -76,6 +78,7 @@ impl Default for Prefs {
             missions_done: Vec::new(),
             welcomed: false,
             recent: Vec::new(),
+            price_bank: None,
         }
     }
 }
@@ -110,6 +113,7 @@ impl Prefs {
             "misiones_hechas": self.missions_done,
             "bienvenida": self.welcomed,
             "recientes": self.recent,
+            "banco_de_precios": self.price_bank,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -153,6 +157,10 @@ impl Prefs {
                         .collect()
                 })
                 .unwrap_or_default(),
+            price_bank: v
+                .get("banco_de_precios")
+                .and_then(|x| x.as_str())
+                .map(str::to_string),
         }
     }
 
@@ -202,6 +210,7 @@ mod tests {
             missions_done: vec!["muro".into(), "plano".into()],
             welcomed: true,
             recent: vec!["/proyectos/casa.archisim".into()],
+            price_bank: Some("/bancos/bcca.bc3".into()),
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         // Unknown or broken files give the defaults.

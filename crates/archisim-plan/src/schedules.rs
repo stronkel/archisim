@@ -186,6 +186,9 @@ pub struct Measured {
 pub struct Item {
     /// Short code: the type mark, or one made up ("M01").
     pub code: String,
+    /// What the item measures, stable while the model changes (a type's
+    /// id, a finish's name): prices from a bank are assigned to it.
+    pub key: String,
     /// `m2`, `m3`, `m`, `ud`.
     pub unit: &'static str,
     pub summary: String,
@@ -241,6 +244,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                 format!("{:03}", i),
                 Item {
                     code: format!("M{:02}", i + 1),
+                    key: format!("muro:{}", t.id.0),
                     unit: "m2",
                     summary: format!("{} ({} cm)", t.name, dec(t.thickness() * 100.0, 1)),
                     lines,
@@ -267,6 +271,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                 format!("{:03}", i),
                 Item {
                     code: format!("F{:02}", i + 1),
+                    key: format!("forjado:{}", t.id.0),
                     unit: "m2",
                     summary: format!("{} ({} cm)", t.name, dec(t.thickness() * 100.0, 1)),
                     lines,
@@ -305,6 +310,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                 format!("{code}{i:03}"),
                 Item {
                     code,
+                    key: format!("carpinteria:{}", t.id.0),
                     unit: "ud",
                     summary: format!("{} {}×{}", t.name, dec(t.width, 2), dec(t.height, 2)),
                     lines,
@@ -331,6 +337,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
                 .entry((kind, name.clone()))
                 .or_insert_with(|| Item {
                     code: format!("A{n:02}"),
+                    key: format!("acabado:{kind}:{name}"),
                     unit: "m2",
                     summary: format!("{what}: {name}"),
                     lines: Vec::new(),
@@ -422,6 +429,7 @@ fn demolitions(model: &Model) -> Vec<Item> {
     .filter(|(_, _, _, l)| !l.is_empty())
     .map(|(code, unit, summary, lines)| Item {
         code: code.into(),
+        key: format!("demolicion:{code}"),
         unit,
         summary: summary.into(),
         lines,
@@ -507,6 +515,7 @@ fn structure(model: &Model) -> Vec<Item> {
         if !lines.is_empty() {
             items.push(Item {
                 code: format!("E{:02}", i + 1),
+                key: format!("estructura:{}", t.id.0),
                 unit,
                 summary: t.name.clone(),
                 lines,
@@ -541,6 +550,7 @@ fn roofs(model: &Model) -> Vec<Item> {
         if !lines.is_empty() {
             items.push(Item {
                 code: format!("T{:02}", i + 1),
+                key: format!("cubierta:{}", t.id.0),
                 unit: "m2",
                 summary: format!("{} (superficie inclinada)", t.name),
                 lines,
@@ -604,6 +614,7 @@ fn stairs_and_railings(model: &Model) -> Vec<Item> {
     if !stairs.is_empty() {
         v.push(Item {
             code: "S01".into(),
+            key: "escalera".into(),
             unit: "ud",
             summary: "Escalera de losa de hormigón armado".into(),
             lines: stairs,
@@ -612,6 +623,7 @@ fn stairs_and_railings(model: &Model) -> Vec<Item> {
     if !railings.is_empty() {
         v.push(Item {
             code: "S02".into(),
+            key: "barandilla".into(),
             unit: "m",
             summary: "Barandilla".into(),
             lines: railings,
@@ -643,6 +655,7 @@ fn curtain_walls(model: &Model) -> Vec<Item> {
         if !lines.is_empty() {
             items.push(Item {
                 code: format!("K{:02}", i + 1),
+                key: format!("cortina:{}", t.id.0),
                 unit: "m2",
                 summary: t.name.clone(),
                 lines,
@@ -681,6 +694,7 @@ fn services(model: &Model) -> Vec<Item> {
         .enumerate()
         .map(|(i, ((system, size), lines))| Item {
             code: format!("T{:02}", i + 1),
+            key: format!("red:{}:{size}", system.name()),
             unit: "m",
             summary: format!("{} {size}", system.name()),
             lines,
@@ -704,8 +718,9 @@ fn services(model: &Model) -> Vec<Item> {
         devices
             .into_iter()
             .enumerate()
-            .map(|(i, ((_, name), lines))| Item {
+            .map(|(i, ((kind, name), lines))| Item {
                 code: format!("A{:02}", i + 1),
+                key: format!("aparato:{kind:?}:{name}"),
                 unit: "ud",
                 summary: name,
                 lines,

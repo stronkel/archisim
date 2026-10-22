@@ -282,6 +282,7 @@ pub struct ArchiSimApp {
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
     render: render_ui::RenderState,
+    budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -587,6 +588,7 @@ impl ArchiSimApp {
             object_grip: None,
             object_grip_hover: None,
             render: Default::default(),
+            budget: Default::default(),
             start: start_ui::StartScreen {
                 open: !cfg!(test),
                 ..Default::default()
@@ -1604,6 +1606,7 @@ impl ArchiSimApp {
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
         self.render_window(&ctx);
+        self.price_pick_window(&ctx);
         self.missions_frame(&ctx);
         self.start_screen(&ctx);
         self.sync_prefs(&ctx);
@@ -2086,6 +2089,7 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 
 mod annotation_ui;
 mod bottom_segments;
+mod budget_ui;
 mod cad_ui;
 mod chrome;
 mod concept_ui;

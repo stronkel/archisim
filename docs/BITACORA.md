@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (11) · Revisión de Antonio, bloque 7: Render y Presto
+
+Rama `bloque/render-presto` (sobre `bloque/simbolos`), pull request para Antonio. v0.47. Formato `.archisim` versión 31 (abre todas las anteriores). Sin cambios en el IFC. Descrito en `docs/RENDER_PRESUPUESTOS.md`. Con este bloque la revisión del 22/10/2026 queda completa.
+
+**Hecho**
+- **Renderizado**: imagen realista con el sol del proyecto, sombras, luz del cielo y vidrio, calculada en el procesador (sin tarjeta gráfica). En la vista 3D, Propiedades → Renderizado (Borrador, Normal, Alta) desde la cámara de la vista, mientras se sigue trabajando; Guardar PNG. Orden `archisim render`.
+- **Presupuesto en Mediciones**: capítulos y partidas con cantidad, precio, importe, totales y ejecución material.
+- **Bancos de precios BC3**: abrir cualquier banco FIEBDC-3 (precios calculados por descomposición cuando no los trae), buscar sin tildes, asignar una partida a cada tipo, acabado o instalación; precio a mano; aviso si la unidad no coincide.
+- **BC3 para Presto** con los códigos, resúmenes, precios y textos del banco y las mediciones elemento a elemento.
+- Banco de ejemplo propio (`docs/ejemplos/banco-ejemplo.bc3`, precios inventados) y la demo con su presupuesto.
+
+**Pendiente**
+- Render: texturas dibujadas, luces artificiales, rebotes de luz en interiores; que la caja de sección recorte la imagen.
+- Presupuesto: descomposición propia, costes indirectos, GG y BI; partidas por elemento suelto.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- demo out/` y luego `cargo run --release -p archisim-cli -- render out/demo.archisim out/demo-render.png`: mira la imagen (sol de la mañana desde el sureste, sombras de los árboles en el suelo).
+2. Abre `out/demo.archisim` en la aplicación, ve a la Vista 3D, gira la cámara a tu gusto y pulsa Propiedades → Renderizado → Renderizar (prueba Borrador y luego Normal). Cambia el día y la hora del sol en Propiedades del proyecto y vuelve a renderizar. Guarda el PNG.
+3. Navegador → Proyecto → Tablas → **Mediciones**: el presupuesto de la vivienda con el banco de ejemplo. Pulsa **Abrir banco BC3…** y abre un banco real del estudio (el de tu comunidad o uno exportado de Presto); en una fila, **Partida…**, busca y **Asignar**. Escribe un precio a mano en otra.
+4. **Exportar BC3…** y ábrelo en Presto: comprueba capítulos, códigos, precios, textos y las líneas de medición.
+
+---
+
 ## 2026-10-22 (10) · Revisión de Antonio, bloque 6: Símbolos DXF
 
 Rama `bloque/simbolos` (sobre `bloque/muebles`), pull request para Antonio. v0.46. Formato `.archisim` versión 30. Sin cambios en el IFC. Descrito en `docs/BIBLIOTECA_3D.md` («Símbolos de planta desde DXF»).

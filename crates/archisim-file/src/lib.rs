@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 30;
+pub const CURRENT_VERSION: u32 = 31;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -281,8 +281,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // 27 → 28: volumes' `deform` and sweeps' `profile`; older ones
             // have none. 28 → 29: wall types' `sweeps` and slab types'
             // `edge`; older ones have none. 29 → 30: object types'
-            // `symbol`; older ones have none.
-            9..=29 => {
+            // `symbol`; older ones have none. 30 → 31: prices of the
+            // budget's items (`prices`); older ones have none.
+            9..=30 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -965,6 +966,19 @@ mod tests {
             })
             .unwrap();
         }
+        // Prices of the budget (version 31).
+        m.set_price(
+            "muro:1",
+            Some(archisim_core::PriceConcept {
+                code: "FFQ010".into(),
+                unit: "m2".into(),
+                summary: "Hoja de partición".into(),
+                price: 28.4,
+                text: "Hoja de partición interior de ladrillo…".into(),
+                bank: "Banco de prueba".into(),
+            }),
+        )
+        .unwrap();
         // Saved plans, level styles, templates, reference planes and the
         // technical lettering (version 27).
         {
@@ -1405,7 +1419,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 30", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 31", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1432,7 +1446,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 30"));
+        assert!(to_string(&opened).contains("\"version\": 31"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1603,7 +1617,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 30", "\"version\": 3", 1)
+            .replacen("\"version\": 31", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1665,7 +1679,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 30", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 31", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2109,7 +2123,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 30", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 31", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2121,7 +2135,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 30,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 31,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -2167,11 +2181,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 30", "\"version\": 31"),
-            Err(FileError::TooNew { version: 31 })
+            edited("\"version\": 31", "\"version\": 32"),
+            Err(FileError::TooNew { version: 32 })
         ));
         assert!(matches!(
-            edited("\"version\": 30", "\"version\": 0"),
+            edited("\"version\": 31", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

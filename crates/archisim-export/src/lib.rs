@@ -9,6 +9,7 @@
 //! (lines, arcs, texts and hatches on their layers), as AutoCAD would.
 
 pub mod bc3;
+pub mod bc3_read;
 pub mod dxf;
 pub mod dxf_read;
 pub mod paths;
