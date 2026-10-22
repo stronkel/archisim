@@ -677,7 +677,7 @@ impl Model {
             .iter()
             .map(|(id, s)| (*id, flat_next_id(&s.model) + 1))
             .collect();
-        let mut base = self.next_id;
+        let mut base = self.first_unused_id();
         let mut out = Vec::new();
         for p in self.modules.values() {
             let Some(&span) = spans.get(&p.source) else {
@@ -1092,11 +1092,11 @@ struct TypeMaps {
 /// The `next_id` of a model once flattened.
 fn flat_next_id(m: &Model) -> u64 {
     if m.modules.is_empty() {
-        m.next_id
+        m.first_unused_id()
     } else {
         m.copy_ranges()
             .last()
-            .map_or(m.next_id, |(_, base, span)| base + span)
+            .map_or(m.first_unused_id(), |(_, base, span)| base + span)
     }
 }
 

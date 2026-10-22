@@ -140,6 +140,7 @@ impl ArchiSimApp {
                 self.cte.open = true;
                 ui.close();
             }
+            self.team_menu_items(ui);
         });
     }
 

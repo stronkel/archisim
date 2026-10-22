@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 · Trabajo en equipo (4.6)
+
+Rama `bloque/equipo`, pull request para Antonio. v0.38. Sin cambios en el formato `.archisim` ni en el IFC. Diseño en `docs/EQUIPO.md`.
+
+**Hecho**
+- **Proyecto compartido en una carpeta** (Google Drive, Dropbox o un NAS; D20): Colaboración → **Compartir en equipo…** y → **Abrir proyecto de equipo…** (o doble clic en `equipo.asequipo`). Cada persona trabaja en su copia, también sin conexión, y solo escribe sus propios ficheros: Drive nunca tiene que mezclar dos versiones del mismo.
+- **Publicar y Recibir** en la barra superior, con el número de elementos por publicar y de cambios por recibir. Los cambios se guardan elemento a elemento y se aplican en el mismo orden en todos los ordenadores (reloj lógico, no la hora de cada uno). Lo que ya no encaja (una puerta en un muro que otro borró) se deja fuera con un aviso, igual para todos.
+- **Reservas por elemento y por zona** (D21): reservar la selección, dibujar una zona (dos esquinas) o la planta entera. Lo que se cambia sin que nadie lo tenga se reserva solo; lo que se dibuja nuevo es de quien lo dibuja. Lo que tiene otro no se deja cambiar («reservado por Ana: pídeselo»). Si dos reservan a la vez, se lo queda el primero.
+- **Peticiones y mensajes**: «Pedir» en Propiedades cuando lo tiene otro; a él le llega el mensaje con «Liberar».
+- **Presencia**: un círculo por persona con sus iniciales y su color en la barra superior (apagado si no está). En la planta, lo reservado se ve del color de su dueño y las zonas con su nombre. Cursor de los compañeros opcional y apagado (D22).
+- **Ventana Equipo**: personas y su planta, publicar con nota, reservas, mensajes, historial y opciones. En Propiedades, de quién es cada elemento y quién lo cambió por última vez.
+- **Copia de trabajo** en la carpeta (`trabajo/<nombre>.archisim`): Guardar la escribe, y el programa la guarda solo cada minuto y al cerrar; al volver a abrir, sigue lo no publicado. Si la misma persona lo tiene abierto en dos ordenadores, avisa.
+- **Identificadores**: cada persona numera sus elementos nuevos en un bloque propio, así que dos personas dibujando a la vez nunca chocan. El `GlobalId` de cada elemento no cambia. Las copias de módulos se numeran por encima de todo lo usado.
+- Crate nuevo `archisim-team`. `archisim equipo prueba out/` comparte la casa de la demo entre Antonio y Ana (reservas, una zona, dos publicaciones y una petición) y escribe `out/equipo/` y `equipo-recibido.archisim` e `.ifc`; `archisim equipo <carpeta>` dice quién está y qué ha hecho cada uno.
+
+**Pendiente**
+- Servidor propio para la presencia al momento (con Drive, unos segundos de retraso).
+- Compactar `cambios/` (crece con cada publicación; solo guarda lo cambiado).
+- Recibir solo sin pulsar; reservar tipos desde el diálogo de tipos (hoy se reservan al cambiarlos).
+- Medir con modelos muy grandes: cada cambio compara el proyecto entero para saber qué se tocó.
+
+**Qué debe probar Antonio**
+1. En un solo ordenador: `archisim equipo prueba out/`, y en la aplicación Colaboración → Abrir proyecto de equipo… → `out/equipo/equipo.asequipo`, como «Antonio Fernández». Mira los círculos de Antonio y Ana arriba, los tres muros reservados de tu color, la zona «Jardín» de Ana en azul y su mensaje en la ventana Equipo (pulsa «Liberar»).
+2. Intenta mover el muro del huerto de Ana: no debe dejarte, y debe decir que es suyo.
+3. Con dos ordenadores (el PC y el MacBook) y una carpeta de Google Drive: comparte un proyecto desde uno y ábrelo desde el otro con otro nombre. Dibuja en los dos a la vez, publica en uno y mira cómo «Recibir» se ilumina en el otro a los pocos segundos.
+4. Cierra sin publicar, vuelve a abrir: lo no publicado debe seguir ahí.
+
+---
+
 ## 2026-10-21 (noche, 3) · Vegetación generada: vivero y plantaciones
 
 Rama `bloque/vivero` (sobre `bloque/mallas`, #42), pull request para Antonio. Formato `.archisim` versión 25 (abre las anteriores tal cual). v0.37. Diseño en `docs/VEGETACION.md`.

@@ -55,6 +55,13 @@ impl Harness {
         self.time += 0.05;
     }
 
+    /// A frame `seconds` later (for what happens now and then: looking at
+    /// the shared folder of a team).
+    fn frame_after(&mut self, seconds: f64) {
+        self.time += seconds;
+        self.frame();
+    }
+
     fn screen(&self, p: Point2) -> Pos2 {
         self.app.view.to_screen(self.app.canvas, p)
     }
@@ -4933,4 +4940,135 @@ fn plants_and_plantings() {
         )
         .unwrap();
     h.frame();
+}
+
+/// Two people on one shared folder, each with their own window: what one
+/// reserves the other can't touch, new walls are their author's, and both
+/// end up with the same project after publishing and receiving.
+#[test]
+fn team_work_in_a_shared_folder() {
+    let dir = std::env::temp_dir().join(format!("archisim-equipo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let wall_at = |h: &mut Harness, a: Point2, b: Point2| {
+        h.key(Key::Escape);
+        h.app.set_tool(Tool::Wall);
+        h.click_at(a);
+        h.click_at(b);
+        h.key(Key::Escape);
+        h.key(Key::Escape);
+    };
+
+    // Antonio draws a wall and shares the project.
+    let mut a = Harness::new(Editor::new_project());
+    let canvas = a.app.canvas;
+    a.app
+        .view
+        .fit_exact(canvas, p(-5.0, -5.0), p(25.0, 15.0), 0.0);
+    wall_at(&mut a, p(0.0, 0.0), p(10.0, 0.0));
+    let w1 = a.model().walls().next().unwrap().id;
+    a.app.start_team(&dir, "Antonio", true);
+    assert!(a.app.team.is_some(), "{:?}", a.app.message);
+    assert!(dir.join(archisim_team::TEAM_FILE).is_file());
+    a.app.team_reserve(&[w1.0]);
+    a.frame();
+
+    // Ana opens it: she has the wall, but can't delete Antonio's.
+    let mut b = Harness::new(Editor::new_project());
+    b.app
+        .view
+        .fit_exact(canvas, p(-5.0, -5.0), p(25.0, 15.0), 0.0);
+    b.app.start_team(&dir, "Ana", false);
+    assert!(b.app.team.is_some(), "{:?}", b.app.message);
+    assert!(b.model().wall(w1).is_some());
+    // The Equipo window opens on joining; out of the way of the clicks.
+    b.app.team_ui.open = false;
+    a.app.team_ui.open = false;
+    for h in [&mut a, &mut b] {
+        h.frame();
+        h.app
+            .view
+            .fit_exact(canvas, p(-5.0, -5.0), p(25.0, 15.0), 0.0);
+    }
+    b.frame();
+    b.frame_after(4.0);
+    b.app.ed.selection = [Element::Wall(w1)].into_iter().collect();
+    b.frame();
+    b.key(Key::Delete);
+    assert!(
+        b.model().wall(w1).is_some(),
+        "Antonio's wall is still there"
+    );
+    assert!(
+        b.app
+            .message
+            .as_ref()
+            .is_some_and(|m| m.error && m.text.contains("Antonio")),
+        "{:?}",
+        b.app.message
+    );
+    // She draws her own wall: it is hers.
+    wall_at(&mut b, p(0.0, 8.0), p(10.0, 8.0));
+    let w2 = b
+        .model()
+        .walls()
+        .map(|w| w.id)
+        .find(|w| *w != w1)
+        .unwrap_or_else(|| panic!("{:?} {:?}", b.app.message, b.app.tool));
+    b.frame();
+    let team = b.app.team.as_ref().unwrap();
+    assert!(team.session.me.owns_id(w2.0));
+    assert!(team
+        .session
+        .reserved_by()
+        .get("ana")
+        .is_some_and(|s| s.contains(&w2.0)));
+    b.app.team_ui.note = "Muro norte".into();
+    b.app.team_sync(true);
+    assert!(
+        b.app.message.as_ref().is_some_and(|m| !m.error),
+        "{:?}",
+        b.app.message
+    );
+
+    // Antonio receives it, draws another wall and publishes.
+    a.frame_after(4.0);
+    assert_eq!(a.app.team.as_ref().unwrap().session.unreceived(), 1);
+    a.app.team_sync(false);
+    assert!(a.model().wall(w2).is_some());
+    // He can't move Ana's wall either.
+    let before = a.model().wall(w2).unwrap().start;
+    let r = a.app.ed.transact("Mover", |m| {
+        m.move_wall(w2, Point2::new(0.0, 9.0), Point2::new(10.0, 9.0))
+    });
+    assert!(r.is_err());
+    assert_eq!(a.model().wall(w2).unwrap().start, before);
+    wall_at(&mut a, p(10.0, 0.0), p(10.0, 8.0));
+    a.frame();
+    assert_eq!(a.model().walls().count(), 3);
+    a.app.team_sync(true);
+    b.app.team_sync(false);
+    assert_eq!(
+        archisim_team::doc_of(a.model()),
+        archisim_team::doc_of(b.model())
+    );
+    // The window, the strip in Properties and the reservations in plan.
+    b.app.team_ui.open = true;
+    b.app.ed.selection = [Element::Wall(w1)].into_iter().collect();
+    b.frame();
+    b.frame();
+    b.app.team_ui.open = false;
+    // Ana asks for the wall; Antonio gets the request and releases it.
+    b.app
+        .team_send("antonio", "¿Me dejas el muro sur?", &[w1.0]);
+    a.frame_after(4.0);
+    assert_eq!(a.app.team.as_ref().unwrap().session.unread(), 1);
+    assert!(a.app.team_release(Some(&[w1.0])));
+    b.frame_after(4.0);
+    b.app.team_reserve(&[w1.0]);
+    b.key(Key::Delete);
+    assert!(b.model().wall(w1).is_none(), "now it is hers to delete");
+    // Saving keeps her working copy in the folder.
+    b.app.save(false);
+    assert!(dir.join("trabajo").join("ana.archisim").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
 }
