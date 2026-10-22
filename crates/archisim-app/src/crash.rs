@@ -82,6 +82,56 @@ pub fn watch_device(device: &wgpu::Device) {
     }));
 }
 
+/// Frames finished, and what the window was doing last: a watchdog
+/// thread writes it down when a frame takes too long (the spinning
+/// beach ball on a Mac), so a hang leaves a trace as a crash does.
+static FRAMES: AtomicUsize = AtomicUsize::new(0);
+static STAGE: std::sync::Mutex<&'static str> = std::sync::Mutex::new("arranque");
+
+/// Marks the end of a frame.
+pub fn frame_done() {
+    FRAMES.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Says what the window is about to do (for the watchdog's report).
+pub fn stage(what: &'static str) {
+    if let Ok(mut s) = STAGE.lock() {
+        *s = what;
+    }
+}
+
+/// Starts the watchdog: a frame still unfinished after 4 seconds is
+/// written down once, with what it was doing.
+pub fn watch_frames() {
+    if cfg!(test) {
+        return;
+    }
+    std::thread::Builder::new()
+        .name("vigilante".into())
+        .spawn(|| {
+            let mut last = FRAMES.load(Ordering::Relaxed);
+            let mut since = std::time::Instant::now();
+            let mut written = false;
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let now = FRAMES.load(Ordering::Relaxed);
+                if now != last {
+                    last = now;
+                    since = std::time::Instant::now();
+                    written = false;
+                } else if !written && last > 0 && since.elapsed().as_secs() >= 4 {
+                    written = true;
+                    let what = STAGE.lock().map_or("¿?", |s| *s);
+                    write(&format!(
+                        "La ventana no responde desde hace {} s; estaba en: {what}",
+                        since.elapsed().as_secs()
+                    ));
+                }
+            }
+        })
+        .ok();
+}
+
 /// The log of the last session, if something was written in it: set
 /// aside, and its path returned.
 pub fn take_previous() -> Option<PathBuf> {

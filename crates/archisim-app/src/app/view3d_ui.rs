@@ -270,6 +270,9 @@ impl View3dState {
             return None;
         }
         let state = gpu_state?;
+        if self.gpu.is_none() {
+            crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
+        }
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
             renderer: Renderer::new(
                 &state.device,
@@ -284,12 +287,14 @@ impl View3dState {
             uploaded: 0,
         });
         if gpu.uploaded != self.scene_serial {
+            crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
         }
         let wanted = (self.camera, size, self.scene_serial, self.section);
         if self.drawn != Some(wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
+            crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(self.section.map(|b| (b.lo, b.hi)));
             gpu.renderer.render(
                 &gpu.state.device,
@@ -298,6 +303,7 @@ impl View3dState {
                 size,
                 self.edge_step,
             );
+            crate::crash::stage("3D: pasar la imagen a la ventana");
             let view = gpu.renderer.display_view()?;
             let mut egui_renderer = gpu.state.renderer.write();
             match gpu.texture {
@@ -435,6 +441,7 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
+        crate::crash::stage("3D: preparar la escena");
         let v = &mut self.v3d;
         v.refresh_scene(
             self.ed.revision(),
@@ -572,6 +579,7 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
+        crate::crash::stage("3D: preparar la escena");
         let v = &mut self.v3d;
         v.refresh_scene(
             self.ed.revision(),

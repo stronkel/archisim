@@ -1882,7 +1882,10 @@ impl eframe::App for ArchiSimApp {
                 crate::crash::watch_device(&g.device);
             }
         }
+        crate::crash::stage("ventana");
         self.show(ui);
+        crate::crash::frame_done();
+        crate::crash::stage("pintar la ventana en la tarjeta gráfica");
     }
 }
 

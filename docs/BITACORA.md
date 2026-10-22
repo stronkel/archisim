@@ -18,6 +18,7 @@ En la rama `bloque/render-presto` (#53), sobre lo de los bloques 2–7, tras la 
 - **Mac y 3D**:
   - En pantallas Retina el 3D se dibujaba al doble de una resolución que ya es doble: imágenes de unos 5000 × 3000 píxeles con cuatro muestras, cientos de MB de la tarjeta gráfica. Ahora, en Retina, a la resolución de la pantalla (y nunca más de 4096 píxeles de lado).
   - Un error de la tarjeta gráfica ya no cierra el programa: la vista 3D se detiene con un aviso.
+  - **Vigilante**: si la ventana deja de responder más de 4 segundos (la pelota de playa), se apunta qué estaba haciendo (preparar la escena 3D, subirla a la tarjeta gráfica, dibujarla…).
   - **Registro de errores**: cualquier fallo se apunta en `errores.log`, en la carpeta de ajustes de ArchiSim. Al abrir otra vez, ArchiSim lo aparta como `errores-anterior.log` y avisa de dónde está.
 
 **Pendiente**

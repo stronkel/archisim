@@ -41,6 +41,7 @@ use editor::Editor;
 
 fn main() -> eframe::Result {
     crash::install();
+    crash::watch_frames();
     let ed = Editor::new_project();
     let mut app = ArchiSimApp::new(ed);
     if let Some(log) = crash::take_previous() {
