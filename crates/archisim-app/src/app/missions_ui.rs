@@ -201,7 +201,8 @@ impl ArchiSimApp {
     fn mission_card(&mut self, ctx: &egui::Context) {
         let p = Palette::current(ctx);
         if self.missions.progress.is_none() {
-            if self.prefs.welcomed {
+            // The start screen offers them too.
+            if self.prefs.welcomed || self.start.open {
                 return;
             }
             // The first time: offer the missions, and a bigger text.

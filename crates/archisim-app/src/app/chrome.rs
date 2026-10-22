@@ -176,6 +176,7 @@ impl ArchiSimApp {
             if ui.add(shortcut_button("Abrir…", "Ctrl+O")).clicked() {
                 self.guarded(Pending::Open(None));
             }
+            self.recent_menu(ui);
             ui.separator();
             if ui.add(shortcut_button("Guardar", "Ctrl+S")).clicked() {
                 self.save(false);

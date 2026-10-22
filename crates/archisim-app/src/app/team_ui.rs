@@ -116,7 +116,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn pick_team_folder(&mut self) {
+    pub(super) fn pick_team_folder(&mut self) {
         let mut d = rfd::FileDialog::new()
             .set_title("Abrir proyecto de equipo (la carpeta compartida o su equipo.asequipo)")
             .add_filter("Proyecto de equipo", &[archisim_team::EXTENSION]);
@@ -190,6 +190,7 @@ impl ArchiSimApp {
                 let others = team.session.members().len().saturating_sub(1);
                 let elsewhere = team.session.open_elsewhere();
                 self.team = Some(team);
+                self.note_recent(&root.join(archisim_team::TEAM_FILE));
                 self.team_ui.open = true;
                 let mut text = if share {
                     format!(

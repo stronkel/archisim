@@ -1647,6 +1647,44 @@ pub fn preview<G: Geo + ?Sized>(
     Ok(out)
 }
 
+/// The model after a drag, the level it happens on (`None`: elements seen
+/// on every level, like reference planes) and the region of that level it
+/// changes: where the selection was and where it goes, with what joins to
+/// it. The plan draws that region of `after` over the plan, so what is
+/// dragged is seen as it will be drawn. `base` is the model the plan shows
+/// (with the copies of modules).
+pub fn ghost<G: Geo + ?Sized>(
+    geo: &G,
+    base: &Model,
+    selection: &BTreeSet<Element>,
+    drag: &Drag,
+) -> Option<(Model, Option<archisim_core::LevelId>, (Point2, Point2))> {
+    let mut after = base.clone();
+    apply(&mut after, selection, drag).ok()?;
+    let level = level_of(geo.model(), selection, drag.grip);
+    let later = crate::geo::Indexed::new(&after);
+    let mut boxes: Vec<(Point2, Point2)> = Vec::new();
+    for e in selection {
+        boxes.extend(outline(geo, *e).and_then(|p| bounds(&p)));
+        boxes.extend(outline(&later, *e).and_then(|p| bounds(&p)));
+    }
+    if let Some(l) = level {
+        for e in crate::pick::elements_on_level(&after, l) {
+            if !exists(base, e) {
+                boxes.extend(outline(&later, e).and_then(|p| bounds(&p)));
+            }
+        }
+    }
+    let (mut lo, mut hi) = *boxes.first()?;
+    for (a, b) in &boxes {
+        lo = Point2::new(lo.x.min(a.x), lo.y.min(a.y));
+        hi = Point2::new(hi.x.max(b.x), hi.y.max(b.y));
+    }
+    // Walls joined to what moves stretch or lose their mitre near it.
+    let margin = Point2::new(0.8, 0.8);
+    Some((after, level, (lo - margin, hi + margin)))
+}
+
 /// A footing moved or turned by `map` (and `turn`, radians): it leaves
 /// its column or wall unless that goes with it in `selection`.
 pub(crate) fn place_footing(

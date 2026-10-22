@@ -190,8 +190,8 @@ Antonio probó v0.37–v0.41 («funciona todo perfecto») y entregó la lista de
 |---|---|---|
 | 1. Urbanismo | Cambiar el tipo de un árbol abría el mobiliario; vista previa al dibujar una calle; editar una vía después (puntos del eje); referencia de vía por eje o borde; referencia de muros en la barra contextual | ✅ v0.41.1 |
 | 2. Gráficos y vistas | Colores y estilos de cada categoría como en Revit (forjados blancos, urbanismo y jardín en pastel, muros blancos con la cámara de aire solo por dentro, transparencias): control total del dibujo; tipografía elegante para textos y cotas; metros; vistas guardadas (superficies, albañilería…); plantas de techo; planos de referencia; líneas finas o grosor real | ✅ v0.42 (`docs/GRAFICOS.md`) |
-| 3. Inicio y vistas previas | Pantalla de inicio con bienvenida y proyectos recientes; vista previa de cualquier cosa al moverla o colocarla | Siguiente |
-| 4. Modelado | Dividir caras con aristas y pintar solo esa región; empujar caras laterales o regiones en cualquier dirección; doblar y retorcer; perfil personalizado para Seguir; redondear aristas (ya existe en Propiedades → Aristas: hacerlo más visible) | |
+| 3. Inicio y vistas previas | Pantalla de inicio con bienvenida y proyectos recientes; vista previa de cualquier cosa al moverla o colocarla | ✅ v0.43 (`docs/INICIO.md`) |
+| 4. Modelado | Dividir caras con aristas y pintar solo esa región; empujar caras laterales o regiones en cualquier dirección; doblar y retorcer; perfil personalizado para Seguir; redondear aristas (ya existe en Propiedades → Aristas: hacerlo más visible) | Siguiente |
 | 5. Muebles y accesorios | Muebles estirables desde la vista 3D; más parámetros (cajones, posición, tipos de pomo); accesorios de muro, forjado y cubierta (zócalos, cornisas, molduras, aleros, vierteaguas) y de baño y cocina | |
 | 6. Símbolos DXF | Importar símbolos de planta desde DXF para objetos (vegetación y demás) | |
 | 7. Render y Presto | Renderizado; mediciones y presupuestos con bancos de precios (Presto, BC3) | |

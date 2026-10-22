@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (7) · Revisión de Antonio, bloque 3: Inicio y vistas previas
+
+Rama `bloque/inicio` (sobre `bloque/graficos`), pull request para Antonio. v0.43. Sin cambios en el formato `.archisim` ni en el IFC. Descrito en `docs/INICIO.md`.
+
+**Hecho**
+- **Pantalla de inicio** al abrir sin fichero: proyecto nuevo, abrir, importar IFC, proyecto en equipo, primeros pasos y los recientes con un dibujo de su planta y cuándo se cambiaron. Archivo → Abrir reciente y Archivo → Pantalla de inicio.
+- **Vista previa real en la planta**: antes del clic se ve lo que se coloca con su dibujo de verdad (mueble, puerta o ventana en su muro cortado, muro con capas y uniones, pilar, viga, forjado); al arrastrar, lo que se mueve en su sitio nuevo y sin dibujar en el antiguo.
+
+**Pendiente**
+- Vista previa real para cimentaciones, plantaciones, instalaciones y módulos, y al arrastrar en 3D.
+
+**Qué debe probar Antonio**
+1. Abre ArchiSim sin fichero (desde el menú de inicio o el icono): sale la bienvenida. Abre la demo con «Abrir…», ciérrala y vuelve a abrir ArchiSim: la demo sale en Recientes con su planta. Clic derecho → «Quitar de la lista».
+2. En la demo, Objeto con una mesa: mueve el ratón por el salón y verás la mesa con sus sillas antes de hacer clic. Prueba Puerta sobre un muro: se ve la hoja y el muro cortado.
+3. Selecciona la cama y arrástrala: se ve en su sitio nuevo y desaparece del antiguo; Esc cancela.
+
+---
+
 ## 2026-10-22 (6) · Revisión de Antonio, bloque 2: Gráficos y vistas
 
 Rama `bloque/graficos`, pull request para Antonio. v0.42. Formato `.archisim` versión 27 (abre todas las anteriores). Sin cambios en el IFC salvo que los planos de referencia no se exportan. Descrito en `docs/GRAFICOS.md`.

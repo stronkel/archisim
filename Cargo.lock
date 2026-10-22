@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-app"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-bcf",
  "archisim-coord",
@@ -240,6 +240,7 @@ dependencies = [
  "glam",
  "objc2 0.5.3",
  "objc2-foundation 0.2.2",
+ "png",
  "pollster 0.4.0",
  "resvg",
  "rfd",
@@ -250,7 +251,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-bcf"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "flate2",
  "roxmltree",
@@ -259,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-cli"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-bcf",
  "archisim-coord",
@@ -279,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-coord"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-bcf",
  "archisim-core",
@@ -290,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-core"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-family",
  "archisim-flora",
@@ -300,7 +301,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-cte"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",
@@ -309,7 +310,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-draft"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "ttf-parser",
@@ -317,11 +318,11 @@ dependencies = [
 
 [[package]]
 name = "archisim-dxf"
-version = "0.42.0"
+version = "0.43.0"
 
 [[package]]
 name = "archisim-export"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "archisim-draft",
@@ -333,11 +334,11 @@ dependencies = [
 
 [[package]]
 name = "archisim-family"
-version = "0.42.0"
+version = "0.43.0"
 
 [[package]]
 name = "archisim-file"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "serde",
@@ -346,11 +347,11 @@ dependencies = [
 
 [[package]]
 name = "archisim-flora"
-version = "0.42.0"
+version = "0.43.0"
 
 [[package]]
 name = "archisim-geom"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "i_overlay",
@@ -358,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-ids"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-ifc",
  "regex",
@@ -367,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-ifc"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "archisim-geom",
@@ -376,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-library"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "archisim-mesh",
@@ -384,7 +385,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-mesh"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "i_overlay",
  "png",
@@ -395,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "archisim-plan"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "archisim-draft",
@@ -405,11 +406,11 @@ dependencies = [
 
 [[package]]
 name = "archisim-props"
-version = "0.42.0"
+version = "0.43.0"
 
 [[package]]
 name = "archisim-team"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "archisim-core",
  "archisim-file",

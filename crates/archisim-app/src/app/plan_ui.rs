@@ -44,6 +44,7 @@ impl ArchiSimApp {
             self.draw_grid(&painter, rect);
         }
         self.draw_plan(&ctx, &painter, rect);
+        self.draw_plan_ghost(&ctx, &painter, rect);
         self.draw_links_in_plan(&painter, rect);
         self.draw_team(&painter, rect);
         self.draw_origin(&painter, rect);
@@ -1283,6 +1284,23 @@ impl ArchiSimApp {
         Some(sh)
     }
 
+    /// How the plan on screen draws the region `lo`–`hi` (without the
+    /// sun's shadows).
+    pub(super) fn screen_plan_options(&self, lo: Point2, hi: Point2) -> archisim_plan::PlanOptions {
+        archisim_plan::PlanOptions {
+            viewport: Some((lo, hi)),
+            show_reference_lines: self.show_reference_lines,
+            scale: self.plan_scale,
+            cut_plane: self.cut_plane,
+            reference_level: self.reference_level(),
+            thin_lines: self.thin_lines,
+            phase_view: self.phase_view,
+            style: self.view_style.clone(),
+            ceiling: self.active_ceiling(),
+            ..archisim_plan::PlanOptions::default()
+        }
+    }
+
     fn draw_plan(&mut self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect) {
         let ppp = ctx.pixels_per_point();
         let size = [
@@ -1308,24 +1326,9 @@ impl ArchiSimApp {
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
             let shadows = self.plan_shadows();
-            let image = rasterize_with(
-                &self.ed.shown(),
-                self.ed.level,
-                size,
-                &archisim_plan::PlanOptions {
-                    viewport: Some((lo, hi)),
-                    show_reference_lines: self.show_reference_lines,
-                    scale: self.plan_scale,
-                    cut_plane: self.cut_plane,
-                    reference_level: key.reference_level,
-                    thin_lines: key.thin_lines,
-                    phase_view: key.phase_view,
-                    style: key.style.clone(),
-                    shadows,
-                    ceiling: key.ceiling,
-                    ..archisim_plan::PlanOptions::default()
-                },
-            );
+            let mut options = self.screen_plan_options(lo, hi);
+            options.shadows = shadows;
+            let image = rasterize_with(&self.ed.shown(), self.ed.level, size, &options);
             self.last_plan_ms = started.elapsed().as_secs_f64() * 1000.0;
             match &mut self.plan {
                 Some((k, tex)) => {
