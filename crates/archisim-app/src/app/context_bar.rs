@@ -452,6 +452,38 @@ impl ArchiSimApp {
             on,
         };
         let edges = self.mass_settings.what == crate::editor::MassWhat::Face;
+        if mode.is_form() {
+            return vec![
+                m(
+                    Mark::Glyph(Glyph::Sphere),
+                    "Esfera",
+                    "Centro y radio: tan alta como ancha",
+                    MethodAct::MassMode(MassMode::Sphere),
+                    mode == MassMode::Sphere,
+                ),
+                m(
+                    Mark::Glyph(Glyph::Cylinder),
+                    "Cilindro",
+                    "Centro y radio; la altura, en Propiedades",
+                    MethodAct::MassMode(MassMode::Cylinder),
+                    mode == MassMode::Cylinder,
+                ),
+                m(
+                    Mark::Glyph(Glyph::Cone),
+                    "Cono",
+                    "Centro y radio; la altura y el radio de arriba (tronco de cono), en Propiedades",
+                    MethodAct::MassMode(MassMode::Cone),
+                    mode == MassMode::Cone,
+                ),
+                m(
+                    Mark::Glyph(Glyph::Revolution),
+                    "Revolución",
+                    "Clic en el eje y dibuja el medio perfil abatido sobre la planta: al lado, el radio; hacia arriba, la altura",
+                    MethodAct::MassMode(MassMode::Revolution),
+                    mode == MassMode::Revolution,
+                ),
+            ];
+        }
         vec![
             m(
                 Mark::Icon(if edges {

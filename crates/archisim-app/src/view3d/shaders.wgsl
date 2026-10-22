@@ -32,6 +32,8 @@ struct VertexIn {
     @location(1) normal: vec3<f32>,
     @location(2) color: vec4<f32>,
     @location(3) bias: f32,
+    // x: texture (0 none, 1 brick…), y: size of its piece in metres.
+    @location(4) tex: vec2<f32>,
 };
 
 struct VertexOut {
@@ -43,6 +45,7 @@ struct VertexOut {
     @location(4) world: vec3<f32>,
     // Foliage (bias 2): no contour lines between its own facets.
     @location(5) @interpolate(flat) soft: f32,
+    @location(6) @interpolate(flat) tex: vec2<f32>,
 };
 
 @vertex
@@ -59,6 +62,7 @@ fn vs_model(v: VertexIn) -> VertexOut {
     out.normal = v.normal;
     out.color = v.color;
     out.world = v.pos;
+    out.tex = v.tex;
     return out;
 }
 
@@ -113,6 +117,159 @@ fn shade(n_in: vec3<f32>, color: vec3<f32>) -> vec3<f32> {
     return color * light;
 }
 
+// ---- Textures -------------------------------------------------------------
+//
+// Drawn from each point's position on its face (no images, nothing to
+// unwrap): on faces looking up, across the plan; on the others, along the
+// face and up it. They change the colour a little, around the material's.
+
+fn hash2(p: vec2<f32>) -> f32 {
+    let q = fract(p * vec2<f32>(123.34, 456.21));
+    let r = q + dot(q, q + 45.32);
+    return fract(r.x * r.y);
+}
+
+fn noise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = hash2(i);
+    let b = hash2(i + vec2<f32>(1.0, 0.0));
+    let c = hash2(i + vec2<f32>(0.0, 1.0));
+    let d = hash2(i + vec2<f32>(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Distance to the nearest and second nearest cell centres, and the
+// nearest cell's id (stones, gravel).
+fn cells(p: vec2<f32>) -> vec3<f32> {
+    let i = floor(p);
+    var d1 = 9.0;
+    var d2 = 9.0;
+    var id = 0.0;
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let c = i + vec2<f32>(f32(x), f32(y));
+            let o = vec2<f32>(hash2(c), hash2(c + 17.0)) * 0.8 + 0.1;
+            let d = length(c + o - p);
+            if (d < d1) {
+                d2 = d1;
+                d1 = d;
+                id = hash2(c + 3.0);
+            } else if (d < d2) {
+                d2 = d;
+            }
+        }
+    }
+    return vec3<f32>(d1, d2, id);
+}
+
+// How far into a joint a coordinate is (0 in the joint, 1 away from it).
+fn joint(t: f32, width: f32) -> f32 {
+    let f = fract(t);
+    let e = min(f, 1.0 - f);
+    return smoothstep(width * 0.5, width, e);
+}
+
+fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {
+    let kind = i32(tex.x + 0.5);
+    if (kind == 0) {
+        return base;
+    }
+    let n = abs(normalize(n_in));
+    // Along the face (horizontal) and up it; on faces looking up, the plan.
+    var uv = world.xy;
+    if (n.z < 0.7) {
+        if (n.x > n.y) {
+            uv = world.yz;
+        } else {
+            uv = world.xz;
+        }
+    }
+    let s = max(tex.y, 0.01);
+    let p = uv / s;
+    let mortar = mix(base, vec3<f32>(0.78, 0.76, 0.72), 0.75);
+    switch kind {
+        // Brick: courses a quarter of the brick's length high, every other
+        // one moved half a brick; each brick a little different.
+        case 1: {
+            let row = floor(p.y * 3.8);
+            let q = vec2<f32>(p.x + 0.5 * (row % 2.0), p.y * 3.8);
+            let id = hash2(vec2<f32>(floor(q.x), row));
+            let body = base * (0.82 + 0.3 * id) * (0.93 + 0.1 * noise(p * 9.0));
+            let m = joint(q.x, 0.06) * joint(q.y, 0.2);
+            return mix(mortar, body, m);
+        }
+        // Stone: irregular pieces with dark joints.
+        case 2: {
+            let c = cells(p * 1.6);
+            let edge = smoothstep(0.02, 0.09, c.y - c.x);
+            let body = base * (0.75 + 0.45 * c.z) * (0.9 + 0.15 * noise(p * 6.0));
+            return mix(base * 0.45, body, edge);
+        }
+        // Tiles: squares with light joints.
+        case 3: {
+            let id = hash2(floor(p));
+            let body = base * (0.95 + 0.08 * id);
+            let m = joint(p.x, 0.03) * joint(p.y, 0.03);
+            return mix(mortar, body, m);
+        }
+        // Wood: grain.
+        case 4: {
+            let g = sin(p.y * 40.0 + noise(p * vec2<f32>(1.5, 8.0)) * 6.0);
+            return base * (0.86 + 0.1 * g + 0.08 * noise(p * vec2<f32>(0.5, 30.0)));
+        }
+        // Boards: strips a board wide, joined end to end in turns, with
+        // their grain.
+        case 5: {
+            let row = floor(p.y);
+            let along = p.x / 8.0 + hash2(vec2<f32>(row, 1.0));
+            let id = hash2(vec2<f32>(floor(along), row));
+            let g = sin(p.y * 25.0 + noise(vec2<f32>(p.x * 0.6, p.y * 5.0)) * 5.0);
+            let body = base * (0.82 + 0.25 * id) * (0.93 + 0.06 * g);
+            let m = joint(p.y, 0.06) * joint(along, 0.01);
+            return mix(base * 0.4, body, m);
+        }
+        // Board-marked concrete: panels, their joints and tie holes.
+        case 6: {
+            let q = vec2<f32>(p.x, p.y * 2.0);
+            let m = joint(q.x, 0.008) * joint(q.y, 0.012);
+            let f = fract(q);
+            let hole = smoothstep(0.012, 0.022, min(length(f - vec2<f32>(0.15, 0.25)), length(f - vec2<f32>(0.85, 0.25))));
+            let body = base * (0.94 + 0.1 * noise(p * 12.0) + 0.04 * noise(p * 50.0));
+            return body * mix(0.82, 1.0, m) * mix(0.55, 1.0, hole);
+        }
+        // Render: a fine grain.
+        case 7: {
+            return base * (0.95 + 0.07 * noise(p * 60.0) + 0.04 * noise(p * 7.0));
+        }
+        // Grass: blades of light and dark green.
+        case 8: {
+            let v = noise(p * vec2<f32>(18.0, 40.0)) * 0.6 + noise(p * 4.0) * 0.4;
+            return base * (0.7 + 0.55 * v);
+        }
+        // Gravel: little stones.
+        case 9: {
+            let c = cells(p * 3.0);
+            let body = base * (0.7 + 0.5 * c.z);
+            return mix(base * 0.5, body, smoothstep(0.0, 0.25, c.y - c.x));
+        }
+        // Water: ripples.
+        case 10: {
+            let w = noise(p * vec2<f32>(3.0, 1.2) + vec2<f32>(noise(p * 2.0) * 2.0, 0.0));
+            return base * (0.88 + 0.25 * smoothstep(0.55, 0.8, w));
+        }
+        // Sheet metal: ribs along the face.
+        case 11: {
+            let r = 0.5 + 0.5 * sin(p.x * 6.2832);
+            return base * (0.8 + 0.3 * r);
+        }
+        default: {
+            return base;
+        }
+    }
+}
+
 struct ModelOut {
     @location(0) color: vec4<f32>,
     @location(1) normal_dist: vec4<f32>,
@@ -134,7 +291,7 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         out.normal_dist = vec4<f32>(normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz), c.w);
         return out;
     }
-    out.color = vec4<f32>(shade(i.normal, i.color.rgb), 1.0);
+    out.color = vec4<f32>(shade(i.normal, textured(i.color.rgb, i.world, i.normal, i.tex)), 1.0);
     out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist);
     if (i.soft > 0.5) {
         // Leaves: the same normal everywhere, so the contours come only

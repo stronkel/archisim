@@ -21,6 +21,117 @@ pub enum MassShape {
     Prism(Vec<Point2>),
     /// A rectangular profile `width` wide along a path.
     Sweep { path: Vec<Point2>, width: f64 },
+    /// A sphere, cylinder, cone or solid of revolution, round a vertical
+    /// axis.
+    Primitive(Primitive),
+    /// Any closed solid, as triangles: what unions, subtractions and
+    /// intersections of volumes give.
+    Mesh(MassMesh),
+}
+
+/// Segments of a round form's circle: each turns 15°, less than the 3D
+/// view's crease angle, so it reads round.
+pub const ROUND_SEGMENTS: usize = 24;
+
+/// A volume round a vertical axis through `center`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Primitive {
+    /// From its base up its diameter (the mass's height is the diameter).
+    Sphere { center: Point2, radius: f64 },
+    /// Up the mass's height.
+    Cylinder { center: Point2, radius: f64 },
+    /// A cone (top radius 0) or a frustum, up the mass's height.
+    Cone {
+        center: Point2,
+        radius: f64,
+        top_radius: f64,
+    },
+    /// A half-section turned round the axis: each point is (distance
+    /// from the axis, height over the base); the mass's height is the
+    /// highest.
+    Revolution {
+        center: Point2,
+        profile: Vec<Point2>,
+    },
+}
+
+impl Primitive {
+    pub fn center(&self) -> Point2 {
+        match self {
+            Primitive::Sphere { center, .. }
+            | Primitive::Cylinder { center, .. }
+            | Primitive::Cone { center, .. }
+            | Primitive::Revolution { center, .. } => *center,
+        }
+    }
+
+    /// The widest radius.
+    pub fn max_radius(&self) -> f64 {
+        match self {
+            Primitive::Sphere { radius, .. } | Primitive::Cylinder { radius, .. } => *radius,
+            Primitive::Cone {
+                radius, top_radius, ..
+            } => radius.max(*top_radius),
+            Primitive::Revolution { profile, .. } => {
+                profile.iter().map(|p| p.x).fold(0.0, f64::max)
+            }
+        }
+    }
+
+    /// The name of the form: «esfera», «cilindro»…
+    pub fn label(&self) -> &'static str {
+        match self {
+            Primitive::Sphere { .. } => "esfera",
+            Primitive::Cylinder { .. } => "cilindro",
+            Primitive::Cone { top_radius, .. } if *top_radius > EPSILON => "tronco de cono",
+            Primitive::Cone { .. } => "cono",
+            Primitive::Revolution { .. } => "revolución",
+        }
+    }
+}
+
+/// A closed solid as triangles, outwards counter-clockwise.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MassMesh {
+    /// `x`, `y` in plan (metres) and `z` over the mass's base.
+    pub positions: Vec<[f64; 3]>,
+    pub triangles: Vec<[u32; 3]>,
+    /// The face each triangle belongs to (a face is painted whole).
+    pub faces: Vec<u32>,
+}
+
+impl MassMesh {
+    /// Highest point over the base.
+    pub fn top(&self) -> f64 {
+        self.positions.iter().map(|p| p[2]).fold(0.0, f64::max)
+    }
+
+    /// The faces it has, in order.
+    pub fn face_ids(&self) -> Vec<u32> {
+        let mut f = self.faces.clone();
+        f.sort_unstable();
+        f.dedup();
+        f
+    }
+}
+
+/// Chamfered or rounded edges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EdgeKind {
+    Chamfer,
+    Round,
+}
+
+/// The edges of a volume, chamfered or rounded: the vertical ones (its
+/// corners in plan), those of its top and those of its base.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EdgeFinish {
+    pub kind: EdgeKind,
+    /// The chamfer's leg or the round's radius, metres.
+    pub size: f64,
+    pub vertical: bool,
+    pub top: bool,
+    pub bottom: bool,
 }
 
 /// How a mass was turned into a building, and what it made.
@@ -54,6 +165,8 @@ pub struct Mass {
     pub floor_height: Option<f64>,
     pub material: MaterialId,
     pub building: Option<MassBuilding>,
+    /// Chamfered or rounded edges.
+    pub finish: Option<EdgeFinish>,
 }
 
 /// A loose edge of the concept phase: a line of the model (not of the
@@ -121,6 +234,48 @@ impl Mass {
         match &mut self.shape {
             MassShape::Prism(p) => p.iter_mut().for_each(|q| *q = f(*q)),
             MassShape::Sweep { path, .. } => path.iter_mut().for_each(|q| *q = f(*q)),
+            MassShape::Primitive(pr) => {
+                let c = pr.center();
+                let c2 = f(c);
+                // How much the map scales lengths.
+                let k = (f(c + Vec2::new(1.0, 0.0)) - c2).length();
+                match pr {
+                    Primitive::Sphere { center, radius }
+                    | Primitive::Cylinder { center, radius } => {
+                        *center = c2;
+                        *radius *= k;
+                    }
+                    Primitive::Cone {
+                        center,
+                        radius,
+                        top_radius,
+                    } => {
+                        *center = c2;
+                        *radius *= k;
+                        *top_radius *= k;
+                    }
+                    Primitive::Revolution { center, profile } => {
+                        *center = c2;
+                        profile.iter_mut().for_each(|p| p.x *= k);
+                    }
+                }
+            }
+            MassShape::Mesh(m) => {
+                let o = f(Point2::new(0.0, 0.0));
+                let ex = f(Point2::new(1.0, 0.0)) - o;
+                let ey = f(Point2::new(0.0, 1.0)) - o;
+                for p in &mut m.positions {
+                    let q = f(Point2::new(p[0], p[1]));
+                    p[0] = q.x;
+                    p[1] = q.y;
+                }
+                // A mirror turns the triangles inside out: turn them back.
+                if ex.x * ey.y - ex.y * ey.x < 0.0 {
+                    for t in &mut m.triangles {
+                        t.swap(1, 2);
+                    }
+                }
+            }
         }
     }
 
@@ -130,6 +285,52 @@ impl Mass {
         match &self.shape {
             MassShape::Prism(p) => p.clone(),
             MassShape::Sweep { path, width } => band(path, *width),
+            MassShape::Primitive(pr) => circle(pr.center(), pr.max_radius()),
+            MassShape::Mesh(m) => hull(
+                &m.positions
+                    .iter()
+                    .map(|p| Point2::new(p[0], p[1]))
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+
+    /// How many sides it has: one per edge of its outline; one curved
+    /// surface for a sphere, cylinder or cone; one per piece of a profile
+    /// turned.
+    pub fn side_count(&self) -> usize {
+        match &self.shape {
+            MassShape::Prism(_) | MassShape::Sweep { .. } => self.outline().len(),
+            MassShape::Primitive(Primitive::Revolution { profile, .. }) => {
+                profile.len().saturating_sub(1)
+            }
+            MassShape::Primitive(_) => 1,
+            MassShape::Mesh(_) => 0,
+        }
+    }
+
+    /// The face of a painted face reference, as the faces of its solid
+    /// are numbered: bottom 0, top 1 and each side (or curved surface,
+    /// or piece of a profile turned) 2 on; any face of a mesh by its own
+    /// number.
+    pub fn face_number(&self, face: FaceRef) -> Option<u32> {
+        match (&self.shape, face) {
+            (MassShape::Mesh(_), FaceRef::Part(n)) => Some(n),
+            (MassShape::Mesh(_), _) => None,
+            (_, FaceRef::Bottom) => Some(0),
+            (_, FaceRef::Top) => Some(1),
+            (_, FaceRef::Side(i)) => Some(i as u32 + 2),
+            _ => None,
+        }
+    }
+
+    /// The face reference of a face of its solid.
+    pub fn face_ref(&self, number: u32) -> FaceRef {
+        match (&self.shape, number) {
+            (MassShape::Mesh(_), n) => FaceRef::Part(n),
+            (_, 0) => FaceRef::Bottom,
+            (_, 1) => FaceRef::Top,
+            (_, n) => FaceRef::Side(n as usize - 2),
         }
     }
 
@@ -168,6 +369,46 @@ impl Mass {
                 || (h - self.height).abs() > 1e-9
         })
     }
+}
+
+/// A circle as a polygon of [`ROUND_SEGMENTS`] sides, counter-clockwise.
+pub fn circle(c: Point2, r: f64) -> Vec<Point2> {
+    (0..ROUND_SEGMENTS)
+        .map(|i| {
+            let a = std::f64::consts::TAU * i as f64 / ROUND_SEGMENTS as f64;
+            c + Vec2::new(a.cos(), a.sin()) * r
+        })
+        .collect()
+}
+
+/// The convex hull of points, counter-clockwise (monotone chain).
+pub fn hull(points: &[Point2]) -> Vec<Point2> {
+    let mut p: Vec<Point2> = points.to_vec();
+    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    p.dedup_by(|a, b| a.approx_eq(*b));
+    if p.len() < 3 {
+        return p;
+    }
+    let cross =
+        |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    let mut lower: Vec<Point2> = Vec::new();
+    for &q in &p {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], q) <= 0.0 {
+            lower.pop();
+        }
+        lower.push(q);
+    }
+    let mut upper: Vec<Point2> = Vec::new();
+    for &q in p.iter().rev() {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], q) <= 0.0 {
+            upper.pop();
+        }
+        upper.push(q);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
 }
 
 /// A band `width` wide along a path, mitred at its corners.
@@ -305,6 +546,54 @@ impl Model {
                     ));
                 }
             }
+            MassShape::Primitive(pr) => {
+                finite_point(pr.center(), "form centre")?;
+                let radii: Vec<f64> = match pr {
+                    Primitive::Sphere { radius, .. } | Primitive::Cylinder { radius, .. } => {
+                        vec![*radius]
+                    }
+                    Primitive::Cone {
+                        radius, top_radius, ..
+                    } => vec![*radius, *top_radius],
+                    Primitive::Revolution { profile, .. } => {
+                        for q in profile {
+                            finite_point(*q, "profile")?;
+                            if q.x < -EPSILON || q.y < -EPSILON {
+                                return Err(ModelError::InvalidShape(
+                                    "a profile turned round its axis keeps to one side of it, above the base",
+                                ));
+                            }
+                        }
+                        if profile.len() < 2 {
+                            return Err(ModelError::InvalidShape(
+                                "a profile turned round its axis needs two points or more",
+                            ));
+                        }
+                        Vec::new()
+                    }
+                };
+                for r in &radii {
+                    finite(*r, "radius")?;
+                    if *r < 0.0 {
+                        return Err(ModelError::NonPositive("radius"));
+                    }
+                }
+                if pr.max_radius() <= EPSILON {
+                    return Err(ModelError::NonPositive("radius"));
+                }
+            }
+            MassShape::Mesh(mesh) => {
+                let n = mesh.positions.len();
+                if mesh.triangles.len() < 4
+                    || mesh.faces.len() != mesh.triangles.len()
+                    || mesh.triangles.iter().flatten().any(|i| *i as usize >= n)
+                    || mesh.positions.iter().flatten().any(|v| !v.is_finite())
+                {
+                    return Err(ModelError::InvalidShape(
+                        "a solid needs four triangles or more, on its own points",
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -332,6 +621,7 @@ impl Model {
                 floor_height: spec.floor_height,
                 material: spec.material,
                 building: None,
+                finish: None,
             },
         );
         Ok(id)

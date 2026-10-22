@@ -2098,8 +2098,11 @@ pub fn footing_solids(model: &Model, id: archisim_core::FootingId) -> Vec<Solid>
     }]
 }
 
-/// The solid of a mass: its outline from its base up its height (a face,
-/// a centimetre thick so that it is seen). None once it is a building.
+/// The solids of a mass: its solid (a contour pushed up, a round form, or
+/// what joining and cutting volumes gave), from its base, one solid per
+/// material: its own, and the paint of the faces painted. A face (height
+/// zero) is a centimetre thick so that it is seen. None once it is a
+/// building.
 pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
     let Some(m) = model.mass(id) else {
         return Vec::new();
@@ -2108,13 +2111,28 @@ pub fn mass_solids(model: &Model, id: archisim_core::MassId) -> Vec<Solid> {
     if m.building.is_some() {
         return Vec::new();
     }
-    let outline = m.outline();
+    let body = crate::forms::mass_body(m);
     let base = model.level(m.level).map_or(0.0, |l| l.elevation) + m.base_offset;
-    vec![Solid {
-        owner: SolidOwner::Mass(id),
-        material: m.material,
-        triangles: prism(&outline, base, base + m.height.max(0.01)),
-    }]
+    let mut by: std::collections::BTreeMap<archisim_core::MaterialId, Vec<[P3; 3]>> =
+        Default::default();
+    let mut paint: std::collections::BTreeMap<u32, archisim_core::MaterialId> = Default::default();
+    for (t, f) in body.triangles.iter().zip(&body.faces) {
+        let mat = *paint
+            .entry(*f)
+            .or_insert_with(|| model.face_paint(id.0, m.face_ref(*f)).unwrap_or(m.material));
+        let tri = t.map(|i| {
+            let p = body.positions[i as usize];
+            [p[0], p[1], p[2] + base]
+        });
+        by.entry(mat).or_default().push(tri);
+    }
+    by.into_iter()
+        .map(|(material, triangles)| Solid {
+            owner: SolidOwner::Mass(id),
+            material,
+            triangles,
+        })
+        .collect()
 }
 
 /// The solids of a road: its pavement from the carriageway's top down
@@ -2248,9 +2266,7 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
             Some(archisim_core::DeviceKind::Light) => [250, 230, 150],
             _ => [235, 235, 230],
         },
-        _ => model
-            .material(s.material)
-            .map_or([200, 200, 200], |m| m.cut_color),
+        _ => model.surface_color(s.material),
     }
 }
 
@@ -2298,27 +2314,9 @@ pub fn face_of(
             }
         }
         SolidOwner::Mass(id) => {
-            if n[2] > 0.5 {
-                return Some(FaceRef::Top);
-            }
-            if n[2] < -0.5 {
-                return Some(FaceRef::Bottom);
-            }
-            let o = model.mass(id)?.outline();
-            // The side under the point, facing the same way.
-            (0..o.len())
-                .filter_map(|i| {
-                    let (a, b) = (o[i], o[(i + 1) % o.len()]);
-                    let u = (b - a).normalized()?;
-                    let along = (c - a).x * u.x + (c - a).y * u.y;
-                    let len = a.distance(b);
-                    let across = ((c - a).x * u.y - (c - a).y * u.x).abs();
-                    let facing = (flat.x * u.y - flat.y * u.x).abs();
-                    (along > -1e-3 && along < len + 1e-3 && facing > 0.7).then_some((across, i))
-                })
-                .min_by(|a, b| a.0.total_cmp(&b.0))
-                .filter(|(d, _)| *d < 0.05)
-                .map(|(_, i)| FaceRef::Side(i))
+            let m = model.mass(id)?;
+            let base = model.level(m.level).map_or(0.0, |l| l.elevation) + m.base_offset;
+            crate::forms::face_at(m, [at[0], at[1], at[2] - base], n).map(|f| m.face_ref(f))
         }
         _ => None,
     }
@@ -2327,9 +2325,19 @@ pub fn face_of(
 /// The paint on a triangle of a wall or a volume: the colour of the
 /// material painted on the face it is part of, if that face is painted.
 pub fn painted_color(model: &Model, s: &Solid, tri: &[P3; 3]) -> Option<[u8; 3]> {
+    painted_material(model, s, tri).map(|m| model.surface_color(m))
+}
+
+/// The material painted on the face a triangle of a wall is on, if it is
+/// painted. (A volume's painted faces come as solids of their own
+/// material.)
+pub fn painted_material(
+    model: &Model,
+    s: &Solid,
+    tri: &[P3; 3],
+) -> Option<archisim_core::MaterialId> {
     let element = match s.owner {
         SolidOwner::Wall(id) => id.0,
-        SolidOwner::Mass(id) => id.0,
         _ => return None,
     };
     let u = [
@@ -2355,8 +2363,7 @@ pub fn painted_color(model: &Model, s: &Solid, tri: &[P3; 3]) -> Option<[u8; 3]>
     let face = face_of(model, s.owner, c, n)?;
     model
         .face_paint(element, face)
-        .and_then(|m| model.material(m))
-        .map(|m| m.cut_color)
+        .filter(|m| model.material(*m).is_some())
 }
 
 /// How far a painted zone stands off its wall's face, so it is seen over it.
@@ -2474,25 +2481,22 @@ mod tests {
         let face = face_of(&m, SolidOwner::Mass(id), [2.0, 0.0, 1.0], [0.0, -1.0, 0.0]);
         assert_eq!(face, Some(FaceRef::Side(0)));
         m.set_face_paint(id.0, FaceRef::Side(0), Some(red)).unwrap();
-        let colour = m.material(red).unwrap().cut_color;
+        // The painted face comes as a solid of its own, in the paint.
         let solids = model_solids(&m);
-        let s = solids
+        let of_mass: Vec<&Solid> = solids
             .iter()
-            .find(|s| s.owner == SolidOwner::Mass(id))
-            .unwrap();
-        let (mut painted, mut plain) = (0, 0);
-        for t in &s.triangles {
-            match painted_color(&m, s, t) {
-                Some(c) => {
-                    assert_eq!(c, colour);
-                    // Every painted triangle lies on y = 0.
-                    assert!(t.iter().all(|p| p[1].abs() < 1e-9), "{t:?}");
-                    painted += 1;
-                }
-                None => plain += 1,
-            }
+            .filter(|s| s.owner == SolidOwner::Mass(id))
+            .collect();
+        assert_eq!(of_mass.len(), 2);
+        let painted = of_mass.iter().find(|s| s.material == red).unwrap();
+        assert_eq!(painted.triangles.len(), 2);
+        // Every painted triangle lies on y = 0.
+        for t in &painted.triangles {
+            assert!(t.iter().all(|p| p[1].abs() < 1e-9), "{t:?}");
         }
-        assert!(painted >= 2 && plain >= 10, "{painted} {plain}");
+        let plain = of_mass.iter().find(|s| s.material == mat).unwrap();
+        assert_eq!(plain.triangles.len(), 10);
+        assert_eq!(solid_color(&m, painted), [200, 100, 80]);
     }
 
     /// The door and window solids as ArchiSim built them before families,

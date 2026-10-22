@@ -49,6 +49,10 @@ pub enum Glyph {
     Planting,
     /// A sprout in a pot: the species of plants.
     Nursery,
+    Sphere,
+    Cylinder,
+    Cone,
+    Revolution,
     StreetLamp,
     Dimension,
     LevelMark,
@@ -189,6 +193,18 @@ impl Glyph {
             Glyph::Planting => {
                 r##"<path d="M2 15c4-6 12-6 16-1" stroke-dasharray="1.5 1.2" stroke-width="0.7"/><circle cx="4.5" cy="11.5" r="2.5"/><circle cx="10" cy="9" r="3"/><circle cx="15.5" cy="11.5" r="2.5"/>"##
             }
+            Glyph::Sphere => {
+                r##"<circle cx="10" cy="10" r="7"/><path d="M3 10c0 2 3.2 3.4 7 3.4s7-1.4 7-3.4" stroke-width="0.9"/><path d="M3 10c0-2 3.2-3.4 7-3.4s7 1.4 7 3.4" stroke-width="0.6" stroke-dasharray="1.2 1.2"/>"##
+            }
+            Glyph::Cylinder => {
+                r##"<ellipse cx="10" cy="5" rx="6" ry="2.2"/><path d="M4 5v10c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2V5"/>"##
+            }
+            Glyph::Cone => {
+                r##"<path d="M10 2.5L4 15M10 2.5L16 15"/><ellipse cx="10" cy="15" rx="6" ry="2.2"/>"##
+            }
+            Glyph::Revolution => {
+                r##"<path d="M10 2v16" stroke-dasharray="1.5 1.3" stroke-width="0.8"/><path d="M10 3h3l2 4-3 4 3 6h-5"/><path d="M10 3H7L5 7l3 4-3 6h5" stroke-width="0.7"/>"##
+            }
             Glyph::Nursery => {
                 r##"<path d="M6 12h8l-1.2 5H7.2z"/><path d="M10 12V7"/><path d="M10 9c-3 0-4-2-4-4 2.5 0 4 1.5 4 4zM10 8c0-3 1.5-4.5 4.5-4.5 0 3-1.5 4.5-4.5 4.5z"/>"##
             }
@@ -322,6 +338,10 @@ impl Glyph {
         Glyph::Tree,
         Glyph::Planting,
         Glyph::Nursery,
+        Glyph::Sphere,
+        Glyph::Cylinder,
+        Glyph::Cone,
+        Glyph::Revolution,
         Glyph::Dimension,
         Glyph::LevelMark,
         Glyph::Tag,

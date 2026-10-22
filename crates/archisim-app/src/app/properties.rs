@@ -1641,6 +1641,7 @@ impl ArchiSimApp {
                 }
             }
         });
+        self.mass_operations(ui, many);
         self.phase_group(ui, "many-phase", many);
         let movable: Vec<Element> = many
             .iter()

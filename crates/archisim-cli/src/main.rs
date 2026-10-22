@@ -13,6 +13,7 @@
 mod colaboracion;
 mod demo;
 mod equipo;
+mod formas;
 mod grande;
 mod muestrario;
 mod vivero;
@@ -66,6 +67,11 @@ Uso:
       Todas las especies de vegetación que ArchiSim genera, plantadas por
       grupos, con un paseo y un arriate: vivero.archisim, vivero.ifc y
       plantas 1:200 de presentación y técnica. Carpeta por defecto: ./out
+  archisim formas [carpeta]
+      Las formas de Concepto juntas: aristas redondeadas y achaflanadas,
+      esfera, cilindro, cono, revolución, uniones, restas, intersecciones,
+      aristas donde se cruzan las caras y materiales de visualización:
+      formas.archisim, planta y axonometría en SVG. Por defecto: ./out
   archisim equipo <carpeta> [recibido.archisim]
       Un proyecto de equipo (carpeta compartida): quién está, qué ha
       publicado y reservado cada uno; con un segundo argumento, guarda el
@@ -161,6 +167,10 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("formas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(formas::write(&dir))
+        }
         Some("vivero") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(vivero::write(&dir))

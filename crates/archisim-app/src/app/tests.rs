@@ -5072,3 +5072,56 @@ fn team_work_in_a_shared_folder() {
     assert!(dir.join("trabajo").join("ana.archisim").is_file());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Formas: a cylinder and a sphere drawn by clicks, a block, and the
+/// operations offered with several volumes selected.
+#[test]
+fn round_forms_drawn_and_combined() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::Pick;
+    use crate::editor::MassMode;
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -5.0), p(25.0, 15.0), 0.0);
+    h.app.pick(Pick::Concept(ConceptPick::Form));
+    assert_eq!(h.app.tool, Tool::Mass);
+    assert_eq!(h.app.mass_settings.mode, MassMode::Cylinder);
+    h.click_at(p(5.0, 5.0));
+    h.click_at(p(7.0, 5.0));
+    let cyl = h.model().masses().next().unwrap().id;
+    assert!(matches!(
+        h.model().mass(cyl).unwrap().shape,
+        archisim_core::MassShape::Primitive(archisim_core::Primitive::Cylinder { .. })
+    ));
+    h.app.set_mass_mode(MassMode::Sphere);
+    h.click_at(p(15.0, 5.0));
+    h.click_at(p(16.0, 5.0));
+    assert_eq!(h.model().masses().count(), 2);
+    // A revolution: the axis, then the profile laid flat.
+    h.app.set_mass_mode(MassMode::Revolution);
+    h.click_at(p(20.0, 0.0));
+    h.click_at(p(21.0, 0.0));
+    h.click_at(p(21.5, 2.0));
+    h.click_at(p(21.5, 2.0));
+    assert_eq!(h.model().masses().count(), 3);
+    // Both round forms selected: the operations show; joined, one solid.
+    h.key(Key::Escape);
+    let ids: Vec<_> = h.model().masses().map(|m| m.id).collect();
+    h.app.ed.selection = [Element::Mass(ids[0]), Element::Mass(ids[1])]
+        .into_iter()
+        .collect();
+    h.frame();
+    h.frame();
+    h.app
+        .ed
+        .combine_masses(ids[0], &[ids[1]], archisim_geom::csg::Op::Union)
+        .unwrap();
+    assert_eq!(h.model().masses().count(), 2);
+    h.app.ed.selection = [Element::Mass(ids[0])].into_iter().collect();
+    h.frame();
+    h.app.mode = ViewMode::ThreeD;
+    h.frame();
+    h.frame();
+}

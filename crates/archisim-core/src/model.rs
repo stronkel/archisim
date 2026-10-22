@@ -14,6 +14,7 @@ use crate::family::{
 use crate::ids::*;
 use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MIN_BULGE};
 
+mod appearance;
 mod concept;
 mod curtain;
 mod disciplines;
@@ -38,6 +39,7 @@ mod stairs;
 mod structure;
 mod sun;
 mod urban;
+pub use appearance::*;
 pub use concept::*;
 pub use curtain::*;
 pub use disciplines::*;
@@ -1219,6 +1221,8 @@ pub struct ModelParts {
     /// walls' faces.
     pub face_paints: Vec<(u64, FaceRef, MaterialId)>,
     pub paint_zones: Vec<PaintZone>,
+    /// How materials look in 3D (colour and texture).
+    pub appearances: Vec<(MaterialId, Appearance)>,
     /// How views can be presented.
     pub presentation_styles: Vec<crate::graphics::PresentationStyle>,
     /// When the shadows of presentation drawings are cast.
@@ -1328,6 +1332,7 @@ pub struct Model {
     masses: BTreeMap<MassId, Mass>,
     edges: BTreeMap<EdgeId, ConceptEdge>,
     face_paints: BTreeMap<(u64, FaceRef), MaterialId>,
+    appearances: BTreeMap<MaterialId, Appearance>,
     paint_zones: Vec<PaintZone>,
     presentation_styles: BTreeMap<PresentationStyleId, crate::graphics::PresentationStyle>,
     sun: Sun,
@@ -1401,6 +1406,7 @@ impl Model {
             masses: BTreeMap::new(),
             edges: BTreeMap::new(),
             face_paints: BTreeMap::new(),
+            appearances: BTreeMap::new(),
             paint_zones: Vec::new(),
             presentation_styles: BTreeMap::new(),
             sun: Sun::default(),
@@ -3828,6 +3834,7 @@ impl Model {
             edges: self.edges.values().cloned().collect(),
             face_paints: self.face_paints().collect(),
             paint_zones: self.paint_zones().cloned().collect(),
+            appearances: self.appearances().collect(),
             presentation_styles: self.presentation_styles.values().cloned().collect(),
             sun: self.sun,
             plot_area: self.plot_area,
@@ -4141,6 +4148,7 @@ impl Model {
         model.restore_masses(parts.masses, &mut claim)?;
         model.restore_edges(parts.edges, &mut claim)?;
         model.restore_paint(parts.face_paints, parts.paint_zones)?;
+        model.restore_appearances(parts.appearances)?;
         model.restore_presentation_styles(parts.presentation_styles, &mut claim)?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),
