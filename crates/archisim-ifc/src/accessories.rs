@@ -23,6 +23,36 @@ impl Exporter<'_> {
         contained: &mut BTreeMap<LevelId, Vec<Ref>>,
     ) {
         let model = self.model;
+        // What the types say, on each wall and slab, to read them back.
+        for w in model.walls() {
+            let Some(t) = model.wall_type(w.wall_type) else {
+                continue;
+            };
+            if t.sweeps.is_empty() {
+                continue;
+            }
+            if let Some(&h) = self.hosts.get(&w.id.0) {
+                let text = encode_sweeps(model, &t.sweeps);
+                let p = self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Sweeps',$,IFCTEXT({}),$)",
+                    string(&text)
+                ));
+                self.pset(h, &w.guid, "ArchiSim_Accessories", &[p]);
+            }
+        }
+        for sl in model.slabs() {
+            let Some(e) = model.slab_type(sl.slab_type).and_then(|t| t.edge.as_ref()) else {
+                continue;
+            };
+            if let Some(&h) = self.hosts.get(&sl.id.0) {
+                let text = encode_profile(model, e.material, &e.profile);
+                let p = self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Edge',$,IFCTEXT({}),$)",
+                    string(&text)
+                ));
+                self.pset(h, &sl.guid, "ArchiSim_Accessories", &[p]);
+            }
+        }
         let mut runs: Vec<(u64, GlobalId, LevelId, String, SweepPiece)> = Vec::new();
         for w in model.walls() {
             let type_name = model
@@ -120,4 +150,82 @@ impl Exporter<'_> {
             contained.entry(level).or_default().push(el);
         }
     }
+}
+
+/// A material and a section as text: `material|x y;x y;…`.
+fn encode_profile(
+    model: &archisim_core::Model,
+    material: MaterialId,
+    profile: &[archisim_core::Point2],
+) -> String {
+    let name = model.material(material).map_or("", |m| m.name.as_str());
+    let pts: Vec<String> = profile
+        .iter()
+        .map(|p| format!("{} {}", real(p.x), real(p.y)))
+        .collect();
+    format!("{name}|{}", pts.join(";"))
+}
+
+/// A wall type's accessories as text, one a line:
+/// `kind|side|offset|from_top|material|x y;x y;…`.
+pub(crate) fn encode_sweeps(
+    model: &archisim_core::Model,
+    sweeps: &[archisim_core::WallSweep],
+) -> String {
+    sweeps
+        .iter()
+        .map(|s| {
+            format!(
+                "{}|{}|{}|{}|{}",
+                s.kind.code(),
+                s.side.code(),
+                real(s.offset),
+                u8::from(s.from_top),
+                encode_profile(model, s.material, &s.profile)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A section from its text, its material found by name.
+pub(crate) fn decode_profile(
+    model: &archisim_core::Model,
+    text: &str,
+) -> Option<(MaterialId, Vec<archisim_core::Point2>)> {
+    let (name, pts) = text.split_once('|')?;
+    let material = model.materials().find(|m| m.name == name)?.id;
+    let profile = pts
+        .split(';')
+        .map(|p| {
+            let mut it = p.split_whitespace().map(|v| v.parse::<f64>().ok());
+            Some(archisim_core::Point2::new(it.next()??, it.next()??))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some((material, profile))
+}
+
+/// A wall type's accessories from their text.
+pub(crate) fn decode_sweeps(
+    model: &archisim_core::Model,
+    text: &str,
+) -> Vec<archisim_core::WallSweep> {
+    text.lines()
+        .filter_map(|line| {
+            let mut it = line.splitn(5, '|');
+            let kind = SweepKind::from_code(it.next()?)?;
+            let side = archisim_core::SweepSide::from_code(it.next()?)?;
+            let offset = it.next()?.parse().ok()?;
+            let from_top = it.next()? == "1";
+            let (material, profile) = decode_profile(model, it.next()?)?;
+            Some(archisim_core::WallSweep {
+                kind,
+                side,
+                offset,
+                from_top,
+                profile,
+                material,
+            })
+        })
+        .collect()
 }

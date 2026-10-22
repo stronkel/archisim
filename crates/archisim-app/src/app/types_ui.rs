@@ -2143,22 +2143,6 @@ pub fn parse_rgb(text: &str) -> Option<[u8; 3]> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn colours_are_typed_as_three_numbers() {
-        assert_eq!(parse_rgb("232, 196, 178"), Some([232, 196, 178]));
-        assert_eq!(parse_rgb("10;20;30"), Some([10, 20, 30]));
-        assert_eq!(parse_rgb("1 2 3"), Some([1, 2, 3]));
-        assert_eq!(parse_rgb("256, 0, 0"), None);
-        assert_eq!(parse_rgb("1, 2"), None);
-        assert_eq!(category_name("glass"), "Vidrio");
-        assert_eq!(category_name("adobe"), "Otra (adobe)");
-    }
-}
-
 /// The accessories of a wall type, editable: what each is, the face it
 /// runs along, its height and material; add one of each kind, remove.
 /// Returns the new list when something changed.
@@ -2357,4 +2341,20 @@ fn slab_edge_row(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colours_are_typed_as_three_numbers() {
+        assert_eq!(parse_rgb("232, 196, 178"), Some([232, 196, 178]));
+        assert_eq!(parse_rgb("10;20;30"), Some([10, 20, 30]));
+        assert_eq!(parse_rgb("1 2 3"), Some([1, 2, 3]));
+        assert_eq!(parse_rgb("256, 0, 0"), None);
+        assert_eq!(parse_rgb("1, 2"), None);
+        assert_eq!(category_name("glass"), "Vidrio");
+        assert_eq!(category_name("adobe"), "Otra (adobe)");
+    }
 }

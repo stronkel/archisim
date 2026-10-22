@@ -17,7 +17,7 @@ Rama `bloque/muebles` (sobre `bloque/modelado-2`), pull request para Antonio. v0
 - **Accesorios de los tipos**: rodapiés, molduras, cornisas y albardillas en los tipos de muro (siguen a sus muros y se cortan en puertas y ventanas) y canto (cornisa o alero) en los de forjado; en 3D, planta, secciones, alzados e IFC.
 
 **Pendiente**
-- Importar los accesorios de un IFC y llevarlos en `.astipos`; accesorios en muros curvos y en cubiertas inclinadas.
+- Llevar los accesorios en `.astipos` (del IFC de ArchiSim ya vuelven); accesorios en muros curvos y en cubiertas inclinadas.
 
 **Qué debe probar Antonio**
 1. Abre la demo: en 3D mira los rodapiés por dentro y la cornisa de piedra de la cubierta; en el alzado sur, la cornisa.

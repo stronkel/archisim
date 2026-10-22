@@ -699,6 +699,26 @@ mod tests {
         assert!(diffs.is_empty(), "{}", diffs.join("\n"));
         assert!(imported.report.skipped.is_empty(), "{}", imported.report);
         assert!(imported.report.warnings.is_empty(), "{}", imported.report);
+        // The accessories of the types come back to their types.
+        for t in original.wall_types().filter(|t| !t.sweeps.is_empty()) {
+            let back = imported
+                .model
+                .wall_types()
+                .find(|x| x.name == t.name)
+                .unwrap();
+            assert_eq!(back.sweeps.len(), t.sweeps.len(), "{}", t.name);
+        }
+        for t in original.slab_types().filter(|t| t.edge.is_some()) {
+            let back = imported
+                .model
+                .slab_types()
+                .find(|x| x.name == t.name)
+                .unwrap();
+            assert_eq!(
+                back.edge.as_ref().map(|e| e.profile.len()),
+                t.edge.as_ref().map(|e| e.profile.len())
+            );
+        }
         // Saved as a project and opened again, still the same.
         let text = archisim_file::to_string(&imported.model);
         let reopened = archisim_file::from_str(&text).unwrap();

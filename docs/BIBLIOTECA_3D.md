@@ -76,7 +76,7 @@ Antonio pidió muebles estirables desde la vista 3D, más parámetros (número d
 
 **Baño y cocina** (familias nuevas, colgadas a su altura): espejo (con marco, sin marco o redondo), toallero (barra o radiador toallero), portarrollos, barra de apoyo (fija o abatible, para baños accesibles), campana extractora (decorativa con chimenea o integrada) y balda (con escuadras o flotante).
 
-**Accesorios de los tipos de muro y de forjado**, como los barridos de Revit: en Tipos y materiales → el tipo de muro → **Accesorios**, se añaden rodapiés, molduras, cornisas y albardillas. Cada uno dice en qué cara va (exterior, interior o coronación), a qué distancia del pie o de la coronación y de qué material. Siguen a todos los muros del tipo, cierran las esquinas y **se cortan en las puertas y ventanas que cruzan su altura** (el rodapié se corta en las puertas y la cornisa sigue por encima). En el tipo de forjado, **Canto**: cornisa o alero alrededor de todos sus forjados horizontales. En planta se ven como una línea fina (discontinua si están por encima del plano de corte); en 3D, secciones y alzados, con su material; en el IFC, cada tramo es un `IfcCovering` (`SKIRTINGBOARD`, `MOLDING`, `COPING`) que cubre su muro o forjado. Los vierteaguas siguen siendo parte de las ventanas (v0.32).
+**Accesorios de los tipos de muro y de forjado**, como los barridos de Revit: en Tipos y materiales → el tipo de muro → **Accesorios**, se añaden rodapiés, molduras, cornisas y albardillas. Cada uno dice en qué cara va (exterior, interior o coronación), a qué distancia del pie o de la coronación y de qué material. Siguen a todos los muros del tipo, cierran las esquinas y **se cortan en las puertas y ventanas que cruzan su altura** (el rodapié se corta en las puertas y la cornisa sigue por encima). En el tipo de forjado, **Canto**: cornisa o alero alrededor de todos sus forjados horizontales. En planta se ven como una línea fina (discontinua si están por encima del plano de corte); en 3D, secciones y alzados, con su material; en el IFC, cada tramo es un `IfcCovering` (`SKIRTINGBOARD`, `MOLDING`, `COPING`) que cubre su muro o forjado, y al importar un IFC de ArchiSim vuelven a sus tipos. Los vierteaguas siguen siendo parte de las ventanas (v0.32).
 
 La demo trae rodapiés de madera en los muros de fachada y en los tabiques y una cornisa de piedra alrededor de la cubierta. `archisim modelos out/` enseña todos los muebles y accesorios nuevos, con el frente hacia quien mira.
 
@@ -84,7 +84,7 @@ Para el programador: `archisim_props::fronts` (`Handle`, `drawer`, `door`, `draw
 
 ## Pendiente
 
-- Importar los accesorios de un IFC (hoy se leen como revestimientos que no se importan) y llevarlos en los ficheros `.astipos` de la biblioteca.
+- Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
 - Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).
 
 - Más objetos: electrodomésticos de encastre, campana, aparatos de iluminación, mobiliario de oficina, plantas de interior en maceta.
