@@ -92,6 +92,29 @@ impl RoadSection {
     pub fn width(&self) -> f64 {
         self.carriageway + 2.0 * (self.parking + self.kerb + self.sidewalk)
     }
+
+    /// Each band with how far its two edges are to the left of the axis
+    /// (negative: to its right), carriageway first, then each side from
+    /// the carriageway outwards.
+    pub fn band_offsets(&self) -> Vec<(RoadBand, f64, f64)> {
+        let c = self.carriageway / 2.0;
+        let mut out = vec![(RoadBand::Carriageway, -c, c)];
+        for side in [1.0, -1.0] {
+            let mut d = c;
+            for (band, w) in [
+                (RoadBand::Parking, self.parking),
+                (RoadBand::Kerb, self.kerb),
+                (RoadBand::Sidewalk, self.sidewalk),
+            ] {
+                if w > EPSILON {
+                    let (a, b) = if side > 0.0 { (d, d + w) } else { (-d - w, -d) };
+                    out.push((band, a, b));
+                }
+                d += w;
+            }
+        }
+        out
+    }
 }
 
 /// A band of a road's section.
@@ -149,23 +172,12 @@ impl Road {
     /// Each band of the section with its outline, from the left side to
     /// the right.
     pub fn bands(&self) -> Vec<(RoadBand, Vec<Point2>)> {
-        let s = self.section;
-        let c = s.carriageway / 2.0;
-        let mut out = vec![(RoadBand::Carriageway, strip(&self.axis, -c, c))];
-        for side in [1.0, -1.0] {
-            let mut d = c;
-            for (band, w) in [
-                (RoadBand::Parking, s.parking),
-                (RoadBand::Kerb, s.kerb),
-                (RoadBand::Sidewalk, s.sidewalk),
-            ] {
-                if w > EPSILON {
-                    let (a, b) = if side > 0.0 { (d, d + w) } else { (-d - w, -d) };
-                    out.push((band, strip(&self.axis, a, b)));
-                }
-                d += w;
-            }
-        }
+        let mut out: Vec<_> = self
+            .section
+            .band_offsets()
+            .into_iter()
+            .map(|(band, a, b)| (band, strip(&self.axis, a, b)))
+            .collect();
         out.retain(|(_, o)| o.len() >= 3);
         out
     }

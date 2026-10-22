@@ -5227,3 +5227,73 @@ fn onboarding_missions_by_clicks() {
     h.frame();
     assert!((h.ctx.zoom_factor() - 1.2).abs() < 1e-3);
 }
+
+/// A road drawn by the edge of its sidewalk (chosen in the bar under the
+/// tabs), its axis edited afterwards by dragging, adding and removing
+/// points; a selected tree changes only among trees.
+#[test]
+fn roads_by_their_edge_edited_after_and_trees_among_trees() {
+    use super::missions_ui::marked;
+    use super::urban_ui::RoadReference;
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -30.0), p(60.0, 20.0), 0.0);
+    h.type_text("w");
+    assert_eq!(h.app.tool, Tool::Road);
+    h.frame();
+    let left = marked(&h.ctx, "reference:0").expect("reference buttons in the bar");
+    h.click_screen(left.center());
+    assert_eq!(h.app.road_settings.reference, RoadReference::LeftEdge);
+    h.click_at(p(0.0, 0.0));
+    h.move_to(p(40.0, 0.0));
+    h.click_at(p(40.0, 0.0));
+    h.key(Key::Enter);
+    let r = h.model().roads().next().unwrap().clone();
+    let half = r.section.width() / 2.0;
+    // Drawn left to right along its left edge: the road lies below.
+    assert!((r.axis[0].y + half).abs() < 1e-6, "{:?}", r.axis);
+    assert!((r.length() - 40.0).abs() < 1e-6);
+    // Edited after: the first point of the axis dragged.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Road(r.id)].into_iter().collect();
+    h.frame();
+    let a0 = r.axis[0];
+    h.drag(a0, a0 + archisim_core::Vec2::new(0.0, -5.0));
+    let axis = h.model().road(r.id).unwrap().axis.clone();
+    assert!((axis[0].y - (a0.y - 5.0)).abs() < 1e-6, "{axis:?}");
+    // A double click on the axis adds a point; picked, Supr takes it away.
+    let mid = p(25.0, -half);
+    h.move_to(mid);
+    for _ in 0..2 {
+        h.button(PointerButton::Primary, true);
+        h.button(PointerButton::Primary, false);
+    }
+    h.time += 1.0;
+    h.frame();
+    assert_eq!(h.model().road(r.id).unwrap().axis.len(), 3);
+    h.key(Key::Delete);
+    assert_eq!(h.model().road(r.id).unwrap().axis.len(), 2);
+    assert!(h.model().road(r.id).is_some(), "the road stays");
+    // A tree: its gallery keeps to vegetation, people and vehicles.
+    h.key(Key::Escape);
+    h.app.pick(super::toolbox::Pick::Objects(
+        super::object_gallery::ObjectScope::Vegetation,
+    ));
+    h.click_at(p(10.0, 10.0));
+    let tree = h.model().objects().next().unwrap().id;
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Object(tree)].into_iter().collect();
+    h.frame();
+    let t = h.model().object(tree).unwrap().object_type;
+    assert_eq!(h.app.object_type_category(t), Some("Entorno"));
+    assert_eq!(
+        super::object_gallery::ObjectScope::of_category("Entorno"),
+        Some(super::object_gallery::ObjectScope::Vegetation)
+    );
+    assert_eq!(
+        super::object_gallery::ObjectScope::of_category("Mobiliario"),
+        None
+    );
+}

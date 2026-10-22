@@ -22,7 +22,11 @@ impl ArchiSimApp {
     /// The field of the top bar that opens the search.
     pub(super) fn search_field(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
-        let (rect, resp) = ui.allocate_exact_size(Vec2::new(250.0, 26.0), Sense::click());
+        // As wide as fits before the buttons on the right of the bar (with
+        // a large text there is less room).
+        let right = if self.team.is_some() { 470.0 } else { 310.0 };
+        let width = (ui.available_width() - right).clamp(110.0, 250.0);
+        let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 26.0), Sense::click());
         let hovered = resp.hovered();
         ui.painter().rect(
             rect,
@@ -40,17 +44,23 @@ impl ArchiSimApp {
         ui.painter().text(
             rect.left_center() + Vec2::new(27.0, 0.0),
             Align2::LEFT_CENTER,
-            "Buscar herramienta…",
+            if width > 160.0 {
+                "Buscar herramienta…"
+            } else {
+                "Buscar…"
+            },
             egui::FontId::proportional(12.0),
             p.muted,
         );
-        ui.painter().text(
-            rect.right_center() - Vec2::new(8.0, 0.0),
-            Align2::RIGHT_CENTER,
-            "Ctrl+Espacio",
-            egui::FontId::monospace(9.5),
-            p.faint,
-        );
+        if width > 230.0 {
+            ui.painter().text(
+                rect.right_center() - Vec2::new(8.0, 0.0),
+                Align2::RIGHT_CENTER,
+                "Ctrl+Espacio",
+                egui::FontId::monospace(9.5),
+                p.faint,
+            );
+        }
         if resp
             .on_hover_text("Buscar una herramienta u orden por su nombre o su tecla")
             .clicked()

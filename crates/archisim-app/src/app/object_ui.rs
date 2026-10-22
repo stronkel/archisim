@@ -149,7 +149,19 @@ impl ArchiSimApp {
             .unwrap_or_default();
         props::title(ui, "Objeto · 1 seleccionado");
         super::properties::view_card(ui, Icon::Object, &t.name, &ifc);
-        if let Some(pick) = self.object_card(ui, &format!("object-{}", id.0), Some(t.id)) {
+        // A tree offers trees, a bench street furniture: the gallery of an
+        // object of Urbanismo keeps to its part of the library.
+        let scope = self
+            .object_type_category(t.id)
+            .and_then(super::object_gallery::ObjectScope::of_category);
+        let (saved, saved_card) = (self.object_scope, self.scoped_card);
+        if scope.is_some() {
+            self.object_scope = scope;
+            self.scoped_card = true;
+        }
+        let card = self.object_card(ui, &format!("object-{}", id.0), Some(t.id));
+        (self.object_scope, self.scoped_card) = (saved, saved_card);
+        if let Some(pick) = card {
             if let Some(picked) = self.object_pick_type(pick).filter(|p| *p != t.id) {
                 let r = self
                     .ed

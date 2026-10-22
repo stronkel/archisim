@@ -10,9 +10,48 @@ use eframe::egui::{self, ComboBox, Id, Ui};
 use super::props::{self, group, row, text_row};
 use super::*;
 
+/// Which line of a road the clicks draw (ArchiCAD's reference line of a
+/// wall): its axis, or the outer edge of one sidewalk, left or right as
+/// seen walking the way it is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RoadReference {
+    LeftEdge,
+    #[default]
+    Axis,
+    RightEdge,
+}
+
+impl RoadReference {
+    pub const ALL: [RoadReference; 3] = [
+        RoadReference::LeftEdge,
+        RoadReference::Axis,
+        RoadReference::RightEdge,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            RoadReference::LeftEdge => "Borde izquierdo",
+            RoadReference::Axis => "Eje",
+            RoadReference::RightEdge => "Borde derecho",
+        }
+    }
+
+    /// The road's axis from the line drawn.
+    pub fn axis(self, drawn: &[Point2], section: &RoadSection) -> Option<Vec<Point2>> {
+        let w = section.width() / 2.0;
+        match self {
+            RoadReference::Axis => Some(drawn.to_vec()),
+            // The road lies to the right of a left edge.
+            RoadReference::LeftEdge => archisim_core::offset_path(drawn, -w),
+            RoadReference::RightEdge => archisim_core::offset_path(drawn, w),
+        }
+    }
+}
+
 /// What the road tool draws.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RoadSettings {
+    pub reference: RoadReference,
     pub section: RoadSection,
     pub top_offset: f64,
     pub pavement: MaterialId,
@@ -29,6 +68,7 @@ impl RoadSettings {
                 .map_or(MaterialId(0), |m| m.id)
         };
         RoadSettings {
+            reference: RoadReference::Axis,
             section: RoadSection::default(),
             top_offset: 0.0,
             pavement: by(&["asphalt", "concrete"]),
@@ -156,12 +196,16 @@ impl ArchiSimApp {
     }
 
     pub(super) fn finish_road(&mut self) {
-        let axis = std::mem::take(&mut self.road_points);
-        if axis.len() < 2 {
+        let drawn = std::mem::take(&mut self.road_points);
+        if drawn.len() < 2 {
             return;
         }
         let level = self.ed.level;
         let s = self.road_settings;
+        let Some(axis) = s.reference.axis(&drawn, &s.section) else {
+            self.complain("No se puede crear el vial: el eje dibujado no tiene longitud.");
+            return;
+        };
         let r = self.ed.transact("Crear vial", |m| {
             m.add_road(NewRoad {
                 name: m.next_road_name(),
@@ -232,21 +276,52 @@ impl ArchiSimApp {
                 if self.road_points.is_empty() {
                     return;
                 }
-                let mut axis = self.road_points.clone();
-                axis.push(c.point);
-                painter.add(Shape::line(self.polygon(rect, &axis), ink));
-                let w = self.road_settings.section.width() / 2.0;
-                let band = archisim_core::strip(&axis, -w, w);
-                if band.len() > 2 {
-                    painter.add(Shape::closed_line(
-                        self.polygon(rect, &band),
-                        Stroke::new(1.0, ACCENT.gamma_multiply(0.6)),
-                    ));
+                let mut drawn = self.road_points.clone();
+                drawn.push(c.point);
+                let s = self.road_settings;
+                // The whole road as it will be: each band filled with its
+                // colour, the kerbs drawn, and the line clicked.
+                if let Some(axis) = s.reference.axis(&drawn, &s.section) {
+                    self.paint_road_bands(painter, rect, &axis, &s.section);
                 }
-                let len: f64 = axis.windows(2).map(|x| x[0].distance(x[1])).sum();
+                painter.add(Shape::line(self.polygon(rect, &drawn), ink));
+                let len: f64 = drawn.windows(2).map(|x| x[0].distance(x[1])).sum();
                 self.draw_label(painter, rect, c.point, format!("L {} m", comma(len, 2)));
             }
             _ => {}
+        }
+    }
+
+    /// The bands of a road along `axis`, filled segment by segment (each
+    /// piece is convex, the whole strip may not be).
+    pub(super) fn paint_road_bands(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        axis: &[Point2],
+        section: &RoadSection,
+    ) {
+        for (band, a, b) in section.band_offsets() {
+            let (Some(near), Some(far)) = (
+                archisim_core::offset_path(axis, a),
+                archisim_core::offset_path(axis, b),
+            ) else {
+                continue;
+            };
+            let fill = match band {
+                RoadBand::Carriageway => Color32::from_rgba_unmultiplied(90, 96, 104, 90),
+                RoadBand::Parking => Color32::from_rgba_unmultiplied(140, 146, 154, 80),
+                RoadBand::Kerb => Color32::from_rgba_unmultiplied(235, 235, 230, 200),
+                RoadBand::Sidewalk => Color32::from_rgba_unmultiplied(214, 196, 160, 110),
+            };
+            for i in 0..near.len().saturating_sub(1) {
+                let quad = [near[i], near[i + 1], far[i + 1], far[i]];
+                painter.add(Shape::convex_polygon(
+                    self.polygon(rect, &quad),
+                    fill,
+                    Stroke::new(0.8, ACCENT.gamma_multiply(0.5)),
+                ));
+            }
         }
     }
 
@@ -259,10 +334,14 @@ impl ArchiSimApp {
                 "Clic: siguiente esquina de la linde · Clic en la primera o Intro: cerrar · Esc: quitar la última"
             }
             Tool::Plot => "Clic: primera esquina de la linde · Esc: flecha",
-            Tool::Road if !self.road_points.is_empty() => {
-                "Clic: siguiente punto del eje · Doble clic o Intro: terminar · Esc: quitar el último"
-            }
-            Tool::Road => "Clic: comienzo del eje del vial (la sección, en Propiedades) · Esc: flecha",
+            Tool::Road if !self.road_points.is_empty() => match self.road_settings.reference {
+                RoadReference::Axis => "Clic: siguiente punto del eje · Doble clic o Intro: terminar · Esc: quitar el último",
+                _ => "Clic: siguiente punto del borde · Doble clic o Intro: terminar · Esc: quitar el último",
+            },
+            Tool::Road => match self.road_settings.reference {
+                RoadReference::Axis => "Clic: comienzo del eje del vial (eje o borde, en la barra de arriba; la sección, en Propiedades) · Esc: flecha",
+                _ => "Clic: comienzo del borde de la acera (eje o borde, en la barra de arriba; la sección, en Propiedades) · Esc: flecha",
+            },
             _ => "",
         }
     }
@@ -298,6 +377,13 @@ impl ArchiSimApp {
         props::title(ui, "Herramienta Vial · lo que vas a dibujar");
         let model = self.ed.model();
         let mut s = self.road_settings;
+        group(ui, "tool-road-ref", "Dibujo", |ui| {
+            text_row(ui, "Línea dibujada", "", s.reference.name());
+            props::note(
+                ui,
+                "Eje o bordes de las aceras: se elige en «Referencia», en la barra bajo las pestañas.",
+            );
+        });
         group(ui, "tool-road", "Sección tipo", |ui| {
             if let Some(sec) = section_rows(ui, 0, s.section) {
                 s.section = sec;

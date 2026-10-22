@@ -23,6 +23,13 @@ pub enum ObjectScope {
 }
 
 impl ObjectScope {
+    /// The part of the library of a gallery category, if it is one.
+    pub fn of_category(category: &str) -> Option<Self> {
+        [ObjectScope::Vegetation, ObjectScope::Street]
+            .into_iter()
+            .find(|s| s.categories().contains(&category))
+    }
+
     /// The gallery categories it shows, the first open.
     pub fn categories(self) -> &'static [&'static str] {
         match self {
@@ -544,14 +551,26 @@ impl ArchiSimApp {
             .width(640.0)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| {
-                let opening = self
-                    .object_scope
-                    .filter(|_| self.scoped_card)
-                    .map(|s| s.categories()[0]);
-                let mut place: Place = ui.ctx().data(|d| d.get_temp(place_id)).unwrap_or(Place {
-                    category: opening,
-                    folder: None,
-                });
+                // It opens where the current type is (a tree among the
+                // trees), or at the first category of the tool's part of
+                // the library.
+                let here = items
+                    .iter()
+                    .find(|i| current.is_some_and(|c| i.pick == ObjectPick::Project(c)));
+                let opening = match here {
+                    Some(i) => Place {
+                        category: Some(i.category),
+                        folder: (!i.folder.is_empty()).then(|| i.folder.clone()),
+                    },
+                    None => Place {
+                        category: self
+                            .object_scope
+                            .filter(|_| self.scoped_card)
+                            .map(|s| s.categories()[0]),
+                        folder: None,
+                    },
+                };
+                let mut place: Place = ui.ctx().data(|d| d.get_temp(place_id)).unwrap_or(opening);
                 let mut query: String =
                     ui.ctx().data(|d| d.get_temp(search_id)).unwrap_or_default();
                 ui.add(

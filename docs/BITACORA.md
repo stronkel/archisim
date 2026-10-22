@@ -6,6 +6,25 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (5) · Revisión de Antonio, bloque 1: Urbanismo
+
+Directo a `main` (arreglos pequeños). v0.41.1. Sin cambios en el formato `.archisim` ni en el IFC. Antonio entregó su lista de feedback acumulado; queda repartida en siete bloques en `docs/HOJA_DE_RUTA.md` §7.
+
+**Hecho**
+- Al seleccionar un árbol (en planta o en 3D), cambiar su tipo abre la galería en su carpeta y solo con vegetación, personas y vehículos; un banco o una farola, solo con mobiliario urbano. Antes salía todo el mobiliario.
+- **Vista previa de la calle** mientras se dibuja: calzada, aparcamiento, bordillos y aceras pintados con su ancho real.
+- **Referencia del vial**: eje, borde izquierdo o borde derecho de las aceras, en la barra bajo las pestañas («Referencia», tres dibujos). Dibujando por el borde de la parcela, la calle queda hacia fuera.
+- **Referencia de los muros** en la misma barra (cara exterior, eje, cara interior), además de en Propiedades.
+- **Editar un vial después**: con el vial seleccionado, sus puntos del eje se arrastran; doble clic en el vial añade un punto; clic en un punto y Supr lo quita. La sección y los materiales ya se cambiaban en Propiedades.
+- Con letra Grande, el buscador de la barra superior ya no tapa deshacer y rehacer.
+
+**Qué debe probar Antonio**
+1. Urbanismo → Vial. En la barra bajo las pestañas, «Referencia»: elige el primer dibujo (borde izquierdo) y dibuja de izquierda a derecha: la calle queda debajo de la línea, con sus bandas pintadas mientras mueves el ratón.
+2. Selecciona la calle: arrastra un punto del eje; doble clic en medio del vial para añadir otro; clic en él y Supr.
+3. Selecciona un árbol y pulsa su tipo en Propiedades: la galería abre en los árboles. Prueba también en la vista 3D.
+
+---
+
 ## 2026-10-22 (4) · Letra grande y misiones de iniciación (I6)
 
 Rama `bloque/iniciacion` (sobre `bloque/biblioteca-3d`), pull request para Antonio. v0.41. Sin cambios en el formato `.archisim` ni en el IFC. Descrito en `docs/INICIACION.md`. Con esto la interfaz por disciplinas (I1–I6) queda completa.

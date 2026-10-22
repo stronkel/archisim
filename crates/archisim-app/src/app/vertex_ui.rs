@@ -1,4 +1,4 @@
-//! Vertices of lines, polylines, fills and slabs, as in ArchiCAD: a double
+//! Vertices of lines, polylines, fills, slabs and road axes, as in ArchiCAD: a double
 //! click on an edge of the selection adds a vertex there (ready to drag), a
 //! click on a vertex picks it, and Supr takes the picked vertex away instead
 //! of the whole element.
@@ -29,6 +29,10 @@ impl ArchiSimApp {
                 self.ed.selection.contains(&Element::Slab(slab))
                     && model.slab(slab).is_some_and(|s| index < s.outline.len())
             }
+            Grip::RoadPoint { road, index } => {
+                self.ed.selection.contains(&Element::Road(road))
+                    && model.road(road).is_some_and(|r| index < r.axis.len())
+            }
             _ => false,
         };
         ok.then_some(g)
@@ -43,7 +47,7 @@ impl ArchiSimApp {
                 .draft(draft)
                 .is_some_and(|d| archisim_draft::grips::is_vertex(&d.shape, index))
                 .then_some(g),
-            Some(g @ Grip::SlabCorner { .. }) => Some(g),
+            Some(g @ (Grip::SlabCorner { .. } | Grip::RoadPoint { .. })) => Some(g),
             _ => None,
         };
         self.vertex = vertex;
@@ -90,6 +94,17 @@ impl ArchiSimApp {
                         }
                     }
                 }
+                Element::Road(id) => {
+                    let Some(r) = model.road(id) else { continue };
+                    if let Some((axis, index, dist)) = with_point(&r.axis, at) {
+                        if dist <= reach.max(r.section.width() / 2.0)
+                            && best.as_ref().is_none_or(|b| dist < b.0)
+                        {
+                            best =
+                                Some((dist, Grip::RoadPoint { road: id, index }, None, Some(axis)));
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -103,6 +118,11 @@ impl ArchiSimApp {
             (Grip::SlabCorner { slab, .. }, _, Some(outline)) => {
                 self.ed.transact("Añadir esquina de forjado", |m| {
                     m.set_slab_outline(slab, outline)
+                })
+            }
+            (Grip::RoadPoint { road, .. }, _, Some(axis)) => {
+                self.ed.transact("Añadir punto al eje del vial", |m| {
+                    m.edit_road(road, |r| r.axis = axis)
                 })
             }
             _ => return false,
@@ -149,6 +169,19 @@ impl ArchiSimApp {
                     m.set_slab_outline(slab, outline)
                 })
             }
+            Grip::RoadPoint { road, index } => {
+                let Some(mut axis) = model.road(road).map(|r| r.axis.clone()) else {
+                    return false;
+                };
+                if axis.len() <= 2 {
+                    self.complain("No se puede quitar: el eje del vial necesita dos puntos.");
+                    return true;
+                }
+                axis.remove(index);
+                self.ed.transact("Quitar punto del eje del vial", |m| {
+                    m.edit_road(road, |r| r.axis = axis)
+                })
+            }
             _ => return false,
         };
         self.vertex = None;
@@ -183,6 +216,34 @@ fn with_corner(outline: &[Point2], at: Point2) -> Option<(Vec<Point2>, usize, f6
         return None;
     }
     let mut out = outline.to_vec();
+    out.insert(i + 1, q);
+    Some((out, i + 1, d))
+}
+
+/// An open line with a new point on its segment nearest to `at`: the
+/// line, the new point's index and how far `at` was from that segment.
+/// `None` when `at` is past its ends or on a point.
+fn with_point(line: &[Point2], at: Point2) -> Option<(Vec<Point2>, usize, f64)> {
+    let (i, q, d) = line
+        .windows(2)
+        .enumerate()
+        .map(|(i, w)| {
+            let (a, b) = (w[0], w[1]);
+            let ab = b - a;
+            let l2 = ab.dot(ab);
+            let t = if l2 < 1e-18 {
+                0.0
+            } else {
+                ((at - a).dot(ab) / l2).clamp(0.0, 1.0)
+            };
+            let q = a + ab * t;
+            (i, q, q.distance(at))
+        })
+        .min_by(|x, y| x.2.total_cmp(&y.2))?;
+    if line.iter().any(|c| c.distance(q) < 1e-6) {
+        return None;
+    }
+    let mut out = line.to_vec();
     out.insert(i + 1, q);
     Some((out, i + 1, d))
 }

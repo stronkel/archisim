@@ -689,6 +689,99 @@ impl ArchiSimApp {
         }
     }
 
+    /// Which line of a wall or road the clicks draw: exterior face, axis
+    /// or interior face (left edge, axis or right edge of a road), as
+    /// three drawings of the wall seen in plan with the line marked.
+    fn reference_buttons(&mut self, ui: &mut Ui) {
+        use super::urban_ui::RoadReference;
+        use archisim_core::ReferenceLine;
+        let p = Palette::current(ui.ctx());
+        // 0: the line on the left side (up in the drawing), 1: axis, 2:
+        // the right side.
+        let (current, hints): (usize, [&str; 3]) = match self.tool {
+            Tool::Wall => (
+                match self.wall_settings.reference {
+                    ReferenceLine::ExteriorFace => 0,
+                    ReferenceLine::Center => 1,
+                    ReferenceLine::InteriorFace => 2,
+                },
+                [
+                    "Cara exterior: los clics van por la cara exterior (a la izquierda según dibujas; dibuja el contorno en el sentido de las agujas del reloj)",
+                    "Eje: los clics van por el centro del muro",
+                    "Cara interior: los clics van por la cara interior (a la derecha según dibujas)",
+                ],
+            ),
+            Tool::Road => (
+                match self.road_settings.reference {
+                    RoadReference::LeftEdge => 0,
+                    RoadReference::Axis => 1,
+                    RoadReference::RightEdge => 2,
+                },
+                [
+                    "Borde izquierdo: los clics van por el borde exterior de la acera de la izquierda (según dibujas); el vial queda a la derecha",
+                    "Eje: los clics van por el eje del vial",
+                    "Borde derecho: los clics van por el borde exterior de la acera de la derecha; el vial queda a la izquierda",
+                ],
+            ),
+            _ => return,
+        };
+        bar_separator(ui, &p);
+        if ui.available_width() > 3.0 * 34.0 + 200.0 {
+            ui.label(egui::RichText::new("Referencia").small().color(p.muted));
+            ui.add_space(4.0);
+        }
+        let mut chosen = None;
+        for (i, hint) in hints.iter().enumerate() {
+            let on = i == current;
+            let (rect, resp) = ui.allocate_exact_size(Vec2::new(32.0, 28.0), Sense::click());
+            let (fill, fg) = if on {
+                (p.accent_soft, p.accent)
+            } else if resp.hovered() {
+                (p.raised, p.text)
+            } else {
+                (Color32::TRANSPARENT, p.text)
+            };
+            ui.painter().rect_filled(rect, CornerRadius::same(7), fill);
+            // The wall (or road) as a band, the line clicked along it.
+            let band = Rect::from_center_size(rect.center(), Vec2::new(20.0, 10.0));
+            ui.painter().rect_stroke(
+                band,
+                CornerRadius::ZERO,
+                Stroke::new(1.0, fg.gamma_multiply(0.7)),
+                egui::StrokeKind::Inside,
+            );
+            let y = match i {
+                0 => band.top() + 0.5,
+                1 => band.center().y,
+                _ => band.bottom() - 0.5,
+            };
+            ui.painter().line_segment(
+                [
+                    egui::pos2(band.left() - 3.0, y),
+                    egui::pos2(band.right() + 3.0, y),
+                ],
+                Stroke::new(2.0, p.accent),
+            );
+            super::missions_ui::mark(ui.ctx(), format!("reference:{i}"), rect);
+            if resp.on_hover_text(*hint).clicked() {
+                chosen = Some(i);
+            }
+        }
+        if let Some(i) = chosen {
+            match self.tool {
+                Tool::Wall => {
+                    self.wall_settings.reference = [
+                        ReferenceLine::ExteriorFace,
+                        ReferenceLine::Center,
+                        ReferenceLine::InteriorFace,
+                    ][i];
+                }
+                Tool::Road => self.road_settings.reference = RoadReference::ALL[i],
+                _ => {}
+            }
+        }
+    }
+
     /// The bar under the tabs.
     pub(super) fn context_bar(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
@@ -722,7 +815,14 @@ impl ArchiSimApp {
             }
             if let Some((name, methods)) = self.methods() {
                 bar_title(ui, name, &p);
-                let room = ui.available_width() - 150.0;
+                // Room for the reference line buttons and the L and ∠
+                // fields after the methods.
+                let refs = if matches!(self.tool, Tool::Wall | Tool::Road) {
+                    150.0
+                } else {
+                    0.0
+                };
+                let room = ui.available_width() - 150.0 - refs;
                 let named = names_fit(ui, methods.iter().map(|m| m.name), room);
                 let mut chosen = None;
                 for m in &methods {
@@ -741,6 +841,7 @@ impl ArchiSimApp {
                 if let Some(act) = chosen {
                     self.apply_method(act);
                 }
+                self.reference_buttons(ui);
                 self.length_angle_fields(ui);
                 return;
             }

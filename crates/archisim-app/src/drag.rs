@@ -58,6 +58,11 @@ pub enum Grip {
         railing: archisim_core::RailingId,
         index: usize,
     },
+    /// A point of a road's axis.
+    RoadPoint {
+        road: archisim_core::RoadId,
+        index: usize,
+    },
     /// A size handle of an object (ArchiCAD's hotspots): its right side
     /// stretches its width (both sides, about its axis), its front its
     /// depth.
@@ -253,6 +258,16 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::Road(id) => {
+                if let Some(r) = model.road(*id) {
+                    for (index, point) in r.axis.iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::RoadPoint { road: *id, index },
+                            point: *point,
+                        });
+                    }
+                }
+            }
             Element::CurtainWall(id) => {
                 if let Some(c) = model.curtain_wall(*id) {
                     for (start, point) in [(true, c.start), (false, c.end)] {
@@ -360,7 +375,6 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Module(_)
             | Element::Mass(_)
             | Element::Plot(_)
-            | Element::Road(_)
             | Element::Planting(_)
             | Element::Run(_)
             | Element::Edge(_)
@@ -423,6 +437,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::StairPoint { stair, .. } => [Element::Stair(stair)].into_iter().collect(),
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
+        Grip::RoadPoint { road, .. } => [Element::Road(road)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
         Grip::OpeningJamb { opening, .. } => [Element::Opening(opening)].into_iter().collect(),
@@ -625,6 +640,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::StairPoint { .. } => "Mover punto de la escalera",
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
+        Grip::RoadPoint { .. } => "Mover punto del eje del vial",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
         Grip::OpeningJamb { .. } => "Estirar hueco",
@@ -740,6 +756,13 @@ pub fn apply(
         Grip::RailingPoint { railing, index } => model
             .edit_railing(railing, |r| {
                 if let Some(p) = r.path.get_mut(index) {
+                    *p = drag.to;
+                }
+            })
+            .map(|_| None),
+        Grip::RoadPoint { road, index } => model
+            .edit_road(road, |r| {
+                if let Some(p) = r.axis.get_mut(index) {
                     *p = drag.to;
                 }
             })
@@ -1685,6 +1708,7 @@ fn level_of(
         Grip::TerrainPoint { terrain, .. } => model.terrain(terrain).map(|t| t.level),
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
+        Grip::RoadPoint { road, .. } => model.road(road).map(|r| r.level),
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
         Grip::OpeningJamb { opening, .. } => {

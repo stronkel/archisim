@@ -1525,6 +1525,7 @@ impl ArchiSimApp {
             (Grip::StairPoint { .. }, _) => "Línea de huella",
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::RailingPoint { .. }, _) => "Barandilla",
+            (Grip::RoadPoint { .. }, _) => "Eje del vial",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
             (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
