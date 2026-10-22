@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-22 (12) · Lentitud, recuadro blanco y cierres del 3D en Mac
+## 2026-10-22 (12) · v0.47.1: lentitud, recuadro blanco y cierres del 3D en Mac
 
 En la rama `bloque/render-presto` (#53), sobre lo de los bloques 2–7, tras la prueba de Antonio («más lento al abrir en Windows y en Mac; al dibujar un muro o un forjado sale un borde blanco enorme que tapa la cuadrícula; el Mac se cierra al entrar en la vista 3D»).
 
