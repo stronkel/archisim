@@ -95,6 +95,10 @@ pub enum Tool {
     Mass,
     /// Pushing a face or volume up (SketchUp's push/pull).
     PushPull,
+    /// Dividing a face of a volume along a line.
+    DivideFace,
+    /// Twisting and bending a volume.
+    Deform,
     /// A parallel contour on a volume.
     MassOffset,
     /// The tape measure: measures and leaves guides.
@@ -143,6 +147,8 @@ impl Tool {
                 | Tool::Module
                 | Tool::Mass
                 | Tool::PushPull
+                | Tool::DivideFace
+                | Tool::Deform
                 | Tool::MassOffset
                 | Tool::Tape
                 | Tool::Paint
@@ -2110,6 +2116,7 @@ mod roof_ui;
 mod room_tool_ui;
 mod room_ui;
 mod schedule_ui;
+mod sculpt_ui;
 mod search_ui;
 mod section_ui;
 mod services_ui;

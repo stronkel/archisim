@@ -19,8 +19,14 @@ use super::*;
 pub enum MassShape {
     /// A contour (counter-clockwise), pushed up.
     Prism(Vec<Point2>),
-    /// A rectangular profile `width` wide along a path.
-    Sweep { path: Vec<Point2>, width: f64 },
+    /// A profile along a path: a rectangle `width` wide and as high as
+    /// the mass, or `profile` (each point across the path, to its left,
+    /// and up), stretched to `width` and to the mass's height.
+    Sweep {
+        path: Vec<Point2>,
+        width: f64,
+        profile: Option<Vec<Point2>>,
+    },
     /// A sphere, cylinder, cone or solid of revolution, round a vertical
     /// axis.
     Primitive(Primitive),
@@ -115,6 +121,24 @@ impl MassMesh {
     }
 }
 
+/// A volume twisted and bent up its height, as a soft bar (bloque 4 de la
+/// revisión del 22/10/2026). Angles in radians.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Deform {
+    /// How much its top turns round its middle (counter-clockwise).
+    pub twist: f64,
+    /// How much it bows from the bottom to the top.
+    pub bend: f64,
+    /// The direction in plan it bows to.
+    pub bend_direction: f64,
+}
+
+impl Deform {
+    pub fn is_none(&self) -> bool {
+        self.twist.abs() < 1e-9 && self.bend.abs() < 1e-9
+    }
+}
+
 /// Chamfered or rounded edges.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EdgeKind {
@@ -167,6 +191,8 @@ pub struct Mass {
     pub building: Option<MassBuilding>,
     /// Chamfered or rounded edges.
     pub finish: Option<EdgeFinish>,
+    /// Twisted or bent.
+    pub deform: Option<Deform>,
 }
 
 /// A loose edge of the concept phase: a line of the model (not of the
@@ -284,7 +310,17 @@ impl Mass {
     pub fn outline(&self) -> Vec<Point2> {
         match &self.shape {
             MassShape::Prism(p) => p.clone(),
-            MassShape::Sweep { path, width } => band(path, *width),
+            MassShape::Sweep {
+                path,
+                width,
+                profile: None,
+            } => band(path, *width),
+            // As wide as the profile reaches to either side.
+            MassShape::Sweep {
+                path,
+                width,
+                profile: Some(p),
+            } => band(path, *width * sweep_reach(p)),
             MassShape::Primitive(pr) => circle(pr.center(), pr.max_radius()),
             MassShape::Mesh(m) => hull(
                 &m.positions
@@ -300,6 +336,9 @@ impl Mass {
     /// turned.
     pub fn side_count(&self) -> usize {
         match &self.shape {
+            MassShape::Sweep {
+                profile: Some(p), ..
+            } => p.len(),
             MassShape::Prism(_) | MassShape::Sweep { .. } => self.outline().len(),
             MassShape::Primitive(Primitive::Revolution { profile, .. }) => {
                 profile.len().saturating_sub(1)
@@ -532,7 +571,21 @@ impl Model {
                     ));
                 }
             }
-            MassShape::Sweep { path, width } => {
+            MassShape::Sweep {
+                path,
+                width,
+                profile,
+            } => {
+                if let Some(p) = profile {
+                    for q in p {
+                        finite_point(*q, "profile")?;
+                    }
+                    if p.len() < 3 || signed_area(p).abs() <= EPSILON {
+                        return Err(ModelError::InvalidShape(
+                            "a profile needs three points or more round an area",
+                        ));
+                    }
+                }
                 for q in path {
                     finite_point(*q, "mass path")?;
                 }
@@ -622,6 +675,7 @@ impl Model {
                 material: spec.material,
                 building: None,
                 finish: None,
+                deform: None,
             },
         );
         Ok(id)
@@ -994,6 +1048,19 @@ impl Model {
         }
         Ok(())
     }
+}
+
+/// How far a sweep's profile reaches to either side of its path, as a
+/// share of its width (1 for a profile centred on it).
+pub fn sweep_reach(profile: &[Point2]) -> f64 {
+    let (lo, hi) = profile.iter().fold((f64::MAX, f64::MIN), |(lo, hi), p| {
+        (lo.min(p.x), hi.max(p.x))
+    });
+    let w = hi - lo;
+    if w <= EPSILON {
+        return 1.0;
+    }
+    2.0 * lo.abs().max(hi.abs()) / w
 }
 
 #[cfg(test)]

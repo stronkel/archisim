@@ -35,7 +35,10 @@ mod structure;
 mod terrain;
 pub(crate) mod types;
 
-pub use concept::{add_mass_in, circle, snap_height, MassMode, MassSettings, MassWhat};
+pub use concept::{
+    add_mass_in, circle, profile_from_outline, snap_height, MassMode, MassSettings, MassWhat,
+    SweepProfile,
+};
 pub use curtain::CurtainSettings;
 pub use foundations::{FootingMode, FootingSettings};
 pub use modules::ModuleStatus;

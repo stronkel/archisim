@@ -819,6 +819,39 @@ pub(crate) struct Mass {
     /// Chamfered or rounded edges (version 26).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish: Option<EdgeFinishOf>,
+    /// Twisted or bent (version 28).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deform: Option<DeformOf>,
+}
+
+/// A twist and a bend, in degrees (version 28).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeformOf {
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub twist: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub bend: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub bend_direction: f64,
+}
+
+impl DeformOf {
+    pub(crate) fn out(d: &core::Deform) -> Self {
+        DeformOf {
+            twist: d.twist.to_degrees(),
+            bend: d.bend.to_degrees(),
+            bend_direction: d.bend_direction.to_degrees(),
+        }
+    }
+
+    pub(crate) fn into_core(self) -> core::Deform {
+        core::Deform {
+            twist: self.twist.to_radians(),
+            bend: self.bend.to_radians(),
+            bend_direction: self.bend_direction.to_radians(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -830,6 +863,9 @@ pub(crate) enum MassShapeOf {
     Sweep {
         path: Vec<Xy>,
         width: f64,
+        /// Any profile, across and up (version 28).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<Vec<Xy>>,
     },
     /// Round forms (version 26).
     Sphere {
@@ -866,9 +902,16 @@ impl MassShapeOf {
             MassShape::Prism(o) => MassShapeOf::Prism {
                 outline: o.iter().copied().map(xy).collect(),
             },
-            MassShape::Sweep { path, width } => MassShapeOf::Sweep {
+            MassShape::Sweep {
+                path,
+                width,
+                profile,
+            } => MassShapeOf::Sweep {
                 path: path.iter().copied().map(xy).collect(),
                 width: *width,
+                profile: profile
+                    .as_ref()
+                    .map(|p| p.iter().copied().map(xy).collect()),
             },
             MassShape::Primitive(Primitive::Sphere { center, radius }) => MassShapeOf::Sphere {
                 center: xy(*center),
@@ -908,9 +951,14 @@ impl MassShapeOf {
             MassShapeOf::Prism { outline } => {
                 MassShape::Prism(outline.into_iter().map(pt).collect())
             }
-            MassShapeOf::Sweep { path, width } => MassShape::Sweep {
+            MassShapeOf::Sweep {
+                path,
+                width,
+                profile,
+            } => MassShape::Sweep {
                 path: path.into_iter().map(pt).collect(),
                 width,
+                profile: profile.map(|p| p.into_iter().map(pt).collect()),
             },
             MassShapeOf::Sphere { center, radius } => MassShape::Primitive(Primitive::Sphere {
                 center: pt(center),
@@ -2311,6 +2359,7 @@ impl ProjectFile {
                     level: m.level.0,
                     shape: MassShapeOf::out(&m.shape),
                     finish: m.finish.as_ref().map(EdgeFinishOf::out),
+                    deform: m.deform.as_ref().map(DeformOf::out),
                     base_offset: m.base_offset,
                     height: m.height,
                     floor_height: m.floor_height,
@@ -3143,6 +3192,7 @@ impl ProjectFile {
                 level: core::LevelId(m.level),
                 shape: m.shape.into_core(),
                 finish: m.finish.map(|f| f.into_core(&element)).transpose()?,
+                deform: m.deform.map(DeformOf::into_core),
                 base_offset: m.base_offset,
                 height: m.height,
                 floor_height: m.floor_height,

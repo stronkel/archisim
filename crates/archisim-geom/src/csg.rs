@@ -720,6 +720,7 @@ mod finished_tests {
             material: archisim_core::MaterialId(1),
             building: None,
             finish,
+            deform: None,
         }
     }
 
@@ -802,6 +803,7 @@ mod joined_tests {
             material: archisim_core::MaterialId(1),
             building: None,
             finish,
+            deform: None,
         };
         let base = mk(
             MassShape::Prism(vec![

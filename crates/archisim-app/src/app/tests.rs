@@ -5455,3 +5455,98 @@ fn plan_shows_what_is_placed_or_dragged() {
     }
     assert_eq!(recent, ["/a.archisim", "/b.ifc"]);
 }
+
+/// Bloque 4 de la revisión del 22/10/2026: a side of a volume pushed out
+/// in plan (it stays a contour), its top divided and one part pushed up,
+/// the volume twisted with a typed angle, a band with a tube's profile,
+/// edges rounded from the contextual bar; all saved and opened again.
+#[test]
+fn concept_faces_divided_pushed_twisted_and_profiles() {
+    use super::concept_ui::ConceptPick;
+    use super::toolbox::{Discipline, Pick};
+    use archisim_core::MassShape;
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-5.0, -12.0), p(30.0, 16.0), 0.0);
+    h.app.set_discipline(Discipline::Concept);
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    h.app.choose_method("Rectángulo");
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(10.0, 8.0));
+    let id = h.model().masses().next().unwrap().id;
+    h.app.pick(Pick::Concept(ConceptPick::Push));
+    h.click_at(p(5.0, 4.0));
+    h.move_to(p(5.0, 8.0));
+    h.click_at(p(5.0, 8.0));
+    assert!((h.model().mass(id).unwrap().height - 4.0).abs() < 1e-6);
+    // The east side, taken by its edge and pulled 2 m out.
+    h.click_at(p(10.0, 4.0));
+    assert!(h.app.concept.face_push.is_some(), "{:?}", h.app.message);
+    h.move_to(p(12.0, 4.0));
+    h.click_at(p(12.0, 4.0));
+    let m = h.model().mass(id).unwrap();
+    assert!(matches!(m.shape, MassShape::Prism(_)));
+    assert!((archisim_core::signed_area(&m.outline()) - 96.0).abs() < 1e-6);
+    // Dividir: a line across the top at x = 3.
+    h.app.pick(Pick::Concept(ConceptPick::Divide));
+    assert_eq!(h.app.tool, Tool::DivideFace);
+    h.click_at(p(3.0, 1.0));
+    h.click_at(p(3.0, 7.0));
+    let m = h.model().mass(id).unwrap();
+    let MassShape::Mesh(mesh) = &m.shape else {
+        panic!("a solid now: {:?}", h.app.message);
+    };
+    assert_eq!(mesh.face_ids().len(), 7);
+    // The eastern part pushed up 1 m.
+    h.app.pick(Pick::Concept(ConceptPick::Push));
+    h.click_at(p(8.0, 4.0));
+    assert!(h.app.concept.face_push.is_some());
+    h.move_to(p(8.0, 5.0));
+    h.click_at(p(8.0, 5.0));
+    assert!((h.model().mass(id).unwrap().height - 5.0).abs() < 1e-6);
+    // Deformar: 45° typed.
+    h.app.pick(Pick::Concept(ConceptPick::Deform));
+    h.click_at(p(5.0, 4.0));
+    h.type_text("45");
+    h.key(Key::Enter);
+    let d = h.model().mass(id).unwrap().deform.expect("twisted");
+    assert!((d.twist.to_degrees() - 45.0).abs() < 1e-6);
+    // Seguir with a tube.
+    h.app.pick(Pick::Concept(ConceptPick::Follow));
+    h.app.mass_settings.profile = crate::editor::SweepProfile::Preset(0);
+    h.click_at(p(0.0, -4.0));
+    h.click_at(p(10.0, -4.0));
+    h.click_at(p(10.0, -8.0));
+    h.key(Key::Enter);
+    assert!(h.model().masses().any(|m| matches!(
+        &m.shape,
+        MassShape::Sweep {
+            profile: Some(_),
+            ..
+        }
+    )));
+    // A face pushed into a volume, its edges rounded.
+    h.app.pick(Pick::Concept(ConceptPick::Line));
+    h.app.choose_method("Rectángulo");
+    h.click_at(p(16.0, 0.0));
+    h.click_at(p(22.0, 6.0));
+    let block = h.model().masses().last().unwrap().id;
+    h.app
+        .ed
+        .edit_mass("Altura", block, |x| x.height = 3.0)
+        .unwrap();
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Mass(block)].into_iter().collect();
+    h.app.round_selected_edges();
+    assert!(h.model().mass(block).unwrap().finish.is_some());
+    // Saved and opened, the same.
+    let dir = std::env::temp_dir().join(format!("archisim-sculpt-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = h.app.ed.save(Some(&dir.join("formas.archisim"))).unwrap();
+    let reopened = Editor::open(&path).unwrap();
+    assert_eq!(reopened.model(), h.model());
+    let _ = std::fs::remove_dir_all(&dir);
+}

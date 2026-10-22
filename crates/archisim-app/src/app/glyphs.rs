@@ -11,6 +11,9 @@ use eframe::egui::{self, Color32, Pos2, Rect, TextureHandle, TextureOptions};
 pub enum Glyph {
     Edge,
     PushPull,
+    DivideFace,
+    Deform,
+    RoundEdge,
     FollowMe,
     FaceOffset,
     Volume,
@@ -122,6 +125,15 @@ impl Glyph {
             }
             Glyph::Grid => {
                 r##"<circle cx="4" cy="4" r="2" stroke-width="1"/><path d="M8 4h11M4 8v11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/><path d="M12 8v11M8 13h11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/>"##
+            }
+            Glyph::DivideFace => {
+                r##"<path d="M3 7l7-4 7 4v7l-7 4-7-4z" stroke-width="1"/><path d="M6.5 5l7 11" stroke-width="1.4"/><circle cx="6.5" cy="5" r="1.1" fill="#fff" stroke="none"/><circle cx="13.5" cy="16" r="1.1" fill="#fff" stroke="none"/>"##
+            }
+            Glyph::Deform => {
+                r##"<path d="M6 18h8M6 18c0-5 3-7 5-10s1-5 0-6M14 18c0-5 3-7 4-10s0-5-1-6M11 2h6" stroke-width="1"/>"##
+            }
+            Glyph::RoundEdge => {
+                r##"<path d="M3 17V9a6 6 0 0 1 6-6h8" stroke-width="1.4"/><path d="M3 3h4M3 3v4" stroke-width="0.8" stroke-dasharray="1.5 1.2"/>"##
             }
             Glyph::RefPlane => {
                 r##"<path d="M2 18L18 2" stroke-dasharray="4 1.5 1 1.5" stroke-width="1"/><path d="M3 11l3 3M9 3l3 3" stroke-width="0.8"/><circle cx="2.8" cy="17.2" r="1.2" stroke-width="0.8"/>"##
@@ -310,6 +322,9 @@ impl Glyph {
     pub const ALL: &'static [Glyph] = &[
         Glyph::Edge,
         Glyph::PushPull,
+        Glyph::DivideFace,
+        Glyph::Deform,
+        Glyph::RoundEdge,
         Glyph::FollowMe,
         Glyph::FaceOffset,
         Glyph::Volume,

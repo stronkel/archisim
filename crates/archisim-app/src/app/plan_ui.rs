@@ -30,6 +30,7 @@ impl ArchiSimApp {
         )
         .ids();
         self.track_cursor(&ctx, &response, rect);
+        self.sculpt_follow(&ctx);
         // Keys go to the plan unless a field is being typed in (a temporary
         // dimension's too: egui lets go of the focus on Esc before the plan
         // sees it).
@@ -118,6 +119,8 @@ impl ArchiSimApp {
             | Tool::Module
             | Tool::Mass
             | Tool::PushPull
+            | Tool::DivideFace
+            | Tool::Deform
             | Tool::MassOffset
             | Tool::Tape
             | Tool::Plot
@@ -394,6 +397,8 @@ impl ArchiSimApp {
             | Tool::Module
             | Tool::Mass
             | Tool::PushPull
+            | Tool::DivideFace
+            | Tool::Deform
             | Tool::MassOffset
             | Tool::Tape
             | Tool::Paint
@@ -535,7 +540,7 @@ impl ArchiSimApp {
                         {
                             self.mass_tool.type_char(c)
                         }
-                        Tool::PushPull | Tool::MassOffset => self.concept_type(c),
+                        Tool::PushPull | Tool::Deform | Tool::MassOffset => self.concept_type(c),
                         Tool::Plot => self.plot_tool.type_char(c),
                         Tool::Wall => self.wall_tool.type_char(c),
                         Tool::Slab => self.slab_tool.type_char(c),
@@ -564,7 +569,7 @@ impl ArchiSimApp {
                 Tool::Railing => self.railing_points.pop().is_some(),
                 Tool::Terrain => self.terrain_back(),
                 Tool::Mass => self.mass_tool.backspace(),
-                Tool::PushPull | Tool::MassOffset => self.concept_backspace(),
+                Tool::PushPull | Tool::Deform | Tool::MassOffset => self.concept_backspace(),
                 Tool::Plot => self.plot_tool.backspace(),
                 Tool::Road => self.road_points.pop().is_some(),
                 Tool::Planting => self.planting_points.pop().is_some(),
@@ -645,7 +650,9 @@ impl ArchiSimApp {
                     SlabOutcome::Nothing => {}
                 },
                 Tool::Terrain => self.finish_terrain(),
-                Tool::Mass | Tool::PushPull | Tool::MassOffset => self.concept_enter(),
+                Tool::Mass | Tool::PushPull | Tool::Deform | Tool::MassOffset => {
+                    self.concept_enter()
+                }
                 Tool::Plot => match self.plot_tool.enter(towards) {
                     SlabOutcome::Build(outline) => self.build_plot(outline),
                     SlabOutcome::Invalid => self
@@ -713,9 +720,13 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
-                Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
-                    self.concept_escape()
-                }
+                Tool::Mass
+                | Tool::PushPull
+                | Tool::DivideFace
+                | Tool::Deform
+                | Tool::MassOffset
+                | Tool::Tape
+                | Tool::Paint => self.concept_escape(),
                 Tool::Plot => {
                     if !self.plot_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -1062,7 +1073,13 @@ impl ArchiSimApp {
                     }
                 }
             }
-            Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
+            Tool::Mass
+            | Tool::PushPull
+            | Tool::DivideFace
+            | Tool::Deform
+            | Tool::MassOffset
+            | Tool::Tape
+            | Tool::Paint => {
                 let path = self.mass_line();
                 if path
                     && (response.double_clicked_by(PointerButton::Primary)

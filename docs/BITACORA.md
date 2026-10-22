@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (8) · Revisión de Antonio, bloque 4: Modelado
+
+Rama `bloque/modelado-2` (sobre `bloque/inicio`), pull request para Antonio. v0.44. Formato `.archisim` versión 28 (abre todas las anteriores). Sin cambios en el IFC (los volúmenes de Concepto no se exportan). Descrito en `docs/FORMAS.md` §5.
+
+**Hecho**
+- **Dividir** caras de volúmenes con una línea; cada parte se pinta (también en planta) o se empuja aparte.
+- **Empujar cualquier cara**: lados (el contorno sigue editable), base, partes divididas y caras de sólidos, hacia fuera o hacia dentro.
+- **Deformar**: retorcer (girando el ratón) y doblar (con Mayús); torsión, curvatura y dirección en Propiedades.
+- **Perfiles de Seguir**: tubo, L, U, doble T, cornisa, media caña o tomado del dibujo.
+- **Redondear** aristas de los volúmenes seleccionados desde la barra bajo las pestañas.
+
+**Pendiente**
+- Dividir solo entre dos aristas (hoy, de borde a borde) y empujar caras curvas.
+
+**Qué debe probar Antonio**
+1. `archisim formas out/` y abre `out/formas.archisim`; mira la vista 3D: torre retorcida, torre doblada, bloque escalonado, cornisa y tubo.
+2. Concepto → Arista con rectángulo, empújalo 3 m. Con Empujar, clic junto a un lado en planta y aléjate: el volumen crece por ese lado.
+3. Concepto → Dividir: en 3D, dos clics cruzando la cara de arriba. Empuja una de las partes hacia arriba y pinta la otra de madera.
+4. Concepto → Deformar: clic en el volumen y gira el ratón a su alrededor; con Mayús, dóblalo. Prueba también en Propiedades → Deformar.
+5. Concepto → Seguir: en Propiedades elige Perfil «Cornisa» y dibuja un camino. Dibuja una polilínea cerrada con el dibujo 2D y prueba «Tomar del dibujo…».
+6. Selecciona un volumen y pulsa «Redondear» en la barra bajo las pestañas.
+
+---
+
 ## 2026-10-22 (7) · Revisión de Antonio, bloque 3: Inicio y vistas previas
 
 Rama `bloque/inicio` (sobre `bloque/graficos`), pull request para Antonio. v0.43. Sin cambios en el formato `.archisim` ni en el IFC. Descrito en `docs/INICIO.md`.

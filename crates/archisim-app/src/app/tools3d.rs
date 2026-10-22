@@ -92,6 +92,11 @@ impl ArchiSimApp {
         };
         // Empujar, with a volume taken: the height from the mouse, on an
         // upright plane through the point taken, facing the camera.
+        // Empujar on any face: the distance along its normal from the ray.
+        let face_pushing = self.tool == Tool::PushPull && self.concept.face_push.is_some();
+        if face_pushing {
+            self.face_push_from_ray(ray.origin, ray.dir);
+        }
         let pushing = self.tool == Tool::PushPull && self.concept.push.is_some();
         if let (true, Some((id, from, h0))) = (pushing, self.concept.push) {
             let base = self
@@ -177,11 +182,12 @@ impl ArchiSimApp {
         let plan_view = std::mem::replace(&mut self.view, local_view);
         // Empujar, and Arista (whose points keep their height, up a face):
         // the point under the cursor as it is.
-        if pushing || self.drawing_edges() {
+        if pushing || face_pushing || self.drawing_edges() {
             self.cursor = Some(crate::snap::Snap::at(raw, crate::snap::SnapKind::Free));
         } else {
             self.track_cursor(ctx, response, rect);
         }
+        self.sculpt_follow(ctx);
         if ctx.memory(|m| m.focused().is_none()) {
             self.keyboard_in_view(ctx);
         }
@@ -215,6 +221,7 @@ impl ArchiSimApp {
             return;
         };
         self.draw_ghost_3d(painter, rect);
+        self.draw_sculpt_3d(painter, rect);
         let size = glam::Vec2::new(rect.width(), rect.height());
         let to_screen = |p: glam::Vec3| {
             self.v3d

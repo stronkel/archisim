@@ -50,11 +50,72 @@ impl Builder {
 /// The solid of a mass, its `z` over the mass's base.
 pub fn mass_body(m: &Mass) -> MassMesh {
     let h = m.height.max(0.01);
-    match &m.shape {
-        MassShape::Prism(_) | MassShape::Sweep { .. } => prism_body(&m.outline(), h, m.finish),
+    let body = match &m.shape {
+        MassShape::Sweep {
+            path,
+            width,
+            profile: Some(p),
+        } => crate::sculpt::sweep(path, &fit_profile(p, *width, h)),
+        // Twisted or bent: in level bands from the start, so its sides
+        // read as smooth surfaces.
+        MassShape::Prism(_) | MassShape::Sweep { .. } => {
+            let bands = m
+                .deform
+                .filter(|d| !d.is_none())
+                .map_or(1, |d| crate::sculpt::deform_steps(&d));
+            prism_body_banded(&m.outline(), h, m.finish, bands)
+        }
         MassShape::Primitive(p) => primitive_body(p, h, m.finish),
         MassShape::Mesh(mesh) => mesh.clone(),
+    };
+    match m.deform {
+        Some(d) if !d.is_none() => crate::sculpt::deform(&body, &d, body_centre(&body)),
+        _ => body,
     }
+}
+
+/// A sweep's profile stretched to its width and height (its points keep
+/// where the path runs: 0 across).
+pub fn fit_profile(profile: &[Point2], width: f64, height: f64) -> Vec<Point2> {
+    let (lo, hi) = profile.iter().fold(
+        (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    let kx = if hi.x - lo.x > 1e-9 {
+        width / (hi.x - lo.x)
+    } else {
+        1.0
+    };
+    let ky = if hi.y - lo.y > 1e-9 {
+        height / (hi.y - lo.y)
+    } else {
+        1.0
+    };
+    profile
+        .iter()
+        .map(|p| Point2::new(p.x * kx, (p.y - lo.y) * ky))
+        .collect()
+}
+
+/// The middle of a solid's base in plan, round which it twists.
+fn body_centre(m: &MassMesh) -> Point2 {
+    let base: Vec<&[f64; 3]> = m.positions.iter().filter(|p| p[2].abs() < 1e-6).collect();
+    let pts = if base.is_empty() {
+        m.positions.iter().collect()
+    } else {
+        base
+    };
+    let n = pts.len().max(1) as f64;
+    let (x, y) = pts.iter().fold((0.0, 0.0), |a, p| (a.0 + p[0], a.1 + p[1]));
+    Point2::new(x / n, y / n)
 }
 
 /// The corners of a polygon chamfered or rounded (`which` says which
@@ -112,7 +173,18 @@ pub fn finish_corners(
 }
 
 /// A contour pushed up `h`, with its edges finished.
-fn prism_body(outline: &[Point2], h: f64, finish: Option<EdgeFinish>) -> MassMesh {
+#[cfg(test)]
+pub(crate) fn prism_body(outline: &[Point2], h: f64, finish: Option<EdgeFinish>) -> MassMesh {
+    prism_body_banded(outline, h, finish, 1)
+}
+
+/// [`prism_body`] with its straight sides in `bands` level bands.
+fn prism_body_banded(
+    outline: &[Point2],
+    h: f64,
+    finish: Option<EdgeFinish>,
+    bands: usize,
+) -> MassMesh {
     let mut poly = outline.to_vec();
     if poly.len() < 3 {
         return MassMesh::default();
@@ -167,6 +239,26 @@ fn prism_body(outline: &[Point2], h: f64, finish: Option<EdgeFinish>) -> MassMes
         _ => rings.push((h, 0.0)),
     }
     rings.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9);
+    if bands > 1 {
+        // Between the finished edges, where the sides run straight.
+        let low = rings
+            .iter()
+            .filter(|r| r.0 < h / 2.0)
+            .map(|r| r.0)
+            .fold(0.0, f64::max);
+        let high = rings
+            .iter()
+            .filter(|r| r.0 >= h / 2.0)
+            .map(|r| r.0)
+            .fold(h, f64::min);
+        for k in 1..bands {
+            let z = h * k as f64 / bands as f64;
+            if z > low + 1e-9 && z < high - 1e-9 {
+                rings.push((z, 0.0));
+            }
+        }
+        rings.sort_by(|a, b| a.0.total_cmp(&b.0));
+    }
 
     let n = poly.len();
     let mut b = Builder::default();
@@ -370,7 +462,24 @@ pub fn footprint(m: &Mass) -> Vec<crate::junctions::Shape> {
     use i_overlay::core::fill_rule::FillRule;
     use i_overlay::core::overlay_rule::OverlayRule;
     use i_overlay::float::single::SingleFloatOverlay;
-    match &m.shape {
+    // A solid of triangles, or one twisted, bent or swept by a profile:
+    // what its faces cover.
+    let shaped = m.deform.is_some_and(|d| !d.is_none())
+        || matches!(
+            m.shape,
+            MassShape::Sweep {
+                profile: Some(_),
+                ..
+            }
+        );
+    let body;
+    let shape = if shaped {
+        body = MassShape::Mesh(mass_body(m));
+        &body
+    } else {
+        &m.shape
+    };
+    match shape {
         MassShape::Mesh(mesh) => {
             // What a closed solid covers is what its faces looking up cover:
             // each of them, a hair larger so they overlap.
@@ -533,6 +642,8 @@ pub enum FormError {
     NothingLeft,
     NothingInCommon,
     NoCrossing,
+    NotDivided,
+    NotFlat,
     Model(ModelError),
 }
 
@@ -544,6 +655,8 @@ impl std::fmt::Display for FormError {
             FormError::NothingLeft => "no queda nada del volumen",
             FormError::NothingInCommon => "los volúmenes no tienen nada en común",
             FormError::NoCrossing => "las caras de esos volúmenes no se cruzan",
+            FormError::NotDivided => "la línea no divide esa cara",
+            FormError::NotFlat => "solo se empujan caras planas",
             FormError::Model(e) => return write!(f, "{e}"),
         })
     }

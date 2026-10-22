@@ -149,6 +149,18 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 .is_some_and(|l| solid.material != l.materials.bark),
             _ => false,
         };
+        // A twisted or bent volume is curved: only its real edges.
+        let crease = match solid.owner {
+            archisim_geom::solid::SolidOwner::Mass(id)
+                if model
+                    .mass(id)
+                    .and_then(|m| m.deform)
+                    .is_some_and(|d| !d.is_none()) =>
+            {
+                0.85
+            }
+            _ => 0.985,
+        };
         // Normals of every triangle, and who shares each edge.
         let normals: Vec<P3> = solid
             .triangles
@@ -177,7 +189,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 *drawn = by_edge.get(&k).is_none_or(|others| {
                     others.iter().filter(|&&j| j != i).all(|&j| {
                         let m = normals[j];
-                        dot(m, f.toward) <= 1e-9 || (!soft && dot(m, n) < 0.985)
+                        dot(m, f.toward) <= 1e-9 || (!soft && dot(m, n) < crease)
                     })
                 });
             }
