@@ -1295,7 +1295,7 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
-        assert_eq!(doc.undo_label(), Some("Parámetros del proyecto"));
+        assert_eq!(doc.undo_label(), Some("Vistas guardadas"));
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 3);
@@ -1359,7 +1359,12 @@ mod tests {
         let all = archisim_plan::render_plan(m, pb, &o);
         assert!(all.contains("<g id=\"objects\">"));
         assert!(all.contains("<g id=\"structure\">"));
-        for c in [Category::Objects, Category::Structure, Category::Terrain] {
+        for c in [
+            Category::Objects,
+            Category::Vegetation,
+            Category::Structure,
+            Category::Terrain,
+        ] {
             o.style.hidden.insert(c);
         }
         let some = archisim_plan::render_plan(m, pb, &o);

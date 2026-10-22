@@ -817,7 +817,9 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         let (lo, hi) = bounds(poly);
         visible(lo, hi)
     };
-    draw_objects(&mut s, model, level, options.scale, k, &poly_visible, &show);
+    if show(archisim_core::Category::Objects) || show(archisim_core::Category::Vegetation) {
+        draw_objects(&mut s, model, level, options.scale, k, &poly_visible, &show);
+    }
     if show(archisim_core::Category::Structure) {
         overrides::group(&mut s, archisim_core::Category::Structure, |s| {
             members::draw_members(s, model, level, options.cut_plane, k, &poly_visible)
