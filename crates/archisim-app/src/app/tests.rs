@@ -5125,3 +5125,105 @@ fn round_forms_drawn_and_combined() {
     h.frame();
     h.frame();
 }
+
+/// The onboarding missions, done by clicking the control each step rings:
+/// the first wall, doors and windows, a slab, the 3D, a level and a sheet.
+/// Each step moves on by itself and the missions done are kept.
+#[test]
+fn onboarding_missions_by_clicks() {
+    use super::missions_ui::marked;
+    let mut h = Harness::new(Editor::new_project());
+    let click_mark = |h: &mut Harness, key: &str| {
+        h.frame();
+        let r = marked(&h.ctx, key).unwrap_or_else(|| panic!("no control marked «{key}»"));
+        h.click_screen(r.center());
+    };
+    let step = |h: &Harness| h.app.missions.progress.as_ref().map(|p| p.step);
+    let target = |h: &Harness| {
+        h.app
+            .missions
+            .progress
+            .as_ref()
+            .and_then(|p| p.current())
+            .map(|s| s.target)
+    };
+    // The first wall: Arquitectura is already chosen, so it starts at the
+    // tile.
+    h.app.start_mission(0);
+    h.frame();
+    assert_eq!(target(&h), Some("tile:Muro"));
+    click_mark(&mut h, "tile:Muro");
+    assert_eq!(h.app.tool, Tool::Wall);
+    assert_eq!(target(&h), Some("method:Rectángulo"));
+    click_mark(&mut h, "method:Rectángulo");
+    assert_eq!(step(&h), Some(3));
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(8.0, 6.0));
+    assert_eq!(h.model().walls().count(), 4);
+    assert!(h.app.missions.progress.as_ref().unwrap().finished());
+    assert_eq!(h.app.prefs.missions_done, ["muro"]);
+    // Doors and windows.
+    h.app.start_mission(1);
+    click_mark(&mut h, "tile:Puerta");
+    h.click_at(p(4.0, 0.0));
+    click_mark(&mut h, "tile:Ventana");
+    h.click_at(p(4.0, 6.0));
+    assert!(
+        h.app.missions.progress.as_ref().unwrap().finished(),
+        "{:?}",
+        step(&h)
+    );
+    // A slab with the wand.
+    h.app.start_mission(2);
+    click_mark(&mut h, "tile:Forjado");
+    click_mark(&mut h, "method:Varita");
+    h.click_at(p(3.0, 3.0));
+    assert_eq!(h.model().slabs().count(), 1);
+    assert!(h.app.missions.progress.as_ref().unwrap().finished());
+    // The 3D, from the Project tab of the navigator, and back.
+    h.key(Key::Escape);
+    h.app.nav_tab = super::navigator::NavTab::Model;
+    h.app.start_mission(3);
+    click_mark(&mut h, "seg:Proyecto");
+    click_mark(&mut h, "nav:Vista 3D");
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    click_mark(&mut h, "tab:plan");
+    assert!(h.app.missions.progress.as_ref().unwrap().finished());
+    // A level above, opened from the navigator.
+    h.app.start_mission(4);
+    click_mark(&mut h, "button:Plantas…");
+    assert!(h.app.show_levels);
+    click_mark(&mut h, "button:Añadir planta encima");
+    assert_eq!(h.model().levels().len(), 2);
+    h.app.show_levels = false;
+    click_mark(&mut h, "nav:planta-alta");
+    assert!(
+        h.app.missions.progress.as_ref().unwrap().finished(),
+        "{:?}",
+        step(&h)
+    );
+    // A sheet, with the ground floor dropped on it.
+    h.app.start_mission(5);
+    click_mark(&mut h, "button:+ Nuevo plano");
+    assert_eq!(step(&h), Some(1));
+    let ground = h.model().levels()[0].id;
+    h.app.place_dropped(
+        super::sheet_drop::Drop::Level(ground),
+        "Planta baja",
+        p(0.3, 0.3),
+    );
+    h.frame();
+    assert!(h.app.missions.progress.as_ref().unwrap().finished());
+    assert_eq!(
+        h.app.prefs.missions_done.len(),
+        crate::missions::MISSIONS.len()
+    );
+    // The card offers no next one; closing it ends the missions.
+    h.app.missions.progress = None;
+    h.frame();
+    // A bigger text grows the whole window.
+    h.app.prefs.text_size = crate::prefs::TextSize::Large;
+    h.frame();
+    h.frame();
+    assert!((h.ctx.zoom_factor() - 1.2).abs() < 1e-3);
+}

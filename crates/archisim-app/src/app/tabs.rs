@@ -412,6 +412,9 @@ impl ArchiSimApp {
                     TabKind::Sheet(_) => "Plano · clic con la rueda: cerrar",
                     TabKind::Schedule(_) => "Tabla · clic con la rueda: cerrar",
                 });
+            if matches!(tab.kind, TabKind::Plan(_)) {
+                super::missions_ui::mark(ui.ctx(), "tab:plan", rect);
+            }
             let painter = ui.painter();
             if active {
                 painter.rect(

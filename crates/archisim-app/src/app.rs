@@ -523,6 +523,14 @@ pub struct ArchiSimApp {
     /// The shared project, when working in a team.
     pub team: Option<crate::team::Team>,
     pub team_ui: team_ui::TeamUi,
+    /// Preferences of this computer (size of the text, theme, keys,
+    /// missions done) and the ones last written.
+    pub prefs: crate::prefs::Prefs,
+    saved_prefs: crate::prefs::Prefs,
+    /// The zoom factor last given to egui (the size of the text).
+    applied_zoom: f32,
+    /// The onboarding mission in hand.
+    pub missions: missions_ui::MissionsUi,
 }
 
 impl ArchiSimApp {
@@ -538,6 +546,7 @@ impl ArchiSimApp {
         let roof_settings = roof_ui::default_roof_settings(ed.model());
         let stair_settings = crate::editor::default_stair_settings(ed.model());
         let level = ed.level;
+        let prefs = crate::prefs::Prefs::load();
         Self {
             ed,
             view: View::default(),
@@ -598,7 +607,7 @@ impl ArchiSimApp {
             cad: None,
             cad_settings: Default::default(),
             cmdline: Default::default(),
-            keys_autocad: true,
+            keys_autocad: prefs.keys_autocad,
             text_draft: None,
             show_layers: false,
             show_levels: false,
@@ -669,7 +678,7 @@ impl ArchiSimApp {
             show_underlay: true,
             other_walls: Vec::new(),
             snap_filter: SnapFilter::default(),
-            dark: false,
+            dark: prefs.dark,
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
@@ -690,6 +699,10 @@ impl ArchiSimApp {
             coord_window: coord_ui::CoordWindow::default(),
             team: None,
             team_ui: Default::default(),
+            saved_prefs: prefs.clone(),
+            prefs,
+            applied_zoom: 1.0,
+            missions: Default::default(),
         }
     }
 
@@ -1423,6 +1436,7 @@ impl ArchiSimApp {
             theme::install_fonts(&ctx);
             theme::apply(&ctx, self.dark);
         }
+        missions_ui::clear_marks(&ctx);
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
@@ -1550,6 +1564,8 @@ impl ArchiSimApp {
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
+        self.missions_frame(&ctx);
+        self.sync_prefs(&ctx);
         self.thumbs.end_frame();
     }
 
@@ -2048,6 +2064,7 @@ mod levels_ui;
 mod library_ui;
 mod mesh_ui;
 mod methods_ui;
+mod missions_ui;
 mod module_ui;
 mod navigator;
 mod object_gallery;

@@ -728,6 +728,7 @@ impl ArchiSimApp {
                 for m in &methods {
                     let enabled = m.act != MethodAct::None;
                     let r = bar_button(ui, m.mark, m.name, m.on, enabled, named);
+                    super::missions_ui::mark(ui.ctx(), format!("method:{}", m.name), r.rect);
                     let r = if enabled {
                         r.on_hover_text(format!("{}: {}", m.name, m.hint))
                     } else {
