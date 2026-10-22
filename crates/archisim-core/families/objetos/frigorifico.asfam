@@ -12,6 +12,9 @@ type_params
     height length = 1.85 range 0.80..2.20 label "Altura"
   section "Materiales"
     mat material = "Acero S275" label "Acabado"
+  section "Modelo 3D"
+    model3d choice("Combi") = "Combi" label "Modelo 3D"
+    metal material = "Cromado" label "Tiradores"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
@@ -23,5 +26,6 @@ plan 1:50
   line (-width / 2, depth - 0.04) to (width / 2, depth - 0.04) pen thin
 
 outputs
+  generator = "props:fridge"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

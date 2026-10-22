@@ -1,0 +1,41 @@
+family "Mesa de centro"
+  category furniture
+  host none
+  version 1
+  description "Mesa baja de salón"
+  folder "Mesas"
+
+# Ejes de los objetos: origen en el centro del lado de atrás, x hacia la
+# derecha, y hacia delante, z hacia arriba desde el suelo.
+
+type_params
+  section "Dimensiones"
+    width  length = 1.10 range 0.40..2.00 label "Largo"
+    depth  length = 0.60 range 0.30..1.20 label "Fondo"
+    height length = 0.40 range 0.25..0.60 label "Altura"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Madera con balda", "Bloque", "Vidrio y metal") = "Madera con balda" label "Modelo 3D"
+    glass material = "Vidrio doble" label "Vidrio"
+    frame material = "Metal lacado" label "Estructura"
+    books material = "Libros" label "Libros"
+
+body
+  box (-width / 2, 0, height - 0.03) to (width / 2, depth, height) material mat
+  box (-width / 2 + 0.03, 0.03, 0) to (-width / 2 + 0.08, 0.08, height - 0.03) material mat
+  box (width / 2 - 0.08, 0.03, 0) to (width / 2 - 0.03, 0.08, height - 0.03) material mat
+  box (-width / 2 + 0.03, depth - 0.08, 0) to (-width / 2 + 0.08, depth - 0.03, height - 0.03) material mat
+  box (width / 2 - 0.08, depth - 0.08, 0) to (width / 2 - 0.03, depth - 0.03, height - 0.03) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  polygon (-width / 2 + 0.05, 0.05) (width / 2 - 0.05, 0.05) (width / 2 - 0.05, depth - 0.05) (-width / 2 + 0.05, depth - 0.05) pen thin
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:coffee_table"
+  ifc_class = "IfcFurniture"
+  ifc_type = "TABLE"

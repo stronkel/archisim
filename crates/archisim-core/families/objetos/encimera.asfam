@@ -15,6 +15,11 @@ type_params
     hob  bool = yes label "Placa de cocina"
   section "Materiales"
     mat material = "Madera de pino" label "Muebles"
+  section "Modelo 3D"
+    model3d choice("Con fregadero y placa") = "Con fregadero y placa" label "Modelo 3D"
+    top material = "Encimera" label "Encimera"
+    metal material = "Cromado" label "Fregadero y grifería"
+    dark material = "Negro mate" label "Placa"
 
 require width >= (if sink then 0.6 else 0) + (if hob then 0.6 else 0) else "No caben el fregadero y la placa"
 
@@ -39,5 +44,6 @@ plan 1:50
       arc center (xc + dx, yc + dy) from (xc + dx, yc + dy - 0.08) to (xc + dx + 0.08, yc + dy) pen thin
 
 outputs
+  generator = "props:counter"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"

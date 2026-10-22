@@ -13,7 +13,11 @@ type_params
     height length = 0.80 range 0.60..1.20 label "Altura del respaldo"
     places integer = 3 range 1..5 label "Plazas"
   section "Materiales"
-    mat material = "Madera de pino" label "Tapicería"
+    mat material = "Tela" label "Tapicería"
+  section "Modelo 3D"
+    model3d choice("Contemporáneo", "Clásico", "Nórdico") = "Contemporáneo" label "Modelo 3D"
+    cushion material = "Tela" label "Cojines"
+    frame material = "Madera de pino" label "Patas"
 
 require 0.5 < width - 0.4 else "No caben los brazos"
 require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"
@@ -34,5 +38,6 @@ plan 1:50
     line (-width / 2 + 0.2 + i * pw, 0.2) to (-width / 2 + 0.2 + i * pw, depth) pen thin
 
 outputs
+  generator = "props:sofa"
   ifc_class = "IfcFurniture"
   ifc_type = "SOFA"

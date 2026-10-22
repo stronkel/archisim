@@ -11,4 +11,5 @@ repository.workspace = true
 [dependencies]
 archisim-family.workspace = true
 archisim-flora.workspace = true
+archisim-props.workspace = true
 uuid.workspace = true

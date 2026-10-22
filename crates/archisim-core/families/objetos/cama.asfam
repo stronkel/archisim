@@ -13,6 +13,12 @@ type_params
     head   length = 1.00 range 0.50..1.60 label "Altura del cabecero"
   section "Materiales"
     mat material = "Madera de pino" label "Estructura"
+  section "Modelo 3D"
+    model3d choice("Tapizada", "Madera", "Tarima") = "Tapizada" label "Modelo 3D"
+    cushion material = "Tela" label "Tapizado"
+    linen material = "Tela clara" label "Sábanas y almohadas"
+    duvet material = "Edredón" label "Edredón"
+    frame material = "Metal lacado" label "Bastidor"
 
 require height + 0.1 < head else "El cabecero tiene que subir por encima del colchón"
 
@@ -32,5 +38,6 @@ plan 1:50
   line (-width / 2, 0.6) to (-width / 2 + 0.35, 0.95) pen thin
 
 outputs
+  generator = "props:bed"
   ifc_class = "IfcFurniture"
   ifc_type = "BED"

@@ -13,6 +13,9 @@ type_params
     doors  integer = 2 range 1..8 label "Puertas"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Puertas batientes") = "Puertas batientes" label "Modelo 3D"
+    frame material = "Cromado" label "Tiradores"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
@@ -31,5 +34,6 @@ plan 1:100
   line (-width / 2, 0) to (width / 2, depth) pen thin
 
 outputs
+  generator = "props:wardrobe"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"

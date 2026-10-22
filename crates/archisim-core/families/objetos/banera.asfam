@@ -12,6 +12,9 @@ type_params
     height length = 0.55 range 0.40..0.70 label "Altura"
   section "Materiales"
     mat material = "Porcelana" label "Material"
+  section "Modelo 3D"
+    model3d choice("Rectangular") = "Rectangular" label "Modelo 3D"
+    metal material = "Cromado" label "Grifería"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
@@ -25,5 +28,6 @@ plan 1:50
   arc center (width / 2 - 0.2, depth / 2) from (width / 2 - 0.2, depth / 2 - 0.03) to (width / 2 - 0.17, depth / 2) pen thin
 
 outputs
+  generator = "props:bath"
   ifc_class = "IfcSanitaryTerminal"
   ifc_type = "BATH"

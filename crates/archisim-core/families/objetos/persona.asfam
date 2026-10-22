@@ -10,6 +10,8 @@ type_params
     height length = 1.75 range 0.80..2.20 label "Estatura"
   section "Materiales"
     mat material = "Figura" label "Figura"
+  section "Modelo 3D"
+    model3d choice("Hombre", "Mujer", "Caminando") = "Hombre" label "Modelo 3D"
 
 body
   let h = height
@@ -45,5 +47,6 @@ plan presentation
   cloud center (0, 0) radius 0.055 * h lobes 6 jitter 0 pen thin tint mat
 
 outputs
+  generator = "props:person"
   ifc_class = "IfcBuildingElementProxy"
   ifc_type = "USERDEFINED"

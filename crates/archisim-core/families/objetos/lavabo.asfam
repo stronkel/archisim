@@ -12,6 +12,10 @@ type_params
     height length = 0.85 range 0.70..1.00 label "Altura"
   section "Materiales"
     mat material = "Porcelana" label "Porcelana"
+  section "Modelo 3D"
+    model3d choice("De pedestal", "Con mueble", "Suspendido") = "De pedestal" label "Modelo 3D"
+    unit material = "Madera de pino" label "Mueble"
+    metal material = "Cromado" label "Grifería"
 
 body
   box (-width / 2, 0, height - 0.15) to (width / 2, depth, height) material mat
@@ -27,5 +31,6 @@ plan 1:50
     line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen thin
 
 outputs
+  generator = "props:washbasin"
   ifc_class = "IfcSanitaryTerminal"
   ifc_type = "WASHHANDBASIN"

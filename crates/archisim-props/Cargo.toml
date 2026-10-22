@@ -1,0 +1,11 @@
+[package]
+name = "archisim-props"
+description = "Furniture, sanitary ware, kitchen units, people and cars made by rules from their measurements: detailed 3D models for the library's objects"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

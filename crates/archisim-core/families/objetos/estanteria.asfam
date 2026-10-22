@@ -14,6 +14,10 @@ type_params
     board   length = 0.02 range 0.012..0.05 label "Grueso del tablero"
   section "Materiales"
     mat material = "Madera de pino" label "Tablero"
+  section "Modelo 3D"
+    model3d choice("Con libros") = "Con libros" label "Modelo 3D"
+    books material = "Libros" label "Libros"
+    books2 material = "Libros claros" label "Libros claros"
 
 require width > 2 * board + 0.1 else "No queda hueco entre los costados"
 require height > (shelves + 2) * board + 0.1 else "No caben tantas baldas"
@@ -34,5 +38,6 @@ plan 1:50
   line (-width / 2 + board, depth) to (width / 2 - board, 0.01) pen thin
 
 outputs
+  generator = "props:bookcase"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"

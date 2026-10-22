@@ -30,6 +30,7 @@ mod parameters;
 mod phases;
 mod plantings;
 mod presentation;
+mod props;
 mod railings;
 mod roofs;
 mod sections;

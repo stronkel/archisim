@@ -13,6 +13,12 @@ type_params
   section "Materiales"
     body_mat material = "Carrocería" label "Carrocería"
     tyre     material = "Neumático" label "Ruedas"
+  section "Modelo 3D"
+    model3d choice("Berlina", "Compacto", "Todoterreno") = "Berlina" label "Modelo 3D"
+    glass material = "Vidrio doble" label "Lunas"
+    light material = "Luz" label "Faros"
+    rear material = "Piloto" label "Pilotos"
+    hub material = "Cromado" label "Tapacubos"
 
 body
   let w = width / 2
@@ -42,5 +48,6 @@ plan presentation
   polygon (-w + 0.2, 0.36 * length) (w - 0.2, 0.36 * length) (w - 0.2, 0.62 * length) (-w + 0.2, 0.62 * length) pen thin tint body_mat opacity 0.6
 
 outputs
+  generator = "props:car"
   ifc_class = "IfcVehicle"
   ifc_type = "VEHICLEWHEELED"

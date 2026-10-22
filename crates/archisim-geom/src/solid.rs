@@ -1105,6 +1105,9 @@ pub fn object_solids(model: &Model, id: archisim_core::ObjectId) -> Vec<Solid> {
     if let Some(solids) = object_mesh_solids(model, id) {
         return solids;
     }
+    if let Some(solids) = prop_solids(model, id) {
+        return solids;
+    }
     let (Some(o), Ok(ev)) = (model.object(id), model.evaluate_object(id)) else {
         return Vec::new();
     };
@@ -1201,6 +1204,32 @@ pub fn with_plant_detail<T>(lod: archisim_core::flora::Lod, f: impl FnOnce() -> 
 pub fn plant_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Solid>> {
     let o = model.object(id)?;
     let (mesh, parts) = model.plant_mesh(id, plant_lod(model))?;
+    let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+    let place = |p: [f32; 3]| -> P3 {
+        let q = o.to_plan(p[0] as f64, p[1] as f64);
+        [q.x, q.y, z0 + p[2] as f64]
+    };
+    Some(
+        parts
+            .iter()
+            .map(|(material, tris)| Solid {
+                owner: SolidOwner::Object(id),
+                material: *material,
+                triangles: tris
+                    .iter()
+                    .map(|t| t.map(|i| place(mesh.positions[i as usize])))
+                    .collect(),
+            })
+            .collect(),
+    )
+}
+
+/// Solids of an object whose model ArchiSim makes from its measurements
+/// (`archisim-props`): one per material, turned and placed. `None` for
+/// any other object.
+pub fn prop_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Solid>> {
+    let o = model.object(id)?;
+    let (mesh, parts) = model.object_prop(id)?;
     let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
     let place = |p: [f32; 3]| -> P3 {
         let q = o.to_plan(p[0] as f64, p[1] as f64);

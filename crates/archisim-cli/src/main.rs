@@ -15,6 +15,7 @@ mod demo;
 mod equipo;
 mod formas;
 mod grande;
+mod modelos;
 mod muestrario;
 mod vivero;
 
@@ -67,6 +68,10 @@ Uso:
       Todas las especies de vegetación que ArchiSim genera, plantadas por
       grupos, con un paseo y un arriate: vivero.archisim, vivero.ifc y
       plantas 1:200 de presentación y técnica. Carpeta por defecto: ./out
+  archisim modelos [carpeta]
+      Todos los muebles, sanitarios, cocina, personas y coches de la
+      biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
+      modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
   archisim formas [carpeta]
       Las formas de Concepto juntas: aristas redondeadas y achaflanadas,
       esfera, cilindro, cono, revolución, uniones, restas, intersecciones,
@@ -167,6 +172,10 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("modelos") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(modelos::write(&dir))
+        }
         Some("formas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(formas::write(&dir))

@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (3) · Biblioteca básica de modelos 3D (L3)
+
+Rama `bloque/biblioteca-3d` (sobre `bloque/modelado`), pull request para Antonio. v0.40. Sin cambios en el formato `.archisim`. Descrito en `docs/BIBLIOTECA_3D.md`.
+
+**Hecho**
+- **El 3D de los muebles lo hace ArchiSim desde sus medidas**, como los árboles: sofás, sillas, mesas (con sus sillas), mesas de centro, camas con almohadas y edredón, mesitas con lámpara, armario, estantería con libros, mueble de TV, muebles de cocina con fregadero, grifo y placa, muebles altos, frigorífico, lavadora, inodoro y bidé (de pie y suspendidos), lavabo (pedestal, mueble, suspendido), bañera, duchas con mampara, personas (hombre, mujer, caminando) y coches (berlina, compacto, todoterreno). Nada descargado ni con licencia de nadie.
+- Cada familia tiene en Propiedades un grupo **Modelo 3D**: el estilo y un material por pieza (tapicería, cojines, patas, encimera, cromados, vidrio…). Cambiar ancho, plazas o número de sillas rehace el modelo.
+- Tres familias nuevas (Mesa de centro, Mesita de noche, Mueble TV), 19 tipos nuevos en la plantilla y diez materiales (Tela, Edredón, Cromado, Encimera…).
+- IFC: cada tipo lleva su modelo una sola vez (mapa de representación con color por pieza) y los ejemplares lo comparten.
+- Crate nuevo `archisim-props`. `archisim modelos out/` coloca los 41 objetos en filas y escribe proyecto, IFC, axonometría y planta.
+
+**Pendiente**
+- Más objetos (encastres, campana, luminarias, oficina, plantas de interior).
+- Biblioteca ampliada descargable con modelos CC0 importados.
+- Retocar proporciones de lo que Antonio vea raro.
+
+**Qué debe probar Antonio**
+1. `archisim modelos out/` y abre `out/modelos.archisim`; en 3D recorre las filas (salón, comedor, dormitorio, cocina, baño, personas y coches). Mira también `out/modelos-3d.svg`.
+2. Selecciona el «Sofá de 3 plazas», en Propiedades cambia el ancho a 3000 y las plazas a 4: deben salir cuatro cojines. Cambia «Modelo 3D» a Clásico y luego a Nórdico.
+3. En la «Mesa de comedor 160×90», sube las sillas a 8 y mira cómo se reparten.
+4. Cambia el material «Tapicería» del sofá a otro de la lista y míralo en 3D.
+5. Exporta el IFC y ábrelo en tu visor: cada mueble con sus colores.
+
+---
+
 ## 2026-10-22 (2) · Formas de Concepto y materiales de visualización (M1–M3)
 
 Rama `bloque/modelado` (sobre `bloque/equipo`), pull request para Antonio. Formato `.archisim` versión 26 (abre las anteriores tal cual). v0.39. Diseño en `docs/FORMAS.md`.

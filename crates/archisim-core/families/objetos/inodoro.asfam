@@ -11,6 +11,9 @@ type_params
     depth  length = 0.68 range 0.50..0.90 label "Fondo"
   section "Materiales"
     mat material = "Porcelana" label "Porcelana"
+  section "Modelo 3D"
+    model3d choice("De pie con cisterna", "Suspendido") = "De pie con cisterna" label "Modelo 3D"
+    metal material = "Cromado" label "Pulsador"
 
 body
   box (-width / 2, 0, 0.40) to (width / 2, 0.18, 0.80) material mat
@@ -28,5 +31,6 @@ plan 1:50
     line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen view
 
 outputs
+  generator = "props:wc"
   ifc_class = "IfcSanitaryTerminal"
   ifc_type = "TOILETPAN"
