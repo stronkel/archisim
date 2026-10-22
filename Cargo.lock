@@ -240,6 +240,7 @@ dependencies = [
  "glam",
  "objc2 0.5.3",
  "objc2-foundation 0.2.2",
+ "png",
  "pollster 0.4.0",
  "resvg",
  "rfd",

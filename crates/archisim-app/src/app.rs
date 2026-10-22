@@ -270,6 +270,8 @@ pub struct ArchiSimApp {
     pub beam_tool: structure_ui::BeamTool,
     /// What the tool would build, for the 3D view (R21).
     ghost: ghost3d::GhostCache,
+    plan_ghost: ghost3d::PlanGhost,
+    start: start_ui::StartScreen,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -569,6 +571,13 @@ impl ArchiSimApp {
             beam_settings,
             beam_tool: structure_ui::BeamTool::default(),
             ghost: ghost3d::GhostCache::default(),
+            plan_ghost: ghost3d::PlanGhost::default(),
+            // The start screen greets the program opened without a file
+            // (never in the tests).
+            start: start_ui::StartScreen {
+                open: !cfg!(test),
+                ..Default::default()
+            },
             grid_anchor: None,
             footing_anchor: None,
             footing_settings,
@@ -782,6 +791,7 @@ impl ArchiSimApp {
     }
 
     fn replace_editor(&mut self, ed: Editor) {
+        self.start.open = false;
         // Another project: the shared one is left (its working copy kept).
         if self.team.is_some() {
             self.team_closing();
@@ -1017,6 +1027,7 @@ impl ArchiSimApp {
                     );
                 }
                 self.import_report = Some(text);
+                self.note_recent(path);
                 let name = path.file_name().map_or_else(
                     || path.display().to_string(),
                     |n| n.to_string_lossy().into_owned(),
@@ -1031,6 +1042,7 @@ impl ArchiSimApp {
         match Editor::open(path) {
             Ok(ed) => {
                 self.replace_editor(ed);
+                self.note_recent(path);
                 self.say(format!("Abierto {}.", path.display()));
             }
             Err(e) => self.complain(format!("No se puede abrir {}: {e}.", path.display())),
@@ -1065,6 +1077,7 @@ impl ArchiSimApp {
         };
         match self.ed.save(target.as_deref()) {
             Ok(p) => {
+                self.note_recent(&p);
                 self.say(format!("Guardado en {}.", p.display()));
                 if let Err(e) = self.coord.save_beside(&p) {
                     self.complain(format!("No se pudieron guardar los vínculos: {e}."));
@@ -1578,6 +1591,7 @@ impl ArchiSimApp {
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
         self.missions_frame(&ctx);
+        self.start_screen(&ctx);
         self.sync_prefs(&ctx);
         self.thumbs.end_frame();
     }
@@ -2102,6 +2116,7 @@ mod services_ui;
 mod sheet_drop;
 mod sheet_ui;
 mod stair_ui;
+mod start_ui;
 mod structure_ui;
 mod survey_ui;
 mod tabs;

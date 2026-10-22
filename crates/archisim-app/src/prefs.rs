@@ -62,6 +62,8 @@ pub struct Prefs {
     pub missions_done: Vec<String>,
     /// The welcome card offering the missions was answered.
     pub welcomed: bool,
+    /// Projects opened or saved lately, the last first.
+    pub recent: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -73,6 +75,7 @@ impl Default for Prefs {
             units: crate::units::LengthUnit::Metre,
             missions_done: Vec::new(),
             welcomed: false,
+            recent: Vec::new(),
         }
     }
 }
@@ -106,6 +109,7 @@ impl Prefs {
             "unidades": self.units.symbol(),
             "misiones_hechas": self.missions_done,
             "bienvenida": self.welcomed,
+            "recientes": self.recent,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -140,6 +144,15 @@ impl Prefs {
                 })
                 .unwrap_or_default(),
             welcomed: flag("bienvenida", d.welcomed),
+            recent: v
+                .get("recientes")
+                .and_then(|x| x.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -188,6 +201,7 @@ mod tests {
             units: crate::units::LengthUnit::Centimetre,
             missions_done: vec!["muro".into(), "plano".into()],
             welcomed: true,
+            recent: vec!["/proyectos/casa.archisim".into()],
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         // Unknown or broken files give the defaults.

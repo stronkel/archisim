@@ -5400,3 +5400,58 @@ fn views_graphics_and_reference_planes() {
         .unwrap();
     h.frame();
 }
+
+/// Bloque 3 de la revisión del 22/10/2026: before the click, the plan
+/// shows the real drawing of what would be placed (a door in its cut
+/// wall), and while dragging, what moves where it goes; the start screen
+/// keeps the files opened and saved, the last first.
+#[test]
+fn plan_shows_what_is_placed_or_dragged() {
+    let mut h = Harness::new(Editor::new_project());
+    assert!(
+        !h.app.start.open,
+        "the tests start without the start screen"
+    );
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.move_to(p(6.0, 4.0));
+    assert!(super::ghost3d::plan_ghost_region(&h.app).is_none());
+    // A door over the south façade.
+    h.type_text("p");
+    assert_eq!(h.app.tool, Tool::Door);
+    h.move_to(p(6.0, 0.2));
+    let (lo, hi) = super::ghost3d::plan_ghost_region(&h.app).expect("the door's ghost");
+    assert!(
+        lo.x < 5.5 && hi.x > 6.5 && lo.y < 0.0 && hi.y > 0.2,
+        "{lo:?} {hi:?}"
+    );
+    assert!(super::ghost3d::plan_ghost_drawn(&h.app));
+    h.click_at(p(6.0, 0.2));
+    assert_eq!(h.model().openings().count(), 1);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.move_to(p(6.0, 4.0));
+    assert!(super::ghost3d::plan_ghost_region(&h.app).is_none());
+    // Dragging the door along its wall: the ghost covers where it was and
+    // where it goes.
+    h.click_at(p(6.0, 0.0));
+    let door = h.model().openings().next().unwrap().id;
+    assert!(h.app.ed.selection.contains(&Element::Opening(door)));
+    h.move_to(p(6.0, 0.0));
+    h.button(PointerButton::Primary, true);
+    for x in [6.5, 7.5, 8.5, 9.0] {
+        h.move_to(p(x, 0.0));
+    }
+    let (lo, hi) = super::ghost3d::plan_ghost_region(&h.app).expect("the drag's ghost");
+    assert!(lo.x < 5.6 && hi.x > 9.4, "{lo:?} {hi:?}");
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    assert!(super::ghost3d::plan_ghost_region(&h.app).is_none());
+    // The recent files.
+    let mut recent = Vec::new();
+    for f in ["/a.archisim", "/b.ifc", "/a.archisim"] {
+        super::start_ui::remember(&mut recent, std::path::Path::new(f));
+    }
+    assert_eq!(recent, ["/a.archisim", "/b.ifc"]);
+}

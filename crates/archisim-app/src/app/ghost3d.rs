@@ -4,6 +4,12 @@
 //! colours. It is built on a copy of the model with the same functions the
 //! click uses, so it shows exactly what the click will make; the copy is
 //! only rebuilt when the cursor or the model change.
+//!
+//! The plan does the same with its real drawing (bloque 3 de la revisión
+//! del 22/10/2026): the region of the model copy that the click or the
+//! drag changes is drawn by `archisim-plan`, as it will look, over the
+//! plan — an object with its symbol, a door with its swing in its cut
+//! wall, a wall with its layers and joins, what is moved where it goes.
 
 use std::cell::RefCell;
 
@@ -20,7 +26,7 @@ pub struct GhostCache {
 }
 
 /// What a click would build.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Would {
     Walls(Vec<NewWall>),
     Opening(archisim_core::NewOpening),
@@ -238,8 +244,178 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
     })
 }
 
+/// Above this many walls, the plan shows only the outline of what a
+/// click would place.
+const GHOST_MAX_WALLS: usize = 3000;
+
+/// The plan's ghost: the copy of the model after the click or drag, the
+/// region it changes and its picture at the current zoom.
+#[derive(Default)]
+pub struct PlanGhost {
+    /// What the copy was built for.
+    what: String,
+    after: Option<(Model, (Point2, Point2))>,
+    /// What the picture was drawn for, and the picture with its region.
+    raster: String,
+    image: Option<(egui::TextureHandle, (Point2, Point2))>,
+}
+
+impl ArchiSimApp {
+    /// What the plan's ghost shows now, as a key, or nothing.
+    fn plan_ghost_what(&self) -> Option<String> {
+        if let Some(d) = &self.drag {
+            let (to, variant, _) = self.drag_preview.as_ref()?;
+            return Some(format!("drag {:?} {:?} {:?} {variant}", d.grip, d.from, to));
+        }
+        self.would_build().map(|w| format!("{w:?}"))
+    }
+
+    /// Builds the copy of the model the ghost draws, and its region.
+    fn plan_ghost_build(&self) -> Option<(Model, (Point2, Point2))> {
+        let shown = self.ed.shown();
+        if let Some(d) = &self.drag {
+            let (to, variant, _) = self.drag_preview.as_ref()?;
+            let drag = crate::drag::Drag {
+                grip: d.grip,
+                from: d.from,
+                to: *to,
+                variant: *variant,
+            };
+            let (after, level, region) =
+                crate::drag::ghost(&self.ed, &shown, &self.ed.selection, &drag)?;
+            if level.is_some_and(|l| l != self.ed.level) {
+                return None;
+            }
+            return Some((after, region));
+        }
+        let would = self.would_build()?;
+        // With very big models, copying the model at each step of the
+        // cursor would slow it down: the outline is enough there.
+        if shown.walls().count() > GHOST_MAX_WALLS {
+            return None;
+        }
+        let (after, made) = build_plan_ghost(&shown, would)?;
+        let geo = crate::geo::Indexed::new(&after);
+        let mut pts: Vec<Point2> = made
+            .iter()
+            .filter_map(|e| crate::pick::outline(&geo, *e))
+            .flatten()
+            .collect();
+        if pts.is_empty() {
+            return None;
+        }
+        let first = pts.remove(0);
+        let (lo, hi) = pts.iter().fold((first, first), |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        });
+        // Walls it joins lose or gain their mitres nearby.
+        let margin = Point2::new(0.8, 0.8);
+        Some((after, (lo - margin, hi + margin)))
+    }
+
+    /// Draws the ghost over the plan: the region it changes, as it will
+    /// be drawn.
+    pub(super) fn draw_plan_ghost(
+        &mut self,
+        ctx: &egui::Context,
+        painter: &egui::Painter,
+        rect: Rect,
+    ) {
+        let Some(what) = self.plan_ghost_what() else {
+            self.plan_ghost = PlanGhost::default();
+            return;
+        };
+        let what = format!("{what} @{} {:?}", self.ed.revision(), self.ed.level);
+        if self.plan_ghost.what != what {
+            self.plan_ghost.after = self.plan_ghost_build();
+            self.plan_ghost.what = what.clone();
+        }
+        let Some((after, (lo, hi))) = &self.plan_ghost.after else {
+            return;
+        };
+        // Only what is on screen is drawn.
+        let (vlo, vhi) = self.view.visible(rect);
+        let lo = Point2::new(lo.x.max(vlo.x), lo.y.max(vlo.y));
+        let hi = Point2::new(hi.x.min(vhi.x), hi.y.min(vhi.y));
+        if hi.x <= lo.x || hi.y <= lo.y {
+            return;
+        }
+        let screen =
+            Rect::from_two_pos(self.view.to_screen(rect, lo), self.view.to_screen(rect, hi));
+        let ppp = ctx.pixels_per_point();
+        let size = [
+            (screen.width() * ppp).round().max(1.0) as usize,
+            (screen.height() * ppp).round().max(1.0) as usize,
+        ];
+        let raster = format!(
+            "{what} {lo:?} {hi:?} {size:?} {} {} {} {:?}",
+            self.plan_scale, self.cut_plane, self.thin_lines, self.view_style
+        );
+        if self.plan_ghost.raster != raster {
+            let mut options = self.screen_plan_options(lo, hi);
+            options.shadows = None;
+            let image = crate::plan_image::rasterize_with(after, self.ed.level, size, &options);
+            match &mut self.plan_ghost.image {
+                Some((tex, region)) => {
+                    tex.set(image, egui::TextureOptions::LINEAR);
+                    *region = (lo, hi);
+                }
+                None => {
+                    let tex = ctx.load_texture("plan-ghost", image, egui::TextureOptions::LINEAR);
+                    self.plan_ghost.image = Some((tex, (lo, hi)));
+                }
+            }
+            self.plan_ghost.raster = raster;
+        }
+        if let Some((tex, _)) = &self.plan_ghost.image {
+            painter.rect_filled(screen, egui::CornerRadius::ZERO, PAPER);
+            painter.image(
+                tex.id(),
+                screen,
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
+        }
+    }
+}
+
+/// Builds `would` on a copy of `model`: the copy and what it added.
+fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)> {
+    let mut m = model.clone();
+    let made = match would {
+        Would::Walls(walls) => walls
+            .into_iter()
+            .map(|w| m.add_wall(w).map(Element::Wall))
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?,
+        Would::Opening(spec) => {
+            let wall = spec.wall;
+            let id = m.add_opening(spec).ok()?;
+            vec![Element::Opening(id), Element::Wall(wall)]
+        }
+        Would::Column(spec) => vec![Element::Column(m.add_column(spec).ok()?)],
+        Would::Beam(spec) => vec![Element::Beam(m.add_beam(spec).ok()?)],
+        Would::Slab(spec) => vec![Element::Slab(m.add_slab(spec).ok()?)],
+        Would::Object(spec) => vec![Element::Object(m.add_object(spec).ok()?)],
+    };
+    Some((m, made))
+}
+
+#[cfg(test)]
+pub(super) fn plan_ghost_region(app: &ArchiSimApp) -> Option<(Point2, Point2)> {
+    app.plan_ghost.after.as_ref().map(|(_, r)| *r)
+}
+
 #[cfg(test)]
 pub(super) fn ghost_triangles(app: &ArchiSimApp) -> usize {
     app.ghost_solids()
         .map_or(0, |s| s.iter().map(|s| s.triangles.len()).sum())
+}
+
+#[cfg(test)]
+pub(super) fn plan_ghost_drawn(app: &ArchiSimApp) -> bool {
+    app.plan_ghost.image.is_some()
 }
