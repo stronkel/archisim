@@ -76,6 +76,7 @@ impl ArchiSimApp {
             [Element::Mass(id)] => self.mass_properties(ui, *id),
             [Element::Plot(id)] => self.plot_properties(ui, *id),
             [Element::Road(id)] => self.road_properties(ui, *id),
+            [Element::Planting(id)] => self.planting_properties(ui, *id),
             [Element::Run(id)] => self.run_properties(ui, *id),
             [Element::Edge(id)] => self.edge_properties(ui, *id),
             [Element::Device(id)] => self.device_properties(ui, *id),
@@ -241,6 +242,7 @@ impl ArchiSimApp {
             }
             Tool::Plot => self.plot_tool_properties(ui),
             Tool::Road => self.road_tool_properties(ui),
+            Tool::Planting => self.planting_tool_properties(ui),
             Tool::Pipe | Tool::Duct => self.run_tool_properties(ui),
             Tool::Device => self.device_tool_properties(ui),
             Tool::Cad => self.cad_tool_properties(ui),

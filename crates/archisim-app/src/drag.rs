@@ -361,6 +361,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             | Element::Mass(_)
             | Element::Plot(_)
             | Element::Road(_)
+            | Element::Planting(_)
             | Element::Run(_)
             | Element::Edge(_)
             | Element::Device(_) => {}
@@ -437,6 +438,13 @@ fn object_handles(model: &Model, id: archisim_core::ObjectId) -> Vec<(bool, Poin
     let Some(o) = model.object(id) else {
         return Vec::new();
     };
+    if let Some(p) = model
+        .type_grows(o.object_type)
+        .then(|| plant_handle(model, id))
+        .flatten()
+    {
+        return vec![(true, p)];
+    }
     let Some(t) = model.object_type(o.object_type) else {
         return Vec::new();
     };
@@ -449,6 +457,40 @@ fn object_handles(model: &Model, id: archisim_core::ObjectId) -> Vec<(bool, Poin
         (true, o.to_plan(w / 2.0, d / 2.0)),
         (false, o.to_plan(0.0, *d)),
     ]
+}
+
+/// The edge of a plant's crown, east of its trunk (turned with it): its
+/// width handle.
+fn plant_handle(model: &Model, id: archisim_core::ObjectId) -> Option<Point2> {
+    let o = model.object(id)?;
+    let look = model.plant_look(id)?;
+    Some(o.to_plan(look.species.width / 2.0, 0.0))
+}
+
+/// A plant made wider or narrower from its handle, by itself (its own
+/// width; with Ctrl, its height too, in proportion). Its type, the
+/// species, does not change.
+fn stretch_plant(
+    model: &mut Model,
+    id: archisim_core::ObjectId,
+    to: Point2,
+    both: bool,
+) -> Result<(), ModelError> {
+    use archisim_core::Value;
+    let o = model
+        .object(id)
+        .ok_or(ModelError::UnknownObject(id))?
+        .clone();
+    let look = model.plant_look(id).ok_or(ModelError::UnknownObject(id))?;
+    let width = ((to.distance(o.position) * 2.0).max(0.1) * 1000.0).round() / 1000.0;
+    let mut values = o.values.clone();
+    values.insert("crown_own".into(), Value::Number(width));
+    if both {
+        let k = width / look.species.width.max(1e-3);
+        let h = ((look.species.height * k).max(0.1) * 1000.0).round() / 1000.0;
+        values.insert("height_own".into(), Value::Number(h));
+    }
+    model.set_object_values(id, values)
 }
 
 /// Stretches an object's width or depth to `to`. A type shared with other
@@ -668,6 +710,14 @@ pub fn apply(
                 }
             })
             .map(|_| None),
+        Grip::ObjectSize { object, width }
+            if model
+                .object(object)
+                .is_some_and(|o| model.type_grows(o.object_type)) =>
+        {
+            let _ = width;
+            stretch_plant(model, object, drag.to, drag.variant).map(|_| None)
+        }
         Grip::ObjectSize { object, width } => {
             stretch_object(model, object, width, drag.to).map(|_| None)
         }
@@ -918,6 +968,9 @@ pub(crate) fn move_selection(
             }
             Element::Road(id) => {
                 model.edit_road(*id, |x| x.axis.iter_mut().for_each(|p| *p = *p + d))?;
+            }
+            Element::Planting(id) => {
+                model.edit_planting(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
             }
             Element::Run(id) => {
                 model.edit_run(*id, |x| x.path.iter_mut().for_each(|p| *p = *p + d))?;
@@ -1348,6 +1401,10 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Road(new));
             }
+            Element::Planting(id) => {
+                let new = crate::xform::copy_planting(model, *id, |p| p + d)?;
+                copies.insert(Element::Planting(new));
+            }
             Element::Run(id) => {
                 let x = model
                     .run(*id)
@@ -1589,6 +1646,7 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Mass(id) => model.mass(id).is_some(),
         Element::Plot(id) => model.plot(id).is_some(),
         Element::Road(id) => model.road(id).is_some(),
+        Element::Planting(id) => model.planting(id).is_some(),
         Element::Run(id) => model.run(id).is_some(),
         Element::Edge(id) => model.edge(id).is_some(),
         Element::Device(id) => model.device(id).is_some(),
@@ -1657,6 +1715,7 @@ fn level_of(
             Element::Mass(id) => model.mass(*id).map(|m| m.level),
             Element::Plot(id) => model.plot(*id).map(|p| p.level),
             Element::Road(id) => model.road(*id).map(|r| r.level),
+            Element::Planting(id) => model.planting(*id).map(|r| r.level),
             Element::Run(id) => model.run(*id).map(|r| r.level),
             Element::Edge(id) => model.edge(*id).map(|e| e.level),
             Element::Device(id) => model.device(*id).map(|d| d.level),

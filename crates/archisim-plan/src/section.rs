@@ -238,7 +238,10 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     }
 
     let mut faces: Vec<(f64, Face)> = Vec::new();
-    for solid in model_solids(model) {
+    let all = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
+        model_solids(model)
+    });
+    for solid in all {
         let glass = model
             .material(solid.material)
             .is_some_and(|m| m.category == "glass");
@@ -261,13 +264,25 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 edge_faces.entry(k).or_default().push(i);
             }
         }
+        // The leaves of a plant: only their sharpest turns, or a crown
+        // would be a net of facets.
+        let crease = match solid.owner {
+            SolidOwner::Object(o)
+                if model
+                    .plant_look(o)
+                    .is_some_and(|l| solid.material != l.materials.bark) =>
+            {
+                0.2
+            }
+            _ => CREASE_COS,
+        };
         let is_corner = |a: P3, b: P3, me: usize| {
             let (a, b) = (key(a), key(b));
             let k = if a <= b { (a, b) } else { (b, a) };
             match edge_faces.get(&k) {
                 Some(list) if list.len() >= 2 => list
                     .iter()
-                    .any(|&j| j != me && dot(normals[j], normals[me]) < CREASE_COS),
+                    .any(|&j| j != me && dot(normals[j], normals[me]) < crease),
                 _ => true,
             }
         };
@@ -781,9 +796,11 @@ pub fn elevations_around(model: &Model) -> Vec<NewSection> {
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     // The building, not the plot.
-    let solids = model_solids(model)
-        .into_iter()
-        .filter(|s| !matches!(s.owner, archisim_geom::solid::SolidOwner::Terrain(_)));
+    let solids = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
+        model_solids(model)
+    })
+    .into_iter()
+    .filter(|s| !matches!(s.owner, archisim_geom::solid::SolidOwner::Terrain(_)));
     for solid in solids {
         for t in &solid.triangles {
             for p in t {

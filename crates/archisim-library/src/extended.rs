@@ -755,7 +755,7 @@ fn material(m: &mut Model, name: &str, category: &str, color: [u8; 3]) -> u64 {
 }
 
 /// A `GlobalId` that is always the same for the same type.
-fn stable_guid(name: &str) -> GlobalId {
+pub(crate) fn stable_guid(name: &str) -> GlobalId {
     // FNV-1a, 128 bits.
     let mut h: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
     for b in format!("ArchiSim biblioteca ampliada · {name}").bytes() {
@@ -860,7 +860,7 @@ mod tests {
                 })
                 .unwrap();
             assert!(!m.object_plan_symbol(o, 50.0).unwrap().is_empty());
-            if let Some(p) = m.object_presentation_symbol(o) {
+            if let Some(p) = m.object_presentation_symbol(o, 50.0) {
                 assert!(!p.unwrap().is_empty());
             }
         }

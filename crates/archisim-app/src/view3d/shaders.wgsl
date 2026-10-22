@@ -41,6 +41,8 @@ struct VertexOut {
     @location(2) view_normal: vec3<f32>,
     @location(3) view_dist: f32,
     @location(4) world: vec3<f32>,
+    // Foliage (bias 2): no contour lines between its own facets.
+    @location(5) @interpolate(flat) soft: f32,
 };
 
 @vertex
@@ -49,7 +51,8 @@ fn vs_model(v: VertexIn) -> VertexOut {
     var vp = g.view * vec4<f32>(v.pos, 1.0);
     // A nudge along the line of sight, 0.02 % of the distance: invisible,
     // but it settles which element wins where two touch on an edge.
-    vp.z = vp.z * (1.0 + v.bias * 0.0002);
+    vp.z = vp.z * (1.0 + min(v.bias, 1.0) * 0.0002);
+    out.soft = select(0.0, 1.0, v.bias > 1.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -133,6 +136,11 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     }
     out.color = vec4<f32>(shade(i.normal, i.color.rgb), 1.0);
     out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist);
+    if (i.soft > 0.5) {
+        // Leaves: the same normal everywhere, so the contours come only
+        // from the outline of the masses.
+        out.normal_dist = vec4<f32>(0.0, 0.0, 1.0, i.view_dist);
+    }
     return out;
 }
 

@@ -230,6 +230,16 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Planting(id) => {
+                if copy {
+                    let new = copy_planting(model, id, |p| t.apply(p))?;
+                    out.insert(Element::Planting(new));
+                } else {
+                    model
+                        .edit_planting(id, |x| x.path.iter_mut().for_each(|p| *p = t.apply(*p)))?;
+                    out.insert(*e);
+                }
+            }
             Element::Run(id) => {
                 let x = model
                     .run(id)
@@ -533,6 +543,34 @@ pub fn device_spec(
         depth: x.depth,
         height: x.height,
     }
+}
+
+/// A copy of a planting with its line moved by `f`: the same rules, the
+/// same plants in their new places.
+pub fn copy_planting(
+    model: &mut Model,
+    id: archisim_core::PlantingId,
+    f: impl Fn(archisim_core::Point2) -> archisim_core::Point2,
+) -> Result<archisim_core::PlantingId, ModelError> {
+    let x = model
+        .planting(id)
+        .ok_or(ModelError::UnknownElement(id.0))?
+        .clone();
+    model.add_planting(archisim_core::NewPlanting {
+        name: model.next_planting_name(),
+        level: x.level,
+        path: x.path.iter().map(|p| f(*p)).collect(),
+        closed: x.closed,
+        smooth: x.smooth,
+        arrangement: x.arrangement,
+        count: x.count,
+        species: x.species.clone(),
+        size_variation: x.size_variation,
+        shape_variation: x.shape_variation,
+        spread: x.spread,
+        seed: x.seed,
+        base_offset: x.base_offset,
+    })
 }
 
 #[cfg(test)]

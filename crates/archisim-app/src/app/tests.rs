@@ -4629,7 +4629,12 @@ fn presentation_styles_and_floor_fills() {
     assert!(shown.contains("fill-opacity"), "see-through canopies");
     assert!(shown.contains("#e2a0b6"), "the blossom's colour");
     let ids: Vec<_> = h.model().objects().map(|o| o.id).collect();
-    let canopy = |id| match &h.model().object_presentation_symbol(id).unwrap().unwrap()[0] {
+    let canopy = |id| match &h
+        .model()
+        .object_presentation_symbol(id, 50.0)
+        .unwrap()
+        .unwrap()[0]
+    {
         archisim_core::Mark::Polygon { points, .. } => points.clone(),
         other => panic!("{other:?}"),
     };
@@ -4717,10 +4722,8 @@ fn vegetation_street_furniture_and_direct_fills() {
     h.frame();
     assert_eq!(h.app.tool, Tool::Object);
     let t = h.app.object_settings.object_type.unwrap();
-    assert_eq!(
-        h.model().object_type(t).unwrap().name,
-        "Árbol de hoja caduca 6 m"
-    );
+    // A plant grown by ArchiSim (v0.37): an olive tree.
+    assert_eq!(h.model().object_type(t).unwrap().name, "Olivo");
     h.click_at(p(2.0, 2.0));
     let tree = h.model().objects().last().unwrap().id;
     // Mobiliario urbano: a street lamp.
@@ -4738,7 +4741,7 @@ fn vegetation_street_furniture_and_direct_fills() {
             archisim_core::Value::Text("presentación".into()),
         ),
         (
-            "shape_own".to_string(),
+            "style_own".to_string(),
             archisim_core::Value::Text("acuarela".into()),
         ),
         (
@@ -4791,4 +4794,143 @@ fn vegetation_street_furniture_and_direct_fills() {
     assert_eq!(fills, 2);
     let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));
     assert!(svg.contains("fill-opacity=\"0.5\""));
+}
+
+/// Urbanismo → Vegetación places a plant grown by ArchiSim (an olive by
+/// default); «Otra planta» grows another; Plantación plants along a line
+/// drawn with clicks and inside an outline, and changing the planting
+/// makes its plants again; the vivero opens and shows a species.
+#[test]
+fn plants_and_plantings() {
+    use super::object_gallery::ObjectScope;
+    use super::toolbox::{Discipline, Pick};
+    use archisim_core::Arrangement;
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -20.0), p(60.0, 30.0), 0.0);
+    h.app.set_discipline(Discipline::Site);
+    h.app.pick(Pick::Objects(ObjectScope::Vegetation));
+    assert_eq!(h.app.tool, Tool::Object);
+    let olive = h.app.object_settings.object_type.unwrap();
+    assert_eq!(h.model().object_type(olive).unwrap().name, "Olivo");
+    assert!(h.model().type_grows(olive));
+    h.click_at(p(5.0, 5.0));
+    let tree = h
+        .model()
+        .objects()
+        .find(|o| o.object_type == olive)
+        .unwrap()
+        .id;
+    // Its plan and 3D come from the plant grown.
+    assert!(h.model().object_plant(tree).is_some());
+    assert!(archisim_geom::solid::object_solids(h.model(), tree).len() >= 2);
+    let before = h.model().plant_look(tree).unwrap().seed;
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Object(tree)].into_iter().collect();
+    h.frame();
+    // Another plant of the same species.
+    let mut v = h.model().object(tree).unwrap().values.clone();
+    v.insert("plant_seed".into(), archisim_core::Value::Number(4242.0));
+    h.app.ed.set_object_values(tree, v).unwrap();
+    assert_ne!(h.model().plant_look(tree).unwrap().seed, before);
+
+    // A planting along a line: twelve plants, seen before planting.
+    h.key(Key::Escape);
+    h.app.set_tool(Tool::Planting);
+    h.app.planting_settings.count = 12;
+    h.click_at(p(0.0, -10.0));
+    h.click_at(p(20.0, -14.0));
+    h.move_to(p(40.0, -10.0));
+    h.click_at(p(40.0, -10.0));
+    h.key(Key::Enter);
+    let pl = h.model().plantings().next().unwrap().clone();
+    assert_eq!(pl.members.len(), 12);
+    assert_eq!(pl.arrangement, Arrangement::Line);
+    assert!(h.app.ed.selection.contains(&Element::Planting(pl.id)));
+    h.frame();
+    // Fewer plants, more irregular: made again.
+    h.app
+        .ed
+        .transact("t", |m| {
+            m.edit_planting(pl.id, |x| {
+                x.count = 5;
+                x.spread = 0.8;
+            })
+        })
+        .unwrap();
+    assert_eq!(h.model().planting(pl.id).unwrap().members.len(), 5);
+    assert_eq!(
+        h.model()
+            .objects()
+            .filter(|o| h.model().planting_of(o.id) == Some(pl.id))
+            .count(),
+        5
+    );
+    // Moving the planting moves its plants.
+    let first = h.model().planting(pl.id).unwrap().members[0];
+    let at = h.model().object(first).unwrap().position;
+    h.app.ed.selection = [Element::Planting(pl.id)].into_iter().collect();
+    h.app
+        .ed
+        .transact("mover", |m| {
+            crate::xform::transform(
+                m,
+                &[Element::Planting(pl.id)].into_iter().collect(),
+                &archisim_draft::Transform::translate(p(0.0, 30.0)),
+                false,
+            )
+        })
+        .unwrap();
+    let first = h.model().planting(pl.id).unwrap().members[0];
+    let moved = h.model().object(first).unwrap().position;
+    assert!((moved.y - at.y - 30.0).abs() < 1e-6, "{at:?} {moved:?}");
+    // Deleting it deletes its plants.
+    let n = h.model().objects().count();
+    h.app
+        .ed
+        .transact("borrar", |m| m.remove_planting(pl.id).map(drop))
+        .unwrap();
+    assert_eq!(h.model().objects().count(), n - 5);
+
+    // Inside an outline.
+    h.app.set_tool(Tool::Planting);
+    h.app.planting_settings.arrangement = Arrangement::Area;
+    h.app.planting_settings.count = 20;
+    h.app.planting_settings.smooth = false;
+    for c in [p(30.0, 0.0), p(50.0, 0.0), p(50.0, 15.0), p(30.0, 15.0)] {
+        h.click_at(c);
+    }
+    h.key(Key::Enter);
+    let area = h.model().plantings().next().unwrap().clone();
+    assert!(area.closed);
+    assert_eq!(area.members.len(), 20);
+    for m in &area.members {
+        let q = h.model().object(*m).unwrap().position;
+        assert!(
+            q.x > 29.9 && q.x < 50.1 && q.y > -0.1 && q.y < 15.1,
+            "{q:?}"
+        );
+    }
+    // Saved and opened again: the same planting and plants.
+    let text = archisim_file::to_string(h.model());
+    let back = archisim_file::from_str(&text).unwrap();
+    assert_eq!(back.plantings().count(), 1);
+    assert_eq!(back.objects().count(), h.model().objects().count());
+
+    // The vivero.
+    h.app.open_vivero(Some(olive), Default::default());
+    h.frame();
+    h.frame();
+    assert!(h.app.vivero.open);
+    h.app
+        .ed
+        .set_object_type_value(
+            olive,
+            "crown_shape",
+            archisim_core::Value::Text("columnar".into()),
+        )
+        .unwrap();
+    h.frame();
 }

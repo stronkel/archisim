@@ -17,6 +17,7 @@ use crate::math::{is_simple_polygon, signed_area, Arc, Point2, Vec2, EPSILON, MI
 mod concept;
 mod curtain;
 mod disciplines;
+mod flora;
 mod foundations;
 mod layered_library;
 mod library;
@@ -26,6 +27,7 @@ mod objects;
 mod paint;
 mod parameters;
 mod phases;
+mod plantings;
 mod presentation;
 mod railings;
 mod roofs;
@@ -39,6 +41,7 @@ mod urban;
 pub use concept::*;
 pub use curtain::*;
 pub use disciplines::*;
+pub use flora::*;
 pub use foundations::*;
 pub use layered_library::*;
 pub use library::*;
@@ -48,6 +51,7 @@ pub use objects::*;
 pub use paint::*;
 pub use parameters::*;
 pub use phases::*;
+pub use plantings::*;
 pub use railings::*;
 pub use roofs::*;
 pub use sections::*;
@@ -1223,6 +1227,9 @@ pub struct ModelParts {
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
     pub roads: Vec<Road>,
+    /// Plants spread along lines or over areas (after the objects they
+    /// made).
+    pub plantings: Vec<Planting>,
     /// Pipes, ducts and devices.
     pub runs: Vec<ServiceRun>,
     pub devices: Vec<ServiceDevice>,
@@ -1324,6 +1331,7 @@ pub struct Model {
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
+    plantings: BTreeMap<PlantingId, Planting>,
     runs: BTreeMap<RunId, ServiceRun>,
     devices: BTreeMap<DeviceId, ServiceDevice>,
     /// True north: radians, clockwise from the plan's up (+Y).
@@ -1395,6 +1403,7 @@ impl Model {
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
+            plantings: BTreeMap::new(),
             runs: BTreeMap::new(),
             devices: BTreeMap::new(),
             true_north: 0.0,
@@ -1514,6 +1523,7 @@ impl Model {
         self.edges.retain(|_, e| e.level != id);
         self.plots.retain(|_, p| p.level != id);
         self.roads.retain(|_, r| r.level != id);
+        self.plantings.retain(|_, p| p.level != id);
         self.runs.retain(|_, r| r.level != id);
         self.devices.retain(|_, d| d.level != id);
         for c in self.curtain_walls.values_mut() {
@@ -3798,6 +3808,7 @@ impl Model {
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
+            plantings: self.plantings.values().cloned().collect(),
             runs: self.runs.values().cloned().collect(),
             devices: self.devices.values().cloned().collect(),
             true_north: self.true_north,
@@ -4111,6 +4122,7 @@ impl Model {
             error,
         })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
+        model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model
             .set_plot_area(parts.plot_area)

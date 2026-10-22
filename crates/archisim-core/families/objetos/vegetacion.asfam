@@ -1,0 +1,76 @@
+family "Vegetación"
+  category site
+  host none
+  version 1
+  description "Planta generada por ArchiSim: árbol, conífera, palmera, arbusto, mata, gramínea o roseta. Cada ejemplar crece distinto según su semilla; el punto de inserción es el pie del tronco"
+  folder "Vegetación"
+
+type_params
+  section "Dimensiones"
+    height length = 6.00 range 0.10..60.00 label "Altura"
+    crown  length = 4.50 range 0.10..50.00 label "Ancho de la copa"
+    trunk  length = 0.30 range 0.01..4.00 label "Diámetro del tronco"
+    clear  length = 1.80 range 0.00..50.00 label "Altura del fuste"
+  section "Porte"
+    habit choice("árbol", "conífera", "palmera", "arbusto", "mata", "gramínea", "roseta") = "árbol" label "Porte"
+    crown_shape choice("redonda", "ovalada", "parasol", "extendida", "columnar", "cónica", "en vaso", "llorona", "irregular", "cúpula", "cojín") = "redonda" label "Forma de la copa"
+    stems integer = 1 range 1..40 label "Troncos o tallos"
+    lean number = 0.10 range 0.00..1.00 label "Inclinación"
+    gnarl number = 0.15 range 0.00..1.00 label "Tortuosidad"
+  section "Ramas"
+    limbs integer = 5 range 1..24 label "Ramas principales"
+    levels integer = 3 range 1..4 label "Órdenes de ramas"
+    angle number = 40 range 0..110 label "Ángulo de las ramas (°)"
+    droop number = 0.00 range -1.00..1.00 label "Caída de las ramas"
+  section "Hojas"
+    foliage choice("hoja ancha", "hoja menuda", "acículas", "escamas", "retama", "suculenta", "pinnada", "abanico", "hojas largas") = "hoja ancha" label "Follaje"
+    density number = 0.70 range 0.05..1.00 label "Densidad"
+    clump length = 0.55 range 0.02..5.00 label "Tamaño de las matas de hojas"
+    fronds integer = 18 range 1..120 visible_if habit == "palmera" or habit == "gramínea" or habit == "roseta" label "Frondas u hojas"
+    frond_length length = 2.50 range 0.05..15.00 visible_if habit == "palmera" or habit == "gramínea" or habit == "roseta" label "Largo de las frondas"
+  section "Flor y fruto"
+    bloom number = 0.00 range 0.00..1.00 label "Floración"
+    fruit number = 0.00 range 0.00..1.00 label "Fruto"
+  section "Materiales"
+    leaves  material = "Vegetación" label "Hojas"
+    bark    material = "Corteza" label "Tronco"
+    flowers material = "Flor" label "Flor"
+    fruits  material = "Fruto" label "Fruto"
+  section "Dibujo en planta"
+    plan_drawing choice("presentación", "según el estilo", "técnico") = "presentación" label "Dibujo en planta"
+    tech_style choice("círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela") = "círculo" label "Estilo técnico"
+    style choice("círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela") = "contorno" label "Estilo de presentación"
+    look choice("líneas", "transparente", "rellena", "solo color") = "transparente" label "Color en presentación"
+    opacity number = 0.55 range 0.05..1.00 label "Opacidad"
+
+instance_params
+  section "Este ejemplar"
+    plant_seed integer = 0 range 0..999999 label "Semilla (0: la suya)"
+    height_own length = 0.00 range 0.00..60.00 label "Altura (0: la del tipo)"
+    crown_own length = 0.00 range 0.00..50.00 label "Ancho (0: el del tipo)"
+    variation number = 0.50 range 0.00..1.00 label "Variación"
+  section "Dibujo"
+    drawing choice("del tipo", "presentación", "según el estilo", "técnico") = "del tipo" label "Dibujo en planta"
+    style_own choice("del tipo", "círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela") = "del tipo" label "Estilo"
+    look_own choice("del tipo", "líneas", "transparente", "rellena", "solo color") = "del tipo" label "Color"
+    opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"
+    color_own bool = false label "Color propio"
+    leaves_own material = "Vegetación" visible_if color_own label "Color de las hojas"
+
+require clear < height else "El fuste tiene que ser más bajo que la planta"
+require trunk < crown else "El tronco no puede ser más ancho que la copa"
+
+body
+  # Only its bulk: the plant itself is grown by ArchiSim from these values.
+  let h = if height_own > 0 then height_own else height
+  let w = if crown_own > 0 then crown_own else crown
+  box (-w / 2, -w / 2, 0) to (w / 2, w / 2, h) material leaves
+
+plan 1:50
+  let w = if crown_own > 0 then crown_own else crown
+  cloud center (0, 0) radius w / 2 lobes 32 jitter 0 pen view
+
+outputs
+  generator = "flora"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "VEGETATION"

@@ -37,6 +37,9 @@ impl ArchiSimApp {
             Tool::Mass => Some(false),
             Tool::Slab if !self.slab_settings.wand => Some(true),
             Tool::Zone | Tool::Plot => Some(true),
+            Tool::Planting => {
+                Some(self.planting_settings.arrangement == archisim_core::Arrangement::Area)
+            }
             _ => None,
         }
     }
@@ -155,6 +158,7 @@ impl ArchiSimApp {
     fn closed_line_is_outline(&self) -> bool {
         match self.tool {
             Tool::Slab | Tool::Zone | Tool::Plot | Tool::Roof => true,
+            Tool::Planting => true,
             Tool::Mass => self.mass_settings.mode != crate::editor::MassMode::Path,
             _ => false,
         }
@@ -205,6 +209,10 @@ impl ArchiSimApp {
             Tool::Road => {
                 self.road_points = l.points;
                 self.finish_road();
+            }
+            Tool::Planting => {
+                self.planting_points = l.points;
+                self.finish_planting(l.closed);
             }
             Tool::Pipe | Tool::Duct => {
                 self.run_points = l.points;
@@ -360,6 +368,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::Tape => self.concept_click(p),
             Tool::Plot => self.plot_click(p),
             Tool::Road => self.road_click(p),
+            Tool::Planting => self.planting_click(p),
             Tool::Pipe | Tool::Duct => self.run_click(p),
             Tool::Device => self.device_click(p),
             Tool::Terrain => self.terrain_click(p),

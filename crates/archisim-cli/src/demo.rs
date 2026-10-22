@@ -584,18 +584,22 @@ pub fn build() -> Result<Document, ModelError> {
                 .map_or(0.0, |z| (z * 1000.0).round() / 1000.0)
         };
         for (name, x, y, rotation) in [
-            ("Árbol de hoja caduca 6 m", -3.6, 2.4, 0.0),
-            ("Árbol grande 12 m", 15.5, 13.0, 0.0),
-            ("Arbusto 120", -1.4, 5.6, 0.0),
-            ("Arbusto 120", -1.4, 10.2, 0.0),
+            // Plants grown by ArchiSim (v0.37): each one its own.
+            ("Olivo", -3.6, 2.4, 0.0),
+            ("Encina", 15.5, 13.0, 0.0),
+            ("Romero", -1.4, 5.6, 0.0),
+            ("Lavanda", -1.4, 10.2, 0.0),
             ("Persona", -2.2, 7.6, -FRAC_PI_2),
             ("Turismo", 15.0, -6.5, 0.0),
             // Species for the presentation plan: blossom by the pool, a
-            // pine to the east.
-            ("Árbol en flor 5 m", -2.6, 11.0, 0.0),
-            ("Pino 10 m", 17.5, 4.0, 0.0),
+            // palm to the east.
+            ("Almendro en flor", -2.6, 11.0, 0.0),
+            ("Palmera datilera", 17.5, 4.0, 0.0),
         ] {
-            let object_type = ty(m, name)?;
+            let object_type = match ty(m, name) {
+                Ok(t) => t,
+                Err(_) => archisim_library::add_object_entry(m, name)?,
+            };
             let at = Point2::new(x, y);
             let base_offset = ground(m, at);
             m.add_object(archisim_core::NewObject {
@@ -606,6 +610,27 @@ pub fn build() -> Result<Document, ModelError> {
                 base_offset,
             })?;
         }
+        // A row of cypresses along the west boundary (a planting, v0.37).
+        let cypress = archisim_library::add_object_entry(m, "Ciprés")?;
+        m.add_planting(archisim_core::NewPlanting {
+            name: "Cipreses del lindero".into(),
+            level: pb,
+            path: vec![
+                Point2::new(-7.0, -4.0),
+                Point2::new(-7.5, 6.0),
+                Point2::new(-7.0, 15.0),
+            ],
+            closed: false,
+            smooth: true,
+            arrangement: archisim_core::Arrangement::Line,
+            count: 8,
+            species: vec![cypress],
+            size_variation: 0.25,
+            shape_variation: 0.5,
+            spread: 0.1,
+            seed: 5,
+            base_offset: 0.0,
+        })?;
         // A tree brought from SketchUp (a COLLADA file, v0.36), by the
         // gate.
         let dae = archisim_mesh::read(
@@ -1201,8 +1226,14 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        // Sixteen of the library and one brought from SketchUp.
-        assert_eq!(m.objects().count(), 17);
+        // Sixteen of the library, eight cypresses of a planting and one
+        // brought from SketchUp.
+        assert_eq!(m.objects().count(), 25);
+        assert_eq!(m.plantings().count(), 1);
+        assert_eq!(
+            m.objects().filter(|o| m.type_grows(o.object_type)).count(),
+            14
+        );
         assert_eq!(m.meshes().count(), 1);
         let stair = m.stairs().next().unwrap();
         assert!(stair.issues().is_empty(), "{:?}", stair.issues());

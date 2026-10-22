@@ -220,6 +220,28 @@ impl Model {
         Ok(())
     }
 
+    /// Renames an object type (names are unique among object types).
+    pub fn rename_object_type(
+        &mut self,
+        id: ObjectTypeId,
+        name: impl Into<String>,
+    ) -> Result<(), ModelError> {
+        let name = name.into();
+        if self
+            .object_types
+            .values()
+            .any(|t| t.id != id && t.name == name)
+        {
+            return Err(ModelError::DuplicateName(name));
+        }
+        let t = self
+            .object_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownObjectType(id))?;
+        t.name = name;
+        Ok(())
+    }
+
     /// Gives an object type a `GlobalId` of its own choosing (a library
     /// made always the same, as the extended library is).
     pub fn set_object_type_guid(
@@ -342,6 +364,9 @@ impl Model {
     /// The plan symbol of a placed object for a drawing scale, in the
     /// family's axes.
     pub fn object_plan_symbol(&self, id: ObjectId, scale: f64) -> Result<Vec<Mark>, ModelError> {
+        if let Some(marks) = self.plant_symbol(id, false, scale) {
+            return Ok(marks);
+        }
         let o = self.objects.get(&id).ok_or(ModelError::UnknownObject(id))?;
         let t = self
             .object_types
@@ -359,7 +384,11 @@ impl Model {
     pub fn object_presentation_symbol(
         &self,
         id: ObjectId,
+        scale: f64,
     ) -> Option<Result<Vec<Mark>, ModelError>> {
+        if let Some(marks) = self.plant_symbol(id, true, scale) {
+            return Some(Ok(marks));
+        }
         let o = self.objects.get(&id)?;
         let t = self.object_types.get(&o.object_type)?;
         let family = self.object_family(t.family).ok()?;
@@ -516,7 +545,7 @@ mod tests {
                 .into_iter()
                 .collect();
                 m.set_object_values(o, v).unwrap();
-                let marks = m.object_presentation_symbol(o).unwrap().unwrap();
+                let marks = m.object_presentation_symbol(o, 50.0).unwrap().unwrap();
                 assert!(marks.len() >= 2, "{shape} {look}");
                 let tinted = marks
                     .iter()

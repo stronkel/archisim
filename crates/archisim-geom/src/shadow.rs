@@ -29,7 +29,9 @@ pub fn shadows(model: &Model, level: LevelId, sun: [f64; 3]) -> Vec<Shape> {
         [p[0] - sun[0] / sun[2] * h, p[1] - sun[1] / sun[2] * h]
     };
     let mut contours: Vec<Vec<[f64; 2]>> = Vec::new();
-    for s in model_solids(model) {
+    let solids =
+        crate::solid::with_plant_detail(archisim_core::flora::Lod::Low, || model_solids(model));
+    for s in solids {
         for t in &s.triangles {
             if t.iter().all(|p| p[2] <= z0 + MIN_LENGTH) {
                 continue;

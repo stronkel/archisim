@@ -129,6 +129,9 @@ pub(crate) struct ProjectFile {
     /// Roads (version 19).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roads: Vec<Road>,
+    /// Plantings: plants along a line or over an area (version 25).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plantings: Vec<PlantingOf>,
     /// Pipes and ducts (version 20).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<Run>,
@@ -638,6 +641,35 @@ pub(crate) struct Road {
     pub pavement: u64,
     pub kerb_material: u64,
     pub sidewalk_material: u64,
+}
+
+/// A planting (version 25): its line, its rules and the objects it made.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PlantingOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub path: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub closed: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub smooth: bool,
+    /// `line` or `area`.
+    pub arrangement: String,
+    pub count: u32,
+    pub species: Vec<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub size_variation: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub shape_variation: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub spread: f64,
+    pub seed: u64,
+    pub members: Vec<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub base_offset: f64,
 }
 
 /// Paint on a face of a wall (version 21).
@@ -2088,6 +2120,31 @@ impl ProjectFile {
                     reference: x.reference.clone(),
                 })
                 .collect(),
+            plantings: p
+                .plantings
+                .iter()
+                .map(|x| PlantingOf {
+                    id: x.id.0,
+                    guid: x.guid.to_string(),
+                    name: x.name.clone(),
+                    level: x.level.0,
+                    path: x.path.iter().copied().map(xy).collect(),
+                    closed: x.closed,
+                    smooth: x.smooth,
+                    arrangement: match x.arrangement {
+                        core::Arrangement::Line => "line".into(),
+                        core::Arrangement::Area => "area".into(),
+                    },
+                    count: x.count,
+                    species: x.species.iter().map(|t| t.0).collect(),
+                    size_variation: x.size_variation,
+                    shape_variation: x.shape_variation,
+                    spread: x.spread,
+                    seed: x.seed,
+                    members: x.members.iter().map(|m| m.0).collect(),
+                    base_offset: x.base_offset,
+                })
+                .collect(),
             roads: p
                 .roads
                 .iter()
@@ -2486,6 +2543,7 @@ impl ProjectFile {
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
+            plantings: Vec::new(),
             runs: Vec::new(),
             devices: Vec::new(),
             railings: self
@@ -2888,6 +2946,36 @@ impl ProjectFile {
                 width: d.width,
                 depth: d.depth,
                 height: d.height,
+            });
+        }
+        for x in self.plantings {
+            let element = format!("planting {} «{}»", x.id, x.name);
+            parts.plantings.push(core::Planting {
+                id: core::PlantingId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                path: x.path.into_iter().map(pt).collect(),
+                closed: x.closed,
+                smooth: x.smooth,
+                arrangement: match x.arrangement.as_str() {
+                    "line" => core::Arrangement::Line,
+                    "area" => core::Arrangement::Area,
+                    other => {
+                        return Err(FileError::Value {
+                            element,
+                            message: format!("«{other}» is not a way of planting"),
+                        })
+                    }
+                },
+                count: x.count,
+                species: x.species.into_iter().map(core::ObjectTypeId).collect(),
+                size_variation: x.size_variation,
+                shape_variation: x.shape_variation,
+                spread: x.spread,
+                seed: x.seed,
+                members: x.members.into_iter().map(core::ObjectId).collect(),
+                base_offset: x.base_offset,
             });
         }
         for r in self.roads {

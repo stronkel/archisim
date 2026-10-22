@@ -69,6 +69,11 @@ pub struct Scene {
     pub hi: Vec3,
 }
 
+/// A corner as a key, to the tenth of a millimetre.
+fn vertex_key(v: &[f64; 3]) -> [i64; 3] {
+    v.map(|c| (c * 10_000.0).round() as i64)
+}
+
 fn srgb_to_linear(c: u8) -> f32 {
     let c = c as f32 / 255.0;
     if c <= 0.04045 {
@@ -138,6 +143,26 @@ impl Scene {
                 }
                 [rgb[0], rgb[1], rgb[2], alpha]
             };
+            // The leaves, flowers and fruit of a plant grown by ArchiSim:
+            // rounded (normals smoothed over each clump) and without
+            // contour lines between their facets.
+            let soft = match solid.owner {
+                SolidOwner::Object(o) => model
+                    .plant_look(o)
+                    .is_some_and(|l| solid.material != l.materials.bark),
+                _ => false,
+            };
+            let smooth: Option<std::collections::HashMap<[i64; 3], Vec3>> = soft.then(|| {
+                let mut acc: std::collections::HashMap<[i64; 3], Vec3> = Default::default();
+                for tri in &solid.triangles {
+                    let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                    let n = (p[1] - p[0]).cross(p[2] - p[0]);
+                    for v in tri {
+                        *acc.entry(vertex_key(v)).or_default() += n;
+                    }
+                }
+                acc
+            });
             let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
             // A model brought from another program: the colours of its
             // vertices (its textures).
@@ -156,7 +181,9 @@ impl Scene {
                 // Faces looking up give way where another element rests on
                 // them: the floor under a wall, the top of a wall under the
                 // roof slab.
-                let bias = if opening {
+                let bias = if soft {
+                    2.0
+                } else if opening {
                     -1.0
                 } else if n.z > 0.5 {
                     1.0
@@ -172,10 +199,17 @@ impl Scene {
                 } else {
                     &mut s.opaque
                 };
-                for (v, color) in p.into_iter().zip(colors) {
+                for (k, (v, color)) in p.into_iter().zip(colors).enumerate() {
+                    let normal = smooth
+                        .as_ref()
+                        .and_then(|m| m.get(&vertex_key(&tri[k])))
+                        .map(|s| s.normalize_or_zero())
+                        // Both faces of a leaf cancel out: its own.
+                        .filter(|s| s.length_squared() > 0.5 && s.dot(n) > 0.0)
+                        .unwrap_or(n);
                     target.push(Vertex {
                         pos: v.to_array(),
-                        normal: n.to_array(),
+                        normal: normal.to_array(),
                         color,
                         bias,
                     });
