@@ -112,6 +112,7 @@ pub(super) enum Action {
     DuplicateMaterial(MaterialId),
     RemoveMaterial(MaterialId),
     EditMaterial(MaterialId, String, String, [u8; 3], CutPattern),
+    Appearance(MaterialId, archisim_core::Appearance),
     MaterialPriority(MaterialId, Option<u16>),
     DuplicateWall(WallTypeId),
     RemoveWall(WallTypeId),
@@ -1227,6 +1228,70 @@ impl ArchiSimApp {
         if bad_rgb {
             self.complain("El color se escribe como tres números de 0 a 255: rojo, verde, azul.");
         }
+        // How it looks in 3D (a visualisation material).
+        let a = self.ed.model().appearance(id);
+        props::group(ui, "types-material-look", "Aspecto en 3D", |ui| {
+            props::row(
+                ui,
+                "Color de la superficie",
+                "El color con que se ve en 3D (sin marcar: el de corte)",
+                |ui, _| {
+                    let mut own = a.color.is_some();
+                    let mut rgb = a.color.unwrap_or(mat.cut_color);
+                    let changed_own = ui.checkbox(&mut own, "").changed();
+                    let picked = own && ui.color_edit_button_srgb(&mut rgb).changed();
+                    if changed_own || picked {
+                        let mut b = a;
+                        b.color = own.then_some(rgb);
+                        actions.push(Action::Appearance(id, b));
+                    }
+                },
+            );
+            props::row(
+                ui,
+                "Textura",
+                "Dibujada en sus caras en la vista 3D",
+                |ui, w| {
+                    let mut t = a.texture;
+                    ComboBox::from_id_salt(("mat-tex", id.0))
+                        .width(w - 8.0)
+                        .selected_text(t.map_or("Ninguna", |k| k.label()))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut t, None, "Ninguna");
+                            for k in archisim_core::TextureKind::ALL {
+                                ui.selectable_value(&mut t, Some(k), k.label());
+                            }
+                        });
+                    if t != a.texture {
+                        let mut b = a;
+                        b.texture = t;
+                        b.scale = None;
+                        actions.push(Action::Appearance(id, b));
+                    }
+                },
+            );
+            if a.texture.is_some() {
+                props::row(
+                    ui,
+                    "Tamaño de la pieza (mm)",
+                    "El largo del ladrillo, el lado de la baldosa, el ancho de la tabla…",
+                    |ui, w| {
+                        if let Some(v) = length_field(
+                            ui,
+                            Id::unique(("mat-tex-size", id.0)),
+                            a.texture_scale(),
+                            w - 8.0,
+                        ) {
+                            if v > 0.0 {
+                                let mut b = a;
+                                b.scale = Some(v);
+                                actions.push(Action::Appearance(id, b));
+                            }
+                        }
+                    },
+                );
+            }
+        });
         props::group(ui, "types-material-use", "Se usa en", |ui| {
             if users.is_empty() {
                 props::note(ui, "Ningún tipo lo usa: se puede borrar.");
@@ -1589,6 +1654,10 @@ impl ArchiSimApp {
                 self.report(r, "Material modificado.");
             }
             Action::ShowPriorities => self.show_priorities = true,
+            Action::Appearance(id, a) => {
+                let r = self.ed.set_appearance(id, a);
+                self.report(r, "Aspecto en 3D cambiado.");
+            }
             Action::MaterialPriority(id, p) => {
                 let r = self.ed.set_material_priority(id, p);
                 self.report(

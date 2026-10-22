@@ -497,6 +497,27 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
     for style in presentation_styles() {
         m.add_presentation_style(style)?;
     }
+    // Finishes to paint volumes and faces with (v0.39), seen with their
+    // texture in 3D, like the other materials seen on faces.
+    for (name, category, color, pattern) in [
+        (
+            "Ladrillo visto",
+            "brick",
+            [176, 98, 72],
+            CutPattern::Diagonal,
+        ),
+        ("Piedra", "stone", [196, 186, 166], CutPattern::Diagonal),
+        (
+            "Tarima de madera",
+            "wood",
+            [168, 122, 80],
+            CutPattern::Solid,
+        ),
+        ("Césped", "vegetation", [110, 156, 78], CutPattern::Solid),
+    ] {
+        m.add_material(name, category, color, pattern);
+    }
+    add_appearances(m);
     Ok(Library {
         curtain,
         void,
@@ -910,6 +931,42 @@ const SPECIES: &[(&str, &str, &str, &str)] = &[
     ("Olivo 5 m", "Copa olivo", "follaje", "transparente"),
     ("Ciprés 8 m", "Copa oscura", "círculo", "rellena"),
 ];
+
+/// How the starter materials look in 3D: the texture of what they are
+/// (bricks, tiles, concrete, boards…), for the ones seen on faces.
+pub fn add_appearances(m: &mut Model) {
+    use archisim_core::{Appearance, TextureKind};
+    let looks: Vec<(MaterialId, TextureKind)> = m
+        .materials()
+        .filter(|x| m.appearance(x.id).is_plain())
+        .filter_map(|x| {
+            let t = match (x.name.as_str(), x.category.as_str()) {
+                ("Ladrillo visto", _) => TextureKind::Brick,
+                ("Tarima de madera", _) => TextureKind::Planks,
+                ("Césped", _) => TextureKind::Grass,
+                ("Mortero monocapa" | "Enlucido de yeso", _) => TextureKind::Plaster,
+                (_, "ceramic") if x.name.contains("Baldosa") => TextureKind::Tile,
+                (_, "concrete") => TextureKind::Concrete,
+                (_, "stone") => TextureKind::Stone,
+                (_, "gravel") => TextureKind::Gravel,
+                (_, "water") => TextureKind::Water,
+                (_, "wood") => TextureKind::Wood,
+                _ => return None,
+            };
+            Some((x.id, t))
+        })
+        .collect();
+    for (id, t) in looks {
+        let _ = m.set_appearance(
+            id,
+            Appearance {
+                color: None,
+                texture: Some(t),
+                scale: (t == TextureKind::Tile).then_some(0.33),
+            },
+        );
+    }
+}
 
 /// The materials the library's objects ask for by name, added if the
 /// project has none of that name.

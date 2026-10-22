@@ -3,8 +3,8 @@
 //! building. Each change one undoable step.
 
 use archisim_core::{
-    DrawLayer, DrawLayerId, LineStyle, MassId, MassShape, MaterialId, Model, NewDraft, NewMass,
-    Point2, Shape, SlabFunction, SlabTypeId, ViewRef, WallFunction, WallTypeId,
+    DrawLayer, DrawLayerId, EdgeFinish, LineStyle, MassId, MassShape, MaterialId, Model, NewDraft,
+    NewMass, Point2, Primitive, Shape, SlabFunction, SlabTypeId, ViewRef, WallFunction, WallTypeId,
 };
 
 use super::{EditResult, Editor};
@@ -17,6 +17,22 @@ pub enum MassMode {
     Circle,
     /// A band along a path ("Seguir").
     Path,
+    /// Round forms: centre and radius (Formas).
+    Sphere,
+    Cylinder,
+    Cone,
+    /// A half-section drawn laid flat, turned round its axis.
+    Revolution,
+}
+
+impl MassMode {
+    /// Whether it makes a round form (the Formas tile).
+    pub fn is_form(self) -> bool {
+        matches!(
+            self,
+            MassMode::Sphere | MassMode::Cylinder | MassMode::Cone | MassMode::Revolution
+        )
+    }
 }
 
 /// What the contour makes.
@@ -43,6 +59,8 @@ pub struct MassSettings {
     pub width: f64,
     pub base_offset: f64,
     pub material: MaterialId,
+    /// Radius of a cone's top (0: a point).
+    pub top_radius: f64,
 }
 
 impl MassSettings {
@@ -62,6 +80,7 @@ impl MassSettings {
             width: 0.3,
             base_offset: 0.0,
             material,
+            top_radius: 0.0,
         }
     }
 
@@ -259,6 +278,121 @@ impl Editor {
         })
     }
 
+    /// A sphere, cylinder or cone with its centre and radius (a sphere is
+    /// as high as it is wide).
+    pub fn add_mass_form(
+        &mut self,
+        s: &MassSettings,
+        centre: Point2,
+        radius: f64,
+    ) -> EditResult<MassId> {
+        let mut s = *s;
+        s.what = MassWhat::Volume;
+        let primitive = match s.mode {
+            MassMode::Sphere => {
+                s.height = 2.0 * radius;
+                Primitive::Sphere {
+                    center: centre,
+                    radius,
+                }
+            }
+            MassMode::Cone => Primitive::Cone {
+                center: centre,
+                radius,
+                top_radius: s.top_radius.min(radius * 4.0),
+            },
+            _ => Primitive::Cylinder {
+                center: centre,
+                radius,
+            },
+        };
+        let level = self.level;
+        let label = format!("Crear {}", primitive.label());
+        self.transact(&label, |m| {
+            add_mass_shape_in(m, &s, level, MassShape::Primitive(primitive))
+        })
+    }
+
+    /// A solid of revolution: its axis in plan and its half-section drawn
+    /// laid flat beside it (to the side: the distance from the axis; up
+    /// the plan: the height).
+    pub fn add_mass_revolution(
+        &mut self,
+        s: &MassSettings,
+        axis: Point2,
+        points: &[Point2],
+    ) -> EditResult<MassId> {
+        let profile: Vec<Point2> = points
+            .iter()
+            .map(|p| Point2::new((p.x - axis.x).abs(), (p.y - axis.y).max(0.0)))
+            .collect();
+        let top = profile.iter().map(|p| p.y).fold(0.0, f64::max);
+        if top <= 1e-6 {
+            return Err(
+                "el perfil necesita altura: dibújalo hacia arriba en la planta desde el eje".into(),
+            );
+        }
+        let mut s = *s;
+        s.what = MassWhat::Volume;
+        s.height = top;
+        let level = self.level;
+        self.transact("Crear revolución", |m| {
+            add_mass_shape_in(
+                m,
+                &s,
+                level,
+                MassShape::Primitive(Primitive::Revolution {
+                    center: axis,
+                    profile,
+                }),
+            )
+        })
+    }
+
+    /// Chamfers or rounds the edges of a volume (`None`: sharp).
+    pub fn set_mass_finish(&mut self, id: MassId, finish: Option<EdgeFinish>) -> EditResult {
+        self.transact("Aristas", |m| m.edit_mass(id, |x| x.finish = finish))
+    }
+
+    /// Joins volumes to `target`, cuts them from it, or keeps what they
+    /// have in common (see [`archisim_geom::forms::combine_masses`]).
+    pub fn combine_masses(
+        &mut self,
+        target: MassId,
+        others: &[MassId],
+        op: archisim_geom::csg::Op,
+    ) -> EditResult {
+        if others.is_empty() {
+            return Err("elige otro volumen".into());
+        }
+        let label = match op {
+            archisim_geom::csg::Op::Union => "Unir volúmenes",
+            archisim_geom::csg::Op::Subtract => "Restar volúmenes",
+            archisim_geom::csg::Op::Intersect => "Intersecar volúmenes",
+        };
+        let mut why = None;
+        let r = self.transact(label, |m| {
+            archisim_geom::forms::combine_masses(m, target, others, op).map_err(|e| {
+                why = Some(e.to_string());
+                archisim_core::ModelError::InvalidShape("operation")
+            })
+        });
+        r.map_err(|e| why.unwrap_or(e))
+    }
+
+    /// Loose edges where the faces of the volumes cross each other
+    /// (SketchUp's «intersecar caras»). Returns how many.
+    pub fn cross_masses(&mut self, ids: &[MassId]) -> EditResult<usize> {
+        let mut why = None;
+        let r = self.transact("Intersecar caras", |m| {
+            archisim_geom::forms::cross_masses(m, ids).map_err(|e| {
+                why = Some(e.to_string());
+                archisim_core::ModelError::InvalidShape("operation")
+            })
+        });
+        r.map_err(|e| why.unwrap_or(e))
+    }
+
     pub fn set_plot_area(&mut self, area: Option<f64>) -> EditResult {
         self.transact("Superficie de la parcela", |m| m.set_plot_area(area))
     }
@@ -325,5 +459,92 @@ mod tests {
             .draw_layers()
             .into_iter()
             .any(|l| l.name == "Guías" && !l.printable));
+    }
+
+    #[test]
+    fn round_forms_joined_and_cut() {
+        use archisim_geom::csg::Op;
+        use archisim_geom::forms::{mass_body, mesh_volume};
+        let mut ed = Editor::new_project();
+        let mut s = MassSettings::new(ed.model());
+        s.what = MassWhat::Volume;
+        s.height = 4.0;
+        let square = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(6.0, 0.0),
+            Point2::new(6.0, 6.0),
+            Point2::new(0.0, 6.0),
+        ];
+        let block = ed.add_mass_outline(&s, square).unwrap();
+        s.mode = MassMode::Cylinder;
+        let cyl = ed.add_mass_form(&s, Point2::new(6.0, 3.0), 2.0).unwrap();
+        s.mode = MassMode::Sphere;
+        let ball = ed.add_mass_form(&s, Point2::new(0.0, 0.0), 1.5).unwrap();
+        assert!((ed.model().mass(ball).unwrap().height - 3.0).abs() < 1e-9);
+        let rev = ed
+            .add_mass_revolution(
+                &s,
+                Point2::new(20.0, 0.0),
+                &[
+                    Point2::new(21.0, 0.0),
+                    Point2::new(22.0, 1.0),
+                    Point2::new(20.5, 3.0),
+                ],
+            )
+            .unwrap();
+        assert!((ed.model().mass(rev).unwrap().height - 3.0).abs() < 1e-9);
+        // Rounded top edges.
+        ed.set_mass_finish(
+            block,
+            Some(EdgeFinish {
+                kind: archisim_core::EdgeKind::Round,
+                size: 0.4,
+                vertical: true,
+                top: true,
+                bottom: false,
+            }),
+        )
+        .unwrap();
+        let v0 = mesh_volume(&mass_body(ed.model().mass(block).unwrap()));
+        assert!(v0 < 144.0 && v0 > 130.0, "{v0}");
+        // The cylinder, painted, cut out of the block: its curved face stays
+        // with its paint.
+        let red = ed.model().materials().last().unwrap().id;
+        ed.transact("Pintar", |m| {
+            m.set_face_paint(cyl.0, archisim_core::FaceRef::Side(0), Some(red))
+        })
+        .unwrap();
+        ed.combine_masses(block, &[cyl], Op::Subtract).unwrap();
+        assert!(ed.model().mass(cyl).is_none());
+        let m = ed.model().mass(block).unwrap();
+        assert!(matches!(m.shape, MassShape::Mesh(_)));
+        let v1 = mesh_volume(&mass_body(m));
+        assert!(v1 < v0 - 10.0, "{v0} {v1}");
+        let solids = archisim_geom::solid::mass_solids(ed.model(), block);
+        assert!(solids.iter().any(|s| s.material == red));
+        // The ball joined to it.
+        ed.combine_masses(block, &[ball], Op::Union).unwrap();
+        let v2 = mesh_volume(&mass_body(ed.model().mass(block).unwrap()));
+        assert!(v2 > v1, "{v1} {v2}");
+        // Edges where two volumes cross.
+        s.mode = MassMode::Polygon;
+        let other = ed
+            .add_mass_outline(
+                &s,
+                vec![
+                    Point2::new(3.0, 3.0),
+                    Point2::new(9.0, 3.0),
+                    Point2::new(9.0, 9.0),
+                    Point2::new(3.0, 9.0),
+                ],
+            )
+            .unwrap();
+        let n = ed.cross_masses(&[block, other]).unwrap();
+        assert!(n >= 1);
+        assert!(ed.model().edges().next().is_some());
+        // Saved and opened again, all the same.
+        let text = archisim_file::to_string(ed.model());
+        let back = archisim_file::from_str(&text).unwrap();
+        assert_eq!(archisim_file::to_string(&back), text);
     }
 }

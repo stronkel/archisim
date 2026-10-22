@@ -246,6 +246,13 @@ const CONCEPT: &[Tile] = &[
         "Volumen por plantas con superficie construida, edificabilidad y ocupación en directo",
     ),
     tile(
+        Pick::Concept(super::concept_ui::ConceptPick::Form),
+        Glyph::Sphere,
+        "Formas",
+        "",
+        "Esfera, cilindro, cono y revolución de un perfil (en la barra superior). Para unir, restar o intersecar volúmenes, selecciona varios",
+    ),
+    tile(
         Pick::Concept(super::concept_ui::ConceptPick::Tape),
         Glyph::Tape,
         "Cinta",

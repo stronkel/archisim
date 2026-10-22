@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (2) · Formas de Concepto y materiales de visualización (M1–M3)
+
+Rama `bloque/modelado` (sobre `bloque/equipo`), pull request para Antonio. Formato `.archisim` versión 26 (abre las anteriores tal cual). v0.39. Diseño en `docs/FORMAS.md`.
+
+**Hecho**
+- **Formas** (Concepto → Formas): esfera, cilindro, cono o tronco de cono, y **revolución** de un medio perfil dibujado abatido sobre la planta. Radios y altura en Propiedades.
+- **Aristas achaflanadas o redondeadas** (Propiedades → Aristas) en esquinas, coronación y base de los volúmenes por contorno, y arriba y abajo en las formas redondas. No destructivas: siguen al volumen.
+- **Unir, restar e intersecar** volúmenes (varios seleccionados → Operaciones con volúmenes), con cada cara conservando su material: el corte de un cilindro de hormigón en un bloque de ladrillo queda de hormigón. **Intersecar caras** dibuja aristas sueltas donde se cruzan.
+- **Materiales de visualización**: cada material tiene un aspecto en 3D (color de superficie y textura: ladrillo, piedra, baldosa, madera, tablas, hormigón visto, enfoscado, césped, grava, agua, chapa) con el tamaño de su pieza. La vista 3D los dibuja en cada cara sin imágenes. Se pinta cara a cara con Pintar, también las caras de esferas, revoluciones y sólidos.
+- La plantilla da su aspecto a los materiales que se ven y trae cuatro acabados nuevos: Ladrillo visto, Piedra, Tarima de madera y Césped.
+- Los volúmenes se dibujan en planta por su huella real (con huecos). `archisim formas out/` junta todas las formas, operaciones y materiales en `formas.archisim`, con planta y axonometría.
+
+**Pendiente**
+- Texturas en las axonometrías de los planos, en los PDF y en el IFC.
+- Editar un sólido ya operado (hoy, deshacer y repetir) y redondear sus aristas.
+- Pintar zonas de una cara de volumen limitadas por aristas.
+
+**Qué debe probar Antonio**
+1. `archisim formas out/` y abrir `out/formas.archisim`. En 3D, mira el ladrillo del bloque, también en el redondeo de las esquinas; el corte del patio cilíndrico en gris hormigón; la esfera de piedra sobre la peana achaflanada; y el jarrón con la barriga de madera.
+2. En un proyecto nuevo: Concepto → Formas → Cilindro, dos clics; en Propiedades → Aristas, «Redondeo», 300 mm, Arriba. Haz un bloque con Volumen que lo atraviese, selecciona los dos con Mayús y prueba Unir, Restar e Intersecar (y Deshacer entre medias).
+3. Revolución: clic en un punto (el eje) y dibuja hacia la derecha y hacia arriba el medio perfil de una columna con basa y capitel; clic otra vez en el último punto.
+4. Tipos y materiales → un material → Aspecto en 3D: cambia la textura y el tamaño de la pieza y míralo en 3D. Pinta una sola cara de un volumen con Pintar.
+
+---
+
 ## 2026-10-22 · Trabajo en equipo (4.6)
 
 Rama `bloque/equipo`, pull request para Antonio. v0.38. Sin cambios en el formato `.archisim` ni en el IFC. Diseño en `docs/EQUIPO.md`.

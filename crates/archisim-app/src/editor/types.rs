@@ -107,6 +107,15 @@ impl Editor {
         })
     }
 
+    /// How a material looks in 3D: surface colour and texture.
+    pub fn set_appearance(
+        &mut self,
+        id: MaterialId,
+        appearance: archisim_core::Appearance,
+    ) -> EditResult {
+        self.transact("Aspecto del material", |m| m.set_appearance(id, appearance))
+    }
+
     /// Sets a material's intersection priority (0–999), or back to that of
     /// each layer's function.
     pub fn set_material_priority(&mut self, id: MaterialId, priority: Option<u16>) -> EditResult {

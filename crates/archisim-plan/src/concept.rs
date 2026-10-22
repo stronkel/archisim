@@ -75,13 +75,21 @@ pub fn draw_masses(
     }
     s.push_str("<g id=\"masses\">\n");
     for m in model.masses_on_level(level) {
-        let o = m.outline();
-        if o.len() < 3 || !visible(&o) {
+        let shapes = archisim_geom::forms::footprint(m);
+        let Some(o) = shapes.first().map(|s| s.0.clone()) else {
+            continue;
+        };
+        if !visible(&o) {
             continue;
         }
-        let [r, g, b] = model
-            .material(m.material)
-            .map_or([200, 200, 200], |x| x.cut_color);
+        // Every outline and hole of what the solid covers.
+        let d: String = shapes
+            .iter()
+            .flat_map(|(outer, holes)| std::iter::once(outer).chain(holes))
+            .map(|c| crate::path(c))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let [r, g, b] = model.surface_color(m.material);
         // A light tint: halfway to white.
         let tint = |c: u8| (c as u16 + 255) / 2;
         let label = mass_label(model, m);
@@ -92,7 +100,7 @@ pub fn draw_masses(
                 let _ = writeln!(
                     s,
                     r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
-                    crate::path(&o),
+                    d,
                     num(pens().thin * k),
                     num(2.0 * k),
                     num(1.0 * k)
@@ -101,8 +109,8 @@ pub fn draw_masses(
             }
             let _ = writeln!(
                 s,
-                r#"<path d="{}" fill="rgb({},{},{})" fill-opacity="0.6" stroke="{INK}" stroke-width="{}"/>"#,
-                crate::path(&o),
+                r#"<path d="{}" fill="rgb({},{},{})" fill-opacity="0.6" fill-rule="evenodd" stroke="{INK}" stroke-width="{}"/>"#,
+                d,
                 tint(r),
                 tint(g),
                 tint(b),

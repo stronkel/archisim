@@ -39,8 +39,11 @@ pub enum FaceRef {
     Wall(FaceSide),
     Top,
     Bottom,
-    /// The side of a volume on the edge from corner `i` to `i + 1`.
+    /// The side of a volume on the edge from corner `i` to `i + 1` (of a
+    /// round form, its curved surface, or a piece of its profile).
     Side(usize),
+    /// A face of a solid made by joining or cutting volumes, by number.
+    Part(u32),
 }
 
 impl FaceRef {
@@ -51,6 +54,7 @@ impl FaceRef {
             FaceRef::Top => "top".into(),
             FaceRef::Bottom => "bottom".into(),
             FaceRef::Side(i) => format!("side {i}"),
+            FaceRef::Part(n) => format!("part {n}"),
         }
     }
 
@@ -58,9 +62,10 @@ impl FaceRef {
         match c {
             "top" => Some(FaceRef::Top),
             "bottom" => Some(FaceRef::Bottom),
-            _ => match c.strip_prefix("side ") {
-                Some(i) => i.trim().parse().ok().map(FaceRef::Side),
-                None => FaceSide::from_code(c).map(FaceRef::Wall),
+            _ => match (c.strip_prefix("side "), c.strip_prefix("part ")) {
+                (Some(i), _) => i.trim().parse().ok().map(FaceRef::Side),
+                (_, Some(n)) => n.trim().parse().ok().map(FaceRef::Part),
+                _ => FaceSide::from_code(c).map(FaceRef::Wall),
             },
         }
     }
@@ -84,15 +89,19 @@ impl Model {
                     return Err(ModelError::UnknownWall(WallId(element)));
                 }
             }
-            FaceRef::Top | FaceRef::Bottom | FaceRef::Side(_) => {
+            FaceRef::Top | FaceRef::Bottom | FaceRef::Side(_) | FaceRef::Part(_) => {
                 let m = self
                     .masses
                     .get(&MassId(element))
                     .ok_or(ModelError::UnknownElement(element))?;
-                if let FaceRef::Side(i) = face {
-                    if i >= m.outline().len() {
-                        return Err(ModelError::InvalidShape("no such side of the volume"));
-                    }
+                let ok = match (face, &m.shape) {
+                    (FaceRef::Part(n), MassShape::Mesh(mesh)) => mesh.faces.contains(&n),
+                    (FaceRef::Part(_), _) | (_, MassShape::Mesh(_)) => false,
+                    (FaceRef::Side(i), _) => i < m.side_count(),
+                    _ => true,
+                };
+                if !ok {
+                    return Err(ModelError::InvalidShape("no such face of the volume"));
                 }
             }
         }

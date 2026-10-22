@@ -117,6 +117,9 @@ pub(crate) struct ProjectFile {
     /// Painted zones of walls' faces (version 21).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paint_zones: Vec<PaintZoneOf>,
+    /// How materials look in 3D: colour and texture (version 26).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appearances: Vec<AppearanceOf>,
     /// Presentation styles of the views (version 22).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation_styles: Vec<PresentationStyleOf>,
@@ -694,6 +697,34 @@ pub(crate) struct PaintZoneOf {
     pub material: u64,
 }
 
+/// How a material looks in 3D (version 26).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AppearanceOf {
+    pub material: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texture: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<f64>,
+}
+
+/// Chamfered or rounded edges of a volume (version 26).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EdgeFinishOf {
+    /// `chamfer` or `round`.
+    pub kind: String,
+    pub size: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub vertical: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub top: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub bottom: bool,
+}
+
 /// A presentation style (version 22).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -775,13 +806,172 @@ pub(crate) struct Mass {
     pub material: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub building: Option<MassBuildingOf>,
+    /// Chamfered or rounded edges (version 26).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish: Option<EdgeFinishOf>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, tag = "kind", rename_all = "snake_case")]
 pub(crate) enum MassShapeOf {
-    Prism { outline: Vec<Xy> },
-    Sweep { path: Vec<Xy>, width: f64 },
+    Prism {
+        outline: Vec<Xy>,
+    },
+    Sweep {
+        path: Vec<Xy>,
+        width: f64,
+    },
+    /// Round forms (version 26).
+    Sphere {
+        center: Xy,
+        radius: f64,
+    },
+    Cylinder {
+        center: Xy,
+        radius: f64,
+    },
+    Cone {
+        center: Xy,
+        radius: f64,
+        top_radius: f64,
+    },
+    /// A half-section: (distance from the axis, height) of each point.
+    Revolution {
+        center: Xy,
+        profile: Vec<Xy>,
+    },
+    /// A closed solid (version 26): points `[x, y, z]` (`z` over the
+    /// base), triangles by point, and the face of each triangle.
+    Mesh {
+        points: Vec<[f64; 3]>,
+        triangles: Vec<[u32; 3]>,
+        faces: Vec<u32>,
+    },
+}
+
+impl MassShapeOf {
+    pub(crate) fn out(shape: &core::MassShape) -> Self {
+        use core::{MassShape, Primitive};
+        match shape {
+            MassShape::Prism(o) => MassShapeOf::Prism {
+                outline: o.iter().copied().map(xy).collect(),
+            },
+            MassShape::Sweep { path, width } => MassShapeOf::Sweep {
+                path: path.iter().copied().map(xy).collect(),
+                width: *width,
+            },
+            MassShape::Primitive(Primitive::Sphere { center, radius }) => MassShapeOf::Sphere {
+                center: xy(*center),
+                radius: *radius,
+            },
+            MassShape::Primitive(Primitive::Cylinder { center, radius }) => MassShapeOf::Cylinder {
+                center: xy(*center),
+                radius: *radius,
+            },
+            MassShape::Primitive(Primitive::Cone {
+                center,
+                radius,
+                top_radius,
+            }) => MassShapeOf::Cone {
+                center: xy(*center),
+                radius: *radius,
+                top_radius: *top_radius,
+            },
+            MassShape::Primitive(Primitive::Revolution { center, profile }) => {
+                MassShapeOf::Revolution {
+                    center: xy(*center),
+                    profile: profile.iter().copied().map(xy).collect(),
+                }
+            }
+            MassShape::Mesh(m) => MassShapeOf::Mesh {
+                points: m.positions.clone(),
+                triangles: m.triangles.clone(),
+                faces: m.faces.clone(),
+            },
+        }
+    }
+
+    pub(crate) fn into_core(self) -> core::MassShape {
+        use core::{MassShape, Primitive};
+        let pt = |p: Xy| Point2::new(p[0], p[1]);
+        match self {
+            MassShapeOf::Prism { outline } => {
+                MassShape::Prism(outline.into_iter().map(pt).collect())
+            }
+            MassShapeOf::Sweep { path, width } => MassShape::Sweep {
+                path: path.into_iter().map(pt).collect(),
+                width,
+            },
+            MassShapeOf::Sphere { center, radius } => MassShape::Primitive(Primitive::Sphere {
+                center: pt(center),
+                radius,
+            }),
+            MassShapeOf::Cylinder { center, radius } => MassShape::Primitive(Primitive::Cylinder {
+                center: pt(center),
+                radius,
+            }),
+            MassShapeOf::Cone {
+                center,
+                radius,
+                top_radius,
+            } => MassShape::Primitive(Primitive::Cone {
+                center: pt(center),
+                radius,
+                top_radius,
+            }),
+            MassShapeOf::Revolution { center, profile } => {
+                MassShape::Primitive(Primitive::Revolution {
+                    center: pt(center),
+                    profile: profile.into_iter().map(pt).collect(),
+                })
+            }
+            MassShapeOf::Mesh {
+                points,
+                triangles,
+                faces,
+            } => MassShape::Mesh(core::MassMesh {
+                positions: points,
+                triangles,
+                faces,
+            }),
+        }
+    }
+}
+
+impl EdgeFinishOf {
+    pub(crate) fn out(f: &core::EdgeFinish) -> Self {
+        Self {
+            kind: match f.kind {
+                core::EdgeKind::Chamfer => "chamfer",
+                core::EdgeKind::Round => "round",
+            }
+            .into(),
+            size: f.size,
+            vertical: f.vertical,
+            top: f.top,
+            bottom: f.bottom,
+        }
+    }
+
+    pub(crate) fn into_core(self, element: &str) -> Result<core::EdgeFinish, FileError> {
+        let kind = match self.kind.as_str() {
+            "chamfer" => core::EdgeKind::Chamfer,
+            "round" => core::EdgeKind::Round,
+            k => {
+                return Err(FileError::Value {
+                    element: element.into(),
+                    message: format!("unknown edge finish «{k}»"),
+                })
+            }
+        };
+        Ok(core::EdgeFinish {
+            kind,
+            size: self.size,
+            vertical: self.vertical,
+            top: self.top,
+            bottom: self.bottom,
+        })
+    }
 }
 
 /// The building a mass was turned into (version 18).
@@ -2040,6 +2230,16 @@ impl ProjectFile {
                     material: m.0,
                 })
                 .collect(),
+            appearances: p
+                .appearances
+                .iter()
+                .map(|(m, a)| AppearanceOf {
+                    material: m.0,
+                    color: a.color.map(crate::drafting::hex),
+                    texture: a.texture.map(|t| t.code().to_string()),
+                    scale: a.scale,
+                })
+                .collect(),
             presentation_styles: p
                 .presentation_styles
                 .iter()
@@ -2079,15 +2279,8 @@ impl ProjectFile {
                     guid: m.guid.to_string(),
                     name: m.name.clone(),
                     level: m.level.0,
-                    shape: match &m.shape {
-                        core::MassShape::Prism(o) => MassShapeOf::Prism {
-                            outline: o.iter().copied().map(xy).collect(),
-                        },
-                        core::MassShape::Sweep { path, width } => MassShapeOf::Sweep {
-                            path: path.iter().copied().map(xy).collect(),
-                            width: *width,
-                        },
-                    },
+                    shape: MassShapeOf::out(&m.shape),
+                    finish: m.finish.as_ref().map(EdgeFinishOf::out),
                     base_offset: m.base_offset,
                     height: m.height,
                     floor_height: m.floor_height,
@@ -2539,6 +2732,7 @@ impl ProjectFile {
             edges: Vec::new(),
             face_paints: Vec::new(),
             paint_zones: Vec::new(),
+            appearances: Vec::new(),
             presentation_styles: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
@@ -2837,6 +3031,32 @@ impl ProjectFile {
         for st in self.presentation_styles {
             parts.presentation_styles.push(st.into_core()?);
         }
+        for a in self.appearances {
+            let element = format!("appearance of material {}", a.material);
+            let texture = match a.texture {
+                Some(t) => {
+                    Some(
+                        core::TextureKind::from_code(&t).ok_or_else(|| FileError::Value {
+                            element: element.clone(),
+                            message: format!("unknown texture «{t}»"),
+                        })?,
+                    )
+                }
+                None => None,
+            };
+            let color = a
+                .color
+                .map(|c| crate::drafting::parse_hex(&element, &c))
+                .transpose()?;
+            parts.appearances.push((
+                core::MaterialId(a.material),
+                core::Appearance {
+                    color,
+                    texture,
+                    scale: a.scale,
+                },
+            ));
+        }
         for z in self.paint_zones {
             let side = core::FaceSide::from_code(&z.side).ok_or_else(|| FileError::Value {
                 element: format!("painted zone of wall {}", z.wall),
@@ -2871,15 +3091,8 @@ impl ProjectFile {
                 guid: guid(&element, &m.guid)?,
                 name: m.name,
                 level: core::LevelId(m.level),
-                shape: match m.shape {
-                    MassShapeOf::Prism { outline } => {
-                        core::MassShape::Prism(outline.into_iter().map(pt).collect())
-                    }
-                    MassShapeOf::Sweep { path, width } => core::MassShape::Sweep {
-                        path: path.into_iter().map(pt).collect(),
-                        width,
-                    },
-                },
+                shape: m.shape.into_core(),
+                finish: m.finish.map(|f| f.into_core(&element)).transpose()?,
                 base_offset: m.base_offset,
                 height: m.height,
                 floor_height: m.floor_height,

@@ -29,6 +29,8 @@ pub enum ConceptPick {
     Mass,
     Tape,
     Paint,
+    /// Formas: sphere, cylinder, cone and solids of revolution.
+    Form,
 }
 
 /// What the concept tools are doing.
@@ -107,15 +109,22 @@ impl ArchiSimApp {
             }
             ConceptPick::Volume => {
                 s.what = MassWhat::Volume;
-                if s.mode == MassMode::Path {
+                if s.mode == MassMode::Path || s.mode.is_form() {
                     s.mode = MassMode::Polygon;
                 }
                 Tool::Mass
             }
             ConceptPick::Mass => {
                 s.what = MassWhat::Mass;
-                if s.mode == MassMode::Path {
+                if s.mode == MassMode::Path || s.mode.is_form() {
                     s.mode = MassMode::Polygon;
+                }
+                Tool::Mass
+            }
+            ConceptPick::Form => {
+                s.what = MassWhat::Volume;
+                if !s.mode.is_form() {
+                    s.mode = MassMode::Cylinder;
                 }
                 Tool::Mass
             }
@@ -145,9 +154,13 @@ impl ArchiSimApp {
             }
             ConceptPick::Follow => self.tool == Tool::Mass && s.mode == MassMode::Path,
             ConceptPick::Volume => {
-                self.tool == Tool::Mass && s.what == MassWhat::Volume && s.mode != MassMode::Path
+                self.tool == Tool::Mass
+                    && s.what == MassWhat::Volume
+                    && s.mode != MassMode::Path
+                    && !s.mode.is_form()
             }
             ConceptPick::Mass => self.tool == Tool::Mass && s.what == MassWhat::Mass,
+            ConceptPick::Form => self.tool == Tool::Mass && s.mode.is_form(),
             ConceptPick::Push => self.tool == Tool::PushPull,
             ConceptPick::Offset => self.tool == Tool::MassOffset,
             ConceptPick::Tape => self.tool == Tool::Tape,
@@ -207,7 +220,10 @@ impl ArchiSimApp {
         }
         match self.tool {
             Tool::Mass => match self.mass_settings.mode {
-                MassMode::Circle => self.concept.centre,
+                MassMode::Circle | MassMode::Sphere | MassMode::Cylinder | MassMode::Cone => {
+                    self.concept.centre
+                }
+                MassMode::Revolution => self.concept.path.last().copied().or(self.concept.centre),
                 MassMode::Path => self.concept.path.last().copied(),
                 _ => self.mass_tool.anchor(),
             },
@@ -223,7 +239,16 @@ impl ArchiSimApp {
         }
         match (self.tool, self.mass_settings.mode) {
             (Tool::Mass, MassMode::Path) => self.concept.path.clone(),
-            (Tool::Mass, MassMode::Circle) => self.concept.centre.into_iter().collect(),
+            (Tool::Mass, MassMode::Revolution) => self
+                .concept
+                .centre
+                .into_iter()
+                .chain(self.concept.path.iter().copied())
+                .collect(),
+            (
+                Tool::Mass,
+                MassMode::Circle | MassMode::Sphere | MassMode::Cylinder | MassMode::Cone,
+            ) => self.concept.centre.into_iter().collect(),
             (Tool::Mass, _) => self.mass_tool.corners().to_vec(),
             (Tool::Tape, _) => self.concept.tape.into_iter().collect(),
             _ => Vec::new(),
@@ -353,6 +378,28 @@ impl ArchiSimApp {
                     self.concept.path.push(p);
                 }
             }
+            MassMode::Sphere | MassMode::Cylinder | MassMode::Cone => match self.concept.centre {
+                None => self.concept.centre = Some(p),
+                Some(c) if c.approx_eq(p) => {}
+                Some(c) => {
+                    self.concept.centre = None;
+                    let s = self.mass_settings;
+                    match self.ed.add_mass_form(&s, c, c.distance(p)) {
+                        Ok(id) => {
+                            self.ed.selection = [Element::Mass(id)].into_iter().collect();
+                            self.say_mass(id, "creado");
+                        }
+                        Err(e) => self.complain(format!("No se puede crear la forma: {e}.")),
+                    }
+                }
+            },
+            MassMode::Revolution => match self.concept.centre {
+                None => self.concept.centre = Some(p),
+                Some(_) if self.concept.path.last().is_some_and(|l| l.approx_eq(p)) => {
+                    self.finish_revolution();
+                }
+                Some(_) => self.concept.path.push(p),
+            },
             MassMode::Polygon | MassMode::Rectangle => match self.mass_tool.click(p) {
                 SlabOutcome::Build(outline) => self.build_mass(outline),
                 SlabOutcome::Invalid => {
@@ -360,6 +407,27 @@ impl ArchiSimApp {
                 }
                 SlabOutcome::Nothing => {}
             },
+        }
+    }
+
+    /// Turns the profile drawn round its axis.
+    pub(super) fn finish_revolution(&mut self) {
+        let (Some(axis), path) = (self.concept.centre, std::mem::take(&mut self.concept.path))
+        else {
+            return;
+        };
+        self.concept.centre = None;
+        if path.len() < 2 {
+            self.complain("El perfil necesita dos puntos o más.");
+            return;
+        }
+        let s = self.mass_settings;
+        match self.ed.add_mass_revolution(&s, axis, &path) {
+            Ok(id) => {
+                self.ed.selection = [Element::Mass(id)].into_iter().collect();
+                self.say_mass(id, "creado");
+            }
+            Err(e) => self.complain(format!("No se puede crear la revolución: {e}.")),
         }
     }
 
@@ -569,6 +637,8 @@ impl ArchiSimApp {
             self.finish_offset(id, d);
         } else if self.mass_line() {
             self.finish_path();
+        } else if self.tool == Tool::Mass && self.mass_settings.mode == MassMode::Revolution {
+            self.finish_revolution();
         } else if self.tool == Tool::Mass {
             let towards = self.cursor.map_or(Point2::new(0.0, 0.0), |c| c.point);
             match self.mass_tool.enter(towards) {
@@ -622,12 +692,57 @@ impl ArchiSimApp {
         }
         match self.tool {
             Tool::Mass => match self.mass_settings.mode {
-                MassMode::Circle => {
+                MassMode::Circle | MassMode::Sphere | MassMode::Cylinder | MassMode::Cone => {
                     if let Some(centre) = self.concept.centre {
                         let r = centre.distance(c.point);
                         let pts = self.polygon(rect, &crate::editor::circle(centre, r));
                         painter.add(Shape::closed_line(pts, ink));
+                        if self.mass_settings.mode == MassMode::Cone
+                            && self.mass_settings.top_radius > 0.0
+                        {
+                            let top = crate::editor::circle(
+                                centre,
+                                self.mass_settings.top_radius.min(r * 4.0),
+                            );
+                            painter.add(Shape::closed_line(
+                                self.polygon(rect, &top),
+                                Stroke::new(1.0, ACCENT.gamma_multiply(0.6)),
+                            ));
+                        }
                         self.draw_label(painter, rect, c.point, format!("R {} mm", fmt_mm(r)));
+                    }
+                }
+                MassMode::Revolution => {
+                    if let Some(axis) = self.concept.centre {
+                        // The axis, up the plan; the profile and its mirror.
+                        let up = Point2::new(0.0, self.view.to_metres(400.0));
+                        dashed(
+                            painter,
+                            self.view.to_screen(rect, axis),
+                            self.view.to_screen(rect, axis + up),
+                            ACCENT,
+                        );
+                        let mut pts = self.concept.path.clone();
+                        pts.push(c.point);
+                        painter.add(Shape::line(self.polygon(rect, &pts), ink));
+                        let mirror: Vec<Point2> = pts
+                            .iter()
+                            .map(|p| Point2::new(2.0 * axis.x - p.x, p.y))
+                            .collect();
+                        painter.add(Shape::line(
+                            self.polygon(rect, &mirror),
+                            Stroke::new(1.0, ACCENT.gamma_multiply(0.5)),
+                        ));
+                        self.draw_label(
+                            painter,
+                            rect,
+                            c.point,
+                            format!(
+                                "R {} · H {} mm",
+                                fmt_mm((c.point.x - axis.x).abs()),
+                                fmt_mm((c.point.y - axis.y).max(0.0))
+                            ),
+                        );
                     }
                 }
                 MassMode::Path => {
@@ -649,6 +764,7 @@ impl ArchiSimApp {
                             floor_height: None,
                             material: self.mass_settings.material,
                             building: None,
+                            finish: None,
                         };
                         let band = probe.outline();
                         if band.len() > 2 {
@@ -761,6 +877,20 @@ impl ArchiSimApp {
             Tool::Mass => match self.mass_settings.mode {
                 MassMode::Circle if self.concept.centre.is_some() => "Clic: radio · Esc: anular",
                 MassMode::Circle => "Clic: centro del círculo · Esc: flecha",
+                MassMode::Sphere | MassMode::Cylinder | MassMode::Cone
+                    if self.concept.centre.is_some() =>
+                {
+                    "Clic: radio (la altura, en Propiedades; la esfera, tan alta como ancha) · Esc: anular"
+                }
+                MassMode::Sphere => "Esfera: clic en el centro · Esc: flecha",
+                MassMode::Cylinder => "Cilindro: clic en el centro · Esc: flecha",
+                MassMode::Cone => "Cono: clic en el centro (radio de arriba, en Propiedades) · Esc: flecha",
+                MassMode::Revolution if self.concept.centre.is_none() => {
+                    "Revolución: clic en el eje · luego el medio perfil, abatido sobre la planta (al lado: radio; hacia arriba: altura)"
+                }
+                MassMode::Revolution => {
+                    "Clic: siguiente punto del perfil · Clic otra vez en el último o Intro: girarlo · Esc: anular"
+                }
                 MassMode::Path if !self.concept.path.is_empty() => {
                     "Clic: siguiente punto · Doble clic, Intro o Esc: terminar el camino"
                 }
@@ -797,6 +927,10 @@ impl ArchiSimApp {
             (Tool::Tape, ..) => "Cinta",
             (Tool::Paint, ..) => "Pintar",
             (_, _, MassMode::Path) => "Seguir",
+            (_, _, MassMode::Sphere) => "Esfera",
+            (_, _, MassMode::Cylinder) => "Cilindro",
+            (_, _, MassMode::Cone) => "Cono",
+            (_, _, MassMode::Revolution) => "Revolución",
             (_, MassWhat::Face, MassMode::Polygon) => "Arista",
             (_, MassWhat::Face, _) => "Cara",
             (_, MassWhat::Volume, _) => "Volumen",
@@ -810,7 +944,7 @@ impl ArchiSimApp {
         match self.tool {
             Tool::Mass => {
                 group(ui, "tool-mass", "Volumen", |ui| {
-                    if s.mode != MassMode::Path {
+                    if s.mode != MassMode::Path && !s.mode.is_form() {
                         row(ui, "Hace", "Una cara para empujar, un volumen de una altura o una masa por plantas", |ui, w| {
                             s.what = choice(
                                 ui,
@@ -860,6 +994,23 @@ impl ArchiSimApp {
                             });
                         }
                         _ => {}
+                    }
+                    if s.mode == MassMode::Cone {
+                        row(
+                            ui,
+                            "Radio arriba (mm)",
+                            "Cero: un cono; más: un tronco de cono",
+                            |ui, w| {
+                                if let Some(v) = length_field(
+                                    ui,
+                                    Id::unique("tool-mass-top"),
+                                    s.top_radius,
+                                    w - 8.0,
+                                ) {
+                                    s.top_radius = v.max(0.0);
+                                }
+                            },
+                        );
                     }
                     if s.mode == MassMode::Path {
                         row(
@@ -1058,9 +1209,17 @@ impl ArchiSimApp {
                         if let Some(v) =
                             length_field(ui, Id::unique(("mass-h", id)), m.height, w - 8.0)
                         {
-                            let r = self
-                                .ed
-                                .edit_mass("Altura del volumen", id, |x| x.height = v.max(0.0));
+                            let r = self.ed.edit_mass("Altura del volumen", id, |x| {
+                                x.height = v.max(0.0);
+                                // A sphere is as high as it is wide.
+                                if let MassShape::Primitive(archisim_core::Primitive::Sphere {
+                                    radius,
+                                    ..
+                                }) = &mut x.shape
+                                {
+                                    *radius = x.height / 2.0;
+                                }
+                            });
                             self.report(r, "Altura cambiada.");
                         }
                     });
@@ -1094,6 +1253,7 @@ impl ArchiSimApp {
                 }
             });
         });
+        self.mass_form_group(ui, &m);
         group(ui, "mass-figures", "Superficies", |ui| {
             text_row(ui, "Huella (m²)", "", &comma(f.footprint, 2));
             text_row(
@@ -1140,6 +1300,232 @@ impl ArchiSimApp {
                     self.convert_masses(&[id]);
                 }
             });
+        }
+    }
+
+    /// The sizes of a round form, the finish of the edges, and how a
+    /// solid made by operations came to be.
+    fn mass_form_group(&mut self, ui: &mut Ui, m: &archisim_core::Mass) {
+        use archisim_core::{EdgeFinish, EdgeKind, Primitive};
+        let id = m.id;
+        if let MassShape::Primitive(p) = &m.shape {
+            let p = p.clone();
+            group(ui, "mass-form", "Forma", |ui| {
+                text_row(ui, "Forma", "", p.label());
+                let mut radius_row = |ui: &mut Ui, label: &str, value: f64, top: bool| {
+                    row(ui, label, "", |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("mass-radius", id, top)), value, w - 8.0)
+                        {
+                            let r = self.ed.edit_mass("Radio", id, |x| {
+                                if let MassShape::Primitive(pr) = &mut x.shape {
+                                    match pr {
+                                        Primitive::Sphere { radius, .. } => {
+                                            *radius = v;
+                                            x.height = 2.0 * v;
+                                        }
+                                        Primitive::Cylinder { radius, .. } => *radius = v,
+                                        Primitive::Cone {
+                                            radius, top_radius, ..
+                                        } => {
+                                            if top {
+                                                *top_radius = v.max(0.0);
+                                            } else {
+                                                *radius = v;
+                                            }
+                                        }
+                                        Primitive::Revolution { .. } => {}
+                                    }
+                                }
+                            });
+                            self.report(r, "Radio cambiado.");
+                        }
+                    });
+                };
+                match &p {
+                    Primitive::Sphere { radius, .. } | Primitive::Cylinder { radius, .. } => {
+                        radius_row(ui, "Radio (mm)", *radius, false);
+                    }
+                    Primitive::Cone {
+                        radius, top_radius, ..
+                    } => {
+                        radius_row(ui, "Radio abajo (mm)", *radius, false);
+                        radius_row(ui, "Radio arriba (mm)", *top_radius, true);
+                    }
+                    Primitive::Revolution { profile, .. } => {
+                        text_row(ui, "Perfil", "", &format!("{} puntos", profile.len()));
+                        text_row(ui, "Radio mayor (m)", "", &comma(p.max_radius(), 2));
+                    }
+                }
+            });
+        }
+        if let MassShape::Mesh(mesh) = &m.shape {
+            group(ui, "mass-solid", "Sólido", |ui| {
+                text_row(ui, "Caras", "", &mesh.face_ids().len().to_string());
+                props::note(
+                    ui,
+                    "Hecho uniendo, restando o intersecando volúmenes. Cada cara conserva su pintura; con Pintar se pinta una a una.",
+                );
+            });
+            return;
+        }
+        if matches!(m.shape, MassShape::Primitive(Primitive::Sphere { .. })) || m.is_face() {
+            return;
+        }
+        let round = matches!(m.shape, MassShape::Primitive(_));
+        let mut f = m.finish.unwrap_or(EdgeFinish {
+            kind: EdgeKind::Round,
+            size: 0.2,
+            vertical: false,
+            top: false,
+            bottom: false,
+        });
+        let before = m.finish;
+        group(ui, "mass-edges", "Aristas", |ui| {
+            row(
+                ui,
+                "Acabado",
+                "Achaflanar o redondear las aristas",
+                |ui, w| {
+                    f.kind = choice(
+                        ui,
+                        format!("mass-edge-kind-{}", id.0),
+                        w,
+                        f.kind,
+                        &[
+                            (EdgeKind::Chamfer, "Chaflán"),
+                            (EdgeKind::Round, "Redondeo"),
+                        ],
+                    );
+                },
+            );
+            row(
+                ui,
+                "Tamaño (mm)",
+                "El cateto del chaflán o el radio del redondeo",
+                |ui, w| {
+                    if let Some(v) =
+                        length_field(ui, Id::unique(("mass-edge-size", id)), f.size, w - 8.0)
+                    {
+                        f.size = v.max(0.0);
+                    }
+                },
+            );
+            ui.horizontal_wrapped(|ui| {
+                if !round {
+                    ui.checkbox(&mut f.vertical, "Esquinas");
+                }
+                ui.checkbox(&mut f.top, "Arriba");
+                ui.checkbox(&mut f.bottom, "Abajo");
+            });
+        });
+        let any = f.vertical || f.top || f.bottom;
+        let after = (any && f.size > 0.0).then_some(f);
+        if after != before && (after.is_some() || before.is_some()) {
+            let r = self.ed.set_mass_finish(id, after);
+            self.report(r, "Aristas cambiadas.");
+        }
+    }
+
+    /// With several volumes selected: join them, cut some from one, keep
+    /// what they share, or draw the lines where their faces cross.
+    pub(super) fn mass_operations(&mut self, ui: &mut Ui, many: &[Element]) {
+        use archisim_geom::csg::Op;
+        let masses: Vec<MassId> = many
+            .iter()
+            .filter_map(|e| match e {
+                Element::Mass(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+        if masses.len() < 2 {
+            return;
+        }
+        let model = self.ed.model();
+        let names: Vec<(MassId, String)> = masses
+            .iter()
+            .filter_map(|id| model.mass(*id).map(|m| (*id, m.name.clone())))
+            .collect();
+        let key = Id::unique("mass-op-target");
+        let mut target: MassId = ui
+            .data(|d| d.get_temp::<MassId>(key))
+            .filter(|t| masses.contains(t))
+            .unwrap_or(masses[0]);
+        let mut action = None;
+        group(ui, "mass-ops", "Operaciones con volúmenes", |ui| {
+            row(
+                ui,
+                "Sobre",
+                "El volumen que queda: los demás se le unen, se le restan o se intersecan con él",
+                |ui, w| {
+                    let shown = names
+                        .iter()
+                        .find(|n| n.0 == target)
+                        .map_or("—".to_string(), |n| n.1.clone());
+                    ComboBox::from_id_salt("mass-op-target")
+                        .width(w - 8.0)
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            for (mid, name) in &names {
+                                ui.selectable_value(&mut target, *mid, name);
+                            }
+                        });
+                },
+            );
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .button("Unir")
+                    .on_hover_text("Un solo volumen con todos")
+                    .clicked()
+                {
+                    action = Some(Op::Union);
+                }
+                if ui
+                    .button("Restar")
+                    .on_hover_text("Quita los demás del volumen elegido")
+                    .clicked()
+                {
+                    action = Some(Op::Subtract);
+                }
+                if ui
+                    .button("Intersecar")
+                    .on_hover_text("Deja solo lo que tienen en común")
+                    .clicked()
+                {
+                    action = Some(Op::Intersect);
+                }
+            });
+            if ui
+                .button("Intersecar caras")
+                .on_hover_text(
+                    "Dibuja aristas donde se cruzan sus caras, sin cambiar los volúmenes",
+                )
+                .clicked()
+            {
+                match self.ed.cross_masses(&masses) {
+                    Ok(n) => self.say(format!(
+                        "{n} arista{} donde se cruzan las caras.",
+                        if n == 1 { "" } else { "s" }
+                    )),
+                    Err(e) => self.complain(format!("No se puede: {e}.")),
+                }
+            }
+            props::note(ui, "Cada cara conserva su material: lo que viene de otro volumen sale pintado con el suyo.");
+        });
+        ui.data_mut(|d| d.insert_temp(key, target));
+        if let Some(op) = action {
+            let others: Vec<MassId> = masses.iter().copied().filter(|m| *m != target).collect();
+            match self.ed.combine_masses(target, &others, op) {
+                Ok(()) => {
+                    self.ed.selection = [Element::Mass(target)].into_iter().collect();
+                    self.say(match op {
+                        Op::Union => "Volúmenes unidos.",
+                        Op::Subtract => "Volúmenes restados.",
+                        Op::Intersect => "Queda lo que tenían en común.",
+                    });
+                }
+                Err(e) => self.complain(format!("No se puede: {e}.")),
+            }
         }
     }
 

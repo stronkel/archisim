@@ -22,6 +22,8 @@ pub struct Vertex {
     /// looking up give way (+1), doors and windows win against the reveals
     /// they sit in (-1).
     pub bias: f32,
+    /// The texture (0: none) and the size of its piece, metres.
+    pub tex: [f32; 2],
 }
 
 /// What the disciplines change in the 3D view: what is greyed and what
@@ -164,14 +166,26 @@ impl Scene {
                 acc
             });
             let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
+            let texture_of = |m: archisim_core::MaterialId| {
+                let a = model.appearance(m);
+                a.texture.map_or([0.0, 0.0], |t| {
+                    [t.number() as f32, a.texture_scale() as f32]
+                })
+            };
+            let own_tex = if dimmed || ghost {
+                [0.0, 0.0]
+            } else {
+                texture_of(solid.material)
+            };
             // A model brought from another program: the colours of its
             // vertices (its textures).
             let corners = archisim_geom::solid::solid_vertex_colors(model, &solid);
             for (i, tri) in solid.triangles.iter().enumerate() {
                 // A painted face: its paint, never greyed (it is what is
                 // being worked on).
-                let color = archisim_geom::solid::painted_color(model, &solid, tri)
-                    .map_or(base, |c| tone(c, false));
+                let painted = archisim_geom::solid::painted_material(model, &solid, tri);
+                let color = painted.map_or(base, |m| tone(model.surface_color(m), false));
+                let tex = painted.map_or(own_tex, texture_of);
                 let colors = match corners.as_ref().and_then(|c| c.get(i)) {
                     Some(c) => c.map(|c| tone(c, dimmed)),
                     None => [color; 3],
@@ -212,6 +226,7 @@ impl Scene {
                         normal: normal.to_array(),
                         color,
                         bias,
+                        tex,
                     });
                 }
                 if is_glass {
@@ -241,6 +256,7 @@ impl Scene {
                     normal: n.to_array(),
                     color: [rgb[0], rgb[1], rgb[2], 1.0],
                     bias: -1.0,
+                    tex: [0.0, 0.0],
                 });
             }
             s.owners.push(owner);
@@ -273,6 +289,7 @@ impl Scene {
                         normal: n.to_array(),
                         color,
                         bias: 0.0,
+                        tex: [0.0, 0.0],
                     });
                 }
                 if see_through {

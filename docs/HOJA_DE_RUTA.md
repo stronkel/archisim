@@ -174,9 +174,9 @@ Bloques:
 
 ### 6.4 Modelado de formas (Concepto, para visualización)
 
-- **M1**: primitivas (esfera, cilindro, cono, revolución de un perfil), redondeo y chaflán de aristas.
-- **M2**: operaciones entre volúmenes (unir, restar, intersecar), intersección de caras y aristas sueltas sobre caras.
-- **M3**: texturas por cara y materiales de visualización.
+- **M1** ✅: primitivas (esfera, cilindro, cono, revolución de un perfil), redondeo y chaflán de aristas. *Hecho en v0.39* (`docs/FORMAS.md`).
+- **M2** ✅: operaciones entre volúmenes (unir, restar, intersecar), intersección de caras y aristas sueltas sobre caras. *Hecho en v0.39*: cada cara del sólido conserva su material; «Intersecar caras» deja aristas donde se cruzan.
+- **M3** ✅: texturas por cara y materiales de visualización. *Hecho en v0.39*: aspecto en 3D de cada material (color de superficie y textura: ladrillo, piedra, baldosa, madera, tablas, hormigón visto, enfoscado, césped, grava, agua, chapa), dibujado por la vista 3D sin imágenes; se pinta cara a cara con Pintar. Falta: texturas en las axonometrías de los planos y en el IFC.
 
 ### Orden propuesto
 
