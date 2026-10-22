@@ -12,6 +12,10 @@ type_params
     height length = 0.04 range 0.01..0.20 label "Altura"
   section "Materiales"
     mat material = "Porcelana" label "Material"
+  section "Modelo 3D"
+    model3d choice("Plato", "Plato y mampara", "Esquina con mampara") = "Plato" label "Modelo 3D"
+    glass material = "Vidrio doble" label "Mampara"
+    metal material = "Cromado" label "Grifería"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
@@ -26,5 +30,6 @@ plan 1:50
   arc center (0, depth / 2) from (0, depth / 2 - 0.04) to (0.04, depth / 2) pen thin
 
 outputs
+  generator = "props:shower"
   ifc_class = "IfcSanitaryTerminal"
   ifc_type = "SHOWER"

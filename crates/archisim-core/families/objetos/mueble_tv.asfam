@@ -1,0 +1,35 @@
+family "Mueble TV"
+  category furniture
+  host none
+  version 1
+  description "Mueble bajo de salón con televisor"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.80 range 0.80..4.00 label "Largo"
+    depth  length = 0.42 range 0.30..0.60 label "Fondo"
+    height length = 0.45 range 0.30..0.80 label "Altura"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Con televisor") = "Con televisor" label "Modelo 3D"
+    frame material = "Negro mate" label "Patas y peana"
+    screen material = "Negro mate" label "Pantalla"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  let sw = min(width * 0.75, 1.6)
+  line (-sw / 2, depth * 0.4) to (sw / 2, depth * 0.4) pen view
+  line (-sw / 2, depth * 0.4 + 0.03) to (sw / 2, depth * 0.4 + 0.03) pen thin
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:tv_unit"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -14,6 +14,9 @@ type_params
     doors     integer = 2 range 1..12 label "Puertas"
   section "Materiales"
     mat material = "Madera de pino" label "Muebles"
+  section "Modelo 3D"
+    model3d choice("Puertas") = "Puertas" label "Modelo 3D"
+    metal material = "Cromado" label "Tiradores"
 
 body
   box (-width / 2, 0, elevation) to (width / 2, depth, elevation + height) material mat
@@ -26,5 +29,6 @@ plan 1:50
     line (-width / 2 + i * dw, depth - 0.05) to (-width / 2 + i * dw, depth) pen thin dashed
 
 outputs
+  generator = "props:wall_cabinet"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"

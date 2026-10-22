@@ -18,6 +18,9 @@ type_params
     chairs integer = 6 range 0..16 label "Sillas alrededor"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Cuatro patas", "Patas metálicas", "Caballetes") = "Cuatro patas" label "Modelo 3D"
+    frame material = "Metal lacado" label "Patas metálicas"
 
 let front = ceil(chairs / 2)
 let back = chairs - front
@@ -64,5 +67,6 @@ plan 1:50
     use chair_plan(-width / 2 + (i + 0.5) * width / back, -0.02, -1)
 
 outputs
+  generator = "props:table"
   ifc_class = "IfcFurniture"
   ifc_type = "TABLE"

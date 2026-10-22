@@ -766,7 +766,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 47] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 66] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -912,6 +912,90 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 47] = [
     ("Señal de tráfico", "Señal de tráfico", &[]),
     ("Jardinera 120", "Jardinera", &[]),
     ("Alcorque 120", "Alcorque", &[]),
+    // More models of each object (v0.40), their 3D made by ArchiSim.
+    ("Sofá clásico de 3 plazas", "Sofá", &[]),
+    (
+        "Sofá nórdico de 2 plazas",
+        "Sofá",
+        &[("width", 1.6), ("places", 2.0), ("depth", 0.85)],
+    ),
+    ("Silla metálica", "Silla", &[]),
+    (
+        "Silla tapizada",
+        "Silla",
+        &[("width", 0.48), ("depth", 0.55)],
+    ),
+    (
+        "Mesa de caballetes 200×100",
+        "Mesa",
+        &[("width", 2.0), ("depth", 1.0), ("chairs", 8.0)],
+    ),
+    (
+        "Mesa de patas metálicas 140×80",
+        "Mesa",
+        &[("width", 1.4), ("depth", 0.8), ("chairs", 4.0)],
+    ),
+    ("Mesa de centro", "Mesa de centro", &[]),
+    (
+        "Mesa de centro de vidrio",
+        "Mesa de centro",
+        &[("width", 1.2), ("depth", 0.7)],
+    ),
+    ("Mesita de noche", "Mesita de noche", &[]),
+    ("Mueble TV 180", "Mueble TV", &[]),
+    (
+        "Cama de madera 160×200",
+        "Cama",
+        &[("width", 1.6), ("head", 0.9)],
+    ),
+    (
+        "Cama tarima 150×200",
+        "Cama",
+        &[("height", 0.4), ("head", 0.6)],
+    ),
+    ("Inodoro suspendido", "Inodoro", &[("depth", 0.54)]),
+    ("Bidé suspendido", "Bidé", &[]),
+    (
+        "Lavabo con mueble 80",
+        "Lavabo",
+        &[("width", 0.8), ("depth", 0.46)],
+    ),
+    ("Lavabo suspendido 60", "Lavabo", &[]),
+    (
+        "Ducha con mampara 120×80",
+        "Plato de ducha",
+        &[("width", 1.2), ("depth", 0.8)],
+    ),
+    ("Mujer", "Persona", &[("height", 1.65)]),
+    (
+        "Todoterreno",
+        "Turismo",
+        &[("length", 4.6), ("width", 1.9), ("height", 1.7)],
+    ),
+];
+
+/// The model of the 3D of the library's types that are not the family's
+/// first (its «Modelo 3D»).
+const MODELS: &[(&str, &str)] = &[
+    ("Sillón", "Contemporáneo"),
+    ("Sofá clásico de 3 plazas", "Clásico"),
+    ("Sofá nórdico de 2 plazas", "Nórdico"),
+    ("Silla metálica", "Tubo metálico"),
+    ("Silla tapizada", "Tapizada"),
+    ("Mesa de caballetes 200×100", "Caballetes"),
+    ("Mesa de patas metálicas 140×80", "Patas metálicas"),
+    ("Mesa de centro de vidrio", "Vidrio y metal"),
+    ("Cama de madera 160×200", "Madera"),
+    ("Cama tarima 150×200", "Tarima"),
+    ("Inodoro suspendido", "Suspendido"),
+    ("Bidé suspendido", "Suspendido"),
+    ("Lavabo con mueble 80", "Con mueble"),
+    ("Lavabo suspendido 60", "Suspendido"),
+    ("Ducha con mampara 120×80", "Plato y mampara"),
+    ("Mujer", "Mujer"),
+    ("Furgoneta", "Todoterreno"),
+    ("Todoterreno", "Todoterreno"),
+    ("Turismo", "Berlina"),
 ];
 
 /// The leaves of each species (a material of [`object_materials`]) and
@@ -989,6 +1073,17 @@ fn object_materials(m: &mut Model) {
         ("Figura", "other", [150, 158, 172]),
         ("Carrocería", "metal", [164, 172, 184]),
         ("Neumático", "rubber", [52, 52, 56]),
+        // The parts of the models ArchiSim makes (v0.40).
+        ("Tela", "fabric", [146, 152, 160]),
+        ("Tela clara", "fabric", [236, 232, 224]),
+        ("Edredón", "fabric", [200, 210, 218]),
+        ("Cromado", "metal", [204, 208, 212]),
+        ("Negro mate", "other", [40, 40, 44]),
+        ("Libros", "other", [150, 62, 54]),
+        ("Libros claros", "other", [222, 198, 144]),
+        ("Encimera", "stone", [226, 224, 218]),
+        ("Piloto", "other", [196, 40, 32]),
+        ("Vidrio doble", "glass", [190, 222, 236]),
     ] {
         material_named(m, name, category, color, CutPattern::Solid);
     }
@@ -1011,6 +1106,9 @@ pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, Model
     let mut values = m.family_defaults(f, ParamScope::Type)?;
     for (k, v) in sizes.iter() {
         values.insert((*k).into(), Value::Number(*v));
+    }
+    if let Some((_, model)) = MODELS.iter().find(|e| e.0 == *name) {
+        values.insert("model3d".into(), Value::Text((*model).into()));
     }
     if let Some((_, leaves, shape, look)) = SPECIES.iter().find(|e| e.0 == *name) {
         if let Some(mat) = m.materials().find(|x| x.name == *leaves) {

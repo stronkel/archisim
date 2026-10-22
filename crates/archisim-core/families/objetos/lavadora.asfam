@@ -12,6 +12,11 @@ type_params
     height length = 0.85 range 0.60..0.90 label "Altura"
   section "Materiales"
     mat material = "Acero S275" label "Acabado"
+  section "Modelo 3D"
+    model3d choice("Carga frontal") = "Carga frontal" label "Modelo 3D"
+    metal material = "Cromado" label "Puerta"
+    dark material = "Negro mate" label "Mandos"
+    glass material = "Vidrio doble" label "Ojo de buey"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
@@ -26,5 +31,6 @@ plan 1:50
   arc center (0, c) from (0, c - r) to (r, c) pen thin
 
 outputs
+  generator = "props:washer"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

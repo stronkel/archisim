@@ -5,6 +5,7 @@ members = [
     "crates/archisim-dxf",
     "crates/archisim-mesh",
     "crates/archisim-flora",
+    "crates/archisim-props",
     "crates/archisim-core",
     "crates/archisim-geom",
     "crates/archisim-draft",
@@ -23,7 +24,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.39.0"
+version = "0.40.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
@@ -36,6 +37,7 @@ archisim-family = { path = "crates/archisim-family" }
 archisim-dxf = { path = "crates/archisim-dxf" }
 archisim-mesh = { path = "crates/archisim-mesh" }
 archisim-flora = { path = "crates/archisim-flora" }
+archisim-props = { path = "crates/archisim-props" }
 archisim-core = { path = "crates/archisim-core" }
 archisim-geom = { path = "crates/archisim-geom" }
 archisim-draft = { path = "crates/archisim-draft" }

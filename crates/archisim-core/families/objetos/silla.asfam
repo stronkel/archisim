@@ -13,6 +13,9 @@ type_params
     height length = 0.90 range 0.50..1.40 label "Altura del respaldo"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Madera", "Tubo metálico", "Tapizada") = "Madera" label "Modelo 3D"
+    frame material = "Metal lacado" label "Estructura"
 
 require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"
 
@@ -30,5 +33,6 @@ plan 1:50
   line (-width / 2, 0.04) to (width / 2, 0.04) pen thin
 
 outputs
+  generator = "props:chair"
   ifc_class = "IfcFurniture"
   ifc_type = "CHAIR"

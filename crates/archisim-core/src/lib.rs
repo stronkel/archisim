@@ -6,6 +6,7 @@
 //! model.
 
 pub use archisim_flora as flora;
+pub use archisim_props as props;
 pub mod code;
 pub mod document;
 pub mod drafting;

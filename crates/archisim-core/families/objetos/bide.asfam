@@ -11,6 +11,9 @@ type_params
     depth  length = 0.55 range 0.45..0.70 label "Fondo"
   section "Materiales"
     mat material = "Porcelana" label "Porcelana"
+  section "Modelo 3D"
+    model3d choice("De pie", "Suspendido") = "De pie" label "Modelo 3D"
+    metal material = "Cromado" label "Grifería"
 
 body
   box (-width / 2 + 0.04, 0, 0) to (width / 2 - 0.04, depth, 0.40) material mat
@@ -26,5 +29,6 @@ plan 1:50
   line (-0.04, 0.06) to (0.04, 0.06) pen thin
 
 outputs
+  generator = "props:bidet"
   ifc_class = "IfcSanitaryTerminal"
   ifc_type = "BIDET"

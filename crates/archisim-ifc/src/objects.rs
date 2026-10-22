@@ -276,14 +276,26 @@ impl Exporter<'_> {
     /// texture), with the colour of each face.
     fn mesh_map(&mut self, object: archisim_core::ObjectId) -> Option<Ref> {
         let model = self.model;
-        let (mesh, k, _) = model.object_mesh(object)?;
-        let level = mesh.level_under(IFC_TRIANGLES)?;
-        let groups: Vec<(MaterialId, &[[u32; 3]])> = level
-            .groups
-            .iter()
-            .map(|g| (g.material, g.triangles.as_slice()))
-            .collect();
-        let items = self.tessellation(&level.positions, &level.colors, &groups, k);
+        let items = match model.object_mesh(object) {
+            Some((mesh, k, _)) => {
+                let level = mesh.level_under(IFC_TRIANGLES)?;
+                let groups: Vec<(MaterialId, &[[u32; 3]])> = level
+                    .groups
+                    .iter()
+                    .map(|g| (g.material, g.triangles.as_slice()))
+                    .collect();
+                self.tessellation(&level.positions, &level.colors, &groups, k)
+            }
+            None => {
+                // A model ArchiSim makes from the type's measurements.
+                let (mesh, parts) = model.object_prop(object)?;
+                let groups: Vec<(MaterialId, &[[u32; 3]])> =
+                    parts.iter().map(|(m, t)| (*m, t.as_slice())).collect();
+                // One colour per material: no colour list per face.
+                let colors: Vec<archisim_core::Rgb> = vec![[0, 0, 0]; mesh.positions.len()];
+                self.tessellation(&mesh.positions, &colors, &groups, 1.0)
+            }
+        };
         if items.is_empty() {
             return None;
         }

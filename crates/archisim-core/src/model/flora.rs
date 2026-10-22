@@ -88,9 +88,7 @@ impl Model {
     /// Whether a family grows plants (its outputs say `generator =
     /// "flora"`).
     pub fn family_grows(&self, family: FamilyId) -> bool {
-        self.families
-            .get(&family)
-            .is_some_and(|f| f.def().outputs.iter().any(|o| o.name == "generator"))
+        self.family_generator(family).as_deref() == Some("flora")
     }
 
     /// Whether objects of a type are grown plants.
