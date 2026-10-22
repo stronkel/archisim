@@ -430,6 +430,27 @@ impl Model {
         (!ev.parts.is_empty()).then_some((lo, hi))
     }
 
+    /// The box of the objects of a type in 3D, in their own axes (`z` over
+    /// their base).
+    pub fn object_type_box_3d(&self, id: ObjectTypeId) -> Option<([f64; 3], [f64; 3])> {
+        let t = self.object_types.get(&id)?;
+        let instance = self.family_defaults(t.family, ParamScope::Instance).ok()?;
+        let ev = self
+            .object_family(t.family)
+            .ok()?
+            .def()
+            .evaluate(&t.values, &instance, &Values::new())
+            .ok()?;
+        let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+        for p in &ev.parts {
+            for k in 0..3 {
+                lo[k] = lo[k].min(p.min[k]);
+                hi[k] = hi[k].max(p.max[k]);
+            }
+        }
+        (!ev.parts.is_empty()).then_some((lo, hi))
+    }
+
     /// The box of a placed object in plan (its 3D parts seen from above),
     /// counter-clockwise; empty if it has none.
     pub fn object_outline(&self, id: ObjectId) -> Vec<Point2> {

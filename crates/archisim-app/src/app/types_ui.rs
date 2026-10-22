@@ -120,6 +120,10 @@ pub(super) enum Action {
     DuplicateSlab(SlabTypeId),
     RemoveSlab(SlabTypeId),
     EditSlab(SlabTypeId, String, SlabFunction, Vec<Layer>),
+    /// The accessories of a wall type (bloque 5).
+    WallSweeps(WallTypeId, Vec<archisim_core::WallSweep>),
+    /// The edge of a slab type.
+    SlabEdge(SlabTypeId, Option<archisim_core::SlabEdge>),
     DuplicateOpening(OpeningTypeId),
     RemoveOpening(OpeningTypeId),
     /// One parameter of the type's family.
@@ -1359,6 +1363,16 @@ impl ArchiSimApp {
                 actions.push(Action::EditWall(id, t.name.clone(), t.function, layers));
             }
         });
+        props::group(
+            ui,
+            "types-wall-sweeps",
+            "Accesorios: rodapiés, molduras, cornisas y albardillas",
+            |ui| {
+                if let Some(v) = sweeps_table(ui, self.ed.model(), id.0, &t.sweeps, t.thickness()) {
+                    actions.push(Action::WallSweeps(id, v));
+                }
+            },
+        );
     }
 
     fn slab_type_editor(&mut self, ui: &mut Ui, id: SlabTypeId, actions: &mut Vec<Action>) {
@@ -1411,6 +1425,11 @@ impl ArchiSimApp {
             );
             if let Some(layers) = edited {
                 actions.push(Action::EditSlab(id, t.name.clone(), t.function, layers));
+            }
+        });
+        props::group(ui, "types-slab-edge", "Canto: cornisa o alero", |ui| {
+            if let Some(e) = slab_edge_row(ui, self.ed.model(), id.0, t.edge.as_ref()) {
+                actions.push(Action::SlabEdge(id, e));
             }
         });
     }
@@ -1699,6 +1718,21 @@ impl ArchiSimApp {
                     r,
                     &format!("Tipo de forjado modificado ({n} forjado{}).", plural(n)),
                 );
+            }
+            Action::WallSweeps(id, v) => {
+                let r = self
+                    .ed
+                    .transact("Accesorios del tipo", |m| m.set_wall_type_sweeps(id, v));
+                self.report(
+                    r,
+                    "Accesorios del tipo cambiados: los siguen todos sus muros.",
+                );
+            }
+            Action::SlabEdge(id, e) => {
+                let r = self
+                    .ed
+                    .transact("Canto del tipo", |m| m.set_slab_type_edge(id, e));
+                self.report(r, "Canto del tipo cambiado.");
             }
             Action::DuplicateOpening(id) => match self.ed.duplicate_opening_type(id) {
                 Ok(new) => {
@@ -2123,4 +2157,204 @@ mod tests {
         assert_eq!(category_name("glass"), "Vidrio");
         assert_eq!(category_name("adobe"), "Otra (adobe)");
     }
+}
+
+/// The accessories of a wall type, editable: what each is, the face it
+/// runs along, its height and material; add one of each kind, remove.
+/// Returns the new list when something changed.
+fn sweeps_table(
+    ui: &mut Ui,
+    model: &Model,
+    key: u64,
+    sweeps: &[archisim_core::WallSweep],
+    thickness: f64,
+) -> Option<Vec<archisim_core::WallSweep>> {
+    use archisim_core::{sweep_preset, SweepKind, SweepSide, WallSweep};
+    let mut out: Option<Vec<WallSweep>> = None;
+    if sweeps.is_empty() {
+        props::note(
+            ui,
+            "Ninguno. Los accesorios siguen a todos los muros del tipo y se cortan en las puertas y ventanas que cruzan.",
+        );
+    }
+    for (i, s) in sweeps.iter().enumerate() {
+        let mut e = s.clone();
+        let mut remove = false;
+        ui.push_id(("sweep", key, i), |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(s.kind.name()).strong());
+                if ui.small_button("Quitar").clicked() {
+                    remove = true;
+                }
+            });
+            props::row(ui, "Cara", "", |ui, w| {
+                e.side = props::choice(
+                    ui,
+                    ("sweep-side", key, i),
+                    w,
+                    s.side,
+                    &[
+                        (SweepSide::Exterior, SweepSide::Exterior.name()),
+                        (SweepSide::Interior, SweepSide::Interior.name()),
+                        (SweepSide::Top, SweepSide::Top.name()),
+                    ],
+                );
+            });
+            if s.side != SweepSide::Top {
+                props::row(
+                    ui,
+                    "Medida desde",
+                    "Desde el pie del muro o desde su coronación",
+                    |ui, w| {
+                        e.from_top = props::choice(
+                            ui,
+                            ("sweep-from", key, i),
+                            w,
+                            s.from_top,
+                            &[(false, "El pie del muro"), (true, "La coronación")],
+                        );
+                    },
+                );
+            }
+            props::row(
+                ui,
+                "Distancia (mm)",
+                "Del pie, o de la coronación hacia abajo",
+                |ui, w| {
+                    if let Some(v) = crate::app::length_field(
+                        ui,
+                        Id::unique(("sweep-off", key, i)),
+                        s.offset,
+                        w - 8.0,
+                    ) {
+                        e.offset = v;
+                    }
+                },
+            );
+            props::row(ui, "Material", "", |ui, w| {
+                material_combo(
+                    ui,
+                    Id::unique(("sweep-mat", key, i)),
+                    model,
+                    &mut e.material,
+                    w,
+                );
+            });
+        });
+        if remove {
+            let mut v = sweeps.to_vec();
+            v.remove(i);
+            out = Some(v);
+        } else if e != *s {
+            let mut v = sweeps.to_vec();
+            v[i] = e;
+            out = Some(v);
+        }
+        ui.add_space(4.0);
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Añadir:");
+        for kind in SweepKind::ALL {
+            if ui.button(kind.name()).clicked() {
+                let material = sweeps
+                    .first()
+                    .map(|x| x.material)
+                    .or_else(|| model.materials().next().map(|m| m.id));
+                if let Some(material) = material {
+                    let (side, from_top) = match kind {
+                        SweepKind::Skirting => (SweepSide::Interior, false),
+                        SweepKind::Moulding => (SweepSide::Exterior, false),
+                        SweepKind::Cornice => (SweepSide::Exterior, true),
+                        SweepKind::Coping => (SweepSide::Top, true),
+                    };
+                    let offset = if kind == SweepKind::Moulding {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    let mut v = sweeps.to_vec();
+                    v.push(WallSweep {
+                        kind,
+                        side,
+                        offset,
+                        from_top,
+                        profile: sweep_preset(kind, thickness),
+                        material,
+                    });
+                    out = Some(v);
+                }
+            }
+        }
+    });
+    out
+}
+
+/// The edge of a slab type: none, a cornice or an eave, and its
+/// material. Returns the new edge when it changed.
+fn slab_edge_row(
+    ui: &mut Ui,
+    model: &Model,
+    key: u64,
+    edge: Option<&archisim_core::SlabEdge>,
+) -> Option<Option<archisim_core::SlabEdge>> {
+    use archisim_core::{slab_edge_preset, SlabEdge};
+    #[derive(Clone, Copy, PartialEq)]
+    enum Kind {
+        None,
+        Cornice,
+        Eave,
+        Other,
+    }
+    let kind = match edge {
+        None => Kind::None,
+        Some(e) if e.profile == slab_edge_preset(false) => Kind::Cornice,
+        Some(e) if e.profile == slab_edge_preset(true) => Kind::Eave,
+        Some(_) => Kind::Other,
+    };
+    let mut out = None;
+    props::row(
+        ui,
+        "Canto",
+        "Alrededor de todos los forjados del tipo (los horizontales)",
+        |ui, w| {
+            let mut options = vec![
+                (Kind::None, "Ninguno"),
+                (Kind::Cornice, "Cornisa"),
+                (Kind::Eave, "Alero"),
+            ];
+            if kind == Kind::Other {
+                options.push((Kind::Other, "Propio"));
+            }
+            let k = props::choice(ui, ("slab-edge", key), w, kind, &options);
+            if k != kind {
+                let material = edge
+                    .map(|e| e.material)
+                    .or_else(|| model.materials().next().map(|m| m.id));
+                out = Some(match (k, material) {
+                    (Kind::Cornice, Some(material)) => Some(SlabEdge {
+                        profile: slab_edge_preset(false),
+                        material,
+                    }),
+                    (Kind::Eave, Some(material)) => Some(SlabEdge {
+                        profile: slab_edge_preset(true),
+                        material,
+                    }),
+                    _ => None,
+                });
+            }
+        },
+    );
+    if let Some(e) = edge {
+        let mut m = e.material;
+        props::row(ui, "Material", "", |ui, w| {
+            material_combo(ui, Id::unique(("slab-edge-mat", key)), model, &mut m, w);
+        });
+        if m != e.material {
+            out = Some(Some(SlabEdge {
+                material: m,
+                ..e.clone()
+            }));
+        }
+    }
+    out
 }

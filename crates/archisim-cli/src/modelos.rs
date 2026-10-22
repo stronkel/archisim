@@ -36,12 +36,20 @@ const ROWS: &[&[&str]] = &[
         "Cama individual 90×190",
         "Mesita de noche",
         "Armario 120",
+        "Cómoda 4 cajones",
+        "Cómoda de patas 2×3 cajones",
+        "Escritorio 140",
+        "Escritorio metálico 120",
+        "Balda 80",
     ],
     &[
         "Muebles de cocina 240",
         "Muebles altos de cocina 120",
         "Frigorífico 60",
         "Lavadora 60",
+        "Encimera con cajonera 300",
+        "Campana decorativa 60",
+        "Campana integrada 60",
     ],
     &[
         "Inodoro",
@@ -54,6 +62,15 @@ const ROWS: &[&[&str]] = &[
         "Bañera 170×70",
         "Plato de ducha 90×90",
         "Ducha con mampara 120×80",
+    ],
+    &[
+        "Espejo 80×100",
+        "Espejo redondo 60",
+        "Toallero 60",
+        "Radiador toallero 50",
+        "Portarrollos",
+        "Barra de apoyo fija 70",
+        "Barra de apoyo abatible 75",
     ],
     &[
         "Persona",
@@ -91,8 +108,10 @@ pub fn build() -> Res<Model> {
             m.add_object(NewObject {
                 object_type: *t,
                 level,
-                position: Point2::new(x + w / 2.0, y),
-                rotation: 0.0,
+                // Turned round: their fronts (drawers, doors, handles) look
+                // towards the axonometry's viewer, in the south.
+                position: Point2::new(x + w / 2.0, y + 0.5 * depth),
+                rotation: std::f64::consts::PI,
                 base_offset: 0.0,
             })?;
             x += w + 0.8;

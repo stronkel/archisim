@@ -34,6 +34,7 @@ pub mod room;
 pub mod sculpt;
 pub mod shadow;
 pub mod solid;
+pub mod sweeps;
 
 use archisim_core::{
     Arc, Hand, LayerFunction, LevelId, MaterialId, Model, OpeningId, OpeningKind, Point2, Vec2,

@@ -1,7 +1,7 @@
 family "Encimera de cocina"
   category kitchen
   host none
-  version 1
+  version 2
   description "Muebles bajos de cocina con encimera, fregadero y placa"
   folder "Cocina"
 
@@ -13,6 +13,9 @@ type_params
   section "Equipamiento"
     sink bool = yes label "Fregadero"
     hob  bool = yes label "Placa de cocina"
+  section "Frentes"
+    drawers integer = 0 range 0..6 label "Cajones (bajo la placa)"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
     mat material = "Madera de pino" label "Muebles"
   section "Modelo 3D"

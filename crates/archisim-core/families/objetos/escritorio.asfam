@@ -1,0 +1,36 @@
+family "Escritorio"
+  category furniture
+  host none
+  version 1
+  description "Mesa de trabajo con cajonera a un lado o sin ella"
+  folder "Despacho"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.40 range 0.80..3.00 label "Ancho"
+    depth  length = 0.70 range 0.50..1.00 label "Fondo"
+    height length = 0.75 range 0.65..1.10 label "Altura"
+  section "Frentes"
+    pedestal choice("Sin cajonera", "A la izquierda", "A la derecha") = "A la derecha" label "Cajonera"
+    drawers integer = 3 range 1..6 label "Cajones"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Con cajonera", "Patas metálicas") = "Con cajonera" label "Modelo 3D"
+    top material = "Madera de pino" label "Tablero"
+    frame material = "Metal lacado" label "Tiradores y estructura"
+
+body
+  box (-width / 2, 0, height - 0.03) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:desk"
+  ifc_class = "IfcFurniture"
+  ifc_type = "DESK"

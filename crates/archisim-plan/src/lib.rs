@@ -812,6 +812,15 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     }
     s.push_str("</g>\n");
     overrides::close(&mut s);
+    // The accessories of wall and slab types (bloque 5): skirtings and
+    // the like seen from above, dashed when over the cut plane.
+    if show(archisim_core::Category::Walls) && !ceiling {
+        overrides::open(&mut s, archisim_core::Category::Walls);
+        s.push_str("<g id=\"accessories\" fill=\"none\">\n");
+        draw_accessories(&mut s, model, level, options.cut_plane, k);
+        s.push_str("</g>\n");
+        overrides::close(&mut s);
+    }
     // Columns and beams on top: the structure goes through the walls.
     let poly_visible = |poly: &[Point2]| {
         let (lo, hi) = bounds(poly);
@@ -1900,6 +1909,73 @@ pub fn object_category(model: &Model, o: &archisim_core::Object) -> archisim_cor
         archisim_core::Category::Vegetation
     } else {
         archisim_core::Category::Objects
+    }
+}
+
+/// Skirtings, bands, cornices and copings of the walls of a level, and
+/// the edges of its slabs: their outline seen from above, a thin line, or
+/// dashed over the cut plane.
+fn draw_accessories(
+    s: &mut String,
+    model: &Model,
+    level: archisim_core::LevelId,
+    cut_plane: f64,
+    k: f64,
+) {
+    let elevation = model.level(level).map_or(0.0, |l| l.elevation);
+    let cut = elevation + cut_plane;
+    let line = |s: &mut String, poly: &[Point2], above: bool| {
+        if poly.len() < 3 {
+            return;
+        }
+        let dash = if above {
+            format!(r#" stroke-dasharray="{} {}""#, num(3.0 * k), num(1.5 * k))
+        } else {
+            String::new()
+        };
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" stroke="{INK}" stroke-width="{}"{dash}/>"#,
+            path(poly),
+            num(pens().hatch * k)
+        );
+    };
+    for w in model.walls_on_level(level) {
+        for p in archisim_geom::sweeps::wall_sweep_pieces(model, w.id) {
+            let pts: Vec<Point2> = p
+                .mesh
+                .positions
+                .iter()
+                .map(|q| Point2::new(q[0], q[1]))
+                .collect();
+            let low = p
+                .mesh
+                .positions
+                .iter()
+                .map(|q| q[2])
+                .fold(f64::MAX, f64::min);
+            dim::element(s, w.id.0, |s| {
+                line(s, &archisim_core::hull(&pts), low > cut)
+            });
+        }
+    }
+    for slab in model.slabs_on_level(level) {
+        let Some(p) = archisim_geom::sweeps::slab_edge_piece(model, slab.id) else {
+            continue;
+        };
+        let reach = model
+            .slab_type(slab.slab_type)
+            .and_then(|t| t.edge.as_ref())
+            .map_or(0.0, |e| e.profile.iter().map(|q| q.x).fold(0.0, f64::max));
+        let low = p
+            .mesh
+            .positions
+            .iter()
+            .map(|q| q[2])
+            .fold(f64::MAX, f64::min);
+        if let Some(outer) = archisim_core::offset_contour(&slab.outline, reach) {
+            dim::element(s, slab.id.0, |s| line(s, &outer, low > cut));
+        }
     }
 }
 

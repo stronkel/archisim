@@ -1725,6 +1725,64 @@ pub(crate) struct WallType {
     pub function: WallFunction,
     /// From the exterior face to the interior face.
     pub layers: Vec<Layer>,
+    /// Skirtings, bands, cornices and copings (version 29).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sweeps: Vec<WallSweepOf>,
+}
+
+/// An accessory of a wall type (version 29).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WallSweepOf {
+    pub kind: String,
+    pub side: String,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub offset: f64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub from_top: bool,
+    pub profile: Vec<Xy>,
+    pub material: u64,
+}
+
+impl WallSweepOf {
+    pub(crate) fn out(s: &core::WallSweep) -> Self {
+        WallSweepOf {
+            kind: s.kind.code().into(),
+            side: s.side.code().into(),
+            offset: s.offset,
+            from_top: s.from_top,
+            profile: s.profile.iter().copied().map(xy).collect(),
+            material: s.material.0,
+        }
+    }
+
+    pub(crate) fn into_core(self, element: &str) -> Result<core::WallSweep, FileError> {
+        let bad = |what: &str, v: &str| FileError::Value {
+            element: element.to_string(),
+            message: format!("unknown accessory {what} \"{v}\""),
+        };
+        Ok(core::WallSweep {
+            kind: core::SweepKind::from_code(&self.kind)
+                .ok_or_else(|| bad("accesorio", &self.kind))?,
+            side: core::SweepSide::from_code(&self.side).ok_or_else(|| bad("lado", &self.side))?,
+            offset: self.offset,
+            from_top: self.from_top,
+            profile: self
+                .profile
+                .into_iter()
+                .map(|p| Point2::new(p[0], p[1]))
+                .collect(),
+            material: core::MaterialId(self.material),
+        })
+    }
+}
+
+/// The edge of a slab type (version 29).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SlabEdgeOf {
+    pub profile: Vec<Xy>,
+    pub material: u64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1787,6 +1845,9 @@ pub(crate) struct SlabType {
     pub function: SlabFunction,
     /// From the top face down to the soffit.
     pub layers: Vec<Layer>,
+    /// A cornice or an eave round its slabs (version 29).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<SlabEdgeOf>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1969,6 +2030,7 @@ impl ProjectFile {
                     id: t.id.0,
                     guid: t.guid.to_string(),
                     layers: layers_out(&t.layers),
+                    sweeps: t.sweeps.iter().map(WallSweepOf::out).collect(),
                     name: t.name,
                     function: match t.function {
                         core::WallFunction::Exterior => WallFunction::Exterior,
@@ -2010,6 +2072,10 @@ impl ProjectFile {
                     id: t.id.0,
                     guid: t.guid.to_string(),
                     layers: layers_out(&t.layers),
+                    edge: t.edge.as_ref().map(|e| SlabEdgeOf {
+                        profile: e.profile.iter().copied().map(xy).collect(),
+                        material: e.material.0,
+                    }),
                     name: t.name,
                     function: match t.function {
                         core::SlabFunction::Floor => SlabFunction::Floor,
@@ -2951,7 +3017,14 @@ impl ProjectFile {
             });
         }
         for t in self.wall_types {
+            let element = format!("wall type {} «{}»", t.id, t.name);
+            let sweeps = t
+                .sweeps
+                .into_iter()
+                .map(|w| w.into_core(&element))
+                .collect::<Result<Vec<_>, _>>()?;
             parts.wall_types.push(core::WallType {
+                sweeps,
                 id: core::WallTypeId(t.id),
                 guid: guid(&format!("wall type {}", t.id), &t.guid)?,
                 name: t.name,
@@ -2998,6 +3071,14 @@ impl ProjectFile {
                     SlabFunction::Roof => core::SlabFunction::Roof,
                 },
                 layers: layers_in(t.layers),
+                edge: t.edge.map(|e| core::SlabEdge {
+                    profile: e
+                        .profile
+                        .into_iter()
+                        .map(|p| Point2::new(p[0], p[1]))
+                        .collect(),
+                    material: core::MaterialId(e.material),
+                }),
             });
         }
         for s in self.slabs {

@@ -5550,3 +5550,106 @@ fn concept_faces_divided_pushed_twisted_and_profiles() {
     assert_eq!(reopened.model(), h.model());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Bloque 5: a wardrobe stretched by its handles in the 3D view, wider
+/// and taller; its drawers and handles come from its family.
+#[test]
+fn objects_are_stretched_in_the_3d_view() {
+    use super::grips3d::SizeKey;
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Armario 120")
+        .expect("the library's wardrobe")
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Armario", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    let handles = h.app.object_handles_3d();
+    assert_eq!(handles.len(), 4, "{handles:?}");
+    let drag = |h: &mut Harness, key: SizeKey, to: glam::DVec3| {
+        let at = h
+            .app
+            .object_handles_3d()
+            .into_iter()
+            .find(|x| x.1 == key)
+            .unwrap()
+            .2;
+        let from = screen_3d(h, at.x, at.y, at.z);
+        let end = screen_3d(h, to.x, to.y, to.z);
+        h.pos = from;
+        h.events.push(Event::PointerMoved(from));
+        h.frame();
+        h.button(PointerButton::Primary, true);
+        for k in 1..=6 {
+            let q = from + (end - from) * (k as f32 / 6.0);
+            h.pos = q;
+            h.events.push(Event::PointerMoved(q));
+            h.frame();
+        }
+        h.button(PointerButton::Primary, false);
+        h.frame();
+        at
+    };
+    // The right side 0,3 m further: 0,6 m wider (it stays centred).
+    let at = h
+        .app
+        .object_handles_3d()
+        .into_iter()
+        .find(|x| x.1 == SizeKey::Width(true))
+        .unwrap()
+        .2;
+    drag(
+        &mut h,
+        SizeKey::Width(true),
+        at + glam::DVec3::new(0.3, 0.0, 0.0),
+    );
+    let ty = h
+        .model()
+        .object_type(h.model().object(id).unwrap().object_type)
+        .unwrap();
+    let width = match ty.values.get("width") {
+        Some(archisim_core::Value::Number(v)) => *v,
+        other => panic!("{other:?}"),
+    };
+    assert!((width - 1.8).abs() < 0.03, "{width} {:?}", h.app.message);
+    // The top 0,2 m up.
+    let at = h
+        .app
+        .object_handles_3d()
+        .into_iter()
+        .find(|x| x.1 == SizeKey::Height)
+        .unwrap()
+        .2;
+    drag(
+        &mut h,
+        SizeKey::Height,
+        at + glam::DVec3::new(0.0, 0.0, 0.2),
+    );
+    let ty = h
+        .model()
+        .object_type(h.model().object(id).unwrap().object_type)
+        .unwrap();
+    let height = match ty.values.get("height") {
+        Some(archisim_core::Value::Number(v)) => *v,
+        other => panic!("{other:?}"),
+    };
+    assert!((height - 2.6).abs() < 0.03, "{height}");
+}

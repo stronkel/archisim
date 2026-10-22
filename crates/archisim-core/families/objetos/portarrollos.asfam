@@ -1,0 +1,25 @@
+family "Portarrollos"
+  category sanitary
+  host none
+  version 1
+  description "Portarrollos de pared con su rollo"
+  folder "Accesorios de baño"
+
+type_params
+  section "Dimensiones"
+    elevation length = 0.70 range 0.30..1.20 label "Altura desde el suelo"
+  section "Modelo 3D"
+    model3d choice("De pared") = "De pared" label "Modelo 3D"
+    metal material = "Cromado" label "Metal"
+    linen material = "Tela clara" label "Rollo"
+
+body
+  box (-0.03, 0, elevation - 0.06) to (0.14, 0.12, elevation + 0.06) material metal
+
+plan 1:50
+  polygon (0, 0.005) (0.11, 0.005) (0.11, 0.115) (0, 0.115) pen thin dashed
+
+outputs
+  generator = "props:toilet_roll"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

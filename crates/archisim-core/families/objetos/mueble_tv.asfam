@@ -1,7 +1,7 @@
 family "Mueble TV"
   category furniture
   host none
-  version 1
+  version 2
   description "Mueble bajo de salón con televisor"
   folder "Salón"
 
@@ -10,6 +10,9 @@ type_params
     width  length = 1.80 range 0.80..4.00 label "Largo"
     depth  length = 0.42 range 0.30..0.60 label "Fondo"
     height length = 0.45 range 0.30..0.80 label "Altura"
+  section "Frentes"
+    drawer_fronts bool = no label "Frentes de cajón"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Sin tirador" label "Tirador"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
   section "Modelo 3D"

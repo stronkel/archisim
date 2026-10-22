@@ -72,3 +72,26 @@ fn models_follow_their_measurements() {
     assert!(Arc::ptr_eq(&x, &y));
     assert!(make("spaceship", &Params::default()).is_none());
 }
+
+/// Bloque 5: drawers and handles as asked.
+#[test]
+fn fronts_with_drawers_and_handles() {
+    let count = |kind: &str, set: &[(&str, f64)]| {
+        let mut p = Params::default();
+        for (k, v) in set {
+            p.set(k, *v);
+        }
+        make(kind, &p).unwrap().triangle_count()
+    };
+    // More drawers, more triangles; no handle, fewer.
+    assert!(count("chest", &[("drawers", 6.0)]) > count("chest", &[("drawers", 3.0)]));
+    assert!(count("nightstand", &[("handle", 5.0)]) < count("nightstand", &[("handle", 1.0)]));
+    assert!(count("wardrobe", &[("drawers", 2.0)]) > count("wardrobe", &[]));
+    assert!(count("counter", &[("drawers", 3.0)]) != count("counter", &[]));
+    assert!(count("desk", &[("pedestal", 1.0)]) < count("desk", &[("pedestal", 3.0)]));
+    for h in 1..=5 {
+        assert!(count("wall_cabinet", &[("handle", h as f64)]) > 20);
+    }
+    assert_eq!(choice_number("handle", "Pomo"), Some(2.0));
+    assert_eq!(choice_number("pedestal", "A la izquierda"), Some(2.0));
+}

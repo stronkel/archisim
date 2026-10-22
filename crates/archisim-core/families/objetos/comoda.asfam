@@ -1,0 +1,39 @@
+family "Cómoda"
+  category furniture
+  host none
+  version 1
+  description "Cómoda de cajones en una o varias columnas"
+  folder "Dormitorio"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.00 range 0.40..2.40 label "Ancho"
+    depth  length = 0.50 range 0.30..0.70 label "Fondo"
+    height length = 0.85 range 0.40..1.40 label "Altura"
+  section "Frentes"
+    drawers integer = 4 range 1..10 label "Cajones por columna"
+    columns integer = 1 range 1..4 label "Columnas"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Zócalo", "Con patas") = "Zócalo" label "Modelo 3D"
+    frame material = "Metal lacado" label "Tiradores y patas"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+  let cw = width / columns
+  repeat i in 1..columns
+    line (-width / 2 + i * cw, 0) to (-width / 2 + i * cw, depth) pen thin
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:chest"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

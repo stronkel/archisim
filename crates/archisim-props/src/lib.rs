@@ -11,7 +11,9 @@
 //!
 //! No dependencies. Described for Antonio in `docs/BIBLIOTECA_3D.md`.
 
+mod accessories;
 pub mod build;
+pub mod fronts;
 mod furniture;
 mod kitchen;
 mod people;
@@ -82,6 +84,8 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("bed", &["Tapizada", "Madera", "Tarima"]),
     ("nightstand", &["Cajonera", "Con patas"]),
     ("wardrobe", &["Puertas batientes"]),
+    ("chest", &["Zócalo", "Con patas"]),
+    ("desk", &["Con cajonera", "Patas metálicas"]),
     ("bookcase", &["Con libros"]),
     ("tv_unit", &["Con televisor"]),
     ("counter", &["Con fregadero y placa"]),
@@ -96,9 +100,35 @@ pub const KINDS: &[(&str, &[&str])] = &[
         "shower",
         &["Plato", "Plato y mampara", "Esquina con mampara"],
     ),
+    ("mirror", &["Con marco", "Sin marco", "Redondo"]),
+    ("towel_rail", &["Barra", "Radiador toallero"]),
+    ("toilet_roll", &["De pared"]),
+    ("grab_bar", &["Fija", "Abatible"]),
+    ("hood", &["Decorativa", "Integrada"]),
+    ("shelf", &["Con escuadras", "Flotante"]),
     ("person", &["Hombre", "Mujer", "Caminando"]),
     ("car", &["Berlina", "Compacto", "Todoterreno"]),
 ];
+
+/// Values of the families chosen by name, as numbers for the models:
+/// the position in the list, from 1 (`handle`: the handle of the fronts;
+/// `pedestal`: where a desk's drawers are).
+pub const CHOICES: &[(&str, &[&str])] = &[
+    ("handle", fronts::HANDLES),
+    (
+        "pedestal",
+        &["Sin cajonera", "A la izquierda", "A la derecha"],
+    ),
+];
+
+/// The number of a value chosen by name (see [`CHOICES`]).
+pub fn choice_number(key: &str, name: &str) -> Option<f64> {
+    CHOICES
+        .iter()
+        .find(|(k, _)| *k == key)
+        .and_then(|(_, names)| names.iter().position(|n| *n == name))
+        .map(|i| (i + 1) as f64)
+}
 
 /// The names of the models of a kind.
 pub fn styles(kind: &str) -> &'static [&'static str] {
@@ -116,6 +146,8 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "bed" => furniture::bed(&mut b, p),
         "nightstand" => furniture::nightstand(&mut b, p),
         "wardrobe" => furniture::wardrobe(&mut b, p),
+        "chest" => furniture::chest(&mut b, p),
+        "desk" => furniture::desk(&mut b, p),
         "bookcase" => furniture::bookcase(&mut b, p),
         "tv_unit" => furniture::tv_unit(&mut b, p),
         "counter" => kitchen::counter(&mut b, p),
@@ -127,6 +159,12 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "washbasin" => sanitary::washbasin(&mut b, p),
         "bath" => sanitary::bath(&mut b, p),
         "shower" => sanitary::shower(&mut b, p),
+        "mirror" => accessories::mirror(&mut b, p),
+        "towel_rail" => accessories::towel_rail(&mut b, p),
+        "toilet_roll" => accessories::toilet_roll(&mut b, p),
+        "grab_bar" => accessories::grab_bar(&mut b, p),
+        "hood" => accessories::hood(&mut b, p),
+        "shelf" => accessories::shelf(&mut b, p),
         "person" => people::person(&mut b, p),
         "car" => vehicles::car(&mut b, p),
         _ => return None,

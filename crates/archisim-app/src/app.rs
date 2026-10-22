@@ -278,6 +278,9 @@ pub struct ArchiSimApp {
     ghost: ghost3d::GhostCache,
     plan_ghost: ghost3d::PlanGhost,
     start: start_ui::StartScreen,
+    /// Stretching an object by a handle in the 3D view.
+    object_grip: Option<grips3d::ObjectGrip3d>,
+    object_grip_hover: Option<grips3d::SizeKey>,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -580,6 +583,8 @@ impl ArchiSimApp {
             plan_ghost: ghost3d::PlanGhost::default(),
             // The start screen greets the program opened without a file
             // (never in the tests).
+            object_grip: None,
+            object_grip_hover: None,
             start: start_ui::StartScreen {
                 open: !cfg!(test),
                 ..Default::default()
@@ -2091,6 +2096,7 @@ mod draft_props;
 mod foundation_ui;
 mod ghost3d;
 mod glyphs;
+mod grips3d;
 mod hatch_ui;
 mod icons;
 mod levels_ui;

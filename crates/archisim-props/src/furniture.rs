@@ -1,9 +1,11 @@
 //! Furniture: sofas and armchairs, chairs, tables (with their chairs),
-//! coffee tables, beds, bedside tables, wardrobes, bookcases and TV units.
+//! coffee tables, beds, bedside tables, wardrobes, chests of drawers,
+//! desks, bookcases and TV units.
 //! Axes of the library's furniture: origin in the middle of the back,
 //! `x` to the right, `y` forwards (away from the wall), `z` up.
 
 use crate::build::Builder;
+use crate::fronts::{self, Handle, FRONT};
 use crate::Params;
 
 /// Sofas (and armchairs, with one place): 1 contemporary, on a plinth,
@@ -490,25 +492,20 @@ pub fn nightstand(b: &mut Builder, p: &Params) {
             b.cone("frame", [x, y, 0.0], [x, y, foot], 0.012, 0.016, 8);
         }
     }
-    b.rbox("mat", [x0, 0.0, foot], [-x0, d, h], 0.008);
-    // Two drawer fronts and their knobs.
-    let n = 2;
-    let fh = (h - foot - 0.04) / n as f64;
-    for i in 0..n {
-        let z = foot + 0.02 + i as f64 * fh;
-        b.rbox(
-            "mat",
-            [x0 + 0.015, d - 0.002, z + 0.005],
-            [-x0 - 0.015, d + 0.012, z + fh - 0.005],
-            0.003,
-        );
-        b.cyl(
-            "frame",
-            [0.0, d + 0.012, z + fh / 2.0],
-            [0.0, d + 0.03, z + fh / 2.0],
-            0.008,
-        );
-    }
+    b.rbox("mat", [x0, 0.0, foot], [-x0, d - FRONT, h], 0.008);
+    // Its drawers, with the handle chosen (knobs, unless said).
+    let n = p.get("drawers", 2.0).round().clamp(1.0, 6.0) as usize;
+    let kind = Handle::of(p, Handle::Knob);
+    fronts::drawers(
+        b,
+        x0 + 0.01,
+        -x0 - 0.01,
+        foot + 0.02,
+        h - 0.02,
+        d - FRONT,
+        n,
+        kind,
+    );
     lamp(b, x0 + w * 0.6, d * 0.45, h);
 }
 
@@ -542,6 +539,8 @@ pub fn wardrobe(b: &mut Builder, p: &Params) {
     let d = p.get("depth", 0.6);
     let h = p.get("height", 2.4);
     let doors = p.get("doors", 2.0).round().max(1.0) as usize;
+    let rows = p.get("drawers", 0.0).round().clamp(0.0, 4.0) as usize;
+    let kind = Handle::of(p, Handle::Bar);
     let x0 = -w / 2.0;
     b.rbox(
         "mat",
@@ -551,35 +550,129 @@ pub fn wardrobe(b: &mut Builder, p: &Params) {
     );
     b.rbox("mat", [x0, 0.0, 0.08], [-x0, d - 0.02, h], 0.004);
     let dw = w / doors as f64;
+    // Drawers under the doors, a row in each door's width.
+    let top_of_drawers = 0.085 + rows as f64 * 0.22;
+    if rows > 0 {
+        for i in 0..doors {
+            let a = x0 + i as f64 * dw;
+            fronts::drawers(b, a, a + dw, 0.085, top_of_drawers, d - 0.02, rows, kind);
+        }
+    }
     for i in 0..doors {
-        let a = x0 + i as f64 * dw + 0.002;
+        let a = x0 + i as f64 * dw;
+        // Hinged at the outside of each pair.
+        let hinge_left = i % 2 == 0;
+        fronts::door(
+            b,
+            a,
+            a + dw,
+            top_of_drawers,
+            h - 0.002,
+            d - 0.02,
+            kind,
+            hinge_left,
+            1.05,
+        );
+    }
+}
+
+/// Chests of drawers: rows of drawers in one or two columns, on a plinth
+/// (1) or on legs (2).
+pub fn chest(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 1.0);
+    let d = p.get("depth", 0.5);
+    let h = p.get("height", 0.85);
+    let rows = p.get("drawers", 4.0).round().clamp(1.0, 10.0) as usize;
+    let cols = p.get("columns", 1.0).round().clamp(1.0, 4.0) as usize;
+    let kind = Handle::of(p, Handle::Bar);
+    let x0 = -w / 2.0;
+    let foot = if p.style() == 2 { 0.15 } else { 0.07 };
+    if p.style() == 2 {
+        for (x, y) in [
+            (x0 + 0.05, 0.05),
+            (-x0 - 0.05, 0.05),
+            (x0 + 0.05, d - 0.06),
+            (-x0 - 0.05, d - 0.06),
+        ] {
+            b.cone("frame", [x, y, 0.0], [x, y, foot], 0.012, 0.018, 8);
+        }
+    } else {
         b.rbox(
             "mat",
-            [a, d - 0.02, 0.085],
-            [a + dw - 0.004, d, h - 0.004],
-            0.002,
+            [x0 + 0.02, 0.02, 0.0],
+            [-x0 - 0.02, d - 0.05, foot],
+            0.0,
         );
-        // The handle near the meeting of each pair.
-        let left = i % 2 == 0;
-        let hx = if left { a + dw - 0.05 } else { a + 0.05 };
-        b.cyl(
-            "frame",
-            [hx, d + 0.03, h * 0.45],
-            [hx, d + 0.03, h * 0.45 + 0.22],
-            0.007,
-        );
-        b.cyl(
-            "frame",
-            [hx, d, h * 0.45 + 0.02],
-            [hx, d + 0.03, h * 0.45 + 0.02],
-            0.005,
-        );
-        b.cyl(
-            "frame",
-            [hx, d, h * 0.45 + 0.2],
-            [hx, d + 0.03, h * 0.45 + 0.2],
-            0.005,
-        );
+    }
+    b.rbox("mat", [x0, 0.0, foot], [-x0, d - FRONT, h], 0.006);
+    let cw = (w - 0.02) / cols as f64;
+    for c in 0..cols {
+        let a = x0 + 0.01 + c as f64 * cw;
+        fronts::drawers(b, a, a + cw, foot + 0.01, h - 0.025, d - FRONT, rows, kind);
+    }
+}
+
+/// Desks: a top on legs (1, a drawer pedestal at one side, `pedestal`:
+/// 1 none, 2 left, 3 right) or on metal frames (2).
+pub fn desk(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 1.4);
+    let d = p.get("depth", 0.7);
+    let h = p.get("height", 0.75);
+    let kind = Handle::of(p, Handle::Bar);
+    let side = p.get("pedestal", 3.0).round() as i32;
+    let n = p.get("drawers", 3.0).round().clamp(1.0, 6.0) as usize;
+    let x0 = -w / 2.0;
+    let t = 0.03;
+    b.rbox("top", [x0, 0.0, h - t], [-x0, d, h], 0.004);
+    let pw = 0.42_f64.min(w * 0.45);
+    let ped = match side {
+        2 => Some((x0 + 0.01, x0 + 0.01 + pw)),
+        3 => Some((-x0 - 0.01 - pw, -x0 - 0.01)),
+        _ => None,
+    };
+    if p.style() == 2 {
+        // Two metal frames, like an upside-down U.
+        for x in [x0 + 0.05, -x0 - 0.05] {
+            b.rbox(
+                "frame",
+                [x - 0.02, 0.05, 0.0],
+                [x + 0.02, 0.09, h - t],
+                0.004,
+            );
+            b.rbox(
+                "frame",
+                [x - 0.02, d - 0.09, 0.0],
+                [x + 0.02, d - 0.05, h - t],
+                0.004,
+            );
+            b.rbox(
+                "frame",
+                [x - 0.02, 0.05, h - t - 0.04],
+                [x + 0.02, d - 0.05, h - t],
+                0.004,
+            );
+        }
+    } else {
+        for (x, y) in [
+            (x0 + 0.04, 0.04),
+            (-x0 - 0.04, 0.04),
+            (x0 + 0.04, d - 0.04),
+            (-x0 - 0.04, d - 0.04),
+        ] {
+            let inside = ped.is_some_and(|(a, b2)| x > a - 0.05 && x < b2 + 0.05);
+            if !inside {
+                b.rbox(
+                    "mat",
+                    [x - 0.025, y - 0.025, 0.0],
+                    [x + 0.025, y + 0.025, h - t],
+                    0.003,
+                );
+            }
+        }
+    }
+    if let Some((a, b2)) = ped {
+        b.rbox("mat", [a, 0.02, 0.0], [b2, d - 0.04 - FRONT, h - t], 0.004);
+        fronts::drawers(b, a, b2, 0.02, h - t - 0.01, d - 0.04 - FRONT, n, kind);
     }
 }
 
@@ -645,16 +738,27 @@ pub fn tv_unit(b: &mut Builder, p: &Params) {
     ] {
         b.cone("frame", [x, y, 0.0], [x, y, 0.06], 0.012, 0.016, 8);
     }
-    let fronts = (w / 0.6).round().max(1.0) as usize;
-    let fw = w / fronts as f64;
-    for i in 0..fronts {
-        let a = x0 + i as f64 * fw + 0.003;
-        b.rbox(
-            "mat",
-            [a, d - 0.002, 0.08],
-            [a + fw - 0.006, d + 0.01, h - 0.02],
-            0.002,
-        );
+    let count = (w / 0.6).round().max(1.0) as usize;
+    let fw = w / count as f64;
+    let kind = Handle::of(p, Handle::None);
+    let as_drawers = p.flag("drawer_fronts", false);
+    for i in 0..count {
+        let a = x0 + i as f64 * fw;
+        if as_drawers {
+            fronts::drawer(b, a, a + fw, 0.08, h - 0.02, d - 0.008, kind);
+        } else {
+            fronts::door(
+                b,
+                a,
+                a + fw,
+                0.08,
+                h - 0.02,
+                d - 0.008,
+                kind,
+                i % 2 == 0,
+                h / 2.0,
+            );
+        }
     }
     // The screen, 16:9, as wide as most of the unit (at most 1.6 m).
     let sw = (w * 0.75).min(1.6);
