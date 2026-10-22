@@ -193,8 +193,8 @@ Antonio probó v0.37–v0.41 («funciona todo perfecto») y entregó la lista de
 | 3. Inicio y vistas previas | Pantalla de inicio con bienvenida y proyectos recientes; vista previa de cualquier cosa al moverla o colocarla | ✅ v0.43 (`docs/INICIO.md`) |
 | 4. Modelado | Dividir caras con aristas y pintar solo esa región; empujar caras laterales o regiones en cualquier dirección; doblar y retorcer; perfil personalizado para Seguir; redondear aristas (ya existe en Propiedades → Aristas: hacerlo más visible) | ✅ v0.44 (`docs/FORMAS.md` §5) |
 | 5. Muebles y accesorios | Muebles estirables desde la vista 3D; más parámetros (cajones, posición, tipos de pomo); accesorios de muro, forjado y cubierta (zócalos, cornisas, molduras, aleros, vierteaguas) y de baño y cocina | ✅ v0.45 (`docs/BIBLIOTECA_3D.md`) |
-| 6. Símbolos DXF | Importar símbolos de planta desde DXF para objetos (vegetación y demás) | Siguiente |
-| 7. Render y Presto | Renderizado; mediciones y presupuestos con bancos de precios (Presto, BC3) | |
+| 6. Símbolos DXF | Importar símbolos de planta desde DXF para objetos (vegetación y demás) | ✅ v0.46 (`docs/BIBLIOTECA_3D.md`) |
+| 7. Render y Presto | Renderizado; mediciones y presupuestos con bancos de precios (Presto, BC3) | Siguiente |
 
 El trabajo colaborativo de la lista ya está (Colaboración → Compartir en equipo, v0.38).
 

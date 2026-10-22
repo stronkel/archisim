@@ -14,3 +14,4 @@ pub mod dxf_read;
 pub mod paths;
 pub mod pdf;
 pub mod png;
+pub mod symbol;

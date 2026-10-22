@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (10) · Revisión de Antonio, bloque 6: Símbolos DXF
+
+Rama `bloque/simbolos` (sobre `bloque/muebles`), pull request para Antonio. v0.46. Formato `.archisim` versión 30. Sin cambios en el IFC. Descrito en `docs/BIBLIOTECA_3D.md` («Símbolos de planta desde DXF»).
+
+**Hecho**
+- **Símbolo de planta desde DXF** para cualquier tipo de objeto (Propiedades → Símbolo de planta → Importar DXF…): sus líneas, arcos, círculos, polilíneas y rellenos con sus colores y grosores, estirado al objeto o a su medida; cambiar y quitar.
+- La demo dibuja un árbol con un símbolo de CAD.
+
+**Pendiente**
+- Elegir un bloque concreto de un DXF con muchos.
+
+**Qué debe probar Antonio**
+1. En la demo, mira el árbol de abajo del todo: un símbolo de CAD verde (copa, círculo y ramas).
+2. Selecciona otro árbol → Propiedades → Símbolo de planta → Importar DXF… y elige un símbolo de árbol del estudio (un DXF con un solo árbol). Cambia «Tamaño» entre «Del objeto» y «Del dibujo».
+3. Haz lo mismo con un mueble (un sofá o una cama del estudio) con «Del dibujo».
+
+---
+
 ## 2026-10-22 (9) · Revisión de Antonio, bloque 5: Muebles y accesorios
 
 Rama `bloque/muebles` (sobre `bloque/modelado-2`), pull request para Antonio. v0.45. Formato `.archisim` versión 29 (abre todas las anteriores). IFC: accesorios como `IfcCovering`. Descrito en `docs/BIBLIOTECA_3D.md` («Muebles y accesorios»).

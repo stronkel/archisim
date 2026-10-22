@@ -22,6 +22,21 @@ use archisim_library::add_library;
 /// Height of the façade walls; the roof slab rests on them.
 const WALL_HEIGHT: f64 = 3.0;
 
+/// A tree as offices draw it in CAD: a crown, a smaller circle and
+/// eight branches (drawn in millimetres, green).
+const TREE_DXF: &str = "0\nSECTION\n2\nENTITIES\n\
+0\nCIRCLE\n8\nARBOLES\n62\n3\n10\n0\n20\n0\n30\n0\n40\n2500\n\
+0\nCIRCLE\n8\nARBOLES\n62\n3\n10\n0\n20\n0\n30\n0\n40\n300\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n0\n20\n300\n30\n0\n11\n0\n21\n2300\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n0\n20\n-300\n30\n0\n11\n0\n21\n-2300\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n300\n20\n0\n30\n0\n11\n2300\n21\n0\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n-300\n20\n0\n30\n0\n11\n-2300\n21\n0\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n212\n20\n212\n30\n0\n11\n1626\n21\n1626\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n-212\n20\n212\n30\n0\n11\n-1626\n21\n1626\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n212\n20\n-212\n30\n0\n11\n1626\n21\n-1626\n31\n0\n\
+0\nLINE\n8\nARBOLES\n62\n3\n10\n-212\n20\n-212\n30\n0\n11\n-1626\n21\n-1626\n31\n0\n\
+0\nENDSEC\n0\nEOF\n";
+
 pub fn build() -> Result<Document, ModelError> {
     let mut doc = Document::new(Model::new("Vivienda de prueba"));
 
@@ -1133,6 +1148,23 @@ pub fn build() -> Result<Document, ModelError> {
                 material: stone,
             }),
         )
+    })?;
+
+    // A tree with a plan symbol drawn in CAD (block 6): a crown with
+    // radiating branches, from a DXF.
+    doc.transact("Símbolo de planta", |m| {
+        let Some(t) = m
+            .object_types()
+            .filter(|t| t.name.starts_with("Árbol"))
+            .find(|t| m.objects().any(|o| o.object_type == t.id))
+            .map(|t| t.id)
+        else {
+            return Ok(());
+        };
+        let symbol =
+            archisim_export::symbol::symbol_from_dxf(TREE_DXF.as_bytes(), "arbol-cad.dxf", true)
+                .map_err(|_| ModelError::InvalidShape("demo symbol"))?;
+        m.set_object_type_symbol(t, Some(symbol))
     })?;
 
     // Saved plans of the ground floor for each job (block 2 of Antonio's

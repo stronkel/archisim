@@ -2016,6 +2016,16 @@ fn draw_objects(
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
         overrides::open(s, category);
+        // A symbol brought from a DXF, drawn instead of the family's.
+        let symbol = model
+            .object_type(o.object_type)
+            .and_then(|t| t.symbol.as_ref())
+            .filter(|_| marks.is_ok());
+        if let Some(sym) = symbol {
+            dim::element(s, o.id.0, |s| draw_symbol(s, model, o, sym, k));
+            overrides::close(s);
+            continue;
+        }
         dim::element(s, o.id.0, |s| match marks {
             Ok(marks) => draw_marks(s, model, marks, &|p| o.to_plan(p[0], p[1]), k),
             Err(()) => {
@@ -2028,6 +2038,43 @@ fn draw_objects(
             }
         });
         overrides::close(s);
+    }
+    s.push_str("</g>\n");
+}
+
+/// An object's plan symbol from a DXF: centred on its type's plan box (and
+/// as large as it, when it is stretched), turned and placed as the
+/// object; each piece with its own colour and weight, or the ink and a
+/// fine line.
+fn draw_symbol(
+    s: &mut String,
+    model: &Model,
+    o: &archisim_core::Object,
+    sym: &archisim_core::PlanSymbol,
+    k: f64,
+) {
+    use archisim_draft::Transform;
+    let (lo, hi) = model
+        .object_type_box(o.object_type)
+        .unwrap_or(([-0.5, -0.5], [0.5, 0.5]));
+    let centre = archisim_core::Vec2::new((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0);
+    let size = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(0.01);
+    let origin = Point2::new(0.0, 0.0);
+    let factor = if sym.fit { size } else { 1.0 };
+    let t = Transform::scale(origin, factor)
+        .then(&Transform::translate(centre))
+        .then(&Transform::rotate(origin, o.rotation))
+        .then(&Transform::translate(o.position - origin));
+    // Lines and arcs are drawn, not filled (fills bring their own).
+    s.push_str("<g fill=\"none\">\n");
+    for item in &sym.items {
+        let look = archisim_core::DraftLook {
+            color: item.color.unwrap_or([26, 26, 26]),
+            weight: item.weight.unwrap_or(pens().hatch),
+            line: archisim_core::LineStyle::Continuous,
+        };
+        let shape = archisim_draft::transform_shape(&item.shape, &t);
+        crate::drafting::draw_shape(s, &shape, &look, k);
     }
     s.push_str("</g>\n");
 }

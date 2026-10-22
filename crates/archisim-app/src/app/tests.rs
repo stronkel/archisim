@@ -5653,3 +5653,59 @@ fn objects_are_stretched_in_the_3d_view() {
     };
     assert!((height - 2.6).abs() < 0.03, "{height}");
 }
+
+/// Bloque 6: a tree's type takes its plan symbol from a DXF, stretched to
+/// the tree's size, and the plan draws it instead of the family's.
+#[test]
+fn object_types_take_plan_symbols_from_dxf() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name.starts_with("Árbol"))
+        .expect("a tree in the library")
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Árbol", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(3.0, 3.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    let before =
+        archisim_plan::render_plan(h.model(), level, &archisim_plan::PlanOptions::default());
+    let dir = std::env::temp_dir().join(format!("archisim-symbol-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pino.dxf");
+    std::fs::write(
+        &path,
+        "0\nSECTION\n2\nENTITIES\n0\nCIRCLE\n8\nCOPA\n62\n3\n10\n500\n20\n500\n30\n0\n40\n2000\n\
+0\nLINE\n8\nCOPA\n10\n-1500\n20\n500\n30\n0\n11\n2500\n21\n500\n31\n0\n0\nENDSEC\n0\nEOF\n",
+    )
+    .unwrap();
+    h.app.set_symbol_from(t, &path);
+    let sym = h
+        .model()
+        .object_type(t)
+        .and_then(|x| x.symbol.clone())
+        .unwrap_or_else(|| panic!("{:?}", h.app.message));
+    assert!(sym.fit, "vegetation is stretched to its size");
+    assert_eq!(sym.items.len(), 2);
+    let after =
+        archisim_plan::render_plan(h.model(), level, &archisim_plan::PlanOptions::default());
+    assert_ne!(before, after);
+    // Saved and opened, the same; undone, the family's again.
+    let file = h.app.ed.save(Some(&dir.join("s.archisim"))).unwrap();
+    assert_eq!(Editor::open(&file).unwrap().model(), h.model());
+    h.app.ed.undo();
+    assert!(h.model().object_type(t).unwrap().symbol.is_none());
+    let _ = id;
+    let _ = std::fs::remove_dir_all(&dir);
+}

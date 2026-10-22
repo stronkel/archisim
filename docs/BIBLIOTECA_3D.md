@@ -82,10 +82,22 @@ La demo trae rodapiés de madera en los muros de fachada y en los tabiques y una
 
 Para el programador: `archisim_props::fronts` (`Handle`, `drawer`, `door`, `drawers`; `CHOICES` y `choice_number` traducen los valores elegidos por nombre), `accessories` (baño y cocina), `chest` y `desk`; `app/grips3d` (estirar en 3D, `drag::set_object_size`); `archisim_core::WallSweep`, `SlabEdge` (`model/sweeps`, `WallType::sweeps`, `SlabType::edge`; formato versión 29), `archisim_geom::sweeps` y `sculpt::sweep_closed`, `archisim_ifc::accessories`.
 
+## Símbolos de planta desde DXF (bloque 6 de la revisión, v0.46)
+
+Cualquier objeto puede dibujarse en planta con un símbolo hecho en CAD: los árboles, arbustos, personas o muebles que el estudio ya tiene dibujados. Selecciona un objeto → Propiedades → **Símbolo de planta** → **Importar DXF…**. Se trae todo el dibujo del fichero (los bloques, despiezados; los textos y cotas se quedan fuera), con los colores y grosores que tiene, centrado en el objeto. Lo dibujan todos los objetos de ese tipo.
+
+- **Tamaño**: «Del objeto» lo estira al tamaño del objeto y cambia con él (así se traen la vegetación y las personas); «Del dibujo» lo deja a su medida real (así se traen los muebles). Se puede cambiar después.
+- **Cambiar…** pone otro; **Quitar** vuelve al dibujo de la familia.
+- Las unidades del DXF se leen de su cabecera (`$INSUNITS`); si no lo dice, milímetros.
+- El símbolo es solo de la planta: el 3D y el IFC siguen siendo los de la familia.
+
+La demo dibuja uno de sus árboles con un símbolo de CAD (copa, círculo interior y ocho ramas). Para el programador: `archisim_core::PlanSymbol` y `SymbolItem` (`ObjectType::symbol`, formato versión 30), `archisim_export::symbol::symbol_from_dxf`, `archisim_plan::draw_symbol` y `drafting::draw_shape`; en la app, `object_ui::symbol_group`.
+
 ## Pendiente
 
 - Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
 - Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).
+- Elegir un bloque de un DXF con muchos (una biblioteca de árboles en un solo fichero); hoy se trae el dibujo entero.
 
 - Más objetos: electrodomésticos de encastre, campana, aparatos de iluminación, mobiliario de oficina, plantas de interior en maceta.
 - Un cuarto nivel de detalle para las vistas lejanas de modelos muy grandes (hoy ya son ligeros).
