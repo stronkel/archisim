@@ -804,7 +804,20 @@ impl ArchiSimApp {
                     self.export_3d_picture();
                 }
             });
+            let mut textures = self.v3d.textures;
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.checkbox(&mut textures, "Texturas de los materiales")
+                    .on_hover_text(
+                        "Ladrillo, madera, piedra… dibujados en las caras. Apagadas, el 3D es más ligero (en los Mac con Intel vienen apagadas porque su tarjeta gráfica se queda colgada con ellas)",
+                    );
+            });
+            if textures != self.v3d.textures {
+                self.v3d.set_textures(textures);
+                self.prefs.textures_3d = Some(textures);
+            }
         });
+        self.render_group(ui);
         self.section_box_group(ui);
     }
 

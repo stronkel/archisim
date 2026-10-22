@@ -123,6 +123,9 @@ pub(crate) struct ProjectFile {
     /// Presentation styles of the views (version 22).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation_styles: Vec<PresentationStyleOf>,
+    /// Prices of the budget's items (version 31).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prices: Vec<PriceOf>,
     /// Saved plans, the looks of the levels' plans, view templates and
     /// reference planes (version 27).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -797,6 +800,53 @@ pub(crate) struct EdgeFinishOf {
     pub top: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub bottom: bool,
+}
+
+/// The price of an item of the measurements (version 31).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PriceOf {
+    /// The item of the measurements: "muro:3", "acabado:0:Gres"…
+    pub item: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub code: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub unit: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    pub price: f64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub bank: String,
+}
+
+impl PriceOf {
+    fn out(item: &str, c: &core::PriceConcept) -> Self {
+        PriceOf {
+            item: item.to_string(),
+            code: c.code.clone(),
+            unit: c.unit.clone(),
+            summary: c.summary.clone(),
+            price: c.price,
+            text: c.text.clone(),
+            bank: c.bank.clone(),
+        }
+    }
+
+    fn into_core(self) -> (String, core::PriceConcept) {
+        (
+            self.item,
+            core::PriceConcept {
+                code: self.code,
+                unit: self.unit,
+                summary: self.summary,
+                price: self.price,
+                text: self.text,
+                bank: self.bank,
+            },
+        )
+    }
 }
 
 /// A presentation style (version 22).
@@ -2434,6 +2484,7 @@ impl ProjectFile {
                 .iter()
                 .map(PresentationStyleOf::out)
                 .collect(),
+            prices: p.prices.iter().map(|(k, c)| PriceOf::out(k, c)).collect(),
             plan_views: p
                 .plan_views
                 .iter()
@@ -2944,6 +2995,7 @@ impl ProjectFile {
             paint_zones: Vec::new(),
             appearances: Vec::new(),
             presentation_styles: Vec::new(),
+            prices: self.prices.into_iter().map(PriceOf::into_core).collect(),
             plan_views: Vec::new(),
             level_styles: Vec::new(),
             view_templates: Vec::new(),

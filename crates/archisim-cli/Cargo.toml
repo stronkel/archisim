@@ -26,5 +26,6 @@ archisim-ids.workspace = true
 archisim-bcf.workspace = true
 archisim-coord.workspace = true
 archisim-cte.workspace = true
+archisim-render.workspace = true
 # Only to measure how long the plan takes to draw on screen (`medir`).
 resvg = { version = "0.48", default-features = false }

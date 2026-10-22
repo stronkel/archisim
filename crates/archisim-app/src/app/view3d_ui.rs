@@ -20,8 +20,36 @@ use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
 
 /// The picture is drawn at twice the screen resolution and scaled down,
-/// which smooths edges (supersampling).
-const SUPERSAMPLE: f32 = 2.0;
+/// which smooths edges (supersampling) — on ordinary screens. A Retina
+/// screen already has two pixels a point: doubling again made pictures of
+/// 5000 × 3000 pixels with four samples each, hundreds of megabytes of the
+/// graphics card's memory, for no visible gain.
+fn supersample(ppp: f32) -> f32 {
+    if ppp >= 1.5 {
+        1.0
+    } else {
+        2.0
+    }
+}
+
+/// The largest side of the picture, in pixels.
+const MAX_SIDE: f32 = 4096.0;
+
+/// The picture's size for a view of `size` points: at most [`MAX_SIDE`]
+/// on its longer side, keeping its shape.
+fn picture_size(size: Vec2, ppp: f32) -> ([u32; 2], u32) {
+    let ss = supersample(ppp);
+    let w = size.x * ppp * ss;
+    let h = size.y * ppp * ss;
+    let k = (MAX_SIDE / w.max(h).max(1.0)).min(1.0);
+    (
+        [
+            ((w * k).round() as u32).max(1),
+            ((h * k).round() as u32).max(1),
+        ],
+        ss as u32,
+    )
+}
 
 /// Which drawing the central area shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +94,16 @@ pub struct View3dState {
     section_drag: Option<Face>,
     /// The handle under the cursor.
     section_hover: Option<Face>,
+    /// Pixels a point of the picture (2: supersampled), for its edges.
+    edge_step: u32,
+    /// The materials' textures (brick, wood, stone…) are drawn.
+    pub textures: bool,
+}
+
+/// Textures on, except on Intel Macs: their AMD graphics drivers (on
+/// recent macOS, often patched) hang drawing them.
+pub fn default_textures() -> bool {
+    !cfg!(all(target_os = "macos", target_arch = "x86_64"))
 }
 
 impl Default for View3dState {
@@ -84,6 +122,8 @@ impl Default for View3dState {
             section_saved: None,
             section_drag: None,
             section_hover: None,
+            edge_step: 2,
+            textures: default_textures(),
         }
     }
 }
@@ -96,6 +136,28 @@ struct Gpu {
 }
 
 impl View3dState {
+    /// A 3D view with the textures on or off.
+    pub fn with_textures(textures: bool) -> Self {
+        Self {
+            textures,
+            ..Self::default()
+        }
+    }
+
+    /// Turns the textures on or off: the shaders are made again.
+    pub fn set_textures(&mut self, on: bool) {
+        if on == self.textures {
+            return;
+        }
+        self.textures = on;
+        if let Some(g) = self.gpu.take() {
+            if let Some(id) = g.texture {
+                g.state.renderer.write().free_texture(&id);
+            }
+        }
+        self.drawn = None;
+    }
+
     /// Forgets the scene, for a project just opened.
     pub fn reset(&mut self) {
         self.scene_key = None;
@@ -233,7 +295,16 @@ impl View3dState {
         gpu_state: Option<&egui_wgpu::RenderState>,
         size: [u32; 2],
     ) -> Option<egui::TextureId> {
+        // After an error of the graphics card nothing more is drawn (it is
+        // written in errores.log): better a message than a crash.
+        if crate::crash::GPU_FAILED.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
         let state = gpu_state?;
+        if self.gpu.is_none() {
+            crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
+        }
+        let textures = self.textures;
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
             renderer: Renderer::new(
                 &state.device,
@@ -242,26 +313,30 @@ impl View3dState {
                     .get_downlevel_capabilities()
                     .flags
                     .contains(wgpu::DownlevelFlags::VIEW_FORMATS),
+                textures,
             ),
             state: state.clone(),
             texture: None,
             uploaded: 0,
         });
         if gpu.uploaded != self.scene_serial {
+            crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
         }
         let wanted = (self.camera, size, self.scene_serial, self.section);
         if self.drawn != Some(wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
+            crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(self.section.map(|b| (b.lo, b.hi)));
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
                 &self.camera,
                 size,
-                SUPERSAMPLE as u32,
+                self.edge_step,
             );
+            crate::crash::stage("3D: pasar la imagen a la ventana");
             let view = gpu.renderer.display_view()?;
             let mut egui_renderer = gpu.state.renderer.write();
             match gpu.texture {
@@ -340,11 +415,8 @@ impl View3dState {
                 );
             }
         }
-        let ppp = ui.ctx().pixels_per_point();
-        let px = [
-            ((size.x * ppp * SUPERSAMPLE).round() as u32).clamp(1, 4096),
-            ((size.y * ppp * SUPERSAMPLE).round() as u32).clamp(1, 4096),
-        ];
+        let (px, ss) = picture_size(size, ui.ctx().pixels_per_point());
+        self.edge_step = ss;
         match self.draw(gpu_state, px) {
             Some(texture) => {
                 painter.image(
@@ -402,6 +474,7 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
+        crate::crash::stage("3D: preparar la escena");
         let v = &mut self.v3d;
         v.refresh_scene(
             self.ed.revision(),
@@ -539,6 +612,7 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
+        crate::crash::stage("3D: preparar la escena");
         let v = &mut self.v3d;
         v.refresh_scene(
             self.ed.revision(),
@@ -550,11 +624,8 @@ impl ArchiSimApp {
         );
 
         // The picture.
-        let ppp = ctx.pixels_per_point();
-        let px = [
-            ((size.x * ppp * SUPERSAMPLE).round() as u32).clamp(1, 8192),
-            ((size.y * ppp * SUPERSAMPLE).round() as u32).clamp(1, 8192),
-        ];
+        let (px, ss) = picture_size(size, ctx.pixels_per_point());
+        v.edge_step = ss;
         match v.draw(self.gpu.as_ref(), px) {
             Some(texture) => {
                 painter.image(
@@ -569,8 +640,14 @@ impl ArchiSimApp {
                 painter.text(
                     rect.center(),
                     Align2::CENTER_CENTER,
-                    "La vista 3D necesita la tarjeta gráfica (Vulkan, DirectX 12 o Metal),\n\
-                     que no está disponible en este equipo.",
+                    if crate::crash::GPU_FAILED.load(std::sync::atomic::Ordering::Relaxed) {
+                        "La tarjeta gráfica dio un error al dibujar el 3D y la vista se ha detenido\n\
+                         (está anotado en errores.log, en la carpeta de ajustes de ArchiSim).\n\
+                         Guarda el proyecto y vuelve a abrir ArchiSim."
+                    } else {
+                        "La vista 3D necesita la tarjeta gráfica (Vulkan, DirectX 12 o Metal),\n\
+                         que no está disponible en este equipo."
+                    },
                     FontId::proportional(14.0),
                     Color32::from_gray(60),
                 );

@@ -106,6 +106,11 @@ Uso:
       Convierte una planta o un plano en SVG en una imagen PNG, a 200
       puntos por pulgada si no se dice otra cosa.
 
+  archisim render <proyecto.archisim> [imagen.png] [ancho]
+      Hace una imagen realista del proyecto visto desde el suroeste, con el
+      sol del proyecto, sus sombras y la luz del cielo (1600 píxeles de
+      ancho si no se dice otra cosa).
+
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
 ";
@@ -132,6 +137,23 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("render") => {
+            match args.get(1) {
+                Some(project) => {
+                    let project = PathBuf::from(project);
+                    let png = args
+                        .get(2)
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| project.with_extension("png"));
+                    let width: usize = args.get(3).and_then(|w| w.parse().ok()).unwrap_or(1600);
+                    report(run_render(&project, &png, width))
+                }
+                None => {
+                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho]");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("exportar") | Some("export") => match args.get(1) {
             Some(project) => {
                 let project = PathBuf::from(project);
@@ -243,6 +265,7 @@ fn run_demo(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(dir)?;
     let project = dir.join(format!("demo.{}", archisim_file::EXTENSION));
     archisim_file::save(doc.model(), &project)?;
+    std::fs::write(dir.join("banco-ejemplo.bc3"), demo::EXAMPLE_BANK)?;
     summary(doc.model());
     println!("  Proyecto: {}", project.display());
     export_all(doc.model(), dir, "demo")?;
@@ -365,6 +388,35 @@ fn run_cte(project: &Path, csv: Option<&Path>) -> Result<(), Box<dyn std::error:
         std::fs::write(csv, r.to_csv(&model))?;
         println!("\nInforme CSV: {}", csv.display());
     }
+    Ok(())
+}
+
+fn run_render(project: &Path, png: &Path, width: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let model = model.flattened().map_err(|e| format!("{e}"))?;
+    let width = width.clamp(16, 8000);
+    let options = archisim_render::Options {
+        width,
+        height: width * 5 / 8,
+        ..Default::default()
+    };
+    let view = archisim_render::View::fit(&model);
+    let start = std::time::Instant::now();
+    let img = archisim_render::render(&model, &view, &options, &|_| {});
+    let bytes =
+        archisim_export::png::encode_rgb(img.width as u32, img.height as u32, &img.rgb, 96.0);
+    if let Some(dir) = png.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(png, bytes)?;
+    println!(
+        "Imagen de {} × {} en {:.1} s: {}",
+        img.width,
+        img.height,
+        start.elapsed().as_secs_f64(),
+        png.display()
+    );
     Ok(())
 }
 
@@ -574,7 +626,19 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         &bc3,
         archisim_export::bc3::bc3(model, &date, env!("CARGO_PKG_VERSION")),
     )?;
-    println!("  Mediciones en BC3 (FIEBDC-3): {}", bc3.display());
+    let (priced, pem) = archisim_plan::schedules::measurements(model)
+        .iter()
+        .flat_map(|c| &c.2)
+        .filter_map(|i| model.price_of(&i.key).map(|c| c.price * i.total()))
+        .fold((0, 0.0), |(n, t), a| (n + 1, t + a));
+    if priced > 0 {
+        println!(
+            "  Presupuesto en BC3 (FIEBDC-3): {} ({priced} partidas con precio, ejecución material {pem:.2} €)",
+            bc3.display()
+        );
+    } else {
+        println!("  Mediciones en BC3 (FIEBDC-3): {}", bc3.display());
+    }
     if !model.sheets().is_empty() {
         let pdf = dir.join(format!("{stem}-planos.pdf"));
         std::fs::write(&pdf, sheets_pdf(model)?)?;

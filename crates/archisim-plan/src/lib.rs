@@ -332,7 +332,9 @@ pub fn render_plan(model: &Model, level: LevelId, options: &PlanOptions) -> Stri
         svg = presentation::apply(&svg, p);
     }
     // Each category's own graphics, over the presentation style.
-    svg = overrides::apply(&svg, &options.style);
+    if !options.style.overrides.is_empty() {
+        svg = overrides::apply(&svg, &options.style);
+    }
     COARSE.with(|c| c.set(false));
     PX_PER_MM.with(|c| c.set(None));
     PENS.with(|p| p.set(archisim_core::Pens::FINE));
@@ -1940,8 +1942,14 @@ fn draw_accessories(
             num(pens().hatch * k)
         );
     };
-    for w in model.walls_on_level(level) {
-        for p in archisim_geom::sweeps::wall_sweep_pieces(model, w.id) {
+    let swept: Vec<_> = model
+        .walls_on_level(level)
+        .filter(|w| archisim_geom::sweeps::has_sweeps(model, w.id))
+        .collect();
+    let idx = (!swept.is_empty()).then(|| archisim_geom::WallIndex::new(model));
+    for w in swept {
+        let Some(idx) = &idx else { break };
+        for p in archisim_geom::sweeps::wall_sweep_pieces_in(idx, w.id) {
             let pts: Vec<Point2> = p
                 .mesh
                 .positions

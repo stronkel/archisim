@@ -75,11 +75,29 @@ pub struct Renderer {
     clip: Option<(glam::Vec3, glam::Vec3)>,
 }
 
+/// The shaders, with or without the materials' textures. Without them
+/// the texture code is left out of the shader altogether: the graphics
+/// drivers of some old Macs (AMD on Intel Macs) hang on it.
+pub fn shader_source(textures: bool) -> String {
+    let full = include_str!("shaders.wgsl");
+    if textures {
+        return full.to_string();
+    }
+    let (Some(a), Some(b)) = (full.find("// ---- Textures"), full.find("struct ModelOut")) else {
+        return full.to_string();
+    };
+    format!(
+        "{}fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {{\n    return base;\n}}\n\n{}",
+        &full[..a],
+        &full[b..]
+    )
+}
+
 impl Renderer {
-    pub fn new(device: &wgpu::Device, view_formats: bool) -> Self {
+    pub fn new(device: &wgpu::Device, view_formats: bool, textures: bool) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("archisim 3d"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader_source(textures).into()),
         });
         let globals_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("globals"),

@@ -114,7 +114,7 @@ impl ArchiSimApp {
             if ui
                 .button("Exportar BC3…")
                 .on_hover_text(
-                    "Presupuesto FIEBDC-3 (Presto, Arquímedes…) de todo el proyecto, sin precios",
+                    "Presupuesto FIEBDC-3 (Presto, Arquímedes…) de todo el proyecto, con las partidas y precios asignados",
                 )
                 .clicked()
             {
@@ -137,9 +137,14 @@ impl ArchiSimApp {
             .iter()
             .map(|k| (*k, archisim_plan::schedules::table(model, *k, level)))
             .collect();
+        drop(shown);
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                if which == SchedTab::Takeoff {
+                    self.budget_section(ui);
+                    ui.add_space(14.0);
+                }
                 for (k, table) in &tables {
                     if which == SchedTab::Takeoff {
                         ui.add_space(6.0);
@@ -211,7 +216,7 @@ impl ArchiSimApp {
         if let Some(path) = d.save_file() {
             match self.ed.export_bc3(&path) {
                 Ok(()) => self.say(format!(
-                    "Mediciones exportadas en {} (muros, forjados, carpinterías y acabados, sin precios).",
+                    "Presupuesto exportado en {} (mediciones de todo el proyecto, con las partidas y precios asignados).",
                     path.display()
                 )),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),

@@ -2075,7 +2075,7 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     // The accessories of their types: skirtings, bands, cornices, copings
     // and slab edges (bloque 5).
     for w in model.walls() {
-        for p in crate::sweeps::wall_sweep_pieces(model, w.id) {
+        for p in crate::sweeps::wall_sweep_pieces_in(&idx, w.id) {
             out.push(Solid {
                 owner: SolidOwner::Wall(w.id),
                 material: p.material,

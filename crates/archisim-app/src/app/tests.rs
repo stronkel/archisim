@@ -5709,3 +5709,95 @@ fn object_types_take_plan_symbols_from_dxf() {
     let _ = id;
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn render_makes_a_picture_from_the_camera() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.render.quality = super::render_ui::RenderQuality::Draft;
+    h.app.start_render();
+    assert!(h.app.render.busy());
+    let start = std::time::Instant::now();
+    while h.app.render.busy() && start.elapsed().as_secs() < 120 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.frame();
+    }
+    let img = h.app.render.image.as_ref().expect("a picture");
+    assert_eq!(img.width, 800);
+    assert_eq!(img.rgb.len(), img.width * img.height * 3);
+    assert!(h.app.render.open);
+}
+
+#[test]
+fn budget_takes_a_price_from_a_bank() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let wt = h.app.ed.model().wall_types().next().unwrap().id;
+    h.app
+        .ed
+        .transact("m", |m| {
+            m.add_wall(archisim_core::NewWall {
+                wall_type: wt,
+                level,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap();
+    let dir = std::env::temp_dir().join(format!("archisim-bank-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("banco.bc3");
+    std::fs::write(
+        &path,
+        "~V|x|FIEBDC-3/2016|Banco|1|ANSI|\r\n~C|B##||Banco de prueba|0|010126|0|\r\n\
+         ~D|B##|FFQ010\\1\\1\\|\r\n~C|FFQ010|m2|Hoja de ladrillo|20,5|010126|0|\r\n\
+         ~T|FFQ010|Hoja de partición de ladrillo hueco doble.|\r\n",
+    )
+    .unwrap();
+    h.app.open_price_bank(&path);
+    let bank = h.app.budget.bank.as_ref().unwrap();
+    assert_eq!(bank.name, "Banco de prueba");
+    let c = bank.search("ladrillo", Some("m2"), 5)[0].clone();
+    let key = archisim_plan::schedules::measurements(h.app.ed.model())
+        .into_iter()
+        .find(|c| c.0 == "01")
+        .unwrap()
+        .2[0]
+        .key
+        .clone();
+    h.app.set_item_price(
+        &key,
+        Some(archisim_core::PriceConcept {
+            code: c.code,
+            unit: c.unit,
+            summary: c.summary,
+            price: c.price,
+            text: c.text,
+            bank: "Banco de prueba".into(),
+        }),
+    );
+    assert_eq!(h.app.ed.undo_label(), Some("Precio de partida"));
+    assert!((h.app.ed.model().price_of(&key).unwrap().price - 20.5).abs() < 1e-9);
+    // The tab draws it (4 × 2,5 m² at 20,50 €).
+    h.app.open_view(super::tabs::TabKind::Schedule(
+        super::tabs::SchedTab::Takeoff,
+    ));
+    h.frame();
+    h.frame();
+    let out = dir.join("p.bc3");
+    h.app.ed.export_bc3(&out).unwrap();
+    let text: String = std::fs::read(&out)
+        .unwrap()
+        .iter()
+        .map(|b| *b as char)
+        .collect();
+    assert!(
+        text.contains("~C|FFQ010|m2|Hoja de ladrillo|20.5|"),
+        "{text}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}

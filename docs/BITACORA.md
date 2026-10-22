@@ -6,6 +6,73 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (13) · v0.47.2: el 3D en el MacBook Pro de 2016
+
+El muestreo del Mac de Antonio (MacBook Pro 2016, Intel con AMD Radeon, macOS 15 con controladores parcheados) muestra el programa esperando, sin hacer nada: no se queda colgado nuestro código, sino la tarjeta gráfica al pintar. Solo pasa con algo dibujado, es decir, cuando corre el sombreador de las caras, que desde hoy (bloque Formas) dibuja las texturas de los materiales. El compilador de sombreadores de AMD de ese Mac se cae también con Safari.
+
+**Hecho**
+- **Texturas de los materiales opcionales** (Propiedades de la vista 3D → «Texturas de los materiales»). Apagadas, el código de texturas ni siquiera llega a la tarjeta gráfica. En los Mac con Intel vienen apagadas por defecto; la elección se guarda en las preferencias.
+- El vigilante solo apunta las esperas de verdad: un fotograma que no termina. Antes también apuntaba la ventana quieta esperando al ratón.
+
+**Confirmado por Antonio** (22/10/2026, noche): con las texturas apagadas el 3D vuelve a ir fluido en su Mac; eran las texturas.
+
+**Pendiente**
+- Una versión de las texturas que su tarjeta aguante (sin `switch` ni bucles en el sombreador, o hechas como imagen y no calculadas), para poder encenderlas también en los Mac con Intel.
+
+**Qué debe probar Antonio**
+1. Baja la 0.47.2 del pull request #53 y entra en el 3D con la demo: debe ir fluido, con colores lisos.
+2. En Propiedades de la vista 3D, enciende «Texturas de los materiales»: si se cuelga, era eso. Vuelve a abrir ArchiSim, quedarán apagadas.
+
+---
+
+## 2026-10-22 (12) · v0.47.1: lentitud, recuadro blanco y cierres del 3D en Mac
+
+En la rama `bloque/render-presto` (#53), sobre lo de los bloques 2–7, tras la prueba de Antonio («más lento al abrir en Windows y en Mac; al dibujar un muro o un forjado sale un borde blanco enorme que tapa la cuadrícula; el Mac se cierra al entrar en la vista 3D»).
+
+**Hecho**
+- **Lentitud**: medido con `archisim medir` frente a `main`. Dos culpables:
+  - Los accesorios de los tipos (bloque 5) rehacían el índice de muros de todo el proyecto por cada muro. Con 1100 muros, la planta en pantalla había pasado de 17 a 877 ms y el 3D de 170 a 954 ms. Ahora se calcula una vez: 39 y 155 ms.
+  - Buscar una familia por su nombre leía y analizaba las 54 recetas cada vez. Empezar un proyecto nuevo había subido a 0,5 s; ahora se leen una sola vez y son 0,02 s.
+- **Recuadro blanco**: la vista previa en planta (bloque 3) tapaba su zona con papel blanco. Ahora vuelve a dibujar la cuadrícula encima del papel, así que solo se ve lo que cambia.
+- **Mac y 3D**:
+  - En pantallas Retina el 3D se dibujaba al doble de una resolución que ya es doble: imágenes de unos 5000 × 3000 píxeles con cuatro muestras, cientos de MB de la tarjeta gráfica. Ahora, en Retina, a la resolución de la pantalla (y nunca más de 4096 píxeles de lado).
+  - Un error de la tarjeta gráfica ya no cierra el programa: la vista 3D se detiene con un aviso.
+  - **Vigilante**: si la ventana deja de responder más de 4 segundos (la pelota de playa), se apunta qué estaba haciendo (preparar la escena 3D, subirla a la tarjeta gráfica, dibujarla…).
+  - **Registro de errores**: cualquier fallo se apunta en `errores.log`, en la carpeta de ajustes de ArchiSim. Al abrir otra vez, ArchiSim lo aparta como `errores-anterior.log` y avisa de dónde está.
+
+**Pendiente**
+- Si el Mac se sigue cerrando, leer su `errores-anterior.log`. No tengo un Mac para reproducirlo.
+
+**Qué debe probar Antonio**
+1. Abre ArchiSim en Windows y en Mac: ¿arranca y abre la demo con la rapidez de antes?
+2. Dibuja un muro y un forjado: mientras los colocas, la cuadrícula debe seguir viéndose alrededor (sin recuadro blanco).
+3. En el Mac, entra en la vista 3D (F3) varias veces, gira y haz zoom. Si se cierra, vuelve a abrir ArchiSim: avisará de un fichero `errores-anterior.log` en `~/Library/Application Support/ArchiSim/` (en Windows, `%APPDATA%\ArchiSim\`). Mándamelo.
+
+---
+
+## 2026-10-22 (11) · Revisión de Antonio, bloque 7: Render y Presto
+
+Rama `bloque/render-presto` (sobre `bloque/simbolos`), pull request para Antonio. v0.47. Formato `.archisim` versión 31 (abre todas las anteriores). Sin cambios en el IFC. Descrito en `docs/RENDER_PRESUPUESTOS.md`. Con este bloque la revisión del 22/10/2026 queda completa.
+
+**Hecho**
+- **Renderizado**: imagen realista con el sol del proyecto, sombras, luz del cielo y vidrio, calculada en el procesador (sin tarjeta gráfica). En la vista 3D, Propiedades → Renderizado (Borrador, Normal, Alta) desde la cámara de la vista, mientras se sigue trabajando; Guardar PNG. Orden `archisim render`.
+- **Presupuesto en Mediciones**: capítulos y partidas con cantidad, precio, importe, totales y ejecución material.
+- **Bancos de precios BC3**: abrir cualquier banco FIEBDC-3 (precios calculados por descomposición cuando no los trae), buscar sin tildes, asignar una partida a cada tipo, acabado o instalación; precio a mano; aviso si la unidad no coincide.
+- **BC3 para Presto** con los códigos, resúmenes, precios y textos del banco y las mediciones elemento a elemento.
+- Banco de ejemplo propio (`docs/ejemplos/banco-ejemplo.bc3`, precios inventados) y la demo con su presupuesto.
+
+**Pendiente**
+- Render: texturas dibujadas, luces artificiales, rebotes de luz en interiores; que la caja de sección recorte la imagen.
+- Presupuesto: descomposición propia, costes indirectos, GG y BI; partidas por elemento suelto.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- demo out/` y luego `cargo run --release -p archisim-cli -- render out/demo.archisim out/demo-render.png`: mira la imagen (sol de la mañana desde el sureste, sombras de los árboles en el suelo).
+2. Abre `out/demo.archisim` en la aplicación, ve a la Vista 3D, gira la cámara a tu gusto y pulsa Propiedades → Renderizado → Renderizar (prueba Borrador y luego Normal). Cambia el día y la hora del sol en Propiedades del proyecto y vuelve a renderizar. Guarda el PNG.
+3. Navegador → Proyecto → Tablas → **Mediciones**: el presupuesto de la vivienda con el banco de ejemplo. Pulsa **Abrir banco BC3…** y abre un banco real del estudio (el de tu comunidad o uno exportado de Presto); en una fila, **Partida…**, busca y **Asignar**. Escribe un precio a mano en otra.
+4. **Exportar BC3…** y ábrelo en Presto: comprueba capítulos, códigos, precios, textos y las líneas de medición.
+
+---
+
 ## 2026-10-22 (10) · Revisión de Antonio, bloque 6: Símbolos DXF
 
 Rama `bloque/simbolos` (sobre `bloque/muebles`), pull request para Antonio. v0.46. Formato `.archisim` versión 30. Sin cambios en el IFC. Descrito en `docs/BIBLIOTECA_3D.md` («Símbolos de planta desde DXF»).

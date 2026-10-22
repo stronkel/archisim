@@ -1,0 +1,84 @@
+~V|ArchiSim|FIEBDC-3/2016\22102026|ArchiSim|Banco de ejemplo|ANSI||2|||
+~K|\2\2\3\2\2\2\2\EUR\|
+~C|EJEMPLO##||Banco de ejemplo de ArchiSim (precios orientativos inventados)|0|22102026|0|
+~D|EJEMPLO##|D#\1\1\F#\1\1\E#\1\1\Q#\1\1\L#\1\1\R#\1\1\V#\1\1\I#\1\1\|
+~C|D#||Demoliciones|0|22102026|0|
+~D|D#|DPT010\1\1\DLC010\1\1\|
+~C|DPT010|m2|Demolición de partición interior de fábrica|9.85|22102026|0|
+~T|DPT010|Demolición de partición interior de fábrica revestida, con medios manuales, incluso retirada de escombros a contenedor.|
+~C|DLC010|ud|Desmontaje de carpintería exterior o interior|18.40|22102026|0|
+~T|DLC010|Desmontaje de hoja y cerco de carpintería, con medios manuales, sin aprovechamiento del material.|
+~C|F#||Fachadas y particiones|0|22102026|0|
+~D|F#|FFZ010\1\1\FFQ010\1\1\FFQ020\1\1\|
+~C|FFZ010|m2|Fachada de doble hoja de fábrica con aislamiento|78.60|22102026|0|
+~T|FFZ010|Cerramiento de fachada formado por hoja exterior de ladrillo cerámico perforado para revestir, cámara con aislamiento de lana mineral de 6 cm y hoja interior de ladrillo hueco doble, recibido con mortero de cemento.|
+~C|FFQ010|m2|Tabique de ladrillo cerámico hueco doble|24.30|22102026|0|
+~T|FFQ010|Partición interior de 10 cm de espesor de fábrica de ladrillo cerámico hueco doble, recibida con mortero de cemento, para revestir.|
+~C|FFQ020|m2|Tabique de placa de yeso laminado|31.90|22102026|0|
+~T|FFQ020|Tabique sencillo autoportante de 100 mm con dos placas de yeso laminado a cada lado y aislamiento de lana mineral.|
+~C|E#||Estructura|0|22102026|0|
+~D|E#|ESS010\1\1\EHS010\1\1\EHV010\1\1\EHE010\1\1\|
+~C|ESS010|m2|Solera de hormigón armado sobre encachado|29.75|22102026|0|
+~T|ESS010|Solera de hormigón armado de 15 cm de espesor, con malla electrosoldada, sobre encachado de grava de 20 cm y lámina de polietileno.|
+~C|EHS010|m3|Pilar de hormigón armado|412.00|22102026|0|
+~T|EHS010|Pilar de sección rectangular o cuadrada de hormigón armado HA-25, con encofrado y armadura de acero B 500 S.|
+~C|EHV010|m3|Viga de hormigón armado|386.50|22102026|0|
+~T|EHV010|Viga de hormigón armado HA-25, con encofrado y armadura de acero B 500 S.|
+~C|EHE010|ud|Escalera de losa de hormigón armado|1850.00|22102026|0|
+~T|EHE010|Escalera de losa de hormigón armado de un tramo, con peldañeado de fábrica, sin revestir.|
+~C|Q#||Cubiertas|0|22102026|0|
+~D|Q#|QAD010\1\1\QTT010\1\1\|
+~C|QAD010|m2|Cubierta plana invertida con acabado de grava|68.20|22102026|0|
+~T|QAD010|Cubierta plana transitable no ventilada, invertida, con formación de pendientes, impermeabilización con lámina bituminosa, aislamiento de poliestireno extruido y capa de grava.|
+~C|QTT010|m2|Cubierta inclinada de teja cerámica|54.90|22102026|0|
+~T|QTT010|Cubierta inclinada sobre losa de hormigón con aislamiento, rastreles y teja cerámica mixta recibida con espuma.|
+~C|L#||Carpintería|0|22102026|0|
+~D|L#|LPM010\1\1\LPM020\1\1\LCL010\1\1\LVC010\1\1\LVC020\1\1\LVC030\1\1\LVF010\1\1\LFM010\1\1\|
+~C|LPM010|ud|Puerta de entrada de madera maciza|920.00|22102026|0|
+~T|LPM010|Puerta de entrada de una hoja de madera maciza, con cerco, tapajuntas, herrajes de seguridad y cerradura de tres puntos.|
+~C|LPM020|ud|Puerta de paso de madera lacada|265.00|22102026|0|
+~T|LPM020|Puerta de paso ciega de una hoja de tablero lacado en blanco, con precerco, cerco, tapajuntas y herrajes.|
+~C|LCL010|m2|Carpintería de aluminio con rotura de puente térmico|318.00|22102026|0|
+~T|LCL010|Carpintería de aluminio lacado con rotura de puente térmico, practicable o corredera, con doble acristalamiento bajo emisivo, sellado y colocación.|
+~C|LVC010|ud|Ventana de aluminio de una hoja practicable|295.00|22102026|0|
+~T|LVC010|Ventana de aluminio lacado con rotura de puente térmico, una hoja practicable, de hasta 1,2 m², con doble acristalamiento.|
+~C|LVC020|ud|Ventana de aluminio de dos hojas practicables|520.00|22102026|0|
+~T|LVC020|Ventana de aluminio lacado con rotura de puente térmico, dos hojas practicables, de hasta 2,5 m², con doble acristalamiento.|
+~C|LVC030|ud|Balconera corredera de aluminio de dos hojas|890.00|22102026|0|
+~T|LVC030|Balconera corredera de dos hojas de aluminio lacado con rotura de puente térmico y doble acristalamiento.|
+~C|LVF010|ud|Fijo de aluminio pequeño|140.00|22102026|0|
+~T|LVF010|Ventana fija de aluminio lacado de hasta 0,5 m², con doble acristalamiento.|
+~C|LFM010|m2|Muro cortina de montantes y travesaños|385.00|22102026|0|
+~T|LFM010|Muro cortina de aluminio con montantes y travesaños, acristalamiento doble y anclajes al forjado.|
+~C|R#||Revestimientos|0|22102026|0|
+~D|R#|RSG010\1\1\RSM010\1\1\RIP010\1\1\RTC010\1\1\|
+~C|RSG010|m2|Solado de gres porcelánico|38.40|22102026|0|
+~T|RSG010|Solado de baldosas de gres porcelánico de 60×60 cm recibidas con adhesivo cementoso, rejuntado incluido.|
+~C|RSM010|m2|Tarima flotante de roble|46.70|22102026|0|
+~T|RSM010|Pavimento de tarima flotante multicapa de roble con lámina de polietileno y rodapié.|
+~C|RIP010|m2|Pintura plástica lisa en paramentos|7.90|22102026|0|
+~T|RIP010|Pintura plástica lisa mate en paramentos interiores, dos manos sobre imprimación.|
+~C|RTC010|m2|Falso techo continuo de placa de yeso|27.60|22102026|0|
+~T|RTC010|Falso techo continuo suspendido de placa de yeso laminado de 15 mm, con estructura metálica.|
+~C|V#||Seguridad y barandillas|0|22102026|0|
+~D|V#|FDD010\1\1\|
+~C|FDD010|m|Barandilla metálica|112.00|22102026|0|
+~T|FDD010|Barandilla de acero con pasamanos, montantes y barrotes, de 1,00 m de altura, anclada a la estructura.|
+~C|I#||Instalaciones|0|22102026|0|
+~D|I#|IFI010\1\1\IFI020\1\1\ISS010\1\1\IVK010\1\1\ICG010\1\1\III010\1\1\IEM010\1\1\IEM020\1\1\|
+~C|IFI010|m|Tubería de agua fría de multicapa|11.20|22102026|0|
+~T|IFI010|Tubería de polietileno reticulado multicapa para agua fría, colocada con accesorios.|
+~C|IFI020|m|Tubería de agua caliente aislada|14.60|22102026|0|
+~T|IFI020|Tubería de polietileno reticulado multicapa para agua caliente, con aislamiento.|
+~C|ISS010|m|Bajante y colector de PVC de 110 mm|19.80|22102026|0|
+~T|ISS010|Tubería de PVC de 110 mm de diámetro para saneamiento, con accesorios y abrazaderas.|
+~C|IVK010|m|Conducto rectangular de extracción|34.50|22102026|0|
+~T|IVK010|Conducto rectangular de chapa galvanizada para extracción, con soportes.|
+~C|ICG010|ud|Caldera de condensación mural|2150.00|22102026|0|
+~T|ICG010|Caldera mural de condensación a gas para calefacción y agua caliente, instalada y probada.|
+~C|III010|ud|Luminaria empotrada LED|86.00|22102026|0|
+~T|III010|Luminaria empotrable de techo con LED, instalada.|
+~C|IEM010|ud|Base de enchufe|32.00|22102026|0|
+~T|IEM010|Base de enchufe de 16 A con toma de tierra, mecanismo y caja, cableado incluido.|
+~C|IEM020|ud|Interruptor|28.00|22102026|0|
+~T|IEM020|Interruptor sencillo con mecanismo y caja, cableado incluido.|

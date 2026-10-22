@@ -1221,8 +1221,79 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Prices of the budget (block 7): every item takes its concept from
+    // the example bank, as it would from a regional bank in the
+    // Mediciones tab.
+    doc.transact("Precios del presupuesto", |m| {
+        let bank = archisim_export::bc3_read::read_bank(EXAMPLE_BANK)
+            .map_err(|_| ModelError::InvalidShape("demo price bank"))?;
+        let items: Vec<(String, String)> = archisim_plan::schedules::measurements(m)
+            .into_iter()
+            .flat_map(|(_, _, items)| items)
+            .map(|i| (i.key, i.summary))
+            .collect();
+        for (key, summary) in items {
+            let Some((_, code)) = DEMO_PRICES.iter().find(|(w, _)| summary.contains(w)) else {
+                continue;
+            };
+            let Some(c) = bank.concepts.get(*code) else {
+                continue;
+            };
+            m.set_price(
+                &key,
+                Some(archisim_core::PriceConcept {
+                    code: c.code.clone(),
+                    unit: c.unit.clone(),
+                    summary: c.summary.clone(),
+                    price: c.price,
+                    text: c.text.clone(),
+                    bank: bank.name.clone(),
+                }),
+            )?;
+        }
+        Ok(())
+    })?;
+
     Ok(doc)
 }
+
+/// The example price bank (made up for ArchiSim, orientative prices).
+pub const EXAMPLE_BANK: &[u8] = include_bytes!("../../../docs/ejemplos/banco-ejemplo.bc3");
+
+/// Which concept of the example bank each item of the demo takes, by a
+/// word of its summary.
+const DEMO_PRICES: &[(&str, &str)] = &[
+    ("Fachada", "FFZ010"),
+    ("Tabique", "FFQ010"),
+    ("Solera", "ESS010"),
+    ("Cubierta plana", "QAD010"),
+    ("Cubierta inclinada", "QTT010"),
+    ("Puerta de entrada", "LPM010"),
+    ("Puerta de paso", "LPM020"),
+    ("practicable 2 hojas", "LVC020"),
+    ("practicable 1 hoja", "LVC010"),
+    ("Balconera", "LVC030"),
+    ("Ventana fija", "LVF010"),
+    ("Gres", "RSG010"),
+    ("Tarima", "RSM010"),
+    ("Pintura", "RIP010"),
+    ("Falso techo", "RTC010"),
+    ("Pilar HA", "EHS010"),
+    ("Viga HA", "EHV010"),
+    ("Escalera", "EHE010"),
+    ("Barandilla", "FDD010"),
+    ("Montante", "LFM010"),
+    ("Agua fría", "IFI010"),
+    ("Agua caliente", "IFI020"),
+    ("Saneamiento", "ISS010"),
+    ("Extracción", "IVK010"),
+    ("Caldera", "ICG010"),
+    ("Luminaria", "III010"),
+    ("Enchufe", "IEM010"),
+    ("Interruptor", "IEM020"),
+    ("Demolición de muros", "DPT010"),
+    ("Desmontaje", "DLC010"),
+];
 
 /// An urbanisation that places the demo house as a module three times:
 /// two side by side (the second mirrored, so their entrances face each
@@ -1358,7 +1429,8 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
-        assert_eq!(doc.undo_label(), Some("Vistas guardadas"));
+        assert_eq!(doc.undo_label(), Some("Precios del presupuesto"));
+        assert_eq!(m.prices().count(), 28);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 3);

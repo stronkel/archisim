@@ -29,6 +29,7 @@ archisim-bcf.workspace = true
 archisim-coord.workspace = true
 archisim-cte.workspace = true
 archisim-team.workspace = true
+archisim-render.workspace = true
 serde_json = "1"
 eframe = "0.37"
 resvg = { version = "0.48", default-features = false }
@@ -54,3 +55,5 @@ winresource = "0.1"
 
 [dev-dependencies]
 pollster = "0.4"
+# To check that the 3D shaders (with and without textures) are valid WGSL.
+naga = { version = "30", features = ["wgsl-in"] }

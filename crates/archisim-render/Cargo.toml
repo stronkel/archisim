@@ -1,0 +1,13 @@
+[package]
+name = "archisim-render"
+description = "Still pictures of the model: a ray tracer with the project's sun, the sky's light and glass"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-geom.workspace = true

@@ -1,12 +1,22 @@
 //! Measurements as a BC3 budget (FIEBDC-3, the exchange format of Spanish
 //! budgeting programs: Presto, Arquímedes, TCQ…): one chapter per kind of
-//! work, one item per type, one measurement line per element. Prices are
-//! left at zero for the budget program to fill.
+//! work, one item per type, one measurement line per element. An item
+//! given a concept of a price bank (`Model::price_of`) takes its code,
+//! summary, price and description; the others keep their price at zero
+//! for the budget program to fill.
 
 use std::fmt::Write;
 
 use archisim_core::Model;
 use archisim_plan::schedules::measurements;
+
+/// A bank's code as BC3 writes it: no separators, no chapter marks.
+fn clean_code(code: &str) -> String {
+    code.trim()
+        .chars()
+        .filter(|c| !matches!(c, '|' | '\\' | '~' | '#') && !c.is_control())
+        .collect()
+}
 
 /// `2026-10-19…` as BC3 writes dates: `19102026`.
 pub fn bc3_date(iso: &str) -> String {
@@ -40,6 +50,16 @@ pub fn bc3(model: &Model, date: &str, version: &str) -> Vec<u8> {
             s.to_string()
         }
     };
+    // Prices with two decimals, as the banks give them.
+    let n2 = |v: f64| {
+        let s = format!("{:.2}", (v * 100.0).round() / 100.0);
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        if s == "-0" || s.is_empty() {
+            "0".to_string()
+        } else {
+            s.to_string()
+        }
+    };
     let mut s = String::new();
     let _ = write!(
         s,
@@ -65,21 +85,45 @@ pub fn bc3(model: &Model, date: &str, version: &str) -> Vec<u8> {
     for (ci, (code, title, items)) in chapters.iter().enumerate() {
         let ch = format!("{code}#");
         let _ = write!(s, "~C|{ch}||{}|0|{date}|0|\r\n", clean(title));
-        let mut d = String::new();
+        // Items with a concept of a bank take its code; two types with the
+        // same concept are one item of the chapter, with both measured.
+        let mut merged: Vec<(String, Vec<&archisim_plan::schedules::Item>)> = Vec::new();
         for it in items {
-            let _ = write!(d, "{}\\1\\{}\\", it.code, n(it.total()));
+            let code = match model.price_of(&it.key) {
+                Some(c) if !clean_code(&c.code).is_empty() => clean_code(&c.code),
+                _ => it.code.clone(),
+            };
+            match merged.iter_mut().find(|(c, _)| *c == code) {
+                Some((_, v)) => v.push(it),
+                None => merged.push((code, vec![it])),
+            }
+        }
+        let mut d = String::new();
+        for (code, its) in &merged {
+            let total: f64 = its.iter().map(|i| i.total()).sum();
+            let _ = write!(d, "{code}\\1\\{}\\", n(total));
         }
         let _ = write!(s, "~D|{ch}|{d}|\r\n");
-        for (ii, it) in items.iter().enumerate() {
+        for (ii, (code, its)) in merged.iter().enumerate() {
+            let first = its[0];
+            let concept = model.price_of(&first.key);
+            let summary = concept
+                .map(|c| c.summary.as_str())
+                .filter(|t| !t.trim().is_empty())
+                .unwrap_or(&first.summary);
+            let price = concept.map_or(0.0, |c| c.price);
             let _ = write!(
                 s,
-                "~C|{}|{}|{}|0|{date}|0|\r\n",
-                it.code,
-                it.unit,
-                clean(&it.summary)
+                "~C|{code}|{}|{}|{}|{date}|0|\r\n",
+                first.unit,
+                clean(summary),
+                n2(price)
             );
+            if let Some(c) = concept.filter(|c| !c.text.trim().is_empty()) {
+                let _ = write!(s, "~T|{code}|{}|\r\n", clean(&c.text));
+            }
             let mut lines = String::new();
-            for l in &it.lines {
+            for l in its.iter().flat_map(|i| &i.lines) {
                 let dim = |v: f64| if v == 0.0 { String::new() } else { n(v) };
                 // Lines without dimensions carry their quantity as units.
                 let units = if l.length == 0.0 && l.width == 0.0 && l.height == 0.0 {
@@ -97,13 +141,13 @@ pub fn bc3(model: &Model, date: &str, version: &str) -> Vec<u8> {
                     dim(l.height)
                 );
             }
+            let total: f64 = its.iter().map(|i| i.total()).sum();
             let _ = write!(
                 s,
-                "~M|{ch}\\{}|{}\\{}\\|{}|{lines}|\r\n",
-                it.code,
+                "~M|{ch}\\{code}|{}\\{}\\|{}|{lines}|\r\n",
                 ci + 1,
                 ii + 1,
-                n(it.total())
+                n(total)
             );
         }
     }
@@ -171,6 +215,39 @@ mod tests {
         assert!(bytes.contains(&0xE1));
         assert!(text.contains("|20|"), "{text}");
         assert!(text.ends_with("\r\n"));
+
+        // With a concept of a bank: its code, price and text.
+        let item = &archisim_plan::schedules::measurements(&m)
+            .into_iter()
+            .find(|c| c.0 == "01")
+            .unwrap()
+            .2[0];
+        m.set_price(
+            &item.key,
+            Some(archisim_core::PriceConcept {
+                code: "FFZ020".into(),
+                unit: "m2".into(),
+                summary: "Hoja exterior de ladrillo cara vista".into(),
+                price: 45.8,
+                text: "Hoja exterior de fachada de 11,5 cm…".into(),
+                bank: "Prueba".into(),
+            }),
+        )
+        .unwrap();
+        let text: String = bc3(&m, "19102026", "0.47")
+            .iter()
+            .map(|b| *b as char)
+            .collect();
+        assert!(text.contains("~D|01#|FFZ020\\1\\15\\|"), "{text}");
+        assert!(
+            text.contains("~C|FFZ020|m2|Hoja exterior de ladrillo cara vista|45.8|"),
+            "{text}"
+        );
+        assert!(
+            text.contains("~T|FFZ020|Hoja exterior de fachada"),
+            "{text}"
+        );
+        assert!(text.contains("~M|01#\\FFZ020|"), "{text}");
     }
 
     /// A refurbishment: the demolished wall goes to «Demoliciones», the

@@ -11,6 +11,7 @@
 mod app;
 mod cad;
 mod coord;
+mod crash;
 mod dim_tool;
 mod drag;
 mod editor;
@@ -39,8 +40,13 @@ use app::ArchiSimApp;
 use editor::Editor;
 
 fn main() -> eframe::Result {
+    crash::install();
+    crash::watch_frames();
     let ed = Editor::new_project();
     let mut app = ArchiSimApp::new(ed);
+    if let Some(log) = crash::take_previous() {
+        app.previous_crash(&log);
+    }
     // A project or an IFC file given on the command line (or by opening a
     // file with the application); a survey (DXF) goes into a new project's
     // terrain.

@@ -281,6 +281,8 @@ pub struct ArchiSimApp {
     /// Stretching an object by a handle in the 3D view.
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
+    render: render_ui::RenderState,
+    budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -585,6 +587,8 @@ impl ArchiSimApp {
             // (never in the tests).
             object_grip: None,
             object_grip_hover: None,
+            render: Default::default(),
+            budget: Default::default(),
             start: start_ui::StartScreen {
                 open: !cfg!(test),
                 ..Default::default()
@@ -719,7 +723,11 @@ impl ArchiSimApp {
             message_serial: 0,
             message_seen: (0, 0.0),
             styled: false,
-            v3d: View3dState::default(),
+            v3d: View3dState::with_textures(
+                prefs
+                    .textures_3d
+                    .unwrap_or_else(view3d_ui::default_textures),
+            ),
             gpu: None,
             coord: crate::coord::Coord::new(),
             coord_window: coord_ui::CoordWindow::default(),
@@ -739,6 +747,14 @@ impl ArchiSimApp {
             text: text.into(),
             error: false,
         });
+    }
+
+    /// The last session ended with an error: says where its report is.
+    pub fn previous_crash(&mut self, log: &std::path::Path) {
+        self.complain(format!(
+            "La última vez ArchiSim se cerró por un error. El informe está en {}: mándaselo a Claude para arreglarlo.",
+            log.display()
+        ));
     }
 
     fn complain(&mut self, text: impl Into<String>) {
@@ -1601,6 +1617,8 @@ impl ArchiSimApp {
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
+        self.render_window(&ctx);
+        self.price_pick_window(&ctx);
         self.missions_frame(&ctx);
         self.start_screen(&ctx);
         self.sync_prefs(&ctx);
@@ -1864,8 +1882,14 @@ impl eframe::App for ArchiSimApp {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         if self.gpu.is_none() {
             self.gpu = frame.wgpu_render_state().cloned();
+            if let Some(g) = &self.gpu {
+                crate::crash::watch_device(&g.device);
+            }
         }
+        crate::crash::frame_start();
+        crate::crash::stage("ventana");
         self.show(ui);
+        crate::crash::frame_done();
     }
 }
 
@@ -2083,6 +2107,7 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 
 mod annotation_ui;
 mod bottom_segments;
+mod budget_ui;
 mod cad_ui;
 mod chrome;
 mod concept_ui;
@@ -2118,6 +2143,7 @@ mod priorities_ui;
 mod properties;
 mod props;
 mod railing_ui;
+mod render_ui;
 mod roof_ui;
 mod room_tool_ui;
 mod room_ui;
