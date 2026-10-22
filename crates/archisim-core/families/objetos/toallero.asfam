@@ -1,0 +1,28 @@
+family "Toallero"
+  category sanitary
+  host none
+  version 1
+  description "Toallero de barra o radiador toallero"
+  folder "Accesorios de baño"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.60 range 0.30..1.20 label "Ancho"
+    height    length = 0.90 range 0.40..1.80 label "Altura (radiador)"
+    elevation length = 1.10 range 0.20..1.80 label "Altura desde el suelo"
+  section "Modelo 3D"
+    model3d choice("Barra", "Radiador toallero") = "Barra" label "Modelo 3D"
+    metal material = "Cromado" label "Metal"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.1, elevation + 0.03) material metal
+
+plan 1:50
+  line (-width / 2, 0.08) to (width / 2, 0.08) pen view dashed
+  line (-width / 2, 0) to (-width / 2, 0.08) pen thin dashed
+  line (width / 2, 0) to (width / 2, 0.08) pen thin dashed
+
+outputs
+  generator = "props:towel_rail"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

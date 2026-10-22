@@ -532,7 +532,6 @@ fn stretch_object(
     width: bool,
     to: Point2,
 ) -> Result<(), ModelError> {
-    use archisim_core::Value;
     let o = model
         .object(id)
         .ok_or(ModelError::UnknownObject(id))?
@@ -545,6 +544,22 @@ fn stretch_object(
     } else {
         ("depth", (y * 1000.0).round() / 1000.0)
     };
+    set_object_size(model, id, key, value)
+}
+
+/// A measurement of an object's type (`width`, `depth`, `height`): a type
+/// shared with other objects is copied first, so only this one changes.
+pub(crate) fn set_object_size(
+    model: &mut Model,
+    id: archisim_core::ObjectId,
+    key: &str,
+    value: f64,
+) -> Result<(), ModelError> {
+    use archisim_core::Value;
+    let o = model
+        .object(id)
+        .ok_or(ModelError::UnknownObject(id))?
+        .clone();
     let t = model
         .object_type(o.object_type)
         .ok_or(ModelError::UnknownObjectType(o.object_type))?

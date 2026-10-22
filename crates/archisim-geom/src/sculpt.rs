@@ -397,6 +397,52 @@ pub fn sweep(path: &[Point2], profile: &[Point2]) -> MassMesh {
     m
 }
 
+/// A profile swept round a closed path, mitred at every corner: a ring
+/// with no ends. Faces: one along each side of the profile, from 2.
+pub fn sweep_closed(path: &[Point2], profile: &[Point2]) -> MassMesh {
+    let mut prof = profile.to_vec();
+    let n = path.len();
+    if n < 3 || prof.len() < 3 {
+        return MassMesh::default();
+    }
+    if archisim_core::signed_area(&prof) < 0.0 {
+        prof.reverse();
+    }
+    let dir = |i: usize| {
+        (path[(i + 1) % n] - path[i])
+            .normalized()
+            .unwrap_or(Point2::new(1.0, 0.0))
+    };
+    let left = |d: Point2| Point2::new(-d.y, d.x);
+    let np = prof.len();
+    let mut m = MassMesh::default();
+    for (i, at) in path.iter().enumerate() {
+        let (a, b) = (dir((i + n - 1) % n), dir(i));
+        let l = (left(a) + left(b)).normalized().unwrap_or(left(b));
+        let k = 1.0 / (l.x * left(b).x + l.y * left(b).y).max(0.2);
+        for q in &prof {
+            let p = *at + l * (q.x * k);
+            m.positions.push([p.x, p.y, q.y]);
+        }
+    }
+    let at = |i: usize, j: usize| ((i % n) * np + j % np) as u32;
+    for i in 0..n {
+        for j in 0..np {
+            let face = 2 + j as u32;
+            m.triangles.push([at(i, j), at(i, j + 1), at(i + 1, j + 1)]);
+            m.faces.push(face);
+            m.triangles.push([at(i, j), at(i + 1, j + 1), at(i + 1, j)]);
+            m.faces.push(face);
+        }
+    }
+    if crate::forms::mesh_volume(&m) < 0.0 {
+        for t in &mut m.triangles {
+            t.swap(1, 2);
+        }
+    }
+    m
+}
+
 /// A prism's contour with edge `i` moved out by `d` (in, if negative):
 /// the edges beside it stretch or shrink to meet it. `None` if it would
 /// turn inside out.

@@ -820,7 +820,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 66] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 81] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -1020,6 +1020,43 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 66] = [
         "Plato de ducha",
         &[("width", 1.2), ("depth", 0.8)],
     ),
+    // Bloque 5 de la revisión: drawers, desks and bathroom and kitchen
+    // accessories.
+    ("Cómoda 4 cajones", "Cómoda", &[]),
+    (
+        "Cómoda de patas 2×3 cajones",
+        "Cómoda",
+        &[("width", 1.2), ("drawers", 3.0), ("columns", 2.0)],
+    ),
+    ("Escritorio 140", "Escritorio", &[]),
+    ("Escritorio metálico 120", "Escritorio", &[("width", 1.2)]),
+    (
+        "Encimera con cajonera 300",
+        "Encimera de cocina",
+        &[("width", 3.0), ("drawers", 3.0)],
+    ),
+    ("Espejo 80×100", "Espejo", &[]),
+    (
+        "Espejo redondo 60",
+        "Espejo",
+        &[("width", 0.6), ("height", 0.6), ("elevation", 1.2)],
+    ),
+    ("Toallero 60", "Toallero", &[]),
+    (
+        "Radiador toallero 50",
+        "Toallero",
+        &[("width", 0.5), ("elevation", 0.3)],
+    ),
+    ("Portarrollos", "Portarrollos", &[]),
+    ("Barra de apoyo fija 70", "Barra de apoyo", &[]),
+    (
+        "Barra de apoyo abatible 75",
+        "Barra de apoyo",
+        &[("width", 0.75)],
+    ),
+    ("Campana decorativa 60", "Campana extractora", &[]),
+    ("Campana integrada 60", "Campana extractora", &[]),
+    ("Balda 80", "Balda", &[]),
     ("Mujer", "Persona", &[("height", 1.65)]),
     (
         "Todoterreno",
@@ -1047,6 +1084,12 @@ const MODELS: &[(&str, &str)] = &[
     ("Lavabo suspendido 60", "Suspendido"),
     ("Ducha con mampara 120×80", "Plato y mampara"),
     ("Mujer", "Mujer"),
+    ("Cómoda de patas 2×3 cajones", "Con patas"),
+    ("Escritorio metálico 120", "Patas metálicas"),
+    ("Espejo redondo 60", "Redondo"),
+    ("Radiador toallero 50", "Radiador toallero"),
+    ("Barra de apoyo abatible 75", "Abatible"),
+    ("Campana integrada 60", "Integrada"),
     ("Furgoneta", "Todoterreno"),
     ("Todoterreno", "Todoterreno"),
     ("Turismo", "Berlina"),

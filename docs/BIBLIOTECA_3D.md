@@ -54,7 +54,38 @@ Cada tipo lleva su modelo como mapa de representación (`IfcRepresentationMap` c
 - 3D: `archisim_geom::solid::prop_solids`. IFC: `archisim_ifc::objects::mesh_map`.
 - `archisim modelos out/` hace `modelos.archisim`, `modelos.ifc`, `modelos-3d.svg` (axonometría) y `modelos-planta.svg` con los 41 objetos en filas.
 
+## Muebles y accesorios (bloque 5 de la revisión del 22/10/2026, v0.45)
+
+Antonio pidió muebles estirables desde la vista 3D, más parámetros (número de cajones, posición, tipos de pomo) y accesorios: los de ArchiCAD que siguen a muros, forjados y cubiertas, y los de baño y cocina.
+
+**Estirar en 3D.** Con un mueble seleccionado en la vista 3D salen cuadros azules a sus lados, en su frente y encima: se arrastran y cambian su ancho (crece por los dos lados), su fondo y su altura, como los tiradores de la planta. Si su tipo lo usan otros objetos, se copia, así que solo cambia ese.
+
+**Frentes.** Las familias con puertas o cajones tienen un grupo **Frentes**:
+
+| Familia | Lo que se elige |
+|---|---|
+| Mesita de noche | Cajones (1 a 6) y tirador |
+| Armario | Filas de cajones abajo (0 a 4) y tirador |
+| Encimera de cocina | Cajones bajo la placa (cajonera de 60 cm) y tirador |
+| Mueble alto de cocina | Tirador |
+| Mueble TV | Frentes de cajón o puertas, y tirador |
+| **Cómoda** (nueva) | Cajones por columna, columnas, tirador; zócalo o patas |
+| **Escritorio** (nuevo) | Cajonera a la izquierda, a la derecha o ninguna, cajones, tirador; patas de madera o estructura metálica |
+
+**Tiradores**: barra, pomo, uñero, asa o sin tirador (de empuje). Las puertas llevan el tirador junto al canto que abre y los cajones arriba y centrado.
+
+**Baño y cocina** (familias nuevas, colgadas a su altura): espejo (con marco, sin marco o redondo), toallero (barra o radiador toallero), portarrollos, barra de apoyo (fija o abatible, para baños accesibles), campana extractora (decorativa con chimenea o integrada) y balda (con escuadras o flotante).
+
+**Accesorios de los tipos de muro y de forjado**, como los barridos de Revit: en Tipos y materiales → el tipo de muro → **Accesorios**, se añaden rodapiés, molduras, cornisas y albardillas. Cada uno dice en qué cara va (exterior, interior o coronación), a qué distancia del pie o de la coronación y de qué material. Siguen a todos los muros del tipo, cierran las esquinas y **se cortan en las puertas y ventanas que cruzan su altura** (el rodapié se corta en las puertas y la cornisa sigue por encima). En el tipo de forjado, **Canto**: cornisa o alero alrededor de todos sus forjados horizontales. En planta se ven como una línea fina (discontinua si están por encima del plano de corte); en 3D, secciones y alzados, con su material; en el IFC, cada tramo es un `IfcCovering` (`SKIRTINGBOARD`, `MOLDING`, `COPING`) que cubre su muro o forjado, y al importar un IFC de ArchiSim vuelven a sus tipos. Los vierteaguas siguen siendo parte de las ventanas (v0.32).
+
+La demo trae rodapiés de madera en los muros de fachada y en los tabiques y una cornisa de piedra alrededor de la cubierta. `archisim modelos out/` enseña todos los muebles y accesorios nuevos, con el frente hacia quien mira.
+
+Para el programador: `archisim_props::fronts` (`Handle`, `drawer`, `door`, `drawers`; `CHOICES` y `choice_number` traducen los valores elegidos por nombre), `accessories` (baño y cocina), `chest` y `desk`; `app/grips3d` (estirar en 3D, `drag::set_object_size`); `archisim_core::WallSweep`, `SlabEdge` (`model/sweeps`, `WallType::sweeps`, `SlabType::edge`; formato versión 29), `archisim_geom::sweeps` y `sculpt::sweep_closed`, `archisim_ifc::accessories`.
+
 ## Pendiente
+
+- Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
+- Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).
 
 - Más objetos: electrodomésticos de encastre, campana, aparatos de iluminación, mobiliario de oficina, plantas de interior en maceta.
 - Un cuarto nivel de detalle para las vistas lejanas de modelos muy grandes (hoy ya son ligeros).

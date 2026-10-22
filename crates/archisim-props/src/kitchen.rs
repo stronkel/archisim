@@ -2,28 +2,28 @@
 //! washing machine. Axes as the furniture's: the back on the wall.
 
 use crate::build::Builder;
+use crate::fronts::{self, Handle};
 use crate::Params;
 
-/// Doors of a run of units: as many as fit, about 60 cm each.
-fn fronts(b: &mut Builder, x0: f64, w: f64, y: f64, z0: f64, z1: f64, handles_low: bool) {
+/// Doors of a run of units: as many as fit, about 60 cm each, with the
+/// handle chosen.
+#[allow(clippy::too_many_arguments)]
+fn fronts(
+    b: &mut Builder,
+    x0: f64,
+    w: f64,
+    y: f64,
+    z0: f64,
+    z1: f64,
+    handles_low: bool,
+    kind: Handle,
+) {
     let n = (w / 0.6).round().max(1.0) as usize;
     let fw = w / n as f64;
     for i in 0..n {
-        let a = x0 + i as f64 * fw + 0.002;
-        b.rbox(
-            "mat",
-            [a, y - 0.002, z0],
-            [a + fw - 0.004, y + 0.018, z1],
-            0.002,
-        );
-        let hz = if handles_low { z1 - 0.05 } else { z0 + 0.05 };
-        let xc = a + fw / 2.0;
-        b.rbox(
-            "metal",
-            [xc - 0.08, y + 0.018, hz - 0.006],
-            [xc + 0.08, y + 0.03, hz + 0.006],
-            0.004,
-        );
+        let a = x0 + i as f64 * fw;
+        let hz = if handles_low { z1 - 0.08 } else { z0 + 0.08 };
+        fronts::door(b, a, a + fw, z0, z1, y, kind, i % 2 == 0, hz);
     }
 }
 
@@ -65,7 +65,33 @@ pub fn counter(b: &mut Builder, p: &Params) {
     } else {
         b.rbox("mat", [x0, 0.0, 0.1], [-x0, d - 0.04, h - top], 0.0);
     }
-    fronts(b, x0, w, d - 0.04, 0.105, h - top - 0.005, true);
+    // A drawer unit under the hob (or at the right end), with the doors
+    // beside it.
+    let kind = Handle::of(p, Handle::Bar);
+    let rows = p.get("drawers", 0.0).round().clamp(0.0, 6.0) as usize;
+    let unit = if rows > 0 { 0.6_f64.min(w * 0.5) } else { 0.0 };
+    if unit > 0.0 {
+        fronts::drawers(
+            b,
+            -x0 - unit,
+            -x0,
+            0.105,
+            h - top - 0.005,
+            d - 0.04,
+            rows,
+            kind,
+        );
+    }
+    fronts(
+        b,
+        x0,
+        w - unit,
+        d - 0.04,
+        0.105,
+        h - top - 0.005,
+        true,
+        kind,
+    );
     // Worktop, cut for the sink.
     let (tlo, thi) = ([x0, 0.0, h - top], [-x0, d, h]);
     if sink {
@@ -117,20 +143,19 @@ pub fn wall_cabinet(b: &mut Builder, p: &Params) {
         (w / 0.6).round().max(1.0) as usize
     };
     let fw = w / n as f64;
+    let kind = Handle::of(p, Handle::Bar);
     for i in 0..n {
-        let a = x0 + i as f64 * fw + 0.002;
-        b.rbox(
-            "mat",
-            [a, d - 0.02, z0 + 0.003],
-            [a + fw - 0.004, d, z0 + h - 0.003],
-            0.002,
-        );
-        let xc = a + fw / 2.0;
-        b.rbox(
-            "metal",
-            [xc - 0.06, d, z0 + 0.04],
-            [xc + 0.06, d + 0.012, z0 + 0.052],
-            0.004,
+        let a = x0 + i as f64 * fw;
+        fronts::door(
+            b,
+            a,
+            a + fw,
+            z0 + 0.003,
+            z0 + h - 0.003,
+            d - 0.02,
+            kind,
+            i % 2 == 0,
+            z0 + 0.08,
         );
     }
 }

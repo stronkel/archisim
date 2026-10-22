@@ -1,7 +1,7 @@
 family "Mesita de noche"
   category furniture
   host none
-  version 1
+  version 2
   description "Mesita de noche con dos cajones y una lámpara"
   folder "Dormitorio"
 
@@ -10,6 +10,9 @@ type_params
     width  length = 0.45 range 0.30..0.80 label "Ancho"
     depth  length = 0.40 range 0.30..0.60 label "Fondo"
     height length = 0.50 range 0.35..0.75 label "Altura"
+  section "Frentes"
+    drawers integer = 2 range 1..6 label "Cajones"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Pomo" label "Tirador"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
   section "Modelo 3D"

@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 28;
+pub const CURRENT_VERSION: u32 = 29;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -279,8 +279,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // overrides of views and the graphics' `font`; older ones have
             // none (an older file's texts change to the sans lettering).
             // 27 → 28: volumes' `deform` and sweeps' `profile`; older ones
-            // have none.
-            9..=27 => {
+            // have none. 28 → 29: wall types' `sweeps` and slab types'
+            // `edge`; older ones have none.
+            9..=28 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
@@ -1196,6 +1197,41 @@ mod tests {
                 })
             })
             .unwrap();
+            // Accessories of a wall type and the edge of a slab type
+            // (version 29).
+            let wt = m.wall_types().next().unwrap().id;
+            let st = m.slab_types().next().unwrap().id;
+            let t = m.wall_types().next().unwrap().thickness();
+            m.set_wall_type_sweeps(
+                wt,
+                vec![
+                    archisim_core::WallSweep {
+                        kind: archisim_core::SweepKind::Skirting,
+                        side: archisim_core::SweepSide::Interior,
+                        offset: 0.0,
+                        from_top: false,
+                        profile: archisim_core::sweep_preset(archisim_core::SweepKind::Skirting, t),
+                        material: mat,
+                    },
+                    archisim_core::WallSweep {
+                        kind: archisim_core::SweepKind::Coping,
+                        side: archisim_core::SweepSide::Top,
+                        offset: 0.0,
+                        from_top: true,
+                        profile: archisim_core::sweep_preset(archisim_core::SweepKind::Coping, t),
+                        material: mat,
+                    },
+                ],
+            )
+            .unwrap();
+            m.set_slab_type_edge(
+                st,
+                Some(archisim_core::SlabEdge {
+                    profile: archisim_core::slab_edge_preset(true),
+                    material: mat,
+                }),
+            )
+            .unwrap();
         }
         // A module placed twice, once mirrored (version 17).
         {
@@ -1338,7 +1374,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 28", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 29", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1365,7 +1401,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 28"));
+        assert!(to_string(&opened).contains("\"version\": 29"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1536,7 +1572,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 28", "\"version\": 3", 1)
+            .replacen("\"version\": 29", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1598,7 +1634,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 28", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 29", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2042,7 +2078,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 28", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 29", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2054,7 +2090,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 28,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 29,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -2100,11 +2136,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 28", "\"version\": 29"),
-            Err(FileError::TooNew { version: 29 })
+            edited("\"version\": 29", "\"version\": 30"),
+            Err(FileError::TooNew { version: 30 })
         ));
         assert!(matches!(
-            edited("\"version\": 28", "\"version\": 0"),
+            edited("\"version\": 29", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

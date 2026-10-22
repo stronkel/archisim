@@ -1,0 +1,28 @@
+family "Balda"
+  category furniture
+  host none
+  version 1
+  description "Balda de pared con escuadras o flotante"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.80 range 0.30..3.00 label "Ancho"
+    depth     length = 0.25 range 0.12..0.45 label "Fondo"
+    elevation length = 1.40 range 0.20..2.20 label "Altura desde el suelo"
+  section "Materiales"
+    mat material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Con escuadras", "Flotante") = "Con escuadras" label "Modelo 3D"
+    frame material = "Metal lacado" label "Escuadras"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, depth, elevation + 0.025) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view dashed
+
+outputs
+  generator = "props:shelf"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"

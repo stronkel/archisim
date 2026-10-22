@@ -1,7 +1,7 @@
 family "Armario"
   category furniture
   host none
-  version 1
+  version 2
   description "Armario de puertas abatibles con barra de colgar"
   folder "Armarios"
 
@@ -11,6 +11,9 @@ type_params
     depth  length = 0.60 range 0.30..1.00 label "Fondo"
     height length = 2.40 range 0.80..3.00 label "Altura"
     doors  integer = 2 range 1..8 label "Puertas"
+  section "Frentes"
+    drawers integer = 0 range 0..4 label "Filas de cajones abajo"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
   section "Modelo 3D"

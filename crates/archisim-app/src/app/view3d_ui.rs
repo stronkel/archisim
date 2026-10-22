@@ -454,9 +454,13 @@ impl ArchiSimApp {
             v.section_drag = None;
         }
 
+        // Handles of the object selected (bloque 5): its size.
+        let grabbing_object = self.object_grips_3d(&ctx, &response, rect);
+        let v = &mut self.v3d;
+
         // Navigation.
         let shift = ctx.input(|i| i.modifiers.shift);
-        let dragging_box = v.section_drag.is_some();
+        let dragging_box = v.section_drag.is_some() || grabbing_object;
         if (response.dragged_by(PointerButton::Primary) && !dragging_box)
             || (shift && response.dragged_by(PointerButton::Middle))
         {
@@ -573,6 +577,7 @@ impl ArchiSimApp {
             }
         }
         draw_section_box(&painter, rect, v);
+        self.draw_object_grips_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);
         if tool3d {
             self.draw_tool_3d(&painter, rect);
@@ -584,7 +589,10 @@ impl ArchiSimApp {
             &v.camera,
             self.ed.model().true_north() as f32,
         );
-        let on_handle = v.section_hover.is_some() || v.section_drag.is_some();
+        let on_handle = v.section_hover.is_some()
+            || v.section_drag.is_some()
+            || self.object_grip_hover.is_some()
+            || self.object_grip.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);
 

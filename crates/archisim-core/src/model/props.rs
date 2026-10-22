@@ -90,6 +90,12 @@ impl Model {
             match v {
                 Value::Number(n) => params.set(k, *n),
                 Value::Bool(b) => params.set(k, if *b { 1.0 } else { 0.0 }),
+                // Handles, a desk's drawers: chosen by name.
+                Value::Text(t) => {
+                    if let Some(n) = props::choice_number(k, t) {
+                        params.set(k, n);
+                    }
+                }
                 _ => {}
             }
         }

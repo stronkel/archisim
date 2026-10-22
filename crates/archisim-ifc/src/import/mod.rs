@@ -2700,6 +2700,52 @@ impl<'a> Importer<'a> {
 
     // ---- Everything else ---------------------------------------------
 
+    /// The accessories of wall and slab types that ArchiSim wrote on
+    /// each wall and slab (`ArchiSim_Accessories`): back in their types.
+    fn restore_type_accessories(&mut self) {
+        for (eid, ifc) in self.sources.clone() {
+            if let Some(t) = self
+                .model
+                .wall(archisim_core::WallId(eid))
+                .map(|w| w.wall_type)
+            {
+                let has = self
+                    .model
+                    .wall_type(t)
+                    .is_some_and(|t| !t.sweeps.is_empty());
+                let text = self
+                    .property_own(ifc, "ArchiSim_Accessories", "Sweeps")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                if let (false, Some(text)) = (has, text) {
+                    let sweeps = crate::accessories::decode_sweeps(&self.model, &text);
+                    let _ = self.model.set_wall_type_sweeps(t, sweeps);
+                }
+            }
+            if let Some(t) = self
+                .model
+                .slab(archisim_core::SlabId(eid))
+                .map(|s| s.slab_type)
+            {
+                let has = self.model.slab_type(t).is_some_and(|t| t.edge.is_some());
+                let text = self
+                    .property_own(ifc, "ArchiSim_Accessories", "Edge")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                if let (false, Some(text)) = (has, text) {
+                    if let Some((material, profile)) =
+                        crate::accessories::decode_profile(&self.model, &text)
+                    {
+                        let _ = self.model.set_slab_type_edge(
+                            t,
+                            Some(archisim_core::SlabEdge { profile, material }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn count_unsupported(&mut self) {
         for kind in UNSUPPORTED_CLASSES {
             let n = self
@@ -2707,7 +2753,11 @@ impl<'a> Importer<'a> {
                 .of_kind(kind)
                 .into_iter()
                 .filter(|id| {
-                    !self.stair_ids.contains(id)
+                    // The accessories of ArchiSim's types come back with
+                    // their types.
+                    self.property_own(*id, "ArchiSim_Accessory", "FromType")
+                        .is_none()
+                        && !self.stair_ids.contains(id)
                         && !self.terrain_ids.contains(id)
                         && !self.curtain_ids.contains(id)
                         && !self.railing_ids.contains(id)
@@ -2775,6 +2825,7 @@ impl<'a> Importer<'a> {
         }
         self.import_walls();
         self.import_slabs();
+        self.restore_type_accessories();
         self.import_members();
         self.import_openings();
         self.import_spaces();

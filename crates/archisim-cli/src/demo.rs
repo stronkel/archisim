@@ -1104,6 +1104,37 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // Accessories of the types (block 5 of Antonio's review): skirting
+    // boards on the interior faces and a stone cornice round the flat roof.
+    doc.transact("Accesorios de los tipos", |m| {
+        use archisim_core::{sweep_preset, SlabEdge, SweepKind, SweepSide, WallSweep};
+        let named = |m: &Model, name: &str| m.materials().find(|x| x.name == name).map(|x| x.id);
+        let wood = named(m, "Madera de pino")
+            .or_else(|| m.materials().next().map(|x| x.id))
+            .ok_or(ModelError::EmptyType)?;
+        let stone = named(m, "Piedra").unwrap_or(wood);
+        let skirting = |side| WallSweep {
+            kind: SweepKind::Skirting,
+            side,
+            offset: 0.0,
+            from_top: false,
+            profile: sweep_preset(SweepKind::Skirting, 0.0),
+            material: wood,
+        };
+        m.set_wall_type_sweeps(fachada, vec![skirting(SweepSide::Interior)])?;
+        m.set_wall_type_sweeps(
+            tabique,
+            vec![skirting(SweepSide::Interior), skirting(SweepSide::Exterior)],
+        )?;
+        m.set_slab_type_edge(
+            cubierta_plana,
+            Some(SlabEdge {
+                profile: archisim_core::slab_edge_preset(false),
+                material: stone,
+            }),
+        )
+    })?;
+
     // Saved plans of the ground floor for each job (block 2 of Antonio's
     // review): AD5's look, masonry, surfaces and the ceilings; and a
     // reference plane on the house's axis.

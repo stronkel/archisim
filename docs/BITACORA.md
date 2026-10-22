@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (9) · Revisión de Antonio, bloque 5: Muebles y accesorios
+
+Rama `bloque/muebles` (sobre `bloque/modelado-2`), pull request para Antonio. v0.45. Formato `.archisim` versión 29 (abre todas las anteriores). IFC: accesorios como `IfcCovering`. Descrito en `docs/BIBLIOTECA_3D.md` («Muebles y accesorios»).
+
+**Hecho**
+- **Estirar muebles en la vista 3D** con cuadros azules en sus lados, frente y altura.
+- **Frentes**: cajones y tiradores (barra, pomo, uñero, asa, sin tirador) en mesita, armario, encimera, mueble alto y mueble TV; **cómoda** y **escritorio** nuevos.
+- **Baño y cocina**: espejo, toallero, portarrollos, barra de apoyo, campana extractora y balda.
+- **Accesorios de los tipos**: rodapiés, molduras, cornisas y albardillas en los tipos de muro (siguen a sus muros y se cortan en puertas y ventanas) y canto (cornisa o alero) en los de forjado; en 3D, planta, secciones, alzados e IFC.
+
+**Pendiente**
+- Llevar los accesorios en `.astipos` (del IFC de ArchiSim ya vuelven); accesorios en muros curvos y en cubiertas inclinadas.
+
+**Qué debe probar Antonio**
+1. Abre la demo: en 3D mira los rodapiés por dentro y la cornisa de piedra de la cubierta; en el alzado sur, la cornisa.
+2. Selecciona en 3D un mueble (el armario o la mesa) y arrastra los cuadros azules: ancho, fondo y altura.
+3. Tipos y materiales → Muro de fachada → Accesorios → «Cornisa»: aparece en todos los muros de fachada. Prueba «Moldura» a 1 m y mira cómo se corta en las ventanas.
+4. Tipos y materiales → un tipo de forjado → Canto → «Alero».
+5. Coloca una Cómoda y un Escritorio; en Propiedades del tipo, cambia cajones, columnas, cajonera y tirador.
+6. `archisim modelos out/` y mira `out/modelos-3d.svg`: todos los muebles y accesorios nuevos, de frente.
+
+---
+
 ## 2026-10-22 (8) · Revisión de Antonio, bloque 4: Modelado
 
 Rama `bloque/modelado-2` (sobre `bloque/inicio`), pull request para Antonio. v0.44. Formato `.archisim` versión 28 (abre todas las anteriores). Sin cambios en el IFC (los volúmenes de Concepto no se exportan). Descrito en `docs/FORMAS.md` §5.

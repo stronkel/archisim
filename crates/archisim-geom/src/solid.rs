@@ -2055,6 +2055,14 @@ pub fn beam_solids(model: &Model, id: BeamId) -> Vec<Solid> {
 }
 
 /// Every solid of the model, on every level.
+/// The triangles of a mesh, as points.
+pub fn mesh_triangles(m: &archisim_core::MassMesh) -> Vec<[P3; 3]> {
+    m.triangles
+        .iter()
+        .map(|t| t.map(|i| m.positions[i as usize]))
+        .collect()
+}
+
 pub fn model_solids(model: &Model) -> Vec<Solid> {
     let mut out = Vec::new();
     let idx = WallIndex::new(model);
@@ -2063,6 +2071,26 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     }
     for s in model.slabs() {
         out.extend(slab_solids_in(&idx, s.id));
+    }
+    // The accessories of their types: skirtings, bands, cornices, copings
+    // and slab edges (bloque 5).
+    for w in model.walls() {
+        for p in crate::sweeps::wall_sweep_pieces(model, w.id) {
+            out.push(Solid {
+                owner: SolidOwner::Wall(w.id),
+                material: p.material,
+                triangles: mesh_triangles(&p.mesh),
+            });
+        }
+    }
+    for s in model.slabs() {
+        if let Some(p) = crate::sweeps::slab_edge_piece(model, s.id) {
+            out.push(Solid {
+                owner: SolidOwner::Slab(s.id),
+                material: p.material,
+                triangles: mesh_triangles(&p.mesh),
+            });
+        }
     }
     for o in model.openings() {
         out.extend(opening_solids(model, o.id));

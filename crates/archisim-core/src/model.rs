@@ -39,6 +39,7 @@ mod site;
 mod stairs;
 mod structure;
 mod sun;
+mod sweeps;
 mod urban;
 mod views;
 pub use appearance::*;
@@ -64,6 +65,7 @@ pub use site::*;
 pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
+pub use sweeps::*;
 pub use urban::*;
 pub use views::*;
 
@@ -177,6 +179,8 @@ pub struct WallType {
     pub function: WallFunction,
     /// Layers ordered from the exterior face to the interior face.
     pub layers: Vec<Layer>,
+    /// Skirting boards, bands, cornices and copings along its walls.
+    pub sweeps: Vec<WallSweep>,
 }
 
 impl WallType {
@@ -330,6 +334,8 @@ pub struct SlabType {
     pub function: SlabFunction,
     /// Layers ordered from the top face down to the soffit.
     pub layers: Vec<Layer>,
+    /// A cornice or an eave round its slabs.
+    pub edge: Option<SlabEdge>,
 }
 
 impl SlabType {
@@ -1845,6 +1851,7 @@ impl Model {
                 name: name.into(),
                 function,
                 layers,
+                sweeps: Vec::new(),
             },
         );
         Ok(id)
@@ -2405,6 +2412,7 @@ impl Model {
                 name: name.into(),
                 function,
                 layers,
+                edge: None,
             },
         );
         Ok(id)
@@ -4177,6 +4185,7 @@ impl Model {
         model.restore_terrains(parts.terrains, &mut claim)?;
         model.restore_curtain_walls(parts.curtain_types, parts.curtain_walls, &mut claim)?;
         model.restore_railings(parts.railings, &mut claim)?;
+        model.check_type_accessories()?;
         model.restore_meshes(parts.meshes, &mut claim)?;
         model.restore_objects(parts.object_types, parts.objects, &mut claim)?;
         model.restore_modules(parts.module_sources, parts.modules, &mut claim)?;

@@ -42,6 +42,7 @@
 //! Relationship GUIDs are derived from element GUIDs, so exporting the same
 //! model twice gives the same file apart from the header timestamp.
 
+mod accessories;
 mod curtain;
 mod foundations;
 pub mod import;
@@ -187,6 +188,9 @@ struct Exporter<'a> {
     /// Surface style of each material, reused on door and window solids.
     styles: BTreeMap<MaterialId, Ref>,
     schema: Schema,
+    /// The walls and slabs written, by element id: what their
+    /// accessories cover.
+    hosts: BTreeMap<u64, Ref>,
 }
 
 impl<'a> Exporter<'a> {
@@ -203,6 +207,7 @@ impl<'a> Exporter<'a> {
             axis_ctx: Ref(0),
             styles: BTreeMap::new(),
             schema: Schema::default(),
+            hosts: BTreeMap::new(),
         }
     }
 
@@ -1641,6 +1646,7 @@ impl<'a> Exporter<'a> {
                 string(&wtype.name),
                 string(&wall.id.0.to_string())
             ));
+            self.hosts.insert(wall.id.0, w);
 
             let usage = self.w.add(format!(
                 "IFCMATERIALLAYERSETUSAGE({},.AXIS2.,.POSITIVE.,{},$)",
@@ -1768,6 +1774,7 @@ impl<'a> Exporter<'a> {
                 string(&slab.id.0.to_string()),
                 stype.function.ifc_predefined_type()
             ));
+            self.hosts.insert(slab.id.0, sl);
 
             let usage = self.w.add(format!(
                 "IFCMATERIALLAYERSETUSAGE({},.AXIS3.,.POSITIVE.,0.,$)",
@@ -1817,6 +1824,7 @@ impl<'a> Exporter<'a> {
         self.write_terrains(&materials, &storeys, &mut contained);
         self.write_curtain_walls(&materials, &storeys, &mut contained);
         self.write_railings(&materials, &storeys, &mut contained);
+        self.write_accessories(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_footings(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
