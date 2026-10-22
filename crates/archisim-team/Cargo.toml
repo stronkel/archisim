@@ -1,0 +1,18 @@
+[package]
+name = "archisim-team"
+description = "Team work on an ArchiSim project through a shared folder (Google Drive, a NAS): changes by person, reservations, publish and receive"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+archisim-core.workspace = true
+archisim-file.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[dev-dependencies]
+archisim-library.workspace = true

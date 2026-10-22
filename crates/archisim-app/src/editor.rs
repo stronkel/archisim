@@ -116,6 +116,9 @@ pub struct Editor {
     /// The level shown in the plan and where new elements go.
     pub level: LevelId,
     pub selection: BTreeSet<Element>,
+    /// In a shared project, what the person has reserved: edits to
+    /// anything else are refused.
+    pub team: Option<crate::team::Guard>,
 }
 
 /// Result of an edit: `Err` carries a Spanish explanation.
@@ -144,7 +147,22 @@ impl Editor {
             flat: Default::default(),
             level,
             selection: BTreeSet::new(),
+            team: None,
         }
+    }
+
+    /// Puts another version of the project in place (received from the
+    /// team): no undo across it, and it counts as saved.
+    pub fn reset_model(&mut self, model: Model) {
+        self.saved = model.clone();
+        self.doc = Document::new(model);
+        self.changed();
+    }
+
+    /// The project as it is now counts as saved (in a shared project, the
+    /// working copy was written to the folder).
+    pub fn mark_saved(&mut self) {
+        self.saved = self.doc.model().clone();
     }
 
     /// Opens a `.archisim` project.
@@ -409,6 +427,11 @@ impl Editor {
         label: &str,
         edit: impl FnOnce(&mut Model) -> Result<T, ModelError>,
     ) -> EditResult<T> {
+        if let Some(g) = self.team.as_mut() {
+            g.prepare(self.revision, self.doc.model());
+        }
+        let guard = &mut self.team;
+        let mut refused = None;
         let result = self
             .doc
             .transact(label, |m| {
@@ -428,6 +451,14 @@ impl Editor {
                     .map(|t| (t.id, t.at, archisim_plan::rooms::tag_anchor(m, t.target)))
                     .collect();
                 let r = edit(m)?;
+                // In a shared project, only what is reserved (what follows
+                // below goes with it: dimensions, rooms, tags).
+                if let Some(g) = guard.as_mut() {
+                    if let Err(e) = g.check(m) {
+                        refused = Some(e.clone());
+                        return Err(ModelError::InUse(e));
+                    }
+                }
                 if m.footings().next().is_some() {
                     m.footings_follow_hosts();
                 }
@@ -454,7 +485,7 @@ impl Editor {
                 }
                 Ok(r)
             })
-            .map_err(|e| explain(&e))?;
+            .map_err(|e| refused.take().unwrap_or_else(|| explain(&e)))?;
         self.changed();
         Ok(result)
     }

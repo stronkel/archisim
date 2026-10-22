@@ -40,6 +40,9 @@ impl ArchiSimApp {
             self.tool_properties(ui);
             return;
         }
+        if self.team.is_some() {
+            self.team_selection_strip(ui, &selection);
+        }
         let drafts: Vec<archisim_core::DraftId> = selection
             .iter()
             .filter_map(|e| match e {
@@ -245,6 +248,7 @@ impl ArchiSimApp {
             Tool::Planting => self.planting_tool_properties(ui),
             Tool::Pipe | Tool::Duct => self.run_tool_properties(ui),
             Tool::Device => self.device_tool_properties(ui),
+            Tool::TeamZone => {}
             Tool::Cad => self.cad_tool_properties(ui),
         }
     }

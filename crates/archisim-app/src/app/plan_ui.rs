@@ -45,6 +45,7 @@ impl ArchiSimApp {
         }
         self.draw_plan(&ctx, &painter, rect);
         self.draw_links_in_plan(&painter, rect);
+        self.draw_team(&painter, rect);
         self.draw_origin(&painter, rect);
         self.draw_selection(&painter, rect);
         self.draw_cte_route(&painter, rect);
@@ -122,7 +123,8 @@ impl ArchiSimApp {
             | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
-            | Tool::Device => CursorIcon::Crosshair,
+            | Tool::Device
+            | Tool::TeamZone => CursorIcon::Crosshair,
             Tool::Paint => CursorIcon::PointingHand,
             Tool::Cad => match self.cad_want() {
                 Some(crate::cad::Want::Pick) => CursorIcon::Cell,
@@ -397,13 +399,15 @@ impl ArchiSimApp {
             | Tool::Planting
             | Tool::Pipe
             | Tool::Duct
-            | Tool::Device => {
+            | Tool::Device
+            | Tool::TeamZone => {
                 let points = match self.tool {
                     Tool::Plot => self.plot_tool.corners().to_vec(),
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
                     Tool::Device => Vec::new(),
+                    Tool::TeamZone => self.team_ui.zone_start.into_iter().collect(),
                     _ => self.concept_points(),
                 };
                 let mut s = self.snap_at(raw, reach, &points, &BTreeSet::new());
@@ -414,7 +418,7 @@ impl ArchiSimApp {
                     Tool::Road => self.road_points.last().copied(),
                     Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
-                    Tool::Device => None,
+                    Tool::Device | Tool::TeamZone => None,
                     _ => self.concept_anchor(),
                 };
                 if let Some(a) = anchor {
@@ -730,6 +734,11 @@ impl ArchiSimApp {
                     }
                 }
                 Tool::Device => self.set_tool(Tool::Arrow),
+                Tool::TeamZone => {
+                    if self.team_ui.zone_start.take().is_none() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
                 Tool::Zone => {
                     if !self.zone_tool.escape() {
                         self.set_tool(Tool::Arrow);
@@ -1015,6 +1024,17 @@ impl ArchiSimApp {
                     if let Some(c) = self.cursor {
                         self.device_click(c.point);
                     }
+                }
+            }
+            Tool::TeamZone => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.team_zone_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.team_ui.zone_start = None;
+                    self.set_tool(Tool::Arrow);
                 }
             }
             Tool::Planting => {

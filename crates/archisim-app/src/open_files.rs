@@ -60,7 +60,9 @@ pub fn set_context(ctx: &egui::Context) {
 /// Whether a file is something ArchiSim opens: a project or an IFC file.
 pub fn is_openable(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|e| {
-        e.eq_ignore_ascii_case(archisim_file::EXTENSION) || e.eq_ignore_ascii_case("ifc")
+        e.eq_ignore_ascii_case(archisim_file::EXTENSION)
+            || e.eq_ignore_ascii_case("ifc")
+            || e.eq_ignore_ascii_case(archisim_team::EXTENSION)
     })
 }
 

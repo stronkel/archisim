@@ -12,6 +12,7 @@
 
 mod colaboracion;
 mod demo;
+mod equipo;
 mod grande;
 mod muestrario;
 mod vivero;
@@ -65,6 +66,14 @@ Uso:
       Todas las especies de vegetación que ArchiSim genera, plantadas por
       grupos, con un paseo y un arriate: vivero.archisim, vivero.ifc y
       plantas 1:200 de presentación y técnica. Carpeta por defecto: ./out
+  archisim equipo <carpeta> [recibido.archisim]
+      Un proyecto de equipo (carpeta compartida): quién está, qué ha
+      publicado y reservado cada uno; con un segundo argumento, guarda el
+      proyecto tal como lo recibe cualquiera.
+  archisim equipo prueba [carpeta]
+      Comparte la casa de la demo entre dos personas (Antonio y Ana), que
+      reservan, dibujan y publican: carpeta equipo/ para abrirla con la
+      aplicación, y equipo-recibido.archisim e .ifc. Por defecto: ./out
   archisim muestrario [carpeta]
       Un muro con todas las puertas y ventanas de la plantilla, para verlas
       en planta, en 3D y en IFC: muestrario.archisim, muestrario.ifc y
@@ -137,6 +146,18 @@ fn main() -> ExitCode {
             }
             None => {
                 eprintln!("Falta el fichero: archisim importar <fichero.ifc> [proyecto.archisim]");
+                ExitCode::FAILURE
+            }
+        },
+        Some("equipo") => match (args.get(1).map(String::as_str), args.get(2)) {
+            (Some("prueba"), dir) => {
+                let dir = PathBuf::from(dir.map(String::as_str).unwrap_or("out"));
+                report(equipo::sample(&dir))
+            }
+            (Some(root), None) => report(equipo::status(Path::new(root))),
+            (Some(root), Some(out)) => report(equipo::export(Path::new(root), Path::new(out))),
+            (None, _) => {
+                eprintln!("Uso: archisim equipo <carpeta> [recibido.archisim] · archisim equipo prueba [carpeta]");
                 ExitCode::FAILURE
             }
         },

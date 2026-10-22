@@ -60,10 +60,20 @@ impl ArchiSimApp {
                     .font(strong_font(12.5))
                     .color(p.text),
             );
+            let file = match &self.team {
+                Some(t) => format!(
+                    "en equipo · {}",
+                    t.session.root.file_name().map_or_else(
+                        || t.session.root.display().to_string(),
+                        |n| n.to_string_lossy().into_owned()
+                    )
+                ),
+                None => self.ed.display_name(),
+            };
             ui.label(
                 egui::RichText::new(format!(
                     "{}{}",
-                    self.ed.display_name(),
+                    file,
                     if modified { " · sin guardar" } else { "" }
                 ))
                 .small()
@@ -104,6 +114,10 @@ impl ArchiSimApp {
                 .clicked()
                 {
                     self.show_properties = !self.show_properties;
+                }
+                if self.team.is_some() {
+                    ui.separator();
+                    self.team_top_bar(ui);
                 }
                 ui.separator();
                 if ui
@@ -654,6 +668,8 @@ impl ArchiSimApp {
             Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Planting => self.planting_hint(),
+            Tool::TeamZone if self.team_ui.zone_start.is_some() => "Clic: esquina opuesta de la zona · Esc o botón derecho: anular",
+            Tool::TeamZone => "Clic: primera esquina de la zona que reservas · Esc: flecha",
             Tool::Pipe | Tool::Duct | Tool::Device => self.services_hint(),
             Tool::Module => "Clic: colocar una copia (su origen en el punto) · Espacio: girar 90° · Propiedades: simetría · Esc: flecha",
             Tool::Object => "Clic: colocar el objeto (lado de atrás en el punto) · Espacio: girar 90° · Esc: flecha",

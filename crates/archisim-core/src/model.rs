@@ -1285,6 +1285,9 @@ pub struct Model {
     /// Line weights of the drawings by scale.
     pub graphics: crate::graphics::GraphicStandard,
     next_id: u64,
+    /// The highest id any element has had (team work hands out ids by
+    /// blocks, so it can be above `next_id`).
+    top_id: u64,
     levels: BTreeMap<LevelId, Level>,
     materials: BTreeMap<MaterialId, Material>,
     wall_types: BTreeMap<WallTypeId, WallType>,
@@ -1361,6 +1364,7 @@ impl Model {
             building_guid: GlobalId::new(),
             graphics: Default::default(),
             next_id: 1,
+            top_id: 0,
             levels: BTreeMap::new(),
             materials: BTreeMap::new(),
             wall_types: BTreeMap::new(),
@@ -1425,7 +1429,28 @@ impl Model {
     pub(crate) fn take_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
+        self.top_id = self.top_id.max(id);
         id
+    }
+
+    /// The first id above every id the model has used: where the copies
+    /// of modules number their elements in [`Model::flattened`].
+    pub fn first_unused_id(&self) -> u64 {
+        self.top_id.max(self.next_id.saturating_sub(1)) + 1
+    }
+
+    /// The id the next new element will get.
+    pub fn next_id(&self) -> u64 {
+        self.next_id
+    }
+
+    /// Makes new elements take ids from `next` on. Team work gives every
+    /// member a block of its own, so two people adding elements at the same
+    /// time never hand out the same id. The caller must make sure no
+    /// element of the model already has an id at or above `next` within
+    /// the ids it will use.
+    pub fn set_next_id(&mut self, next: u64) {
+        self.next_id = next.clamp(1, MAX_ID);
     }
 
     // ---- Levels -------------------------------------------------------
@@ -4156,6 +4181,7 @@ impl Model {
         // Parameters take ids from the same counter as the elements.
         let params = model.user_params.keys().map(|p| p.0);
         model.next_id = ids.iter().copied().chain(params).max().map_or(1, |m| m + 1);
+        model.top_id = model.next_id - 1;
         Ok(model)
     }
 }

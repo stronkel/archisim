@@ -17,12 +17,13 @@ members = [
     "crates/archisim-ids",
     "crates/archisim-coord",
     "crates/archisim-cte",
+    "crates/archisim-team",
     "crates/archisim-cli",
     "crates/archisim-app",
 ]
 
 [workspace.package]
-version = "0.37.0"
+version = "0.38.0"
 edition = "2021"
 publish = false
 authors = ["Antonio Fernández <antoniofernandez@ad5.es>"]
@@ -47,6 +48,7 @@ archisim-ids = { path = "crates/archisim-ids" }
 archisim-bcf = { path = "crates/archisim-bcf" }
 archisim-coord = { path = "crates/archisim-coord" }
 archisim-cte = { path = "crates/archisim-cte" }
+archisim-team = { path = "crates/archisim-team" }
 
 # The plan view rasterises the 1:50 drawing on every change; keep the SVG
 # renderer fast even in debug builds.

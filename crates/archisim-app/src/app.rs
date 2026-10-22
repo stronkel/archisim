@@ -111,6 +111,8 @@ pub enum Tool {
     Duct,
     /// Equipment, lights, sockets and switches, by a click.
     Device,
+    /// A zone reserved for team work, by two corners.
+    TeamZone,
     /// A 2D drafting or editing command is running (AutoCAD's).
     Cad,
 }
@@ -147,6 +149,7 @@ impl Tool {
                 | Tool::Pipe
                 | Tool::Duct
                 | Tool::Device
+                | Tool::TeamZone
         )
     }
 
@@ -517,6 +520,9 @@ pub struct ArchiSimApp {
     /// Linked models, issues, clashes and requirements (phase 4).
     pub coord: crate::coord::Coord,
     pub coord_window: coord_ui::CoordWindow,
+    /// The shared project, when working in a team.
+    pub team: Option<crate::team::Team>,
+    pub team_ui: team_ui::TeamUi,
 }
 
 impl ArchiSimApp {
@@ -682,6 +688,8 @@ impl ArchiSimApp {
             gpu: None,
             coord: crate::coord::Coord::new(),
             coord_window: coord_ui::CoordWindow::default(),
+            team: None,
+            team_ui: Default::default(),
         }
     }
 
@@ -754,6 +762,11 @@ impl ArchiSimApp {
     }
 
     fn replace_editor(&mut self, ed: Editor) {
+        // Another project: the shared one is left (its working copy kept).
+        if self.team.is_some() {
+            self.team_closing();
+            self.team = None;
+        }
         self.wall_settings = default_wall_settings(ed.model());
         self.slab_settings = default_slab_settings(ed.model());
         self.door_settings = default_opening_settings(ed.model(), true);
@@ -945,6 +958,13 @@ impl ArchiSimApp {
             return;
         };
         let rest = openable.count();
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(archisim_team::EXTENSION))
+        {
+            self.open_team(&path);
+            return;
+        }
         let is_ifc = path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
@@ -1000,6 +1020,10 @@ impl ArchiSimApp {
     /// Saves; with `ask` or without a file yet, asks where. Returns whether
     /// the project ended up saved.
     fn save(&mut self, ask: bool) -> bool {
+        // In a shared project, the working copy goes to the folder.
+        if self.team.is_some() && !ask {
+            return self.team_save();
+        }
         let target = if ask || self.ed.path.is_none() {
             let mut d = rfd::FileDialog::new()
                 .set_title("Guardar proyecto")
@@ -1406,6 +1430,7 @@ impl ArchiSimApp {
         self.keep_tool_types_valid();
         self.receive_files(&ctx);
         self.coord_poll(&ctx);
+        self.team_poll(&ctx);
         self.sync_tabs();
         self.update_title(&ctx);
         self.age_message(ctx.input(|i| i.time));
@@ -1517,6 +1542,7 @@ impl ArchiSimApp {
             ));
         }
         self.dialogs(&ctx);
+        self.team_windows(&ctx);
         self.text_entry(&ctx);
         if !matches!(self.mode, ViewMode::Sheet(_)) {
             sheet_drop::paint_carried(&ctx, false);
@@ -1532,6 +1558,8 @@ impl ArchiSimApp {
         // the window's close button.
         let quit = crate::open_files::take_quit();
         if (quit || ctx.input(|i| i.viewport().close_requested())) && !self.allow_close {
+            // A shared project keeps its working copy in the folder.
+            self.team_closing();
             if self.ed.is_modified() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.pending = Some(Pending::Quit);
@@ -2047,6 +2075,7 @@ mod stair_ui;
 mod structure_ui;
 mod survey_ui;
 mod tabs;
+mod team_ui;
 mod temp_ui;
 mod terrain_ui;
 pub mod theme;

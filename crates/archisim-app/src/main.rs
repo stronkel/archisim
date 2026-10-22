@@ -23,6 +23,7 @@ mod plan_image;
 mod slab_tool;
 mod snap;
 mod spline;
+mod team;
 mod temp_dims;
 mod type_drawing;
 mod type_preview;
@@ -50,6 +51,7 @@ fn main() -> eframe::Result {
         match ext.as_str() {
             "ifc" => app.import_path(&path),
             "dxf" => app.open_survey(&path),
+            "asequipo" => app.open_team(&path),
             _ => app.open_path(&path),
         }
     }

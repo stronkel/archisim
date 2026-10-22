@@ -307,7 +307,7 @@ impl ArchiSimApp {
                 Tool::Duct => ("Conducto", None, "Varita", ""),
                 Tool::Device => ("Aparato", None, "Varita", ""),
                 Tool::Footing => return Some(("Cimentación", self.footing_methods())),
-                Tool::Arrow | Tool::Cad => return None,
+                Tool::Arrow | Tool::Cad | Tool::TeamZone => return None,
             };
         let wall = (self.tool == Tool::Wall).then_some(self.wall_tool.mode);
         let line_tool = matches!(
