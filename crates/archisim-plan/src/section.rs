@@ -766,7 +766,7 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
             let apex = h + look * (r * 1.9);
             let _ = writeln!(
                 s,
-                r#"<path d="M{} L{} L{} Z" fill="{INK}" stroke="{INK}" stroke-width="{}"/><circle cx="{}" cy="{}" r="{}" fill="white" stroke="{INK}" stroke-width="{}"/><path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                r#"<path d="M{} L{} L{} Z" fill="{INK}" stroke="{INK}" stroke-width="{}"/><circle cx="{}" cy="{}" r="{}" fill="white" stroke="{INK}" stroke-width="{}"/><path d="{}" {}/>"#,
                 pt(h + u * r),
                 pt(apex),
                 pt(h - u * r),
@@ -782,7 +782,7 @@ pub fn draw_markers(s: &mut String, model: &Model, k: f64) {
                     th,
                     Align::Centre
                 ),
-                num(crate::lettering::STROKE * th)
+                crate::lettering::paint(th, INK)
             );
         }
     }
@@ -863,6 +863,7 @@ pub fn elevations_around(model: &Model) -> Vec<NewSection> {
 /// Writes a section drawing to SVG, with the same options as a plan
 /// (scale, viewport for the screen, thin lines).
 pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) -> String {
+    let _font = crate::lettering::use_font(model.graphics.font);
     let pens = options
         .pens
         .unwrap_or_else(|| model.graphics.pens(options.scale));
@@ -1089,7 +1090,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         let h = annotate::TEXT_HEIGHT * k;
         let _ = writeln!(
             s,
-            r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            r#"<path d="{}" {}/>"#,
             text_path(
                 &label,
                 Point2::new(x1 + 0.5 * k, *z + 0.8 * k),
@@ -1097,7 +1098,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
                 h,
                 Align::Left
             ),
-            num(crate::lettering::STROKE * h)
+            crate::lettering::paint(h, INK)
         );
     }
     s.push_str("</g>\n");
@@ -1111,7 +1112,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         );
         let _ = writeln!(
             s,
-            r#"<path class="title" d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+            r#"<path class="title" d="{}" {}/>"#,
             crate::lettering::text_path(
                 &text,
                 Point2::new(d.lo.x, d.lo.y - margin * 0.6 - h),
@@ -1119,7 +1120,7 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
                 h,
                 Align::Left
             ),
-            num(crate::lettering::STROKE * h)
+            crate::lettering::paint(h, INK)
         );
     }
     s.push_str("</svg>\n");

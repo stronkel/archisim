@@ -48,7 +48,10 @@ impl ArchiSimApp {
                 painter,
                 rect,
                 c.point,
-                format!("Barandilla   L {} mm", fmt_mm(a.distance(c.point))),
+                format!(
+                    "Barandilla   L {}",
+                    crate::units::fmt_len(a.distance(c.point))
+                ),
             );
         }
     }

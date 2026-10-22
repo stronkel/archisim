@@ -10,7 +10,7 @@ use eframe::egui::{self, Ui};
 use super::icons::Icon;
 use super::props::{self, choice, group, row, text_row};
 use super::*;
-use crate::units::{fmt_area, fmt_mm};
+use crate::units::fmt_area;
 
 /// Layer, colour, weight and line style to change (`None`: unchanged).
 type StyleChange = (
@@ -331,7 +331,7 @@ impl ArchiSimApp {
             .sum();
         group(ui, "draft-measure", "Medidas", |ui| {
             if total_len > 0.0 {
-                text_row(ui, "Longitud", "", &format!("{} mm", fmt_mm(total_len)));
+                text_row(ui, "Longitud", "", &crate::units::fmt_len(total_len));
             }
             if total_area > 0.0 {
                 text_row(ui, "Área", "", &fmt_area(total_area));
@@ -339,7 +339,7 @@ impl ArchiSimApp {
             if drafts.len() == 1 {
                 match &first.shape {
                     Shape::Circle { radius, .. } | Shape::Arc { radius, .. } => {
-                        text_row(ui, "Radio", "", &format!("{} mm", fmt_mm(*radius)));
+                        text_row(ui, "Radio", "", &crate::units::fmt_len(*radius));
                     }
                     Shape::Line { a, b } => {
                         text_row(ui, "Ángulo", "", &fmt_angle((*b - *a).y.atan2((*b - *a).x)));
@@ -722,6 +722,13 @@ impl ArchiSimApp {
             .open(&mut open)
             .default_width(460.0)
             .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Tipografía de textos, cotas y rótulos:");
+                    for f in archisim_core::TextFont::ALL {
+                        ui.selectable_value(&mut g.font, f, f.label());
+                    }
+                });
+                ui.add_space(6.0);
                 ui.label("Grosores en mm de papel (UNE-EN ISO 128). Las escalas finas se usan hasta 1:50; desde la escala indicada, las gruesas.");
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {

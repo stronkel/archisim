@@ -5297,3 +5297,106 @@ fn roads_by_their_edge_edited_after_and_trees_among_trees() {
         None
     );
 }
+
+/// Block 2 of Antonio's review: a level's look kept in the model (and
+/// undone), a saved ceiling plan, a reference plane walls snap to, the
+/// window «Visibilidad y gráficos» and the AD5 template.
+#[test]
+fn views_graphics_and_reference_planes() {
+    use archisim_core::{Category, GraphicOverride, LayerLines, PlanKind};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-2.0, -2.0), p(14.0, 10.0), 0.0);
+    let level = h.app.ed.level;
+    // Walls white with their cavity only: kept with the level's plan.
+    let mut style = h.app.view_style.clone();
+    style.set_graphics(
+        Category::Walls,
+        GraphicOverride {
+            cut_fill: Some([255, 255, 255]),
+            patterns: false,
+            layer_lines: LayerLines::Cavity,
+            ..Default::default()
+        },
+    );
+    h.app.view_style = style;
+    h.frame();
+    h.frame();
+    assert_eq!(
+        h.model()
+            .level_style(level)
+            .graphics(Category::Walls)
+            .layer_lines,
+        LayerLines::Cavity
+    );
+    // Undone, the view goes back too.
+    h.app.ed.undo();
+    h.frame();
+    h.frame();
+    assert!(h.app.view_style.overrides.is_empty());
+    // The AD5 template from the starter library.
+    let ad5 = h
+        .model()
+        .view_templates()
+        .find(|t| t.name == "AD5")
+        .map(|t| t.id)
+        .expect("AD5 template");
+    h.app.apply_template(ad5);
+    h.frame();
+    h.frame();
+    assert_eq!(
+        h.model()
+            .level_style(level)
+            .graphics(Category::Slabs)
+            .surface_fill,
+        Some([255, 255, 255])
+    );
+    // The window opens and draws every category.
+    h.app.views.vg_open = true;
+    h.frame();
+    h.frame();
+    h.app.views.vg_open = false;
+    // A ceiling plan, saved and shown in its own tab.
+    h.app.duplicate_view(PlanKind::Ceiling);
+    h.frame();
+    let id = h.app.active_saved().expect("a saved view");
+    assert!(h.app.active_ceiling());
+    assert_eq!(
+        h.model().plan_view(id).unwrap().name,
+        "Planta baja — techos"
+    );
+    // Its own scale, kept in the model.
+    h.app.set_scale(100.0);
+    h.frame();
+    h.frame();
+    assert_eq!(h.model().plan_view(id).unwrap().scale, 100.0);
+    // Back to the level's own plan: its scale was 1:50.
+    h.app.open_view(super::tabs::TabKind::Plan(level));
+    h.frame();
+    assert!(h.app.active_saved().is_none());
+    // A reference plane, drawn with its tool.
+    h.app.set_tool(Tool::RefPlane);
+    h.click_at(p(4.0, -1.0));
+    h.click_at(p(4.0, 9.0));
+    assert_eq!(h.model().ref_planes().count(), 1);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    // A wall started near it starts on it.
+    h.type_text("m");
+    h.click_at(p(4.03, 2.0));
+    h.click_at(p(10.0, 2.0));
+    h.key(Key::Escape);
+    let w = h.model().walls().next().expect("a wall");
+    assert!((w.start.x - 4.0).abs() < 1e-6, "{:?}", w.start);
+    // The sans lettering and the technical one both draw.
+    h.app
+        .ed
+        .transact("Letra", |m| {
+            m.graphics.font = archisim_core::TextFont::Technical;
+            Ok(())
+        })
+        .unwrap();
+    h.frame();
+}

@@ -202,16 +202,11 @@ pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
             );
         }
         Shape::Text(t) => {
-            let mut path = String::new();
-            for st in archisim_draft::font::text_strokes(t, k) {
-                path.push_str(&points_path(&st, false));
-                path.push(' ');
-            }
             let _ = writeln!(
                 s,
-                r#"<path d="{}" stroke="{color}" stroke-width="{}" stroke-linecap="round"/>"#,
-                path.trim_end(),
-                num(archisim_draft::font::STROKE * t.height * k)
+                r#"<path d="{}" {}/>"#,
+                crate::lettering::text_d(t, k),
+                crate::lettering::paint(t.height * k, &color)
             );
         }
         Shape::Hatch(h) => draw_hatch(s, h, &color, &width, k),
@@ -230,16 +225,11 @@ pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
                     arrows.trim_end()
                 );
             }
-            let mut path = String::new();
-            for st in archisim_draft::font::text_strokes(&dd.text, k) {
-                path.push_str(&points_path(&st, false));
-                path.push(' ');
-            }
             let _ = writeln!(
                 s,
-                r#"<path d="{}" stroke="{color}" stroke-width="{}" stroke-linecap="round"/>"#,
-                path.trim_end(),
-                num(archisim_draft::font::STROKE * dd.text.height * k)
+                r#"<path d="{}" {}/>"#,
+                crate::lettering::text_d(&dd.text, k),
+                crate::lettering::paint(dd.text.height * k, &color)
             );
         }
     }

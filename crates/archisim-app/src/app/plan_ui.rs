@@ -112,6 +112,7 @@ impl ArchiSimApp {
             | Tool::Railing
             | Tool::Object
             | Tool::Grid
+            | Tool::RefPlane
             | Tool::Footing
             | Tool::Module
             | Tool::Mass
@@ -387,6 +388,7 @@ impl ArchiSimApp {
             Tool::Column
             | Tool::Beam
             | Tool::Grid
+            | Tool::RefPlane
             | Tool::Footing
             | Tool::Module
             | Tool::Mass
@@ -413,7 +415,7 @@ impl ArchiSimApp {
                 let mut s = self.snap_at(raw, reach, &points, &BTreeSet::new());
                 let anchor = match self.tool {
                     Tool::Beam => self.beam_tool.anchor,
-                    Tool::Grid | Tool::Footing => self.foundation_anchor(),
+                    Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_anchor(),
                     Tool::Plot => self.plot_tool.anchor(),
                     Tool::Road => self.road_points.last().copied(),
                     Tool::Planting => self.planting_points.last().copied(),
@@ -705,7 +707,7 @@ impl ArchiSimApp {
                 Tool::Door | Tool::Window | Tool::Column | Tool::Object | Tool::Module => {
                     self.set_tool(Tool::Arrow)
                 }
-                Tool::Grid | Tool::Footing => {
+                Tool::Grid | Tool::RefPlane | Tool::Footing => {
                     if !self.foundation_finish() {
                         self.set_tool(Tool::Arrow);
                     }
@@ -1074,7 +1076,7 @@ impl ArchiSimApp {
                     self.concept_escape();
                 }
             }
-            Tool::Grid | Tool::Footing => {
+            Tool::Grid | Tool::RefPlane | Tool::Footing => {
                 if response.clicked_by(PointerButton::Primary) {
                     if let Some(c) = self.cursor {
                         self.foundation_click(c.point);
@@ -1301,6 +1303,7 @@ impl ArchiSimApp {
             thin_lines: self.thin_lines,
             phase_view: self.phase_view,
             style: self.view_style.clone(),
+            ceiling: self.active_ceiling(),
         };
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
             let started = std::time::Instant::now();
@@ -1319,6 +1322,7 @@ impl ArchiSimApp {
                     phase_view: key.phase_view,
                     style: key.style.clone(),
                     shadows,
+                    ceiling: key.ceiling,
                     ..archisim_plan::PlanOptions::default()
                 },
             );
@@ -1526,6 +1530,7 @@ impl ArchiSimApp {
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::RailingPoint { .. }, _) => "Barandilla",
             (Grip::RoadPoint { .. }, _) => "Eje del vial",
+            (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
             (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
@@ -1536,8 +1541,8 @@ impl ArchiSimApp {
         let delta = to - d.from;
         let mut text = if d.typed.is_empty() {
             format!(
-                "{action}  {} mm   {}",
-                fmt_mm(delta.length()),
+                "{action}  {}   {}",
+                crate::units::fmt_len(delta.length()),
                 fmt_angle(delta.y.atan2(delta.x))
             )
         } else {
@@ -1689,21 +1694,26 @@ impl ArchiSimApp {
             (WallMode::Rectangle, _) => {
                 let (x, y) = (pieces[0].length(), pieces[1].length());
                 if typed.is_empty() {
-                    format!("{} × {} mm   S {}", fmt_mm(x), fmt_mm(y), fmt_area(x * y))
+                    format!(
+                        "{} × {}   S {}",
+                        fmt_mm(x),
+                        crate::units::fmt_len(y),
+                        fmt_area(x * y)
+                    )
                 } else {
                     format!("{typed}▏ (ancho x fondo)")
                 }
             }
             (WallMode::Circle, Some(arc)) if typed.is_empty() => {
-                format!("R {} mm", fmt_mm(arc.radius))
+                format!("R {}", crate::units::fmt_len(arc.radius))
             }
             (WallMode::Circle, _) => format!("R: {typed}▏"),
             (WallMode::Arc, Some(arc)) if self.wall_tool.arc_end().is_some() => {
                 if typed.is_empty() {
                     format!(
-                        "R {} mm   L {} mm",
-                        fmt_mm(arc.radius),
-                        fmt_mm(arc.length())
+                        "R {}   L {}",
+                        crate::units::fmt_len(arc.radius),
+                        crate::units::fmt_len(arc.length())
                     )
                 } else {
                     format!("R: {typed}▏")
@@ -1719,7 +1729,11 @@ impl ArchiSimApp {
             _ => {
                 let angle = (w.end - w.start).y.atan2((w.end - w.start).x);
                 if typed.is_empty() {
-                    format!("L {} mm   {}", fmt_mm(w.length()), fmt_angle(angle))
+                    format!(
+                        "L {}   {}",
+                        crate::units::fmt_len(w.length()),
+                        fmt_angle(angle)
+                    )
                 } else {
                     format!("L: {typed}▏   {}", fmt_angle(angle))
                 }
@@ -1747,7 +1761,12 @@ impl ArchiSimApp {
                     outline[1].distance(outline[2]),
                 );
                 let text = if self.slab_tool.typed.is_empty() {
-                    format!("{} × {} mm   S {}", fmt_mm(x), fmt_mm(y), fmt_area(x * y))
+                    format!(
+                        "{} × {}   S {}",
+                        fmt_mm(x),
+                        crate::units::fmt_len(y),
+                        fmt_area(x * y)
+                    )
                 } else {
                     format!("{}▏ (ancho x fondo)", self.slab_tool.typed)
                 };
@@ -1774,7 +1793,7 @@ impl ArchiSimApp {
         let len = last.distance(next);
         let angle = (next - last).y.atan2((next - last).x);
         let mut text = if self.slab_tool.typed.is_empty() {
-            format!("L {} mm   {}", fmt_mm(len), fmt_angle(angle))
+            format!("L {}   {}", crate::units::fmt_len(len), fmt_angle(angle))
         } else {
             format!("L: {}▏   {}", self.slab_tool.typed, fmt_angle(angle))
         };
@@ -1870,9 +1889,9 @@ impl ArchiSimApp {
         let text = match &pl.problem {
             Some(p) => format!("No cabe: {p}"),
             None => format!(
-                "{} mm ◂ ▸ {} mm   {side}",
-                fmt_mm(pl.before),
-                fmt_mm(pl.after)
+                "{} ◂ ▸ {}   {side}",
+                crate::units::fmt_len(pl.before),
+                crate::units::fmt_len(pl.after)
             ),
         };
         self.draw_label(painter, rect, c.point, text);
@@ -1891,7 +1910,7 @@ impl ArchiSimApp {
             Tool::Wall => self.wall_tool.anchor(),
             Tool::Slab => self.slab_tool.anchor(),
             Tool::Beam => self.beam_tool.anchor,
-            Tool::Grid | Tool::Footing => self.foundation_anchor(),
+            Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_anchor(),
             Tool::Mass | Tool::Tape => self.concept_anchor(),
             Tool::Plot => self.plot_tool.anchor(),
             Tool::Road => self.road_points.last().copied(),
@@ -1926,7 +1945,9 @@ impl ArchiSimApp {
             Tool::Section => self.section_tool.anchor.into_iter().collect(),
             Tool::CurtainWall => self.curtain_anchor.into_iter().collect(),
             Tool::Beam => self.beam_tool.anchor.into_iter().collect(),
-            Tool::Grid | Tool::Footing => self.foundation_anchor().into_iter().collect(),
+            Tool::Grid | Tool::RefPlane | Tool::Footing => {
+                self.foundation_anchor().into_iter().collect()
+            }
             Tool::Mass | Tool::Tape => self.concept_points(),
             Tool::Plot => self.plot_tool.corners().to_vec(),
             Tool::Road => self.road_points.clone(),

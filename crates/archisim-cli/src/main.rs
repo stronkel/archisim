@@ -511,6 +511,19 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
             dxf_path.display()
         );
     }
+    // Saved plans, each with its own scale, cut plane and look.
+    for v in model.plan_views() {
+        let path = dir.join(format!("{stem}-vista-{}.svg", slug(&v.name)));
+        let options = PlanOptions {
+            scale: v.scale,
+            cut_plane: v.cut_plane,
+            style: v.style.clone(),
+            ceiling: v.kind == archisim_core::PlanKind::Ceiling,
+            ..PlanOptions::default()
+        };
+        std::fs::write(&path, render_plan(model, v.level, &options))?;
+        println!("  Vista «{}»: {}", v.name, path.display());
+    }
     for sheet in model.sheets() {
         let path = dir.join(format!("{stem}-plano-{}.svg", slug(&sheet.number)));
         let svg = archisim_plan::sheet::render_sheet(

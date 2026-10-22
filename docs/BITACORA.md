@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (6) · Revisión de Antonio, bloque 2: Gráficos y vistas
+
+Rama `bloque/graficos`, pull request para Antonio. v0.42. Formato `.archisim` versión 27 (abre todas las anteriores). Sin cambios en el IFC salvo que los planos de referencia no se exportan. Descrito en `docs/GRAFICOS.md`.
+
+**Hecho**
+- **Visibilidad y gráficos** por vista, como en Revit: por categoría, visible, color de líneas, relleno de corte, relleno de superficie, transparencia, medios tonos, tramas, grosor y, en muros, qué líneas de capas se ven (todas, solo la cámara —aislamiento y cámara juntos— o solo el contorno). Se imprime igual en PDF y DXF.
+- **Plantillas de vista**: AD5 (blanco con líneas negras, muros con solo la cámara, sin tramas, jardín y urbanismo en pastel), Albañilería y Superficies; se guardan plantillas nuevas desde la ventana VG.
+- **Vistas guardadas** de cada planta (nombre, escala, plano de corte y gráficos) en el navegador, arrastrables a los planos. La vista de cada planta recuerda ya su aspecto en el proyecto.
+- **Plantas de techo**: el forjado de encima, luminarias, instalaciones y vigas; sin mobiliario ni pavimentos.
+- **Planos de referencia** (Estructura o Documentación → Plano ref., tecla Q): verdes, con nombre, en todas las plantas; los muros, líneas y cotas se fuerzan a ellos.
+- **Tipografía**: IBM Plex Sans (libre) por defecto en textos, cotas, locales, etiquetas, cajetines y tablas, como contornos (igual en pantalla, PDF y DXF). La de trazo sigue en Normas gráficas.
+- **Unidades**: metros por defecto (también centímetros y milímetros) en Vista → Unidades; se escribe en la unidad elegida o con sufijo (`270cm`).
+- **Líneas finas / grosor real** en la barra inferior.
+
+**Pendiente**
+- Gráficos por categoría en secciones, alzados y 3D; sustituciones por elemento y por filtro; falsos techos como elementos.
+
+**Qué debe probar Antonio**
+1. Abre la demo. En el navegador, bajo Planta baja, abre «Planta baja — AD5»: muros blancos con solo la cámara, sin tramas, jardín en pastel. Compárala con «— albañilería», «— superficies» y «— techos».
+2. En tu planta, sin nada seleccionado, Propiedades → «Visibilidad y gráficos…»: cambia el relleno de corte de los muros, la transparencia de la vegetación o apaga las tramas; luego «Plantilla» → AD5.
+3. Clic derecho en una planta del navegador → «Planta de techos». Arrástrala a un plano.
+4. Estructura → Plano ref. (Q): dos clics; dibuja un muro y comprueba que se fuerza a él.
+5. Vista → Unidades: metros; escribe «2,70» en una cota temporal y en Propiedades. Prueba el botón de grosor real de la barra inferior.
+6. Mira los textos y cotas con la letra nueva; si prefieres la de antes, Normas gráficas → Tipografía.
+
+---
+
 ## 2026-10-22 (5) · Revisión de Antonio, bloque 1: Urbanismo
 
 Directo a `main` (arreglos pequeños). v0.41.1. Sin cambios en el formato `.archisim` ni en el IFC. Antonio entregó su lista de feedback acumulado; queda repartida en siete bloques en `docs/HOJA_DE_RUTA.md` §7.

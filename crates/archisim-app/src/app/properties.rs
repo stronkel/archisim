@@ -75,6 +75,7 @@ impl ArchiSimApp {
             [Element::Tag(id)] => self.tag_properties(ui, *id),
             [Element::Footing(id)] => self.footing_properties(ui, *id),
             [Element::Grid(id)] => self.grid_properties(ui, *id),
+            [Element::RefPlane(id)] => self.ref_plane_properties(ui, *id),
             [Element::Module(id)] => self.module_properties(ui, *id),
             [Element::Mass(id)] => self.mass_properties(ui, *id),
             [Element::Plot(id)] => self.plot_properties(ui, *id),
@@ -142,8 +143,8 @@ impl ArchiSimApp {
                     id: t.id,
                     name: t.name.clone(),
                     note: format!(
-                        "{} mm · {f} · {} capas",
-                        fmt_mm(t.thickness()),
+                        "{} · {f} · {} capas",
+                        crate::units::fmt_len(t.thickness()),
                         t.layers.len()
                     ),
                     thumb,
@@ -173,7 +174,7 @@ impl ArchiSimApp {
                 TypeItem {
                     id: t.id,
                     name: t.name.clone(),
-                    note: format!("canto {} mm · {f}", fmt_mm(t.thickness())),
+                    note: format!("canto {} · {f}", crate::units::fmt_len(t.thickness())),
                     thumb,
                     caption: "Capas 1:20 · cara superior arriba",
                 }
@@ -205,9 +206,9 @@ impl ArchiSimApp {
                     id: t.id,
                     name,
                     note: format!(
-                        "{} × {} mm · {}",
+                        "{} × {} · {}",
                         fmt_mm(t.width),
-                        fmt_mm(t.height),
+                        crate::units::fmt_len(t.height),
                         types_ui::family_label(model, t.family)
                     ),
                     thumb,
@@ -238,6 +239,7 @@ impl ArchiSimApp {
             Tool::Railing => self.railing_tool_properties(ui),
             Tool::Object => self.object_tool_properties(ui),
             Tool::Grid => self.grid_tool_properties(ui),
+            Tool::RefPlane => self.ref_plane_tool_properties(ui),
             Tool::Footing => self.footing_tool_properties(ui),
             Tool::Module => self.module_tool_properties(ui),
             Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
@@ -658,12 +660,28 @@ impl ArchiSimApp {
         let level = self.ed.model().level(self.ed.level).cloned();
         let name = level.as_ref().map_or(String::new(), |l| l.name.clone());
         props::title(ui, &format!("Vista · {name}"));
-        view_card(
-            ui,
-            Icon::Plan,
-            &format!("Planta · {name}"),
-            "Vista de planta",
-        );
+        let saved = self
+            .active_saved()
+            .and_then(|id| self.ed.model().plan_view(id).cloned());
+        match &saved {
+            Some(v) => view_card(
+                ui,
+                Icon::Plan,
+                &v.name,
+                if v.kind == archisim_core::PlanKind::Ceiling {
+                    "Planta de techos guardada"
+                } else {
+                    "Vista de planta guardada"
+                },
+            ),
+            None => view_card(
+                ui,
+                Icon::Plan,
+                &format!("Planta · {name}"),
+                "Vista de planta",
+            ),
+        }
+        self.view_actions_group(ui, saved.as_ref());
         group(ui, "view-graphics", "Gráficos", |ui| {
             row(
                 ui,
@@ -862,7 +880,7 @@ impl ArchiSimApp {
                 ui,
                 "Espesor total",
                 "",
-                &format!("{} mm", fmt_mm(t.thickness())),
+                &crate::units::fmt_len(t.thickness()),
             );
         });
     }
@@ -1514,7 +1532,7 @@ impl ArchiSimApp {
                 ui,
                 "Cara superior",
                 "Más baja y más alta, sobre la planta",
-                &format!("{} … {} mm", fmt_mm(lo), fmt_mm(hi)),
+                &format!("{} … {}", fmt_mm(lo), crate::units::fmt_len(hi)),
             );
         });
     }
@@ -1985,5 +2003,86 @@ fn capitalized(s: &str) -> String {
     match c.next() {
         Some(f) => f.to_uppercase().chain(c).collect(),
         None => String::new(),
+    }
+}
+
+impl ArchiSimApp {
+    /// Saved views, templates and «Visibilidad y gráficos» of the active
+    /// plan.
+    fn view_actions_group(&mut self, ui: &mut Ui, saved: Option<&archisim_core::PlanView>) {
+        let templates: Vec<(archisim_core::ViewTemplateId, String)> = self
+            .ed
+            .model()
+            .view_templates()
+            .map(|t| (t.id, t.name.clone()))
+            .collect();
+        let mut apply = None;
+        let mut rename = None;
+        let mut duplicate = None;
+        let mut vg = false;
+        group(ui, "view-saved", "Vista", |ui| {
+            if let Some(v) = saved {
+                row(ui, "Nombre", "El de la vista guardada", |ui, w| {
+                    if let Some(t) =
+                        text_edit_committed(ui, Id::unique(("view-name", v.id.0)), &v.name, w - 8.0)
+                    {
+                        rename = Some((v.id, t));
+                    }
+                });
+            }
+            row(
+                ui,
+                "Plantilla",
+                "Da a la vista el aspecto de una plantilla (Visibilidad y gráficos)",
+                |ui, w| {
+                    egui::ComboBox::from_id_salt("view-template")
+                        .width(w - 8.0)
+                        .selected_text("Aplicar…")
+                        .show_ui(ui, |ui| {
+                            for (id, name) in &templates {
+                                if ui.selectable_label(false, name).clicked() {
+                                    apply = Some(*id);
+                                }
+                            }
+                        });
+                },
+            );
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(4.0);
+                let r = ui
+                    .button("Visibilidad y gráficos…")
+                    .on_hover_text("Colores, rellenos, transparencia, tramas y grosor de cada categoría en esta vista (VG)");
+                super::missions_ui::mark(ui.ctx(), "button:Visibilidad y gráficos…", r.rect);
+                if r.clicked() {
+                    vg = true;
+                }
+                if ui
+                    .button("Guardar vista")
+                    .on_hover_text("Otra vista de esta planta con su propio aspecto (albañilería, superficies…)")
+                    .clicked()
+                {
+                    duplicate = Some(archisim_core::PlanKind::Floor);
+                }
+                if ui
+                    .button("Planta de techos")
+                    .on_hover_text("La planta vista hacia arriba: techos, luminarias, vigas")
+                    .clicked()
+                {
+                    duplicate = Some(archisim_core::PlanKind::Ceiling);
+                }
+            });
+        });
+        if let Some(id) = apply {
+            self.apply_template(id);
+        }
+        if let Some((id, t)) = rename {
+            self.rename_view(id, &t);
+        }
+        if let Some(kind) = duplicate {
+            self.duplicate_view(kind);
+        }
+        if vg {
+            self.views.vg_open = true;
+        }
     }
 }

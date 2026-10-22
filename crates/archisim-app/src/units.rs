@@ -1,8 +1,85 @@
-//! Number formatting and parsing for the interface (millimetres, Spanish
-//! decimal comma) and Spanish messages for model and file errors.
+//! Number formatting and parsing for the interface (lengths in the unit
+//! chosen in Vista → Unidades, metres by default; Spanish decimal comma)
+//! and Spanish messages for model and file errors.
+
+use std::borrow::Cow;
+use std::cell::Cell;
 
 use archisim_core::ModelError;
 use archisim_file::FileError;
+
+/// The unit lengths are shown and typed in (the model is always in
+/// metres).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LengthUnit {
+    #[default]
+    Metre,
+    Centimetre,
+    Millimetre,
+}
+
+impl LengthUnit {
+    pub const ALL: [LengthUnit; 3] = [
+        LengthUnit::Metre,
+        LengthUnit::Centimetre,
+        LengthUnit::Millimetre,
+    ];
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            LengthUnit::Metre => "m",
+            LengthUnit::Centimetre => "cm",
+            LengthUnit::Millimetre => "mm",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            LengthUnit::Metre => "Metros",
+            LengthUnit::Centimetre => "Centímetros",
+            LengthUnit::Millimetre => "Milímetros",
+        }
+    }
+
+    pub fn from_symbol(s: &str) -> Option<LengthUnit> {
+        LengthUnit::ALL.into_iter().find(|u| u.symbol() == s)
+    }
+
+    /// Metres in one of this unit.
+    fn factor(self) -> f64 {
+        match self {
+            LengthUnit::Metre => 1.0,
+            LengthUnit::Centimetre => 0.01,
+            LengthUnit::Millimetre => 0.001,
+        }
+    }
+}
+
+thread_local! {
+    // The tests type millimetres, as the program did before.
+    static UNIT: Cell<LengthUnit> = const {
+        Cell::new(if cfg!(test) { LengthUnit::Millimetre } else { LengthUnit::Metre })
+    };
+}
+
+/// The unit lengths are shown and typed in.
+pub fn unit() -> LengthUnit {
+    UNIT.with(|u| u.get())
+}
+
+pub fn set_unit(u: LengthUnit) {
+    UNIT.with(|c| c.set(u));
+}
+
+/// A label written for millimetres («Ancho (mm)») in the unit in use.
+pub fn unit_label(label: &str) -> Cow<'_, str> {
+    let u = unit();
+    if u != LengthUnit::Millimetre && label.contains("(mm)") {
+        Cow::Owned(label.replace("(mm)", &format!("({})", u.symbol())))
+    } else {
+        Cow::Borrowed(label)
+    }
+}
 
 /// Metres with three decimals and a decimal comma: `3,250`.
 pub fn fmt_m(v: f64) -> String {
@@ -10,9 +87,41 @@ pub fn fmt_m(v: f64) -> String {
     format!("{v:.3}").replace('.', ",")
 }
 
-/// A length given in metres, shown in millimetres: `2700`, or `2700,5`
-/// when it is not a whole number of millimetres.
+/// A length given in metres, shown in the unit in use: in metres with two
+/// decimals (three when it has millimetres: `2,70`, `2,705`), in
+/// centimetres (`270`, `270,5`) or in millimetres (`2700`, `2700,5`).
 pub fn fmt_mm(v: f64) -> String {
+    match unit() {
+        LengthUnit::Metre => {
+            let mm = (v * 1000.0).round();
+            let mm = if mm == 0.0 { 0.0 } else { mm };
+            if (mm / 10.0 - (mm / 10.0).round()).abs() < 1e-9 {
+                format!("{:.2}", mm / 1000.0).replace('.', ",")
+            } else {
+                format!("{:.3}", mm / 1000.0).replace('.', ",")
+            }
+        }
+        LengthUnit::Centimetre => {
+            let cm = (v * 100.0 * 10.0).round() / 10.0;
+            let cm = if cm == 0.0 { 0.0 } else { cm };
+            if (cm - cm.round()).abs() < 1e-9 {
+                format!("{}", cm.round() as i64)
+            } else {
+                format!("{cm:.1}").replace('.', ",")
+            }
+        }
+        LengthUnit::Millimetre => fmt_millimetres(v),
+    }
+}
+
+/// A length with its unit: `2,70 m`.
+pub fn fmt_len(v: f64) -> String {
+    format!("{} {}", fmt_mm(v), unit().symbol())
+}
+
+/// A length given in metres, always in millimetres: `2700`, or `2700,5`
+/// when it is not a whole number of millimetres.
+pub fn fmt_millimetres(v: f64) -> String {
     let mm = (v * 1000.0 * 10.0).round() / 10.0;
     let mm = if mm == 0.0 { 0.0 } else { mm };
     if (mm - mm.round()).abs() < 1e-9 {
@@ -41,9 +150,10 @@ pub fn fmt_angle(radians: f64) -> String {
 
 /// Reads a length typed by the user and returns it in metres.
 ///
-/// Millimetres by default. Accepts a decimal comma or point (`2700,5`,
-/// `2700.5`), a point as thousands separator (`2.700` is 2700 mm), and the
-/// suffixes `mm`, `cm` and `m` (`3m` is 3000 mm).
+/// In the unit in use unless it says another one (the suffixes `mm`, `cm`
+/// and `m`: `270cm`, `3m`). Accepts a decimal comma or point (`2,70`,
+/// `2.70`); in millimetres a point between groups of three digits is a
+/// thousands separator (`2.700` is 2700 mm).
 pub fn parse_length(text: &str) -> Option<f64> {
     let t: String = text.trim().chars().filter(|c| !c.is_whitespace()).collect();
     let t = t.to_lowercase();
@@ -54,7 +164,7 @@ pub fn parse_length(text: &str) -> Option<f64> {
     } else if let Some(n) = t.strip_suffix('m') {
         (n, 1.0)
     } else {
-        (t.as_str(), 0.001)
+        (t.as_str(), unit().factor())
     };
     if number.is_empty() {
         return None;
@@ -62,7 +172,7 @@ pub fn parse_length(text: &str) -> Option<f64> {
     let normalized = if number.contains(',') {
         // Decimal comma; any points are thousands separators.
         number.replace('.', "").replace(',', ".")
-    } else if is_thousands(number) {
+    } else if (factor - 0.001).abs() < 1e-12 && is_thousands(number) {
         number.replace('.', "")
     } else {
         number.to_string()
@@ -206,6 +316,9 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::UnknownViewport(_) => "la vista ya no está en el plano".into(),
         ModelError::UnknownRoom(_) => "el local ya no existe".into(),
         ModelError::UnknownPresentationStyle(_) => "el estilo de presentación ya no existe".into(),
+        ModelError::UnknownPlanView(_) => "la vista guardada ya no existe".into(),
+        ModelError::UnknownViewTemplate(_) => "la plantilla de vista ya no existe".into(),
+        ModelError::UnknownRefPlane(_) => "el plano de referencia ya no existe".into(),
         ModelError::UnknownTag(_) => "la etiqueta ya no existe".into(),
         ModelError::UnknownTable(_) => "la tabla ya no está en el plano".into(),
         ModelError::InvalidShape(what) => es_shape(what).into(),
@@ -441,5 +554,24 @@ mod tests {
     fn errors_in_spanish() {
         assert!(explain(&ModelError::NonPositive("wall height")).starts_with("la altura"));
         assert!(explain(&ModelError::OverlappingOpenings).contains("solaparía"));
+    }
+
+    #[test]
+    fn lengths_in_metres_and_centimetres() {
+        set_unit(LengthUnit::Metre);
+        assert_eq!(fmt_mm(2.7), "2,70");
+        assert_eq!(fmt_mm(2.705), "2,705");
+        assert_eq!(fmt_len(0.0), "0,00 m");
+        assert_eq!(parse_length("2,7"), Some(2.7));
+        assert_eq!(parse_length("2.70"), Some(2.7));
+        assert_eq!(parse_length("270cm"), Some(2.7));
+        assert_eq!(parse_length("2700mm"), Some(2.7));
+        assert_eq!(parse_size("6x4"), Some((6.0, 4.0)));
+        assert_eq!(unit_label("Ancho (mm)"), "Ancho (m)");
+        set_unit(LengthUnit::Centimetre);
+        assert_eq!(fmt_mm(2.705), "270,5");
+        assert_eq!(parse_length("25"), Some(0.25));
+        set_unit(LengthUnit::Millimetre);
+        assert_eq!(unit_label("Ancho (mm)"), "Ancho (mm)");
     }
 }

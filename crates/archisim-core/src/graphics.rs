@@ -55,13 +55,47 @@ impl Pens {
     };
 }
 
-/// The project's graphic standard: pens for fine and coarse scales.
+/// The lettering of texts, dimensions, room stamps and title blocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum TextFont {
+    /// A sans-serif type (IBM Plex Sans), filled: the default.
+    #[default]
+    Sans,
+    /// The single-stroke technical lettering (UNE-EN ISO 3098).
+    Technical,
+}
+
+impl TextFont {
+    pub const ALL: [TextFont; 2] = [TextFont::Sans, TextFont::Technical];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            TextFont::Sans => "sans",
+            TextFont::Technical => "technical",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<TextFont> {
+        TextFont::ALL.into_iter().find(|f| f.code() == code)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TextFont::Sans => "Sans (IBM Plex)",
+            TextFont::Technical => "Técnica de trazo (ISO 3098)",
+        }
+    }
+}
+
+/// The project's graphic standard: pens for fine and coarse scales, and
+/// the lettering.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GraphicStandard {
     pub fine: Pens,
     pub coarse: Pens,
     /// Scales from 1:`coarse_from` down use the coarse pens.
     pub coarse_from: f64,
+    pub font: TextFont,
 }
 
 impl Default for GraphicStandard {
@@ -70,6 +104,7 @@ impl Default for GraphicStandard {
             fine: Pens::FINE,
             coarse: Pens::COARSE,
             coarse_from: 100.0,
+            font: TextFont::default(),
         }
     }
 }
@@ -140,10 +175,14 @@ pub enum Category {
     Roads,
     /// Pipes, ducts and devices.
     Services,
+    /// Trees, shrubs, hedges and plantings (objects of the garden).
+    Vegetation,
+    /// Reference planes: lines to draw against.
+    RefPlanes,
 }
 
 impl Category {
-    pub const ALL: [Category; 22] = [
+    pub const ALL: [Category; 24] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
@@ -154,6 +193,7 @@ impl Category {
         Category::CurtainWalls,
         Category::Railings,
         Category::Objects,
+        Category::Vegetation,
         Category::Terrain,
         Category::Masses,
         Category::Plots,
@@ -163,6 +203,7 @@ impl Category {
         Category::LevelMarks,
         Category::SectionMarks,
         Category::Grids,
+        Category::RefPlanes,
         Category::Drafting,
         Category::Rooms,
         Category::Tags,
@@ -192,6 +233,8 @@ impl Category {
             Category::Plots => "plots",
             Category::Roads => "roads",
             Category::Services => "services",
+            Category::Vegetation => "vegetation",
+            Category::RefPlanes => "reference_planes",
         }
     }
 
@@ -223,6 +266,8 @@ impl Category {
             Category::Plots => "Parcelas",
             Category::Roads => "Viales",
             Category::Services => "Instalaciones",
+            Category::Vegetation => "Vegetación",
+            Category::RefPlanes => "Planos de referencia",
         }
     }
 }
@@ -263,6 +308,96 @@ impl Detail {
     }
 }
 
+/// Which lines between the layers of a cut wall are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum LayerLines {
+    /// Every boundary between layers.
+    #[default]
+    All,
+    /// Only the faces of the air gap (the wall reads as two leaves).
+    Cavity,
+    /// None: the wall is its outline.
+    None,
+}
+
+impl LayerLines {
+    pub const ALL: [LayerLines; 3] = [LayerLines::All, LayerLines::Cavity, LayerLines::None];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            LayerLines::All => "all",
+            LayerLines::Cavity => "cavity",
+            LayerLines::None => "none",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<LayerLines> {
+        LayerLines::ALL.into_iter().find(|l| l.code() == code)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            LayerLines::All => "Todas las capas",
+            LayerLines::Cavity => "Solo la cámara de aire",
+            LayerLines::None => "Solo el contorno",
+        }
+    }
+}
+
+/// How a category is drawn in a view, over how it would be (Revit's
+/// visibility and graphic overrides): every field left at its default
+/// changes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GraphicOverride {
+    /// Colour of every line and text.
+    pub line: Option<crate::Rgb>,
+    /// Fill of what is cut (walls, columns, slabs in section).
+    pub cut_fill: Option<crate::Rgb>,
+    /// Fill of what is seen (slabs, floors, terrain, roads, plots,
+    /// objects, the crowns of trees).
+    pub surface_fill: Option<crate::Rgb>,
+    /// How see-through, percent (0 opaque, 100 invisible).
+    pub transparency: u8,
+    /// Every colour halfway to white.
+    pub halftone: bool,
+    /// The hatches of materials (and the zigzag of insulation).
+    pub patterns: bool,
+    /// Weight of the lines, percent of the pen's.
+    pub weight: u16,
+    /// Lines between the layers of walls (and of slabs in section).
+    pub layer_lines: LayerLines,
+}
+
+impl Default for GraphicOverride {
+    fn default() -> Self {
+        Self {
+            line: None,
+            cut_fill: None,
+            surface_fill: None,
+            transparency: 0,
+            halftone: false,
+            patterns: true,
+            weight: 100,
+            layer_lines: LayerLines::All,
+        }
+    }
+}
+
+impl GraphicOverride {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// A colour as this override shows it: halfway to white in halftone.
+    pub fn tint(&self, c: crate::Rgb) -> crate::Rgb {
+        if self.halftone {
+            c.map(|v| ((v as u16 + 255) / 2) as u8)
+        } else {
+            c
+        }
+    }
+}
+
 /// What a view shows (Revit's visibility and view template).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ViewStyle {
@@ -275,11 +410,67 @@ pub struct ViewStyle {
     pub hidden_disciplines: BTreeSet<crate::ElementDiscipline>,
     /// How it is presented: colours, solid walls, line weights.
     pub presentation: Option<crate::PresentationStyleId>,
+    /// How each category is drawn, where it is not as usual.
+    pub overrides: std::collections::BTreeMap<Category, GraphicOverride>,
 }
 
 impl ViewStyle {
     pub fn shows(&self, c: Category) -> bool {
         !self.hidden.contains(&c)
+    }
+
+    /// How a category is drawn: its override, or the usual way.
+    pub fn graphics(&self, c: Category) -> GraphicOverride {
+        self.overrides.get(&c).copied().unwrap_or_default()
+    }
+
+    /// Sets a category's override (a default one is taken away).
+    pub fn set_graphics(&mut self, c: Category, g: GraphicOverride) {
+        if g.is_default() {
+            self.overrides.remove(&c);
+        } else {
+            self.overrides.insert(c, g);
+        }
+    }
+
+    /// The view template «AD5»: everything cut or seen in white with
+    /// black lines, walls with their air gap only, the garden and the
+    /// site in pastel colours.
+    pub fn ad5() -> ViewStyle {
+        let mut s = ViewStyle::default();
+        let white = Some([255, 255, 255]);
+        let plain = GraphicOverride {
+            cut_fill: white,
+            surface_fill: white,
+            patterns: false,
+            ..Default::default()
+        };
+        s.set_graphics(
+            Category::Walls,
+            GraphicOverride {
+                layer_lines: LayerLines::Cavity,
+                ..plain
+            },
+        );
+        for c in [
+            Category::Slabs,
+            Category::Structure,
+            Category::Roofs,
+            Category::Stairs,
+            Category::Objects,
+            Category::Foundations,
+        ] {
+            s.set_graphics(c, plain);
+        }
+        let pastel = |rgb: crate::Rgb| GraphicOverride {
+            surface_fill: Some(rgb),
+            ..Default::default()
+        };
+        s.set_graphics(Category::Vegetation, pastel([196, 222, 178]));
+        s.set_graphics(Category::Terrain, pastel([226, 236, 212]));
+        s.set_graphics(Category::Plots, pastel([238, 240, 222]));
+        s.set_graphics(Category::Roads, pastel([230, 228, 222]));
+        s
     }
 
     pub fn shows_layer(&self, l: DrawLayerId) -> bool {

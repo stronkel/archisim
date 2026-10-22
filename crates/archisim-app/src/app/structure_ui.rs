@@ -56,35 +56,41 @@ fn shape_of(p: Profile) -> SectionShape {
 /// Section in words: «300 × 500», «Ø 300», «I 150 × 300».
 pub fn profile_text(p: Profile) -> String {
     match p {
-        Profile::Rectangle { width, depth } => format!("{} × {} mm", fmt_mm(width), fmt_mm(depth)),
-        Profile::Circle { diameter } => format!("Ø {} mm", fmt_mm(diameter)),
+        Profile::Rectangle { width, depth } => {
+            format!("{} × {}", fmt_mm(width), crate::units::fmt_len(depth))
+        }
+        Profile::Circle { diameter } => format!("Ø {}", crate::units::fmt_len(diameter)),
         Profile::IShape { width, depth, .. } => {
-            format!("I {} × {} mm", fmt_mm(width), fmt_mm(depth))
+            format!("I {} × {}", fmt_mm(width), crate::units::fmt_len(depth))
         }
         Profile::UShape { width, depth, .. } => {
-            format!("U {} × {} mm", fmt_mm(width), fmt_mm(depth))
+            format!("U {} × {}", fmt_mm(width), crate::units::fmt_len(depth))
         }
         Profile::TShape { width, depth, .. } => {
-            format!("T {} × {} mm", fmt_mm(width), fmt_mm(depth))
+            format!("T {} × {}", fmt_mm(width), crate::units::fmt_len(depth))
         }
         Profile::LShape {
             width,
             depth,
             thickness,
         } => format!(
-            "L {} × {} × {} mm",
+            "L {} × {} × {}",
             fmt_mm(width),
             fmt_mm(depth),
-            fmt_mm(thickness)
+            crate::units::fmt_len(thickness)
         ),
         Profile::RectHollow { width, depth, wall } => format!(
-            "Tubo {} × {} × {} mm",
+            "Tubo {} × {} × {}",
             fmt_mm(width),
             fmt_mm(depth),
-            fmt_mm(wall)
+            crate::units::fmt_len(wall)
         ),
         Profile::CircleHollow { diameter, wall } => {
-            format!("Tubo Ø {} × {} mm", fmt_mm(diameter), fmt_mm(wall))
+            format!(
+                "Tubo Ø {} × {}",
+                fmt_mm(diameter),
+                crate::units::fmt_len(wall)
+            )
         }
     }
 }
@@ -840,8 +846,8 @@ impl ArchiSimApp {
                         self.beam_tool.anchor = Some(p);
                         self.ed.selection = [Element::Beam(id)].into_iter().collect();
                         self.say(format!(
-                            "Viga de {} mm creada. Clic: la siguiente desde aquí · Esc: terminar.",
-                            fmt_mm(a.distance(p))
+                            "Viga de {} creada. Clic: la siguiente desde aquí · Esc: terminar.",
+                            crate::units::fmt_len(a.distance(p))
                         ));
                     }
                     Err(e) => self.complain(format!("No se puede crear la viga: {e}.")),
@@ -925,8 +931,8 @@ impl ArchiSimApp {
                     rect,
                     c.point,
                     format!(
-                        "L {} mm   {}",
-                        fmt_mm(d.length()),
+                        "L {}   {}",
+                        crate::units::fmt_len(d.length()),
                         fmt_angle(d.y.atan2(d.x))
                     ),
                 );

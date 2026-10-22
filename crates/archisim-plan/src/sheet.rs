@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{LevelId, Model, Point2, SectionId, Sheet, SheetId, ViewRef, Viewport};
 
-use crate::lettering::{text_path, text_width, Align, STROKE};
+use crate::lettering::{text_path, text_width, Align};
 use crate::{num, render_plan, PlanOptions};
 
 const INK: &str = "#1a1a1a";
@@ -131,7 +131,13 @@ pub fn viewport_title(model: &Model, v: &Viewport) -> String {
                 .unwrap_or_default(),
             None => model
                 .level(v.level)
-                .map(|l| l.name.to_uppercase())
+                .map(|l| {
+                    if v.ceiling {
+                        format!("{} · TECHOS", l.name.to_uppercase())
+                    } else {
+                        l.name.to_uppercase()
+                    }
+                })
                 .unwrap_or_default(),
         }
     } else {
@@ -146,9 +152,9 @@ fn text(s: &mut String, t: &str, at: Point2, h_mm: f64, align: Align, color: &st
     let h = h_mm * MM;
     let _ = writeln!(
         s,
-        r#"<path d="{}" fill="none" stroke="{color}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+        r#"<path d="{}" {}/>"#,
         text_path(t, at, Point2::new(1.0, 0.0), h, align),
-        num(STROKE * h)
+        crate::lettering::paint(h, color)
     );
 }
 
@@ -393,6 +399,7 @@ fn draw_viewport(s: &mut String, model: &Model, v: &Viewport, px_per_mm: Option<
         style: v.style.clone(),
         px_per_mm,
         title: false,
+        ceiling: v.ceiling,
         ..PlanOptions::default()
     };
     let plan = match &section {
@@ -432,6 +439,7 @@ fn place_view_svg(s: &mut String, plan: &str, v: &Viewport, crop: (Point2, Point
 
 /// Renders a sheet as an SVG document.
 pub fn render_sheet(model: &Model, id: SheetId, options: &SheetOptions) -> String {
+    let _font = crate::lettering::use_font(model.graphics.font);
     let Some(sheet) = model.sheet(id) else {
         return String::from(r#"<svg xmlns="http://www.w3.org/2000/svg"/>"#);
     };

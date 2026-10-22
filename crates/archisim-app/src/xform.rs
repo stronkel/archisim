@@ -195,6 +195,7 @@ pub fn transform(
             | Element::Object(_)
             | Element::Footing(_)
             | Element::Grid(_)
+            | Element::RefPlane(_)
             | Element::Module(_) => {}
             Element::Plot(id) => {
                 let x = model
@@ -350,6 +351,7 @@ fn transform_phase_2(
                     | Element::Object(_)
                     | Element::Footing(_)
                     | Element::Grid(_)
+                    | Element::RefPlane(_)
                     | Element::Module(_)
             )
         })
@@ -414,6 +416,10 @@ fn transform_phase_2(
             Element::Grid(id) => model.edit_grid(id, |g| {
                 g.start = t.apply(g.start);
                 g.end = t.apply(g.end);
+            })?,
+            Element::RefPlane(id) => model.edit_ref_plane(id, |r| {
+                r.start = t.apply(r.start);
+                r.end = t.apply(r.end);
             })?,
             Element::Module(id) => model.edit_module(id, |m| {
                 m.position = t.apply(m.position);

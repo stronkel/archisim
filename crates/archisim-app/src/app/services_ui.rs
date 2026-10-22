@@ -160,9 +160,9 @@ impl ArchiSimApp {
             Ok(id) => {
                 self.ed.selection = [Element::Device(id)].into_iter().collect();
                 self.say(format!(
-                    "{} a {} mm del suelo.",
+                    "{} a {} del suelo.",
                     s.device.name(),
-                    fmt_mm(s.device_elevation)
+                    crate::units::fmt_len(s.device_elevation)
                 ));
             }
             Err(e) => self.complain(format!("No se puede colocar: {e}.")),

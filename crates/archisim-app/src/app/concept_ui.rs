@@ -305,8 +305,8 @@ impl ArchiSimApp {
                     let r = self.ed.add_guide(a, p);
                     match r {
                         Ok(()) => self.say(format!(
-                            "Distancia {} mm. Guía en la capa «Guías» (no se imprime).",
-                            fmt_mm(a.distance(p))
+                            "Distancia {}. Guía en la capa «Guías» (no se imprime).",
+                            crate::units::fmt_len(a.distance(p))
                         )),
                         Err(e) => self.complain(format!("No se puede dejar la guía: {e}.")),
                     }
@@ -565,8 +565,8 @@ impl ArchiSimApp {
             Ok(new) => {
                 self.ed.selection = [Element::Mass(new)].into_iter().collect();
                 self.say(format!(
-                    "Cara a {} mm {}, encima del volumen. Empújala para seguir.",
-                    fmt_mm(d.abs()),
+                    "Cara a {} {}, encima del volumen. Empújala para seguir.",
+                    crate::units::fmt_len(d.abs()),
                     if d < 0.0 {
                         "hacia dentro"
                     } else {
@@ -685,7 +685,12 @@ impl ArchiSimApp {
                     self.draw_label(painter, rect, c.point, "Cerrar: cara".to_string());
                 } else {
                     let len: f64 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
-                    self.draw_label(painter, rect, c.point, format!("L {} mm", fmt_mm(len)));
+                    self.draw_label(
+                        painter,
+                        rect,
+                        c.point,
+                        format!("L {}", crate::units::fmt_len(len)),
+                    );
                 }
             }
             return;
@@ -709,7 +714,12 @@ impl ArchiSimApp {
                                 Stroke::new(1.0, ACCENT.gamma_multiply(0.6)),
                             ));
                         }
-                        self.draw_label(painter, rect, c.point, format!("R {} mm", fmt_mm(r)));
+                        self.draw_label(
+                            painter,
+                            rect,
+                            c.point,
+                            format!("R {}", crate::units::fmt_len(r)),
+                        );
                     }
                 }
                 MassMode::Revolution => {
@@ -738,9 +748,9 @@ impl ArchiSimApp {
                             rect,
                             c.point,
                             format!(
-                                "R {} · H {} mm",
+                                "R {} · H {}",
                                 fmt_mm((c.point.x - axis.x).abs()),
-                                fmt_mm((c.point.y - axis.y).max(0.0))
+                                crate::units::fmt_len((c.point.y - axis.y).max(0.0))
                             ),
                         );
                     }
@@ -842,7 +852,7 @@ impl ArchiSimApp {
                     {
                         painter.add(Shape::closed_line(self.polygon(rect, &o), ink));
                     }
-                    self.draw_label(painter, rect, c.point, format!("{} mm", fmt_mm(d)));
+                    self.draw_label(painter, rect, c.point, crate::units::fmt_len(d));
                 }
             }
             Tool::Tape => {
@@ -857,7 +867,7 @@ impl ArchiSimApp {
                         painter,
                         rect,
                         c.point,
-                        format!("{} mm", fmt_mm(a.distance(c.point))),
+                        crate::units::fmt_len(a.distance(c.point)),
                     );
                 }
             }

@@ -5,7 +5,7 @@
 use std::fmt::Write;
 
 use archisim_core::{Model, Point2, Room, Tag, TagTarget, Text, TextAlign};
-use archisim_draft::font::{text_frame, text_strokes, STROKE};
+use archisim_draft::font::text_frame;
 
 use crate::{num, pens, pt};
 
@@ -187,17 +187,11 @@ fn edge_towards(f: &[Point2; 4], c: Point2, to: Point2) -> Point2 {
 }
 
 fn text_path(s: &mut String, t: &Text, k: f64) {
-    let mut d = String::new();
-    for st in text_strokes(t, k) {
-        for (i, p) in st.iter().enumerate() {
-            let _ = write!(d, "{}{} ", if i == 0 { "M" } else { "L" }, pt(*p));
-        }
-    }
     let _ = writeln!(
         s,
-        r#"<path d="{}" stroke="{INK}" stroke-width="{}" stroke-linecap="round" fill="none"/>"#,
-        d.trim_end(),
-        num(STROKE * t.height * k)
+        r#"<path d="{}" {}/>"#,
+        crate::lettering::text_d(t, k),
+        crate::lettering::paint(t.height * k, INK)
     );
 }
 

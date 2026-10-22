@@ -126,8 +126,8 @@ impl ArchiSimApp {
             .unwrap_or_default();
         self.ed.selection = [Element::Roof(id)].into_iter().collect();
         self.say(format!(
-            "Cubierta de {planes} faldones en «{level}», cumbrera a {} mm sobre la planta. Cambia la forma y cada lado en Propiedades.",
-            fmt_mm(top)
+            "Cubierta de {planes} faldones en «{level}», cumbrera a {} sobre la planta. Cambia la forma y cada lado en Propiedades.",
+            crate::units::fmt_len(top)
         ));
     }
 

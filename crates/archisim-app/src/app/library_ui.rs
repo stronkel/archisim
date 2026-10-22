@@ -220,11 +220,11 @@ impl ArchiSimApp {
                                     ui.label(&t.name).on_hover_text(
                                         t.layers
                                             .iter()
-                                            .map(|(m, th, _)| format!("{} mm · {m}", crate::units::fmt_mm(*th)))
+                                            .map(|(m, th, _)| format!("{} · {m}", crate::units::fmt_len(*th)))
                                             .collect::<Vec<_>>()
                                             .join("\n"),
                                     );
-                                    ui.label(egui::RichText::new(format!("{} mm", crate::units::fmt_mm(total))).weak());
+                                    ui.label(egui::RichText::new(crate::units::fmt_len(total)).weak());
                                     ui.with_layout(
                                         egui::Layout::right_to_left(egui::Align::Center),
                                         |ui| {

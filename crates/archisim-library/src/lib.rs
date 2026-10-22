@@ -60,6 +60,56 @@ pub fn new_project(name: impl Into<String>) -> Model {
     model
 }
 
+/// The view templates a project starts with (Revit's): «AD5» (everything
+/// in white with black lines, walls with their air gap only, the garden
+/// and the site in pastel), «Albañilería» (walls, doors and windows and
+/// dimensions; no furniture, garden or installations) and «Superficies»
+/// (the rooms with their floors and areas, in AD5's look).
+pub fn view_templates() -> Vec<archisim_core::ViewTemplate> {
+    use archisim_core::{Category as C, ViewStyle, ViewTemplate, ViewTemplateId};
+    let template = |name: &str, style: ViewStyle| ViewTemplate {
+        id: ViewTemplateId(0),
+        name: name.into(),
+        style,
+    };
+    let hide = |mut s: ViewStyle, cs: &[C]| {
+        s.hidden.extend(cs.iter().copied());
+        s
+    };
+    vec![
+        template("AD5", ViewStyle::ad5()),
+        template(
+            "Albañilería",
+            hide(
+                ViewStyle::default(),
+                &[
+                    C::Objects,
+                    C::Vegetation,
+                    C::Services,
+                    C::Terrain,
+                    C::Roads,
+                    C::Plots,
+                    C::Rooms,
+                    C::Tags,
+                ],
+            ),
+        ),
+        template(
+            "Superficies",
+            hide(
+                ViewStyle::ad5(),
+                &[
+                    C::Objects,
+                    C::Vegetation,
+                    C::Services,
+                    C::Dimensions,
+                    C::Tags,
+                ],
+            ),
+        ),
+    ]
+}
+
 /// The presentation styles a project starts with: the studio's («AD5»:
 /// fine black lines, walls cut black, the drawing's own colours) and four
 /// with a palette of their own, after presentation plans of other
@@ -518,6 +568,10 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         m.add_material(name, category, color, pattern);
     }
     add_appearances(m);
+    // View templates (v0.42), last so older ids stay put.
+    for t in view_templates() {
+        m.add_view_template(t)?;
+    }
     Ok(Library {
         curtain,
         void,

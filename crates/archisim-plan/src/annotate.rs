@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 
 use archisim_core::{Dimension, ElevationMark, Model, Point2};
 
-use crate::lettering::{text_path, text_width, Align, STROKE};
+use crate::lettering::{text_path, text_width, Align};
 
 /// Text height, paper millimetres.
 pub const TEXT_HEIGHT: f64 = 2.5;
@@ -155,13 +155,13 @@ pub fn draw_dimension(s: &mut String, d: &Dimension, k: f64) {
     }
     let _ = writeln!(
         s,
-        r#"<g class="dimension" fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round"><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/></g>"#,
+        r#"<g class="dimension" fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round"><path d="{}" stroke-width="{}"/><path d="{}" stroke-width="{}"/><path d="{}" {}/></g>"#,
         thin.trim_end(),
         num(crate::pens().dimension * k),
         ticks.trim_end(),
         num(crate::pens().tick * k),
         text.trim_end(),
-        num(STROKE * h)
+        crate::lettering::paint(h, INK)
     );
 }
 
@@ -180,7 +180,7 @@ pub fn draw_elevation_mark(s: &mut String, model: &Model, m: &ElevationMark, k: 
     let rule_end = text_at + Point2::new(text_width(&text, th), -TEXT_LIFT * k);
     let _ = writeln!(
         s,
-        r#"<g class="level-mark" stroke="{INK}" stroke-linejoin="round" stroke-linecap="round"><path d="M{} L{} L{} Z" fill="{INK}" stroke-width="{}"/><path d="M{} L{} L{} Z M{} L{}" fill="none" stroke-width="{}"/><path d="{}" fill="none" stroke-width="{}"/></g>"#,
+        r#"<g class="level-mark" stroke="{INK}" stroke-linejoin="round" stroke-linecap="round"><path d="M{} L{} L{} Z" fill="{INK}" stroke-width="{}"/><path d="M{} L{} L{} Z M{} L{}" fill="none" stroke-width="{}"/><path d="{}" {}/></g>"#,
         pt(p),
         pt(left),
         pt(top),
@@ -192,7 +192,7 @@ pub fn draw_elevation_mark(s: &mut String, model: &Model, m: &ElevationMark, k: 
         pt(rule_end),
         num(crate::pens().dimension * k),
         text_path(&text, text_at, Point2::new(1.0, 0.0), th, Align::Left),
-        num(STROKE * th)
+        crate::lettering::paint(th, INK)
     );
 }
 

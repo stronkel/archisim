@@ -557,6 +557,9 @@ pub(crate) struct Graphics {
     pub coarse: Pens,
     /// Scales from 1:`coarse_from` down use the coarse pens.
     pub coarse_from: f64,
+    /// Lettering of texts and dimensions (version 27; sans if missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
 }
 
 impl Graphics {
@@ -565,15 +568,23 @@ impl Graphics {
             fine: Pens::out(&g.fine),
             coarse: Pens::out(&g.coarse),
             coarse_from: g.coarse_from,
+            font: (g.font != core::TextFont::default()).then(|| g.font.code().to_string()),
         }
     }
 
-    pub fn into_core(self) -> core::GraphicStandard {
-        core::GraphicStandard {
+    pub fn into_core(self) -> Result<core::GraphicStandard, FileError> {
+        Ok(core::GraphicStandard {
             fine: self.fine.into_core(),
             coarse: self.coarse.into_core(),
             coarse_from: self.coarse_from,
-        }
+            font: match &self.font {
+                None => core::TextFont::default(),
+                Some(f) => core::TextFont::from_code(f).ok_or_else(|| FileError::Value {
+                    element: "graphics".into(),
+                    message: format!("unknown font «{f}»"),
+                })?,
+            },
+        })
     }
 }
 
@@ -661,6 +672,92 @@ pub(crate) struct Style {
     /// Presentation style (version 22).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presentation: Option<u64>,
+    /// How categories are drawn (version 27).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<OverrideOf>,
+}
+
+/// A category drawn otherwise in a view (version 27): only what changes.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OverrideOf {
+    pub category: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut_fill: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface_fill: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub transparency: u8,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub halftone: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub patterns: bool,
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub weight: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer_lines: Option<String>,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
+}
+fn is_yes(v: &bool) -> bool {
+    *v
+}
+fn hundred() -> u16 {
+    100
+}
+fn is_hundred(v: &u16) -> bool {
+    *v == 100
+}
+
+impl OverrideOf {
+    fn out(c: core::Category, g: &core::GraphicOverride) -> Self {
+        Self {
+            category: c.code().into(),
+            line: g.line.map(hex),
+            cut_fill: g.cut_fill.map(hex),
+            surface_fill: g.surface_fill.map(hex),
+            transparency: g.transparency,
+            halftone: g.halftone,
+            patterns: g.patterns,
+            weight: g.weight,
+            layer_lines: (g.layer_lines != core::LayerLines::All)
+                .then(|| g.layer_lines.code().to_string()),
+        }
+    }
+
+    fn into_core(
+        self,
+        element: &str,
+    ) -> Result<(core::Category, core::GraphicOverride), FileError> {
+        let bad = |m: String| FileError::Value {
+            element: element.to_string(),
+            message: m,
+        };
+        let category = core::Category::from_code(&self.category)
+            .ok_or_else(|| bad(format!("unknown category «{}»", self.category)))?;
+        let colour = |c: &Option<String>| c.as_deref().map(|t| parse_hex(element, t)).transpose();
+        Ok((
+            category,
+            core::GraphicOverride {
+                line: colour(&self.line)?,
+                cut_fill: colour(&self.cut_fill)?,
+                surface_fill: colour(&self.surface_fill)?,
+                transparency: self.transparency.min(100),
+                halftone: self.halftone,
+                patterns: self.patterns,
+                weight: self.weight.clamp(10, 1000),
+                layer_lines: match &self.layer_lines {
+                    None => core::LayerLines::All,
+                    Some(l) => core::LayerLines::from_code(l)
+                        .ok_or_else(|| bad(format!("unknown layer lines «{l}»")))?,
+                },
+            },
+        ))
+    }
 }
 
 impl Default for Style {
@@ -672,6 +769,7 @@ impl Default for Style {
             focus: None,
             hidden_disciplines: Vec::new(),
             presentation: None,
+            overrides: Vec::new(),
         }
     }
 }
@@ -685,7 +783,7 @@ fn is_fine(d: &String) -> bool {
 }
 
 impl Style {
-    fn out(s: &core::ViewStyle) -> Self {
+    pub(crate) fn out(s: &core::ViewStyle) -> Self {
         Self {
             hidden: s.hidden.iter().map(|c| c.code().to_string()).collect(),
             hidden_layers: s.hidden_layers.iter().map(|l| l.0).collect(),
@@ -697,10 +795,15 @@ impl Style {
                 .map(|d| d.code().to_string())
                 .collect(),
             presentation: s.presentation.map(|p| p.0),
+            overrides: s
+                .overrides
+                .iter()
+                .map(|(c, g)| OverrideOf::out(*c, g))
+                .collect(),
         }
     }
 
-    fn into_core(self, element: &str) -> Result<core::ViewStyle, FileError> {
+    pub(crate) fn into_core(self, element: &str) -> Result<core::ViewStyle, FileError> {
         let bad = |m: String| FileError::Value {
             element: element.to_string(),
             message: m,
@@ -735,16 +838,22 @@ impl Style {
                 })
                 .collect::<Result<_, _>>()?,
             presentation: self.presentation.map(core::PresentationStyleId),
+            overrides: self
+                .overrides
+                .into_iter()
+                .map(|o| o.into_core(element))
+                .collect::<Result<_, _>>()?,
         })
     }
 
-    fn is_default(&self) -> bool {
+    pub(crate) fn is_default(&self) -> bool {
         self.hidden.is_empty()
             && self.hidden_layers.is_empty()
             && self.detail == "fine"
             && self.focus.is_none()
             && self.hidden_disciplines.is_empty()
             && self.presentation.is_none()
+            && self.overrides.is_empty()
     }
 }
 
@@ -769,6 +878,9 @@ pub(crate) struct Viewport {
     pub centre: Xy,
     #[serde(default, skip_serializing_if = "Style::is_default")]
     pub style: Style,
+    /// The reflected ceiling plan of the level (version 27).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ceiling: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title: String,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
@@ -820,6 +932,7 @@ pub(crate) fn viewports_out(v: &[core::Viewport]) -> Vec<Viewport> {
             crop: v.crop.map(|(a, b)| [xy(a), xy(b)]),
             centre: xy(v.centre),
             style: Style::out(&v.style),
+            ceiling: v.ceiling,
             title: v.title.clone(),
             show_title: v.show_title,
         })
@@ -841,6 +954,7 @@ pub(crate) fn viewports_in(v: Vec<Viewport>) -> Result<Vec<core::Viewport>, File
                 crop: v.crop.map(|[a, b]| (pt(a), pt(b))),
                 centre: pt(v.centre),
                 style: v.style.into_core(&element)?,
+                ceiling: v.ceiling,
                 title: v.title,
                 show_title: v.show_title,
             })

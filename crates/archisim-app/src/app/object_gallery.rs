@@ -216,9 +216,9 @@ pub fn category_name(family_category: &str) -> &'static str {
 fn size_note(lo: [f64; 2], hi: [f64; 2]) -> String {
     let cm = |v: f64| (v * 100.0).round() / 100.0;
     format!(
-        "{} × {} mm",
+        "{} × {}",
         fmt_mm(cm(hi[0] - lo[0])),
-        fmt_mm(cm(hi[1] - lo[1]))
+        crate::units::fmt_len(cm(hi[1] - lo[1]))
     )
 }
 

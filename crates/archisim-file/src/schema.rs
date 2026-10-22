@@ -123,6 +123,16 @@ pub(crate) struct ProjectFile {
     /// Presentation styles of the views (version 22).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub presentation_styles: Vec<PresentationStyleOf>,
+    /// Saved plans, the looks of the levels' plans, view templates and
+    /// reference planes (version 27).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan_views: Vec<crate::views::PlanViewOf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub level_styles: Vec<crate::views::LevelStyleOf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub view_templates: Vec<crate::views::ViewTemplateOf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ref_planes: Vec<crate::views::RefPlaneOf>,
     /// Plot area for the masses' figures, m² (version 18).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plot_area: Option<f64>,
@@ -2245,6 +2255,26 @@ impl ProjectFile {
                 .iter()
                 .map(PresentationStyleOf::out)
                 .collect(),
+            plan_views: p
+                .plan_views
+                .iter()
+                .map(crate::views::PlanViewOf::out)
+                .collect(),
+            level_styles: p
+                .level_styles
+                .iter()
+                .map(|(l, s)| crate::views::LevelStyleOf::out(*l, s))
+                .collect(),
+            view_templates: p
+                .view_templates
+                .iter()
+                .map(crate::views::ViewTemplateOf::out)
+                .collect(),
+            ref_planes: p
+                .ref_planes
+                .iter()
+                .map(crate::views::RefPlaneOf::out)
+                .collect(),
             paint_zones: p
                 .paint_zones
                 .iter()
@@ -2734,6 +2764,10 @@ impl ProjectFile {
             paint_zones: Vec::new(),
             appearances: Vec::new(),
             presentation_styles: Vec::new(),
+            plan_views: Vec::new(),
+            level_styles: Vec::new(),
+            view_templates: Vec::new(),
+            ref_planes: Vec::new(),
             plot_area: None,
             plots: Vec::new(),
             roads: Vec::new(),
@@ -2825,7 +2859,11 @@ impl ProjectFile {
                 .collect::<Result<Vec<_>, FileError>>()?,
             draw_layers: crate::drafting::layers_in(self.draw_layers)?,
             drafts: crate::drafting::drafts_in(self.drafts)?,
-            graphics: self.graphics.map(|g| g.into_core()).unwrap_or_default(),
+            graphics: self
+                .graphics
+                .map(|g| g.into_core())
+                .transpose()?
+                .unwrap_or_default(),
             info: self.info.map(|i| i.into_core()).unwrap_or_default(),
             sheets: crate::drafting::sheets_in(self.sheets),
             viewports: crate::drafting::viewports_in(self.viewports)?,
@@ -3030,6 +3068,18 @@ impl ProjectFile {
         }
         for st in self.presentation_styles {
             parts.presentation_styles.push(st.into_core()?);
+        }
+        for v in self.plan_views {
+            parts.plan_views.push(v.into_core()?);
+        }
+        for l in self.level_styles {
+            parts.level_styles.push(l.into_core()?);
+        }
+        for t in self.view_templates {
+            parts.view_templates.push(t.into_core()?);
+        }
+        for r in self.ref_planes {
+            parts.ref_planes.push(r.into_core());
         }
         for a in self.appearances {
             let element = format!("appearance of material {}", a.material);

@@ -18,6 +18,7 @@ pub enum Glyph {
     Tape,
     Paint,
     Grid,
+    RefPlane,
     Convert,
     Wall,
     Slab,
@@ -86,6 +87,7 @@ pub enum Glyph {
     SnapEdge,
     SnapTrack,
     Ortho,
+    LineWeight,
     Hatch,
     Line,
 }
@@ -120,6 +122,9 @@ impl Glyph {
             }
             Glyph::Grid => {
                 r##"<circle cx="4" cy="4" r="2" stroke-width="1"/><path d="M8 4h11M4 8v11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/><path d="M12 8v11M8 13h11" stroke-dasharray="3 1.5 0.5 1.5" stroke-width="1"/>"##
+            }
+            Glyph::RefPlane => {
+                r##"<path d="M2 18L18 2" stroke-dasharray="4 1.5 1 1.5" stroke-width="1"/><path d="M3 11l3 3M9 3l3 3" stroke-width="0.8"/><circle cx="2.8" cy="17.2" r="1.2" stroke-width="0.8"/>"##
             }
             Glyph::Convert => {
                 r##"<path d="M3 8l4-3 4 3v6l-4 3-4-3z" stroke-width="1"/><path d="M12 10h3M14 8.5l1.5 1.5-1.5 1.5" stroke-width="1"/><path d="M16 6v9M19 6v9M16 6h3" stroke-width="1"/>"##
@@ -278,6 +283,9 @@ impl Glyph {
                 r##"<path d="M2 10h16M10 2v16" stroke-dasharray="2 1.6"/><circle cx="10" cy="10" r="2.2"/>"##
             }
             Glyph::Ortho => r##"<path d="M4 3v13h13"/><path d="M4 12h4v4" stroke-width="0.9"/>"##,
+            Glyph::LineWeight => {
+                r##"<path d="M3 5h14" stroke-width="0.6"/><path d="M3 10h14" stroke-width="1.4"/><path d="M3 15.5h14" stroke-width="2.6"/>"##
+            }
             Glyph::Hatch => {
                 r##"<rect x="3" y="3" width="14" height="14"/><path d="M3 9l6-6M3 15L15 3M7 17l10-10M13 17l4-4" stroke-width="0.8"/>"##
             }
@@ -309,6 +317,7 @@ impl Glyph {
         Glyph::Tape,
         Glyph::Paint,
         Glyph::Grid,
+        Glyph::RefPlane,
         Glyph::Convert,
         Glyph::Wall,
         Glyph::Slab,
@@ -373,6 +382,7 @@ impl Glyph {
         Glyph::SnapEdge,
         Glyph::SnapTrack,
         Glyph::Ortho,
+        Glyph::LineWeight,
         Glyph::Hatch,
         Glyph::Line,
     ];

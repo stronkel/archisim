@@ -49,7 +49,12 @@ impl ArchiSimApp {
         self.spline_closes().is_some()
             || matches!(
                 self.tool,
-                Tool::Beam | Tool::CurtainWall | Tool::Footing | Tool::Grid | Tool::Roof
+                Tool::Beam
+                    | Tool::CurtainWall
+                    | Tool::Footing
+                    | Tool::Grid
+                    | Tool::RefPlane
+                    | Tool::Roof
             )
     }
 
@@ -219,7 +224,7 @@ impl ArchiSimApp {
                 self.finish_run();
             }
             // One element along each straight piece.
-            Tool::Beam | Tool::CurtainWall | Tool::Footing | Tool::Grid => {
+            Tool::Beam | Tool::CurtainWall | Tool::Footing | Tool::Grid | Tool::RefPlane => {
                 let mut made = 0;
                 for (a, b, bulge) in &l.pieces {
                     if bulge.abs() > 1e-9 || a.approx_eq(*b) {
@@ -232,6 +237,7 @@ impl ArchiSimApp {
                             .add_curtain_wall(&self.curtain_settings, *a, *b)
                             .is_ok(),
                         Tool::Grid => self.ed.add_grid(*a, *b).is_ok(),
+                        Tool::RefPlane => self.ed.add_ref_plane(*a, *b).is_ok(),
                         _ => {
                             let s = self.footing_settings;
                             let kind = match s.mode {
@@ -308,7 +314,7 @@ impl ArchiSimApp {
         ui.label(egui::RichText::new("L").small());
         let typed_len = text_edit_committed(ui, Id::unique("bar-length"), &fmt_mm(len), 64.0)
             .and_then(|t| crate::units::parse_length(&t));
-        ui.label(egui::RichText::new("mm  ∠").small());
+        ui.label(egui::RichText::new(format!("{}  ∠", crate::units::unit().symbol())).small());
         let typed_ang = text_edit_committed(
             ui,
             Id::unique("bar-angle"),
@@ -364,7 +370,7 @@ impl ArchiSimApp {
             Tool::CurtainWall => self.curtain_click(p),
             Tool::Section => self.section_click(p),
             Tool::Column | Tool::Beam => self.member_click(p),
-            Tool::Grid | Tool::Footing => self.foundation_click(p),
+            Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_click(p),
             Tool::Mass | Tool::Tape => self.concept_click(p),
             Tool::Plot => self.plot_click(p),
             Tool::Road => self.road_click(p),

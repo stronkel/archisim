@@ -611,9 +611,9 @@ impl ArchiSimApp {
                     ui.add_sized(
                         [130.0, 20.0],
                         egui::Label::new(format!(
-                            "Fila {} · {} mm",
+                            "Fila {} · {}",
                             r + 1,
-                            fmt_mm(rows[r + 1] - rows[r])
+                            crate::units::fmt_len(rows[r + 1] - rows[r])
                         )),
                     );
                     picked =
@@ -786,9 +786,9 @@ impl ArchiSimApp {
         let Some(sample) = crate::type_preview::curtain_model(model, &design, len, high) else {
             ui.add_space(20.0);
             ui.label(format!(
-                "Este tipo no cabe en un muro de {} × {} mm: los marcos no dejan sitio a los paneles. Prueba con una muestra mayor.",
+                "Este tipo no cabe en un muro de {} × {}: los marcos no dejan sitio a los paneles. Prueba con una muestra mayor.",
                 fmt_mm(len),
-                fmt_mm(high)
+                crate::units::fmt_len(high)
             ));
             return;
         };

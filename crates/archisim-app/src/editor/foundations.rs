@@ -139,6 +139,11 @@ impl Editor {
         })
     }
 
+    /// A reference plane from `a` to `b`, named «Referencia N».
+    pub fn add_ref_plane(&mut self, a: Point2, b: Point2) -> EditResult<archisim_core::RefPlaneId> {
+        self.transact("Crear plano de referencia", |m| m.add_ref_plane("", a, b))
+    }
+
     pub fn edit_grid(
         &mut self,
         label: &str,

@@ -406,6 +406,7 @@ impl Editor {
             Element::Tag(id) => model.tag(*id).is_some(),
             Element::Footing(id) => model.footing(*id).is_some(),
             Element::Grid(id) => model.grid(*id).is_some(),
+            Element::RefPlane(id) => model.ref_plane(*id).is_some(),
             Element::Module(id) => model.module(*id).is_some(),
             Element::Mass(id) => model.mass(*id).is_some(),
             Element::Plot(id) => model.plot(*id).is_some(),
@@ -652,6 +653,7 @@ impl Editor {
                     | Element::Object(_)
                     | Element::Footing(_)
                     | Element::Grid(_)
+                    | Element::RefPlane(_)
                     | Element::Module(_)
                     | Element::Mass(_)
                     | Element::Plot(_)
@@ -756,6 +758,7 @@ impl Editor {
                         | Element::Object(_)
                         | Element::Footing(_)
                         | Element::Grid(_)
+                        | Element::RefPlane(_)
                         | Element::Module(_)
                         | Element::Mass(_)
                         | Element::Plot(_)
@@ -1065,8 +1068,8 @@ impl Editor {
         let chord = w.start.distance(w.end);
         if radius < chord / 2.0 - 1e-9 {
             return Err(format!(
-                "el radio debe ser al menos la mitad de la distancia entre los extremos ({} mm)",
-                crate::units::fmt_mm(chord / 2.0)
+                "el radio debe ser al menos la mitad de la distancia entre los extremos ({})",
+                crate::units::fmt_len(chord / 2.0)
             ));
         }
         let minor = 2.0 * (chord / (2.0 * radius)).min(1.0).asin();
@@ -1395,6 +1398,7 @@ fn remove_element(m: &mut Model, e: Element) -> Result<(), archisim_core::ModelE
         Element::Object(id) => m.remove_object(id).map(drop),
         Element::Footing(id) => m.remove_footing(id).map(drop),
         Element::Grid(id) => m.remove_grid(id).map(drop),
+        Element::RefPlane(id) => m.remove_ref_plane(id).map(drop),
         Element::Module(id) => m.remove_module(id).map(drop),
         Element::Mass(id) => m.remove_mass(id).map(drop),
         Element::Plot(id) => m.remove_plot(id).map(drop),

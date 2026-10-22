@@ -31,6 +31,18 @@ typed_id!(
     PresentationStyleId
 );
 typed_id!(
+    /// Identifies a [`crate::PlanView`] (a saved plan of a level).
+    PlanViewId
+);
+typed_id!(
+    /// Identifies a [`crate::ViewTemplate`].
+    ViewTemplateId
+);
+typed_id!(
+    /// Identifies a [`crate::RefPlane`] (a reference plane).
+    RefPlaneId
+);
+typed_id!(
     /// Identifies a [`crate::ConceptEdge`] (a loose edge of the concept phase).
     EdgeId
 );

@@ -138,9 +138,9 @@ impl ArchiSimApp {
             rect,
             c.point,
             format!(
-                "Sección {}   L {} mm",
+                "Sección {}   L {}",
                 self.ed.model().next_section_name(),
-                fmt_mm(d.length())
+                crate::units::fmt_len(d.length())
             ),
         );
     }
@@ -422,7 +422,7 @@ impl ArchiSimApp {
                 ui,
                 "Longitud",
                 "",
-                &format!("{} mm", fmt_mm(s.start.distance(s.end))),
+                &crate::units::fmt_len(s.start.distance(s.end)),
             );
             row(
                 ui,

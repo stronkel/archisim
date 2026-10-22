@@ -5,7 +5,6 @@ use archisim_core::LevelId;
 use eframe::egui::{self, Id, Ui};
 
 use super::{fmt_level, length_field, text_edit_committed, ArchiSimApp};
-use crate::units::fmt_mm;
 
 /// Floor-to-floor height used when adding a level above or below.
 const DEFAULT_STOREY_HEIGHT: f64 = 3.0;
@@ -93,7 +92,7 @@ impl ArchiSimApp {
                         self.report(r, &format!("Planta a cota {}.", fmt_level(v)));
                     }
                     match i.checked_sub(1).map(|j| levels[j].2) {
-                        Some(above) => ui.label(format!("{} mm", fmt_mm(above - elevation))),
+                        Some(above) => ui.label(crate::units::fmt_len(above - elevation)),
                         None => ui.label("—"),
                     };
                     let (w, o, s, a) = self.ed.model().level_contents(*id);

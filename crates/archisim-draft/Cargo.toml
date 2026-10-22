@@ -10,3 +10,6 @@ repository.workspace = true
 
 [dependencies]
 archisim-core.workspace = true
+# Outlines of the sans lettering (IBM Plex Sans, SIL Open Font License,
+# in fonts/). The same version resvg already brings.
+ttf-parser = { version = "0.25", default-features = false, features = ["std", "opentype-layout", "apple-layout", "variable-fonts", "glyph-names"] }

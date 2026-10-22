@@ -430,7 +430,7 @@ impl ArchiSimApp {
             return;
         };
         match self.ed.drag_elements(&elements, &drag) {
-            Ok(_) => self.say(format!("Cota fijada en {} mm.", fmt_mm(value))),
+            Ok(_) => self.say(format!("Cota fijada en {}.", crate::units::fmt_len(value))),
             Err(e) => self.complain(format!("No se puede: {e}.")),
         }
     }

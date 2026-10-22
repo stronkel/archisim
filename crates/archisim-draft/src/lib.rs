@@ -15,6 +15,7 @@ pub mod grips;
 pub mod hatch;
 pub mod measure;
 pub mod ops;
+pub mod outline;
 pub mod region;
 pub mod seg;
 pub mod snaps;

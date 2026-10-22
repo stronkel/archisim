@@ -40,6 +40,7 @@ mod stairs;
 mod structure;
 mod sun;
 mod urban;
+mod views;
 pub use appearance::*;
 pub use concept::*;
 pub use curtain::*;
@@ -64,6 +65,7 @@ pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
 pub use urban::*;
+pub use views::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
 #[derive(Debug, Clone, PartialEq)]
@@ -916,6 +918,9 @@ pub enum ModelError {
     UnknownViewport(ViewportId),
     UnknownRoom(RoomId),
     UnknownPresentationStyle(PresentationStyleId),
+    UnknownPlanView(PlanViewId),
+    UnknownViewTemplate(ViewTemplateId),
+    UnknownRefPlane(RefPlaneId),
     UnknownTag(TagId),
     UnknownTable(TableId),
     /// A drafting element or annotation is not well formed.
@@ -1076,6 +1081,11 @@ impl fmt::Display for ModelError {
             ModelError::UnknownPresentationStyle(id) => {
                 write!(f, "presentation style {id} does not exist")
             }
+            ModelError::UnknownPlanView(id) => write!(f, "plan view {id} does not exist"),
+            ModelError::UnknownViewTemplate(id) => {
+                write!(f, "view template {id} does not exist")
+            }
+            ModelError::UnknownRefPlane(id) => write!(f, "reference plane {id} does not exist"),
             ModelError::UnknownTag(id) => write!(f, "tag {id} does not exist"),
             ModelError::UnknownTable(id) => write!(f, "schedule {id} on a sheet does not exist"),
             ModelError::InvalidShape(what) => write!(f, "{what}"),
@@ -1226,6 +1236,12 @@ pub struct ModelParts {
     pub appearances: Vec<(MaterialId, Appearance)>,
     /// How views can be presented.
     pub presentation_styles: Vec<crate::graphics::PresentationStyle>,
+    /// Saved plans, the style of each level's own plan, view templates
+    /// and reference planes.
+    pub plan_views: Vec<PlanView>,
+    pub level_styles: Vec<(LevelId, crate::graphics::ViewStyle)>,
+    pub view_templates: Vec<ViewTemplate>,
+    pub ref_planes: Vec<RefPlane>,
     /// When the shadows of presentation drawings are cast.
     pub sun: Sun,
     pub plot_area: Option<f64>,
@@ -1336,6 +1352,10 @@ pub struct Model {
     appearances: BTreeMap<MaterialId, Appearance>,
     paint_zones: Vec<PaintZone>,
     presentation_styles: BTreeMap<PresentationStyleId, crate::graphics::PresentationStyle>,
+    plan_views: BTreeMap<PlanViewId, PlanView>,
+    level_styles: BTreeMap<LevelId, crate::graphics::ViewStyle>,
+    view_templates: BTreeMap<ViewTemplateId, ViewTemplate>,
+    ref_planes: BTreeMap<RefPlaneId, RefPlane>,
     sun: Sun,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
@@ -1410,6 +1430,10 @@ impl Model {
             appearances: BTreeMap::new(),
             paint_zones: Vec::new(),
             presentation_styles: BTreeMap::new(),
+            plan_views: BTreeMap::new(),
+            level_styles: BTreeMap::new(),
+            view_templates: BTreeMap::new(),
+            ref_planes: BTreeMap::new(),
             sun: Sun::default(),
             plot_area: None,
             plots: BTreeMap::new(),
@@ -1558,6 +1582,8 @@ impl Model {
         self.plantings.retain(|_, p| p.level != id);
         self.runs.retain(|_, r| r.level != id);
         self.devices.retain(|_, d| d.level != id);
+        self.plan_views.retain(|_, v| v.level != id);
+        self.level_styles.remove(&id);
         for c in self.curtain_walls.values_mut() {
             if matches!(c.top, WallTop::Level { level, .. } if level == id) {
                 c.top = WallTop::Unconnected;
@@ -3837,6 +3863,14 @@ impl Model {
             paint_zones: self.paint_zones().cloned().collect(),
             appearances: self.appearances().collect(),
             presentation_styles: self.presentation_styles.values().cloned().collect(),
+            plan_views: self.plan_views.values().cloned().collect(),
+            level_styles: self
+                .level_styles
+                .iter()
+                .map(|(l, s)| (*l, s.clone()))
+                .collect(),
+            view_templates: self.view_templates.values().cloned().collect(),
+            ref_planes: self.ref_planes.values().cloned().collect(),
             sun: self.sun,
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
@@ -4151,6 +4185,13 @@ impl Model {
         model.restore_paint(parts.face_paints, parts.paint_zones)?;
         model.restore_appearances(parts.appearances)?;
         model.restore_presentation_styles(parts.presentation_styles, &mut claim)?;
+        model.restore_views(
+            parts.plan_views,
+            parts.level_styles,
+            parts.view_templates,
+            parts.ref_planes,
+            &mut claim,
+        )?;
         model.set_sun(parts.sun).map_err(|error| RestoreError {
             element: "sun".into(),
             error,

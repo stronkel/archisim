@@ -313,6 +313,25 @@ pub fn snap_filtered<G: Geo + ?Sized>(
             &mut edges,
         );
     }
+    // Reference planes: their ends, anywhere along them, and where they
+    // cross each other or an edge near the cursor.
+    let planes: Vec<(Point2, Point2)> = model
+        .ref_planes()
+        .filter(|r| !skip.contains(&Element::RefPlane(r.id)))
+        .map(|r| (r.start, r.end))
+        .collect();
+    for (i, &(a, b)) in planes.iter().enumerate() {
+        points.push((a, SnapKind::Endpoint));
+        points.push((b, SnapKind::Endpoint));
+        for &(c, d) in edges.iter().chain(&planes[i + 1..]) {
+            if let Some(x) = crossing(a, b, c, d) {
+                if x.distance(cursor) <= tolerance * 2.0 {
+                    points.push((x, SnapKind::Intersection));
+                }
+            }
+        }
+    }
+    edges.extend(planes);
     // The project origin, reachable from a little further away.
     let origin = Point2::new(0.0, 0.0);
     if filter.points && origin.distance(cursor) <= tolerance * ORIGIN_REACH {
@@ -336,6 +355,19 @@ pub fn snap_filtered<G: Geo + ?Sized>(
         &mut curves,
     );
     choose(cursor, tolerance, filter, &points, edges, curves)
+}
+
+/// Where two segments cross, if they do.
+fn crossing(a: Point2, b: Point2, c: Point2, d: Point2) -> Option<Point2> {
+    let (r, s) = (b - a, d - c);
+    let den = r.x * s.y - r.y * s.x;
+    if den.abs() < 1e-12 {
+        return None;
+    }
+    let q = c - a;
+    let t = (q.x * s.y - q.y * s.x) / den;
+    let u = (q.x * r.y - q.y * r.x) / den;
+    ((-1e-9..=1.0 + 1e-9).contains(&t) && (-1e-9..=1.0 + 1e-9).contains(&u)).then(|| a + r * t)
 }
 
 /// The snap points and curves of the drafting near `cursor` in a view.

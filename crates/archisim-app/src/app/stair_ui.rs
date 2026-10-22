@@ -285,7 +285,7 @@ impl ArchiSimApp {
                     ui,
                     "Altura",
                     "De esta planta a la de llegada",
-                    &format!("{} mm", fmt_mm(height)),
+                    &crate::units::fmt_len(height),
                 );
             }
         });
@@ -296,8 +296,8 @@ impl ArchiSimApp {
         props::note(
             ui,
             &format!(
-                "Dibuja la línea de huella del pie a la llegada: cada clic, un tramo; en los giros, meseta. Para {} mm, unas {risers} tabicas de {} cm: unos {} m de tramos.",
-                fmt_mm(height),
+                "Dibuja la línea de huella del pie a la llegada: cada clic, un tramo; en los giros, meseta. Para {}, unas {risers} tabicas de {} cm: unos {} m de tramos.",
+                crate::units::fmt_len(height),
                 cm(height / risers as f64),
                 fmt_m(length)
             ),
@@ -423,7 +423,7 @@ impl ArchiSimApp {
                     ui,
                     "Altura",
                     "De su planta a la de llegada",
-                    &format!("{} mm", fmt_mm(s.height)),
+                    &crate::units::fmt_len(s.height),
                 );
             }
         });

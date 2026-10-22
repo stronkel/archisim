@@ -152,7 +152,7 @@ fn paper(svg: &mut String, c: archisim_core::Rgb) {
 }
 
 /// Every `stroke-width` of an SVG multiplied by `f`.
-fn scale_strokes(svg: &str, f: f64) -> String {
+pub(crate) fn scale_strokes(svg: &str, f: f64) -> String {
     let key = "stroke-width=\"";
     let mut out = String::with_capacity(svg.len());
     let mut rest = svg;

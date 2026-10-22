@@ -109,6 +109,8 @@ pub struct Viewport {
     pub centre: Point2,
     /// What the view shows.
     pub style: ViewStyle,
+    /// A plan view is the reflected ceiling plan of its level.
+    pub ceiling: bool,
     /// Title under the view; empty takes the level's name.
     pub title: String,
     pub show_title: bool,
@@ -322,6 +324,7 @@ impl Model {
                 crop: spec.crop,
                 centre: spec.centre,
                 style: ViewStyle::default(),
+                ceiling: false,
                 title: String::new(),
                 show_title: true,
             },

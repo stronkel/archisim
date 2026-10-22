@@ -49,6 +49,8 @@ pub struct ViewTab {
     pub fitted: bool,
     /// What the view shows: categories, drawing layers, detail.
     pub style: archisim_core::ViewStyle,
+    /// A saved plan of the level (`Plan` tabs), instead of its own.
+    pub saved: Option<archisim_core::PlanViewId>,
 }
 
 impl ViewTab {
@@ -61,6 +63,7 @@ impl ViewTab {
             cut_plane: d.cut_plane,
             fitted: false,
             style: Default::default(),
+            saved: None,
         }
     }
 
@@ -192,17 +195,30 @@ impl ArchiSimApp {
 
     /// Opens a view, or shows it if a tab has it already.
     pub(super) fn open_view(&mut self, kind: TabKind) {
-        if let Some(i) = self.tabs.iter().position(|t| t.kind == kind) {
+        if let Some(i) = self
+            .tabs
+            .iter()
+            .position(|t| t.kind == kind && t.saved.is_none())
+        {
             self.activate_tab(i);
             return;
         }
         let tab = match kind {
-            TabKind::Plan(level) => ViewTab::plan(level),
+            TabKind::Plan(level) => ViewTab {
+                // A level's plan keeps its look in the model.
+                style: self.ed.model().level_style(level),
+                ..ViewTab::plan(level)
+            },
             TabKind::ThreeD => ViewTab::three_d(),
             TabKind::Section(id) => ViewTab::section(id),
             TabKind::Sheet(id) => ViewTab::sheet(id),
             TabKind::Schedule(w) => ViewTab::schedule(w),
         };
+        self.insert_tab(tab);
+    }
+
+    /// Opens a new tab next to the active one and shows it.
+    pub(super) fn insert_tab(&mut self, tab: ViewTab) {
         // Next to the active tab, as browsers do.
         let at = (self.active_tab + 1).min(self.tabs.len());
         self.store_active_tab();
@@ -373,7 +389,10 @@ impl ArchiSimApp {
         let mut close = None;
         let closable = self.tabs.len() > 1;
         for (i, tab) in self.tabs.iter().enumerate() {
-            let title = self.tab_title(tab.kind);
+            let title = match tab.saved.and_then(|id| self.saved_view_name(id)) {
+                Some(n) => n,
+                None => self.tab_title(tab.kind),
+            };
             let active = i == self.active_tab;
             let font = if active {
                 strong_font(12.5)

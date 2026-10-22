@@ -444,7 +444,9 @@ impl Command for Rectangle {
                 },
                 _ => {
                     let Some((w, h)) = crate::units::parse_size(v) else {
-                        return Step::Refuse("Escriba ancho x alto, por ejemplo 6000x4000.".into());
+                        return Step::Refuse(
+                            "Escriba ancho x alto, por ejemplo 6x4 (en metros).".into(),
+                        );
                     };
                     let a = self.first.unwrap_or_default();
                     // Towards the side of the cursor.

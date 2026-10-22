@@ -7,10 +7,40 @@
 //! character of Spanish texts has one: letters with accents, ñ, ç, ü,
 //! opening question and exclamation marks, º and ª, ², ³, Ø, °, ±, €…
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use archisim_core::{Point2, Text, LINE_SPACING};
+use archisim_core::{Point2, Text, TextFont, LINE_SPACING};
+
+thread_local! {
+    /// The lettering texts are measured and drawn with on this thread.
+    static CURRENT: Cell<TextFont> = const { Cell::new(TextFont::Sans) };
+}
+
+/// The lettering in use: the project's, set by whoever draws.
+pub fn current() -> TextFont {
+    CURRENT.with(|c| c.get())
+}
+
+/// Uses a lettering until the guard is dropped (then the previous one).
+pub fn use_font(f: TextFont) -> FontGuard {
+    let previous = CURRENT.with(|c| c.replace(f));
+    FontGuard(previous)
+}
+
+/// Sets the lettering for good (the app, once per frame).
+pub fn set_font(f: TextFont) {
+    CURRENT.with(|c| c.set(f));
+}
+
+pub struct FontGuard(TextFont);
+
+impl Drop for FontGuard {
+    fn drop(&mut self) {
+        CURRENT.with(|c| c.set(self.0));
+    }
+}
 
 /// Stroke width as a fraction of the text height (ISO 3098 type B: h/10).
 pub const STROKE: f64 = 0.1;
@@ -456,8 +486,17 @@ pub fn glyph(c: char) -> Option<(Vec<Stroke>, f64)> {
     None
 }
 
-/// Width of a single line of text of height `h`, in the same units.
+/// Width of a single line of text of height `h`, in the same units, in
+/// the lettering in use.
 pub fn text_width(text: &str, h: f64) -> f64 {
+    match current() {
+        TextFont::Sans => crate::outline::width(text, h),
+        TextFont::Technical => stroke_width(text, h),
+    }
+}
+
+/// Width of a line in the technical lettering.
+pub fn stroke_width(text: &str, h: f64) -> f64 {
     let widths: Vec<f64> = text.chars().filter_map(glyph).map(|g| g.1).collect();
     if widths.is_empty() {
         return 0.0;
@@ -517,6 +556,21 @@ pub fn text_strokes(t: &Text, k: f64) -> Vec<Vec<Point2>> {
                     .collect(),
             );
         }
+    }
+    out
+}
+
+/// The outlines of a text in the sans lettering, in drawing coordinates.
+pub fn text_outline(t: &Text, k: f64) -> Vec<crate::outline::Seg> {
+    let h = t.height * k;
+    let (s, c) = t.angle.sin_cos();
+    let along = Point2::new(c, s);
+    let up = along.perp_left();
+    let mut out = Vec::new();
+    for (line, x0, y0) in line_origins(t, h) {
+        out.extend(crate::outline::line(line, h, |x, y| {
+            t.at + along * (x0 + x) + up * (y0 + y)
+        }));
     }
     out
 }

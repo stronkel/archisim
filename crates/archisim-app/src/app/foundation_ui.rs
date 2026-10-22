@@ -40,7 +40,7 @@ impl ArchiSimApp {
     /// from.
     pub(super) fn foundation_anchor(&self) -> Option<Point2> {
         match self.tool {
-            Tool::Grid => self.grid_anchor,
+            Tool::Grid | Tool::RefPlane => self.grid_anchor,
             Tool::Footing => self.footing_anchor,
             _ => None,
         }
@@ -87,6 +87,20 @@ impl ArchiSimApp {
                         self.say(format!("Eje {name} creado. Clic: el siguiente."));
                     }
                     Err(e) => self.complain(format!("No se puede crear el eje: {e}.")),
+                },
+            },
+            Tool::RefPlane => match self.grid_anchor {
+                None => self.grid_anchor = Some(p),
+                Some(a) if a.approx_eq(p) => {}
+                Some(a) => match self.ed.add_ref_plane(a, p) {
+                    Ok(id) => {
+                        self.grid_anchor = None;
+                        self.ed.selection = [Element::RefPlane(id)].into_iter().collect();
+                        self.say("Plano de referencia creado: los muros y las líneas se fuerzan a él. Clic: el siguiente.");
+                    }
+                    Err(e) => {
+                        self.complain(format!("No se puede crear el plano de referencia: {e}."))
+                    }
                 },
             },
             Tool::Footing => self.footing_click(p),
@@ -143,9 +157,9 @@ impl ArchiSimApp {
                 let r = self.ed.add_footing(&s, s.between(a, p, None));
                 self.footing_anchor = Some(p);
                 let what = format!(
-                    "{} de {} mm. Clic: la siguiente desde aquí · Esc: terminar.",
+                    "{} de {}. Clic: la siguiente desde aquí · Esc: terminar.",
                     mode.name(),
-                    fmt_mm(a.distance(p))
+                    crate::units::fmt_len(a.distance(p))
                 );
                 placed(self, r, &what);
             }
@@ -189,9 +203,32 @@ impl ArchiSimApp {
                     rect,
                     c.point,
                     format!(
-                        "Eje {}   L {} mm   {}",
+                        "Eje {}   L {}   {}",
                         model.next_grid_name(a, c.point),
-                        fmt_mm(d.length()),
+                        crate::units::fmt_len(d.length()),
+                        fmt_angle(d.y.atan2(d.x))
+                    ),
+                );
+            }
+            Tool::RefPlane => {
+                let Some(a) = self.grid_anchor else {
+                    return;
+                };
+                painter.line_segment(
+                    [
+                        self.view.to_screen(rect, a),
+                        self.view.to_screen(rect, c.point),
+                    ],
+                    egui::Stroke::new(1.2, egui::Color32::from_rgb(47, 143, 91)),
+                );
+                let d = c.point - a;
+                self.draw_label(
+                    painter,
+                    rect,
+                    c.point,
+                    format!(
+                        "L {}   {}",
+                        crate::units::fmt_len(d.length()),
                         fmt_angle(d.y.atan2(d.x))
                     ),
                 );
@@ -245,18 +282,18 @@ impl ArchiSimApp {
                 }
                 let text = match kind {
                     FootingKind::Pad { length, .. } => format!(
-                        "{} × {} × {} mm",
+                        "{} × {} × {}",
                         fmt_mm(size.width),
                         fmt_mm(length),
-                        fmt_mm(size.depth)
+                        crate::units::fmt_len(size.depth)
                     ),
                     FootingKind::Strip { start, end, .. } | FootingKind::TieBeam { start, end } => {
                         format!(
-                            "{}   L {} mm   {} × {} mm",
+                            "{}   L {}   {} × {}",
                             s.mode.name(),
-                            fmt_mm(start.distance(end)),
+                            crate::units::fmt_len(start.distance(end)),
                             fmt_mm(size.width),
-                            fmt_mm(size.depth)
+                            crate::units::fmt_len(size.depth)
                         )
                     }
                 };
@@ -273,6 +310,10 @@ impl ArchiSimApp {
                 "Clic: final del eje · Mayús: 45° · Esc: anular"
             }
             (Tool::Grid, _) => "Clic: comienzo del eje (se nombra 1, 2… o A, B… según su dirección) · Esc: flecha",
+            (Tool::RefPlane, _) if self.grid_anchor.is_some() => {
+                "Clic: final del plano de referencia · Mayús: 45° · Esc: anular"
+            }
+            (Tool::RefPlane, _) => "Clic: comienzo del plano de referencia (una línea para dibujar contra ella, en todas las plantas) · Esc: flecha",
             (_, FootingMode::Pad) => {
                 "Clic en un pilar: zapata bajo él (lo sigue) · Clic en otro sitio: zapata en ese punto · Esc: flecha"
             }
@@ -616,6 +657,55 @@ impl ArchiSimApp {
                 "",
                 "IfcGridAxis (en el IfcGrid del proyecto)",
             );
+        });
+    }
+
+    pub(super) fn ref_plane_tool_properties(&mut self, ui: &mut Ui) {
+        props::title(ui, "Herramienta Plano de referencia · lo que vas a dibujar");
+        props::note(
+            ui,
+            "Dos clics: una línea verde de trazo y punto que se ve en todas las plantas y a la que se fuerzan los muros, las líneas y las cotas (en su recorrido y en sus cruces). No se construye ni va al IFC. Se oculta en Visibilidad y gráficos.",
+        );
+    }
+
+    pub(super) fn ref_plane_properties(&mut self, ui: &mut Ui, id: archisim_core::RefPlaneId) {
+        let Some(r) = self.ed.model().ref_plane(id).cloned() else {
+            return;
+        };
+        props::title(ui, &format!("{} · 1 seleccionado", r.name));
+        group(ui, "ref-plane-data", "Plano de referencia", |ui| {
+            row(ui, "Nombre", "", |ui, w| {
+                if let Some(t) =
+                    text_edit_committed(ui, Id::unique(("ref-plane-name", id)), &r.name, w - 8.0)
+                {
+                    let t = t.trim().to_string();
+                    let res = self.ed.transact("Nombre del plano de referencia", |m| {
+                        m.edit_ref_plane(id, |p| p.name = t)
+                    });
+                    self.report(res, "Nombre cambiado.");
+                }
+            });
+            row(
+                ui,
+                "Longitud (mm)",
+                "Desde el inicio; el final se desplaza",
+                |ui, w| {
+                    if let Some(v) =
+                        length_field(ui, Id::unique(("ref-plane-len", id)), r.length(), w - 8.0)
+                    {
+                        let res = self.ed.transact("Longitud del plano de referencia", |m| {
+                            m.edit_ref_plane(id, |p| {
+                                if let Some(u) = (p.end - p.start).normalized() {
+                                    p.end = p.start + u * v;
+                                }
+                            })
+                        });
+                        self.report(res, "Longitud cambiada.");
+                    }
+                },
+            );
+            let d = r.end - r.start;
+            text_row(ui, "Dirección", "", &fmt_angle(d.y.atan2(d.x)));
         });
     }
 }

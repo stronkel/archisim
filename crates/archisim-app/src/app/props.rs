@@ -83,7 +83,7 @@ pub fn row<R>(ui: &mut Ui, name: &str, hint: &str, value: impl FnOnce(&mut Ui, f
         let job = egui::text::LayoutJob {
             wrap: egui::text::TextWrapping::truncate_at_width(lw - 10.0),
             ..egui::text::LayoutJob::single_section(
-                name.to_owned(),
+                crate::units::unit_label(name).into_owned(),
                 egui::TextFormat::simple(FontId::proportional(12.0), p.muted),
             )
         };

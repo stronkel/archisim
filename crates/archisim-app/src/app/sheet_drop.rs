@@ -14,6 +14,8 @@ use super::ArchiSimApp;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Drop {
     Level(LevelId),
+    /// A saved plan, with its scale, cut plane and look.
+    View(archisim_core::PlanViewId),
     Section(SectionId),
     Table(ScheduleKind),
     /// An axonometric of the model as the 3D view looks at it.
@@ -73,6 +75,11 @@ impl ArchiSimApp {
     /// The scale a view is placed at: that of its tab if it is open, or
     /// the usual one for its kind.
     fn drop_scale(&self, what: Drop) -> f64 {
+        if let Drop::View(id) = what {
+            if let Some(v) = self.ed.model().plan_view(id) {
+                return v.scale;
+            }
+        }
         let kind = match what {
             Drop::Level(l) => Some(TabKind::Plan(l)),
             Drop::Section(s) => Some(TabKind::Section(s)),
@@ -146,6 +153,29 @@ impl ArchiSimApp {
                 .ed
                 .add_table(sheet, kind, self.schedule_level, at)
                 .map(Placed::Table),
+            Drop::View(id) => {
+                let Some(v) = self.ed.model().plan_view(id).cloned() else {
+                    return;
+                };
+                // The view as saved: its scale, cut plane, look and kind.
+                self.place_view(sheet, ViewChoice::Level(v.level), v.scale, at)
+                    .and_then(|vp| {
+                        self.ed
+                            .transact("Vista guardada en el plano", |m| {
+                                let mut p = m
+                                    .viewport(vp)
+                                    .cloned()
+                                    .ok_or(archisim_core::ModelError::UnknownViewport(vp))?;
+                                p.cut_plane = v.cut_plane;
+                                p.style = v.style.clone();
+                                p.ceiling = v.kind == archisim_core::PlanKind::Ceiling;
+                                p.title = v.name.to_uppercase();
+                                m.set_viewport(p)
+                            })
+                            .map(|_| vp)
+                    })
+                    .map(Placed::View)
+            }
             other => {
                 let scale = self.drop_scale(other);
                 let view = match other {

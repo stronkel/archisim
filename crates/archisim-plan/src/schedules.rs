@@ -10,7 +10,7 @@ use std::fmt::Write;
 use archisim_core::{
     signed_area, LevelId, Model, OpeningKind, Phase, Point2, ScheduleKind, Text, TextAlign,
 };
-use archisim_draft::font::{text_strokes, text_width, STROKE};
+use archisim_draft::font::text_width;
 
 use crate::{num, pt};
 
@@ -1383,17 +1383,11 @@ pub fn draw_table(s: &mut String, t: &Table, at: Point2) {
         }
     }
     for tx in &texts {
-        let mut d = String::new();
-        for st in text_strokes(tx, k) {
-            for (i, q) in st.iter().enumerate() {
-                let _ = write!(d, "{}{} ", if i == 0 { "M" } else { "L" }, pt(*q));
-            }
-        }
         let _ = writeln!(
             s,
-            r#"<path d="{}" stroke="{ink}" stroke-width="{}" stroke-linecap="round" fill="none"/>"#,
-            d.trim_end(),
-            num(STROKE * tx.height * k)
+            r#"<path d="{}" {}/>"#,
+            crate::lettering::text_d(tx, k),
+            crate::lettering::paint(tx.height * k, ink)
         );
     }
 }

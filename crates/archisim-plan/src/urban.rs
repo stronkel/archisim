@@ -20,7 +20,7 @@ fn label(s: &mut String, at: Point2, text: &str, k: f64) {
     let h = LABEL * k;
     let _ = writeln!(
         s,
-        r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+        r#"<path d="{}" {}/>"#,
         text_path(
             text,
             at - Point2::new(0.0, h / 2.0),
@@ -28,7 +28,7 @@ fn label(s: &mut String, at: Point2, text: &str, k: f64) {
             h,
             Align::Centre
         ),
-        num(crate::lettering::STROKE * h)
+        crate::lettering::paint(h, INK)
     );
 }
 
@@ -174,9 +174,9 @@ pub fn draw_roads(
                     let h = LABEL * k;
                     let _ = writeln!(
                         s,
-                        r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                        r#"<path d="{}" {}/>"#,
                         text_path(&r.name, m, u, h, Align::Centre),
-                        num(crate::lettering::STROKE * h)
+                        crate::lettering::paint(h, INK)
                     );
                 }
             }

@@ -85,6 +85,8 @@ pub enum Tool {
     Object,
     /// Setting-out grid lines, by two points.
     Grid,
+    /// Reference planes, by two points.
+    RefPlane,
     /// Pads, strips and tie beams.
     Footing,
     /// Copies of a module (another project).
@@ -136,6 +138,7 @@ impl Tool {
                 | Tool::Railing
                 | Tool::Object
                 | Tool::Grid
+                | Tool::RefPlane
                 | Tool::Footing
                 | Tool::Module
                 | Tool::Mass
@@ -184,6 +187,7 @@ impl Tool {
             "j" => Some(Tool::Planting),
             "h" => Some(Tool::Pipe),
             "d" => Some(Tool::Duct),
+            "q" => Some(Tool::RefPlane),
             _ => None,
         }
     }
@@ -531,6 +535,8 @@ pub struct ArchiSimApp {
     applied_zoom: f32,
     /// The onboarding mission in hand.
     pub missions: missions_ui::MissionsUi,
+    /// Saved plans and the window «Visibilidad y gráficos».
+    pub views: views_ui::ViewsUi,
 }
 
 impl ArchiSimApp {
@@ -703,6 +709,7 @@ impl ArchiSimApp {
             prefs,
             applied_zoom: 1.0,
             missions: Default::default(),
+            views: Default::default(),
         }
     }
 
@@ -1100,6 +1107,7 @@ impl ArchiSimApp {
             cut_plane: self.cut_plane,
             style: self.view_style.clone(),
             phase_view: self.phase_view,
+            ceiling: self.active_ceiling(),
             ..archisim_plan::PlanOptions::default()
         }
     }
@@ -1299,21 +1307,21 @@ impl ArchiSimApp {
                 self.ed.selection = ids.iter().map(|id| Element::Wall(*id)).collect();
                 let message = match (self.wall_tool.mode, pieces.as_slice()) {
                     (WallMode::Rectangle, [a, b, ..]) => format!(
-                        "4 muros creados ({} × {} mm).",
+                        "4 muros creados ({} × {}).",
                         fmt_mm(a.length()),
-                        fmt_mm(b.length())
+                        crate::units::fmt_len(b.length())
                     ),
                     (WallMode::Circle, [a, ..]) => format!(
-                        "Muro circular de radio {} mm creado (dos medios círculos).",
-                        fmt_mm(a.arc().map_or(0.0, |c| c.radius))
+                        "Muro circular de radio {} creado (dos medios círculos).",
+                        crate::units::fmt_len(a.arc().map_or(0.0, |c| c.radius))
                     ),
                     (_, [w]) => match w.arc() {
                         Some(arc) => format!(
-                            "Muro curvo de {} mm (radio {} mm) creado.",
-                            fmt_mm(w.length()),
-                            fmt_mm(arc.radius)
+                            "Muro curvo de {} (radio {}) creado.",
+                            crate::units::fmt_len(w.length()),
+                            crate::units::fmt_len(arc.radius)
                         ),
-                        None => format!("Muro de {} mm creado.", fmt_mm(w.length())),
+                        None => format!("Muro de {} creado.", crate::units::fmt_len(w.length())),
                     },
                     _ => format!("{} muros creados.", pieces.len()),
                 };
@@ -1437,6 +1445,8 @@ impl ArchiSimApp {
             theme::apply(&ctx, self.dark);
         }
         missions_ui::clear_marks(&ctx);
+        // Texts are measured and drawn in the project's lettering.
+        archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
@@ -1446,6 +1456,7 @@ impl ArchiSimApp {
         self.coord_poll(&ctx);
         self.team_poll(&ctx);
         self.sync_tabs();
+        self.sync_views(&ctx);
         self.update_title(&ctx);
         self.age_message(ctx.input(|i| i.time));
         let p = theme::Palette::current(&ctx);
@@ -1552,10 +1563,12 @@ impl ArchiSimApp {
 
         if let Some(text) = ctx.data_mut(|d| d.remove_temp::<String>(Id::unique("length-error"))) {
             self.complain(format!(
-                "«{text}» no es una medida válida: escribe milímetros (2700) o con unidad (2,7m · 270cm)."
+                "«{text}» no es una medida válida: escribe un número en {} (Vista → Unidades) o con su unidad (2,7m · 270cm · 2700mm).",
+                crate::units::unit().name().to_lowercase()
             ));
         }
         self.dialogs(&ctx);
+        self.vg_window(&ctx);
         self.team_windows(&ctx);
         self.text_entry(&ctx);
         if !matches!(self.mode, ViewMode::Sheet(_)) {
@@ -1867,7 +1880,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ),
     (
         "Números + Intro (arco o círculo)",
-        "Radio en mm; en un rectángulo, ancho x fondo (6000x4000)",
+        "Radio; en un rectángulo, ancho x fondo (6x4 en metros)",
     ),
     (
         "Método (Propiedades del forjado)",
@@ -2104,6 +2117,7 @@ mod types_ui;
 mod urban_ui;
 mod vertex_ui;
 mod view3d_ui;
+mod views_ui;
 mod vivero_ui;
 mod widgets;
 pub use tabs::{TabKind, ViewTab};
