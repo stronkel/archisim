@@ -72,9 +72,26 @@ La plantilla de un proyecto nuevo trae ya con su aspecto:
 - una torre y un puente con las aristas donde se cruzan;
 - todo sobre un césped.
 
-## 5. Pendiente
+## 5. Modelado (bloque 4 de la revisión del 22/10/2026, v0.44)
+
+Antonio echaba en falta, al probar Concepto: dividir caras con aristas y pintar solo esa parte; empujar caras que no sean la de arriba; doblar y retorcer; un perfil propio para Seguir; y que redondear aristas se encontrara a la primera.
+
+- **Dividir** (Concepto → Dividir): dos clics sobre una cara de un volumen (mejor en 3D; en planta, sobre la cara de arriba) la parten por esa línea, de borde a borde. Cada parte se pinta con Pintar (también en planta) o se empuja por separado.
+- **Empujar cualquier cara**: la de arriba de un volumen por contorno sigue cambiando su altura como siempre; un **lado** (en planta, clic junto a su arista; en 3D, sobre la cara) mueve esa arista hacia fuera o hacia dentro y el volumen sigue siendo un contorno editable; la **base** baja el volumen; y cualquier otra cara —una parte dividida, la cara de un sólido— sale a lo largo de su normal como en SketchUp: hacia fuera hace un saliente y hacia dentro un rebaje. Se escribe la distancia + Intro.
+- **Deformar** (Concepto → Deformar): clic en un volumen y gira el ratón alrededor para **retorcerlo**; con Mayús, llévalo hacia un lado para **doblarlo**. En Propiedades → Deformar: torsión, curvatura y hacia dónde (y «Enderezar»). No destruye el volumen: si se cambia su contorno o su altura, se retuerce igual.
+- **Perfiles de Seguir**: en las propiedades de la herramienta Seguir o de una banda ya hecha, **Perfil**: rectangular, tubo, L, U, doble T, cornisa o media caña, estirados al ancho y a la altura; o **Tomar del dibujo…**: clic en una polilínea cerrada del dibujo 2D o en una cara de Concepto, dibujada como el perfil (de lado el ancho, hacia arriba la altura).
+- **Redondear**: con volúmenes seleccionados, botón **Redondear** en la barra bajo las pestañas: esquinas y aristas de arriba redondeadas 15 cm (otra vez: vivas). El tamaño y cuáles, en Propiedades → Aristas.
+
+Al dividir o empujar una cara que no es de un contorno, el volumen pasa a ser un sólido (como al unir o restar): conserva sus caras pintadas.
+
+`archisim formas out/` trae ahora una torre retorcida un cuarto de vuelta, otra doblada, un bloque con media cubierta subida y pintada de madera, una cornisa y un tubo.
+
+Para el programador: `archisim_geom::sculpt` (`split`, `divide_face`, `push_face`, `deform`, `sweep`, `move_edge`, `preset_profile`; en el modelo, `divide_mass_face`, `push_mass_face`, `mass_to_mesh`); `Mass::deform` (`Deform`) y `MassShape::Sweep::profile`; formato versión 28; en la app, `app/sculpt_ui` y las herramientas `Tool::DivideFace` y `Tool::Deform`.
+
+## 6. Pendiente
 
 - Las texturas en las axonometrías de los planos y en los PDF (hoy, el color liso del material) y en el IFC.
 - Editar un sólido después de la operación (hoy se deshace y se repite).
 - Redondear aristas de un sólido ya operado.
-- Pintar zonas de una cara de volumen limitadas por aristas (en muros ya existe).
+- Dividir una cara solo entre dos aristas suyas (hoy, de borde a borde).
+- Empujar regiones curvas (hoy, caras planas).

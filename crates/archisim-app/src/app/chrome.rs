@@ -678,7 +678,7 @@ impl ArchiSimApp {
             Tool::CurtainWall if self.curtain_anchor.is_some() => "Clic: final del muro cortina (exterior a la izquierda) · Mayús: 45° · Esc: anular",
             Tool::CurtainWall => "Clic: inicio del muro cortina · Esc: flecha",
             Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_hint(),
-            Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
+            Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Planting => self.planting_hint(),
             Tool::TeamZone if self.team_ui.zone_start.is_some() => "Clic: esquina opuesta de la zona · Esc o botón derecho: anular",

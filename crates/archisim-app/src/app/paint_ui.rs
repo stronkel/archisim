@@ -49,6 +49,17 @@ impl ArchiSimApp {
             }
             _ => {
                 // In plan: the top of a volume, or the side of a wall.
+                // The face looking up under the click (a part of a divided
+                // top, too).
+                if let Some(pick) = self.face_under(p, false) {
+                    let face = self
+                        .ed
+                        .model()
+                        .mass(pick.mass)
+                        .map_or(FaceRef::Top, |m| m.face_ref(pick.face));
+                    self.paint_face(pick.mass.0, face, material);
+                    return;
+                }
                 if let Some(id) = self.mass_under(p) {
                     self.paint_face(id.0, FaceRef::Top, material);
                     return;

@@ -218,6 +218,13 @@ const CONCEPT: &[Tile] = &[
         "Empujar o tirar de una cara para hacer un volumen",
     ),
     tile(
+        Pick::Concept(super::concept_ui::ConceptPick::Divide),
+        Glyph::DivideFace,
+        "Dividir",
+        "",
+        "Dividir una cara de un volumen con una línea, para pintar o empujar cada parte",
+    ),
+    tile(
         Pick::Concept(super::concept_ui::ConceptPick::Follow),
         Glyph::FollowMe,
         "Seguir",
@@ -267,11 +274,11 @@ const CONCEPT: &[Tile] = &[
         "Dar un material a una cara",
     ),
     tile(
-        Pick::Tool(Tool::Grid),
-        Glyph::Grid,
-        "Ejes",
-        "X",
-        "Ejes de replanteo con su numeración",
+        Pick::Concept(super::concept_ui::ConceptPick::Deform),
+        Glyph::Deform,
+        "Deformar",
+        "",
+        "Retorcer un volumen alrededor de su centro o doblarlo hacia un lado (con Mayús)",
     ),
     tile(
         Pick::Action(Action::Convert),

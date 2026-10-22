@@ -51,7 +51,7 @@ pub fn build() -> Res<Model> {
         })?)
     };
     // A lawn under everything.
-    add(&mut m, "Césped", rect(-4.0, -12.0, 52.0, 26.0), 0.0, grass)?;
+    add(&mut m, "Césped", rect(-4.0, -12.0, 52.0, 46.0), 0.0, grass)?;
 
     // A brick block with its corners and top rounded, a concrete cylinder
     // cut out of one corner.
@@ -171,6 +171,84 @@ pub fn build() -> Res<Model> {
     let d = add(&mut m, "Puente", rect(0.0, -8.0, 14.0, 2.0), 3.0, concept)?;
     m.edit_mass(d, |x| x.base_offset = 4.0)?;
     cross_masses(&mut m, &[c, d])?;
+
+    // Bloque 4 de la revisión: a tower twisted a quarter turn, another
+    // bent, a block with part of its top raised, a cornice and a tube.
+    let twisted = add(
+        &mut m,
+        "Torre retorcida",
+        rect(2.0, 18.0, 6.0, 6.0),
+        20.0,
+        concrete,
+    )?;
+    m.edit_mass(twisted, |x| {
+        x.deform = Some(archisim_core::Deform {
+            twist: 90f64.to_radians(),
+            ..Default::default()
+        })
+    })?;
+    let bent = add(
+        &mut m,
+        "Torre doblada",
+        rect(14.0, 18.0, 4.0, 4.0),
+        16.0,
+        stone,
+    )?;
+    m.edit_mass(bent, |x| {
+        x.deform = Some(archisim_core::Deform {
+            bend: 40f64.to_radians(),
+            ..Default::default()
+        })
+    })?;
+    let stepped = add(
+        &mut m,
+        "Bloque escalonado",
+        rect(24.0, 18.0, 10.0, 8.0),
+        4.0,
+        brick,
+    )?;
+    let part = archisim_geom::sculpt::divide_mass_face(
+        &mut m,
+        stepped,
+        archisim_geom::forms::TOP,
+        [29.0, 18.0, 4.0],
+        [1.0, 0.0, 0.0],
+    )?;
+    archisim_geom::sculpt::push_mass_face(&mut m, stepped, part, 3.0)?;
+    m.set_face_paint(stepped.0, archisim_core::FaceRef::Part(part), Some(wood))?;
+    let profile = |name: &str| archisim_geom::sculpt::preset_profile(name, 1.0, 1.0);
+    let cornice = add(
+        &mut m,
+        "Cornisa",
+        MassShape::Sweep {
+            path: vec![
+                Point2::new(0.0, 30.0),
+                Point2::new(20.0, 30.0),
+                Point2::new(20.0, 26.0),
+            ],
+            width: 0.6,
+            profile: profile("cornisa"),
+        },
+        0.5,
+        stone,
+    )?;
+    m.edit_mass(cornice, |x| x.base_offset = 3.0)?;
+    let tube = add(
+        &mut m,
+        "Tubo",
+        MassShape::Sweep {
+            path: vec![
+                Point2::new(24.0, 30.0),
+                Point2::new(40.0, 30.0),
+                Point2::new(44.0, 26.0),
+            ],
+            width: 0.6,
+            profile: profile("tubo"),
+        },
+        0.6,
+        concrete,
+    )?;
+    m.edit_mass(tube, |x| x.base_offset = 1.0)?;
     Ok(m)
 }
 
@@ -216,7 +294,7 @@ mod tests {
     #[test]
     fn every_form_is_built() {
         let m = super::build().unwrap();
-        assert_eq!(m.masses().count(), 9);
+        assert_eq!(m.masses().count(), 14);
         assert!(m.edges().count() >= 1);
         let solids = archisim_geom::solid::model_solids(&m);
         assert!(solids.len() >= 10);

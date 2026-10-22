@@ -294,6 +294,8 @@ impl ArchiSimApp {
                     return Some((title, self.mass_methods()));
                 }
                 Tool::PushPull => ("Empujar", None, "Varita", ""),
+                Tool::DivideFace => ("Dividir cara", None, "Varita", ""),
+                Tool::Deform => ("Deformar", None, "Varita", ""),
                 Tool::MassOffset => ("Equidistancia", None, "Varita", ""),
                 Tool::Tape => ("Cinta", None, "Varita", ""),
                 Tool::Paint => ("Pintar", None, "Varita", ""),
@@ -886,6 +888,22 @@ impl ArchiSimApp {
                     if r.clicked() && enabled {
                         run = Some(o.command);
                     }
+                }
+            }
+            // Volumes: their edges rounded at once (bloque 4).
+            if sel.iter().any(|e| matches!(e, Element::Mass(_))) {
+                bar_separator(ui, &p);
+                let r = bar_button(
+                    ui,
+                    Mark::Glyph(Glyph::RoundEdge),
+                    "Redondear",
+                    false,
+                    true,
+                    named,
+                )
+                .on_hover_text("Redondear las esquinas y las aristas de arriba de los volúmenes (otra vez: aristas vivas). Tamaño y cuáles, en Propiedades → Aristas");
+                if r.clicked() {
+                    self.round_selected_edges();
                 }
             }
             if let Some(c) = run {

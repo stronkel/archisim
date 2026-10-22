@@ -242,9 +242,13 @@ impl ArchiSimApp {
             Tool::RefPlane => self.ref_plane_tool_properties(ui),
             Tool::Footing => self.footing_tool_properties(ui),
             Tool::Module => self.module_tool_properties(ui),
-            Tool::Mass | Tool::PushPull | Tool::MassOffset | Tool::Tape | Tool::Paint => {
-                self.mass_tool_properties(ui)
-            }
+            Tool::Mass
+            | Tool::PushPull
+            | Tool::DivideFace
+            | Tool::Deform
+            | Tool::MassOffset
+            | Tool::Tape
+            | Tool::Paint => self.mass_tool_properties(ui),
             Tool::Plot => self.plot_tool_properties(ui),
             Tool::Road => self.road_tool_properties(ui),
             Tool::Planting => self.planting_tool_properties(ui),

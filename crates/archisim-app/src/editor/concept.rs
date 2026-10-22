@@ -61,6 +61,76 @@ pub struct MassSettings {
     pub material: MaterialId,
     /// Radius of a cone's top (0: a point).
     pub top_radius: f64,
+    /// The profile Seguir sweeps.
+    pub profile: SweepProfile,
+}
+
+/// The profile of a band along a path: the plain rectangle, a ready one
+/// (`archisim_geom::sculpt::PRESETS`) or one taken from the drawing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SweepProfile {
+    #[default]
+    Band,
+    Preset(usize),
+    Drawn,
+}
+
+impl SweepProfile {
+    pub fn label(self) -> String {
+        match self {
+            SweepProfile::Band => "Rectangular".into(),
+            SweepProfile::Preset(i) => {
+                let n = archisim_geom::sculpt::PRESETS
+                    .get(i)
+                    .copied()
+                    .unwrap_or("?");
+                let mut c = n.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                    .unwrap_or_default()
+            }
+            SweepProfile::Drawn => "Dibujado".into(),
+        }
+    }
+
+    /// The profile's points, unit sized (the band stretches it to its
+    /// width and height); `drawn` is the one taken from the drawing.
+    pub fn points(self, drawn: Option<&[Point2]>) -> Option<Vec<Point2>> {
+        match self {
+            SweepProfile::Band => None,
+            SweepProfile::Preset(i) => archisim_geom::sculpt::PRESETS
+                .get(i)
+                .and_then(|n| archisim_geom::sculpt::preset_profile(n, 1.0, 1.0)),
+            SweepProfile::Drawn => drawn.map(<[Point2]>::to_vec),
+        }
+    }
+}
+
+/// A closed outline drawn in plan as a profile: across from its middle,
+/// up from its lowest point.
+pub fn profile_from_outline(outline: &[Point2]) -> Option<Vec<Point2>> {
+    if outline.len() < 3 || archisim_core::signed_area(outline).abs() < 1e-6 {
+        return None;
+    }
+    let (lo, hi) = outline.iter().fold(
+        (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    let mid = (lo.x + hi.x) / 2.0;
+    Some(
+        outline
+            .iter()
+            .map(|p| Point2::new(p.x - mid, p.y - lo.y))
+            .collect(),
+    )
 }
 
 impl MassSettings {
@@ -81,6 +151,7 @@ impl MassSettings {
             base_offset: 0.0,
             material,
             top_radius: 0.0,
+            profile: SweepProfile::Band,
         }
     }
 
@@ -171,7 +242,12 @@ impl Editor {
     }
 
     /// A band along a path.
-    pub fn add_mass_path(&mut self, s: &MassSettings, path: Vec<Point2>) -> EditResult<MassId> {
+    pub fn add_mass_path(
+        &mut self,
+        s: &MassSettings,
+        path: Vec<Point2>,
+        drawn: Option<&[Point2]>,
+    ) -> EditResult<MassId> {
         let mut s = *s;
         if s.what == MassWhat::Face {
             s.what = MassWhat::Volume;
@@ -181,8 +257,92 @@ impl Editor {
             MassShape::Sweep {
                 path,
                 width: s.width,
+                profile: s.profile.points(drawn),
             },
         )
+    }
+
+    /// Divides a face of a volume along a line (see
+    /// [`archisim_geom::sculpt::divide_mass_face`]). Returns the new face.
+    pub fn divide_mass_face(
+        &mut self,
+        id: MassId,
+        face: u32,
+        point: [f64; 3],
+        normal: [f64; 3],
+    ) -> EditResult<u32> {
+        let mut why = None;
+        let r = self.transact("Dividir cara", |m| {
+            archisim_geom::sculpt::divide_mass_face(m, id, face, point, normal).map_err(|e| {
+                why = Some(e.to_string());
+                archisim_core::ModelError::InvalidShape("operation")
+            })
+        });
+        r.map_err(|e| why.unwrap_or(e))
+    }
+
+    /// Pushes any face of a volume along its normal (see
+    /// [`archisim_geom::sculpt::push_mass_face`]).
+    pub fn push_mass_face(&mut self, id: MassId, face: u32, d: f64) -> EditResult {
+        let mut why = None;
+        let r = self.transact("Empujar", |m| {
+            archisim_geom::sculpt::push_mass_face(m, id, face, d).map_err(|e| {
+                why = Some(e.to_string());
+                archisim_core::ModelError::InvalidShape("operation")
+            })
+        });
+        r.map_err(|e| why.unwrap_or(e))
+    }
+
+    /// Twists and bends a volume (nothing: straight again).
+    pub fn set_mass_deform(&mut self, id: MassId, d: archisim_core::Deform) -> EditResult {
+        self.transact("Deformar", |m| {
+            m.edit_mass(id, |x| x.deform = (!d.is_none()).then_some(d))
+        })
+    }
+
+    /// The profile a band along a path sweeps (nothing: the rectangle).
+    pub fn set_sweep_profile(&mut self, id: MassId, profile: Option<Vec<Point2>>) -> EditResult {
+        self.transact("Perfil", |m| {
+            m.edit_mass(id, |x| {
+                if let MassShape::Sweep { profile: p, .. } = &mut x.shape {
+                    *p = profile;
+                }
+            })
+        })
+    }
+
+    /// Rounds the corners and top edges of volumes, or leaves them sharp
+    /// if they were all rounded.
+    pub fn round_mass_edges(&mut self, ids: &[MassId]) -> EditResult<bool> {
+        let rounded = ids.iter().all(|id| {
+            self.model().mass(*id).is_some_and(|m| {
+                m.finish
+                    .is_some_and(|f| f.kind == archisim_core::EdgeKind::Round)
+            })
+        });
+        self.transact("Redondear aristas", |m| {
+            for id in ids {
+                let round = !matches!(
+                    m.mass(*id).map(|x| &x.shape),
+                    Some(MassShape::Mesh(_)) | None
+                );
+                if !round {
+                    continue;
+                }
+                m.edit_mass(*id, |x| {
+                    x.finish = (!rounded).then_some(archisim_core::EdgeFinish {
+                        kind: archisim_core::EdgeKind::Round,
+                        size: 0.15,
+                        vertical: matches!(x.shape, MassShape::Prism(_)),
+                        top: true,
+                        bottom: false,
+                    })
+                })?;
+            }
+            Ok(())
+        })?;
+        Ok(!rounded)
     }
 
     fn add_mass_shape(&mut self, s: &MassSettings, shape: MassShape) -> EditResult<MassId> {

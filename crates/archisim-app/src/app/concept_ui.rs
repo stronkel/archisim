@@ -10,7 +10,7 @@
 //! measures and leaves a guide; Pintar gives a volume a material; and
 //! Convertir turns volumes into walls, slabs and a roof, remembering them.
 
-use archisim_core::{MassId, MassShape, MaterialId, Point2};
+use archisim_core::{Deform, MassId, MassShape, MaterialId, Point2};
 use eframe::egui::{self, ComboBox, Id, Ui};
 
 use super::props::{self, choice, group, row, text_row};
@@ -31,6 +31,10 @@ pub enum ConceptPick {
     Paint,
     /// Formas: sphere, cylinder, cone and solids of revolution.
     Form,
+    /// Dividir: a face divided along a line.
+    Divide,
+    /// Deformar: twisted and bent.
+    Deform,
 }
 
 /// What the concept tools are doing.
@@ -51,11 +55,23 @@ pub struct ConceptState {
     pub tape: Option<Point2>,
     /// A value typed (height, distance).
     pub typed: String,
+    /// Empujar on any face (not a contour's height).
+    pub face_push: Option<super::sculpt_ui::FacePush>,
+    /// The first point of Dividir, on its face.
+    pub divide: Option<super::sculpt_ui::FacePick>,
+    /// Deformar, with a volume taken.
+    pub deform: Option<super::sculpt_ui::DeformDrag>,
+    /// Taking a profile from the drawing: for a band, or for the tool.
+    pub pick_profile: Option<Option<MassId>>,
+    /// The profile taken from the drawing for Seguir (kept between uses).
+    pub drawn_profile: Option<Vec<Point2>>,
 }
 
 impl ConceptState {
     pub fn finish(&mut self) {
+        let drawn = self.drawn_profile.take();
         *self = ConceptState::default();
+        self.drawn_profile = drawn;
     }
 
     pub fn is_drawing(&self) -> bool {
@@ -64,6 +80,10 @@ impl ConceptState {
             || self.push.is_some()
             || self.offset.is_some()
             || self.tape.is_some()
+            || self.face_push.is_some()
+            || self.divide.is_some()
+            || self.deform.is_some()
+            || self.pick_profile.is_some()
     }
 }
 
@@ -133,6 +153,8 @@ impl ArchiSimApp {
                 Tool::Mass
             }
             ConceptPick::Push => Tool::PushPull,
+            ConceptPick::Divide => Tool::DivideFace,
+            ConceptPick::Deform => Tool::Deform,
             ConceptPick::Offset => Tool::MassOffset,
             ConceptPick::Tape => Tool::Tape,
             ConceptPick::Paint => Tool::Paint,
@@ -162,6 +184,8 @@ impl ArchiSimApp {
             ConceptPick::Mass => self.tool == Tool::Mass && s.what == MassWhat::Mass,
             ConceptPick::Form => self.tool == Tool::Mass && s.mode.is_form(),
             ConceptPick::Push => self.tool == Tool::PushPull,
+            ConceptPick::Divide => self.tool == Tool::DivideFace,
+            ConceptPick::Deform => self.tool == Tool::Deform,
             ConceptPick::Offset => self.tool == Tool::MassOffset,
             ConceptPick::Tape => self.tool == Tool::Tape,
             ConceptPick::Paint => self.tool == Tool::Paint,
@@ -258,17 +282,44 @@ impl ArchiSimApp {
     // ---- Clicks -------------------------------------------------------------
 
     pub(super) fn concept_click(&mut self, p: Point2) {
+        if self.concept.pick_profile.is_some() {
+            self.profile_click(p);
+            return;
+        }
         match self.tool {
             Tool::Mass => self.mass_click(p),
+            Tool::DivideFace => self.divide_click(p),
+            Tool::Deform => self.deform_click(p),
+            Tool::PushPull if self.concept.face_push.is_some() => {
+                let fp = self.concept.face_push.expect("checked");
+                let d = if self.mode == ViewMode::ThreeD {
+                    fp.d
+                } else {
+                    self.face_push_distance(&fp, p)
+                };
+                self.finish_face_push(d);
+            }
             Tool::PushPull => match self.concept.push {
-                None => match self.mass_under(p) {
-                    Some(id) => {
+                None => match self.face_under(p, true) {
+                    Some(pick) if !self.push_is_height(&pick) => {
+                        self.start_face_push(pick, p);
+                    }
+                    Some(pick) => {
+                        let id = pick.mass;
                         let h = self.ed.model().mass(id).map_or(0.0, |m| m.height);
                         self.concept.push = Some((id, p, h));
                         self.concept.typed.clear();
-                        self.say("Mueve el ratón hacia arriba para subir (o escribe la altura) y haz clic.");
+                        self.say("Mueve el ratón hacia arriba para subir (o escribe la altura) y haz clic. Las caras de los lados también se empujan.");
                     }
-                    None => self.complain("Haz clic en una cara o un volumen para empujarlo."),
+                    None => match self.mass_under(p) {
+                        Some(id) => {
+                            let h = self.ed.model().mass(id).map_or(0.0, |m| m.height);
+                            self.concept.push = Some((id, p, h));
+                            self.concept.typed.clear();
+                            self.say("Mueve el ratón hacia arriba para subir (o escribe la altura) y haz clic.");
+                        }
+                        None => self.complain("Haz clic en una cara o un volumen para empujarlo."),
+                    },
                 },
                 Some((id, from, h0)) => {
                     let h = h0 + (p.y - from.y);
@@ -482,7 +533,8 @@ impl ArchiSimApp {
             return;
         }
         let s = self.mass_settings;
-        match self.ed.add_mass_path(&s, path) {
+        let drawn = self.concept.drawn_profile.clone();
+        match self.ed.add_mass_path(&s, path, drawn.as_deref()) {
             Ok(id) => {
                 self.ed.selection = [Element::Mass(id)].into_iter().collect();
                 self.say_mass(id, "creado");
@@ -615,7 +667,10 @@ impl ArchiSimApp {
     /// Typing a value while pushing or offsetting (Enter applies it).
     /// Returns whether the key was used.
     pub(super) fn concept_type(&mut self, c: char) -> bool {
-        if (self.concept.push.is_some() || self.concept.offset.is_some())
+        if (self.concept.push.is_some()
+            || self.concept.offset.is_some()
+            || self.concept.face_push.is_some()
+            || self.concept.deform.is_some())
             && (c.is_ascii_digit() || matches!(c, ',' | '.' | '-' | 'm' | 'c'))
         {
             self.concept.typed.push(c);
@@ -631,6 +686,24 @@ impl ArchiSimApp {
     /// Enter: applies the typed value, or ends the path.
     pub(super) fn concept_enter(&mut self) {
         let v = crate::units::parse_length(&self.concept.typed);
+        if let (Some(_), Some(d)) = (self.concept.face_push, v) {
+            self.finish_face_push(d);
+            return;
+        }
+        if let Some(dd) = self.concept.deform {
+            // A number typed: the twist (with Mayús held, the bend), in
+            // degrees.
+            let deg = self.concept.typed.replace(',', ".").parse::<f64>().ok();
+            let mut d = dd.now;
+            if let Some(deg) = deg {
+                d = Deform {
+                    twist: deg.to_radians(),
+                    ..dd.before
+                };
+            }
+            self.finish_deform(dd.mass, d);
+            return;
+        }
         if let (Some((id, _, _)), Some(h)) = (self.concept.push, v) {
             self.finish_push(id, h);
         } else if let (Some(id), Some(d)) = (self.concept.offset, v) {
@@ -668,6 +741,7 @@ impl ArchiSimApp {
     // ---- Preview ----------------------------------------------------------
 
     pub(super) fn draw_concept_preview(&self, painter: &egui::Painter, rect: Rect) {
+        self.draw_sculpt_preview(painter, rect);
         let Some(c) = self.cursor else {
             return;
         };
@@ -768,6 +842,7 @@ impl ArchiSimApp {
                             shape: MassShape::Sweep {
                                 path: pts,
                                 width: self.mass_settings.width,
+                                profile: None,
                             },
                             base_offset: 0.0,
                             height: 1.0,
@@ -775,6 +850,7 @@ impl ArchiSimApp {
                             material: self.mass_settings.material,
                             building: None,
                             finish: None,
+                            deform: None,
                         };
                         let band = probe.outline();
                         if band.len() > 2 {
@@ -915,7 +991,18 @@ impl ArchiSimApp {
             Tool::PushPull if self.concept.push.is_some() => {
                 "Ratón arriba: más alto · Escribe la altura + Intro · Clic: dejarlo · Esc: anular"
             }
-            Tool::PushPull => "Clic en una cara o un volumen para empujarlo · Esc: flecha",
+            Tool::PushPull if self.concept.face_push.is_some() => {
+                "Ratón hacia fuera o hacia dentro · Escribe la distancia + Intro · Clic: dejarlo · Esc: anular"
+            }
+            Tool::PushPull => "Clic en una cara (arriba, un lado o una parte dividida) para empujarla · Esc: flecha",
+            Tool::DivideFace if self.concept.divide.is_some() => {
+                "Clic: el otro punto de la línea, sobre la misma cara · Esc: anular"
+            }
+            Tool::DivideFace => "Clic en una cara de un volumen (mejor en 3D): el primer punto de la línea que la divide · Esc: flecha",
+            Tool::Deform if self.concept.deform.is_some() => {
+                "Gira el ratón alrededor: retorcer · Mayús: doblar hacia el ratón · Escribe los grados + Intro · Clic: dejarlo · Esc: anular"
+            }
+            Tool::Deform => "Clic en un volumen para retorcerlo o doblarlo · Esc: flecha",
             Tool::MassOffset if self.concept.offset.is_some() => {
                 "Ratón dentro o fuera · Escribe la distancia + Intro · Clic: dejarlo · Esc: anular"
             }
@@ -933,6 +1020,8 @@ impl ArchiSimApp {
     pub(super) fn mass_tool_properties(&mut self, ui: &mut Ui) {
         let what = match (self.tool, self.mass_settings.what, self.mass_settings.mode) {
             (Tool::PushPull, ..) => "Empujar",
+            (Tool::DivideFace, ..) => "Dividir",
+            (Tool::Deform, ..) => "Deformar",
             (Tool::MassOffset, ..) => "Equidistancia",
             (Tool::Tape, ..) => "Cinta",
             (Tool::Paint, ..) => "Pintar",
@@ -951,6 +1040,8 @@ impl ArchiSimApp {
         let mut s = self.mass_settings;
         let mut plot = model.plot_area();
         let mut plot_changed = false;
+        let mut take_profile = false;
+        let has_drawn = self.concept.drawn_profile.is_some();
         match self.tool {
             Tool::Mass => {
                 group(ui, "tool-mass", "Volumen", |ui| {
@@ -1038,6 +1129,16 @@ impl ArchiSimApp {
                             },
                         );
                     }
+                    if s.mode == MassMode::Path {
+                        super::sculpt_ui::profile_tool_row(ui, &mut s, has_drawn);
+                        if ui
+                            .button("Tomar del dibujo…")
+                            .on_hover_text("Una polilínea cerrada del dibujo 2D o una cara de Concepto, dibujada como el perfil")
+                            .clicked()
+                        {
+                            take_profile = true;
+                        }
+                    }
                     row(ui, "Base (mm)", "Sobre la planta", |ui, w| {
                         if let Some(v) =
                             length_field(ui, Id::unique("tool-mass-base"), s.base_offset, w - 8.0)
@@ -1113,6 +1214,9 @@ impl ArchiSimApp {
             );
         });
         self.mass_settings = s;
+        if take_profile {
+            self.take_profile(None);
+        }
         if plot_changed {
             let r = self.ed.set_plot_area(plot);
             self.report(r, "Superficie de la parcela cambiada.");
@@ -1264,6 +1368,7 @@ impl ArchiSimApp {
             });
         });
         self.mass_form_group(ui, &m);
+        self.sculpt_groups(ui, &m);
         group(ui, "mass-figures", "Superficies", |ui| {
             text_row(ui, "Huella (m²)", "", &comma(f.footprint, 2));
             text_row(
