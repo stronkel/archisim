@@ -292,9 +292,165 @@ impl ArchiSimApp {
                 );
             });
         }
+        self.symbol_group(ui, o.object_type);
         group(ui, "object-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &o.guid.to_string());
         });
+    }
+
+    /// The plan symbol of an object's type (bloque 6): brought from a DXF,
+    /// stretched to the type's size or at its own, or taken away.
+    fn symbol_group(&mut self, ui: &mut Ui, t: ObjectTypeId) {
+        let Some(ty) = self.ed.model().object_type(t) else {
+            return;
+        };
+        let symbol = ty.symbol.clone();
+        let users = self.ed.model().object_type_users(t);
+        let mut import = false;
+        let mut fit_to = None;
+        let mut remove = false;
+        group(ui, "object-symbol", "Símbolo de planta", |ui| {
+            match &symbol {
+                None => props::note(
+                    ui,
+                    "El de la familia. Puedes poner uno tuyo de un DXF (un árbol, una persona, un mueble dibujados en CAD): lo dibujarán todos los objetos del tipo.",
+                ),
+                Some(s) => {
+                    props::text_row(ui, "Fichero", "De donde se importó", &s.source);
+                    props::text_row(ui, "Piezas", "", &s.items.len().to_string());
+                    let mut fit = s.fit;
+                    props::row(
+                        ui,
+                        "Tamaño",
+                        "Estirado: tan grande como el objeto (cambia con él); propio: a la medida del dibujo",
+                        |ui, w| {
+                            fit = props::choice(
+                                ui,
+                                ("symbol-fit", t.0),
+                                w,
+                                s.fit,
+                                &[(true, "Del objeto"), (false, "Del dibujo")],
+                            );
+                        },
+                    );
+                    if fit != s.fit {
+                        fit_to = Some(fit);
+                    }
+                }
+            }
+            ui.horizontal(|ui| {
+                if ui
+                    .button(if symbol.is_some() {
+                        "Cambiar…"
+                    } else {
+                        "Importar DXF…"
+                    })
+                    .on_hover_text(if users > 1 {
+                        format!("Lo dibujarán los {users} objetos de este tipo")
+                    } else {
+                        "Lo dibujará este objeto (es el único de su tipo)".to_string()
+                    })
+                    .clicked()
+                {
+                    import = true;
+                }
+                if symbol.is_some() && ui.button("Quitar").clicked() {
+                    remove = true;
+                }
+            });
+        });
+        if import {
+            self.pick_symbol(t);
+        }
+        if remove {
+            let r = self
+                .ed
+                .transact("Quitar símbolo", |m| m.set_object_type_symbol(t, None));
+            self.report(r, "Símbolo quitado: vuelve el de la familia.");
+        }
+        if let (Some(fit), Some(s)) = (fit_to, symbol) {
+            // Between stretched and real size, the drawing keeps its look:
+            // scaled by the type's size (or back).
+            let size = self
+                .ed
+                .model()
+                .object_type_box(t)
+                .map_or(1.0, |(lo, hi)| (hi[0] - lo[0]).max(hi[1] - lo[1]).max(0.01));
+            let k = if fit { 1.0 / size } else { size };
+            let origin = Point2::new(0.0, 0.0);
+            let tr = archisim_draft::Transform::scale(origin, k);
+            let symbol = archisim_core::PlanSymbol {
+                fit,
+                items: s
+                    .items
+                    .iter()
+                    .map(|i| archisim_core::SymbolItem {
+                        shape: archisim_draft::transform_shape(&i.shape, &tr),
+                        ..i.clone()
+                    })
+                    .collect(),
+                ..s
+            };
+            let r = self.ed.transact("Tamaño del símbolo", |m| {
+                m.set_object_type_symbol(t, Some(symbol))
+            });
+            self.report(r, "Tamaño del símbolo cambiado.");
+        }
+    }
+
+    /// Asks for a DXF and puts its drawing as the type's symbol: stretched
+    /// to the type for vegetation, at its own size for the rest.
+    pub(super) fn pick_symbol(&mut self, t: ObjectTypeId) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Símbolo de planta (DXF)")
+            .add_filter("Dibujo DXF", &["dxf"]);
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.pick_file() {
+            self.set_symbol_from(t, &path);
+        }
+    }
+
+    pub(super) fn set_symbol_from(&mut self, t: ObjectTypeId, path: &std::path::Path) {
+        let fit = self.ed.model().type_grows(t)
+            || self
+                .ed
+                .model()
+                .object_type(t)
+                .and_then(|ty| self.ed.model().family(ty.family))
+                .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people"));
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                self.complain(format!("No se puede leer {}: {e}.", path.display()));
+                return;
+            }
+        };
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        match archisim_export::symbol::symbol_from_dxf(&bytes, &name, fit) {
+            Ok(symbol) => {
+                let n = symbol.items.len();
+                let r = self.ed.transact("Símbolo de planta", |m| {
+                    m.set_object_type_symbol(t, Some(symbol))
+                });
+                self.report(
+                    r,
+                    &format!(
+                        "Símbolo de {name}: {n} piezas, {}.",
+                        if fit {
+                            "estirado al tamaño del objeto"
+                        } else {
+                            "a la medida del dibujo"
+                        }
+                    ),
+                );
+            }
+            Err(e) => self.complain(format!("No se puede usar {name}: {e}.")),
+        }
     }
 }
 

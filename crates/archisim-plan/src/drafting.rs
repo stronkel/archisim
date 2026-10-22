@@ -124,7 +124,11 @@ pub fn draw_drafts(
 
 /// Draws one drafting element.
 pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
-    let look = model.draft_look(d);
+    draw_shape(s, &d.shape, &model.draft_look(d), k);
+}
+
+/// Draws a drafting shape with a look (colour, weight, line type).
+pub fn draw_shape(s: &mut String, shape: &Shape, look: &archisim_core::DraftLook, k: f64) {
     let color = hex(look.color);
     let width = num(look.weight * k);
     let dash = dash_attr(look.line, k);
@@ -140,7 +144,7 @@ pub fn draw_draft(s: &mut String, model: &Model, d: &Draft, k: f64) {
             r#"<path d="{path}" stroke="{color}" stroke-width="{width}"{cap}{dash}/>"#
         );
     };
-    match &d.shape {
+    match shape {
         Shape::Line { a, b } => stroke(s, &format!("M{} L{}", pt(*a), pt(*b))),
         Shape::Polyline(p) => {
             let segs = polyline_segs(p);

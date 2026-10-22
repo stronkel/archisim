@@ -34,6 +34,32 @@ pub struct ObjectType {
     /// A 3D model shown instead of the family's boxes (scaled to the
     /// type's height).
     pub mesh: Option<MeshId>,
+    /// A plan symbol brought from a DXF, drawn instead of the family's
+    /// (bloque 6 de la revisión del 22/10/2026).
+    pub symbol: Option<PlanSymbol>,
+}
+
+/// A plan symbol of an object type: lines, arcs, circles and fills of a
+/// DXF drawing, centred on the middle of the type's plan box.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanSymbol {
+    /// Where it came from (the file's name), to show.
+    pub source: String,
+    /// Stretched to the type's size (its items then fit a square of side
+    /// 1 round the origin, drawn as large as the type's box) or at its
+    /// own size (its items in metres round the origin).
+    pub fit: bool,
+    pub items: Vec<SymbolItem>,
+}
+
+/// One drawn piece of a symbol, with its own colour and line weight if
+/// the drawing gave them (otherwise the category's ink and a fine line).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SymbolItem {
+    pub shape: crate::Shape,
+    pub color: Option<crate::Rgb>,
+    /// Paper millimetres.
+    pub weight: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,6 +187,27 @@ impl Model {
         }
     }
 
+    /// The plan symbol of an object type (none: the family's drawing).
+    pub fn set_object_type_symbol(
+        &mut self,
+        id: ObjectTypeId,
+        symbol: Option<PlanSymbol>,
+    ) -> Result<(), ModelError> {
+        if let Some(s) = &symbol {
+            if s.items.is_empty() {
+                return Err(ModelError::InvalidShape(
+                    "a plan symbol needs something drawn",
+                ));
+            }
+        }
+        let t = self
+            .object_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownObjectType(id))?;
+        t.symbol = symbol;
+        Ok(())
+    }
+
     /// Sets an object's own instance values (checked against its family).
     pub fn set_object_values(&mut self, id: ObjectId, values: Values) -> Result<(), ModelError> {
         let o = self.objects.get(&id).ok_or(ModelError::UnknownObject(id))?;
@@ -197,6 +244,7 @@ impl Model {
                 family,
                 values,
                 mesh: None,
+                symbol: None,
             },
         );
         Ok(id)

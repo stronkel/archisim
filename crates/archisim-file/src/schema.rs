@@ -188,6 +188,70 @@ pub(crate) struct ObjectType {
     /// The 3D model it shows (version 24).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mesh: Option<u64>,
+    /// A plan symbol from a DXF (version 30).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<SymbolOf>,
+}
+
+/// An object type's plan symbol (version 30): its source, whether it is
+/// stretched to the type's size, and its pieces as drafting shapes.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SymbolOf {
+    pub source: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fit: bool,
+    pub items: Vec<SymbolItemOf>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SymbolItemOf {
+    pub shape: crate::drafting::Shape,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weight: Option<f64>,
+}
+
+impl SymbolOf {
+    pub(crate) fn out(s: &core::PlanSymbol) -> Self {
+        SymbolOf {
+            source: s.source.clone(),
+            fit: s.fit,
+            items: s
+                .items
+                .iter()
+                .map(|i| SymbolItemOf {
+                    shape: crate::drafting::Shape::out(&i.shape),
+                    color: i.color.map(crate::drafting::hex),
+                    weight: i.weight,
+                })
+                .collect(),
+        }
+    }
+
+    pub(crate) fn into_core(self, element: &str) -> Result<core::PlanSymbol, FileError> {
+        let items = self
+            .items
+            .into_iter()
+            .map(|i| {
+                Ok(core::SymbolItem {
+                    shape: i.shape.into_core(element)?,
+                    color: i
+                        .color
+                        .map(|c| crate::drafting::parse_hex(element, &c))
+                        .transpose()?,
+                    weight: i.weight,
+                })
+            })
+            .collect::<Result<Vec<_>, FileError>>()?;
+        Ok(core::PlanSymbol {
+            source: self.source,
+            fit: self.fit,
+            items,
+        })
+    }
 }
 
 /// An object (version 7): its type, level, insertion point, turn
@@ -2342,6 +2406,7 @@ impl ProjectFile {
                     family: t.family.0,
                     values: values_out(&t.values),
                     mesh: t.mesh.map(|m| m.0),
+                    symbol: t.symbol.as_ref().map(SymbolOf::out),
                 })
                 .collect(),
             meshes: p.meshes.iter().map(crate::meshes::mesh_out).collect(),
@@ -3182,6 +3247,7 @@ impl ProjectFile {
                 family: core::FamilyId(t.family),
                 values,
                 mesh: t.mesh.map(core::MeshId),
+                symbol: t.symbol.map(|s| s.into_core(&element)).transpose()?,
             });
         }
         for m in self.meshes {
