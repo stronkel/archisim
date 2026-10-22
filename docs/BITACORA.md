@@ -14,6 +14,11 @@ El muestreo del Mac de Antonio (MacBook Pro 2016, Intel con AMD Radeon, macOS 15
 - **Texturas de los materiales opcionales** (Propiedades de la vista 3D → «Texturas de los materiales»). Apagadas, el código de texturas ni siquiera llega a la tarjeta gráfica. En los Mac con Intel vienen apagadas por defecto; la elección se guarda en las preferencias.
 - El vigilante solo apunta las esperas de verdad: un fotograma que no termina. Antes también apuntaba la ventana quieta esperando al ratón.
 
+**Confirmado por Antonio** (22/10/2026, noche): con las texturas apagadas el 3D vuelve a ir fluido en su Mac; eran las texturas.
+
+**Pendiente**
+- Una versión de las texturas que su tarjeta aguante (sin `switch` ni bucles en el sombreador, o hechas como imagen y no calculadas), para poder encenderlas también en los Mac con Intel.
+
 **Qué debe probar Antonio**
 1. Baja la 0.47.2 del pull request #53 y entra en el 3D con la demo: debe ir fluido, con colores lisos.
 2. En Propiedades de la vista 3D, enciende «Texturas de los materiales»: si se cuelga, era eso. Vuelve a abrir ArchiSim, quedarán apagadas.
