@@ -1429,7 +1429,8 @@ mod tests {
         assert_eq!(m.beams().count(), 1);
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
-        assert_eq!(doc.undo_label(), Some("Vistas guardadas"));
+        assert_eq!(doc.undo_label(), Some("Precios del presupuesto"));
+        assert_eq!(m.prices().count(), 28);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 3);

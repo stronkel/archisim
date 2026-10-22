@@ -147,6 +147,8 @@ impl ArchiSimApp {
         let mut save = false;
         egui::Window::new("Renderizado")
             .open(&mut open)
+            .pivot(egui::Align2::CENTER_CENTER)
+            .default_pos(ctx.content_rect().center())
             .default_size([760.0, 520.0])
             .resizable(true)
             .collapsible(false)

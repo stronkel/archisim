@@ -314,6 +314,8 @@ impl ArchiSimApp {
         let mut chosen: Option<PriceConcept> = None;
         egui::Window::new("Partida del banco de precios")
             .open(&mut open)
+            .pivot(egui::Align2::CENTER_CENTER)
+            .default_pos(ctx.content_rect().center())
             .default_size([680.0, 460.0])
             .collapsible(false)
             .show(ctx, |ui| {
