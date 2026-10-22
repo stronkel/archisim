@@ -723,7 +723,11 @@ impl ArchiSimApp {
             message_serial: 0,
             message_seen: (0, 0.0),
             styled: false,
-            v3d: View3dState::default(),
+            v3d: View3dState::with_textures(
+                prefs
+                    .textures_3d
+                    .unwrap_or_else(view3d_ui::default_textures),
+            ),
             gpu: None,
             coord: crate::coord::Coord::new(),
             coord_window: coord_ui::CoordWindow::default(),
@@ -1882,10 +1886,10 @@ impl eframe::App for ArchiSimApp {
                 crate::crash::watch_device(&g.device);
             }
         }
+        crate::crash::frame_start();
         crate::crash::stage("ventana");
         self.show(ui);
         crate::crash::frame_done();
-        crate::crash::stage("pintar la ventana en la tarjeta gráfica");
     }
 }
 

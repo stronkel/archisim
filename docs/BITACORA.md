@@ -6,6 +6,20 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (13) · v0.47.2: el 3D en el MacBook Pro de 2016
+
+El muestreo del Mac de Antonio (MacBook Pro 2016, Intel con AMD Radeon, macOS 15 con controladores parcheados) muestra el programa esperando, sin hacer nada: no se queda colgado nuestro código, sino la tarjeta gráfica al pintar. Solo pasa con algo dibujado, es decir, cuando corre el sombreador de las caras, que desde hoy (bloque Formas) dibuja las texturas de los materiales. El compilador de sombreadores de AMD de ese Mac se cae también con Safari.
+
+**Hecho**
+- **Texturas de los materiales opcionales** (Propiedades de la vista 3D → «Texturas de los materiales»). Apagadas, el código de texturas ni siquiera llega a la tarjeta gráfica. En los Mac con Intel vienen apagadas por defecto; la elección se guarda en las preferencias.
+- El vigilante solo apunta las esperas de verdad: un fotograma que no termina. Antes también apuntaba la ventana quieta esperando al ratón.
+
+**Qué debe probar Antonio**
+1. Baja la 0.47.2 del pull request #53 y entra en el 3D con la demo: debe ir fluido, con colores lisos.
+2. En Propiedades de la vista 3D, enciende «Texturas de los materiales»: si se cuelga, era eso. Vuelve a abrir ArchiSim, quedarán apagadas.
+
+---
+
 ## 2026-10-22 (12) · v0.47.1: lentitud, recuadro blanco y cierres del 3D en Mac
 
 En la rama `bloque/render-presto` (#53), sobre lo de los bloques 2–7, tras la prueba de Antonio («más lento al abrir en Windows y en Mac; al dibujar un muro o un forjado sale un borde blanco enorme que tapa la cuadrícula; el Mac se cierra al entrar en la vista 3D»).

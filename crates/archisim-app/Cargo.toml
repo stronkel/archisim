@@ -55,3 +55,5 @@ winresource = "0.1"
 
 [dev-dependencies]
 pollster = "0.4"
+# To check that the 3D shaders (with and without textures) are valid WGSL.
+naga = { version = "30", features = ["wgsl-in"] }

@@ -66,6 +66,8 @@ pub struct Prefs {
     pub recent: Vec<String>,
     /// The price bank (BC3) opened last, opened again when needed.
     pub price_bank: Option<String>,
+    /// The materials' textures in the 3D view (none: as the computer goes).
+    pub textures_3d: Option<bool>,
 }
 
 impl Default for Prefs {
@@ -79,6 +81,7 @@ impl Default for Prefs {
             welcomed: false,
             recent: Vec::new(),
             price_bank: None,
+            textures_3d: None,
         }
     }
 }
@@ -114,6 +117,7 @@ impl Prefs {
             "bienvenida": self.welcomed,
             "recientes": self.recent,
             "banco_de_precios": self.price_bank,
+            "texturas_3d": self.textures_3d,
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -161,6 +165,7 @@ impl Prefs {
                 .get("banco_de_precios")
                 .and_then(|x| x.as_str())
                 .map(str::to_string),
+            textures_3d: v.get("texturas_3d").and_then(|x| x.as_bool()),
         }
     }
 
@@ -211,6 +216,7 @@ mod tests {
             welcomed: true,
             recent: vec!["/proyectos/casa.archisim".into()],
             price_bank: Some("/bancos/bcca.bc3".into()),
+            textures_3d: Some(false),
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         // Unknown or broken files give the defaults.

@@ -96,6 +96,14 @@ pub struct View3dState {
     section_hover: Option<Face>,
     /// Pixels a point of the picture (2: supersampled), for its edges.
     edge_step: u32,
+    /// The materials' textures (brick, wood, stone…) are drawn.
+    pub textures: bool,
+}
+
+/// Textures on, except on Intel Macs: their AMD graphics drivers (on
+/// recent macOS, often patched) hang drawing them.
+pub fn default_textures() -> bool {
+    !cfg!(all(target_os = "macos", target_arch = "x86_64"))
 }
 
 impl Default for View3dState {
@@ -115,6 +123,7 @@ impl Default for View3dState {
             section_drag: None,
             section_hover: None,
             edge_step: 2,
+            textures: default_textures(),
         }
     }
 }
@@ -127,6 +136,28 @@ struct Gpu {
 }
 
 impl View3dState {
+    /// A 3D view with the textures on or off.
+    pub fn with_textures(textures: bool) -> Self {
+        Self {
+            textures,
+            ..Self::default()
+        }
+    }
+
+    /// Turns the textures on or off: the shaders are made again.
+    pub fn set_textures(&mut self, on: bool) {
+        if on == self.textures {
+            return;
+        }
+        self.textures = on;
+        if let Some(g) = self.gpu.take() {
+            if let Some(id) = g.texture {
+                g.state.renderer.write().free_texture(&id);
+            }
+        }
+        self.drawn = None;
+    }
+
     /// Forgets the scene, for a project just opened.
     pub fn reset(&mut self) {
         self.scene_key = None;
@@ -273,6 +304,7 @@ impl View3dState {
         if self.gpu.is_none() {
             crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
         }
+        let textures = self.textures;
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
             renderer: Renderer::new(
                 &state.device,
@@ -281,6 +313,7 @@ impl View3dState {
                     .get_downlevel_capabilities()
                     .flags
                     .contains(wgpu::DownlevelFlags::VIEW_FORMATS),
+                textures,
             ),
             state: state.clone(),
             texture: None,

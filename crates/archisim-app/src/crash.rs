@@ -86,10 +86,19 @@ pub fn watch_device(device: &wgpu::Device) {
 /// thread writes it down when a frame takes too long (the spinning
 /// beach ball on a Mac), so a hang leaves a trace as a crash does.
 static FRAMES: AtomicUsize = AtomicUsize::new(0);
+/// A frame is being made (between [`frame_start`] and [`frame_done`]):
+/// the window waiting for the mouse is not a hang.
+static IN_FRAME: AtomicBool = AtomicBool::new(false);
+
+/// Marks the start of a frame.
+pub fn frame_start() {
+    IN_FRAME.store(true, Ordering::Relaxed);
+}
 static STAGE: std::sync::Mutex<&'static str> = std::sync::Mutex::new("arranque");
 
 /// Marks the end of a frame.
 pub fn frame_done() {
+    IN_FRAME.store(false, Ordering::Relaxed);
     FRAMES.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -115,11 +124,11 @@ pub fn watch_frames() {
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 let now = FRAMES.load(Ordering::Relaxed);
-                if now != last {
+                if now != last || !IN_FRAME.load(Ordering::Relaxed) {
                     last = now;
                     since = std::time::Instant::now();
                     written = false;
-                } else if !written && last > 0 && since.elapsed().as_secs() >= 4 {
+                } else if !written && since.elapsed().as_secs() >= 4 {
                     written = true;
                     let what = STAGE.lock().map_or("¿?", |s| *s);
                     write(&format!(
