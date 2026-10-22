@@ -71,16 +71,24 @@ impl ArchiSimApp {
                     let new = ui
                         .scope(|ui| {
                             ui.set_min_width(170.0);
-                            text_edit_committed(ui, Id::unique(("level-name", id.0)), name, 170.0)
+                            text_edit_committed(
+                                ui,
+                                Id::unique(("levels-dialog-name", id.0)),
+                                name,
+                                170.0,
+                            )
                         })
                         .inner;
                     if let Some(new) = new {
                         let r = self.ed.rename_level(*id, &new);
                         self.report(r, "Planta renombrada.");
                     }
-                    if let Some(v) =
-                        length_field(ui, Id::unique(("level-elev", id.0)), *elevation, 70.0)
-                    {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique(("levels-dialog-elev", id.0)),
+                        *elevation,
+                        70.0,
+                    ) {
                         let r = self.ed.set_level_elevation(*id, v);
                         self.report(r, &format!("Planta a cota {}.", fmt_level(v)));
                     }
@@ -114,7 +122,9 @@ impl ArchiSimApp {
                 (Some(a), Some(b)) if a.2 - b.2 > 0.5 => a.2 - b.2,
                 _ => DEFAULT_STOREY_HEIGHT,
             };
-            if ui.button("➕ Añadir planta encima").clicked() {
+            let r = ui.button("➕ Añadir planta encima");
+            super::missions_ui::mark(ui.ctx(), "button:Añadir planta encima", r.rect);
+            if r.clicked() {
                 let n = levels.len();
                 let r = self
                     .ed

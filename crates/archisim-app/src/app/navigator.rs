@@ -133,7 +133,7 @@ impl ArchiSimApp {
         sections.sort_by(|a, b| a.2.cmp(&b.2).then(a.1.cmp(&b.1)));
         nav_section(ui, "nav-views", "VISTAS", |ui| {
             sub_header(ui, "Plantas", Some(("Plantas…", &mut levels_dialog)));
-            for (id, name, elevation) in &levels {
+            for (i, (id, name, elevation)) in levels.iter().enumerate() {
                 let kind = TabKind::Plan(*id);
                 let r = super::widgets::list_row_draggable(
                     ui,
@@ -145,6 +145,14 @@ impl ArchiSimApp {
                     10.0,
                 )
                 .on_hover_text("Abrir la planta; arrástrala a un plano para colocarla a su escala");
+                // The missions point at the lowest level, and at the top
+                // one for «abre la planta nueva».
+                if i + 1 == levels.len() {
+                    super::missions_ui::mark(ui.ctx(), "nav:planta", r.rect);
+                }
+                if i == 0 && levels.len() > 1 {
+                    super::missions_ui::mark(ui.ctx(), "nav:planta-alta", r.rect);
+                }
                 if r.clicked() {
                     open = Some(kind);
                 }
@@ -161,6 +169,7 @@ impl ArchiSimApp {
                 10.0,
             )
             .on_hover_text("Abrir la vista 3D; arrástrala a un plano para colocar una axonometría desde donde la miras");
+            super::missions_ui::mark(ui.ctx(), "nav:Vista 3D", r.rect);
             if r.clicked() {
                 open = Some(TabKind::ThreeD);
             }
@@ -764,7 +773,9 @@ fn sub_header(ui: &mut Ui, title: &str, button: Option<(&str, &mut bool)>) {
         ui.label(egui::RichText::new(title).small().color(p.muted));
         if let Some((text, clicked)) = button {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button(text).on_hover_text(hint).clicked() {
+                let r = ui.small_button(text).on_hover_text(hint);
+                super::missions_ui::mark(ui.ctx(), format!("button:{text}"), r.rect);
+                if r.clicked() {
                     *clicked = true;
                 }
             });

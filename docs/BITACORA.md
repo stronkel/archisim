@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (4) · Letra grande y misiones de iniciación (I6)
+
+Rama `bloque/iniciacion` (sobre `bloque/biblioteca-3d`), pull request para Antonio. v0.41. Sin cambios en el formato `.archisim` ni en el IFC. Descrito en `docs/INICIACION.md`. Con esto la interfaz por disciplinas (I1–I6) queda completa.
+
+**Hecho**
+- **Tamaño de letra** Normal, Grande (120 %) y Muy grande (140 %), en Vista → Tamaño de letra: crece toda la ventana a la vez (fichas, barra contextual, Propiedades, navegador, diálogos) sin que nada se corte.
+- **Preferencias recordadas** en este ordenador: tamaño de letra, tema claro u oscuro y teclas de AutoCAD (antes se perdían al cerrar).
+- **Misiones de iniciación**: la primera vez, una tarjeta ofrece empezarlas (y elegir el tamaño de letra); después, en Ayuda → Misiones de iniciación. Seis: tu primer muro, puertas y ventanas, tu primer forjado, míralo en 3D, tu primera planta y tu primer plano. Cada paso rodea en azul el control que hay que usar y se marca solo al hacerlo (también por otro camino: tecla, buscador). Saltar paso, dejar la misión, siguiente misión; las hechas quedan con ✓.
+- Corregido de paso: con la ventana Plantas abierta y Propiedades mostrando la planta, los campos de nombre y cota de los dos sitios se confundían (mismo identificador interno).
+
+**Pendiente**
+- Más misiones (secciones y alzados, tipos y materiales, cotas, Concepto, trabajo en equipo) según lo que Antonio vea que cuesta encontrar.
+- Recordar también la disposición de las paletas y la última carpeta.
+
+**Qué debe probar Antonio**
+1. Para ver la bienvenida como alguien nuevo, borra el fichero de preferencias (en Mac: `~/Library/Application Support/ArchiSim/preferencias.json`; en Windows: `%APPDATA%\ArchiSim\preferencias.json`) y abre ArchiSim. Elige «Grande» en la tarjeta y mira que todo crece; vuelve a «Normal» en Vista → Tamaño de letra.
+2. Pulsa Empezar y haz la primera misión siguiendo los anillos azules; prueba en la segunda a pulsar la tecla P en vez de la ficha.
+3. Cierra y vuelve a abrir: el tamaño y el tema oscuro (si lo pusiste) se mantienen y la bienvenida no vuelve a salir. En Ayuda → Misiones de iniciación, mira las ✓.
+4. Dime qué otras misiones pondrías y si los textos se entienden a la primera.
+
+---
+
 ## 2026-10-22 (3) · Biblioteca básica de modelos 3D (L3)
 
 Rama `bloque/biblioteca-3d` (sobre `bloque/modelado`), pull request para Antonio. v0.40. Sin cambios en el formato `.archisim`. Descrito en `docs/BIBLIOTECA_3D.md`.

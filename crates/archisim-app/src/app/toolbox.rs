@@ -1172,6 +1172,7 @@ impl ArchiSimApp {
                 let r = rail_button(ui, on, |painter, rect, color| {
                     glyphs::paint(painter, rect, d.glyph(), color)
                 });
+                super::missions_ui::mark(ui.ctx(), format!("rail:{}", d.name()), r.rect);
                 if r.on_hover_text(format!("{} — {}", d.name(), d.purpose()))
                     .clicked()
                 {
@@ -1211,6 +1212,7 @@ impl ArchiSimApp {
             let rect = Rect::from_min_size(min, Vec2::new(w, TILE_HEIGHT));
             let active = self.picked(t.pick);
             let resp = glyph_tile(ui, rect, t, active);
+            super::missions_ui::mark(ui.ctx(), format!("tile:{}", t.name), rect);
             let hint = match t.pick {
                 Pick::Later(what) => format!("{} — {} (llegará con {what})", t.name, t.hint),
                 _ if t.key.is_empty() => format!("{} — {}", t.name, t.hint),

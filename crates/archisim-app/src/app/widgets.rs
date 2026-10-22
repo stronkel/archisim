@@ -43,6 +43,7 @@ pub fn segmented<T: PartialEq + Copy>(
             Vec2::new(w, inner.height()),
         );
         let mut resp = ui.interact(r, base.with(i), Sense::click());
+        super::missions_ui::mark(ui.ctx(), format!("seg:{label}"), r);
         if !hint.is_empty() {
             resp = resp.on_hover_text(*hint);
         }
