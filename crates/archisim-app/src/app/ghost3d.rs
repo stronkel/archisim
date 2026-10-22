@@ -371,7 +371,12 @@ impl ArchiSimApp {
             self.plan_ghost.raster = raster;
         }
         if let Some((tex, _)) = &self.plan_ghost.image {
+            // The drawing under it is hidden (it is drawn again, changed),
+            // but not the grid: without it the region was a white box.
             painter.rect_filled(screen, egui::CornerRadius::ZERO, PAPER);
+            if self.show_grid {
+                self.draw_grid(&painter.with_clip_rect(screen.intersect(rect)), rect);
+            }
             painter.image(
                 tex.id(),
                 screen,

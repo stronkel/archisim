@@ -745,6 +745,14 @@ impl ArchiSimApp {
         });
     }
 
+    /// The last session ended with an error: says where its report is.
+    pub fn previous_crash(&mut self, log: &std::path::Path) {
+        self.complain(format!(
+            "La última vez ArchiSim se cerró por un error. El informe está en {}: mándaselo a Claude para arreglarlo.",
+            log.display()
+        ));
+    }
+
     fn complain(&mut self, text: impl Into<String>) {
         self.message_serial += 1;
         self.message = Some(Message {
@@ -1870,6 +1878,9 @@ impl eframe::App for ArchiSimApp {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         if self.gpu.is_none() {
             self.gpu = frame.wgpu_render_state().cloned();
+            if let Some(g) = &self.gpu {
+                crate::crash::watch_device(&g.device);
+            }
         }
         self.show(ui);
     }

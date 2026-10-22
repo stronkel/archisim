@@ -8,7 +8,7 @@
 
 use archisim_core::{MassMesh, MaterialId, Model, Point2, SlabId, SweepKind, SweepSide, WallId};
 
-use crate::{wall_geometry, EndCut};
+use crate::{wall_geometry_in, EndCut, WallIndex};
 
 /// One run of an accessory.
 #[derive(Debug, Clone)]
@@ -26,8 +26,26 @@ fn y_range(p: &[Point2]) -> (f64, f64) {
     })
 }
 
-/// The runs of the accessories of a wall's type.
+/// The runs of the accessories of a wall's type. For many walls, build a
+/// [`WallIndex`] once and call [`wall_sweep_pieces_in`].
 pub fn wall_sweep_pieces(model: &Model, id: WallId) -> Vec<SweepPiece> {
+    if !has_sweeps(model, id) {
+        return Vec::new();
+    }
+    wall_sweep_pieces_in(&WallIndex::new(model), id)
+}
+
+/// Whether a wall's type has accessories (cheap: no geometry).
+pub fn has_sweeps(model: &Model, id: WallId) -> bool {
+    model
+        .wall(id)
+        .and_then(|w| model.wall_type(w.wall_type))
+        .is_some_and(|t| !t.sweeps.is_empty())
+}
+
+/// [`wall_sweep_pieces`] with the walls' index of the model.
+pub fn wall_sweep_pieces_in(idx: &WallIndex, id: WallId) -> Vec<SweepPiece> {
+    let model = idx.model;
     let Some(wall) = model.wall(id) else {
         return Vec::new();
     };
@@ -37,7 +55,7 @@ pub fn wall_sweep_pieces(model: &Model, id: WallId) -> Vec<SweepPiece> {
     if wt.sweeps.is_empty() {
         return Vec::new();
     }
-    let Some(g) = wall_geometry(model, id) else {
+    let Some(g) = wall_geometry_in(idx, id) else {
         return Vec::new();
     };
     if g.arc.is_some() {
@@ -50,7 +68,7 @@ pub fn wall_sweep_pieces(model: &Model, id: WallId) -> Vec<SweepPiece> {
     let n = u.perp_left();
     let base = model.level(wall.level).map_or(0.0, |l| l.elevation) + wall.base_offset;
     let h = wall.height;
-    let openings = crate::openings_in_wall(model, id);
+    let openings = idx.openings_in_wall(id);
     let mut out = Vec::new();
     for (index, s) in wt.sweeps.iter().enumerate() {
         let face = match s.side {

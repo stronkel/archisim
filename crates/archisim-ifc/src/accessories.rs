@@ -54,11 +54,12 @@ impl Exporter<'_> {
             }
         }
         let mut runs: Vec<(u64, GlobalId, LevelId, String, SweepPiece)> = Vec::new();
+        let idx = archisim_geom::WallIndex::new(model);
         for w in model.walls() {
             let type_name = model
                 .wall_type(w.wall_type)
                 .map_or(String::new(), |t| t.name.clone());
-            for p in archisim_geom::sweeps::wall_sweep_pieces(model, w.id) {
+            for p in archisim_geom::sweeps::wall_sweep_pieces_in(&idx, w.id) {
                 runs.push((w.id.0, w.guid.clone(), w.level, type_name.clone(), p));
             }
         }

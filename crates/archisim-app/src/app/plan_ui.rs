@@ -1249,7 +1249,7 @@ impl ArchiSimApp {
         }
     }
 
-    fn draw_grid(&self, painter: &egui::Painter, rect: Rect) {
+    pub(super) fn draw_grid(&self, painter: &egui::Painter, rect: Rect) {
         let (lo, hi) = self.view.visible(rect);
         for (step, color) in [(1.0, GRID_MINOR), (5.0, GRID_MAJOR)] {
             if step * self.view.zoom < 8.0 {

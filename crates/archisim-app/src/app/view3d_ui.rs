@@ -20,8 +20,36 @@ use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
 
 /// The picture is drawn at twice the screen resolution and scaled down,
-/// which smooths edges (supersampling).
-const SUPERSAMPLE: f32 = 2.0;
+/// which smooths edges (supersampling) — on ordinary screens. A Retina
+/// screen already has two pixels a point: doubling again made pictures of
+/// 5000 × 3000 pixels with four samples each, hundreds of megabytes of the
+/// graphics card's memory, for no visible gain.
+fn supersample(ppp: f32) -> f32 {
+    if ppp >= 1.5 {
+        1.0
+    } else {
+        2.0
+    }
+}
+
+/// The largest side of the picture, in pixels.
+const MAX_SIDE: f32 = 4096.0;
+
+/// The picture's size for a view of `size` points: at most [`MAX_SIDE`]
+/// on its longer side, keeping its shape.
+fn picture_size(size: Vec2, ppp: f32) -> ([u32; 2], u32) {
+    let ss = supersample(ppp);
+    let w = size.x * ppp * ss;
+    let h = size.y * ppp * ss;
+    let k = (MAX_SIDE / w.max(h).max(1.0)).min(1.0);
+    (
+        [
+            ((w * k).round() as u32).max(1),
+            ((h * k).round() as u32).max(1),
+        ],
+        ss as u32,
+    )
+}
 
 /// Which drawing the central area shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +94,8 @@ pub struct View3dState {
     section_drag: Option<Face>,
     /// The handle under the cursor.
     section_hover: Option<Face>,
+    /// Pixels a point of the picture (2: supersampled), for its edges.
+    edge_step: u32,
 }
 
 impl Default for View3dState {
@@ -84,6 +114,7 @@ impl Default for View3dState {
             section_saved: None,
             section_drag: None,
             section_hover: None,
+            edge_step: 2,
         }
     }
 }
@@ -233,6 +264,11 @@ impl View3dState {
         gpu_state: Option<&egui_wgpu::RenderState>,
         size: [u32; 2],
     ) -> Option<egui::TextureId> {
+        // After an error of the graphics card nothing more is drawn (it is
+        // written in errores.log): better a message than a crash.
+        if crate::crash::GPU_FAILED.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
         let state = gpu_state?;
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
             renderer: Renderer::new(
@@ -260,7 +296,7 @@ impl View3dState {
                 &gpu.state.queue,
                 &self.camera,
                 size,
-                SUPERSAMPLE as u32,
+                self.edge_step,
             );
             let view = gpu.renderer.display_view()?;
             let mut egui_renderer = gpu.state.renderer.write();
@@ -340,11 +376,8 @@ impl View3dState {
                 );
             }
         }
-        let ppp = ui.ctx().pixels_per_point();
-        let px = [
-            ((size.x * ppp * SUPERSAMPLE).round() as u32).clamp(1, 4096),
-            ((size.y * ppp * SUPERSAMPLE).round() as u32).clamp(1, 4096),
-        ];
+        let (px, ss) = picture_size(size, ui.ctx().pixels_per_point());
+        self.edge_step = ss;
         match self.draw(gpu_state, px) {
             Some(texture) => {
                 painter.image(
@@ -550,11 +583,8 @@ impl ArchiSimApp {
         );
 
         // The picture.
-        let ppp = ctx.pixels_per_point();
-        let px = [
-            ((size.x * ppp * SUPERSAMPLE).round() as u32).clamp(1, 8192),
-            ((size.y * ppp * SUPERSAMPLE).round() as u32).clamp(1, 8192),
-        ];
+        let (px, ss) = picture_size(size, ctx.pixels_per_point());
+        v.edge_step = ss;
         match v.draw(self.gpu.as_ref(), px) {
             Some(texture) => {
                 painter.image(
@@ -569,8 +599,14 @@ impl ArchiSimApp {
                 painter.text(
                     rect.center(),
                     Align2::CENTER_CENTER,
-                    "La vista 3D necesita la tarjeta gráfica (Vulkan, DirectX 12 o Metal),\n\
-                     que no está disponible en este equipo.",
+                    if crate::crash::GPU_FAILED.load(std::sync::atomic::Ordering::Relaxed) {
+                        "La tarjeta gráfica dio un error al dibujar el 3D y la vista se ha detenido\n\
+                         (está anotado en errores.log, en la carpeta de ajustes de ArchiSim).\n\
+                         Guarda el proyecto y vuelve a abrir ArchiSim."
+                    } else {
+                        "La vista 3D necesita la tarjeta gráfica (Vulkan, DirectX 12 o Metal),\n\
+                         que no está disponible en este equipo."
+                    },
                     FontId::proportional(14.0),
                     Color32::from_gray(60),
                 );

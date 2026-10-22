@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-22 (12) · Lentitud, recuadro blanco y cierres del 3D en Mac
+
+En la rama `bloque/render-presto` (#53), sobre lo de los bloques 2–7, tras la prueba de Antonio («más lento al abrir en Windows y en Mac; al dibujar un muro o un forjado sale un borde blanco enorme que tapa la cuadrícula; el Mac se cierra al entrar en la vista 3D»).
+
+**Hecho**
+- **Lentitud**: medido con `archisim medir` frente a `main`. Dos culpables:
+  - Los accesorios de los tipos (bloque 5) rehacían el índice de muros de todo el proyecto por cada muro. Con 1100 muros, la planta en pantalla había pasado de 17 a 877 ms y el 3D de 170 a 954 ms. Ahora se calcula una vez: 39 y 155 ms.
+  - Buscar una familia por su nombre leía y analizaba las 54 recetas cada vez. Empezar un proyecto nuevo había subido a 0,5 s; ahora se leen una sola vez y son 0,02 s.
+- **Recuadro blanco**: la vista previa en planta (bloque 3) tapaba su zona con papel blanco. Ahora vuelve a dibujar la cuadrícula encima del papel, así que solo se ve lo que cambia.
+- **Mac y 3D**:
+  - En pantallas Retina el 3D se dibujaba al doble de una resolución que ya es doble: imágenes de unos 5000 × 3000 píxeles con cuatro muestras, cientos de MB de la tarjeta gráfica. Ahora, en Retina, a la resolución de la pantalla (y nunca más de 4096 píxeles de lado).
+  - Un error de la tarjeta gráfica ya no cierra el programa: la vista 3D se detiene con un aviso.
+  - **Registro de errores**: cualquier fallo se apunta en `errores.log`, en la carpeta de ajustes de ArchiSim. Al abrir otra vez, ArchiSim lo aparta como `errores-anterior.log` y avisa de dónde está.
+
+**Pendiente**
+- Si el Mac se sigue cerrando, leer su `errores-anterior.log`. No tengo un Mac para reproducirlo.
+
+**Qué debe probar Antonio**
+1. Abre ArchiSim en Windows y en Mac: ¿arranca y abre la demo con la rapidez de antes?
+2. Dibuja un muro y un forjado: mientras los colocas, la cuadrícula debe seguir viéndose alrededor (sin recuadro blanco).
+3. En el Mac, entra en la vista 3D (F3) varias veces, gira y haz zoom. Si se cierra, vuelve a abrir ArchiSim: avisará de un fichero `errores-anterior.log` en `~/Library/Application Support/ArchiSim/` (en Windows, `%APPDATA%\ArchiSim\`). Mándamelo.
+
+---
+
 ## 2026-10-22 (11) · Revisión de Antonio, bloque 7: Render y Presto
 
 Rama `bloque/render-presto` (sobre `bloque/simbolos`), pull request para Antonio. v0.47. Formato `.archisim` versión 31 (abre todas las anteriores). Sin cambios en el IFC. Descrito en `docs/RENDER_PRESUPUESTOS.md`. Con este bloque la revisión del 22/10/2026 queda completa.

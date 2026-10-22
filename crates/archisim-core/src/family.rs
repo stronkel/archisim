@@ -175,39 +175,45 @@ pub fn expand_shared_pieces(source: &str) -> Result<String, FamilyError> {
 
 /// The system families: `(name, recipe with its pieces expanded)`.
 pub fn system_families() -> Vec<(String, String)> {
-    SYSTEM_SOURCES
-        .iter()
-        .map(|src| {
-            let source = expand_shared_pieces(src).expect("system families expand");
-            let name = archisim_family::parse(&source)
-                .expect("system families parse")
-                .name;
-            (name, source)
-        })
-        .collect()
+    parsed(&SYSTEM_SOURCES, &SYSTEM_PARSED).clone()
 }
+
+/// The recipes of `sources` expanded and named, worked out once: the
+/// sources are fixed, and expanding and parsing them all each time a
+/// family is looked up by name made opening a project slow.
+fn parsed<'a>(
+    sources: &[&str],
+    cell: &'a std::sync::OnceLock<Vec<(String, String)>>,
+) -> &'a Vec<(String, String)> {
+    cell.get_or_init(|| {
+        sources
+            .iter()
+            .map(|src| {
+                let source = expand_shared_pieces(src).expect("system families expand");
+                let name = archisim_family::parse(&source)
+                    .expect("system families parse")
+                    .name;
+                (name, source)
+            })
+            .collect()
+    })
+}
+
+static SYSTEM_PARSED: std::sync::OnceLock<Vec<(String, String)>> = std::sync::OnceLock::new();
+static OBJECT_PARSED: std::sync::OnceLock<Vec<(String, String)>> = std::sync::OnceLock::new();
 
 /// The system object families: `(name, recipe)`.
 pub fn object_families() -> Vec<(String, String)> {
-    OBJECT_SOURCES
-        .iter()
-        .map(|src| {
-            let source = expand_shared_pieces(src).expect("object families expand");
-            let name = archisim_family::parse(&source)
-                .expect("object families parse")
-                .name;
-            (name, source)
-        })
-        .collect()
+    parsed(&OBJECT_SOURCES, &OBJECT_PARSED).clone()
 }
 
 /// The recipe of one system family (door, window or object), by name.
 pub fn system_family(name: &str) -> Option<String> {
-    system_families()
-        .into_iter()
-        .chain(object_families())
+    parsed(&SYSTEM_SOURCES, &SYSTEM_PARSED)
+        .iter()
+        .chain(parsed(&OBJECT_SOURCES, &OBJECT_PARSED))
         .find(|(n, _)| n == name)
-        .map(|(_, s)| s)
+        .map(|(_, s)| s.clone())
 }
 
 /// The system family that makes a door or window of the given operation
