@@ -106,6 +106,11 @@ Uso:
       Convierte una planta o un plano en SVG en una imagen PNG, a 200
       puntos por pulgada si no se dice otra cosa.
 
+  archisim render <proyecto.archisim> [imagen.png] [ancho]
+      Hace una imagen realista del proyecto visto desde el suroeste, con el
+      sol del proyecto, sus sombras y la luz del cielo (1600 píxeles de
+      ancho si no se dice otra cosa).
+
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
 ";
@@ -132,6 +137,23 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("render") => {
+            match args.get(1) {
+                Some(project) => {
+                    let project = PathBuf::from(project);
+                    let png = args
+                        .get(2)
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| project.with_extension("png"));
+                    let width: usize = args.get(3).and_then(|w| w.parse().ok()).unwrap_or(1600);
+                    report(run_render(&project, &png, width))
+                }
+                None => {
+                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho]");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("exportar") | Some("export") => match args.get(1) {
             Some(project) => {
                 let project = PathBuf::from(project);
@@ -365,6 +387,35 @@ fn run_cte(project: &Path, csv: Option<&Path>) -> Result<(), Box<dyn std::error:
         std::fs::write(csv, r.to_csv(&model))?;
         println!("\nInforme CSV: {}", csv.display());
     }
+    Ok(())
+}
+
+fn run_render(project: &Path, png: &Path, width: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let model = model.flattened().map_err(|e| format!("{e}"))?;
+    let width = width.clamp(16, 8000);
+    let options = archisim_render::Options {
+        width,
+        height: width * 5 / 8,
+        ..Default::default()
+    };
+    let view = archisim_render::View::fit(&model);
+    let start = std::time::Instant::now();
+    let img = archisim_render::render(&model, &view, &options, &|_| {});
+    let bytes =
+        archisim_export::png::encode_rgb(img.width as u32, img.height as u32, &img.rgb, 96.0);
+    if let Some(dir) = png.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(png, bytes)?;
+    println!(
+        "Imagen de {} × {} en {:.1} s: {}",
+        img.width,
+        img.height,
+        start.elapsed().as_secs_f64(),
+        png.display()
+    );
     Ok(())
 }
 

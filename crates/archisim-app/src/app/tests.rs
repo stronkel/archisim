@@ -5709,3 +5709,20 @@ fn object_types_take_plan_symbols_from_dxf() {
     let _ = id;
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn render_makes_a_picture_from_the_camera() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.render.quality = super::render_ui::RenderQuality::Draft;
+    h.app.start_render();
+    assert!(h.app.render.busy());
+    let start = std::time::Instant::now();
+    while h.app.render.busy() && start.elapsed().as_secs() < 120 {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.frame();
+    }
+    let img = h.app.render.image.as_ref().expect("a picture");
+    assert_eq!(img.width, 800);
+    assert_eq!(img.rgb.len(), img.width * img.height * 3);
+    assert!(h.app.render.open);
+}

@@ -234,6 +234,7 @@ dependencies = [
  "archisim-library",
  "archisim-mesh",
  "archisim-plan",
+ "archisim-render",
  "archisim-team",
  "bytemuck",
  "eframe",
@@ -274,6 +275,7 @@ dependencies = [
  "archisim-library",
  "archisim-mesh",
  "archisim-plan",
+ "archisim-render",
  "archisim-team",
  "resvg",
 ]
@@ -407,6 +409,14 @@ dependencies = [
 [[package]]
 name = "archisim-props"
 version = "0.46.0"
+
+[[package]]
+name = "archisim-render"
+version = "0.46.0"
+dependencies = [
+ "archisim-core",
+ "archisim-geom",
+]
 
 [[package]]
 name = "archisim-team"

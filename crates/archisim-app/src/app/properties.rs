@@ -805,6 +805,7 @@ impl ArchiSimApp {
                 }
             });
         });
+        self.render_group(ui);
         self.section_box_group(ui);
     }
 

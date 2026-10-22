@@ -281,6 +281,7 @@ pub struct ArchiSimApp {
     /// Stretching an object by a handle in the 3D view.
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
+    render: render_ui::RenderState,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
     /// The first point of the strip or tie beam being drawn.
@@ -585,6 +586,7 @@ impl ArchiSimApp {
             // (never in the tests).
             object_grip: None,
             object_grip_hover: None,
+            render: Default::default(),
             start: start_ui::StartScreen {
                 open: !cfg!(test),
                 ..Default::default()
@@ -1601,6 +1603,7 @@ impl ArchiSimApp {
         self.layers_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
+        self.render_window(&ctx);
         self.missions_frame(&ctx);
         self.start_screen(&ctx);
         self.sync_prefs(&ctx);
@@ -2118,6 +2121,7 @@ mod priorities_ui;
 mod properties;
 mod props;
 mod railing_ui;
+mod render_ui;
 mod roof_ui;
 mod room_tool_ui;
 mod room_ui;
