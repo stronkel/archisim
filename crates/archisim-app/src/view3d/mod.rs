@@ -3,6 +3,7 @@
 //! shapes the IFC export writes.
 
 pub mod camera;
+pub mod cutaway;
 pub mod render;
 pub mod scene;
 pub mod section_box;

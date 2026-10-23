@@ -57,16 +57,32 @@ impl Builder {
 
     /// A box from `lo` to `hi` with its edges rounded `r` (0: sharp).
     pub fn rbox(&mut self, role: &'static str, lo: P3, hi: P3, r: f64) {
-        self.rbox_faces(role, lo, hi, r, [true; 6], false);
+        self.rbox_faces(role, lo, hi, r, [true; 6], false, None);
+    }
+
+    /// A cushion: a rounded box whose two big faces swell `puff` in the
+    /// middle, as a stuffed cushion does (its sides stay straight).
+    pub fn pillow(&mut self, role: &'static str, lo: P3, hi: P3, r: f64, puff: f64) {
+        self.rbox_faces(role, lo, hi, r, [true; 6], false, Some(puff));
     }
 
     /// The hollow of a basin: a rounded box without its top, seen from
     /// inside (its faces looking in).
     pub fn hollow(&mut self, role: &'static str, lo: P3, hi: P3, r: f64) {
-        self.rbox_faces(role, lo, hi, r, [true, true, true, true, true, false], true);
+        self.rbox_faces(
+            role,
+            lo,
+            hi,
+            r,
+            [true, true, true, true, true, false],
+            true,
+            None,
+        );
     }
 
-    /// The faces of a rounded box: −x, +x, −y, +y, −z, +z, which to make.
+    /// The faces of a rounded box: −x, +x, −y, +y, −z, +z, which to make;
+    /// with `puff`, swollen as a cushion along its thinnest side.
+    #[allow(clippy::too_many_arguments)]
     fn rbox_faces(
         &mut self,
         role: &'static str,
@@ -75,6 +91,7 @@ impl Builder {
         r: f64,
         which: [bool; 6],
         inside: bool,
+        puff: Option<f64>,
     ) {
         let size = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
         if size.iter().any(|s| *s <= 1e-6) {
@@ -86,6 +103,8 @@ impl Builder {
             .min(size[2] / 2.0)
             .max(0.0);
         let steps = if r > 1e-4 { 4 } else { 0 };
+        // A cushion's straight runs are divided, for it to swell.
+        let runs = if puff.is_some() { 4 } else { 1 };
         // Coordinates along each axis: the rounding at each end, then the
         // straight run.
         let coords = |k: usize| -> Vec<f64> {
@@ -93,6 +112,9 @@ impl Builder {
             for s in 1..=steps {
                 let t = std::f64::consts::FRAC_PI_2 * s as f64 / steps as f64;
                 v.push(lo[k] + r - r * t.cos());
+            }
+            for s in 1..runs {
+                v.push(lo[k] + r + (size[k] - 2.0 * r) * s as f64 / runs as f64);
             }
             for s in (0..steps).rev() {
                 let t = std::f64::consts::FRAC_PI_2 * s as f64 / steps as f64;
@@ -125,6 +147,21 @@ impl Builder {
                 ]
             }
         };
+        // The swelling: along the thinnest side, most in the middle of
+        // the big faces, nothing at their edges.
+        let thin = (0..3)
+            .min_by(|a, b| size[*a].total_cmp(&size[*b]))
+            .unwrap_or(2);
+        let swell = |mut q: P3| -> P3 {
+            let Some(puff) = puff else {
+                return q;
+            };
+            let n = |k: usize| ((q[k] - (lo[k] + hi[k]) / 2.0) / (size[k] / 2.0)).clamp(-1.0, 1.0);
+            let (u, v) = ((thin + 1) % 3, (thin + 2) % 3);
+            let f = (1.0 - n(u) * n(u)) * (1.0 - n(v) * n(v));
+            q[thin] += puff * n(thin) * f;
+            q
+        };
         for (f, make) in which.iter().enumerate() {
             if !make {
                 continue;
@@ -140,7 +177,7 @@ impl Builder {
                     q[a] = if positive { hi[a] } else { lo[a] };
                     q[u] = *x;
                     q[v] = *y;
-                    ids[i][j] = self.point(round(q));
+                    ids[i][j] = self.point(swell(round(q)));
                 }
             }
             // u × v = a: counter-clockwise from +a.

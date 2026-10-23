@@ -38,7 +38,12 @@ struct Globals {
     clip_max: [f32; 4],
     eye: [f32; 4],
     forward: [f32; 4],
+    cut: [f32; 4],
+    front: [f32; 4],
 }
+
+/// A vertex buffer and how many vertices it has.
+type Triangles = (wgpu::Buffer, u32);
 
 /// Render targets of one size.
 struct Targets {
@@ -68,11 +73,18 @@ pub struct Renderer {
     targets: Option<Targets>,
     opaque: Option<(wgpu::Buffer, u32)>,
     glass: Option<(wgpu::Buffer, u32)>,
+    /// What is being stretched, drawn over the scene (whose own copy of
+    /// it is hidden): its opaque and glass triangles.
+    overlay: Option<(Option<Triangles>, Option<Triangles>)>,
     /// The device can view a texture in another format of the same bytes
     /// (wgpu's `VIEW_FORMATS`); otherwise the picture is copied for display.
     view_formats: bool,
     /// The section box, if on: everything outside it is cut away.
     clip: Option<(glam::Vec3, glam::Vec3)>,
+    /// The cut away walls, if on.
+    cut: Option<super::cutaway::CutRule>,
+    /// Something of the scene is selected: the contour pass outlines it.
+    selected: bool,
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
@@ -156,7 +168,7 @@ impl Renderer {
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32, 4 => Float32x2],
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32, 4 => Float32x2, 5 => Float32x4, 6 => Float32],
         };
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -268,8 +280,11 @@ impl Renderer {
             targets: None,
             opaque: None,
             glass: None,
+            overlay: None,
             view_formats,
             clip: None,
+            cut: None,
+            selected: false,
             transparent: false,
         }
     }
@@ -284,20 +299,28 @@ impl Renderer {
         self.clip = clip;
     }
 
+    /// Sets (or clears) the cut away walls of the next pictures.
+    pub fn set_cut(&mut self, cut: Option<super::cutaway::CutRule>) {
+        self.cut = cut;
+    }
+
+    /// Uploads (or clears) what is drawn over the scene in place of the
+    /// selected element (`Scene::of_solids`).
+    pub fn set_overlay(&mut self, device: &wgpu::Device, overlay: Option<&Scene>) {
+        self.overlay = overlay.map(|o| {
+            (
+                upload(device, "overlay", &o.opaque),
+                upload(device, "overlay glass", &o.glass),
+            )
+        });
+    }
+
     /// Uploads the scene's triangles.
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
-        let upload = |label: &str, v: &[Vertex]| {
-            (!v.is_empty()).then(|| {
-                let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(label),
-                    contents: bytemuck::cast_slice(v),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-                (buf, v.len() as u32)
-            })
-        };
+        let upload = |label: &str, v: &[Vertex]| upload(device, label, v);
         self.opaque = upload("opaque", &scene.opaque);
         self.glass = upload("glass", &scene.glass);
+        self.selected = scene.opaque.iter().any(|v| v.select > 0.5);
     }
 
     fn targets(&mut self, device: &wgpu::Device, size: [u32; 2]) -> &Targets {
@@ -395,7 +418,16 @@ impl Renderer {
             proj: camera.projection(aspect).to_cols_array_2d(),
             view: camera.view().to_cols_array_2d(),
             sun: [sun.x, sun.y, sun.z, 0.0],
-            edges: [edge_step.max(1) as f32, 1.0, 0.0, 0.0],
+            edges: [
+                edge_step.max(1) as f32,
+                1.0,
+                if self.selected || self.overlay.is_some() {
+                    1.0
+                } else {
+                    0.0
+                },
+                if self.overlay.is_some() { 1.0 } else { 0.0 },
+            ],
             clip_min: self
                 .clip
                 .map_or([0.0; 4], |(lo, _)| [lo.x, lo.y, lo.z, 1.0]),
@@ -410,6 +442,8 @@ impl Renderer {
                 let f = camera.forward();
                 [f.x, f.y, f.z, 0.0]
             },
+            cut: super::cutaway::CutRule::uniforms(self.cut.as_ref()).0,
+            front: super::cutaway::CutRule::uniforms(self.cut.as_ref()).1,
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);
@@ -459,7 +493,8 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            if let Some((buf, n)) = &self.opaque {
+            let over = self.overlay.as_ref().and_then(|o| o.0.as_ref());
+            for (buf, n) in self.opaque.iter().chain(over) {
                 pass.set_pipeline(&self.model_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
@@ -484,7 +519,8 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            if let Some((buf, n)) = &self.glass {
+            let over = self.overlay.as_ref().and_then(|o| o.1.as_ref());
+            for (buf, n) in self.glass.iter().chain(over) {
                 pass.set_pipeline(&self.glass_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
@@ -587,4 +623,16 @@ impl Renderer {
         buffer.unmap();
         Some((w, h, out))
     }
+}
+
+/// A vertex buffer of some triangles (none if there are none).
+fn upload(device: &wgpu::Device, label: &str, v: &[Vertex]) -> Option<(wgpu::Buffer, u32)> {
+    (!v.is_empty()).then(|| {
+        let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(label),
+            contents: bytemuck::cast_slice(v),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        (buf, v.len() as u32)
+    })
 }

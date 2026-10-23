@@ -1,7 +1,7 @@
 family "Sofá"
   category furniture
   host none
-  version 1
+  version 2
   description "Sofá recto con brazos y respaldo"
   folder "Sofás y sillones"
 
@@ -41,3 +41,8 @@ outputs
   generator = "props:sofa"
   ifc_class = "IfcFurniture"
   ifc_type = "SOFA"
+
+# Stretched by its handles, a seat more (or less) when the seats would be
+# too wide (or narrow): as in Paralives, the sofa grows by pieces.
+stretch
+  places = if (width - 0.4) / places >= 0.5 and (width - 0.4) / places <= 0.8 then places else (width - 0.4) / 0.62

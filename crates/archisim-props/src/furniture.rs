@@ -93,13 +93,20 @@ pub fn sofa(b: &mut Builder, p: &Params) {
     for i in 0..places as usize {
         let a = x0 + arm + i as f64 * pw + 0.005;
         let c = a + pw - 0.01;
-        b.rbox("cushion", [a, back, base_top], [c, d - 0.01, seat], 0.05);
+        b.pillow(
+            "cushion",
+            [a, back, base_top],
+            [c, d - 0.01, seat],
+            0.05,
+            0.025,
+        );
         let top = if style == 2 { h - 0.02 } else { h + 0.04 };
-        b.rbox(
+        b.pillow(
             "cushion",
             [a, back - 0.02, seat - 0.02],
             [c, back + 0.17, top],
             0.06,
+            0.035,
         );
     }
 }
@@ -164,9 +171,15 @@ pub fn chair_at(b: &mut Builder, p: &Params, x: f64, y0: f64, dir: f64, style: i
                 );
             }
             let (a, c) = span(0.0, d);
-            b.rbox("mat", [x0, a, seat - 0.07], [x1, c, seat + 0.02], 0.035);
+            b.pillow(
+                "mat",
+                [x0, a, seat - 0.07],
+                [x1, c, seat + 0.02],
+                0.035,
+                0.015,
+            );
             let (a, c) = span(d - 0.07, d);
-            b.rbox("mat", [x0, a, seat], [x1, c, h], 0.035);
+            b.pillow("mat", [x0, a, seat], [x1, c, h], 0.035, 0.015);
         }
         _ => {
             let leg = 0.038;
@@ -456,21 +469,23 @@ pub fn bed(b: &mut Builder, p: &Params) {
         [-x0 - 0.01, l - 0.01, top],
         0.06,
     );
-    b.rbox(
+    b.pillow(
         "duvet",
         [x0 - 0.01, l * 0.3, top - 0.12],
         [-x0 + 0.01, l + 0.01, top + 0.06],
         0.05,
+        0.02,
     );
     let pillows = if w > 1.2 { 2 } else { 1 };
     let pw = (w - 0.1) / pillows as f64;
     for i in 0..pillows {
         let a = x0 + 0.05 + i as f64 * pw + 0.02;
-        b.rbox(
+        b.pillow(
             "linen",
             [a, 0.1, top - 0.01],
             [a + pw - 0.04, 0.48, top + 0.12],
             0.05,
+            0.04,
         );
     }
 }

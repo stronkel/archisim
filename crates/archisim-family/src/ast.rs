@@ -42,6 +42,11 @@ pub struct FamilyDef {
     pub outputs: Vec<Output>,
     /// IFC data (class, predefined type…).
     pub ifc: Vec<Output>,
+    /// Type parameters that follow the measurements when the element is
+    /// stretched by its handles (`stretch` section): a sofa made longer
+    /// gains a seat, a table its chairs. Each is a formula of the type's
+    /// values after the stretch.
+    pub stretch: Vec<Output>,
     /// Types kept with the recipe in a library file (`catalog`), like the
     /// types of a Revit family file.
     pub catalog: Catalog,

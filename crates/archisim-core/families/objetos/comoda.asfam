@@ -1,7 +1,7 @@
 family "Cómoda"
   category furniture
   host none
-  version 1
+  version 2
   description "Cómoda de cajones en una o varias columnas"
   folder "Dormitorio"
 
@@ -37,3 +37,7 @@ outputs
   generator = "props:chest"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"
+
+# Stretched, a column of drawers more when the drawers would be too wide.
+stretch
+  columns = if width / columns >= 0.4 and width / columns <= 1.1 then columns else max(1, round(width / 0.8))

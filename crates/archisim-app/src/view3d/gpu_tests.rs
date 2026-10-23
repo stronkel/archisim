@@ -159,3 +159,75 @@ fn shaders_without_textures_are_valid() {
     .validate(&module)
     .expect("valid");
 }
+
+/// Selecting outlines in orange without tinting; cutting the walls
+/// leaves the walls in front low and the ones behind whole.
+#[test]
+fn selection_outline_and_walls_in_front() {
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let (m, _, _) = room();
+    let size = [400, 300];
+    let draw = |selection: &BTreeSet<crate::pick::Element>,
+                cut: Option<super::cutaway::CutRule>| {
+        let scene = Scene::build(&m, selection);
+        let mut camera = Camera::default();
+        camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+        let mut r = Renderer::new(&device, view_formats, true);
+        r.set_scene(&device, &scene);
+        r.set_cut(cut);
+        r.render(&device, &queue, &camera, size, 1);
+        (r.read_pixels(&device, &queue).unwrap().2, camera)
+    };
+    let orange = |px: &[u8]| {
+        px.as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[0] > 230 && p[1] > 150 && p[1] < 215 && p[2] < 90)
+            .count()
+    };
+    let (plain, camera) = draw(&BTreeSet::new(), None);
+    let wall = m.walls().next().unwrap().id;
+    let sel: BTreeSet<_> = [crate::pick::Element::Wall(wall)].into_iter().collect();
+    let (marked, _) = draw(&sel, None);
+    assert!(orange(&marked) > orange(&plain) + 100);
+    // Away from the outline the colours are the same as unselected.
+    let same = plain
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(marked.as_chunks::<4>().0)
+        .filter(|(a, b)| a == b)
+        .count();
+    assert!(
+        same > size[0] as usize * size[1] as usize * 9 / 10,
+        "{same}"
+    );
+    // Walls in front low: more of the floor is seen than with all the
+    // walls up, less than with all of them cut low.
+    let eye = camera.eye();
+    let toward = glam::Vec2::new(eye.x - camera.target.x, eye.y - camera.target.y).normalize();
+    let rule = |front: bool| super::cutaway::CutRule {
+        top: if front { 10.0 } else { 0.3 },
+        front: front.then_some(super::cutaway::Front {
+            toward,
+            at: toward.dot(camera.target.truncate()),
+            low: 0.3,
+            above: 0.5,
+        }),
+    };
+    let (front, _) = draw(&BTreeSet::new(), Some(rule(true)));
+    let (low, _) = draw(&BTreeSet::new(), Some(rule(false)));
+    let differ = |a: &[u8], b: &[u8]| {
+        a.as_chunks::<4>()
+            .0
+            .iter()
+            .zip(b.as_chunks::<4>().0)
+            .filter(|(x, y)| x != y)
+            .count()
+    };
+    assert!(differ(&plain, &front) > 500, "front walls not cut");
+    assert!(differ(&front, &low) > 500, "back walls cut too");
+}

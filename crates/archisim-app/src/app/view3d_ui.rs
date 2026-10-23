@@ -15,6 +15,7 @@ use eframe::egui_wgpu::{self, wgpu};
 use super::ArchiSimApp;
 use crate::pick::Element;
 use crate::view3d::camera::Camera;
+use crate::view3d::cutaway::{CutRule, Front};
 use crate::view3d::render::Renderer;
 use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
@@ -65,13 +66,19 @@ pub enum ViewMode {
 }
 
 /// How much of the walls the 3D view shows (Los Sims' «walls up / cut
-/// away / down»): everything above a height over the active level is cut
-/// away, with its cut faces filled, so the inside of a floor is seen.
+/// away / down»): the building above a height over the active level is
+/// cut away, with its cut faces filled, so the inside of a floor is seen.
+/// The furniture is never cut: it stays whole, or goes if it is upstairs
+/// (`crate::view3d::cutaway`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Cutaway {
     /// Everything.
     #[default]
     Up,
+    /// The walls between the camera and what is looked at cut low, the
+    /// others whole; the floors above and the roof gone. It follows the
+    /// camera as it turns.
+    Front,
     /// Cut 1.20 m above the level: walls at sill height, the floors
     /// above and the roof gone.
     Cut,
@@ -79,12 +86,16 @@ pub enum Cutaway {
     Low,
 }
 
+/// Height the walls in front are cut at, over the level.
+const FRONT_LOW: f32 = 0.3;
+
 impl Cutaway {
-    pub const ALL: [Cutaway; 3] = [Cutaway::Up, Cutaway::Cut, Cutaway::Low];
+    pub const ALL: [Cutaway; 4] = [Cutaway::Up, Cutaway::Front, Cutaway::Cut, Cutaway::Low];
 
     pub fn name(self) -> &'static str {
         match self {
             Cutaway::Up => "Muros arriba",
+            Cutaway::Front => "Muros delante bajos",
             Cutaway::Cut => "Muros recortados",
             Cutaway::Low => "Muros bajos",
         }
@@ -94,15 +105,23 @@ impl Cutaway {
     pub fn height(self) -> Option<f32> {
         match self {
             Cutaway::Up => None,
-            Cutaway::Cut => Some(1.2),
+            Cutaway::Front | Cutaway::Cut => Some(1.2),
             Cutaway::Low => Some(0.3),
         }
     }
 }
 
-/// What a picture was drawn with: camera, size, scene, cut and whether
-/// its background was left transparent.
-type Drawn = (Camera, [u32; 2], u64, Option<SectionBox>, bool);
+/// What a picture was drawn with: camera, size, scene, section box, cut
+/// away walls and whether its background was left transparent.
+type Drawn = (
+    Camera,
+    [u32; 2],
+    u64,
+    Option<SectionBox>,
+    Option<CutRule>,
+    bool,
+    u64,
+);
 
 /// Everything the 3D view keeps between frames.
 pub struct View3dState {
@@ -145,6 +164,11 @@ pub struct View3dState {
     edge_step: u32,
     /// The materials' textures (brick, wood, stone…) are drawn.
     pub textures: bool,
+    /// What is being stretched, as it will be, drawn in place of the
+    /// selected element while the handle is dragged: what it was built
+    /// for, and its triangles.
+    overlay: Option<(String, Scene)>,
+    overlay_serial: u64,
 }
 
 /// Textures on, except on Intel Macs: their AMD graphics drivers (on
@@ -174,6 +198,8 @@ impl Default for View3dState {
             cutaway: Cutaway::Up,
             level_z: 0.0,
             under: false,
+            overlay: None,
+            overlay_serial: 0,
         }
     }
 }
@@ -183,27 +209,37 @@ struct Gpu {
     renderer: Renderer,
     texture: Option<egui::TextureId>,
     uploaded: u64,
+    overlay_uploaded: u64,
 }
 
 impl View3dState {
-    /// What is cut away: the section box and the cut of the walls
-    /// together (the lower top).
+    /// The section box, if on: it cuts everything, furniture too.
     pub fn clip_box(&self) -> Option<SectionBox> {
-        let cut = self.cutaway.height().map(|h| self.level_z + h);
-        match (self.section, cut) {
-            (Some(b), None) => Some(b),
-            (Some(mut b), Some(z)) => {
-                b.hi.z = b.hi.z.min(z);
-                Some(b)
+        self.section
+    }
+
+    /// The cut away walls, if on: what they take away depends on each
+    /// element (`CutRule::top_of`), and with walls in front on the
+    /// camera.
+    pub fn cut_rule(&self) -> Option<CutRule> {
+        let top = self.level_z + self.cutaway.height()?;
+        let front = (self.cutaway == Cutaway::Front).then(|| {
+            let eye = self.camera.eye();
+            let t = self.camera.target;
+            let mut toward = glam::Vec2::new(eye.x - t.x, eye.y - t.y);
+            if toward.length_squared() < 1e-8 {
+                // Straight down: the south side.
+                toward = glam::Vec2::new(0.0, -1.0);
             }
-            (None, Some(z)) => {
-                let pad = glam::Vec3::splat(1000.0);
-                let mut b = SectionBox::around(self.scene.lo - pad, self.scene.hi + pad);
-                b.hi.z = z;
-                Some(b)
+            let toward = toward.normalize();
+            Front {
+                toward,
+                at: toward.dot(glam::Vec2::new(t.x, t.y)),
+                low: self.level_z + FRONT_LOW,
+                above: self.level_z + 0.5,
             }
-            (None, None) => None,
-        }
+        });
+        Some(CutRule { top, front })
     }
 
     /// A 3D view with the textures on or off.
@@ -226,6 +262,31 @@ impl View3dState {
             }
         }
         self.drawn = None;
+    }
+
+    /// Draws `make()` in place of the selected element (what it is built
+    /// for is `key`: it is made again only when that changes), or nothing.
+    pub fn set_overlay(&mut self, key: Option<String>, make: impl FnOnce() -> Option<Scene>) {
+        match key {
+            None => {
+                if self.overlay.take().is_some() {
+                    self.overlay_serial += 1;
+                }
+            }
+            Some(k) => {
+                if self.overlay.as_ref().is_some_and(|(o, _)| *o == k) {
+                    return;
+                }
+                self.overlay = make().map(|s| (k, s));
+                self.overlay_serial += 1;
+            }
+        }
+    }
+
+    /// Whether something is drawn in place of the selected element.
+    #[cfg(test)]
+    pub fn has_overlay(&self) -> bool {
+        self.overlay.is_some()
     }
 
     /// Forgets the scene, for a project just opened.
@@ -283,7 +344,8 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        self.scene.pick_in(ray, self.clip_box().as_ref())
+        self.scene
+            .pick_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())
     }
 
     /// What is under a point of the view: the point hit, its triangle's
@@ -293,7 +355,9 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        let (d, i) = self.scene.hit_in(ray, self.clip_box().as_ref())?;
+        let (d, i) = self
+            .scene
+            .hit_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())?;
         let [a, b, c] = self.scene.triangles().nth(i)?;
         let mut n = (b - a).cross(c - a).normalize_or_zero();
         if n.dot(ray.dir) > 0.0 {
@@ -372,6 +436,7 @@ impl View3dState {
         }
         let state = gpu_state?;
         let clip = self.clip_box();
+        let cut = self.cut_rule();
         if self.gpu.is_none() {
             crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
         }
@@ -389,17 +454,32 @@ impl View3dState {
             state: state.clone(),
             texture: None,
             uploaded: 0,
+            overlay_uploaded: 0,
         });
         if gpu.uploaded != self.scene_serial {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
         }
-        let wanted = (self.camera, size, self.scene_serial, clip, self.under);
+        if gpu.overlay_uploaded != self.overlay_serial {
+            gpu.renderer
+                .set_overlay(&gpu.state.device, self.overlay.as_ref().map(|o| &o.1));
+            gpu.overlay_uploaded = self.overlay_serial;
+        }
+        let wanted = (
+            self.camera,
+            size,
+            self.scene_serial,
+            clip,
+            cut,
+            self.under,
+            self.overlay_serial,
+        );
         if self.drawn != Some(wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+            gpu.renderer.set_cut(cut);
             gpu.renderer.set_transparent(self.under);
             gpu.renderer.render(
                 &gpu.state.device,

@@ -799,3 +799,55 @@ plan presentation
         .unwrap()
         .is_err());
 }
+
+/// The `stretch` section: a sofa stretched gains seats, in their range,
+/// whole; a parameter that is not a numeric type one is refused.
+#[test]
+fn stretch_follows_the_measurements() {
+    let src = r#"
+family "Sofá de prueba"
+  category furniture
+type_params
+  width length = 2.00 range 0.80..4.00
+  places integer = 3 range 1..5
+  chairs integer = 0 range 0..8
+  mat material = "Tela"
+stretch
+  places = (width - 0.4) / 0.62
+  chairs = if chairs == 0 then 0 else 2 * round(width / 0.6)
+body
+  box (0, 0, 0) to (width, 1, 1) material mat
+"#;
+    let def = parse(src).unwrap();
+    // As it is: nothing changes.
+    let v = values(&[
+        ("width", Value::Number(2.0)),
+        ("places", Value::Number(3.0)),
+    ]);
+    assert!(def.evaluate_stretch(&v).unwrap().is_empty());
+    // Longer: four seats; much longer: five at most.
+    let v = values(&[
+        ("width", Value::Number(2.9)),
+        ("places", Value::Number(3.0)),
+    ]);
+    assert_eq!(
+        def.evaluate_stretch(&v).unwrap().get("places"),
+        Some(&Value::Number(4.0))
+    );
+    let v = values(&[("width", Value::Number(4.0))]);
+    assert_eq!(
+        def.evaluate_stretch(&v).unwrap().get("places"),
+        Some(&Value::Number(5.0))
+    );
+    // Chairs only if it had them.
+    let v = values(&[
+        ("width", Value::Number(2.4)),
+        ("chairs", Value::Number(6.0)),
+    ]);
+    assert_eq!(
+        def.evaluate_stretch(&v).unwrap().get("chairs"),
+        Some(&Value::Number(8.0))
+    );
+    let bad = src.replace("  chairs = if", "  nothing = 1\n  chairs = if");
+    assert!(parse(&bad).is_err());
+}

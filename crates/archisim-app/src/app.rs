@@ -357,6 +357,8 @@ pub struct ArchiSimApp {
     /// The first time in the Maqueta (it starts with the walls cut away
     /// and the grid).
     maquette_first: bool,
+    /// The angle the card's «Girar» turns by, degrees.
+    turn_by: f64,
     /// The tab to go back to on leaving the Maqueta.
     maquette_return: Option<usize>,
     /// The Maqueta's catalog: group and theme shown.
@@ -652,6 +654,7 @@ impl ArchiSimApp {
             zone_tool: SlabTool::default(),
             maquette: false,
             maquette_first: true,
+            turn_by: 90.0,
             maquette_return: None,
             catalog_group: Default::default(),
             catalog_theme: "Habitaciones",

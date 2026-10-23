@@ -113,7 +113,17 @@ Propiedades de la cubierta → **Cubrición**:
 - **K1 y K2 completos**: buhardillas a dos aguas, a un agua y planas y ventanas de cubierta (herramienta Cubierta → «Buhardilla» o «Ventana de cubierta» en la barra de arriba, o desde el catálogo), con sus Propiedades (clase, ancho, altura del frente, pendiente, ventana, materiales); tejas, caballetes, canalones y bajantes en Propiedades de la cubierta → Cubrición. Planta de cubiertas, 3D, render, IFC (ida y vuelta), mediciones y BC3. `archisim cubiertas out/` hace un ejemplo con todo.
 - **MQ1, primera vuelta**: interruptor y Tab; ventana sin columnas; catálogo Construir · Amueblar · Exterior con sus temas y miniaturas (las de planta de los tipos; las 3D, pendientes); tarjeta flotante con girar, duplicar, cuentagotas, borrar y Más…; plantas arriba y abajo; **muros recortados** (arriba, recortados a 1,20 m, bajos a 30 cm, también en la vista 3D técnica, con sus cortes rellenos); cuadrícula de 50 cm con ajuste; **Habitación** (cuatro muros, su suelo y su local de una vez; desde el catálogo).
 
-Pendiente de MQ1: «solo los muros de delante recortados», miniaturas en 3D, arrastrar objetos por el suelo en 3D sin herramienta, que la habitación sea un solo paso de Deshacer (hoy son tres: muros, suelo y local).
+Pendiente de MQ1: miniaturas en 3D, arrastrar objetos por el suelo en 3D sin herramienta, que la habitación sea un solo paso de Deshacer (hoy son tres: muros, suelo y local).
+
+## 6 bis. Hecho en v0.49 (rama `bloque/maqueta-2`, revisión de Antonio del 23/10/2026)
+
+- **Los muebles no se cortan**: los muros recortados bajan los muros, los forjados de arriba y la cubierta, pero los muebles, sanitarios, aparatos, plantas y coches de la planta quedan enteros (los de las plantas de arriba desaparecen enteros). La caja de sección, que es técnica, sigue cortándolo todo.
+- **Muros delante bajos** (el «recorte» de Los Sims): los muros entre la cámara y el centro de la vista bajan a 30 cm y los del fondo quedan enteros; las puertas y ventanas van con su muro. Sigue a la cámara al girar. Es lo que se ve al entrar en la Maqueta; también en la vista 3D técnica.
+- **Estirar en vivo**: mientras se arrastra un pinzamiento del objeto en 3D se ve el objeto como quedará (con sus cojines, puertas y cajones nuevos), dibujado en su sitio; el modelo cambia al soltar, en un solo paso de Deshacer.
+- **Giro libre**: un anillo en el suelo alrededor del objeto seleccionado lo gira a cualquier ángulo, a saltos de 15° (con Mayús, libre); la tarjeta gira lo seleccionado el ángulo que se escriba al lado de «Girar» (90° por defecto); al colocar un objeto, Mayús+Espacio lo gira 15°.
+- **Selección con contorno**: en 3D lo seleccionado ya no se tiñe de azul; se marca con un contorno naranja, y sus colores, materiales y texturas se ven tal cual mientras se cambian.
+- **Muebles que crecen por piezas**: la sección `stretch` de las recetas (`docs/FAMILIAS.md`) hace que, al estirar, el sofá gane plazas, la mesa sillas, el armario y el mueble alto puertas, la estantería baldas y la cómoda columnas de cajones, cuando las de antes quedarían demasiado anchas o estrechas.
+- **Más mullidos**: los cojines del sofá y la silla tapizada, la almohada y el edredón se hinchan en el centro (`Builder::pillow`), y en 3D las aristas redondeadas de los muebles se sombrean suaves, sin una línea en cada faceta.
 
 ## 7. Bloques
 

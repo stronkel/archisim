@@ -5583,7 +5583,8 @@ fn objects_are_stretched_in_the_3d_view() {
     h.frame();
     assert_eq!(h.app.mode, ViewMode::ThreeD);
     let handles = h.app.object_handles_3d();
-    assert_eq!(handles.len(), 4, "{handles:?}");
+    // Width (both sides), depth, height and the ring's knob.
+    assert_eq!(handles.len(), 5, "{handles:?}");
     let drag = |h: &mut Harness, key: SizeKey, to: glam::DVec3| {
         let at = h
             .app
@@ -5604,8 +5605,14 @@ fn objects_are_stretched_in_the_3d_view() {
             h.events.push(Event::PointerMoved(q));
             h.frame();
         }
+        // While dragged, the object is drawn as it will be, before the
+        // model changes.
+        let before = h.app.ed.revision();
+        assert!(h.app.v3d.has_overlay(), "no live preview");
         h.button(PointerButton::Primary, false);
         h.frame();
+        assert!(!h.app.v3d.has_overlay());
+        assert_ne!(h.app.ed.revision(), before);
         at
     };
     // The right side 0,3 m further: 0,6 m wider (it stays centred).
@@ -5630,6 +5637,12 @@ fn objects_are_stretched_in_the_3d_view() {
         other => panic!("{other:?}"),
     };
     assert!((width - 1.8).abs() < 0.03, "{width} {:?}", h.app.message);
+    // Its doors follow (the family's `stretch`): four of 45 cm, not two
+    // of 90.
+    assert_eq!(
+        ty.values.get("doors"),
+        Some(&archisim_core::Value::Number(4.0))
+    );
     // The top 0,2 m up.
     let at = h
         .app
@@ -5652,6 +5665,85 @@ fn objects_are_stretched_in_the_3d_view() {
         other => panic!("{other:?}"),
     };
     assert!((height - 2.6).abs() < 0.03, "{height}");
+}
+
+/// The ring on the floor turns an object to any angle: in steps of 15°
+/// while dragged, with the object drawn turned before it is let go.
+#[test]
+fn objects_turn_with_the_ring_in_3d() {
+    use super::grips3d::SizeKey;
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Armario 120")
+        .expect("the library's wardrobe")
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Armario", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    let (c, r, a0) = h.app.turn_ring(id).unwrap();
+    // Close up on it, the ring in view.
+    let canvas = h.app.v3d.canvas;
+    h.app.v3d.camera.fit(
+        glam::Vec3::new(0.0, 0.0, 0.0),
+        glam::Vec3::new(4.0, 4.0, 2.5),
+        canvas.width() / canvas.height(),
+    );
+    h.frame();
+    let knob = h
+        .app
+        .object_handles_3d()
+        .into_iter()
+        .find(|x| x.1 == SizeKey::Turn)
+        .expect("a turn knob")
+        .2;
+    // Along the ring to 37° further: 30° once snapped.
+    let from = screen_3d(&h, knob.x, knob.y, knob.z);
+    h.pos = from;
+    h.events.push(Event::PointerMoved(from));
+    h.frame();
+    h.button(PointerButton::Primary, true);
+    for k in 1..=8 {
+        let a = a0 + (37.0_f64).to_radians() * k as f64 / 8.0;
+        let q = c + glam::DVec3::new(r * a.cos(), r * a.sin(), 0.0);
+        let q = screen_3d(&h, q.x, q.y, q.z);
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+    }
+    assert!(
+        h.app.v3d.has_overlay(),
+        "not drawn turned while dragged: {:?} {from:?} {:?}",
+        h.app.object_grip,
+        h.app.v3d.canvas
+    );
+    assert!(h.model().object(id).unwrap().rotation.abs() < 1e-9);
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    let rot = h.model().object(id).unwrap().rotation;
+    assert!(
+        (rot.to_degrees() - 30.0).abs() < 0.5,
+        "{}",
+        rot.to_degrees()
+    );
+    let o = h.model().object(id).unwrap();
+    assert!((o.position.x - 2.0).abs() < 1e-6 && (o.position.y - 2.0).abs() < 1e-6);
 }
 
 /// Bloque 6: a tree's type takes its plan symbol from a DXF, stretched to
@@ -5924,11 +6016,14 @@ fn maquette_environment() {
     h.key(Key::Tab);
     assert!(h.app.maquette);
     assert_eq!(h.app.mode, ViewMode::ThreeD);
-    assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Cut);
+    assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Front);
     assert!(h.app.ground_grid);
-    // The cut: 1.20 m over the level.
-    let clip = h.app.v3d.clip_box().unwrap();
-    assert!((clip.hi.z - 1.2).abs() < 1e-6);
+    // The cut: 1.20 m over the level, the walls in front at 30 cm; no
+    // section box.
+    let cut = h.app.v3d.cut_rule().unwrap();
+    assert!((cut.top - 1.2).abs() < 1e-6);
+    assert!((cut.front.unwrap().low - 0.3).abs() < 1e-6);
+    assert!(h.app.v3d.clip_box().is_none());
     h.frame();
     // A room from the catalog, drawn in the plan.
     h.app.catalog_take(super::maquette_ui::CatalogAct::Room);

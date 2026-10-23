@@ -15,7 +15,9 @@ struct Globals {
     view: mat4x4<f32>,
     // xyz: direction towards the sun; w: unused.
     sun: vec4<f32>,
-    // x: pixel step for contour detection; y: contour strength.
+    // x: pixel step for contour detection; y: contour strength; z = 1
+    // when something is selected (outlined); w = 1 while what is
+    // selected is drawn stretched over the scene.
     edges: vec4<f32>,
     // Section box corners; clip_min.w = 1 when the box is on.
     clip_min: vec4<f32>,
@@ -23,6 +25,13 @@ struct Globals {
     // Eye position (w = 1 in perspective) and viewing direction.
     eye: vec4<f32>,
     forward: vec4<f32>,
+    // The cut away walls (view3d/cutaway.rs): x the height everything is
+    // cut at, y = 1 when on, z the height of the walls in front, w = 1
+    // with walls in front.
+    cut: vec4<f32>,
+    // Walls in front: xy the horizontal direction towards the camera, z
+    // where in front begins along it, w above which walls are upstairs.
+    front: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -34,6 +43,11 @@ struct VertexIn {
     @location(3) bias: f32,
     // x: texture (0 none, 1 brick…), y: size of its piece in metres.
     @location(4) tex: vec2<f32>,
+    // The element for the cut away walls: kind (0 plain, 1 wall, 2
+    // object), a point of it in plan and its base.
+    @location(5) cut: vec4<f32>,
+    // 1 if selected.
+    @location(6) picked: f32,
 };
 
 struct VertexOut {
@@ -46,6 +60,8 @@ struct VertexOut {
     // Foliage (bias 2): no contour lines between its own facets.
     @location(5) @interpolate(flat) soft: f32,
     @location(6) @interpolate(flat) tex: vec2<f32>,
+    @location(7) @interpolate(flat) cut: vec4<f32>,
+    @location(8) @interpolate(flat) picked: f32,
 };
 
 @vertex
@@ -63,6 +79,8 @@ fn vs_model(v: VertexIn) -> VertexOut {
     out.color = v.color;
     out.world = v.pos;
     out.tex = v.tex;
+    out.cut = v.cut;
+    out.picked = v.picked;
     return out;
 }
 
@@ -70,16 +88,68 @@ fn boxed() -> bool {
     return g.clip_min.w > 0.5;
 }
 
-// Outside the section box (a hair of tolerance keeps faces on it).
-fn outside(p: vec3<f32>) -> bool {
+// The height above which an element is cut away by the cut away walls:
+// 1e9 if it is not, -1e9 if all of it goes. As `CutRule::top_of`.
+fn cut_top(c: vec4<f32>) -> f32 {
+    if (g.cut.y < 0.5) {
+        return 1e9;
+    }
+    if (c.x > 1.5) {
+        if (c.w > g.cut.x + 1e-3) {
+            return -1e9;
+        }
+        return 1e9;
+    }
+    if (c.x > 0.5 && g.cut.w > 0.5) {
+        if (c.w > g.front.w) {
+            return g.cut.x;
+        }
+        if (dot(g.front.xy, c.yz) > g.front.z) {
+            return g.cut.z;
+        }
+        return 1e9;
+    }
+    return g.cut.x;
+}
+
+// The scene's own copy of what is being stretched (picked 1 while an
+// overlay, picked 2, is drawn in its place: edges.w = 1).
+fn stretched(picked: f32) -> bool {
+    return g.edges.w > 0.5 && picked > 0.5 && picked < 1.5;
+}
+
+// What is kept of an element: the section box, lowered to its cut.
+struct Keep {
+    lo: vec3<f32>,
+    hi: vec3<f32>,
+    // Something of it is cut.
+    on: bool,
+};
+
+fn keep(c: vec4<f32>) -> Keep {
+    var k: Keep;
+    k.lo = vec3<f32>(-1e9);
+    k.hi = vec3<f32>(1e9);
+    if (boxed()) {
+        k.lo = g.clip_min.xyz;
+        k.hi = g.clip_max.xyz;
+    }
+    let top = cut_top(c);
+    k.hi.z = min(k.hi.z, top);
+    k.on = boxed() || top < 1e8;
+    return k;
+}
+
+// Outside what is kept (a hair of tolerance keeps faces on it).
+fn outside(p: vec3<f32>, k: Keep) -> bool {
     let e = 1e-4;
-    return any(p < g.clip_min.xyz - vec3<f32>(e)) || any(p > g.clip_max.xyz + vec3<f32>(e));
+    return any(p < k.lo - vec3<f32>(e)) || any(p > k.hi + vec3<f32>(e));
 }
 
 // Where the line of sight through `p` (inside the box) leaves it towards
 // the eye: the cap of the cut. Returns the cap's normal (xyz) and its
 // distance along the view (w).
-fn cap(p: vec3<f32>) -> vec4<f32> {
+fn cap(p: vec3<f32>, kept: Keep) -> vec4<f32> {
     var d = g.forward.xyz;
     if (g.eye.w > 0.5) {
         d = normalize(p - g.eye.xyz);
@@ -90,10 +160,10 @@ fn cap(p: vec3<f32>) -> vec4<f32> {
     var n = vec3<f32>(0.0, 0.0, 1.0);
     for (var k = 0; k < 3; k = k + 1) {
         if (abs(b[k]) > 1e-6) {
-            var bound = g.clip_min[k];
+            var bound = kept.lo[k];
             var sgn = -1.0;
             if (b[k] > 0.0) {
-                bound = g.clip_max[k];
+                bound = kept.hi[k];
                 sgn = 1.0;
             }
             let tk = (bound - p[k]) / b[k];
@@ -278,32 +348,43 @@ struct ModelOut {
 @fragment
 fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     var out: ModelOut;
-    if (boxed() && outside(i.world)) {
+    if (stretched(i.picked)) {
         discard;
     }
+    let kept = keep(i.cut);
+    if (kept.on && outside(i.world, kept)) {
+        discard;
+    }
+    // Selected: the distance is written negative, for the contour pass
+    // to outline it.
+    let mark = select(1.0, -1.0, i.picked > 0.5);
     if (!front) {
         // The inside of a solid shows only through a cut.
-        if (!boxed()) {
+        if (!kept.on) {
             discard;
         }
-        let c = cap(i.world);
+        let c = cap(i.world, kept);
         out.color = vec4<f32>(shade(c.xyz, i.color.rgb) * 0.82, 1.0);
-        out.normal_dist = vec4<f32>(normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz), c.w);
+        out.normal_dist = vec4<f32>(normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz), c.w * mark);
         return out;
     }
     out.color = vec4<f32>(shade(i.normal, textured(i.color.rgb, i.world, i.normal, i.tex)), 1.0);
-    out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist);
+    out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist * mark);
     if (i.soft > 0.5) {
         // Leaves: the same normal everywhere, so the contours come only
         // from the outline of the masses.
-        out.normal_dist = vec4<f32>(0.0, 0.0, 1.0, i.view_dist);
+        out.normal_dist = vec4<f32>(0.0, 0.0, 1.0, i.view_dist * mark);
     }
     return out;
 }
 
 @fragment
 fn fs_glass(i: VertexOut) -> @location(0) vec4<f32> {
-    if (boxed() && outside(i.world)) {
+    if (stretched(i.picked)) {
+        discard;
+    }
+    let kept = keep(i.cut);
+    if (kept.on && outside(i.world, kept)) {
         discard;
     }
     return vec4<f32>(shade(i.normal, i.color.rgb), i.color.a);
@@ -326,10 +407,15 @@ fn sample_nd(p: vec2<i32>) -> vec4<f32> {
     return textureLoad(normal_dist, clamp(p, vec2<i32>(0), size - 1), 0);
 }
 
+// Nothing drawn there (the distance of a selected element is negative).
+fn empty(a: vec4<f32>) -> bool {
+    return abs(a.w) < 1e-4;
+}
+
 // Whether two neighbouring samples belong to different surfaces.
 fn crease(a: vec4<f32>, b: vec4<f32>) -> f32 {
-    let a_empty = a.w <= 0.0;
-    let b_empty = b.w <= 0.0;
+    let a_empty = empty(a);
+    let b_empty = empty(b);
     if (a_empty && b_empty) {
         return 0.0;
     }
@@ -343,12 +429,12 @@ fn crease(a: vec4<f32>, b: vec4<f32>) -> f32 {
 // distance changes linearly across a flat surface, so a kink in it is a
 // step from one surface to another behind it.
 fn depth_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
-    if (a.w <= 0.0 || b.w <= 0.0 || c.w <= 0.0) {
+    if (empty(a) || empty(b) || empty(c)) {
         return 0.0;
     }
-    let ia = 1.0 / a.w;
-    let ib = 1.0 / b.w;
-    let ic = 1.0 / c.w;
+    let ia = 1.0 / abs(a.w);
+    let ib = 1.0 / abs(b.w);
+    let ic = 1.0 / abs(c.w);
     let kink = abs(ia + ib - 2.0 * ic) / ic;
     return select(0.0, 1.0, kink > 0.03);
 }
@@ -364,5 +450,24 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let d = sample_nd(p + vec2<i32>(0, s));
     var e = max(max(crease(c, r), crease(c, d)), max(crease(c, l), crease(c, u)));
     e = max(e, max(depth_step(l, c, r), depth_step(u, c, d)));
+    // The outline of what is selected, a little thicker than the
+    // contours, in its own colour: its faces keep theirs.
+    if (g.edges.z > 0.5) {
+        let inside = c.w < 0.0 && !empty(c);
+        for (var k = 1; k <= 2; k = k + 1) {
+            let o = s * k;
+            let around = array<vec2<i32>, 8>(
+                vec2<i32>(o, 0), vec2<i32>(-o, 0), vec2<i32>(0, o), vec2<i32>(0, -o),
+                vec2<i32>(o, o), vec2<i32>(-o, o), vec2<i32>(o, -o), vec2<i32>(-o, -o),
+            );
+            for (var j = 0; j < 8; j = j + 1) {
+                let n = sample_nd(p + around[j]);
+                let other = n.w < 0.0 && !empty(n);
+                if (other != inside) {
+                    return vec4<f32>(0.98, 0.55, 0.05, 1.0);
+                }
+            }
+        }
+    }
     return vec4<f32>(0.05, 0.05, 0.06, e * g.edges.y);
 }

@@ -136,9 +136,10 @@ impl ArchiSimApp {
                 self.set_mode(ViewMode::ThreeD);
             }
             if self.maquette_first {
-                // As in Los Sims: walls cut away and the grid on.
+                // As in Los Sims: the walls in front cut away and the
+                // grid on.
                 self.maquette_first = false;
-                self.v3d.cutaway = Cutaway::Cut;
+                self.v3d.cutaway = Cutaway::Front;
                 self.ground_grid = true;
             }
             self.say("Maqueta: elige abajo qué poner y pincha en el 3D. Técnica, arriba a la derecha, vuelve a la ventana de siempre con lo mismo seleccionado.");
@@ -298,8 +299,9 @@ impl ArchiSimApp {
         for c in Cutaway::ALL {
             let hint = match c {
                 Cutaway::Up => "Todo el edificio",
-                Cutaway::Cut => "Corte a 1,20 m sobre la planta: se ve el interior; las plantas de arriba y la cubierta se ocultan",
-                Cutaway::Low => "Corte a 30 cm: la planta en 3D",
+                Cutaway::Front => "Los muros entre la cámara y el centro de la vista bajan a 30 cm; los del fondo quedan enteros. Sigue a la cámara al girar. Los muebles no se cortan",
+                Cutaway::Cut => "Corte a 1,20 m sobre la planta: se ve el interior; las plantas de arriba y la cubierta se ocultan. Los muebles no se cortan",
+                Cutaway::Low => "Corte a 30 cm: la planta en 3D. Los muebles no se cortan",
             };
             if ui
                 .selectable_label(self.v3d.cutaway == c, c.name())
@@ -717,7 +719,8 @@ impl ArchiSimApp {
 
     /// The card next to what is selected: what it is, and quick actions.
     fn maquette_card(&mut self, ctx: &egui::Context) {
-        if self.ed.selection.is_empty() || self.tool != Tool::Arrow {
+        // Not while a handle is dragged: it would hide what grows.
+        if self.ed.selection.is_empty() || self.tool != Tool::Arrow || self.object_grip.is_some() {
             return;
         }
         let Some(at) = self.selection_anchor() else {
@@ -751,11 +754,21 @@ impl ArchiSimApp {
                             ui.spacing_mut().item_spacing.x = 4.0;
                             if ui
                                 .button("⟳ Girar")
-                                .on_hover_text("Un cuarto de vuelta")
+                                .on_hover_text(
+                                    "Gira lo seleccionado el ángulo de al lado (sentido antihorario). Un objeto solo se gira también a mano con el anillo del suelo",
+                                )
                                 .clicked()
                             {
                                 act = Some(CardAct::Turn);
                             }
+                            ui.add(
+                                egui::DragValue::new(&mut self.turn_by)
+                                    .range(-180.0..=180.0)
+                                    .speed(1.0)
+                                    .max_decimals(1)
+                                    .suffix("°"),
+                            )
+                            .on_hover_text("Ángulo del giro, en grados");
                             if ui
                                 .button("⧉ Duplicar")
                                 .on_hover_text("Una copia al lado, seleccionada")
@@ -847,7 +860,7 @@ impl ArchiSimApp {
         self.card_duplicate()
     }
 
-    /// A quarter turn of the selection about its middle.
+    /// Turns the selection by the card's angle about its middle.
     fn card_turn(&mut self) {
         let items = self.ed.selection.clone();
         let pts: Vec<Point2> = items
@@ -859,7 +872,7 @@ impl ArchiSimApp {
             return;
         }
         let c = pts.iter().fold(Point2::new(0.0, 0.0), |a, q| a + *q) * (1.0 / pts.len() as f64);
-        let t = archisim_draft::Transform::rotate(c, std::f64::consts::FRAC_PI_2);
+        let t = archisim_draft::Transform::rotate(c, self.turn_by.to_radians());
         let res = self
             .ed
             .transact("Girar", |m| crate::xform::transform(m, &items, &t, false));

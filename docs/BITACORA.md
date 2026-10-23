@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 (2) · v0.49: Maqueta, segunda vuelta (revisión de Antonio)
+
+Rama `bloque/maqueta-2`, pull request para Antonio (v0.48 ya unida a `main`). Sin cambios de formato `.archisim` ni de IFC. Detalle en `docs/MAQUETA.md` §6 bis.
+
+Antonio probó v0.48 y pidió: que el recorte de muros no corte los muebles; el modo de Los Sims en que se ocultan solo los muros de delante; ver el objeto estirarse mientras se arrastra; girar a cualquier ángulo; que la selección no tape el material con azul; y muebles estilizados que, como en Paralives, crezcan con fluidez al estirarlos.
+
+**Hecho**
+- **Los muebles no se cortan** con los muros recortados (quedan enteros; los de las plantas de arriba desaparecen). La caja de sección sigue cortándolo todo. Cada vértice del 3D sabe qué es su elemento (`view3d/cutaway.rs`) y el sombreador y la selección aplican la misma regla.
+- **Muros delante bajos**, nuevo modo y el de entrada en la Maqueta: los muros entre la cámara y el centro de la vista bajan a 30 cm, con sus puertas y ventanas; los del fondo, enteros; sigue a la cámara.
+- **Estirar en vivo** en 3D: el objeto se dibuja como quedará mientras se arrastra el pinzamiento (con sus puertas, plazas o cajones nuevos); al soltar cambia el modelo.
+- **Giro libre**: anillo en el suelo alrededor del objeto (saltos de 15°, Mayús libre, también en vivo), ángulo escrito en la tarjeta junto a «Girar», y Mayús+Espacio (15°) al colocar.
+- **Selección con contorno naranja** en 3D; los colores y texturas quedan tal cual.
+- **Muebles que crecen por piezas**: sección `stretch` en las recetas (`docs/FAMILIAS.md`). Sofá (plazas), Mesa (sillas), Armario y Mueble alto (puertas), Estantería (baldas) y Cómoda (columnas); vale también al estirar en planta.
+- **Más mullidos**: cojines, almohadas y edredón hinchados (`Builder::pillow`) y aristas redondeadas de los muebles sombreadas suaves en 3D.
+
+**Pendiente**
+- Los pinzamientos se quedan en su sitio mientras se gira el objeto (se recolocan al soltar).
+- Un catálogo de muebles más estilizado al modo de Paralives (diseños nuevos, no solo los de hoy más mullidos) y la rueda de color por pieza (MQ2).
+- V1, la imagen (sombras, luz de ilustración, niveles de calidad).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes `cargo run -p archisim-cli -- demo out/`) y pulsa **Maqueta**: los muros de delante bajos y los del fondo enteros. Gira la cámara alrededor de la casa: los que bajan cambian con ella. Prueba también «Muros recortados» y «Muros bajos»: armario, frigorífico y cama siguen enteros.
+2. Pincha el armario del dormitorio: contorno naranja, su madera se ve igual. Arrastra el cuadradito azul de un lado: crece mientras arrastras y gana puertas al pasar de unos 1,30 m.
+3. Arrastra el punto azul del anillo del suelo: gira a saltos de 15°; con Mayús pulsada, libre. En la tarjeta, escribe 30 junto a «Girar» y pulsa «Girar».
+4. Amueblar → Salón → un sofá: estíralo a lo largo y mira cómo gana un cojín; la mesa del comedor, sus sillas.
+5. Cambia el material del sofá con él seleccionado (Más… → material): se ve el cambio sin deseleccionar.
+6. En el MacBook: dime si girar la cámara con los muros de delante bajos va fluido.
+
+---
+
 ## 2026-10-23 · v0.48: entorno Maqueta y cubiertas (buhardillas, tejas y canalones)
 
 Rama `bloque/maqueta`, pull request para Antonio. Formato `.archisim` versión 32 (abre todas las anteriores). Diseño en `docs/MAQUETA.md`, hoja de ruta §8.

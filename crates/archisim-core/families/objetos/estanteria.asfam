@@ -1,7 +1,7 @@
 family "Estantería"
   category furniture
   host none
-  version 1
+  version 2
   description "Estantería de tablero con baldas fijas y trasera"
   folder "Estanterías"
 
@@ -41,3 +41,7 @@ outputs
   generator = "props:bookcase"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"
+
+# Stretched up, a shelf more when they would be too far apart.
+stretch
+  shelves = if height / (shelves + 1) >= 0.25 and height / (shelves + 1) <= 0.45 then shelves else round(height / 0.35) - 1
