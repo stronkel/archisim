@@ -750,10 +750,13 @@ impl ArchiSimApp {
             message_serial: 0,
             message_seen: (0, 0.0),
             styled: false,
-            v3d: View3dState::with_textures(
+            v3d: View3dState::with_look(
                 prefs
                     .textures_3d
                     .unwrap_or_else(view3d_ui::default_textures),
+                prefs
+                    .quality_3d
+                    .unwrap_or_else(crate::view3d::look::default_quality),
             ),
             gpu: None,
             coord: crate::coord::Coord::new(),

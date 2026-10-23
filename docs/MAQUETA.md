@@ -79,6 +79,8 @@ Técnicas de juego que corren en portátiles viejos:
 
 Tres niveles (**Ligera**, **Normal**, **Bonita**) elegidos solos según el ordenador, y **la imagen mejora al parar**: mientras se gira, menos resolución y sombra dura; al soltar el ratón se afina sola.
 
+**Hecho en v0.49 (primera vuelta de V1)**: sombras del sol del proyecto (fecha y hora de Propiedades del proyecto → Sol) con mapa de sombras que solo se redibuja cuando cambia el modelo, el sol, el recorte de muros o la zona que se mira, así que girar la cámara no cuesta más; la zona de sombras se ajusta a lo que se ve, para que en una parcela grande sigan siendo finas; luz de ilustración (sol cálido, cielo frío, sombras azuladas); niveles **Ligera** (sin sombras ni suavizado), **Normal** (sombras suavizadas) y **Bonita** (sombras más finas y penumbra de los rincones calculada en pantalla), en la barra de la Maqueta y en Propiedades de la vista 3D, guardados por ordenador (en los Mac con Intel empieza en Ligera). Lo que los muros recortados quitan no da sombra. Pendiente: texturas como imagen (punto 4), cielo y bruma (5) y afinar al parar.
+
 ## 5. Cubiertas: buhardillas, ventanas de cubierta, tejas y canalones
 
 Pedido por Antonio el 23/10/2026 al probar inserciones: la buhardilla no se podía colocar porque **no existía como elemento** (una ventana normal solo admite muros como anfitrión).

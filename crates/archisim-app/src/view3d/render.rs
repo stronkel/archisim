@@ -40,7 +40,32 @@ struct Globals {
     forward: [f32; 4],
     cut: [f32; 4],
     front: [f32; 4],
+    /// The sun's view and projection, for the shadows.
+    sun_vp: [[f32; 4]; 4],
+    /// x: shadows on; y: how far a point is moved off its face before
+    /// looking it up (metres); z: samples of the shadow map; w: shade of
+    /// inner corners on.
+    look: [f32; 4],
 }
+
+/// The shadow map: the scene's depth seen from the sun.
+struct ShadowMap {
+    size: u32,
+    view: wgpu::TextureView,
+    bind: wgpu::BindGroup,
+}
+
+/// What a shadow map was drawn for: the scene, the sun, the cut away
+/// walls, what is drawn stretched and the map's size.
+type ShadowKey = (
+    u64,
+    [i32; 3],
+    Option<super::cutaway::CutRule>,
+    u64,
+    u32,
+    [i32; 3],
+    [i32; 3],
+);
 
 /// A vertex buffer and how many vertices it has.
 type Triangles = (wgpu::Buffer, u32);
@@ -65,6 +90,24 @@ struct Targets {
 
 pub struct Renderer {
     model_pipeline: wgpu::RenderPipeline,
+    shadow_pipeline: wgpu::RenderPipeline,
+    shadow_layout: wgpu::BindGroupLayout,
+    shadow_sampler: wgpu::Sampler,
+    /// The shadow map, and what it was drawn for.
+    shadow: Option<(ShadowMap, Option<ShadowKey>)>,
+    /// A map with nothing in it, for pictures without shadows.
+    no_shadow: ShadowMap,
+    /// The quality of the picture and the direction towards the sun (none:
+    /// below the horizon, no shadows).
+    quality: super::look::Quality,
+    sun: Option<glam::Vec3>,
+    /// The box of the scene, for the sun's view.
+    bounds: (glam::Vec3, glam::Vec3),
+    /// The part of the scene the shadows are drawn for (around what is
+    /// looked at), if not all of it: finer shadows on a large site.
+    focus: Option<(glam::Vec3, glam::Vec3)>,
+    /// Counts the scenes and overlays uploaded, so the shadows know.
+    uploads: u64,
     glass_pipeline: wgpu::RenderPipeline,
     edges_pipeline: wgpu::RenderPipeline,
     globals: wgpu::Buffer,
@@ -154,11 +197,47 @@ impl Renderer {
                 resource: globals.as_entire_binding(),
             }],
         });
+        // Bindings 1 and 2 of the group 1 (the contour pass has its
+        // picture at binding 0 of its own group 1).
+        let shadow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shadow map"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                    count: None,
+                },
+            ],
+        });
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("shadow map"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
         let model_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("model"),
-            bind_group_layouts: &[Some(&globals_layout)],
+            bind_group_layouts: &[Some(&globals_layout), Some(&shadow_layout)],
             immediate_size: 0,
         });
+        let shadow_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("shadow"),
+                bind_group_layouts: &[Some(&globals_layout)],
+                immediate_size: 0,
+            });
         let edges_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("edges"),
@@ -245,6 +324,39 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("shadow"),
+            layout: Some(&shadow_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_shadow"),
+                compilation_options: Default::default(),
+                buffers: &[Some(vertex_layout.clone())],
+            },
+            primitive,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                // Faces do not shade themselves (shadow acne).
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_shadow"),
+                compilation_options: Default::default(),
+                targets: &[],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let no_shadow = shadow_map(device, &shadow_layout, &shadow_sampler, 1);
         let edges_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("edges"),
             layout: Some(&edges_pipeline_layout),
@@ -272,6 +384,16 @@ impl Renderer {
         });
         Self {
             model_pipeline,
+            shadow_pipeline,
+            shadow_layout,
+            shadow_sampler,
+            shadow: None,
+            no_shadow,
+            quality: Default::default(),
+            sun: None,
+            bounds: (glam::Vec3::ZERO, glam::Vec3::ONE),
+            focus: None,
+            uploads: 0,
             glass_pipeline,
             edges_pipeline,
             globals,
@@ -299,6 +421,36 @@ impl Renderer {
         self.clip = clip;
     }
 
+    /// The quality of the next pictures and the direction towards the sun
+    /// (none: no shadows).
+    pub fn set_look(&mut self, quality: super::look::Quality, sun: Option<glam::Vec3>) {
+        self.quality = quality;
+        self.sun = sun.map(|s| s.normalize_or(glam::Vec3::Z));
+    }
+
+    /// The part of the scene the shadows are drawn for (none: all of it).
+    pub fn set_shadow_focus(&mut self, focus: Option<(glam::Vec3, glam::Vec3)>) {
+        self.focus = focus;
+    }
+
+    /// The box the shadows are drawn for: the scene's, cut to the focus
+    /// in plan (all its height: what is above still casts shadows).
+    fn shadow_region(&self) -> (glam::Vec3, glam::Vec3) {
+        let (lo, hi) = self.bounds;
+        match self.focus {
+            Some((a, b)) => {
+                let l = glam::Vec3::new(lo.x.max(a.x), lo.y.max(a.y), lo.z);
+                let h = glam::Vec3::new(hi.x.min(b.x), hi.y.min(b.y), hi.z);
+                if l.x < h.x && l.y < h.y {
+                    (l, h)
+                } else {
+                    (lo, hi)
+                }
+            }
+            None => (lo, hi),
+        }
+    }
+
     /// Sets (or clears) the cut away walls of the next pictures.
     pub fn set_cut(&mut self, cut: Option<super::cutaway::CutRule>) {
         self.cut = cut;
@@ -307,6 +459,7 @@ impl Renderer {
     /// Uploads (or clears) what is drawn over the scene in place of the
     /// selected element (`Scene::of_solids`).
     pub fn set_overlay(&mut self, device: &wgpu::Device, overlay: Option<&Scene>) {
+        self.uploads += 1;
         self.overlay = overlay.map(|o| {
             (
                 upload(device, "overlay", &o.opaque),
@@ -318,6 +471,8 @@ impl Renderer {
     /// Uploads the scene's triangles.
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
         let upload = |label: &str, v: &[Vertex]| upload(device, label, v);
+        self.uploads += 1;
+        self.bounds = (scene.lo, scene.hi);
         self.opaque = upload("opaque", &scene.opaque);
         self.glass = upload("glass", &scene.glass);
         self.selected = scene.opaque.iter().any(|v| v.select > 0.5);
@@ -413,7 +568,20 @@ impl Renderer {
     ) -> &wgpu::Texture {
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
         let aspect = size[0] as f32 / size[1] as f32;
-        let sun = glam::Vec3::new(-0.45, -0.6, 0.66).normalize();
+        // Without the model's sun (at night), a light from the south-west
+        // and no shadows.
+        let sun = self
+            .sun
+            .unwrap_or(glam::Vec3::new(-0.45, -0.6, 0.66).normalize());
+        let shadow_size = self.sun.and(self.quality.shadow_size());
+        let region = self.shadow_region();
+        let sun_vp = sun_view_proj(sun, region);
+        // A shadow-map pixel, in metres: how far a point is moved off its
+        // face before it is looked up.
+        let texel = shadow_size.map_or(0.0, |n| {
+            let (lo, hi) = region;
+            (hi - lo).length() / n as f32
+        });
         let globals = Globals {
             proj: camera.projection(aspect).to_cols_array_2d(),
             view: camera.view().to_cols_array_2d(),
@@ -444,12 +612,65 @@ impl Renderer {
             },
             cut: super::cutaway::CutRule::uniforms(self.cut.as_ref()).0,
             front: super::cutaway::CutRule::uniforms(self.cut.as_ref()).1,
+            sun_vp: sun_vp.to_cols_array_2d(),
+            look: [
+                if shadow_size.is_some() { 1.0 } else { 0.0 },
+                texel * 1.5,
+                self.quality.shadow_taps(),
+                if self.quality.occlusion() { 1.0 } else { 0.0 },
+            ],
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);
-        let t = self.targets.as_ref().expect("targets exist");
 
         let mut encoder = device.create_command_encoder(&Default::default());
+        // 0. The shadow map, only when what casts the shadows changed.
+        if let Some(n) = shadow_size {
+            let key: ShadowKey = (
+                self.uploads,
+                (sun * 1000.0).round().as_ivec3().to_array(),
+                self.cut,
+                u64::from(self.overlay.is_some()),
+                n,
+                (region.0 * 100.0).round().as_ivec3().to_array(),
+                (region.1 * 100.0).round().as_ivec3().to_array(),
+            );
+            if self.shadow.as_ref().is_none_or(|(m, _)| m.size != n) {
+                let map = shadow_map(device, &self.shadow_layout, &self.shadow_sampler, n);
+                self.shadow = Some((map, None));
+            }
+            let (map, drawn) = self.shadow.as_mut().expect("just made");
+            if *drawn != Some(key) {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("shadow"),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &map.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                let over = self.overlay.as_ref().and_then(|o| o.0.as_ref());
+                for (buf, count) in self.opaque.iter().chain(over) {
+                    pass.set_pipeline(&self.shadow_pipeline);
+                    pass.set_bind_group(0, &self.globals_bind, &[]);
+                    pass.set_vertex_buffer(0, buf.slice(..));
+                    pass.draw(0..*count, 0..1);
+                }
+                *drawn = Some(key);
+            }
+        }
+        let shadow_bind = match (&self.shadow, shadow_size) {
+            (Some((m, _)), Some(_)) => &m.bind,
+            _ => &self.no_shadow.bind,
+        };
+        let t = self.targets.as_ref().expect("targets exist");
         let depth = |load| {
             Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &t.depth_view,
@@ -497,6 +718,7 @@ impl Renderer {
             for (buf, n) in self.opaque.iter().chain(over) {
                 pass.set_pipeline(&self.model_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
+                pass.set_bind_group(1, shadow_bind, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
@@ -523,6 +745,7 @@ impl Renderer {
             for (buf, n) in self.glass.iter().chain(over) {
                 pass.set_pipeline(&self.glass_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
+                pass.set_bind_group(1, shadow_bind, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
@@ -635,4 +858,75 @@ fn upload(device: &wgpu::Device, label: &str, v: &[Vertex]) -> Option<(wgpu::Buf
         });
         (buf, v.len() as u32)
     })
+}
+
+/// A shadow map `n` pixels a side, cleared (nothing in shadow).
+fn shadow_map(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    n: u32,
+) -> ShadowMap {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("shadow map"),
+        size: wgpu::Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: DEPTH_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&Default::default());
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("shadow map"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    });
+    ShadowMap {
+        size: n,
+        view,
+        bind,
+    }
+}
+
+/// The sun's view of the scene's box, as a parallel projection that just
+/// holds it.
+pub fn sun_view_proj(sun: glam::Vec3, (lo, hi): (glam::Vec3, glam::Vec3)) -> glam::Mat4 {
+    use glam::camera::rh::{proj::directx, view::look_at_mat4};
+    let centre = (lo + hi) / 2.0;
+    let radius = ((hi - lo).length() / 2.0).max(1.0);
+    let up = if sun.z.abs() > 0.99 {
+        glam::Vec3::Y
+    } else {
+        glam::Vec3::Z
+    };
+    let view = look_at_mat4(centre + sun * radius * 2.0, centre, up);
+    let (mut a, mut b) = (glam::Vec3::splat(f32::MAX), glam::Vec3::splat(f32::MIN));
+    for i in 0..8 {
+        let corner = glam::Vec3::new(
+            if i & 1 == 0 { lo.x } else { hi.x },
+            if i & 2 == 0 { lo.y } else { hi.y },
+            if i & 4 == 0 { lo.z } else { hi.z },
+        );
+        let q = view.transform_point3(corner);
+        a = a.min(q);
+        b = b.max(q);
+    }
+    // In front of the eye the view's z is negative.
+    let (near, far) = ((-b.z - 1.0).max(0.01), -a.z + 1.0);
+    directx::orthographic(a.x, b.x, a.y, b.y, near, far) * view
 }

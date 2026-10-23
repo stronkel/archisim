@@ -32,9 +32,20 @@ struct Globals {
     // Walls in front: xy the horizontal direction towards the camera, z
     // where in front begins along it, w above which walls are upstairs.
     front: vec4<f32>,
+    // The sun's view and projection, for the shadows (view3d/look.rs).
+    sun_vp: mat4x4<f32>,
+    // x = 1 with shadows; y: how far a point is moved off its face before
+    // it is looked up in the shadow map; z: samples (1, 5 or 9); w = 1
+    // with the shade of inner corners.
+    look: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
+
+// The shadow map of the model's passes (the contour pass has its own
+// picture at binding 0 of its group 1).
+@group(1) @binding(1) var shadow_map: texture_depth_2d;
+@group(1) @binding(2) var shadow_cmp: sampler_comparison;
 
 struct VertexIn {
     @location(0) pos: vec3<f32>,
@@ -178,13 +189,51 @@ fn cap(p: vec3<f32>, kept: Keep) -> vec4<f32> {
     return vec4<f32>(n, dot(q - g.eye.xyz, g.forward.xyz));
 }
 
-fn shade(n_in: vec3<f32>, color: vec3<f32>) -> vec3<f32> {
+// An illustration's light: a warm sun (its edge a little crisper than
+// plain shading) and a cool sky, brighter from above; `lit` is how much
+// of the sun reaches the point (0 in shadow).
+fn shade(n_in: vec3<f32>, color: vec3<f32>, lit: f32) -> vec3<f32> {
     let n = normalize(n_in);
-    let sun = max(dot(n, normalize(g.sun.xyz)), 0.0);
-    // Sky from above, a little bounce from the ground below.
-    let sky = 0.5 + 0.5 * n.z;
-    let light = 0.38 + 0.22 * sky + 0.55 * sun;
-    return color * light;
+    let ndl = dot(n, normalize(g.sun.xyz));
+    let direct = (0.65 * max(ndl, 0.0) + 0.35 * smoothstep(0.0, 0.3, ndl)) * lit;
+    let up = 0.5 + 0.5 * n.z;
+    let sky = mix(vec3<f32>(0.60, 0.60, 0.64), vec3<f32>(0.84, 0.89, 1.0), up) * (0.48 + 0.18 * up);
+    let sun = vec3<f32>(1.0, 0.94, 0.84) * 0.58 * direct;
+    return color * (sky + sun);
+}
+
+// How much of the sun reaches a point of a face looking along `n`: 1 in
+// the sun, 0 in shadow, softened over a few samples. No loops (Windows'
+// shader compiler).
+fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
+    if (g.look.x < 0.5) {
+        return 1.0;
+    }
+    let q = g.sun_vp * vec4<f32>(world + normalize(n) * g.look.y, 1.0);
+    let ndc = q.xyz / q.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    let d = ndc.z;
+    let px = 1.0 / f32(textureDimensions(shadow_map).x);
+    var sum = textureSampleCompareLevel(shadow_map, shadow_cmp, uv, d);
+    var count = 1.0;
+    if (g.look.z > 1.5) {
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(px, px), d);
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-px, px), d);
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(px, -px), d);
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-px, -px), d);
+        count = count + 4.0;
+    }
+    if (g.look.z > 5.5) {
+        let r = 2.0 * px;
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(r, 0.0), d);
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(-r, 0.0), d);
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(0.0, r), d);
+        sum = sum + textureSampleCompareLevel(shadow_map, shadow_cmp, uv + vec2<f32>(0.0, -r), d);
+        count = count + 4.0;
+    }
+    // Outside the map (beyond the scene), in the sun.
+    let inside = uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 && d <= 1.0;
+    return select(1.0, sum / count, inside);
 }
 
 // ---- Textures -------------------------------------------------------------
@@ -364,11 +413,12 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
             discard;
         }
         let c = cap(i.world, kept);
-        out.color = vec4<f32>(shade(c.xyz, i.color.rgb) * 0.82, 1.0);
+        out.color = vec4<f32>(shade(c.xyz, i.color.rgb, 1.0) * 0.82, 1.0);
         out.normal_dist = vec4<f32>(normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz), c.w * mark);
         return out;
     }
-    out.color = vec4<f32>(shade(i.normal, textured(i.color.rgb, i.world, i.normal, i.tex)), 1.0);
+    let lit = sunlit(i.world, i.normal);
+    out.color = vec4<f32>(shade(i.normal, textured(i.color.rgb, i.world, i.normal, i.tex), lit), 1.0);
     out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist * mark);
     if (i.soft > 0.5) {
         // Leaves: the same normal everywhere, so the contours come only
@@ -387,7 +437,40 @@ fn fs_glass(i: VertexOut) -> @location(0) vec4<f32> {
     if (kept.on && outside(i.world, kept)) {
         discard;
     }
-    return vec4<f32>(shade(i.normal, i.color.rgb), i.color.a);
+    return vec4<f32>(shade(i.normal, i.color.rgb, 1.0), i.color.a);
+}
+
+// ---- Shadow map -------------------------------------------------------------
+//
+// The scene's depth seen from the sun. What the cut away walls take away
+// casts no shadow.
+
+struct ShadowOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) world: vec3<f32>,
+    @location(1) @interpolate(flat) cut: vec4<f32>,
+    @location(2) @interpolate(flat) picked: f32,
+};
+
+@vertex
+fn vs_shadow(v: VertexIn) -> ShadowOut {
+    var out: ShadowOut;
+    out.clip = g.sun_vp * vec4<f32>(v.pos, 1.0);
+    out.world = v.pos;
+    out.cut = v.cut;
+    out.picked = v.picked;
+    return out;
+}
+
+@fragment
+fn fs_shadow(i: ShadowOut) {
+    if (stretched(i.picked)) {
+        discard;
+    }
+    let kept = keep(i.cut);
+    if (kept.on && outside(i.world, kept)) {
+        discard;
+    }
 }
 
 // ---- Contours -------------------------------------------------------------
@@ -480,5 +563,35 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             return vec4<f32>(0.98, 0.55, 0.05, 1.0);
         }
     }
-    return vec4<f32>(0.05, 0.05, 0.06, e * g.edges.y);
+    var shade_corner = 0.0;
+    if (g.look.w > 0.5) {
+        shade_corner = corner_shade(p, c, 3 * s);
+    }
+    return vec4<f32>(0.05, 0.05, 0.06, max(e * g.edges.y, shade_corner));
+}
+
+// How far the surface through `c` bends inwards between two samples on
+// either side: 0 on a flat face (1 / distance changes linearly across it)
+// or a corner turned outwards, more in an inner corner. A big step (one
+// thing in front of another) is not a corner.
+fn bend(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
+    if (empty(a) || empty(b) || empty(c)) {
+        return 0.0;
+    }
+    let ic = 1.0 / abs(c.w);
+    let k = ((1.0 / abs(a.w) + 1.0 / abs(b.w)) * 0.5 - ic) / ic;
+    return clamp(k * 25.0, 0.0, 1.0) * (1.0 - smoothstep(0.06, 0.15, abs(k)));
+}
+
+// The shade of inner corners (where a wall meets the floor, under a
+// sofa…), from the distances around the point. No loops.
+fn corner_shade(p: vec2<i32>, c: vec4<f32>, r: i32) -> f32 {
+    var k = bend(sample_nd(p - vec2<i32>(r, 0)), c, sample_nd(p + vec2<i32>(r, 0)));
+    k = k + bend(sample_nd(p - vec2<i32>(0, r)), c, sample_nd(p + vec2<i32>(0, r)));
+    k = k + bend(sample_nd(p - vec2<i32>(r, r)), c, sample_nd(p + vec2<i32>(r, r)));
+    k = k + bend(sample_nd(p - vec2<i32>(r, -r)), c, sample_nd(p + vec2<i32>(r, -r)));
+    let t = 2 * r;
+    k = k + bend(sample_nd(p - vec2<i32>(t, 0)), c, sample_nd(p + vec2<i32>(t, 0)));
+    k = k + bend(sample_nd(p - vec2<i32>(0, t)), c, sample_nd(p + vec2<i32>(0, t)));
+    return k / 6.0 * 0.4;
 }

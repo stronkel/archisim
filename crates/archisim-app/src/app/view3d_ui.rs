@@ -16,6 +16,7 @@ use super::ArchiSimApp;
 use crate::pick::Element;
 use crate::view3d::camera::Camera;
 use crate::view3d::cutaway::{CutRule, Front};
+use crate::view3d::look::Quality;
 use crate::view3d::render::Renderer;
 use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
@@ -38,8 +39,12 @@ const MAX_SIDE: f32 = 4096.0;
 
 /// The picture's size for a view of `size` points: at most [`MAX_SIDE`]
 /// on its longer side, keeping its shape.
-fn picture_size(size: Vec2, ppp: f32) -> ([u32; 2], u32) {
-    let ss = supersample(ppp);
+fn picture_size(size: Vec2, ppp: f32, quality: Quality) -> ([u32; 2], u32) {
+    let ss = if quality.supersample() {
+        supersample(ppp)
+    } else {
+        1.0
+    };
     let w = size.x * ppp * ss;
     let h = size.y * ppp * ss;
     let k = (MAX_SIDE / w.max(h).max(1.0)).min(1.0);
@@ -121,6 +126,7 @@ type Drawn = (
     Option<CutRule>,
     bool,
     u64,
+    (Quality, Option<[i32; 3]>),
 );
 
 /// Everything the 3D view keeps between frames.
@@ -169,6 +175,10 @@ pub struct View3dState {
     /// for, and its triangles.
     overlay: Option<(String, Scene)>,
     overlay_serial: u64,
+    /// How the picture looks: its quality (shadows…).
+    pub quality: Quality,
+    /// Towards the model's sun (none: below the horizon).
+    sun: Option<glam::Vec3>,
 }
 
 /// Textures on, except on Intel Macs: their AMD graphics drivers (on
@@ -200,6 +210,8 @@ impl Default for View3dState {
             under: false,
             overlay: None,
             overlay_serial: 0,
+            quality: crate::view3d::look::default_quality(),
+            sun: None,
         }
     }
 }
@@ -242,10 +254,11 @@ impl View3dState {
         Some(CutRule { top, front })
     }
 
-    /// A 3D view with the textures on or off.
-    pub fn with_textures(textures: bool) -> Self {
+    /// A 3D view with the textures on or off and its quality.
+    pub fn with_look(textures: bool, quality: Quality) -> Self {
         Self {
             textures,
+            quality,
             ..Self::default()
         }
     }
@@ -335,6 +348,9 @@ impl View3dState {
             );
             self.scene_key = Some(key);
             self.scene_serial += 1;
+            self.sun = model
+                .sun_direction()
+                .map(|d| glam::Vec3::new(d[0] as f32, d[1] as f32, d[2] as f32));
         }
     }
 
@@ -474,12 +490,19 @@ impl View3dState {
             cut,
             self.under,
             self.overlay_serial,
+            (
+                self.quality,
+                self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
+            ),
         );
         if self.drawn != Some(wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
             gpu.renderer.set_cut(cut);
+            gpu.renderer.set_look(self.quality, self.sun);
+            gpu.renderer
+                .set_shadow_focus(Some(shadow_focus(&self.camera)));
             gpu.renderer.set_transparent(self.under);
             gpu.renderer.render(
                 &gpu.state.device,
@@ -567,7 +590,7 @@ impl View3dState {
                 );
             }
         }
-        let (px, ss) = picture_size(size, ui.ctx().pixels_per_point());
+        let (px, ss) = picture_size(size, ui.ctx().pixels_per_point(), self.quality);
         self.edge_step = ss;
         match self.draw(gpu_state, px) {
             Some(texture) => {
@@ -795,7 +818,7 @@ impl ArchiSimApp {
         );
 
         // The picture, over the ground grid when it is on.
-        let (px, ss) = picture_size(size, ctx.pixels_per_point());
+        let (px, ss) = picture_size(size, ctx.pixels_per_point(), v.quality);
         v.edge_step = ss;
         v.under = self.ground_grid;
         let under = v.under;
@@ -1043,4 +1066,20 @@ impl ArchiSimApp {
             });
         });
     }
+}
+
+/// The part of the model the shadows are drawn for: a square around what
+/// is looked at, as wide as the view from that far (and at least 16 m),
+/// snapped to a grid of a quarter of its side so the shadows are not drawn
+/// again at every move of the camera.
+fn shadow_focus(camera: &Camera) -> (glam::Vec3, glam::Vec3) {
+    let r = (camera.distance * 1.2).clamp(8.0, 300.0);
+    // The side as a power of two, so a little zoom does not change it.
+    let r = 2f32.powf(r.log2().ceil());
+    let step = r / 4.0;
+    let c = (camera.target / step).round() * step;
+    (
+        glam::Vec3::new(c.x - r, c.y - r, f32::MIN),
+        glam::Vec3::new(c.x + r, c.y + r, f32::MAX),
+    )
 }

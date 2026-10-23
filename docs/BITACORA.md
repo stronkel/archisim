@@ -21,6 +21,9 @@ Antonio probó v0.48 y pidió: que el recorte de muros no corte los muebles; el 
 - **Muebles que crecen por piezas**: sección `stretch` en las recetas (`docs/FAMILIAS.md`). Sofá (plazas), Mesa (sillas), Armario y Mueble alto (puertas), Estantería (baldas) y Cómoda (columnas); vale también al estirar en planta.
 - **Más mullidos**: cojines, almohadas y edredón hinchados (`Builder::pillow`) y aristas redondeadas de los muebles sombreadas suaves en 3D.
 - Esc, Espacio y Supr funcionan en la vista justo después de pinchar una tarjeta o un botón (el botón ya no se queda con el teclado).
+- **W A S D y Q E** en la Maqueta: moverse por el suelo hacia donde mira la cámara, bajar y subir; con Mayús, más rápido.
+- **Sombras del sol y luz de ilustración** (V1, primera vuelta; `docs/MAQUETA.md` §4): niveles de imagen Ligera, Normal y Bonita en la barra de la Maqueta y en Propiedades de la vista 3D. Las sombras siguen la fecha y la hora del sol del proyecto.
+- El contorno de la selección se reescribió sin bucles: el compilador de sombreadores de Windows no lo aceptaba y el 3D no se habría dibujado allí.
 
 **Pendiente**
 - Los pinzamientos se quedan en su sitio mientras se gira el objeto (se recolocan al soltar).
@@ -34,6 +37,8 @@ Antonio probó v0.48 y pidió: que el recorte de muros no corte los muebles; el 
 4. Amueblar → Salón → un sofá: estíralo a lo largo y mira cómo gana un cojín; la mesa del comedor, sus sillas.
 5. Cambia el material del sofá con él seleccionado (Más… → material): se ve el cambio sin deseleccionar.
 6. En el MacBook: dime si girar la cámara con los muros de delante bajos va fluido.
+7. En la Maqueta, muévete con W A S D, baja y sube con Q y E.
+8. Arriba, **Imagen: Ligera · Normal · Bonita**. En el PC, Normal y Bonita: sombras de árboles, muebles y tabiques; cambia la hora del sol en Propiedades del proyecto y míralas moverse. En el MacBook empieza en Ligera: prueba Normal y dime si va fluido o si se cuelga.
 
 ---
 

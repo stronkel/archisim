@@ -4,6 +4,7 @@
 
 pub mod camera;
 pub mod cutaway;
+pub mod look;
 pub mod render;
 pub mod scene;
 pub mod section_box;

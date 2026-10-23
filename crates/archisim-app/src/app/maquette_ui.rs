@@ -321,6 +321,8 @@ impl ArchiSimApp {
                 .on_hover_text(
                 "Cuadrícula de 50 cm en el suelo de la planta, y los clics se ajustan a ella (G)",
             );
+            ui.separator();
+            self.quality_buttons(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.workspace_switch(ui);
                 ui.add_space(10.0);
@@ -333,6 +335,24 @@ impl ArchiSimApp {
                 }
             });
         });
+    }
+
+    /// The quality of the 3D picture (in both environments): kept for
+    /// this computer.
+    pub(super) fn quality_buttons(&mut self, ui: &mut Ui) {
+        use crate::view3d::look::Quality;
+        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.label("Imagen");
+        for q in Quality::ALL {
+            if ui
+                .selectable_label(self.v3d.quality == q, q.name())
+                .on_hover_text(q.hint())
+                .clicked()
+            {
+                self.v3d.quality = q;
+                self.prefs.quality_3d = Some(q);
+            }
+        }
     }
 
     /// Walls up, cut away or low (in the 3D view of both environments).

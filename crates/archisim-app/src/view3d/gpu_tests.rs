@@ -263,3 +263,55 @@ fn selection_outline_and_walls_in_front() {
         differ(&front, &low)
     );
 }
+
+/// With the sun, the walls cast their shadows on the floor (darker than
+/// without them), and the finest level draws too.
+#[test]
+fn shadows_of_the_sun() {
+    use super::look::Quality;
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let (m, _, _) = room();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [400, 300];
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    let sun = glam::Vec3::new(-0.6, -0.5, 0.45);
+    let draw = |q: Quality| {
+        let mut r = Renderer::new(&device, view_formats, true);
+        r.set_scene(&device, &scene);
+        r.set_look(q, Some(sun));
+        r.render(&device, &queue, &camera, size, 1);
+        r.read_pixels(&device, &queue).unwrap().2
+    };
+    let light = draw(Quality::Light);
+    let normal = draw(Quality::Normal);
+    let pretty = draw(Quality::Pretty);
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, px) in [("ligera", &light), ("normal", &normal), ("bonita", &pretty)] {
+            resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap()
+            .save_png(dir.join(format!("sombras-{name}.png")))
+            .unwrap();
+        }
+    }
+    let luma = |p: &[u8; 4]| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]);
+    let darker = |a: &[u8], b: &[u8]| {
+        a.as_chunks::<4>()
+            .0
+            .iter()
+            .zip(b.as_chunks::<4>().0)
+            .filter(|(x, y)| luma(y) + 60 < luma(x))
+            .count()
+    };
+    let shaded = darker(&light, &normal);
+    assert!(shaded > 1500, "shadow pixels: {shaded}");
+    assert!(darker(&light, &pretty) > 1500);
+}
