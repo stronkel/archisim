@@ -168,7 +168,7 @@ impl super::ArchiSimApp {
                     .object_library
                     .as_ref()
                     .filter(|l| l.object_types().any(|t| t.name == name))
-                    .or_else(|| self.flora_library.as_deref())?;
+                    .or(self.flora_library.as_deref())?;
                 let ty = lib.object_types().find(|t| t.name == name)?;
                 self.thumbs3d.get(ctx, gpu, format!("l:{name}"), || {
                     crate::type_preview::object_model(lib, ty)
