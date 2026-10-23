@@ -1298,6 +1298,10 @@ pub fn build() -> Result<Document, ModelError> {
             .map(|i| (i.key, i.summary))
             .collect();
         for (key, summary) in items {
+            // Elbows and tees are counted by units: not a metre of pipe.
+            if key.starts_with("pieza:") {
+                continue;
+            }
             let Some((_, code)) = DEMO_PRICES.iter().find(|(w, _)| summary.contains(w)) else {
                 continue;
             };
@@ -1485,7 +1489,7 @@ mod tests {
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
         assert_eq!(doc.undo_label(), Some("Precios del presupuesto"));
-        assert_eq!(m.prices().count(), 28);
+        assert_eq!(m.prices().count(), 29);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 3);
