@@ -138,9 +138,20 @@ Pendiente: unirse también al arrastrar en planta; muebles en L (sofá rinconera
 
 ## 6 quater. Colecciones (v0.50)
 
-- **Colección** encima del catálogo (en Amueblar y en Exterior): nórdico cálido, mediterráneo, años 50 o japandi, cada una con su tira de colores. Con una elegida, las tarjetas enseñan todas las piezas de la biblioteca con la tira de colores de la colección (el dibujo sigue siendo el de planta; las miniaturas en 3D están pendientes), y se colocan ya en sus maderas, telas, metales y cerámicas.
+- **Colección** encima del catálogo (en Amueblar y en Exterior): nórdico cálido, mediterráneo, años 50 o japandi, cada una con su tira de colores. Con una elegida, las tarjetas enseñan todas las piezas de la biblioteca con la tira de colores de la colección (desde v0.51, cada tarjeta es la pieza en 3D), y se colocan ya en sus maderas, telas, metales y cerámicas.
 - **Aplicar** pasa lo seleccionado a la colección (una habitación entera, con un recuadro); «Sin colección» lo devuelve a la biblioteca. Un paso de Deshacer.
 - Piezas nuevas en el mismo estilo: camas con cabecero tapizado o de lamas, colcha y cojines; mesitas de patas cónicas y flotantes; taburetes, islas y lo de la encimera; toallas y cestas; cuadros, espejos y relojes; cojines de suelo y mantas; y la pestaña **Jardín y terraza** en Exterior (tumbonas, sombrillas, macetones y pérgolas). Detalle en `docs/BIBLIOTECA_3D.md` («Colecciones»).
+
+## 6 quinquies. Imagen de la Maqueta (v0.51)
+
+- **Cielo y suelo con bruma**: en la Maqueta, detrás del modelo, un cielo que va del azul del cénit al blanco del horizonte y un suelo que se pierde en la bruma; lo lejano del modelo (árboles al fondo) se aclara con ella. La cuadrícula se dibuja en ese suelo. En Técnica, el fondo de siempre.
+- **Luz**: menú «Luz» con **Día** (el sol del proyecto), **Atardecer** (sol bajo y dorado del oeste, sombras largas, cielo cálido) y **Noche** (cielo oscuro; las pantallas, bombillas y velas brillan, y cada lámpara alumbra lo que tiene alrededor, hasta 4,5 m, las 16 más cercanas a lo que se mira; la luz de las lámparas no atraviesa los muros).
+- **Texturas de los muebles**: lino (hilos y nudos), bouclé (bucles), punto (puntos en V), terciopelo (brilla donde la tela se vuelve), mimbre (trenzado), terrazo (chinas de colores) y mármol (vetas). Las toman solas las telas, fibras y piedras de la paleta, por su nombre; se pueden elegir también en «Tipos y materiales», como las de siempre. Son dibujos del sombreador, sin imágenes.
+- **Captura grande**: en el menú «Imagen», «Captura grande…» guarda la vista tal cual en un PNG de 3840 píxeles de ancho, con su cielo y su luz.
+- **Miniaturas en 3D**: las tarjetas del catálogo son la pieza en 3D, vista de frente y un poco desde arriba, con sus colores y texturas (y los de la colección elegida). Se hacen unas pocas en cada fotograma; mientras tanto, el dibujo de planta.
+- Arreglo: las líneas de contorno y el vidrio dejaban la imagen medio transparente (con fondo claro no se notaba; de noche salían líneas blancas).
+
+Pendiente: la imagen realista (`archisim render` y Visualización) todavía no usa las texturas nuevas ni la noche; la luz de las lámparas no hace sombras.
 
 ## 7. Bloques
 

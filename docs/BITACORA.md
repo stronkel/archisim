@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 (6) · v0.51: imagen de la Maqueta y miniaturas en 3D
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (los tipos de textura nuevos se guardan como los de siempre). Antonio eligió seguir por los puntos 2 (imagen) y 3 (miniaturas en 3D) y dejar para después el `.glb` para D5 y Twinmotion. Detalle en `docs/MAQUETA.md` §6 quinquies.
+
+**Hecho**
+- Cielo y suelo con bruma detrás del modelo en la Maqueta; la cuadrícula, dibujada en ese suelo.
+- Menú **Luz**: día (sol del proyecto), atardecer (sol bajo, dorado) y noche (las lámparas encienden sus pantallas y bombillas y alumbran alrededor).
+- Texturas de lino, bouclé, punto, terciopelo, mimbre, terrazo y mármol, que las telas, fibras y piedras de la paleta toman solas.
+- **Captura grande…** en el menú **Imagen**: PNG de 3840 píxeles de ancho.
+- **Miniaturas en 3D** en el catálogo, también en los colores de la colección elegida.
+- Arreglo: líneas blancas alrededor de todo de noche (la imagen quedaba medio transparente en los contornos y el vidrio).
+
+**Pendiente**
+- El `.glb` de todo el proyecto para D5, Twinmotion o Blender (lo siguiente, cuando digas).
+- La imagen realista (`archisim render`) sin las texturas nuevas ni la noche; sombras de las lámparas.
+
+**Qué debe probar Antonio**
+1. Abre la demo en la Maqueta. Gira la cámara hasta ver el horizonte: cielo azul arriba, el suelo perdiéndose en la bruma.
+2. **Luz: Atardecer** y luego **Noche**: de noche, la lámpara de la mesita y la de pie del salón se encienden y alumbran el suelo y las paredes de su habitación.
+3. Acércate al sofá con **Imagen: Bonita**: el lino, los cojines de terciopelo y la manta de lana deben tener su textura; una butaca de ratán, su trenzado.
+4. Amueblar → Salón y Decoración: las tarjetas son ahora las piezas en 3D. Elige **Colección: Japandi**: salen con sus colores.
+5. **Imagen → Captura grande…** y guarda el PNG: ábrelo, son 3840 píxeles de ancho, listos para pasarlos a una IA o a D5.
+
+---
+
 ## 2026-10-23 (5) · v0.50: colecciones y piezas en el mismo estilo
 
 Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (la pérgola sale como `IfcBuildingElementProxy`; lo demás, `IfcFurniture`). Detalle en `docs/BIBLIOTECA_3D.md` («Colecciones») y `docs/MAQUETA.md` §6 quater.

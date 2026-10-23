@@ -130,7 +130,7 @@ Un estilo para toda la casa. Una colección no tiene muebles propios: dice qué 
 
 - Modelos por colección, cuando la pieza no elige el suyo: en nórdico, sofá nórdico, cama con cabecero tapizado y mesita de patas; en mediterráneo, cama de madera, butaca de ratán y taburete de enea; en años 50, sofá de patas, mesita de patas cónicas y butaca baja; en japandi, cama de lamas, mesita flotante y aparador de lamas.
 - Lo que no es del mueble se queda como está: sábanas, pantallas de lámpara, vidrio, espejos, grifería cromada, porcelana de los sanitarios, plantas y lo que hay encima de las mesas.
-- **En la Maqueta**: «Colección» encima del catálogo (Amueblar y Exterior). Al elegir una, las tarjetas (que siguen siendo el dibujo de planta) llevan la tira de colores de la colección, y las piezas se colocan ya en ella. **Aplicar** pasa a la colección lo seleccionado (con un recuadro, una habitación entera); «Sin colección» + Aplicar lo devuelve a sus colores. Un paso de Deshacer.
+- **En la Maqueta**: «Colección» encima del catálogo (Amueblar y Exterior). Al elegir una, las tarjetas (la pieza en 3D desde v0.51) la enseñan en sus colores y llevan la tira de la colección, y las piezas se colocan ya en ella. **Aplicar** pasa a la colección lo seleccionado (con un recuadro, una habitación entera); «Sin colección» + Aplicar lo devuelve a sus colores. Un paso de Deshacer.
 
 **Piezas nuevas en el mismo estilo** (44 tipos, 12 familias nuevas y dos ampliadas):
 
