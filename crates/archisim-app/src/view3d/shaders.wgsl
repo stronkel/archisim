@@ -412,6 +412,11 @@ fn empty(a: vec4<f32>) -> bool {
     return abs(a.w) < 1e-4;
 }
 
+// A sample of something selected (its distance written negative).
+fn picked_at(a: vec4<f32>) -> bool {
+    return a.w < 0.0 && !empty(a);
+}
+
 // Whether two neighbouring samples belong to different surfaces.
 fn crease(a: vec4<f32>, b: vec4<f32>) -> f32 {
     let a_empty = empty(a);
@@ -452,21 +457,27 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     e = max(e, max(depth_step(l, c, r), depth_step(u, c, d)));
     // The outline of what is selected, a little thicker than the
     // contours, in its own colour: its faces keep theirs.
+    // No loops here: the shader compiler of Windows (FXC) refuses to
+    // unroll them.
     if (g.edges.z > 0.5) {
-        let inside = c.w < 0.0 && !empty(c);
-        for (var k = 1; k <= 2; k = k + 1) {
-            let o = s * k;
-            let around = array<vec2<i32>, 8>(
-                vec2<i32>(o, 0), vec2<i32>(-o, 0), vec2<i32>(0, o), vec2<i32>(0, -o),
-                vec2<i32>(o, o), vec2<i32>(-o, o), vec2<i32>(o, -o), vec2<i32>(-o, -o),
-            );
-            for (var j = 0; j < 8; j = j + 1) {
-                let n = sample_nd(p + around[j]);
-                let other = n.w < 0.0 && !empty(n);
-                if (other != inside) {
-                    return vec4<f32>(0.98, 0.55, 0.05, 1.0);
-                }
-            }
+        let inside = picked_at(c);
+        let o = s;
+        let t = 2 * s;
+        var ring = false;
+        ring = ring || picked_at(sample_nd(p + vec2<i32>(o, 0))) != inside;
+        ring = ring || picked_at(sample_nd(p - vec2<i32>(o, 0))) != inside;
+        ring = ring || picked_at(sample_nd(p + vec2<i32>(0, o))) != inside;
+        ring = ring || picked_at(sample_nd(p - vec2<i32>(0, o))) != inside;
+        ring = ring || picked_at(sample_nd(p + vec2<i32>(t, 0))) != inside;
+        ring = ring || picked_at(sample_nd(p - vec2<i32>(t, 0))) != inside;
+        ring = ring || picked_at(sample_nd(p + vec2<i32>(0, t))) != inside;
+        ring = ring || picked_at(sample_nd(p - vec2<i32>(0, t))) != inside;
+        ring = ring || picked_at(sample_nd(p + vec2<i32>(o, o))) != inside;
+        ring = ring || picked_at(sample_nd(p - vec2<i32>(o, o))) != inside;
+        ring = ring || picked_at(sample_nd(p + vec2<i32>(o, -o))) != inside;
+        ring = ring || picked_at(sample_nd(p - vec2<i32>(o, -o))) != inside;
+        if (ring) {
+            return vec4<f32>(0.98, 0.55, 0.05, 1.0);
         }
     }
     return vec4<f32>(0.05, 0.05, 0.06, e * g.edges.y);
