@@ -142,6 +142,18 @@ impl<'a> Importer<'a> {
                 overhang: snap(overhang),
             })
             .map_err(|e| explain(&e))?;
+        // Its dormers and covering.
+        let parts = |name: &str| {
+            self.property_own(id, "ArchiSim_RoofParts", name)
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+        if let (Some(dormers), Some(covering)) = (parts("Dormers"), parts("Covering")) {
+            let (dormers, covering) =
+                crate::roof_parts::decode_parts(&self.model, &dormers, &covering, len);
+            let _ = self.model.set_roof_covering(rid, covering);
+            let _ = self.model.edit_roof(rid, |r| r.dormers = dormers);
+        }
         self.roof_ids.insert(id);
         self.report.roofs += 1;
         self.sources.push((rid.0, id));

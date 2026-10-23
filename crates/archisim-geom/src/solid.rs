@@ -33,6 +33,8 @@ pub enum SolidOwner {
     Column(ColumnId),
     Beam(BeamId),
     Roof(archisim_core::RoofId),
+    /// A dormer or roof window: its roof and its index there.
+    Dormer(archisim_core::RoofId, u16),
     Stair(archisim_core::StairId),
     Terrain(archisim_core::TerrainId),
     CurtainWall(archisim_core::CurtainWallId),
@@ -57,6 +59,7 @@ impl SolidOwner {
             SolidOwner::Column(x) => x.0,
             SolidOwner::Beam(x) => x.0,
             SolidOwner::Roof(x) => x.0,
+            SolidOwner::Dormer(x, _) => x.0,
             SolidOwner::Stair(x) => x.0,
             SolidOwner::Terrain(x) => x.0,
             SolidOwner::CurtainWall(x) => x.0,
@@ -944,10 +947,19 @@ pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
     let mut out = Vec::new();
     for plane in roof.planes() {
         let slope = plane.slope;
+        // The dormers on this plane (on this piece of it) cut it.
+        let holes: Vec<Vec<Point2>> = roof
+            .plane_holes(plane.side)
+            .into_iter()
+            .filter(|h| {
+                h.iter()
+                    .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
+            })
+            .collect();
         out.extend(layered_plate(
             SolidOwner::Roof(id),
             &plane.outline,
-            &[],
+            &holes,
             &|p| level + roof.base_offset + slope.rise_at(p),
             &|t| slope.vertical(t),
             &stype.layers,
@@ -1645,6 +1657,30 @@ fn clip_x(poly: &[Point2], at: f64, right: bool) -> Vec<Point2> {
     out
 }
 
+/// [`layered_plate`] for the other modules of this crate.
+pub(crate) fn layered_plate_pub(
+    owner: SolidOwner,
+    outline: &[Point2],
+    holes: &[Vec<Point2>],
+    top: &dyn Fn(Point2) -> f64,
+    vertical: &dyn Fn(f64) -> f64,
+    layers: &[archisim_core::Layer],
+) -> Vec<Solid> {
+    layered_plate(owner, outline, holes, top, vertical, layers)
+}
+
+/// [`vertical_prism`] for the other modules of this crate.
+pub(crate) fn vertical_prism_pub(
+    owner: SolidOwner,
+    material: archisim_core::MaterialId,
+    profile: &[Point2],
+    origin: Point2,
+    u: archisim_core::Vec2,
+    half: f64,
+) -> Solid {
+    vertical_prism(owner, material, profile, origin, u, half)
+}
+
 /// A plate of layers under a (level or inclined) top face: one skin with
 /// the top face in the top layer's material, the soffit in the bottom
 /// layer's, and the edges banded by layer. Layers touching inside have no
@@ -2103,6 +2139,12 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     }
     for r in model.roofs() {
         out.extend(roof_solids(model, r.id));
+        // What it carries: dormers, tiles, gutters (bloque K).
+        for i in 0..r.dormers.len() {
+            out.extend(crate::roof_parts::dormer_solids(model, r.id, i));
+        }
+        out.extend(crate::roof_parts::tile_solids(model, r.id));
+        out.extend(crate::roof_parts::gutter_solids(model, r.id));
     }
     for s in model.stairs() {
         out.extend(stair_solids(model, s.id));
@@ -2487,7 +2529,9 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
             .is_some_and(|w| w.level == level),
         SolidOwner::Column(c) => model.column(c).is_some_and(|c| c.level == level),
         SolidOwner::Beam(b) => model.beam(b).is_some_and(|b| b.level == level),
-        SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| r.level == level),
+        SolidOwner::Roof(r) | SolidOwner::Dormer(r, _) => {
+            model.roof(r).is_some_and(|r| r.level == level)
+        }
         SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
         SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
         SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),

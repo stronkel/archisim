@@ -24,7 +24,7 @@ pub fn raw_id(e: Element) -> u64 {
         Element::Column(i) => i.0,
         Element::Beam(i) => i.0,
         Element::Section(i) => i.0,
-        Element::Roof(i) => i.0,
+        Element::Roof(i) | Element::Dormer(i, _) => i.0,
         Element::Stair(i) => i.0,
         Element::Terrain(i) => i.0,
         Element::CurtainWall(i) => i.0,

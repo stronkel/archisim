@@ -5801,3 +5801,83 @@ fn budget_takes_a_price_from_a_bank() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Dormers (bloque K): with the roof tool's «Buhardilla» method a click on
+/// a plane puts a gabled dormer there, looking down the slope; «Ventana de
+/// cubierta» a roof window; they are selected and deleted on their own,
+/// the roof's covering adds tiles and gutters, and undo takes it all back.
+#[test]
+fn dormers_with_the_roof_tool() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let pb = h.app.ed.level;
+    h.app.ed.add_level("Cubierta", 3.0).unwrap();
+    h.app.ed.level = pb;
+    h.frame();
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("t");
+    h.click_at(p(6.0, 4.5));
+    let r = h.model().roofs().next().unwrap().id;
+    h.app
+        .ed
+        .set_roof_kind(r, crate::editor::RoofKind::Gable, 0.55)
+        .unwrap();
+    // A point 60 cm up each sloping plane, in the middle of its side.
+    let spots: Vec<Point2> = {
+        let roof = h.model().roof(r).unwrap();
+        let n = roof.outline.len();
+        (0..n)
+            .filter(|i| roof.slopes[*i].is_some())
+            .map(|i| {
+                let (a, b) = (roof.outline[i], roof.outline[(i + 1) % n]);
+                let u = (b - a).normalized().unwrap();
+                a + (b - a) * 0.5 + u.perp_left() * 0.6
+            })
+            .collect()
+    };
+    assert_eq!(spots.len(), 2);
+    h.app.choose_method("Buhardilla");
+    assert_eq!(h.app.roof_settings.dormer, Some(archisim_core::DormerKind::Gable));
+    let before = h.model().roofs().count();
+    h.click_at(spots[0]);
+    let roof = h.model().roof(r).unwrap().clone();
+    assert_eq!(roof.dormers.len(), 1, "{:?}", h.app.message);
+    assert_eq!(h.model().roofs().count(), before, "no new roof");
+    assert!(roof.dormer_shape(&roof.dormers[0]).is_some());
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Dormer(r, 0)]
+    );
+    // A roof window on the other plane, a little to the side.
+    h.app.choose_method("Ventana de cubierta");
+    h.click_at(spots[1] + archisim_core::Vec2::new(-2.0, 0.0));
+    assert_eq!(h.model().roof(r).unwrap().dormers.len(), 2, "{:?}", h.app.message);
+    // In 3D: the dormers are their own solids and the roof has their holes.
+    let solids = archisim_geom::solid::model_solids(h.model());
+    assert!(solids
+        .iter()
+        .any(|s| s.owner == archisim_geom::solid::SolidOwner::Dormer(r, 0)));
+    // Tiles and gutters.
+    let gutter = h.model().default_gutter();
+    h.app
+        .ed
+        .set_roof_covering(
+            r,
+            archisim_core::RoofCovering {
+                tiles: Some(archisim_core::TileKind::Mixed),
+                tile_material: None,
+                gutter,
+            },
+        )
+        .unwrap();
+    assert!(!archisim_geom::roof_parts::tile_solids(h.model(), r).is_empty());
+    // The roof window goes alone with Supr.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Dormer(r, 1)].into_iter().collect();
+    h.key(Key::Delete);
+    assert_eq!(h.model().roof(r).unwrap().dormers.len(), 1);
+    assert_eq!(h.model().roofs().count(), 1);
+    h.app.ed.undo();
+    assert_eq!(h.model().roof(r).unwrap().dormers.len(), 2);
+}

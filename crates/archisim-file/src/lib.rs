@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 31;
+pub const CURRENT_VERSION: u32 = 32;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -282,8 +282,9 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // have none. 28 → 29: wall types' `sweeps` and slab types'
             // `edge`; older ones have none. 29 → 30: object types'
             // `symbol`; older ones have none. 30 → 31: prices of the
-            // budget's items (`prices`); older ones have none.
-            9..=30 => {
+            // budget's items (`prices`); older ones have none. 31 → 32:
+            // roofs' `dormers` and `covering`; older ones have none.
+            9..=31 => {
                 let mut v = value;
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));

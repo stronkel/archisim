@@ -11,6 +11,7 @@
 //! ```
 
 mod colaboracion;
+mod cubiertas;
 mod demo;
 mod equipo;
 mod formas;
@@ -72,6 +73,11 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim cubiertas [carpeta]
+      Lo que llevan las cubiertas: buhardillas a dos aguas, a un agua y
+      planas, ventanas de cubierta, tejas de cada clase, caballetes,
+      canalones y bajantes: cubiertas.archisim, cubiertas.ifc, planta de
+      cubiertas y axonometría en SVG. Por defecto: ./out
   archisim formas [carpeta]
       Las formas de Concepto juntas: aristas redondeadas y achaflanadas,
       esfera, cilindro, cono, revolución, uniones, restas, intersecciones,
@@ -197,6 +203,10 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("cubiertas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(cubiertas::write(&dir))
         }
         Some("formas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

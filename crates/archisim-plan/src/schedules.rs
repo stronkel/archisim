@@ -557,6 +557,132 @@ fn roofs(model: &Model) -> Vec<Item> {
             });
         }
     }
+    items.extend(roof_parts(model));
+    items
+}
+
+/// What the roofs carry (bloque K): tiles (m², with the pieces), ridge
+/// tiles (m), gutters and downpipes (m) and dormers (ud).
+fn roof_parts(model: &Model) -> Vec<Item> {
+    let new: Vec<&archisim_core::Roof> = model
+        .roofs()
+        .filter(|r| model.phase(r.id.0) == Phase::New)
+        .collect();
+    let mut items: Vec<Item> = Vec::new();
+    let mut push = |key: String,
+                    code: String,
+                    unit: &'static str,
+                    summary: String,
+                    line: Measured| {
+        match items.iter_mut().find(|i| i.key == key) {
+            Some(i) => i.lines.push(line),
+            None => items.push(Item {
+                code,
+                key,
+                unit,
+                summary,
+                lines: vec![line],
+            }),
+        }
+    };
+    let ground = model
+        .levels()
+        .iter()
+        .map(|l| l.elevation)
+        .fold(f64::INFINITY, f64::min);
+    for r in &new {
+        let lz = model.level(r.level).map_or(0.0, |l| l.elevation);
+        let line = |comment: String, quantity: f64| Measured {
+            comment,
+            units: 1.0,
+            length: 0.0,
+            width: 0.0,
+            height: 0.0,
+            quantity,
+        };
+        if let Some(t) = r.covering.tiles {
+            let area = r.surface_area();
+            let pieces = t.per_m2().map_or(String::new(), |n| {
+                format!(" ≈ {} piezas", (area * n).ceil())
+            });
+            push(
+                format!("teja:{}", t.code()),
+                format!("TJ{}", t.code()[..2].to_uppercase()),
+                "m2",
+                format!("Cubrición de {}", t.name().to_lowercase()),
+                line(format!("Cubierta {}{pieces}", r.id.0), area),
+            );
+            let ridge: f64 = r
+                .ridge_lines()
+                .iter()
+                .map(|(p, q)| {
+                    let dz = r.top_at(*p) - r.top_at(*q);
+                    (p.distance(*q).powi(2) + dz * dz).sqrt()
+                })
+                .sum();
+            if ridge > 0.0 {
+                push(
+                    "caballete".into(),
+                    "TJCB".into(),
+                    "m",
+                    "Caballete de cumbreras y limatesas".into(),
+                    line(format!("Cubierta {}", r.id.0), ridge),
+                );
+            }
+        }
+        if let Some(g) = &r.covering.gutter {
+            let runs = r.gutter_runs();
+            let length: f64 = runs.iter().map(|x| x.start.distance(x.end)).sum();
+            push(
+                format!("canalon:{}", g.shape.code()),
+                "CN01".into(),
+                "m",
+                format!(
+                    "Canalón {} de {} cm",
+                    g.shape.name().to_lowercase(),
+                    dec(g.size * 100.0, 1)
+                ),
+                line(format!("Cubierta {}", r.id.0), length),
+            );
+            let pipes: Vec<f64> = runs
+                .iter()
+                .flat_map(|x| x.downpipes.iter().map(move |_| lz + x.z - ground))
+                .collect();
+            push(
+                "bajante".into(),
+                "CN02".into(),
+                "m",
+                format!("Bajante de Ø {} mm", dec(g.downpipe * 1000.0, 0)),
+                Measured {
+                    comment: format!("Cubierta {}: {} bajantes", r.id.0, pipes.len()),
+                    units: pipes.len() as f64,
+                    length: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                    quantity: pipes.iter().sum(),
+                },
+            );
+        }
+        for d in &r.dormers {
+            if r.dormer_shape(d).is_none() {
+                continue;
+            }
+            push(
+                format!("buhardilla:{}", d.kind.code()),
+                format!("BH{}", d.kind.code()[..2].to_uppercase()),
+                "ud",
+                d.kind.name().to_string(),
+                line(
+                    format!(
+                        "Cubierta {} · {} cm de ancho",
+                        r.id.0,
+                        dec(d.width * 100.0, 0)
+                    ),
+                    1.0,
+                ),
+            );
+        }
+    }
     items
 }
 

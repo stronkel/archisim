@@ -41,6 +41,10 @@ pub struct Roof {
     pub base_offset: f64,
     /// How far the eaves and verges stand out from the footprint.
     pub overhang: f64,
+    /// Dormers and roof windows on its planes.
+    pub dormers: Vec<Dormer>,
+    /// Its tiles and gutters.
+    pub covering: RoofCovering,
 }
 
 /// Data needed to create a roof.
@@ -366,11 +370,20 @@ impl Roof {
             })
     }
 
-    /// Area of the roof surface (on the slope), eaves included.
+    /// Area of the roof surface (on the slope), eaves included, less the
+    /// holes of its dormers.
     pub fn surface_area(&self) -> f64 {
         self.planes()
             .iter()
-            .map(|p| signed_area(&p.outline).abs() * p.slope.vertical(1.0))
+            .map(|p| {
+                let holes: f64 = self
+                    .plane_holes(p.side)
+                    .iter()
+                    .filter(|h| h.iter().all(|q| point_in_polygon(*q, &p.outline)))
+                    .map(|h| signed_area(h).abs())
+                    .sum();
+                (signed_area(&p.outline).abs() - holes) * p.slope.vertical(1.0)
+            })
             .sum()
     }
 }
@@ -693,6 +706,8 @@ impl Model {
                 slopes,
                 base_offset: spec.base_offset,
                 overhang: spec.overhang,
+                dormers: Vec::new(),
+                covering: RoofCovering::default(),
             },
         );
         self.stamp_phase(id.0);
@@ -710,6 +725,13 @@ impl Model {
             .get(&id)
             .cloned()
             .ok_or(ModelError::UnknownRoof(id))?;
+        // Where its dormers are, in plan, in case the sides change.
+        let old_sides = r.outline.len();
+        let spots: Vec<Option<Point2>> = r
+            .dormers
+            .iter()
+            .map(|d| r.dormer_frame(d).map(|f| f.origin))
+            .collect();
         edit(&mut r);
         let (outline, slopes) = self.validate_roof(&NewRoof {
             roof_type: r.roof_type,
@@ -719,8 +741,32 @@ impl Model {
             base_offset: r.base_offset,
             overhang: r.overhang,
         })?;
+        // Drawn the other way round (a mirrored roof): the sides are
+        // renumbered and each runs the other way.
+        let reversed = signed_area(&r.outline) < 0.0;
+        let n = outline.len();
         r.outline = outline;
         r.slopes = slopes;
+        if reversed && n == old_sides {
+            for d in &mut r.dormers {
+                d.side = (2 * n - 2 - d.side) % n;
+                d.along = -d.along;
+            }
+        } else if n != old_sides {
+            // Sides added or removed: each dormer goes back on whatever
+            // plane is where it was.
+            let found: Vec<Option<(usize, f64, f64)>> = spots
+                .iter()
+                .map(|p| p.and_then(|p| r.locate_on_plane(p)))
+                .collect();
+            for (d, f) in r.dormers.iter_mut().zip(found) {
+                if let Some((side, along, up)) = f {
+                    d.side = side;
+                    d.along = along;
+                    d.up = up;
+                }
+            }
+        }
         self.roofs.insert(id, r);
         Ok(())
     }
@@ -896,7 +942,13 @@ impl Model {
                 base_offset: r.base_offset,
                 overhang: r.overhang,
             };
+            let parts = r
+                .dormers
+                .iter()
+                .try_for_each(|d| self.check_dormer_parts(d))
+                .and_then(|_| self.check_covering(&r.covering));
             claim(r.id.0, Some(&r.guid))
+                .and(parts)
                 .and_then(|_| self.validate_roof(&spec))
                 .map(|(outline, slopes)| {
                     r.outline = outline;

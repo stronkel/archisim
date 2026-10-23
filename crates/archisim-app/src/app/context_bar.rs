@@ -36,6 +36,9 @@ enum MethodAct {
     Command(&'static str),
     /// The tool draws only like this (a beam by two points).
     Fixed,
+    /// Roof tool: clicks put a dormer of this kind on a roof (none: draw
+    /// roofs again).
+    Dormer(archisim_core::DormerKind),
     /// Not for this tool.
     None,
 }
@@ -167,6 +170,7 @@ fn element_name(e: &Element) -> &'static str {
         Element::Beam(_) => "Viga",
         Element::Section(_) => "Sección",
         Element::Roof(_) => "Cubierta",
+        Element::Dormer(..) => "Buhardilla",
         Element::Stair(_) => "Escalera",
         Element::Terrain(_) => "Terreno",
         Element::CurtainWall(_) => "Muro cortina",
@@ -407,6 +411,33 @@ impl ArchiSimApp {
         ];
         let mut list = list;
         list.extend(self.curve_methods());
+        if self.tool == Tool::Roof {
+            // Dormers and roof windows on a roof already drawn.
+            let dormer = self.roof_settings.dormer;
+            if dormer.is_some() {
+                for m in &mut list {
+                    m.on = false;
+                }
+            }
+            let gable = match dormer {
+                Some(k) if k != archisim_core::DormerKind::Skylight => k,
+                _ => archisim_core::DormerKind::Gable,
+            };
+            list.push(m(
+                Mark::Glyph(Glyph::Roof),
+                "Buhardilla",
+                "Clic en un faldón: la buhardilla mira aguas abajo (a dos aguas, a un agua o plana, en Propiedades)",
+                MethodAct::Dormer(gable),
+                dormer.is_some_and(|k| k != archisim_core::DormerKind::Skylight),
+            ));
+            list.push(m(
+                Mark::Glyph(Glyph::Window),
+                "Ventana de cubierta",
+                "Clic en un faldón: una ventana en su plano",
+                MethodAct::Dormer(archisim_core::DormerKind::Skylight),
+                dormer == Some(archisim_core::DormerKind::Skylight),
+            ));
+        }
         Some((name, list))
     }
 
@@ -668,9 +699,16 @@ impl ArchiSimApp {
         };
         match act {
             MethodAct::Wall(mode) => self.wall_tool.set_mode(mode),
+            MethodAct::Dormer(k) => {
+                self.roof_settings.dormer = Some(k);
+                self.roof_tool.finish();
+            }
             MethodAct::Outline(o) => match self.tool {
                 Tool::Slab => set_outline(&mut self.slab_settings.wand, &mut self.slab_tool, o),
-                Tool::Roof => set_outline(&mut self.roof_settings.wand, &mut self.roof_tool, o),
+                Tool::Roof => {
+                    self.roof_settings.dormer = None;
+                    set_outline(&mut self.roof_settings.wand, &mut self.roof_tool, o)
+                }
                 Tool::Zone => set_outline(&mut self.room_settings.wand, &mut self.zone_tool, o),
                 Tool::Plot => {
                     let mut wand = false;

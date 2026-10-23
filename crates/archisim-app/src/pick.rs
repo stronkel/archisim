@@ -25,6 +25,9 @@ pub enum Element {
     Section(archisim_core::SectionId),
     /// A pitched roof, picked by its eaves.
     Roof(archisim_core::RoofId),
+    /// A dormer or roof window of a roof (its index there), picked by its
+    /// footprint.
+    Dormer(archisim_core::RoofId, u16),
     /// A stair, picked by its flights and landings.
     Stair(archisim_core::StairId),
     /// The terrain, picked anywhere on it if nothing else is there.
@@ -115,6 +118,14 @@ pub fn outline<G: Geo + ?Sized>(geo: &G, element: Element) -> Option<Vec<Point2>
             .map(|b| archisim_plan::members::beam_outline(model, b)),
         Element::Section(id) => model.section(id).map(section_outline),
         Element::Roof(id) => model.roof(id).map(|r| r.eaves()),
+        Element::Dormer(id, i) => model
+            .roof(id)
+            .and_then(|r| {
+                r.dormers
+                    .get(usize::from(i))
+                    .and_then(|d| r.dormer_shape(d))
+            })
+            .map(|s| s.footprint),
         Element::Stair(id) => model.stair(id).map(stair_outline),
         Element::Terrain(id) => model
             .terrain(id)
@@ -412,6 +423,11 @@ pub fn elements_on_level(model: &Model, level: LevelId) -> Vec<Element> {
     v.extend(model.objects_on_level(level).map(|o| Element::Object(o.id)));
     v.extend(model.beams_on_level(level).map(|b| Element::Beam(b.id)));
     v.extend(model.stairs_on_level(level).map(|s| Element::Stair(s.id)));
+    v.extend(
+        model
+            .roofs_on_level(level)
+            .flat_map(|r| (0..r.dormers.len()).map(move |i| Element::Dormer(r.id, i as u16))),
+    );
     v.extend(model.roofs_on_level(level).map(|r| Element::Roof(r.id)));
     v.extend(model.slabs_on_level(level).map(|s| Element::Slab(s.id)));
     v.extend(
@@ -459,6 +475,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
         Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
         Element::Roof(id) => model.roof(id).map(|r| TypeOf::Slab(r.roof_type)),
+        Element::Dormer(..) => None,
         Element::Dimension(_)
         | Element::Mark(_)
         | Element::Room(_)
@@ -519,6 +536,8 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Railing(_) | Element::Object(_) => 1,
         Element::Beam(_) => 3,
         Element::Roof(_) => 3,
+        // On the roof: before it.
+        Element::Dormer(..) => 2,
         Element::Stair(_) => 1,
         Element::Room(_) => 3,
         Element::Slab(_) => 4,
@@ -628,6 +647,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Column(id) => Element::Column(id),
         SolidOwner::Beam(id) => Element::Beam(id),
         SolidOwner::Roof(id) => Element::Roof(id),
+        SolidOwner::Dormer(id, i) => Element::Dormer(id, i),
         SolidOwner::Stair(id) => Element::Stair(id),
         SolidOwner::Terrain(id) => Element::Terrain(id),
         SolidOwner::CurtainWall(id) => Element::CurtainWall(id),
@@ -652,6 +672,7 @@ pub fn solid_of(e: Element) -> Option<archisim_geom::solid::SolidOwner> {
         Element::Column(id) => SolidOwner::Column(id),
         Element::Beam(id) => SolidOwner::Beam(id),
         Element::Roof(id) => SolidOwner::Roof(id),
+        Element::Dormer(id, i) => SolidOwner::Dormer(id, i),
         Element::Stair(id) => SolidOwner::Stair(id),
         Element::Terrain(id) => SolidOwner::Terrain(id),
         Element::CurtainWall(id) => SolidOwner::CurtainWall(id),

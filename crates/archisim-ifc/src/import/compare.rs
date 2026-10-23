@@ -675,6 +675,44 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
         if !same {
             diff(format!("cubierta {}: {:?} / {:?}", r.guid, r, t));
         }
+        // Its dormers and covering (materials by name).
+        let mat = |m: &Model, id| m.material(id).map(|x| x.name.clone());
+        let same_dormers = r.dormers.len() == t.dormers.len()
+            && r.dormers.iter().zip(&t.dormers).all(|(x, y)| {
+                x.guid == y.guid
+                    && x.kind == y.kind
+                    && x.side == y.side
+                    && close(x.along, y.along)
+                    && close(x.up, y.up)
+                    && close(x.width, y.width)
+                    && close(x.height, y.height)
+                    && close(x.pitch, y.pitch)
+                    && close(x.window_width, y.window_width)
+                    && close(x.window_height, y.window_height)
+                    && mat(a, x.wall_material) == mat(b, y.wall_material)
+                    && mat(a, x.frame_material) == mat(b, y.frame_material)
+                    && mat(a, x.glass_material) == mat(b, y.glass_material)
+            });
+        let (cr, ct) = (&r.covering, &t.covering);
+        let same_covering = cr.tiles == ct.tiles
+            && cr.tile_material.and_then(|m| mat(a, m)) == ct.tile_material.and_then(|m| mat(b, m))
+            && match (&cr.gutter, &ct.gutter) {
+                (None, None) => true,
+                (Some(x), Some(y)) => {
+                    x.shape == y.shape
+                        && close(x.size, y.size)
+                        && close(x.downpipe, y.downpipe)
+                        && close(x.spacing, y.spacing)
+                        && mat(a, x.material) == mat(b, y.material)
+                }
+                _ => false,
+            };
+        if !same_dormers || !same_covering {
+            diff(format!(
+                "buhardillas o cubrición de la cubierta {} distintas",
+                r.guid
+            ));
+        }
     }
     for s in a.rooms() {
         let Some(t) = b.rooms().find(|t| t.guid == s.guid) else {

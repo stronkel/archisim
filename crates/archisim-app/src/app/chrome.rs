@@ -688,6 +688,7 @@ impl ArchiSimApp {
             Tool::Object => "Clic: colocar el objeto (lado de atrás en el punto) · Espacio: girar 90° · Esc: flecha",
             Tool::Railing if self.railing_points.is_empty() => "Clic: inicio de la barandilla · Esc: flecha",
             Tool::Railing => "Clic: siguiente punto · Intro, doble clic o clic derecho: terminar · Esc: quitar el último punto",
+            Tool::Roof if self.roof_settings.dormer.is_some() => "Clic en un faldón: buhardilla por el centro de su frente · Esc: flecha",
             Tool::Roof if self.roof_wand() => "Clic dentro del edificio: cubierta por las caras exteriores de sus muros · Esc: flecha",
             Tool::Roof if !self.roof_tool.is_drawing() => "Clic: primera esquina de la cubierta · Esc: flecha",
             Tool::Roof => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",

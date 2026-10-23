@@ -198,6 +198,20 @@ Antonio probó v0.37–v0.41 («funciona todo perfecto») y entregó la lista de
 
 El trabajo colaborativo de la lista ya está (Colaboración → Compartir en equipo, v0.38). Con el bloque 7, la revisión del 22/10/2026 queda completa: siguiente, lo que diga Antonio al probar v0.41.1–v0.47.
 
+## 8. Entorno Maqueta y cubiertas (23/10/2026)
+
+Pedido por Antonio el 23/10/2026: un editor tan intuitivo como Los Sims y tan modular como Paralives, para arquitectura, formas y urbanismo, con una imagen cartoon con sombras que no castigue al MacBook de 2016 («lo importante siempre será la fluidez»). Decidido con él: **no es otro programa ni otra disciplina**, sino un entorno (Técnica · Maqueta) sobre el mismo modelo; lo que es herramienta va a los dos y lo que es forma de presentarla, solo a la maqueta. Diseño en `docs/MAQUETA.md`.
+
+Al probar inserciones pidió además buhardillas que se adapten a la cubierta (no existían) y tejas y canalones en el modelo.
+
+| Bloque | Qué | Estado |
+|---|---|---|
+| K1 | Buhardillas (a dos aguas, a un agua, plana) y ventanas de cubierta pinchadas en un faldón | — |
+| K2 | Tejas, caballetes, canalones y bajantes | — |
+| MQ1 | Entorno Maqueta: interruptor, ventana sin columnas, catálogo Construir · Amueblar · Exterior, tarjeta flotante, cuadrícula, muros recortados, habitación arrastrando, cuentagotas | — |
+| V1 | Imagen: sombras, penumbra guardada, luz de ilustración, texturas como imagen, niveles de calidad | — |
+| MQ2–MQ4 | Muebles modulares, pinceles de Exterior, flechas y aros en Concepto | — |
+
 ## Propuesta de orden
 
 1. ~~Bloque 8: **mover / copiar / estirar** con el ratón y **varita mágica** (1.1 + 1.2)~~ — hecho en v0.9, con la edición de vértices (1.3).
