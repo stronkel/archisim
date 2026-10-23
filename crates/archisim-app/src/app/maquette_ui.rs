@@ -348,19 +348,10 @@ impl ArchiSimApp {
                 "Cuadrícula de 50 cm en el suelo de la planta, y los clics se ajustan a ella (G)",
             );
             ui.separator();
-            self.quality_buttons(ui);
-            ui.separator();
-            self.light_buttons(ui);
+            self.look_menus(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.workspace_switch(ui);
-                ui.add_space(10.0);
-                if ui
-                    .button("Captura")
-                    .on_hover_text("Guarda la vista tal cual en una imagen grande (3840 píxeles de ancho), para un render con IA, D5 o Twinmotion")
-                    .clicked()
-                {
-                    self.big_capture();
-                }
+
                 ui.add_space(10.0);
                 if ui
                     .button("Encuadrar")
@@ -391,20 +382,48 @@ impl ArchiSimApp {
         }
     }
 
-    /// Day, evening or night (the Maqueta's).
-    pub(super) fn light_buttons(&mut self, ui: &mut Ui) {
-        use crate::view3d::look::Light;
-        ui.spacing_mut().item_spacing.x = 2.0;
-        ui.label("Luz");
-        for l in Light::ALL {
-            if ui
-                .selectable_label(self.v3d.light == l, l.name())
-                .on_hover_text(l.hint())
-                .clicked()
-            {
-                self.v3d.light = l;
-            }
-        }
+    /// The picture's quality and its light (day, evening or night), as
+    /// two short lists: the Maqueta's bar has little room.
+    fn look_menus(&mut self, ui: &mut Ui) {
+        use crate::view3d::look::{Light, Quality};
+        egui::ComboBox::from_id_salt("maquette-quality")
+            .selected_text(format!("Imagen: {}", self.v3d.quality.name()))
+            .width(120.0)
+            .show_ui(ui, |ui| {
+                for q in Quality::ALL {
+                    if ui
+                        .selectable_label(self.v3d.quality == q, q.name())
+                        .on_hover_text(q.hint())
+                        .clicked()
+                    {
+                        self.v3d.quality = q;
+                        self.prefs.quality_3d = Some(q);
+                    }
+                }
+                ui.separator();
+                if ui
+                    .button("Captura grande…")
+                    .on_hover_text("Guarda la vista tal cual en una imagen de 3840 píxeles de ancho (PNG), para un render con IA, D5 o Twinmotion")
+                    .clicked()
+                {
+                    ui.close();
+                    self.big_capture();
+                }
+            });
+        egui::ComboBox::from_id_salt("maquette-light")
+            .selected_text(format!("Luz: {}", self.v3d.light.name()))
+            .width(110.0)
+            .show_ui(ui, |ui| {
+                for l in Light::ALL {
+                    if ui
+                        .selectable_label(self.v3d.light == l, l.name())
+                        .on_hover_text(l.hint())
+                        .clicked()
+                    {
+                        self.v3d.light = l;
+                    }
+                }
+            });
     }
 
     /// Walls up, cut away or low (in the 3D view of both environments).

@@ -740,7 +740,9 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     if (g.look.w > 0.5) {
         shade_corner = corner_shade(p, c, 3 * s);
     }
-    return vec4<f32>(0.05, 0.05, 0.06, max(e * g.edges.y, shade_corner));
+    // The ink: darker at night, or it would be lighter than the scene.
+    let ink = vec3<f32>(0.05, 0.05, 0.06) * (1.0 - 0.9 * g.atmos.y);
+    return vec4<f32>(ink, max(e * g.edges.y, shade_corner));
 }
 
 // How far the surface through `c` bends inwards between two samples on

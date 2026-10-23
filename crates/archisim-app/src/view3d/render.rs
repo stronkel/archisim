@@ -27,6 +27,23 @@ const BACKGROUND: wgpu::Color = wgpu::Color {
     a: 1.0,
 };
 
+/// Drawing over what is there: the colour by its opacity, and the
+/// picture's opacity kept (with wgpu's `ALPHA_BLENDING` it would drop
+/// under 1 on every contour line and every pane of glass, and what is
+/// behind the picture in the window would show through there).
+const OVER: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::SrcAlpha,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 struct Globals {
@@ -345,7 +362,7 @@ impl Renderer {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: COLOR_FORMAT,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(OVER),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -403,7 +420,7 @@ impl Renderer {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: COLOR_FORMAT,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(OVER),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
