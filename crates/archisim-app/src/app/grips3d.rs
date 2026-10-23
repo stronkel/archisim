@@ -216,7 +216,9 @@ impl ArchiSimApp {
             });
         }
         let Some(mut g) = self.object_grip else {
-            self.v3d.set_overlay(None, || None);
+            if self.object_move.is_none() {
+                self.v3d.set_overlay(None, || None);
+            }
             return false;
         };
         if response.dragged_by(PointerButton::Primary) {

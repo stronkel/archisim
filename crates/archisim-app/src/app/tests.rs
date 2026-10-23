@@ -6198,6 +6198,112 @@ fn maquette_environment() {
 
 /// In the Maqueta, a room drawn in the 3D view by two clicks on the
 /// ground: four walls, their floor and their room.
+/// Placing as in Paralives: in the Maqueta a sofa dragged near a wall
+/// goes against it facing the room, as it is drawn while dragged; a vase
+/// placed over the table rests on it.
+#[test]
+fn maquette_places_like_paralives() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    h.frame();
+    h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
+    h.app.v3d.camera.pitch = 1.3;
+    h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
+    h.app.v3d.camera.distance = 14.0;
+    h.frame();
+    // A room of 6 × 4 and a sofa in its middle.
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Room);
+    h.frame();
+    for q in [screen_3d(&h, 0.0, 0.0, 0.0), screen_3d(&h, 6.0, 4.0, 0.0)] {
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+        h.click_screen(q);
+        h.frame();
+    }
+    h.key(Key::Escape);
+    let level = h.app.ed.level;
+    let sofa_type = h.app.ed.library_object_type("Sofá de 3 plazas").unwrap();
+    let sofa = h
+        .app
+        .ed
+        .transact("Sofá", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: sofa_type,
+                position: p(3.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.frame();
+    // Dragged by its seat towards the west wall.
+    let from = screen_3d(&h, 3.0, 2.5, 0.3);
+    let to = screen_3d(&h, 0.55, 2.5, 0.3);
+    h.pos = from;
+    h.events.push(Event::PointerMoved(from));
+    h.frame();
+    h.button(PointerButton::Primary, true);
+    for k in 1..=8 {
+        let q = from + (to - from) * (k as f32 / 8.0);
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+    }
+    assert!(h.app.v3d.has_overlay(), "not drawn while dragged");
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    let o = h.model().object(sofa).unwrap().clone();
+    let forward = archisim_core::Vec2::new(-o.rotation.sin(), o.rotation.cos());
+    assert!((forward.x - 1.0).abs() < 1e-6, "{o:?} {:?}", h.app.message);
+    assert!(o.position.x < 0.4, "{o:?}");
+    // A vase over a table, placed from the catalog: on the table.
+    let table_type = h
+        .app
+        .ed
+        .library_object_type("Mesa de comedor 160×90")
+        .unwrap();
+    h.app
+        .ed
+        .transact("Mesa", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: table_type,
+                position: p(4.0, 1.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
+        super::object_gallery::ObjectPick::Library("Jarrón con ramas"),
+    ));
+    h.frame();
+    let at = screen_3d(&h, 4.0, 1.45, 0.75);
+    h.pos = at;
+    h.events.push(Event::PointerMoved(at));
+    h.frame();
+    h.click_screen(at);
+    h.frame();
+    let vase = h
+        .model()
+        .objects()
+        .find(|o| {
+            h.model()
+                .object_type(o.object_type)
+                .is_some_and(|t| t.name == "Jarrón con ramas")
+        })
+        .cloned()
+        .expect("a vase");
+    assert!(
+        (vase.base_offset - 0.75).abs() < 0.03,
+        "{vase:?} {:?}",
+        h.app.message
+    );
+}
+
 #[test]
 fn maquette_room_in_3d() {
     let mut h = Harness::new(Editor::new_project());

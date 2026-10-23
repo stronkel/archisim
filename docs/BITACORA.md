@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 (4) · v0.49: colocar como en Paralives
+
+Misma rama y pull request #56. Sin cambios de formato. Detalle en `docs/MAQUETA.md` §6 ter.
+
+**Hecho**
+- Lo pequeño (decoración, lámparas de mesa, plantas) se posa solo en la mesa, la balda o la encimera que hay debajo, en 3D y en planta.
+- En la Maqueta, los muebles se arrastran por el suelo sin herramienta, viéndolos donde quedarán; cerca de un muro se pegan a él de espaldas, mirando a la habitación. También al colocarlos.
+- Muebles que se unen: dos de cocina, altos, estanterías, aparadores o sofás iguales, uno junto a otro, se hacen uno (con sus puertas o plazas).
+
+**Pendiente**
+- Unirse al arrastrar en planta; muebles en L.
+
+**Qué debe probar Antonio**
+1. En la Maqueta de la demo, pincha el sofá y arrástralo por el salón: acércalo a otra pared y suéltalo; debe quedar de espaldas a ella.
+2. Amueblar → Decoración → Jarrón con ramas, y pincha encima de la mesa del comedor: debe quedar sobre el tablero. Prueba también una lámpara de mesa sobre la mesita de noche.
+3. Amueblar → Cocina → «Muebles de cocina 240» junto al que ya hay, en línea: deben quedar como un solo mueble de 4,80 m.
+4. Pon dos sofás iguales uno al lado del otro: uno solo, más largo, con más plazas.
+
+---
+
 ## 2026-10-23 (3) · v0.49: biblioteca acogedora (al modo de Paralives)
 
 Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim`. Detalle en `docs/BIBLIOTECA_3D.md` («Biblioteca acogedora»).

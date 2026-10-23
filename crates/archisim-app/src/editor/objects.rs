@@ -52,13 +52,15 @@ impl Editor {
             .flatten()
             .map_or(0.0, |mm| mm.round() / 1000.0);
         self.transact("Colocar objeto", |m| {
-            m.add_object(NewObject {
+            let id = m.add_object(NewObject {
                 level,
                 object_type,
                 position: at,
                 rotation: s.rotation,
                 base_offset: s.base_offset + ground,
-            })
+            })?;
+            // Against another that joins (worktops, bookcases…): one.
+            Ok(crate::placing::join_alongside(m, id).unwrap_or(id))
         })
     }
 

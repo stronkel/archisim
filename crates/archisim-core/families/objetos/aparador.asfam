@@ -1,7 +1,7 @@
 family "Aparador"
   category furniture
   host none
-  version 1
+  version 2
   description "Aparador bajo de patas con puertas y cajones, o con puertas de lamas"
   folder "Salón"
 
@@ -26,6 +26,8 @@ plan 1:50
   line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
 
 outputs
+  # Placed against another of its kind, in line: one, as wide as both.
+  joins = "width"
   generator = "props:sideboard"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

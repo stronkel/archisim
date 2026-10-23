@@ -127,6 +127,15 @@ Pendiente de MQ1: miniaturas en 3D, arrastrar objetos por el suelo en 3D sin her
 - **Muebles que crecen por piezas**: la sección `stretch` de las recetas (`docs/FAMILIAS.md`) hace que, al estirar, el sofá gane plazas, la mesa sillas, el armario y el mueble alto puertas, la estantería baldas y la cómoda columnas de cajones, cuando las de antes quedarían demasiado anchas o estrechas.
 - **Más mullidos**: los cojines del sofá y la silla tapizada, la almohada y el edredón se hinchan en el centro (`Builder::pillow`), y en 3D las aristas redondeadas de los muebles se sombrean suaves, sin una línea en cada faceta.
 
+## 6 ter. Colocar como en Paralives (v0.49)
+
+- **Lo pequeño se apoya solo**: la decoración, las lámparas de mesa, las plantas y cualquier objeto pequeño (de menos de 70 cm de lado y 1 m de alto) se posan en la mesa, la balda, la encimera o el alféizar que hay debajo del cursor, en 3D y en planta (donde toma la cara más alta del mueble que hay debajo: el tablero de la mesa, no los respaldos de sus sillas). La vista previa ya sale encima.
+- **Arrastrar muebles en la Maqueta**, sin herramienta: se pincha un mueble y se lleva por el suelo; se ve donde quedará mientras se arrastra. Cerca de un muro (a menos de 35 cm) se pega a él de espaldas y mirando a la habitación; si no, a la cuadrícula. Lo pequeño, arrastrado, se sube a lo que haya debajo.
+- **Contra la pared al colocar**: en la Maqueta, un mueble que se coloca cerca de un muro ya se pone de espaldas a él.
+- **Piezas que se unen**: dos muebles de cocina, muebles altos, estanterías, aparadores o sofás del mismo tipo de fondo y altura, colocados uno junto a otro en línea, se convierten en uno solo tan largo como los dos (y, por la sección `stretch` de su receta, con sus puertas o plazas). Lo dice la salida `joins = "width"` de la receta. Al colocar y al arrastrar en la Maqueta; un paso de Deshacer.
+
+Pendiente: unirse también al arrastrar en planta; muebles en L (sofá rinconera, cocina en esquina).
+
 ## 7. Bloques
 
 | Bloque | Contenido |

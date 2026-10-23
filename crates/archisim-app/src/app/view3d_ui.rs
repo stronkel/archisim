@@ -722,7 +722,8 @@ impl ArchiSimApp {
         }
 
         // Handles of the object selected (bloque 5): its size.
-        let grabbing_object = self.object_grips_3d(&ctx, &response, rect);
+        let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
+            | self.object_drag_3d(&ctx, &response, rect);
         let v = &mut self.v3d;
 
         // Navigation.

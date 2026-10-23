@@ -1,7 +1,7 @@
 family "Sofá"
   category furniture
   host none
-  version 3
+  version 4
   description "Sofá recto con brazos y respaldo"
   folder "Sofás y sillones"
 
@@ -43,6 +43,8 @@ plan 1:50
     line (-width / 2 + 0.2 + i * pw, 0.2) to (-width / 2 + 0.2 + i * pw, depth) pen thin
 
 outputs
+  # Placed against another of its kind, in line: one, as wide as both.
+  joins = "width"
   generator = "props:sofa"
   ifc_class = "IfcFurniture"
   ifc_type = "SOFA"

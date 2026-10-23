@@ -281,6 +281,8 @@ pub struct ArchiSimApp {
     /// Stretching an object by a handle in the 3D view.
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
+    /// Furniture dragged along the floor in the Maqueta.
+    object_move: Option<placing::ObjectMove3d>,
     render: render_ui::RenderState,
     budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
@@ -605,6 +607,7 @@ impl ArchiSimApp {
             // (never in the tests).
             object_grip: None,
             object_grip_hover: None,
+            object_move: None,
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
@@ -2230,6 +2233,7 @@ mod object_ui;
 mod paint_ui;
 mod params_ui;
 mod phases_ui;
+mod placing;
 mod plan_ui;
 mod planting_ui;
 mod presentation_ui;
