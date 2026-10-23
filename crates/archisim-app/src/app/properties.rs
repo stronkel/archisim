@@ -805,16 +805,19 @@ impl ArchiSimApp {
                 }
             });
             let mut textures = self.v3d.textures;
-            ui.horizontal(|ui| {
-                ui.add_space(4.0);
-                ui.checkbox(&mut textures, "Texturas de los materiales")
-                    .on_hover_text(
-                        "Ladrillo, madera, piedra… dibujados en las caras. Apagadas, el 3D es más ligero (en los Mac con Intel vienen apagadas porque su tarjeta gráfica se queda colgada con ellas)",
-                    );
-            });
+            super::props::row(
+                ui,
+                "Texturas",
+                "Ladrillo, madera, piedra… dibujados en las caras. «Ligeras» las dibuja más sencillas, para tarjetas gráficas antiguas (las de los Mac con Intel se quedaban colgadas con las completas); sin texturas, colores lisos",
+                |ui, _| {
+                    for m in crate::view3d::render::TextureMode::ALL {
+                        ui.selectable_value(&mut textures, m, m.label());
+                    }
+                },
+            );
             if textures != self.v3d.textures {
                 self.v3d.set_textures(textures);
-                self.prefs.textures_3d = Some(textures);
+                self.prefs.textures_3d = Some(textures.key().to_string());
             }
         });
         self.render_group(ui);

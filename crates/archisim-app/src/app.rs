@@ -726,6 +726,8 @@ impl ArchiSimApp {
             v3d: View3dState::with_textures(
                 prefs
                     .textures_3d
+                    .as_deref()
+                    .and_then(crate::view3d::render::TextureMode::from_key)
                     .unwrap_or_else(view3d_ui::default_textures),
             ),
             gpu: None,

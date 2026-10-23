@@ -15,7 +15,7 @@ use eframe::egui_wgpu::{self, wgpu};
 use super::ArchiSimApp;
 use crate::pick::Element;
 use crate::view3d::camera::Camera;
-use crate::view3d::render::Renderer;
+use crate::view3d::render::{Renderer, TextureMode};
 use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
 
@@ -96,14 +96,19 @@ pub struct View3dState {
     section_hover: Option<Face>,
     /// Pixels a point of the picture (2: supersampled), for its edges.
     edge_step: u32,
-    /// The materials' textures (brick, wood, stone…) are drawn.
-    pub textures: bool,
+    /// How the materials' textures (brick, wood, stone…) are drawn.
+    pub textures: TextureMode,
 }
 
-/// Textures on, except on Intel Macs: their AMD graphics drivers (on
-/// recent macOS, often patched) hang drawing them.
-pub fn default_textures() -> bool {
-    !cfg!(all(target_os = "macos", target_arch = "x86_64"))
+/// Full textures, except on Intel Macs: their AMD graphics drivers (on
+/// recent macOS, often patched) hang drawing them, so they draw the light
+/// ones.
+pub fn default_textures() -> TextureMode {
+    if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        TextureMode::Light
+    } else {
+        TextureMode::Full
+    }
 }
 
 impl Default for View3dState {
@@ -136,16 +141,16 @@ struct Gpu {
 }
 
 impl View3dState {
-    /// A 3D view with the textures on or off.
-    pub fn with_textures(textures: bool) -> Self {
+    /// A 3D view with its textures drawn so.
+    pub fn with_textures(textures: TextureMode) -> Self {
         Self {
             textures,
             ..Self::default()
         }
     }
 
-    /// Turns the textures on or off: the shaders are made again.
-    pub fn set_textures(&mut self, on: bool) {
+    /// Changes how the textures are drawn: the shaders are made again.
+    pub fn set_textures(&mut self, on: TextureMode) {
         if on == self.textures {
             return;
         }

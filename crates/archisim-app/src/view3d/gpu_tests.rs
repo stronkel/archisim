@@ -38,7 +38,7 @@ pub(crate) fn picture(size: [u32; 2]) -> Option<(u32, u32, Vec<u8>)> {
     let scene = Scene::build(&m, &BTreeSet::new());
     let mut camera = Camera::default();
     camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
-    let mut r = Renderer::new(&device, view_formats, true);
+    let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
     r.set_scene(&device, &scene);
     r.render(&device, &queue, &camera, size, 1);
     r.read_pixels(&device, &queue)
@@ -106,7 +106,7 @@ fn section_box_cuts_and_caps() {
         ..Camera::default()
     };
     camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
-    let mut r = Renderer::new(&device, view_formats, true);
+    let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
     r.set_scene(&device, &scene);
     let mut cut = super::section_box::SectionBox::around(scene.lo, scene.hi);
     cut.hi.z = 1.0;
@@ -140,22 +140,20 @@ fn section_box_cuts_and_caps() {
 }
 
 #[test]
-fn shaders_without_textures_are_valid() {
-    let source = super::render::shader_source(false);
-    assert!(!source.contains("fn cells("));
-    let module = naga::front::wgsl::parse_str(&source).expect("parses");
-    naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::all(),
-    )
-    .validate(&module)
-    .expect("valid");
-    let full = super::render::shader_source(true);
-    let module = naga::front::wgsl::parse_str(&full).expect("parses");
-    naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::all(),
-    )
-    .validate(&module)
-    .expect("valid");
+fn shaders_with_every_texture_mode_are_valid() {
+    use super::render::{shader_source, TextureMode};
+    for mode in TextureMode::ALL {
+        let source = shader_source(mode);
+        let module = naga::front::wgsl::parse_str(&source)
+            .unwrap_or_else(|e| panic!("{mode:?}: {}", e.emit_to_string(&source)));
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .unwrap_or_else(|e| panic!("{mode:?}: {e:?}"));
+    }
+    assert!(!shader_source(TextureMode::Off).contains("fn cells("));
+    let light = shader_source(TextureMode::Light);
+    assert!(!light.contains("fn cells(") && !light.contains("switch kind"));
 }

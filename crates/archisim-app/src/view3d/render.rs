@@ -75,26 +75,65 @@ pub struct Renderer {
     clip: Option<(glam::Vec3, glam::Vec3)>,
 }
 
-/// The shaders, with or without the materials' textures. Without them
-/// the texture code is left out of the shader altogether: the graphics
-/// drivers of some old Macs (AMD on Intel Macs) hang on it.
-pub fn shader_source(textures: bool) -> String {
-    let full = include_str!("shaders.wgsl");
-    if textures {
-        return full.to_string();
+/// How the materials' textures are drawn in the 3D view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextureMode {
+    /// Plain colours: the texture code is left out of the shader.
+    Off,
+    /// Simpler textures, for graphics drivers that hang on the full ones
+    /// (AMD on Intel Macs): no `switch`, no loops.
+    Light,
+    Full,
+}
+
+impl TextureMode {
+    pub const ALL: [TextureMode; 3] = [Self::Full, Self::Light, Self::Off];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Sin texturas",
+            Self::Light => "Ligeras",
+            Self::Full => "Completas",
+        }
     }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Off => "no",
+            Self::Light => "ligeras",
+            Self::Full => "completas",
+        }
+    }
+
+    pub fn from_key(k: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == k)
+    }
+}
+
+/// The shaders with the textures drawn as `mode` says.
+pub fn shader_source(mode: TextureMode) -> String {
+    let full = include_str!("shaders.wgsl");
     let (Some(a), Some(b)) = (full.find("// ---- Textures"), full.find("struct ModelOut")) else {
         return full.to_string();
     };
-    format!(
-        "{}fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {{\n    return base;\n}}\n\n{}",
-        &full[..a],
-        &full[b..]
-    )
+    match mode {
+        TextureMode::Full => full.to_string(),
+        TextureMode::Light => format!(
+            "{}{}{}",
+            &full[..a],
+            include_str!("textures_light.wgsl"),
+            &full[b..]
+        ),
+        TextureMode::Off => format!(
+            "{}fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {{\n    return base;\n}}\n\n{}",
+            &full[..a],
+            &full[b..]
+        ),
+    }
 }
 
 impl Renderer {
-    pub fn new(device: &wgpu::Device, view_formats: bool, textures: bool) -> Self {
+    pub fn new(device: &wgpu::Device, view_formats: bool, textures: TextureMode) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("archisim 3d"),
             source: wgpu::ShaderSource::Wgsl(shader_source(textures).into()),
