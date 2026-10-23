@@ -5685,7 +5685,8 @@ fn maquette_walks_with_wasd() {
             repeat: false,
             modifiers: Default::default(),
         });
-        h.events.push(Event::Text(format!("{key:?}").to_lowercase()));
+        h.events
+            .push(Event::Text(format!("{key:?}").to_lowercase()));
         for _ in 0..frames {
             h.frame();
         }
