@@ -1,7 +1,7 @@
 family "Alcorque"
   category street
   host none
-  version 1
+  version 2
   description "Alcorque cuadrado con rejilla, para un árbol de calle; el punto de inserción es su centro"
   folder "Mobiliario urbano"
 
@@ -10,6 +10,10 @@ type_params
     width length = 1.20 range 0.60..3.00 label "Lado"
   section "Materiales"
     mat material = "Metal lacado" label "Rejilla"
+  section "Modelo 3D"
+    model3d choice("Fundición", "Pletinas", "Bordillo y grava") = "Fundición" label "Modelo 3D"
+    concrete material = "Piedra gris" label "Bordillo"
+    soil     material = "Tierra" label "Grava o tierra"
 
 body
   box (-width / 2, -width / 2, 0) to (width / 2, width / 2, 0.02) material mat
@@ -31,5 +35,6 @@ plan presentation
   cloud center (0, 0) radius w * 0.35 lobes 16 jitter 0 pen thin filled
 
 outputs
+  generator = "props:tree_grate"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

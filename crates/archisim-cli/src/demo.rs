@@ -465,6 +465,10 @@ pub fn build() -> Result<Document, ModelError> {
             ("Armario 120", 5.95, 1.5, FRAC_PI_2),
             ("Frigorífico 60", 6.05, 7.5, -FRAC_PI_2),
             ("Muebles altos de cocina 120", 7.45, 9.0 - inner, PI),
+            // Two streetlights by the path to the door (v0.52): they light
+            // at night in the Maqueta.
+            ("Farola fernandina 3,5 m", -1.2, -1.6, 0.0),
+            ("Farola fernandina 3,5 m", 13.2, -1.6, 0.0),
         ] {
             let object_type = ty(m, name)?;
             m.add_object(archisim_core::NewObject {
@@ -1450,7 +1454,7 @@ mod tests {
         // Twenty of the library (four of them the cosy pieces of the
         // living room), eight cypresses of a planting and one brought
         // from SketchUp.
-        assert_eq!(m.objects().count(), 29);
+        assert_eq!(m.objects().count(), 31);
         assert_eq!(m.plantings().count(), 1);
         assert_eq!(
             m.objects().filter(|o| m.type_grows(o.object_type)).count(),

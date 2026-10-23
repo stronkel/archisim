@@ -821,7 +821,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 159] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 205] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -1331,6 +1331,166 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 159] = [
     ("Pérgola de madera 3×3", "Pérgola", &[]),
     ("Pérgola de lamas 4×3", "Pérgola", &[("width", 4.0)]),
     ("Pérgola con cañizo 3×3", "Pérgola", &[]),
+    // Street furniture in more models (v0.52)…
+    (
+        "Banco de hormigón y madera",
+        "Banco",
+        &[("width", 2.0), ("depth", 0.55)],
+    ),
+    ("Banco de acero sin respaldo", "Banco", &[("width", 1.6)]),
+    (
+        "Farola fernandina 3,5 m",
+        "Farola",
+        &[
+            ("height", 3.5),
+            ("arm", 0.0),
+            ("pole", 0.14),
+            ("lamp", 0.45),
+            ("glow", 4.0),
+        ],
+    ),
+    (
+        "Farola de globo 4 m",
+        "Farola",
+        &[
+            ("height", 4.0),
+            ("arm", 0.0),
+            ("pole", 0.12),
+            ("lamp", 0.5),
+            ("glow", 4.0),
+        ],
+    ),
+    (
+        "Papelera de listones",
+        "Papelera",
+        &[("width", 0.5), ("height", 0.85)],
+    ),
+    (
+        "Papelera doble de reciclaje",
+        "Papelera",
+        &[("width", 0.7), ("height", 0.95)],
+    ),
+    (
+        "Bolardo de acero",
+        "Bolardo",
+        &[("width", 0.12), ("height", 0.9)],
+    ),
+    (
+        "Bolardo cónico de hormigón",
+        "Bolardo",
+        &[("width", 0.25), ("height", 0.55)],
+    ),
+    (
+        "Buzón sobre poste",
+        "Buzón",
+        &[("width", 0.4), ("depth", 0.3), ("height", 1.2)],
+    ),
+    (
+        "Buzones de portal",
+        "Buzón",
+        &[("width", 0.9), ("depth", 0.3), ("height", 1.5)],
+    ),
+    (
+        "Iglú de vidrio",
+        "Contenedor de residuos",
+        &[("width", 1.4), ("depth", 1.4), ("height", 1.7)],
+    ),
+    (
+        "Contenedor soterrado",
+        "Contenedor de residuos",
+        &[("width", 1.5), ("depth", 1.5), ("height", 1.2)],
+    ),
+    (
+        "Fuente de piedra",
+        "Fuente de beber",
+        &[("width", 0.5), ("depth", 0.4), ("height", 0.95)],
+    ),
+    (
+        "Estanque con surtidor",
+        "Fuente de beber",
+        &[("width", 3.0), ("depth", 3.0), ("height", 1.4)],
+    ),
+    (
+        "Jardinera de madera con flores",
+        "Jardinera",
+        &[("width", 1.6), ("depth", 0.6), ("height", 0.55)],
+    ),
+    (
+        "Jardinera de acero corten",
+        "Jardinera",
+        &[("width", 2.0), ("depth", 0.5), ("height", 0.6)],
+    ),
+    ("Alcorque de pletinas", "Alcorque", &[("width", 1.2)]),
+    ("Alcorque de piedra y grava", "Alcorque", &[("width", 1.4)]),
+    (
+        "Aparcabicis de onda",
+        "Aparcabicis",
+        &[("count", 5.0), ("step", 0.7)],
+    ),
+    (
+        "Aparcabicis de rueda",
+        "Aparcabicis",
+        &[("count", 6.0), ("step", 0.6), ("height", 0.6)],
+    ),
+    ("Señal de peligro", "Señal de tráfico", &[]),
+    ("Panel informativo", "Señal de tráfico", &[("plate", 0.8)]),
+    ("Bicicleta de carretera", "Bicicleta", &[("length", 1.7)]),
+    ("Bicicleta de carga", "Bicicleta", &[("length", 2.4)]),
+    // …and more of what a house has.
+    ("Chimenea de obra", "Chimenea", &[]),
+    (
+        "Estufa de leña",
+        "Chimenea",
+        &[("width", 0.8), ("depth", 0.7)],
+    ),
+    (
+        "Chimenea moderna lineal",
+        "Chimenea",
+        &[("width", 2.0), ("depth", 0.35)],
+    ),
+    ("Perchero de pie", "Perchero", &[]),
+    ("Recibidor con banco", "Perchero", &[("width", 1.2)]),
+    ("Silla de oficina", "Silla de oficina", &[]),
+    (
+        "Silla de oficina de malla",
+        "Silla de oficina",
+        &[("width", 0.66)],
+    ),
+    ("Mesa de bistró con dos sillas", "Mesa de exterior", &[]),
+    (
+        "Mesa de teca para seis",
+        "Mesa de exterior",
+        &[("width", 1.9), ("depth", 0.95)],
+    ),
+    (
+        "Sofá de exterior con mesa",
+        "Mesa de exterior",
+        &[("width", 2.0)],
+    ),
+    ("Silla colgante de ratán", "Columpio y hamaca", &[]),
+    (
+        "Hamaca con bastidor",
+        "Columpio y hamaca",
+        &[("width", 3.0)],
+    ),
+    ("Radiador de aluminio 80", "Radiador", &[]),
+    (
+        "Radiador de panel 120",
+        "Radiador",
+        &[("width", 1.2), ("height", 0.6)],
+    ),
+    ("Aire acondicionado de pared", "Aire acondicionado", &[]),
+    ("Ventilador de techo", "Ventilador de techo", &[]),
+    ("Ventilador de techo de ratán", "Ventilador de techo", &[]),
+    ("Piano de pared", "Piano", &[]),
+    ("Piano de cola", "Piano", &[("width", 1.5)]),
+    ("Cama cabaña 90×190", "Cama infantil", &[]),
+    ("Litera 90×190", "Cama infantil", &[]),
+    (
+        "Estantería con objetos 120",
+        "Estantería",
+        &[("width", 1.2), ("height", 1.9), ("shelves", 3.0)],
+    ),
 ];
 
 /// Choices and materials of the library's types that are not the family's
@@ -1490,6 +1650,41 @@ const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
             ("leaves", T("Copa olivo")),
         ],
     ),
+    (
+        "Jardinera de madera con flores",
+        &[("mat", T("Teca")), ("frame", T("Teca"))],
+    ),
+    ("Jardinera de acero corten", &[("mat", T("Terracota"))]),
+    ("Señal de peligro", &[("face", T("Cerámica blanca"))]),
+    (
+        "Panel informativo",
+        &[("face", T("Lino añil")), ("face2", T("Cerámica blanca"))],
+    ),
+    (
+        "Papelera de listones",
+        &[("mat", T("Teca")), ("dark", T("Negro mate"))],
+    ),
+    ("Bicicleta de carretera", &[("frame_mat", T("Lana teja"))]),
+    (
+        "Bicicleta de carga",
+        &[("frame_mat", T("Terciopelo salvia")), ("frame", T("Teca"))],
+    ),
+    ("Chimenea moderna lineal", &[("mat", T("Microcemento"))]),
+    (
+        "Silla de oficina de malla",
+        &[("cushion", T("Lana carbón"))],
+    ),
+    ("Mesa de teca para seis", &[("frame", T("Teca"))]),
+    (
+        "Sofá de exterior con mesa",
+        &[("mat", T("Teca")), ("frame", T("Teca"))],
+    ),
+    (
+        "Hamaca con bastidor",
+        &[("frame", T("Teca")), ("cushion", T("Lino añil"))],
+    ),
+    ("Litera 90×190", &[("duvet", T("Lino añil"))]),
+    ("Banco de acero sin respaldo", &[("back", B(false))]),
 ];
 
 /// The model of the 3D of the library's types that are not the family's
@@ -1576,6 +1771,43 @@ const MODELS: &[(&str, &str)] = &[
     ("Cuenco con lavanda", "Con lavanda"),
     ("Pérgola de lamas 4×3", "De lamas"),
     ("Pérgola con cañizo 3×3", "Con cañizo"),
+    ("Banco de hormigón y madera", "Hormigón y madera"),
+    ("Banco de acero sin respaldo", "Marco de acero"),
+    ("Farola fernandina 3,5 m", "Fernandina"),
+    ("Farola de globo 4 m", "Columna con globo"),
+    ("Baliza de jardín", "Baliza"),
+    ("Papelera de listones", "Listones de madera"),
+    ("Papelera doble de reciclaje", "Doble para reciclar"),
+    ("Bolardo de acero", "Tubo de acero"),
+    ("Bolardo cónico de hormigón", "Hormigón"),
+    ("Buzón sobre poste", "Sobre poste"),
+    ("Buzones de portal", "Buzones de portal"),
+    ("Iglú de vidrio", "Iglú de vidrio"),
+    ("Contenedor soterrado", "Soterrado"),
+    ("Fuente de piedra", "Bloque de piedra"),
+    ("Estanque con surtidor", "Estanque con surtidor"),
+    ("Jardinera de madera con flores", "Madera con flores"),
+    ("Jardinera de acero corten", "Acero corten con gramíneas"),
+    ("Alcorque de pletinas", "Pletinas"),
+    ("Alcorque de piedra y grava", "Bordillo y grava"),
+    ("Aparcabicis de onda", "Onda"),
+    ("Aparcabicis de rueda", "Soporte de rueda"),
+    ("Señal de peligro", "Triangular"),
+    ("Panel informativo", "Rectangular"),
+    ("Bicicleta de carretera", "Carretera"),
+    ("Bicicleta de carga", "De carga"),
+    ("Estufa de leña", "Estufa de leña"),
+    ("Chimenea moderna lineal", "Moderna lineal"),
+    ("Recibidor con banco", "Recibidor con banco"),
+    ("Silla de oficina de malla", "De malla"),
+    ("Mesa de teca para seis", "Teca para seis"),
+    ("Sofá de exterior con mesa", "Sofá de exterior"),
+    ("Hamaca con bastidor", "Hamaca"),
+    ("Radiador de panel 120", "Panel de acero"),
+    ("Ventilador de techo de ratán", "Aspas de ratán"),
+    ("Piano de cola", "De cola"),
+    ("Litera 90×190", "Litera"),
+    ("Estantería con objetos 120", "Con objetos"),
 ];
 
 /// The leaves of each species (a material of [`object_materials`]) and

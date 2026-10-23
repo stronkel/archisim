@@ -1,7 +1,7 @@
 family "Farola"
   category street
   host none
-  version 1
+  version 2
   description "Farola de báculo con su luminaria; el punto de inserción es el centro del poste y el brazo sale hacia delante"
   folder "Alumbrado"
 
@@ -16,6 +16,8 @@ type_params
     light material = "Luz" label "Luz"
   section "Presentación"
     glow length = 3.00 range 0.00..20.00 label "Radio del círculo de luz"
+  section "Modelo 3D"
+    model3d choice("Báculo curvo", "Fernandina", "Columna con globo", "Baliza") = "Báculo curvo" label "Modelo 3D"
 
 body
   let p = pole / 2
@@ -45,5 +47,6 @@ plan presentation
   polygon (-0.12, arm - lamp / 2) (0.12, arm - lamp / 2) (0.12, arm + lamp / 2) (-0.12, arm + lamp / 2) pen thin tint mat
 
 outputs
+  generator = "props:streetlight"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

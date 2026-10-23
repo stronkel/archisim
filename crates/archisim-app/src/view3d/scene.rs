@@ -79,34 +79,44 @@ pub struct Scene {
     pub lamps: Vec<[f32; 4]>,
 }
 
-/// How far a lamp's light reaches at night, metres.
+/// How far a lamp's light reaches at night, metres; a streetlight's.
 const LAMP_REACH: f32 = 4.5;
+const STREET_REACH: f32 = 11.0;
 
 /// The materials of an object that glow at night: the shade and the bulb
-/// of a lamp (also of a bedside table's), a candle's flame.
-fn glow_materials(model: &Model, o: archisim_core::ObjectId) -> Vec<archisim_core::MaterialId> {
+/// of a lamp (also of a bedside table's), a candle's flame, the fire of a
+/// fireplace, a streetlight's lantern; and how far its light reaches.
+fn glow_materials(
+    model: &Model,
+    o: archisim_core::ObjectId,
+) -> (Vec<archisim_core::MaterialId>, f32) {
+    let none = (Vec::new(), 0.0);
     let Some(t) = model
         .object(o)
         .and_then(|ob| model.object_type(ob.object_type))
     else {
-        return Vec::new();
+        return none;
     };
     let Some(kind) = model.family_prop(t.family) else {
-        return Vec::new();
+        return none;
     };
-    if !matches!(kind.as_str(), "lamp" | "nightstand" | "decor") {
-        return Vec::new();
-    }
+    let (keys, reach): (&[&str], f32) = match kind.as_str() {
+        "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
+        "fireplace" => (&["flame"], LAMP_REACH),
+        "streetlight" => (&["light"], STREET_REACH),
+        _ => return none,
+    };
     let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {
-        return Vec::new();
+        return none;
     };
-    ["shade", "bulb", "flame"]
+    let mats = keys
         .iter()
         .filter_map(|k| match t.values.get(*k).or(defaults.get(*k)) {
             Some(archisim_core::Value::Material(m)) => Some(archisim_core::MaterialId(*m)),
             _ => None,
         })
-        .collect()
+        .collect();
+    (mats, reach)
 }
 
 /// A corner as a key, to the tenth of a millimetre.
@@ -252,7 +262,7 @@ impl Scene {
     ) {
         let s = self;
         // What glows of each object, for its light.
-        let mut lit: std::collections::BTreeMap<u64, (Vec3, f32)> = Default::default();
+        let mut lit: std::collections::BTreeMap<u64, (Vec3, f32, f32)> = Default::default();
         for solid in solids {
             let id = solid.owner.id();
             if model.hidden_by_discipline(&disciplines.hidden, id) {
@@ -330,14 +340,16 @@ impl Scene {
             });
             // A lampshade, a bulb or a flame: it glows at night, and its
             // middle is where the lamp's light comes from.
-            let glows = match solid.owner {
+            let (glows, reach) = match solid.owner {
                 SolidOwner::Object(o) if !dimmed && !ghost => {
-                    glow_materials(model, o).contains(&solid.material)
+                    let (mats, reach) = glow_materials(model, o);
+                    (mats.contains(&solid.material), reach)
                 }
-                _ => false,
+                _ => (false, 0.0),
             };
             if glows {
-                let (sum, n) = lit.entry(id).or_insert((Vec3::ZERO, 0.0));
+                let (sum, n, r) = lit.entry(id).or_insert((Vec3::ZERO, 0.0, reach));
+                *r = reach;
                 for tri in &solid.triangles {
                     for v in tri {
                         *sum += Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32);
@@ -440,10 +452,10 @@ impl Scene {
                 }
             }
         }
-        for (sum, n) in lit.into_values() {
+        for (sum, n, reach) in lit.into_values() {
             if n > 0.0 {
                 let c = sum / n;
-                s.lamps.push([c.x, c.y, c.z, LAMP_REACH]);
+                s.lamps.push([c.x, c.y, c.z, reach]);
             }
         }
     }

@@ -1,17 +1,22 @@
 family "Bicicleta"
   category vehicle
   host none
-  version 2
+  version 3
   description "Bicicleta; el punto de inserción es el centro de la rueda trasera, mira hacia delante"
   folder "Bicicletas"
 
 type_params
   section "Dimensiones"
-    length length = 1.75 range 1.20..2.20 label "Largo"
+    length length = 1.75 range 1.20..2.60 label "Largo"
     wheel  length = 0.68 range 0.40..0.75 label "Diámetro de rueda"
   section "Materiales"
     frame_mat material = "Carrocería" label "Cuadro"
     tyre      material = "Neumático" label "Ruedas"
+  section "Modelo 3D"
+    model3d choice("Paseo", "Carretera", "De carga") = "Paseo" label "Modelo 3D"
+    metal material = "Cromado" label "Manillar y radios"
+    dark  material = "Negro mate" label "Sillín y puños"
+    frame material = "Ratán" label "Cesta o caja"
 
 body
   box (-0.02, 0, 0) to (0.02, wheel, wheel) material tyre
@@ -30,5 +35,6 @@ plan 1:50
   polygon (-0.10, wheel * 0.75) (0.10, wheel * 0.75) (0.10, wheel * 1.05) (-0.10, wheel * 1.05) pen thin
 
 outputs
+  generator = "props:bicycle"
   ifc_class = "IfcVehicle"
   ifc_type = "VEHICLEWHEELED"

@@ -1,7 +1,7 @@
 family "Estantería"
   category furniture
   host none
-  version 3
+  version 4
   description "Estantería de tablero con baldas fijas y trasera"
   folder "Estanterías"
 
@@ -15,9 +15,13 @@ type_params
   section "Materiales"
     mat material = "Madera de pino" label "Tablero"
   section "Modelo 3D"
-    model3d choice("Con libros") = "Con libros" label "Modelo 3D"
+    model3d choice("Con libros", "Con objetos") = "Con libros" label "Modelo 3D"
     books material = "Libros" label "Libros"
     books2 material = "Libros claros" label "Libros claros"
+    glaze   material = "Cerámica esmaltada" label "Jarrones"
+    pot_mat material = "Terracota" label "Macetas"
+    leaves  material = "Hoja verde" label "Plantas"
+    weave   material = "Ratán" label "Cestas"
 
 require width > 2 * board + 0.1 else "No queda hueco entre los costados"
 require height > (shelves + 2) * board + 0.1 else "No caben tantas baldas"

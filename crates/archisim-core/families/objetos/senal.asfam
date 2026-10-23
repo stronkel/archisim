@@ -1,7 +1,7 @@
 family "Señal de tráfico"
   category street
   host none
-  version 1
+  version 2
   description "Señal sobre poste; el punto de inserción es el centro del poste y la cara mira hacia delante"
   folder "Señalización"
 
@@ -11,7 +11,10 @@ type_params
     plate  length = 0.60 range 0.30..1.50 label "Ancho de la placa"
   section "Materiales"
     mat   material = "Metal lacado" label "Poste"
-    face  material = "Metal lacado" label "Placa"
+    face  material = "Cerámica blanca" label "Placa"
+  section "Modelo 3D"
+    model3d choice("Circular", "Triangular", "Rectangular") = "Circular" label "Modelo 3D"
+    face2 material = "Piloto" label "Borde"
 
 body
   box (-0.04, -0.04, 0) to (0.04, 0.04, height - plate) material mat
@@ -26,5 +29,6 @@ plan presentation
   polygon (-plate / 2, 0.04) (plate / 2, 0.04) (plate / 2, 0.07) (-plate / 2, 0.07) pen thin tint face
 
 outputs
+  generator = "props:sign"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

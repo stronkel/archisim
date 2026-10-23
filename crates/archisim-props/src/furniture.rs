@@ -903,6 +903,18 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
         if i + 1 == n || i == 0 && shelves > 2 {
             continue;
         }
+        if p.style() == 2 {
+            dressed_shelf(
+                b,
+                x0 + t + 0.02,
+                -x0 - t - 0.02,
+                d,
+                z + t,
+                gap - t,
+                &mut rnd,
+            );
+            continue;
+        }
         // Books, leaning against each other, leaving a gap now and then.
         let mut x = x0 + t + 0.02;
         let end = -x0 - t - 0.04;
@@ -922,6 +934,112 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
                 0.002,
             );
             x += bw + 0.002;
+        }
+    }
+}
+
+/// A shelf dressed as a lived-in one: runs of books, a vase, a little
+/// plant in its pot, books lying in a pile, a basket, from `x0` to `x1`
+/// on a board at `z`, `room` high.
+fn dressed_shelf(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    d: f64,
+    z: f64,
+    room: f64,
+    rnd: &mut impl FnMut() -> f64,
+) {
+    let mut x = x0;
+    while x < x1 - 0.06 {
+        let pick = rnd();
+        let left = x1 - x;
+        if pick < 0.4 {
+            // A run of books.
+            let run = (0.12 + 0.18 * rnd()).min(left);
+            let end = x + run;
+            while x < end {
+                let bw = (0.02 + 0.025 * rnd()).min(end - x);
+                let bh = room * (0.6 + 0.3 * rnd());
+                let role = if rnd() < 0.5 { "books" } else { "books2" };
+                b.rbox(role, [x, 0.03, z], [x + bw, 0.03 + d * 0.75, z + bh], 0.002);
+                x += bw + 0.002;
+            }
+        } else if pick < 0.55 && left > 0.14 {
+            // A vase.
+            let r = 0.045 + 0.02 * rnd();
+            let h = (room * (0.45 + 0.3 * rnd())).min(0.35);
+            b.lathe(
+                "glaze",
+                [x + r + 0.01, d * 0.5, z],
+                &[
+                    (0.0, 0.0),
+                    (r * 0.6, 0.0),
+                    (r, h * 0.45),
+                    (r * 0.45, h * 0.9),
+                    (r * 0.55, h),
+                    (0.0, h),
+                ],
+                1.0,
+                1.0,
+            );
+            x += 2.0 * r + 0.05;
+        } else if pick < 0.7 && left > 0.16 {
+            // A little plant in its pot.
+            let r = 0.05;
+            let c = [x + r + 0.02, d * 0.5];
+            b.lathe(
+                "pot",
+                [c[0], c[1], z],
+                &[(0.0, 0.0), (r * 0.8, 0.0), (r, 0.09), (0.0, 0.09)],
+                1.0,
+                1.0,
+            );
+            for k in 0..6 {
+                let a = std::f64::consts::TAU * k as f64 / 6.0 + rnd();
+                let up = (room - 0.1).clamp(0.05, 0.14);
+                b.blob(
+                    "leaves",
+                    [
+                        c[0] + a.cos() * 0.03,
+                        c[1] + a.sin() * 0.03,
+                        z + 0.1 + up * 0.4,
+                    ],
+                    [a.cos() * 0.02, a.sin() * 0.02, 0.0],
+                    [-a.sin() * 0.025, a.cos() * 0.025, 0.0],
+                    [a.cos() * 0.03, a.sin() * 0.03, up * 0.4],
+                );
+            }
+            x += 2.0 * r + 0.06;
+        } else if pick < 0.82 && left > 0.2 {
+            // Books lying in a pile.
+            let n = 2 + (rnd() * 3.0) as usize;
+            let mut zz = z;
+            for i in 0..n {
+                let th = 0.025 + 0.015 * rnd();
+                let role = if i % 2 == 0 { "books2" } else { "books" };
+                let s = 0.01 * rnd();
+                b.rbox(
+                    role,
+                    [x + s, 0.04, zz],
+                    [x + 0.17 + s, 0.04 + d * 0.7, zz + th],
+                    0.002,
+                );
+                zz += th;
+            }
+            x += 0.2;
+        } else if pick < 0.9 && left > 0.24 && room > 0.2 {
+            // A basket.
+            let w = 0.2;
+            b.rbox(
+                "weave",
+                [x, 0.03, z],
+                [x + w, d - 0.02, z + (room * 0.6).min(0.2)],
+                0.02,
+            );
+            x += w + 0.03;
+        } else {
+            x += 0.05 + 0.08 * rnd();
         }
     }
 }

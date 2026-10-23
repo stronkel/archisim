@@ -1,7 +1,7 @@
 family "Jardinera"
   category street
   host none
-  version 1
+  version 2
   description "Jardinera con plantas; el punto de inserción es el centro de la trasera"
   folder "Mobiliario urbano"
 
@@ -13,6 +13,11 @@ type_params
   section "Materiales"
     mat    material = "Hormigón prefabricado" label "Jardinera"
     leaves material = "Vegetación" label "Plantas"
+  section "Modelo 3D"
+    model3d choice("Hormigón con arbustos", "Madera con flores", "Acero corten con gramíneas") = "Hormigón con arbustos" label "Modelo 3D"
+    frame   material = "Madera de pino" label "Postes"
+    soil    material = "Tierra" label "Tierra"
+    flowers material = "Copa en flor" label "Flores"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
@@ -30,5 +35,6 @@ plan presentation
     cloud center (x, depth / 2) radius min(width / n, depth) * 0.46 lobes 7 jitter 0.2 pen thin tint leaves
 
 outputs
+  generator = "props:planter"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

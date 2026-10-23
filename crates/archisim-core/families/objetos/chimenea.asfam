@@ -1,0 +1,35 @@
+family "Chimenea"
+  category furniture
+  host none
+  version 1
+  description "Chimenea de obra con repisa y hogar, estufa de leña con su tubo o chimenea moderna lineal; el fuego se enciende de noche"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.40 range 0.60..4.00 label "Ancho"
+    depth  length = 0.50 range 0.30..1.20 label "Fondo"
+    height length = 2.50 range 1.00..4.00 label "Altura (hasta el techo)"
+  section "Materiales"
+    mat material = "Enlucido de yeso" label "Obra"
+  section "Modelo 3D"
+    model3d choice("De obra", "Estufa de leña", "Moderna lineal") = "De obra" label "Modelo 3D"
+    stone material = "Piedra gris" label "Solera"
+    frame material = "Negro mate" label "Repisa, estufa y marco"
+    dark  material = "Negro mate" label "Hogar"
+    wood  material = "Corteza" label "Leña"
+    flame material = "Luz" label "Fuego"
+    glass material = "Vidrio doble" label "Vidrio"
+    metal material = "Cromado" label "Tirador"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  polygon (-width * 0.28, depth * 0.5) (width * 0.28, depth * 0.5) (width * 0.28, depth) (-width * 0.28, depth) pen thin
+
+outputs
+  generator = "props:fireplace"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

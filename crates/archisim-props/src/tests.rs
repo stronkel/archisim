@@ -37,7 +37,13 @@ fn every_model_is_made() {
             assert!(volume > 0.0, "{kind} {s}: volume {volume}");
             let (lo, hi) = bounds(&m);
             assert!(lo[2] >= -1e-3, "{kind} {s}: below the floor {lo:?}");
-            assert!(hi[2] < 3.0, "{kind} {s}: {hi:?}");
+            // Streetlights stand well over a storey.
+            let tallest = match *kind {
+                "streetlight" => 17.0,
+                "fireplace" | "ceiling_fan" => 4.1,
+                _ => 3.0,
+            };
+            assert!(hi[2] < tallest, "{kind} {s}: {hi:?}");
         }
     }
 }

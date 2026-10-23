@@ -1,7 +1,7 @@
 family "Papelera"
   category street
   host none
-  version 1
+  version 2
   description "Papelera de calle; el punto de inserción es su centro"
   folder "Mobiliario urbano"
 
@@ -11,6 +11,11 @@ type_params
     height length = 0.90 range 0.40..1.40 label "Altura"
   section "Materiales"
     mat material = "Metal lacado" label "Papelera"
+  section "Modelo 3D"
+    model3d choice("Chapa perforada", "Listones de madera", "Doble para reciclar") = "Chapa perforada" label "Modelo 3D"
+    frame material = "Metal lacado" label "Poste y aros"
+    dark  material = "Negro mate" label "Interior"
+    mat2  material = "Plástico verde" label "Segunda papelera"
 
 body
   let r = width / 2
@@ -33,5 +38,6 @@ plan presentation
   cloud center (0, 0) radius width * 0.36 lobes 16 jitter 0 pen thin filled
 
 outputs
+  generator = "props:litter_bin"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"
