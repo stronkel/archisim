@@ -27,6 +27,33 @@ pub enum Discipline {
 }
 
 impl Discipline {
+    pub const ALL: [Discipline; 7] = [
+        Discipline::Architecture,
+        Discipline::Structure,
+        Discipline::Mechanical,
+        Discipline::Plumbing,
+        Discipline::Electrical,
+        Discipline::Site,
+        Discipline::Other,
+    ];
+
+    /// How the settings files name it.
+    pub fn code(self) -> &'static str {
+        match self {
+            Discipline::Architecture => "architecture",
+            Discipline::Structure => "structure",
+            Discipline::Mechanical => "mechanical",
+            Discipline::Plumbing => "plumbing",
+            Discipline::Electrical => "electrical",
+            Discipline::Site => "site",
+            Discipline::Other => "other",
+        }
+    }
+
+    pub fn from_code(c: &str) -> Option<Discipline> {
+        Self::ALL.into_iter().find(|d| d.code() == c)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Discipline::Architecture => "Arquitectura",

@@ -407,7 +407,7 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
                     r.guid.to_string(),
                     r.system.code().to_string(),
                     r.path.iter().map(|p| [q(p.x), q(p.y)]).collect(),
-                    [q(r.elevation), q(r.width), q(r.height)],
+                    [q(r.elevation), q(r.width), q(r.height), q(r.slope * 100.0)],
                 )
             })
             .collect();
@@ -669,6 +669,17 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             })
             && close(r.base_offset, t.base_offset)
             && close(r.overhang, t.overhang)
+            && r.dormers.len() == t.dormers.len()
+            && r.dormers.iter().zip(&t.dormers).all(|(x, y)| {
+                x.kind == y.kind
+                    && x.window == y.window
+                    && x.position.distance(y.position) <= TOL
+                    && close(x.width, y.width)
+                    && close(x.height, y.height)
+                    && close(x.pitch, y.pitch)
+                    && a.material(x.wall_material).map(|m| &m.name)
+                        == b.material(y.wall_material).map(|m| &m.name)
+            })
             && level_guid(a, r.level) == level_guid(b, t.level)
             && a.slab_type(r.roof_type).map(|x| &x.guid)
                 == b.slab_type(t.roof_type).map(|x| &x.guid);
@@ -822,4 +833,4 @@ fn material_name(m: &Model, id: archisim_core::MaterialId) -> Option<&str> {
 }
 
 /// A pipe or duct compared: GUID, system, path and sizes in millimetres.
-type RunKey = (String, String, Vec<[i64; 2]>, [i64; 3]);
+type RunKey = (String, String, Vec<[i64; 2]>, [i64; 4]);

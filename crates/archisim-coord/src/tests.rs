@@ -326,3 +326,84 @@ fn print_volumes() {
         );
     }
 }
+
+#[test]
+fn clearances_and_rules_by_discipline() {
+    // A beam, a duct 3 cm under it and a pipe 10 cm beside it.
+    let structure = read_elements(&ifc(
+        &[B(
+            "IFCBEAM",
+            "0b000000000000000000c1",
+            "Viga",
+            [0.0, 0.0, 2.7],
+            [4.0, 0.3, 3.0],
+        )],
+        &[],
+    ))
+    .unwrap();
+    let services = read_elements(&ifc(
+        &[
+            B(
+                "IFCDUCTSEGMENT",
+                "0d000000000000000000c2",
+                "Conducto",
+                [0.5, 0.0, 2.37],
+                [3.5, 0.3, 2.67],
+            ),
+            B(
+                "IFCPIPESEGMENT",
+                "0t000000000000000000c3",
+                "Tubería",
+                [0.5, 0.4, 2.75],
+                [3.5, 0.45, 2.8],
+            ),
+        ],
+        &[],
+    ))
+    .unwrap();
+    assert_eq!(services.elements[0].discipline, Discipline::Mechanical);
+    let opts = ClashOptions::default();
+    let found = find_clashes(&structure, &services, &opts);
+    // The duct is 3 cm from the beam, under the 5 cm asked; the pipe 10
+    // cm, over its 3 cm.
+    assert_eq!(found.len(), 1, "{found:?}");
+    let c = &found[0];
+    assert_eq!(c.kind, ClashKind::Clearance);
+    assert_eq!(services.elements[c.b].name, "Conducto");
+    assert!((c.gap - 0.03).abs() < 1e-6, "{}", c.gap);
+    assert!((c.depth - 0.02).abs() < 1e-6, "{}", c.depth);
+    // Without clearances, nothing; with the pair not checked, nothing.
+    let mut none = ClashOptions::default();
+    none.rules.iter_mut().for_each(|r| r.clearance = 0.0);
+    assert!(find_clashes(&structure, &services, &none).is_empty());
+    // A wider clearance for the pipes catches the pipe too.
+    let mut wide = ClashOptions::default();
+    for r in &mut wide.rules {
+        if r.is_for(Discipline::Plumbing, Discipline::Structure) {
+            r.clearance = 0.15;
+        }
+    }
+    assert_eq!(find_clashes(&structure, &services, &wide).len(), 2);
+    let mut off = ClashOptions::default();
+    for r in &mut off.rules {
+        if r.is_for(Discipline::Structure, Discipline::Mechanical) {
+            r.check = false;
+        }
+    }
+    assert!(find_clashes(&structure, &services, &off).is_empty());
+    // As a topic.
+    let mut bcf = archisim_bcf::Bcf::default();
+    clashes_to_bcf(
+        &mut bcf,
+        &found,
+        &structure,
+        &services,
+        &[],
+        &Author("a@b.es".into()),
+    );
+    assert!(bcf.topics[0]
+        .description
+        .as_deref()
+        .unwrap()
+        .contains("menos de la holgura"));
+}

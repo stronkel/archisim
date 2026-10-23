@@ -77,10 +77,35 @@ de prueba (`scripts/compare_volumes.py`).
   comentario, las que han desaparecido pasan a **Resuelta** y las nuevas se
   añaden. Las incidencias de otros vínculos no se tocan.
 
-Pendiente: holguras (elementos a menos de X cm, como el paso libre bajo una
-viga), interferencias entre dos vínculos y dentro del propio proyecto,
-reglas por disciplina (ignorar mobiliario contra instalaciones…) y una caja
-de sección en 3D.
+**Reglas por disciplinas y holguras** (v0.48). En la pestaña de
+interferencias, *Reglas por disciplinas y holguras* es una tabla de parejas
+de disciplinas (la de cada elemento sale de su clase IFC: arquitectura,
+estructura, climatización y ventilación, fontanería y saneamiento,
+electricidad, urbanización): si la pareja se comprueba y qué **holgura**
+pide, en mm. Dos elementos de esa pareja que no se meten uno en otro pero
+quedan más cerca que la holgura salen en la lista en ámbar, «a 30 mm
+(holgura 50 mm)», después de las interferencias de verdad, y como
+incidencia BCF «quedan a…, menos de la holgura de…». Las reglas con las que
+empieza ArchiSim (*Las de ArchiSim* vuelve a ellas):
+
+| Pareja | Se comprueba | Holgura |
+|---|---|---|
+| Climatización – Estructura | sí | 50 mm |
+| Fontanería – Estructura | sí | 30 mm |
+| Electricidad – Estructura | sí | — |
+| Climatización – Fontanería | sí | 25 mm |
+| Fontanería – Electricidad | sí | 30 mm |
+| Climatización – Electricidad | sí | — |
+| Urbanización – Arquitectura | no | — |
+| Urbanización – Estructura | no | — |
+
+Las parejas que no están en la tabla se comprueban sin holgura. Las reglas
+cambiadas se guardan junto al proyecto (en el mismo fichero que los
+vínculos). Son una propuesta para que Antonio las ajuste a lo que pide el
+estudio.
+
+Pendiente: interferencias entre dos vínculos y dentro del propio proyecto,
+y una caja de sección en 3D.
 
 ## 4. Incidencias BCF (4.3)
 

@@ -3,7 +3,9 @@
 //! work, one item per type, one measurement line per element. An item
 //! given a concept of a price bank (`Model::price_of`) takes its code,
 //! summary, price and description; the others keep their price at zero
-//! for the budget program to fill.
+//! for the budget program to fill. A concept with pieces is written with
+//! its decomposition (`~D` and a `~C` for each piece, with its FIEBDC
+//! type), and the project's overheads, profit and VAT go in `~K`.
 
 use std::fmt::Write;
 
@@ -66,7 +68,16 @@ pub fn bc3(model: &Model, date: &str, version: &str) -> Vec<u8> {
         "~V|ArchiSim|FIEBDC-3/2016\\{date}|ArchiSim {version}|{}|ANSI||2|||\r\n",
         clean(&model.project_name)
     );
-    s.push_str("~K|\\2\\2\\3\\2\\2\\2\\2\\EUR\\|\r\n");
+    let b = model.budget_settings();
+    let _ = write!(
+        s,
+        "~K|\\2\\2\\3\\2\\2\\2\\2\\EUR\\|0\\{}\\{}\\0\\{}|\r\n",
+        n(b.overheads * 100.0),
+        n(b.profit * 100.0),
+        n(b.vat * 100.0)
+    );
+    // Pieces already written (several items may share one).
+    let mut written: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let root = "ARCHISIM##";
     let _ = write!(
         s,
@@ -121,6 +132,28 @@ pub fn bc3(model: &Model, date: &str, version: &str) -> Vec<u8> {
             );
             if let Some(c) = concept.filter(|c| !c.text.trim().is_empty()) {
                 let _ = write!(s, "~T|{code}|{}|\r\n", clean(&c.text));
+            }
+            // Its decomposition.
+            if let Some(c) = concept.filter(|c| !c.pieces.is_empty()) {
+                let mut d = String::new();
+                for p in &c.pieces {
+                    let pc = clean_code(&p.code);
+                    if pc.is_empty() {
+                        continue;
+                    }
+                    let _ = write!(d, "{pc}\\1\\{}\\", n(p.quantity));
+                    if written.insert(pc.clone()) {
+                        let _ = write!(
+                            s,
+                            "~C|{pc}|{}|{}|{}|{date}|{}|\r\n",
+                            clean(&p.unit),
+                            clean(&p.summary),
+                            n2(p.price),
+                            p.kind
+                        );
+                    }
+                }
+                let _ = write!(s, "~D|{code}|{d}|\r\n");
             }
             let mut lines = String::new();
             for l in its.iter().flat_map(|i| &i.lines) {
@@ -231,6 +264,7 @@ mod tests {
                 price: 45.8,
                 text: "Hoja exterior de fachada de 11,5 cm…".into(),
                 bank: "Prueba".into(),
+                pieces: Vec::new(),
             }),
         )
         .unwrap();
@@ -248,6 +282,57 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("~M|01#\\FFZ020|"), "{text}");
+
+        // With its decomposition, and overheads and profit in ~K.
+        m.set_price(
+            &item.key,
+            Some(archisim_core::PriceConcept {
+                code: "FFZ020".into(),
+                unit: "m2".into(),
+                summary: "Hoja exterior".into(),
+                price: 20.4,
+                pieces: vec![
+                    archisim_core::PricePiece {
+                        code: "mo020".into(),
+                        unit: "h".into(),
+                        summary: "Oficial 1ª".into(),
+                        kind: 1,
+                        quantity: 0.5,
+                        price: 40.0,
+                    },
+                    archisim_core::PricePiece {
+                        code: "%".into(),
+                        unit: "%".into(),
+                        summary: "Costes directos complementarios".into(),
+                        kind: 0,
+                        quantity: 2.0,
+                        price: 0.0,
+                    },
+                ],
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+        let text: String = bc3(&m, "19102026", "0.48")
+            .iter()
+            .map(|b| *b as char)
+            .collect();
+        assert!(
+            text.contains("~D|FFZ020|mo020\\1\\0.5\\%\\1\\2\\|"),
+            "{text}"
+        );
+        assert!(text.contains("~C|mo020|h|Oficial 1"), "{text}");
+        assert!(text.contains("|19102026|1|"), "{text}");
+        assert!(
+            text.contains("~K|\\2\\2\\3\\2\\2\\2\\2\\EUR\\|0\\13\\6\\0\\21|"),
+            "{text}"
+        );
+        // And it reads back as a bank, pieces and all.
+        let bank = crate::bc3_read::read_bank(&bc3(&m, "19102026", "0.48")).unwrap();
+        let c = bank.price_concept("FFZ020").unwrap();
+        assert_eq!(c.pieces.len(), 2);
+        assert_eq!(c.pieces[0].kind, 1);
+        assert!((c.price - 20.4).abs() < 1e-9);
     }
 
     /// A refurbishment: the demolished wall goes to «Demoliciones», the

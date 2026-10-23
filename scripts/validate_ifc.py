@@ -26,7 +26,8 @@ Checks:
      and its risers add up.
   8. Every pitched roof (IfcRoof) is contained in a storey, made of roof
      slabs (checked as slabs above) and has its common property set and
-     base quantities, its area the sum of its planes'.
+     base quantities, its area the sum of its planes'. Its dormers are
+     IfcRoof aggregated into it, with their own sets and 3D.
  10. Every curtain wall (IfcCurtainWall) is contained in a storey, has its
      common property set and quantities, and is made of mullions
      (IfcMember) and panels (IfcPlate) with their material, quantities and
@@ -232,12 +233,21 @@ def main(path: str) -> int:
     roofs = f.by_type("IfcRoof")
     for r in roofs:
         name = r.Name
-        parts = [p for rel in r.IsDecomposedBy for p in rel.RelatedObjects]
+        psets = eu.get_psets(r)
+        # A dormer: an IfcRoof aggregated into its roof, with its own 3D.
+        if any(rel.RelatingObject.is_a("IfcRoof") for rel in r.Decomposes):
+            for required in ("Pset_RoofCommon", "Qto_RoofBaseQuantities"):
+                if required not in psets:
+                    errors.append(f"{name}: missing {required}")
+            if r.Representation is None:
+                errors.append(f"{name}: dormer without 3D")
+            continue
+        all_parts = [p for rel in r.IsDecomposedBy for p in rel.RelatedObjects]
+        parts = [p for p in all_parts if not p.is_a("IfcRoof")]
         if not parts or not all(p.is_a("IfcSlab") and p.PredefinedType == "ROOF" for p in parts):
             errors.append(f"{name}: not made of roof slabs")
         if not r.ContainedInStructure:
             errors.append(f"{name}: not contained in a storey")
-        psets = eu.get_psets(r)
         for required in ("Pset_RoofCommon", "Qto_RoofBaseQuantities"):
             if required not in psets:
                 errors.append(f"{name}: missing {required}")

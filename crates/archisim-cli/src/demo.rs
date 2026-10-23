@@ -455,7 +455,7 @@ pub fn build() -> Result<Document, ModelError> {
         for (system, gap, width, elevation) in [
             (ServiceSystem::ColdWater, 0.05, 0.025, 0.4),
             (ServiceSystem::HotWater, 0.1, 0.02, 0.4),
-            (ServiceSystem::Drainage, 0.2, 0.11, 0.15),
+            (ServiceSystem::Drainage, 0.2, 0.11, 0.35),
         ] {
             let (x, y) = (12.0 - inner - gap, 9.0 - inner - gap);
             m.add_run(NewRun {
@@ -465,8 +465,24 @@ pub fn build() -> Result<Document, ModelError> {
                 elevation,
                 width,
                 height: width,
+                // The drain falls 2 % towards the kitchen.
+                slope: if system == ServiceSystem::Drainage {
+                    0.02
+                } else {
+                    0.0
+                },
             })?;
         }
+        // A branch of the drain, with its tee on the main one.
+        m.add_run(NewRun {
+            level: pb,
+            system: ServiceSystem::Drainage,
+            path: vec![Point2::new(10.5, 5.0), Point2::new(12.0 - inner - 0.2, 5.0)],
+            elevation: 0.29,
+            width: 0.04,
+            height: 0.04,
+            slope: 0.02,
+        })?;
         m.add_run(NewRun {
             level: pb,
             system: ServiceSystem::ExhaustAir,
@@ -474,6 +490,7 @@ pub fn build() -> Result<Document, ModelError> {
             elevation: 2.3,
             width: 0.2,
             height: 0.15,
+            slope: 0.0,
         })?;
         let place = |m: &mut archisim_core::Model,
                      kind: DeviceKind,
@@ -498,6 +515,14 @@ pub fn build() -> Result<Document, ModelError> {
         for (x, y) in [(2.5, 6.5), (8.5, 6.5), (2.5, 2.2), (9.5, 2.2)] {
             place(m, DeviceKind::Light, "Luminaria", Point2::new(x, y), 0.0)?;
         }
+        // A radiator under the front windows.
+        place(
+            m,
+            DeviceKind::Radiator,
+            "Radiador",
+            Point2::new(3.0, inner + 0.08),
+            0.0,
+        )?;
         for (x, y, r) in [
             (6.2, 9.0 - inner - 0.02, PI),
             (8.9, 9.0 - inner - 0.02, PI),
@@ -1221,6 +1246,46 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // A dormer on the garden shed's roof ("remates" of 23/10/2026): a
+    // low shed dormer with a window on its south slope, near the eaves.
+    doc.transact("Buhardilla", |m| {
+        let Some((roof, at)) = m.roofs().find_map(|r| {
+            let plane = r.planes().into_iter().find(|p| {
+                p.slope.direction().is_some_and(|u| u.y > 0.9)
+                    && r.slopes.len() == 4
+                    && r.slopes.iter().filter(|s| s.is_some()).count() == 2
+            })?;
+            let c = archisim_core::centroid(&plane.outline);
+            let low = plane
+                .outline
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            Some((r.id, Point2::new(c.x, low + r.overhang + 0.1)))
+        }) else {
+            return Ok(());
+        };
+        let wall_material = m
+            .materials()
+            .find(|x| x.name.contains("Enfoscado") || x.name.contains("Mortero"))
+            .or_else(|| m.materials().next())
+            .map(|x| x.id)
+            .ok_or(ModelError::EmptyType)?;
+        m.add_dormer(
+            roof,
+            archisim_core::Dormer {
+                position: at,
+                width: 1.2,
+                height: 0.3,
+                kind: archisim_core::DormerKind::Shed,
+                pitch: 0.05,
+                wall_material,
+                window: true,
+            },
+        )?;
+        Ok(())
+    })?;
+
     // Prices of the budget (block 7): every item takes its concept from
     // the example bank, as it would from a regional bank in the
     // Mediciones tab.
@@ -1233,23 +1298,17 @@ pub fn build() -> Result<Document, ModelError> {
             .map(|i| (i.key, i.summary))
             .collect();
         for (key, summary) in items {
+            // Elbows and tees are counted by units: not a metre of pipe.
+            if key.starts_with("pieza:") {
+                continue;
+            }
             let Some((_, code)) = DEMO_PRICES.iter().find(|(w, _)| summary.contains(w)) else {
                 continue;
             };
-            let Some(c) = bank.concepts.get(*code) else {
+            let Some(c) = bank.price_concept(code) else {
                 continue;
             };
-            m.set_price(
-                &key,
-                Some(archisim_core::PriceConcept {
-                    code: c.code.clone(),
-                    unit: c.unit.clone(),
-                    summary: c.summary.clone(),
-                    price: c.price,
-                    text: c.text.clone(),
-                    bank: bank.name.clone(),
-                }),
-            )?;
+            m.set_price(&key, Some(c))?;
         }
         Ok(())
     })?;
@@ -1430,7 +1489,7 @@ mod tests {
         assert_eq!(m.openings().count(), 10);
         assert_eq!(m.opening_types().count(), 28);
         assert_eq!(doc.undo_label(), Some("Precios del presupuesto"));
-        assert_eq!(m.prices().count(), 28);
+        assert_eq!(m.prices().count(), 29);
         assert_eq!(m.user_parameters().count(), 2);
         assert_eq!(m.sections().count(), 6);
         assert_eq!(m.sheets().len(), 3);

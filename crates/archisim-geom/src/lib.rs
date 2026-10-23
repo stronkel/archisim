@@ -26,6 +26,7 @@
 
 pub mod anchors;
 pub mod csg;
+pub mod dormers;
 pub mod forms;
 pub mod index;
 pub mod joins;
@@ -804,9 +805,12 @@ pub struct OpeningGeometry {
     pub opening: OpeningId,
     pub wall: WallId,
     pub kind: OpeningKind,
-    /// Start of the wall's drawn line, origin of the `t` coordinates.
+    /// Start of the wall's drawn line, origin of the `t` coordinates (in
+    /// a curved wall, the point of the tangent at the opening's centre as
+    /// far back as the centre is along the arc).
     pub origin: Point2,
-    /// Unit vector along the wall, start → end.
+    /// Unit vector along the wall, start → end (in a curved wall, the
+    /// tangent at the opening's centre).
     pub u: Vec2,
     /// Unit normal towards the exterior face.
     pub n: Vec2,
@@ -962,14 +966,24 @@ pub fn opening_geometry(model: &Model, id: OpeningId) -> Option<OpeningGeometry>
     let wall = model.wall(o.wall)?;
     let thickness = model.wall_type(wall.wall_type)?.thickness();
     let (ext, int) = wall.face_offsets(thickness);
-    let u = (wall.end - wall.start).normalized()?;
     let setback = o.frame_setback(thickness, otype.frame_depth);
     let (t0, t1) = o.span(otype.width);
+    // In a curved wall, a straight door or window square to the wall at
+    // its centre: its frame is the tangent there, with `t` measured as
+    // along the arc at its centre.
+    let (origin, u) = match wall.is_curved() {
+        true => {
+            let mid = (t0 + t1) / 2.0;
+            let (c, u) = wall.opening_frame(mid, otype.width)?;
+            (c - u * mid, u)
+        }
+        false => (wall.start, (wall.end - wall.start).normalized()?),
+    };
     Some(OpeningGeometry {
         opening: id,
         wall: wall.id,
         kind: otype.kind,
-        origin: wall.start,
+        origin,
         u,
         n: u.perp_left(),
         t0,
@@ -1043,6 +1057,31 @@ fn clip_half_plane(poly: &[Point2], side: impl Fn(Point2) -> f64) -> Vec<Point2>
         out.pop();
     }
     out
+}
+
+/// [`clip_span`] for a curved wall: the part of `poly` between `lo` and
+/// `hi` metres along `arc` (either open), cut square to the arc (along
+/// the radius). The polygon's edges must be short (as the curve's).
+pub fn clip_arc_span(
+    poly: &[Point2],
+    arc: &archisim_core::Arc,
+    lo: Option<f64>,
+    hi: Option<f64>,
+) -> Vec<Point2> {
+    let len = arc.length().max(EPSILON);
+    let along = |p: Point2| arc.project(p).0 * len;
+    let mut out = poly.to_vec();
+    if let Some(lo) = lo {
+        out = clip_half_plane(&out, |p| along(p) - lo);
+    }
+    if let Some(hi) = hi {
+        out = clip_half_plane(&out, |p| hi - along(p));
+    }
+    if out.len() < 3 || signed_area(&out).abs() < EPSILON * EPSILON {
+        Vec::new()
+    } else {
+        out
+    }
 }
 
 /// One solid stretch of a wall between openings (or the wall ends). `None`

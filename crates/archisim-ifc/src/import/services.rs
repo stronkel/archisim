@@ -7,15 +7,27 @@ use archisim_core::{DeviceKind, NewDevice, NewRun, Point2, ServiceSystem};
 use super::{explain, snap, Importer};
 
 const RUN_CLASSES: [&str; 2] = ["IFCPIPESEGMENT", "IFCDUCTSEGMENT"];
-const DEVICE_CLASSES: [&str; 4] = [
+const DEVICE_CLASSES: [&str; 6] = [
     "IFCUNITARYEQUIPMENT",
     "IFCLIGHTFIXTURE",
     "IFCOUTLET",
     "IFCSWITCHINGDEVICE",
+    "IFCSPACEHEATER",
+    "IFCAIRTERMINAL",
 ];
+const FITTING_CLASSES: [&str; 2] = ["IFCPIPEFITTING", "IFCDUCTFITTING"];
 
 impl<'a> Importer<'a> {
     pub(super) fn import_services(&mut self) {
+        // Elbows and tees written by ArchiSim follow from the runs: made
+        // again, not read.
+        for k in FITTING_CLASSES {
+            for id in self.file.of_kind(k) {
+                if self.property_own(id, "ArchiSim_Fitting", "Run").is_some() {
+                    self.service_ids.insert(id);
+                }
+            }
+        }
         let mut ids: Vec<u64> = RUN_CLASSES
             .iter()
             .flat_map(|k| self.file.of_kind(k))
@@ -83,6 +95,9 @@ impl<'a> Importer<'a> {
                 .ok_or("sin tamaño")?,
         );
         let height = snap(self.run_num(id, "ArchiSim_Run", "Height").unwrap_or(width));
+        let slope = self
+            .run_num(id, "ArchiSim_Run", "Slope")
+            .map_or(0.0, |s| (s * 1e6).round() / 1e6);
         let level = self.level_of(id, 0.0);
         let rid = self
             .model
@@ -93,6 +108,7 @@ impl<'a> Importer<'a> {
                 elevation,
                 width,
                 height,
+                slope,
             })
             .map_err(|e| explain(&e))?;
         self.report.services += 1;

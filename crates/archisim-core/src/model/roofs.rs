@@ -41,6 +41,8 @@ pub struct Roof {
     pub base_offset: f64,
     /// How far the eaves and verges stand out from the footprint.
     pub overhang: f64,
+    /// Its dormers.
+    pub dormers: Vec<Dormer>,
 }
 
 /// Data needed to create a roof.
@@ -693,6 +695,7 @@ impl Model {
                 slopes,
                 base_offset: spec.base_offset,
                 overhang: spec.overhang,
+                dormers: Vec::new(),
             },
         );
         self.stamp_phase(id.0);
@@ -721,6 +724,12 @@ impl Model {
         })?;
         r.outline = outline;
         r.slopes = slopes;
+        // The dormers that no longer stand on a plane go.
+        let dormers = std::mem::take(&mut r.dormers);
+        r.dormers = dormers
+            .into_iter()
+            .filter(|d| r.dormer_shape(d).is_ok())
+            .collect();
         self.roofs.insert(id, r);
         Ok(())
     }

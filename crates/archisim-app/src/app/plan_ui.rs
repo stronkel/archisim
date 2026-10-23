@@ -865,6 +865,13 @@ impl ArchiSimApp {
                 }
             }
         }
+        // A dormer being placed takes the next click.
+        if self.dormer_pick.is_some() && response.clicked_by(PointerButton::Primary) {
+            if let Some(c) = self.cursor {
+                self.place_dormer(c.point);
+                return;
+            }
+        }
         // Spline and Elegir línea take the clicks of any tool that offers
         // them.
         if self.draw_method != super::methods_ui::DrawMethod::Normal && self.tool != Tool::Cad {

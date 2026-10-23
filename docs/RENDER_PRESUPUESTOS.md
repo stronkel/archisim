@@ -37,6 +37,13 @@ Las **Mediciones** (Navegador → Proyecto → Tablas → Mediciones) empiezan a
 
 **A Presto.** **Exportar BC3…** escribe el presupuesto entero: cada partida con el código del banco, su resumen, su precio, su texto largo (`~T`) y sus líneas de medición elemento a elemento (muro a muro con largo y alto y los huecos a deducir, local a local…). Dos tipos con la misma partida del banco se juntan en una partida con las mediciones de ambos. Las partidas sin precio salen con precio cero para completarlas en Presto.
 
-**El banco de ejemplo.** `docs/ejemplos/banco-ejemplo.bc3` es un banco pequeño hecho para probar (precios orientativos inventados, no de ningún banco oficial); `archisim demo out/` lo copia en `out/` y la vivienda de prueba ya trae sus partidas asignadas desde él.
+**El banco de ejemplo.** `docs/ejemplos/banco-ejemplo.bc3` es un banco pequeño hecho para probar (precios orientativos inventados, no de ningún banco oficial; desde v0.48 sus partidas traen descomposición: oficial, peón, medios auxiliares, materiales y un 2 % de costes directos complementarios); `archisim demo out/` lo copia en `out/` y la vivienda de prueba ya trae sus partidas asignadas desde él.
 
-**Pendiente**: descomposición propia de las partidas en ArchiSim (hoy se lleva solo el precio), coeficientes de costes indirectos, gastos generales y beneficio industrial, y partidas por elemento suelto.
+### Descomposición, gastos generales y beneficio industrial (v0.48)
+
+- **Descomposición.** Al asignar una partida del banco se copia también cómo está hecha: cada pieza con su código, unidad, resumen, tipo (mano de obra, maquinaria, material u otros), rendimiento y precio. El botón **▸** de la fila la despliega debajo; el rendimiento y el precio de cada pieza se pueden cambiar allí, y el precio de la partida se rehace con ellos. Las piezas de porcentaje (código que empieza por `%` o unidad `%`: costes directos complementarios, medios auxiliares) se calculan sobre la suma de las piezas de encima, como en Presto.
+- Si se escribe el precio de la partida a mano, deja de tener descomposición. Si la descomposición no suma el precio (porque el banco da un precio redondeado), aparece un aviso en rojo debajo.
+- **Del PEM al PEC.** Al final de la tabla: presupuesto de ejecución material, **gastos generales** (13 % por defecto) y **beneficio industrial** (6 %), presupuesto de ejecución por contrata, **IVA** (21 %) y total. Los tres porcentajes se cambian en sus casillas y se guardan con el proyecto.
+- **En el BC3.** Cada partida con descomposición sale con su `~D` y un `~C` por pieza con su tipo FIEBDC (1 mano de obra, 2 maquinaria, 3 material); los porcentajes de gastos generales, beneficio e IVA van en el registro `~K`. Leído otra vez como banco (o en Presto), la partida sale con sus piezas.
+
+**Pendiente**: añadir o quitar piezas a mano (hoy se editan las que trae el banco), coeficiente de costes indirectos propio del proyecto, y partidas por elemento suelto.

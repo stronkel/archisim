@@ -126,6 +126,10 @@ pub(crate) struct ProjectFile {
     /// Prices of the budget's items (version 31).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prices: Vec<PriceOf>,
+    /// Overheads, profit and VAT of the budget (version 32; absent: 13, 6
+    /// and 21 %).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<Budget>,
     /// Saved plans, the looks of the levels' plans, view templates and
     /// reference planes (version 27).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -605,6 +609,24 @@ pub(crate) struct Roof {
     pub slopes: Vec<Option<f64>>,
     pub base_offset: f64,
     pub overhang: f64,
+    /// Its dormers (version 32).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dormers: Vec<DormerOf>,
+}
+
+/// A dormer on a roof (version 32).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DormerOf {
+    pub position: Xy,
+    pub width: f64,
+    pub height: f64,
+    /// `shed` or `gable`.
+    pub kind: String,
+    pub pitch: f64,
+    pub wall_material: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub window: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -666,6 +688,9 @@ pub(crate) struct Run {
     pub elevation: f64,
     pub width: f64,
     pub height: f64,
+    /// Fall along the path (version 32).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub slope: f64,
 }
 
 /// A device (version 20).
@@ -819,6 +844,37 @@ pub(crate) struct PriceOf {
     pub text: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub bank: String,
+    /// Its decomposition (version 32).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pieces: Vec<PieceOf>,
+}
+
+/// A piece of a price's decomposition (version 32).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PieceOf {
+    pub code: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub unit: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub kind: u8,
+    pub quantity: f64,
+    pub price: f64,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
+}
+
+/// Overheads, profit and VAT (version 32).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Budget {
+    pub overheads: f64,
+    pub profit: f64,
+    pub vat: f64,
 }
 
 impl PriceOf {
@@ -831,6 +887,18 @@ impl PriceOf {
             price: c.price,
             text: c.text.clone(),
             bank: c.bank.clone(),
+            pieces: c
+                .pieces
+                .iter()
+                .map(|p| PieceOf {
+                    code: p.code.clone(),
+                    unit: p.unit.clone(),
+                    summary: p.summary.clone(),
+                    kind: p.kind,
+                    quantity: p.quantity,
+                    price: p.price,
+                })
+                .collect(),
         }
     }
 
@@ -844,6 +912,18 @@ impl PriceOf {
                 price: self.price,
                 text: self.text,
                 bank: self.bank,
+                pieces: self
+                    .pieces
+                    .into_iter()
+                    .map(|p| core::PricePiece {
+                        code: p.code,
+                        unit: p.unit,
+                        summary: p.summary,
+                        kind: p.kind,
+                        quantity: p.quantity,
+                        price: p.price,
+                    })
+                    .collect(),
             },
         )
     }
@@ -2430,6 +2510,19 @@ impl ProjectFile {
                     slopes: r.slopes,
                     base_offset: r.base_offset,
                     overhang: r.overhang,
+                    dormers: r
+                        .dormers
+                        .iter()
+                        .map(|d| DormerOf {
+                            position: xy(d.position),
+                            width: d.width,
+                            height: d.height,
+                            kind: d.kind.code().to_string(),
+                            pitch: d.pitch,
+                            wall_material: d.wall_material.0,
+                            window: d.window,
+                        })
+                        .collect(),
                 })
                 .collect(),
             terrains: p
@@ -2485,6 +2578,11 @@ impl ProjectFile {
                 .map(PresentationStyleOf::out)
                 .collect(),
             prices: p.prices.iter().map(|(k, c)| PriceOf::out(k, c)).collect(),
+            budget: (p.budget != core::BudgetSettings::default()).then_some(Budget {
+                overheads: p.budget.overheads,
+                profit: p.budget.profit,
+                vat: p.budget.vat,
+            }),
             plan_views: p
                 .plan_views
                 .iter()
@@ -2632,6 +2730,7 @@ impl ProjectFile {
                     elevation: r.elevation,
                     width: r.width,
                     height: r.height,
+                    slope: r.slope,
                 })
                 .collect(),
             devices: p
@@ -2935,6 +3034,26 @@ impl ProjectFile {
                         slopes: r.slopes.clone(),
                         base_offset: r.base_offset,
                         overhang: r.overhang,
+                        dormers: r
+                            .dormers
+                            .iter()
+                            .map(|d| {
+                                Ok(core::Dormer {
+                                    position: pt(d.position),
+                                    width: d.width,
+                                    height: d.height,
+                                    kind: core::DormerKind::from_code(&d.kind).ok_or_else(
+                                        || FileError::Value {
+                                            element: format!("dormer of roof {}", r.id),
+                                            message: format!("unknown kind «{}»", d.kind),
+                                        },
+                                    )?,
+                                    pitch: d.pitch,
+                                    wall_material: core::MaterialId(d.wall_material),
+                                    window: d.window,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, FileError>>()?,
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
@@ -2996,6 +3115,13 @@ impl ProjectFile {
             appearances: Vec::new(),
             presentation_styles: Vec::new(),
             prices: self.prices.into_iter().map(PriceOf::into_core).collect(),
+            budget: self.budget.map_or_else(core::BudgetSettings::default, |b| {
+                core::BudgetSettings {
+                    overheads: b.overheads,
+                    profit: b.profit,
+                    vat: b.vat,
+                }
+            }),
             plan_views: Vec::new(),
             level_styles: Vec::new(),
             view_templates: Vec::new(),
@@ -3439,6 +3565,7 @@ impl ProjectFile {
                 elevation: r.elevation,
                 width: r.width,
                 height: r.height,
+                slope: r.slope,
             });
         }
         for d in self.devices {

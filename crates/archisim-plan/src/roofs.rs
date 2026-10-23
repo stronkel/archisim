@@ -13,7 +13,9 @@ use crate::{annotate, num, path, pens, pt, INK, SLAB_COVER};
 
 /// Every point of the roof that the plan must show.
 pub fn roof_points(roof: &Roof) -> Vec<Point2> {
-    roof.eaves()
+    let mut v = roof.eaves();
+    v.extend(roof.dormers.iter().map(|d| d.position));
+    v
 }
 
 pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
@@ -83,7 +85,62 @@ pub fn draw_roof(s: &mut String, roof: &Roof, k: f64) {
             crate::lettering::paint(th, INK)
         );
     }
+    draw_dormers(s, roof, k);
     s.push_str("</g>\n");
+}
+
+/// The dormers over the roof: the outline of their roof (with its eaves)
+/// filled over the planes, their ridge or the top of their front, and
+/// their front wall.
+fn draw_dormers(s: &mut String, roof: &Roof, k: f64) {
+    for d in &roof.dormers {
+        let Ok(shape) = roof.dormer_shape(d) else {
+            continue;
+        };
+        let f = &shape.frame;
+        let w = d.width / 2.0;
+        let e = w + 0.15;
+        let outline: Vec<Point2> = match d.kind {
+            archisim_core::DormerKind::Shed => vec![
+                f.at(-e, -0.15),
+                f.at(e, -0.15),
+                f.at(e, shape.depth),
+                f.at(-e, shape.depth),
+            ],
+            archisim_core::DormerKind::Gable => vec![
+                f.at(-e, -0.15),
+                f.at(e, -0.15),
+                f.at(e, shape.eave_depth),
+                f.at(0.0, shape.depth),
+                f.at(-e, shape.eave_depth),
+            ],
+        };
+        let _ = writeln!(
+            s,
+            r#"<path d="{}" fill="{SLAB_COVER}" stroke="{INK}" stroke-width="{}"/>"#,
+            path(&outline),
+            num(pens().view * 1.5 * k)
+        );
+        // The front wall, dashed under the eave.
+        let _ = writeln!(
+            s,
+            r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {}"/>"#,
+            pt(f.at(-w, 0.0)),
+            pt(f.at(w, 0.0)),
+            num(pens().hatch * k),
+            num(1.0 * k),
+            num(0.8 * k)
+        );
+        if d.kind == archisim_core::DormerKind::Gable {
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                pt(f.at(0.0, -0.15)),
+                pt(f.at(0.0, shape.depth)),
+                num(pens().view * k)
+            );
+        }
+    }
 }
 
 /// A percentage with up to one decimal and a decimal comma.

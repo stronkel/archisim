@@ -66,8 +66,9 @@ pub struct Prefs {
     pub recent: Vec<String>,
     /// The price bank (BC3) opened last, opened again when needed.
     pub price_bank: Option<String>,
-    /// The materials' textures in the 3D view (none: as the computer goes).
-    pub textures_3d: Option<bool>,
+    /// How the 3D view draws the materials' textures: `completas`,
+    /// `ligeras` or `no` (none: as the computer goes).
+    pub textures_3d: Option<String>,
 }
 
 impl Default for Prefs {
@@ -165,7 +166,12 @@ impl Prefs {
                 .get("banco_de_precios")
                 .and_then(|x| x.as_str())
                 .map(str::to_string),
-            textures_3d: v.get("texturas_3d").and_then(|x| x.as_bool()),
+            // Version 0.47.2 kept on or off (on hung some Macs): that
+            // choice is forgotten, and the computer's default taken.
+            textures_3d: v
+                .get("texturas_3d")
+                .and_then(|x| x.as_str())
+                .map(str::to_string),
         }
     }
 
@@ -216,7 +222,7 @@ mod tests {
             welcomed: true,
             recent: vec!["/proyectos/casa.archisim".into()],
             price_bank: Some("/bancos/bcca.bc3".into()),
-            textures_3d: Some(false),
+            textures_3d: Some("ligeras".into()),
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         // Unknown or broken files give the defaults.
