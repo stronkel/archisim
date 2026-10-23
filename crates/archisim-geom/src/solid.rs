@@ -2160,6 +2160,7 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     for r in model.runs() {
         out.extend(run_solids(model, r.id));
     }
+    out.extend(fitting_solids(model));
     for d in model.devices() {
         out.extend(device_solids(model, d.id));
     }
@@ -2294,7 +2295,8 @@ pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
     let Some(r) = model.run(id) else {
         return Vec::new();
     };
-    let z = model.level(r.level).map_or(0.0, |l| l.elevation) + r.elevation;
+    let z0 = model.level(r.level).map_or(0.0, |l| l.elevation);
+    let zs = r.point_elevations();
     let section: Vec<(f64, f64)> = if r.is_duct() {
         let (w, h) = (r.width / 2.0, r.height / 2.0);
         vec![(-w, -h), (w, -h), (w, h), (-w, h)]
@@ -2311,13 +2313,62 @@ pub fn run_solids(model: &Model, id: archisim_core::RunId) -> Vec<Solid> {
     let tris: Vec<[P3; 3]> = r
         .path
         .windows(2)
-        .flat_map(|w| sweep_segment(&section, [w[0].x, w[0].y, z], [w[1].x, w[1].y, z]))
+        .zip(zs.windows(2))
+        .flat_map(|(w, z)| {
+            sweep_segment(
+                &section,
+                [w[0].x, w[0].y, z0 + z[0]],
+                [w[1].x, w[1].y, z0 + z[1]],
+            )
+        })
         .collect();
     vec![Solid {
         owner: SolidOwner::Run(id),
         material: archisim_core::MaterialId(0),
         triangles: tris,
     }]
+}
+
+/// The elbows and tees of the pipes and ducts (`Model::run_fittings`):
+/// a sleeve a little wider than the run along each way out of them, with
+/// the colour of its run.
+pub fn fitting_solids(model: &Model) -> Vec<Solid> {
+    let mut out = Vec::new();
+    for f in model.run_fittings() {
+        let Some(r) = model.run(f.run) else {
+            continue;
+        };
+        let z = model.level(r.level).map_or(0.0, |l| l.elevation) + f.elevation;
+        let grow = 0.01_f64.max(r.width * 0.15);
+        let section: Vec<(f64, f64)> = if r.is_duct() {
+            let (w, h) = ((r.width + grow) / 2.0, (r.height + grow) / 2.0);
+            vec![(-w, -h), (w, -h), (w, h), (-w, h)]
+        } else {
+            (0..ROUND_FACETS)
+                .map(|i| {
+                    let a = i as f64 * std::f64::consts::TAU / ROUND_FACETS as f64;
+                    let rad = (r.width + grow) / 2.0;
+                    (rad * a.cos(), rad * a.sin())
+                })
+                .collect()
+        };
+        let leg = (r.width.max(r.height) * 0.75).max(0.03);
+        let mut ways = vec![-f.from, f.to];
+        if f.kind == archisim_core::FittingKind::Tee {
+            ways.push(f.from);
+        }
+        let c = [f.position.x, f.position.y, z];
+        let tris: Vec<[P3; 3]> = ways
+            .into_iter()
+            .flat_map(|d| sweep_segment(&section, c, [c[0] + d.x * leg, c[1] + d.y * leg, z]))
+            .collect();
+        out.push(Solid {
+            owner: SolidOwner::Run(f.run),
+            material: archisim_core::MaterialId(0),
+            triangles: tris,
+        });
+    }
+    out
 }
 
 /// The solid of a device: its box (a light, a disc).
@@ -2350,6 +2401,10 @@ pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
         SolidOwner::Run(id) => model.run(id).map_or([150, 150, 150], |r| r.system.color()),
         SolidOwner::Device(id) => match model.device(id).map(|d| d.kind) {
             Some(archisim_core::DeviceKind::Light) => [250, 230, 150],
+            Some(archisim_core::DeviceKind::Radiator) => [245, 245, 240],
+            Some(archisim_core::DeviceKind::Grille | archisim_core::DeviceKind::Diffuser) => {
+                [200, 205, 210]
+            }
             _ => [235, 235, 230],
         },
         _ => model.surface_color(s.material),

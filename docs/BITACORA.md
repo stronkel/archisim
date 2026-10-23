@@ -6,6 +6,39 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 (14) · v0.48: remates (texturas ligeras, buhardillas, huecos en muros curvos, instalaciones, presupuesto, holguras)
+
+Rama `bloque/remates`, pull request para Antonio. Formato `.archisim` versión 32 (abre todas las anteriores). Lo que quedó a medias en los bloques anteriores, pedido por Antonio el 23/10/2026.
+
+**Hecho**
+- **Texturas que aguante el MacBook de 2016**: el 3D tiene ahora tres modos de texturas (Propiedades de la vista 3D → «Texturas»: Sin texturas, Ligeras, Completas). Las ligeras están escritas sin las construcciones del sombreador que tumbaban la tarjeta AMD de su Mac (sin `switch` ni bucles), con los mismos dibujos más sencillos (ladrillo, madera, piedra, grava…). En los Mac con Intel vienen **Ligeras** por defecto; en el resto, Completas.
+- **Buhardillas** a un agua y a dos aguas sobre cualquier faldón: Propiedades de la cubierta → Buhardillas → «Añadir buhardilla…» y clic en la planta sobre el faldón; ancho, alto del frente, pendiente de su cubierta, ventana, mover y quitar. Se dibujan en la planta de cubiertas (con su alero), en 3D (frente y laterales del material de los muros, cubierta del material de la cubierta, vidrio) y en el IFC como `IfcRoof` dentro de la cubierta. Si no cabe en su faldón, ArchiSim lo dice. Las cubiertas en L con limahoyas ya estaban (R10).
+- **Puertas y ventanas en muros curvos**: se colocan igual que en los rectos; el hueco es recto y en escuadra con el muro en su centro (como se construye un premarco). Planta con las capas cortadas en el hueco, 3D con dintel y antepecho, IFC e importación de vuelta. Un hueco demasiado ancho para la curva (la flecha pasa de medio grueso del muro) se rechaza con aviso; las ventanas en esquina no van en muros curvos.
+- **Instalaciones, segunda vuelta**:
+  - **Pendiente** de las tuberías de saneamiento (2 % por defecto en la herramienta; en Propiedades de cualquier tubería). La tubería baja desde su primer punto hacia el último, en 3D, en el IFC y con una flecha en planta; el rótulo dice «Saneamiento Ø 110 mm · 2 %».
+  - **Codos y tes** automáticos: donde una tubería gira o acaba sobre otra del mismo sistema. Se ven en 3D (manguitos), las tes de tuberías como un punto en planta, se cuentan en Mediciones por sistema y diámetro y salen en el IFC (`IfcPipeFitting`, `IfcDuctFitting`).
+  - Aparatos nuevos: **radiador**, **rejilla** y **difusor** (fichas en Instalaciones), con su símbolo en planta y su clase IFC.
+  - **Comprobación CTE de agua y saneamiento** (HS 4 y HS 5) en la ventana Comprobación CTE: diámetros del desagüe y de las derivaciones de agua fría y caliente de cada sanitario, y pendientes de derivaciones y colectores. Descrito en `docs/CTE.md`.
+- **Presupuesto**: la partida del banco llega con su **descomposición** (mano de obra, maquinaria, materiales y porcentajes), que se despliega con ▸ y se puede retocar; al final de la tabla, PEM, **gastos generales**, **beneficio industrial**, PEC, IVA y total, con los porcentajes editables y guardados en el proyecto. El BC3 lleva la descomposición y los porcentajes. El banco de ejemplo trae ahora descomposiciones.
+- **Interferencias**: **reglas por parejas de disciplinas** (comprobar o no, y holgura en mm) en Coordinación → Interferencias → «Reglas por disciplinas y holguras». Lo que queda más cerca de la holgura sale en ámbar («a 30 mm, holgura 50 mm») y como incidencia BCF. Reglas de partida y explicación en `docs/COLABORACION.md`.
+
+**Pendiente**
+- Valores de las tablas 4.1 de HS 5 y 4.2 de HS 4: escritos de memoria, a contrastar por Antonio con el texto del CTE.
+- Instalaciones: bajantes verticales, sección y alzado, diámetros de colectores y bajantes por UD.
+- Presupuesto: añadir y quitar piezas a mano.
+- Interferencias entre dos vínculos y dentro del propio proyecto.
+
+**Qué debe probar Antonio**
+1. En el Mac, abre la demo y entra en el 3D (F3): debe ir fluido y con texturas sencillas (Propiedades de la vista 3D → Texturas: «Ligeras»). Prueba «Completas» solo si quieres comprobar que sigue colgándose; vuelve a «Sin texturas» si las ligeras también fallaran, y dímelo.
+2. Selecciona la cubierta de la caseta del jardín de la demo: en Propiedades → Buhardillas hay una a un agua. Añade otra a dos aguas con «Añadir buhardilla…» y un clic sobre el faldón; mírala en planta de cubiertas y en 3D. Exporta el IFC y ábrelo en otro visor.
+3. Dibuja un muro en arco (herramienta Muro, método Arco) y coloca en él una puerta y una ventana: en planta deben cortar las capas, en 3D verse rectas y centradas en el muro.
+4. Herramienta Tubería, sistema Saneamiento: dibuja un colector con un giro y otra tubería que acabe en su mitad. En 3D deben aparecer el codo y la te; en la planta, la flecha de la pendiente y el punto de la te; en Mediciones, «Codo Saneamiento…» y «Te Saneamiento…».
+5. Pon un inodoro y un lavabo de la biblioteca junto a esas tuberías y abre Colaboración → Comprobación CTE → «Agua y saneamiento»: un desagüe de Ø 40 mm junto al inodoro debe salir «No cumple» (pide 100 mm). Revisa si los diámetros de las tablas son los que usas en el estudio.
+6. Navegador → Mediciones: despliega con ▸ una partida de la demo (por ejemplo la fachada) y cambia el rendimiento del oficial; el precio de la partida debe cambiar. Cambia los gastos generales al 15 % y mira el PEC. Exporta el BC3 y ábrelo en Presto: deben salir las descomposiciones y los porcentajes.
+7. Con un IFC de instalaciones vinculado, abre Coordinación → Interferencias → «Reglas por disciplinas y holguras», sube la holgura de Climatización – Estructura a 100 mm y comprueba: los conductos cerca de las vigas salen en ámbar.
+
+---
+
 ## 2026-10-22 (13) · v0.47.2: el 3D en el MacBook Pro de 2016
 
 El muestreo del Mac de Antonio (MacBook Pro 2016, Intel con AMD Radeon, macOS 15 con controladores parcheados) muestra el programa esperando, sin hacer nada: no se queda colgado nuestro código, sino la tarjeta gráfica al pintar. Solo pasa con algo dibujado, es decir, cuando corre el sombreador de las caras, que desde hoy (bloque Formas) dibuja las texturas de los materiales. El compilador de sombreadores de AMD de ese Mac se cae también con Safari.

@@ -15,8 +15,10 @@ pub struct ServiceSettings {
     pub pipe_system: ServiceSystem,
     /// A pipe's diameter.
     pub pipe_size: f64,
-    /// Its axis over the level.
+    /// Its axis over the level (at its first point).
     pub pipe_elevation: f64,
+    /// The fall of a drain, from its first point to its last.
+    pub drain_slope: f64,
     pub duct_system: ServiceSystem,
     pub duct_width: f64,
     pub duct_height: f64,
@@ -33,6 +35,7 @@ impl Default for ServiceSettings {
             pipe_system: ServiceSystem::ColdWater,
             pipe_size: 0.025,
             pipe_elevation: 0.3,
+            drain_slope: 0.02,
             duct_system: ServiceSystem::SupplyAir,
             duct_width: 0.3,
             duct_height: 0.2,
@@ -56,6 +59,25 @@ impl ServiceSettings {
 
 fn comma(v: f64, d: usize) -> String {
     format!("{v:.d$}").replace('.', ",")
+}
+
+/// A slope as a percentage («2», «1,5»).
+fn fmt_percent(slope: f64) -> String {
+    let v = (slope * 1000.0).round() / 10.0;
+    format!("{v}").replace('.', ",")
+}
+
+/// A field with a percentage: the slope it says, from 0 to 1.
+fn percent_field(ui: &mut Ui, id: Id, slope: f64, width: f32) -> Option<f64> {
+    let text = text_edit_committed(ui, id, &fmt_percent(slope), width)?;
+    text.trim()
+        .trim_end_matches('%')
+        .trim()
+        .replace(',', ".")
+        .parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite())
+        .map(|v| (v / 100.0).clamp(0.0, 1.0))
 }
 
 fn system_combo(ui: &mut Ui, id: Id, ducts: bool, value: ServiceSystem, w: f32) -> ServiceSystem {
@@ -118,6 +140,11 @@ impl ArchiSimApp {
             },
             width: if duct { s.duct_width } else { s.pipe_size },
             height: if duct { s.duct_height } else { s.pipe_size },
+            slope: if !duct && s.pipe_system == ServiceSystem::Drainage {
+                s.drain_slope
+            } else {
+                0.0
+            },
         };
         let what = if duct { "conducto" } else { "tubería" };
         match self
@@ -291,13 +318,35 @@ impl ArchiSimApp {
                         s.pipe_size = v.max(0.005);
                     }
                 });
-                row(ui, "Altura del eje (mm)", "Sobre la planta", |ui, w| {
-                    if let Some(v) =
-                        length_field(ui, Id::unique("tool-pipe-z"), s.pipe_elevation, w - 8.0)
-                    {
-                        s.pipe_elevation = v;
-                    }
-                });
+                row(
+                    ui,
+                    "Altura del eje (mm)",
+                    "Sobre la planta, en el primer punto",
+                    |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique("tool-pipe-z"), s.pipe_elevation, w - 8.0)
+                        {
+                            s.pipe_elevation = v;
+                        }
+                    },
+                );
+                if s.pipe_system == ServiceSystem::Drainage {
+                    row(
+                        ui,
+                        "Pendiente (%)",
+                        "Baja desde el primer punto hacia el último",
+                        |ui, w| {
+                            if let Some(v) = percent_field(
+                                ui,
+                                Id::unique("tool-pipe-slope"),
+                                s.drain_slope,
+                                w - 8.0,
+                            ) {
+                                s.drain_slope = v;
+                            }
+                        },
+                    );
+                }
             });
         }
         self.service_settings = s;
@@ -390,10 +439,58 @@ impl ArchiSimApp {
                     }
                 });
             }
+            if !duct {
+                row(
+                    ui,
+                    "Pendiente (%)",
+                    "Baja desde el primer punto hacia el último",
+                    |ui, w| {
+                        if let Some(v) =
+                            percent_field(ui, Id::unique(("run-slope", id)), r.slope, w - 8.0)
+                        {
+                            let res = self
+                                .ed
+                                .transact("Pendiente", |m| m.edit_run(id, |x| x.slope = v));
+                            self.report(res, "Pendiente cambiada.");
+                        }
+                    },
+                );
+            }
         });
+        let fittings: Vec<_> = self
+            .ed
+            .model()
+            .run_fittings()
+            .into_iter()
+            .filter(|f| f.run == id)
+            .collect();
         group(ui, "run-figures", "Mediciones", |ui| {
-            text_row(ui, "Longitud (m)", "", &comma(r.length(), 2));
+            text_row(ui, "Longitud (m)", "", &comma(r.true_length(), 2));
             text_row(ui, "Tramos", "", &(r.path.len() - 1).to_string());
+            if r.slope > 0.0 {
+                text_row(
+                    ui,
+                    "Altura al final (mm)",
+                    "Del eje, sobre la planta",
+                    &crate::units::fmt_len(r.end_elevation()),
+                );
+            }
+            for kind in [
+                archisim_core::FittingKind::Elbow,
+                archisim_core::FittingKind::Tee,
+            ] {
+                let n = fittings.iter().filter(|f| f.kind == kind).count();
+                text_row(
+                    ui,
+                    if kind == archisim_core::FittingKind::Elbow {
+                        "Codos"
+                    } else {
+                        "Tes"
+                    },
+                    "Salen del trazado: no se dibujan",
+                    &n.to_string(),
+                );
+            }
         });
         group(ui, "run-identity", "Datos de identidad", |ui| {
             text_row(
@@ -486,6 +583,8 @@ impl ArchiSimApp {
                     DeviceKind::Light => "IfcLightFixture",
                     DeviceKind::Socket => "IfcOutlet",
                     DeviceKind::Switch => "IfcSwitchingDevice",
+                    DeviceKind::Radiator => "IfcSpaceHeater",
+                    DeviceKind::Grille | DeviceKind::Diffuser => "IfcAirTerminal",
                 },
             );
         });

@@ -1287,6 +1287,8 @@ pub struct ModelParts {
     pub sun: Sun,
     /// Prices of the budget's items, by their keys.
     pub prices: Vec<(String, PriceConcept)>,
+    /// Overheads, profit and VAT of the budget.
+    pub budget: BudgetSettings,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1401,6 +1403,7 @@ pub struct Model {
     ref_planes: BTreeMap<RefPlaneId, RefPlane>,
     sun: Sun,
     prices: BTreeMap<String, PriceConcept>,
+    budget: BudgetSettings,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1480,6 +1483,7 @@ impl Model {
             ref_planes: BTreeMap::new(),
             sun: Sun::default(),
             prices: BTreeMap::new(),
+            budget: BudgetSettings::default(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -3933,6 +3937,7 @@ impl Model {
                 .iter()
                 .map(|(k, c)| (k.clone(), c.clone()))
                 .collect(),
+            budget: self.budget,
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4266,6 +4271,12 @@ impl Model {
                     error,
                 })?;
         }
+        model
+            .set_budget_settings(parts.budget)
+            .map_err(|error| RestoreError {
+                element: "budget".into(),
+                error,
+            })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;

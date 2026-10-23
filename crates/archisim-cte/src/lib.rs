@@ -8,7 +8,9 @@
 //!   and ramps (DB-SUA 9 and Anejo A; DB-SUA 1, 4.3), as the building's
 //!   settings ask;
 //! - stairs (DB-SUA 1, 4.2), as the stairs check themselves;
-//! - floor areas: usable area by room, use and level, and built area.
+//! - floor areas: usable area by room, use and level, and built area;
+//! - water supply and drainage (DB-HS 4 and HS 5): the diameters of the
+//!   pipes of each sanitary appliance and the slope of the drains.
 //!
 //! What is checked is described in `docs/CTE.md`. The checks read the model
 //! as it is drawn: a room's use says what it is, doors connect the rooms
@@ -19,10 +21,12 @@ pub mod access;
 pub mod evacuation;
 pub mod occupancy;
 pub mod region;
+pub mod services;
 pub mod surfaces;
 
 use archisim_core::{
-    Accessibility, BuildingUse, LevelId, Model, OpeningId, Point2, RoomId, SlabId, StairId,
+    Accessibility, BuildingUse, LevelId, Model, ObjectId, OpeningId, Point2, RoomId, RunId, SlabId,
+    StairId,
 };
 
 /// How an item came out.
@@ -47,15 +51,18 @@ pub enum Section {
     Accessibility,
     /// DB-SUA 1: stairs and ramps.
     StairsAndRamps,
+    /// DB-HS 4 and HS 5: water supply and drainage.
+    Services,
     /// Floor areas.
     Areas,
 }
 
 impl Section {
-    pub const ALL: [Section; 4] = [
+    pub const ALL: [Section; 5] = [
         Section::Evacuation,
         Section::Accessibility,
         Section::StairsAndRamps,
+        Section::Services,
         Section::Areas,
     ];
 
@@ -64,6 +71,7 @@ impl Section {
             Section::Evacuation => "Evacuación (DB-SI 3)",
             Section::Accessibility => "Accesibilidad (DB-SUA 9)",
             Section::StairsAndRamps => "Escaleras y rampas (DB-SUA 1)",
+            Section::Services => "Agua y saneamiento (DB-HS 4 y HS 5)",
             Section::Areas => "Superficies",
         }
     }
@@ -78,6 +86,10 @@ pub enum Subject {
     Opening(OpeningId),
     Stair(StairId),
     Slab(SlabId),
+    /// A sanitary appliance.
+    Object(ObjectId),
+    /// A pipe.
+    Run(RunId),
 }
 
 /// One result.
@@ -243,6 +255,16 @@ pub fn subject_name(model: &Model, s: Subject) -> String {
             .unwrap_or_default(),
         Subject::Stair(s) => format!("Escalera {}", s.0),
         Subject::Slab(s) => format!("Rampa (forjado {})", s.0),
+        Subject::Object(o) => model
+            .objects()
+            .find(|x| x.id == o)
+            .and_then(|x| model.object_type(x.object_type))
+            .map(|t| t.name.clone())
+            .unwrap_or_default(),
+        Subject::Run(r) => model
+            .run(r)
+            .map(|r| format!("{} {} ({})", r.system.name(), r.size_text(), r.id.0))
+            .unwrap_or_default(),
     }
 }
 
@@ -270,6 +292,7 @@ pub fn check(model: &Model) -> Report {
     evacuation::check(model, &mut report);
     access::check(model, &mut report);
     access::stairs_and_ramps(model, &mut report);
+    services::check(model, &mut report);
     report
 }
 

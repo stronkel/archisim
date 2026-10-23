@@ -5797,6 +5797,7 @@ fn budget_takes_a_price_from_a_bank() {
             price: c.price,
             text: c.text,
             bank: "Banco de prueba".into(),
+            pieces: Vec::new(),
         }),
     );
     assert_eq!(h.app.ed.undo_label(), Some("Precio de partida"));

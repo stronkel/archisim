@@ -344,3 +344,76 @@ fn stairs_are_the_exits_of_upper_floors() {
         .iter()
         .any(|i| i.section == Section::StairsAndRamps && matches!(i.subject, Subject::Stair(_))));
 }
+
+#[test]
+fn sanitary_pipes_by_hs4_and_hs5() {
+    let mut m = archisim_library::new_project("Baño");
+    let l = m.levels()[0].id;
+    let wc = archisim_library::add_object_entry(&mut m, "Inodoro").unwrap();
+    let basin = archisim_library::add_object_entry(&mut m, "Lavabo 60").unwrap();
+    let place = |m: &mut Model, t, x: f64| {
+        m.add_object(NewObject {
+            level: l,
+            object_type: t,
+            position: Point2::new(x, 0.5),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap()
+    };
+    let wc_id = place(&mut m, wc, 1.0);
+    let basin_id = place(&mut m, basin, 4.0);
+    assert_eq!(
+        services::Appliance::of(&m, wc_id),
+        Some(services::Appliance::Wc)
+    );
+    assert_eq!(
+        services::Appliance::of(&m, basin_id),
+        Some(services::Appliance::Washbasin)
+    );
+    let run = |m: &mut Model, system, x: f64, y: f64, width: f64, slope: f64| {
+        m.add_run(NewRun {
+            level: l,
+            system,
+            path: vec![Point2::new(x, y), Point2::new(x + 0.6, y)],
+            elevation: 0.3,
+            width,
+            height: width,
+            slope,
+        })
+        .unwrap()
+    };
+    // The WC drains through a 90 (too small); the basin through a 40 hung
+    // flat (no slope).
+    run(&mut m, ServiceSystem::Drainage, 0.7, 0.2, 0.09, 0.02);
+    let flat = run(&mut m, ServiceSystem::Drainage, 3.7, 0.2, 0.04, 0.0);
+    // Water: a 16 to the WC, a 10 (too small) to the basin, hot to neither.
+    run(&mut m, ServiceSystem::ColdWater, 0.7, 0.9, 0.016, 0.0);
+    run(&mut m, ServiceSystem::ColdWater, 3.7, 0.9, 0.010, 0.0);
+    let r = check(&m);
+    let of = |s: Subject, rule: &str| -> Vec<Status> {
+        r.items
+            .iter()
+            .filter(|i| i.subject == s && i.rule == rule)
+            .map(|i| i.status)
+            .collect()
+    };
+    assert_eq!(
+        of(Subject::Object(wc_id), "HS 5, tabla 4.1"),
+        [Status::Fails]
+    );
+    assert_eq!(
+        of(Subject::Object(basin_id), "HS 5, tabla 4.1"),
+        [Status::Passes]
+    );
+    assert_eq!(
+        of(Subject::Object(wc_id), "HS 4, tabla 4.2"),
+        [Status::Passes]
+    );
+    assert_eq!(
+        of(Subject::Object(basin_id), "HS 4, tabla 4.2"),
+        [Status::Fails]
+    );
+    assert_eq!(of(Subject::Run(flat), "HS 5, 3.3.1.1"), [Status::Fails]);
+    assert!(r.to_text(&m).contains("Agua y saneamiento"));
+}

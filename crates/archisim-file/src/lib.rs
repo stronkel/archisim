@@ -977,8 +977,34 @@ mod tests {
                 price: 28.4,
                 text: "Hoja de partición interior de ladrillo…".into(),
                 bank: "Banco de prueba".into(),
+                // Its decomposition (version 32).
+                pieces: vec![
+                    archisim_core::PricePiece {
+                        code: "mo021".into(),
+                        unit: "h".into(),
+                        summary: "Oficial 1ª construcción".into(),
+                        kind: 1,
+                        quantity: 0.6,
+                        price: 21.5,
+                    },
+                    archisim_core::PricePiece {
+                        code: "%".into(),
+                        unit: "%".into(),
+                        summary: "Costes directos complementarios".into(),
+                        kind: 0,
+                        quantity: 2.0,
+                        price: 0.0,
+                    },
+                ],
             }),
         )
+        .unwrap();
+        // Overheads, profit and VAT of the budget (version 32).
+        m.set_budget_settings(archisim_core::BudgetSettings {
+            overheads: 0.15,
+            profit: 0.06,
+            vat: 0.1,
+        })
         .unwrap();
         // Saved plans, level styles, templates, reference planes and the
         // technical lettering (version 27).
@@ -1076,6 +1102,18 @@ mod tests {
                 elevation: 0.4,
                 width: 0.02,
                 height: 0.02,
+                slope: 0.0,
+            })
+            .unwrap();
+            // A drain with its slope (version 32).
+            m.add_run(archisim_core::NewRun {
+                level: levels[0],
+                system: archisim_core::ServiceSystem::Drainage,
+                path: vec![Point2::new(0.5, 1.0), Point2::new(3.5, 1.0)],
+                elevation: 0.3,
+                width: 0.11,
+                height: 0.11,
+                slope: 0.02,
             })
             .unwrap();
             m.add_run(archisim_core::NewRun {
@@ -1085,6 +1123,7 @@ mod tests {
                 elevation: 2.6,
                 width: 0.3,
                 height: 0.2,
+                slope: 0.0,
             })
             .unwrap();
             m.add_device(archisim_core::NewDevice {
