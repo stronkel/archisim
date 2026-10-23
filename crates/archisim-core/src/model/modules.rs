@@ -898,7 +898,7 @@ impl Model {
                 .collect();
             let covering = RoofCovering {
                 tiles: r.covering.tiles,
-                tile_material: r.covering.tile_material.and_then(&mat),
+                tile_material: r.covering.tile_material.and_then(mat),
                 gutter: r.covering.gutter.as_ref().and_then(|g| {
                     Some(Gutter {
                         material: mat(g.material)?,
