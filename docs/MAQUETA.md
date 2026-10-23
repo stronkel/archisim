@@ -138,7 +138,7 @@ Pendiente: unirse también al arrastrar en planta; muebles en L (sofá rinconera
 
 ## 6 quater. Colecciones (v0.50)
 
-- **Colección** encima del catálogo (en Amueblar y en Exterior): nórdico cálido, mediterráneo, años 50 o japandi, cada una con su tira de colores. Con una elegida, las tarjetas enseñan todas las piezas de la biblioteca en sus maderas, telas, metales y cerámicas, y se colocan así.
+- **Colección** encima del catálogo (en Amueblar y en Exterior): nórdico cálido, mediterráneo, años 50 o japandi, cada una con su tira de colores. Con una elegida, las tarjetas enseñan todas las piezas de la biblioteca con la tira de colores de la colección (el dibujo sigue siendo el de planta; las miniaturas en 3D están pendientes), y se colocan ya en sus maderas, telas, metales y cerámicas.
 - **Aplicar** pasa lo seleccionado a la colección (una habitación entera, con un recuadro); «Sin colección» lo devuelve a la biblioteca. Un paso de Deshacer.
 - Piezas nuevas en el mismo estilo: camas con cabecero tapizado o de lamas, colcha y cojines; mesitas de patas cónicas y flotantes; taburetes, islas y lo de la encimera; toallas y cestas; cuadros, espejos y relojes; cojines de suelo y mantas; y la pestaña **Jardín y terraza** en Exterior (tumbonas, sombrillas, macetones y pérgolas). Detalle en `docs/BIBLIOTECA_3D.md` («Colecciones»).
 

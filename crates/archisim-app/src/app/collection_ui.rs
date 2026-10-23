@@ -28,6 +28,11 @@ fn swatch(name: &str) -> Color32 {
         .map_or(Color32::GRAY, |e| Color32::from_rgb(e.2[0], e.2[1], e.2[2]))
 }
 
+/// A collection's colours, for the cards.
+pub(super) fn colours(c: &Collection) -> Vec<Color32> {
+    c.swatches().iter().map(|n| swatch(n)).collect()
+}
+
 /// A strip with a collection's colours.
 fn strip(ui: &mut Ui, c: &Collection) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(54.0, 12.0), Sense::hover());

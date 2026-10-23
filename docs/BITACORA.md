@@ -12,7 +12,7 @@ Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archi
 
 **Hecho**
 - Cuatro **colecciones** con su paleta: nórdico cálido, mediterráneo, años 50 y japandi. Cada pieza de la biblioteca tiene su versión en cada una («Sofá de 3 plazas · Japandi»): madera, telas, cojines, metal, cerámica, piedra y fibra de la colección, y el modelo 3D que le va (cama de lamas en japandi, taburete de enea en mediterráneo…). Sábanas, pantallas, vidrio, cromados y porcelana se quedan como están.
-- En la Maqueta, **Colección** encima del catálogo (las tarjetas se ven en sus colores y se colocan así) y **Aplicar** para pasar lo seleccionado; «Sin colección» lo devuelve.
+- En la Maqueta, **Colección** encima del catálogo (cada tarjeta lleva la tira de colores de la colección y la pieza se coloca ya en ella) y **Aplicar** para pasar lo seleccionado; «Sin colección» lo devuelve.
 - 44 tipos nuevos: camas con cabecero tapizado o de lamas, con colcha a los pies y cojines; mesitas de patas cónicas y flotante; taburetes (madera, tapizado, enea); islas de cocina (con voladizo, mesa de trabajo con cestas, con fregadero); cosas de la encimera (tablas y aceite, botes, cafetera y tazas, hierbas); toallas (dobladas, colgadas, enrolladas); cestas; cuadros, tríptico, espejo de arco, espejo sol y reloj; cojines de suelo; mantas (doblada, pila, en escalera); tumbonas, cama de exterior, sombrillas, macetones (olivo, ánfora, gramíneas, lavanda) y pérgolas.
 - Exterior tiene la pestaña **Jardín y terraza**. Lo de la encimera, las toallas y las mantas se posan solas donde se pinchan; los taburetes y lo del jardín, en el suelo.
 - `archisim modelos out/` empieza con una fila por colección (las mismas once piezas en los cuatro estilos) y luego todas las piezas nuevas.
@@ -23,7 +23,7 @@ Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archi
 
 **Qué debe probar Antonio**
 1. `cargo run -p archisim-cli -- modelos out/` y abre `out/modelos.archisim` en la Maqueta con imagen Bonita: las cuatro primeras filas son las mismas piezas en nórdico, mediterráneo, años 50 y japandi; detrás, todas las piezas nuevas. Dime qué colección o qué pieza cambiarías.
-2. En la demo, Maqueta → Amueblar → **Colección: Japandi**. Mira Dormitorio y Cocina: las tarjetas salen en roble ahumado, lino piedra y gres. Pon una cama y una mesita.
+2. En la demo, Maqueta → Amueblar → **Colección: Japandi**. Mira Dormitorio y Cocina: cada tarjeta lleva la tira de colores de Japandi. Pon una cama y una mesita: deben salir en roble ahumado y lino piedra, la cama con cabecero de lamas.
 3. Selecciona con un recuadro todo el salón de la demo, elige **Mediterráneo** y pulsa **Aplicar**: sofá, butaca, alfombra y lámpara cambian de golpe. Ctrl+Z lo deshace en un paso.
 4. Exterior → **Jardín y terraza**: una pérgola con cañizo, dos tumbonas y una sombrilla junto a la casa; y un macetón con olivo.
 5. Amueblar → Decoración: un cuadro y un espejo de arco contra una pared (se pegan de espaldas), unas mantas en escalera y un cojín de suelo.

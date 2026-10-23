@@ -137,6 +137,8 @@ struct Card {
     name: String,
     glyph: Glyph,
     thumb: Option<super::thumbs::Thumb>,
+    /// The colours of the collection the piece is shown in.
+    swatches: Vec<Color32>,
 }
 
 /// Height of the catalog at the bottom.
@@ -426,6 +428,7 @@ impl ArchiSimApp {
             name: name.to_string(),
             glyph,
             thumb: None,
+            swatches: Vec::new(),
         };
         let sig = self.picture_signature(false);
         let openings = |app: &mut Self, door: bool| -> Vec<Card> {
@@ -447,6 +450,7 @@ impl ArchiSimApp {
                         name: t.name.clone(),
                         glyph: if door { Glyph::Door } else { Glyph::Window },
                         thumb,
+                        swatches: Vec::new(),
                     }
                 })
                 .collect()
@@ -536,6 +540,7 @@ impl ArchiSimApp {
                         name: i.name.to_string(),
                         glyph: Glyph::Object,
                         thumb: i.thumb,
+                        swatches: super::collection_ui::colours(c),
                     })
                     .collect()
             }
@@ -565,6 +570,7 @@ impl ArchiSimApp {
                         name: i.name,
                         glyph: Glyph::Object,
                         thumb: i.thumb,
+                        swatches: Vec::new(),
                     })
                     .collect()
             }
@@ -788,6 +794,21 @@ impl ArchiSimApp {
                                 c.glyph,
                                 if on { p.accent } else { p.text },
                             ),
+                        }
+                        // The collection's colours, under the picture.
+                        if !c.swatches.is_empty() {
+                            let n = c.swatches.len() as f32;
+                            let w = (CARD.x - 24.0) / n;
+                            for (i, col) in c.swatches.iter().enumerate() {
+                                let r = Rect::from_min_size(
+                                    Pos2::new(
+                                        rect.left() + 12.0 + i as f32 * w,
+                                        rect.bottom() - 30.0,
+                                    ),
+                                    Vec2::new(w - 1.0, 5.0),
+                                );
+                                painter.rect_filled(r, CornerRadius::same(1), *col);
+                            }
                         }
                         let name = egui::text::LayoutJob {
                             wrap: egui::text::TextWrapping::truncate_at_width(CARD.x - 10.0),
