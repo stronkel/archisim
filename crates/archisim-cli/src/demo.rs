@@ -452,7 +452,13 @@ pub fn build() -> Result<Document, ModelError> {
         let inner = 0.265;
         for (name, x, y, rotation) in [
             ("Muebles de cocina 240", 7.45, 9.0 - inner, PI),
-            ("Sofá de 3 plazas", inner, 5.5, -FRAC_PI_2),
+            ("Sofá acogedor de 3 plazas", inner, 5.5, -FRAC_PI_2),
+            // The cosy pieces (v0.49): a rug, an armchair, a lamp and a
+            // plant round the sofa.
+            ("Alfombra 200×140", inner + 0.75, 5.5, -FRAC_PI_2),
+            ("Butaca de orejas", 2.95, 5.1, FRAC_PI_2 + 0.5),
+            ("Lámpara de pie", inner + 0.05, 4.05, -FRAC_PI_2),
+            ("Costilla de Adán", inner + 0.05, 6.95, -FRAC_PI_2),
             ("Mesa de comedor 160×90", 4.3, 7.0, 0.0),
             ("Cama doble 150×200", 2.0, 3.45, PI),
             ("Cama individual 90×190", 12.0 - inner, 2.0, FRAC_PI_2),
@@ -1441,9 +1447,10 @@ mod tests {
         assert_eq!(m.terrains().count(), 1);
         assert_eq!(m.curtain_walls().count(), 1);
         assert_eq!(m.railings().count(), 1);
-        // Sixteen of the library, eight cypresses of a planting and one
-        // brought from SketchUp.
-        assert_eq!(m.objects().count(), 25);
+        // Twenty of the library (four of them the cosy pieces of the
+        // living room), eight cypresses of a planting and one brought
+        // from SketchUp.
+        assert_eq!(m.objects().count(), 29);
         assert_eq!(m.plantings().count(), 1);
         assert_eq!(
             m.objects().filter(|o| m.type_grows(o.object_type)).count(),

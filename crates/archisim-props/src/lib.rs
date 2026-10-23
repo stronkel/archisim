@@ -13,6 +13,7 @@
 
 mod accessories;
 pub mod build;
+mod cozy;
 pub mod fronts;
 mod furniture;
 mod kitchen;
@@ -107,6 +108,44 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("hood", &["Decorativa", "Integrada"]),
     ("shelf", &["Con escuadras", "Flotante"]),
     ("person", &["Hombre", "Mujer", "Caminando"]),
+    (
+        "rug",
+        &[
+            "Lisa con ribete",
+            "Redonda",
+            "De rayas",
+            "Bereber con flecos",
+        ],
+    ),
+    ("lamp", &["De pie", "De mesa", "Colgante", "De arco"]),
+    (
+        "potted_plant",
+        &[
+            "Costilla de Adán",
+            "Ficus",
+            "Cactus",
+            "Helecho",
+            "Sansevieria",
+        ],
+    ),
+    (
+        "armchair",
+        &["De orejas", "Redonda", "De ratán", "Baja de patas"],
+    ),
+    ("pouf", &["Redondo", "De punto", "Cubo"]),
+    ("side_table", &["Pie central", "Tres patas", "Nido"]),
+    ("sideboard", &["Nórdico de patas", "Puertas de lamas"]),
+    ("curtain", &["Larga", "Visillo", "Hasta el alféizar"]),
+    (
+        "decor",
+        &[
+            "Jarrón con ramas",
+            "Frutero",
+            "Libros y vela",
+            "Cerámicas",
+            "Cesta con manta",
+        ],
+    ),
     ("car", &["Berlina", "Compacto", "Todoterreno"]),
 ];
 
@@ -167,6 +206,15 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "shelf" => accessories::shelf(&mut b, p),
         "person" => people::person(&mut b, p),
         "car" => vehicles::car(&mut b, p),
+        "rug" => cozy::rug(&mut b, p),
+        "lamp" => cozy::lamp(&mut b, p),
+        "potted_plant" => cozy::potted_plant(&mut b, p),
+        "armchair" => cozy::armchair(&mut b, p),
+        "pouf" => cozy::pouf(&mut b, p),
+        "side_table" => cozy::side_table(&mut b, p),
+        "sideboard" => cozy::sideboard(&mut b, p),
+        "curtain" => cozy::curtain(&mut b, p),
+        "decor" => cozy::decor(&mut b, p),
         _ => return None,
     }
     Some(PropMesh {

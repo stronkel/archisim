@@ -1,7 +1,7 @@
 family "Sofá"
   category furniture
   host none
-  version 2
+  version 3
   description "Sofá recto con brazos y respaldo"
   folder "Sofás y sillones"
 
@@ -18,6 +18,11 @@ type_params
     model3d choice("Contemporáneo", "Clásico", "Nórdico") = "Contemporáneo" label "Modelo 3D"
     cushion material = "Tela" label "Cojines"
     frame material = "Madera de pino" label "Patas"
+  section "Decoración"
+    pillows integer = 0 range 0..4 label "Cojines sueltos"
+    pillow  material = "Terciopelo mostaza" label "Cojines sueltos"
+    throw   bool = no label "Manta sobre el brazo"
+    throw_mat material = "Lana teja" label "Manta"
 
 require 0.5 < width - 0.4 else "No caben los brazos"
 require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"

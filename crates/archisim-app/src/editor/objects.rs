@@ -107,6 +107,42 @@ impl Editor {
         self.transact("Modificar objeto", |m| m.set_object_values(id, values))
     }
 
+    /// Gives one piece of an object (its material parameter `key`) a
+    /// colour of the cosy palette, as Paralives' swatches: only this
+    /// object changes (a type shared with others is copied first), in one
+    /// step.
+    pub fn paint_object_piece(&mut self, id: ObjectId, key: &str, swatch: &str) -> EditResult {
+        let Some(o) = self.model().object(id).cloned() else {
+            return Err("el objeto no existe".into());
+        };
+        let Some(t) = self.model().object_type(o.object_type).cloned() else {
+            return Err("el tipo no existe".into());
+        };
+        let shared = self.model().object_type_users(t.id) > 1;
+        let taken: Vec<String> = self
+            .model()
+            .object_types()
+            .map(|t| t.name.clone())
+            .collect();
+        let name = format!("{} · {swatch}", t.name);
+        let name = super::types::copy_name(&name, &taken);
+        let key = key.to_string();
+        let swatch = swatch.to_string();
+        self.transact("Color de la pieza", move |m| {
+            let mat = archisim_library::palette_material(m, &swatch)
+                .ok_or_else(|| archisim_core::ModelError::NotAnObject(swatch.clone()))?;
+            let mut values = t.values.clone();
+            values.insert(key, Value::Material(mat.0));
+            if shared {
+                let new = m.add_object_type(name, t.family, values)?;
+                m.set_object_type_mesh(new, t.mesh)?;
+                m.edit_object(id, |o| o.object_type = new)
+            } else {
+                m.set_object_type_values(t.id, values)
+            }
+        })
+    }
+
     pub fn set_object_type_value(
         &mut self,
         id: ObjectTypeId,

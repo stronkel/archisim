@@ -1,0 +1,39 @@
+family "Decoración"
+  category furniture
+  host none
+  version 1
+  description "Pequeñas cosas para mesas y baldas: jarrón con ramas, frutero, libros y vela, cerámicas o cesta con manta; súbelas con el desfase de la base"
+  folder "Decoración"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.30 range 0.08..1.00 label "Ancho"
+    height length = 0.50 range 0.10..1.50 label "Altura (jarrón)"
+  section "Materiales"
+    mat    material = "Cerámica esmaltada" label "Pieza principal"
+    glaze2 material = "Cerámica blanca" label "Piezas pequeñas"
+    leaves material = "Hoja verde" label "Ramas"
+    stem   material = "Corteza" label "Tallos"
+    fruit  material = "Naranja" label "Fruta"
+    fruit2 material = "Manzana verde" label "Otra fruta"
+    books2 material = "Libros claros" label "Libros"
+    candle material = "Cera" label "Vela"
+    flame  material = "Luz" label "Llama"
+    frame  material = "Ratán" label "Cesta"
+  section "Modelo 3D"
+    model3d choice("Jarrón con ramas", "Frutero", "Libros y vela", "Cerámicas", "Cesta con manta") = "Jarrón con ramas" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, width, height * 0.6) material mat
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..12
+    let t0 = 6.283185307 * i / 12
+    let t1 = 6.283185307 * (i + 1) / 12
+    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen thin
+
+outputs
+  generator = "props:decor"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

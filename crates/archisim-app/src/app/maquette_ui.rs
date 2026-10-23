@@ -57,6 +57,7 @@ impl CatalogGroup {
                 "Baño",
                 "Dormitorio",
                 "Despacho",
+                "Decoración",
                 "Otros",
             ],
             Self::Outside => &[
@@ -79,8 +80,22 @@ fn room_of(folder: &str) -> &'static str {
         "Accesorios de baño" | "Duchas y bañeras" | "Inodoros y bidés" | "Lavabos" => "Baño",
         "Camas" | "Dormitorio" | "Armarios" => "Dormitorio",
         "Despacho" => "Despacho",
+        // What makes a house lived in, for any room.
+        "Alfombras" | "Iluminación" | "Plantas de interior" | "Cortinas" | "Decoración" => {
+            "Decoración"
+        }
         _ => "Otros",
     }
+}
+
+/// A piece of a piece of furniture that takes a colour in the card.
+pub(super) struct Piece {
+    /// Its material parameter.
+    pub key: String,
+    pub label: String,
+    /// The name of its material now.
+    pub current: Option<String>,
+    pub swatches: Vec<(&'static str, [u8; 3])>,
 }
 
 /// What a card of the catalog does.
@@ -793,6 +808,11 @@ impl ArchiSimApp {
         let single =
             (self.ed.selection.len() == 1).then(|| *self.ed.selection.iter().next().expect("one"));
         let name = single.map(|e| self.element_title(e)).unwrap_or_default();
+        let pieces = match single {
+            Some(Element::Object(id)) => self.object_pieces(id),
+            _ => Vec::new(),
+        };
+        let mut paint: Option<(String, &'static str)> = None;
         let mut act = None;
         egui::Area::new(Id::unique("maquette-card"))
             .order(egui::Order::Foreground)
@@ -811,6 +831,42 @@ impl ArchiSimApp {
                         );
                         if !name.is_empty() {
                             ui.label(egui::RichText::new(&name).small().color(p.muted));
+                        }
+                        // A row of colours for each piece (Paralives'
+                        // swatches): only this object changes.
+                        for piece in &pieces {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 3.0;
+                                ui.add_sized(
+                                    Vec2::new(78.0, 16.0),
+                                    egui::Label::new(
+                                        egui::RichText::new(&piece.label).small().color(p.muted),
+                                    )
+                                    .truncate(),
+                                );
+                                for (swatch, [r, g, b]) in &piece.swatches {
+                                    let (rect, resp) =
+                                        ui.allocate_exact_size(Vec2::splat(15.0), Sense::click());
+                                    let on = piece.current.as_deref() == Some(*swatch);
+                                    let painter = ui.painter();
+                                    painter.circle_filled(
+                                        rect.center(),
+                                        6.5,
+                                        Color32::from_rgb(*r, *g, *b),
+                                    );
+                                    painter.circle_stroke(
+                                        rect.center(),
+                                        if on { 7.0 } else { 6.5 },
+                                        Stroke::new(
+                                            if on { 2.0 } else { 0.8 },
+                                            if on { p.accent } else { p.line },
+                                        ),
+                                    );
+                                    if resp.on_hover_text(*swatch).clicked() {
+                                        paint = Some((piece.key.clone(), swatch));
+                                    }
+                                }
+                            });
                         }
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 4.0;
@@ -862,6 +918,10 @@ impl ArchiSimApp {
                         });
                     });
             });
+        if let (Some((key, swatch)), Some(Element::Object(id))) = (paint, single) {
+            let r = self.ed.paint_object_piece(id, &key, swatch);
+            self.report(r, &format!("{swatch}."));
+        }
         match act {
             Some(CardAct::Turn) => self.card_turn(),
             Some(CardAct::Duplicate) => self.card_duplicate(),
@@ -877,6 +937,62 @@ impl ArchiSimApp {
             },
             None => {}
         }
+    }
+
+    /// The pieces of an object that take a colour (its type's materials,
+    /// but light and glass) with the swatches of the cosy palette that suit
+    /// each: fabrics for upholstery, woods and metals for legs…
+    pub(super) fn object_pieces(&self, id: archisim_core::ObjectId) -> Vec<Piece> {
+        let m = self.ed.model();
+        let Some(o) = m.object(id) else {
+            return Vec::new();
+        };
+        let Some(t) = m.object_type(o.object_type) else {
+            return Vec::new();
+        };
+        let Some(f) = m.family(t.family) else {
+            return Vec::new();
+        };
+        let Ok(defaults) = m.family_defaults(t.family, archisim_core::ParamScope::Type) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for param in f.def().params_of(archisim_core::ParamScope::Type) {
+            if param.kind != archisim_family::ParamKind::Material {
+                continue;
+            }
+            let value = t.values.get(&param.name).or(defaults.get(&param.name));
+            let Some(archisim_core::Value::Material(mid)) = value else {
+                continue;
+            };
+            let Some(mat) = m.material(archisim_core::MaterialId(*mid)) else {
+                continue;
+            };
+            let kinds: &[&str] = match mat.category.as_str() {
+                "fabric" => &["fabric"],
+                "wood" | "metal" => &["wood", "metal"],
+                "ceramic" | "stone" => &["ceramic", "stone"],
+                _ => continue,
+            };
+            let swatches: Vec<(&'static str, [u8; 3])> = archisim_library::COZY_PALETTE
+                .iter()
+                .filter(|(n, c, _)| kinds.contains(c) && !n.starts_with("Pantalla"))
+                .map(|(n, _, rgb)| (*n, *rgb))
+                .collect();
+            if swatches.is_empty() {
+                continue;
+            }
+            out.push(Piece {
+                key: param.name.clone(),
+                label: param.label.clone(),
+                current: Some(mat.name.clone()),
+                swatches,
+            });
+            if out.len() == 4 {
+                break;
+            }
+        }
+        out
     }
 
     /// A short name of what an element is (its type).
@@ -1102,6 +1218,7 @@ mod tests {
         assert_eq!(room_of("Camas"), "Dormitorio");
         assert_eq!(room_of("Lavabos"), "Baño");
         assert_eq!(room_of("Mesas"), "Comedor");
+        assert_eq!(room_of("Iluminación"), "Decoración");
         assert_eq!(room_of("Modelos 3D"), "Otros");
         assert_eq!(
             snap_to_grid(Point2::new(1.26, -0.74)),

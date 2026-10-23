@@ -17,11 +17,11 @@ pub struct Builder {
     pub parts: BTreeMap<&'static str, Vec<[u32; 3]>>,
 }
 
-fn sub(a: P3, b: P3) -> P3 {
+pub fn sub(a: P3, b: P3) -> P3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
-fn cross(a: P3, b: P3) -> P3 {
+pub fn cross(a: P3, b: P3) -> P3 {
     [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
@@ -29,7 +29,7 @@ fn cross(a: P3, b: P3) -> P3 {
     ]
 }
 
-fn norm(a: P3) -> P3 {
+pub fn norm(a: P3) -> P3 {
     let l = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
     if l < 1e-12 {
         [0.0, 0.0, 1.0]
@@ -124,8 +124,14 @@ impl Builder {
             v.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
             v
         };
+        // (When the rounding takes all of a side, both ends meet: kept in
+        // order against rounding errors.)
         let inner_lo = [lo[0] + r, lo[1] + r, lo[2] + r];
-        let inner_hi = [hi[0] - r, hi[1] - r, hi[2] - r];
+        let inner_hi = [
+            (hi[0] - r).max(inner_lo[0]),
+            (hi[1] - r).max(inner_lo[1]),
+            (hi[2] - r).max(inner_lo[2]),
+        ];
         let round = |q: P3| -> P3 {
             if r <= 1e-9 {
                 return q;
@@ -310,6 +316,56 @@ impl Builder {
             })
             .collect();
         self.lathe(role, [c[0], c[1], c[2] - r[2]], &profile, r[0], r[1]);
+    }
+
+    /// An ellipsoid whose half-axes are the vectors `ax`, `ay`, `az`
+    /// (at right angles): a leaf, a pebble, a cushion lying askew.
+    pub fn blob(&mut self, role: &'static str, c: P3, ax: P3, ay: P3, az: P3) {
+        let seg = 12;
+        let rows = 6;
+        // Outwards whatever the hand of the axes.
+        let det = {
+            let x = cross(ax, ay);
+            x[0] * az[0] + x[1] * az[1] + x[2] * az[2]
+        };
+        let at = |b: &mut Builder, phi: f64, t: f64| {
+            let (sp, cp) = phi.sin_cos();
+            let (st, ct) = t.sin_cos();
+            let (x, y, z) = (cp * ct, cp * st, sp);
+            b.point([
+                c[0] + ax[0] * x + ay[0] * y + az[0] * z,
+                c[1] + ax[1] * x + ay[1] * y + az[1] * z,
+                c[2] + ax[2] * x + ay[2] * y + az[2] * z,
+            ])
+        };
+        let half = std::f64::consts::FRAC_PI_2;
+        let bottom = at(self, -half, 0.0);
+        let top = at(self, half, 0.0);
+        let rings: Vec<Vec<u32>> = (1..rows)
+            .map(|i| {
+                let phi = -half + std::f64::consts::PI * i as f64 / rows as f64;
+                (0..seg)
+                    .map(|k| at(self, phi, std::f64::consts::TAU * k as f64 / seg as f64))
+                    .collect()
+            })
+            .collect();
+        let tri = |b: &mut Builder, p: u32, q: u32, r: u32| {
+            if det >= 0.0 {
+                b.tri(role, p, q, r);
+            } else {
+                b.tri(role, p, r, q);
+            }
+        };
+        for k in 0..seg {
+            let k1 = (k + 1) % seg;
+            tri(self, bottom, rings[0][k1], rings[0][k]);
+            let last = rings.len() - 1;
+            tri(self, top, rings[last][k], rings[last][k1]);
+            for j in 0..rings.len() - 1 {
+                tri(self, rings[j][k], rings[j][k1], rings[j + 1][k1]);
+                tri(self, rings[j][k], rings[j + 1][k1], rings[j + 1][k]);
+            }
+        }
     }
 
     /// A slab whose plan is a polygon (counter-clockwise, convex), from

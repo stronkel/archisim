@@ -93,7 +93,34 @@ Cualquier objeto puede dibujarse en planta con un símbolo hecho en CAD: los ár
 
 La demo dibuja uno de sus árboles con un símbolo de CAD (copa, círculo interior y ocho ramas). Para el programador: `archisim_core::PlanSymbol` y `SymbolItem` (`ObjectType::symbol`, formato versión 30), `archisim_export::symbol::symbol_from_dxf`, `archisim_plan::draw_symbol` y `drafting::draw_shape`; en la app, `object_ui::symbol_group`.
 
+## Biblioteca acogedora (v0.49, revisión de Antonio del 23/10/2026)
+
+Lo que hace que una casa parezca vivida, como en Paralives: piezas de formas blandas (cojines que se hinchan, cantos redondeados, patas torneadas), con pocas piezas cada una para que una habitación llena siga siendo ligera, y una paleta cálida de materiales. Todo está en la Maqueta, en Amueblar → **Salón** y en la nueva pestaña **Decoración**; y en la galería de objetos de Técnica.
+
+| Familia | Modelos 3D | Tipos de la biblioteca |
+|---|---|---|
+| Butaca | de orejas, redonda, de ratán, baja de patas | una de cada |
+| Puf | redondo, de punto, cubo | uno de cada |
+| Mesa auxiliar | pie central, tres patas, nido | una de cada |
+| Aparador | nórdico de patas (puertas y cajones), puertas de lamas | 160 y 180 |
+| Alfombra | lisa con ribete, redonda, de rayas, bereber con flecos | cuatro |
+| Lámpara | de pie, de mesa, colgante (con su cable hasta el techo), de arco | cuatro |
+| Planta de interior | costilla de Adán, ficus, cactus, helecho, sansevieria | cinco |
+| Cortina | larga, visillo (transparente), hasta el alféizar; abierta o corrida | lino y visillo |
+| Decoración | jarrón con ramas, frutero, libros y vela, cerámicas, cesta con manta | cinco |
+
+- El **Sofá** lleva ahora **cojines sueltos** (de 0 a 4, apoyados en el respaldo) y **manta sobre el brazo**, cada uno con su material: «Sofá acogedor de 3 plazas» (lino arena, cojines mostaza y manta teja) y «Sofá nórdico con cojines».
+- **Paleta acogedora** (`archisim_library::COZY_PALETTE`): linos, bouclé, lanas, terciopelos (salvia, mostaza, rosa), pana, robles, nogal, ratán, latón, mármol, terracota y cerámicas.
+- **Color por pieza**: en la tarjeta de la Maqueta, un objeto seleccionado muestra una fila de colores para cada pieza (tapicería, cojines, patas…), con los de la paleta que le van (telas para lo tapizado, maderas y metales para las patas). Cambia solo ese objeto: si su tipo lo comparten otros, se le hace una copia («Sofá de 3 plazas · Terciopelo mostaza»). Un solo paso de Deshacer.
+- La decoración se pone en el suelo; para subirla a una mesa o una balda, el desfase de la base. Que se apoye sola en las superficies queda pendiente.
+- `archisim modelos out/` coloca en sus dos primeras filas todas las piezas nuevas; la demo tiene en el salón el sofá acogedor, una alfombra, una butaca de orejas, una lámpara de pie y una costilla de Adán.
+
+Para el programador: `archisim-props::cozy` (`rug`, `lamp`, `potted_plant`, `armchair`, `pouf`, `side_table`, `sideboard`, `curtain`, `decor`) y `Builder::blob` (elipsoide con ejes cualesquiera, para hojas y ramas); las recetas en `families/objetos/` (`butaca`, `puf`, `mesa_auxiliar`, `aparador`, `alfombra`, `lampara`, `planta_interior`, `cortina`, `decoracion`); los papeles nuevos y sus parámetros en `model/props::candidates`; la tarjeta en `app/maquette_ui::object_pieces` y `Editor::paint_object_piece`. Sin cambios de formato: los proyectos guardan las familias que usan.
+
 ## Pendiente
+
+- Decoración que se apoya sola en mesas, baldas y encimeras.
+- Más colecciones con su paleta (mediterránea, años 50, japandi) y más piezas: camas con cabecero tapizado y colchas, estanterías con objetos, cocina y baño en el mismo estilo.
 
 - Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
 - Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).

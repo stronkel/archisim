@@ -5668,6 +5668,65 @@ fn objects_are_stretched_in_the_3d_view() {
     assert!((height - 2.6).abs() < 0.03, "{height}");
 }
 
+/// The card's swatches give one piece of one object a colour of the cosy
+/// palette: the other objects of its type keep theirs.
+#[test]
+fn swatches_paint_one_piece_of_one_object() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Sofá de 3 plazas")
+        .unwrap()
+        .id;
+    let mut ids = Vec::new();
+    for x in [1.0, 4.0] {
+        ids.push(
+            h.app
+                .ed
+                .transact("Sofá", |m| {
+                    m.add_object(archisim_core::NewObject {
+                        level,
+                        object_type: t,
+                        position: p(x, 2.0),
+                        rotation: 0.0,
+                        base_offset: 0.0,
+                    })
+                })
+                .unwrap(),
+        );
+    }
+    let pieces = h.app.object_pieces(ids[0]);
+    let upholstery = pieces.iter().find(|p| p.key == "mat").expect("upholstery");
+    assert!(upholstery
+        .swatches
+        .iter()
+        .any(|s| s.0 == "Terciopelo mostaza"));
+    assert!(pieces.iter().any(|p| p.key == "frame"));
+    h.app
+        .ed
+        .paint_object_piece(ids[0], "mat", "Terciopelo mostaza")
+        .unwrap();
+    let m = h.model();
+    let mat_of = |id| {
+        let ty = m.object_type(m.object(id).unwrap().object_type).unwrap();
+        match ty.values.get("mat") {
+            Some(archisim_core::Value::Material(x)) => m
+                .material(archisim_core::MaterialId(*x))
+                .unwrap()
+                .name
+                .clone(),
+            _ => String::new(),
+        }
+    };
+    assert_eq!(mat_of(ids[0]), "Terciopelo mostaza");
+    assert_ne!(mat_of(ids[1]), "Terciopelo mostaza");
+    // One step back undoes it.
+    h.app.ed.undo();
+    assert_eq!(h.model().object(ids[0]).unwrap().object_type, t);
+}
+
 /// In the Maqueta, W A S D walk the camera along the ground and Q E move
 /// it down and up; the letters do not start tools there.
 #[test]

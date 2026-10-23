@@ -109,6 +109,54 @@ pub fn sofa(b: &mut Builder, p: &Params) {
             0.035,
         );
     }
+    // Loose cushions leaning on the back, at the ends first; and a throw
+    // over the right arm, falling to the floor.
+    let pillows = p.get("pillows", 0.0).round().clamp(0.0, 4.0) as usize;
+    let size = (pw * 0.34).clamp(0.15, 0.22);
+    let spots: Vec<f64> = match pillows {
+        0 => vec![],
+        1 => vec![x0 + arm + size * 1.1],
+        2 => vec![x0 + arm + size * 1.1, -x0 - arm - size * 1.1],
+        3 => vec![x0 + arm + size * 1.1, 0.0, -x0 - arm - size * 1.1],
+        _ => vec![
+            x0 + arm + size * 1.1,
+            x0 + arm + size * 2.9,
+            -x0 - arm - size * 2.9,
+            -x0 - arm - size * 1.1,
+        ],
+    };
+    for (i, x) in spots.into_iter().enumerate() {
+        // Square, stuffed, upright against the back; the ones at the ends
+        // a little bigger.
+        let s = if i == 0 || i + 1 == pillows {
+            size
+        } else {
+            size * 0.88
+        };
+        b.pillow(
+            "pillow",
+            [x - s, back + 0.12, seat - 0.03],
+            [x + s, back + 0.25, seat - 0.03 + s * 1.85],
+            0.05,
+            0.04,
+        );
+    }
+    if p.flag("throw", false) {
+        let a0 = -x0 - arm - 0.02;
+        b.pillow(
+            "throw",
+            [a0, 0.25, arm_h],
+            [-x0 + 0.015, 0.6, arm_h + 0.03],
+            0.012,
+            0.006,
+        );
+        b.rbox(
+            "throw",
+            [-x0, 0.25, foot + 0.08],
+            [-x0 + 0.02, 0.6, arm_h + 0.02],
+            0.008,
+        );
+    }
 }
 
 /// Chairs: 1 wooden, with back slats; 2 bent metal tube with a shell;

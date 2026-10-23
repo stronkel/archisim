@@ -38,6 +38,14 @@ fn candidates(role: &str) -> &'static [&'static str] {
         "hub" => &["hub", "metal", "frame"],
         "body" => &["body_mat", "body"],
         "tyre" => &["tyre"],
+        // The cosy pieces (v0.49).
+        "pot" => &["pot_mat", "pot"],
+        "bulb" => &["bulb", "light"],
+        "flame" => &["flame", "bulb", "light"],
+        "fruit2" => &["fruit2", "fruit"],
+        "stem" => &["stem", "frame"],
+        "pillow" => &["pillow", "cushion"],
+        "throw" => &["throw_mat", "cushion"],
         _ => &[],
     }
 }

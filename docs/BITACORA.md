@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 (3) · v0.49: biblioteca acogedora (al modo de Paralives)
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim`. Detalle en `docs/BIBLIOTECA_3D.md` («Biblioteca acogedora»).
+
+Antonio probó en el Mac la Maqueta con sombras y pidió seguir por la biblioteca, para tener la calidad y el aire acogedor de Paralives.
+
+**Hecho**
+- Nueve familias nuevas con su 3D hecho por ArchiSim y sus símbolos de planta: butaca (4 modelos), puf (3), mesa auxiliar (3), aparador (2), alfombra (4), lámpara (4, la colgante con su cable), planta de interior (5), cortina (3, abierta o corrida) y decoración (5: jarrón, frutero, libros y vela, cerámicas, cesta).
+- Sofá con cojines sueltos y manta; 34 tipos nuevos en la biblioteca (`archisim modelos out/` los coloca todos).
+- Paleta acogedora de 24 materiales y **color por pieza** en la tarjeta de la Maqueta (solo ese objeto; un paso de Deshacer).
+- Pestaña **Decoración** en Amueblar (alfombras, lámparas, plantas, cortinas y decoración).
+- La demo tiene un salón vestido (sofá acogedor, alfombra, butaca, lámpara y planta).
+- Arreglo: con los muros recortados, las pantallas de las lámparas (y cualquier pieza alta de un mueble) desaparecían; ahora un mueble se corta por donde se apoya, no por su pieza más baja.
+
+**Pendiente**
+- Decoración que se apoya sola en mesas y baldas (hoy, con el desfase de la base).
+- Más colecciones y piezas en el mismo estilo (dormitorio, cocina, baño).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y abre `out/demo.archisim` en la Maqueta, imagen Bonita: el salón con su sofá con cojines y manta, la alfombra, la butaca, la lámpara y la planta.
+2. Amueblar → **Decoración**: pon una alfombra, una lámpara de pie, una planta y unas cortinas delante de una ventana.
+3. Selecciona el sofá: en la tarjeta, cambia la tapicería, los cojines y las patas con los colores de cada fila. Pon otro sofá igual: debe quedarse como estaba.
+4. `cargo run -p archisim-cli -- modelos out/` y abre `out/modelos.archisim`: las dos primeras filas son todas las piezas nuevas. Dime cuáles te convencen y cuáles cambiarías: es lo que más mejora con tu ojo.
+
+---
+
 ## 2026-10-23 (2) · v0.49: Maqueta, segunda vuelta (revisión de Antonio)
 
 Rama `bloque/maqueta-2`, pull request para Antonio (v0.48 ya unida a `main`). Sin cambios de formato `.archisim` ni de IFC. Detalle en `docs/MAQUETA.md` §6 bis.

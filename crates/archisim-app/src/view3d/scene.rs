@@ -572,7 +572,17 @@ fn cut_of(
             .and_then(|o| walls.get(&o.wall))
             .map_or(own(cutaway::WALL), |a| a.cut()),
         SolidOwner::Column(_) | SolidOwner::CurtainWall(_) => own(cutaway::WALL),
-        SolidOwner::Object(_) | SolidOwner::Device(_) => own(cutaway::OBJECT),
+        // Furniture by where it stands, not by its lowest piece: a lamp's
+        // shade (a solid of its own material) goes with its foot.
+        SolidOwner::Object(id) => {
+            let mut c = own(cutaway::OBJECT);
+            if let Some(o) = model.object(id) {
+                let floor = model.level(o.level).map_or(0.0, |l| l.elevation);
+                c[3] = (floor + o.base_offset) as f32;
+            }
+            c
+        }
+        SolidOwner::Device(_) => own(cutaway::OBJECT),
         _ => own(cutaway::PLAIN),
     }
 }
