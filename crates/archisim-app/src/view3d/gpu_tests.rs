@@ -10,7 +10,26 @@ use super::render::Renderer;
 use super::scene::Scene;
 use crate::pick::tests::room;
 
+/// In the continuous integration, a failing test is also written as a
+/// note of the job, readable without its log (only some runners have a
+/// graphics adapter, so a 3D test may fail where no one can run it).
+pub(crate) fn ci_notes() {
+    if std::env::var_os("GITHUB_ACTIONS").is_none() {
+        return;
+    }
+    static HOOK: std::sync::Once = std::sync::Once::new();
+    HOOK.call_once(|| {
+        let old = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let msg = info.to_string().replace('\n', " ");
+            println!("::error title=Prueba fallida::{msg}");
+            old(info);
+        }));
+    });
+}
+
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
+    ci_notes();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::LowPower,
@@ -192,7 +211,12 @@ fn selection_outline_and_walls_in_front() {
     let wall = m.walls().next().unwrap().id;
     let sel: BTreeSet<_> = [crate::pick::Element::Wall(wall)].into_iter().collect();
     let (marked, _) = draw(&sel, None);
-    assert!(orange(&marked) > orange(&plain) + 100);
+    assert!(
+        orange(&marked) > orange(&plain) + 100,
+        "outline: {} orange pixels selected, {} not",
+        orange(&marked),
+        orange(&plain)
+    );
     // Away from the outline the colours are the same as unselected.
     let same = plain
         .as_chunks::<4>()
@@ -228,6 +252,14 @@ fn selection_outline_and_walls_in_front() {
             .filter(|(x, y)| x != y)
             .count()
     };
-    assert!(differ(&plain, &front) > 500, "front walls not cut");
-    assert!(differ(&front, &low) > 500, "back walls cut too");
+    assert!(
+        differ(&plain, &front) > 500,
+        "front walls not cut: {}",
+        differ(&plain, &front)
+    );
+    assert!(
+        differ(&front, &low) > 500,
+        "back walls cut too: {}",
+        differ(&front, &low)
+    );
 }

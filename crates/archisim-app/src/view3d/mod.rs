@@ -9,4 +9,4 @@ pub mod scene;
 pub mod section_box;
 
 #[cfg(test)]
-mod gpu_tests;
+pub(crate) mod gpu_tests;

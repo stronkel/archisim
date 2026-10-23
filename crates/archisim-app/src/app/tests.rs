@@ -23,6 +23,7 @@ struct Harness {
 
 impl Harness {
     fn new(ed: Editor) -> Self {
+        crate::view3d::gpu_tests::ci_notes();
         let mut h = Self {
             ctx: egui::Context::default(),
             app: ArchiSimApp::new(ed),
