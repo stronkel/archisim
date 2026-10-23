@@ -208,6 +208,48 @@ impl ArchiSimApp {
         self.maquette_more(&ctx);
     }
 
+    /// Walking as in a game: W A S D forwards, left, back and right along
+    /// the ground, Q down and E up, faster with Mayús; held, it keeps
+    /// going. The letters are the walk's here, not the tools'.
+    pub(super) fn maquette_walk(&mut self, ctx: &egui::Context) {
+        if crate::app::typing_in_text(ctx) {
+            return;
+        }
+        use egui::Key;
+        let walk_keys = [Key::W, Key::A, Key::S, Key::D, Key::Q, Key::E];
+        let (held, fast, dt) = ctx.input_mut(|i| {
+            // Ctrl+S and the like are not walking.
+            let plain = !i.modifiers.command && !i.modifiers.ctrl && !i.modifiers.alt;
+            let held = walk_keys.map(|k| plain && i.key_down(k));
+            // The tools do not see these letters.
+            i.events.retain(|e| match e {
+                egui::Event::Text(t) => !(plain && t.chars().all(|c| "wasdqeWASDQE".contains(c))),
+                egui::Event::Key { key, modifiers, .. } => {
+                    !(walk_keys.contains(key)
+                        && !modifiers.command
+                        && !modifiers.ctrl
+                        && !modifiers.alt)
+                }
+                _ => true,
+            });
+            (held, i.modifiers.shift, i.stable_dt.clamp(0.0, 0.1))
+        });
+        if !held.iter().any(|h| *h) {
+            return;
+        }
+        let axis = |plus: bool, minus: bool| f32::from(u8::from(plus)) - f32::from(u8::from(minus));
+        let forward = axis(held[0], held[2]);
+        let right = axis(held[3], held[1]);
+        let up = axis(held[5], held[4]);
+        // Metres a second: more from afar, so it feels the same at any zoom.
+        let speed = self.v3d.camera.distance.clamp(3.0, 200.0) * 0.6 * if fast { 3.0 } else { 1.0 };
+        let step = speed * dt;
+        self.v3d
+            .camera
+            .walk(forward * step, right * step, up * step * 0.5);
+        ctx.request_repaint();
+    }
+
     fn maquette_top_bar(&mut self, ui: &mut Ui) {
         let p = Palette::current(ui.ctx());
         ui.horizontal(|ui| {

@@ -128,6 +128,15 @@ impl Camera {
         self.target += (-right * delta.x + up * delta.y) * k;
     }
 
+    /// Walks the camera as in a game (W A S D): `forward` and `right`
+    /// along the ground in the direction it looks, `up` straight up, in
+    /// metres; the eye and what it looks at move together.
+    pub fn walk(&mut self, forward: f32, right: f32, up: f32) {
+        let f = Vec3::new(-self.yaw.cos(), -self.yaw.sin(), 0.0);
+        let r = f.cross(Vec3::Z);
+        self.target += f * forward + r * right + Vec3::Z * up;
+    }
+
     /// Ray through a point of the view, in points from its top-left corner.
     pub fn ray(&self, pos: Vec2, size: Vec2) -> Ray {
         let (forward, right, up) = self.basis();
@@ -233,6 +242,25 @@ mod tests {
             let after = c.on_target_plane(pos, size).unwrap();
             assert!((after - before).length() < 1e-3, "{before:?} {after:?}");
         }
+    }
+
+    #[test]
+    fn walks_where_it_looks() {
+        let mut c = Camera::default();
+        let (eye, target) = (c.eye(), c.target);
+        c.walk(2.0, 0.0, 0.0);
+        // Forward along the ground, towards where it looks.
+        let moved = c.target - target;
+        assert!(moved.z.abs() < 1e-6 && (moved.length() - 2.0).abs() < 1e-5);
+        assert!(moved.dot(c.forward()) > 0.0);
+        assert!(((c.eye() - eye) - moved).length() < 1e-5);
+        // To the right, as on the screen; and up.
+        let before = c.target;
+        c.walk(0.0, 1.0, 0.5);
+        let (_, right, _) = c.screen_axes();
+        let d = c.target - before;
+        assert!((d.truncate().dot(right.truncate()) - 1.0).abs() < 1e-4);
+        assert!((d.z - 0.5).abs() < 1e-6);
     }
 
     #[test]

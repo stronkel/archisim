@@ -1545,6 +1545,10 @@ impl ArchiSimApp {
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);
+        if self.maquette {
+            // Before the shortcuts: W A S D Q E walk here.
+            self.maquette_walk(&ctx);
+        }
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
         self.drop_locked_from_selection();

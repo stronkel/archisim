@@ -5668,6 +5668,51 @@ fn objects_are_stretched_in_the_3d_view() {
     assert!((height - 2.6).abs() < 0.03, "{height}");
 }
 
+/// In the Maqueta, W A S D walk the camera along the ground and Q E move
+/// it down and up; the letters do not start tools there.
+#[test]
+fn maquette_walks_with_wasd() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    assert!(h.app.maquette);
+    h.frame();
+    let hold = |h: &mut Harness, key: Key, frames: usize| {
+        h.events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        h.events.push(Event::Text(format!("{key:?}").to_lowercase()));
+        for _ in 0..frames {
+            h.frame();
+        }
+        h.events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        h.frame();
+    };
+    let before = h.app.v3d.camera;
+    hold(&mut h, Key::W, 10);
+    let moved = h.app.v3d.camera.target - before.target;
+    assert!(moved.length() > 0.1, "{moved:?}");
+    assert!(moved.z.abs() < 1e-6);
+    assert!(moved.dot(before.forward()) > 0.0);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let z = h.app.v3d.camera.target.z;
+    hold(&mut h, Key::E, 10);
+    assert!(h.app.v3d.camera.target.z > z);
+    hold(&mut h, Key::Q, 20);
+    assert!(h.app.v3d.camera.target.z < z);
+    assert_eq!(h.app.tool, Tool::Arrow);
+}
+
 /// After choosing in the catalog (a card keeps the keyboard focus), Esc
 /// still leaves the tool in the Maqueta's 3D view.
 #[test]
