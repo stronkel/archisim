@@ -1221,6 +1221,46 @@ pub fn build() -> Result<Document, ModelError> {
         Ok(())
     })?;
 
+    // A dormer on the garden shed's roof ("remates" of 23/10/2026): a
+    // low shed dormer with a window on its south slope, near the eaves.
+    doc.transact("Buhardilla", |m| {
+        let Some((roof, at)) = m.roofs().find_map(|r| {
+            let plane = r.planes().into_iter().find(|p| {
+                p.slope.direction().is_some_and(|u| u.y > 0.9)
+                    && r.slopes.len() == 4
+                    && r.slopes.iter().filter(|s| s.is_some()).count() == 2
+            })?;
+            let c = archisim_core::centroid(&plane.outline);
+            let low = plane
+                .outline
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            Some((r.id, Point2::new(c.x, low + r.overhang + 0.1)))
+        }) else {
+            return Ok(());
+        };
+        let wall_material = m
+            .materials()
+            .find(|x| x.name.contains("Enfoscado") || x.name.contains("Mortero"))
+            .or_else(|| m.materials().next())
+            .map(|x| x.id)
+            .ok_or(ModelError::EmptyType)?;
+        m.add_dormer(
+            roof,
+            archisim_core::Dormer {
+                position: at,
+                width: 1.2,
+                height: 0.3,
+                kind: archisim_core::DormerKind::Shed,
+                pitch: 0.05,
+                wall_material,
+                window: true,
+            },
+        )?;
+        Ok(())
+    })?;
+
     // Prices of the budget (block 7): every item takes its concept from
     // the example bank, as it would from a regional bank in the
     // Mediciones tab.

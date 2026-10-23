@@ -2793,7 +2793,13 @@ impl<'a> Importer<'a> {
         }
         for id in self.file.of_kind("IFCROOF") {
             let has_slabs = self.ix.parent.values().any(|&p| p == id);
-            if !has_slabs && !self.roof_ids.contains(&id) {
+            // A dormer of a roof read back is read with it.
+            let in_roof = self
+                .ix
+                .parent
+                .get(&id)
+                .is_some_and(|p| self.roof_ids.contains(p));
+            if !has_slabs && !in_roof && !self.roof_ids.contains(&id) {
                 self.report.skip(
                     class_name("IFCROOF"),
                     "cubierta sin forjados (las cubiertas inclinadas llegarán más adelante)",

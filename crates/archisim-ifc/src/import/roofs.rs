@@ -74,6 +74,7 @@ impl<'a> Importer<'a> {
         let (Some(footprint), Some(slopes)) = (text("Footprint"), text("Slopes")) else {
             return Ok(false);
         };
+        let dormers_text = text("Dormers");
         let len = self.geo.length;
         let number = |name: &str| {
             self.property_own(id, "ArchiSim_Roof", name)
@@ -142,6 +143,10 @@ impl<'a> Importer<'a> {
                 overhang: snap(overhang),
             })
             .map_err(|e| explain(&e))?;
+        if let Some(dormers) = dormers_text {
+            let dormers = crate::roofs::decode_dormers(&self.model, &dormers, len);
+            let _ = self.model.set_roof_dormers(rid, dormers);
+        }
         self.roof_ids.insert(id);
         self.report.roofs += 1;
         self.sources.push((rid.0, id));

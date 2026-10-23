@@ -669,6 +669,17 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             })
             && close(r.base_offset, t.base_offset)
             && close(r.overhang, t.overhang)
+            && r.dormers.len() == t.dormers.len()
+            && r.dormers.iter().zip(&t.dormers).all(|(x, y)| {
+                x.kind == y.kind
+                    && x.window == y.window
+                    && x.position.distance(y.position) <= TOL
+                    && close(x.width, y.width)
+                    && close(x.height, y.height)
+                    && close(x.pitch, y.pitch)
+                    && a.material(x.wall_material).map(|m| &m.name)
+                        == b.material(y.wall_material).map(|m| &m.name)
+            })
             && level_guid(a, r.level) == level_guid(b, t.level)
             && a.slab_type(r.roof_type).map(|x| &x.guid)
                 == b.slab_type(t.roof_type).map(|x| &x.guid);

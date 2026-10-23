@@ -605,6 +605,24 @@ pub(crate) struct Roof {
     pub slopes: Vec<Option<f64>>,
     pub base_offset: f64,
     pub overhang: f64,
+    /// Its dormers (version 32).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dormers: Vec<DormerOf>,
+}
+
+/// A dormer on a roof (version 32).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DormerOf {
+    pub position: Xy,
+    pub width: f64,
+    pub height: f64,
+    /// `shed` or `gable`.
+    pub kind: String,
+    pub pitch: f64,
+    pub wall_material: u64,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub window: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -2430,6 +2448,19 @@ impl ProjectFile {
                     slopes: r.slopes,
                     base_offset: r.base_offset,
                     overhang: r.overhang,
+                    dormers: r
+                        .dormers
+                        .iter()
+                        .map(|d| DormerOf {
+                            position: xy(d.position),
+                            width: d.width,
+                            height: d.height,
+                            kind: d.kind.code().to_string(),
+                            pitch: d.pitch,
+                            wall_material: d.wall_material.0,
+                            window: d.window,
+                        })
+                        .collect(),
                 })
                 .collect(),
             terrains: p
@@ -2935,6 +2966,26 @@ impl ProjectFile {
                         slopes: r.slopes.clone(),
                         base_offset: r.base_offset,
                         overhang: r.overhang,
+                        dormers: r
+                            .dormers
+                            .iter()
+                            .map(|d| {
+                                Ok(core::Dormer {
+                                    position: pt(d.position),
+                                    width: d.width,
+                                    height: d.height,
+                                    kind: core::DormerKind::from_code(&d.kind).ok_or_else(
+                                        || FileError::Value {
+                                            element: format!("dormer of roof {}", r.id),
+                                            message: format!("unknown kind «{}»", d.kind),
+                                        },
+                                    )?,
+                                    pitch: d.pitch,
+                                    wall_material: core::MaterialId(d.wall_material),
+                                    window: d.window,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, FileError>>()?,
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

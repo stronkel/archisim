@@ -26,6 +26,7 @@
 
 pub mod anchors;
 pub mod csg;
+pub mod dormers;
 pub mod forms;
 pub mod index;
 pub mod joins;

@@ -282,6 +282,9 @@ pub struct ArchiSimApp {
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
     render: render_ui::RenderState,
+    /// A dormer of this roof (a new one, or the one numbered) goes where
+    /// the next click in plan is.
+    dormer_pick: Option<(archisim_core::RoofId, Option<usize>)>,
     budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
     pub grid_anchor: Option<Point2>,
@@ -588,6 +591,7 @@ impl ArchiSimApp {
             object_grip: None,
             object_grip_hover: None,
             render: Default::default(),
+            dormer_pick: None,
             budget: Default::default(),
             start: start_ui::StartScreen {
                 open: !cfg!(test),

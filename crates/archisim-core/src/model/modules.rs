@@ -882,6 +882,17 @@ impl Model {
                 level,
                 outline: pts(&r.outline),
                 slopes,
+                dormers: r
+                    .dormers
+                    .iter()
+                    .filter_map(|d| {
+                        Some(Dormer {
+                            position: t.apply(d.position),
+                            wall_material: mat(d.wall_material)?,
+                            ..d.clone()
+                        })
+                    })
+                    .collect(),
                 ..r.clone()
             });
         }

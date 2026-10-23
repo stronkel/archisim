@@ -5801,3 +5801,56 @@ fn budget_takes_a_price_from_a_bank() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_dormer_is_placed_with_a_click_on_the_roof() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let roof_type = h
+        .app
+        .ed
+        .model()
+        .slab_types()
+        .find(|t| t.function == archisim_core::SlabFunction::Roof)
+        .unwrap()
+        .id;
+    let roof = h
+        .app
+        .ed
+        .transact("c", |m| {
+            m.add_roof(archisim_core::NewRoof {
+                roof_type,
+                level,
+                outline: vec![
+                    Point2::new(0.0, 0.0),
+                    Point2::new(10.0, 0.0),
+                    Point2::new(10.0, 8.0),
+                    Point2::new(0.0, 8.0),
+                ],
+                slopes: vec![Some(0.6), None, Some(0.6), None],
+                base_offset: 3.0,
+                overhang: 0.4,
+            })
+        })
+        .unwrap();
+    h.app.dormer_pick = Some((roof, None));
+    h.app.place_dormer(Point2::new(5.0, 1.0));
+    assert_eq!(h.app.ed.undo_label(), Some("Añadir buhardilla"));
+    assert_eq!(h.app.ed.model().roof(roof).unwrap().dormers.len(), 1);
+    // Moved with another click; refused off the roof (nothing changes).
+    h.app.dormer_pick = Some((roof, Some(0)));
+    h.app.place_dormer(Point2::new(3.0, 1.2));
+    assert!(h.app.ed.model().roof(roof).unwrap().dormers[0]
+        .position
+        .approx_eq(Point2::new(3.0, 1.2)));
+    h.app.dormer_pick = Some((roof, Some(0)));
+    h.app.place_dormer(Point2::new(30.0, 1.0));
+    assert!(h.app.ed.model().roof(roof).unwrap().dormers[0]
+        .position
+        .approx_eq(Point2::new(3.0, 1.2)));
+    // Its properties draw.
+    h.app.ed.selection.clear();
+    h.app.ed.selection.insert(Element::Roof(roof));
+    h.frame();
+    h.frame();
+}

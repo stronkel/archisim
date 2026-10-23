@@ -953,6 +953,7 @@ pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
             &stype.layers,
         ));
     }
+    out.extend(crate::dormers::dormer_solids(model, id));
     out
 }
 

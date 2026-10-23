@@ -304,6 +304,7 @@ impl ArchiSimApp {
                 }
             });
         });
+        self.dormers_group(ui, id, &r);
         group(ui, "roof-sides", "Lados", |ui| {
             let n = r.outline.len();
             for i in 0..n {
@@ -436,5 +437,173 @@ impl ArchiSimApp {
         group(ui, "roof-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &r.guid.to_string());
         });
+    }
+
+    /// The dormers of a roof: each with its shape and measures, to move
+    /// with a click on the roof or take away; and a new one.
+    fn dormers_group(&mut self, ui: &mut Ui, id: RoofId, r: &archisim_core::Roof) {
+        use archisim_core::DormerKind;
+        group(ui, "roof-dormers", "Buhardillas", |ui| {
+            let mut dormers = r.dormers.clone();
+            let mut changed = None;
+            let mut remove = None;
+            for (i, d) in r.dormers.iter().enumerate() {
+                ui.label(egui::RichText::new(format!("Buhardilla {}", i + 1)).strong());
+                row(
+                    ui,
+                    "Forma",
+                    "A un agua (cubierta que sube hacia atrás) o a dos aguas (capuchina)",
+                    |ui, w| {
+                        let k = choice(
+                            ui,
+                            ("dormer-kind", id.0, i),
+                            w,
+                            d.kind,
+                            &[
+                                (DormerKind::Shed, DormerKind::Shed.label()),
+                                (DormerKind::Gable, DormerKind::Gable.label()),
+                            ],
+                        );
+                        if k != d.kind {
+                            dormers[i].kind = k;
+                            // A flatter roof for a shed one, a steeper for a gable.
+                            dormers[i].pitch = match k {
+                                DormerKind::Shed => 0.05,
+                                DormerKind::Gable => 0.6,
+                            };
+                            changed = Some("Forma de la buhardilla");
+                        }
+                    },
+                );
+                row(ui, "Ancho (mm)", "Ancho del frente, por fuera", |ui, w| {
+                    if let Some(v) =
+                        length_field(ui, Id::unique(("dormer-w", id.0, i)), d.width, w - 8.0)
+                    {
+                        dormers[i].width = v;
+                        changed = Some("Ancho de la buhardilla");
+                    }
+                });
+                row(
+                    ui,
+                    "Alto (mm)",
+                    "Altura del frente sobre la cubierta",
+                    |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("dormer-h", id.0, i)), d.height, w - 8.0)
+                        {
+                            dormers[i].height = v;
+                            changed = Some("Altura de la buhardilla");
+                        }
+                    },
+                );
+                row(
+                    ui,
+                    "Pendiente (%)",
+                    "De su cubierta: a un agua, más tendida que la principal",
+                    |ui, w| {
+                        if let Some(v) = text_edit_committed(
+                            ui,
+                            Id::unique(("dormer-p", id.0, i)),
+                            &percent(d.pitch),
+                            w - 8.0,
+                        ) {
+                            match parse_percent(&v) {
+                                Some(p) => {
+                                    dormers[i].pitch = p;
+                                    changed = Some("Pendiente de la buhardilla");
+                                }
+                                None => self.complain(format!(
+                                    "«{v}» no es una pendiente: escribe 10 o 60."
+                                )),
+                            }
+                        }
+                    },
+                );
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    let mut window = d.window;
+                    if ui.checkbox(&mut window, "Ventana").changed() {
+                        dormers[i].window = window;
+                        changed = Some("Ventana de la buhardilla");
+                    }
+                    if ui
+                        .button("Mover…")
+                        .on_hover_text(
+                            "Haz clic después en el faldón, donde va el centro de su frente",
+                        )
+                        .clicked()
+                    {
+                        self.dormer_pick = Some((id, Some(i)));
+                        self.say(
+                            "Haz clic en el faldón donde va el centro del frente de la buhardilla.",
+                        );
+                    }
+                    if ui.button("Quitar").clicked() {
+                        remove = Some(i);
+                    }
+                });
+                ui.add_space(4.0);
+            }
+            if let Some(i) = remove {
+                dormers.remove(i);
+                changed = Some("Quitar buhardilla");
+            }
+            if let Some(label) = changed {
+                let res = self.ed.transact(label, |m| m.set_roof_dormers(id, dormers));
+                self.report(res, "Buhardillas cambiadas.");
+            }
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                if ui
+                    .button("Añadir buhardilla…")
+                    .on_hover_text("Haz clic después en un faldón de esta cubierta, donde va el centro de su frente")
+                    .clicked()
+                {
+                    self.dormer_pick = Some((id, None));
+                    self.say("Haz clic en el faldón donde va el centro del frente de la buhardilla.");
+                }
+            });
+        });
+    }
+
+    /// A click on the roof while a dormer is being placed: puts it there.
+    pub(super) fn place_dormer(&mut self, p: Point2) {
+        let Some((id, index)) = self.dormer_pick.take() else {
+            return;
+        };
+        let model = self.ed.model();
+        let Some(r) = model.roof(id).cloned() else {
+            return;
+        };
+        let mut dormers = r.dormers.clone();
+        let wall_material = model
+            .wall_types()
+            .find(|t| t.function == archisim_core::WallFunction::Exterior)
+            .and_then(|t| t.layers.first())
+            .map(|l| l.material)
+            .or_else(|| model.materials().next().map(|m| m.id));
+        let (label, done) = match index {
+            Some(i) if i < dormers.len() => {
+                dormers[i].position = p;
+                ("Mover buhardilla", "Buhardilla movida.")
+            }
+            _ => {
+                let Some(wall_material) = wall_material else {
+                    return;
+                };
+                dormers.push(archisim_core::Dormer {
+                    position: p,
+                    width: 1.2,
+                    height: 1.0,
+                    kind: archisim_core::DormerKind::Gable,
+                    pitch: 0.6,
+                    wall_material,
+                    window: true,
+                });
+                ("Añadir buhardilla", "Buhardilla añadida.")
+            }
+        };
+        let res = self.ed.transact(label, |m| m.set_roof_dormers(id, dormers));
+        self.report(res, done);
     }
 }
