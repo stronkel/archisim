@@ -38,6 +38,25 @@ struct Globals {
     // it is looked up in the shadow map; z: samples (1, 5 or 9); w = 1
     // with the shade of inner corners.
     look: vec4<f32>,
+    // The line of sight through each pixel (the sky).
+    inv_vp: mat4x4<f32>,
+    // The light (view3d/look.rs, `Light::colours`): the sun's colour and
+    // strength (w), the sky's above and at the horizon (w: strength), the
+    // zenith, the haze and the far ground (w: its height).
+    sun_color: vec4<f32>,
+    sky_hi: vec4<f32>,
+    sky_lo: vec4<f32>,
+    zenith: vec4<f32>,
+    haze: vec4<f32>,
+    ground: vec4<f32>,
+    // The grid on the ground: centre, reach and step (0: none).
+    grid: vec4<f32>,
+    // x = 1 with the sky; y: night (0…1); z, w: where the haze begins and
+    // where it is thickest.
+    atmos: vec4<f32>,
+    // Lamps lit at night: position and reach; lamp_count.x of them.
+    lamps: array<vec4<f32>, 16>,
+    lamp_count: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -82,7 +101,8 @@ fn vs_model(v: VertexIn) -> VertexOut {
     // A nudge along the line of sight, 0.02 % of the distance: invisible,
     // but it settles which element wins where two touch on an edge.
     vp.z = vp.z * (1.0 + min(v.bias, 1.0) * 0.0002);
-    out.soft = select(0.0, 1.0, v.bias > 1.5);
+    // 1: foliage; 2: what glows at night (lampshades, bulbs, flames).
+    out.soft = select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -197,9 +217,37 @@ fn shade(n_in: vec3<f32>, color: vec3<f32>, lit: f32) -> vec3<f32> {
     let ndl = dot(n, normalize(g.sun.xyz));
     let direct = (0.65 * max(ndl, 0.0) + 0.35 * smoothstep(0.0, 0.3, ndl)) * lit;
     let up = 0.5 + 0.5 * n.z;
-    let sky = mix(vec3<f32>(0.60, 0.60, 0.64), vec3<f32>(0.84, 0.89, 1.0), up) * (0.48 + 0.18 * up);
-    let sun = vec3<f32>(1.0, 0.94, 0.84) * 0.58 * direct;
+    let sky = mix(g.sky_lo.rgb * g.sky_lo.w, g.sky_hi.rgb * g.sky_hi.w, up) * (0.48 + 0.18 * up);
+    let sun = g.sun_color.rgb * g.sun_color.w * direct;
     return color * (sky + sun);
+}
+
+// The warm light of the lamps lit at night on a point of a face (no
+// shadows). A fixed number of turns, only sums: Windows' compiler unrolls
+// it.
+fn lamplight(world: vec3<f32>, n_in: vec3<f32>) -> vec3<f32> {
+    let n = normalize(n_in);
+    var sum = 0.0;
+    for (var i = 0; i < 16; i = i + 1) {
+        let l = g.lamps[i];
+        let to = l.xyz - world;
+        let d = max(length(to), 0.05);
+        let fall = clamp(1.0 - d / max(l.w, 0.1), 0.0, 1.0);
+        // Only faces turned to the lamp: not the far side of its walls.
+        let face = max(dot(n, to / d), 0.0);
+        let on = select(0.0, 1.0, f32(i) < g.lamp_count.x);
+        sum = sum + on * fall * fall * face;
+    }
+    return vec3<f32>(1.0, 0.72, 0.42) * 1.25 * sum * g.atmos.y;
+}
+
+// The haze between the eye and a point `dist` away.
+fn hazed(color: vec3<f32>, dist: f32) -> vec3<f32> {
+    if (g.atmos.x < 0.5) {
+        return color;
+    }
+    let f = smoothstep(g.atmos.z, g.atmos.w, dist) * 0.75;
+    return mix(color, g.haze.rgb, f);
 }
 
 // How much of the sun reaches a point of a face looking along `n`: 1 in
@@ -383,6 +431,72 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let r = 0.5 + 0.5 * sin(p.x * 6.2832);
             return base * (0.8 + 0.3 * r);
         }
+        // Linen: threads both ways and slubs along them, faint up close,
+        // a soft mottle from afar.
+        case 12: {
+            let warp = 0.5 + 0.5 * sin(p.x * 150.0);
+            let weft = 0.5 + 0.5 * sin(p.y * 150.0);
+            let slub = noise(vec2<f32>(p.x * 4.0, p.y * 60.0)) * 0.6 + noise(vec2<f32>(p.x * 60.0, p.y * 4.0)) * 0.4;
+            return base * (0.9 + 0.035 * (warp + weft) + 0.08 * slub + 0.04 * noise(p * 3.0));
+        }
+        // Bouclé: little loops, each catching the light.
+        case 13: {
+            let c = cells(p * 14.0);
+            let loop_ = 1.0 - smoothstep(0.0, 0.45, c.x);
+            return base * (0.84 + 0.2 * loop_ + 0.06 * c.z);
+        }
+        // Knit: rows of V-shaped stitches.
+        case 14: {
+            let q = vec2<f32>(p.x * 10.0, p.y * 7.0);
+            let col = fract(q.x);
+            let v = abs(col - 0.5) * 2.0;
+            let row = fract(q.y + v * 0.5);
+            let stitch = smoothstep(0.0, 0.35, row) * (1.0 - smoothstep(0.65, 1.0, row));
+            let gap = smoothstep(0.0, 0.12, min(col, 1.0 - col));
+            return base * (0.78 + 0.22 * stitch * gap + 0.05 * noise(p * 2.0));
+        }
+        // Velvet: lighter where the face turns away from the eye, a soft
+        // pile.
+        case 15: {
+            var d = g.forward.xyz;
+            if (g.eye.w > 0.5) {
+                d = normalize(world - g.eye.xyz);
+            }
+            let rim = 1.0 - abs(dot(normalize(n_in), d));
+            let pile = noise(p * 12.0) * 0.5 + noise(p * 3.0) * 0.5;
+            return base * (0.82 + 0.45 * rim * rim + 0.07 * pile);
+        }
+        // Wicker: strands over and under in squares.
+        case 16: {
+            let q = p * 7.0;
+            let c = floor(q);
+            let f = fract(q);
+            let across = (c.x + c.y) % 2.0;
+            let t = select(f.x, f.y, across > 0.5);
+            let strand = sin(t * 3.1416);
+            let gap = smoothstep(0.0, 0.08, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+            return base * (0.55 + 0.5 * strand * gap + 0.05 * hash2(c));
+        }
+        // Terrazzo: chips of light, dark and warm stone in the ground.
+        case 17: {
+            let c = cells(p * 9.0);
+            let chip = 1.0 - smoothstep(0.18, 0.24, c.x);
+            var tint = vec3<f32>(0.32, 0.3, 0.3);
+            if (c.z > 0.66) {
+                tint = vec3<f32>(0.75, 0.45, 0.35);
+            } else if (c.z > 0.33) {
+                tint = vec3<f32>(0.95, 0.93, 0.9);
+            }
+            let ground = base * (0.96 + 0.05 * noise(p * 20.0));
+            return mix(ground, tint, chip * 0.85);
+        }
+        // Marble: grey veins wandering across a white ground.
+        case 18: {
+            let w = p.x * 1.3 + p.y * 0.7 + noise(p * 1.5) * 3.0 + noise(p * 5.0) * 0.8;
+            let vein = 1.0 - smoothstep(0.0, 0.06, abs(sin(w * 3.1416)));
+            let fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((w + noise(p * 9.0)) * 9.0)));
+            return base * (0.97 + 0.03 * noise(p * 4.0)) * (1.0 - 0.32 * vein - 0.12 * fine);
+        }
         default: {
             return base;
         }
@@ -418,9 +532,16 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         return out;
     }
     let lit = sunlit(i.world, i.normal);
-    out.color = vec4<f32>(shade(i.normal, textured(i.color.rgb, i.world, i.normal, i.tex), lit), 1.0);
+    let base = textured(i.color.rgb, i.world, i.normal, i.tex);
+    var color = shade(i.normal, base, lit) + base * lamplight(i.world, i.normal);
+    if (i.soft > 1.5) {
+        // A lampshade or a bulb at night: it glows.
+        let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;
+        color = mix(color, glow, g.atmos.y);
+    }
+    out.color = vec4<f32>(hazed(color, i.view_dist), 1.0);
     out.normal_dist = vec4<f32>(normalize(i.view_normal), i.view_dist * mark);
-    if (i.soft > 0.5) {
+    if (i.soft > 0.5 && i.soft < 1.5) {
         // Leaves: the same normal everywhere, so the contours come only
         // from the outline of the masses.
         out.normal_dist = vec4<f32>(0.0, 0.0, 1.0, i.view_dist * mark);
@@ -437,7 +558,8 @@ fn fs_glass(i: VertexOut) -> @location(0) vec4<f32> {
     if (kept.on && outside(i.world, kept)) {
         discard;
     }
-    return vec4<f32>(shade(i.normal, i.color.rgb, 1.0), i.color.a);
+    let c = shade(i.normal, i.color.rgb, 1.0) + i.color.rgb * lamplight(i.world, i.normal);
+    return vec4<f32>(hazed(c, i.view_dist), i.color.a);
 }
 
 // ---- Shadow map -------------------------------------------------------------
@@ -527,11 +649,62 @@ fn depth_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
     return select(0.0, 1.0, kink > 0.03);
 }
 
+// Where the line of sight through a pixel meets the ground (w = 1), or
+// its direction (w = 0) when it looks above the horizon.
+fn sight(pos: vec2<f32>) -> vec4<f32> {
+    let size = vec2<f32>(textureDimensions(normal_dist));
+    let ndc = vec2<f32>(pos.x / size.x * 2.0 - 1.0, 1.0 - pos.y / size.y * 2.0);
+    let near = g.inv_vp * vec4<f32>(ndc, 0.0, 1.0);
+    let far = g.inv_vp * vec4<f32>(ndc, 1.0, 1.0);
+    let a = near.xyz / near.w;
+    let b = far.xyz / far.w;
+    let d = normalize(b - a);
+    if (d.z < -1e-4) {
+        let t = (g.ground.w - a.z) / d.z;
+        if (t > 0.0) {
+            return vec4<f32>(a + d * t, 1.0);
+        }
+    }
+    return vec4<f32>(d, 0.0);
+}
+
+// The sky and the ground fading into the haze, with the grid on the
+// ground near what is looked at; `fade` is how much the grid shows.
+fn backdrop(at: vec4<f32>, line: f32) -> vec3<f32> {
+    if (at.w < 0.5) {
+        let up = clamp(at.z, 0.0, 1.0);
+        return mix(g.haze.rgb, g.zenith.rgb, pow(up, 0.55));
+    }
+    let dist = length(at.xyz - g.eye.xyz);
+    var c = mix(g.ground.rgb, g.haze.rgb, smoothstep(g.atmos.z * 0.5, g.atmos.w * 1.5, dist));
+    c = mix(c, vec3<f32>(0.32, 0.36, 0.44) * (1.0 - 0.8 * g.atmos.y), line);
+    return c;
+}
+
 @fragment
 fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let p = vec2<i32>(pos.xy);
     let s = i32(g.edges.x);
     let c = sample_nd(p);
+    // The grid's lines, measured before anything is decided (derivatives
+    // only in uniform control flow).
+    let at = sight(pos.xy);
+    var line = 0.0;
+    if (g.grid.w > 0.0) {
+        let q = at.xy / g.grid.w;
+        let w = max(fwidth(q), vec2<f32>(1e-4));
+        let dl = abs(fract(q - 0.5) - 0.5) / w;
+        let minor = 1.0 - clamp(min(dl.x, dl.y) - 0.5, 0.0, 1.0);
+        let q2 = q * 0.5;
+        let dl2 = abs(fract(q2 - 0.5) - 0.5) / max(fwidth(q2), vec2<f32>(1e-4));
+        let major = 1.0 - clamp(min(dl2.x, dl2.y) - 0.5, 0.0, 1.0);
+        let off = abs(at.xy - g.grid.xy);
+        let inside = 1.0 - smoothstep(g.grid.z * 0.8, g.grid.z, max(off.x, off.y));
+        line = max(minor * 0.22, major * 0.45) * inside * at.w;
+    }
+    if (g.atmos.x > 0.5 && empty(c)) {
+        return vec4<f32>(backdrop(at, line), 1.0);
+    }
     let l = sample_nd(p - vec2<i32>(s, 0));
     let r = sample_nd(p + vec2<i32>(s, 0));
     let u = sample_nd(p - vec2<i32>(0, s));

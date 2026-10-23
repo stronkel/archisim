@@ -1604,6 +1604,10 @@ pub fn add_appearances(m: &mut Model) {
         .materials()
         .filter(|x| m.appearance(x.id).is_plain())
         .filter_map(|x| {
+            // The furniture's fabrics, woods, fibres and stones.
+            if COZY_PALETTE.iter().any(|e| e.0 == x.name) {
+                return TextureKind::suggested(&x.name, &x.category).map(|t| (x.id, t));
+            }
             let t = match (x.name.as_str(), x.category.as_str()) {
                 ("Ladrillo visto", _) => TextureKind::Brick,
                 ("Tarima de madera", _) => TextureKind::Planks,
@@ -1734,7 +1738,20 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
 /// that name.
 pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {
     let (name, category, color) = COZY_PALETTE.iter().find(|e| e.0 == name)?;
-    Some(material_named(m, name, category, *color, CutPattern::Solid))
+    let id = material_named(m, name, category, *color, CutPattern::Solid);
+    if m.appearance(id).is_plain() {
+        if let Some(t) = archisim_core::TextureKind::suggested(name, category) {
+            let _ = m.set_appearance(
+                id,
+                archisim_core::Appearance {
+                    color: None,
+                    texture: Some(t),
+                    scale: None,
+                },
+            );
+        }
+    }
+    Some(id)
 }
 
 /// Adds one object type of the library (by its name in

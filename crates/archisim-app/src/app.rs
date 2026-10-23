@@ -1832,6 +1832,37 @@ impl ArchiSimApp {
         }
     }
 
+    /// The Maqueta's view as a big picture (3840 pixels wide), saved as a
+    /// PNG: for a render with an AI, D5 or Twinmotion.
+    pub(super) fn big_capture(&mut self) {
+        let Some((w, h, px)) = self.v3d.capture(3840) else {
+            self.complain(
+                "No hay imagen 3D que guardar (la vista 3D necesita la tarjeta gráfica).",
+            );
+            return;
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title("Guardar captura")
+            .add_filter("PNG", &["png"])
+            .set_file_name(format!("{} - captura.png", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let saved = resvg::tiny_skia::IntSize::from_wh(w, h)
+            .and_then(|size| resvg::tiny_skia::Pixmap::from_vec(px, size))
+            .map(|pixmap| pixmap.save_png(&path));
+        match saved {
+            Some(Ok(())) => self.say(format!(
+                "Captura de {w} × {h} guardada en {}.",
+                path.display()
+            )),
+            _ => self.complain("No se pudo guardar la captura."),
+        }
+    }
+
     fn export_3d_picture(&mut self) {
         let Some((w, h, px)) = self.v3d.picture() else {
             self.complain(

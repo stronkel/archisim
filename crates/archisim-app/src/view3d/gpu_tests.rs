@@ -315,3 +315,98 @@ fn shadows_of_the_sun() {
     assert!(shaded > 1500, "shadow pixels: {shaded}");
     assert!(darker(&light, &pretty) > 1500);
 }
+
+/// The Maqueta's sky, and the night: the sky goes dark and a lamp's shade
+/// glows and lights what is around it.
+#[test]
+fn sky_and_night_with_a_lamp() {
+    use super::look::{Atmosphere, Light, Quality};
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let (mut m, _, _) = room();
+    let level = m.levels()[0].id;
+    let lamp = archisim_library::add_object_entry(&mut m, "Lámpara de pie").unwrap();
+    let (lo, hi) = {
+        let s = Scene::build(&m, &BTreeSet::new());
+        (s.lo, s.hi)
+    };
+    m.add_object(archisim_core::NewObject {
+        object_type: lamp,
+        level,
+        position: archisim_core::Point2::new(
+            f64::from((lo.x + hi.x) / 2.0),
+            f64::from((lo.y + hi.y) / 2.0),
+        ),
+        rotation: 0.0,
+        base_offset: 0.0,
+    })
+    .unwrap();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    assert_eq!(scene.lamps.len(), 1, "one light for the lamp");
+    let size = [400, 300];
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    camera.pitch = 0.08;
+    let draw = |light: Light, camera: &Camera| {
+        let mut r = Renderer::new(&device, view_formats, true);
+        r.set_scene(&device, &scene);
+        r.set_look(Quality::Normal, Some(glam::Vec3::new(-0.6, -0.5, 0.45)));
+        r.set_atmosphere(Some(Atmosphere {
+            light,
+            ground_z: 0.0,
+            grid: Some((glam::Vec2::ZERO, 10.0, 0.5)),
+        }));
+        r.render(&device, &queue, camera, size, 1);
+        r.read_pixels(&device, &queue).unwrap().2
+    };
+    let day = draw(Light::Day, &camera);
+    let night = draw(Light::Night, &camera);
+    // From above, into the room, to see the lamp.
+    let mut above = camera;
+    above.pitch = 1.1;
+    let inside = draw(Light::Night, &above);
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, px) in [("dia", &day), ("noche", &night), ("noche-dentro", &inside)] {
+            resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap()
+            .save_png(dir.join(format!("cielo-{name}.png")))
+            .unwrap();
+        }
+    }
+    let at = |px: &[u8], x: u32, y: u32| {
+        let i = ((y * size[0] + x) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2]]
+    };
+    // The top corner is sky: blue by day, dark at night.
+    let sky = at(&day, 2, 2);
+    assert!(sky[2] > sky[0] && sky[2] > 150, "day sky {sky:?}");
+    let dark = at(&night, 2, 2);
+    assert!(
+        u32::from(dark[0]) + u32::from(dark[1]) + u32::from(dark[2]) < 250,
+        "night sky {dark:?}"
+    );
+    // At night the picture is darker, but the lamp glows.
+    let luma = |p: &[u8; 4]| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]);
+    let mean =
+        |px: &[u8]| px.as_chunks::<4>().0.iter().map(luma).sum::<u32>() / (size[0] * size[1]);
+    assert!(
+        mean(&night) * 2 < mean(&day),
+        "{} {}",
+        mean(&night),
+        mean(&day)
+    );
+    let bright = inside
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[0] > 200 && p[1] > 150)
+        .count();
+    assert!(bright > 30, "glowing pixels: {bright}");
+}

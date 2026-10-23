@@ -46,7 +46,30 @@ struct Globals {
     /// looking it up (metres); z: samples of the shadow map; w: shade of
     /// inner corners on.
     look: [f32; 4],
+    /// The inverse of the camera's view and projection: the line of sight
+    /// through each pixel, for the sky.
+    inv_vp: [[f32; 4]; 4],
+    /// The light (`look::LightColours`): the sun's colour and strength,
+    /// the sky's above and at the horizon, the zenith, the haze and the
+    /// far ground (its w: the ground's height).
+    sun_color: [f32; 4],
+    sky_hi: [f32; 4],
+    sky_lo: [f32; 4],
+    zenith: [f32; 4],
+    haze: [f32; 4],
+    ground: [f32; 4],
+    /// The grid on the ground: centre, reach and step (0: none).
+    grid: [f32; 4],
+    /// x = 1 with the sky drawn; y: night (0…1); z, w: where the haze
+    /// begins and where it is thickest, metres from the eye.
+    atmos: [f32; 4],
+    /// Lamps lit: position and reach; `lamp_count.x` of them.
+    lamps: [[f32; 4]; MAX_LAMPS],
+    lamp_count: [f32; 4],
 }
+
+/// Lamps that light the scene at night (the nearest to what is looked at).
+pub const MAX_LAMPS: usize = 16;
 
 /// The shadow map: the scene's depth seen from the sun.
 struct ShadowMap {
@@ -131,6 +154,11 @@ pub struct Renderer {
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
+    /// The sky, the haze, the light and the grid (the Maqueta's).
+    atmosphere: Option<super::look::Atmosphere>,
+    /// The lamps of the scene: where their light comes from and how far it
+    /// reaches.
+    lamps: Vec<[f32; 4]>,
 }
 
 /// The shaders, with or without the materials' textures. Without them
@@ -408,7 +436,15 @@ impl Renderer {
             cut: None,
             selected: false,
             transparent: false,
+            atmosphere: None,
+            lamps: Vec::new(),
         }
+    }
+
+    /// The sky, the light and the grid of the next pictures (none: the
+    /// plain background and the project's sun).
+    pub fn set_atmosphere(&mut self, a: Option<super::look::Atmosphere>) {
+        self.atmosphere = a;
     }
 
     /// Leaves the background of the next pictures transparent (or not).
@@ -476,6 +512,7 @@ impl Renderer {
         self.opaque = upload("opaque", &scene.opaque);
         self.glass = upload("glass", &scene.glass);
         self.selected = scene.opaque.iter().any(|v| v.select > 0.5);
+        self.lamps = scene.lamps.clone();
     }
 
     fn targets(&mut self, device: &wgpu::Device, size: [u32; 2]) -> &Targets {
@@ -568,12 +605,48 @@ impl Renderer {
     ) -> &wgpu::Texture {
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
         let aspect = size[0] as f32 / size[1] as f32;
-        // Without the model's sun (at night), a light from the south-west
-        // and no shadows.
-        let sun = self
-            .sun
-            .unwrap_or(glam::Vec3::new(-0.45, -0.6, 0.66).normalize());
-        let shadow_size = self.sun.and(self.quality.shadow_size());
+        let light = self
+            .atmosphere
+            .as_ref()
+            .map_or_else(Default::default, |a| a.light);
+        let colours = light.colours();
+        let project_sun = light.sun(self.sun);
+        // Without the model's sun (below the horizon), a light from the
+        // south-west and no shadows; at night, no sun at all.
+        let sun = project_sun.unwrap_or(glam::Vec3::new(-0.45, -0.6, 0.66).normalize());
+        let shadow_size = project_sun.and(self.quality.shadow_size());
+        let sun_strength = if light == super::look::Light::Night {
+            0.0
+        } else {
+            colours.sun[3]
+        };
+        // The lamps nearest to what is looked at, lit at night.
+        let mut lamps = [[0.0f32; 4]; MAX_LAMPS];
+        let mut lamp_n = 0;
+        if colours.night > 0.0 {
+            let mut near: Vec<&[f32; 4]> = self.lamps.iter().collect();
+            let t = camera.target;
+            near.sort_by(|a, b| {
+                let da = glam::Vec3::new(a[0], a[1], a[2]).distance_squared(t);
+                let db = glam::Vec3::new(b[0], b[1], b[2]).distance_squared(t);
+                da.total_cmp(&db)
+            });
+            for (slot, l) in lamps.iter_mut().zip(near) {
+                *slot = *l;
+                lamp_n += 1;
+            }
+        }
+        let vp = camera.projection(aspect) * camera.view();
+        let (grid, ground_z, sky_on) = match &self.atmosphere {
+            Some(a) => (
+                a.grid
+                    .map_or([0.0; 4], |(c, reach, step)| [c.x, c.y, reach, step]),
+                a.ground_z,
+                1.0,
+            ),
+            None => ([0.0; 4], 0.0, 0.0),
+        };
+        let haze_from = camera.distance * 1.3 + 6.0;
         let region = self.shadow_region();
         let sun_vp = sun_view_proj(sun, region);
         // A shadow-map pixel, in metres: how far a point is moved off its
@@ -619,6 +692,22 @@ impl Renderer {
                 self.quality.shadow_taps(),
                 if self.quality.occlusion() { 1.0 } else { 0.0 },
             ],
+            inv_vp: vp.inverse().to_cols_array_2d(),
+            sun_color: [colours.sun[0], colours.sun[1], colours.sun[2], sun_strength],
+            sky_hi: colours.sky_hi,
+            sky_lo: colours.sky_lo,
+            zenith: colours.zenith,
+            haze: colours.haze,
+            ground: [
+                colours.ground[0],
+                colours.ground[1],
+                colours.ground[2],
+                ground_z,
+            ],
+            grid,
+            atmos: [sky_on, colours.night, haze_from, haze_from * 5.0 + 60.0],
+            lamps,
+            lamp_count: [lamp_n as f32, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);
@@ -691,7 +780,16 @@ impl Renderer {
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(if self.transparent {
+                            load: wgpu::LoadOp::Clear(if self.atmosphere.is_some() {
+                                // The haze: what the edges of the model
+                                // are blended with, as the sky behind.
+                                wgpu::Color {
+                                    r: colours.haze[0] as f64,
+                                    g: colours.haze[1] as f64,
+                                    b: colours.haze[2] as f64,
+                                    a: 1.0,
+                                }
+                            } else if self.transparent {
                                 wgpu::Color::TRANSPARENT
                             } else {
                                 BACKGROUND

@@ -349,8 +349,18 @@ impl ArchiSimApp {
             );
             ui.separator();
             self.quality_buttons(ui);
+            ui.separator();
+            self.light_buttons(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.workspace_switch(ui);
+                ui.add_space(10.0);
+                if ui
+                    .button("Captura")
+                    .on_hover_text("Guarda la vista tal cual en una imagen grande (3840 píxeles de ancho), para un render con IA, D5 o Twinmotion")
+                    .clicked()
+                {
+                    self.big_capture();
+                }
                 ui.add_space(10.0);
                 if ui
                     .button("Encuadrar")
@@ -377,6 +387,22 @@ impl ArchiSimApp {
             {
                 self.v3d.quality = q;
                 self.prefs.quality_3d = Some(q);
+            }
+        }
+    }
+
+    /// Day, evening or night (the Maqueta's).
+    pub(super) fn light_buttons(&mut self, ui: &mut Ui) {
+        use crate::view3d::look::Light;
+        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.label("Luz");
+        for l in Light::ALL {
+            if ui
+                .selectable_label(self.v3d.light == l, l.name())
+                .on_hover_text(l.hint())
+                .clicked()
+            {
+                self.v3d.light = l;
             }
         }
     }

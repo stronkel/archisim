@@ -127,6 +127,7 @@ type Drawn = (
     bool,
     u64,
     (Quality, Option<[i32; 3]>),
+    Option<crate::view3d::look::Atmosphere>,
 );
 
 /// Everything the 3D view keeps between frames.
@@ -179,6 +180,11 @@ pub struct View3dState {
     pub quality: Quality,
     /// Towards the model's sun (none: below the horizon).
     sun: Option<glam::Vec3>,
+    /// The sky, the haze and the grid on the ground (the Maqueta's; none:
+    /// the plain background).
+    pub atmosphere: Option<crate::view3d::look::Atmosphere>,
+    /// The light the Maqueta is seen with: day, evening or night.
+    pub light: crate::view3d::look::Light,
 }
 
 /// Textures on, except on Intel Macs: their AMD graphics drivers (on
@@ -212,6 +218,8 @@ impl Default for View3dState {
             overlay_serial: 0,
             quality: crate::view3d::look::default_quality(),
             sun: None,
+            atmosphere: None,
+            light: Default::default(),
         }
     }
 }
@@ -494,8 +502,9 @@ impl View3dState {
                 self.quality,
                 self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
             ),
+            self.atmosphere.clone(),
         );
-        if self.drawn != Some(wanted) || gpu.texture.is_none() {
+        if self.drawn.as_ref() != Some(&wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
@@ -504,6 +513,7 @@ impl View3dState {
             gpu.renderer
                 .set_shadow_focus(Some(shadow_focus(&self.camera)));
             gpu.renderer.set_transparent(self.under);
+            gpu.renderer.set_atmosphere(self.atmosphere.clone());
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
@@ -621,6 +631,38 @@ impl View3dState {
     }
 
     /// The last picture as RGBA, to save it.
+    /// The view drawn again `width` pixels wide (as it is on screen, its
+    /// lines as thick for the size), read back as RGBA bytes. The next
+    /// frame draws the screen's picture again.
+    pub fn capture(&mut self, width: u32) -> Option<(u32, u32, Vec<u8>)> {
+        let canvas = self.canvas;
+        if canvas.width() < 1.0 || canvas.height() < 1.0 {
+            return None;
+        }
+        let w = width.clamp(64, 8192);
+        let h = ((w as f32 * canvas.height() / canvas.width()).round() as u32).clamp(1, 8192);
+        let step = ((w as f32 / canvas.width()).round() as u32).clamp(1, 6);
+        let clip = self.clip_box();
+        let cut = self.cut_rule();
+        let gpu = self.gpu.as_mut()?;
+        gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+        gpu.renderer.set_cut(cut);
+        gpu.renderer.set_look(self.quality, self.sun);
+        gpu.renderer
+            .set_shadow_focus(Some(shadow_focus(&self.camera)));
+        gpu.renderer.set_transparent(self.under);
+        gpu.renderer.set_atmosphere(self.atmosphere.clone());
+        gpu.renderer.render(
+            &gpu.state.device,
+            &gpu.state.queue,
+            &self.camera,
+            [w, h],
+            step,
+        );
+        self.drawn = None;
+        self.picture()
+    }
+
     pub fn picture(&self) -> Option<(u32, u32, Vec<u8>)> {
         let gpu = self.gpu.as_ref()?;
         let (w, h, mut px) = gpu
@@ -821,7 +863,27 @@ impl ArchiSimApp {
         // The picture, over the ground grid when it is on.
         let (px, ss) = picture_size(size, ctx.pixels_per_point(), v.quality);
         v.edge_step = ss;
-        v.under = self.ground_grid;
+        // In the Maqueta, the sky, the haze and the grid are drawn with the
+        // picture; elsewhere the grid goes under it.
+        if self.maquette {
+            let step = super::maquette_ui::GRID_STEP as f32;
+            let t = v.camera.target;
+            v.atmosphere = Some(crate::view3d::look::Atmosphere {
+                light: v.light,
+                ground_z: v.level_z,
+                grid: self.ground_grid.then(|| {
+                    (
+                        glam::Vec2::new((t.x / step).round() * step, (t.y / step).round() * step),
+                        10.0_f32.max(v.camera.distance * 0.5).min(30.0),
+                        step,
+                    )
+                }),
+            });
+            v.under = false;
+        } else {
+            v.atmosphere = None;
+            v.under = self.ground_grid;
+        }
         let under = v.under;
         let drawn = v.draw(self.gpu.as_ref(), px);
         if under && drawn.is_some() {

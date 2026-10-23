@@ -74,6 +74,39 @@ pub struct Scene {
     owners: Vec<Owner>,
     pub lo: Vec3,
     pub hi: Vec3,
+    /// The lamps: where their light comes from (the middle of what glows)
+    /// and how far it reaches, metres.
+    pub lamps: Vec<[f32; 4]>,
+}
+
+/// How far a lamp's light reaches at night, metres.
+const LAMP_REACH: f32 = 4.5;
+
+/// The materials of an object that glow at night: the shade and the bulb
+/// of a lamp (also of a bedside table's), a candle's flame.
+fn glow_materials(model: &Model, o: archisim_core::ObjectId) -> Vec<archisim_core::MaterialId> {
+    let Some(t) = model
+        .object(o)
+        .and_then(|ob| model.object_type(ob.object_type))
+    else {
+        return Vec::new();
+    };
+    let Some(kind) = model.family_prop(t.family) else {
+        return Vec::new();
+    };
+    if !matches!(kind.as_str(), "lamp" | "nightstand" | "decor") {
+        return Vec::new();
+    }
+    let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {
+        return Vec::new();
+    };
+    ["shade", "bulb", "flame"]
+        .iter()
+        .filter_map(|k| match t.values.get(*k).or(defaults.get(*k)) {
+            Some(archisim_core::Value::Material(m)) => Some(archisim_core::MaterialId(*m)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// A corner as a key, to the tenth of a millimetre.
@@ -218,6 +251,8 @@ impl Scene {
         glass_owners: &mut Vec<Owner>,
     ) {
         let s = self;
+        // What glows of each object, for its light.
+        let mut lit: std::collections::BTreeMap<u64, (Vec3, f32)> = Default::default();
         for solid in solids {
             let id = solid.owner.id();
             if model.hidden_by_discipline(&disciplines.hidden, id) {
@@ -293,13 +328,40 @@ impl Scene {
                 }
                 acc
             });
+            // A lampshade, a bulb or a flame: it glows at night, and its
+            // middle is where the lamp's light comes from.
+            let glows = match solid.owner {
+                SolidOwner::Object(o) if !dimmed && !ghost => {
+                    glow_materials(model, o).contains(&solid.material)
+                }
+                _ => false,
+            };
+            if glows {
+                let (sum, n) = lit.entry(id).or_insert((Vec3::ZERO, 0.0));
+                for tri in &solid.triangles {
+                    for v in tri {
+                        *sum += Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32);
+                        *n += 1.0;
+                    }
+                }
+            }
             let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
             let cut = cut_of(model, anchors, &solid);
             let select = if selected { 1.0 } else { 0.0 };
+            let is_object = matches!(solid.owner, SolidOwner::Object(_));
             let texture_of = |m: archisim_core::MaterialId| {
                 let a = model.appearance(m);
-                a.texture.map_or([0.0, 0.0], |t| {
-                    [t.number() as f32, a.texture_scale() as f32]
+                // Furniture whose material has no appearance of its own:
+                // the texture of what it is (linen, wool, rattan…).
+                let t = a.texture.or_else(|| {
+                    let x = model.material(m)?;
+                    (is_object && a.is_plain())
+                        .then(|| archisim_core::TextureKind::suggested(&x.name, &x.category))
+                        .flatten()
+                });
+                t.map_or([0.0, 0.0], |t| {
+                    let scale = a.scale.unwrap_or_else(|| t.default_scale());
+                    [t.number() as f32, scale as f32]
                 })
             };
             let own_tex = if dimmed || ghost {
@@ -325,7 +387,9 @@ impl Scene {
                 // Faces looking up give way where another element rests on
                 // them: the floor under a wall, the top of a wall under the
                 // roof slab.
-                let bias = if soft {
+                let bias = if glows {
+                    3.0
+                } else if soft {
                     2.0
                 } else if opening {
                     -1.0
@@ -376,6 +440,12 @@ impl Scene {
                 }
             }
         }
+        for (sum, n) in lit.into_values() {
+            if n > 0.0 {
+                let c = sum / n;
+                s.lamps.push([c.x, c.y, c.z, LAMP_REACH]);
+            }
+        }
     }
 
     /// A scene of a few solids only: what is being stretched, drawn over
@@ -403,6 +473,11 @@ impl Scene {
             v.select = 2.0;
         }
         s
+    }
+
+    /// Nothing to draw.
+    pub fn is_blank(&self) -> bool {
+        self.opaque.is_empty() && self.glass.is_empty()
     }
 
     #[cfg(test)]
