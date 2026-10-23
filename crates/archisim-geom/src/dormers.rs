@@ -97,7 +97,7 @@ pub fn dormer_meshes(d: &Dormer, s: &DormerShape, level: f64, covering: f64) -> 
         [p.x, p.y, level + z]
     };
     let ground = |x: f64, t: f64| at(x, t, f.roof_z(t));
-    let (body, roof_faces): (Vec<Vec<P3>>, Vec<(Vec<P3>, P3)>) = match d.kind {
+    let (body, roof_faces): (Vec<Vec<P3>>, Vec<Vec<P3>>) = match d.kind {
         DormerKind::Shed => {
             let back = f.roof_z(s.depth);
             let ftl = at(-w, 0.0, s.front_top);
@@ -120,7 +120,7 @@ pub fn dormer_meshes(d: &Dormer, s: &DormerShape, level: f64, covering: f64) -> 
                 at(e, s.depth, back),
                 at(-e, s.depth, back),
             ];
-            (body, vec![(skin, [0.0, 0.0, 1.0])])
+            (body, vec![skin])
         }
         DormerKind::Gable => {
             let ftl = at(-w, 0.0, s.front_top);
@@ -152,15 +152,12 @@ pub fn dormer_meshes(d: &Dormer, s: &DormerShape, level: f64, covering: f64) -> 
                 at(e, s.eave_depth, low),
                 at(0.0, s.depth, s.ridge),
             ];
-            (
-                body,
-                vec![(left, [0.0, 0.0, 1.0]), (right, [0.0, 0.0, 1.0])],
-            )
+            (body, vec![left, right])
         }
     };
     let roof = roof_faces
         .iter()
-        .flat_map(|(poly, _)| {
+        .flat_map(|poly| {
             // Thickness along the face's upward normal.
             let n = cross(sub(poly[1], poly[0]), sub(poly[2], poly[0]));
             let n = if n[2] < 0.0 { [-n[0], -n[1], -n[2]] } else { n };

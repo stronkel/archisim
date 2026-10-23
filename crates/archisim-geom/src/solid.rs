@@ -313,7 +313,12 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
         model.wall_top_z(wall)
     };
     if g.arc.is_some() {
-        return curved_wall_solids(&g, &offsets_of(&g, wtype), wtype, z_base, z_top);
+        let spans: Vec<(f64, f64, f64, f64)> = idx
+            .openings_in_wall(id)
+            .iter()
+            .map(|o| (o.t0, o.t1, level + o.sill, level + o.head))
+            .collect();
+        return curved_wall_solids(&g, &offsets_of(&g, wtype), wtype, z_base, z_top, &spans);
     }
     let (a, b) = g.axis;
     let len = a.distance(b);
@@ -801,56 +806,79 @@ fn offsets_of(g: &WallGeometry, wtype: &archisim_core::WallType) -> Vec<f64> {
     offsets
 }
 
-/// Solids of a curved wall (no doors, windows or walls butting in): each
-/// layer is its plan band extruded, with no faces where layers touch or
-/// where a mitred end meets the next wall.
+/// Solids of a curved wall (no walls butting in): each layer is its plan
+/// band extruded, with no faces where layers touch or where a mitred end
+/// meets the next wall. Doors and windows cut it square to the curve: the
+/// band is full height between them and, across each, only below its sill
+/// and above its head.
 fn curved_wall_solids(
     g: &WallGeometry,
     offsets: &[f64],
     wtype: &archisim_core::WallType,
     z0: f64,
     z1: f64,
+    openings: &[(f64, f64, f64, f64)],
 ) -> Vec<Solid> {
     let Some(arc) = &g.arc else {
         return Vec::new();
     };
     let (outer_a, outer_b) = (offsets[0], offsets[offsets.len() - 1]);
     let at = |p: Point2, z: f64| [p.x, p.y, z];
+    // One piece extruded from `za` to `zb`; `jambs`: whether its cut ends
+    // (at doors and windows) show.
+    let extrude = |poly: &[Point2], za: f64, zb: f64, jambs: bool, tris: &mut Vec<[P3; 3]>| {
+        if zb - za < 1e-9 || poly.len() < 3 {
+            return;
+        }
+        let n = poly.len();
+        for [a, b, c] in triangulate(poly) {
+            tris.push([at(poly[a], zb), at(poly[b], zb), at(poly[c], zb)]);
+            tris.push([at(poly[a], za), at(poly[c], za), at(poly[b], za)]);
+        }
+        for i in 0..n {
+            let (p, q) = (poly[i], poly[(i + 1) % n]);
+            if p.approx_eq(q) {
+                continue;
+            }
+            let (fp, op) = arc.project(p);
+            let (fq, oq) = arc.project(q);
+            let exposed = if (op - oq).abs() < 1e-6 {
+                // Along a face or a layer boundary: only the faces.
+                (op - outer_a).abs() < 1e-6 || (op - outer_b).abs() < 1e-6
+            } else if fp.min(fq) > 1e-6 && fp.max(fq) < 1.0 - 1e-6 {
+                // Across the wall, inside it: a jamb.
+                jambs
+            } else {
+                // Across an end: open unless another wall closes it.
+                let cut = if fp + fq < 1.0 {
+                    &g.start_cut
+                } else {
+                    &g.end_cut
+                };
+                !cut.is_mitre()
+            };
+            if exposed {
+                tris.push([at(p, za), at(q, za), at(q, zb)]);
+                tris.push([at(p, za), at(q, zb), at(p, zb)]);
+            }
+        }
+    };
+    let spans: Vec<(f64, f64)> = openings.iter().map(|o| (o.0, o.1)).collect();
+    let full = crate::wall_pieces(&spans);
     wtype
         .layers
         .iter()
         .zip(&g.layers)
         .map(|(layer, band)| {
-            let poly = &band.polygon;
-            let n = poly.len();
             let mut tris = Vec::new();
-            for [a, b, c] in triangulate(poly) {
-                tris.push([at(poly[a], z1), at(poly[b], z1), at(poly[c], z1)]);
-                tris.push([at(poly[a], z0), at(poly[c], z0), at(poly[b], z0)]);
+            for piece in &full {
+                let poly = crate::clip_arc_span(&band.polygon, arc, piece.from, piece.to);
+                extrude(&poly, z0, z1, true, &mut tris);
             }
-            for i in 0..n {
-                let (p, q) = (poly[i], poly[(i + 1) % n]);
-                if p.approx_eq(q) {
-                    continue;
-                }
-                let (fp, op) = arc.project(p);
-                let (fq, oq) = arc.project(q);
-                let exposed = if (op - oq).abs() < 1e-6 {
-                    // Along a face or a layer boundary: only the faces.
-                    (op - outer_a).abs() < 1e-6 || (op - outer_b).abs() < 1e-6
-                } else {
-                    // Across an end: open unless another wall closes it.
-                    let cut = if fp + fq < 1.0 {
-                        &g.start_cut
-                    } else {
-                        &g.end_cut
-                    };
-                    !cut.is_mitre()
-                };
-                if exposed {
-                    tris.push([at(p, z0), at(q, z0), at(q, z1)]);
-                    tris.push([at(p, z0), at(q, z1), at(p, z1)]);
-                }
+            for &(t0, t1, sill, head) in openings {
+                let poly = crate::clip_arc_span(&band.polygon, arc, Some(t0), Some(t1));
+                extrude(&poly, z0, sill.min(z1), false, &mut tris);
+                extrude(&poly, head.max(z0), z1, false, &mut tris);
             }
             Solid {
                 owner: SolidOwner::Wall(g.wall),
