@@ -410,3 +410,30 @@ fn sky_and_night_with_a_lamp() {
         .count();
     assert!(bright > 30, "glowing pixels: {bright}");
 }
+
+/// A streetlight's lantern and a fireplace's fire are lamps at night too,
+/// the streetlight's light reaching further.
+#[test]
+fn streetlights_and_fires_are_lamps() {
+    let (mut m, _, _) = room();
+    let level = m.levels()[0].id;
+    for (name, x) in [("Farola fernandina 3,5 m", -3.0), ("Chimenea de obra", 1.0)] {
+        let t = archisim_library::add_object_entry(&mut m, name).unwrap();
+        m.add_object(archisim_core::NewObject {
+            object_type: t,
+            level,
+            position: archisim_core::Point2::new(x, -2.0),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    }
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let mut reach: Vec<f32> = scene.lamps.iter().map(|l| l[3]).collect();
+    reach.sort_by(f32::total_cmp);
+    assert_eq!(reach.len(), 2, "{:?}", scene.lamps);
+    assert!(reach[1] > reach[0] * 2.0, "{reach:?}");
+    // The streetlight's light is up in its lantern.
+    let high = scene.lamps.iter().map(|l| l[2]).fold(0.0f32, f32::max);
+    assert!(high > 2.5, "{high}");
+}

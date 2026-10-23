@@ -157,9 +157,35 @@ Un estilo para toda la casa. Una colección no tiene muebles propios: dice qué 
 
 Para el programador: `archisim_library::collections` (`COLLECTIONS`, `restyle`, `add_collection_entry`, `type_in_collection`, `apply_collection`, `collection_library` para las fotos del catálogo); `archisim-props::home` (`stool`, `island`, `counter_decor`, `towels`, `basket`, `wall_decor`, `floor_cushion`, `blanket`), `archisim-props::garden` (`lounger`, `parasol`, `big_pot`, `pergola`) y `Builder::obox` (caja girada: lamas y respaldos inclinados); en la app, `app/collection_ui` y `Editor::apply_collection`/`collection_object_type`. Sin cambios de formato.
 
+## Mobiliario urbano, chimeneas y más mobiliario (v0.52, revisión de Antonio del 24/10/2026)
+
+Antonio: «el mobiliario urbano sigue siendo muy básico y cuando pongo una farola no se ilumina como una lámpara alrededor». Ahora cada pieza de exterior tiene su 3D hecho por ArchiSim, con varios modelos (las familias son las de siempre, con los mismos parámetros: los proyectos que ya las usan se ven mejor sin tocar nada).
+
+| Familia | Modelos 3D |
+|---|---|
+| Banco | de listones sobre patas de fundición, de hormigón con asiento de madera, de listones sobre marco de acero (con o sin respaldo) |
+| Farola | báculo curvo, **fernandina** (columna acanalada y farol de cuatro caras), columna con globo, baliza |
+| Papelera | de chapa perforada sobre poste, de listones de madera, doble para reciclar |
+| Bolardo | de fundición con bola, tubo de acero con banda reflectante, cono de hormigón |
+| Buzón | de pie, sobre poste, buzones de portal |
+| Contenedor de residuos | de carga lateral (ruedas, tapa, pedal), iglú de vidrio, soterrado |
+| Fuente | de fundición con pila y rejilla, bloque de piedra con caño, estanque redondo con surtidor |
+| Jardinera | de hormigón con arbustos, de madera con flores, de acero corten con gramíneas |
+| Alcorque | de fundición en anillos, de pletinas, bordillo de piedra con grava |
+| Aparcabicis | U invertida, onda, soporte de rueda |
+| Señal | circular, triangular, rectangular |
+| Bicicleta | de paseo con cesta, de carretera, de carga |
+
+- **Las farolas alumbran de noche** (Maqueta → Luz: Noche): su farol brilla y alumbra hasta 11 m alrededor. La demo tiene dos fernandinas junto al camino.
+- **Chimeneas** (familia nueva, Amueblar → Salón): de obra con repisa, hogar y solera; estufa de leña con su tubo hasta el techo; moderna lineal en un paramento. El fuego brilla y alumbra de noche.
+- **Más mobiliario**: perchero de pie y recibidor con banco, ganchos y cestas; sillas de oficina (giratoria y de malla); mesa de bistró con dos sillas, mesa de teca para seis y sofá de exterior; silla colgante de ratán y hamaca; radiadores (de elementos y de panel), aire acondicionado de pared, ventiladores de techo; piano de pared y de cola; cama cabaña con guirnalda de luces y litera; y la estantería «Con objetos» (libros, jarrones, plantas, libros apilados, cestas).
+- `archisim modelos out/` tiene cuatro filas con todo esto.
+
+Para el programador: `archisim-props::street` y `archisim-props::extras`; lo que brilla y alumbra de noche, `view3d::scene::glow_materials` (lámparas 4,5 m; farolas 11 m).
+
 ## Pendiente
 
-- Estanterías con objetos; muebles en L; más colecciones (rústica, industrial) si Antonio las quiere.
+- Estanterías con objetos (hecho en v0.52); muebles en L; más colecciones (rústica, industrial) si Antonio las quiere.
 
 - Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
 - Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).

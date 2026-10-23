@@ -153,6 +153,11 @@ Pendiente: unirse también al arrastrar en planta; muebles en L (sofá rinconera
 
 Pendiente: la imagen realista (`archisim render` y Visualización) todavía no usa las texturas nuevas ni la noche; la luz de las lámparas no hace sombras.
 
+## 6 sexies. Cámara y biblioteca (v0.52)
+
+- **La cámara gira alrededor de lo seleccionado**: con algo seleccionado, arrastrar gira la vista en torno a ello, que se queda donde estaba en la pantalla (como en Revit o SketchUp). Sin nada seleccionado, alrededor del centro de la vista, como siempre. En las dos vistas 3D, Técnica y Maqueta.
+- Mobiliario urbano con modelos de verdad, farolas que alumbran de noche, chimeneas y más mobiliario: `docs/BIBLIOTECA_3D.md`.
+
 ## 7. Bloques
 
 | Bloque | Contenido |

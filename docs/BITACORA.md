@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (1) · v0.52: cámara alrededor de la selección, mobiliario urbano, chimeneas y más mobiliario
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (las familias de mobiliario urbano suben de versión con los mismos parámetros y un «Modelo 3D»). Detalle en `docs/BIBLIOTECA_3D.md` y `docs/MAQUETA.md` §6 sexies.
+
+Antonio probó v0.51 (fluida incluso en su MacBook Pro de 2016) y pidió: mejores modelos (el mobiliario urbano era muy básico y las farolas no alumbraban), más accesorios y mobiliario, chimeneas, que la cámara gire alrededor de lo seleccionado y mejorar mucho las escaleras (en U, tipos de estructura, caracol). Las escaleras van en su propia rama, después de esto.
+
+**Hecho**
+- La cámara gira alrededor de lo seleccionado.
+- Mobiliario urbano rehecho: bancos, farolas (báculo, fernandina, globo, baliza), papeleras, bolardos, buzones, contenedores, fuentes, jardineras, alcorques, aparcabicis, señales y bicicletas, con 3 o 4 modelos cada uno; 24 tipos nuevos.
+- Las farolas y las chimeneas brillan y alumbran de noche (las farolas, hasta 11 m).
+- Chimeneas (de obra, estufa de leña, moderna lineal), perchero y recibidor, sillas de oficina, mesas de exterior con sus sillas, silla colgante y hamaca, radiadores, aire acondicionado, ventiladores de techo, pianos, cama cabaña y litera, estantería con objetos; 22 tipos nuevos.
+- La demo tiene dos farolas fernandinas junto al camino.
+
+**Pendiente**
+- Escaleras: en U, en L, peldaños compensados, caracol, tipos de estructura (zancas laterales, zanca central, losa, peldaños volados), con o sin tabica: rama `bloque/escaleras`, lo siguiente.
+- El `.glb` del proyecto para D5 o Twinmotion.
+
+**Qué debe probar Antonio**
+1. Selecciona un mueble en la Maqueta y gira la cámara: debe girar a su alrededor, sin perderlo de la pantalla.
+2. Demo en la Maqueta, **Luz: Noche**: las dos farolas del camino se encienden y alumbran el suelo.
+3. Exterior → Mobiliario urbano y Jardín y terraza: bancos, farolas, papeleras, fuentes, jardineras, mesas de exterior y la hamaca, con sus modelos nuevos (cámbialos en «Modelo 3D»).
+4. Amueblar → Salón: una chimenea de obra o una estufa de leña contra un muro; de noche, el fuego alumbra el salón.
+5. `cargo run -p archisim-cli -- modelos out/`: las cuatro primeras filas son todo lo nuevo.
+
+---
+
 ## 2026-10-23 (6) · v0.51: imagen de la Maqueta y miniaturas en 3D
 
 Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (los tipos de textura nuevos se guardan como los de siempre). Antonio eligió seguir por los puntos 2 (imagen) y 3 (miniaturas en 3D) y dejar para después el `.glb` para D5 y Twinmotion. Detalle en `docs/MAQUETA.md` §6 quinquies.
