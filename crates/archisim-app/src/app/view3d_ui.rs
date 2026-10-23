@@ -526,7 +526,7 @@ impl View3dState {
         // Drawn over the ground grid (transparent, premultiplied): put the
         // background back.
         if self.under {
-            for p in px.chunks_exact_mut(4) {
+            for p in px.as_chunks_mut::<4>().0 {
                 let a = f32::from(p[3]) / 255.0;
                 for (c, bg) in p.iter_mut().take(3).zip([224.0_f32, 230.0, 237.0]) {
                     *c = (f32::from(*c) + bg * (1.0 - a)).round().min(255.0) as u8;
