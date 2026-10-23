@@ -28,7 +28,7 @@ pub(crate) fn ci_notes() {
     });
 }
 
-fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
+pub(crate) fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
     ci_notes();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

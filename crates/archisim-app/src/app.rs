@@ -533,6 +533,8 @@ pub struct ArchiSimApp {
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
     thumbs: thumbs::Thumbs,
+    /// The 3D pictures of the Maqueta's catalog.
+    thumbs3d: thumbs3d::Thumbs3d,
     /// The command line stays shown (Vista); otherwise it shows only while
     /// an order is typed or running.
     pub pin_command_line: bool,
@@ -750,6 +752,7 @@ impl ArchiSimApp {
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
+            thumbs3d: Default::default(),
             pin_command_line: false,
             attenuate: true,
             hidden_disciplines: Default::default(),
@@ -2302,6 +2305,7 @@ mod temp_ui;
 mod terrain_ui;
 pub mod theme;
 mod thumbs;
+mod thumbs3d;
 mod toolbox;
 mod tools3d;
 mod type_views;

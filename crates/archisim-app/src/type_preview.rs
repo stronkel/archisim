@@ -139,6 +139,8 @@ pub fn opening_model(source: &Model, t: &OpeningType) -> Option<(Model, LevelId)
                 None => {
                     let mat = source.material(MaterialId(*id))?.clone();
                     let n = m.add_material(mat.name, mat.category, mat.cut_color, mat.cut_pattern);
+                    // Its colour and texture in 3D too.
+                    let _ = m.set_appearance(n, source.appearance(MaterialId(*id)));
                     copied.insert(*id, n);
                     n
                 }

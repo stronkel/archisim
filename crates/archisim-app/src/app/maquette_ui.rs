@@ -782,7 +782,17 @@ impl ArchiSimApp {
             });
         });
         ui.add_space(6.0);
-        let cards = self.catalog_cards(&ctx, self.catalog_group, self.catalog_theme);
+        let mut cards = self.catalog_cards(&ctx, self.catalog_group, self.catalog_theme);
+        // The pieces drawn in 3D, a few each frame.
+        self.thumbs3d.begin();
+        for c in &mut cards {
+            if let Some(t) = self.card_thumb_3d(&ctx, c.act) {
+                c.thumb = Some(t);
+            }
+        }
+        if self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
         if cards.is_empty() {
             ui.label(
                 egui::RichText::new("Nada en este tema todavía: la biblioteca del estudio y los tipos del proyecto salen aquí.")

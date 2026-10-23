@@ -19,7 +19,7 @@ use crate::view3d::scene::Scene;
 /// Pictures made in one frame, at most.
 const PER_FRAME: usize = 4;
 /// The picture's size, in points (drawn at twice the screen's pixels).
-pub const SIZE: Vec2 = Vec2::new(84.0, 66.0);
+pub const SIZE: Vec2 = Vec2::new(80.0, 58.0);
 
 #[derive(Default)]
 pub struct Thumbs3d {
@@ -39,19 +39,13 @@ impl Thumbs3d {
         self.pending = false;
     }
 
-    /// Forgets the pictures not asked for since the last call.
-    pub fn sweep(&mut self) {
-        let used = std::mem::take(&mut self.used);
-        self.cache.retain(|k, _| used.contains(k));
-    }
-
     /// The picture for `key`, drawn from the model `build` gives (with the
     /// piece alone) the first time it is asked for, if the graphics card
     /// is there and this frame has room for one more.
     pub fn get(
         &mut self,
         ctx: &egui::Context,
-        gpu: Option<&egui_wgpu::RenderState>,
+        gpu: Option<&eframe::egui_wgpu::RenderState>,
         key: String,
         build: impl FnOnce() -> Option<(Model, LevelId)>,
     ) -> Option<Thumb> {
@@ -92,6 +86,11 @@ impl Thumbs3d {
         let tex = ctx.load_texture(format!("thumb3d:{key}"), img, TextureOptions::LINEAR);
         let size = SIZE;
         let id = tex.id();
+        if self.cache.len() > 600 {
+            // Many themes seen: keep the ones shown since the last time.
+            let used = std::mem::take(&mut self.used);
+            self.cache.retain(|k, _| used.contains(k));
+        }
         self.cache.insert(key.clone(), (tex, size));
         self.used.insert(key);
         Some(Thumb { tex: id, size })
@@ -139,6 +138,88 @@ pub fn draw(
         Some(glam::Vec3::new(0.35, 0.75, 0.55).normalize()),
     );
     r.set_shadow_focus(None);
-    r.render(device, queue, &camera, px, 2);
+    r.render(device, queue, &camera, px, 1);
     r.read_pixels(device, queue)
+}
+
+impl super::ArchiSimApp {
+    /// The 3D picture of the piece on a card of the Maqueta's catalog (the
+    /// project's types, the library's, the collection's), if it is ready.
+    pub(super) fn card_thumb_3d(
+        &mut self,
+        ctx: &egui::Context,
+        act: super::maquette_ui::CatalogAct,
+    ) -> Option<Thumb> {
+        use super::maquette_ui::CatalogAct;
+        use super::object_gallery::ObjectPick;
+        let sig = self.picture_signature(false);
+        let gpu = self.gpu.as_ref();
+        match act {
+            CatalogAct::Object(ObjectPick::Project(t)) => {
+                let model = self.ed.model();
+                let ty = model.object_type(t)?;
+                let key = format!("p:{}:{:?}:{sig}", ty.family.0, ty.values);
+                self.thumbs3d.get(ctx, gpu, key, || {
+                    crate::type_preview::object_model(model, ty)
+                })
+            }
+            CatalogAct::Object(ObjectPick::Library(name)) => {
+                let lib = self
+                    .object_library
+                    .as_ref()
+                    .filter(|l| l.object_types().any(|t| t.name == name))
+                    .or_else(|| self.flora_library.as_deref())?;
+                let ty = lib.object_types().find(|t| t.name == name)?;
+                self.thumbs3d.get(ctx, gpu, format!("l:{name}"), || {
+                    crate::type_preview::object_model(lib, ty)
+                })
+            }
+            CatalogAct::Collected(name) => {
+                let c = self.collection?;
+                let lib = &self
+                    .collection_libraries
+                    .iter()
+                    .find(|(n, _)| *n == c.name)?
+                    .1;
+                let variant = archisim_library::collections::variant_name(name, c);
+                let ty = lib.object_types().find(|t| t.name == variant)?;
+                self.thumbs3d
+                    .get(ctx, gpu, format!("c:{}:{name}", c.name), || {
+                        crate::type_preview::object_model(lib, ty)
+                    })
+            }
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A sofa of the library drawn alone fills its picture, on a
+    /// transparent background.
+    #[test]
+    fn a_piece_in_3d() {
+        let Some((device, queue, view_formats)) = crate::view3d::gpu_tests::gpu() else {
+            eprintln!("No graphics adapter: 3D drawing test skipped.");
+            return;
+        };
+        let lib = archisim_library::new_project("Biblioteca");
+        let t = lib
+            .object_types()
+            .find(|t| t.name == "Sofá acogedor de 3 plazas")
+            .unwrap();
+        let (model, _) = crate::type_preview::object_model(&lib, t).unwrap();
+        let mut r = Renderer::new(&device, view_formats, true);
+        let (w, h, px) = draw(&mut r, &device, &queue, &model, [160, 116]).unwrap();
+        assert_eq!([w, h], [160, 116]);
+        let px = px.as_chunks::<4>().0;
+        let opaque = px.iter().filter(|p| p[3] > 200).count();
+        let clear = px.iter().filter(|p| p[3] == 0).count();
+        assert!(opaque > 3000, "the sofa fills the picture: {opaque}");
+        assert!(clear > 2000, "the background is left clear: {clear}");
+        // Its corners are background.
+        assert_eq!(px[0][3], 0);
+    }
 }
