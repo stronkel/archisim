@@ -5667,6 +5667,31 @@ fn objects_are_stretched_in_the_3d_view() {
     assert!((height - 2.6).abs() < 0.03, "{height}");
 }
 
+/// After choosing in the catalog (a card keeps the keyboard focus), Esc
+/// still leaves the tool in the Maqueta's 3D view.
+#[test]
+fn escape_works_after_clicking_a_card() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    assert!(h.app.maquette);
+    h.frame();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
+        super::object_gallery::ObjectPick::Library("Sofá de 3 plazas"),
+    ));
+    assert_eq!(h.app.tool, Tool::Object, "{:?}", h.app.message);
+    // The card just clicked has the focus.
+    h.ctx
+        .memory_mut(|m| m.request_focus(egui::Id::unique("a card")));
+    h.frame();
+    let mid = h.app.v3d.canvas.center();
+    h.pos = mid;
+    h.events.push(Event::PointerMoved(mid));
+    h.frame();
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+}
+
 /// The ring on the floor turns an object to any angle: in steps of 15°
 /// while dragged, with the object drawn turned before it is let go.
 #[test]

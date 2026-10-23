@@ -1748,9 +1748,7 @@ impl ArchiSimApp {
         // button that has the keyboard focus lets go of it).
         // (egui moves the focus between buttons with Tab: only a text
         // field keeps it.)
-        let in_text = ctx
-            .memory(|m| m.focused())
-            .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
+        let in_text = typing_in_text(ctx);
         if self.temp_edit.is_none() && !in_text && consume(Modifiers::NONE, Key::Tab) {
             ctx.memory_mut(|m| {
                 if let Some(id) = m.focused() {
@@ -2269,3 +2267,19 @@ pub use view3d_ui::{View3dState, ViewMode};
 
 #[cfg(test)]
 mod tests;
+
+/// Whether a text field has the keyboard (the keys are for it). A button
+/// or card just clicked keeps the focus too, but not the keys: the view's
+/// keys (Esc, Espacio, Supr…) still work.
+pub(crate) fn typing_in_text(ctx: &egui::Context) -> bool {
+    let Some(id) = ctx.memory(|m| m.focused()) else {
+        return false;
+    };
+    if egui::TextEdit::load_state(ctx, id).is_some() {
+        return true;
+    }
+    // The button lets go of the keyboard, so Espacio or Intro do not
+    // press it again.
+    ctx.memory_mut(|m| m.surrender_focus(id));
+    false
+}

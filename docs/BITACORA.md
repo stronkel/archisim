@@ -20,6 +20,7 @@ Antonio probó v0.48 y pidió: que el recorte de muros no corte los muebles; el 
 - **Selección con contorno naranja** en 3D; los colores y texturas quedan tal cual.
 - **Muebles que crecen por piezas**: sección `stretch` en las recetas (`docs/FAMILIAS.md`). Sofá (plazas), Mesa (sillas), Armario y Mueble alto (puertas), Estantería (baldas) y Cómoda (columnas); vale también al estirar en planta.
 - **Más mullidos**: cojines, almohadas y edredón hinchados (`Builder::pillow`) y aristas redondeadas de los muebles sombreadas suaves en 3D.
+- Esc, Espacio y Supr funcionan en la vista justo después de pinchar una tarjeta o un botón (el botón ya no se queda con el teclado).
 
 **Pendiente**
 - Los pinzamientos se quedan en su sitio mientras se gira el objeto (se recolocan al soltar).

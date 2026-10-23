@@ -34,7 +34,7 @@ impl ArchiSimApp {
         // Keys go to the plan unless a field is being typed in (a temporary
         // dimension's too: egui lets go of the focus on Esc before the plan
         // sees it).
-        if ctx.memory(|m| m.focused().is_none()) && self.temp_edit.is_none() {
+        if !crate::app::typing_in_text(&ctx) && self.temp_edit.is_none() {
             self.keyboard_in_view(&ctx);
         }
         self.clicks(&ctx, &response, rect);
