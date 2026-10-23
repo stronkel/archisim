@@ -475,11 +475,6 @@ impl Scene {
         s
     }
 
-    /// Nothing to draw.
-    pub fn is_blank(&self) -> bool {
-        self.opaque.is_empty() && self.glass.is_empty()
-    }
-
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.opaque.is_empty() && self.glass.is_empty()
