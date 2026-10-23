@@ -769,6 +769,7 @@ pub enum StudioValue {
 }
 use StudioValue::{B, N, T};
 
+pub mod collections;
 pub mod extended;
 pub mod flora;
 pub mod imported;
@@ -820,7 +821,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 81] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 205] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -1063,6 +1064,627 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 81] = [
         "Turismo",
         &[("length", 4.6), ("width", 1.9), ("height", 1.7)],
     ),
+    // The cosy pieces (v0.49): living room…
+    (
+        "Sofá acogedor de 3 plazas",
+        "Sofá",
+        &[("width", 2.2), ("depth", 0.95), ("pillows", 3.0)],
+    ),
+    (
+        "Sofá nórdico con cojines",
+        "Sofá",
+        &[("width", 1.8), ("places", 2.0), ("pillows", 2.0)],
+    ),
+    ("Butaca de orejas", "Butaca", &[]),
+    (
+        "Butaca redonda",
+        "Butaca",
+        &[("width", 0.85), ("height", 0.8)],
+    ),
+    (
+        "Butaca de ratán",
+        "Butaca",
+        &[("width", 0.75), ("height", 0.85)],
+    ),
+    (
+        "Butaca baja de patas",
+        "Butaca",
+        &[
+            ("width", 0.75),
+            ("depth", 0.85),
+            ("height", 0.8),
+            ("seat", 0.38),
+        ],
+    ),
+    ("Puf redondo", "Puf", &[]),
+    ("Puf de punto", "Puf", &[("width", 0.55), ("height", 0.38)]),
+    ("Puf cubo", "Puf", &[("width", 0.45), ("height", 0.42)]),
+    ("Mesa auxiliar redonda", "Mesa auxiliar", &[]),
+    (
+        "Mesa auxiliar de tres patas",
+        "Mesa auxiliar",
+        &[("width", 0.45), ("height", 0.5)],
+    ),
+    (
+        "Mesas nido",
+        "Mesa auxiliar",
+        &[("width", 0.55), ("depth", 0.4)],
+    ),
+    ("Aparador 160", "Aparador", &[]),
+    (
+        "Aparador de lamas 180",
+        "Aparador",
+        &[("width", 1.8), ("height", 0.7)],
+    ),
+    // …and what makes a house lived in.
+    ("Alfombra 200×140", "Alfombra", &[]),
+    (
+        "Alfombra redonda 160",
+        "Alfombra",
+        &[("width", 1.6), ("depth", 1.6)],
+    ),
+    (
+        "Alfombra de rayas 240×170",
+        "Alfombra",
+        &[("width", 2.4), ("depth", 1.7)],
+    ),
+    (
+        "Alfombra bereber 300×200",
+        "Alfombra",
+        &[("width", 3.0), ("depth", 2.0)],
+    ),
+    ("Lámpara de pie", "Lámpara", &[]),
+    (
+        "Lámpara de mesa",
+        "Lámpara",
+        &[("height", 0.55), ("diameter", 0.32)],
+    ),
+    (
+        "Lámpara colgante",
+        "Lámpara",
+        &[("height", 1.9), ("diameter", 0.42), ("drop", 0.6)],
+    ),
+    (
+        "Lámpara de arco",
+        "Lámpara",
+        &[("height", 1.95), ("diameter", 0.38)],
+    ),
+    ("Costilla de Adán", "Planta de interior", &[]),
+    (
+        "Ficus en maceta",
+        "Planta de interior",
+        &[("height", 1.6), ("pot", 0.36)],
+    ),
+    (
+        "Cactus",
+        "Planta de interior",
+        &[("height", 0.7), ("pot", 0.24)],
+    ),
+    (
+        "Helecho",
+        "Planta de interior",
+        &[("height", 0.45), ("pot", 0.26)],
+    ),
+    (
+        "Sansevieria",
+        "Planta de interior",
+        &[("height", 0.75), ("pot", 0.26)],
+    ),
+    ("Cortinas de lino 160", "Cortina", &[]),
+    ("Visillo 160", "Cortina", &[("open", 0.0)]),
+    (
+        "Jarrón con ramas",
+        "Decoración",
+        &[("width", 0.22), ("height", 0.55)],
+    ),
+    ("Frutero", "Decoración", &[]),
+    ("Libros y vela", "Decoración", &[("width", 0.26)]),
+    ("Cerámicas", "Decoración", &[("width", 0.32)]),
+    ("Cesta con manta", "Decoración", &[("width", 0.45)]),
+    // The collections' pieces (v0.50): bedroom…
+    (
+        "Cama con cabecero tapizado 160",
+        "Cama",
+        &[("width", 1.6), ("head", 1.2), ("cushions", 2.0)],
+    ),
+    (
+        "Cama de lamas 160",
+        "Cama",
+        &[
+            ("width", 1.6),
+            ("height", 0.4),
+            ("head", 0.9),
+            ("cushions", 1.0),
+        ],
+    ),
+    (
+        "Mesita de patas cónicas",
+        "Mesita de noche",
+        &[("drawers", 1.0)],
+    ),
+    (
+        "Mesita flotante",
+        "Mesita de noche",
+        &[("drawers", 1.0), ("height", 0.5)],
+    ),
+    // …kitchen…
+    ("Taburete de madera", "Taburete", &[]),
+    ("Taburete tapizado", "Taburete", &[("width", 0.42)]),
+    ("Taburete de enea", "Taburete", &[("width", 0.36)]),
+    ("Isla de cocina 180", "Isla de cocina", &[]),
+    (
+        "Mesa de trabajo de cocina 140",
+        "Isla de cocina",
+        &[("width", 1.4), ("depth", 0.7), ("overhang", 0.0)],
+    ),
+    (
+        "Isla con fregadero 240",
+        "Isla de cocina",
+        &[("width", 2.4), ("depth", 1.0)],
+    ),
+    ("Tablas y aceite", "Cosas de la encimera", &[]),
+    (
+        "Botes de cristal",
+        "Cosas de la encimera",
+        &[("width", 0.45)],
+    ),
+    (
+        "Cafetera y tazas",
+        "Cosas de la encimera",
+        &[("width", 0.4)],
+    ),
+    (
+        "Hierbas aromáticas",
+        "Cosas de la encimera",
+        &[("width", 0.42)],
+    ),
+    // …bathroom…
+    ("Toallas dobladas", "Toallas", &[]),
+    ("Toallas colgadas", "Toallas", &[("width", 0.6)]),
+    ("Toallas enrolladas", "Toallas", &[("width", 0.36)]),
+    ("Cesto de ropa", "Cesta", &[]),
+    (
+        "Cesta con rollos",
+        "Cesta",
+        &[("width", 0.3), ("height", 0.18)],
+    ),
+    (
+        "Cesta con asas",
+        "Cesta",
+        &[("width", 0.45), ("height", 0.3)],
+    ),
+    // …walls, floor cushions and blankets…
+    (
+        "Cuadro 50×70",
+        "Cuadro o espejo",
+        &[("width", 0.5), ("height", 0.7), ("elevation", 1.3)],
+    ),
+    (
+        "Tríptico",
+        "Cuadro o espejo",
+        &[("width", 1.2), ("height", 0.5), ("elevation", 1.4)],
+    ),
+    (
+        "Espejo de arco",
+        "Cuadro o espejo",
+        &[("width", 0.7), ("height", 1.5), ("elevation", 0.5)],
+    ),
+    (
+        "Espejo sol",
+        "Cuadro o espejo",
+        &[("width", 0.7), ("height", 0.7), ("elevation", 1.3)],
+    ),
+    (
+        "Reloj de pared",
+        "Cuadro o espejo",
+        &[("width", 0.35), ("height", 0.35), ("elevation", 1.8)],
+    ),
+    ("Cojín de suelo", "Cojín de suelo", &[]),
+    (
+        "Zafu",
+        "Cojín de suelo",
+        &[("width", 0.4), ("height", 0.15)],
+    ),
+    (
+        "Pila de cojines de suelo",
+        "Cojín de suelo",
+        &[("width", 0.6), ("height", 0.12)],
+    ),
+    ("Manta doblada", "Manta", &[]),
+    ("Pila de mantas", "Manta", &[("width", 0.5)]),
+    ("Escalera con mantas", "Manta", &[]),
+    // …and the garden and the terrace.
+    ("Tumbona de teca", "Tumbona", &[]),
+    ("Tumbona de aluminio", "Tumbona", &[("width", 0.66)]),
+    (
+        "Cama de exterior",
+        "Tumbona",
+        &[("width", 1.4), ("depth", 2.0)],
+    ),
+    ("Sombrilla redonda 250", "Sombrilla", &[]),
+    (
+        "Sombrilla descentrada 300",
+        "Sombrilla",
+        &[("width", 3.0), ("height", 2.5)],
+    ),
+    (
+        "Sombrilla de paja 200",
+        "Sombrilla",
+        &[("width", 2.0), ("height", 2.3)],
+    ),
+    ("Macetón con olivo", "Macetón", &[]),
+    (
+        "Ánfora de barro",
+        "Macetón",
+        &[("width", 0.5), ("height", 0.9)],
+    ),
+    (
+        "Macetón con gramíneas",
+        "Macetón",
+        &[("width", 0.5), ("height", 1.2)],
+    ),
+    (
+        "Cuenco con lavanda",
+        "Macetón",
+        &[("width", 0.7), ("height", 0.6)],
+    ),
+    ("Pérgola de madera 3×3", "Pérgola", &[]),
+    ("Pérgola de lamas 4×3", "Pérgola", &[("width", 4.0)]),
+    ("Pérgola con cañizo 3×3", "Pérgola", &[]),
+    // Street furniture in more models (v0.52)…
+    (
+        "Banco de hormigón y madera",
+        "Banco",
+        &[("width", 2.0), ("depth", 0.55)],
+    ),
+    ("Banco de acero sin respaldo", "Banco", &[("width", 1.6)]),
+    (
+        "Farola fernandina 3,5 m",
+        "Farola",
+        &[
+            ("height", 3.5),
+            ("arm", 0.0),
+            ("pole", 0.14),
+            ("lamp", 0.45),
+            ("glow", 4.0),
+        ],
+    ),
+    (
+        "Farola de globo 4 m",
+        "Farola",
+        &[
+            ("height", 4.0),
+            ("arm", 0.0),
+            ("pole", 0.12),
+            ("lamp", 0.5),
+            ("glow", 4.0),
+        ],
+    ),
+    (
+        "Papelera de listones",
+        "Papelera",
+        &[("width", 0.5), ("height", 0.85)],
+    ),
+    (
+        "Papelera doble de reciclaje",
+        "Papelera",
+        &[("width", 0.7), ("height", 0.95)],
+    ),
+    (
+        "Bolardo de acero",
+        "Bolardo",
+        &[("width", 0.12), ("height", 0.9)],
+    ),
+    (
+        "Bolardo cónico de hormigón",
+        "Bolardo",
+        &[("width", 0.25), ("height", 0.55)],
+    ),
+    (
+        "Buzón sobre poste",
+        "Buzón",
+        &[("width", 0.4), ("depth", 0.3), ("height", 1.2)],
+    ),
+    (
+        "Buzones de portal",
+        "Buzón",
+        &[("width", 0.9), ("depth", 0.3), ("height", 1.5)],
+    ),
+    (
+        "Iglú de vidrio",
+        "Contenedor de residuos",
+        &[("width", 1.4), ("depth", 1.4), ("height", 1.7)],
+    ),
+    (
+        "Contenedor soterrado",
+        "Contenedor de residuos",
+        &[("width", 1.5), ("depth", 1.5), ("height", 1.2)],
+    ),
+    (
+        "Fuente de piedra",
+        "Fuente de beber",
+        &[("width", 0.5), ("depth", 0.4), ("height", 0.95)],
+    ),
+    (
+        "Estanque con surtidor",
+        "Fuente de beber",
+        &[("width", 3.0), ("depth", 3.0), ("height", 1.4)],
+    ),
+    (
+        "Jardinera de madera con flores",
+        "Jardinera",
+        &[("width", 1.6), ("depth", 0.6), ("height", 0.55)],
+    ),
+    (
+        "Jardinera de acero corten",
+        "Jardinera",
+        &[("width", 2.0), ("depth", 0.5), ("height", 0.6)],
+    ),
+    ("Alcorque de pletinas", "Alcorque", &[("width", 1.2)]),
+    ("Alcorque de piedra y grava", "Alcorque", &[("width", 1.4)]),
+    (
+        "Aparcabicis de onda",
+        "Aparcabicis",
+        &[("count", 5.0), ("step", 0.7)],
+    ),
+    (
+        "Aparcabicis de rueda",
+        "Aparcabicis",
+        &[("count", 6.0), ("step", 0.6), ("height", 0.6)],
+    ),
+    ("Señal de peligro", "Señal de tráfico", &[]),
+    ("Panel informativo", "Señal de tráfico", &[("plate", 0.8)]),
+    ("Bicicleta de carretera", "Bicicleta", &[("length", 1.7)]),
+    ("Bicicleta de carga", "Bicicleta", &[("length", 2.4)]),
+    // …and more of what a house has.
+    ("Chimenea de obra", "Chimenea", &[]),
+    (
+        "Estufa de leña",
+        "Chimenea",
+        &[("width", 0.8), ("depth", 0.7)],
+    ),
+    (
+        "Chimenea moderna lineal",
+        "Chimenea",
+        &[("width", 2.0), ("depth", 0.35)],
+    ),
+    ("Perchero de pie", "Perchero", &[]),
+    ("Recibidor con banco", "Perchero", &[("width", 1.2)]),
+    ("Silla de oficina", "Silla de oficina", &[]),
+    (
+        "Silla de oficina de malla",
+        "Silla de oficina",
+        &[("width", 0.66)],
+    ),
+    ("Mesa de bistró con dos sillas", "Mesa de exterior", &[]),
+    (
+        "Mesa de teca para seis",
+        "Mesa de exterior",
+        &[("width", 1.9), ("depth", 0.95)],
+    ),
+    (
+        "Sofá de exterior con mesa",
+        "Mesa de exterior",
+        &[("width", 2.0)],
+    ),
+    ("Silla colgante de ratán", "Columpio y hamaca", &[]),
+    (
+        "Hamaca con bastidor",
+        "Columpio y hamaca",
+        &[("width", 3.0)],
+    ),
+    ("Radiador de aluminio 80", "Radiador", &[]),
+    (
+        "Radiador de panel 120",
+        "Radiador",
+        &[("width", 1.2), ("height", 0.6)],
+    ),
+    ("Aire acondicionado de pared", "Aire acondicionado", &[]),
+    ("Ventilador de techo", "Ventilador de techo", &[]),
+    ("Ventilador de techo de ratán", "Ventilador de techo", &[]),
+    ("Piano de pared", "Piano", &[]),
+    ("Piano de cola", "Piano", &[("width", 1.5)]),
+    ("Cama cabaña 90×190", "Cama infantil", &[]),
+    ("Litera 90×190", "Cama infantil", &[]),
+    (
+        "Estantería con objetos 120",
+        "Estantería",
+        &[("width", 1.2), ("height", 1.9), ("shelves", 3.0)],
+    ),
+];
+
+/// Choices and materials of the library's types that are not the family's
+/// (the cosy ones): by parameter, a yes/no or a material's name.
+const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
+    (
+        "Sofá acogedor de 3 plazas",
+        &[
+            ("mat", T("Lino arena")),
+            ("cushion", T("Lino arena")),
+            ("frame", T("Roble claro")),
+            ("pillow", T("Terciopelo mostaza")),
+            ("throw", B(true)),
+        ],
+    ),
+    (
+        "Sofá nórdico con cojines",
+        &[
+            ("mat", T("Terciopelo salvia")),
+            ("cushion", T("Terciopelo salvia")),
+            ("frame", T("Roble claro")),
+            ("pillow", T("Lana teja")),
+        ],
+    ),
+    (
+        "Butaca redonda",
+        &[("mat", T("Bouclé crudo")), ("cushion", T("Bouclé crudo"))],
+    ),
+    (
+        "Butaca de ratán",
+        &[("frame", T("Ratán")), ("cushion", T("Lino arena"))],
+    ),
+    (
+        "Butaca baja de patas",
+        &[
+            ("mat", T("Nogal")),
+            ("cushion", T("Lana teja")),
+            ("frame", T("Nogal")),
+        ],
+    ),
+    ("Puf de punto", &[("mat", T("Lana teja"))]),
+    ("Puf cubo", &[("mat", T("Terciopelo mostaza"))]),
+    (
+        "Mesa auxiliar de tres patas",
+        &[("mat", T("Nogal")), ("frame", T("Nogal"))],
+    ),
+    ("Mesas nido", &[("mat", T("Nogal")), ("frame", T("Latón"))]),
+    (
+        "Aparador de lamas 180",
+        &[("mat", T("Nogal")), ("frame", T("Negro mate"))],
+    ),
+    (
+        "Alfombra redonda 160",
+        &[("mat", T("Lana teja")), ("border", T("Lana cruda"))],
+    ),
+    (
+        "Alfombra de rayas 240×170",
+        &[
+            ("mat", T("Lana cruda")),
+            ("border", T("Pana azul petróleo")),
+        ],
+    ),
+    ("Alfombra bereber 300×200", &[("border", T("Lana cruda"))]),
+    ("Lámpara de mesa", &[("frame", T("Cerámica esmaltada"))]),
+    ("Lámpara colgante", &[("shade", T("Ratán"))]),
+    (
+        "Lámpara de arco",
+        &[("shade", T("Latón")), ("frame", T("Mármol"))],
+    ),
+    ("Cactus", &[("pot_mat", T("Cerámica blanca"))]),
+    ("Helecho", &[("pot_mat", T("Cerámica esmaltada"))]),
+    ("Sansevieria", &[("pot_mat", T("Negro mate"))]),
+    ("Frutero", &[("mat", T("Cerámica blanca"))]),
+    ("Libros y vela", &[("mat", T("Libros"))]),
+    ("Cesta con manta", &[("mat", T("Lana teja"))]),
+    (
+        "Cama con cabecero tapizado 160",
+        &[
+            ("cushion", T("Lino arena")),
+            ("frame", T("Roble claro")),
+            ("spread", B(true)),
+            ("spread_mat", T("Lana teja")),
+        ],
+    ),
+    (
+        "Cama de lamas 160",
+        &[
+            ("mat", T("Roble claro")),
+            ("duvet", T("Lino gris")),
+            ("spread", B(true)),
+            ("spread_mat", T("Lino piedra")),
+            ("pillow", T("Lana carbón")),
+        ],
+    ),
+    (
+        "Mesita de patas cónicas",
+        &[
+            ("mat", T("Nogal")),
+            ("frame", T("Latón")),
+            ("shade", T("Pantalla de lino")),
+        ],
+    ),
+    (
+        "Mesita flotante",
+        &[("mat", T("Roble claro")), ("shade", T("Pantalla de lino"))],
+    ),
+    ("Taburete de enea", &[("mat", T("Nogal"))]),
+    (
+        "Isla de cocina 180",
+        &[("mat", T("Lacado salvia")), ("top", T("Mármol"))],
+    ),
+    (
+        "Mesa de trabajo de cocina 140",
+        &[("mat", T("Roble claro"))],
+    ),
+    (
+        "Isla con fregadero 240",
+        &[("mat", T("Roble claro")), ("top", T("Microcemento"))],
+    ),
+    ("Botes de cristal", &[("mat", T("Lino arena"))]),
+    ("Cafetera y tazas", &[("mat", T("Cerámica esmaltada"))]),
+    ("Toallas colgadas", &[("mat", T("Terciopelo salvia"))]),
+    ("Toallas enrolladas", &[("mat2", T("Lino arena"))]),
+    ("Cesta con rollos", &[("mat", T("Cerámica blanca"))]),
+    ("Cesta con asas", &[("mat", T("Lino gris"))]),
+    (
+        "Tríptico",
+        &[
+            ("frame", T("Negro mate")),
+            ("art2", T("Terciopelo mostaza")),
+        ],
+    ),
+    ("Espejo de arco", &[("frame", T("Latón"))]),
+    ("Espejo sol", &[("frame", T("Ratán"))]),
+    ("Reloj de pared", &[("frame", T("Nogal"))]),
+    ("Zafu", &[("mat", T("Lana teja"))]),
+    (
+        "Pila de cojines de suelo",
+        &[("mat2", T("Terciopelo salvia"))],
+    ),
+    ("Pila de mantas", &[("mat", T("Lana cruda"))]),
+    ("Tumbona de teca", &[("pad", B(true))]),
+    ("Tumbona de aluminio", &[("mat", T("Lino gris"))]),
+    (
+        "Sombrilla de paja 200",
+        &[("mat", T("Paja")), ("frame", T("Madera de pino"))],
+    ),
+    ("Ánfora de barro", &[("pot_mat", T("Terracota"))]),
+    (
+        "Macetón con gramíneas",
+        &[("pot_mat", T("Microcemento")), ("leaves", T("Copa clara"))],
+    ),
+    (
+        "Cuenco con lavanda",
+        &[
+            ("pot_mat", T("Cerámica blanca")),
+            ("leaves", T("Copa olivo")),
+        ],
+    ),
+    (
+        "Jardinera de madera con flores",
+        &[("mat", T("Teca")), ("frame", T("Teca"))],
+    ),
+    ("Jardinera de acero corten", &[("mat", T("Terracota"))]),
+    ("Señal de peligro", &[("face", T("Cerámica blanca"))]),
+    (
+        "Panel informativo",
+        &[("face", T("Lino añil")), ("face2", T("Cerámica blanca"))],
+    ),
+    (
+        "Papelera de listones",
+        &[("mat", T("Teca")), ("dark", T("Negro mate"))],
+    ),
+    ("Bicicleta de carretera", &[("frame_mat", T("Lana teja"))]),
+    (
+        "Bicicleta de carga",
+        &[("frame_mat", T("Terciopelo salvia")), ("frame", T("Teca"))],
+    ),
+    ("Chimenea moderna lineal", &[("mat", T("Microcemento"))]),
+    (
+        "Silla de oficina de malla",
+        &[("cushion", T("Lana carbón"))],
+    ),
+    ("Mesa de teca para seis", &[("frame", T("Teca"))]),
+    (
+        "Sofá de exterior con mesa",
+        &[("mat", T("Teca")), ("frame", T("Teca"))],
+    ),
+    (
+        "Hamaca con bastidor",
+        &[("frame", T("Teca")), ("cushion", T("Lino añil"))],
+    ),
+    ("Litera 90×190", &[("duvet", T("Lino añil"))]),
+    ("Banco de acero sin respaldo", &[("back", B(false))]),
 ];
 
 /// The model of the 3D of the library's types that are not the family's
@@ -1093,6 +1715,99 @@ const MODELS: &[(&str, &str)] = &[
     ("Furgoneta", "Todoterreno"),
     ("Todoterreno", "Todoterreno"),
     ("Turismo", "Berlina"),
+    ("Sofá nórdico con cojines", "Nórdico"),
+    ("Butaca redonda", "Redonda"),
+    ("Butaca de ratán", "De ratán"),
+    ("Butaca baja de patas", "Baja de patas"),
+    ("Puf de punto", "De punto"),
+    ("Puf cubo", "Cubo"),
+    ("Mesa auxiliar de tres patas", "Tres patas"),
+    ("Mesas nido", "Nido"),
+    ("Aparador de lamas 180", "Puertas de lamas"),
+    ("Alfombra redonda 160", "Redonda"),
+    ("Alfombra de rayas 240×170", "De rayas"),
+    ("Alfombra bereber 300×200", "Bereber con flecos"),
+    ("Lámpara de mesa", "De mesa"),
+    ("Lámpara colgante", "Colgante"),
+    ("Lámpara de arco", "De arco"),
+    ("Ficus en maceta", "Ficus"),
+    ("Cactus", "Cactus"),
+    ("Helecho", "Helecho"),
+    ("Sansevieria", "Sansevieria"),
+    ("Visillo 160", "Visillo"),
+    ("Frutero", "Frutero"),
+    ("Libros y vela", "Libros y vela"),
+    ("Cerámicas", "Cerámicas"),
+    ("Cesta con manta", "Cesta con manta"),
+    ("Cama con cabecero tapizado 160", "Cabecero tapizado"),
+    ("Cama de lamas 160", "Cabecero de lamas"),
+    ("Mesita de patas cónicas", "Patas cónicas"),
+    ("Mesita flotante", "Flotante"),
+    ("Taburete tapizado", "Tapizado con respaldo"),
+    ("Taburete de enea", "De enea"),
+    ("Mesa de trabajo de cocina 140", "Mesa de trabajo"),
+    ("Isla con fregadero 240", "Con fregadero"),
+    ("Botes de cristal", "Botes de cristal"),
+    ("Cafetera y tazas", "Cafetera y tazas"),
+    ("Hierbas aromáticas", "Hierbas aromáticas"),
+    ("Toallas colgadas", "Colgadas"),
+    ("Toallas enrolladas", "Enrolladas"),
+    ("Cesta con rollos", "Con rollos"),
+    ("Cesta con asas", "Con asas"),
+    ("Tríptico", "Tríptico"),
+    ("Espejo de arco", "Espejo de arco"),
+    ("Espejo sol", "Espejo sol"),
+    ("Reloj de pared", "Reloj"),
+    ("Zafu", "Zafu"),
+    ("Pila de cojines de suelo", "Pila"),
+    ("Pila de mantas", "Pila de mantas"),
+    ("Escalera con mantas", "En escalera"),
+    ("Tumbona de aluminio", "De aluminio"),
+    ("Cama de exterior", "Cama de exterior"),
+    ("Sombrilla descentrada 300", "Descentrada"),
+    ("Sombrilla de paja 200", "De paja"),
+    ("Ánfora de barro", "Ánfora"),
+    ("Macetón con gramíneas", "Con gramíneas"),
+    ("Cuenco con lavanda", "Con lavanda"),
+    ("Pérgola de lamas 4×3", "De lamas"),
+    ("Pérgola con cañizo 3×3", "Con cañizo"),
+    ("Banco de hormigón y madera", "Hormigón y madera"),
+    ("Banco de acero sin respaldo", "Marco de acero"),
+    ("Farola fernandina 3,5 m", "Fernandina"),
+    ("Farola de globo 4 m", "Columna con globo"),
+    ("Baliza de jardín", "Baliza"),
+    ("Papelera de listones", "Listones de madera"),
+    ("Papelera doble de reciclaje", "Doble para reciclar"),
+    ("Bolardo de acero", "Tubo de acero"),
+    ("Bolardo cónico de hormigón", "Hormigón"),
+    ("Buzón sobre poste", "Sobre poste"),
+    ("Buzones de portal", "Buzones de portal"),
+    ("Iglú de vidrio", "Iglú de vidrio"),
+    ("Contenedor soterrado", "Soterrado"),
+    ("Fuente de piedra", "Bloque de piedra"),
+    ("Estanque con surtidor", "Estanque con surtidor"),
+    ("Jardinera de madera con flores", "Madera con flores"),
+    ("Jardinera de acero corten", "Acero corten con gramíneas"),
+    ("Alcorque de pletinas", "Pletinas"),
+    ("Alcorque de piedra y grava", "Bordillo y grava"),
+    ("Aparcabicis de onda", "Onda"),
+    ("Aparcabicis de rueda", "Soporte de rueda"),
+    ("Señal de peligro", "Triangular"),
+    ("Panel informativo", "Rectangular"),
+    ("Bicicleta de carretera", "Carretera"),
+    ("Bicicleta de carga", "De carga"),
+    ("Estufa de leña", "Estufa de leña"),
+    ("Chimenea moderna lineal", "Moderna lineal"),
+    ("Recibidor con banco", "Recibidor con banco"),
+    ("Silla de oficina de malla", "De malla"),
+    ("Mesa de teca para seis", "Teca para seis"),
+    ("Sofá de exterior con mesa", "Sofá de exterior"),
+    ("Hamaca con bastidor", "Hamaca"),
+    ("Radiador de panel 120", "Panel de acero"),
+    ("Ventilador de techo de ratán", "Aspas de ratán"),
+    ("Piano de cola", "De cola"),
+    ("Litera 90×190", "Litera"),
+    ("Estantería con objetos 120", "Con objetos"),
 ];
 
 /// The leaves of each species (a material of [`object_materials`]) and
@@ -1121,6 +1836,10 @@ pub fn add_appearances(m: &mut Model) {
         .materials()
         .filter(|x| m.appearance(x.id).is_plain())
         .filter_map(|x| {
+            // The furniture's fabrics, woods, fibres and stones.
+            if COZY_PALETTE.iter().any(|e| e.0 == x.name) {
+                return TextureKind::suggested(&x.name, &x.category).map(|t| (x.id, t));
+            }
             let t = match (x.name.as_str(), x.category.as_str()) {
                 ("Ladrillo visto", _) => TextureKind::Brick,
                 ("Tarima de madera", _) => TextureKind::Planks,
@@ -1184,19 +1903,113 @@ fn object_materials(m: &mut Model) {
     ] {
         material_named(m, name, category, color, CutPattern::Solid);
     }
+    for (name, category, color) in COZY_PALETTE {
+        material_named(m, name, category, *color, CutPattern::Solid);
+    }
+}
+
+/// The cosy palette (v0.49): warm fabrics, woods, metals and ceramics, the
+/// colours the Maqueta offers for each piece of a piece of furniture.
+pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
+    ("Lino arena", "fabric", [214, 198, 172]),
+    ("Bouclé crudo", "fabric", [236, 228, 212]),
+    ("Lana cruda", "fabric", [226, 216, 196]),
+    ("Lana teja", "fabric", [190, 104, 72]),
+    ("Terciopelo salvia", "fabric", [150, 168, 136]),
+    ("Terciopelo mostaza", "fabric", [214, 160, 58]),
+    ("Terciopelo rosa", "fabric", [214, 160, 156]),
+    ("Pana azul petróleo", "fabric", [52, 96, 108]),
+    ("Lino gris", "fabric", [168, 166, 160]),
+    ("Pantalla de lino", "fabric", [244, 232, 206]),
+    ("Visillo", "glass", [246, 244, 238]),
+    ("Roble claro", "wood", [206, 170, 122]),
+    ("Nogal", "wood", [120, 82, 56]),
+    ("Ratán", "wood", [200, 160, 104]),
+    ("Latón", "metal", [196, 160, 88]),
+    ("Mármol", "stone", [234, 232, 226]),
+    ("Terracota", "ceramic", [196, 112, 78]),
+    ("Cerámica esmaltada", "ceramic", [92, 128, 150]),
+    ("Cerámica blanca", "ceramic", [240, 238, 232]),
+    ("Hoja verde", "vegetation", [76, 132, 76]),
+    ("Tierra", "other", [94, 70, 52]),
+    ("Naranja", "other", [236, 140, 40]),
+    ("Manzana verde", "other", [150, 190, 70]),
+    ("Cera", "other", [246, 240, 226]),
+    // The collections' (v0.50): Mediterranean…
+    ("Lino blanco", "fabric", [242, 238, 228]),
+    ("Lino añil", "fabric", [58, 86, 140]),
+    ("Madera encalada", "wood", [224, 214, 196]),
+    ("Hierro forjado", "metal", [54, 52, 50]),
+    ("Microcemento", "stone", [212, 204, 190]),
+    ("Enea", "wood", [196, 166, 106]),
+    // …fifties…
+    ("Teca", "wood", [150, 98, 60]),
+    ("Lana oliva", "fabric", [130, 128, 74]),
+    ("Cerámica turquesa", "ceramic", [72, 150, 150]),
+    ("Terrazo", "stone", [228, 220, 206]),
+    // …japandi…
+    ("Roble ahumado", "wood", [106, 84, 66]),
+    ("Lino piedra", "fabric", [196, 188, 172]),
+    ("Lana carbón", "fabric", [72, 72, 74]),
+    ("Metal negro", "metal", [46, 46, 48]),
+    ("Gres", "ceramic", [178, 166, 150]),
+    ("Piedra gris", "stone", [152, 150, 144]),
+    ("Bambú", "wood", [206, 180, 126]),
+    // …and what the new pieces are made of.
+    ("Toalla blanca", "fabric", [242, 240, 234]),
+    ("Tela de exterior", "fabric", [232, 226, 212]),
+    ("Paja", "wood", [214, 184, 124]),
+    ("Cañizo", "wood", [204, 178, 122]),
+    ("Espejo", "metal", [206, 214, 220]),
+    ("Aceite", "other", [196, 170, 60]),
+    ("Lavanda", "vegetation", [150, 120, 190]),
+    ("Lacado salvia", "wood", [164, 180, 150]),
+];
+
+/// A material of the cosy palette, added to the project if it has none of
+/// that name.
+pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {
+    let (name, category, color) = COZY_PALETTE.iter().find(|e| e.0 == name)?;
+    let id = material_named(m, name, category, *color, CutPattern::Solid);
+    if m.appearance(id).is_plain() {
+        if let Some(t) = archisim_core::TextureKind::suggested(name, category) {
+            let _ = m.set_appearance(
+                id,
+                archisim_core::Appearance {
+                    color: None,
+                    texture: Some(t),
+                    scale: None,
+                },
+            );
+        }
+    }
+    Some(id)
 }
 
 /// Adds one object type of the library (by its name in
 /// [`OBJECT_CATALOGUE`]), or finds the project's type of that name.
 pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, ModelError> {
-    use archisim_core::{ParamScope, Value};
     if let Some(t) = m.object_types().find(|t| t.name == name) {
         return Ok(t.id);
     }
-    let Some((name, family, sizes)) = OBJECT_CATALOGUE.iter().find(|e| e.0 == name) else {
+    let Some((f, values)) = entry_values(m, name)? else {
         // A species of the plants ArchiSim grows.
         return flora::add_flora_entry(m, name)?
             .ok_or_else(|| ModelError::NotAnObject(name.to_string()));
+    };
+    m.add_object_type(name, f, values)
+}
+
+/// The family and values of an object type of the library (by its name in
+/// [`OBJECT_CATALOGUE`]), its materials added to the project; `None` if
+/// the catalogue has no type of that name.
+pub(crate) fn entry_values(
+    m: &mut Model,
+    name: &str,
+) -> Result<Option<(archisim_core::FamilyId, archisim_core::Values)>, ModelError> {
+    use archisim_core::{ParamScope, Value};
+    let Some((name, family, sizes)) = OBJECT_CATALOGUE.iter().find(|e| e.0 == name) else {
+        return Ok(None);
     };
     object_materials(m);
     let f = m.system_family(family)?;
@@ -1207,6 +2020,20 @@ pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, Model
     if let Some((_, model)) = MODELS.iter().find(|e| e.0 == *name) {
         values.insert("model3d".into(), Value::Text((*model).into()));
     }
+    if let Some((_, looks)) = LOOKS.iter().find(|e| e.0 == *name) {
+        for (k, v) in looks.iter() {
+            let v = match v {
+                N(n) => Value::Number(*n),
+                B(b) => Value::Bool(*b),
+                // A material, by its name.
+                T(t) => match m.materials().find(|x| x.name == *t) {
+                    Some(mat) => Value::Material(mat.id.0),
+                    None => continue,
+                },
+            };
+            values.insert((*k).into(), v);
+        }
+    }
     if let Some((_, leaves, shape, look)) = SPECIES.iter().find(|e| e.0 == *name) {
         if let Some(mat) = m.materials().find(|x| x.name == *leaves) {
             values.insert("leaves".into(), Value::Material(mat.id.0));
@@ -1214,7 +2041,13 @@ pub fn add_object_entry(m: &mut Model, name: &str) -> Result<ObjectTypeId, Model
         values.insert("shape".into(), Value::Text((*shape).into()));
         values.insert("look".into(), Value::Text((*look).into()));
     }
-    m.add_object_type(*name, f, values)
+    Ok(Some((f, values)))
+}
+
+/// Whether a type of the catalogue chooses its own model of the 3D (and
+/// a collection should not change it).
+pub(crate) fn entry_has_model(name: &str) -> bool {
+    MODELS.iter().any(|e| e.0 == name)
 }
 
 /// Adds the object types of the library: furniture, sanitary ware,
@@ -1508,6 +2341,83 @@ fn add_structure_with(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every piece of the catalogue whose model ArchiSim makes has it,
+    /// with each role in a material of the project.
+    #[test]
+    fn every_piece_has_its_model() {
+        let m = new_project("Prueba");
+        for (name, _, _) in OBJECT_CATALOGUE {
+            let t = m
+                .object_types()
+                .find(|t| t.name == name)
+                .unwrap_or_else(|| panic!("{name}"));
+            if !m.type_has_prop(t.id) {
+                continue;
+            }
+            let (mesh, parts) = m
+                .type_prop(t.id)
+                .unwrap_or_else(|| panic!("{name}: no model"));
+            assert!(mesh.triangle_count() > 20, "{name}");
+            assert!(!parts.is_empty(), "{name}");
+        }
+    }
+
+    #[test]
+    fn cosy_pieces_have_their_models_and_materials() {
+        let m = new_project("Prueba");
+        for name in [
+            "Sofá acogedor de 3 plazas",
+            "Butaca de ratán",
+            "Puf de punto",
+            "Mesas nido",
+            "Aparador 160",
+            "Alfombra bereber 300×200",
+            "Lámpara de pie",
+            "Lámpara colgante",
+            "Costilla de Adán",
+            "Cortinas de lino 160",
+            "Libros y vela",
+        ] {
+            let t = m
+                .object_types()
+                .find(|t| t.name == name)
+                .unwrap_or_else(|| panic!("{name}"));
+            let (mesh, parts) = m
+                .type_prop(t.id)
+                .unwrap_or_else(|| panic!("{name}: no model"));
+            assert!(mesh.triangle_count() > 50, "{name}");
+            assert!(!parts.is_empty(), "{name}");
+        }
+        // A plant's pot is terracotta, its leaves green.
+        let t = m
+            .object_types()
+            .find(|t| t.name == "Costilla de Adán")
+            .unwrap();
+        let (_, parts) = m.type_prop(t.id).unwrap();
+        let names: Vec<&str> = parts
+            .iter()
+            .filter_map(|(id, _)| m.material(*id).map(|x| x.name.as_str()))
+            .collect();
+        assert!(
+            names.contains(&"Terracota") && names.contains(&"Hoja verde"),
+            "{names:?}"
+        );
+        // The cosy sofa: linen, mustard cushions and a throw.
+        let t = m
+            .object_types()
+            .find(|t| t.name == "Sofá acogedor de 3 plazas")
+            .unwrap();
+        let (_, parts) = m.type_prop(t.id).unwrap();
+        let names: Vec<&str> = parts
+            .iter()
+            .filter_map(|(id, _)| m.material(*id).map(|x| x.name.as_str()))
+            .collect();
+        assert!(
+            names.contains(&"Terciopelo mostaza") && names.contains(&"Lana teja"),
+            "{names:?}"
+        );
+    }
 
     #[test]
     fn new_project_has_a_level_and_the_library() {

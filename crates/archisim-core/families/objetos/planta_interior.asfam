@@ -1,0 +1,38 @@
+family "Planta de interior"
+  category furniture
+  host none
+  version 1
+  description "Planta en su maceta: costilla de Adán, ficus, cactus, helecho o sansevieria"
+  folder "Plantas de interior"
+
+type_params
+  section "Dimensiones"
+    height length = 1.00 range 0.15..3.00 label "Altura"
+    pot    length = 0.32 range 0.08..1.00 label "Diámetro de la maceta"
+  section "Materiales"
+    pot_mat material = "Terracota" label "Maceta"
+    leaves  material = "Hoja verde" label "Hojas"
+    stem    material = "Corteza" label "Tallos"
+    soil    material = "Tierra" label "Tierra"
+  section "Modelo 3D"
+    model3d choice("Costilla de Adán", "Ficus", "Cactus", "Helecho", "Sansevieria") = "Costilla de Adán" label "Modelo 3D"
+
+body
+  box (-pot / 2, 0, 0) to (pot / 2, pot, height) material leaves
+
+plan 1:50
+  let r = pot / 2
+  let c = max(height * 0.35, r)
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+    line (c * cos(t0), r + c * sin(t0)) to (c * cos(t1), r + c * sin(t1)) pen thin
+
+plan presentation
+  cloud center (0, pot / 2) radius max(height * 0.35, pot / 2) lobes 9 jitter 0.2 pen thin tint leaves
+
+outputs
+  generator = "props:potted_plant"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

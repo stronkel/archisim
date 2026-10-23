@@ -567,6 +567,8 @@ pub(crate) fn set_object_size(
         .clone();
     let mut values = t.values.clone();
     values.insert(key.into(), Value::Number(value));
+    // What follows the measurement: a longer sofa gains a seat.
+    model.follow_stretch(t.family, &mut values);
     if model.object_type_users(t.id) > 1 {
         let taken: Vec<String> = model.object_types().map(|t| t.name.clone()).collect();
         let name = crate::editor::copy_name(&t.name, &taken);

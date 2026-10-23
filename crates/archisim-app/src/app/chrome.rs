@@ -637,6 +637,9 @@ impl ArchiSimApp {
             if self.v3d.section.is_some() {
                 return "Flechas azules: mover las caras de la caja de sección · Arrastrar: girar · Rueda: zoom · Clic: seleccionar · F2: planta";
             }
+            if self.maquette {
+                return "Arrastrar: girar · Rueda: zoom · W A S D: moverse · Q E: bajar y subir · Clic: seleccionar · Inicio: ajustar";
+            }
             return "Arrastrar: girar · Rueda: zoom · Botón derecho: encuadre · Clic: seleccionar · Inicio: ajustar · F2: planta";
         }
         if matches!(self.mode, ViewMode::Sheet(_)) && self.tool != Tool::Cad {

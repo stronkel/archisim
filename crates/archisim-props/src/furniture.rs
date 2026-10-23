@@ -93,13 +93,68 @@ pub fn sofa(b: &mut Builder, p: &Params) {
     for i in 0..places as usize {
         let a = x0 + arm + i as f64 * pw + 0.005;
         let c = a + pw - 0.01;
-        b.rbox("cushion", [a, back, base_top], [c, d - 0.01, seat], 0.05);
+        b.pillow(
+            "cushion",
+            [a, back, base_top],
+            [c, d - 0.01, seat],
+            0.05,
+            0.025,
+        );
         let top = if style == 2 { h - 0.02 } else { h + 0.04 };
-        b.rbox(
+        b.pillow(
             "cushion",
             [a, back - 0.02, seat - 0.02],
             [c, back + 0.17, top],
             0.06,
+            0.035,
+        );
+    }
+    // Loose cushions leaning on the back, at the ends first; and a throw
+    // over the right arm, falling to the floor.
+    let pillows = p.get("pillows", 0.0).round().clamp(0.0, 4.0) as usize;
+    let size = (pw * 0.34).clamp(0.15, 0.22);
+    let spots: Vec<f64> = match pillows {
+        0 => vec![],
+        1 => vec![x0 + arm + size * 1.1],
+        2 => vec![x0 + arm + size * 1.1, -x0 - arm - size * 1.1],
+        3 => vec![x0 + arm + size * 1.1, 0.0, -x0 - arm - size * 1.1],
+        _ => vec![
+            x0 + arm + size * 1.1,
+            x0 + arm + size * 2.9,
+            -x0 - arm - size * 2.9,
+            -x0 - arm - size * 1.1,
+        ],
+    };
+    for (i, x) in spots.into_iter().enumerate() {
+        // Square, stuffed, upright against the back; the ones at the ends
+        // a little bigger.
+        let s = if i == 0 || i + 1 == pillows {
+            size
+        } else {
+            size * 0.88
+        };
+        b.pillow(
+            "pillow",
+            [x - s, back + 0.12, seat - 0.03],
+            [x + s, back + 0.25, seat - 0.03 + s * 1.85],
+            0.05,
+            0.04,
+        );
+    }
+    if p.flag("throw", false) {
+        let a0 = -x0 - arm - 0.02;
+        b.pillow(
+            "throw",
+            [a0, 0.25, arm_h],
+            [-x0 + 0.015, 0.6, arm_h + 0.03],
+            0.012,
+            0.006,
+        );
+        b.rbox(
+            "throw",
+            [-x0, 0.25, foot + 0.08],
+            [-x0 + 0.02, 0.6, arm_h + 0.02],
+            0.008,
         );
     }
 }
@@ -164,9 +219,15 @@ pub fn chair_at(b: &mut Builder, p: &Params, x: f64, y0: f64, dir: f64, style: i
                 );
             }
             let (a, c) = span(0.0, d);
-            b.rbox("mat", [x0, a, seat - 0.07], [x1, c, seat + 0.02], 0.035);
+            b.pillow(
+                "mat",
+                [x0, a, seat - 0.07],
+                [x1, c, seat + 0.02],
+                0.035,
+                0.015,
+            );
             let (a, c) = span(d - 0.07, d);
-            b.rbox("mat", [x0, a, seat], [x1, c, h], 0.035);
+            b.pillow("mat", [x0, a, seat], [x1, c, h], 0.035, 0.015);
         }
         _ => {
             let leg = 0.038;
@@ -433,6 +494,66 @@ pub fn bed(b: &mut Builder, p: &Params) {
                 0.01,
             );
         }
+        4 => {
+            // An upholstered base on short legs and a wide padded headboard
+            // in vertical channels, wider than the bed.
+            b.rbox("cushion", [x0, 0.1, 0.1], [-x0, l, base_top], 0.03);
+            for (x, y) in [
+                (x0 + 0.06, 0.16),
+                (-x0 - 0.06, 0.16),
+                (x0 + 0.06, l - 0.06),
+                (-x0 - 0.06, l - 0.06),
+            ] {
+                b.cone("frame", [x, y, 0.0], [x, y, 0.1], 0.016, 0.02, 10);
+            }
+            let hw = w + 0.24;
+            let n = ((hw / 0.2).round() as usize).max(4);
+            let cw = hw / n as f64;
+            for i in 0..n {
+                let a = -hw / 2.0 + i as f64 * cw;
+                b.pillow(
+                    "cushion",
+                    [a + 0.004, 0.0, 0.12],
+                    [a + cw - 0.004, 0.1, head],
+                    0.04,
+                    0.025,
+                );
+            }
+        }
+        5 => {
+            // A low wooden platform wider than the mattress and a headboard
+            // of slats.
+            b.rbox(
+                "mat",
+                [x0 - 0.06, 0.04, 0.0],
+                [-x0 + 0.06, l + 0.06, 0.04],
+                0.005,
+            );
+            b.rbox(
+                "mat",
+                [x0 - 0.04, 0.06, 0.04],
+                [-x0 + 0.04, l + 0.04, base_top],
+                0.01,
+            );
+            let hw = w + 0.12;
+            let n = ((hw / 0.07).round() as usize).max(6);
+            let sw = hw / n as f64;
+            for i in 0..n {
+                let a = -hw / 2.0 + i as f64 * sw;
+                b.rbox(
+                    "mat",
+                    [a + 0.012, 0.0, 0.0],
+                    [a + sw - 0.012, 0.035, head],
+                    0.004,
+                );
+            }
+            b.rbox(
+                "mat",
+                [-hw / 2.0, 0.0, head - 0.05],
+                [hw / 2.0, 0.045, head],
+                0.005,
+            );
+        }
         _ => {
             b.rbox("cushion", [x0, 0.08, 0.06], [-x0, l, base_top], 0.03);
             b.rbox(
@@ -456,22 +577,49 @@ pub fn bed(b: &mut Builder, p: &Params) {
         [-x0 - 0.01, l - 0.01, top],
         0.06,
     );
-    b.rbox(
+    b.pillow(
         "duvet",
         [x0 - 0.01, l * 0.3, top - 0.12],
         [-x0 + 0.01, l + 0.01, top + 0.06],
         0.05,
+        0.02,
     );
     let pillows = if w > 1.2 { 2 } else { 1 };
     let pw = (w - 0.1) / pillows as f64;
     for i in 0..pillows {
         let a = x0 + 0.05 + i as f64 * pw + 0.02;
-        b.rbox(
+        b.pillow(
             "linen",
             [a, 0.1, top - 0.01],
             [a + pw - 0.04, 0.48, top + 0.12],
             0.05,
+            0.04,
         );
+    }
+    // A bedspread folded over the foot and loose cushions before the
+    // pillows.
+    if p.flag("spread", false) {
+        b.pillow(
+            "spread",
+            [x0 - 0.025, l * 0.7, top - 0.1],
+            [-x0 + 0.025, l + 0.025, top + 0.09],
+            0.04,
+            0.012,
+        );
+    }
+    let n = p.get("cushions", 0.0).round().clamp(0.0, 4.0) as usize;
+    if n > 0 {
+        let s = 0.2_f64.min((w - 0.2) / n as f64 / 2.0);
+        for i in 0..n {
+            let x = x0 + w * (i as f64 + 0.5) / n as f64;
+            b.pillow(
+                "pillow",
+                [x - s, 0.42, top + 0.04],
+                [x + s, 0.54, top + 0.04 + s * 1.7],
+                0.05,
+                0.035,
+            );
+        }
     }
 }
 
@@ -481,6 +629,61 @@ pub fn nightstand(b: &mut Builder, p: &Params) {
     let d = p.get("depth", 0.4);
     let h = p.get("height", 0.5);
     let x0 = -w / 2.0;
+    match p.style() {
+        3 => {
+            // Fifties: splayed tapered legs, a drawer over an open shelf.
+            let foot = 0.2;
+            for (x, y, dx, dy) in [
+                (x0 + 0.05, 0.05, -0.025, -0.02),
+                (-x0 - 0.05, 0.05, 0.025, -0.02),
+                (x0 + 0.05, d - 0.07, -0.025, 0.02),
+                (-x0 - 0.05, d - 0.07, 0.025, 0.02),
+            ] {
+                b.cone(
+                    "frame",
+                    [x + dx, y + dy, 0.004],
+                    [x, y, foot],
+                    0.009,
+                    0.016,
+                    8,
+                );
+            }
+            b.rbox("mat", [x0, 0.0, foot], [-x0, d - FRONT, foot + 0.02], 0.004);
+            b.rbox("mat", [x0, 0.0, foot], [x0 + 0.018, d - FRONT, h], 0.004);
+            b.rbox("mat", [-x0 - 0.018, 0.0, foot], [-x0, d - FRONT, h], 0.004);
+            b.rbox("mat", [x0, 0.0, foot], [-x0, 0.015, h], 0.0);
+            let dz = (h - foot) * 0.45;
+            b.rbox("mat", [x0, 0.0, h - dz - 0.02], [-x0, d - FRONT, h], 0.006);
+            fronts::drawer(
+                b,
+                x0 + 0.02,
+                -x0 - 0.02,
+                h - dz,
+                h - 0.01,
+                d - FRONT,
+                Handle::of(p, Handle::Knob),
+            );
+            lamp(b, x0 + w * 0.6, d * 0.45, h);
+            return;
+        }
+        4 => {
+            // Hung on the wall: a slim box with a finger-groove drawer.
+            let z0 = (h - 0.16).max(0.2);
+            b.rbox("mat", [x0, 0.0, z0], [-x0, d - FRONT, h], 0.006);
+            fronts::drawer(
+                b,
+                x0 + 0.01,
+                -x0 - 0.01,
+                z0 + 0.01,
+                h - 0.01,
+                d - FRONT,
+                Handle::of(p, Handle::Groove),
+            );
+            lamp(b, x0 + w * 0.6, d * 0.45, h);
+            return;
+        }
+        _ => {}
+    }
     let foot = if p.style() == 2 { 0.12 } else { 0.0 };
     if foot > 0.0 {
         for (x, y) in [
@@ -700,6 +903,18 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
         if i + 1 == n || i == 0 && shelves > 2 {
             continue;
         }
+        if p.style() == 2 {
+            dressed_shelf(
+                b,
+                x0 + t + 0.02,
+                -x0 - t - 0.02,
+                d,
+                z + t,
+                gap - t,
+                &mut rnd,
+            );
+            continue;
+        }
         // Books, leaning against each other, leaving a gap now and then.
         let mut x = x0 + t + 0.02;
         let end = -x0 - t - 0.04;
@@ -719,6 +934,112 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
                 0.002,
             );
             x += bw + 0.002;
+        }
+    }
+}
+
+/// A shelf dressed as a lived-in one: runs of books, a vase, a little
+/// plant in its pot, books lying in a pile, a basket, from `x0` to `x1`
+/// on a board at `z`, `room` high.
+fn dressed_shelf(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    d: f64,
+    z: f64,
+    room: f64,
+    rnd: &mut impl FnMut() -> f64,
+) {
+    let mut x = x0;
+    while x < x1 - 0.06 {
+        let pick = rnd();
+        let left = x1 - x;
+        if pick < 0.4 {
+            // A run of books.
+            let run = (0.12 + 0.18 * rnd()).min(left);
+            let end = x + run;
+            while x < end {
+                let bw = (0.02 + 0.025 * rnd()).min(end - x);
+                let bh = room * (0.6 + 0.3 * rnd());
+                let role = if rnd() < 0.5 { "books" } else { "books2" };
+                b.rbox(role, [x, 0.03, z], [x + bw, 0.03 + d * 0.75, z + bh], 0.002);
+                x += bw + 0.002;
+            }
+        } else if pick < 0.55 && left > 0.14 {
+            // A vase.
+            let r = 0.045 + 0.02 * rnd();
+            let h = (room * (0.45 + 0.3 * rnd())).min(0.35);
+            b.lathe(
+                "glaze",
+                [x + r + 0.01, d * 0.5, z],
+                &[
+                    (0.0, 0.0),
+                    (r * 0.6, 0.0),
+                    (r, h * 0.45),
+                    (r * 0.45, h * 0.9),
+                    (r * 0.55, h),
+                    (0.0, h),
+                ],
+                1.0,
+                1.0,
+            );
+            x += 2.0 * r + 0.05;
+        } else if pick < 0.7 && left > 0.16 {
+            // A little plant in its pot.
+            let r = 0.05;
+            let c = [x + r + 0.02, d * 0.5];
+            b.lathe(
+                "pot",
+                [c[0], c[1], z],
+                &[(0.0, 0.0), (r * 0.8, 0.0), (r, 0.09), (0.0, 0.09)],
+                1.0,
+                1.0,
+            );
+            for k in 0..6 {
+                let a = std::f64::consts::TAU * k as f64 / 6.0 + rnd();
+                let up = (room - 0.1).clamp(0.05, 0.14);
+                b.blob(
+                    "leaves",
+                    [
+                        c[0] + a.cos() * 0.03,
+                        c[1] + a.sin() * 0.03,
+                        z + 0.1 + up * 0.4,
+                    ],
+                    [a.cos() * 0.02, a.sin() * 0.02, 0.0],
+                    [-a.sin() * 0.025, a.cos() * 0.025, 0.0],
+                    [a.cos() * 0.03, a.sin() * 0.03, up * 0.4],
+                );
+            }
+            x += 2.0 * r + 0.06;
+        } else if pick < 0.82 && left > 0.2 {
+            // Books lying in a pile.
+            let n = 2 + (rnd() * 3.0) as usize;
+            let mut zz = z;
+            for i in 0..n {
+                let th = 0.025 + 0.015 * rnd();
+                let role = if i % 2 == 0 { "books2" } else { "books" };
+                let s = 0.01 * rnd();
+                b.rbox(
+                    role,
+                    [x + s, 0.04, zz],
+                    [x + 0.17 + s, 0.04 + d * 0.7, zz + th],
+                    0.002,
+                );
+                zz += th;
+            }
+            x += 0.2;
+        } else if pick < 0.9 && left > 0.24 && room > 0.2 {
+            // A basket.
+            let w = 0.2;
+            b.rbox(
+                "weave",
+                [x, 0.03, z],
+                [x + w, d - 0.02, z + (room * 0.6).min(0.2)],
+                0.02,
+            );
+            x += w + 0.03;
+        } else {
+            x += 0.05 + 0.08 * rnd();
         }
     }
 }

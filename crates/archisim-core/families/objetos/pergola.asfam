@@ -1,0 +1,37 @@
+family "Pérgola"
+  category street
+  host none
+  version 1
+  description "Pérgola de madera con vigas y viguetas, de aluminio con lamas o de madera con cañizo y una trepadora"
+  folder "Jardín y terraza"
+
+type_params
+  section "Dimensiones"
+    width  length = 3.00 range 1.50..8.00 label "Ancho"
+    depth  length = 3.00 range 1.50..8.00 label "Fondo"
+    height length = 2.50 range 2.10..2.95 label "Altura"
+  section "Materiales"
+    frame material = "Madera de pino" label "Madera"
+  section "Modelo 3D"
+    model3d choice("De madera", "De lamas", "Con cañizo") = "De madera" label "Modelo 3D"
+    metal  material = "Metal lacado" label "Aluminio"
+    mat    material = "Cañizo" label "Cañizo"
+    leaves material = "Hoja verde" label "Trepadora"
+
+body
+  box (-width / 2, 0, 0) to (-width / 2 + 0.12, 0.12, height) material frame
+  box (width / 2 - 0.12, 0, 0) to (width / 2, 0.12, height) material frame
+  box (-width / 2, depth - 0.12, 0) to (-width / 2 + 0.12, depth, height) material frame
+  box (width / 2 - 0.12, depth - 0.12, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (-width / 2 + 0.12, 0) (-width / 2 + 0.12, 0.12) (-width / 2, 0.12) pen cut
+  polygon (width / 2 - 0.12, 0) (width / 2, 0) (width / 2, 0.12) (width / 2 - 0.12, 0.12) pen cut
+  polygon (-width / 2, depth - 0.12) (-width / 2 + 0.12, depth - 0.12) (-width / 2 + 0.12, depth) (-width / 2, depth) pen cut
+  polygon (width / 2 - 0.12, depth - 0.12) (width / 2, depth - 0.12) (width / 2, depth) (width / 2 - 0.12, depth) pen cut
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin dashed
+
+outputs
+  generator = "props:pergola"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

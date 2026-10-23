@@ -1,7 +1,7 @@
 family "Mesa"
   category furniture
   host none
-  version 2
+  version 3
   description "Mesa rectangular de tablero y cuatro patas, con sillas alrededor si se quiere"
   folder "Mesas"
 
@@ -70,3 +70,8 @@ outputs
   generator = "props:table"
   ifc_class = "IfcFurniture"
   ifc_type = "TABLE"
+
+# Stretched, the chairs follow its length: one more each side when they
+# would sit too far apart; none if it had none.
+stretch
+  chairs = if chairs == 0 or (width / ceil(chairs / 2) >= 0.4 and width / ceil(chairs / 2) <= 0.85) then chairs else 2 * max(1, round(width / 0.6))

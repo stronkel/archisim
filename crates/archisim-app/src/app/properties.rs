@@ -817,6 +817,10 @@ impl ArchiSimApp {
                 self.v3d.set_textures(textures);
                 self.prefs.textures_3d = Some(textures);
             }
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                self.quality_buttons(ui);
+            });
         });
         self.render_group(ui);
         self.section_box_group(ui);

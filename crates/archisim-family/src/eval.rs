@@ -214,6 +214,44 @@ impl FamilyDef {
         Ok(run.marks)
     }
 
+    /// The type values after a stretch by the handles: `values` (the
+    /// type's, the new measurement among them; missing ones take their
+    /// default) with the `stretch` parameters worked out again from them,
+    /// rounded if whole and kept in their range. Only the parameters that
+    /// change are returned.
+    pub fn evaluate_stretch(&self, values: &Values) -> Result<Values, FamilyError> {
+        if self.stretch.is_empty() {
+            return Ok(Values::new());
+        }
+        let mut base: HashMap<String, Value> = self
+            .defaults(ParamScope::Type)
+            .into_iter()
+            .chain(self.defaults(ParamScope::Instance))
+            .collect();
+        base.extend(values.iter().map(|(k, v)| (k.clone(), v.clone())));
+        let before = base.clone();
+        let mut run = Run::new(self, Mode::Body);
+        let mut env = vec![base];
+        let out = run.assign(&self.stretch, &mut env)?;
+        let mut changed = Values::new();
+        for (name, v) in out {
+            let (Some(p), Some(mut n)) = (self.param(&name), v.as_number()) else {
+                continue;
+            };
+            if p.kind == ParamKind::Integer {
+                n = n.round();
+            }
+            if let Some((lo, hi)) = p.range {
+                n = n.clamp(lo, hi);
+            }
+            let now = before.get(&name).and_then(Value::as_number);
+            if now.is_none_or(|x| (x - n).abs() > 1e-9) {
+                changed.insert(name, Value::Number(n));
+            }
+        }
+        Ok(changed)
+    }
+
     /// Whether a parameter is shown in the settings dialog for these values
     /// (its `visible_if`). Missing values take their default; a condition
     /// that cannot be evaluated shows the parameter.

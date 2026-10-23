@@ -1,0 +1,37 @@
+family "Sombrilla"
+  category street
+  host none
+  version 1
+  description "Sombrilla redonda de mástil central, cuadrada descentrada o de paja con flecos"
+  folder "Jardín y terraza"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.50 range 1.20..4.00 label "Diámetro o lado"
+    height length = 2.40 range 1.80..2.90 label "Altura"
+  section "Materiales"
+    mat material = "Tela de exterior" label "Lona"
+  section "Modelo 3D"
+    model3d choice("Redonda", "Descentrada", "De paja") = "Redonda" label "Modelo 3D"
+    frame material = "Teca" label "Mástil y varillas"
+    metal material = "Metal lacado" label "Brazo"
+    dark  material = "Negro mate" label "Base"
+
+body
+  box (-0.1, width / 2 - 0.1, 0) to (0.1, width / 2 + 0.1, height - 0.45) material frame
+  box (-width / 2, 0, height - 0.45) to (width / 2, width, height) material mat
+
+plan 1:50
+  let r = width / 2
+  if model3d == "Descentrada"
+    polygon (-r, 0) (r, 0) (r, width) (-r, width) pen thin dashed
+  else
+    repeat i in 0..24
+      let t0 = 6.283185307 * i / 24
+      let t1 = 6.283185307 * (i + 1) / 24
+      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen thin dashed
+
+outputs
+  generator = "props:parasol"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

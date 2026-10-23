@@ -281,6 +281,8 @@ pub struct ArchiSimApp {
     /// Stretching an object by a handle in the 3D view.
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
+    /// Furniture dragged along the floor in the Maqueta.
+    object_move: Option<placing::ObjectMove3d>,
     render: render_ui::RenderState,
     budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
@@ -357,6 +359,8 @@ pub struct ArchiSimApp {
     /// The first time in the Maqueta (it starts with the walls cut away
     /// and the grid).
     maquette_first: bool,
+    /// The angle the card's «Girar» turns by, degrees.
+    turn_by: f64,
     /// The tab to go back to on leaving the Maqueta.
     maquette_return: Option<usize>,
     /// The Maqueta's catalog: group and theme shown.
@@ -399,6 +403,12 @@ pub struct ArchiSimApp {
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
+    /// The Maqueta's collection: the catalog shows its pieces and puts
+    /// them in its colours (`None`: the library as it is).
+    pub collection: Option<&'static archisim_library::collections::Collection>,
+    /// The library in each collection, for the catalog's pictures (made
+    /// the first time one is chosen).
+    pub collection_libraries: Vec<(&'static str, archisim_core::Model)>,
     /// Every species of plants of the library, for the gallery.
     pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
@@ -523,6 +533,8 @@ pub struct ArchiSimApp {
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
     thumbs: thumbs::Thumbs,
+    /// The 3D pictures of the Maqueta's catalog.
+    thumbs3d: thumbs3d::Thumbs3d,
     /// The command line stays shown (Vista); otherwise it shows only while
     /// an order is typed or running.
     pub pin_command_line: bool,
@@ -603,6 +615,7 @@ impl ArchiSimApp {
             // (never in the tests).
             object_grip: None,
             object_grip_hover: None,
+            object_move: None,
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
@@ -652,6 +665,7 @@ impl ArchiSimApp {
             zone_tool: SlabTool::default(),
             maquette: false,
             maquette_first: true,
+            turn_by: 90.0,
             maquette_return: None,
             catalog_group: Default::default(),
             catalog_theme: "Habitaciones",
@@ -673,6 +687,8 @@ impl ArchiSimApp {
             cte: Default::default(),
             survey_import: None,
             object_library: None,
+            collection: None,
+            collection_libraries: Vec::new(),
             flora_library: None,
             folder_objects: None,
             priorities_all: false,
@@ -736,6 +752,7 @@ impl ArchiSimApp {
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
+            thumbs3d: Default::default(),
             pin_command_line: false,
             attenuate: true,
             hidden_disciplines: Default::default(),
@@ -747,10 +764,13 @@ impl ArchiSimApp {
             message_serial: 0,
             message_seen: (0, 0.0),
             styled: false,
-            v3d: View3dState::with_textures(
+            v3d: View3dState::with_look(
                 prefs
                     .textures_3d
                     .unwrap_or_else(view3d_ui::default_textures),
+                prefs
+                    .quality_3d
+                    .unwrap_or_else(crate::view3d::look::default_quality),
             ),
             gpu: None,
             coord: crate::coord::Coord::new(),
@@ -1542,6 +1562,10 @@ impl ArchiSimApp {
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);
+        if self.maquette {
+            // Before the shortcuts: W A S D Q E walk here.
+            self.maquette_walk(&ctx);
+        }
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
         self.drop_locked_from_selection();
@@ -1745,9 +1769,7 @@ impl ArchiSimApp {
         // button that has the keyboard focus lets go of it).
         // (egui moves the focus between buttons with Tab: only a text
         // field keeps it.)
-        let in_text = ctx
-            .memory(|m| m.focused())
-            .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
+        let in_text = typing_in_text(ctx);
         if self.temp_edit.is_none() && !in_text && consume(Modifiers::NONE, Key::Tab) {
             ctx.memory_mut(|m| {
                 if let Some(id) = m.focused() {
@@ -1810,6 +1832,37 @@ impl ArchiSimApp {
             if let egui::Event::Text(t) = e {
                 self.tool_key(t);
             }
+        }
+    }
+
+    /// The Maqueta's view as a big picture (3840 pixels wide), saved as a
+    /// PNG: for a render with an AI, D5 or Twinmotion.
+    pub(super) fn big_capture(&mut self) {
+        let Some((w, h, px)) = self.v3d.capture(3840) else {
+            self.complain(
+                "No hay imagen 3D que guardar (la vista 3D necesita la tarjeta gráfica).",
+            );
+            return;
+        };
+        let mut d = rfd::FileDialog::new()
+            .set_title("Guardar captura")
+            .add_filter("PNG", &["png"])
+            .set_file_name(format!("{} - captura.png", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let saved = resvg::tiny_skia::IntSize::from_wh(w, h)
+            .and_then(|size| resvg::tiny_skia::Pixmap::from_vec(px, size))
+            .map(|pixmap| pixmap.save_png(&path));
+        match saved {
+            Some(Ok(())) => self.say(format!(
+                "Captura de {w} × {h} guardada en {}.",
+                path.display()
+            )),
+            _ => self.complain("No se pudo guardar la captura."),
         }
     }
 
@@ -2195,6 +2248,7 @@ mod bottom_segments;
 mod budget_ui;
 mod cad_ui;
 mod chrome;
+mod collection_ui;
 mod concept_ui;
 mod context_bar;
 mod coord_ui;
@@ -2222,6 +2276,7 @@ mod object_ui;
 mod paint_ui;
 mod params_ui;
 mod phases_ui;
+mod placing;
 mod plan_ui;
 mod planting_ui;
 mod presentation_ui;
@@ -2250,6 +2305,7 @@ mod temp_ui;
 mod terrain_ui;
 pub mod theme;
 mod thumbs;
+mod thumbs3d;
 mod toolbox;
 mod tools3d;
 mod type_views;
@@ -2266,3 +2322,19 @@ pub use view3d_ui::{View3dState, ViewMode};
 
 #[cfg(test)]
 mod tests;
+
+/// Whether a text field has the keyboard (the keys are for it). A button
+/// or card just clicked keeps the focus too, but not the keys: the view's
+/// keys (Esc, Espacio, Supr…) still work.
+pub(crate) fn typing_in_text(ctx: &egui::Context) -> bool {
+    let Some(id) = ctx.memory(|m| m.focused()) else {
+        return false;
+    };
+    if egui::TextEdit::load_state(ctx, id).is_some() {
+        return true;
+    }
+    // The button lets go of the keyboard, so Espacio or Intro do not
+    // press it again.
+    ctx.memory_mut(|m| m.surrender_focus(id));
+    false
+}

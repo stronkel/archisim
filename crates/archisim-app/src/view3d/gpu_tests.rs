@@ -10,7 +10,26 @@ use super::render::Renderer;
 use super::scene::Scene;
 use crate::pick::tests::room;
 
-fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
+/// In the continuous integration, a failing test is also written as a
+/// note of the job, readable without its log (only some runners have a
+/// graphics adapter, so a 3D test may fail where no one can run it).
+pub(crate) fn ci_notes() {
+    if std::env::var_os("GITHUB_ACTIONS").is_none() {
+        return;
+    }
+    static HOOK: std::sync::Once = std::sync::Once::new();
+    HOOK.call_once(|| {
+        let old = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let msg = info.to_string().replace('\n', " ");
+            println!("::error title=Prueba fallida::{msg}");
+            old(info);
+        }));
+    });
+}
+
+pub(crate) fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
+    ci_notes();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::LowPower,
@@ -158,4 +177,263 @@ fn shaders_without_textures_are_valid() {
     )
     .validate(&module)
     .expect("valid");
+}
+
+/// Selecting outlines in orange without tinting; cutting the walls
+/// leaves the walls in front low and the ones behind whole.
+#[test]
+fn selection_outline_and_walls_in_front() {
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let (m, _, _) = room();
+    let size = [400, 300];
+    let draw = |selection: &BTreeSet<crate::pick::Element>,
+                cut: Option<super::cutaway::CutRule>| {
+        let scene = Scene::build(&m, selection);
+        let mut camera = Camera::default();
+        camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+        let mut r = Renderer::new(&device, view_formats, true);
+        r.set_scene(&device, &scene);
+        r.set_cut(cut);
+        r.render(&device, &queue, &camera, size, 1);
+        (r.read_pixels(&device, &queue).unwrap().2, camera)
+    };
+    let orange = |px: &[u8]| {
+        px.as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[0] > 230 && p[1] > 150 && p[1] < 215 && p[2] < 90)
+            .count()
+    };
+    let (plain, camera) = draw(&BTreeSet::new(), None);
+    let wall = m.walls().next().unwrap().id;
+    let sel: BTreeSet<_> = [crate::pick::Element::Wall(wall)].into_iter().collect();
+    let (marked, _) = draw(&sel, None);
+    assert!(
+        orange(&marked) > orange(&plain) + 100,
+        "outline: {} orange pixels selected, {} not",
+        orange(&marked),
+        orange(&plain)
+    );
+    // Away from the outline the colours are the same as unselected.
+    let same = plain
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(marked.as_chunks::<4>().0)
+        .filter(|(a, b)| a == b)
+        .count();
+    assert!(
+        same > size[0] as usize * size[1] as usize * 9 / 10,
+        "{same}"
+    );
+    // Walls in front low: more of the floor is seen than with all the
+    // walls up, less than with all of them cut low.
+    let eye = camera.eye();
+    let toward = glam::Vec2::new(eye.x - camera.target.x, eye.y - camera.target.y).normalize();
+    let rule = |front: bool| super::cutaway::CutRule {
+        top: if front { 10.0 } else { 0.3 },
+        front: front.then_some(super::cutaway::Front {
+            toward,
+            at: toward.dot(camera.target.truncate()),
+            low: 0.3,
+            above: 0.5,
+        }),
+    };
+    let (front, _) = draw(&BTreeSet::new(), Some(rule(true)));
+    let (low, _) = draw(&BTreeSet::new(), Some(rule(false)));
+    let differ = |a: &[u8], b: &[u8]| {
+        a.as_chunks::<4>()
+            .0
+            .iter()
+            .zip(b.as_chunks::<4>().0)
+            .filter(|(x, y)| x != y)
+            .count()
+    };
+    assert!(
+        differ(&plain, &front) > 500,
+        "front walls not cut: {}",
+        differ(&plain, &front)
+    );
+    assert!(
+        differ(&front, &low) > 500,
+        "back walls cut too: {}",
+        differ(&front, &low)
+    );
+}
+
+/// With the sun, the walls cast their shadows on the floor (darker than
+/// without them), and the finest level draws too.
+#[test]
+fn shadows_of_the_sun() {
+    use super::look::Quality;
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let (m, _, _) = room();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [400, 300];
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    let sun = glam::Vec3::new(-0.6, -0.5, 0.45);
+    let draw = |q: Quality| {
+        let mut r = Renderer::new(&device, view_formats, true);
+        r.set_scene(&device, &scene);
+        r.set_look(q, Some(sun));
+        r.render(&device, &queue, &camera, size, 1);
+        r.read_pixels(&device, &queue).unwrap().2
+    };
+    let light = draw(Quality::Light);
+    let normal = draw(Quality::Normal);
+    let pretty = draw(Quality::Pretty);
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, px) in [("ligera", &light), ("normal", &normal), ("bonita", &pretty)] {
+            resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap()
+            .save_png(dir.join(format!("sombras-{name}.png")))
+            .unwrap();
+        }
+    }
+    let luma = |p: &[u8; 4]| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]);
+    let darker = |a: &[u8], b: &[u8]| {
+        a.as_chunks::<4>()
+            .0
+            .iter()
+            .zip(b.as_chunks::<4>().0)
+            .filter(|(x, y)| luma(y) + 60 < luma(x))
+            .count()
+    };
+    let shaded = darker(&light, &normal);
+    assert!(shaded > 1500, "shadow pixels: {shaded}");
+    assert!(darker(&light, &pretty) > 1500);
+}
+
+/// The Maqueta's sky, and the night: the sky goes dark and a lamp's shade
+/// glows and lights what is around it.
+#[test]
+fn sky_and_night_with_a_lamp() {
+    use super::look::{Atmosphere, Light, Quality};
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let (mut m, _, _) = room();
+    let level = m.levels()[0].id;
+    let lamp = archisim_library::add_object_entry(&mut m, "Lámpara de pie").unwrap();
+    let (lo, hi) = {
+        let s = Scene::build(&m, &BTreeSet::new());
+        (s.lo, s.hi)
+    };
+    m.add_object(archisim_core::NewObject {
+        object_type: lamp,
+        level,
+        position: archisim_core::Point2::new(
+            f64::from((lo.x + hi.x) / 2.0),
+            f64::from((lo.y + hi.y) / 2.0),
+        ),
+        rotation: 0.0,
+        base_offset: 0.0,
+    })
+    .unwrap();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    assert_eq!(scene.lamps.len(), 1, "one light for the lamp");
+    let size = [400, 300];
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    camera.pitch = 0.08;
+    let draw = |light: Light, camera: &Camera| {
+        let mut r = Renderer::new(&device, view_formats, true);
+        r.set_scene(&device, &scene);
+        r.set_look(Quality::Normal, Some(glam::Vec3::new(-0.6, -0.5, 0.45)));
+        r.set_atmosphere(Some(Atmosphere {
+            light,
+            ground_z: 0.0,
+            grid: Some((glam::Vec2::ZERO, 10.0, 0.5)),
+        }));
+        r.render(&device, &queue, camera, size, 1);
+        r.read_pixels(&device, &queue).unwrap().2
+    };
+    let day = draw(Light::Day, &camera);
+    let night = draw(Light::Night, &camera);
+    // From above, into the room, to see the lamp.
+    let mut above = camera;
+    above.pitch = 1.1;
+    let inside = draw(Light::Night, &above);
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, px) in [("dia", &day), ("noche", &night), ("noche-dentro", &inside)] {
+            resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap()
+            .save_png(dir.join(format!("cielo-{name}.png")))
+            .unwrap();
+        }
+    }
+    let at = |px: &[u8], x: u32, y: u32| {
+        let i = ((y * size[0] + x) * 4) as usize;
+        [px[i], px[i + 1], px[i + 2]]
+    };
+    // The top corner is sky: blue by day, dark at night.
+    let sky = at(&day, 2, 2);
+    assert!(sky[2] > sky[0] && sky[2] > 150, "day sky {sky:?}");
+    let dark = at(&night, 2, 2);
+    assert!(
+        u32::from(dark[0]) + u32::from(dark[1]) + u32::from(dark[2]) < 250,
+        "night sky {dark:?}"
+    );
+    // At night the picture is darker, but the lamp glows.
+    let luma = |p: &[u8; 4]| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]);
+    let mean =
+        |px: &[u8]| px.as_chunks::<4>().0.iter().map(luma).sum::<u32>() / (size[0] * size[1]);
+    assert!(
+        mean(&night) * 2 < mean(&day),
+        "{} {}",
+        mean(&night),
+        mean(&day)
+    );
+    let bright = inside
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[0] > 200 && p[1] > 150)
+        .count();
+    assert!(bright > 30, "glowing pixels: {bright}");
+}
+
+/// A streetlight's lantern and a fireplace's fire are lamps at night too,
+/// the streetlight's light reaching further.
+#[test]
+fn streetlights_and_fires_are_lamps() {
+    let (mut m, _, _) = room();
+    let level = m.levels()[0].id;
+    for (name, x) in [("Farola fernandina 3,5 m", -3.0), ("Chimenea de obra", 1.0)] {
+        let t = archisim_library::add_object_entry(&mut m, name).unwrap();
+        m.add_object(archisim_core::NewObject {
+            object_type: t,
+            level,
+            position: archisim_core::Point2::new(x, -2.0),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+    }
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let mut reach: Vec<f32> = scene.lamps.iter().map(|l| l[3]).collect();
+    reach.sort_by(f32::total_cmp);
+    assert_eq!(reach.len(), 2, "{:?}", scene.lamps);
+    assert!(reach[1] > reach[0] * 2.0, "{reach:?}");
+    // The streetlight's light is up in its lantern.
+    let high = scene.lamps.iter().map(|l| l[2]).fold(0.0f32, f32::max);
+    assert!(high > 2.5, "{high}");
 }

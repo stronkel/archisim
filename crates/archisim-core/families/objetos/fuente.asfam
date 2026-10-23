@@ -1,18 +1,22 @@
 family "Fuente de beber"
   category street
   host none
-  version 1
+  version 2
   description "Fuente de agua potable de pie; el punto de inserción es el centro de la trasera y el caño mira hacia delante"
   folder "Mobiliario urbano"
 
 type_params
   section "Dimensiones"
-    width  length = 0.35 range 0.20..1.00 label "Ancho"
-    depth  length = 0.35 range 0.20..1.00 label "Fondo"
-    height length = 1.00 range 0.60..1.40 label "Altura"
+    width  length = 0.35 range 0.20..6.00 label "Ancho"
+    depth  length = 0.35 range 0.20..6.00 label "Fondo"
+    height length = 1.00 range 0.40..2.00 label "Altura"
   section "Materiales"
     mat   material = "Metal lacado" label "Cuerpo"
     water material = "Agua" label "Agua"
+  section "Modelo 3D"
+    model3d choice("Fuente de fundición", "Bloque de piedra", "Estanque con surtidor") = "Fuente de fundición" label "Modelo 3D"
+    frame    material = "Metal lacado" label "Rejilla y caño"
+    concrete material = "Piedra gris" label "Piedra"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height - 0.1) material mat
@@ -28,5 +32,6 @@ plan presentation
   cloud center (0, depth / 2) radius min(width, depth) * 0.3 lobes 12 jitter 0 pen thin tint water
 
 outputs
+  generator = "props:fountain"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

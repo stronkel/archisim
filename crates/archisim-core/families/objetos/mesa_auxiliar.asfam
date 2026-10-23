@@ -1,0 +1,35 @@
+family "Mesa auxiliar"
+  category furniture
+  host none
+  version 1
+  description "Mesa auxiliar redonda de pie central, de tres patas o un par de mesas nido"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.50 range 0.25..1.00 label "Diámetro o largo"
+    depth  length = 0.50 range 0.25..1.00 label "Fondo (nido)"
+    height length = 0.55 range 0.25..0.90 label "Altura"
+  section "Materiales"
+    mat   material = "Roble claro" label "Tablero"
+    frame material = "Negro mate" label "Pie y patas"
+  section "Modelo 3D"
+    model3d choice("Pie central", "Tres patas", "Nido") = "Pie central" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, height - 0.03) to (width / 2, width, height) material mat
+
+plan 1:50
+  if model3d == "Nido"
+    polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  else
+    let r = width / 2
+    repeat i in 0..16
+      let t0 = 6.283185307 * i / 16
+      let t1 = 6.283185307 * (i + 1) / 16
+      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+
+outputs
+  generator = "props:side_table"
+  ifc_class = "IfcFurniture"
+  ifc_type = "TABLE"

@@ -23,6 +23,7 @@ struct Harness {
 
 impl Harness {
     fn new(ed: Editor) -> Self {
+        crate::view3d::gpu_tests::ci_notes();
         let mut h = Self {
             ctx: egui::Context::default(),
             app: ArchiSimApp::new(ed),
@@ -5583,7 +5584,8 @@ fn objects_are_stretched_in_the_3d_view() {
     h.frame();
     assert_eq!(h.app.mode, ViewMode::ThreeD);
     let handles = h.app.object_handles_3d();
-    assert_eq!(handles.len(), 4, "{handles:?}");
+    // Width (both sides), depth, height and the ring's knob.
+    assert_eq!(handles.len(), 5, "{handles:?}");
     let drag = |h: &mut Harness, key: SizeKey, to: glam::DVec3| {
         let at = h
             .app
@@ -5604,8 +5606,14 @@ fn objects_are_stretched_in_the_3d_view() {
             h.events.push(Event::PointerMoved(q));
             h.frame();
         }
+        // While dragged, the object is drawn as it will be, before the
+        // model changes.
+        let before = h.app.ed.revision();
+        assert!(h.app.v3d.has_overlay(), "no live preview");
         h.button(PointerButton::Primary, false);
         h.frame();
+        assert!(!h.app.v3d.has_overlay());
+        assert_ne!(h.app.ed.revision(), before);
         at
     };
     // The right side 0,3 m further: 0,6 m wider (it stays centred).
@@ -5630,6 +5638,12 @@ fn objects_are_stretched_in_the_3d_view() {
         other => panic!("{other:?}"),
     };
     assert!((width - 1.8).abs() < 0.03, "{width} {:?}", h.app.message);
+    // Its doors follow (the family's `stretch`): four of 45 cm, not two
+    // of 90.
+    assert_eq!(
+        ty.values.get("doors"),
+        Some(&archisim_core::Value::Number(4.0))
+    );
     // The top 0,2 m up.
     let at = h
         .app
@@ -5652,6 +5666,215 @@ fn objects_are_stretched_in_the_3d_view() {
         other => panic!("{other:?}"),
     };
     assert!((height - 2.6).abs() < 0.03, "{height}");
+}
+
+/// The card's swatches give one piece of one object a colour of the cosy
+/// palette: the other objects of its type keep theirs.
+#[test]
+fn swatches_paint_one_piece_of_one_object() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Sofá de 3 plazas")
+        .unwrap()
+        .id;
+    let mut ids = Vec::new();
+    for x in [1.0, 4.0] {
+        ids.push(
+            h.app
+                .ed
+                .transact("Sofá", |m| {
+                    m.add_object(archisim_core::NewObject {
+                        level,
+                        object_type: t,
+                        position: p(x, 2.0),
+                        rotation: 0.0,
+                        base_offset: 0.0,
+                    })
+                })
+                .unwrap(),
+        );
+    }
+    let pieces = h.app.object_pieces(ids[0]);
+    let upholstery = pieces.iter().find(|p| p.key == "mat").expect("upholstery");
+    assert!(upholstery
+        .swatches
+        .iter()
+        .any(|s| s.0 == "Terciopelo mostaza"));
+    assert!(pieces.iter().any(|p| p.key == "frame"));
+    h.app
+        .ed
+        .paint_object_piece(ids[0], "mat", "Terciopelo mostaza")
+        .unwrap();
+    let m = h.model();
+    let mat_of = |id| {
+        let ty = m.object_type(m.object(id).unwrap().object_type).unwrap();
+        match ty.values.get("mat") {
+            Some(archisim_core::Value::Material(x)) => m
+                .material(archisim_core::MaterialId(*x))
+                .unwrap()
+                .name
+                .clone(),
+            _ => String::new(),
+        }
+    };
+    assert_eq!(mat_of(ids[0]), "Terciopelo mostaza");
+    assert_ne!(mat_of(ids[1]), "Terciopelo mostaza");
+    // One step back undoes it.
+    h.app.ed.undo();
+    assert_eq!(h.model().object(ids[0]).unwrap().object_type, t);
+}
+
+/// In the Maqueta, W A S D walk the camera along the ground and Q E move
+/// it down and up; the letters do not start tools there.
+#[test]
+fn maquette_walks_with_wasd() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    assert!(h.app.maquette);
+    h.frame();
+    let hold = |h: &mut Harness, key: Key, frames: usize| {
+        h.events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        h.events
+            .push(Event::Text(format!("{key:?}").to_lowercase()));
+        for _ in 0..frames {
+            h.frame();
+        }
+        h.events.push(Event::Key {
+            key,
+            physical_key: None,
+            pressed: false,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+        h.frame();
+    };
+    let before = h.app.v3d.camera;
+    hold(&mut h, Key::W, 10);
+    let moved = h.app.v3d.camera.target - before.target;
+    assert!(moved.length() > 0.1, "{moved:?}");
+    assert!(moved.z.abs() < 1e-6);
+    assert!(moved.dot(before.forward()) > 0.0);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let z = h.app.v3d.camera.target.z;
+    hold(&mut h, Key::E, 10);
+    assert!(h.app.v3d.camera.target.z > z);
+    hold(&mut h, Key::Q, 20);
+    assert!(h.app.v3d.camera.target.z < z);
+    assert_eq!(h.app.tool, Tool::Arrow);
+}
+
+/// After choosing in the catalog (a card keeps the keyboard focus), Esc
+/// still leaves the tool in the Maqueta's 3D view.
+#[test]
+fn escape_works_after_clicking_a_card() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    assert!(h.app.maquette);
+    h.frame();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
+        super::object_gallery::ObjectPick::Library("Sofá de 3 plazas"),
+    ));
+    assert_eq!(h.app.tool, Tool::Object, "{:?}", h.app.message);
+    // The card just clicked has the focus.
+    h.ctx
+        .memory_mut(|m| m.request_focus(egui::Id::unique("a card")));
+    h.frame();
+    let mid = h.app.v3d.canvas.center();
+    h.pos = mid;
+    h.events.push(Event::PointerMoved(mid));
+    h.frame();
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+}
+
+/// The ring on the floor turns an object to any angle: in steps of 15°
+/// while dragged, with the object drawn turned before it is let go.
+#[test]
+fn objects_turn_with_the_ring_in_3d() {
+    use super::grips3d::SizeKey;
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Armario 120")
+        .expect("the library's wardrobe")
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Armario", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.key(Key::F3);
+    h.frame();
+    h.frame();
+    let (c, r, a0) = h.app.turn_ring(id).unwrap();
+    // Close up on it, the ring in view.
+    let canvas = h.app.v3d.canvas;
+    h.app.v3d.camera.fit(
+        glam::Vec3::new(0.0, 0.0, 0.0),
+        glam::Vec3::new(4.0, 4.0, 2.5),
+        canvas.width() / canvas.height(),
+    );
+    h.frame();
+    let knob = h
+        .app
+        .object_handles_3d()
+        .into_iter()
+        .find(|x| x.1 == SizeKey::Turn)
+        .expect("a turn knob")
+        .2;
+    // Along the ring to 37° further: 30° once snapped.
+    let from = screen_3d(&h, knob.x, knob.y, knob.z);
+    h.pos = from;
+    h.events.push(Event::PointerMoved(from));
+    h.frame();
+    h.button(PointerButton::Primary, true);
+    for k in 1..=8 {
+        let a = a0 + (37.0_f64).to_radians() * k as f64 / 8.0;
+        let q = c + glam::DVec3::new(r * a.cos(), r * a.sin(), 0.0);
+        let q = screen_3d(&h, q.x, q.y, q.z);
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+    }
+    assert!(
+        h.app.v3d.has_overlay(),
+        "not drawn turned while dragged: {:?} {from:?} {:?}",
+        h.app.object_grip,
+        h.app.v3d.canvas
+    );
+    assert!(h.model().object(id).unwrap().rotation.abs() < 1e-9);
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    let rot = h.model().object(id).unwrap().rotation;
+    assert!(
+        (rot.to_degrees() - 30.0).abs() < 0.5,
+        "{}",
+        rot.to_degrees()
+    );
+    let o = h.model().object(id).unwrap();
+    assert!((o.position.x - 2.0).abs() < 1e-6 && (o.position.y - 2.0).abs() < 1e-6);
 }
 
 /// Bloque 6: a tree's type takes its plan symbol from a DXF, stretched to
@@ -5924,11 +6147,14 @@ fn maquette_environment() {
     h.key(Key::Tab);
     assert!(h.app.maquette);
     assert_eq!(h.app.mode, ViewMode::ThreeD);
-    assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Cut);
+    assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Front);
     assert!(h.app.ground_grid);
-    // The cut: 1.20 m over the level.
-    let clip = h.app.v3d.clip_box().unwrap();
-    assert!((clip.hi.z - 1.2).abs() < 1e-6);
+    // The cut: 1.20 m over the level, the walls in front at 30 cm; no
+    // section box.
+    let cut = h.app.v3d.cut_rule().unwrap();
+    assert!((cut.top - 1.2).abs() < 1e-6);
+    assert!((cut.front.unwrap().low - 0.3).abs() < 1e-6);
+    assert!(h.app.v3d.clip_box().is_none());
     h.frame();
     // A room from the catalog, drawn in the plan.
     h.app.catalog_take(super::maquette_ui::CatalogAct::Room);
@@ -5972,6 +6198,112 @@ fn maquette_environment() {
 
 /// In the Maqueta, a room drawn in the 3D view by two clicks on the
 /// ground: four walls, their floor and their room.
+/// Placing as in Paralives: in the Maqueta a sofa dragged near a wall
+/// goes against it facing the room, as it is drawn while dragged; a vase
+/// placed over the table rests on it.
+#[test]
+fn maquette_places_like_paralives() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    h.frame();
+    h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
+    h.app.v3d.camera.pitch = 1.3;
+    h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
+    h.app.v3d.camera.distance = 14.0;
+    h.frame();
+    // A room of 6 × 4 and a sofa in its middle.
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Room);
+    h.frame();
+    for q in [screen_3d(&h, 0.0, 0.0, 0.0), screen_3d(&h, 6.0, 4.0, 0.0)] {
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+        h.click_screen(q);
+        h.frame();
+    }
+    h.key(Key::Escape);
+    let level = h.app.ed.level;
+    let sofa_type = h.app.ed.library_object_type("Sofá de 3 plazas").unwrap();
+    let sofa = h
+        .app
+        .ed
+        .transact("Sofá", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: sofa_type,
+                position: p(3.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.frame();
+    // Dragged by its seat towards the west wall.
+    let from = screen_3d(&h, 3.0, 2.5, 0.3);
+    let to = screen_3d(&h, 0.55, 2.5, 0.3);
+    h.pos = from;
+    h.events.push(Event::PointerMoved(from));
+    h.frame();
+    h.button(PointerButton::Primary, true);
+    for k in 1..=8 {
+        let q = from + (to - from) * (k as f32 / 8.0);
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+    }
+    assert!(h.app.v3d.has_overlay(), "not drawn while dragged");
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    let o = h.model().object(sofa).unwrap().clone();
+    let forward = archisim_core::Vec2::new(-o.rotation.sin(), o.rotation.cos());
+    assert!((forward.x - 1.0).abs() < 1e-6, "{o:?} {:?}", h.app.message);
+    assert!(o.position.x < 0.4, "{o:?}");
+    // A vase over a table, placed from the catalog: on the table.
+    let table_type = h
+        .app
+        .ed
+        .library_object_type("Mesa de comedor 160×90")
+        .unwrap();
+    h.app
+        .ed
+        .transact("Mesa", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: table_type,
+                position: p(4.0, 1.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
+        super::object_gallery::ObjectPick::Library("Jarrón con ramas"),
+    ));
+    h.frame();
+    let at = screen_3d(&h, 4.0, 1.45, 0.75);
+    h.pos = at;
+    h.events.push(Event::PointerMoved(at));
+    h.frame();
+    h.click_screen(at);
+    h.frame();
+    let vase = h
+        .model()
+        .objects()
+        .find(|o| {
+            h.model()
+                .object_type(o.object_type)
+                .is_some_and(|t| t.name == "Jarrón con ramas")
+        })
+        .cloned()
+        .expect("a vase");
+    assert!(
+        (vase.base_offset - 0.75).abs() < 0.03,
+        "{vase:?} {:?}",
+        h.app.message
+    );
+}
+
 #[test]
 fn maquette_room_in_3d() {
     let mut h = Harness::new(Editor::new_project());
@@ -5995,4 +6327,77 @@ fn maquette_room_in_3d() {
     let m = h.model();
     assert_eq!(m.walls().count(), 4, "{:?}", h.app.message);
     assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
+}
+
+/// Collections: the Maqueta's catalog shows the pieces in the style
+/// chosen, places them so, and «Aplicar» puts the selection in it (one
+/// step back undoes it).
+#[test]
+fn collections_restyle_the_catalog_and_the_selection() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_maquette(true);
+    let japandi = archisim_library::collections::collection("Japandi").unwrap();
+    h.app.collection = Some(japandi);
+    let ctx = egui::Context::default();
+    let cards = h.app.catalog_cards_pub(
+        &ctx,
+        super::maquette_ui::CatalogGroup::Furnish,
+        "Dormitorio",
+    );
+    assert!(
+        cards.contains(&"Cama de lamas 160".to_string()),
+        "{cards:?}"
+    );
+    // Taking a card loads the piece in the collection.
+    h.app.take_collected("Cama doble 150×200");
+    let t = h.app.object_settings.object_type.unwrap();
+    assert_eq!(
+        h.model().object_type(t).unwrap().name,
+        "Cama doble 150×200 · Japandi"
+    );
+    // The garden has its theme.
+    let garden = h.app.catalog_cards_pub(
+        &ctx,
+        super::maquette_ui::CatalogGroup::Outside,
+        "Jardín y terraza",
+    );
+    assert!(
+        garden.contains(&"Pérgola de madera 3×3".to_string()),
+        "{garden:?}"
+    );
+    // Applied to a sofa placed as it is in the library.
+    let level = h.app.ed.level;
+    let sofa = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Sofá acogedor de 3 plazas")
+        .unwrap()
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Sofá", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: sofa,
+                position: p(1.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.app.apply_collection_to_selection();
+    let now = h.model().object(id).unwrap().object_type;
+    assert_eq!(
+        h.model().object_type(now).unwrap().name,
+        "Sofá acogedor de 3 plazas · Japandi"
+    );
+    h.app.ed.undo();
+    assert_eq!(h.model().object(id).unwrap().object_type, sofa);
+    // And back to no collection.
+    h.app.ed.redo();
+    h.app.collection = None;
+    h.app.apply_collection_to_selection();
+    assert_eq!(h.model().object(id).unwrap().object_type, sofa);
 }

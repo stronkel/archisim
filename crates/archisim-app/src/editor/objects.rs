@@ -2,6 +2,7 @@
 //! undoable step.
 
 use archisim_core::{NewObject, Object, ObjectId, ObjectTypeId, Point2, Value};
+use archisim_library::collections::Collection;
 
 use super::{EditResult, Editor};
 
@@ -52,13 +53,15 @@ impl Editor {
             .flatten()
             .map_or(0.0, |mm| mm.round() / 1000.0);
         self.transact("Colocar objeto", |m| {
-            m.add_object(NewObject {
+            let id = m.add_object(NewObject {
                 level,
                 object_type,
                 position: at,
                 rotation: s.rotation,
                 base_offset: s.base_offset + ground,
-            })
+            })?;
+            // Against another that joins (worktops, bookcases…): one.
+            Ok(crate::placing::join_alongside(m, id).unwrap_or(id))
         })
     }
 
@@ -105,6 +108,74 @@ impl Editor {
     /// Sets an object's own instance values.
     pub fn set_object_values(&mut self, id: ObjectId, values: archisim_core::Values) -> EditResult {
         self.transact("Modificar objeto", |m| m.set_object_values(id, values))
+    }
+
+    /// Gives one piece of an object (its material parameter `key`) a
+    /// colour of the cosy palette, as Paralives' swatches: only this
+    /// object changes (a type shared with others is copied first), in one
+    /// step.
+    pub fn paint_object_piece(&mut self, id: ObjectId, key: &str, swatch: &str) -> EditResult {
+        let Some(o) = self.model().object(id).cloned() else {
+            return Err("el objeto no existe".into());
+        };
+        let Some(t) = self.model().object_type(o.object_type).cloned() else {
+            return Err("el tipo no existe".into());
+        };
+        let shared = self.model().object_type_users(t.id) > 1;
+        let taken: Vec<String> = self
+            .model()
+            .object_types()
+            .map(|t| t.name.clone())
+            .collect();
+        let name = format!("{} · {swatch}", t.name);
+        let name = super::types::copy_name(&name, &taken);
+        let key = key.to_string();
+        let swatch = swatch.to_string();
+        self.transact("Color de la pieza", move |m| {
+            let mat = archisim_library::palette_material(m, &swatch)
+                .ok_or_else(|| archisim_core::ModelError::NotAnObject(swatch.clone()))?;
+            let mut values = t.values.clone();
+            values.insert(key, Value::Material(mat.0));
+            if shared {
+                let new = m.add_object_type(name, t.family, values)?;
+                m.set_object_type_mesh(new, t.mesh)?;
+                m.edit_object(id, |o| o.object_type = new)
+            } else {
+                m.set_object_type_values(t.id, values)
+            }
+        })
+    }
+
+    /// The type of a piece of the library in a collection: the project's,
+    /// or loaded (one undoable step).
+    pub fn collection_object_type(
+        &mut self,
+        name: &str,
+        c: &'static Collection,
+    ) -> EditResult<ObjectTypeId> {
+        let variant = archisim_library::collections::variant_name(name, c);
+        if let Some(t) = self.model().object_types().find(|t| t.name == variant) {
+            return Ok(t.id);
+        }
+        self.transact("Cargar objeto de la colección", |m| {
+            archisim_library::collections::add_collection_entry(m, name, c)
+        })
+    }
+
+    /// Puts objects in a collection (`None`: in none), one undoable step.
+    /// Returns how many changed.
+    pub fn apply_collection(
+        &mut self,
+        objects: &[ObjectId],
+        c: Option<&'static Collection>,
+    ) -> EditResult<usize> {
+        let label = match c {
+            Some(c) => format!("Colección {}", c.name),
+            None => "Sin colección".to_string(),
+        };
+        self.transact(&label, |m| {
+            archisim_library::collections::apply_collection(m, objects, c)
+        })
     }
 
     pub fn set_object_type_value(

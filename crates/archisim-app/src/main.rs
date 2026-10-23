@@ -21,6 +21,7 @@ mod missions;
 mod open_files;
 mod opening_tool;
 mod pick;
+mod placing;
 mod plan_image;
 mod prefs;
 mod slab_tool;

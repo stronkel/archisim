@@ -1,0 +1,34 @@
+family "Macetón"
+  category street
+  host none
+  version 1
+  description "Macetón de terraza: de terracota con un olivo, ánfora de barro, cubo con gramíneas o cuenco con lavanda"
+  folder "Jardín y terraza"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.25..1.40 label "Diámetro"
+    height length = 1.40 range 0.30..2.80 label "Altura con la planta"
+  section "Materiales"
+    pot_mat material = "Terracota" label "Maceta"
+  section "Modelo 3D"
+    model3d choice("Con olivo", "Ánfora", "Con gramíneas", "Con lavanda") = "Con olivo" label "Modelo 3D"
+    soil    material = "Tierra" label "Tierra"
+    stem    material = "Corteza" label "Tronco y tallos"
+    leaves  material = "Copa olivo" label "Hojas"
+    flowers material = "Lavanda" label "Flores"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, width, height) material pot_mat
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+
+outputs
+  generator = "props:big_pot"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

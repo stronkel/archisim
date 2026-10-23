@@ -37,6 +37,7 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
         presentation: None,
         outputs: Vec::new(),
         ifc: Vec::new(),
+        stretch: Vec::new(),
         catalog: Catalog::default(),
     };
     let mut seen_family = false;
@@ -186,6 +187,26 @@ pub fn parse(source: &str) -> Result<FamilyDef, FamilyError> {
             "catalog" => {
                 c.end()?;
                 catalog(&mut def.catalog, &line.children)?;
+            }
+            "stretch" => {
+                c.end()?;
+                for o in assignments(&line.children)? {
+                    let ok = def.params.iter().any(|p| {
+                        p.name == o.name
+                            && p.scope == ParamScope::Type
+                            && matches!(
+                                p.kind,
+                                ParamKind::Number | ParamKind::Integer | ParamKind::Length
+                            )
+                    });
+                    if !ok {
+                        return Err(syntax(
+                            o.line,
+                            format!("«{}» is not a numeric type parameter written above", o.name),
+                        ));
+                    }
+                    def.stretch.push(o);
+                }
             }
             other => return Err(syntax(line.no, format!("unknown section «{other}»"))),
         }
