@@ -605,6 +605,56 @@ pub(crate) struct Roof {
     pub slopes: Vec<Option<f64>>,
     pub base_offset: f64,
     pub overhang: f64,
+    /// Dormers and roof windows (version 32).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dormers: Vec<Dormer>,
+    /// Tiles and gutters (version 32).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub covering: Option<RoofCovering>,
+}
+
+/// A dormer or roof window on a plane of a roof (version 32): the side
+/// whose plane it stands on, its front's middle along that side (from the
+/// side's midpoint) and up the slope.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Dormer {
+    pub guid: String,
+    pub kind: String,
+    pub side: usize,
+    pub along: f64,
+    pub up: f64,
+    pub width: f64,
+    pub height: f64,
+    pub pitch: f64,
+    pub window_width: f64,
+    pub window_height: f64,
+    pub wall_material: u64,
+    pub frame_material: u64,
+    pub glass_material: u64,
+}
+
+/// What covers a roof (version 32).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RoofCovering {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tiles: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_material: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gutter: Option<Gutter>,
+}
+
+/// Gutters along a roof's eaves, with their downpipes (version 32).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Gutter {
+    pub shape: String,
+    pub size: f64,
+    pub material: u64,
+    pub downpipe: f64,
+    pub spacing: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -2430,6 +2480,36 @@ impl ProjectFile {
                     slopes: r.slopes,
                     base_offset: r.base_offset,
                     overhang: r.overhang,
+                    dormers: r
+                        .dormers
+                        .into_iter()
+                        .map(|d| Dormer {
+                            guid: d.guid.to_string(),
+                            kind: d.kind.code().into(),
+                            side: d.side,
+                            along: d.along,
+                            up: d.up,
+                            width: d.width,
+                            height: d.height,
+                            pitch: d.pitch,
+                            window_width: d.window_width,
+                            window_height: d.window_height,
+                            wall_material: d.wall_material.0,
+                            frame_material: d.frame_material.0,
+                            glass_material: d.glass_material.0,
+                        })
+                        .collect(),
+                    covering: (r.covering != core::RoofCovering::default()).then(|| RoofCovering {
+                        tiles: r.covering.tiles.map(|t| t.code().into()),
+                        tile_material: r.covering.tile_material.map(|m| m.0),
+                        gutter: r.covering.gutter.map(|g| Gutter {
+                            shape: g.shape.code().into(),
+                            size: g.size,
+                            material: g.material.0,
+                            downpipe: g.downpipe,
+                            spacing: g.spacing,
+                        }),
+                    }),
                 })
                 .collect(),
             terrains: p
@@ -2935,6 +3015,67 @@ impl ProjectFile {
                         slopes: r.slopes.clone(),
                         base_offset: r.base_offset,
                         overhang: r.overhang,
+                        dormers: r
+                            .dormers
+                            .iter()
+                            .map(|d| {
+                                let what = format!("dormer of roof {}", r.id);
+                                Ok(core::Dormer {
+                                    guid: guid(&what, &d.guid)?,
+                                    kind: core::DormerKind::from_code(&d.kind).ok_or_else(
+                                        || FileError::Value {
+                                            element: what.clone(),
+                                            message: format!("unknown dormer kind {:?}", d.kind),
+                                        },
+                                    )?,
+                                    side: d.side,
+                                    along: d.along,
+                                    up: d.up,
+                                    width: d.width,
+                                    height: d.height,
+                                    pitch: d.pitch,
+                                    window_width: d.window_width,
+                                    window_height: d.window_height,
+                                    wall_material: core::MaterialId(d.wall_material),
+                                    frame_material: core::MaterialId(d.frame_material),
+                                    glass_material: core::MaterialId(d.glass_material),
+                                })
+                            })
+                            .collect::<Result<Vec<_>, FileError>>()?,
+                        covering: match &r.covering {
+                            None => core::RoofCovering::default(),
+                            Some(c) => {
+                                let what = format!("covering of roof {}", r.id);
+                                let bad = |m: String| FileError::Value {
+                                    element: what.clone(),
+                                    message: m,
+                                };
+                                core::RoofCovering {
+                                    tiles: match &c.tiles {
+                                        None => None,
+                                        Some(t) => {
+                                            Some(core::TileKind::from_code(t).ok_or_else(|| {
+                                                bad(format!("unknown tiles {t:?}"))
+                                            })?)
+                                        }
+                                    },
+                                    tile_material: c.tile_material.map(core::MaterialId),
+                                    gutter: match &c.gutter {
+                                        None => None,
+                                        Some(g) => Some(core::Gutter {
+                                            shape: core::GutterShape::from_code(&g.shape)
+                                                .ok_or_else(|| {
+                                                    bad(format!("unknown gutter {:?}", g.shape))
+                                                })?,
+                                            size: g.size,
+                                            material: core::MaterialId(g.material),
+                                            downpipe: g.downpipe,
+                                            spacing: g.spacing,
+                                        }),
+                                    },
+                                }
+                            }
+                        },
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

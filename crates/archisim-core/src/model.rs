@@ -18,6 +18,7 @@ mod appearance;
 mod concept;
 mod curtain;
 mod disciplines;
+mod dormers;
 mod flora;
 mod foundations;
 mod layered_library;
@@ -47,6 +48,7 @@ pub use appearance::*;
 pub use concept::*;
 pub use curtain::*;
 pub use disciplines::*;
+pub use dormers::*;
 pub use flora::*;
 pub use foundations::*;
 pub use layered_library::*;
@@ -891,6 +893,13 @@ pub enum ModelError {
     InvalidRoof,
     /// A roof footprint with a re-entrant corner.
     RoofNotConvex,
+    /// No dormer with that index on the roof.
+    UnknownDormer(usize),
+    /// A dormer or gutter with a size out of range.
+    InvalidDormer,
+    /// A dormer that is not all on one plane of its roof (or whose own
+    /// roof cannot meet it).
+    DormerDoesNotFit,
     UnknownStair(StairId),
     UnknownTerrain(TerrainId),
     UnknownCurtainWall(CurtainWallId),
@@ -1069,6 +1078,15 @@ impl fmt::Display for ModelError {
             ModelError::InvalidRoof => write!(
                 f,
                 "a roof needs a pitch for each side (or a gable), at least one sloping side, pitches up to {MAX_SLAB_SLOPE} and an overhang up to {MAX_OVERHANG} m"
+            ),
+            ModelError::UnknownDormer(i) => write!(f, "unknown dormer {i}"),
+            ModelError::InvalidDormer => write!(
+                f,
+                "a dormer needs a width of 0.4 to 8 m, a height of 0.3 to 4 m and a pitch up to {MAX_SLAB_SLOPE}; a gutter a size of 5 to 50 cm"
+            ),
+            ModelError::DormerDoesNotFit => write!(
+                f,
+                "the dormer is not all on one plane of the roof (or its own roof is as steep as the plane)"
             ),
             ModelError::RoofNotConvex => write!(
                 f,

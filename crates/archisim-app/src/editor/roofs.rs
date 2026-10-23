@@ -33,6 +33,9 @@ pub struct RoofSettings {
     pub level_above: bool,
     /// A click inside the building takes the outer faces of its walls.
     pub wand: bool,
+    /// Clicks put this kind of dormer (or roof window) on a roof instead
+    /// of drawing one.
+    pub dormer: Option<archisim_core::DormerKind>,
 }
 
 /// The pitch of each side of a footprint for a kind of roof.
@@ -106,6 +109,60 @@ impl Editor {
         edit: impl FnOnce(&mut Roof),
     ) -> EditResult {
         self.transact(label, |m| m.edit_roof(id, edit))
+    }
+
+    /// The roof whose plane is under `p`: one of `level` first, then the
+    /// highest of the others there.
+    pub fn roof_at(&self, level: archisim_core::LevelId, p: Point2) -> Option<RoofId> {
+        let m = self.model();
+        let on = |r: &&Roof| r.locate_on_plane(p).is_some();
+        m.roofs_on_level(level)
+            .find(on)
+            .or_else(|| {
+                m.roofs().filter(on).max_by(|a, b| {
+                    let z = |r: &Roof| m.level(r.level).map_or(0.0, |l| l.elevation) + r.top_at(p);
+                    z(a).total_cmp(&z(b))
+                })
+            })
+            .map(|r| r.id)
+    }
+
+    /// Puts a dormer of `kind` on the roof under `p`: its roof and index.
+    pub fn add_dormer_at(
+        &mut self,
+        level: archisim_core::LevelId,
+        kind: archisim_core::DormerKind,
+        p: Point2,
+    ) -> EditResult<(RoofId, usize)> {
+        let roof = self
+            .roof_at(level, p)
+            .ok_or_else(|| "pincha sobre el faldón de una cubierta".to_string())?;
+        let label = match kind {
+            archisim_core::DormerKind::Skylight => "Ventana de cubierta",
+            _ => "Buhardilla",
+        };
+        let i = self.transact(label, |m| m.add_dormer(roof, kind, p))?;
+        Ok((roof, i))
+    }
+
+    pub fn edit_dormer(
+        &mut self,
+        label: &str,
+        roof: RoofId,
+        index: usize,
+        edit: impl FnOnce(&mut archisim_core::Dormer),
+    ) -> EditResult {
+        self.transact(label, |m| m.edit_dormer(roof, index, edit))
+    }
+
+    pub fn set_roof_covering(
+        &mut self,
+        roof: RoofId,
+        covering: archisim_core::RoofCovering,
+    ) -> EditResult {
+        self.transact("Cubrición de la cubierta", |m| {
+            m.set_roof_covering(roof, covering)
+        })
     }
 
     /// Trims walls under a roof (or frees them).
@@ -205,6 +262,7 @@ mod tests {
             base_offset: 0.0,
             level_above: true,
             wand: false,
+            dormer: None,
         };
         let id = ed.add_roof(&s, rect()).unwrap();
         assert_eq!(ed.model().roof(id).unwrap().level, p1);

@@ -302,6 +302,9 @@ pub fn explain(e: &ModelError) -> String {
         }
         ModelError::InvalidStair => "la escalera necesita una línea de huella con sitio para un tramo, algo que subir, un ancho de al menos 40 cm y huella de al menos 10 cm".into(),
         ModelError::InvalidRoof => "cada lado necesita una pendiente (de 0 a 300 %) o ser piñón, al menos uno con pendiente, y el alero no puede pasar de 3 m".into(),
+        ModelError::UnknownDormer(_) => "la buhardilla ya no existe".into(),
+        ModelError::InvalidDormer => "la buhardilla necesita un ancho de 40 cm a 8 m, una altura de 30 cm a 4 m y una pendiente de hasta el 300 %; el canalón, de 5 a 50 cm".into(),
+        ModelError::DormerDoesNotFit => "la buhardilla no cabe entera en ese faldón (o su cubierta tiene tanta pendiente como el faldón): pruébala más abajo, más estrecha o más baja".into(),
         ModelError::RoofNotConvex => "no se pueden resolver los faldones de ese contorno (o el alero se cruza consigo mismo: prueba con menos vuelo)".into(),
         ModelError::InvalidSlope => {
             "la pendiente necesita una dirección y no puede pasar del 300 %".into()

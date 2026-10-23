@@ -152,6 +152,11 @@ impl Scene {
                 SolidOwner::Object(o) => model
                     .plant_look(o)
                     .is_some_and(|l| solid.material != l.materials.bark),
+                // Tiles too: hundreds of covers would otherwise be drawn
+                // as as many contour lines and darken the roof from afar.
+                SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| {
+                    r.covering.tiles.is_some() && model.tile_material(r) == Some(solid.material)
+                }),
                 _ => false,
             };
             let smooth: Option<std::collections::HashMap<[i64; 3], Vec3>> = soft.then(|| {

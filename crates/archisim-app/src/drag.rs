@@ -384,6 +384,7 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             }
             Element::Mark(_)
             | Element::Column(_)
+            | Element::Dormer(..)
             | Element::Tag(_)
             | Element::Footing(_)
             | Element::Grid(_)
@@ -1057,6 +1058,15 @@ pub(crate) fn move_selection(
                 let t = archisim_draft::Transform::translate(d);
                 crate::xform::transform_one(model, *e, &t, false, walls_too)?;
             }
+            Element::Dormer(r, i) if !selection.contains(&Element::Roof(*r)) => {
+                let i = usize::from(*i);
+                let at = model
+                    .roof(*r)
+                    .and_then(|x| x.dormers.get(i).and_then(|dm| x.dormer_frame(dm)))
+                    .ok_or(ModelError::UnknownDormer(i))?
+                    .origin;
+                model.move_dormer(*r, i, at + d)?;
+            }
             _ => {}
         }
     }
@@ -1380,7 +1390,38 @@ pub(crate) fn copy(
                     base_offset: r.base_offset,
                     overhang: r.overhang,
                 })?;
+                // Its dormers and covering go with it, each dormer new.
+                model.set_roof_covering(new, r.covering.clone())?;
+                model.edit_roof(new, |x| {
+                    x.dormers = r
+                        .dormers
+                        .iter()
+                        .map(|dm| archisim_core::Dormer {
+                            guid: archisim_core::GlobalId::new(),
+                            ..dm.clone()
+                        })
+                        .collect();
+                })?;
                 copies.insert(Element::Roof(new));
+            }
+            Element::Dormer(r, i) => {
+                let i = usize::from(*i);
+                let roof = model.roof(*r).ok_or(ModelError::UnknownRoof(*r))?;
+                let dm = roof
+                    .dormers
+                    .get(i)
+                    .ok_or(ModelError::UnknownDormer(i))?
+                    .clone();
+                let at = roof
+                    .dormer_frame(&dm)
+                    .ok_or(ModelError::DormerDoesNotFit)?
+                    .origin;
+                let copy = archisim_core::Dormer {
+                    guid: archisim_core::GlobalId::new(),
+                    ..dm
+                };
+                let new = model.insert_dormer(*r, copy, at + d)?;
+                copies.insert(Element::Dormer(*r, new as u16));
             }
             Element::Footing(id) => {
                 let f = model
@@ -1767,6 +1808,9 @@ fn exists(model: &Model, e: Element) -> bool {
         Element::Run(id) => model.run(id).is_some(),
         Element::Edge(id) => model.edge(id).is_some(),
         Element::Device(id) => model.device(id).is_some(),
+        Element::Dormer(r, i) => model
+            .roof(r)
+            .is_some_and(|x| usize::from(i) < x.dormers.len()),
     }
 }
 
@@ -1819,7 +1863,7 @@ fn level_of(
             Element::Column(id) => model.column(*id).map(|c| c.level),
             Element::Beam(id) => model.beam(*id).map(|b| b.level),
             Element::Section(_) => None,
-            Element::Roof(id) => model.roof(*id).map(|r| r.level),
+            Element::Roof(id) | Element::Dormer(id, _) => model.roof(*id).map(|r| r.level),
             Element::Stair(id) => model.stair(*id).map(|s| s.level),
             Element::Terrain(id) => model.terrain(*id).map(|t| t.level),
             Element::CurtainWall(id) => model.curtain_wall(*id).map(|c| c.level),

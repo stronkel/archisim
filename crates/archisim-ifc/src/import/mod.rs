@@ -98,7 +98,8 @@ impl std::error::Error for ImportError {}
 
 /// Reads an IFC file into a new model.
 pub fn import_ifc(text: &str) -> Result<Imported, ImportError> {
-    let file = step_read::parse(text).map_err(ImportError::Parse)?;
+    let mut file = step_read::parse(text).map_err(ImportError::Parse)?;
+    drop_roof_parts(&mut file);
     let schema = file.schemas.first().cloned().unwrap_or_default();
     if !(schema.starts_with("IFC2X3") || schema.starts_with("IFC4")) {
         return Err(ImportError::Schema(schema));
@@ -106,6 +107,33 @@ pub fn import_ifc(text: &str) -> Result<Imported, ImportError> {
     let mut imp = Importer::new(&file, schema);
     imp.run();
     imp.finish()
+}
+
+/// The pieces ArchiSim writes for what a roof carries (dormers, tiles,
+/// gutters: `ArchiSim_RoofPart`) come back with their roof, not as
+/// elements of their own: they leave the file before it is read.
+fn drop_roof_parts(file: &mut step_read::StepFile) {
+    let sets: std::collections::HashSet<u64> = file
+        .entities
+        .iter()
+        .filter(|(_, e)| {
+            e.kind == "IFCPROPERTYSET" && e.arg(2).as_str() == Some("ArchiSim_RoofPart")
+        })
+        .map(|(id, _)| *id)
+        .collect();
+    if sets.is_empty() {
+        return;
+    }
+    let parts: Vec<u64> = file
+        .entities
+        .values()
+        .filter(|e| e.kind == "IFCRELDEFINESBYPROPERTIES")
+        .filter(|e| e.arg(5).as_ref().is_some_and(|s| sets.contains(&s)))
+        .flat_map(|e| e.arg(4).refs())
+        .collect();
+    for id in parts {
+        file.entities.remove(&id);
+    }
 }
 
 /// Rounds to the micrometre: what the file says, without the noise of the

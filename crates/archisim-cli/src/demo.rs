@@ -209,7 +209,7 @@ pub fn build() -> Result<Document, ModelError> {
             end: Point2::new(11.85, -2.7),
             top_offset: beam_top,
         })?;
-        m.add_roof(archisim_core::NewRoof {
+        let porch = m.add_roof(archisim_core::NewRoof {
             roof_type: lib.pitched_roof,
             level: cubierta,
             outline: vec![
@@ -223,6 +223,24 @@ pub fn build() -> Result<Document, ModelError> {
             base_offset: base,
             overhang: 0.0,
         })?;
+        // Curved tiles with a gutter along the eave and two roof windows
+        // to light the porch (bloque K).
+        let gutter = m.default_gutter();
+        m.set_roof_covering(
+            porch,
+            archisim_core::RoofCovering {
+                tiles: Some(archisim_core::TileKind::Arabic),
+                tile_material: None,
+                gutter,
+            },
+        )?;
+        for x in [3.0, 9.0] {
+            m.add_dormer(
+                porch,
+                archisim_core::DormerKind::Skylight,
+                Point2::new(x, -2.2),
+            )?;
+        }
         // A glazed screen closing the east side of the porch (v0.25), from
         // the façade to the column, up to the underside of the beam.
         m.add_curtain_wall(archisim_core::NewCurtainWall {
@@ -407,6 +425,15 @@ pub fn build() -> Result<Document, ModelError> {
         for w in walls {
             m.set_wall_roof(w, Some(roof))?;
         }
+        let gutter = m.default_gutter();
+        m.set_roof_covering(
+            roof,
+            archisim_core::RoofCovering {
+                tiles: Some(archisim_core::TileKind::Mixed),
+                tile_material: None,
+                gutter,
+            },
+        )?;
         Ok(())
     })?;
 

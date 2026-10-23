@@ -875,6 +875,37 @@ impl Model {
             };
             roofs_in.push(r.id);
             placed.push(r.id.0);
+            // Its dormers, each its own in every copy, on the same plane
+            // (renumbered and running the other way when mirrored).
+            let dormers = r
+                .dormers
+                .iter()
+                .filter_map(|d| {
+                    Some(Dormer {
+                        guid: guid(&d.guid),
+                        side: if mirror {
+                            (2 * n - 2 - d.side) % n
+                        } else {
+                            d.side
+                        },
+                        along: if mirror { -d.along } else { d.along },
+                        wall_material: mat(d.wall_material)?,
+                        frame_material: mat(d.frame_material)?,
+                        glass_material: mat(d.glass_material)?,
+                        ..d.clone()
+                    })
+                })
+                .collect();
+            let covering = RoofCovering {
+                tiles: r.covering.tiles,
+                tile_material: r.covering.tile_material.and_then(mat),
+                gutter: r.covering.gutter.as_ref().and_then(|g| {
+                    Some(Gutter {
+                        material: mat(g.material)?,
+                        ..g.clone()
+                    })
+                }),
+            };
             parts.roofs.push(Roof {
                 id: RoofId(r.id.0 + base),
                 guid: guid(&r.guid),
@@ -882,6 +913,8 @@ impl Model {
                 level,
                 outline: pts(&r.outline),
                 slopes,
+                dormers,
+                covering,
                 ..r.clone()
             });
         }

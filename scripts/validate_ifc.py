@@ -24,6 +24,9 @@ Checks:
   9. Every stair (IfcStair) is contained in a storey, made of flights
      with their material and quantities (3D volume included) and landings,
      and its risers add up.
+  13. What a roof carries (ArchiSim_RoofPart: dormers, roof windows,
+     tiles, gutters, downpipes) has its roof, a material, 3D geometry and
+     a storey; it is not checked as a wall, slab or window of its own.
   8. Every pitched roof (IfcRoof) is contained in a storey, made of roof
      slabs (checked as slabs above) and has its common property set and
      base quantities, its area the sum of its planes'.
@@ -108,7 +111,10 @@ def main(path: str) -> int:
                 errors.append(f"{name}: geometry failed: {exc}")
         return mat
 
-    walls = f.by_type("IfcWall")
+    def roof_part(el):
+        return "ArchiSim_RoofPart" in eu.get_psets(el)
+
+    walls = [w for w in f.by_type("IfcWall") if not roof_part(w)]
     if not walls:
         errors.append("no IfcWall found")
     for w in walls:
@@ -117,7 +123,7 @@ def main(path: str) -> int:
     def in_stair(el):
         return any(rel.RelatingObject.is_a("IfcStair") for rel in el.Decomposes)
 
-    slabs = [s for s in f.by_type("IfcSlab") if not in_stair(s)]
+    slabs = [s for s in f.by_type("IfcSlab") if not in_stair(s) and not roof_part(s)]
     for s in slabs:
         mat = check_element(s, "Pset_SlabCommon", "Qto_SlabBaseQuantities")
         if mat is None:
@@ -145,7 +151,7 @@ def main(path: str) -> int:
         if expected == 0 and "Qto_OpeningElementBaseQuantities" not in psets:
             errors.append(f"{o.Name}: void without its quantities")
 
-    fillings = f.by_type("IfcDoor") + f.by_type("IfcWindow")
+    fillings = [el for el in f.by_type("IfcDoor") + f.by_type("IfcWindow") if not roof_part(el)]
     for el in fillings:
         name = el.Name
         door = el.is_a("IfcDoor")
@@ -168,6 +174,41 @@ def main(path: str) -> int:
             errors.append(f"{name}: missing overall size")
         if el.ContainedInStructure == ():
             errors.append(f"{name}: not contained in a storey")
+        if geom_ok:
+            try:
+                shp = geom.create_shape(settings, el)
+                if shape.get_volume(shp.geometry) <= 0:
+                    errors.append(f"{name}: empty geometry")
+            except Exception as exc:
+                errors.append(f"{name}: geometry failed: {exc}")
+
+    # 13. What a roof carries (dormers, roof windows, tiles, gutters and
+    # downpipes): every piece has its roof, a material, 3D geometry and a
+    # storey (itself or the dormer it is part of); a roof window and a
+    # dormer's window their size; the tiles cover their roof.
+    roof_guids = {r.GlobalId for r in f.by_type("IfcRoof")}
+    for el in f.by_type("IfcProduct"):
+        if not roof_part(el):
+            continue
+        name = el.Name
+        part = eu.get_psets(el)["ArchiSim_RoofPart"]
+        if part.get("Roof") not in roof_guids:
+            errors.append(f"{name}: its roof {part.get('Roof')} is not in the file")
+        whole = [r.RelatingObject for r in el.Decomposes]
+        if el.ContainedInStructure == () and not any(w.ContainedInStructure for w in whole):
+            errors.append(f"{name}: not in a storey")
+        if el.is_a("IfcElementAssembly"):
+            if not el.IsDecomposedBy or not el.IsDecomposedBy[0].RelatedObjects:
+                errors.append(f"{name}: a dormer with no parts")
+            continue
+        if eu.get_material(el) is None:
+            errors.append(f"{name}: no material")
+        if el.is_a("IfcWindow") and (not el.OverallWidth or not el.OverallHeight):
+            errors.append(f"{name}: missing overall size")
+        if el.is_a("IfcCovering") and not any(
+            r.RelatingBuildingElement.is_a("IfcRoof") for r in el.CoversElements
+        ):
+            errors.append(f"{name}: covers no roof")
         if geom_ok:
             try:
                 shp = geom.create_shape(settings, el)

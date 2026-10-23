@@ -30,6 +30,7 @@ pub mod forms;
 pub mod index;
 pub mod joins;
 pub mod junctions;
+pub mod roof_parts;
 pub mod room;
 pub mod sculpt;
 pub mod shadow;

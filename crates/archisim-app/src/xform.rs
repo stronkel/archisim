@@ -188,6 +188,7 @@ pub fn transform(
             | Element::Beam(_)
             | Element::Section(_)
             | Element::Roof(_)
+            | Element::Dormer(..)
             | Element::Stair(_)
             | Element::Terrain(_)
             | Element::CurtainWall(_)
@@ -344,6 +345,7 @@ fn transform_phase_2(
                     | Element::Beam(_)
                     | Element::Section(_)
                     | Element::Roof(_)
+                    | Element::Dormer(..)
                     | Element::Stair(_)
                     | Element::Terrain(_)
                     | Element::CurtainWall(_)
@@ -427,6 +429,17 @@ fn transform_phase_2(
             })?,
             Element::Stair(id) => model.edit_stair(id, |x| pts(&mut x.path))?,
             Element::Roof(id) => model.edit_roof(id, |r| pts(&mut r.outline))?,
+            // Turned with its roof, or carried round on it.
+            Element::Dormer(r, i) if !targets.contains(&Element::Roof(r)) => {
+                let i = usize::from(i);
+                if let Some(at) = model
+                    .roof(r)
+                    .and_then(|x| x.dormers.get(i).and_then(|dm| x.dormer_frame(dm)))
+                    .map(|f| f.origin)
+                {
+                    model.move_dormer(r, i, t.apply(at))?;
+                }
+            }
             Element::Terrain(id) => model.edit_terrain(id, |x| {
                 for p in x.points.iter_mut() {
                     p.at = t.apply(p.at);

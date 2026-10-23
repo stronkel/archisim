@@ -398,6 +398,9 @@ impl Editor {
             Element::Column(id) => model.column(*id).is_some(),
             Element::Beam(id) => model.beam(*id).is_some(),
             Element::Section(id) => model.section(*id).is_some(),
+            Element::Dormer(id, i) => model
+                .roof(*id)
+                .is_some_and(|r| usize::from(*i) < r.dormers.len()),
             Element::Roof(id) => model.roof(*id).is_some(),
             Element::Stair(id) => model.stair(*id).is_some(),
             Element::Terrain(id) => model.terrain(*id).is_some(),
@@ -631,6 +634,19 @@ impl Editor {
                     }
                 }
             }
+            // Dormers, the last of each roof first (unless the roof goes
+            // too).
+            let mut dormers: Vec<(archisim_core::RoofId, u16)> = items
+                .iter()
+                .filter_map(|e| match e {
+                    Element::Dormer(r, i) if !items.contains(&Element::Roof(*r)) => Some((*r, *i)),
+                    _ => None,
+                })
+                .collect();
+            dormers.sort_by_key(|d| std::cmp::Reverse(d.1));
+            for (r, i) in dormers {
+                m.remove_dormer(r, usize::from(i))?;
+            }
             for e in &items {
                 match e {
                     Element::Wall(id) => {
@@ -676,7 +692,7 @@ impl Editor {
                             m.remove_tag(*id)?;
                         }
                     }
-                    Element::Opening(_) => {}
+                    Element::Opening(_) | Element::Dormer(..) => {}
                 }
             }
             Ok(())
@@ -748,6 +764,11 @@ impl Editor {
                         Element::Tag(id) => {
                             if m.tag(id).is_some() {
                                 m.remove_tag(id)?;
+                            }
+                        }
+                        Element::Dormer(r, i) => {
+                            if m.roof(r).is_some_and(|x| usize::from(i) < x.dormers.len()) {
+                                m.remove_dormer(r, usize::from(i))?;
                             }
                         }
                         e @ (Element::Column(_)

@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 23/10/2026 (§8, Maqueta y cubiertas, v0.48). Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -197,6 +197,20 @@ Antonio probó v0.37–v0.41 («funciona todo perfecto») y entregó la lista de
 | 7. Render y Presto | Renderizado; mediciones y presupuestos con bancos de precios (Presto, BC3) | ✅ v0.47 (`docs/RENDER_PRESUPUESTOS.md`) |
 
 El trabajo colaborativo de la lista ya está (Colaboración → Compartir en equipo, v0.38). Con el bloque 7, la revisión del 22/10/2026 queda completa: siguiente, lo que diga Antonio al probar v0.41.1–v0.47.
+
+## 8. Entorno Maqueta y cubiertas (23/10/2026)
+
+Pedido por Antonio el 23/10/2026: un editor tan intuitivo como Los Sims y tan modular como Paralives, para arquitectura, formas y urbanismo, con una imagen cartoon con sombras que no castigue al MacBook de 2016 («lo importante siempre será la fluidez»). Decidido con él: **no es otro programa ni otra disciplina**, sino un entorno (Técnica · Maqueta) sobre el mismo modelo; lo que es herramienta va a los dos y lo que es forma de presentarla, solo a la maqueta. Diseño en `docs/MAQUETA.md`.
+
+Al probar inserciones pidió además buhardillas que se adapten a la cubierta (no existían) y tejas y canalones en el modelo.
+
+| Bloque | Qué | Estado |
+|---|---|---|
+| K1 | Buhardillas (a dos aguas, a un agua, plana) y ventanas de cubierta pinchadas en un faldón | ✅ v0.48 |
+| K2 | Tejas, caballetes, canalones y bajantes | ✅ v0.48 |
+| MQ1 | Entorno Maqueta: interruptor, ventana sin columnas, catálogo Construir · Amueblar · Exterior, tarjeta flotante, cuadrícula, muros recortados, habitación arrastrando, cuentagotas | ◐ v0.48 (falta: muros de delante recortados, miniaturas en 3D, arrastrar en 3D) |
+| V1 | Imagen: sombras, penumbra guardada, luz de ilustración, texturas como imagen, niveles de calidad | — |
+| MQ2–MQ4 | Muebles modulares, pinceles de Exterior, flechas y aros en Concepto | — |
 
 ## Propuesta de orden
 

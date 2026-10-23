@@ -1291,3 +1291,64 @@ fn project_parameters_survive_the_round_trip() {
         std::fs::write(std::path::Path::new(&dir).join("parametros.ifc"), &ifc).unwrap();
     }
 }
+
+/// Dormers, roof windows, tiles and gutters (docs/MAQUETA.md §5) go out
+/// as their own pieces and come back with their roof, not as walls, slabs,
+/// windows or pipes of their own.
+#[test]
+fn dormers_tiles_and_gutters_round_trip() {
+    let mut m = Model::new("Buhardillas");
+    let level = m.add_level("Planta baja", 0.0);
+    let lib = add_library(&mut m).unwrap();
+    let r = m
+        .add_roof(archisim_core::NewRoof {
+            roof_type: lib.pitched_roof,
+            level,
+            outline: vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(10.0, 0.0),
+                Point2::new(10.0, 8.0),
+                Point2::new(0.0, 8.0),
+            ],
+            slopes: vec![Some(0.55), None, Some(0.55), None],
+            base_offset: 3.0,
+            overhang: 0.4,
+        })
+        .unwrap();
+    m.add_dormer(r, archisim_core::DormerKind::Gable, Point2::new(3.0, 0.5))
+        .unwrap();
+    m.add_dormer(r, archisim_core::DormerKind::Shed, Point2::new(3.5, 7.5))
+        .unwrap();
+    m.add_dormer(
+        r,
+        archisim_core::DormerKind::Skylight,
+        Point2::new(7.0, 1.5),
+    )
+    .unwrap();
+    let gutter = m.default_gutter();
+    m.set_roof_covering(
+        r,
+        archisim_core::RoofCovering {
+            tiles: Some(archisim_core::TileKind::Arabic),
+            tile_material: None,
+            gutter,
+        },
+    )
+    .unwrap();
+    let ifc = export(&m);
+    for class in [
+        "IFCELEMENTASSEMBLY(",
+        ".SKYLIGHT.",
+        ".ROOFING.",
+        ".GUTTER.",
+        ".RIGIDSEGMENT.",
+    ] {
+        assert!(ifc.contains(class), "{class}");
+    }
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert_eq!(model.walls().count(), 0, "{report}");
+    assert_eq!(model.slabs().count(), 0, "{report}");
+    assert_eq!(model.runs().count(), 0, "{report}");
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

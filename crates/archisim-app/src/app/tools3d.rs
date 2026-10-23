@@ -159,7 +159,15 @@ impl ArchiSimApp {
             let dz = world.z as f64 - (z as f64 + base + h0);
             Point2::new(from.x, from.y + dz)
         } else {
-            Point2::new(world.x as f64, world.y as f64)
+            let p = Point2::new(world.x as f64, world.y as f64);
+            // On the ground with the grid on: on the grid (Maqueta).
+            if self.ground_grid && owner.is_none() {
+                let q = super::maquette_ui::snap_to_grid(p);
+                world = glam::Vec3::new(q.x as f32, q.y as f32, world.z);
+                q
+            } else {
+                p
+            }
         };
         // A plan view that puts `raw` under the cursor at this scale: the
         // plan's snaps, clicks and keys work through it.

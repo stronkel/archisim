@@ -66,6 +66,7 @@ impl ArchiSimApp {
 
             [Element::Section(id)] => self.section_properties(ui, *id),
             [Element::Roof(id)] => self.roof_properties(ui, *id),
+            [Element::Dormer(id, i)] => self.dormer_properties(ui, *id, usize::from(*i)),
             [Element::Stair(id)] => self.stair_properties(ui, *id),
             [Element::Terrain(id)] => self.terrain_properties(ui, *id),
             [Element::CurtainWall(id)] => self.curtain_wall_properties(ui, *id),

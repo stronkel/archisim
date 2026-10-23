@@ -49,6 +49,7 @@ pub mod import;
 mod members;
 mod objects;
 mod railings;
+mod roof_parts;
 mod roofs;
 mod services;
 mod spaces;
@@ -1825,6 +1826,7 @@ impl<'a> Exporter<'a> {
         self.write_curtain_walls(&materials, &storeys, &mut contained);
         self.write_railings(&materials, &storeys, &mut contained);
         self.write_accessories(&materials, &storeys, &mut contained);
+        self.write_roof_parts(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_footings(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);

@@ -54,7 +54,15 @@ impl Exporter<'_> {
                     level: roof.level,
                     outline: plane.outline.clone(),
                     top_offset: roof.base_offset,
-                    holes: Vec::new(),
+                    // Its dormers' footprints (on this piece of it).
+                    holes: roof
+                        .plane_holes(plane.side)
+                        .into_iter()
+                        .filter(|h| {
+                            h.iter()
+                                .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
+                        })
+                        .collect(),
                     slope: Some(plane.slope),
                 };
                 let (spl, shape) = self.slab_shape(&part, thickness, pl, &[]);
@@ -81,7 +89,8 @@ impl Exporter<'_> {
                     true,
                     rtype.is_load_bearing(),
                 );
-                let area = signed_area(&plane.outline).abs();
+                let area = signed_area(&plane.outline).abs()
+                    - part.holes.iter().map(|h| signed_area(h).abs()).sum::<f64>();
                 plan += area;
                 let surface = area * plane.slope.vertical(1.0);
                 self.quantities(
@@ -157,6 +166,7 @@ impl Exporter<'_> {
                     ("ProjectedArea", "IFCQUANTITYAREA", plan),
                 ],
             );
+            self.hosts.insert(roof.id.0, r);
             contained.entry(roof.level).or_default().push(r);
         }
     }

@@ -73,6 +73,9 @@ pub struct Renderer {
     view_formats: bool,
     /// The section box, if on: everything outside it is cut away.
     clip: Option<(glam::Vec3, glam::Vec3)>,
+    /// The background left transparent (premultiplied: what is drawn
+    /// under the picture, the ground grid, shows where there is no model).
+    transparent: bool,
 }
 
 /// The shaders, with or without the materials' textures. Without them
@@ -267,7 +270,13 @@ impl Renderer {
             glass: None,
             view_formats,
             clip: None,
+            transparent: false,
         }
+    }
+
+    /// Leaves the background of the next pictures transparent (or not).
+    pub fn set_transparent(&mut self, on: bool) {
+        self.transparent = on;
     }
 
     /// Sets (or clears) the section box of the next pictures.
@@ -427,7 +436,11 @@ impl Renderer {
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(BACKGROUND),
+                            load: wgpu::LoadOp::Clear(if self.transparent {
+                                wgpu::Color::TRANSPARENT
+                            } else {
+                                BACKGROUND
+                            }),
                             store: wgpu::StoreOp::Store,
                         },
                     }),
