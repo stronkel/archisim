@@ -83,6 +83,9 @@ impl ArchiSimApp {
             self.search_field(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
+                self.workspace_switch(ui);
+                ui.add_space(8.0);
+                ui.spacing_mut().item_spacing.x = 4.0;
                 let dark = ui.ctx().global_style().visuals.dark_mode;
                 if icon_button(
                     ui,
@@ -528,6 +531,8 @@ impl ArchiSimApp {
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();
                     }
+                    ui.separator();
+                    self.cutaway_buttons(ui);
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

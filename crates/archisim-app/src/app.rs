@@ -352,6 +352,22 @@ pub struct ArchiSimApp {
     pub terrain_pick: Vec<usize>,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
+    /// The «Maqueta» environment is on (`docs/MAQUETA.md`).
+    pub maquette: bool,
+    /// The first time in the Maqueta (it starts with the walls cut away
+    /// and the grid).
+    maquette_first: bool,
+    /// The tab to go back to on leaving the Maqueta.
+    maquette_return: Option<usize>,
+    /// The Maqueta's catalog: group and theme shown.
+    catalog_group: maquette_ui::CatalogGroup,
+    catalog_theme: &'static str,
+    /// Properties of the selection in a window (Más…, in the Maqueta).
+    maquette_props: bool,
+    /// The wall tool's rectangle makes a room: its walls, floor and room.
+    pub room_walls: bool,
+    /// The ground grid of the 3D view, and clicks on it snapped to it.
+    pub ground_grid: bool,
     /// The 2D command running, if any.
     pub cad: Option<Box<dyn crate::cad::Command>>,
     /// Layer, style and the values 2D commands remember.
@@ -634,6 +650,14 @@ impl ArchiSimApp {
             terrain_pick: Vec::new(),
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
+            maquette: false,
+            maquette_first: true,
+            maquette_return: None,
+            catalog_group: Default::default(),
+            catalog_theme: "Habitaciones",
+            maquette_props: false,
+            room_walls: false,
+            ground_grid: false,
             cad: None,
             cad_settings: Default::default(),
             cmdline: Default::default(),
@@ -1340,6 +1364,36 @@ impl ArchiSimApp {
     /// Builds the walls asked for by the wall tool.
     fn build_walls(&mut self, pieces: Vec<Piece>) {
         match self.ed.add_walls(&self.wall_settings, &pieces) {
+            Ok(ids) if self.room_walls && self.wall_tool.mode == WallMode::Rectangle => {
+                // A room (Los Sims'): its floor and its room inside the
+                // walls just drawn.
+                self.wall_tool.accept(&pieces);
+                let n = pieces.len().max(1) as f64;
+                let c = pieces
+                    .iter()
+                    .fold(Point2::new(0.0, 0.0), |a, w| a + w.start)
+                    * (1.0 / n);
+                let floor = self.ed.add_slab_in_room(
+                    self.slab_settings.slab_type,
+                    c,
+                    archisim_geom::Contour::InteriorFace,
+                    self.slab_settings.top_offset,
+                );
+                let room = self.ed.add_room_in_room(&self.room_settings, c);
+                self.ed.selection = ids.iter().map(|id| Element::Wall(*id)).collect();
+                match (floor, room) {
+                    (Ok(_), Ok(_)) => {
+                        self.say("Habitación hecha: sus 4 muros, su suelo y su local.")
+                    }
+                    (f, r) => self.complain(format!(
+                        "Muros hechos; {}{}",
+                        f.err()
+                            .map_or(String::new(), |e| format!("sin suelo ({e}) ")),
+                        r.err()
+                            .map_or(String::new(), |e| format!("sin local ({e})"))
+                    )),
+                }
+            }
             Ok(ids) => {
                 self.wall_tool.accept(&pieces);
                 // The last walls drawn stay selected, with their temporary
@@ -1499,8 +1553,23 @@ impl ArchiSimApp {
         self.sync_views(&ctx);
         self.update_title(&ctx);
         self.age_message(ctx.input(|i| i.time));
-        let p = theme::Palette::current(&ctx);
+        crate::pick::set_scale(if matches!(self.mode, ViewMode::Sheet(_)) {
+            1.0
+        } else {
+            self.plan_scale
+        });
+        if self.maquette {
+            self.maquette_frame(ui);
+        } else {
+            self.technical_frame(ui);
+        }
+        self.after_frame(&ctx);
+    }
 
+    /// The window of the technical environment: disciplines, tools and
+    /// Properties on the left, the navigator on the right, tabs of views.
+    fn technical_frame(&mut self, ui: &mut Ui) {
+        let p = theme::Palette::current(ui.ctx());
         let bar = |fill| {
             egui::Frame::new()
                 .fill(fill)
@@ -1513,11 +1582,6 @@ impl ArchiSimApp {
         egui::Panel::bottom("bottom-bar")
             .frame(bar(p.panel))
             .show(ui, |ui| self.bottom_bar(ui));
-        crate::pick::set_scale(if matches!(self.mode, ViewMode::Sheet(_)) {
-            1.0
-        } else {
-            self.plan_scale
-        });
         // The drawing stays in the middle of the window: the column on the
         // right (navigator) is as wide as the two on the left (disciplines,
         // and tools with properties). Dragging the edge of the tools widens
@@ -1600,7 +1664,11 @@ impl ArchiSimApp {
                 ViewMode::Sheet(s) => self.sheet_view(ui, s),
             }
         });
+    }
 
+    /// What every frame does after the window: dialogs and windows.
+    fn after_frame(&mut self, ctx: &egui::Context) {
+        let ctx = ctx.clone();
         if let Some(text) = ctx.data_mut(|d| d.remove_temp::<String>(Id::unique("length-error"))) {
             self.complain(format!(
                 "«{text}» no es una medida válida: escribe un número en {} (Vista → Unidades) o con su unidad (2,7m · 270cm · 2700mm).",
@@ -1673,6 +1741,22 @@ impl ArchiSimApp {
         if consume(Modifiers::CTRL, Key::Space) {
             self.open_command_search();
         }
+        // Tab: Técnica ↔ Maqueta (not while typing in a text field; a
+        // button that has the keyboard focus lets go of it).
+        // (egui moves the focus between buttons with Tab: only a text
+        // field keeps it.)
+        let in_text = ctx
+            .memory(|m| m.focused())
+            .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
+        if self.temp_edit.is_none() && !in_text && consume(Modifiers::NONE, Key::Tab) {
+            ctx.memory_mut(|m| {
+                if let Some(id) = m.focused() {
+                    m.surrender_focus(id);
+                }
+            });
+            let on = !self.maquette;
+            self.set_maquette(on);
+        }
         if typing {
             return;
         }
@@ -1688,6 +1772,7 @@ impl ArchiSimApp {
         if consume(Modifiers::NONE, Key::Home) {
             self.fit_active_view();
         }
+
         if consume(Modifiers::CTRL, Key::Tab) && !self.tabs.is_empty() {
             self.activate_tab((self.active_tab + 1) % self.tabs.len());
         }
@@ -2126,6 +2211,7 @@ mod hatch_ui;
 mod icons;
 mod levels_ui;
 mod library_ui;
+mod maquette_ui;
 mod mesh_ui;
 mod methods_ui;
 mod missions_ui;

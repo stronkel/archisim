@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 23/10/2026 (§8, Maqueta y cubiertas, v0.48). Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -206,9 +206,9 @@ Al probar inserciones pidió además buhardillas que se adapten a la cubierta (n
 
 | Bloque | Qué | Estado |
 |---|---|---|
-| K1 | Buhardillas (a dos aguas, a un agua, plana) y ventanas de cubierta pinchadas en un faldón | — |
-| K2 | Tejas, caballetes, canalones y bajantes | — |
-| MQ1 | Entorno Maqueta: interruptor, ventana sin columnas, catálogo Construir · Amueblar · Exterior, tarjeta flotante, cuadrícula, muros recortados, habitación arrastrando, cuentagotas | — |
+| K1 | Buhardillas (a dos aguas, a un agua, plana) y ventanas de cubierta pinchadas en un faldón | ✅ v0.48 |
+| K2 | Tejas, caballetes, canalones y bajantes | ✅ v0.48 |
+| MQ1 | Entorno Maqueta: interruptor, ventana sin columnas, catálogo Construir · Amueblar · Exterior, tarjeta flotante, cuadrícula, muros recortados, habitación arrastrando, cuentagotas | ◐ v0.48 (falta: muros de delante recortados, miniaturas en 3D, arrastrar en 3D) |
 | V1 | Imagen: sombras, penumbra guardada, luz de ilustración, texturas como imagen, niveles de calidad | — |
 | MQ2–MQ4 | Muebles modulares, pinceles de Exterior, flechas y aros en Concepto | — |
 

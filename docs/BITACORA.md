@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 · v0.48: entorno Maqueta y cubiertas (buhardillas, tejas y canalones)
+
+Rama `bloque/maqueta`, pull request para Antonio. Formato `.archisim` versión 32 (abre todas las anteriores). Diseño en `docs/MAQUETA.md`, hoja de ruta §8.
+
+Antonio quiere un editor tan intuitivo como Los Sims y tan modular como Paralives, con una imagen cartoon con sombras que no castigue a su MacBook de 2016. Decidido con él: no es otro programa ni otra disciplina, sino un entorno (Técnica · Maqueta) sobre el mismo modelo. Al probar, pidió además buhardillas (no se dejaban colocar: el elemento no existía) y tejas y canalones.
+
+**Hecho**
+- **Buhardillas y ventanas de cubierta** (K1): a dos aguas, a un agua y planas, y ventanas en el plano del faldón. Viven en su cubierta: se colocan por el centro del frente, miran aguas abajo, cortan el faldón solas y siguen a la cubierta (mover, girar, simetría, cambiar sus lados). Herramienta Cubierta → «Buhardilla» o «Ventana de cubierta» en la barra de arriba; Propiedades propias (clase, ancho, altura del frente, pendiente, ventana del frente, materiales). Se seleccionan, mueven, copian y borran solas.
+- **Cubrición** (K2), en Propiedades de la cubierta: teja árabe, mixta, plana, pizarra o chapa (hiladas escalonadas y cobijas o juntas en 3D, caballete en cumbreras y limatesas, rayado en la planta de cubiertas) y canalón de media caña o cuadrado con bajantes hasta la planta más baja.
+- **IFC**: la buhardilla, `IfcElementAssembly` con frente y laterales (`IfcWall`), cubierta (`IfcSlab` `ROOF`) y ventana; la ventana de cubierta, `IfcWindow` `SKYLIGHT`; las tejas, `IfcCovering` `ROOFING` que cubre la cubierta; canalones y bajantes, `IfcPipeSegment` `GUTTER` y `RIGIDSEGMENT`. Los faldones llevan los huecos y sus cantidades netas. Al importar un IFC de ArchiSim vuelven con su cubierta, no como muros o tuberías sueltos.
+- **Mediciones y BC3**: m² de cubrición (con nº de piezas), ml de caballete, canalón y bajante, ud de buhardilla.
+- **Entorno Maqueta** (MQ1, primera vuelta): botones Técnica · Maqueta arriba a la derecha y tecla Tab; el 3D a toda la ventana; catálogo abajo (Construir · Amueblar · Exterior, por temas y estancias, con miniaturas); tarjeta junto a lo seleccionado (girar, duplicar, cuentagotas, borrar, Más…); plantas arriba y abajo; cuadrícula de 50 cm con ajuste; **Habitación** (cuatro muros, suelo y local de una vez).
+- **Muros recortados** en el 3D de los dos entornos: arriba, recortados a 1,20 m o bajos a 30 cm, con los cortes rellenos.
+- `archisim cubiertas out/`: una casa con dos buhardillas a dos aguas, una a un agua, una plana y ventanas de cubierta, y cuatro garajes con cada clase de teja; también la demo lleva teja árabe, canalón y dos ventanas de cubierta en el porche, y teja mixta en la caseta.
+
+**Pendiente**
+- V1, la imagen (sombras, penumbra guardada, luz de ilustración, texturas como imagen para los Mac con Intel, niveles de calidad): siguiente bloque.
+- De la Maqueta: «solo los muros de delante», miniaturas en 3D, arrastrar objetos por el suelo en 3D, Habitación en un solo paso de Deshacer (hoy tres), rueda de color por pieza (MQ2).
+- Buhardillas: en cubiertas con limahoyas que pasen por encima de un encuentro; de momento deben caber en un solo faldón.
+
+**Qué debe probar Antonio**
+1. `archisim cubiertas out/` y abre `out/cubiertas.archisim`: mira la vista 3D, la planta de cubiertas (planta baja a 1:100) y las mediciones (Navegador → Tablas → Mediciones, capítulo Cubiertas).
+2. En la demo, selecciona la cubierta del porche: en Propiedades → Cubrición, cambia la teja y quita y pon el canalón.
+3. Herramienta Cubierta (T) → arriba «Buhardilla» → clic en un faldón (en planta o en 3D). Selecciónala, cambia su clase y su altura en Propiedades, muévela arrastrando, y mueve o gira la cubierta: la buhardilla debe ir con ella. Pruébala demasiado arriba: debe avisar de que no cabe.
+4. Pulsa **Maqueta** (arriba a la derecha) o Tab. Prueba Construir → Habitaciones → Habitación (dos esquinas), luego Puertas y Ventanas, Cubiertas → A dos aguas (clic dentro del edificio) y Buhardilla; Amueblar → Salón → un sofá. Selecciona el sofá: en la tarjeta, Girar, Duplicar y Cuentagotas. Cambia entre muros arriba, recortados y bajos, y entre plantas con ▲▼.
+5. En el MacBook: entra en la Maqueta con los muros recortados y gira la cámara; dime si va fluido.
+6. Exporta el IFC de `cubiertas.archisim` y ábrelo en ArchiCAD o Revit: buhardillas, ventanas de cubierta, tejas y canalones deben verse en su sitio.
+
+---
+
 ## 2026-10-22 (13) · v0.47.2: el 3D en el MacBook Pro de 2016
 
 El muestreo del Mac de Antonio (MacBook Pro 2016, Intel con AMD Radeon, macOS 15 con controladores parcheados) muestra el programa esperando, sin hacer nada: no se queda colgado nuestro código, sino la tarjeta gráfica al pintar. Solo pasa con algo dibujado, es decir, cuando corre el sombreador de las caras, que desde hoy (bloque Formas) dibuja las texturas de los materiales. El compilador de sombreadores de AMD de ese Mac se cae también con Safari.

@@ -64,6 +64,46 @@ pub enum ViewMode {
     Schedule,
 }
 
+/// How much of the walls the 3D view shows (Los Sims' «walls up / cut
+/// away / down»): everything above a height over the active level is cut
+/// away, with its cut faces filled, so the inside of a floor is seen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Cutaway {
+    /// Everything.
+    #[default]
+    Up,
+    /// Cut 1.20 m above the level: walls at sill height, the floors
+    /// above and the roof gone.
+    Cut,
+    /// Cut 30 cm above the level: the floor plan in 3D.
+    Low,
+}
+
+impl Cutaway {
+    pub const ALL: [Cutaway; 3] = [Cutaway::Up, Cutaway::Cut, Cutaway::Low];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Cutaway::Up => "Muros arriba",
+            Cutaway::Cut => "Muros recortados",
+            Cutaway::Low => "Muros bajos",
+        }
+    }
+
+    /// Height of the cut above the level.
+    pub fn height(self) -> Option<f32> {
+        match self {
+            Cutaway::Up => None,
+            Cutaway::Cut => Some(1.2),
+            Cutaway::Low => Some(0.3),
+        }
+    }
+}
+
+/// What a picture was drawn with: camera, size, scene, cut and whether
+/// its background was left transparent.
+type Drawn = (Camera, [u32; 2], u64, Option<SectionBox>, bool);
+
 /// Everything the 3D view keeps between frames.
 pub struct View3dState {
     pub camera: Camera,
@@ -80,7 +120,14 @@ pub struct View3dState {
     )>,
     gpu: Option<Gpu>,
     /// What the last picture was drawn with.
-    drawn: Option<(Camera, [u32; 2], u64, Option<SectionBox>)>,
+    drawn: Option<Drawn>,
+    /// Walls up, cut away or low.
+    pub cutaway: Cutaway,
+    /// Height of the active level, for the cut away walls.
+    pub level_z: f32,
+    /// The picture's background is left transparent: the ground grid is
+    /// drawn under it.
+    pub under: bool,
     scene_serial: u64,
     /// Screen area of the 3D view in the last frame.
     pub canvas: Rect,
@@ -124,6 +171,9 @@ impl Default for View3dState {
             section_hover: None,
             edge_step: 2,
             textures: default_textures(),
+            cutaway: Cutaway::Up,
+            level_z: 0.0,
+            under: false,
         }
     }
 }
@@ -136,6 +186,26 @@ struct Gpu {
 }
 
 impl View3dState {
+    /// What is cut away: the section box and the cut of the walls
+    /// together (the lower top).
+    pub fn clip_box(&self) -> Option<SectionBox> {
+        let cut = self.cutaway.height().map(|h| self.level_z + h);
+        match (self.section, cut) {
+            (Some(b), None) => Some(b),
+            (Some(mut b), Some(z)) => {
+                b.hi.z = b.hi.z.min(z);
+                Some(b)
+            }
+            (None, Some(z)) => {
+                let pad = glam::Vec3::splat(1000.0);
+                let mut b = SectionBox::around(self.scene.lo - pad, self.scene.hi + pad);
+                b.hi.z = z;
+                Some(b)
+            }
+            (None, None) => None,
+        }
+    }
+
     /// A 3D view with the textures on or off.
     pub fn with_textures(textures: bool) -> Self {
         Self {
@@ -213,7 +283,7 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        self.scene.pick_in(ray, self.section.as_ref())
+        self.scene.pick_in(ray, self.clip_box().as_ref())
     }
 
     /// What is under a point of the view: the point hit, its triangle's
@@ -223,7 +293,7 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        let (d, i) = self.scene.hit_in(ray, self.section.as_ref())?;
+        let (d, i) = self.scene.hit_in(ray, self.clip_box().as_ref())?;
         let [a, b, c] = self.scene.triangles().nth(i)?;
         let mut n = (b - a).cross(c - a).normalize_or_zero();
         if n.dot(ray.dir) > 0.0 {
@@ -301,6 +371,7 @@ impl View3dState {
             return None;
         }
         let state = gpu_state?;
+        let clip = self.clip_box();
         if self.gpu.is_none() {
             crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
         }
@@ -324,11 +395,12 @@ impl View3dState {
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
         }
-        let wanted = (self.camera, size, self.scene_serial, self.section);
+        let wanted = (self.camera, size, self.scene_serial, clip, self.under);
         if self.drawn != Some(wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
-            gpu.renderer.set_clip(self.section.map(|b| (b.lo, b.hi)));
+            gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+            gpu.renderer.set_transparent(self.under);
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
@@ -448,8 +520,21 @@ impl View3dState {
     /// The last picture as RGBA, to save it.
     pub fn picture(&self) -> Option<(u32, u32, Vec<u8>)> {
         let gpu = self.gpu.as_ref()?;
-        gpu.renderer
-            .read_pixels(&gpu.state.device, &gpu.state.queue)
+        let (w, h, mut px) = gpu
+            .renderer
+            .read_pixels(&gpu.state.device, &gpu.state.queue)?;
+        // Drawn over the ground grid (transparent, premultiplied): put the
+        // background back.
+        if self.under {
+            for p in px.chunks_exact_mut(4) {
+                let a = f32::from(p[3]) / 255.0;
+                for (c, bg) in p.iter_mut().take(3).zip([224.0_f32, 230.0, 237.0]) {
+                    *c = (f32::from(*c) + bg * (1.0 - a)).round().min(255.0) as u8;
+                }
+                p[3] = 255;
+            }
+        }
+        Some((w, h, px))
     }
 }
 
@@ -468,8 +553,14 @@ impl ArchiSimApp {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         let ctx = ui.ctx().clone();
         let painter = ui.painter_at(rect);
+        let level_z = self
+            .ed
+            .model()
+            .level(self.ed.level)
+            .map_or(0.0, |l| l.elevation) as f32;
         let v = &mut self.v3d;
         v.canvas = rect;
+        v.level_z = level_z;
         let disciplines = crate::view3d::scene::Disciplines {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
@@ -623,10 +714,17 @@ impl ArchiSimApp {
             &disciplines,
         );
 
-        // The picture.
+        // The picture, over the ground grid when it is on.
         let (px, ss) = picture_size(size, ctx.pixels_per_point());
         v.edge_step = ss;
-        match v.draw(self.gpu.as_ref(), px) {
+        v.under = self.ground_grid;
+        let under = v.under;
+        let drawn = v.draw(self.gpu.as_ref(), px);
+        if under && drawn.is_some() {
+            painter.rect_filled(rect, CornerRadius::ZERO, Color32::from_rgb(224, 230, 237));
+            self.draw_ground_grid(&painter, rect);
+        }
+        match drawn {
             Some(texture) => {
                 painter.image(
                     texture,
@@ -653,6 +751,7 @@ impl ArchiSimApp {
                 );
             }
         }
+        let v = &self.v3d;
         draw_section_box(&painter, rect, v);
         self.draw_object_grips_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);

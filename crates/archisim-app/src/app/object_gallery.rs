@@ -223,13 +223,13 @@ fn size_note(lo: [f64; 2], hi: [f64; 2]) -> String {
 }
 
 /// One type the gallery offers.
-struct Item {
-    pick: ObjectPick,
-    name: String,
+pub(super) struct Item {
+    pub pick: ObjectPick,
+    pub name: String,
     note: String,
-    category: &'static str,
-    folder: String,
-    thumb: Option<Thumb>,
+    pub category: &'static str,
+    pub folder: String,
+    pub thumb: Option<Thumb>,
 }
 
 /// Which category and folder the gallery shows (`None`: all).
@@ -245,6 +245,15 @@ impl ArchiSimApp {
     fn library_model(&mut self) -> &archisim_core::Model {
         self.object_library
             .get_or_insert_with(|| archisim_library::new_project("Biblioteca"))
+    }
+
+    /// Every object type the gallery offers, for the Maqueta's catalog
+    /// (not narrowed to the tool's part of the library).
+    pub(super) fn object_items_pub(&mut self, ctx: &egui::Context) -> Vec<Item> {
+        let scoped = std::mem::replace(&mut self.scoped_card, false);
+        let items = self.object_items(ctx);
+        self.scoped_card = scoped;
+        items
     }
 
     fn object_items(&mut self, ctx: &egui::Context) -> Vec<Item> {

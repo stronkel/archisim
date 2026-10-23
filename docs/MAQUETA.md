@@ -7,7 +7,7 @@
 
 La maqueta **no es otro programa ni otra disciplina**: es otra forma de presentar la misma ventana, sobre el mismo modelo. Las disciplinas dicen *qué* se modela (estructura, instalaciones, urbanismo); la maqueta dice *cómo* se maneja: a ojo, en 3D, eligiendo cosas de un catálogo.
 
-- Un interruptor **Técnica · Maqueta** en la barra superior, en el mismo sitio en los dos entornos (y la tecla **Tab** con el dibujo activo).
+- Un interruptor **Técnica · Maqueta** arriba a la derecha, en el mismo sitio en los dos entornos, y la tecla **Tab** (salvo escribiendo en un campo de texto).
 - Todo lo que se hace en la maqueta está a la vez en la planta técnica, las mediciones, el CTE y el IFC, y al revés: son los mismos muros, forjados, cubiertas y objetos.
 - **Lo seleccionado sigue seleccionado al cambiar de entorno**: eliges el sofá en la maqueta, pulsas Técnica y lo tienes en la planta con sus propiedades.
 
@@ -57,9 +57,9 @@ Así un boceto con el cliente es ya el proyecto, y quien no sabe BIM (el equipo 
   | **Exterior** | Terreno · Vegetación · Caminos · Mobiliario urbano · Formas | Especies del vivero, plantación, vial, mobiliario urbano, volúmenes de Concepto |
 
   Una miniatura *es* un tipo (o una herramienta con su tipo): al pulsarla se activa la herramienta de siempre con ese tipo. Se colocan igual que en técnica: la vista previa sigue al ratón, Espacio gira, clic suelta.
-- **Tarjeta flotante** junto a lo seleccionado, en lugar de Propiedades: nombre, colores rápidos (el material principal de la pieza), girar, duplicar, cuentagotas, borrar y **Más…** (abre las Propiedades completas en una ventana). Las medidas se cambian con los tiradores 3D que ya existen.
+- **Tarjeta flotante** junto a lo seleccionado, en lugar de Propiedades: qué es y su tipo, **girar** un cuarto de vuelta, **duplicar** (una copia al lado), **cuentagotas**, **borrar** y **Más…** (las Propiedades completas en una ventana). Las medidas se cambian con los tiradores 3D que ya existen. Los colores rápidos por pieza llegan con la rueda de color (MQ2).
 - **Estilos en lugar de tipos**: lo que sale del catálogo usa los tipos del proyecto, pero se ve por su nombre y su dibujo. Quien quiera los tipos los tiene en Más….
-- **Cuadrícula en el suelo** de la planta activa (50 cm), encendida por defecto en la maqueta y con la tecla G; el forzado a la cuadrícula solo actúa con ella visible.
+- **Cuadrícula en el suelo** de la planta activa (50 cm), encendida la primera vez que se entra en la maqueta; los clics sobre el suelo se ajustan a ella solo cuando se ve. (Sin tecla propia: la G ya es la viga.)
 
 ## 3. Fluidez
 
@@ -108,7 +108,14 @@ Propiedades de la cubierta → **Cubrición**:
 - **Mediciones**: m² de cubrición y número de tejas por m², ml de caballete, ml de canalón y ml de bajante, cada uno en su partida.
 - **IFC**: las tejas como `IfcCovering` (`ROOFING`) de cada faldón; canalones (`IfcPipeSegment` `GUTTER`) y bajantes (`IfcPipeSegment` `RIGIDSEGMENT`) en un sistema de saneamiento de pluviales.
 
-## 6. Bloques
+## 6. Hecho en v0.48 (rama `bloque/maqueta`)
+
+- **K1 y K2 completos**: buhardillas a dos aguas, a un agua y planas y ventanas de cubierta (herramienta Cubierta → «Buhardilla» o «Ventana de cubierta» en la barra de arriba, o desde el catálogo), con sus Propiedades (clase, ancho, altura del frente, pendiente, ventana, materiales); tejas, caballetes, canalones y bajantes en Propiedades de la cubierta → Cubrición. Planta de cubiertas, 3D, render, IFC (ida y vuelta), mediciones y BC3. `archisim cubiertas out/` hace un ejemplo con todo.
+- **MQ1, primera vuelta**: interruptor y Tab; ventana sin columnas; catálogo Construir · Amueblar · Exterior con sus temas y miniaturas (las de planta de los tipos; las 3D, pendientes); tarjeta flotante con girar, duplicar, cuentagotas, borrar y Más…; plantas arriba y abajo; **muros recortados** (arriba, recortados a 1,20 m, bajos a 30 cm, también en la vista 3D técnica, con sus cortes rellenos); cuadrícula de 50 cm con ajuste; **Habitación** (cuatro muros, su suelo y su local de una vez; desde el catálogo).
+
+Pendiente de MQ1: «solo los muros de delante recortados», miniaturas en 3D, arrastrar objetos por el suelo en 3D sin herramienta, que la habitación sea un solo paso de Deshacer (hoy son tres: muros, suelo y local).
+
+## 7. Bloques
 
 | Bloque | Contenido |
 |---|---|

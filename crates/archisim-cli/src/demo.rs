@@ -235,7 +235,11 @@ pub fn build() -> Result<Document, ModelError> {
             },
         )?;
         for x in [3.0, 9.0] {
-            m.add_dormer(porch, archisim_core::DormerKind::Skylight, Point2::new(x, -2.2))?;
+            m.add_dormer(
+                porch,
+                archisim_core::DormerKind::Skylight,
+                Point2::new(x, -2.2),
+            )?;
         }
         // A glazed screen closing the east side of the porch (v0.25), from
         // the façade to the column, up to the underside of the beam.

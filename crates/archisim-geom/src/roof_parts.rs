@@ -338,8 +338,8 @@ pub fn tile_solids(model: &Model, id: RoofId) -> Vec<Solid> {
         function: archisim_core::LayerFunction::Finish,
     }];
     let (step, rib) = match kind {
-        TileKind::Arabic => (0.035, Some((0.075, 6))),
-        TileKind::Mixed => (0.03, Some((0.05, 4))),
+        TileKind::Arabic => (0.035, Some((0.075, 12))),
+        TileKind::Mixed => (0.03, Some((0.05, 10))),
         TileKind::Flat => (0.02, None),
         TileKind::Slate => (0.01, None),
         TileKind::Metal => (0.0, None),
@@ -350,15 +350,24 @@ pub fn tile_solids(model: &Model, id: RoofId) -> Vec<Solid> {
         };
         let s = plane.slope.slope;
         let k = (1.0 + s * s).sqrt();
-        let holes = roof.plane_holes(plane.side);
-        let holes: Vec<Vec<Point2>> = holes
-            .into_iter()
-            .filter(|h| {
-                h.iter()
-                    .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
+        // Where the tiles go: the plane less what its dormers cover (their
+        // footprint and their own roof with its eaves).
+        let covered: Vec<Shape> = roof
+            .dormers
+            .iter()
+            .filter(|d| d.side == plane.side)
+            .filter_map(|d| roof.dormer_shape(d))
+            .flat_map(|s| {
+                let mut v = vec![s.footprint];
+                v.extend(s.planes.into_iter().map(|p| p.outline));
+                v
             })
+            .map(|o| (crate::ensure_ccw(o), Vec::new()))
             .collect();
-        let shape: Shape = (crate::ensure_ccw(plane.outline.clone()), holes);
+        let shapes: Vec<Shape> = junctions::difference(
+            &[(crate::ensure_ccw(plane.outline.clone()), Vec::new())],
+            &covered,
+        );
         let from = plane.slope.from;
         let base = roof.base_offset;
         let roof_top = move |p: Point2| lz + base + s * (p - from).dot(u);
@@ -399,9 +408,7 @@ pub fn tile_solids(model: &Model, id: RoofId) -> Vec<Solid> {
                 at(c0 - 1.0, hi),
             ];
             let span = (hi - lo).max(1e-9);
-            for (outer, hs) in
-                junctions::intersection(&[(strip, Vec::new())], std::slice::from_ref(&shape))
-            {
+            for (outer, hs) in junctions::intersection(&[(strip, Vec::new())], &shapes) {
                 let top = move |p: Point2| {
                     let f = ((p - from).dot(u) - lo) / span;
                     roof_top(p) + 0.015 * k + step * (1.0 - f.clamp(0.0, 1.0))
@@ -424,7 +431,7 @@ pub fn tile_solids(model: &Model, id: RoofId) -> Vec<Solid> {
         };
         while c < c1 {
             let o = at(c, 0.0);
-            for (ta, tb) in inside_runs(o, u, &shape) {
+            for (ta, tb) in shapes.iter().flat_map(|sh| inside_runs(o, u, sh)) {
                 let (pa, pb) = (o + u * (ta + 0.02), o + u * (tb - 0.02));
                 let lift = 0.015 * k + step;
                 let a: P3 = [pa.x, pa.y, roof_top(pa) + lift];
@@ -439,7 +446,9 @@ pub fn tile_solids(model: &Model, id: RoofId) -> Vec<Solid> {
         }
     }
     // Ridge tiles over ridges and hips.
-    let ridge = half_round(0.11, 6, true);
+    // Facets that turn less than the 3D view's crease angle (20°): a
+    // round tile, not a ribbed one.
+    let ridge = half_round(0.11, 12, true);
     for (p, q) in roof.ridge_lines() {
         let a: P3 = [p.x, p.y, lz + roof.top_at(p) + 0.01];
         let b: P3 = [q.x, q.y, lz + roof.top_at(q) + 0.01];
@@ -493,7 +502,7 @@ pub fn gutter_pieces(model: &Model, id: RoofId) -> Vec<(usize, Option<usize>, So
         .min(lz);
     let w = g.size;
     let section: Vec<(f64, f64)> = match g.shape {
-        archisim_core::GutterShape::HalfRound => half_round(w / 2.0, 8, false),
+        archisim_core::GutterShape::HalfRound => half_round(w / 2.0, 12, false),
         archisim_core::GutterShape::Box => vec![
             (-w / 2.0, -w * 0.75),
             (w / 2.0, -w * 0.75),

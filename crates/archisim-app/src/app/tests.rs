@@ -5838,7 +5838,10 @@ fn dormers_with_the_roof_tool() {
     };
     assert_eq!(spots.len(), 2);
     h.app.choose_method("Buhardilla");
-    assert_eq!(h.app.roof_settings.dormer, Some(archisim_core::DormerKind::Gable));
+    assert_eq!(
+        h.app.roof_settings.dormer,
+        Some(archisim_core::DormerKind::Gable)
+    );
     let before = h.model().roofs().count();
     h.click_at(spots[0]);
     let roof = h.model().roof(r).unwrap().clone();
@@ -5849,10 +5852,37 @@ fn dormers_with_the_roof_tool() {
         h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
         vec![Element::Dormer(r, 0)]
     );
+    // Dragged along the roof with the arrow: it stays on its plane.
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Dormer(r, 0)].into_iter().collect();
+    h.frame();
+    let at = |h: &Harness| {
+        let roof = h.model().roof(r).unwrap();
+        roof.dormer_frame(&roof.dormers[0]).unwrap().origin
+    };
+    let before_drag = at(&h);
+    h.drag(
+        spots[0] + archisim_core::Vec2::new(0.0, 0.6),
+        spots[0] + archisim_core::Vec2::new(1.5, 0.6),
+    );
+    assert!(
+        at(&h).distance(before_drag + archisim_core::Vec2::new(1.5, 0.0)) < 0.05,
+        "{:?} → {:?} {:?}",
+        before_drag,
+        at(&h),
+        h.app.message
+    );
+    h.type_text("t");
     // A roof window on the other plane, a little to the side.
     h.app.choose_method("Ventana de cubierta");
     h.click_at(spots[1] + archisim_core::Vec2::new(-2.0, 0.0));
-    assert_eq!(h.model().roof(r).unwrap().dormers.len(), 2, "{:?}", h.app.message);
+    assert_eq!(
+        h.model().roof(r).unwrap().dormers.len(),
+        2,
+        "{:?}",
+        h.app.message
+    );
     // In 3D: the dormers are their own solids and the roof has their holes.
     let solids = archisim_geom::solid::model_solids(h.model());
     assert!(solids
@@ -5880,4 +5910,89 @@ fn dormers_with_the_roof_tool() {
     assert_eq!(h.model().roofs().count(), 1);
     h.app.ed.undo();
     assert_eq!(h.model().roof(r).unwrap().dormers.len(), 2);
+}
+
+/// The Maqueta (docs/MAQUETA.md): Tab enters it, in the 3D view, with the
+/// walls cut away and the grid; the catalog's «Habitación» draws four
+/// walls with their floor and room; the eyedropper and the card's quarter
+/// turn and copy work on what is selected; Tab goes back with the same
+/// selection.
+#[test]
+fn maquette_environment() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    assert!(h.app.maquette);
+    assert_eq!(h.app.mode, ViewMode::ThreeD);
+    assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Cut);
+    assert!(h.app.ground_grid);
+    // The cut: 1.20 m over the level.
+    let clip = h.app.v3d.clip_box().unwrap();
+    assert!((clip.hi.z - 1.2).abs() < 1e-6);
+    h.frame();
+    // A room from the catalog, drawn in the plan.
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Room);
+    assert_eq!(h.app.tool, Tool::Wall);
+    assert!(h.app.room_walls);
+    h.frame();
+    h.key(Key::Tab);
+    assert!(!h.app.maquette);
+    assert_eq!(h.app.mode, ViewMode::Plan);
+    h.click_at(p(0.0, 0.0));
+    h.click_at(p(5.0, 4.0));
+    let m = h.model();
+    assert_eq!(m.walls().count(), 4, "{:?}", h.app.message);
+    assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
+    assert_eq!(m.rooms().count(), 1, "{:?}", h.app.message);
+    // A sofa from the catalog (loaded from the library), placed; the
+    // card turns and copies it.
+    {
+        h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
+            super::object_gallery::ObjectPick::Library("Sofá de 3 plazas"),
+        ));
+        assert_eq!(h.app.tool, Tool::Object, "{:?}", h.app.message);
+        let t = h.app.object_settings.object_type.unwrap();
+        h.click_at(p(2.5, 2.0));
+        let o = h.model().objects().next().map(|o| (o.id, o.rotation));
+        let (id, rot) = o.expect("a sofa placed");
+        h.key(Key::Escape);
+        h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+        h.app.eyedropper(Element::Object(id));
+        assert_eq!(h.app.tool, Tool::Object);
+        assert_eq!(h.app.object_settings.object_type, Some(t));
+        h.key(Key::Escape);
+        h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+        h.app.card_turn_pub();
+        let turned = h.model().object(id).unwrap().rotation;
+        assert!((turned - rot - std::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        h.app.card_duplicate_pub();
+        assert_eq!(h.model().objects().count(), 2);
+    }
+}
+
+/// In the Maqueta, a room drawn in the 3D view by two clicks on the
+/// ground: four walls, their floor and their room.
+#[test]
+fn maquette_room_in_3d() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    h.frame();
+    h.app.v3d.camera.pitch = 1.2;
+    h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
+    h.app.v3d.camera.distance = 20.0;
+    h.frame();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Room);
+    h.frame();
+    let a = screen_3d(&h, 0.0, 0.0, 0.0);
+    let b = screen_3d(&h, 5.0, 4.0, 0.0);
+    h.click_screen(a);
+    h.pos = b;
+    h.events.push(Event::PointerMoved(b));
+    h.frame();
+    h.click_screen(b);
+    h.frame();
+    let m = h.model();
+    assert_eq!(m.walls().count(), 4, "{:?}", h.app.message);
+    assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
 }
