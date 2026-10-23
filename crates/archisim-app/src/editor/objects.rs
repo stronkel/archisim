@@ -2,6 +2,7 @@
 //! undoable step.
 
 use archisim_core::{NewObject, Object, ObjectId, ObjectTypeId, Point2, Value};
+use archisim_library::collections::Collection;
 
 use super::{EditResult, Editor};
 
@@ -142,6 +143,38 @@ impl Editor {
             } else {
                 m.set_object_type_values(t.id, values)
             }
+        })
+    }
+
+    /// The type of a piece of the library in a collection: the project's,
+    /// or loaded (one undoable step).
+    pub fn collection_object_type(
+        &mut self,
+        name: &str,
+        c: &'static Collection,
+    ) -> EditResult<ObjectTypeId> {
+        let variant = archisim_library::collections::variant_name(name, c);
+        if let Some(t) = self.model().object_types().find(|t| t.name == variant) {
+            return Ok(t.id);
+        }
+        self.transact("Cargar objeto de la colección", |m| {
+            archisim_library::collections::add_collection_entry(m, name, c)
+        })
+    }
+
+    /// Puts objects in a collection (`None`: in none), one undoable step.
+    /// Returns how many changed.
+    pub fn apply_collection(
+        &mut self,
+        objects: &[ObjectId],
+        c: Option<&'static Collection>,
+    ) -> EditResult<usize> {
+        let label = match c {
+            Some(c) => format!("Colección {}", c.name),
+            None => "Sin colección".to_string(),
+        };
+        self.transact(&label, |m| {
+            archisim_library::collections::apply_collection(m, objects, c)
         })
     }
 

@@ -1,0 +1,39 @@
+family "Isla de cocina"
+  category kitchen
+  host none
+  version 1
+  description "Isla de cocina con voladizo para taburetes, mesa de trabajo con cestas o isla con fregadero"
+  folder "Cocina"
+
+type_params
+  section "Dimensiones"
+    width    length = 1.80 range 0.90..4.00 label "Largo"
+    depth    length = 0.95 range 0.60..1.40 label "Fondo"
+    height   length = 0.90 range 0.75..1.10 label "Altura"
+    overhang length = 0.30 range 0.00..0.50 label "Voladizo para taburetes"
+  section "Frentes"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
+  section "Materiales"
+    mat material = "Madera de pino" label "Muebles"
+  section "Modelo 3D"
+    model3d choice("Con voladizo", "Mesa de trabajo", "Con fregadero") = "Con voladizo" label "Modelo 3D"
+    top    material = "Encimera" label "Encimera"
+    metal  material = "Cromado" label "Fregadero, grifo y tiradores"
+    plinth material = "Negro mate" label "Zócalo"
+    weave  material = "Ratán" label "Cestas"
+
+body
+  box (-width / 2, 0, height - 0.04) to (width / 2, depth, height) material top
+  box (-width / 2, overhang, 0.1) to (width / 2, depth - 0.04, height - 0.04) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  if model3d != "Mesa de trabajo"
+    line (-width / 2, overhang) to (width / 2, overhang) pen thin dashed
+  if model3d == "Con fregadero"
+    polygon (-width / 2 + 0.2, overhang + 0.12) (-width / 2 + 0.6, overhang + 0.12) (-width / 2 + 0.6, depth - 0.1) (-width / 2 + 0.2, depth - 0.1) pen thin
+
+outputs
+  generator = "props:island"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

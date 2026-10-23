@@ -33,7 +33,12 @@ impl ArchiSimApp {
         };
         let side = (hi[0] - lo[0]).max(hi[1] - lo[1]);
         let tall = hi[2] - lo[2];
-        side <= SMALL && tall <= 1.0 && !matches!(folder, Some("Sofás y sillones" | "Sillas"))
+        side <= SMALL
+            && tall <= 1.0
+            && !matches!(
+                folder,
+                Some("Sofás y sillones" | "Sillas" | "Taburetes" | "Jardín y terraza")
+            )
     }
 
     /// Height over the level an object placed at `p` stands on: the top of

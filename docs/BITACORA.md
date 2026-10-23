@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-23 (5) · v0.50: colecciones y piezas en el mismo estilo
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (la pérgola sale como `IfcBuildingElementProxy`; lo demás, `IfcFurniture`). Detalle en `docs/BIBLIOTECA_3D.md` («Colecciones») y `docs/MAQUETA.md` §6 quater.
+
+**Hecho**
+- Cuatro **colecciones** con su paleta: nórdico cálido, mediterráneo, años 50 y japandi. Cada pieza de la biblioteca tiene su versión en cada una («Sofá de 3 plazas · Japandi»): madera, telas, cojines, metal, cerámica, piedra y fibra de la colección, y el modelo 3D que le va (cama de lamas en japandi, taburete de enea en mediterráneo…). Sábanas, pantallas, vidrio, cromados y porcelana se quedan como están.
+- En la Maqueta, **Colección** encima del catálogo (las tarjetas se ven en sus colores y se colocan así) y **Aplicar** para pasar lo seleccionado; «Sin colección» lo devuelve.
+- 44 tipos nuevos: camas con cabecero tapizado o de lamas, con colcha a los pies y cojines; mesitas de patas cónicas y flotante; taburetes (madera, tapizado, enea); islas de cocina (con voladizo, mesa de trabajo con cestas, con fregadero); cosas de la encimera (tablas y aceite, botes, cafetera y tazas, hierbas); toallas (dobladas, colgadas, enrolladas); cestas; cuadros, tríptico, espejo de arco, espejo sol y reloj; cojines de suelo; mantas (doblada, pila, en escalera); tumbonas, cama de exterior, sombrillas, macetones (olivo, ánfora, gramíneas, lavanda) y pérgolas.
+- Exterior tiene la pestaña **Jardín y terraza**. Lo de la encimera, las toallas y las mantas se posan solas donde se pinchan; los taburetes y lo del jardín, en el suelo.
+- `archisim modelos out/` empieza con una fila por colección (las mismas once piezas en los cuatro estilos) y luego todas las piezas nuevas.
+
+**Pendiente**
+- Estanterías con objetos; muebles en L; más colecciones si las quieres (rústica, industrial…).
+- Lo que dijiste en el punto 3 (texturas como imágenes, cielo, lámparas que alumbran de noche, captura grande) y el 4 (exportar el proyecto entero a `.glb` para D5 o Twinmotion).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- modelos out/` y abre `out/modelos.archisim` en la Maqueta con imagen Bonita: las cuatro primeras filas son las mismas piezas en nórdico, mediterráneo, años 50 y japandi; detrás, todas las piezas nuevas. Dime qué colección o qué pieza cambiarías.
+2. En la demo, Maqueta → Amueblar → **Colección: Japandi**. Mira Dormitorio y Cocina: las tarjetas salen en roble ahumado, lino piedra y gres. Pon una cama y una mesita.
+3. Selecciona con un recuadro todo el salón de la demo, elige **Mediterráneo** y pulsa **Aplicar**: sofá, butaca, alfombra y lámpara cambian de golpe. Ctrl+Z lo deshace en un paso.
+4. Exterior → **Jardín y terraza**: una pérgola con cañizo, dos tumbonas y una sombrilla junto a la casa; y un macetón con olivo.
+5. Amueblar → Decoración: un cuadro y un espejo de arco contra una pared (se pegan de espaldas), unas mantas en escalera y un cojín de suelo.
+
+---
+
 ## 2026-10-23 (4) · v0.49: colocar como en Paralives
 
 Misma rama y pull request #56. Sin cambios de formato. Detalle en `docs/MAQUETA.md` §6 ter.

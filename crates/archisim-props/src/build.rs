@@ -368,6 +368,41 @@ impl Builder {
         }
     }
 
+    /// A box turned any way: centred at `c`, its half-sides the vectors
+    /// `ax`, `ay`, `az` (at right angles): a slat or a back that leans.
+    pub fn obox(&mut self, role: &'static str, c: P3, ax: P3, ay: P3, az: P3) {
+        let det = {
+            let x = cross(ax, ay);
+            x[0] * az[0] + x[1] * az[1] + x[2] * az[2]
+        };
+        let corner = |b: &mut Builder, i: usize| {
+            let s = |bit: usize| if i & bit != 0 { 1.0 } else { -1.0 };
+            let (sx, sy, sz) = (s(1), s(2), s(4));
+            b.point([
+                c[0] + ax[0] * sx + ay[0] * sy + az[0] * sz,
+                c[1] + ax[1] * sx + ay[1] * sy + az[1] * sz,
+                c[2] + ax[2] * sx + ay[2] * sy + az[2] * sz,
+            ])
+        };
+        let v: Vec<u32> = (0..8).map(|i| corner(self, i)).collect();
+        // The faces as for an axis box (x, y, z by bits 1, 2, 4).
+        let faces = [
+            [0, 4, 6, 2], // −x
+            [1, 3, 7, 5], // +x
+            [0, 1, 5, 4], // −y
+            [2, 6, 7, 3], // +y
+            [0, 2, 3, 1], // −z
+            [4, 5, 7, 6], // +z
+        ];
+        for f in faces {
+            if det >= 0.0 {
+                self.quad(role, v[f[0]], v[f[1]], v[f[2]], v[f[3]]);
+            } else {
+                self.quad(role, v[f[3]], v[f[2]], v[f[1]], v[f[0]]);
+            }
+        }
+    }
+
     /// A slab whose plan is a polygon (counter-clockwise, convex), from
     /// `z0` to `z1`.
     pub fn slab(&mut self, role: &'static str, poly: &[[f64; 2]], z0: f64, z1: f64) {

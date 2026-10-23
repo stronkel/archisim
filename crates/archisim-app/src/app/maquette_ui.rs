@@ -61,6 +61,7 @@ impl CatalogGroup {
                 "Otros",
             ],
             Self::Outside => &[
+                "Jardín y terraza",
                 "Vegetación",
                 "Mobiliario urbano",
                 "Gente y coches",
@@ -76,14 +77,20 @@ fn room_of(folder: &str) -> &'static str {
     match folder {
         "Sofás y sillones" | "Salón" | "Estanterías" => "Salón",
         "Mesas" | "Sillas" => "Comedor",
-        "Cocina" | "Electrodomésticos" => "Cocina",
+        "Cocina" | "Electrodomésticos" | "Taburetes" => "Cocina",
         "Accesorios de baño" | "Duchas y bañeras" | "Inodoros y bidés" | "Lavabos" => "Baño",
         "Camas" | "Dormitorio" | "Armarios" => "Dormitorio",
         "Despacho" => "Despacho",
         // What makes a house lived in, for any room.
-        "Alfombras" | "Iluminación" | "Plantas de interior" | "Cortinas" | "Decoración" => {
-            "Decoración"
-        }
+        "Alfombras"
+        | "Iluminación"
+        | "Plantas de interior"
+        | "Cortinas"
+        | "Decoración"
+        | "Cuadros y espejos"
+        | "Cojines y mantas" => "Decoración",
+        // In «Exterior».
+        "Jardín y terraza" => "Jardín y terraza",
         _ => "Otros",
     }
 }
@@ -113,6 +120,8 @@ pub enum CatalogAct {
     Roof(crate::editor::RoofKind),
     Dormer(DormerKind),
     Stair,
+    /// A piece of the library in the Maqueta's collection, by its name.
+    Collected(&'static str),
     Railing,
     Object(ObjectPick),
     Planting,
@@ -390,6 +399,20 @@ impl ArchiSimApp {
         }
     }
 
+    /// The names on the cards of a theme (for the tests).
+    #[cfg(test)]
+    pub(super) fn catalog_cards_pub(
+        &mut self,
+        ctx: &egui::Context,
+        group: CatalogGroup,
+        theme: &str,
+    ) -> Vec<String> {
+        self.catalog_cards(ctx, group, theme)
+            .into_iter()
+            .map(|c| c.name)
+            .collect()
+    }
+
     /// The cards of a theme.
     fn catalog_cards(
         &mut self,
@@ -494,6 +517,28 @@ impl ArchiSimApp {
                     Glyph::Revolution,
                 ),
             ],
+            (CatalogGroup::Furnish, _) | (CatalogGroup::Outside, "Jardín y terraza")
+                if self.collection.is_some() =>
+            {
+                // The library's pieces in the collection, in its colours.
+                let c = self.collection.expect("checked");
+                self.collected_items(ctx, c)
+                    .into_iter()
+                    .filter(|i| match group {
+                        CatalogGroup::Furnish => {
+                            matches!(i.category, "Mobiliario" | "Sanitarios")
+                                && room_of(&i.folder) == theme
+                        }
+                        _ => i.folder == "Jardín y terraza",
+                    })
+                    .map(|i| Card {
+                        act: CatalogAct::Collected(i.name),
+                        name: i.name.to_string(),
+                        glyph: Glyph::Object,
+                        thumb: i.thumb,
+                    })
+                    .collect()
+            }
             _ => {
                 // Objects of the library and the project, by room.
                 let items = self.object_items_pub(ctx);
@@ -505,8 +550,11 @@ impl ArchiSimApp {
                                 && room_of(&i.folder) == theme
                         }
                         CatalogGroup::Outside => match theme {
+                            "Jardín y terraza" => i.folder == "Jardín y terraza",
                             "Vegetación" => i.category == "Entorno",
-                            "Mobiliario urbano" => i.category == "Mobiliario urbano",
+                            "Mobiliario urbano" => {
+                                i.category == "Mobiliario urbano" && i.folder != "Jardín y terraza"
+                            }
                             "Gente y coches" => matches!(i.category, "Gente" | "Vehículos"),
                             _ => false,
                         },
@@ -548,6 +596,18 @@ impl ArchiSimApp {
                 self.tool == Tool::Object && self.object_settings.object_type == Some(t)
             }
             CatalogAct::Object(_) => false,
+            CatalogAct::Collected(name) => {
+                self.tool == Tool::Object
+                    && self.collection.is_some_and(|c| {
+                        let m = self.ed.model();
+                        self.object_settings
+                            .object_type
+                            .and_then(|t| m.object_type(t))
+                            .is_some_and(|t| {
+                                t.name == archisim_library::collections::variant_name(name, c)
+                            })
+                    })
+            }
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
@@ -614,6 +674,7 @@ impl ArchiSimApp {
                     self.set_tool(Tool::Object);
                 }
             }
+            CatalogAct::Collected(name) => self.take_collected(name),
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
@@ -660,6 +721,12 @@ impl ArchiSimApp {
                     .clicked()
                 {
                     self.set_tool(Tool::Arrow);
+                }
+                if self.catalog_group != CatalogGroup::Build {
+                    ui.separator();
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        self.collection_chooser(ui);
+                    });
                 }
             });
         });

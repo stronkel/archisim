@@ -494,6 +494,66 @@ pub fn bed(b: &mut Builder, p: &Params) {
                 0.01,
             );
         }
+        4 => {
+            // An upholstered base on short legs and a wide padded headboard
+            // in vertical channels, wider than the bed.
+            b.rbox("cushion", [x0, 0.1, 0.1], [-x0, l, base_top], 0.03);
+            for (x, y) in [
+                (x0 + 0.06, 0.16),
+                (-x0 - 0.06, 0.16),
+                (x0 + 0.06, l - 0.06),
+                (-x0 - 0.06, l - 0.06),
+            ] {
+                b.cone("frame", [x, y, 0.0], [x, y, 0.1], 0.016, 0.02, 10);
+            }
+            let hw = w + 0.24;
+            let n = ((hw / 0.2).round() as usize).max(4);
+            let cw = hw / n as f64;
+            for i in 0..n {
+                let a = -hw / 2.0 + i as f64 * cw;
+                b.pillow(
+                    "cushion",
+                    [a + 0.004, 0.0, 0.12],
+                    [a + cw - 0.004, 0.1, head],
+                    0.04,
+                    0.025,
+                );
+            }
+        }
+        5 => {
+            // A low wooden platform wider than the mattress and a headboard
+            // of slats.
+            b.rbox(
+                "mat",
+                [x0 - 0.06, 0.04, 0.0],
+                [-x0 + 0.06, l + 0.06, 0.04],
+                0.005,
+            );
+            b.rbox(
+                "mat",
+                [x0 - 0.04, 0.06, 0.04],
+                [-x0 + 0.04, l + 0.04, base_top],
+                0.01,
+            );
+            let hw = w + 0.12;
+            let n = ((hw / 0.07).round() as usize).max(6);
+            let sw = hw / n as f64;
+            for i in 0..n {
+                let a = -hw / 2.0 + i as f64 * sw;
+                b.rbox(
+                    "mat",
+                    [a + 0.012, 0.0, 0.0],
+                    [a + sw - 0.012, 0.035, head],
+                    0.004,
+                );
+            }
+            b.rbox(
+                "mat",
+                [-hw / 2.0, 0.0, head - 0.05],
+                [hw / 2.0, 0.045, head],
+                0.005,
+            );
+        }
         _ => {
             b.rbox("cushion", [x0, 0.08, 0.06], [-x0, l, base_top], 0.03);
             b.rbox(
@@ -536,6 +596,31 @@ pub fn bed(b: &mut Builder, p: &Params) {
             0.04,
         );
     }
+    // A bedspread folded over the foot and loose cushions before the
+    // pillows.
+    if p.flag("spread", false) {
+        b.pillow(
+            "spread",
+            [x0 - 0.025, l * 0.7, top - 0.1],
+            [-x0 + 0.025, l + 0.025, top + 0.09],
+            0.04,
+            0.012,
+        );
+    }
+    let n = p.get("cushions", 0.0).round().clamp(0.0, 4.0) as usize;
+    if n > 0 {
+        let s = 0.2_f64.min((w - 0.2) / n as f64 / 2.0);
+        for i in 0..n {
+            let x = x0 + w * (i as f64 + 0.5) / n as f64;
+            b.pillow(
+                "pillow",
+                [x - s, 0.42, top + 0.04],
+                [x + s, 0.54, top + 0.04 + s * 1.7],
+                0.05,
+                0.035,
+            );
+        }
+    }
 }
 
 /// Bedside tables: a drawer unit with a lamp on it.
@@ -544,6 +629,61 @@ pub fn nightstand(b: &mut Builder, p: &Params) {
     let d = p.get("depth", 0.4);
     let h = p.get("height", 0.5);
     let x0 = -w / 2.0;
+    match p.style() {
+        3 => {
+            // Fifties: splayed tapered legs, a drawer over an open shelf.
+            let foot = 0.2;
+            for (x, y, dx, dy) in [
+                (x0 + 0.05, 0.05, -0.025, -0.02),
+                (-x0 - 0.05, 0.05, 0.025, -0.02),
+                (x0 + 0.05, d - 0.07, -0.025, 0.02),
+                (-x0 - 0.05, d - 0.07, 0.025, 0.02),
+            ] {
+                b.cone(
+                    "frame",
+                    [x + dx, y + dy, 0.004],
+                    [x, y, foot],
+                    0.009,
+                    0.016,
+                    8,
+                );
+            }
+            b.rbox("mat", [x0, 0.0, foot], [-x0, d - FRONT, foot + 0.02], 0.004);
+            b.rbox("mat", [x0, 0.0, foot], [x0 + 0.018, d - FRONT, h], 0.004);
+            b.rbox("mat", [-x0 - 0.018, 0.0, foot], [-x0, d - FRONT, h], 0.004);
+            b.rbox("mat", [x0, 0.0, foot], [-x0, 0.015, h], 0.0);
+            let dz = (h - foot) * 0.45;
+            b.rbox("mat", [x0, 0.0, h - dz - 0.02], [-x0, d - FRONT, h], 0.006);
+            fronts::drawer(
+                b,
+                x0 + 0.02,
+                -x0 - 0.02,
+                h - dz,
+                h - 0.01,
+                d - FRONT,
+                Handle::of(p, Handle::Knob),
+            );
+            lamp(b, x0 + w * 0.6, d * 0.45, h);
+            return;
+        }
+        4 => {
+            // Hung on the wall: a slim box with a finger-groove drawer.
+            let z0 = (h - 0.16).max(0.2);
+            b.rbox("mat", [x0, 0.0, z0], [-x0, d - FRONT, h], 0.006);
+            fronts::drawer(
+                b,
+                x0 + 0.01,
+                -x0 - 0.01,
+                z0 + 0.01,
+                h - 0.01,
+                d - FRONT,
+                Handle::of(p, Handle::Groove),
+            );
+            lamp(b, x0 + w * 0.6, d * 0.45, h);
+            return;
+        }
+        _ => {}
+    }
     let foot = if p.style() == 2 { 0.12 } else { 0.0 };
     if foot > 0.0 {
         for (x, y) in [

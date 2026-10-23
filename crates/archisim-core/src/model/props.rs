@@ -46,6 +46,12 @@ fn candidates(role: &str) -> &'static [&'static str] {
         "stem" => &["stem", "frame"],
         "pillow" => &["pillow", "cushion"],
         "throw" => &["throw_mat", "cushion"],
+        // The collections' pieces.
+        "spread" => &["spread_mat", "duvet"],
+        "accent" => &["accent", "pillow", "cushion"],
+        "weave" => &["weave", "frame"],
+        "mat2" => &["mat2"],
+        "flowers" => &["flowers", "leaves"],
         _ => &[],
     }
 }

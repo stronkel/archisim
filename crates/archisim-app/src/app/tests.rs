@@ -6328,3 +6328,76 @@ fn maquette_room_in_3d() {
     assert_eq!(m.walls().count(), 4, "{:?}", h.app.message);
     assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
 }
+
+/// Collections: the Maqueta's catalog shows the pieces in the style
+/// chosen, places them so, and «Aplicar» puts the selection in it (one
+/// step back undoes it).
+#[test]
+fn collections_restyle_the_catalog_and_the_selection() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_maquette(true);
+    let japandi = archisim_library::collections::collection("Japandi").unwrap();
+    h.app.collection = Some(japandi);
+    let ctx = egui::Context::default();
+    let cards = h.app.catalog_cards_pub(
+        &ctx,
+        super::maquette_ui::CatalogGroup::Furnish,
+        "Dormitorio",
+    );
+    assert!(
+        cards.contains(&"Cama de lamas 160".to_string()),
+        "{cards:?}"
+    );
+    // Taking a card loads the piece in the collection.
+    h.app.take_collected("Cama doble 150×200");
+    let t = h.app.object_settings.object_type.unwrap();
+    assert_eq!(
+        h.model().object_type(t).unwrap().name,
+        "Cama doble 150×200 · Japandi"
+    );
+    // The garden has its theme.
+    let garden = h.app.catalog_cards_pub(
+        &ctx,
+        super::maquette_ui::CatalogGroup::Outside,
+        "Jardín y terraza",
+    );
+    assert!(
+        garden.contains(&"Pérgola de madera 3×3".to_string()),
+        "{garden:?}"
+    );
+    // Applied to a sofa placed as it is in the library.
+    let level = h.app.ed.level;
+    let sofa = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Sofá acogedor de 3 plazas")
+        .unwrap()
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Sofá", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: sofa,
+                position: p(1.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Object(id)].into_iter().collect();
+    h.app.apply_collection_to_selection();
+    let now = h.model().object(id).unwrap().object_type;
+    assert_eq!(
+        h.model().object_type(now).unwrap().name,
+        "Sofá acogedor de 3 plazas · Japandi"
+    );
+    h.app.ed.undo();
+    assert_eq!(h.model().object(id).unwrap().object_type, sofa);
+    // And back to no collection.
+    h.app.ed.redo();
+    h.app.collection = None;
+    h.app.apply_collection_to_selection();
+    assert_eq!(h.model().object(id).unwrap().object_type, sofa);
+}

@@ -403,6 +403,12 @@ pub struct ArchiSimApp {
     /// The whole object library, for the gallery's pictures of the types
     /// the project does not have yet (made the first time it is needed).
     pub object_library: Option<archisim_core::Model>,
+    /// The Maqueta's collection: the catalog shows its pieces and puts
+    /// them in its colours (`None`: the library as it is).
+    pub collection: Option<&'static archisim_library::collections::Collection>,
+    /// The library in each collection, for the catalog's pictures (made
+    /// the first time one is chosen).
+    pub collection_libraries: Vec<(&'static str, archisim_core::Model)>,
     /// Every species of plants of the library, for the gallery.
     pub flora_library: Option<std::sync::Arc<archisim_core::Model>>,
     /// The object types of the library folder (the studio's and the
@@ -679,6 +685,8 @@ impl ArchiSimApp {
             cte: Default::default(),
             survey_import: None,
             object_library: None,
+            collection: None,
+            collection_libraries: Vec::new(),
             flora_library: None,
             folder_objects: None,
             priorities_all: false,
@@ -2206,6 +2214,7 @@ mod bottom_segments;
 mod budget_ui;
 mod cad_ui;
 mod chrome;
+mod collection_ui;
 mod concept_ui;
 mod context_bar;
 mod coord_ui;

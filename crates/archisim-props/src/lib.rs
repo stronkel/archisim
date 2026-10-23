@@ -16,6 +16,8 @@ pub mod build;
 mod cozy;
 pub mod fronts;
 mod furniture;
+mod garden;
+mod home;
 mod kitchen;
 mod people;
 mod sanitary;
@@ -82,8 +84,20 @@ pub const KINDS: &[(&str, &[&str])] = &[
         "coffee_table",
         &["Madera con balda", "Bloque", "Vidrio y metal"],
     ),
-    ("bed", &["Tapizada", "Madera", "Tarima"]),
-    ("nightstand", &["Cajonera", "Con patas"]),
+    (
+        "bed",
+        &[
+            "Tapizada",
+            "Madera",
+            "Tarima",
+            "Cabecero tapizado",
+            "Cabecero de lamas",
+        ],
+    ),
+    (
+        "nightstand",
+        &["Cajonera", "Con patas", "Patas cónicas", "Flotante"],
+    ),
     ("wardrobe", &["Puertas batientes"]),
     ("chest", &["Zócalo", "Con patas"]),
     ("desk", &["Con cajonera", "Patas metálicas"]),
@@ -146,6 +160,41 @@ pub const KINDS: &[(&str, &[&str])] = &[
             "Cesta con manta",
         ],
     ),
+    ("stool", &["De madera", "Tapizado con respaldo", "De enea"]),
+    (
+        "island",
+        &["Con voladizo", "Mesa de trabajo", "Con fregadero"],
+    ),
+    (
+        "counter_decor",
+        &[
+            "Tablas y aceite",
+            "Botes de cristal",
+            "Cafetera y tazas",
+            "Hierbas aromáticas",
+        ],
+    ),
+    ("towels", &["Dobladas", "Colgadas", "Enrolladas"]),
+    ("basket", &["Cesto de ropa", "Con rollos", "Con asas"]),
+    (
+        "wall_decor",
+        &[
+            "Cuadro",
+            "Tríptico",
+            "Espejo de arco",
+            "Espejo sol",
+            "Reloj",
+        ],
+    ),
+    ("floor_cushion", &["Cuadrado", "Zafu", "Pila"]),
+    ("blanket", &["Doblada", "Pila de mantas", "En escalera"]),
+    ("lounger", &["De teca", "De aluminio", "Cama de exterior"]),
+    ("parasol", &["Redonda", "Descentrada", "De paja"]),
+    (
+        "big_pot",
+        &["Con olivo", "Ánfora", "Con gramíneas", "Con lavanda"],
+    ),
+    ("pergola", &["De madera", "De lamas", "Con cañizo"]),
     ("car", &["Berlina", "Compacto", "Todoterreno"]),
 ];
 
@@ -215,6 +264,18 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "sideboard" => cozy::sideboard(&mut b, p),
         "curtain" => cozy::curtain(&mut b, p),
         "decor" => cozy::decor(&mut b, p),
+        "stool" => home::stool(&mut b, p),
+        "island" => home::island(&mut b, p),
+        "counter_decor" => home::counter_decor(&mut b, p),
+        "towels" => home::towels(&mut b, p),
+        "basket" => home::basket(&mut b, p),
+        "wall_decor" => home::wall_decor(&mut b, p),
+        "floor_cushion" => home::floor_cushion(&mut b, p),
+        "blanket" => home::blanket(&mut b, p),
+        "lounger" => garden::lounger(&mut b, p),
+        "parasol" => garden::parasol(&mut b, p),
+        "big_pot" => garden::big_pot(&mut b, p),
+        "pergola" => garden::pergola(&mut b, p),
         _ => return None,
     }
     Some(PropMesh {

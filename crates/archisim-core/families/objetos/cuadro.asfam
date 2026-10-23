@@ -1,0 +1,34 @@
+family "Cuadro o espejo"
+  category furniture
+  host none
+  version 1
+  description "En la pared: cuadro con marco y paspartú, tríptico, espejo de arco, espejo sol o reloj"
+  folder "Cuadros y espejos"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.60 range 0.15..2.40 label "Ancho"
+    height    length = 0.80 range 0.15..2.00 label "Altura"
+    elevation length = 1.20 range 0.00..2.40 label "Altura desde el suelo"
+  section "Materiales"
+    frame material = "Roble claro" label "Marco"
+  section "Modelo 3D"
+    model3d choice("Cuadro", "Tríptico", "Espejo de arco", "Espejo sol", "Reloj") = "Cuadro" label "Modelo 3D"
+    mount material = "Tela clara" label "Paspartú"
+    art   material = "Lino arena" label "Fondo de la lámina"
+    art2  material = "Lana teja" label "Figura"
+    art3  material = "Pana azul petróleo" label "Franja"
+    glass material = "Espejo" label "Espejo"
+    mat   material = "Cerámica blanca" label "Esfera del reloj"
+    dark  material = "Negro mate" label "Agujas"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.03, elevation + height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.03) (-width / 2, 0.03) pen view dashed
+
+outputs
+  generator = "props:wall_decor"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

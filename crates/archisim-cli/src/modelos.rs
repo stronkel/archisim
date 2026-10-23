@@ -9,7 +9,73 @@ use archisim_core::{Model, NewObject, Point2};
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+/// The pieces shown in each collection (a row each).
+const IN_COLLECTIONS: &[&str] = &[
+    "Sofá acogedor de 3 plazas",
+    "Butaca de orejas",
+    "Mesa auxiliar redonda",
+    "Alfombra 200×140",
+    "Aparador 160",
+    "Lámpara de pie",
+    "Cama doble 150×200",
+    "Mesita de noche",
+    "Taburete de madera",
+    "Cojín de suelo",
+    "Macetón con olivo",
+];
+
 const ROWS: &[&[&str]] = &[
+    // The collections' pieces (v0.50).
+    &[
+        "Cama con cabecero tapizado 160",
+        "Cama de lamas 160",
+        "Mesita de patas cónicas",
+        "Mesita flotante",
+        "Taburete de madera",
+        "Taburete tapizado",
+        "Taburete de enea",
+        "Isla de cocina 180",
+        "Mesa de trabajo de cocina 140",
+        "Isla con fregadero 240",
+        "Tablas y aceite",
+        "Botes de cristal",
+        "Cafetera y tazas",
+        "Hierbas aromáticas",
+    ],
+    &[
+        "Toallas dobladas",
+        "Toallas colgadas",
+        "Toallas enrolladas",
+        "Cesto de ropa",
+        "Cesta con rollos",
+        "Cesta con asas",
+        "Cuadro 50×70",
+        "Tríptico",
+        "Espejo de arco",
+        "Espejo sol",
+        "Reloj de pared",
+        "Cojín de suelo",
+        "Zafu",
+        "Pila de cojines de suelo",
+        "Manta doblada",
+        "Pila de mantas",
+        "Escalera con mantas",
+    ],
+    &[
+        "Tumbona de teca",
+        "Tumbona de aluminio",
+        "Cama de exterior",
+        "Sombrilla redonda 250",
+        "Sombrilla descentrada 300",
+        "Sombrilla de paja 200",
+        "Macetón con olivo",
+        "Ánfora de barro",
+        "Macetón con gramíneas",
+        "Cuenco con lavanda",
+        "Pérgola de madera 3×3",
+        "Pérgola de lamas 4×3",
+        "Pérgola con cañizo 3×3",
+    ],
     // The cosy pieces (v0.49).
     &[
         "Sofá acogedor de 3 plazas",
@@ -125,11 +191,23 @@ pub fn build() -> Res<Model> {
     let mut m = archisim_library::new_project("Modelos 3D de ArchiSim");
     let level = m.levels()[0].id;
     let mut y = 0.0;
+    let mut rows: Vec<Vec<archisim_core::ObjectTypeId>> = Vec::new();
+    for c in archisim_library::collections::COLLECTIONS {
+        rows.push(
+            IN_COLLECTIONS
+                .iter()
+                .map(|name| archisim_library::collections::add_collection_entry(&mut m, name, c))
+                .collect::<Result<_, _>>()?,
+        );
+    }
     for row in ROWS {
-        let types: Vec<_> = row
-            .iter()
-            .map(|name| archisim_library::add_object_entry(&mut m, name))
-            .collect::<Result<_, _>>()?;
+        rows.push(
+            row.iter()
+                .map(|name| archisim_library::add_object_entry(&mut m, name))
+                .collect::<Result<_, _>>()?,
+        );
+    }
+    for types in rows {
         let sizes: Vec<(f64, f64)> = types
             .iter()
             .map(|t| {
@@ -204,7 +282,12 @@ mod tests {
     fn every_model_is_placed_with_its_3d() {
         let m = super::build().unwrap();
         let n = m.objects().count();
-        assert_eq!(n, super::ROWS.iter().map(|r| r.len()).sum::<usize>());
+        let collections = archisim_library::collections::COLLECTIONS.len();
+        assert_eq!(
+            n,
+            super::ROWS.iter().map(|r| r.len()).sum::<usize>()
+                + collections * super::IN_COLLECTIONS.len()
+        );
         assert!(m.objects().all(|o| m.type_has_prop(o.object_type)));
         let solids = archisim_geom::solid::model_solids(&m);
         assert!(solids.len() > n * 2);

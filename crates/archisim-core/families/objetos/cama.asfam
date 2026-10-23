@@ -1,8 +1,8 @@
 family "Cama"
   category furniture
   host none
-  version 1
-  description "Cama con cabecero contra la pared, colchón y almohadas"
+  version 2
+  description "Cama con cabecero contra la pared, colchón y almohadas; con colcha y cojines si se quiere"
   folder "Camas"
 
 type_params
@@ -14,11 +14,16 @@ type_params
   section "Materiales"
     mat material = "Madera de pino" label "Estructura"
   section "Modelo 3D"
-    model3d choice("Tapizada", "Madera", "Tarima") = "Tapizada" label "Modelo 3D"
+    model3d choice("Tapizada", "Madera", "Tarima", "Cabecero tapizado", "Cabecero de lamas") = "Tapizada" label "Modelo 3D"
     cushion material = "Tela" label "Tapizado"
     linen material = "Tela clara" label "Sábanas y almohadas"
     duvet material = "Edredón" label "Edredón"
     frame material = "Metal lacado" label "Bastidor"
+  section "Ropa de cama"
+    spread   bool = no label "Colcha a los pies"
+    spread_mat material = "Lana cruda" visible_if spread label "Colcha"
+    cushions integer = 0 range 0..4 label "Cojines"
+    pillow   material = "Terciopelo salvia" label "Cojines (tela)"
 
 require height + 0.1 < head else "El cabecero tiene que subir por encima del colchón"
 
