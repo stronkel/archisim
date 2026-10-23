@@ -766,6 +766,15 @@ impl ArchiSimApp {
         // Handles of the object selected (bloque 5): its size.
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
             | self.object_drag_3d(&ctx, &response, rect);
+        // With something selected, the camera turns about it.
+        let pivot = if self.ed.selection.is_empty() {
+            None
+        } else {
+            self.v3d
+                .scene
+                .bounds_of(&self.ed.selection)
+                .map(|(lo, hi)| (lo + hi) / 2.0)
+        };
         let v = &mut self.v3d;
 
         // Navigation.
@@ -774,7 +783,10 @@ impl ArchiSimApp {
         if (response.dragged_by(PointerButton::Primary) && !dragging_box)
             || (shift && response.dragged_by(PointerButton::Middle))
         {
-            v.camera.orbit(delta);
+            match pivot {
+                Some(p) => v.camera.orbit_about(delta, p),
+                None => v.camera.orbit(delta),
+            }
         } else if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
