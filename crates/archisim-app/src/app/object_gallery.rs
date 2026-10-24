@@ -265,7 +265,7 @@ impl ArchiSimApp {
         {
             let model = self.ed.model();
             let thumbs = &mut self.thumbs;
-            for t in model.object_types() {
+            for t in model.object_types().filter(|t| t.own.is_none()) {
                 let def = model.family(t.family).map(|f| f.def());
                 let (category, folder) = def.map_or(("Mobiliario", String::new()), |d| {
                     (category_name(&d.category), d.folder.clone())

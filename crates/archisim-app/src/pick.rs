@@ -521,6 +521,18 @@ pub fn pick<G: Geo + ?Sized>(
     p: Point2,
     tolerance: f64,
 ) -> Option<Element> {
+    pick_all(geo, level, p, tolerance).into_iter().next()
+}
+
+/// Every element under a point, the one [`pick`] takes first: what Tab
+/// goes through when several overlap (a grid line over a wall, a wall
+/// over a slab).
+pub fn pick_all<G: Geo + ?Sized>(
+    geo: &G,
+    level: LevelId,
+    p: Point2,
+    tolerance: f64,
+) -> Vec<Element> {
     let model = geo.model();
     let rank = |e: &Element| match e {
         Element::Dimension(_)
@@ -562,7 +574,7 @@ pub fn pick<G: Geo + ?Sized>(
         Element::Terrain(_) => 6,
     };
     let k = paper_k();
-    elements_on_level(model, level)
+    let mut found: Vec<(u8, f64, Element)> = elements_on_level(model, level)
         .into_iter()
         .filter_map(|e| {
             if let Element::Draft(id) = e {
@@ -602,8 +614,10 @@ pub fn pick<G: Geo + ?Sized>(
             let d = distance_to_outline(&poly, p);
             (inside || d <= tolerance).then_some((rank(&e), if inside { 0.0 } else { d }, e))
         })
-        .min_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)))
-        .map(|(_, _, e)| e)
+        .collect();
+    // By rank, then nearest.
+    found.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    found.into_iter().map(|(_, _, e)| e).collect()
 }
 
 /// Elements found by a selection window from `a` to `b`, as in AutoCAD:

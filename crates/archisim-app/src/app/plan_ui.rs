@@ -494,12 +494,25 @@ impl ArchiSimApp {
                 } else {
                     grip_at(&self.ed, &self.ed.selection, raw, reach).map(|g| g.0)
                 };
-                self.hover = if self.window_start.is_some() {
-                    None
+                self.under_cursor = if self.window_start.is_some() {
+                    Vec::new()
                 } else {
-                    pick(&self.ed, self.ed.level, raw, reach)
+                    crate::pick::pick_all(&self.ed, self.ed.level, raw, reach)
+                        .into_iter()
                         .filter(|e| !self.ed.hidden().contains(e))
+                        .collect()
                 };
+                // Tab goes on to the next element under the cursor while it
+                // stays where Tab was pressed.
+                let n = self.under_cursor.len();
+                let i = match self.tab_pick {
+                    Some((at, i)) if n > 1 && at.distance(raw) <= reach => i % n,
+                    _ => {
+                        self.tab_pick = None;
+                        0
+                    }
+                };
+                self.hover = self.under_cursor.get(i).copied();
             }
         }
         self.align_cursor(ctx.input(|i| i.modifiers.shift));

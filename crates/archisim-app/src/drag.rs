@@ -792,34 +792,25 @@ pub(crate) fn set_object_size(
     set_object_value(model, id, key, archisim_core::Value::Number(value))
 }
 
-/// Sets a value of an object's type (a measurement, a material…). A type
-/// shared with other objects is copied first, so only this one changes.
+/// Sets a value (a measurement, a material, a choice) of this object
+/// only: it goes to the object's own type ([`Model::own_object_type`]),
+/// and the type it came from, and the others of it, stay as they were.
 pub(crate) fn set_object_value(
     model: &mut Model,
     id: archisim_core::ObjectId,
     key: &str,
     value: archisim_core::Value,
 ) -> Result<(), ModelError> {
-    let o = model
-        .object(id)
-        .ok_or(ModelError::UnknownObject(id))?
-        .clone();
+    let own = model.own_object_type(id)?;
     let t = model
-        .object_type(o.object_type)
-        .ok_or(ModelError::UnknownObjectType(o.object_type))?
+        .object_type(own)
+        .ok_or(ModelError::UnknownObjectType(own))?
         .clone();
     let mut values = t.values.clone();
     values.insert(key.into(), value);
     // What follows the measurement: a longer sofa gains a seat.
     model.follow_stretch(t.family, &mut values);
-    if model.object_type_users(t.id) > 1 {
-        let taken: Vec<String> = model.object_types().map(|t| t.name.clone()).collect();
-        let name = crate::editor::copy_name(&t.name, &taken);
-        let new = model.add_object_type(name, t.family, values)?;
-        model.edit_object(id, |o| o.object_type = new)
-    } else {
-        model.set_object_type_values(t.id, values)
-    }
+    model.set_object_type_values(own, values)
 }
 
 /// Moves one jamb of a door or window along its wall to `to` (projected

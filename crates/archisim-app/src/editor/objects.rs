@@ -112,37 +112,25 @@ impl Editor {
 
     /// Gives one piece of an object (its material parameter `key`) a
     /// colour of the cosy palette, as Paralives' swatches: only this
-    /// object changes (a type shared with others is copied first), in one
-    /// step.
+    /// object changes (in its own type), in one step.
     pub fn paint_object_piece(&mut self, id: ObjectId, key: &str, swatch: &str) -> EditResult {
-        let Some(o) = self.model().object(id).cloned() else {
+        if self.model().object(id).is_none() {
             return Err("el objeto no existe".into());
-        };
-        let Some(t) = self.model().object_type(o.object_type).cloned() else {
-            return Err("el tipo no existe".into());
-        };
-        let shared = self.model().object_type_users(t.id) > 1;
-        let taken: Vec<String> = self
-            .model()
-            .object_types()
-            .map(|t| t.name.clone())
-            .collect();
-        let name = format!("{} · {swatch}", t.name);
-        let name = super::types::copy_name(&name, &taken);
+        }
         let key = key.to_string();
         let swatch = swatch.to_string();
         self.transact("Color de la pieza", move |m| {
             let mat = archisim_library::palette_material(m, &swatch)
                 .ok_or_else(|| archisim_core::ModelError::NotAnObject(swatch.clone()))?;
-            let mut values = t.values.clone();
-            values.insert(key, Value::Material(mat.0));
-            if shared {
-                let new = m.add_object_type(name, t.family, values)?;
-                m.set_object_type_mesh(new, t.mesh)?;
-                m.edit_object(id, |o| o.object_type = new)
-            } else {
-                m.set_object_type_values(t.id, values)
-            }
+            crate::drag::set_object_value(m, id, &key, Value::Material(mat.0))
+        })
+    }
+
+    /// Takes what was changed on an object (its own type) to the type it
+    /// came from: every object of that type changes alike.
+    pub fn object_changes_to_type(&mut self, id: ObjectId) -> EditResult {
+        self.transact("Aplicar a todos los del tipo", |m| {
+            m.own_type_to_base(id).map(|_| ())
         })
     }
 
@@ -251,5 +239,66 @@ mod tests {
             .unwrap()
             .name
             .ends_with("(copia)"));
+    }
+
+    /// What is changed on a piece in the Maqueta is of that piece only
+    /// (Antonio, 24/10/2026): the type it came from (the catalogue's) and
+    /// the others of it stay as they were; «Aplicar a todos» takes it to
+    /// them; deleting the piece takes its own type with it.
+    #[test]
+    fn changes_in_the_maquette_are_of_the_object() {
+        let mut ed = Editor::new_project();
+        let t = ed
+            .model()
+            .object_types()
+            .find(|t| t.name.starts_with("Mesa"))
+            .unwrap()
+            .id;
+        let s = ObjectSettings {
+            object_type: Some(t),
+            ..Default::default()
+        };
+        let a = ed.add_object(&s, Point2::new(2.0, 3.0)).unwrap();
+        let wide = |ed: &Editor, id| {
+            let o = ed.model().object_outline(id);
+            o[0].distance(o[1])
+        };
+        // Alone of its type, it still gets its own: the type stays.
+        ed.transact("x", |m| {
+            crate::drag::set_object_value(m, a, "width", Value::Number(2.0))
+        })
+        .unwrap();
+        let own = ed.model().object(a).unwrap().object_type;
+        assert_ne!(own, t);
+        assert!(ed
+            .model()
+            .object_type(own)
+            .unwrap()
+            .name
+            .ends_with("(ejemplar)"));
+        assert!((wide(&ed, a) - 2.0).abs() < 1e-9);
+        let b = ed.add_object(&s, Point2::new(6.0, 3.0)).unwrap();
+        assert!(
+            (wide(&ed, b) - 1.6).abs() < 1e-9,
+            "the catalogue's type stays"
+        );
+        // Changed again: the same own type, no new one.
+        ed.transact("x", |m| {
+            crate::drag::set_object_value(m, a, "width", Value::Number(2.2))
+        })
+        .unwrap();
+        assert_eq!(ed.model().object(a).unwrap().object_type, own);
+        // To all of the type.
+        ed.object_changes_to_type(a).unwrap();
+        assert_eq!(ed.model().object(a).unwrap().object_type, t);
+        assert!(ed.model().object_type(own).is_none());
+        assert!((wide(&ed, b) - 2.2).abs() < 1e-9);
+        // Deleted, its own type goes with it.
+        ed.paint_object_piece(b, "mat", "Nogal").unwrap();
+        let own_b = ed.model().object(b).unwrap().object_type;
+        assert_ne!(own_b, t);
+        ed.transact("x", |m| m.remove_object(b).map(|_| ()))
+            .unwrap();
+        assert!(ed.model().object_type(own_b).is_none());
     }
 }

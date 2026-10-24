@@ -198,6 +198,18 @@ pub(crate) struct ObjectType {
     /// A plan symbol from a DXF (version 30).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<SymbolOf>,
+    /// The type of one object only, and the type it was made from
+    /// (version 35).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<OwnOf>,
+}
+
+/// Whose own type it is (version 35).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OwnOf {
+    pub object: u64,
+    pub base: u64,
 }
 
 /// An object type's plan symbol (version 30): its source, whether it is
@@ -2709,6 +2721,10 @@ impl ProjectFile {
                     values: values_out(&t.values),
                     mesh: t.mesh.map(|m| m.0),
                     symbol: t.symbol.as_ref().map(SymbolOf::out),
+                    own: t.own.map(|w| OwnOf {
+                        object: w.object.0,
+                        base: w.base.0,
+                    }),
                 })
                 .collect(),
             meshes: p.meshes.iter().map(crate::meshes::mesh_out).collect(),
@@ -3678,6 +3694,10 @@ impl ProjectFile {
                 values,
                 mesh: t.mesh.map(core::MeshId),
                 symbol: t.symbol.map(|s| s.into_core(&element)).transpose()?,
+                own: t.own.map(|w| core::OwnType {
+                    object: core::ObjectId(w.object),
+                    base: core::ObjectTypeId(w.base),
+                }),
             });
         }
         for m in self.meshes {

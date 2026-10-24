@@ -37,6 +37,19 @@ pub struct ObjectType {
     /// A plan symbol brought from a DXF, drawn instead of the family's
     /// (bloque 6 de la revisión del 22/10/2026).
     pub symbol: Option<PlanSymbol>,
+    /// A type of one object only: what was changed on that object in the
+    /// Maqueta (its size, its colours, its drawers), leaving the type it
+    /// came from as it was (as ArchiCAD keeps each object's own values).
+    /// Not offered in the catalogue nor the galleries; it goes with its
+    /// object.
+    pub own: Option<OwnType>,
+}
+
+/// Whose own type an object type is, and the type it was made from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OwnType {
+    pub object: ObjectId,
+    pub base: ObjectTypeId,
 }
 
 /// A plan symbol of an object type: lines, arcs, circles and fills of a
@@ -245,9 +258,83 @@ impl Model {
                 values,
                 mesh: None,
                 symbol: None,
+                own: None,
             },
         );
         Ok(id)
+    }
+
+    /// The object's own type ([`OwnType`]): the one it has, or a copy of
+    /// its type made its own now, «(ejemplar)». Changing it changes only
+    /// this object.
+    pub fn own_object_type(&mut self, id: ObjectId) -> Result<ObjectTypeId, ModelError> {
+        let o = self.objects.get(&id).ok_or(ModelError::UnknownObject(id))?;
+        let t = self
+            .object_types
+            .get(&o.object_type)
+            .ok_or(ModelError::UnknownObjectType(o.object_type))?
+            .clone();
+        if t.own.is_some_and(|w| w.object == id) {
+            return Ok(t.id);
+        }
+        // The type it comes from: a copy of an own type comes from that
+        // type's.
+        let base = t.own.map_or(t.id, |w| w.base);
+        let base_name = self
+            .object_types
+            .get(&base)
+            .map_or(t.name.clone(), |b| b.name.clone());
+        let mut name = format!("{base_name} (ejemplar)");
+        let mut n = 2;
+        while self.object_types.values().any(|x| x.name == name) {
+            name = format!("{base_name} (ejemplar {n})");
+            n += 1;
+        }
+        let new = ObjectTypeId(self.take_id());
+        self.object_types.insert(
+            new,
+            ObjectType {
+                id: new,
+                guid: GlobalId::new(),
+                name,
+                own: Some(OwnType { object: id, base }),
+                ..t
+            },
+        );
+        self.edit_object(id, |o| o.object_type = new)?;
+        Ok(new)
+    }
+
+    /// Takes what was changed on an object to the type it came from: every
+    /// object of that type takes it, this one goes back to it and its own
+    /// type goes. Returns the type.
+    pub fn own_type_to_base(&mut self, id: ObjectId) -> Result<ObjectTypeId, ModelError> {
+        let o = self.objects.get(&id).ok_or(ModelError::UnknownObject(id))?;
+        let t = self
+            .object_types
+            .get(&o.object_type)
+            .ok_or(ModelError::UnknownObjectType(o.object_type))?
+            .clone();
+        let Some(own) = t.own.filter(|w| w.object == id) else {
+            return Ok(t.id);
+        };
+        if !self.object_types.contains_key(&own.base) {
+            // Its type is gone: this one becomes a type of its own.
+            let name = t.name.replace(" (ejemplar)", "");
+            if let Some(x) = self.object_types.get_mut(&t.id) {
+                x.own = None;
+                x.name = name;
+            }
+            return Ok(t.id);
+        }
+        self.set_object_type_values(own.base, t.values.clone())?;
+        if let Some(b) = self.object_types.get_mut(&own.base) {
+            b.mesh = t.mesh;
+            b.symbol = t.symbol.clone();
+        }
+        self.edit_object(id, |o| o.object_type = own.base)?;
+        self.object_types.remove(&t.id);
+        Ok(own.base)
     }
 
     /// Changes the values of an object type; every object of it follows.
@@ -378,9 +465,36 @@ impl Model {
     }
 
     pub fn remove_object(&mut self, id: ObjectId) -> Result<Object, ModelError> {
-        self.objects
+        let o = self
+            .objects
             .remove(&id)
-            .ok_or(ModelError::UnknownObject(id))
+            .ok_or(ModelError::UnknownObject(id))?;
+        // Its own type goes with it; if a copy of it has it too, the copy
+        // keeps it as its own.
+        if self
+            .object_types
+            .get(&o.object_type)
+            .is_some_and(|t| t.own.is_some_and(|w| w.object == id))
+        {
+            let heir = self
+                .objects
+                .values()
+                .find(|x| x.object_type == o.object_type)
+                .map(|x| x.id);
+            match heir {
+                Some(h) => {
+                    if let Some(t) = self.object_types.get_mut(&o.object_type) {
+                        if let Some(w) = t.own.as_mut() {
+                            w.object = h;
+                        }
+                    }
+                }
+                None => {
+                    self.object_types.remove(&o.object_type);
+                }
+            }
+        }
+        Ok(o)
     }
 
     pub fn object(&self, id: ObjectId) -> Option<&Object> {
