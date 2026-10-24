@@ -322,7 +322,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Coordinación")
+        super::widgets::dialog("Coordinación")
             .open(&mut open)
             .default_width(620.0)
             .default_height(460.0)

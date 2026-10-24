@@ -1,0 +1,56 @@
+family "Módulo bajo de cocina"
+  category kitchen
+  host none
+  version 1
+  description "Un módulo bajo con su encimera: cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero o esquina. Junto a otro, las encimeras se juntan."
+  folder "Cocina"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.15..1.20 label "Ancho"
+    depth  length = 0.60 range 0.45..0.70 label "Fondo"
+    height length = 0.90 range 0.80..0.95 label "Altura"
+  section "Módulo"
+    unit choice("Cajonera", "Puertas", "Fregadero", "Horno", "Lavavajillas", "Placa", "Botellero", "Esquina") = "Cajonera" label "Qué lleva"
+    drawers integer = 3 range 0..4 visible_if unit == "Cajonera" or unit == "Placa" label "Cajones"
+    doors integer = 1 range 1..2 visible_if unit == "Puertas" or unit == "Fregadero" label "Puertas"
+  section "Frentes"
+    front_style choice("Liso", "Marco", "Ranurado", "Cristal") = "Liso" label "Frente"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
+  section "Materiales"
+    mat material = "Madera de pino" label "Frentes"
+    top material = "Encimera" label "Encimera"
+  section "Modelo 3D"
+    model3d choice("Módulo") = "Módulo" label "Modelo 3D"
+    metal material = "Cromado" label "Tiradores y grifería"
+    dark material = "Negro mate" label "Placa y horno"
+
+body
+  box (-width / 2, 0, 0.1) to (width / 2, depth - 0.04, height - 0.03) material mat
+  box (-width / 2, 0, height - 0.03) to (width / 2, depth, height) material top
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  if unit == "Fregadero" and width >= 0.45
+    polygon (-width / 2 + 0.06, 0.1) (width / 2 - 0.06, 0.1) (width / 2 - 0.06, depth - 0.12) (-width / 2 + 0.06, depth - 0.12) pen thin
+  if unit == "Placa"
+    let yc = depth / 2
+    repeat i in 0..4
+      let dx = if i == 0 or i == 2 then -0.12 else 0.12
+      let dy = if i < 2 then -0.12 else 0.12
+      arc center (dx, yc + dy) from (dx + 0.08, yc + dy) to (dx, yc + dy + 0.08) pen thin
+      arc center (dx, yc + dy) from (dx, yc + dy + 0.08) to (dx - 0.08, yc + dy) pen thin
+      arc center (dx, yc + dy) from (dx - 0.08, yc + dy) to (dx, yc + dy - 0.08) pen thin
+      arc center (dx, yc + dy) from (dx, yc + dy - 0.08) to (dx + 0.08, yc + dy) pen thin
+  if unit == "Horno" or unit == "Lavavajillas"
+    line (-width / 2, depth) to (width / 2, depth - 0.05) pen thin
+  if unit == "Esquina"
+    line (-width / 2, 0) to (-width / 2 + width * 0.45, depth) pen thin dashed
+
+outputs
+  # Placed beside another module, in line: flush, so their worktops meet
+  # (each keeps its own drawers, doors and front).
+  joins = "row"
+  generator = "props:base_unit"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

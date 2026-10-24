@@ -36,20 +36,22 @@ pub struct Palette {
     pub hud: Color32,
 }
 
-pub const ACCENT: Color32 = Color32::from_rgb(30, 111, 217);
+pub const ACCENT: Color32 = Color32::from_rgb(37, 99, 235);
 
 impl Palette {
     pub fn light() -> Self {
         Self {
-            ground: Color32::from_rgb(237, 239, 242),
+            // Warm paper behind white islands (concepto de interfaz del
+            // 24/10/2026).
+            ground: Color32::from_rgb(240, 237, 231),
             panel: Color32::WHITE,
-            raised: Color32::from_rgb(246, 247, 249),
-            line: Color32::from_rgb(223, 226, 231),
-            text: Color32::from_rgb(27, 30, 35),
-            muted: Color32::from_rgb(92, 99, 113),
-            faint: Color32::from_rgb(154, 161, 172),
+            raised: Color32::from_rgb(246, 244, 240),
+            line: Color32::from_rgb(232, 228, 220),
+            text: Color32::from_rgb(35, 38, 43),
+            muted: Color32::from_rgb(98, 102, 110),
+            faint: Color32::from_rgb(164, 167, 172),
             accent: ACCENT,
-            accent_soft: Color32::from_rgb(228, 238, 251),
+            accent_soft: Color32::from_rgb(230, 238, 253),
             good: Color32::from_rgb(36, 128, 80),
             bad: Color32::from_rgb(192, 48, 40),
             hud: Color32::from_rgba_unmultiplied(27, 30, 35, 228),
@@ -176,11 +178,13 @@ fn style(p: Palette, dark: bool) -> egui::Style {
     v.panel_fill = p.panel;
     v.window_fill = p.panel;
     v.window_stroke = Stroke::new(1.0, p.line);
-    v.window_corner_radius = CornerRadius::same(10);
-    v.menu_corner_radius = CornerRadius::same(8);
+    // Dialogs, sheets and menus: one family of rounded cards with a soft
+    // shadow (concepto de interfaz del 24/10/2026).
+    v.window_corner_radius = CornerRadius::same(14);
+    v.menu_corner_radius = CornerRadius::same(12);
     v.window_shadow = Shadow {
-        offset: [0, 6],
-        blur: 24,
+        offset: [0, 10],
+        blur: 32,
         spread: 0,
         color: Color32::from_black_alpha(if dark { 110 } else { 38 }),
     };

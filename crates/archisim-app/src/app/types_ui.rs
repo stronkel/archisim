@@ -388,8 +388,11 @@ impl ArchiSimApp {
         self.commit_color_draft(ctx);
         let mut open = true;
         let mut actions = Vec::new();
-        egui::Window::new("Tipos y materiales")
+        super::widgets::dialog("Tipos y materiales")
             .id(Id::unique("types-dialog"))
+            // Large: in the middle of the window.
+            .pivot(egui::Align2::CENTER_CENTER)
+            .default_pos(ctx.content_rect().center())
             .open(&mut open)
             .resizable(true)
             .collapsible(false)

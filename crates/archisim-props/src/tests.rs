@@ -130,3 +130,31 @@ fn cosy_pieces() {
     let open = make_with("curtain", &[("open", 1.0)]).triangle_count();
     assert!(open < shut);
 }
+
+/// The modular kitchen: each base unit is made as it says, and the fronts'
+/// styles change the model.
+#[test]
+fn kitchen_modules_and_front_styles() {
+    let mesh = |unit: f64, style: f64| {
+        let mut p = Params::default();
+        p.set("unit", unit);
+        p.set("front_style", style);
+        make("base_unit", &p)
+            .unwrap()
+            .parts
+            .iter()
+            .map(|(_, t)| t.len())
+            .sum::<usize>()
+    };
+    let units: Vec<usize> = (1..=8).map(|u| mesh(u as f64, 1.0)).collect();
+    let distinct: std::collections::BTreeSet<_> = units.iter().collect();
+    assert!(distinct.len() >= 6, "{units:?}");
+    let styles: Vec<usize> = (1..=4).map(|s| mesh(2.0, s as f64)).collect();
+    let distinct: std::collections::BTreeSet<_> = styles.iter().collect();
+    assert_eq!(distinct.len(), 4, "{styles:?}");
+    for tall in 1..=3 {
+        let mut p = Params::default();
+        p.set("tall", tall as f64);
+        assert!(make("tall_unit", &p).is_some());
+    }
+}

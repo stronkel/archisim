@@ -223,6 +223,34 @@ impl ArchiSimApp {
             }
         }
     }
+
+    /// The carpentry sheets: every door and window type in elevation, as
+    /// a PDF (and the SVG of each sheet beside it).
+    pub(super) fn export_carpentry(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Plano de carpinterías (PDF)")
+            .add_filter("PDF", &["pdf"])
+            .set_file_name(format!("{}-carpinterias.pdf", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        let Some(path) = d.save_file() else {
+            return;
+        };
+        let model = self.ed.shown();
+        let sheets = crate::carpentry::carpentry_sheets(&model);
+        let r = crate::carpentry::carpentry_pdf(&model)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        match r {
+            Ok(()) => self.say(format!(
+                "Plano de carpinterías: {} hoja(s) A3 en {}.",
+                sheets.len(),
+                path.display()
+            )),
+            Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+        }
+    }
 }
 
 /// The rows of a schedule, totals in bold, numbers to the right.

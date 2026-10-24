@@ -1292,6 +1292,55 @@ impl Editor {
         self.transact("Renombrar planta", |m| m.rename_level(id, name))
     }
 
+    /// Adds a level at `elevation`, one storey of `height` above (or
+    /// below) the level shown: the levels from there on move by `height`
+    /// with everything on them, in one step.
+    pub fn insert_level(
+        &mut self,
+        name: &str,
+        elevation: f64,
+        height: f64,
+        above: bool,
+    ) -> EditResult<LevelId> {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err("el nombre no puede quedar vacío".into());
+        }
+        if !(elevation.is_finite() && height.is_finite() && height > 0.0) {
+            return Err("la altura no es válida".into());
+        }
+        let here = self.model().level(self.level).map_or(0.0, |l| l.elevation);
+        let id = self.transact("Añadir planta", |m| {
+            let mut moving: Vec<(LevelId, f64)> = m
+                .levels()
+                .into_iter()
+                .filter(|l| {
+                    if above {
+                        l.elevation >= elevation - 1e-6
+                    } else {
+                        l.elevation < here - 1e-6
+                    }
+                })
+                .map(|l| (l.id, l.elevation))
+                .collect();
+            // The farthest first, so no two meet on the way.
+            moving.sort_by(|a, b| {
+                if above {
+                    b.1.total_cmp(&a.1)
+                } else {
+                    a.1.total_cmp(&b.1)
+                }
+            });
+            for (id, e) in moving {
+                m.set_level_elevation(id, if above { e + height } else { e - height })?;
+            }
+            Ok(m.add_level(name, elevation))
+        })?;
+        self.level = id;
+        self.selection.clear();
+        Ok(id)
+    }
+
     pub fn set_level_elevation(&mut self, id: LevelId, elevation: f64) -> EditResult {
         self.transact("Cambiar cota de planta", |m| {
             m.set_level_elevation(id, elevation)
@@ -1519,6 +1568,25 @@ pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), Model
 mod tests {
     use super::*;
     use crate::pick::tests::room;
+
+    /// «Añadir planta» encima: the new level goes on top of the one in hand
+    /// and those above move up by its height, in one undoable step.
+    #[test]
+    fn a_level_inserted_above_lifts_the_upper_ones() {
+        let mut ed = Editor::new_project();
+        let base = ed.model().levels()[0].id;
+        let top = ed.add_level("Cubierta", 3.0).unwrap();
+        ed.level = base;
+        let new = ed.insert_level("Primera", 3.0, 2.8, true).unwrap();
+        let at = |ed: &Editor, id| ed.model().level(id).unwrap().elevation;
+        assert!((at(&ed, new) - 3.0).abs() < 1e-9);
+        assert!((at(&ed, top) - 5.8).abs() < 1e-9);
+        assert!(at(&ed, base).abs() < 1e-9);
+        assert!(ed.insert_level("  ", 9.0, 3.0, true).is_err());
+        ed.undo();
+        assert!(ed.model().level(new).is_none());
+        assert!((at(&ed, top) - 3.0).abs() < 1e-9);
+    }
 
     fn settings(m: &Model) -> WallSettings {
         WallSettings {

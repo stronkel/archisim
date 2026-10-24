@@ -189,34 +189,94 @@ impl ArchiSimApp {
         door: bool,
     ) -> Vec<TypeItem<OpeningTypeId>> {
         let sig = self.picture_signature(true);
-        let model = self.ed.model();
-        let thumbs = &mut self.thumbs;
-        model
+        let view = self.opening_card_view;
+        let ids: Vec<OpeningTypeId> = self
+            .ed
+            .model()
             .opening_types()
             .filter(|t| t.is_door() == door)
-            .map(|t| {
-                let name = if t.mark.is_empty() {
-                    t.name.clone()
-                } else {
-                    format!("{}  {}", t.mark, t.name)
-                };
-                let thumb = thumbs.get(ctx, format!("opening:{t:?}:{sig}"), || {
-                    crate::type_preview::opening_model(model, t)
-                });
-                TypeItem {
-                    id: t.id,
-                    name,
-                    note: format!(
-                        "{} × {} · {}",
-                        fmt_mm(t.width),
-                        crate::units::fmt_len(t.height),
-                        types_ui::family_label(model, t.family)
+            .map(|t| t.id)
+            .collect();
+        if view == CardView::ThreeD {
+            self.thumbs3d.begin();
+        }
+        let mut out = Vec::new();
+        for id in ids {
+            let gpu = self.gpu.clone();
+            let model = self.ed.model();
+            let Some(t) = model.opening_type(id) else {
+                continue;
+            };
+            let name = if t.mark.is_empty() {
+                t.name.clone()
+            } else {
+                format!("{}  {}", t.mark, t.name)
+            };
+            // Planta · Alzado · 3D (concepto de interfaz del 24/10/2026):
+            // in plan one window is a line like any other.
+            let (thumb, caption) = match view {
+                CardView::Plan => (
+                    self.thumbs.get(ctx, format!("opening:{t:?}:{sig}"), || {
+                        crate::type_preview::opening_model(model, t)
+                    }),
+                    "Planta 1:20 · exterior arriba",
+                ),
+                CardView::Elevation => (
+                    self.thumbs.get_drawing(
+                        ctx,
+                        format!("elev:{}:{:?}:{sig}", t.id.0, t.values),
+                        egui::vec2(260.0, 130.0),
+                        || crate::type_drawing::opening_elevation(model, t),
                     ),
-                    thumb,
-                    caption: "Planta 1:20 · exterior arriba",
-                }
-            })
-            .collect()
+                    "Alzado desde el exterior",
+                ),
+                CardView::ThreeD => (
+                    self.thumbs3d.get(
+                        ctx,
+                        gpu.as_ref(),
+                        format!("open3d:{}:{:?}:{sig}", t.id.0, t.values),
+                        || crate::type_preview::opening_model(model, t),
+                    ),
+                    "3D",
+                ),
+            };
+            out.push(TypeItem {
+                id: t.id,
+                name,
+                note: format!(
+                    "{} × {} · {}",
+                    fmt_mm(t.width),
+                    crate::units::fmt_len(t.height),
+                    types_ui::family_label(model, t.family)
+                ),
+                thumb,
+                caption,
+            });
+        }
+        if view == CardView::ThreeD && self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
+        out
+    }
+
+    /// The switch over a door's or window's type card: its picture in
+    /// plan, in elevation or in 3D.
+    fn opening_view_switch(&mut self, ui: &mut Ui) {
+        let mut v = self.opening_card_view;
+        ui.allocate_ui(egui::vec2(ui.available_width(), 26.0), |ui| {
+            super::widgets::segmented(
+                ui,
+                "opening-card-view",
+                &mut v,
+                &[
+                    (CardView::Plan, "Planta", "La planta a 1:20"),
+                    (CardView::Elevation, "Alzado", "Desde el exterior"),
+                    (CardView::ThreeD, "3D", "En su trozo de muro"),
+                ],
+            );
+        });
+        self.opening_card_view = v;
+        ui.add_space(4.0);
     }
 
     // ---- Tools (ArchiCAD's info box) ----------------------------------------
@@ -494,6 +554,7 @@ impl ArchiSimApp {
                 "Herramienta Ventana · lo que vas a colocar"
             },
         );
+        self.opening_view_switch(ui);
         let items = self.opening_type_items(ui.ctx(), door);
         let current = if door {
             self.door_settings.opening_type
@@ -1337,6 +1398,7 @@ impl ArchiSimApp {
                 "Ventana · 1 seleccionada"
             },
         );
+        self.opening_view_switch(ui);
         let items = self.opening_type_items(ui.ctx(), door);
         let mut chosen = None;
         let card = type_card(
@@ -2107,4 +2169,13 @@ impl ArchiSimApp {
             self.views.vg_open = true;
         }
     }
+}
+
+/// How the type card of a door or window shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CardView {
+    Plan,
+    #[default]
+    Elevation,
+    ThreeD,
 }

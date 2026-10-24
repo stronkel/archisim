@@ -259,41 +259,107 @@ fn list_row_with(
     resp
 }
 
-/// The message of the last action, as a card in the corner of `area`.
-pub fn toast(painter: &egui::Painter, area: Rect, text: &str, error: bool, alpha: f32, p: Palette) {
-    if alpha <= 0.0 || area.width() < 160.0 {
-        return;
-    }
-    let font = FontId::proportional(12.5);
-    let max = (area.width() - 60.0).min(560.0);
-    let job = egui::text::LayoutJob {
-        wrap: egui::text::TextWrapping {
-            max_width: max,
-            max_rows: 3,
-            ..Default::default()
-        },
-        ..egui::text::LayoutJob::single_section(
-            text.to_owned(),
-            egui::TextFormat::simple(font, p.text.gamma_multiply(alpha)),
-        )
+thread_local! {
+    /// Where the last click was, and the size of the window: where a
+    /// dialog opened by it appears.
+    static LAST_CLICK: std::cell::Cell<(Pos2, egui::Vec2)> =
+        const { std::cell::Cell::new((Pos2::new(200.0, 120.0), egui::Vec2::new(1440.0, 900.0))) };
+}
+
+/// Notes the click of this frame (called once a frame, before any window).
+pub fn note_click(ctx: &egui::Context) {
+    let size = ctx.content_rect().size();
+    let at = ctx.input(|i| {
+        i.pointer
+            .any_pressed()
+            .then(|| i.pointer.interact_pos())
+            .flatten()
+    });
+    LAST_CLICK.with(|c| {
+        let (p, _) = c.get();
+        c.set((at.unwrap_or(p), size));
+    });
+}
+
+/// A dialog of the application (concepto de interfaz del 24/10/2026): it
+/// opens next to the button that called it — to its left when that is on
+/// the right half of the window, to its right otherwise — and never in a
+/// corner over the tools; it cannot be folded away. After that, egui
+/// remembers where it was moved.
+pub fn dialog<'a>(title: impl Into<egui::WidgetText>) -> egui::Window<'a> {
+    let (at, size) = LAST_CLICK.with(|c| c.get());
+    let right = at.x > size.x / 2.0;
+    let low = at.y > size.y * 0.6;
+    let pivot = match (right, low) {
+        (true, false) => egui::Align2::RIGHT_TOP,
+        (false, false) => egui::Align2::LEFT_TOP,
+        (true, true) => egui::Align2::RIGHT_BOTTOM,
+        (false, true) => egui::Align2::LEFT_BOTTOM,
     };
-    let g = painter.layout_job(job);
-    let r = Rect::from_min_size(
-        area.left_top() + Vec2::new(14.0, 14.0),
-        g.size() + Vec2::new(38.0, 16.0),
+    let gap = if right { -16.0 } else { 16.0 };
+    egui::Window::new(title)
+        .collapsible(false)
+        .pivot(pivot)
+        .default_pos(Pos2::new(at.x + gap, at.y))
+        .constrain(true)
+}
+
+/// A side panel (concepto de interfaz del 24/10/2026): the managers —
+/// Plantas, Capas, Estilos, Parámetros, Biblioteca — come in from the
+/// right over the navigator, as tall as the window between its bars, and
+/// do not cover the drawing more than they need. They slide in (0,15 s)
+/// so it is seen where they come from.
+pub fn side_sheet<'a>(ctx: &egui::Context, title: &str, width: f32) -> egui::Window<'a> {
+    let screen = ctx.content_rect();
+    let frame = ctx.cumulative_frame_nr();
+    let now = ctx.input(|i| i.time);
+    let id = egui::Id::unique(("side-sheet", title.to_string()));
+    // When it was opened: it was not drawn the frame before.
+    let (last, start) = ctx
+        .data(|d| d.get_temp::<(u64, f64)>(id))
+        .unwrap_or((0, now));
+    let start = if last + 1 >= frame { start } else { now };
+    ctx.data_mut(|d| d.insert_temp(id, (frame, start)));
+    let t = ((now - start) / 0.15).clamp(0.0, 1.0) as f32;
+    if t < 1.0 {
+        ctx.request_repaint();
+    }
+    let w = width.min(screen.width() - 40.0);
+    let slide = (1.0 - t) * (w + 20.0);
+    let (top, bottom) = (62.0, 52.0);
+    let h = (screen.height() - top - bottom - 30.0).max(200.0);
+    egui::Window::new(title.to_string())
+        .id(id)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-10.0 + slide, top))
+        // Wide enough for what it holds, never off the screen; as tall as
+        // the space between the bars, scrolling.
+        .min_width(w)
+        .max_width((screen.width() - 40.0).max(w))
+        .min_height(h)
+        .max_height(h)
+        .vscroll(true)
+}
+
+/// A dialog only for deciding (purge, a conflict, an import): in the
+/// middle, the window behind dimmed; it does not close until something is
+/// chosen.
+pub fn decision<'a>(ctx: &egui::Context, title: &str) -> egui::Window<'a> {
+    let screen = ctx.content_rect();
+    ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Middle,
+        egui::Id::unique("decision-dim"),
+    ))
+    .rect_filled(
+        screen,
+        CornerRadius::ZERO,
+        egui::Color32::from_black_alpha(70),
     );
-    painter.rect(
-        r,
-        CornerRadius::same(9),
-        p.panel.gamma_multiply(alpha),
-        Stroke::new(1.0, p.line.gamma_multiply(alpha)),
-        StrokeKind::Inside,
-    );
-    let dot = if error { p.bad } else { p.good };
-    painter.circle_filled(
-        Pos2::new(r.left() + 15.0, r.top() + 16.5),
-        4.0,
-        dot.gamma_multiply(alpha),
-    );
-    painter.galley(Pos2::new(r.left() + 28.0, r.top() + 8.0), g, p.text);
+    egui::Window::new(title.to_string())
+        .collapsible(false)
+        .resizable(false)
+        .order(egui::Order::Foreground)
+        .pivot(Align2::CENTER_CENTER)
+        .default_pos(screen.center())
 }

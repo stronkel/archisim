@@ -515,9 +515,8 @@ impl ArchiSimApp {
         let mut set: Option<DrawLayer> = None;
         let mut remove: Option<DrawLayerId> = None;
         let mut add = false;
-        egui::Window::new("Capas de dibujo")
+        super::widgets::side_sheet(ctx, "Capas de dibujo", 620.0)
             .open(&mut open)
-            .default_width(620.0)
             .show(ctx, |ui| {
                 egui::Grid::new("layers-grid")
                     .striped(true)
@@ -718,7 +717,7 @@ impl ArchiSimApp {
         let mut open = true;
         let mut g = self.ed.model().graphics;
         let before = g;
-        egui::Window::new("Normas gráficas")
+        super::widgets::dialog("Normas gráficas")
             .open(&mut open)
             .default_width(460.0)
             .show(ctx, |ui| {

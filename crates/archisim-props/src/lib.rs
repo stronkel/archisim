@@ -107,6 +107,8 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("tv_unit", &["Con televisor"]),
     ("counter", &["Con fregadero y placa"]),
     ("wall_cabinet", &["Puertas"]),
+    ("base_unit", &["Módulo"]),
+    ("tall_unit", &["Columna"]),
     ("fridge", &["Combi"]),
     ("washer", &["Carga frontal"]),
     ("wc", &["De pie con cisterna", "Suspendido"]),
@@ -268,6 +270,9 @@ pub const KINDS: &[(&str, &[&str])] = &[
 /// `pedestal`: where a desk's drawers are).
 pub const CHOICES: &[(&str, &[&str])] = &[
     ("handle", fronts::HANDLES),
+    ("front_style", fronts::STYLES),
+    ("unit", kitchen::UNITS),
+    ("tall", kitchen::TALLS),
     (
         "pedestal",
         &["Sin cajonera", "A la izquierda", "A la derecha"],
@@ -305,6 +310,8 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "tv_unit" => furniture::tv_unit(&mut b, p),
         "counter" => kitchen::counter(&mut b, p),
         "wall_cabinet" => kitchen::wall_cabinet(&mut b, p),
+        "base_unit" => kitchen::base_unit(&mut b, p),
+        "tall_unit" => kitchen::tall_unit(&mut b, p),
         "fridge" => kitchen::fridge(&mut b, p),
         "washer" => kitchen::washer(&mut b, p),
         "wc" => sanitary::wc(&mut b, p),

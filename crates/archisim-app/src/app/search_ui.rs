@@ -24,7 +24,7 @@ impl ArchiSimApp {
         let p = Palette::current(ui.ctx());
         // As wide as fits before the buttons on the right of the bar (with
         // a large text there is less room).
-        let right = if self.team.is_some() { 470.0 } else { 310.0 };
+        let right = if self.team.is_some() { 500.0 } else { 345.0 };
         let width = (ui.available_width() - right).clamp(110.0, 250.0);
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 26.0), Sense::click());
         let hovered = resp.hovered();

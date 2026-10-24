@@ -95,6 +95,75 @@ fn room_of(folder: &str) -> &'static str {
     }
 }
 
+/// The kind of door or window a family makes, for the catalog's chips.
+fn opening_kind(family: &str) -> String {
+    let f = family.to_lowercase();
+    let k = if f.contains("empotrada") {
+        "Empotradas"
+    } else if f.contains("corredera") {
+        "Correderas"
+    } else if f.contains("guillotina") {
+        "Guillotina"
+    } else if f.contains("plegable") {
+        "Plegables"
+    } else if f.contains("pivotante") {
+        "Pivotantes"
+    } else if f.contains("garaje") {
+        "Garaje"
+    } else if f.contains("hueco") {
+        "Huecos"
+    } else if f.contains("fij") {
+        "Fijas"
+    } else if f.contains("abatible") {
+        "Abatibles"
+    } else if f.contains("practicable") {
+        "Practicables"
+    } else {
+        return family.to_string();
+    };
+    k.to_string()
+}
+
+/// The kind of a piece of the library within its room, for the catalog's
+/// chips: a kitchen's by what it is (base, wall, tall units, hoods…), the
+/// rest by the library's folder.
+fn object_kind(family: &str, folder: &str) -> String {
+    match family {
+        "Módulo bajo de cocina" => "Bajos",
+        "Mueble alto de cocina" => "Altos",
+        "Columna de cocina" | "Frigorífico" => "Columnas",
+        "Campana extractora" => "Campanas",
+        "Encimera de cocina" => "Cocinas enteras",
+        "Isla de cocina" => "Islas",
+        "Lavadora" => "Electrodomésticos",
+        "Cosas de la encimera" => "Sobre la encimera",
+        _ => return folder.to_string(),
+    }
+    .to_string()
+}
+
+/// The order of the kitchen's kinds (the others keep theirs, after).
+fn kind_order(k: &str) -> usize {
+    [
+        "Bajos",
+        "Altos",
+        "Columnas",
+        "Campanas",
+        "Islas",
+        "Sobre la encimera",
+        "Electrodomésticos",
+        "Cocinas enteras",
+        "Practicables",
+        "Abatibles",
+        "Correderas",
+        "Guillotina",
+        "Fijas",
+    ]
+    .iter()
+    .position(|x| *x == k)
+    .unwrap_or(99)
+}
+
 /// A piece of a piece of furniture that takes a colour in the card.
 pub(super) struct Piece {
     /// Its material parameter.
@@ -147,10 +216,13 @@ struct Card {
     thumb: Option<super::thumbs::Thumb>,
     /// The colours of the collection the piece is shown in.
     swatches: Vec<Color32>,
+    /// Its kind within the theme (the third level of the catalog's tree:
+    /// «Bajos», «Correderas»…); empty when the theme has no kinds.
+    sub: String,
 }
 
 /// Height of the catalog at the bottom.
-const CATALOG_HEIGHT: f32 = 172.0;
+const CATALOG_HEIGHT: f32 = 204.0;
 /// Size of a card.
 const CARD: Vec2 = Vec2::new(112.0, 108.0);
 /// Spacing of the ground grid.
@@ -469,6 +541,23 @@ impl ArchiSimApp {
             .collect()
     }
 
+    /// The kinds (third level) of a theme, as its chips show them.
+    #[cfg(test)]
+    pub(super) fn catalog_kinds_pub(
+        &mut self,
+        ctx: &egui::Context,
+        group: CatalogGroup,
+        theme: &str,
+    ) -> Vec<String> {
+        let mut v: Vec<String> = Vec::new();
+        for c in self.catalog_cards(ctx, group, theme) {
+            if !c.sub.is_empty() && !v.contains(&c.sub) {
+                v.push(c.sub);
+            }
+        }
+        v
+    }
+
     /// The cards of a theme.
     fn catalog_cards(
         &mut self,
@@ -483,6 +572,7 @@ impl ArchiSimApp {
             glyph,
             thumb: None,
             swatches: Vec::new(),
+            sub: String::new(),
         };
         let sig = self.picture_signature(false);
         let openings = |app: &mut Self, door: bool| -> Vec<Card> {
@@ -508,6 +598,9 @@ impl ArchiSimApp {
                         glyph: if door { Glyph::Door } else { Glyph::Window },
                         thumb,
                         swatches: Vec::new(),
+                        sub: opening_kind(
+                            model.family(t.family).map_or("", |f| f.def().name.as_str()),
+                        ),
                     }
                 })
                 .collect()
@@ -621,6 +714,7 @@ impl ArchiSimApp {
                         glyph: Glyph::Object,
                         thumb: i.thumb,
                         swatches: super::collection_ui::colours(c),
+                        sub: i.folder.clone(),
                     })
                     .collect()
             }
@@ -647,6 +741,7 @@ impl ArchiSimApp {
                     })
                     .map(|i| Card {
                         act: CatalogAct::Object(i.pick),
+                        sub: object_kind(&i.family, &i.folder),
                         name: i.name,
                         glyph: Glyph::Object,
                         thumb: i.thumb,
@@ -816,6 +911,7 @@ impl ArchiSimApp {
                 {
                     self.catalog_group = g;
                     self.catalog_theme = g.themes()[0];
+                    self.catalog_sub = None;
                 }
             }
             ui.separator();
@@ -826,6 +922,7 @@ impl ArchiSimApp {
             for t in themes {
                 if ui.selectable_label(self.catalog_theme == *t, *t).clicked() {
                     self.catalog_theme = t;
+                    self.catalog_sub = None;
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -844,8 +941,58 @@ impl ArchiSimApp {
                 }
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(4.0);
         let mut cards = self.catalog_cards(&ctx, self.catalog_group, self.catalog_theme);
+        // The third level of the tree: the kinds of the theme (Bajos,
+        // Altos, Columnas…), as chips; «Todas» shows them all.
+        let mut subs: Vec<String> = Vec::new();
+        for c in &cards {
+            if !c.sub.is_empty() && !subs.contains(&c.sub) {
+                subs.push(c.sub.clone());
+            }
+        }
+        subs.sort_by_key(|k| kind_order(k));
+        if self.catalog_sub.as_ref().is_some_and(|k| !subs.contains(k)) {
+            self.catalog_sub = None;
+        }
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.add_space(2.0);
+            ui.label(egui::RichText::new("↳").color(p.muted));
+            if subs.len() < 2 {
+                ui.label(
+                    egui::RichText::new(self.catalog_theme)
+                        .font(strong_font(12.5))
+                        .color(p.text),
+                );
+                return;
+            }
+            let chip = |ui: &mut Ui, label: &str, on: bool| -> bool {
+                let text =
+                    egui::RichText::new(label)
+                        .size(12.5)
+                        .color(if on { p.accent } else { p.text });
+                ui.add(
+                    egui::Button::new(text)
+                        .fill(if on { p.accent_soft } else { p.panel })
+                        .stroke(Stroke::new(1.0, if on { p.accent_soft } else { p.line }))
+                        .corner_radius(CornerRadius::same(12)),
+                )
+                .clicked()
+            };
+            if chip(ui, "Todas", self.catalog_sub.is_none()) {
+                self.catalog_sub = None;
+            }
+            for k in &subs {
+                if chip(ui, k, self.catalog_sub.as_deref() == Some(k.as_str())) {
+                    self.catalog_sub = Some(k.clone());
+                }
+            }
+        });
+        if let Some(k) = &self.catalog_sub {
+            cards.retain(|c| &c.sub == k);
+        }
+        ui.add_space(4.0);
         // The pieces drawn in 3D, a few each frame.
         self.thumbs3d.begin();
         for c in &mut cards {
@@ -1152,7 +1299,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Propiedades")
+        super::widgets::dialog("Propiedades")
             .id(Id::unique("maquette-props"))
             .open(&mut open)
             .default_width(300.0)

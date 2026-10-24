@@ -30,6 +30,30 @@ enum BarAct {
     SetMaterial(String, u64),
     /// Give a piece of the object a colour of the cosy palette.
     PaintPiece(String, &'static str),
+    /// Give a value to a measure or choice of its type (to its whole row
+    /// of modules with `true`).
+    SetValue(String, Value, bool),
+}
+
+/// A count or a choice of the object's type the bar offers: how many
+/// drawers, its handle, its front…
+#[derive(Debug, Clone)]
+enum Control {
+    /// A small whole number, as buttons (0 1 2 3 4).
+    Count {
+        key: String,
+        label: String,
+        lo: i64,
+        hi: i64,
+        now: i64,
+    },
+    /// One of a list, in a popover.
+    Choice {
+        key: String,
+        label: String,
+        options: Vec<String>,
+        now: String,
+    },
 }
 
 /// Size of the picture card.
@@ -64,6 +88,107 @@ impl ArchiSimApp {
             .collect()
     }
 
+    /// The counts and choices of an object's type that its bar offers (not
+    /// its model, which the catalogue chooses).
+    fn object_controls(&self, id: ObjectId) -> Vec<Control> {
+        let model = self.ed.model();
+        let Some(t) = model
+            .object(id)
+            .and_then(|o| model.object_type(o.object_type))
+        else {
+            return Vec::new();
+        };
+        let Some(def) = model.family(t.family).map(|f| f.def().clone()) else {
+            return Vec::new();
+        };
+        let defaults = model
+            .family_defaults(t.family, archisim_family::ParamScope::Type)
+            .unwrap_or_default();
+        let value = |k: &str| t.values.get(k).or(defaults.get(k)).cloned();
+        let mut out = Vec::new();
+        for p in def.params_of(archisim_family::ParamScope::Type) {
+            if p.name == "model3d" || !def.is_visible(&p.name, &t.values) {
+                continue;
+            }
+            match (&p.kind, value(&p.name)) {
+                (archisim_family::ParamKind::Integer, Some(Value::Number(n))) => {
+                    let (lo, hi) = p.range.unwrap_or((0.0, 0.0));
+                    if hi - lo >= 1.0 && hi - lo <= 5.0 {
+                        out.push(Control::Count {
+                            key: p.name.clone(),
+                            label: p.label.clone(),
+                            lo: lo as i64,
+                            hi: hi as i64,
+                            now: n.round() as i64,
+                        });
+                    }
+                }
+                (archisim_family::ParamKind::Choice(options), Some(Value::Text(now))) => {
+                    out.push(Control::Choice {
+                        key: p.name.clone(),
+                        label: p.label.clone(),
+                        options: options.clone(),
+                        now,
+                    });
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    /// The objects in a row with `id`: of its family, turned the same
+    /// way, their backs on one line and touching one after another (a run
+    /// of kitchen modules).
+    pub(super) fn row_of(&self, id: ObjectId) -> Vec<ObjectId> {
+        let m = self.ed.model();
+        let Some(o) = m.object(id) else {
+            return Vec::new();
+        };
+        let Some(family) = m.object_type(o.object_type).map(|t| t.family) else {
+            return vec![id];
+        };
+        let (c, s) = (o.rotation.cos(), o.rotation.sin());
+        let along = |p: archisim_core::Point2| (p - o.position).x * c + (p - o.position).y * s;
+        let back = |p: archisim_core::Point2| -(p - o.position).x * s + (p - o.position).y * c;
+        let mut row: Vec<(f64, f64, ObjectId)> = m
+            .objects()
+            .filter(|x| x.level == o.level)
+            .filter(|x| {
+                m.object_type(x.object_type)
+                    .is_some_and(|t| t.family == family)
+            })
+            .filter(|x| {
+                let turn = (x.rotation - o.rotation).rem_euclid(std::f64::consts::TAU);
+                turn.min(std::f64::consts::TAU - turn) < 0.02 && back(x.position).abs() < 0.03
+            })
+            .filter_map(|x| {
+                let (lo, hi) = crate::drag::object_box(m, x.id)?;
+                let a = along(x.position);
+                Some((a + lo[0], a + hi[0], x.id))
+            })
+            .collect();
+        row.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // The run of touching ones that holds `id`.
+        let Some(at) = row.iter().position(|r| r.2 == id) else {
+            return vec![id];
+        };
+        let (mut a, mut b) = (at, at);
+        while a > 0 && (row[a].0 - row[a - 1].1).abs() < 0.02 {
+            a -= 1;
+        }
+        while b + 1 < row.len() && (row[b + 1].0 - row[b].1).abs() < 0.02 {
+            b += 1;
+        }
+        row[a..=b].iter().map(|r| r.2).collect()
+    }
+
+    /// What the bar does when one of its counts or choices is picked.
+    #[cfg(test)]
+    pub(super) fn bar_set_value_pub(&mut self, key: &str, v: Value, whole_row: bool) {
+        self.bar_do(BarAct::SetValue(key.to_string(), v, whole_row));
+    }
+
     /// The bar of the selection, at the bottom left over the catalogue.
     pub(super) fn object_bar(&mut self, ctx: &egui::Context, bottom: f32) {
         if self.ed.selection.is_empty() || self.tool != Tool::Arrow {
@@ -85,6 +210,9 @@ impl ArchiSimApp {
         };
         let materials = object
             .map(|id| self.object_materials(id))
+            .unwrap_or_default();
+        let controls = object
+            .map(|id| self.object_controls(id))
             .unwrap_or_default();
         let thumb = single.and_then(|e| self.bar_thumb(ctx, e));
         let mut act = None;
@@ -154,6 +282,29 @@ impl ArchiSimApp {
                                     b(ui, Mark::Glyph(Glyph::Paint), "Igualar", "La herramienta para poner otro igual (cuentagotas)", BarAct::Eyedropper);
                                 }
                                 b(ui, Mark::Icon(Icon::Close), "Borrar", "Quitarlo (Supr)", BarAct::Delete);
+                                if !controls.is_empty() {
+                                    bar_gap(ui, p);
+                                    for c in &controls {
+                                        match c {
+                                            Control::Count { key, label, lo, hi, now } => {
+                                                if let Some(n) = count_buttons(ui, label, *lo, *hi, *now, p) {
+                                                    act = Some(BarAct::SetValue(key.clone(), Value::Number(n as f64), false));
+                                                }
+                                            }
+                                            Control::Choice { key, label, now, .. } => {
+                                                let k = format!("choice:{key}");
+                                                let open = self.bar_swatches.as_deref() == Some(k.as_str());
+                                                let r = choice_button(ui, label, now, open, p);
+                                                if r.clicked() {
+                                                    act = Some(BarAct::Swatches(k));
+                                                }
+                                                if open {
+                                                    self.bar_swatch_at = Some(r.rect);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 if !materials.is_empty() {
                                     bar_gap(ui, p);
                                     for (key, name, _, rgb) in &materials {
@@ -202,41 +353,92 @@ impl ArchiSimApp {
             Color32::from_rgb(35, 38, 43),
         );
 
-        // The colours of the material open, above its swatch.
+        // The colours of the material open, or the options of a choice,
+        // above its button.
         if let (Some(key), Some(at), Some(id)) =
             (self.bar_swatches.clone(), self.bar_swatch_at, object)
         {
-            if let Some(a) = self.material_swatches(ctx, &key, at, id) {
+            let found = match key.strip_prefix("choice:") {
+                Some(name) => controls.iter().find_map(|c| match c {
+                    Control::Choice {
+                        key,
+                        label,
+                        options,
+                        now,
+                    } if key == name => {
+                        Some(self.choice_options(ctx, key, label, options, now, at, id))
+                    }
+                    _ => None,
+                }),
+                None => Some(self.material_swatches(ctx, &key, at, id)),
+            };
+            if let Some(Some(a)) = found {
                 act = Some(a);
             }
         }
+        if let Some(a) = act {
+            self.bar_do(a);
+        }
+    }
+
+    /// Does what a button of the bar asked for.
+    fn bar_do(&mut self, act: BarAct) {
+        let single =
+            (self.ed.selection.len() == 1).then(|| *self.ed.selection.iter().next().expect("one"));
+        let object = match single {
+            Some(Element::Object(id)) => Some(id),
+            _ => None,
+        };
         match act {
-            Some(BarAct::Turn) => self.card_turn_pub(),
-            Some(BarAct::Flip) => {
+            BarAct::Turn => self.card_turn_pub(),
+            BarAct::Flip => {
                 self.flip_selected(None);
             }
-            Some(BarAct::Duplicate) => self.card_duplicate_pub(),
-            Some(BarAct::Eyedropper) => {
+            BarAct::Duplicate => self.card_duplicate_pub(),
+            BarAct::Eyedropper => {
                 if let Some(e) = single {
                     self.eyedropper(e);
                 }
             }
-            Some(BarAct::Delete) => self.delete_pub(),
-            Some(BarAct::More) => self.maquette_props = true,
-            Some(BarAct::Swatches(key)) => {
+            BarAct::Delete => self.delete_pub(),
+            BarAct::More => self.maquette_props = true,
+            BarAct::Swatches(key) => {
                 self.bar_swatches = if self.bar_swatches.as_deref() == Some(key.as_str()) {
                     None
                 } else {
                     Some(key)
                 };
             }
-            Some(BarAct::PaintPiece(key, swatch)) => {
+            BarAct::PaintPiece(key, swatch) => {
                 if let Some(id) = object {
                     let r = self.ed.paint_object_piece(id, &key, swatch);
                     self.report(r, &format!("{swatch}."));
                 }
             }
-            Some(BarAct::SetMaterial(key, m)) => {
+            BarAct::SetValue(key, v, whole_row) => {
+                if let Some(id) = object {
+                    let ids = if whole_row { self.row_of(id) } else { vec![id] };
+                    let n = ids.len();
+                    let r = self.ed.transact("Cambiar el mueble", |model| {
+                        for i in &ids {
+                            crate::drag::set_object_value(model, *i, &key, v.clone())?;
+                        }
+                        Ok(())
+                    });
+                    if !whole_row {
+                        self.bar_swatches = None;
+                    }
+                    self.report(
+                        r,
+                        &if n > 1 {
+                            format!("Cambiados los {n} módulos de la fila.")
+                        } else {
+                            "Cambiado.".to_string()
+                        },
+                    );
+                }
+            }
+            BarAct::SetMaterial(key, m) => {
                 if let Some(id) = object {
                     let r = self.ed.transact("Cambiar material", |model| {
                         crate::drag::set_object_value(model, id, &key, Value::Material(m))
@@ -244,12 +446,25 @@ impl ArchiSimApp {
                     self.report(r, "Material cambiado.");
                 }
             }
-            None => {}
         }
     }
 
     /// A small picture of what is selected for the card.
     fn bar_thumb(&mut self, ctx: &egui::Context, e: Element) -> Option<super::thumbs::Thumb> {
+        // An object: drawn in 3D, as the catalogue's cards.
+        if let Element::Object(id) = e {
+            let t = self.ed.model().object(id)?.object_type;
+            let act = super::maquette_ui::CatalogAct::Object(
+                super::object_gallery::ObjectPick::Project(t),
+            );
+            self.thumbs3d.begin();
+            if let Some(th) = self.card_thumb_3d(ctx, act) {
+                return Some(th);
+            }
+            if self.thumbs3d.pending {
+                ctx.request_repaint();
+            }
+        }
         let sig = self.picture_signature(false);
         let model = self.ed.model();
         let thumbs = &mut self.thumbs;
@@ -268,6 +483,77 @@ impl ArchiSimApp {
             }
             _ => None,
         }
+    }
+
+    /// The options of a choice above its button at `at`: a click gives
+    /// them to this object, or to its whole row.
+    #[allow(clippy::too_many_arguments)]
+    fn choice_options(
+        &mut self,
+        ctx: &egui::Context,
+        key: &str,
+        label: &str,
+        options: &[String],
+        now: &str,
+        at: Rect,
+        id: ObjectId,
+    ) -> Option<BarAct> {
+        let p = Palette::current(ctx);
+        let row = self.row_of(id).len();
+        let mut act = None;
+        let area = egui::Area::new(Id::unique("object-bar-choice"))
+            .order(egui::Order::Foreground)
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .fixed_pos(Pos2::new(at.left() - 8.0, at.top() - 10.0))
+            .constrain(true)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_min_width(200.0);
+                    ui.label(egui::RichText::new(label).strong().color(p.text));
+                    for o in options {
+                        let on = o == now;
+                        let text = egui::RichText::new(o).color(if on { p.accent } else { p.text });
+                        if ui
+                            .add(
+                                egui::Button::new(text)
+                                    .frame(on)
+                                    .min_size(Vec2::new(190.0, 24.0)),
+                            )
+                            .clicked()
+                        {
+                            act = Some(BarAct::SetValue(
+                                key.to_string(),
+                                Value::Text(o.clone()),
+                                false,
+                            ));
+                        }
+                    }
+                    if row > 1 {
+                        ui.separator();
+                        if ui
+                            .link(format!("«{now}» a toda la fila ({row})"))
+                            .on_hover_text("Los módulos que se tocan con este, en línea")
+                            .clicked()
+                        {
+                            act = Some(BarAct::SetValue(
+                                key.to_string(),
+                                Value::Text(now.to_string()),
+                                true,
+                            ));
+                        }
+                    }
+                })
+            });
+        let outside = ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|q| !area.response.rect.contains(q) && !at.contains(q))
+        });
+        if outside && act.is_none() {
+            self.bar_swatches = None;
+        }
+        act
     }
 
     /// The colours of the project's materials, above the swatch at `at`:
@@ -460,6 +746,71 @@ fn swatch_button(ui: &mut Ui, rgb: [u8; 3], name: &str, open: bool, p: Palette) 
         p.text,
     );
     resp
+}
+
+/// A small count as a row of buttons under its name; the one clicked.
+fn count_buttons(ui: &mut Ui, label: &str, lo: i64, hi: i64, now: i64, p: Palette) -> Option<i64> {
+    let mut out = None;
+    ui.vertical(|ui| {
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new(label).size(11.0).color(p.muted));
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 1.0;
+            for n in lo..=hi {
+                let on = n == now;
+                let (r, resp) = ui.allocate_exact_size(Vec2::new(22.0, 22.0), Sense::click());
+                let painter = ui.painter();
+                painter.rect_filled(
+                    r,
+                    CornerRadius::same(6),
+                    if on {
+                        p.accent_soft
+                    } else if resp.hovered() {
+                        p.line.gamma_multiply(0.5)
+                    } else {
+                        Color32::TRANSPARENT
+                    },
+                );
+                painter.text(
+                    r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    n.to_string(),
+                    egui::FontId::proportional(12.0),
+                    if on { p.accent } else { p.text },
+                );
+                if resp.clicked() && !on {
+                    out = Some(n);
+                }
+            }
+        });
+    });
+    out
+}
+
+/// A choice of the bar: its name over what it is now.
+fn choice_button(ui: &mut Ui, label: &str, now: &str, open: bool, p: Palette) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(Vec2::new(78.0, 52.0), Sense::click());
+    let painter = ui.painter();
+    if open {
+        painter.rect_filled(r, CornerRadius::same(10), p.accent_soft);
+    } else if resp.hovered() {
+        painter.rect_filled(r, CornerRadius::same(10), p.line.gamma_multiply(0.5));
+    }
+    painter.text(
+        Pos2::new(r.center().x, r.top() + 15.0),
+        egui::Align2::CENTER_CENTER,
+        truncate(label, 12),
+        egui::FontId::proportional(11.0),
+        p.muted,
+    );
+    painter.text(
+        Pos2::new(r.center().x, r.bottom() - 17.0),
+        egui::Align2::CENTER_CENTER,
+        format!("{} ▾", truncate(now, 10)),
+        egui::FontId::proportional(12.0),
+        if open { p.accent } else { p.text },
+    );
+    resp.on_hover_text(format!("{label}: {now}"))
 }
 
 fn truncate(s: &str, n: usize) -> String {

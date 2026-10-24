@@ -53,10 +53,8 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Biblioteca")
+        super::widgets::side_sheet(ctx, "Biblioteca", 560.0)
             .open(&mut open)
-            .default_width(560.0)
-            .default_height(520.0)
             .show(ctx, |ui| self.library_contents(ui));
         self.library.open = open;
         self.library_conflict(ctx);
@@ -404,9 +402,7 @@ impl ArchiSimApp {
         }
         .unwrap_or_default();
         let mut choice = None;
-        egui::Window::new("El tipo ya está en el proyecto")
-            .collapsible(false)
-            .resizable(false)
+        super::widgets::decision(ctx, "El tipo ya está en el proyecto")
             .show(ctx, |ui| {
                 ui.label(format!(
                     "El proyecto tiene el tipo «{name}» (el mismo, con el mismo GlobalId) pero con otros valores."
@@ -449,9 +445,7 @@ impl ArchiSimApp {
             return;
         };
         let mut done = None;
-        egui::Window::new("Purgar tipos sin usar")
-            .collapsible(false)
-            .resizable(false)
+        super::widgets::decision(ctx, "Purgar tipos sin usar")
             .show(ctx, |ui| {
                 if n == 0 {
                     ui.label("Todos los tipos del proyecto se usan.");

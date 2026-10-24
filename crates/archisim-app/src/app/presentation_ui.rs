@@ -37,9 +37,8 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Estilos de presentación")
+        super::widgets::side_sheet(ctx, "Estilos de presentación", 620.0)
             .open(&mut open)
-            .default_width(620.0)
             .show(ctx, |ui| self.presentation_contents(ui));
         self.presentation.open = open;
         if !open {

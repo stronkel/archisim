@@ -133,7 +133,7 @@ impl ArchiSimApp {
         let mut open = true;
         let mut go = false;
         let mut reread = false;
-        egui::Window::new("Importar modelo 3D")
+        super::widgets::dialog("Importar modelo 3D")
             .open(&mut open)
             .collapsible(false)
             .resizable(false)

@@ -105,7 +105,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Prioridades de intersección")
+        super::widgets::dialog("Prioridades de intersección")
             .open(&mut open)
             .default_width(680.0)
             .default_height(560.0)

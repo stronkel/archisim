@@ -245,7 +245,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Tipos de muro cortina")
+        super::widgets::dialog("Tipos de muro cortina")
             .open(&mut open)
             .default_size([1080.0, 680.0])
             .resizable(true)

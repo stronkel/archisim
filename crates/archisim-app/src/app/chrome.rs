@@ -255,6 +255,13 @@ impl ArchiSimApp {
                 self.export_sheets(true);
             }
             if ui
+                .button("Plano de carpinterías (PDF)…")
+                .on_hover_text("Cada tipo de puerta y ventana en alzado a 1:50, con sus medidas, su sección y sus datos, en hojas A3")
+                .clicked()
+            {
+                self.export_carpentry();
+            }
+            if ui
                 .button("Exportar mediciones (BC3)…")
                 .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para Presto, Arquímedes y otros")
                 .clicked()
@@ -759,24 +766,97 @@ impl ArchiSimApp {
         }
     }
 
-    /// The last message over the drawing (what the keys do is no longer
-    /// shown over it: the tool's step is in the context bar, and what
-    /// can be done with the selection in its right click menu).
-    pub(super) fn draw_overlays(&self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect) {
+    /// Nothing over the drawing any more: the keys are in the context bar
+    /// and the right click's menu, and the messages at the bottom of the
+    /// window ([`Self::toast_area`]).
+    pub(super) fn draw_overlays(
+        &self,
+        _ctx: &egui::Context,
+        _painter: &egui::Painter,
+        _rect: Rect,
+    ) {
+    }
+
+    /// The last message, always at the bottom in the middle of the window
+    /// (concepto de interfaz del 24/10/2026), with «Deshacer» when it tells
+    /// of a change that can be undone.
+    pub(super) fn toast_area(&mut self, ctx: &egui::Context) {
         let p = Palette::current(ctx);
-        if let Some(m) = &self.message {
-            let now = ctx.input(|i| i.time);
-            let age = now - self.message_seen.1;
-            let life = if m.error {
-                ERROR_SECONDS
-            } else {
-                MESSAGE_SECONDS
-            };
-            let alpha = ((life - age) / FADE_SECONDS).clamp(0.0, 1.0) as f32;
-            if alpha > 0.0 {
-                widgets::toast(painter, rect, &m.text, m.error, alpha, p);
-                ctx.request_repaint_after(std::time::Duration::from_millis(50));
-            }
+        let Some(m) = &self.message else {
+            return;
+        };
+        let now = ctx.input(|i| i.time);
+        let age = now - self.message_seen.1;
+        let life = if m.error {
+            ERROR_SECONDS
+        } else {
+            MESSAGE_SECONDS
+        };
+        let alpha = ((life - age) / FADE_SECONDS).clamp(0.0, 1.0) as f32;
+        if alpha <= 0.0 {
+            return;
+        }
+        ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        let undo = !m.error
+            && self.message_undo == Some(self.ed.revision())
+            && self.ed.undo_label().is_some();
+        let screen = ctx.content_rect();
+        let lift = if self.maquette { 230.0 } else { 62.0 };
+        let text = m.text.clone();
+        let error = m.error;
+        let mut undo_now = false;
+        egui::Area::new(egui::Id::unique("toast"))
+            .order(egui::Order::Foreground)
+            .pivot(egui::Align2::CENTER_BOTTOM)
+            .fixed_pos(egui::pos2(screen.center().x, screen.bottom() - lift))
+            .interactable(true)
+            .show(ctx, |ui| {
+                ui.set_opacity(alpha);
+                egui::Frame::new()
+                    .fill(p.panel)
+                    .stroke(egui::Stroke::new(1.0, p.line))
+                    .corner_radius(egui::CornerRadius::same(12))
+                    .shadow(egui::epaint::Shadow {
+                        offset: [0, 6],
+                        blur: 20,
+                        spread: 0,
+                        color: egui::Color32::from_black_alpha(36),
+                    })
+                    .inner_margin(egui::Margin::symmetric(14, 9))
+                    .show(ui, |ui| {
+                        ui.set_max_width(560.0);
+                        ui.horizontal(|ui| {
+                            let (dot, _) =
+                                ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
+                            ui.painter().circle_filled(
+                                dot.center(),
+                                4.0,
+                                if error { p.bad } else { p.good },
+                            );
+                            ui.add(
+                                egui::Label::new(egui::RichText::new(&text).color(p.text)).wrap(),
+                            );
+                            if undo {
+                                ui.add_space(6.0);
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            egui::RichText::new("Deshacer")
+                                                .strong()
+                                                .color(p.accent),
+                                        )
+                                        .frame(false),
+                                    )
+                                    .clicked()
+                                {
+                                    undo_now = true;
+                                }
+                            }
+                        });
+                    });
+            });
+        if undo_now {
+            self.undo();
         }
     }
 
