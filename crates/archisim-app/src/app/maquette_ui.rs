@@ -57,9 +57,11 @@ impl CatalogGroup {
                 "Baño",
                 "Dormitorio",
                 "Despacho",
+                "Decoración",
                 "Otros",
             ],
             Self::Outside => &[
+                "Jardín y terraza",
                 "Vegetación",
                 "Mobiliario urbano",
                 "Gente y coches",
@@ -75,12 +77,40 @@ fn room_of(folder: &str) -> &'static str {
     match folder {
         "Sofás y sillones" | "Salón" | "Estanterías" => "Salón",
         "Mesas" | "Sillas" => "Comedor",
-        "Cocina" | "Electrodomésticos" => "Cocina",
+        "Cocina" | "Electrodomésticos" | "Taburetes" => "Cocina",
         "Accesorios de baño" | "Duchas y bañeras" | "Inodoros y bidés" | "Lavabos" => "Baño",
         "Camas" | "Dormitorio" | "Armarios" => "Dormitorio",
         "Despacho" => "Despacho",
+        // What makes a house lived in, for any room.
+        "Alfombras"
+        | "Iluminación"
+        | "Plantas de interior"
+        | "Cortinas"
+        | "Decoración"
+        | "Cuadros y espejos"
+        | "Cojines y mantas" => "Decoración",
+        // In «Exterior».
+        "Jardín y terraza" => "Jardín y terraza",
         _ => "Otros",
     }
+}
+
+/// A piece of a piece of furniture that takes a colour in the card.
+pub(super) struct Piece {
+    /// Its material parameter.
+    pub key: String,
+    /// The name of its material now.
+    pub current: Option<String>,
+    pub swatches: Vec<(&'static str, [u8; 3])>,
+}
+
+/// A kind of stair on the catalog: its shape, its turns and what carries
+/// it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StairCard {
+    pub preset: archisim_core::StairPreset,
+    pub winders: bool,
+    pub structure: archisim_core::StairStructure,
 }
 
 /// What a card of the catalog does.
@@ -97,7 +127,9 @@ pub enum CatalogAct {
     Window(OpeningTypeId),
     Roof(crate::editor::RoofKind),
     Dormer(DormerKind),
-    Stair,
+    Stair(StairCard),
+    /// A piece of the library in the Maqueta's collection, by its name.
+    Collected(&'static str),
     Railing,
     Object(ObjectPick),
     Planting,
@@ -113,12 +145,14 @@ struct Card {
     name: String,
     glyph: Glyph,
     thumb: Option<super::thumbs::Thumb>,
+    /// The colours of the collection the piece is shown in.
+    swatches: Vec<Color32>,
 }
 
 /// Height of the catalog at the bottom.
-const CATALOG_HEIGHT: f32 = 156.0;
+const CATALOG_HEIGHT: f32 = 172.0;
 /// Size of a card.
-const CARD: Vec2 = Vec2::new(96.0, 92.0);
+const CARD: Vec2 = Vec2::new(112.0, 108.0);
 /// Spacing of the ground grid.
 pub const GRID_STEP: f64 = 0.5;
 
@@ -136,9 +170,10 @@ impl ArchiSimApp {
                 self.set_mode(ViewMode::ThreeD);
             }
             if self.maquette_first {
-                // As in Los Sims: walls cut away and the grid on.
+                // As in Los Sims: the walls in front cut away and the
+                // grid on.
                 self.maquette_first = false;
-                self.v3d.cutaway = Cutaway::Cut;
+                self.v3d.cutaway = Cutaway::Front;
                 self.ground_grid = true;
             }
             self.say("Maqueta: elige abajo qué poner y pincha en el 3D. Técnica, arriba a la derecha, vuelve a la ventana de siempre con lo mismo seleccionado.");
@@ -203,8 +238,51 @@ impl ArchiSimApp {
             self.view_3d(ui);
         });
         let ctx = ui.ctx().clone();
-        self.maquette_card(&ctx);
+        let bottom = ctx.content_rect().bottom() - CATALOG_HEIGHT;
+        self.object_bar(&ctx, bottom);
         self.maquette_more(&ctx);
+    }
+
+    /// Walking as in a game: W A S D forwards, left, back and right along
+    /// the ground, Q down and E up, faster with Mayús; held, it keeps
+    /// going. The letters are the walk's here, not the tools'.
+    pub(super) fn maquette_walk(&mut self, ctx: &egui::Context) {
+        if crate::app::typing_in_text(ctx) {
+            return;
+        }
+        use egui::Key;
+        let walk_keys = [Key::W, Key::A, Key::S, Key::D, Key::Q, Key::E];
+        let (held, fast, dt) = ctx.input_mut(|i| {
+            // Ctrl+S and the like are not walking.
+            let plain = !i.modifiers.command && !i.modifiers.ctrl && !i.modifiers.alt;
+            let held = walk_keys.map(|k| plain && i.key_down(k));
+            // The tools do not see these letters.
+            i.events.retain(|e| match e {
+                egui::Event::Text(t) => !(plain && t.chars().all(|c| "wasdqeWASDQE".contains(c))),
+                egui::Event::Key { key, modifiers, .. } => {
+                    !(walk_keys.contains(key)
+                        && !modifiers.command
+                        && !modifiers.ctrl
+                        && !modifiers.alt)
+                }
+                _ => true,
+            });
+            (held, i.modifiers.shift, i.stable_dt.clamp(0.0, 0.1))
+        });
+        if !held.iter().any(|h| *h) {
+            return;
+        }
+        let axis = |plus: bool, minus: bool| f32::from(u8::from(plus)) - f32::from(u8::from(minus));
+        let forward = axis(held[0], held[2]);
+        let right = axis(held[3], held[1]);
+        let up = axis(held[5], held[4]);
+        // Metres a second: more from afar, so it feels the same at any zoom.
+        let speed = self.v3d.camera.distance.clamp(3.0, 200.0) * 0.6 * if fast { 3.0 } else { 1.0 };
+        let step = speed * dt;
+        self.v3d
+            .camera
+            .walk(forward * step, right * step, up * step * 0.5);
+        ctx.request_repaint();
     }
 
     fn maquette_top_bar(&mut self, ui: &mut Ui) {
@@ -278,8 +356,11 @@ impl ArchiSimApp {
                 .on_hover_text(
                 "Cuadrícula de 50 cm en el suelo de la planta, y los clics se ajustan a ella (G)",
             );
+            ui.separator();
+            self.look_menus(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.workspace_switch(ui);
+
                 ui.add_space(10.0);
                 if ui
                     .button("Encuadrar")
@@ -292,14 +373,77 @@ impl ArchiSimApp {
         });
     }
 
+    /// The quality of the 3D picture (in both environments): kept for
+    /// this computer.
+    pub(super) fn quality_buttons(&mut self, ui: &mut Ui) {
+        use crate::view3d::look::Quality;
+        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.label("Imagen");
+        for q in Quality::ALL {
+            if ui
+                .selectable_label(self.v3d.quality == q, q.name())
+                .on_hover_text(q.hint())
+                .clicked()
+            {
+                self.v3d.quality = q;
+                self.prefs.quality_3d = Some(q);
+            }
+        }
+    }
+
+    /// The picture's quality and its light (day, evening or night), as
+    /// two short lists: the Maqueta's bar has little room.
+    fn look_menus(&mut self, ui: &mut Ui) {
+        use crate::view3d::look::{Light, Quality};
+        egui::ComboBox::from_id_salt("maquette-quality")
+            .selected_text(format!("Imagen: {}", self.v3d.quality.name()))
+            .width(120.0)
+            .show_ui(ui, |ui| {
+                for q in Quality::ALL {
+                    if ui
+                        .selectable_label(self.v3d.quality == q, q.name())
+                        .on_hover_text(q.hint())
+                        .clicked()
+                    {
+                        self.v3d.quality = q;
+                        self.prefs.quality_3d = Some(q);
+                    }
+                }
+                ui.separator();
+                if ui
+                    .button("Captura grande…")
+                    .on_hover_text("Guarda la vista tal cual en una imagen de 3840 píxeles de ancho (PNG), para un render con IA, D5 o Twinmotion")
+                    .clicked()
+                {
+                    ui.close();
+                    self.big_capture();
+                }
+            });
+        egui::ComboBox::from_id_salt("maquette-light")
+            .selected_text(format!("Luz: {}", self.v3d.light.name()))
+            .width(110.0)
+            .show_ui(ui, |ui| {
+                for l in Light::ALL {
+                    if ui
+                        .selectable_label(self.v3d.light == l, l.name())
+                        .on_hover_text(l.hint())
+                        .clicked()
+                    {
+                        self.v3d.light = l;
+                    }
+                }
+            });
+    }
+
     /// Walls up, cut away or low (in the 3D view of both environments).
     pub(super) fn cutaway_buttons(&mut self, ui: &mut Ui) {
         ui.spacing_mut().item_spacing.x = 2.0;
         for c in Cutaway::ALL {
             let hint = match c {
                 Cutaway::Up => "Todo el edificio",
-                Cutaway::Cut => "Corte a 1,20 m sobre la planta: se ve el interior; las plantas de arriba y la cubierta se ocultan",
-                Cutaway::Low => "Corte a 30 cm: la planta en 3D",
+                Cutaway::Front => "Los muros entre la cámara y el centro de la vista bajan a 30 cm; los del fondo quedan enteros. Sigue a la cámara al girar. Los muebles no se cortan",
+                Cutaway::Cut => "Corte a 1,20 m sobre la planta: se ve el interior; las plantas de arriba y la cubierta se ocultan. Los muebles no se cortan",
+                Cutaway::Low => "Corte a 30 cm: la planta en 3D. Los muebles no se cortan",
             };
             if ui
                 .selectable_label(self.v3d.cutaway == c, c.name())
@@ -309,6 +453,20 @@ impl ArchiSimApp {
                 self.v3d.cutaway = c;
             }
         }
+    }
+
+    /// The names on the cards of a theme (for the tests).
+    #[cfg(test)]
+    pub(super) fn catalog_cards_pub(
+        &mut self,
+        ctx: &egui::Context,
+        group: CatalogGroup,
+        theme: &str,
+    ) -> Vec<String> {
+        self.catalog_cards(ctx, group, theme)
+            .into_iter()
+            .map(|c| c.name)
+            .collect()
     }
 
     /// The cards of a theme.
@@ -324,6 +482,7 @@ impl ArchiSimApp {
             name: name.to_string(),
             glyph,
             thumb: None,
+            swatches: Vec::new(),
         };
         let sig = self.picture_signature(false);
         let openings = |app: &mut Self, door: bool| -> Vec<Card> {
@@ -333,9 +492,12 @@ impl ArchiSimApp {
                 .opening_types()
                 .filter(|t| t.is_door() == door)
                 .map(|t| {
-                    let key = format!("maqueta:open:{}:{sig}", t.id.0);
-                    let thumb =
-                        thumbs.get(ctx, key, || crate::type_preview::opening_model(model, t));
+                    // In elevation: in plan, one window is a line like any
+                    // other (concepto de interfaz del 24/10/2026).
+                    let key = format!("maqueta:elev:{}:{:?}:{sig}", t.id.0, t.values);
+                    let thumb = thumbs.get_drawing(ctx, key, CARD - Vec2::new(16.0, 46.0), || {
+                        crate::type_drawing::opening_elevation(model, t)
+                    });
                     Card {
                         act: if door {
                             CatalogAct::Door(t.id)
@@ -345,6 +507,7 @@ impl ArchiSimApp {
                         name: t.name.clone(),
                         glyph: if door { Glyph::Door } else { Glyph::Window },
                         thumb,
+                        swatches: Vec::new(),
                     }
                 })
                 .collect()
@@ -391,10 +554,33 @@ impl ArchiSimApp {
                     Glyph::Window,
                 ),
             ],
-            (CatalogGroup::Build, "Escaleras") => vec![
-                card(CatalogAct::Stair, "Escalera", Glyph::Stair),
-                card(CatalogAct::Railing, "Barandilla", Glyph::Railing),
-            ],
+            (CatalogGroup::Build, "Escaleras") => {
+                use archisim_core::{StairPreset as P, StairStructure as S};
+                let stair = |preset, winders, structure, name| {
+                    card(
+                        CatalogAct::Stair(StairCard {
+                            preset,
+                            winders,
+                            structure,
+                        }),
+                        name,
+                        Glyph::Stair,
+                    )
+                };
+                vec![
+                    stair(P::Straight, false, S::Slab, "Recta"),
+                    stair(P::LShape, false, S::Slab, "En L con meseta"),
+                    stair(P::LShape, true, S::Slab, "En L compensada"),
+                    stair(P::UShape, false, S::Slab, "En U con meseta"),
+                    stair(P::UShape, true, S::Slab, "En U compensada"),
+                    stair(P::Spiral, false, S::Newel, "De caracol"),
+                    stair(P::Straight, false, S::Stringers, "De zancas"),
+                    stair(P::Straight, false, S::Spine, "De zanca central"),
+                    stair(P::Straight, false, S::Cantilever, "De peldaños volados"),
+                    stair(P::Free, false, S::Slab, "Libre"),
+                    card(CatalogAct::Railing, "Barandilla", Glyph::Railing),
+                ]
+            }
             (CatalogGroup::Outside, "Terreno y caminos") => vec![
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
                 card(CatalogAct::Road, "Camino o calle", Glyph::Road),
@@ -415,6 +601,29 @@ impl ArchiSimApp {
                     Glyph::Revolution,
                 ),
             ],
+            (CatalogGroup::Furnish, _) | (CatalogGroup::Outside, "Jardín y terraza")
+                if self.collection.is_some() =>
+            {
+                // The library's pieces in the collection, in its colours.
+                let c = self.collection.expect("checked");
+                self.collected_items(ctx, c)
+                    .into_iter()
+                    .filter(|i| match group {
+                        CatalogGroup::Furnish => {
+                            matches!(i.category, "Mobiliario" | "Sanitarios")
+                                && room_of(&i.folder) == theme
+                        }
+                        _ => i.folder == "Jardín y terraza",
+                    })
+                    .map(|i| Card {
+                        act: CatalogAct::Collected(i.name),
+                        name: i.name.to_string(),
+                        glyph: Glyph::Object,
+                        thumb: i.thumb,
+                        swatches: super::collection_ui::colours(c),
+                    })
+                    .collect()
+            }
             _ => {
                 // Objects of the library and the project, by room.
                 let items = self.object_items_pub(ctx);
@@ -426,8 +635,11 @@ impl ArchiSimApp {
                                 && room_of(&i.folder) == theme
                         }
                         CatalogGroup::Outside => match theme {
+                            "Jardín y terraza" => i.folder == "Jardín y terraza",
                             "Vegetación" => i.category == "Entorno",
-                            "Mobiliario urbano" => i.category == "Mobiliario urbano",
+                            "Mobiliario urbano" => {
+                                i.category == "Mobiliario urbano" && i.folder != "Jardín y terraza"
+                            }
                             "Gente y coches" => matches!(i.category, "Gente" | "Vehículos"),
                             _ => false,
                         },
@@ -438,6 +650,7 @@ impl ArchiSimApp {
                         name: i.name,
                         glyph: Glyph::Object,
                         thumb: i.thumb,
+                        swatches: Vec::new(),
                     })
                     .collect()
             }
@@ -463,12 +676,30 @@ impl ArchiSimApp {
             CatalogAct::Dormer(k) => {
                 self.tool == Tool::Roof && self.roof_settings.dormer == Some(k)
             }
-            CatalogAct::Stair => self.tool == Tool::Stair,
+            CatalogAct::Stair(c) => {
+                let s = &self.stair_settings;
+                self.tool == Tool::Stair
+                    && s.preset == c.preset
+                    && s.winders == c.winders
+                    && s.structure == c.structure
+            }
             CatalogAct::Railing => self.tool == Tool::Railing,
             CatalogAct::Object(ObjectPick::Project(t)) => {
                 self.tool == Tool::Object && self.object_settings.object_type == Some(t)
             }
             CatalogAct::Object(_) => false,
+            CatalogAct::Collected(name) => {
+                self.tool == Tool::Object
+                    && self.collection.is_some_and(|c| {
+                        let m = self.ed.model();
+                        self.object_settings
+                            .object_type
+                            .and_then(|t| m.object_type(t))
+                            .is_some_and(|t| {
+                                t.name == archisim_library::collections::variant_name(name, c)
+                            })
+                    })
+            }
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
@@ -526,7 +757,29 @@ impl ArchiSimApp {
                 self.roof_tool.finish();
                 self.say(format!("{}: pincha en un faldón.", k.name()));
             }
-            CatalogAct::Stair => self.pick(Pick::Tool(Tool::Stair)),
+            CatalogAct::Stair(c) => {
+                use archisim_core::{StairPreset as P, StairStructure as S, StairUse};
+                self.pick(Pick::Tool(Tool::Stair));
+                self.stair_tool.points.clear();
+                let s = &mut self.stair_settings;
+                s.preset = c.preset;
+                s.winders = c.winders;
+                s.structure = c.structure;
+                // Concrete closed, the others open; a spiral narrower and
+                // steeper, for a dwelling.
+                s.closed_risers = c.structure == S::Slab;
+                if c.preset == P::Spiral {
+                    s.width = 0.8;
+                    s.going = 0.24;
+                    s.core = 0.12;
+                    s.usage = StairUse::Restricted;
+                }
+                self.say(match c.preset {
+                    P::Free => "Escalera libre: clic en cada giro de la línea de huella; Intro para terminar.",
+                    P::Spiral => "Escalera de caracol: clic en el centro y clic hacia donde arranca.",
+                    _ => "Escalera: clic en el arranque y clic hacia donde sube; Espacio la gira al otro lado.",
+                });
+            }
             CatalogAct::Railing => self.pick(Pick::Tool(Tool::Railing)),
             CatalogAct::Object(pick) => {
                 if let Some(t) = self.object_pick_type(pick) {
@@ -535,6 +788,7 @@ impl ArchiSimApp {
                     self.set_tool(Tool::Object);
                 }
             }
+            CatalogAct::Collected(name) => self.take_collected(name),
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
@@ -582,10 +836,26 @@ impl ArchiSimApp {
                 {
                     self.set_tool(Tool::Arrow);
                 }
+                if self.catalog_group != CatalogGroup::Build {
+                    ui.separator();
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        self.collection_chooser(ui);
+                    });
+                }
             });
         });
         ui.add_space(6.0);
-        let cards = self.catalog_cards(&ctx, self.catalog_group, self.catalog_theme);
+        let mut cards = self.catalog_cards(&ctx, self.catalog_group, self.catalog_theme);
+        // The pieces drawn in 3D, a few each frame.
+        self.thumbs3d.begin();
+        for c in &mut cards {
+            if let Some(t) = self.card_thumb_3d(&ctx, c.act) {
+                c.thumb = Some(t);
+            }
+        }
+        if self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
         if cards.is_empty() {
             ui.label(
                 egui::RichText::new("Nada en este tema todavía: la biblioteca del estudio y los tipos del proyecto salen aquí.")
@@ -623,7 +893,7 @@ impl ArchiSimApp {
                         );
                         let pic = Rect::from_min_size(
                             rect.min + Vec2::new(8.0, 6.0),
-                            Vec2::new(CARD.x - 16.0, CARD.y - 34.0),
+                            Vec2::new(CARD.x - 16.0, CARD.y - 46.0),
                         );
                         match &c.thumb {
                             Some(t) => {
@@ -643,19 +913,37 @@ impl ArchiSimApp {
                                 if on { p.accent } else { p.text },
                             ),
                         }
+                        // The collection's colours, under the picture.
+                        if !c.swatches.is_empty() {
+                            let n = c.swatches.len() as f32;
+                            let w = (CARD.x - 24.0) / n;
+                            for (i, col) in c.swatches.iter().enumerate() {
+                                let r = Rect::from_min_size(
+                                    Pos2::new(
+                                        rect.left() + 12.0 + i as f32 * w,
+                                        rect.bottom() - 41.0,
+                                    ),
+                                    Vec2::new(w - 1.0, 4.0),
+                                );
+                                painter.rect_filled(r, CornerRadius::same(1), *col);
+                            }
+                        }
+                        // The whole name, in two lines if it needs them.
                         let name = egui::text::LayoutJob {
-                            wrap: egui::text::TextWrapping::truncate_at_width(CARD.x - 10.0),
+                            wrap: egui::text::TextWrapping {
+                                max_width: CARD.x - 10.0,
+                                max_rows: 2,
+                                break_anywhere: false,
+                                overflow_character: Some('…'),
+                            },
+                            halign: egui::Align::Center,
                             ..egui::text::LayoutJob::single_section(
                                 c.name.clone(),
                                 egui::TextFormat::simple(FontId::proportional(11.5), p.text),
                             )
                         };
                         let g = painter.layout_job(name);
-                        painter.galley(
-                            Pos2::new(rect.center().x - g.size().x / 2.0, rect.bottom() - 22.0),
-                            g,
-                            p.text,
-                        );
+                        painter.galley(Pos2::new(rect.center().x, rect.bottom() - 36.0), g, p.text);
                         if resp.on_hover_text(&c.name).clicked() {
                             take = Some(c.act);
                         }
@@ -667,145 +955,63 @@ impl ArchiSimApp {
         }
     }
 
-    /// Where the card of the selection goes: over the middle of what is
-    /// selected, as seen in the 3D view.
-    fn selection_anchor(&self) -> Option<Pos2> {
-        let rect = self.v3d.canvas;
-        let model = self.ed.model();
-        let mut pts = Vec::new();
-        let mut z = 0.0;
-        for e in &self.ed.selection {
-            let Some(o) = crate::pick::outline(&self.ed, *e) else {
+    /// The pieces of an object that take a colour (its type's materials,
+    /// but light and glass) with the swatches of the cosy palette that suit
+    /// each: fabrics for upholstery, woods and metals for legs…
+    pub(super) fn object_pieces(&self, id: archisim_core::ObjectId) -> Vec<Piece> {
+        let m = self.ed.model();
+        let Some(o) = m.object(id) else {
+            return Vec::new();
+        };
+        let Some(t) = m.object_type(o.object_type) else {
+            return Vec::new();
+        };
+        let Some(f) = m.family(t.family) else {
+            return Vec::new();
+        };
+        let Ok(defaults) = m.family_defaults(t.family, archisim_core::ParamScope::Type) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for param in f.def().params_of(archisim_core::ParamScope::Type) {
+            if param.kind != archisim_family::ParamKind::Material {
+                continue;
+            }
+            let value = t.values.get(&param.name).or(defaults.get(&param.name));
+            let Some(archisim_core::Value::Material(mid)) = value else {
                 continue;
             };
-            pts.extend(o);
-            z = match *e {
-                Element::Dormer(r, i) => model
-                    .roof(r)
-                    .and_then(|x| {
-                        x.dormers
-                            .get(usize::from(i))
-                            .and_then(|d| x.dormer_shape(d))
-                    })
-                    .map(|s| {
-                        model
-                            .roof(r)
-                            .and_then(|x| model.level(x.level))
-                            .map_or(0.0, |l| l.elevation)
-                            + s.ridge_z
-                    })
-                    .unwrap_or(z),
-                Element::Roof(r) => model
-                    .roof(r)
-                    .map(|x| model.level(x.level).map_or(0.0, |l| l.elevation) + x.top_range().1)
-                    .unwrap_or(z),
-                _ => self.v3d.level_z as f64 + 1.6,
+            let Some(mat) = m.material(archisim_core::MaterialId(*mid)) else {
+                continue;
             };
-        }
-        if pts.is_empty() {
-            return None;
-        }
-        let n = pts.len() as f64;
-        let c = pts.iter().fold(Point2::new(0.0, 0.0), |a, q| a + *q) * (1.0 / n);
-        let s = self.v3d.camera.project_to_screen(
-            glam::Vec3::new(c.x as f32, c.y as f32, z as f32),
-            glam::Vec2::new(rect.width(), rect.height()),
-        )?;
-        let at = rect.min + Vec2::new(s.x, s.y);
-        rect.contains(at).then_some(at)
-    }
-
-    /// The card next to what is selected: what it is, and quick actions.
-    fn maquette_card(&mut self, ctx: &egui::Context) {
-        if self.ed.selection.is_empty() || self.tool != Tool::Arrow {
-            return;
-        }
-        let Some(at) = self.selection_anchor() else {
-            return;
-        };
-        let p = Palette::current(ctx);
-        let label = super::context_bar::selection_label(self.ed.selection.iter());
-        let single =
-            (self.ed.selection.len() == 1).then(|| *self.ed.selection.iter().next().expect("one"));
-        let name = single.map(|e| self.element_title(e)).unwrap_or_default();
-        let mut act = None;
-        egui::Area::new(Id::unique("maquette-card"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(at + Vec2::new(40.0, -150.0))
-            .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(p.panel)
-                    .stroke(Stroke::new(1.0, p.line))
-                    .corner_radius(CornerRadius::same(10))
-                    .inner_margin(egui::Margin::same(8))
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(&label)
-                                .font(strong_font(12.5))
-                                .color(p.text),
-                        );
-                        if !name.is_empty() {
-                            ui.label(egui::RichText::new(&name).small().color(p.muted));
-                        }
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 4.0;
-                            if ui
-                                .button("⟳ Girar")
-                                .on_hover_text("Un cuarto de vuelta")
-                                .clicked()
-                            {
-                                act = Some(CardAct::Turn);
-                            }
-                            if ui
-                                .button("⧉ Duplicar")
-                                .on_hover_text("Una copia al lado, seleccionada")
-                                .clicked()
-                            {
-                                act = Some(CardAct::Duplicate);
-                            }
-                            if single.is_some()
-                                && ui
-                                    .button("Cuentagotas")
-                                    .on_hover_text("La herramienta para poner otro igual")
-                                    .clicked()
-                            {
-                                act = Some(CardAct::Eyedropper);
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 4.0;
-                            if ui
-                                .button("Más…")
-                                .on_hover_text("Todas sus propiedades")
-                                .clicked()
-                            {
-                                act = Some(CardAct::More);
-                            }
-                            if ui.button("🗑 Borrar").on_hover_text("Supr").clicked() {
-                                act = Some(CardAct::Delete);
-                            }
-                        });
-                    });
-            });
-        match act {
-            Some(CardAct::Turn) => self.card_turn(),
-            Some(CardAct::Duplicate) => self.card_duplicate(),
-            Some(CardAct::Eyedropper) => {
-                if let Some(e) = single {
-                    self.eyedropper(e);
-                }
+            let kinds: &[&str] = match mat.category.as_str() {
+                "fabric" => &["fabric"],
+                "wood" | "metal" => &["wood", "metal"],
+                "ceramic" | "stone" => &["ceramic", "stone"],
+                _ => continue,
+            };
+            let swatches: Vec<(&'static str, [u8; 3])> = archisim_library::COZY_PALETTE
+                .iter()
+                .filter(|(n, c, _)| kinds.contains(c) && !n.starts_with("Pantalla"))
+                .map(|(n, _, rgb)| (*n, *rgb))
+                .collect();
+            if swatches.is_empty() {
+                continue;
             }
-            Some(CardAct::More) => self.maquette_props = true,
-            Some(CardAct::Delete) => match self.ed.delete_selection() {
-                Ok(n) => self.say(format!("{n} borrado(s).")),
-                Err(e) => self.complain(format!("No se puede borrar: {e}.")),
-            },
-            None => {}
+            out.push(Piece {
+                key: param.name.clone(),
+                current: Some(mat.name.clone()),
+                swatches,
+            });
+            if out.len() == 4 {
+                break;
+            }
         }
+        out
     }
 
     /// A short name of what an element is (its type).
-    fn element_title(&self, e: Element) -> String {
+    pub(super) fn element_title(&self, e: Element) -> String {
         let m = self.ed.model();
         match e {
             Element::Object(id) => m
@@ -837,17 +1043,15 @@ impl ArchiSimApp {
         .unwrap_or_default()
     }
 
-    #[cfg(test)]
     pub(super) fn card_turn_pub(&mut self) {
         self.card_turn()
     }
 
-    #[cfg(test)]
     pub(super) fn card_duplicate_pub(&mut self) {
         self.card_duplicate()
     }
 
-    /// A quarter turn of the selection about its middle.
+    /// Turns the selection by the card's angle about its middle.
     fn card_turn(&mut self) {
         let items = self.ed.selection.clone();
         let pts: Vec<Point2> = items
@@ -859,7 +1063,7 @@ impl ArchiSimApp {
             return;
         }
         let c = pts.iter().fold(Point2::new(0.0, 0.0), |a, q| a + *q) * (1.0 / pts.len() as f64);
-        let t = archisim_draft::Transform::rotate(c, std::f64::consts::FRAC_PI_2);
+        let t = archisim_draft::Transform::rotate(c, self.turn_by.to_radians());
         let res = self
             .ed
             .transact("Girar", |m| crate::xform::transform(m, &items, &t, false));
@@ -1003,15 +1207,6 @@ impl ArchiSimApp {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum CardAct {
-    Turn,
-    Duplicate,
-    Eyedropper,
-    More,
-    Delete,
-}
-
 /// The point snapped to the ground grid, if it is on.
 pub fn snap_to_grid(p: Point2) -> Point2 {
     let r = |v: f64| (v / GRID_STEP).round() * GRID_STEP;
@@ -1027,6 +1222,7 @@ mod tests {
         assert_eq!(room_of("Camas"), "Dormitorio");
         assert_eq!(room_of("Lavabos"), "Baño");
         assert_eq!(room_of("Mesas"), "Comedor");
+        assert_eq!(room_of("Iluminación"), "Decoración");
         assert_eq!(room_of("Modelos 3D"), "Otros");
         assert_eq!(
             snap_to_grid(Point2::new(1.26, -0.74)),

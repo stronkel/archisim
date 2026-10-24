@@ -1,0 +1,32 @@
+family "Cosas de la encimera"
+  category kitchen
+  host none
+  version 1
+  description "Lo que vive en la encimera: tablas y aceite, botes de cristal, cafetera y tazas o hierbas aromáticas"
+  folder "Cocina"
+
+type_params
+  section "Dimensiones"
+    width length = 0.40 range 0.15..1.00 label "Ancho"
+  section "Materiales"
+    mat material = "Roble claro" label "Tablas, tazas, contenido"
+  section "Modelo 3D"
+    model3d choice("Tablas y aceite", "Botes de cristal", "Cafetera y tazas", "Hierbas aromáticas") = "Tablas y aceite" label "Modelo 3D"
+    glass  material = "Vidrio doble" label "Vidrio"
+    frame  material = "Roble claro" label "Tapas"
+    fruit  material = "Aceite" label "Aceite"
+    metal  material = "Cromado" label "Cafetera"
+    dark   material = "Negro mate" label "Asa"
+    pot_mat material = "Terracota" label "Macetas"
+    leaves material = "Hoja verde" label "Hierbas"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.2, 0.25) material mat
+
+plan 1:50
+  polygon (-width / 2, 0.02) (width / 2, 0.02) (width / 2, 0.18) (-width / 2, 0.18) pen thin
+
+outputs
+  generator = "props:counter_decor"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -1,0 +1,33 @@
+family "Ventilador de techo"
+  category furniture
+  host none
+  version 1
+  description "Ventilador de techo de cinco aspas, de madera con luz o de ratán"
+  folder "Climatización"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.30 range 0.80..1.80 label "Diámetro"
+    height length = 2.60 range 2.20..4.00 label "Altura del techo"
+  section "Materiales"
+    mat material = "Roble claro" label "Aspas"
+  section "Modelo 3D"
+    model3d choice("Aspas de madera", "Aspas de ratán") = "Aspas de madera" label "Modelo 3D"
+    frame material = "Latón" label "Motor y barra"
+    weave material = "Ratán" label "Aspas de ratán"
+    bulb  material = "Luz" label "Luz"
+
+body
+  box (-width / 2, 0, height - 0.5) to (width / 2, width, height) material mat
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), width / 2 + r * sin(t0)) to (r * cos(t1), width / 2 + r * sin(t1)) pen thin dashed
+
+outputs
+  generator = "props:ceiling_fan"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

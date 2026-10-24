@@ -1,0 +1,36 @@
+family "Cortina"
+  category furniture
+  host none
+  version 1
+  description "Cortinas con su barra, abiertas a los lados o corridas; el punto de inserción es el centro de la barra, contra la pared"
+  folder "Cortinas"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.60 range 0.40..6.00 label "Ancho del hueco"
+    height length = 2.50 range 0.40..3.50 label "Altura de la barra"
+    open   number = 0.6 range 0..1 label "Abierta (0 corrida, 1 abierta del todo)"
+  section "Materiales"
+    mat   material = "Lino arena" label "Tela"
+    sheer material = "Visillo" label "Visillo"
+    metal material = "Latón" label "Barra"
+  section "Modelo 3D"
+    model3d choice("Larga", "Visillo", "Hasta el alféizar") = "Larga" label "Modelo 3D"
+
+body
+  box (-width / 2 - 0.08, 0.06, 0) to (width / 2 + 0.08, 0.11, height) material mat
+
+plan 1:50
+  line (-width / 2 - 0.08, 0.08) to (width / 2 + 0.08, 0.08) pen thin
+  let n = max(3, round(width / 0.2))
+  repeat i in 0..n
+    let x0 = -width / 2 - 0.06 + (width + 0.12) * i / n
+    let x1 = -width / 2 - 0.06 + (width + 0.12) * (i + 0.5) / n
+    let x2 = -width / 2 - 0.06 + (width + 0.12) * (i + 1) / n
+    line (x0, 0.06) to (x1, 0.11) pen thin
+    line (x1, 0.11) to (x2, 0.06) pen thin
+
+outputs
+  generator = "props:curtain"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

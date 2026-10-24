@@ -1,0 +1,33 @@
+family "Toallas"
+  category sanitary
+  host none
+  version 1
+  description "Toallas dobladas en pila, colgadas de una barra o enrolladas en una bandeja"
+  folder "Accesorios de baño"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.40 range 0.20..1.20 label "Ancho"
+    count     integer = 3 range 1..6 label "Toallas en la pila"
+    elevation length = 1.10 range 0.30..2.00 label "Altura de la barra"
+  section "Materiales"
+    mat material = "Toalla blanca" label "Toallas"
+  section "Modelo 3D"
+    model3d choice("Dobladas", "Colgadas", "Enrolladas") = "Dobladas" label "Modelo 3D"
+    mat2  material = "Lino gris" label "Otras toallas"
+    frame material = "Ratán" label "Bandeja"
+    metal material = "Cromado" label "Barra"
+
+body
+  if model3d == "Colgadas"
+    box (-width / 2, 0, elevation - 0.55) to (width / 2, 0.1, elevation + 0.02) material mat
+  else
+    box (-width / 2, 0.02, 0) to (width / 2, 0.3, 0.15) material mat
+
+plan 1:50
+  polygon (-width / 2, 0.02) (width / 2, 0.02) (width / 2, 0.3) (-width / 2, 0.3) pen thin
+
+outputs
+  generator = "props:towels"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

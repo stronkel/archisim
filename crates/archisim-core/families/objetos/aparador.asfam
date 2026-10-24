@@ -1,0 +1,33 @@
+family "Aparador"
+  category furniture
+  host none
+  version 2
+  description "Aparador bajo de patas con puertas y cajones, o con puertas de lamas"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.60 range 0.60..3.00 label "Largo"
+    depth  length = 0.45 range 0.30..0.60 label "Fondo"
+    height length = 0.75 range 0.40..1.20 label "Altura"
+  section "Materiales"
+    mat   material = "Roble claro" label "Madera"
+    frame material = "Nogal" label "Patas"
+    metal material = "Latón" label "Tiradores"
+  section "Modelo 3D"
+    model3d choice("Nórdico de patas", "Puertas de lamas") = "Nórdico de patas" label "Modelo 3D"
+    handle  choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Pomo" label "Tiradores"
+
+body
+  box (-width / 2, 0, 0.18) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+
+outputs
+  # Placed against another of its kind, in line: one, as wide as both.
+  joins = "width"
+  generator = "props:sideboard"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

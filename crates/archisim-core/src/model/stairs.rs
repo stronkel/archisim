@@ -49,6 +49,84 @@ impl Railings {
 /// Height of a stair's railing above the nosings (CTE: 0,90 m).
 pub const RAILING_HEIGHT: f64 = 0.9;
 
+/// How a stair is laid out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StairForm {
+    /// Straight flights along the walking line, a landing at every turn.
+    #[default]
+    Landings,
+    /// One run along the walking line, its turns made with winders
+    /// ("peldaños compensados").
+    Winders,
+    /// Round a centre ("de caracol"): the walking line's first point is
+    /// the centre, its second gives the direction of the first riser.
+    Spiral,
+}
+
+/// What carries the treads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StairStructure {
+    /// A concrete slab under the steps ("losa").
+    #[default]
+    Slab,
+    /// A stringer on each side ("dos zancas laterales").
+    Stringers,
+    /// One stringer under the middle ("zanca central").
+    Spine,
+    /// Treads built into a wall, nothing under them ("peldaños volados").
+    Cantilever,
+    /// A spiral's treads round a central post ("mástil").
+    Newel,
+}
+
+/// The form and build of a stair.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StairDesign {
+    pub form: StairForm,
+    /// Spiral: the angle turned from the first riser to the last, in
+    /// radians; counter-clockwise if positive.
+    pub sweep: f64,
+    /// Spiral: the radius of the newel or of the eye, where the treads
+    /// begin.
+    pub core: f64,
+    pub structure: StairStructure,
+    /// Steps with risers ("tabica"); without, open treads.
+    pub closed_risers: bool,
+    /// Thickness of the treads (on a slab, of their finish, if it has a
+    /// material of its own).
+    pub tread: f64,
+    /// The material of the treads; `None`, the stair's.
+    pub tread_material: Option<MaterialId>,
+    /// Width and depth of the stringers (or of the central one).
+    pub stringer: [f64; 2],
+}
+
+impl Default for StairDesign {
+    fn default() -> Self {
+        StairDesign {
+            form: StairForm::Landings,
+            sweep: 0.0,
+            core: 0.1,
+            structure: StairStructure::Slab,
+            closed_risers: true,
+            tread: 0.04,
+            tread_material: None,
+            stringer: [0.08, 0.3],
+        }
+    }
+}
+
+impl StairDesign {
+    /// Thickness of what is laid on the slab of a concrete stair (none
+    /// without a material of its own).
+    pub fn finish(&self) -> f64 {
+        match (self.structure, self.tread_material) {
+            (StairStructure::Slab, Some(_)) => self.tread,
+            _ => 0.0,
+        }
+    }
+}
+
 /// A stair.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stair {
@@ -75,6 +153,8 @@ pub struct Stair {
     pub usage: StairUse,
     /// Railings along the flights (and round the landings).
     pub railings: Railings,
+    /// Its form and build.
+    pub design: StairDesign,
 }
 
 /// Data needed to create a stair.
@@ -90,6 +170,7 @@ pub struct NewStair {
     pub waist: f64,
     pub material: MaterialId,
     pub usage: StairUse,
+    pub design: StairDesign,
 }
 
 /// One flight: its walking line (from its first riser to its last), how
@@ -134,24 +215,28 @@ impl Flight {
 pub struct Landing {
     pub outline: Vec<Point2>,
     pub top: f64,
+    /// Its left side, from the flight arriving to the one leaving.
+    pub left: Vec<Point2>,
+    /// Its right side, the same way.
+    pub right: Vec<Point2>,
+    /// The middle of the stair through it.
+    pub centre: Vec<Point2>,
 }
 
-/// How a stair is laid out: flights, landings and the riser height.
+/// How a stair is laid out: its treads and landings in walking order and
+/// the riser height (and, for flights and landings, the flights).
 #[derive(Debug, Clone, PartialEq)]
 pub struct StairLayout {
+    /// The straight flights (a stair of flights and landings).
     pub flights: Vec<Flight>,
     pub landings: Vec<Landing>,
+    /// Every tread, from the foot.
+    pub steps: Vec<Step>,
     pub riser: f64,
-}
-
-impl StairLayout {
-    pub fn risers(&self) -> usize {
-        self.flights.iter().map(|f| f.risers).sum()
-    }
-
-    pub fn treads(&self) -> usize {
-        self.flights.iter().map(|f| f.treads).sum()
-    }
+    /// The runs of treads, a landing between each two.
+    pub runs: Vec<Run>,
+    /// The walking line drawn in plan, from the foot to the head.
+    pub walk: Vec<Point2>,
 }
 
 /// What the code (CTE DB-SUA 1, 4.2) asks of a stair that this one does
@@ -174,32 +259,95 @@ pub enum StairIssue {
     NoHandrail,
     /// A handrail on one side only of a stair 1,20 m wide or more.
     HandrailBothSides,
+    /// A curved tread narrower than 5 cm on its narrow side (dwelling).
+    NarrowEdge { going: f64, min: f64 },
+    /// A curved tread deeper than 44 cm on its wide side.
+    WideEdge { going: f64, max: f64 },
+    /// Steps without risers in a stair of general use (only allowed out of
+    /// public areas and not for evacuation upwards).
+    OpenRisers,
 }
 
 /// Extreme values a stair may take at all (not the code's limits).
 const MIN_WIDTH: f64 = 0.4;
 const MIN_GOING: f64 = 0.1;
 
+/// Lays out a stair of any form.
+#[allow(clippy::too_many_arguments)]
+pub fn stair_layout(
+    path: &[Point2],
+    width: f64,
+    going: f64,
+    height: f64,
+    base: f64,
+    design: &StairDesign,
+    edge: f64,
+) -> StairLayout {
+    match design.form {
+        StairForm::Landings => layout(path, width, going, height, base),
+        StairForm::Winders => winder_layout(path, width, going, height, base, edge),
+        StairForm::Spiral => match path {
+            [c, f, ..] => spiral_layout(
+                *c,
+                *f - *c,
+                design.sweep,
+                design.core,
+                width,
+                going,
+                height,
+                base,
+                edge,
+            ),
+            _ => layout(&[], width, going, height, base),
+        },
+    }
+}
+
 impl Stair {
-    /// Flights, landings and riser height.
+    /// Treads, landings and riser height.
     pub fn layout(&self) -> StairLayout {
-        layout(
+        stair_layout(
             &self.path,
             self.width,
             self.going,
             self.height,
             self.base_offset,
+            &self.design,
+            self.walking_edge(),
         )
     }
 
-    /// The outline of the whole stair in plan: flights and landings.
+    /// The outline of the whole stair in plan: treads and landings.
     pub fn outlines(&self) -> Vec<Vec<Point2>> {
         let l = self.layout();
-        l.flights
+        l.steps
             .iter()
-            .map(|f| f.outline(self.width))
+            .map(Step::outline)
             .chain(l.landings.iter().map(|x| x.outline.clone()))
             .collect()
+    }
+
+    /// Where one sets foot on the stair, and where one leaves it, on its
+    /// walking line.
+    pub fn foot(&self) -> Option<Point2> {
+        match self.design.form {
+            StairForm::Spiral => self.layout().walk.first().copied(),
+            _ => self.path.first().copied(),
+        }
+    }
+
+    pub fn head(&self) -> Option<Point2> {
+        match self.design.form {
+            StairForm::Spiral => self.layout().walk.last().copied(),
+            _ => self.path.last().copied(),
+        }
+    }
+
+    /// How far from the narrow side of a curved tread the code measures
+    /// its going: 50 cm, or its middle in a dwelling's stair narrower
+    /// than 1 m.
+    pub fn walking_edge(&self) -> f64 {
+        walking_edge(self.usage, self.width)
     }
 
     /// What the code asks that this stair does not meet.
@@ -211,11 +359,7 @@ impl Stair {
         };
         let mut v = Vec::new();
         let e = 1e-6;
-        let going = l
-            .flights
-            .iter()
-            .map(|f| f.going)
-            .fold(f64::INFINITY, f64::min);
+        let going = l.going();
         if going.is_finite() && going < min_going - e {
             v.push(StairIssue::TreadTooShort {
                 going,
@@ -241,6 +385,33 @@ impl Stair {
                 min: min_width,
             });
         }
+        // Curved treads: not too narrow on one side, not too deep on the
+        // other.
+        let turned = || l.steps.iter().filter(|s| s.turned);
+        let narrow = turned()
+            .map(|s| s.side_length(true).min(s.side_length(false)))
+            .fold(f64::INFINITY, f64::min);
+        let wide = turned()
+            .map(|s| s.side_length(true).max(s.side_length(false)))
+            .fold(0.0, f64::max);
+        if self.usage == StairUse::Restricted && narrow < 0.05 - e {
+            v.push(StairIssue::NarrowEdge {
+                going: narrow,
+                min: 0.05,
+            });
+        }
+        if wide > 0.44 + e {
+            v.push(StairIssue::WideEdge {
+                going: wide,
+                max: 0.44,
+            });
+        }
+        if self.usage == StairUse::General
+            && !self.design.closed_risers
+            && self.design.structure != StairStructure::Slab
+        {
+            v.push(StairIssue::OpenRisers);
+        }
         if l.risers() as f64 * l.riser >= 0.55 - e {
             match self.railings {
                 Railings::None => v.push(StairIssue::NoHandrail),
@@ -250,11 +421,12 @@ impl Stair {
                 _ => {}
             }
         }
-        for f in &l.flights {
-            if f.risers < 3 {
-                v.push(StairIssue::ShortFlight { risers: f.risers });
+        for run in &l.runs {
+            let risers = run.steps.len() + 1;
+            if risers < 3 {
+                v.push(StairIssue::ShortFlight { risers });
             }
-            let h = f.risers as f64 * l.riser;
+            let h = risers as f64 * l.riser;
             if h > 3.2 + e {
                 v.push(StairIssue::FlightTooHigh {
                     height: h,
@@ -264,137 +436,6 @@ impl Stair {
         }
         v
     }
-}
-
-/// Lays out a stair along a walking line.
-pub fn layout(path: &[Point2], width: f64, going: f64, height: f64, base: f64) -> StairLayout {
-    let k = path.len();
-    let half = width / 2.0;
-    // Each piece of the walking line, shortened by half the width at the
-    // turns (the landing takes it); those still long enough for a tread
-    // are flights, the others belong to the landing.
-    struct Piece {
-        start: Point2,
-        end: Point2,
-        flight: bool,
-    }
-    let mut pieces = Vec::new();
-    for i in 0..k.saturating_sub(1) {
-        let (a, b) = (path[i], path[i + 1]);
-        let Some(u) = (b - a).normalized() else {
-            continue;
-        };
-        let start = if i > 0 { a + u * half } else { a };
-        let end = if i + 2 < k { b - u * half } else { b };
-        let long = (end - start).dot(u) >= going * 0.999;
-        pieces.push(Piece {
-            start,
-            end,
-            flight: long,
-        });
-    }
-    // Treads per flight, and the risers: one more than the treads per
-    // flight (the last rises onto the landing or the floor).
-    let mut flights: Vec<Flight> = pieces
-        .iter()
-        .filter(|p| p.flight)
-        .map(|p| {
-            let len = p.start.distance(p.end);
-            let treads = ((len / going) + 1e-6).floor().max(1.0) as usize;
-            Flight {
-                start: p.start,
-                end: p.end,
-                treads,
-                risers: treads + 1,
-                going: len / treads as f64,
-                base: 0.0,
-            }
-        })
-        .collect();
-    let risers: usize = flights.iter().map(|f| f.risers).sum();
-    let riser = if risers > 0 {
-        height / risers as f64
-    } else {
-        0.0
-    };
-    let mut z = base;
-    for f in &mut flights {
-        f.base = z;
-        z += f.risers as f64 * riser;
-    }
-    // Landings: between consecutive flights, everything the walking line
-    // turns through, as wide as the stair.
-    let mut landings = Vec::new();
-    let flight_pieces: Vec<usize> = (0..pieces.len()).filter(|i| pieces[*i].flight).collect();
-    for (fi, w) in flight_pieces.windows(2).enumerate() {
-        let (i, j) = (w[0], w[1]);
-        let mut pts: Vec<Point2> = Vec::new();
-        let edge = |p: Point2, u: Vec2| {
-            let n = u.perp_left() * half;
-            [p - n, p + n]
-        };
-        let ui = (pieces[i].end - pieces[i].start)
-            .normalized()
-            .unwrap_or(Vec2::new(1.0, 0.0));
-        let uj = (pieces[j].end - pieces[j].start)
-            .normalized()
-            .unwrap_or(Vec2::new(1.0, 0.0));
-        pts.extend(edge(pieces[i].end, ui));
-        pts.extend(edge(pieces[j].start, uj));
-        // The square of the landing round every turn in between.
-        for v in &path[i + 1..=j] {
-            let n = ui.perp_left() * half;
-            let t = ui * half;
-            pts.extend([*v - t - n, *v + t - n, *v + t + n, *v - t + n]);
-            let m = uj.perp_left() * half;
-            let s = uj * half;
-            pts.extend([*v - s - m, *v + s - m, *v + s + m, *v - s + m]);
-        }
-        let hull = convex_hull(&pts);
-        if hull.len() >= 3 {
-            landings.push(Landing {
-                outline: hull,
-                top: flights[fi + 1].base,
-            });
-        }
-    }
-    StairLayout {
-        flights,
-        landings,
-        riser,
-    }
-}
-
-/// Convex hull, counter-clockwise (monotone chain).
-fn convex_hull(points: &[Point2]) -> Vec<Point2> {
-    let mut p: Vec<Point2> = points.to_vec();
-    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
-    p.dedup_by(|a, b| a.approx_eq(*b));
-    if p.len() < 3 {
-        return p;
-    }
-    let cross =
-        |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    let mut lower: Vec<Point2> = Vec::new();
-    for q in &p {
-        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], *q) <= 1e-12
-        {
-            lower.pop();
-        }
-        lower.push(*q);
-    }
-    let mut upper: Vec<Point2> = Vec::new();
-    for q in p.iter().rev() {
-        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], *q) <= 1e-12
-        {
-            upper.pop();
-        }
-        upper.push(*q);
-    }
-    lower.pop();
-    upper.pop();
-    lower.extend(upper);
-    lower
 }
 
 impl Model {
@@ -442,15 +483,53 @@ impl Model {
         ] {
             finite(v, what)?;
         }
-        if s.width < MIN_WIDTH || s.going < MIN_GOING || s.waist <= EPSILON {
+        let d = &s.design;
+        for (v, what) in [
+            (d.sweep, "stair sweep"),
+            (d.core, "stair core"),
+            (d.tread, "stair tread"),
+            (d.stringer[0], "stair stringer width"),
+            (d.stringer[1], "stair stringer depth"),
+        ] {
+            finite(v, what)?;
+        }
+        if let Some(m) = d.tread_material {
+            if !self.materials.contains_key(&m) {
+                return Err(ModelError::UnknownMaterial(m));
+            }
+        }
+        if s.width < MIN_WIDTH
+            || s.going < MIN_GOING
+            || s.waist <= EPSILON
+            || !(0.005..=0.3).contains(&d.tread)
+            || d.stringer[0] < 0.005
+            || d.stringer[1] < 0.02
+            || d.core < 0.0
+        {
+            return Err(ModelError::InvalidStair);
+        }
+        if d.form == StairForm::Spiral
+            && (s.path.len() != 2
+                || s.path[0].approx_eq(s.path[1])
+                || !(0.2..=6.0 * std::f64::consts::TAU).contains(&d.sweep.abs())
+                || d.core > 5.0)
+        {
             return Err(ModelError::InvalidStair);
         }
         let height = self.stair_height(s.level, s.base_offset, s.top, s.height)?;
         if height <= 0.05 {
             return Err(ModelError::InvalidStair);
         }
-        let l = layout(&s.path, s.width, s.going, height, s.base_offset);
-        if s.path.len() < 2 || l.flights.is_empty() {
+        let l = stair_layout(
+            &s.path,
+            s.width,
+            s.going,
+            height,
+            s.base_offset,
+            d,
+            walking_edge(s.usage, s.width),
+        );
+        if s.path.len() < 2 || l.steps.is_empty() {
             return Err(ModelError::InvalidStair);
         }
         Ok(height)
@@ -475,6 +554,7 @@ impl Model {
                 material: spec.material,
                 usage: spec.usage,
                 railings: Railings::default(),
+                design: spec.design,
             },
         );
         self.stamp_phase(id.0);
@@ -562,6 +642,7 @@ fn spec_of(s: &Stair) -> NewStair {
         waist: s.waist,
         material: s.material,
         usage: s.usage,
+        design: s.design,
     }
 }
 
@@ -592,6 +673,7 @@ mod tests {
             waist: 0.15,
             material,
             usage: StairUse::General,
+            design: StairDesign::default(),
         }
     }
 

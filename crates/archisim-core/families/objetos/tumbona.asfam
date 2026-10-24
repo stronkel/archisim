@@ -1,0 +1,33 @@
+family "Tumbona"
+  category street
+  host none
+  version 1
+  description "Tumbona de teca con ruedas, de aluminio y textil o cama de exterior con colchón y cojines"
+  folder "Jardín y terraza"
+
+type_params
+  section "Dimensiones"
+    width length = 0.70 range 0.50..2.00 label "Ancho"
+    depth length = 2.00 range 1.60..2.40 label "Largo"
+    pad   bool = no label "Colchoneta"
+  section "Materiales"
+    frame material = "Teca" label "Madera"
+  section "Modelo 3D"
+    model3d choice("De teca", "De aluminio", "Cama de exterior") = "De teca" label "Modelo 3D"
+    mat     material = "Tela de exterior" label "Lona y colchón"
+    cushion material = "Lino blanco" label "Colchoneta y cojines"
+    accent  material = "Lino añil" label "Cojín"
+    metal   material = "Metal lacado" label "Aluminio"
+    dark    material = "Negro mate" label "Ruedas"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, 0.35) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0.55) to (width / 2, 0.55) pen thin
+
+outputs
+  generator = "props:lounger"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

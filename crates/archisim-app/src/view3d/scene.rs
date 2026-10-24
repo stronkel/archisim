@@ -8,6 +8,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 
 use super::camera::Ray;
+use super::cutaway::{self, CutRule};
 use crate::pick::Element;
 
 /// One corner of a triangle as the shader reads it.
@@ -24,6 +25,12 @@ pub struct Vertex {
     pub bias: f32,
     /// The texture (0: none) and the size of its piece, metres.
     pub tex: [f32; 2],
+    /// What the cut away walls do with its element (`cutaway`): its kind,
+    /// a point of it in plan and its base.
+    pub cut: [f32; 4],
+    /// 1 if its element is selected: outlined (the contour pass), its
+    /// colours left as they are.
+    pub select: f32,
 }
 
 /// What the disciplines change in the 3D view: what is greyed and what
@@ -34,8 +41,6 @@ pub struct Disciplines {
     pub hidden: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
 }
 
-/// Selected elements are tinted with this colour (linear RGB).
-const HIGHLIGHT: [f32; 3] = [0.05, 0.35, 0.85];
 /// How see-through glass is (as in the IFC export).
 const GLASS_ALPHA: f32 = 0.4;
 /// What is left of the rest of the model around an isolated clash.
@@ -69,6 +74,49 @@ pub struct Scene {
     owners: Vec<Owner>,
     pub lo: Vec3,
     pub hi: Vec3,
+    /// The lamps: where their light comes from (the middle of what glows)
+    /// and how far it reaches, metres.
+    pub lamps: Vec<[f32; 4]>,
+}
+
+/// How far a lamp's light reaches at night, metres; a streetlight's.
+const LAMP_REACH: f32 = 4.5;
+const STREET_REACH: f32 = 11.0;
+
+/// The materials of an object that glow at night: the shade and the bulb
+/// of a lamp (also of a bedside table's), a candle's flame, the fire of a
+/// fireplace, a streetlight's lantern; and how far its light reaches.
+fn glow_materials(
+    model: &Model,
+    o: archisim_core::ObjectId,
+) -> (Vec<archisim_core::MaterialId>, f32) {
+    let none = (Vec::new(), 0.0);
+    let Some(t) = model
+        .object(o)
+        .and_then(|ob| model.object_type(ob.object_type))
+    else {
+        return none;
+    };
+    let Some(kind) = model.family_prop(t.family) else {
+        return none;
+    };
+    let (keys, reach): (&[&str], f32) = match kind.as_str() {
+        "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
+        "fireplace" => (&["flame"], LAMP_REACH),
+        "streetlight" => (&["light"], STREET_REACH),
+        _ => return none,
+    };
+    let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {
+        return none;
+    };
+    let mats = keys
+        .iter()
+        .filter_map(|k| match t.values.get(*k).or(defaults.get(*k)) {
+            Some(archisim_core::Value::Material(m)) => Some(archisim_core::MaterialId(*m)),
+            _ => None,
+        })
+        .collect();
+    (mats, reach)
 }
 
 /// A corner as a key, to the tenth of a millimetre.
@@ -110,149 +158,32 @@ impl Scene {
             ..Default::default()
         };
         let mut glass_owners = Vec::new();
-        for solid in model_solids(model) {
-            let id = solid.owner.id();
-            if model.hidden_by_discipline(&disciplines.hidden, id) {
-                continue;
-            }
-            let owner = Owner::Model(element(solid.owner));
-            let mat = model.material(solid.material);
-            let dimmed = model.dimmed(disciplines.focus, id);
-            let selected = selection.contains(&element(solid.owner));
-            let ghost = isolate && !selected;
-            let is_glass = ghost || mat.is_some_and(|m| m.category == "glass");
-            // Doors and windows win where they touch the reveals.
-            let opening = matches!(solid.owner, SolidOwner::Opening(_));
-            let alpha = if ghost {
-                GHOST_ALPHA
-            } else if is_glass {
-                GLASS_ALPHA
-            } else {
-                1.0
-            };
-            let tone = |[r, g, b]: [u8; 3], dim: bool| {
-                let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
-                if dim {
-                    // In light grey, as a reference.
-                    let lum = 0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2];
-                    let v = 1.0 - (1.0 - lum) * 0.35;
-                    rgb = [v, v, v];
-                }
-                if selected {
-                    for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
-                        *c = *c * 0.45 + h * 0.55;
-                    }
-                }
-                [rgb[0], rgb[1], rgb[2], alpha]
-            };
-            // The leaves, flowers and fruit of a plant grown by ArchiSim:
-            // rounded (normals smoothed over each clump) and without
-            // contour lines between their facets.
-            let soft = match solid.owner {
-                SolidOwner::Object(o) => model
-                    .plant_look(o)
-                    .is_some_and(|l| solid.material != l.materials.bark),
-                // Tiles too: hundreds of covers would otherwise be drawn
-                // as as many contour lines and darken the roof from afar.
-                SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| {
-                    r.covering.tiles.is_some() && model.tile_material(r) == Some(solid.material)
-                }),
-                _ => false,
-            };
-            let smooth: Option<std::collections::HashMap<[i64; 3], Vec3>> = soft.then(|| {
-                let mut acc: std::collections::HashMap<[i64; 3], Vec3> = Default::default();
-                for tri in &solid.triangles {
-                    let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
-                    let n = (p[1] - p[0]).cross(p[2] - p[0]);
-                    for v in tri {
-                        *acc.entry(vertex_key(v)).or_default() += n;
-                    }
-                }
-                acc
-            });
-            let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
-            let texture_of = |m: archisim_core::MaterialId| {
-                let a = model.appearance(m);
-                a.texture.map_or([0.0, 0.0], |t| {
-                    [t.number() as f32, a.texture_scale() as f32]
-                })
-            };
-            let own_tex = if dimmed || ghost {
-                [0.0, 0.0]
-            } else {
-                texture_of(solid.material)
-            };
-            // A model brought from another program: the colours of its
-            // vertices (its textures).
-            let corners = archisim_geom::solid::solid_vertex_colors(model, &solid);
-            for (i, tri) in solid.triangles.iter().enumerate() {
-                // A painted face: its paint, never greyed (it is what is
-                // being worked on).
-                let painted = archisim_geom::solid::painted_material(model, &solid, tri);
-                let color = painted.map_or(base, |m| tone(model.surface_color(m), false));
-                let tex = painted.map_or(own_tex, texture_of);
-                let colors = match corners.as_ref().and_then(|c| c.get(i)) {
-                    Some(c) => c.map(|c| tone(c, dimmed)),
-                    None => [color; 3],
-                };
-                let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
-                let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
-                // Faces looking up give way where another element rests on
-                // them: the floor under a wall, the top of a wall under the
-                // roof slab.
-                let bias = if soft {
-                    2.0
-                } else if opening {
-                    -1.0
-                } else if n.z > 0.5 {
-                    1.0
-                } else {
-                    0.0
-                };
-                for v in p {
-                    s.lo = s.lo.min(v);
-                    s.hi = s.hi.max(v);
-                }
-                let target = if is_glass {
-                    &mut s.glass
-                } else {
-                    &mut s.opaque
-                };
-                for (k, (v, color)) in p.into_iter().zip(colors).enumerate() {
-                    let normal = smooth
-                        .as_ref()
-                        .and_then(|m| m.get(&vertex_key(&tri[k])))
-                        .map(|s| s.normalize_or_zero())
-                        // Both faces of a leaf cancel out: its own.
-                        .filter(|s| s.length_squared() > 0.5 && s.dot(n) > 0.0)
-                        .unwrap_or(n);
-                    target.push(Vertex {
-                        pos: v.to_array(),
-                        normal: normal.to_array(),
-                        color,
-                        bias,
-                        tex,
-                    });
-                }
-                if is_glass {
-                    glass_owners.push(owner);
-                } else {
-                    s.owners.push(owner);
-                }
-            }
-        }
+        let solids = model_solids(model);
+        let anchors = anchors(&solids);
+        s.add_solids(
+            model,
+            solids,
+            &anchors,
+            selection,
+            isolate,
+            disciplines,
+            &mut glass_owners,
+        );
         // Painted zones of walls' faces, just off them.
         for (wall, tri, [r, g, b]) in archisim_geom::solid::paint_zone_triangles(model) {
             if model.hidden_by_discipline(&disciplines.hidden, wall.0) {
                 continue;
             }
             let owner = Owner::Model(Element::Wall(wall));
-            let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
-            if selection.contains(&Element::Wall(wall)) {
-                for (c, h) in rgb.iter_mut().zip(HIGHLIGHT) {
-                    *c = *c * 0.45 + h * 0.55;
-                }
-            }
+            let rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+            let select = if selection.contains(&Element::Wall(wall)) {
+                1.0
+            } else {
+                0.0
+            };
+            let cut = anchors
+                .get(&wall)
+                .map_or([cutaway::WALL, 0.0, 0.0, 0.0], |a| a.cut());
             let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
             let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
             for v in p {
@@ -262,6 +193,8 @@ impl Scene {
                     color: [rgb[0], rgb[1], rgb[2], 1.0],
                     bias: -1.0,
                     tex: [0.0, 0.0],
+                    cut,
+                    select,
                 });
             }
             s.owners.push(owner);
@@ -295,6 +228,8 @@ impl Scene {
                         color,
                         bias: 0.0,
                         tex: [0.0, 0.0],
+                        cut: [cutaway::PLAIN, 0.0, 0.0, 0.0],
+                        select: 0.0,
                     });
                 }
                 if see_through {
@@ -312,9 +247,272 @@ impl Scene {
         s
     }
 
+    /// Adds solids of the model, each triangle with its owner (glass
+    /// ones in `glass_owners`, to go after the opaque ones).
+    #[allow(clippy::too_many_arguments)]
+    fn add_solids(
+        &mut self,
+        model: &Model,
+        solids: Vec<archisim_geom::solid::Solid>,
+        anchors: &std::collections::HashMap<archisim_core::WallId, Anchor>,
+        selection: &BTreeSet<Element>,
+        isolate: bool,
+        disciplines: &Disciplines,
+        glass_owners: &mut Vec<Owner>,
+    ) {
+        let s = self;
+        // What glows of each object, for its light.
+        let mut lit: std::collections::BTreeMap<u64, (Vec3, f32, f32)> = Default::default();
+        for solid in solids {
+            let id = solid.owner.id();
+            if model.hidden_by_discipline(&disciplines.hidden, id) {
+                continue;
+            }
+            let owner = Owner::Model(element(solid.owner));
+            let mat = model.material(solid.material);
+            let dimmed = model.dimmed(disciplines.focus, id);
+            let selected = selection.contains(&element(solid.owner));
+            let ghost = isolate && !selected;
+            let is_glass = ghost || mat.is_some_and(|m| m.category == "glass");
+            // Doors and windows win where they touch the reveals.
+            let opening = matches!(solid.owner, SolidOwner::Opening(_));
+            let alpha = if ghost {
+                GHOST_ALPHA
+            } else if is_glass {
+                GLASS_ALPHA
+            } else {
+                1.0
+            };
+            let tone = |[r, g, b]: [u8; 3], dim: bool| {
+                let mut rgb = [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)];
+                if dim {
+                    // In light grey, as a reference.
+                    let lum = 0.3 * rgb[0] + 0.59 * rgb[1] + 0.11 * rgb[2];
+                    let v = 1.0 - (1.0 - lum) * 0.35;
+                    rgb = [v, v, v];
+                }
+                [rgb[0], rgb[1], rgb[2], alpha]
+            };
+            // The leaves, flowers and fruit of a plant grown by ArchiSim:
+            // rounded (normals smoothed over each clump) and without
+            // contour lines between their facets.
+            let soft = match solid.owner {
+                SolidOwner::Object(o) => model
+                    .plant_look(o)
+                    .is_some_and(|l| solid.material != l.materials.bark),
+                // Tiles too: hundreds of covers would otherwise be drawn
+                // as as many contour lines and darken the roof from afar.
+                SolidOwner::Roof(r) => model.roof(r).is_some_and(|r| {
+                    r.covering.tiles.is_some() && model.tile_material(r) == Some(solid.material)
+                }),
+                _ => false,
+            };
+            let smooth: Option<std::collections::HashMap<[i64; 3], Vec3>> = soft.then(|| {
+                let mut acc: std::collections::HashMap<[i64; 3], Vec3> = Default::default();
+                for tri in &solid.triangles {
+                    let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                    let n = (p[1] - p[0]).cross(p[2] - p[0]);
+                    for v in tri {
+                        *acc.entry(vertex_key(v)).or_default() += n;
+                    }
+                }
+                acc
+            });
+            // Furniture: rounded edges and cushions shaded smooth (the
+            // faces of each corner that turn less than ~40° share their
+            // normal), so they are drawn soft, without a contour line at
+            // every facet of a rounding; real edges stay sharp.
+            let creased: Option<std::collections::HashMap<[i64; 3], Vec<Vec3>>> = (!soft
+                && matches!(solid.owner, SolidOwner::Object(_)))
+            .then(|| {
+                let mut acc: std::collections::HashMap<[i64; 3], Vec<Vec3>> = Default::default();
+                for tri in &solid.triangles {
+                    let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                    let n = (p[1] - p[0]).cross(p[2] - p[0]);
+                    if n.length_squared() < 1e-14 {
+                        continue;
+                    }
+                    for v in tri {
+                        acc.entry(vertex_key(v)).or_default().push(n);
+                    }
+                }
+                acc
+            });
+            // A lampshade, a bulb or a flame: it glows at night, and its
+            // middle is where the lamp's light comes from.
+            let (glows, reach) = match solid.owner {
+                SolidOwner::Object(o) if !dimmed && !ghost => {
+                    let (mats, reach) = glow_materials(model, o);
+                    (mats.contains(&solid.material), reach)
+                }
+                _ => (false, 0.0),
+            };
+            if glows {
+                let (sum, n, r) = lit.entry(id).or_insert((Vec3::ZERO, 0.0, reach));
+                *r = reach;
+                for tri in &solid.triangles {
+                    for v in tri {
+                        *sum += Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32);
+                        *n += 1.0;
+                    }
+                }
+            }
+            let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
+            let cut = cut_of(model, anchors, &solid);
+            let select = if selected { 1.0 } else { 0.0 };
+            let is_object = matches!(solid.owner, SolidOwner::Object(_));
+            let texture_of = |m: archisim_core::MaterialId| {
+                let a = model.appearance(m);
+                // Furniture whose material has no appearance of its own:
+                // the texture of what it is (linen, wool, rattan…).
+                let t = a.texture.or_else(|| {
+                    let x = model.material(m)?;
+                    (is_object && a.is_plain())
+                        .then(|| archisim_core::TextureKind::suggested(&x.name, &x.category))
+                        .flatten()
+                });
+                t.map_or([0.0, 0.0], |t| {
+                    let scale = a.scale.unwrap_or_else(|| t.default_scale());
+                    [t.number() as f32, scale as f32]
+                })
+            };
+            let own_tex = if dimmed || ghost {
+                [0.0, 0.0]
+            } else {
+                texture_of(solid.material)
+            };
+            // A model brought from another program: the colours of its
+            // vertices (its textures).
+            let corners = archisim_geom::solid::solid_vertex_colors(model, &solid);
+            for (i, tri) in solid.triangles.iter().enumerate() {
+                // A painted face: its paint, never greyed (it is what is
+                // being worked on).
+                let painted = archisim_geom::solid::painted_material(model, &solid, tri);
+                let color = painted.map_or(base, |m| tone(model.surface_color(m), false));
+                let tex = painted.map_or(own_tex, texture_of);
+                let colors = match corners.as_ref().and_then(|c| c.get(i)) {
+                    Some(c) => c.map(|c| tone(c, dimmed)),
+                    None => [color; 3],
+                };
+                let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
+                // Faces looking up give way where another element rests on
+                // them: the floor under a wall, the top of a wall under the
+                // roof slab.
+                let bias = if glows {
+                    3.0
+                } else if soft {
+                    2.0
+                } else if opening {
+                    -1.0
+                } else if n.z > 0.5 {
+                    1.0
+                } else {
+                    0.0
+                };
+                for v in p {
+                    s.lo = s.lo.min(v);
+                    s.hi = s.hi.max(v);
+                }
+                let target = if is_glass {
+                    &mut s.glass
+                } else {
+                    &mut s.opaque
+                };
+                for (k, (v, color)) in p.into_iter().zip(colors).enumerate() {
+                    let normal = smooth
+                        .as_ref()
+                        .and_then(|m| m.get(&vertex_key(&tri[k])))
+                        .map(|s| s.normalize_or_zero())
+                        // Both faces of a leaf cancel out: its own.
+                        .filter(|s| s.length_squared() > 0.5 && s.dot(n) > 0.0)
+                        .or_else(|| {
+                            let around = creased.as_ref()?.get(&vertex_key(&tri[k]))?;
+                            let sum: Vec3 = around
+                                .iter()
+                                .filter(|f| f.normalize_or_zero().dot(n) > 0.77)
+                                .sum();
+                            Some(sum.normalize_or_zero()).filter(|s| s.length_squared() > 0.5)
+                        })
+                        .unwrap_or(n);
+                    target.push(Vertex {
+                        pos: v.to_array(),
+                        normal: normal.to_array(),
+                        color,
+                        bias,
+                        tex,
+                        cut,
+                        select,
+                    });
+                }
+                if is_glass {
+                    glass_owners.push(owner);
+                } else {
+                    s.owners.push(owner);
+                }
+            }
+        }
+        for (sum, n, reach) in lit.into_values() {
+            if n > 0.0 {
+                let c = sum / n;
+                s.lamps.push([c.x, c.y, c.z, reach]);
+            }
+        }
+    }
+
+    /// A scene of a few solids only: what is being stretched, drawn over
+    /// the scene while the handle is dragged (its element is marked
+    /// selected, `Vertex::select` 2, so the scene's own copy is hidden).
+    pub fn of_solids(model: &Model, solids: Vec<archisim_geom::solid::Solid>) -> Self {
+        let mut s = Scene {
+            lo: Vec3::splat(f32::INFINITY),
+            hi: Vec3::splat(f32::NEG_INFINITY),
+            ..Default::default()
+        };
+        let mut glass_owners = Vec::new();
+        let selection: BTreeSet<Element> = solids.iter().map(|x| element(x.owner)).collect();
+        s.add_solids(
+            model,
+            solids,
+            &Default::default(),
+            &selection,
+            false,
+            &Default::default(),
+            &mut glass_owners,
+        );
+        s.owners.extend(glass_owners);
+        for v in s.opaque.iter_mut().chain(&mut s.glass) {
+            v.select = 2.0;
+        }
+        s
+    }
+
     #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.opaque.is_empty() && self.glass.is_empty()
+    }
+
+    /// The box around the triangles of each element of the project.
+    pub fn element_bounds(&self) -> std::collections::BTreeMap<Element, (Vec3, Vec3)> {
+        let tris = self
+            .opaque
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0);
+        let mut out = std::collections::BTreeMap::new();
+        for (i, t) in tris.enumerate() {
+            let Owner::Model(e) = self.owners[i] else {
+                continue;
+            };
+            for v in t {
+                let p = Vec3::from_array(v.pos);
+                out.entry(e)
+                    .and_modify(|b: &mut (Vec3, Vec3)| *b = (b.0.min(p), b.1.max(p)))
+                    .or_insert((p, p));
+            }
+        }
+        out
     }
 
     /// The box around the triangles of some elements.
@@ -345,8 +543,9 @@ impl Scene {
         &self,
         ray: Ray,
         clip: Option<&super::section_box::SectionBox>,
+        cut: Option<&CutRule>,
     ) -> Option<Owner> {
-        self.hit_in(ray, clip).map(|(_, i)| self.owners[i])
+        self.hit_in(ray, clip, cut).map(|(_, i)| self.owners[i])
     }
 
     /// The nearest triangle hit by a ray (inside the section box): its
@@ -355,11 +554,23 @@ impl Scene {
         &self,
         ray: Ray,
         clip: Option<&super::section_box::SectionBox>,
+        cut: Option<&CutRule>,
     ) -> Option<(f32, usize)> {
         let mut best: Option<(f32, usize)> = None;
-        for (i, [a, b, c]) in self.triangles().enumerate() {
+        let firsts = self
+            .opaque
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0)
+            .map(|t| t[0].cut);
+        for (i, ([a, b, c], code)) in self.triangles().zip(firsts).enumerate() {
             if let Some(d) = hit(ray, a, b, c) {
-                if clip.is_some_and(|bx| !bx.contains(ray.origin + ray.dir * d)) {
+                let at = ray.origin + ray.dir * d;
+                if clip.is_some_and(|bx| !bx.contains(at)) {
+                    continue;
+                }
+                if cut.is_some_and(|r| at.z > r.top_of(code) + 1e-4) {
                     continue;
                 }
                 if best.is_none_or(|(bd, _)| d < bd) {
@@ -397,10 +608,97 @@ impl Scene {
     /// element is in front).
     #[cfg(test)]
     pub fn pick(&self, ray: Ray) -> Option<Element> {
-        match self.pick_in(ray, None)? {
+        match self.pick_in(ray, None, None)? {
             Owner::Model(e) => Some(e),
             Owner::Linked(..) => None,
         }
+    }
+}
+
+/// Where a wall is for the cut away walls: the middle of its plan and
+/// its base.
+#[derive(Debug, Clone, Copy)]
+struct Anchor {
+    lo: Vec3,
+    hi: Vec3,
+}
+
+impl Anchor {
+    fn cut(&self) -> [f32; 4] {
+        let c = (self.lo + self.hi) / 2.0;
+        [cutaway::WALL, c.x, c.y, self.lo.z]
+    }
+}
+
+/// The box of each wall's solids.
+fn anchors(
+    solids: &[archisim_geom::solid::Solid],
+) -> std::collections::HashMap<archisim_core::WallId, Anchor> {
+    let mut out: std::collections::HashMap<archisim_core::WallId, Anchor> = Default::default();
+    for s in solids {
+        let SolidOwner::Wall(w) = s.owner else {
+            continue;
+        };
+        for v in s.triangles.iter().flatten() {
+            let p = Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32);
+            let a = out.entry(w).or_insert(Anchor { lo: p, hi: p });
+            a.lo = a.lo.min(p);
+            a.hi = a.hi.max(p);
+        }
+    }
+    out
+}
+
+/// The box of a solid.
+fn bounds(solid: &archisim_geom::solid::Solid) -> Option<(Vec3, Vec3)> {
+    solid.triangles.iter().flatten().fold(None, |b, v| {
+        let p = Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32);
+        Some(b.map_or((p, p), |(lo, hi): (Vec3, Vec3)| (lo.min(p), hi.max(p))))
+    })
+}
+
+/// What the cut away walls do with a solid (`Vertex::cut`).
+fn cut_of(
+    model: &Model,
+    walls: &std::collections::HashMap<archisim_core::WallId, Anchor>,
+    solid: &archisim_geom::solid::Solid,
+) -> [f32; 4] {
+    let own = |kind: f32| {
+        bounds(solid).map_or([kind, 0.0, 0.0, 0.0], |(lo, hi)| {
+            let c = (lo + hi) / 2.0;
+            [kind, c.x, c.y, lo.z]
+        })
+    };
+    match solid.owner {
+        SolidOwner::Wall(w) => walls.get(&w).map_or(own(cutaway::WALL), |a| a.cut()),
+        // Doors and windows go with their wall.
+        SolidOwner::Opening(o) => model
+            .opening(o)
+            .and_then(|o| walls.get(&o.wall))
+            .map_or(own(cutaway::WALL), |a| a.cut()),
+        SolidOwner::Column(_) | SolidOwner::CurtainWall(_) => own(cutaway::WALL),
+        // Furniture by where it stands, not by its lowest piece: a lamp's
+        // shade (a solid of its own material) goes with its foot.
+        SolidOwner::Object(id) => {
+            let mut c = own(cutaway::OBJECT);
+            if let Some(o) = model.object(id) {
+                let floor = model.level(o.level).map_or(0.0, |l| l.elevation);
+                c[3] = (floor + o.base_offset) as f32;
+            }
+            c
+        }
+        SolidOwner::Device(_) => own(cutaway::OBJECT),
+        // A stair stays whole up to the floor it reaches, as the
+        // furniture: by where its foot is.
+        SolidOwner::Stair(id) => {
+            let mut c = own(cutaway::OBJECT);
+            if let Some(s) = model.stair(id) {
+                let floor = model.level(s.level).map_or(0.0, |l| l.elevation);
+                c[3] = (floor + s.base_offset) as f32;
+            }
+            c
+        }
+        _ => own(cutaway::PLAIN),
     }
 }
 
@@ -472,16 +770,46 @@ mod tests {
         };
         assert_eq!(s.pick(up), None);
 
-        // Selecting tints the selected element and nothing else.
+        // Selecting marks the selected element (to outline it) and
+        // leaves every colour as it was.
         let before = s.opaque.clone();
         let mut sel = BTreeSet::new();
         sel.insert(Element::Wall(west));
         s = Scene::build(&m, &sel);
-        let changed = before
+        let marked = s.opaque.iter().filter(|v| v.select > 0.5).count();
+        assert!(marked > 0 && marked < before.len());
+        assert!(before
             .iter()
             .zip(&s.opaque)
-            .filter(|(a, b)| a.color != b.color)
-            .count();
-        assert!(changed > 0 && changed < before.len());
+            .all(|(a, b)| a.color == b.color));
+
+        // Cut away at 1.20 m: through the wall above the cut, the slab;
+        // the door and the wall share their wall's point.
+        let rule = CutRule {
+            top: 1.2,
+            front: None,
+        };
+        let low_down = Ray {
+            origin: Vec3::new(0.1, 2.0, 10.0),
+            dir: Vec3::new(0.0, 0.0, -1.0),
+        };
+        assert_eq!(
+            s.pick_in(low_down, None, Some(&rule)),
+            Some(Owner::Model(Element::Wall(west)))
+        );
+        let first_of = |e: Element| {
+            s.opaque
+                .chunks(3)
+                .zip(&s.owners)
+                .find(|(_, o)| **o == Owner::Model(e))
+                .map(|(t, _)| t[0].cut)
+                .unwrap()
+        };
+        let south = m.opening(door).unwrap().wall;
+        assert_eq!(
+            first_of(Element::Opening(door)),
+            first_of(Element::Wall(south))
+        );
+        assert_eq!(first_of(Element::Wall(south))[0], cutaway::WALL);
     }
 }

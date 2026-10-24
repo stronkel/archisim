@@ -1,0 +1,33 @@
+family "Columpio y hamaca"
+  category furniture
+  host none
+  version 1
+  description "Silla colgante de ratán con su soporte, o hamaca de tela en su bastidor de madera"
+  folder "Jardín y terraza"
+
+type_params
+  section "Dimensiones"
+    width length = 1.00 range 0.80..3.50 label "Largo (hamaca)"
+  section "Materiales"
+    weave material = "Ratán" label "Huevo"
+  section "Modelo 3D"
+    model3d choice("Huevo de ratán", "Hamaca") = "Huevo de ratán" label "Modelo 3D"
+    frame   material = "Negro mate" label "Soporte o bastidor"
+    cushion material = "Lino blanco" label "Cojín o tela"
+    dark    material = "Lino gris" label "Interior"
+    metal   material = "Metal lacado" label "Cadena"
+
+body
+  box (-0.5, 0, 0) to (0.5, 1.1, 1.7) material weave
+
+plan 1:50
+  let r = 0.42
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), 0.55 + r * sin(t0)) to (r * cos(t1), 0.55 + r * sin(t1)) pen view
+
+outputs
+  generator = "props:hanging_chair"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -139,16 +139,33 @@ Terminal (sin cuarentena, sin los pasos de abajo):
    clic derecho → Abrir con → ArchiSim.
 TXT
 dmg="$dist/ArchiSim-${version}.dmg"
-# hdiutil fails now and then on the CI runners ("Resource busy"): try again.
-for attempt in 1 2 3 4 5; do
-    if hdiutil create -volname "ArchiSim ${version}" -srcfolder "$stage" -ov -format UDZO "$dmg" >/dev/null; then
-        break
-    fi
-    if [ "$attempt" = 5 ]; then
-        echo "::error file=scripts/macos_bundle.sh::hdiutil failed five times"
-        exit 1
+# hdiutil fails now and then on the CI runners ("Resource busy", often
+# XProtect scanning the new image): stop the scanner, wait longer each
+# time, and in the last tries make the image in two steps (a plain one,
+# then compressed), which does not hold the volume as long.
+made=0
+for attempt in 1 2 3 4 5 6; do
+    rm -f "$dmg" "$dist/tmp.dmg"
+    if [ "$attempt" -le 3 ]; then
+        if hdiutil create -volname "ArchiSim ${version}" -srcfolder "$stage" -ov -format UDZO "$dmg"; then
+            made=1
+            break
+        fi
+    else
+        if hdiutil create -volname "ArchiSim ${version}" -srcfolder "$stage" -ov -format UDRW "$dist/tmp.dmg" \
+            && hdiutil convert "$dist/tmp.dmg" -format UDZO -o "$dmg"; then
+            rm -f "$dist/tmp.dmg"
+            made=1
+            break
+        fi
     fi
     echo "hdiutil failed (attempt $attempt), retrying"
-    sleep $((attempt * 5))
+    sudo -n pkill -9 XProtect >/dev/null 2>&1 || true
+    sudo -n pkill -9 XProtectBehaviorService >/dev/null 2>&1 || true
+    sleep $((attempt * 10))
 done
+if [ "$made" != 1 ]; then
+    echo "::error file=scripts/macos_bundle.sh::hdiutil failed six times"
+    exit 1
+fi
 echo "$dmg"

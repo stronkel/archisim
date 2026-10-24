@@ -9,7 +9,180 @@ use archisim_core::{Model, NewObject, Point2};
 
 type Res<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+/// The pieces shown in each collection (a row each).
+const IN_COLLECTIONS: &[&str] = &[
+    "Sofá acogedor de 3 plazas",
+    "Butaca de orejas",
+    "Mesa auxiliar redonda",
+    "Alfombra 200×140",
+    "Aparador 160",
+    "Lámpara de pie",
+    "Cama doble 150×200",
+    "Mesita de noche",
+    "Taburete de madera",
+    "Cojín de suelo",
+    "Macetón con olivo",
+];
+
 const ROWS: &[&[&str]] = &[
+    // Street furniture in more models and more of a house (v0.52).
+    &[
+        "Banco con respaldo",
+        "Banco de hormigón y madera",
+        "Banco de acero sin respaldo",
+        "Farola 4,5 m",
+        "Farola fernandina 3,5 m",
+        "Farola de globo 4 m",
+        "Baliza de jardín",
+        "Papelera",
+        "Papelera de listones",
+        "Papelera doble de reciclaje",
+        "Bolardo",
+        "Bolardo de acero",
+        "Bolardo cónico de hormigón",
+        "Buzón",
+        "Buzón sobre poste",
+        "Buzones de portal",
+    ],
+    &[
+        "Contenedor de residuos",
+        "Iglú de vidrio",
+        "Contenedor soterrado",
+        "Fuente de beber",
+        "Fuente de piedra",
+        "Estanque con surtidor",
+        "Jardinera 120",
+        "Jardinera de madera con flores",
+        "Jardinera de acero corten",
+        "Alcorque 120",
+        "Alcorque de pletinas",
+        "Alcorque de piedra y grava",
+        "Aparcabicis 5 plazas",
+        "Aparcabicis de onda",
+        "Aparcabicis de rueda",
+        "Señal de tráfico",
+        "Señal de peligro",
+        "Panel informativo",
+        "Bicicleta",
+        "Bicicleta de carretera",
+        "Bicicleta de carga",
+    ],
+    &[
+        "Chimenea de obra",
+        "Estufa de leña",
+        "Chimenea moderna lineal",
+        "Perchero de pie",
+        "Recibidor con banco",
+        "Silla de oficina",
+        "Silla de oficina de malla",
+        "Mesa de bistró con dos sillas",
+        "Mesa de teca para seis",
+        "Sofá de exterior con mesa",
+        "Silla colgante de ratán",
+        "Hamaca con bastidor",
+    ],
+    &[
+        "Radiador de aluminio 80",
+        "Radiador de panel 120",
+        "Aire acondicionado de pared",
+        "Ventilador de techo",
+        "Ventilador de techo de ratán",
+        "Piano de pared",
+        "Piano de cola",
+        "Cama cabaña 90×190",
+        "Litera 90×190",
+        "Estantería con objetos 120",
+    ],
+    // The collections' pieces (v0.50).
+    &[
+        "Cama con cabecero tapizado 160",
+        "Cama de lamas 160",
+        "Mesita de patas cónicas",
+        "Mesita flotante",
+        "Taburete de madera",
+        "Taburete tapizado",
+        "Taburete de enea",
+        "Isla de cocina 180",
+        "Mesa de trabajo de cocina 140",
+        "Isla con fregadero 240",
+        "Tablas y aceite",
+        "Botes de cristal",
+        "Cafetera y tazas",
+        "Hierbas aromáticas",
+    ],
+    &[
+        "Toallas dobladas",
+        "Toallas colgadas",
+        "Toallas enrolladas",
+        "Cesto de ropa",
+        "Cesta con rollos",
+        "Cesta con asas",
+        "Cuadro 50×70",
+        "Tríptico",
+        "Espejo de arco",
+        "Espejo sol",
+        "Reloj de pared",
+        "Cojín de suelo",
+        "Zafu",
+        "Pila de cojines de suelo",
+        "Manta doblada",
+        "Pila de mantas",
+        "Escalera con mantas",
+    ],
+    &[
+        "Tumbona de teca",
+        "Tumbona de aluminio",
+        "Cama de exterior",
+        "Sombrilla redonda 250",
+        "Sombrilla descentrada 300",
+        "Sombrilla de paja 200",
+        "Macetón con olivo",
+        "Ánfora de barro",
+        "Macetón con gramíneas",
+        "Cuenco con lavanda",
+        "Pérgola de madera 3×3",
+        "Pérgola de lamas 4×3",
+        "Pérgola con cañizo 3×3",
+    ],
+    // The cosy pieces (v0.49).
+    &[
+        "Sofá acogedor de 3 plazas",
+        "Sofá nórdico con cojines",
+        "Butaca de orejas",
+        "Butaca redonda",
+        "Butaca de ratán",
+        "Butaca baja de patas",
+        "Puf redondo",
+        "Puf de punto",
+        "Puf cubo",
+        "Mesa auxiliar redonda",
+        "Mesa auxiliar de tres patas",
+        "Mesas nido",
+        "Aparador 160",
+        "Aparador de lamas 180",
+    ],
+    &[
+        "Alfombra 200×140",
+        "Alfombra redonda 160",
+        "Alfombra de rayas 240×170",
+        "Alfombra bereber 300×200",
+        "Lámpara de pie",
+        "Lámpara de mesa",
+        "Lámpara colgante",
+        "Lámpara de arco",
+        "Costilla de Adán",
+        "Ficus en maceta",
+        "Cactus",
+        "Helecho",
+        "Sansevieria",
+        "Cortinas de lino 160",
+        "Visillo 160",
+        "Jarrón con ramas",
+        "Frutero",
+        "Libros y vela",
+        "Cerámicas",
+        "Cesta con manta",
+    ],
     &[
         "Sofá de 3 plazas",
         "Sofá clásico de 3 plazas",
@@ -86,11 +259,23 @@ pub fn build() -> Res<Model> {
     let mut m = archisim_library::new_project("Modelos 3D de ArchiSim");
     let level = m.levels()[0].id;
     let mut y = 0.0;
+    let mut rows: Vec<Vec<archisim_core::ObjectTypeId>> = Vec::new();
+    for c in archisim_library::collections::COLLECTIONS {
+        rows.push(
+            IN_COLLECTIONS
+                .iter()
+                .map(|name| archisim_library::collections::add_collection_entry(&mut m, name, c))
+                .collect::<Result<_, _>>()?,
+        );
+    }
     for row in ROWS {
-        let types: Vec<_> = row
-            .iter()
-            .map(|name| archisim_library::add_object_entry(&mut m, name))
-            .collect::<Result<_, _>>()?;
+        rows.push(
+            row.iter()
+                .map(|name| archisim_library::add_object_entry(&mut m, name))
+                .collect::<Result<_, _>>()?,
+        );
+    }
+    for types in rows {
         let sizes: Vec<(f64, f64)> = types
             .iter()
             .map(|t| {
@@ -165,7 +350,12 @@ mod tests {
     fn every_model_is_placed_with_its_3d() {
         let m = super::build().unwrap();
         let n = m.objects().count();
-        assert_eq!(n, super::ROWS.iter().map(|r| r.len()).sum::<usize>());
+        let collections = archisim_library::collections::COLLECTIONS.len();
+        assert_eq!(
+            n,
+            super::ROWS.iter().map(|r| r.len()).sum::<usize>()
+                + collections * super::IN_COLLECTIONS.len()
+        );
         assert!(m.objects().all(|o| m.type_has_prop(o.object_type)));
         let solids = archisim_geom::solid::model_solids(&m);
         assert!(solids.len() > n * 2);

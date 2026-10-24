@@ -119,13 +119,16 @@ impl ArchiSimApp {
                     top_offset: self.slab_settings.top_offset,
                 })
             }
-            Tool::Object => Would::Object(NewObject {
-                level,
-                object_type: self.object_settings.object_type?,
-                position: c.point,
-                rotation: self.object_settings.rotation,
-                base_offset: self.object_settings.base_offset,
-            }),
+            Tool::Object => {
+                let (position, rotation, base_offset) = self.placement_spot(c.point);
+                Would::Object(NewObject {
+                    level,
+                    object_type: self.object_settings.object_type?,
+                    position,
+                    rotation,
+                    base_offset,
+                })
+            }
             _ => return None,
         })
     }

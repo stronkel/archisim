@@ -1,0 +1,28 @@
+family "Radiador"
+  category furniture
+  host none
+  version 1
+  description "Radiador de elementos de aluminio o de panel de acero, en la pared"
+  folder "Climatización"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.80 range 0.30..2.50 label "Ancho"
+    height    length = 0.60 range 0.30..2.00 label "Altura"
+    elevation length = 0.15 range 0.00..1.50 label "Altura desde el suelo"
+  section "Materiales"
+    mat material = "Cerámica blanca" label "Radiador"
+  section "Modelo 3D"
+    model3d choice("Aluminio", "Panel de acero") = "Aluminio" label "Modelo 3D"
+    metal material = "Cromado" label "Llaves y tubo"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.11, elevation + height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.11) (-width / 2, 0.11) pen view
+
+outputs
+  generator = "props:radiator"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

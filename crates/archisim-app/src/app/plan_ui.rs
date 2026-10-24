@@ -34,7 +34,7 @@ impl ArchiSimApp {
         // Keys go to the plan unless a field is being typed in (a temporary
         // dimension's too: egui lets go of the focus on Esc before the plan
         // sees it).
-        if ctx.memory(|m| m.focused().is_none()) && self.temp_edit.is_none() {
+        if !crate::app::typing_in_text(&ctx) && self.temp_edit.is_none() {
             self.keyboard_in_view(&ctx);
         }
         self.clicks(&ctx, &response, rect);
@@ -469,7 +469,7 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
                 self.hover_grip = None;
-                let variant = ctx.input(|i| i.modifiers.command);
+                let variant = drag_variant(ctx, d.grip);
                 let to = d.target(s.point);
                 let fresh = self
                     .drag_preview
@@ -498,6 +498,7 @@ impl ArchiSimApp {
                     None
                 } else {
                     pick(&self.ed, self.ed.level, raw, reach)
+                        .filter(|e| !self.ed.hidden().contains(e))
                 };
             }
         }
@@ -521,6 +522,9 @@ impl ArchiSimApp {
         }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
             self.toggle_ortho();
+        }
+        if space && self.flip_stair_turn() {
+            return;
         }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
@@ -616,9 +620,15 @@ impl ArchiSimApp {
                     self.say("Aparato girado 90° (Espacio para seguir girando).");
                 }
                 Tool::Object => {
+                    // Mayús+Espacio: 15°, to set it at any angle.
+                    let fine = ctx.input(|i| i.modifiers.shift);
+                    let step = if fine { 15.0_f64 } else { 90.0 };
                     let r = &mut self.object_settings.rotation;
-                    *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
-                    self.say("Objeto girado 90° (Espacio para seguir girando).");
+                    *r = crate::editor::normal_angle(*r + step.to_radians());
+                    let deg = r.to_degrees().round();
+                    self.say(format!(
+                        "Objeto a {deg}° (Espacio: +90°; Mayús+Espacio: +15°)."
+                    ));
                 }
                 Tool::Column => {
                     let r = &mut self.column_settings.rotation;
@@ -1138,6 +1148,16 @@ impl ArchiSimApp {
                 }
             }
             Tool::Arrow => {
+                // A right click (not held: that moves the view) opens the
+                // menu of what is under the cursor.
+                if response.clicked_by(PointerButton::Secondary) {
+                    if let Some(pos) = response.interact_pointer_pos() {
+                        let at = self.view.to_model(rect, pos);
+                        let frame = ctx.cumulative_frame_nr();
+                        self.open_context_menu(pos, self.hover, Some(at), frame);
+                    }
+                    return;
+                }
                 // Double click on a section or elevation mark: its view;
                 // on an edge of a selected line, fill or slab: a vertex.
                 if response.double_clicked_by(PointerButton::Primary) {
@@ -1229,7 +1249,7 @@ impl ArchiSimApp {
                 if response.drag_stopped() && self.drag.is_some() {
                     match self.cursor {
                         Some(c) => {
-                            let variant = ctx.input(|i| i.modifiers.command);
+                            let variant = drag_variant(ctx, grip_of(&self.drag));
                             self.finish_drag(c.point, variant);
                         }
                         None => self.say("Cancelado: se ha soltado fuera de la planta."),
@@ -1238,7 +1258,8 @@ impl ArchiSimApp {
                 }
                 if response.drag_stopped() {
                     if let (Some(a), Some(c)) = (self.window_start.take(), self.cursor) {
-                        let found = in_window(&self.ed, self.ed.level, a, c.point);
+                        let mut found = in_window(&self.ed, self.ed.level, a, c.point);
+                        found.retain(|e| !self.ed.hidden().contains(e));
                         if !shift {
                             self.ed.selection.clear();
                         }
@@ -1487,6 +1508,35 @@ impl ArchiSimApp {
                         Stroke::new(1.0, Color32::BLACK),
                     ));
                 }
+                Grip::ObjectSize { object, side } => {
+                    let model = self.ed.model();
+                    let dir = model.object(object).map_or(Vec2::X, |o| {
+                        let (dx, dy) = side.dir();
+                        let (cs, sn) = (o.rotation.cos(), o.rotation.sin());
+                        let far = Point2::new(
+                            h.point.x + (dx * cs - dy * sn) * 0.1,
+                            h.point.y + (dx * sn + dy * cs) * 0.1,
+                        );
+                        self.view.to_screen(rect, far) - c
+                    });
+                    super::handles::arrow(painter, c, dir, ACCENT, hot);
+                    let both = painter.ctx().input(|i| i.modifiers.alt);
+                    if hot
+                        && !both
+                        && !model
+                            .object(object)
+                            .is_some_and(|o| model.type_grows(o.object_type))
+                    {
+                        if let Some(f) = crate::drag::fixed_side(model, object, side) {
+                            super::handles::pin(painter, self.view.to_screen(rect, f));
+                        }
+                    }
+                }
+                Grip::ObjectTurn { object } => {
+                    if let Some(m) = crate::drag::object_middle(self.ed.model(), object) {
+                        super::handles::turn(painter, self.view.to_screen(rect, m), c, hot);
+                    }
+                }
                 Grip::WallBend { .. } => {
                     let r = if hot { 6.0 } else { 4.5 };
                     let inside = if hot { ACCENT } else { Color32::WHITE };
@@ -1552,8 +1602,8 @@ impl ArchiSimApp {
             (Grip::RoadPoint { .. }, _) => "Eje del vial",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
-            (Grip::ObjectSize { width: true, .. }, _) => "Ancho",
-            (Grip::ObjectSize { width: false, .. }, _) => "Fondo",
+            (Grip::ObjectSize { side, .. }, _) => side.label(),
+            (Grip::ObjectTurn { .. }, _) => "Girar",
             (Grip::OpeningJamb { .. }, _) => "Ancho del hueco",
             (Grip::TerrainPoint { .. }, _) => "Punto",
             (Grip::DraftPoint { .. }, _) => "Estirar",
@@ -2164,4 +2214,17 @@ impl ArchiSimApp {
         painter.line_segment([p - Vec2::new(12.0, 0.0), p + Vec2::new(12.0, 0.0)], ink);
         painter.line_segment([p - Vec2::new(0.0, 12.0), p + Vec2::new(0.0, 12.0)], ink);
     }
+}
+
+/// The variant of a drag: Ctrl (copy, leave the corner…); for the size
+/// handles of an object, Alt (grow on both sides) or Ctrl (a plant: its
+/// height too).
+fn drag_variant(ctx: &egui::Context, grip: Grip) -> bool {
+    ctx.input(|i| {
+        i.modifiers.command || (matches!(grip, Grip::ObjectSize { .. }) && i.modifiers.alt)
+    })
+}
+
+fn grip_of(drag: &Option<DragState>) -> Grip {
+    drag.as_ref().map_or(Grip::Body, |d| d.grip)
 }

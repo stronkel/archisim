@@ -1,0 +1,36 @@
+family "Taburete"
+  category furniture
+  host none
+  version 1
+  description "Taburete alto de cocina: de madera, tapizado con respaldo o de enea"
+  folder "Taburetes"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.38 range 0.28..0.55 label "Ancho del asiento"
+    height length = 0.65 range 0.40..0.85 label "Altura del asiento"
+  section "Materiales"
+    mat material = "Roble claro" label "Madera"
+  section "Modelo 3D"
+    model3d choice("De madera", "Tapizado con respaldo", "De enea") = "De madera" label "Modelo 3D"
+    cushion material = "Lino arena" label "Tapizado"
+    seat    material = "Enea" label "Asiento de enea"
+    metal   material = "Negro mate" label "Patas metálicas"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, width, height) material mat
+
+plan 1:50
+  if model3d == "De enea"
+    polygon (-width * 0.41, width * 0.09) (width * 0.41, width * 0.09) (width * 0.41, width * 0.91) (-width * 0.41, width * 0.91) pen view
+  else
+    let r = width / 2
+    repeat i in 0..16
+      let t0 = 6.283185307 * i / 16
+      let t1 = 6.283185307 * (i + 1) / 16
+      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+
+outputs
+  generator = "props:stool"
+  ifc_class = "IfcFurniture"
+  ifc_type = "CHAIR"

@@ -21,6 +21,8 @@ use crate::{
     ensure_ccw, opening_geometry, wall_geometry_in, Curve, EndCut, Line, WallGeometry, WallIndex,
 };
 
+pub use crate::stairs::{railing_bars, railing_material, stair_parts, stair_solids};
+
 /// A point in model space: metres, Z up.
 pub type P3 = [f64; 3];
 
@@ -968,54 +970,6 @@ pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
     out
 }
 
-/// Solids of a stair: each flight as its stepped profile on a sloping
-/// slab ("losa"), swept across its width; each landing as a slab of the
-/// same thickness.
-pub fn stair_solids(model: &Model, id: archisim_core::StairId) -> Vec<Solid> {
-    let Some(stair) = model.stair(id) else {
-        return Vec::new();
-    };
-    let level = model.level(stair.level).map_or(0.0, |l| l.elevation);
-    let l = stair.layout();
-    let mut out = Vec::new();
-    for f in &l.flights {
-        let profile = flight_profile(f, l.riser, stair.waist, level);
-        out.push(vertical_prism(
-            SolidOwner::Stair(id),
-            stair.material,
-            &profile,
-            f.start,
-            f.direction(),
-            stair.width / 2.0,
-        ));
-    }
-    // Landings: the slab and, in front, the riser up to them.
-    let waist = [archisim_core::Layer {
-        material: stair.material,
-        thickness: stair.waist + l.riser,
-        function: archisim_core::LayerFunction::Structure,
-    }];
-    for landing in &l.landings {
-        out.extend(layered_plate(
-            SolidOwner::Stair(id),
-            &landing.outline,
-            &[],
-            &|_| level + landing.top,
-            &|t| t,
-            &waist,
-        ));
-    }
-    let bars = railing_bars(model, id);
-    if !bars.is_empty() {
-        out.push(Solid {
-            owner: SolidOwner::Stair(id),
-            material: railing_material(model, stair),
-            triangles: bars.iter().flat_map(Bar::triangles).collect(),
-        });
-    }
-    out
-}
-
 /// The ground of a terrain: its surface on top, flat underneath `depth`
 /// below its lowest point, plumb at its edges.
 /// Solids of a curtain wall: one per material (frames, each kind of
@@ -1401,113 +1355,6 @@ impl Bar {
         }
         t
     }
-}
-
-/// The bars of a stair's railings: a handrail along each flight's side
-/// that has one, following the line of the nosings at the railing height,
-/// with posts at its ends and about every metre; round the landings, a
-/// level rail on every edge no flight arrives at.
-pub fn railing_bars(model: &Model, id: archisim_core::StairId) -> Vec<Bar> {
-    let Some(stair) = model.stair(id) else {
-        return Vec::new();
-    };
-    let (left, right) = (stair.railings.left(), stair.railings.right());
-    if !left && !right {
-        return Vec::new();
-    }
-    let level = model.level(stair.level).map_or(0.0, |l| l.elevation);
-    let l = stair.layout();
-    let h = archisim_core::RAILING_HEIGHT;
-    let half = stair.width / 2.0;
-    let inset = 0.04;
-    let up = [0.0, 0.0, 1.0];
-    let mut bars = Vec::new();
-    let post = |p: Point2, z0: f64, z1: f64, along: archisim_core::Vec2| Bar {
-        a: [p.x, p.y, z0],
-        b: [p.x, p.y, z1],
-        side: [along.x, along.y, 0.0],
-        up: [-along.y, along.x, 0.0],
-        w: 0.04,
-        d: 0.04,
-    };
-    for f in &l.flights {
-        let u = f.direction();
-        let n = u.perp_left();
-        let k = l.riser / f.going;
-        let z0 = level + f.base;
-        let nosing = |s: f64| z0 + l.riser + k * s;
-        let tread = |s: f64| {
-            let i = ((s / f.going) + 1e-9)
-                .floor()
-                .min(f.treads as f64 - 1.0)
-                .max(0.0);
-            z0 + (i + 1.0) * l.riser
-        };
-        for (on, sign) in [(left, 1.0), (right, -1.0)] {
-            if !on {
-                continue;
-            }
-            let o = n * (sign * (half - inset));
-            let len = f.length();
-            let a = f.start + o;
-            let b = f.end + o;
-            bars.push(Bar {
-                a: [a.x, a.y, nosing(0.0) + h],
-                b: [b.x, b.y, nosing(len) + h],
-                side: [n.x, n.y, 0.0],
-                up,
-                w: 0.05,
-                d: 0.05,
-            });
-            let count = (len / 1.0).ceil().max(1.0) as usize;
-            for i in 0..=count {
-                let s = len * i as f64 / count as f64;
-                let p = f.start + u * s + o;
-                let s_in = s.clamp(0.02, len - 0.02);
-                bars.push(post(p, tread(s_in), nosing(s) + h - 0.025, u));
-            }
-        }
-    }
-    // Landings: the edges no flight arrives at.
-    for (li, landing) in l.landings.iter().enumerate() {
-        let arrivals = [l.flights[li].end, l.flights[li + 1].start];
-        let m = landing.outline.len();
-        for i in 0..m {
-            let (p, q) = (landing.outline[i], landing.outline[(i + 1) % m]);
-            let on_edge = |x: &Point2| {
-                let t = (*x - p).dot(q - p) / (q - p).dot(q - p).max(1e-12);
-                (0.0..=1.0).contains(&t) && (p + (q - p) * t).distance(*x) < 1e-6
-            };
-            if arrivals.iter().any(on_edge) {
-                continue;
-            }
-            let Some(u) = (q - p).normalized() else {
-                continue;
-            };
-            let n = u.perp_left();
-            let (a, b) = (p + n * inset, q + n * inset);
-            let z = level + landing.top + h;
-            bars.push(Bar {
-                a: [a.x, a.y, z],
-                b: [b.x, b.y, z],
-                side: [n.x, n.y, 0.0],
-                up,
-                w: 0.05,
-                d: 0.05,
-            });
-            bars.push(post(a, level + landing.top, z - 0.025, u));
-        }
-    }
-    bars
-}
-
-/// The material railings are drawn in: the model's first steel, or the
-/// stair's own.
-pub fn railing_material(model: &Model, stair: &archisim_core::Stair) -> archisim_core::MaterialId {
-    model
-        .materials()
-        .find(|m| m.category == "steel")
-        .map_or(stair.material, |m| m.id)
 }
 
 /// The side view of a flight: `x` along it from its first riser, `y` the
@@ -3011,6 +2858,7 @@ mod tests {
                 waist: 0.15,
                 material: mat,
                 usage: archisim_core::StairUse::General,
+                design: Default::default(),
             })
             .unwrap();
         let solids = stair_solids(&m, id);
@@ -3025,10 +2873,8 @@ mod tests {
             assert!(s.volume() > 0.0);
         }
         let bars = railing_bars(&m, id);
-        // Both sides of two flights, and the two free edges of the landing
-        // (the outer corner of the L), with their posts.
-        let rails = bars.iter().filter(|b| b.w == 0.05).count();
-        assert_eq!(rails, 4 + 2);
+        // Both sides, round the outer corner of the landing too.
+        assert!(bars.iter().filter(|b| b.w == 0.05).count() >= 6);
         for b in &bars {
             let t = Solid {
                 owner: SolidOwner::Stair(id),

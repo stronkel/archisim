@@ -1,7 +1,7 @@
 family "Armario"
   category furniture
   host none
-  version 2
+  version 3
   description "Armario de puertas abatibles con barra de colgar"
   folder "Armarios"
 
@@ -40,3 +40,7 @@ outputs
   generator = "props:wardrobe"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"
+
+# Stretched, a door more when the doors would be too wide.
+stretch
+  doors = if width / doors >= 0.35 and width / doors <= 0.65 then doors else max(1, round(width / 0.5))

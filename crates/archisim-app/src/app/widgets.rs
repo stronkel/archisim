@@ -2,7 +2,7 @@
 //! segmented choices, toggle chips, icon buttons, list rows and key caps.
 
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontFamily, FontId, Pos2, Rect, Response, Sense, Stroke,
+    self, Align2, CornerRadius, FontFamily, FontId, Pos2, Rect, Response, Sense, Stroke,
     StrokeKind, Ui, Vec2,
 };
 
@@ -259,77 +259,6 @@ fn list_row_with(
     resp
 }
 
-/// Draws hints as key caps ("Clic" siguiente punto · "Esc" terminar) in a
-/// dark pill centred at the bottom of `area`.
-pub fn hud(painter: &egui::Painter, area: Rect, hints: &[(String, String)], p: Palette) {
-    if hints.is_empty() || area.width() < 200.0 {
-        return;
-    }
-    let cap_font = FontId::monospace(10.5);
-    let text_font = FontId::proportional(12.0);
-    let light = Color32::from_rgb(232, 234, 237);
-    let mut items = Vec::new();
-    let mut total = 0.0;
-    for (key, text) in hints {
-        let k =
-            (!key.is_empty()).then(|| painter.layout_no_wrap(key.clone(), cap_font.clone(), light));
-        let t = (!text.is_empty())
-            .then(|| painter.layout_no_wrap(text.clone(), text_font.clone(), light));
-        let w = k.as_ref().map_or(0.0, |g| g.size().x + 12.0)
-            + t.as_ref().map_or(0.0, |g| g.size().x)
-            + if k.is_some() && t.is_some() { 6.0 } else { 0.0 };
-        total += w;
-        items.push((k, t, w));
-    }
-    let gap = 14.0;
-    total += gap * (items.len() as f32 - 1.0);
-    // Leave out the last hints if they do not fit.
-    let max = area.width() - 40.0;
-    while total > max && items.len() > 1 {
-        let (_, _, w) = items.pop().unwrap_or((None, None, 0.0));
-        total -= w + gap;
-    }
-    let pill = Rect::from_center_size(
-        Pos2::new(area.center().x, area.bottom() - 30.0),
-        Vec2::new(total + 24.0, 32.0),
-    );
-    painter.rect_filled(pill, CornerRadius::same(10), p.hud);
-    let mut x = pill.left() + 12.0;
-    let cy = pill.center().y;
-    for (k, t, w) in items {
-        let start = x;
-        if let Some(k) = k {
-            let r =
-                Rect::from_min_size(Pos2::new(x, cy - 10.0), Vec2::new(k.size().x + 12.0, 20.0));
-            painter.rect(
-                r,
-                CornerRadius::same(4),
-                Color32::from_white_alpha(30),
-                Stroke::new(1.0, Color32::from_white_alpha(56)),
-                StrokeKind::Inside,
-            );
-            painter.galley(r.center() - k.size() / 2.0, k, light);
-            x = r.right() + 6.0;
-        }
-        if let Some(t) = t {
-            painter.galley(Pos2::new(x, cy - t.size().y / 2.0), t, light);
-        }
-        x = start + w + gap;
-    }
-}
-
-/// Splits a hint like "Clic: siguiente punto · Esc: terminar" into key caps
-/// and what they do.
-pub fn parse_hints(text: &str) -> Vec<(String, String)> {
-    text.split(" · ")
-        .map(|part| match part.split_once(": ") {
-            Some((k, v)) => (k.trim().to_owned(), v.trim().to_owned()),
-            None => (String::new(), part.trim().to_owned()),
-        })
-        .filter(|(k, v)| !k.is_empty() || !v.is_empty())
-        .collect()
-}
-
 /// The message of the last action, as a card in the corner of `area`.
 pub fn toast(painter: &egui::Painter, area: Rect, text: &str, error: bool, alpha: f32, p: Palette) {
     if alpha <= 0.0 || area.width() < 160.0 {
@@ -367,34 +296,4 @@ pub fn toast(painter: &egui::Painter, area: Rect, text: &str, error: bool, alpha
         dot.gamma_multiply(alpha),
     );
     painter.galley(Pos2::new(r.left() + 28.0, r.top() + 8.0), g, p.text);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hints_become_key_caps() {
-        assert_eq!(
-            parse_hints(
-                "Clic: siguiente punto · Mayús: ángulos de 45° · Intro/Esc/botón derecho: terminar"
-            ),
-            vec![
-                ("Clic".into(), "siguiente punto".into()),
-                ("Mayús".into(), "ángulos de 45°".into()),
-                ("Intro/Esc/botón derecho".into(), "terminar".into()),
-            ]
-        );
-        assert_eq!(
-            parse_hints("Varita mágica: clic dentro de un recinto de muros"),
-            vec![(
-                "Varita mágica".into(),
-                "clic dentro de un recinto de muros".into()
-            )]
-        );
-        assert_eq!(
-            parse_hints("solo texto"),
-            vec![(String::new(), "solo texto".into())]
-        );
-    }
 }

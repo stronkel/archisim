@@ -1,0 +1,30 @@
+family "Perchero"
+  category furniture
+  host none
+  version 1
+  description "Perchero de pie con abrigos o recibidor con banco, ganchos y cestas"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.50 range 0.30..2.00 label "Ancho"
+    height length = 1.80 range 1.20..2.20 label "Altura"
+  section "Materiales"
+    mat material = "Roble claro" label "Madera"
+  section "Modelo 3D"
+    model3d choice("De pie", "Recibidor con banco") = "De pie" label "Modelo 3D"
+    cushion  material = "Lana teja" label "Abrigo"
+    cushion2 material = "Lino gris" label "Otro abrigo"
+    weave    material = "Ratán" label "Cestas"
+    metal    material = "Negro mate" label "Ganchos"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.45, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.45) (-width / 2, 0.45) pen view
+
+outputs
+  generator = "props:coat_stand"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

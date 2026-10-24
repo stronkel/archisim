@@ -464,6 +464,7 @@ pub enum TypeOf {
     Slab(archisim_core::SlabTypeId),
     Opening(archisim_core::OpeningTypeId),
     Member(archisim_core::MemberTypeId),
+    Object(archisim_core::ObjectTypeId),
 }
 
 /// The type of a wall, slab, door or window (annotations have none).
@@ -475,6 +476,7 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         Element::Column(id) => model.column(id).map(|c| TypeOf::Member(c.member_type)),
         Element::Beam(id) => model.beam(id).map(|b| TypeOf::Member(b.member_type)),
         Element::Roof(id) => model.roof(id).map(|r| TypeOf::Slab(r.roof_type)),
+        Element::Object(id) => model.object(id).map(|o| TypeOf::Object(o.object_type)),
         Element::Dormer(..) => None,
         Element::Dimension(_)
         | Element::Mark(_)
@@ -486,7 +488,6 @@ pub fn type_of(model: &Model, e: Element) -> Option<TypeOf> {
         | Element::Terrain(_)
         | Element::CurtainWall(_)
         | Element::Railing(_)
-        | Element::Object(_)
         | Element::Footing(_)
         | Element::Grid(_)
         | Element::RefPlane(_)

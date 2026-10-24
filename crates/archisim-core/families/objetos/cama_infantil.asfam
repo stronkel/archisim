@@ -1,0 +1,30 @@
+family "Cama infantil"
+  category furniture
+  host none
+  version 1
+  description "Cama cabaña con forma de casita y guirnalda de luces, o litera con su escalera"
+  folder "Camas"
+
+type_params
+  section "Dimensiones"
+    width length = 0.90 range 0.70..1.40 label "Ancho del colchón"
+    depth length = 1.90 range 1.40..2.10 label "Largo del colchón"
+  section "Materiales"
+    mat material = "Roble claro" label "Madera"
+  section "Modelo 3D"
+    model3d choice("Cabaña", "Litera") = "Cabaña" label "Modelo 3D"
+    linen material = "Tela clara" label "Sábanas y almohada"
+    duvet material = "Terciopelo salvia" label "Edredón"
+    bulb  material = "Luz" label "Guirnalda"
+
+body
+  box (-width / 2 - 0.04, 0, 0) to (width / 2 + 0.04, depth, 1.7) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0.42) to (width / 2, 0.42) pen thin
+
+outputs
+  generator = "props:kids_bed"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

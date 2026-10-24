@@ -1,0 +1,28 @@
+family "Aire acondicionado"
+  category furniture
+  host none
+  version 1
+  description "Unidad interior de un split, en lo alto de la pared"
+  folder "Climatización"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.85 range 0.60..1.40 label "Ancho"
+    elevation length = 2.10 range 1.50..2.80 label "Altura desde el suelo"
+  section "Materiales"
+    mat material = "Cerámica blanca" label "Carcasa"
+  section "Modelo 3D"
+    model3d choice("Split de pared") = "Split de pared" label "Modelo 3D"
+    dark  material = "Lino gris" label "Rejilla"
+    light material = "Luz" label "Piloto"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.2, elevation + 0.29) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.2) (-width / 2, 0.2) pen view dashed
+
+outputs
+  generator = "props:ac_unit"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

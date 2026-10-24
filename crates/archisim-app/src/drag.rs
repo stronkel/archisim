@@ -68,13 +68,16 @@ pub enum Grip {
         road: archisim_core::RoadId,
         index: usize,
     },
-    /// A size handle of an object (ArchiCAD's hotspots): its right side
-    /// stretches its width (both sides, about its axis), its front its
-    /// depth.
+    /// A size handle of an object (an arrow on its right, left or front
+    /// side): the object grows only towards the handle, the opposite side
+    /// staying put (with Alt, both sides about its middle).
     ObjectSize {
         object: archisim_core::ObjectId,
-        width: bool,
+        side: ObjectSide,
     },
+    /// The turning handle of an object (the ring in front of it): dragged
+    /// round its middle, in steps of 15° (1° when the cursor is far).
+    ObjectTurn { object: archisim_core::ObjectId },
     /// A jamb of a door or window (ArchiCAD's hotspots on its rough
     /// opening): dragged along the wall, it widens or narrows the opening
     /// with the other jamb staying put. `start`: the jamb nearer the wall's
@@ -140,6 +143,61 @@ pub struct Drag {
     pub to: Point2,
     /// Ctrl: copy (body), leave the corner (wall end), add a corner (edge).
     pub variant: bool,
+}
+
+/// The side of an object a size handle is on, in its own axes: right and
+/// left change its width, the front its depth (the back usually leans on a
+/// wall).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectSide {
+    Right,
+    Left,
+    Front,
+}
+
+impl ObjectSide {
+    /// The measurement it changes.
+    pub fn key(self) -> &'static str {
+        match self {
+            ObjectSide::Right | ObjectSide::Left => "width",
+            ObjectSide::Front => "depth",
+        }
+    }
+
+    /// The name of that measurement.
+    pub fn label(self) -> &'static str {
+        match self {
+            ObjectSide::Right | ObjectSide::Left => "Ancho",
+            ObjectSide::Front => "Fondo",
+        }
+    }
+
+    /// Which side stays put when it grows only towards this one.
+    pub fn keep(self) -> Keep {
+        match self {
+            ObjectSide::Right => Keep::Low(0),
+            ObjectSide::Left => Keep::High(0),
+            ObjectSide::Front => Keep::Low(1),
+        }
+    }
+
+    /// The direction it points, in the object's axes.
+    pub fn dir(self) -> (f64, f64) {
+        match self {
+            ObjectSide::Right => (1.0, 0.0),
+            ObjectSide::Left => (-1.0, 0.0),
+            ObjectSide::Front => (0.0, 1.0),
+        }
+    }
+}
+
+/// What stays where it was when an object changes size: its low or high
+/// face on an axis (0 width, 1 depth, 2 height) or its middle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Keep {
+    Low(usize),
+    High(usize),
+    Middle(usize),
 }
 
 /// Handles of the selected walls and slabs.
@@ -243,9 +301,15 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             // Moved whole, turned with Space; width and depth by their
             // handles if the family has them.
             Element::Object(id) => {
-                for (width, point) in object_handles(model, *id) {
+                for (side, point) in object_handles(model, *id) {
                     v.push(Hotspot {
-                        grip: Grip::ObjectSize { object: *id, width },
+                        grip: Grip::ObjectSize { object: *id, side },
+                        point,
+                    });
+                }
+                if let Some(point) = turn_handle(model, *id) {
+                    v.push(Hotspot {
+                        grip: Grip::ObjectTurn { object: *id },
                         point,
                     });
                 }
@@ -456,17 +520,19 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::RoadPoint { road, .. } => [Element::Road(road)].into_iter().collect(),
         Grip::RefPlaneEnd { plane, .. } => [Element::RefPlane(plane)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
-        Grip::ObjectSize { object, .. } => [Element::Object(object)].into_iter().collect(),
+        Grip::ObjectSize { object, .. } | Grip::ObjectTurn { object } => {
+            [Element::Object(object)].into_iter().collect()
+        }
         Grip::OpeningJamb { opening, .. } => [Element::Opening(opening)].into_iter().collect(),
         Grip::TerrainPoint { terrain, .. } => [Element::Terrain(terrain)].into_iter().collect(),
         Grip::DraftPoint { draft, .. } => [Element::Draft(draft)].into_iter().collect(),
     }
 }
 
-/// The width and depth handles of an object whose family has `width` and
-/// `depth` lengths: the middle of its right side and of its front.
-fn object_handles(model: &Model, id: archisim_core::ObjectId) -> Vec<(bool, Point2)> {
-    use archisim_core::Value;
+/// The size handles of an object whose type has a `width` or a `depth`:
+/// arrows in the middle of its right and left sides, and of its front (a plant: one,
+/// on the edge of its crown).
+fn object_handles(model: &Model, id: archisim_core::ObjectId) -> Vec<(ObjectSide, Point2)> {
     let Some(o) = model.object(id) else {
         return Vec::new();
     };
@@ -475,20 +541,132 @@ fn object_handles(model: &Model, id: archisim_core::ObjectId) -> Vec<(bool, Poin
         .then(|| plant_handle(model, id))
         .flatten()
     {
-        return vec![(true, p)];
+        return vec![(ObjectSide::Right, p)];
     }
-    let Some(t) = model.object_type(o.object_type) else {
+    let Some((lo, hi)) = object_box(model, id) else {
         return Vec::new();
     };
-    let (Some(Value::Number(w)), Some(Value::Number(d))) =
-        (t.values.get("width"), t.values.get("depth"))
-    else {
-        return Vec::new();
+    let (mx, my) = ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0);
+    let mut v = Vec::new();
+    if type_number(model, id, "width").is_some() {
+        v.push((ObjectSide::Right, o.to_plan(hi[0], my)));
+        v.push((ObjectSide::Left, o.to_plan(lo[0], my)));
+    }
+    if type_number(model, id, "depth").is_some() {
+        v.push((ObjectSide::Front, o.to_plan(mx, hi[1])));
+    }
+    v
+}
+
+/// A measurement of an object's type: its own value or its family's.
+pub(crate) fn type_number(model: &Model, id: archisim_core::ObjectId, key: &str) -> Option<f64> {
+    use archisim_core::Value;
+    let t = model.object_type(model.object(id)?.object_type)?;
+    if let Some(Value::Number(v)) = t.values.get(key) {
+        return Some(*v);
+    }
+    let d = model
+        .family_defaults(t.family, archisim_family::ParamScope::Type)
+        .ok()?;
+    match d.get(key) {
+        Some(Value::Number(v)) => Some(*v),
+        _ => None,
+    }
+}
+
+/// The box an object fills, in its own axes (from its family's 3D, or
+/// else its width centred and its depth forward from its point).
+pub(crate) fn object_box(
+    model: &Model,
+    id: archisim_core::ObjectId,
+) -> Option<([f64; 3], [f64; 3])> {
+    use archisim_core::Value;
+    let o = model.object(id)?;
+    if let Some(b) = model.object_type_box_3d(o.object_type) {
+        return Some(b);
+    }
+    let t = model.object_type(o.object_type)?;
+    let num = |k: &str| match t.values.get(k) {
+        Some(Value::Number(v)) => Some(*v),
+        _ => None,
     };
-    vec![
-        (true, o.to_plan(w / 2.0, d / 2.0)),
-        (false, o.to_plan(0.0, *d)),
-    ]
+    let (w, d) = (num("width")?, num("depth")?);
+    let h = num("height").unwrap_or(0.0);
+    Some(([-w / 2.0, 0.0, 0.0], [w / 2.0, d, h]))
+}
+
+/// The middle of the side that stays put while `side` stretches (with
+/// Alt, none: the object grows about its middle).
+pub(crate) fn fixed_side(
+    model: &Model,
+    id: archisim_core::ObjectId,
+    side: ObjectSide,
+) -> Option<Point2> {
+    let o = model.object(id)?;
+    let (lo, hi) = object_box(model, id)?;
+    let (mx, my) = ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0);
+    Some(match side {
+        ObjectSide::Right => o.to_plan(lo[0], my),
+        ObjectSide::Left => o.to_plan(hi[0], my),
+        ObjectSide::Front => o.to_plan(mx, lo[1]),
+    })
+}
+
+/// How far in front of an object its turning handle is, in metres.
+pub(crate) const TURN_GAP: f64 = 0.35;
+
+/// Where the turning handle of an object is: in front of its middle.
+pub(crate) fn turn_handle(model: &Model, id: archisim_core::ObjectId) -> Option<Point2> {
+    let o = model.object(id)?;
+    let (lo, hi) = object_box(model, id)?;
+    Some(o.to_plan((lo[0] + hi[0]) / 2.0, hi[1] + TURN_GAP))
+}
+
+/// The middle of an object in plan, what it turns about.
+pub(crate) fn object_middle(model: &Model, id: archisim_core::ObjectId) -> Option<Point2> {
+    let o = model.object(id)?;
+    let (lo, hi) = object_box(model, id)?;
+    Some(o.to_plan((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0))
+}
+
+/// The turn an object takes when its handle is dragged to `to`: pointing
+/// from its middle to the cursor, in steps of 15° (1° when the cursor is
+/// further than three times the handle's distance).
+pub(crate) fn turn_angle(model: &Model, id: archisim_core::ObjectId, to: Point2) -> Option<f64> {
+    let c = object_middle(model, id)?;
+    let h = turn_handle(model, id)?;
+    let reach = h.distance(c).max(0.1);
+    let rel = to - c;
+    if rel.length() < 1e-6 {
+        return None;
+    }
+    // The handle sits on the object's +y axis.
+    let raw = rel.y.atan2(rel.x) - std::f64::consts::FRAC_PI_2;
+    let step = f64::to_radians(if rel.length() > 3.0 * reach {
+        1.0
+    } else {
+        15.0
+    });
+    let a = (raw / step).round() * step;
+    Some(a.rem_euclid(std::f64::consts::TAU))
+}
+
+/// Turns an object to `angle` about its middle.
+pub(crate) fn turn_object(
+    model: &mut Model,
+    id: archisim_core::ObjectId,
+    angle: f64,
+) -> Result<(), ModelError> {
+    let c = object_middle(model, id).ok_or(ModelError::UnknownObject(id))?;
+    let o = model.object(id).ok_or(ModelError::UnknownObject(id))?;
+    let d = angle - o.rotation;
+    let rel = o.position - c;
+    let (cs, sn) = (d.cos(), d.sin());
+    let position = Point2::new(c.x + rel.x * cs - rel.y * sn, c.y + rel.x * sn + rel.y * cs);
+    model.edit_object(id, |o| {
+        o.rotation = angle;
+        o.position = position;
+    })
 }
 
 /// The edge of a plant's crown, east of its trunk (turned with it): its
@@ -525,27 +703,82 @@ fn stretch_plant(
     model.set_object_values(id, values)
 }
 
-/// Stretches an object's width or depth to `to`. A type shared with other
-/// objects is copied first, so only this one changes.
+/// Stretches an object from its handle on `side` to `to`: it grows only
+/// towards that side, the opposite one staying put; with `both`, about its
+/// middle. A type shared with other objects is copied first, so only this
+/// one changes.
 fn stretch_object(
     model: &mut Model,
     id: archisim_core::ObjectId,
-    width: bool,
+    side: ObjectSide,
     to: Point2,
+    both: bool,
 ) -> Result<(), ModelError> {
     let o = model
         .object(id)
         .ok_or(ModelError::UnknownObject(id))?
         .clone();
+    let (lo, hi) = object_box(model, id).ok_or(ModelError::UnknownObject(id))?;
     let rel = to - o.position;
     let (c, s) = (o.rotation.cos(), o.rotation.sin());
     let (x, y) = (rel.x * c + rel.y * s, -rel.x * s + rel.y * c);
-    let (key, value) = if width {
-        ("width", (2.0 * x.abs() * 1000.0).round() / 1000.0)
-    } else {
-        ("depth", (y * 1000.0).round() / 1000.0)
+    let (axis, at) = match side {
+        ObjectSide::Right | ObjectSide::Left => (0, x),
+        ObjectSide::Front => (1, y),
     };
-    set_object_size(model, id, key, value)
+    let value = if both {
+        2.0 * (at - (lo[axis] + hi[axis]) / 2.0).abs()
+    } else {
+        match side.keep() {
+            Keep::Low(_) => at - lo[axis],
+            _ => hi[axis] - at,
+        }
+    };
+    let value = (value.max(0.05) * 1000.0).round() / 1000.0;
+    let keep = if both {
+        Keep::Middle(axis)
+    } else {
+        side.keep()
+    };
+    resize_object(model, id, side.key(), value, keep)
+}
+
+/// Gives an object a new `width`, `depth` or `height`, moving it so that
+/// `keep` stays where it was. A type shared with other objects is copied
+/// first, so only this one changes.
+pub(crate) fn resize_object(
+    model: &mut Model,
+    id: archisim_core::ObjectId,
+    key: &str,
+    value: f64,
+    keep: Keep,
+) -> Result<(), ModelError> {
+    let before = object_box(model, id);
+    set_object_size(model, id, key, value)?;
+    let after = object_box(model, id);
+    let (Some((lo0, hi0)), Some((lo1, hi1))) = (before, after) else {
+        return Ok(());
+    };
+    let shift = |a: usize| match keep {
+        Keep::Low(k) if k == a => lo0[a] - lo1[a],
+        Keep::High(k) if k == a => hi0[a] - hi1[a],
+        Keep::Middle(k) if k == a => (lo0[a] + hi0[a] - lo1[a] - hi1[a]) / 2.0,
+        _ => 0.0,
+    };
+    let (dx, dy, dz) = (shift(0), shift(1), shift(2));
+    if dx.abs() < 1e-9 && dy.abs() < 1e-9 && dz.abs() < 1e-9 {
+        return Ok(());
+    }
+    let o = model.object(id).ok_or(ModelError::UnknownObject(id))?;
+    let (c, s) = (o.rotation.cos(), o.rotation.sin());
+    let position = Point2::new(
+        o.position.x + dx * c - dy * s,
+        o.position.y + dx * s + dy * c,
+    );
+    model.edit_object(id, |o| {
+        o.position = position;
+        o.base_offset += dz;
+    })
 }
 
 /// A measurement of an object's type (`width`, `depth`, `height`): a type
@@ -556,7 +789,17 @@ pub(crate) fn set_object_size(
     key: &str,
     value: f64,
 ) -> Result<(), ModelError> {
-    use archisim_core::Value;
+    set_object_value(model, id, key, archisim_core::Value::Number(value))
+}
+
+/// Sets a value of an object's type (a measurement, a material…). A type
+/// shared with other objects is copied first, so only this one changes.
+pub(crate) fn set_object_value(
+    model: &mut Model,
+    id: archisim_core::ObjectId,
+    key: &str,
+    value: archisim_core::Value,
+) -> Result<(), ModelError> {
     let o = model
         .object(id)
         .ok_or(ModelError::UnknownObject(id))?
@@ -566,7 +809,9 @@ pub(crate) fn set_object_size(
         .ok_or(ModelError::UnknownObjectType(o.object_type))?
         .clone();
     let mut values = t.values.clone();
-    values.insert(key.into(), Value::Number(value));
+    values.insert(key.into(), value);
+    // What follows the measurement: a longer sofa gains a seat.
+    model.follow_stretch(t.family, &mut values);
     if model.object_type_users(t.id) > 1 {
         let taken: Vec<String> = model.object_types().map(|t| t.name.clone()).collect();
         let name = crate::editor::copy_name(&t.name, &taken);
@@ -676,6 +921,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::RefPlaneEnd { .. } => "Estirar plano de referencia",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
+        Grip::ObjectTurn { .. } => "Girar objeto",
         Grip::OpeningJamb { .. } => "Estirar hueco",
         Grip::TerrainPoint { .. } => "Mover punto del terreno",
         Grip::DraftPoint { .. } => "Estirar",
@@ -759,17 +1005,20 @@ pub fn apply(
                 }
             })
             .map(|_| None),
-        Grip::ObjectSize { object, width }
+        Grip::ObjectSize { object, .. }
             if model
                 .object(object)
                 .is_some_and(|o| model.type_grows(o.object_type)) =>
         {
-            let _ = width;
             stretch_plant(model, object, drag.to, drag.variant).map(|_| None)
         }
-        Grip::ObjectSize { object, width } => {
-            stretch_object(model, object, width, drag.to).map(|_| None)
+        Grip::ObjectSize { object, side } => {
+            stretch_object(model, object, side, drag.to, drag.variant).map(|_| None)
         }
+        Grip::ObjectTurn { object } => match turn_angle(model, object, drag.to) {
+            Some(a) => turn_object(model, object, a).map(|_| None),
+            None => Ok(None),
+        },
         Grip::OpeningJamb { opening, start } => {
             stretch_opening(model, opening, start, drag.to).map(|_| None)
         }
@@ -820,7 +1069,13 @@ pub fn apply(
             .map(|_| None),
         Grip::StairPoint { stair, index } => model
             .edit_stair(stair, |s| {
-                if let Some(p) = s.path.get_mut(index) {
+                // A spiral's centre takes its first riser with it.
+                if index == 0 && s.design.form == archisim_core::StairForm::Spiral {
+                    let d = drag.to - s.path[0];
+                    for p in &mut s.path {
+                        *p = *p + d;
+                    }
+                } else if let Some(p) = s.path.get_mut(index) {
                     *p = drag.to;
                 }
             })
@@ -1377,7 +1632,9 @@ pub(crate) fn copy(
                     waist: s.waist,
                     material: s.material,
                     usage: s.usage,
+                    design: s.design,
                 })?;
+                model.edit_stair(new, |x| x.railings = s.railings)?;
                 copies.insert(Element::Stair(new));
             }
             Element::Roof(id) => {
@@ -1778,7 +2035,7 @@ pub(crate) fn place_footing(
 }
 
 /// Whether the element is in the model.
-fn exists(model: &Model, e: Element) -> bool {
+pub(crate) fn exists(model: &Model, e: Element) -> bool {
     match e {
         Element::Wall(id) => model.wall(id).is_some(),
         Element::Opening(id) => model.opening(id).is_some(),
@@ -1849,7 +2106,9 @@ fn level_of(
         Grip::RoadPoint { road, .. } => model.road(road).map(|r| r.level),
         Grip::RefPlaneEnd { .. } => None,
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
-        Grip::ObjectSize { object, .. } => model.object(object).map(|o| o.level),
+        Grip::ObjectSize { object, .. } | Grip::ObjectTurn { object } => {
+            model.object(object).map(|o| o.level)
+        }
         Grip::OpeningJamb { opening, .. } => {
             model.opening(opening).and_then(|o| wall_level(o.wall))
         }
@@ -2022,7 +2281,16 @@ mod tests {
         // An object's width by its handle: a shared type is copied.
         let one = sel(&[Element::Object(obj)]);
         let handles = hotspots(&m, &one);
-        assert_eq!(handles.len(), 2);
+        // Right, left, front and the turning handle.
+        assert_eq!(handles.len(), 4);
+        assert!(matches!(
+            handles[0].grip,
+            Grip::ObjectSize {
+                side: ObjectSide::Right,
+                ..
+            }
+        ));
+        let left = handles[1].point;
         let w0 = handles[0].point;
         let stretch = Drag {
             grip: handles[0].grip,
@@ -2038,10 +2306,42 @@ mod tests {
         let w0v = m.object_type(before).unwrap().values["width"].clone();
         match (w, w0v) {
             (archisim_core::Value::Number(a), archisim_core::Value::Number(b)) => {
-                assert!((a - b - 0.4).abs() < 1e-6, "{a} {b}")
+                // It grows only towards the handle: the left side stays.
+                assert!((a - b - 0.2).abs() < 1e-6, "{a} {b}")
             }
             _ => panic!(),
         }
+        let left_now = hotspots(&m, &one)[1].point;
+        assert!(left_now.distance(left) < 1e-6, "{left:?} {left_now:?}");
+        // With Alt (the variant), on both sides about its middle.
+        let middle = object_middle(&m, obj).unwrap();
+        let w1 = hotspots(&m, &one)[0].point;
+        let both = Drag {
+            grip: Grip::ObjectSize {
+                object: obj,
+                side: ObjectSide::Right,
+            },
+            from: w1,
+            to: w1 + archisim_core::Vec2::new(0.1, 0.0),
+            variant: true,
+        };
+        apply(&mut m, &one, &both).unwrap();
+        assert!(object_middle(&m, obj).unwrap().distance(middle) < 1e-6);
+        // The turning handle, dragged to the right of its middle: a
+        // quarter turn clockwise, about its middle.
+        let turn = hotspots(&m, &one)[3];
+        assert!(matches!(turn.grip, Grip::ObjectTurn { .. }));
+        let middle = object_middle(&m, obj).unwrap();
+        let turned = Drag {
+            grip: turn.grip,
+            from: turn.point,
+            to: middle + archisim_core::Vec2::new(1.0, 0.02),
+            variant: false,
+        };
+        apply(&mut m, &one, &turned).unwrap();
+        let r = m.object(obj).unwrap().rotation;
+        assert!((r - 1.5 * std::f64::consts::PI).abs() < 1e-6, "{r}");
+        assert!(object_middle(&m, obj).unwrap().distance(middle) < 1e-6);
         // Stretch a curtain wall by its end and move a railing point.
         let ends = sel(&[Element::CurtainWall(cw), Element::Railing(rail)]);
         assert_eq!(hotspots(&m, &ends).len(), 2 + 3);

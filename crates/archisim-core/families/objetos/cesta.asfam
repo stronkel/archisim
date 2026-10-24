@@ -1,0 +1,31 @@
+family "Cesta"
+  category sanitary
+  host none
+  version 1
+  description "Cesto de la ropa con tapa, cesta baja con rollos o cesta de mimbre con asas"
+  folder "Accesorios de baño"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.40 range 0.15..0.90 label "Diámetro"
+    height length = 0.60 range 0.08..1.00 label "Altura"
+  section "Materiales"
+    weave material = "Ratán" label "Mimbre"
+  section "Modelo 3D"
+    model3d choice("Cesto de ropa", "Con rollos", "Con asas") = "Cesto de ropa" label "Modelo 3D"
+    mat material = "Toalla blanca" label "Lo de dentro"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, width, height) material weave
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+
+outputs
+  generator = "props:basket"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

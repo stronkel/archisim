@@ -630,14 +630,17 @@ impl ArchiSimApp {
     /// What the keys and the mouse do now, as "Clic: … · Esc: …".
     pub(super) fn hint_text(&self) -> &'static str {
         if self.mode == ViewMode::Section {
-            return "Rueda: zoom · Botón derecho o central: desplazar · Inicio: ajustar · F2: planta · F3: 3D";
+            return "Rueda: zoom · Rueda pulsada o botón derecho: desplazar · Inicio: ajustar · F2: planta · F3: 3D";
         }
         // A tool in the 3D view: its own hint (arrastrar still turns).
         if self.mode == ViewMode::ThreeD && !self.tool_in_3d() {
             if self.v3d.section.is_some() {
-                return "Flechas azules: mover las caras de la caja de sección · Arrastrar: girar · Rueda: zoom · Clic: seleccionar · F2: planta";
+                return "Flechas azules: mover las caras de la caja de sección · Botón derecho mantenido: girar · Rueda pulsada: desplazar · Clic: seleccionar";
             }
-            return "Arrastrar: girar · Rueda: zoom · Botón derecho: encuadre · Clic: seleccionar · Inicio: ajustar · F2: planta";
+            if self.maquette {
+                return "Clic: seleccionar · Arrastrar: mover o ventana de selección · Botón derecho mantenido: girar · Rueda pulsada: desplazar · W A S D: moverse · Q E: bajar y subir · Clic derecho: menú";
+            }
+            return "Clic: seleccionar · Arrastrar: mover o ventana de selección · Botón derecho mantenido: girar · Rueda pulsada: desplazar · Clic derecho: menú";
         }
         if matches!(self.mode, ViewMode::Sheet(_)) && self.tool != Tool::Cad {
             return "Clic: seleccionar vista o dibujo · Arrastrar vista: colocarla · Doble clic: abrir su planta · L, TX…: dibujar en el plano · Supr: quitar";
@@ -663,8 +666,8 @@ impl ArchiSimApp {
             Tool::Arrow if self.single_opening_selected() => "Clic en una cota azul: medida exacta · Espacio o flechas azules: girar · Arrastrar: deslizar por el muro · Supr: borrar",
             Tool::Arrow if self.single_curved_wall_selected() => "Círculo blanco: curvar · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Propiedades: radio · Supr: borrar",
             Tool::Arrow if self.single_wall_selected() => "Clic en una cota azul: medida exacta · Espacio: invertir · Arrastrar: mover · Extremo: estirar · Supr: borrar",
-            Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar: mover · Ctrl: copiar · Extremo o esquina: estirar · Rombo: mover la arista · Supr: borrar · Esc: anular",
-            Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Botón derecho: encuadre · M F P V C I G Z: herramientas · Orden (L, PL, C…) + Intro: dibujar y editar",
+            Tool::Arrow if !self.ed.selection.is_empty() => "Arrastrar: mover · Ctrl: copiar · Flecha azul: estirar hacia ese lado (Alt: por los dos) · Punto naranja: girar · Clic derecho: menú",
+            Tool::Arrow => "Clic: seleccionar · Arrastrar: ventana de selección · Rueda: zoom · Rueda pulsada o botón derecho mantenido: desplazar · Clic derecho: menú",
             Tool::Wall => self.wall_hint(),
             Tool::Slab if !self.slab_tool.is_drawing() && self.slab_settings.wand => "Clic: dentro de un recinto de muros · Esc: flecha",
             Tool::Slab if !self.slab_tool.is_drawing() => "Clic: primera esquina · Espacio + clic: varita mágica · Esc: flecha",
@@ -699,7 +702,13 @@ impl ArchiSimApp {
             Tool::Roof => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
             Tool::Terrain if self.terrain_settings.line => "Escribe la cota en Propiedades y clic: vértices de la línea de nivel · Intro o doble clic: terminarla · Esc: quitar el último",
             Tool::Terrain => "Escribe la cota en Propiedades y clic: punto del terreno (sobre uno que ya existe: le pone la cota) · Intro o doble clic: crear · Esc: quitar el último",
-            Tool::Stair if self.stair_tool.points.is_empty() => "Clic: pie de la escalera (inicio de la línea de huella) · Esc: flecha",
+            Tool::Stair if self.stair_tool.points.is_empty() => match self.stair_settings.preset {
+                archisim_core::StairPreset::Free => "Clic: pie de la escalera (inicio de la línea de huella) · Esc: flecha",
+                archisim_core::StairPreset::Spiral => "Clic: centro de la escalera de caracol · Esc: flecha",
+                _ => "Clic: arranque de la escalera (el pie de su primer peldaño) · Esc: flecha",
+            },
+            Tool::Stair if self.stair_settings.preset == archisim_core::StairPreset::Spiral => "Clic: hacia donde arranca el primer peldaño · Espacio: girar al otro lado · Esc: quitar el centro",
+            Tool::Stair if self.stair_settings.preset != archisim_core::StairPreset::Free => "Clic: hacia donde sube (mide lo que pide la altura) · Espacio: girar al otro lado · Esc: quitar el arranque",
             Tool::Stair => "Clic: final del tramo o giro (meseta) · Intro, doble clic o clic derecho: terminar · Esc: quitar el último punto",
             Tool::Cad => "Clic o coordenadas + Intro: punto · Intro, Espacio o botón derecho: aceptar · Esc: terminar · F8: orto",
         }
@@ -750,10 +759,11 @@ impl ArchiSimApp {
         }
     }
 
-    /// The hint pill at the bottom and the last message at the top left.
+    /// The last message over the drawing (what the keys do is no longer
+    /// shown over it: the tool's step is in the context bar, and what
+    /// can be done with the selection in its right click menu).
     pub(super) fn draw_overlays(&self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect) {
         let p = Palette::current(ctx);
-        widgets::hud(painter, rect, &widgets::parse_hints(self.hint_text()), p);
         if let Some(m) = &self.message {
             let now = ctx.input(|i| i.time);
             let age = now - self.message_seen.1;
@@ -780,8 +790,8 @@ impl ArchiSimApp {
         if pos.x + galley.size().x + 10.0 > rect.right() {
             pos.x = cursor.x - 18.0 - galley.size().x;
         }
-        // Clear of the hint pill at the bottom of the view.
-        if pos.y + galley.size().y + 10.0 > rect.bottom() - 56.0 {
+        // Clear of the bottom of the view.
+        if pos.y + galley.size().y + 10.0 > rect.bottom() - 16.0 {
             pos.y = cursor.y - 20.0 - galley.size().y;
         }
         let bg = Rect::from_min_size(pos, galley.size()).expand2(Vec2::new(7.0, 4.0));

@@ -1,7 +1,7 @@
 family "Mesita de noche"
   category furniture
   host none
-  version 2
+  version 3
   description "Mesita de noche con dos cajones y una lámpara"
   folder "Dormitorio"
 
@@ -16,7 +16,7 @@ type_params
   section "Materiales"
     mat material = "Madera de pino" label "Madera"
   section "Modelo 3D"
-    model3d choice("Cajonera", "Con patas") = "Cajonera" label "Modelo 3D"
+    model3d choice("Cajonera", "Con patas", "Patas cónicas", "Flotante") = "Cajonera" label "Modelo 3D"
     frame material = "Metal lacado" label "Tiradores y patas"
     shade material = "Tela clara" label "Pantalla de la lámpara"
 

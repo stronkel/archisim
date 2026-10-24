@@ -158,7 +158,7 @@ const GEOMETRY: &[Order] = &[
 ];
 
 /// The name of one element, for «Modificar · Muro (1)».
-fn element_name(e: &Element) -> &'static str {
+pub(super) fn element_name(e: &Element) -> &'static str {
     match e {
         Element::Dimension(_) => "Cota",
         Element::Mark(_) => "Cota de nivel",
@@ -886,6 +886,7 @@ impl ArchiSimApp {
                 }
                 self.reference_buttons(ui);
                 self.length_angle_fields(ui);
+                self.tool_step(ui);
                 return;
             }
             // Modificar: with the selection, or grey without it.
@@ -948,6 +949,26 @@ impl ArchiSimApp {
                 self.start_command(c);
             }
         });
+    }
+
+    /// What a click does now with the tool in use, in grey at the end of
+    /// the bar (it used to be a pill over the drawing): its first part,
+    /// the rest when the cursor rests on it.
+    fn tool_step(&mut self, ui: &mut Ui) {
+        let p = Palette::current(ui.ctx());
+        let hint = self.hint_text();
+        let first = hint.split(" · ").next().unwrap_or(hint);
+        if ui.available_width() < 80.0 {
+            return;
+        }
+        bar_separator(ui, &p);
+        let label = egui::Label::new(
+            egui::RichText::new(first)
+                .font(FontId::proportional(12.0))
+                .color(p.muted),
+        )
+        .truncate();
+        ui.add(label).on_hover_text(hint.replace(" · ", "\n"));
     }
 
     /// The step of the order running: its name, what it asks and its

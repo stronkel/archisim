@@ -13,11 +13,16 @@
 
 mod accessories;
 pub mod build;
+mod cozy;
+mod extras;
 pub mod fronts;
 mod furniture;
+mod garden;
+mod home;
 mod kitchen;
 mod people;
 mod sanitary;
+mod street;
 mod vehicles;
 
 use std::collections::{BTreeMap, HashMap};
@@ -81,12 +86,24 @@ pub const KINDS: &[(&str, &[&str])] = &[
         "coffee_table",
         &["Madera con balda", "Bloque", "Vidrio y metal"],
     ),
-    ("bed", &["Tapizada", "Madera", "Tarima"]),
-    ("nightstand", &["Cajonera", "Con patas"]),
+    (
+        "bed",
+        &[
+            "Tapizada",
+            "Madera",
+            "Tarima",
+            "Cabecero tapizado",
+            "Cabecero de lamas",
+        ],
+    ),
+    (
+        "nightstand",
+        &["Cajonera", "Con patas", "Patas cónicas", "Flotante"],
+    ),
     ("wardrobe", &["Puertas batientes"]),
     ("chest", &["Zócalo", "Con patas"]),
     ("desk", &["Con cajonera", "Patas metálicas"]),
-    ("bookcase", &["Con libros"]),
+    ("bookcase", &["Con libros", "Con objetos"]),
     ("tv_unit", &["Con televisor"]),
     ("counter", &["Con fregadero y placa"]),
     ("wall_cabinet", &["Puertas"]),
@@ -107,7 +124,143 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("hood", &["Decorativa", "Integrada"]),
     ("shelf", &["Con escuadras", "Flotante"]),
     ("person", &["Hombre", "Mujer", "Caminando"]),
+    (
+        "rug",
+        &[
+            "Lisa con ribete",
+            "Redonda",
+            "De rayas",
+            "Bereber con flecos",
+        ],
+    ),
+    ("lamp", &["De pie", "De mesa", "Colgante", "De arco"]),
+    (
+        "potted_plant",
+        &[
+            "Costilla de Adán",
+            "Ficus",
+            "Cactus",
+            "Helecho",
+            "Sansevieria",
+        ],
+    ),
+    (
+        "armchair",
+        &["De orejas", "Redonda", "De ratán", "Baja de patas"],
+    ),
+    ("pouf", &["Redondo", "De punto", "Cubo"]),
+    ("side_table", &["Pie central", "Tres patas", "Nido"]),
+    ("sideboard", &["Nórdico de patas", "Puertas de lamas"]),
+    ("curtain", &["Larga", "Visillo", "Hasta el alféizar"]),
+    (
+        "decor",
+        &[
+            "Jarrón con ramas",
+            "Frutero",
+            "Libros y vela",
+            "Cerámicas",
+            "Cesta con manta",
+        ],
+    ),
+    ("stool", &["De madera", "Tapizado con respaldo", "De enea"]),
+    (
+        "island",
+        &["Con voladizo", "Mesa de trabajo", "Con fregadero"],
+    ),
+    (
+        "counter_decor",
+        &[
+            "Tablas y aceite",
+            "Botes de cristal",
+            "Cafetera y tazas",
+            "Hierbas aromáticas",
+        ],
+    ),
+    ("towels", &["Dobladas", "Colgadas", "Enrolladas"]),
+    ("basket", &["Cesto de ropa", "Con rollos", "Con asas"]),
+    (
+        "wall_decor",
+        &[
+            "Cuadro",
+            "Tríptico",
+            "Espejo de arco",
+            "Espejo sol",
+            "Reloj",
+        ],
+    ),
+    ("floor_cushion", &["Cuadrado", "Zafu", "Pila"]),
+    ("blanket", &["Doblada", "Pila de mantas", "En escalera"]),
+    ("lounger", &["De teca", "De aluminio", "Cama de exterior"]),
+    ("parasol", &["Redonda", "Descentrada", "De paja"]),
+    (
+        "big_pot",
+        &["Con olivo", "Ánfora", "Con gramíneas", "Con lavanda"],
+    ),
+    ("pergola", &["De madera", "De lamas", "Con cañizo"]),
     ("car", &["Berlina", "Compacto", "Todoterreno"]),
+    // Street furniture (v0.52).
+    (
+        "bench",
+        &["De listones", "Hormigón y madera", "Marco de acero"],
+    ),
+    (
+        "streetlight",
+        &["Báculo curvo", "Fernandina", "Columna con globo", "Baliza"],
+    ),
+    (
+        "litter_bin",
+        &[
+            "Chapa perforada",
+            "Listones de madera",
+            "Doble para reciclar",
+        ],
+    ),
+    ("bollard", &["Fundición", "Tubo de acero", "Hormigón"]),
+    (
+        "letter_box",
+        &["De pie", "Sobre poste", "Buzones de portal"],
+    ),
+    (
+        "container",
+        &["Carga lateral", "Iglú de vidrio", "Soterrado"],
+    ),
+    (
+        "fountain",
+        &[
+            "Fuente de fundición",
+            "Bloque de piedra",
+            "Estanque con surtidor",
+        ],
+    ),
+    (
+        "planter",
+        &[
+            "Hormigón con arbustos",
+            "Madera con flores",
+            "Acero corten con gramíneas",
+        ],
+    ),
+    ("tree_grate", &["Fundición", "Pletinas", "Bordillo y grava"]),
+    ("bike_rack", &["U invertida", "Onda", "Soporte de rueda"]),
+    ("sign", &["Circular", "Triangular", "Rectangular"]),
+    ("bicycle", &["Paseo", "Carretera", "De carga"]),
+    // More of what a house has (v0.52).
+    (
+        "fireplace",
+        &["De obra", "Estufa de leña", "Moderna lineal"],
+    ),
+    ("coat_stand", &["De pie", "Recibidor con banco"]),
+    ("office_chair", &["Giratoria", "De malla"]),
+    (
+        "outdoor_set",
+        &["Bistró", "Teca para seis", "Sofá de exterior"],
+    ),
+    ("hanging_chair", &["Huevo de ratán", "Hamaca"]),
+    ("radiator", &["Aluminio", "Panel de acero"]),
+    ("ac_unit", &["Split de pared"]),
+    ("ceiling_fan", &["Aspas de madera", "Aspas de ratán"]),
+    ("piano", &["De pared", "De cola"]),
+    ("kids_bed", &["Cabaña", "Litera"]),
 ];
 
 /// Values of the families chosen by name, as numbers for the models:
@@ -167,6 +320,49 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "shelf" => accessories::shelf(&mut b, p),
         "person" => people::person(&mut b, p),
         "car" => vehicles::car(&mut b, p),
+        "rug" => cozy::rug(&mut b, p),
+        "lamp" => cozy::lamp(&mut b, p),
+        "potted_plant" => cozy::potted_plant(&mut b, p),
+        "armchair" => cozy::armchair(&mut b, p),
+        "pouf" => cozy::pouf(&mut b, p),
+        "side_table" => cozy::side_table(&mut b, p),
+        "sideboard" => cozy::sideboard(&mut b, p),
+        "curtain" => cozy::curtain(&mut b, p),
+        "decor" => cozy::decor(&mut b, p),
+        "stool" => home::stool(&mut b, p),
+        "island" => home::island(&mut b, p),
+        "counter_decor" => home::counter_decor(&mut b, p),
+        "towels" => home::towels(&mut b, p),
+        "basket" => home::basket(&mut b, p),
+        "wall_decor" => home::wall_decor(&mut b, p),
+        "floor_cushion" => home::floor_cushion(&mut b, p),
+        "blanket" => home::blanket(&mut b, p),
+        "lounger" => garden::lounger(&mut b, p),
+        "parasol" => garden::parasol(&mut b, p),
+        "big_pot" => garden::big_pot(&mut b, p),
+        "pergola" => garden::pergola(&mut b, p),
+        "bench" => street::bench(&mut b, p),
+        "streetlight" => street::streetlight(&mut b, p),
+        "litter_bin" => street::litter_bin(&mut b, p),
+        "bollard" => street::bollard(&mut b, p),
+        "letter_box" => street::letter_box(&mut b, p),
+        "container" => street::container(&mut b, p),
+        "fountain" => street::fountain(&mut b, p),
+        "planter" => street::planter(&mut b, p),
+        "tree_grate" => street::tree_grate(&mut b, p),
+        "bike_rack" => street::bike_rack(&mut b, p),
+        "sign" => street::sign(&mut b, p),
+        "bicycle" => street::bicycle(&mut b, p),
+        "fireplace" => extras::fireplace(&mut b, p),
+        "coat_stand" => extras::coat_stand(&mut b, p),
+        "office_chair" => extras::office_chair(&mut b, p),
+        "outdoor_set" => extras::outdoor_set(&mut b, p),
+        "hanging_chair" => extras::hanging_chair(&mut b, p),
+        "radiator" => extras::radiator(&mut b, p),
+        "ac_unit" => extras::ac_unit(&mut b, p),
+        "ceiling_fan" => extras::ceiling_fan(&mut b, p),
+        "piano" => extras::piano(&mut b, p),
+        "kids_bed" => extras::kids_bed(&mut b, p),
         _ => return None,
     }
     Some(PropMesh {
