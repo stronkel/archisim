@@ -1,6 +1,6 @@
 # ArchiSim — Hoja de ruta después del MVP
 
-> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 23/10/2026 (§8, Maqueta y cubiertas, v0.48). Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
+> 17 de octubre de 2026 · versión 0.8 · MVP (fase 1) terminado. Actualizada el 24/10/2026 (§9, hoja de ruta común entre conversaciones, v0.56). Actualizada el 23/10/2026 (§8, Maqueta y cubiertas, v0.48). Actualizada el 18/10/2026 (D2 decidida; §1 cerrada en v0.22) y el 19/10/2026 (fase 2 y revisión R1–R11, fase 3 en v0.25, fase 4: 4.1 a 4.4 en v0.26; todo junto en v0.27).
 > Lista de todo lo que hay que preparar a continuación, ordenada por fases.
 > Antonio decide el orden dentro de cada fase; lo marcado con ★ es lo que
 > propongo hacer primero. Tamaño orientativo: **S** (un bloque corto),
@@ -215,6 +215,28 @@ Al probar inserciones pidió además buhardillas que se adapten a la cubierta (n
 | UI2 | Catálogo en árbol (grupo → tema → clase); cocina por módulos: bajos que juntan su encimera (cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero, esquina), columnas, altos y campanas; frentes liso, con marco, ranurado y con cristal; cajones, tirador y frente en la barra, para un módulo o toda la fila | ✅ v0.55 (`bloque/cocina`) |
 | UI3 | Diálogos junto al botón que los abre (nada aparece en una esquina sobre las herramientas) y con la misma forma; plano de carpinterías en A3 con alzados, secciones y datos (Archivo → Plano de carpinterías) | ✅ v0.55 (`bloque/cocina`) |
 | UI4 | Interfaz en islas (paneles como tarjetas sobre fondo cálido); paneles laterales para gestionar, burbuja junto al botón para lo corto (Añadir planta con su sección), diálogo central con fondo oscurecido para decidir; avisos abajo con Deshacer; tarjeta de tipo con Planta · Alzado · 3D | ✅ v0.56 (`bloque/islas`) |
+
+## 9. Hoja de ruta común (24/10/2026, v0.56)
+
+Antonio trabaja con **varias conversaciones a la vez**. Esta sección es la lista única de lo que falta: cada conversación la lee al empezar, **marca aquí el bloque que coge** («en curso, rama `bloque/…`») con un commit en `main` antes de tocar código, y no toca los ficheros de un bloque que lleva otra. Así nadie rehace lo que ya hizo otra (como pasó con la 0.49, que salió de la 0.48 sin la Maqueta segunda vuelta).
+
+Ya hecho y que **no se vuelve a abrir** salvo que Antonio lo pida: biblioteca acogedora y colecciones (v0.49–v0.50), muebles que crecen por piezas y se unen, color por pieza, luz de día, atardecer y noche (V1, primera vuelta), mobiliario urbano rehecho (v0.52), escaleras (v0.53), manejo común, cocina por módulos, catálogo en árbol, diálogos e islas (UI1–UI4, v0.54–v0.56).
+
+Orden propuesto, **pendiente de que Antonio lo confirme**:
+
+| # | Bloque | Qué | Tamaño | Estado |
+|---|---|---|---|---|
+| C1 | **Figuras y vegetación en alzado y sección** | Árboles, palmeras y arbustos dibujados en secciones, alzados y axonometrías como los dibuja un arquitecto (silueta de la copa con estilos como los de planta: contorno, lóbulos, acuarela, ramas; tronco; sin la red de facetas de la malla); coches y personas con su silueta. Coches y personas rehechos en el estilo de la biblioteca acogedora (los generadores son del 22/10/2026) | M | — |
+| C2 | **Cocina y muebles, segunda vuelta** | Encimera continua de verdad en el IFC y en las mediciones; módulos de esquina en L con la encimera en ángulo; islas por módulos; sofá rinconera; unirse también al arrastrar en planta; rueda de color libre | M | — |
+| C3 | **Detalles de la Maqueta y de la interfaz** | Habitación en un solo paso de Deshacer; mover en 3D pegándose a las paredes y con cotas temporales; colocación de huecos «Por el centro / Desde un extremo / Repartidas»; todos los interruptores y botones con el mismo dibujo | M | — |
+| C4 | **Salida para visualización** | El proyecto entero a `.glb` (D5, Twinmotion, Blender); `archisim render` con las texturas nuevas y la noche; sombras de las lámparas; texturas como imagen para los Mac con Intel | M | — |
+| C5 | **Exterior y Concepto en la Maqueta** (MQ3–MQ4) | Pinceles de Exterior (césped, caminos, plantaciones pintadas); flechas y aros en Concepto | M | — |
+| C6 | **Documentación** | Más láminas con el cajetín del plano de carpinterías: memoria de carpinterías, cuadro de superficies; lo que Antonio eche en falta del plano de carpinterías | M | — |
+| C7 | **Deudas** | Escaleras: mesetas partidas a 45°, meseta de llegada de las de caracol. Buhardillas sobre limahoyas que pasan por un encuentro | S | — |
+
+Pendiente de Antonio, fuera de la tabla:
+- **#54 (remates v0.48)**: rehacerlo sobre la 0.56 o cerrarlo.
+- Decisiones **D4** (nombre), **D5** (normas de dibujo), **D7** (IFC reales de prueba), **D8–D12** (disciplinas y mediciones); **catálogo real de AD5** (2.2) y **reglas del CTE** que quiera añadir.
 
 ## Propuesta de orden
 

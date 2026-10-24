@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (4) · Hoja de ruta común entre conversaciones
+
+En `main`, solo documentación (sin cambios de código, formato ni IFC).
+
+Antonio trabaja con varias conversaciones a la vez y pidió una hoja de ruta común para no desandar lo andado. En esta conversación se habló de Paralives: no se usa su biblioteca (son modelos con derechos de su estudio y ArchiSim es GPL y de sala limpia), se replica lo que la hace bonita. Y de que los árboles se ven feos en alzado y sección: las secciones dibujan las aristas de la malla 3D de la copa, no un árbol.
+
+**Hecho**
+- `docs/HOJA_DE_RUTA.md` §9: la lista única de lo que falta (C1–C7), lo que ya está hecho y no se reabre, y la regla para trabajar a la vez: cada conversación marca en §9 el bloque que coge antes de tocar código.
+
+**Pendiente**
+- Que Antonio confirme o cambie el orden de §9. Propuesta: C1 (figuras y vegetación en alzado y sección, y coches y personas en el estilo de la biblioteca) primero.
+
+**Qué debe probar Antonio**
+- Nada que ejecutar. Leer `docs/HOJA_DE_RUTA.md` §9 y decir el orden.
+
+---
+
 ## 2026-10-24 (3) · v0.56: la interfaz en islas, avisos con Deshacer y tres maneras de abrir las cosas (UI4)
 
 Rama `bloque/islas`, sobre la 0.55 (lleva dentro #59), pull request para Antonio. Sin cambios de formato ni de IFC.
