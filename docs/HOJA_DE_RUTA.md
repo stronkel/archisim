@@ -222,11 +222,11 @@ Antonio trabaja con **varias conversaciones a la vez**. Esta sección es la list
 
 Ya hecho y que **no se vuelve a abrir** salvo que Antonio lo pida: remates de la 0.48 rehechos sobre la 0.56 (v0.57), biblioteca acogedora y colecciones (v0.49–v0.50), muebles que crecen por piezas y se unen, color por pieza, luz de día, atardecer y noche (V1, primera vuelta), mobiliario urbano rehecho (v0.52), escaleras (v0.53), manejo común, cocina por módulos, catálogo en árbol, diálogos e islas (UI1–UI4, v0.54–v0.56).
 
-Orden propuesto, **pendiente de que Antonio lo confirme**:
+Orden **confirmado por Antonio el 24/10/2026**: de C1 a C7, uno tras otro.
 
 | # | Bloque | Qué | Tamaño | Estado |
 |---|---|---|---|---|
-| C1 | **Figuras y vegetación en alzado y sección** | Árboles, palmeras y arbustos dibujados en secciones, alzados y axonometrías como los dibuja un arquitecto (silueta de la copa con estilos como los de planta: contorno, lóbulos, acuarela, ramas; tronco; sin la red de facetas de la malla); coches y personas con su silueta. Coches y personas rehechos en el estilo de la biblioteca acogedora (los generadores son del 22/10/2026) | M | — |
+| C1 | **Figuras y vegetación en alzado y sección** | Árboles, palmeras y arbustos dibujados en secciones, alzados y axonometrías como los dibuja un arquitecto (silueta de la copa con estilos como los de planta: contorno, lóbulos, acuarela, ramas; tronco; sin la red de facetas de la malla); coches y personas con su silueta. Coches y personas rehechos en el estilo de la biblioteca acogedora (los generadores son del 22/10/2026) | M | **en curso, rama `bloque/c1-figuras`** |
 | C2 | **Cocina y muebles, segunda vuelta** | Encimera continua de verdad en el IFC y en las mediciones; módulos de esquina en L con la encimera en ángulo; islas por módulos; sofá rinconera; unirse también al arrastrar en planta; rueda de color libre | M | — |
 | C3 | **Detalles de la Maqueta y de la interfaz** | Habitación en un solo paso de Deshacer; mover en 3D pegándose a las paredes y con cotas temporales; colocación de huecos «Por el centro / Desde un extremo / Repartidas»; todos los interruptores y botones con el mismo dibujo | M | — |
 | C4 | **Salida para visualización** | El proyecto entero a `.glb` (D5, Twinmotion, Blender); `archisim render` con las texturas nuevas y la noche; sombras de las lámparas; texturas como imagen para los Mac con Intel | M | — |
