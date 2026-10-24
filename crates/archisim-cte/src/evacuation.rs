@@ -186,9 +186,10 @@ fn stair_exits(model: &Model, level: LevelId, entrance: LevelId) -> Vec<(StairId
         };
         let foot = base.elevation + s.base_offset;
         let head = foot + s.height;
-        let (Some(first), Some(last)) = (s.path.first(), s.path.last()) else {
+        let (Some(first), Some(last)) = (s.foot(), s.head()) else {
             continue;
         };
+        let (first, last) = (&first, &last);
         if here.elevation > entry.elevation && (head - here.elevation).abs() < 0.3 {
             // Going down from this level.
             out.push((s.id, *last));

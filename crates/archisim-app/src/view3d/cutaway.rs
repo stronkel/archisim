@@ -11,13 +11,13 @@
 
 use glam::Vec2;
 
-/// An element cut at the height like the rest (slabs, roofs, stairs…).
+/// An element cut at the height like the rest (slabs, roofs…).
 pub const PLAIN: f32 = 0.0;
 /// A wall, or what stands in one (doors, windows), or a column: in the
 /// «walls in front» mode, low in front and whole behind.
 pub const WALL: f32 = 1.0;
-/// Furniture and things placed on the floor: whole if they stand below
-/// the cut, gone if above (on an upper floor).
+/// Furniture, stairs and things placed on the floor: whole if they stand
+/// below the cut, gone if above (on an upper floor).
 pub const OBJECT: f32 = 2.0;
 
 /// Taller than anything: not cut.

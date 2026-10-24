@@ -105,6 +105,15 @@ pub(super) struct Piece {
     pub swatches: Vec<(&'static str, [u8; 3])>,
 }
 
+/// A kind of stair on the catalog: its shape, its turns and what carries
+/// it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StairCard {
+    pub preset: archisim_core::StairPreset,
+    pub winders: bool,
+    pub structure: archisim_core::StairStructure,
+}
+
 /// What a card of the catalog does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CatalogAct {
@@ -119,7 +128,7 @@ pub enum CatalogAct {
     Window(OpeningTypeId),
     Roof(crate::editor::RoofKind),
     Dormer(DormerKind),
-    Stair,
+    Stair(StairCard),
     /// A piece of the library in the Maqueta's collection, by its name.
     Collected(&'static str),
     Railing,
@@ -542,10 +551,33 @@ impl ArchiSimApp {
                     Glyph::Window,
                 ),
             ],
-            (CatalogGroup::Build, "Escaleras") => vec![
-                card(CatalogAct::Stair, "Escalera", Glyph::Stair),
-                card(CatalogAct::Railing, "Barandilla", Glyph::Railing),
-            ],
+            (CatalogGroup::Build, "Escaleras") => {
+                use archisim_core::{StairPreset as P, StairStructure as S};
+                let stair = |preset, winders, structure, name| {
+                    card(
+                        CatalogAct::Stair(StairCard {
+                            preset,
+                            winders,
+                            structure,
+                        }),
+                        name,
+                        Glyph::Stair,
+                    )
+                };
+                vec![
+                    stair(P::Straight, false, S::Slab, "Recta"),
+                    stair(P::LShape, false, S::Slab, "En L con meseta"),
+                    stair(P::LShape, true, S::Slab, "En L compensada"),
+                    stair(P::UShape, false, S::Slab, "En U con meseta"),
+                    stair(P::UShape, true, S::Slab, "En U compensada"),
+                    stair(P::Spiral, false, S::Newel, "De caracol"),
+                    stair(P::Straight, false, S::Stringers, "De zancas"),
+                    stair(P::Straight, false, S::Spine, "De zanca central"),
+                    stair(P::Straight, false, S::Cantilever, "De peldaños volados"),
+                    stair(P::Free, false, S::Slab, "Libre"),
+                    card(CatalogAct::Railing, "Barandilla", Glyph::Railing),
+                ]
+            }
             (CatalogGroup::Outside, "Terreno y caminos") => vec![
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
                 card(CatalogAct::Road, "Camino o calle", Glyph::Road),
@@ -641,7 +673,13 @@ impl ArchiSimApp {
             CatalogAct::Dormer(k) => {
                 self.tool == Tool::Roof && self.roof_settings.dormer == Some(k)
             }
-            CatalogAct::Stair => self.tool == Tool::Stair,
+            CatalogAct::Stair(c) => {
+                let s = &self.stair_settings;
+                self.tool == Tool::Stair
+                    && s.preset == c.preset
+                    && s.winders == c.winders
+                    && s.structure == c.structure
+            }
             CatalogAct::Railing => self.tool == Tool::Railing,
             CatalogAct::Object(ObjectPick::Project(t)) => {
                 self.tool == Tool::Object && self.object_settings.object_type == Some(t)
@@ -716,7 +754,29 @@ impl ArchiSimApp {
                 self.roof_tool.finish();
                 self.say(format!("{}: pincha en un faldón.", k.name()));
             }
-            CatalogAct::Stair => self.pick(Pick::Tool(Tool::Stair)),
+            CatalogAct::Stair(c) => {
+                use archisim_core::{StairPreset as P, StairStructure as S, StairUse};
+                self.pick(Pick::Tool(Tool::Stair));
+                self.stair_tool.points.clear();
+                let s = &mut self.stair_settings;
+                s.preset = c.preset;
+                s.winders = c.winders;
+                s.structure = c.structure;
+                // Concrete closed, the others open; a spiral narrower and
+                // steeper, for a dwelling.
+                s.closed_risers = c.structure == S::Slab;
+                if c.preset == P::Spiral {
+                    s.width = 0.8;
+                    s.going = 0.24;
+                    s.core = 0.12;
+                    s.usage = StairUse::Restricted;
+                }
+                self.say(match c.preset {
+                    P::Free => "Escalera libre: clic en cada giro de la línea de huella; Intro para terminar.",
+                    P::Spiral => "Escalera de caracol: clic en el centro y clic hacia donde arranca.",
+                    _ => "Escalera: clic en el arranque y clic hacia donde sube; Espacio la gira al otro lado.",
+                });
+            }
             CatalogAct::Railing => self.pick(Pick::Tool(Tool::Railing)),
             CatalogAct::Object(pick) => {
                 if let Some(t) = self.object_pick_type(pick) {

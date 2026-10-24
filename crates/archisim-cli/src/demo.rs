@@ -387,6 +387,7 @@ pub fn build() -> Result<Document, ModelError> {
             waist: 0.15,
             material: concrete,
             usage: archisim_core::StairUse::General,
+            design: Default::default(),
         })
     })?;
 

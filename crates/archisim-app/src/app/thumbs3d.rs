@@ -188,14 +188,93 @@ impl super::ArchiSimApp {
                         crate::type_preview::object_model(lib, ty)
                     })
             }
+            CatalogAct::Stair(c) => {
+                let key = format!("stair:{c:?}");
+                self.thumbs3d.get(ctx, gpu, key, || stair_model(c))
+            }
             _ => None,
         }
     }
 }
 
+/// A small model with one stair of a catalog card, alone.
+pub fn stair_model(c: super::maquette_ui::StairCard) -> Option<(Model, LevelId)> {
+    use archisim_core::{NewStair, Point2, StairPreset, StairUse, Vec2, WallTop};
+    let mut m = archisim_library::new_project("Escalera");
+    let level = m.levels().first()?.id;
+    let mut s = crate::editor::default_stair_settings(&m);
+    s.preset = if c.preset == StairPreset::Free {
+        StairPreset::LShape
+    } else {
+        c.preset
+    };
+    s.winders = c.winders;
+    s.structure = c.structure;
+    s.closed_risers = c.structure == archisim_core::StairStructure::Slab;
+    s.top = crate::editor::TopChoice::Unconnected;
+    // Short, so that the picture shows the steps (a spiral, its turn).
+    s.height = if c.preset == StairPreset::Spiral {
+        2.8
+    } else {
+        1.6
+    };
+    if c.preset == StairPreset::Spiral {
+        s.width = 0.8;
+        s.going = 0.24;
+        s.core = 0.12;
+    }
+    // Wooden treads on the stairs that are not of concrete.
+    if c.structure != archisim_core::StairStructure::Slab {
+        s.tread_material = m.materials().find(|x| x.category == "wood").map(|x| x.id);
+        s.material = m
+            .materials()
+            .find(|x| x.category == "steel")
+            .map_or(s.material, |x| x.id);
+    }
+    let (path, design) = s.preset_on(&m, level, Point2::new(0.0, 0.0), Vec2::new(1.0, 0.0))?;
+    m.add_stair(NewStair {
+        level,
+        path,
+        width: s.width,
+        going: s.going,
+        base_offset: 0.0,
+        top: WallTop::Unconnected,
+        height: s.height,
+        waist: s.waist,
+        material: s.material,
+        usage: StairUse::Restricted,
+        design,
+    })
+    .ok()?;
+    // Without railings: at the card's size they hide the steps.
+    let id = m.stairs().next()?.id;
+    m.edit_stair(id, |s| s.railings = archisim_core::Railings::None)
+        .ok()?;
+    Some((m, level))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every kind of stair on the catalog has its picture's model.
+    #[test]
+    fn every_stair_card_has_a_model() {
+        use archisim_core::{StairPreset as P, StairStructure as S};
+        for preset in [P::Straight, P::LShape, P::UShape, P::Spiral, P::Free] {
+            for winders in [false, true] {
+                for structure in [S::Slab, S::Stringers, S::Spine, S::Cantilever, S::Newel] {
+                    let c = crate::app::maquette_ui::StairCard {
+                        preset,
+                        winders,
+                        structure,
+                    };
+                    let (m, _) = stair_model(c).unwrap_or_else(|| panic!("{c:?}"));
+                    assert_eq!(m.stairs().count(), 1);
+                }
+            }
+        }
+    }
 
     /// A sofa of the library drawn alone fills its picture, on a
     /// transparent background.

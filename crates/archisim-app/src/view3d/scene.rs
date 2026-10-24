@@ -665,6 +665,16 @@ fn cut_of(
             c
         }
         SolidOwner::Device(_) => own(cutaway::OBJECT),
+        // A stair stays whole up to the floor it reaches, as the
+        // furniture: by where its foot is.
+        SolidOwner::Stair(id) => {
+            let mut c = own(cutaway::OBJECT);
+            if let Some(s) = model.stair(id) {
+                let floor = model.level(s.level).map_or(0.0, |l| l.elevation);
+                c[3] = (floor + s.base_offset) as f32;
+            }
+            c
+        }
         _ => own(cutaway::PLAIN),
     }
 }
