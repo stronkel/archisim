@@ -810,6 +810,8 @@ pub(crate) fn set_object_value(
         .clone();
     let mut values = t.values.clone();
     values.insert(key.into(), value);
+    // What follows the measurement: a longer sofa gains a seat.
+    model.follow_stretch(t.family, &mut values);
     if model.object_type_users(t.id) > 1 {
         let taken: Vec<String> = model.object_types().map(|t| t.name.clone()).collect();
         let name = crate::editor::copy_name(&t.name, &taken);
@@ -1067,7 +1069,13 @@ pub fn apply(
             .map(|_| None),
         Grip::StairPoint { stair, index } => model
             .edit_stair(stair, |s| {
-                if let Some(p) = s.path.get_mut(index) {
+                // A spiral's centre takes its first riser with it.
+                if index == 0 && s.design.form == archisim_core::StairForm::Spiral {
+                    let d = drag.to - s.path[0];
+                    for p in &mut s.path {
+                        *p = *p + d;
+                    }
+                } else if let Some(p) = s.path.get_mut(index) {
                     *p = drag.to;
                 }
             })
@@ -1624,7 +1632,9 @@ pub(crate) fn copy(
                     waist: s.waist,
                     material: s.material,
                     usage: s.usage,
+                    design: s.design,
                 })?;
+                model.edit_stair(new, |x| x.railings = s.railings)?;
                 copies.insert(Element::Stair(new));
             }
             Element::Roof(id) => {

@@ -1,0 +1,28 @@
+family "Mesa de exterior"
+  category street
+  host none
+  version 1
+  description "Mesa de bistró con dos sillas, mesa de teca para seis o sofá de exterior con su mesa baja"
+  folder "Jardín y terraza"
+
+type_params
+  section "Dimensiones"
+    width length = 0.60 range 0.50..3.00 label "Ancho de la mesa"
+    depth length = 0.60 range 0.50..1.40 label "Fondo de la mesa"
+  section "Materiales"
+    mat material = "Teca" label "Tablero y asientos"
+  section "Modelo 3D"
+    model3d choice("Bistró", "Teca para seis", "Sofá de exterior") = "Bistró" label "Modelo 3D"
+    frame   material = "Hierro forjado" label "Patas"
+    cushion material = "Tela de exterior" label "Cojines"
+
+body
+  box (-width / 2 - 0.5, 0, 0) to (width / 2 + 0.5, depth + 1.1, 0.75) material mat
+
+plan 1:50
+  polygon (-width / 2, 0.55) (width / 2, 0.55) (width / 2, depth + 0.55) (-width / 2, depth + 0.55) pen view
+
+outputs
+  generator = "props:outdoor_set"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -15,6 +15,8 @@ use eframe::egui_wgpu::{self, wgpu};
 use super::ArchiSimApp;
 use crate::pick::Element;
 use crate::view3d::camera::Camera;
+use crate::view3d::cutaway::{CutRule, Front};
+use crate::view3d::look::Quality;
 use crate::view3d::render::Renderer;
 use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
@@ -37,8 +39,12 @@ const MAX_SIDE: f32 = 4096.0;
 
 /// The picture's size for a view of `size` points: at most [`MAX_SIDE`]
 /// on its longer side, keeping its shape.
-fn picture_size(size: Vec2, ppp: f32) -> ([u32; 2], u32) {
-    let ss = supersample(ppp);
+fn picture_size(size: Vec2, ppp: f32, quality: Quality) -> ([u32; 2], u32) {
+    let ss = if quality.supersample() {
+        supersample(ppp)
+    } else {
+        1.0
+    };
     let w = size.x * ppp * ss;
     let h = size.y * ppp * ss;
     let k = (MAX_SIDE / w.max(h).max(1.0)).min(1.0);
@@ -65,13 +71,19 @@ pub enum ViewMode {
 }
 
 /// How much of the walls the 3D view shows (Los Sims' «walls up / cut
-/// away / down»): everything above a height over the active level is cut
-/// away, with its cut faces filled, so the inside of a floor is seen.
+/// away / down»): the building above a height over the active level is
+/// cut away, with its cut faces filled, so the inside of a floor is seen.
+/// The furniture is never cut: it stays whole, or goes if it is upstairs
+/// (`crate::view3d::cutaway`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Cutaway {
     /// Everything.
     #[default]
     Up,
+    /// The walls between the camera and what is looked at cut low, the
+    /// others whole; the floors above and the roof gone. It follows the
+    /// camera as it turns.
+    Front,
     /// Cut 1.20 m above the level: walls at sill height, the floors
     /// above and the roof gone.
     Cut,
@@ -79,12 +91,16 @@ pub enum Cutaway {
     Low,
 }
 
+/// Height the walls in front are cut at, over the level.
+const FRONT_LOW: f32 = 0.3;
+
 impl Cutaway {
-    pub const ALL: [Cutaway; 3] = [Cutaway::Up, Cutaway::Cut, Cutaway::Low];
+    pub const ALL: [Cutaway; 4] = [Cutaway::Up, Cutaway::Front, Cutaway::Cut, Cutaway::Low];
 
     pub fn name(self) -> &'static str {
         match self {
             Cutaway::Up => "Muros arriba",
+            Cutaway::Front => "Muros delante bajos",
             Cutaway::Cut => "Muros recortados",
             Cutaway::Low => "Muros bajos",
         }
@@ -94,15 +110,25 @@ impl Cutaway {
     pub fn height(self) -> Option<f32> {
         match self {
             Cutaway::Up => None,
-            Cutaway::Cut => Some(1.2),
+            Cutaway::Front | Cutaway::Cut => Some(1.2),
             Cutaway::Low => Some(0.3),
         }
     }
 }
 
-/// What a picture was drawn with: camera, size, scene, cut and whether
-/// its background was left transparent.
-type Drawn = (Camera, [u32; 2], u64, Option<SectionBox>, bool);
+/// What a picture was drawn with: camera, size, scene, section box, cut
+/// away walls and whether its background was left transparent.
+type Drawn = (
+    Camera,
+    [u32; 2],
+    u64,
+    Option<SectionBox>,
+    Option<CutRule>,
+    bool,
+    u64,
+    (Quality, Option<[i32; 3]>),
+    Option<crate::view3d::look::Atmosphere>,
+);
 
 /// Everything the 3D view keeps between frames.
 pub struct View3dState {
@@ -145,6 +171,20 @@ pub struct View3dState {
     edge_step: u32,
     /// The materials' textures (brick, wood, stone…) are drawn.
     pub textures: bool,
+    /// What is being stretched, as it will be, drawn in place of the
+    /// selected element while the handle is dragged: what it was built
+    /// for, and its triangles.
+    overlay: Option<(String, Scene)>,
+    overlay_serial: u64,
+    /// How the picture looks: its quality (shadows…).
+    pub quality: Quality,
+    /// Towards the model's sun (none: below the horizon).
+    sun: Option<glam::Vec3>,
+    /// The sky, the haze and the grid on the ground (the Maqueta's; none:
+    /// the plain background).
+    pub atmosphere: Option<crate::view3d::look::Atmosphere>,
+    /// The light the Maqueta is seen with: day, evening or night.
+    pub light: crate::view3d::look::Light,
 }
 
 /// Textures on, except on Intel Macs: their AMD graphics drivers (on
@@ -174,6 +214,12 @@ impl Default for View3dState {
             cutaway: Cutaway::Up,
             level_z: 0.0,
             under: false,
+            overlay: None,
+            overlay_serial: 0,
+            quality: crate::view3d::look::default_quality(),
+            sun: None,
+            atmosphere: None,
+            light: Default::default(),
         }
     }
 }
@@ -183,33 +229,44 @@ struct Gpu {
     renderer: Renderer,
     texture: Option<egui::TextureId>,
     uploaded: u64,
+    overlay_uploaded: u64,
 }
 
 impl View3dState {
-    /// What is cut away: the section box and the cut of the walls
-    /// together (the lower top).
+    /// The section box, if on: it cuts everything, furniture too.
     pub fn clip_box(&self) -> Option<SectionBox> {
-        let cut = self.cutaway.height().map(|h| self.level_z + h);
-        match (self.section, cut) {
-            (Some(b), None) => Some(b),
-            (Some(mut b), Some(z)) => {
-                b.hi.z = b.hi.z.min(z);
-                Some(b)
-            }
-            (None, Some(z)) => {
-                let pad = glam::Vec3::splat(1000.0);
-                let mut b = SectionBox::around(self.scene.lo - pad, self.scene.hi + pad);
-                b.hi.z = z;
-                Some(b)
-            }
-            (None, None) => None,
-        }
+        self.section
     }
 
-    /// A 3D view with the textures on or off.
-    pub fn with_textures(textures: bool) -> Self {
+    /// The cut away walls, if on: what they take away depends on each
+    /// element (`CutRule::top_of`), and with walls in front on the
+    /// camera.
+    pub fn cut_rule(&self) -> Option<CutRule> {
+        let top = self.level_z + self.cutaway.height()?;
+        let front = (self.cutaway == Cutaway::Front).then(|| {
+            let eye = self.camera.eye();
+            let t = self.camera.target;
+            let mut toward = glam::Vec2::new(eye.x - t.x, eye.y - t.y);
+            if toward.length_squared() < 1e-8 {
+                // Straight down: the south side.
+                toward = glam::Vec2::new(0.0, -1.0);
+            }
+            let toward = toward.normalize();
+            Front {
+                toward,
+                at: toward.dot(glam::Vec2::new(t.x, t.y)),
+                low: self.level_z + FRONT_LOW,
+                above: self.level_z + 0.5,
+            }
+        });
+        Some(CutRule { top, front })
+    }
+
+    /// A 3D view with the textures on or off and its quality.
+    pub fn with_look(textures: bool, quality: Quality) -> Self {
         Self {
             textures,
+            quality,
             ..Self::default()
         }
     }
@@ -226,6 +283,31 @@ impl View3dState {
             }
         }
         self.drawn = None;
+    }
+
+    /// Draws `make()` in place of the selected element (what it is built
+    /// for is `key`: it is made again only when that changes), or nothing.
+    pub fn set_overlay(&mut self, key: Option<String>, make: impl FnOnce() -> Option<Scene>) {
+        match key {
+            None => {
+                if self.overlay.take().is_some() {
+                    self.overlay_serial += 1;
+                }
+            }
+            Some(k) => {
+                if self.overlay.as_ref().is_some_and(|(o, _)| *o == k) {
+                    return;
+                }
+                self.overlay = make().map(|s| (k, s));
+                self.overlay_serial += 1;
+            }
+        }
+    }
+
+    /// Whether something is drawn in place of the selected element.
+    #[cfg(test)]
+    pub fn has_overlay(&self) -> bool {
+        self.overlay.is_some()
     }
 
     /// Forgets the scene, for a project just opened.
@@ -274,6 +356,9 @@ impl View3dState {
             );
             self.scene_key = Some(key);
             self.scene_serial += 1;
+            self.sun = model
+                .sun_direction()
+                .map(|d| glam::Vec3::new(d[0] as f32, d[1] as f32, d[2] as f32));
         }
     }
 
@@ -283,7 +368,8 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        self.scene.pick_in(ray, self.clip_box().as_ref())
+        self.scene
+            .pick_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())
     }
 
     /// What is under a point of the view: the point hit, its triangle's
@@ -293,7 +379,9 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        let (d, i) = self.scene.hit_in(ray, self.clip_box().as_ref())?;
+        let (d, i) = self
+            .scene
+            .hit_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())?;
         let [a, b, c] = self.scene.triangles().nth(i)?;
         let mut n = (b - a).cross(c - a).normalize_or_zero();
         if n.dot(ray.dir) > 0.0 {
@@ -377,6 +465,7 @@ impl View3dState {
         }
         let state = gpu_state?;
         let clip = self.clip_box();
+        let cut = self.cut_rule();
         if self.gpu.is_none() {
             crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
         }
@@ -394,18 +483,42 @@ impl View3dState {
             state: state.clone(),
             texture: None,
             uploaded: 0,
+            overlay_uploaded: 0,
         });
         if gpu.uploaded != self.scene_serial {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
             gpu.renderer.set_scene(&gpu.state.device, &self.scene);
             gpu.uploaded = self.scene_serial;
         }
-        let wanted = (self.camera, size, self.scene_serial, clip, self.under);
-        if self.drawn != Some(wanted) || gpu.texture.is_none() {
+        if gpu.overlay_uploaded != self.overlay_serial {
+            gpu.renderer
+                .set_overlay(&gpu.state.device, self.overlay.as_ref().map(|o| &o.1));
+            gpu.overlay_uploaded = self.overlay_serial;
+        }
+        let wanted = (
+            self.camera,
+            size,
+            self.scene_serial,
+            clip,
+            cut,
+            self.under,
+            self.overlay_serial,
+            (
+                self.quality,
+                self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
+            ),
+            self.atmosphere.clone(),
+        );
+        if self.drawn.as_ref() != Some(&wanted) || gpu.texture.is_none() {
             let started = std::time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+            gpu.renderer.set_cut(cut);
+            gpu.renderer.set_look(self.quality, self.sun);
+            gpu.renderer
+                .set_shadow_focus(Some(shadow_focus(&self.camera)));
             gpu.renderer.set_transparent(self.under);
+            gpu.renderer.set_atmosphere(self.atmosphere.clone());
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
@@ -493,7 +606,7 @@ impl View3dState {
                 );
             }
         }
-        let (px, ss) = picture_size(size, ui.ctx().pixels_per_point());
+        let (px, ss) = picture_size(size, ui.ctx().pixels_per_point(), self.quality);
         self.edge_step = ss;
         match self.draw(gpu_state, px) {
             Some(texture) => {
@@ -524,6 +637,38 @@ impl View3dState {
     }
 
     /// The last picture as RGBA, to save it.
+    /// The view drawn again `width` pixels wide (as it is on screen, its
+    /// lines as thick for the size), read back as RGBA bytes. The next
+    /// frame draws the screen's picture again.
+    pub fn capture(&mut self, width: u32) -> Option<(u32, u32, Vec<u8>)> {
+        let canvas = self.canvas;
+        if canvas.width() < 1.0 || canvas.height() < 1.0 {
+            return None;
+        }
+        let w = width.clamp(64, 8192);
+        let h = ((w as f32 * canvas.height() / canvas.width()).round() as u32).clamp(1, 8192);
+        let step = ((w as f32 / canvas.width()).round() as u32).clamp(1, 6);
+        let clip = self.clip_box();
+        let cut = self.cut_rule();
+        let gpu = self.gpu.as_mut()?;
+        gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+        gpu.renderer.set_cut(cut);
+        gpu.renderer.set_look(self.quality, self.sun);
+        gpu.renderer
+            .set_shadow_focus(Some(shadow_focus(&self.camera)));
+        gpu.renderer.set_transparent(self.under);
+        gpu.renderer.set_atmosphere(self.atmosphere.clone());
+        gpu.renderer.render(
+            &gpu.state.device,
+            &gpu.state.queue,
+            &self.camera,
+            [w, h],
+            step,
+        );
+        self.drawn = None;
+        self.picture()
+    }
+
     pub fn picture(&self) -> Option<(u32, u32, Vec<u8>)> {
         let gpu = self.gpu.as_ref()?;
         let (w, h, mut px) = gpu
@@ -625,7 +770,17 @@ impl ArchiSimApp {
         }
 
         // Handles of the object selected (bloque 5): its size.
-        let grabbing_object = self.object_grips_3d(&ctx, &response, rect);
+        let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
+            | self.object_drag_3d(&ctx, &response, rect);
+        // With something selected, the camera turns about it.
+        let pivot = if self.ed.selection.is_empty() {
+            None
+        } else {
+            self.v3d
+                .scene
+                .bounds_of(&self.ed.selection)
+                .map(|(lo, hi)| (lo + hi) / 2.0)
+        };
         let v = &mut self.v3d;
 
         // Navigation: the right button held turns the view (with Shift,
@@ -635,7 +790,10 @@ impl ArchiSimApp {
         if response.dragged_by(PointerButton::Secondary)
             || (shift && response.dragged_by(PointerButton::Middle))
         {
-            v.camera.orbit(delta);
+            match pivot {
+                Some(p) => v.camera.orbit_about(delta, p),
+                None => v.camera.orbit(delta),
+            }
         } else if response.dragged_by(PointerButton::Middle) {
             v.camera.pan(delta, size.y);
         }
@@ -737,9 +895,29 @@ impl ArchiSimApp {
         );
 
         // The picture, over the ground grid when it is on.
-        let (px, ss) = picture_size(size, ctx.pixels_per_point());
+        let (px, ss) = picture_size(size, ctx.pixels_per_point(), v.quality);
         v.edge_step = ss;
-        v.under = self.ground_grid;
+        // In the Maqueta, the sky, the haze and the grid are drawn with the
+        // picture; elsewhere the grid goes under it.
+        if self.maquette {
+            let step = super::maquette_ui::GRID_STEP as f32;
+            let t = v.camera.target;
+            v.atmosphere = Some(crate::view3d::look::Atmosphere {
+                light: v.light,
+                ground_z: v.level_z,
+                grid: self.ground_grid.then(|| {
+                    (
+                        glam::Vec2::new((t.x / step).round() * step, (t.y / step).round() * step),
+                        10.0_f32.max(v.camera.distance * 0.5).min(30.0),
+                        step,
+                    )
+                }),
+            });
+            v.under = false;
+        } else {
+            v.atmosphere = None;
+            v.under = self.ground_grid;
+        }
         let under = v.under;
         let drawn = v.draw(self.gpu.as_ref(), px);
         if under && drawn.is_some() {
@@ -792,7 +970,7 @@ impl ArchiSimApp {
             || v.section_drag.is_some()
             || self.object_grip_hover.is_some()
             || self.object_grip.is_some()
-            || self.object_turn.is_some();
+            || self.object_move.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);
 
@@ -987,4 +1165,20 @@ impl ArchiSimApp {
             });
         });
     }
+}
+
+/// The part of the model the shadows are drawn for: a square around what
+/// is looked at, as wide as the view from that far (and at least 16 m),
+/// snapped to a grid of a quarter of its side so the shadows are not drawn
+/// again at every move of the camera.
+fn shadow_focus(camera: &Camera) -> (glam::Vec3, glam::Vec3) {
+    let r = (camera.distance * 1.2).clamp(8.0, 300.0);
+    // The side as a power of two, so a little zoom does not change it.
+    let r = 2f32.powf(r.log2().ceil());
+    let step = r / 4.0;
+    let c = (camera.target / step).round() * step;
+    (
+        glam::Vec3::new(c.x - r, c.y - r, f32::MIN),
+        glam::Vec3::new(c.x + r, c.y + r, f32::MAX),
+    )
 }

@@ -6,9 +6,16 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-24 · v0.49: manejo común, menú del clic derecho y barra del objeto (UI1)
+## 2026-10-24 · v0.54: manejo común, menú del clic derecho y barra del objeto (UI1), unido a la 0.53
 
 Rama `bloque/manejo`, pull request para Antonio. Sin cambios de formato ni de IFC.
+
+Al probar la 0.49 de esta rama, Antonio echó de menos lo que ya tenía en la 0.53 de `bloque/escaleras`: el contorno de selección en lugar de pintarlo todo de azul, ver en vivo lo que se gira o se estira, la decoración, los muros recortados como en Los Sims y el día y la noche con colores cálidos. Esa rama, con `bloque/maqueta-2` dentro, aún no estaba unida a la versión principal y esta salió de la 0.48. Así que se ha unido aquí, como versión 0.54:
+- la barra del objeto sustituye a la tarjeta flotante de la 0.49 de la Maqueta; sus muestras ofrecen primero los colores de la paleta acogedora que le van a cada pieza y después todos los materiales;
+- el anillo de giro de la 0.49 se queda, pero naranja, delante del objeto como en planta, y gira sobre el centro del mueble;
+- arrastrar muebles como en Paralives vale ya en los dos entornos; lo demás seleccionado se mueve con su vista previa;
+- la cámara gira alrededor de lo seleccionado, ahora con el botón derecho.
+
 
 Antonio aprobó el concepto de interfaz (artefacto «ArchiSim · concepto de interfaz», seis tableros) después de pedir sus cambios. Pidió quitar la barra negra de teclas, usar una barra del objeto como la de Paralives, cambiar el ratón (izquierdo elige y mueve, rueda desplaza, derecho mantenido gira, un clic derecho abre un menú), usar flechas y un aro distintos para estirar y girar, y que los objetos crezcan solo hacia donde se estiran. Este es el primer bloque (UI1). Los de después son el catálogo en árbol con la cocina por módulos (UI2) y las fichas y diálogos unificados con el plano de carpinterías (UI3).
 
@@ -43,11 +50,196 @@ Antonio aprobó el concepto de interfaz (artefacto «ArchiSim · concepto de int
 - Mover en 3D se hace sobre el plano del punto que se coge; todavía no se pega a las paredes ni muestra cotas temporales como en planta.
 
 **Qué debe probar Antonio**
+0. Comprueba que sigue todo lo de la 0.53: contorno de selección, decoración y colecciones, muros delante bajos, día y noche, escaleras.
 1. Abre la demo (`out/demo.archisim`). En planta, haz clic derecho sobre un muro: debe salir el menú. Prueba Ocultar y después, con clic derecho en vacío, Mostrar todo. Prueba Copiar y luego clic derecho en otro sitio → Pegar.
 2. Pulsa F3. Mantén el botón derecho y arrastra: la vista gira y no se mueve nada. Con la rueda pulsada, desplaza. Selecciona el coche con el izquierdo y arrástralo: se mueve por el suelo. En vacío, arrastra para hacer una ventana de selección (de izquierda a derecha y al revés).
 3. Con el coche seleccionado, en planta o en 3D, estira una flecha azul: debe crecer solo hacia ese lado. Repítelo con Alt pulsado: crece por los dos. Coge el punto naranja y gíralo.
 4. Entra en la Maqueta. Selecciona el coche o un mueble: abajo a la izquierda sale su barra. Cambia el color de la carrocería con su muestra redonda. Mira el catálogo Construir → Ventanas: deben verse en alzado.
 5. Dime si el menú tiene lo que usas y si la barra del objeto te deja hacer sin teclado lo que hacías con teclas.
+## 2026-10-24 (2) · v0.53: escaleras en L, en U, compensadas y de caracol, con zancas, zanca central, peldaños volados o mástil
+
+Rama nueva `bloque/escaleras`, sacada de `bloque/maqueta-2`, con su pull request para que Antonio la revise. **Formato `.archisim` versión 33** (las escaleras guardan su forma y estructura en `design`; las de versiones anteriores se abren como tramos y mesetas sobre losa, igual que eran). Detalle en `docs/ESCALERAS.md`.
+
+Antonio pidió mejorar mucho la forma de crear escaleras: en U, «diferentes tipos de castelillete», caracol. Lo he entendido como tipos de **estructura** (losa, zancas laterales, zanca central, peldaños volados, mástil); si quería decir otra cosa, que lo diga.
+
+**Hecho**
+- Formas hechas en dos clics, que miden lo que pide la altura: recta, en L, en U (con su ojo) y de caracol; y la libre de siempre. Espacio gira la L, la U o el caracol al otro lado mientras se dibuja; la vista previa dice tabicas, huellas y si cumple el CTE.
+- Giros con meseta o con **peldaños compensados**, repartidos en cuatro peldaños antes y después, todos con la misma huella en la línea de huella (a 50 cm del lado interior).
+- Estructura: losa (helicoidal en caracol), dos zancas laterales, zanca central, peldaños volados, mástil central. Con o sin tabica, y material del peldañeado (madera, piedra) con su grosor.
+- Barandillas con pasamanos, listón bajo, postes y barrotes a 11 cm, siguiendo la escalera por las mesetas y los giros; la de caracol, solo por fuera.
+- Planta genérica para todas (línea de corte en zigzag, lo de encima a trazos, mástil, línea de huella con su flecha), 3D y IFC (`IfcStair` con su forma, `WINDER`/`SPIRAL`, zancas `IfcMember STRINGER`), importación de vuelta igual.
+- CTE: huella en la línea de huella, lado ancho ≤ 44 cm, lado estrecho ≥ 5 cm en vivienda, aviso de escaleras sin tabica en uso general.
+- En la Maqueta, Construir → Escaleras: diez tarjetas con su miniatura en 3D (recta, L con meseta, L compensada, U con meseta, U compensada, caracol, de zancas, de zanca central, de peldaños volados, libre). Las escaleras ya no se cortan con los «muros recortados»: se ven enteras, como los muebles.
+- Propiedades de una escalera: forma (meseta o compensada), giro total y sentido del caracol, radio del mástil, estructura, tabicas, zancas, peldañeado.
+- `archisim escaleras out/`: las diez, cada una hasta la planta primera.
+
+**Pendiente**
+- Las mesetas partidas a 45° y la meseta de llegada de las de caracol.
+- El `.glb` del proyecto para D5 o Twinmotion.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- escaleras out/` y abre `out/escaleras.archisim`: diez escaleras, todas de 17 tabicas de 17,5 cm. Míralas en planta (baja y primera) y en la Maqueta.
+2. Herramienta Escalera → Forma «En U (ida y vuelta)»: clic en el arranque, mueve el ratón hacia donde sube (pulsa Espacio para que gire al otro lado) y clic. Prueba «Giros: peldaños compensados» y mira el reparto de los peldaños.
+3. «De caracol»: clic en el centro y clic hacia donde arranca. Cambia la estructura a «Losa helicoidal» o «Zancas helicoidales».
+4. Selecciona una escalera y cambia en Propiedades → Forma y estructura: compensada ↔ meseta, zancas, sin tabica, peldañeado de madera.
+5. Exporta el IFC y ábrelo en ArchiCAD o Revit: las escaleras deben llegar con sus tramos, zancas y materiales, y con su tipo (en U, compensada, de caracol).
+
+---
+
+## 2026-10-24 (1) · v0.52: cámara alrededor de la selección, mobiliario urbano, chimeneas y más mobiliario
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (las familias de mobiliario urbano suben de versión con los mismos parámetros y un «Modelo 3D»). Detalle en `docs/BIBLIOTECA_3D.md` y `docs/MAQUETA.md` §6 sexies.
+
+Antonio probó v0.51 (fluida incluso en su MacBook Pro de 2016) y pidió: mejores modelos (el mobiliario urbano era muy básico y las farolas no alumbraban), más accesorios y mobiliario, chimeneas, que la cámara gire alrededor de lo seleccionado y mejorar mucho las escaleras (en U, tipos de estructura, caracol). Las escaleras van en su propia rama, después de esto.
+
+**Hecho**
+- La cámara gira alrededor de lo seleccionado.
+- Mobiliario urbano rehecho: bancos, farolas (báculo, fernandina, globo, baliza), papeleras, bolardos, buzones, contenedores, fuentes, jardineras, alcorques, aparcabicis, señales y bicicletas, con 3 o 4 modelos cada uno; 24 tipos nuevos.
+- Las farolas y las chimeneas brillan y alumbran de noche (las farolas, hasta 11 m).
+- Chimeneas (de obra, estufa de leña, moderna lineal), perchero y recibidor, sillas de oficina, mesas de exterior con sus sillas, silla colgante y hamaca, radiadores, aire acondicionado, ventiladores de techo, pianos, cama cabaña y litera, estantería con objetos; 22 tipos nuevos.
+- La demo tiene dos farolas fernandinas junto al camino.
+
+**Pendiente**
+- Escaleras: en U, en L, peldaños compensados, caracol, tipos de estructura (zancas laterales, zanca central, losa, peldaños volados), con o sin tabica: rama `bloque/escaleras`, lo siguiente.
+- El `.glb` del proyecto para D5 o Twinmotion.
+
+**Qué debe probar Antonio**
+1. Selecciona un mueble en la Maqueta y gira la cámara: debe girar a su alrededor, sin perderlo de la pantalla.
+2. Demo en la Maqueta, **Luz: Noche**: las dos farolas del camino se encienden y alumbran el suelo.
+3. Exterior → Mobiliario urbano y Jardín y terraza: bancos, farolas, papeleras, fuentes, jardineras, mesas de exterior y la hamaca, con sus modelos nuevos (cámbialos en «Modelo 3D»).
+4. Amueblar → Salón: una chimenea de obra o una estufa de leña contra un muro; de noche, el fuego alumbra el salón.
+5. `cargo run -p archisim-cli -- modelos out/`: las cuatro primeras filas son todo lo nuevo.
+
+---
+
+## 2026-10-23 (6) · v0.51: imagen de la Maqueta y miniaturas en 3D
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (los tipos de textura nuevos se guardan como los de siempre). Antonio eligió seguir por los puntos 2 (imagen) y 3 (miniaturas en 3D) y dejar para después el `.glb` para D5 y Twinmotion. Detalle en `docs/MAQUETA.md` §6 quinquies.
+
+**Hecho**
+- Cielo y suelo con bruma detrás del modelo en la Maqueta; la cuadrícula, dibujada en ese suelo.
+- Menú **Luz**: día (sol del proyecto), atardecer (sol bajo, dorado) y noche (las lámparas encienden sus pantallas y bombillas y alumbran alrededor).
+- Texturas de lino, bouclé, punto, terciopelo, mimbre, terrazo y mármol, que las telas, fibras y piedras de la paleta toman solas.
+- **Captura grande…** en el menú **Imagen**: PNG de 3840 píxeles de ancho.
+- **Miniaturas en 3D** en el catálogo, también en los colores de la colección elegida.
+- Arreglo: líneas blancas alrededor de todo de noche (la imagen quedaba medio transparente en los contornos y el vidrio).
+
+**Pendiente**
+- El `.glb` de todo el proyecto para D5, Twinmotion o Blender (lo siguiente, cuando digas).
+- La imagen realista (`archisim render`) sin las texturas nuevas ni la noche; sombras de las lámparas.
+
+**Qué debe probar Antonio**
+1. Abre la demo en la Maqueta. Gira la cámara hasta ver el horizonte: cielo azul arriba, el suelo perdiéndose en la bruma.
+2. **Luz: Atardecer** y luego **Noche**: de noche, la lámpara de la mesita y la de pie del salón se encienden y alumbran el suelo y las paredes de su habitación.
+3. Acércate al sofá con **Imagen: Bonita**: el lino, los cojines de terciopelo y la manta de lana deben tener su textura; una butaca de ratán, su trenzado.
+4. Amueblar → Salón y Decoración: las tarjetas son ahora las piezas en 3D. Elige **Colección: Japandi**: salen con sus colores.
+5. **Imagen → Captura grande…** y guarda el PNG: ábrelo, son 3840 píxeles de ancho, listos para pasarlos a una IA o a D5.
+
+---
+
+## 2026-10-23 (5) · v0.50: colecciones y piezas en el mismo estilo
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (la pérgola sale como `IfcBuildingElementProxy`; lo demás, `IfcFurniture`). Detalle en `docs/BIBLIOTECA_3D.md` («Colecciones») y `docs/MAQUETA.md` §6 quater.
+
+**Hecho**
+- Cuatro **colecciones** con su paleta: nórdico cálido, mediterráneo, años 50 y japandi. Cada pieza de la biblioteca tiene su versión en cada una («Sofá de 3 plazas · Japandi»): madera, telas, cojines, metal, cerámica, piedra y fibra de la colección, y el modelo 3D que le va (cama de lamas en japandi, taburete de enea en mediterráneo…). Sábanas, pantallas, vidrio, cromados y porcelana se quedan como están.
+- En la Maqueta, **Colección** encima del catálogo (cada tarjeta lleva la tira de colores de la colección y la pieza se coloca ya en ella) y **Aplicar** para pasar lo seleccionado; «Sin colección» lo devuelve.
+- 44 tipos nuevos: camas con cabecero tapizado o de lamas, con colcha a los pies y cojines; mesitas de patas cónicas y flotante; taburetes (madera, tapizado, enea); islas de cocina (con voladizo, mesa de trabajo con cestas, con fregadero); cosas de la encimera (tablas y aceite, botes, cafetera y tazas, hierbas); toallas (dobladas, colgadas, enrolladas); cestas; cuadros, tríptico, espejo de arco, espejo sol y reloj; cojines de suelo; mantas (doblada, pila, en escalera); tumbonas, cama de exterior, sombrillas, macetones (olivo, ánfora, gramíneas, lavanda) y pérgolas.
+- Exterior tiene la pestaña **Jardín y terraza**. Lo de la encimera, las toallas y las mantas se posan solas donde se pinchan; los taburetes y lo del jardín, en el suelo.
+- `archisim modelos out/` empieza con una fila por colección (las mismas once piezas en los cuatro estilos) y luego todas las piezas nuevas.
+
+**Pendiente**
+- Estanterías con objetos; muebles en L; más colecciones si las quieres (rústica, industrial…).
+- Lo que dijiste en el punto 3 (texturas como imágenes, cielo, lámparas que alumbran de noche, captura grande) y el 4 (exportar el proyecto entero a `.glb` para D5 o Twinmotion).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- modelos out/` y abre `out/modelos.archisim` en la Maqueta con imagen Bonita: las cuatro primeras filas son las mismas piezas en nórdico, mediterráneo, años 50 y japandi; detrás, todas las piezas nuevas. Dime qué colección o qué pieza cambiarías.
+2. En la demo, Maqueta → Amueblar → **Colección: Japandi**. Mira Dormitorio y Cocina: cada tarjeta lleva la tira de colores de Japandi. Pon una cama y una mesita: deben salir en roble ahumado y lino piedra, la cama con cabecero de lamas.
+3. Selecciona con un recuadro todo el salón de la demo, elige **Mediterráneo** y pulsa **Aplicar**: sofá, butaca, alfombra y lámpara cambian de golpe. Ctrl+Z lo deshace en un paso.
+4. Exterior → **Jardín y terraza**: una pérgola con cañizo, dos tumbonas y una sombrilla junto a la casa; y un macetón con olivo.
+5. Amueblar → Decoración: un cuadro y un espejo de arco contra una pared (se pegan de espaldas), unas mantas en escalera y un cojín de suelo.
+
+---
+
+## 2026-10-23 (4) · v0.49: colocar como en Paralives
+
+Misma rama y pull request #56. Sin cambios de formato. Detalle en `docs/MAQUETA.md` §6 ter.
+
+**Hecho**
+- Lo pequeño (decoración, lámparas de mesa, plantas) se posa solo en la mesa, la balda o la encimera que hay debajo, en 3D y en planta.
+- En la Maqueta, los muebles se arrastran por el suelo sin herramienta, viéndolos donde quedarán; cerca de un muro se pegan a él de espaldas, mirando a la habitación. También al colocarlos.
+- Muebles que se unen: dos de cocina, altos, estanterías, aparadores o sofás iguales, uno junto a otro, se hacen uno (con sus puertas o plazas).
+
+**Pendiente**
+- Unirse al arrastrar en planta; muebles en L.
+
+**Qué debe probar Antonio**
+1. En la Maqueta de la demo, pincha el sofá y arrástralo por el salón: acércalo a otra pared y suéltalo; debe quedar de espaldas a ella.
+2. Amueblar → Decoración → Jarrón con ramas, y pincha encima de la mesa del comedor: debe quedar sobre el tablero. Prueba también una lámpara de mesa sobre la mesita de noche.
+3. Amueblar → Cocina → «Muebles de cocina 240» junto al que ya hay, en línea: deben quedar como un solo mueble de 4,80 m.
+4. Pon dos sofás iguales uno al lado del otro: uno solo, más largo, con más plazas.
+
+---
+
+## 2026-10-23 (3) · v0.49: biblioteca acogedora (al modo de Paralives)
+
+Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim`. Detalle en `docs/BIBLIOTECA_3D.md` («Biblioteca acogedora»).
+
+Antonio probó en el Mac la Maqueta con sombras y pidió seguir por la biblioteca, para tener la calidad y el aire acogedor de Paralives.
+
+**Hecho**
+- Nueve familias nuevas con su 3D hecho por ArchiSim y sus símbolos de planta: butaca (4 modelos), puf (3), mesa auxiliar (3), aparador (2), alfombra (4), lámpara (4, la colgante con su cable), planta de interior (5), cortina (3, abierta o corrida) y decoración (5: jarrón, frutero, libros y vela, cerámicas, cesta).
+- Sofá con cojines sueltos y manta; 34 tipos nuevos en la biblioteca (`archisim modelos out/` los coloca todos).
+- Paleta acogedora de 24 materiales y **color por pieza** en la tarjeta de la Maqueta (solo ese objeto; un paso de Deshacer).
+- Pestaña **Decoración** en Amueblar (alfombras, lámparas, plantas, cortinas y decoración).
+- La demo tiene un salón vestido (sofá acogedor, alfombra, butaca, lámpara y planta).
+- Arreglo: con los muros recortados, las pantallas de las lámparas (y cualquier pieza alta de un mueble) desaparecían; ahora un mueble se corta por donde se apoya, no por su pieza más baja.
+
+**Pendiente**
+- Decoración que se apoya sola en mesas y baldas (hoy, con el desfase de la base).
+- Más colecciones y piezas en el mismo estilo (dormitorio, cocina, baño).
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- demo out/` y abre `out/demo.archisim` en la Maqueta, imagen Bonita: el salón con su sofá con cojines y manta, la alfombra, la butaca, la lámpara y la planta.
+2. Amueblar → **Decoración**: pon una alfombra, una lámpara de pie, una planta y unas cortinas delante de una ventana.
+3. Selecciona el sofá: en la tarjeta, cambia la tapicería, los cojines y las patas con los colores de cada fila. Pon otro sofá igual: debe quedarse como estaba.
+4. `cargo run -p archisim-cli -- modelos out/` y abre `out/modelos.archisim`: las dos primeras filas son todas las piezas nuevas. Dime cuáles te convencen y cuáles cambiarías: es lo que más mejora con tu ojo.
+
+---
+
+## 2026-10-23 (2) · v0.49: Maqueta, segunda vuelta (revisión de Antonio)
+
+Rama `bloque/maqueta-2`, pull request para Antonio (v0.48 ya unida a `main`). Sin cambios de formato `.archisim` ni de IFC. Detalle en `docs/MAQUETA.md` §6 bis.
+
+Antonio probó v0.48 y pidió: que el recorte de muros no corte los muebles; el modo de Los Sims en que se ocultan solo los muros de delante; ver el objeto estirarse mientras se arrastra; girar a cualquier ángulo; que la selección no tape el material con azul; y muebles estilizados que, como en Paralives, crezcan con fluidez al estirarlos.
+
+**Hecho**
+- **Los muebles no se cortan** con los muros recortados (quedan enteros; los de las plantas de arriba desaparecen). La caja de sección sigue cortándolo todo. Cada vértice del 3D sabe qué es su elemento (`view3d/cutaway.rs`) y el sombreador y la selección aplican la misma regla.
+- **Muros delante bajos**, nuevo modo y el de entrada en la Maqueta: los muros entre la cámara y el centro de la vista bajan a 30 cm, con sus puertas y ventanas; los del fondo, enteros; sigue a la cámara.
+- **Estirar en vivo** en 3D: el objeto se dibuja como quedará mientras se arrastra el pinzamiento (con sus puertas, plazas o cajones nuevos); al soltar cambia el modelo.
+- **Giro libre**: anillo en el suelo alrededor del objeto (saltos de 15°, Mayús libre, también en vivo), ángulo escrito en la tarjeta junto a «Girar», y Mayús+Espacio (15°) al colocar.
+- **Selección con contorno naranja** en 3D; los colores y texturas quedan tal cual.
+- **Muebles que crecen por piezas**: sección `stretch` en las recetas (`docs/FAMILIAS.md`). Sofá (plazas), Mesa (sillas), Armario y Mueble alto (puertas), Estantería (baldas) y Cómoda (columnas); vale también al estirar en planta.
+- **Más mullidos**: cojines, almohadas y edredón hinchados (`Builder::pillow`) y aristas redondeadas de los muebles sombreadas suaves en 3D.
+- Esc, Espacio y Supr funcionan en la vista justo después de pinchar una tarjeta o un botón (el botón ya no se queda con el teclado).
+- **W A S D y Q E** en la Maqueta: moverse por el suelo hacia donde mira la cámara, bajar y subir; con Mayús, más rápido.
+- **Sombras del sol y luz de ilustración** (V1, primera vuelta; `docs/MAQUETA.md` §4): niveles de imagen Ligera, Normal y Bonita en la barra de la Maqueta y en Propiedades de la vista 3D. Las sombras siguen la fecha y la hora del sol del proyecto.
+- El contorno de la selección se reescribió sin bucles: el compilador de sombreadores de Windows no lo aceptaba y el 3D no se habría dibujado allí.
+
+**Pendiente**
+- Los pinzamientos se quedan en su sitio mientras se gira el objeto (se recolocan al soltar).
+- Un catálogo de muebles más estilizado al modo de Paralives (diseños nuevos, no solo los de hoy más mullidos) y la rueda de color por pieza (MQ2).
+- V1, la imagen (sombras, luz de ilustración, niveles de calidad).
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` (antes `cargo run -p archisim-cli -- demo out/`) y pulsa **Maqueta**: los muros de delante bajos y los del fondo enteros. Gira la cámara alrededor de la casa: los que bajan cambian con ella. Prueba también «Muros recortados» y «Muros bajos»: armario, frigorífico y cama siguen enteros.
+2. Pincha el armario del dormitorio: contorno naranja, su madera se ve igual. Arrastra el cuadradito azul de un lado: crece mientras arrastras y gana puertas al pasar de unos 1,30 m.
+3. Arrastra el punto azul del anillo del suelo: gira a saltos de 15°; con Mayús pulsada, libre. En la tarjeta, escribe 30 junto a «Girar» y pulsa «Girar».
+4. Amueblar → Salón → un sofá: estíralo a lo largo y mira cómo gana un cojín; la mesa del comedor, sus sillas.
+5. Cambia el material del sofá con él seleccionado (Más… → material): se ve el cambio sin deseleccionar.
+6. En el MacBook: dime si girar la cámara con los muros de delante bajos va fluido.
+7. En la Maqueta, muévete con W A S D, baja y sube con Q y E.
+8. Arriba, **Imagen: Ligera · Normal · Bonita**. En el PC, Normal y Bonita: sombras de árboles, muebles y tabiques; cambia la hora del sol en Propiedades del proyecto y míralas moverse. En el MacBook empieza en Ligera: prueba Normal y dime si va fluido o si se cuelga.
 
 ---
 

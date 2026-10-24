@@ -3,9 +3,11 @@
 //! shapes the IFC export writes.
 
 pub mod camera;
+pub mod cutaway;
+pub mod look;
 pub mod render;
 pub mod scene;
 pub mod section_box;
 
 #[cfg(test)]
-mod gpu_tests;
+pub(crate) mod gpu_tests;

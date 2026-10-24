@@ -211,7 +211,7 @@ Al probar inserciones pidió además buhardillas que se adapten a la cubierta (n
 | MQ1 | Entorno Maqueta: interruptor, ventana sin columnas, catálogo Construir · Amueblar · Exterior, tarjeta flotante, cuadrícula, muros recortados, habitación arrastrando, cuentagotas | ◐ v0.48 (falta: muros de delante recortados, miniaturas en 3D, arrastrar en 3D) |
 | V1 | Imagen: sombras, penumbra guardada, luz de ilustración, texturas como imagen, niveles de calidad | — |
 | MQ2–MQ4 | Muebles modulares, pinceles de Exterior, flechas y aros en Concepto | — |
-| UI1 | Concepto de interfaz del 24/10/2026, primera vuelta: ratón (izquierdo elige y mueve, rueda desplaza, derecho mantenido gira), menú del clic derecho, flechas y anillo, estirar por un solo lado, barra del objeto con materiales, ventanas en alzado en el catálogo, sin cartel de teclas | ✅ v0.49 (`bloque/manejo`) |
+| UI1 | Concepto de interfaz del 24/10/2026, primera vuelta: ratón (izquierdo elige y mueve, rueda desplaza, derecho mantenido gira), menú del clic derecho, flechas y anillo, estirar por un solo lado, barra del objeto con materiales, ventanas en alzado en el catálogo, sin cartel de teclas | ✅ v0.54 (`bloque/manejo`, unida a la 0.53) |
 | UI2 | Catálogo en árbol; cocina por módulos (encimera continua, cajones, tiradores, fregadero, placa, altos y campanas, estilos) | — |
 | UI3 | Fichas y diálogos unificados (nada aparece en una esquina); plano de carpinterías con alzados | — |
 

@@ -34,7 +34,7 @@ impl ArchiSimApp {
         // Keys go to the plan unless a field is being typed in (a temporary
         // dimension's too: egui lets go of the focus on Esc before the plan
         // sees it).
-        if ctx.memory(|m| m.focused().is_none()) && self.temp_edit.is_none() {
+        if !crate::app::typing_in_text(&ctx) && self.temp_edit.is_none() {
             self.keyboard_in_view(&ctx);
         }
         self.clicks(&ctx, &response, rect);
@@ -523,6 +523,9 @@ impl ArchiSimApp {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
             self.toggle_ortho();
         }
+        if space && self.flip_stair_turn() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }
@@ -617,9 +620,15 @@ impl ArchiSimApp {
                     self.say("Aparato girado 90° (Espacio para seguir girando).");
                 }
                 Tool::Object => {
+                    // Mayús+Espacio: 15°, to set it at any angle.
+                    let fine = ctx.input(|i| i.modifiers.shift);
+                    let step = if fine { 15.0_f64 } else { 90.0 };
                     let r = &mut self.object_settings.rotation;
-                    *r = crate::editor::normal_angle(*r + std::f64::consts::FRAC_PI_2);
-                    self.say("Objeto girado 90° (Espacio para seguir girando).");
+                    *r = crate::editor::normal_angle(*r + step.to_radians());
+                    let deg = r.to_degrees().round();
+                    self.say(format!(
+                        "Objeto a {deg}° (Espacio: +90°; Mayús+Espacio: +15°)."
+                    ));
                 }
                 Tool::Column => {
                     let r = &mut self.column_settings.rotation;

@@ -28,6 +28,8 @@ enum BarAct {
     Swatches(String),
     /// Give a material of the object this one.
     SetMaterial(String, u64),
+    /// Give a piece of the object a colour of the cosy palette.
+    PaintPiece(String, &'static str),
 }
 
 /// Size of the picture card.
@@ -228,6 +230,12 @@ impl ArchiSimApp {
                     Some(key)
                 };
             }
+            Some(BarAct::PaintPiece(key, swatch)) => {
+                if let Some(id) = object {
+                    let r = self.ed.paint_object_piece(id, &key, swatch);
+                    self.report(r, &format!("{swatch}."));
+                }
+            }
             Some(BarAct::SetMaterial(key, m)) => {
                 if let Some(id) = object {
                     let r = self.ed.transact("Cambiar material", |model| {
@@ -282,6 +290,9 @@ impl ArchiSimApp {
             .materials()
             .map(|m| (m.id.0, m.name.clone(), model.surface_color(m.id)))
             .collect();
+        // The colours that suit this piece (fabrics for upholstery, woods
+        // and metals for legs…), then every material of the project.
+        let piece = self.object_pieces(id).into_iter().find(|x| x.key == key);
         let mut act = None;
         let area = egui::Area::new(Id::unique("object-bar-swatches"))
             .order(egui::Order::Foreground)
@@ -291,6 +302,44 @@ impl ArchiSimApp {
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(320.0);
+                    if let Some(piece) = &piece {
+                        ui.label(
+                            egui::RichText::new("Colores que le van")
+                                .small()
+                                .color(p.muted),
+                        );
+                        ui.horizontal_wrapped(|ui| {
+                            ui.spacing_mut().item_spacing = Vec2::splat(6.0);
+                            for (swatch, rgb) in &piece.swatches {
+                                let on = piece.current.as_deref() == Some(*swatch);
+                                let (r, resp) =
+                                    ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
+                                let painter = ui.painter();
+                                if on {
+                                    painter.circle_stroke(
+                                        r.center(),
+                                        15.0,
+                                        Stroke::new(2.0, p.accent),
+                                    );
+                                }
+                                painter.circle(
+                                    r.center(),
+                                    12.0,
+                                    Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
+                                    Stroke::new(1.0, Color32::from_black_alpha(40)),
+                                );
+                                if resp.on_hover_text(*swatch).clicked() {
+                                    act = Some(BarAct::PaintPiece(key.to_string(), swatch));
+                                }
+                            }
+                        });
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new("Todos los materiales")
+                                .small()
+                                .color(p.muted),
+                        );
+                    }
                     egui::ScrollArea::vertical()
                         .max_height(220.0)
                         .show(ui, |ui| {

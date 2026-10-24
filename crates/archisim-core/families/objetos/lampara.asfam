@@ -1,0 +1,39 @@
+family "Lámpara"
+  category furniture
+  host none
+  version 1
+  description "Lámpara de pie, de mesa, colgante o de arco; la colgante cuelga a su altura con su cable hasta el techo"
+  folder "Iluminación"
+
+type_params
+  section "Dimensiones"
+    height length = 1.60 range 0.20..3.50 label "Altura (la colgante: de la pantalla)"
+    diameter length = 0.45 range 0.15..1.20 label "Diámetro de la pantalla"
+    drop   length = 0.60 range 0.20..2.00 label "Cable hasta el techo (colgante)"
+  section "Materiales"
+    shade     material = "Pantalla de lino" label "Pantalla"
+    frame     material = "Latón" label "Pie y estructura"
+    bulb      material = "Luz" label "Luz"
+  section "Modelo 3D"
+    model3d choice("De pie", "De mesa", "Colgante", "De arco") = "De pie" label "Modelo 3D"
+
+body
+  box (-diameter / 2, 0, height - 0.3) to (diameter / 2, diameter, height) material shade
+
+plan 1:50
+  let r = diameter / 2
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+  line (-r * 0.5, r) to (r * 0.5, r) pen thin
+  line (0, r * 0.5) to (0, r * 1.5) pen thin
+
+plan presentation
+  cloud center (0, diameter / 2) radius diameter * 1.6 lobes 24 jitter 0 pen none tint bulb opacity 0.25
+  cloud center (0, diameter / 2) radius diameter / 2 lobes 16 jitter 0 pen thin tint shade
+
+outputs
+  generator = "props:lamp"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

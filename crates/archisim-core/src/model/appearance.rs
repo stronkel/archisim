@@ -32,10 +32,24 @@ pub enum TextureKind {
     Water,
     /// Corrugated or ribbed metal sheet.
     Metal,
+    /// Linen and cotton: a plain weave with slubs.
+    Linen,
+    /// Bouclé: little loops of yarn.
+    Boucle,
+    /// Knitted wool: rows of stitches.
+    Knit,
+    /// Velvet: a sheen where the surface turns away.
+    Velvet,
+    /// Rattan, rush, bamboo, straw: a basket weave.
+    Wicker,
+    /// Terrazzo: chips of stone in a ground.
+    Terrazzo,
+    /// Marble: veins.
+    Marble,
 }
 
 impl TextureKind {
-    pub const ALL: [TextureKind; 11] = [
+    pub const ALL: [TextureKind; 18] = [
         TextureKind::Brick,
         TextureKind::Stone,
         TextureKind::Tile,
@@ -47,6 +61,13 @@ impl TextureKind {
         TextureKind::Gravel,
         TextureKind::Water,
         TextureKind::Metal,
+        TextureKind::Linen,
+        TextureKind::Boucle,
+        TextureKind::Knit,
+        TextureKind::Velvet,
+        TextureKind::Wicker,
+        TextureKind::Terrazzo,
+        TextureKind::Marble,
     ];
 
     pub fn code(self) -> &'static str {
@@ -62,6 +83,13 @@ impl TextureKind {
             TextureKind::Gravel => "gravel",
             TextureKind::Water => "water",
             TextureKind::Metal => "metal",
+            TextureKind::Linen => "linen",
+            TextureKind::Boucle => "boucle",
+            TextureKind::Knit => "knit",
+            TextureKind::Velvet => "velvet",
+            TextureKind::Wicker => "wicker",
+            TextureKind::Terrazzo => "terrazzo",
+            TextureKind::Marble => "marble",
         }
     }
 
@@ -83,6 +111,13 @@ impl TextureKind {
             TextureKind::Gravel => "Grava",
             TextureKind::Water => "Agua",
             TextureKind::Metal => "Chapa",
+            TextureKind::Linen => "Lino",
+            TextureKind::Boucle => "Bouclé",
+            TextureKind::Knit => "Punto",
+            TextureKind::Velvet => "Terciopelo",
+            TextureKind::Wicker => "Mimbre",
+            TextureKind::Terrazzo => "Terrazo",
+            TextureKind::Marble => "Mármol",
         }
     }
 
@@ -101,7 +136,45 @@ impl TextureKind {
             TextureKind::Gravel => 0.08,
             TextureKind::Water => 1.0,
             TextureKind::Metal => 0.08,
+            TextureKind::Linen => 0.2,
+            TextureKind::Boucle => 0.1,
+            TextureKind::Knit => 0.12,
+            TextureKind::Velvet => 0.3,
+            TextureKind::Wicker => 0.1,
+            TextureKind::Terrazzo => 0.25,
+            TextureKind::Marble => 0.8,
         }
+    }
+
+    /// The texture a material of this name and category looks best with,
+    /// if any: what the library gives its own, and what furniture without
+    /// an appearance of its own is drawn with.
+    pub fn suggested(name: &str, category: &str) -> Option<TextureKind> {
+        let has = |w: &str| name.starts_with(w);
+        Some(if has("Bouclé") || has("Toalla") {
+            TextureKind::Boucle
+        } else if has("Lana") {
+            TextureKind::Knit
+        } else if has("Terciopelo") || has("Pana") {
+            TextureKind::Velvet
+        } else if ["Ratán", "Enea", "Bambú", "Paja", "Cañizo"]
+            .iter()
+            .any(|w| has(w))
+        {
+            TextureKind::Wicker
+        } else if has("Terrazo") {
+            TextureKind::Terrazzo
+        } else if has("Mármol") {
+            TextureKind::Marble
+        } else if has("Microcemento") {
+            TextureKind::Plaster
+        } else {
+            match category {
+                "fabric" => TextureKind::Linen,
+                "wood" if !has("Lacado") && !has("Madera encalada") => TextureKind::Wood,
+                _ => return None,
+            }
+        })
     }
 
     /// The number the 3D view knows it by (0 is none).

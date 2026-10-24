@@ -3,8 +3,9 @@
 //! wheel pressed moves it. So turning the view never moves anything by
 //! mistake.
 //!
-//! A left drag that starts on something selected (or on a piece of
-//! furniture) moves it over its floor; one that starts elsewhere opens a
+//! A left drag that starts on furniture slides it as in Paralives
+//! (`app/placing`); one that starts on something else selected moves it
+//! over its plane, drawn where it goes; one that starts elsewhere opens a
 //! selection window: from left to right it takes what is wholly inside,
 //! from right to left what it touches (as in AutoCAD).
 
@@ -50,9 +51,7 @@ impl ArchiSimApp {
             let shift = ctx.input(|i| i.modifiers.shift || i.modifiers.command);
             let hit = origin.and_then(|p| self.element_at_3d(rect, p));
             self.drag3d = match (origin, hit) {
-                (_, Some((e, at)))
-                    if self.ed.selection.contains(&e) || matches!(e, Element::Object(_)) =>
-                {
+                (_, Some((e, at))) if self.ed.selection.contains(&e) => {
                     if !self.ed.selection.contains(&e) {
                         if !shift {
                             self.ed.selection.clear();
@@ -85,10 +84,15 @@ impl ArchiSimApp {
                     },
                     Drag3d::Window { start, .. } => Drag3d::Window { start, now: pos },
                 });
+                if let Some(Drag3d::Move { from, to, .. }) = self.drag3d {
+                    self.move_preview_3d(from, to);
+                }
+                ctx.request_repaint();
             }
         }
         if response.drag_stopped() {
             self.drag3d = None;
+            self.v3d.set_overlay(None, || None);
             match d {
                 Drag3d::Move { from, to, .. } => {
                     if from.distance(to) < 1e-4 {
@@ -117,6 +121,41 @@ impl ArchiSimApp {
                 }
             }
         }
+    }
+
+    /// What is moved, drawn where it would go (the shader hides it where
+    /// it is): built on a copy of the model with the same move the
+    /// release makes.
+    fn move_preview_3d(&mut self, from: Point2, to: Point2) {
+        if from.distance(to) < 1e-4 {
+            self.v3d.set_overlay(None, || None);
+            return;
+        }
+        let key = format!(
+            "move3d:{}:{:.3}:{:.3}:{:.3}:{:.3}",
+            self.ed.revision(),
+            from.x,
+            from.y,
+            to.x,
+            to.y
+        );
+        let model = self.ed.model();
+        let sel = self.ed.selection.clone();
+        self.v3d.set_overlay(Some(key), || {
+            let mut m = model.clone();
+            let drag = crate::drag::Drag {
+                grip: crate::drag::Grip::Body,
+                from,
+                to,
+                variant: false,
+            };
+            crate::drag::apply(&mut m, &sel, &drag).ok()?;
+            let solids: Vec<_> = archisim_geom::solid::model_solids(&m)
+                .into_iter()
+                .filter(|s| sel.contains(&crate::pick::of_solid(s.owner)))
+                .collect();
+            Some(crate::view3d::scene::Scene::of_solids(&m, solids))
+        });
     }
 
     /// Where the cursor is on the horizontal plane at height `z`.
@@ -206,7 +245,6 @@ impl ArchiSimApp {
                 painter.rect_stroke(r, 2.0, Stroke::new(1.2, line), egui::StrokeKind::Inside);
             }
             Some(Drag3d::Move { from, to, z }) => {
-                let delta = Point2::new(to.x - from.x, to.y - from.y);
                 let size = glam::Vec2::new(rect.width(), rect.height());
                 let screen = |p: Point2| {
                     self.v3d
@@ -214,19 +252,6 @@ impl ArchiSimApp {
                         .project_to_screen(glam::Vec3::new(p.x as f32, p.y as f32, z as f32), size)
                         .map(|s| Pos2::new(rect.min.x + s.x, rect.min.y + s.y))
                 };
-                // The outlines where they would go, at the height taken.
-                for e in &self.ed.selection {
-                    let Some(poly) = crate::pick::outline(&self.ed, *e) else {
-                        continue;
-                    };
-                    let pts: Vec<Pos2> = poly
-                        .iter()
-                        .filter_map(|p| screen(Point2::new(p.x + delta.x, p.y + delta.y)))
-                        .collect();
-                    if pts.len() == poly.len() && pts.len() > 1 {
-                        painter.add(egui::Shape::closed_line(pts, Stroke::new(2.0, ACCENT)));
-                    }
-                }
                 if let (Some(a), Some(b)) = (screen(from), screen(to)) {
                     painter.line_segment([a, b], Stroke::new(1.2, Color32::from_gray(60)));
                     super::handles::tag(

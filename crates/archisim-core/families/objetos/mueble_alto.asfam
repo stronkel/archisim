@@ -1,7 +1,7 @@
 family "Mueble alto de cocina"
   category kitchen
   host none
-  version 2
+  version 4
   description "Muebles altos colgados sobre la encimera (en planta, discontinuos)"
   folder "Cocina"
 
@@ -31,6 +31,12 @@ plan 1:50
     line (-width / 2 + i * dw, depth - 0.05) to (-width / 2 + i * dw, depth) pen thin dashed
 
 outputs
+  # Placed against another of its kind, in line: one, as wide as both.
+  joins = "width"
   generator = "props:wall_cabinet"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"
+
+# Stretched, a door more when the doors would be too wide.
+stretch
+  doors = if width / doors >= 0.3 and width / doors <= 0.65 then doors else max(1, round(width / 0.5))

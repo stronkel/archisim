@@ -52,7 +52,7 @@ impl ArchiSimApp {
         let Some(pos) = response.hover_pos() else {
             self.cursor = None;
             self.cursor3d = None;
-            if ctx.memory(|m| m.focused().is_none()) {
+            if !crate::app::typing_in_text(ctx) {
                 self.keyboard_in_view(ctx);
             }
             return;
@@ -196,7 +196,7 @@ impl ArchiSimApp {
             self.track_cursor(ctx, response, rect);
         }
         self.sculpt_follow(ctx);
-        if ctx.memory(|m| m.focused().is_none()) {
+        if !crate::app::typing_in_text(ctx) {
             self.keyboard_in_view(ctx);
         }
         self.clicks(ctx, response, rect);

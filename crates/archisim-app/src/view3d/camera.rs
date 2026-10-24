@@ -120,12 +120,45 @@ impl Camera {
         self.pitch = (self.pitch + delta.y * 0.008).clamp(-1.5, 1.5);
     }
 
+    /// Turns the camera around `pivot` (what is selected) instead of its
+    /// target: the eye and what it looks at turn together about it, so
+    /// the selection stays where it is on screen while the view goes
+    /// round it.
+    pub fn orbit_about(&mut self, delta: Vec2, pivot: Vec3) {
+        let dy = -delta.x * 0.008;
+        let pitch = (self.pitch + delta.y * 0.008).clamp(-1.5, 1.5);
+        let dp = pitch - self.pitch;
+        let (_, right, _) = self.basis();
+        // About the screen's right: the sign that lifts the eye as the
+        // pitch grows.
+        let tilt = |a: f32| glam::Quat::from_axis_angle(right, a);
+        let lifted = tilt(dp) * self.back();
+        let turn_up = if (lifted.z - self.back().z) * dp >= 0.0 {
+            tilt(dp)
+        } else {
+            tilt(-dp)
+        };
+        let r = glam::Quat::from_rotation_z(dy) * turn_up;
+        self.target = pivot + r * (self.target - pivot);
+        self.yaw += dy;
+        self.pitch = pitch;
+    }
+
     /// Moves the target with the drawing (dragging by screen points), in a
     /// view `height` points high.
     pub fn pan(&mut self, delta: Vec2, height: f32) {
         let (_, right, up) = self.basis();
         let k = 2.0 * self.half_height() / height.max(1.0);
         self.target += (-right * delta.x + up * delta.y) * k;
+    }
+
+    /// Walks the camera as in a game (W A S D): `forward` and `right`
+    /// along the ground in the direction it looks, `up` straight up, in
+    /// metres; the eye and what it looks at move together.
+    pub fn walk(&mut self, forward: f32, right: f32, up: f32) {
+        let f = Vec3::new(-self.yaw.cos(), -self.yaw.sin(), 0.0);
+        let r = f.cross(Vec3::Z);
+        self.target += f * forward + r * right + Vec3::Z * up;
     }
 
     /// Ray through a point of the view, in points from its top-left corner.
@@ -233,6 +266,40 @@ mod tests {
             let after = c.on_target_plane(pos, size).unwrap();
             assert!((after - before).length() < 1e-3, "{before:?} {after:?}");
         }
+    }
+
+    #[test]
+    fn walks_where_it_looks() {
+        let mut c = Camera::default();
+        let (eye, target) = (c.eye(), c.target);
+        c.walk(2.0, 0.0, 0.0);
+        // Forward along the ground, towards where it looks.
+        let moved = c.target - target;
+        assert!(moved.z.abs() < 1e-6 && (moved.length() - 2.0).abs() < 1e-5);
+        assert!(moved.dot(c.forward()) > 0.0);
+        assert!(((c.eye() - eye) - moved).length() < 1e-5);
+        // To the right, as on the screen; and up.
+        let before = c.target;
+        c.walk(0.0, 1.0, 0.5);
+        let (_, right, _) = c.screen_axes();
+        let d = c.target - before;
+        assert!((d.truncate().dot(right.truncate()) - 1.0).abs() < 1e-4);
+        assert!((d.z - 0.5).abs() < 1e-6);
+    }
+
+    /// Turning about a point keeps that point where it was on screen.
+    #[test]
+    fn orbit_about_a_selection() {
+        let mut c = Camera::default();
+        let pivot = c.target + Vec3::new(3.0, -2.0, 0.5);
+        let size = Vec2::new(800.0, 600.0);
+        let before = c.project_to_screen(pivot, size).unwrap();
+        c.orbit_about(Vec2::new(60.0, 25.0), pivot);
+        let after = c.project_to_screen(pivot, size).unwrap();
+        assert!((after - before).length() < 1.0, "{before:?} {after:?}");
+        // …and the view did turn.
+        assert!((c.yaw - Camera::default().yaw).abs() > 0.3);
+        assert!(c.pitch > Camera::default().pitch);
     }
 
     #[test]

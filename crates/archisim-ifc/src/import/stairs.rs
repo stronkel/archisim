@@ -3,7 +3,7 @@
 //! read back as one stair; the slabs of its landings, already imported,
 //! are dropped. Stairs from other programs are not imported yet.
 
-use archisim_core::{NewStair, Point2, SlabId, StairUse, WallTop};
+use archisim_core::{NewStair, Point2, SlabId, StairForm, StairStructure, StairUse, WallTop};
 
 use super::{explain, snap, snap2, Importer};
 
@@ -63,6 +63,45 @@ impl<'a> Importer<'a> {
             })
             .collect();
         let path = path.ok_or("línea de huella ilegible")?;
+        let mut material_named = None;
+        // Form and build (older files have none: flights and landings on
+        // a slab).
+        let mut design = archisim_core::StairDesign::default();
+        let by_name = |model: &archisim_core::Model, name: Option<String>| {
+            let name = name?;
+            model.materials().find(|m| m.name == name).map(|m| m.id)
+        };
+        if let Some(form) = text("Form") {
+            design.form = match form.as_str() {
+                "winders" => StairForm::Winders,
+                "spiral" => StairForm::Spiral,
+                _ => StairForm::Landings,
+            };
+            design.structure = match text("Structure").as_deref() {
+                Some("stringers") => StairStructure::Stringers,
+                Some("spine") => StairStructure::Spine,
+                Some("cantilever") => StairStructure::Cantilever,
+                Some("newel") => StairStructure::Newel,
+                _ => StairStructure::Slab,
+            };
+            design.closed_risers = self
+                .property_own(id, "ArchiSim_Stair", "ClosedRisers")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            design.sweep = self
+                .property_own(id, "ArchiSim_Stair", "Sweep")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+                * self.geo.angle;
+            design.core = number("Core").unwrap_or(design.core);
+            design.tread = number("Tread").unwrap_or(design.tread);
+            design.stringer = [
+                number("StringerWidth").unwrap_or(design.stringer[0]),
+                number("StringerDepth").unwrap_or(design.stringer[1]),
+            ];
+            material_named = by_name(&self.model, text("Material"));
+            design.tread_material = by_name(&self.model, text("TreadMaterial"));
+        }
         // Up to a level, by its GlobalId.
         let top = match text("Top") {
             Some(t) if !t.trim().is_empty() => {
@@ -96,10 +135,13 @@ impl<'a> Importer<'a> {
             .copied()
             .filter(|c| self.ent(*c).is_some_and(|e| e.kind == "IFCSTAIRFLIGHT"))
             .min();
-        let material = match flight {
+        let mut material = match flight {
             Some(f) => self.single_material(f),
             None => self.single_material(id),
         };
+        if let Some(m) = material_named {
+            material = m;
+        }
         // Landings were imported as slabs: they go.
         let made: Vec<u64> = self
             .sources
@@ -128,6 +170,7 @@ impl<'a> Importer<'a> {
                 waist: snap(waist),
                 material,
                 usage,
+                design,
             })
             .map_err(|e| explain(&e))?;
         let _ = self.model.edit_stair(sid, |s| s.railings = railings);

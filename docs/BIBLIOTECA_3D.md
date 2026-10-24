@@ -93,7 +93,99 @@ Cualquier objeto puede dibujarse en planta con un símbolo hecho en CAD: los ár
 
 La demo dibuja uno de sus árboles con un símbolo de CAD (copa, círculo interior y ocho ramas). Para el programador: `archisim_core::PlanSymbol` y `SymbolItem` (`ObjectType::symbol`, formato versión 30), `archisim_export::symbol::symbol_from_dxf`, `archisim_plan::draw_symbol` y `drafting::draw_shape`; en la app, `object_ui::symbol_group`.
 
+## Biblioteca acogedora (v0.49, revisión de Antonio del 23/10/2026)
+
+Lo que hace que una casa parezca vivida, como en Paralives: piezas de formas blandas (cojines que se hinchan, cantos redondeados, patas torneadas), con pocas piezas cada una para que una habitación llena siga siendo ligera, y una paleta cálida de materiales. Todo está en la Maqueta, en Amueblar → **Salón** y en la nueva pestaña **Decoración**; y en la galería de objetos de Técnica.
+
+| Familia | Modelos 3D | Tipos de la biblioteca |
+|---|---|---|
+| Butaca | de orejas, redonda, de ratán, baja de patas | una de cada |
+| Puf | redondo, de punto, cubo | uno de cada |
+| Mesa auxiliar | pie central, tres patas, nido | una de cada |
+| Aparador | nórdico de patas (puertas y cajones), puertas de lamas | 160 y 180 |
+| Alfombra | lisa con ribete, redonda, de rayas, bereber con flecos | cuatro |
+| Lámpara | de pie, de mesa, colgante (con su cable hasta el techo), de arco | cuatro |
+| Planta de interior | costilla de Adán, ficus, cactus, helecho, sansevieria | cinco |
+| Cortina | larga, visillo (transparente), hasta el alféizar; abierta o corrida | lino y visillo |
+| Decoración | jarrón con ramas, frutero, libros y vela, cerámicas, cesta con manta | cinco |
+
+- El **Sofá** lleva ahora **cojines sueltos** (de 0 a 4, apoyados en el respaldo) y **manta sobre el brazo**, cada uno con su material: «Sofá acogedor de 3 plazas» (lino arena, cojines mostaza y manta teja) y «Sofá nórdico con cojines».
+- **Paleta acogedora** (`archisim_library::COZY_PALETTE`): linos, bouclé, lanas, terciopelos (salvia, mostaza, rosa), pana, robles, nogal, ratán, latón, mármol, terracota y cerámicas.
+- **Color por pieza**: en la tarjeta de la Maqueta, un objeto seleccionado muestra una fila de colores para cada pieza (tapicería, cojines, patas…), con los de la paleta que le van (telas para lo tapizado, maderas y metales para las patas). Cambia solo ese objeto: si su tipo lo comparten otros, se le hace una copia («Sofá de 3 plazas · Terciopelo mostaza»). Un solo paso de Deshacer.
+- La decoración se pone en el suelo; para subirla a una mesa o una balda, el desfase de la base. Que se apoye sola en las superficies queda pendiente.
+- `archisim modelos out/` coloca en sus dos primeras filas todas las piezas nuevas; la demo tiene en el salón el sofá acogedor, una alfombra, una butaca de orejas, una lámpara de pie y una costilla de Adán.
+
+Para el programador: `archisim-props::cozy` (`rug`, `lamp`, `potted_plant`, `armchair`, `pouf`, `side_table`, `sideboard`, `curtain`, `decor`) y `Builder::blob` (elipsoide con ejes cualesquiera, para hojas y ramas); las recetas en `families/objetos/` (`butaca`, `puf`, `mesa_auxiliar`, `aparador`, `alfombra`, `lampara`, `planta_interior`, `cortina`, `decoracion`); los papeles nuevos y sus parámetros en `model/props::candidates`; la tarjeta en `app/maquette_ui::object_pieces` y `Editor::paint_object_piece`. Sin cambios de formato: los proyectos guardan las familias que usan.
+
+## Colecciones (v0.50, revisión de Antonio del 23/10/2026)
+
+Un estilo para toda la casa. Una colección no tiene muebles propios: dice qué madera, qué telas, qué metal, qué cerámica, qué piedra y qué fibra lleva cada pieza, y qué modelo 3D toman algunas familias. Así **cada pieza de la biblioteca tiene su versión en cada colección**, con el nombre «Sofá de 3 plazas · Japandi».
+
+| Colección | Madera | Tela | Segunda tela | Cojines y colchas | Metal | Cerámica | Piedra | Fibra |
+|---|---|---|---|---|---|---|---|---|
+| Nórdico cálido | roble claro | lino arena | bouclé crudo | terciopelo salvia | metal negro | cerámica blanca | mármol | ratán |
+| Mediterráneo | madera encalada | lino blanco | lino arena | lino añil | hierro forjado | terracota | microcemento | enea |
+| Años 50 | teca | lana oliva | lana cruda | terciopelo mostaza | latón | cerámica turquesa | terrazo | ratán |
+| Japandi | roble ahumado | lino piedra | lino gris | lana carbón | metal negro | gres | piedra gris | bambú |
+
+- Modelos por colección, cuando la pieza no elige el suyo: en nórdico, sofá nórdico, cama con cabecero tapizado y mesita de patas; en mediterráneo, cama de madera, butaca de ratán y taburete de enea; en años 50, sofá de patas, mesita de patas cónicas y butaca baja; en japandi, cama de lamas, mesita flotante y aparador de lamas.
+- Lo que no es del mueble se queda como está: sábanas, pantallas de lámpara, vidrio, espejos, grifería cromada, porcelana de los sanitarios, plantas y lo que hay encima de las mesas.
+- **En la Maqueta**: «Colección» encima del catálogo (Amueblar y Exterior). Al elegir una, las tarjetas (la pieza en 3D desde v0.51) la enseñan en sus colores y llevan la tira de la colección, y las piezas se colocan ya en ella. **Aplicar** pasa a la colección lo seleccionado (con un recuadro, una habitación entera); «Sin colección» + Aplicar lo devuelve a sus colores. Un paso de Deshacer.
+
+**Piezas nuevas en el mismo estilo** (44 tipos, 12 familias nuevas y dos ampliadas):
+
+| Dónde | Familia | Modelos 3D |
+|---|---|---|
+| Dormitorio | Cama | + cabecero tapizado (capitoné en canales, más ancho que la cama) y cabecero de lamas (tarima baja); **colcha a los pies** y **cojines** (0–4) |
+| Dormitorio | Mesita de noche | + patas cónicas (cajón y balda abierta) y flotante (colgada, con uñero) |
+| Cocina | Taburete | de madera, tapizado con respaldo, de enea |
+| Cocina | Isla de cocina | con voladizo para taburetes, mesa de trabajo con cestas, con fregadero |
+| Cocina | Cosas de la encimera | tablas y aceite, botes de cristal, cafetera y tazas, hierbas aromáticas |
+| Baño | Toallas | dobladas en pila, colgadas de una barra, enrolladas en una bandeja |
+| Baño | Cesta | cesto de ropa con tapa, con rollos, con asas y una toalla |
+| Decoración | Cuadro o espejo | cuadro con paspartú, tríptico, espejo de arco, espejo sol, reloj |
+| Decoración | Cojín de suelo | cuadrado capitoné, zafu, pila |
+| Decoración | Manta | doblada con flecos, pila de mantas, en escalera |
+| Jardín y terraza | Tumbona | de teca con ruedas (y colchoneta), de aluminio, cama de exterior |
+| Jardín y terraza | Sombrilla | redonda, descentrada, de paja con flecos |
+| Jardín y terraza | Macetón | con olivo, ánfora, con gramíneas, con lavanda |
+| Jardín y terraza | Pérgola | de madera, de lamas de aluminio, con cañizo y trepadora (`IfcBuildingElementProxy`) |
+
+- Lo de la encimera, las toallas, las cestas y las mantas dobladas se posa solo donde se pincha; los taburetes, los cojines de suelo y lo del jardín van al suelo. Los cuadros, espejos y relojes llevan su altura desde el suelo.
+- Exterior tiene una pestaña nueva, **Jardín y terraza**.
+- `archisim modelos out/` empieza con una fila por colección (las mismas once piezas en los cuatro estilos) y sigue con las piezas nuevas.
+
+Para el programador: `archisim_library::collections` (`COLLECTIONS`, `restyle`, `add_collection_entry`, `type_in_collection`, `apply_collection`, `collection_library` para las fotos del catálogo); `archisim-props::home` (`stool`, `island`, `counter_decor`, `towels`, `basket`, `wall_decor`, `floor_cushion`, `blanket`), `archisim-props::garden` (`lounger`, `parasol`, `big_pot`, `pergola`) y `Builder::obox` (caja girada: lamas y respaldos inclinados); en la app, `app/collection_ui` y `Editor::apply_collection`/`collection_object_type`. Sin cambios de formato.
+
+## Mobiliario urbano, chimeneas y más mobiliario (v0.52, revisión de Antonio del 24/10/2026)
+
+Antonio: «el mobiliario urbano sigue siendo muy básico y cuando pongo una farola no se ilumina como una lámpara alrededor». Ahora cada pieza de exterior tiene su 3D hecho por ArchiSim, con varios modelos (las familias son las de siempre, con los mismos parámetros: los proyectos que ya las usan se ven mejor sin tocar nada).
+
+| Familia | Modelos 3D |
+|---|---|
+| Banco | de listones sobre patas de fundición, de hormigón con asiento de madera, de listones sobre marco de acero (con o sin respaldo) |
+| Farola | báculo curvo, **fernandina** (columna acanalada y farol de cuatro caras), columna con globo, baliza |
+| Papelera | de chapa perforada sobre poste, de listones de madera, doble para reciclar |
+| Bolardo | de fundición con bola, tubo de acero con banda reflectante, cono de hormigón |
+| Buzón | de pie, sobre poste, buzones de portal |
+| Contenedor de residuos | de carga lateral (ruedas, tapa, pedal), iglú de vidrio, soterrado |
+| Fuente | de fundición con pila y rejilla, bloque de piedra con caño, estanque redondo con surtidor |
+| Jardinera | de hormigón con arbustos, de madera con flores, de acero corten con gramíneas |
+| Alcorque | de fundición en anillos, de pletinas, bordillo de piedra con grava |
+| Aparcabicis | U invertida, onda, soporte de rueda |
+| Señal | circular, triangular, rectangular |
+| Bicicleta | de paseo con cesta, de carretera, de carga |
+
+- **Las farolas alumbran de noche** (Maqueta → Luz: Noche): su farol brilla y alumbra hasta 11 m alrededor. La demo tiene dos fernandinas junto al camino.
+- **Chimeneas** (familia nueva, Amueblar → Salón): de obra con repisa, hogar y solera; estufa de leña con su tubo hasta el techo; moderna lineal en un paramento. El fuego brilla y alumbra de noche.
+- **Más mobiliario**: perchero de pie y recibidor con banco, ganchos y cestas; sillas de oficina (giratoria y de malla); mesa de bistró con dos sillas, mesa de teca para seis y sofá de exterior; silla colgante de ratán y hamaca; radiadores (de elementos y de panel), aire acondicionado de pared, ventiladores de techo; piano de pared y de cola; cama cabaña con guirnalda de luces y litera; y la estantería «Con objetos» (libros, jarrones, plantas, libros apilados, cestas).
+- `archisim modelos out/` tiene cuatro filas con todo esto.
+
+Para el programador: `archisim-props::street` y `archisim-props::extras`; lo que brilla y alumbra de noche, `view3d::scene::glow_materials` (lámparas 4,5 m; farolas 11 m).
+
 ## Pendiente
+
+- Estanterías con objetos (hecho en v0.52); muebles en L; más colecciones (rústica, industrial) si Antonio las quiere.
 
 - Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
 - Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).

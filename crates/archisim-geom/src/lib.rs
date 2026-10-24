@@ -35,6 +35,7 @@ pub mod room;
 pub mod sculpt;
 pub mod shadow;
 pub mod solid;
+pub mod stairs;
 pub mod sweeps;
 
 use archisim_core::{

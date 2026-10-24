@@ -37,7 +37,13 @@ fn every_model_is_made() {
             assert!(volume > 0.0, "{kind} {s}: volume {volume}");
             let (lo, hi) = bounds(&m);
             assert!(lo[2] >= -1e-3, "{kind} {s}: below the floor {lo:?}");
-            assert!(hi[2] < 3.0, "{kind} {s}: {hi:?}");
+            // Streetlights stand well over a storey.
+            let tallest = match *kind {
+                "streetlight" => 17.0,
+                "fireplace" | "ceiling_fan" => 4.1,
+                _ => 3.0,
+            };
+            assert!(hi[2] < tallest, "{kind} {s}: {hi:?}");
         }
     }
 }
@@ -94,4 +100,33 @@ fn fronts_with_drawers_and_handles() {
     }
     assert_eq!(choice_number("handle", "Pomo"), Some(2.0));
     assert_eq!(choice_number("pedestal", "A la izquierda"), Some(2.0));
+}
+
+/// The cosy pieces follow their measurements; the sofa takes its loose
+/// cushions and its throw.
+#[test]
+fn cosy_pieces() {
+    let make_with = |kind: &str, set: &[(&str, f64)]| {
+        let mut p = Params::default();
+        for (k, v) in set {
+            p.set(k, *v);
+        }
+        make(kind, &p).unwrap()
+    };
+    let (lo, hi) = bounds(&make_with("rug", &[("width", 3.0), ("depth", 2.0)]));
+    assert!((hi[0] - lo[0] - 3.0).abs() < 0.02 && (hi[1] - lo[1] - 2.0).abs() < 0.02);
+    assert!(hi[2] < 0.05);
+    let (_, hi) = bounds(&make_with("lamp", &[("height", 1.8)]));
+    assert!((hi[2] - 1.8).abs() < 0.1, "{hi:?}");
+    let (_, hi) = bounds(&make_with("potted_plant", &[("height", 1.4)]));
+    assert!(hi[2] > 1.0 && hi[2] < 1.6, "{hi:?}");
+    let plain = make_with("sofa", &[]).triangle_count();
+    let dressed = make_with("sofa", &[("pillows", 2.0), ("throw", 1.0)]);
+    assert!(dressed.triangle_count() > plain);
+    assert!(dressed.parts.iter().any(|(r, _)| *r == "pillow"));
+    assert!(dressed.parts.iter().any(|(r, _)| *r == "throw"));
+    // Curtains drawn open gather to the sides: less in the middle.
+    let shut = make_with("curtain", &[("open", 0.0)]).triangle_count();
+    let open = make_with("curtain", &[("open", 1.0)]).triangle_count();
+    assert!(open < shut);
 }

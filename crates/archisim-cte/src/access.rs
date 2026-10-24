@@ -361,10 +361,29 @@ pub fn stairs_and_ramps(model: &Model, report: &mut Report) {
                     "en un lado".into(),
                     "en ambos lados".into(),
                 ),
+                I::NarrowEdge { going, min } => (
+                    "Huella de peldaño curvo en su lado estrecho".into(),
+                    m(going),
+                    format!("≥ {}", m(min)),
+                ),
+                I::WideEdge { going, max } => (
+                    "Huella de peldaño curvo en su lado ancho".into(),
+                    m(going),
+                    format!("≤ {}", m(max)),
+                ),
+                I::OpenRisers => (
+                    "Peldaños sin tabica: no valen en zonas de uso público ni en evacuación ascendente".into(),
+                    "sin tabica".into(),
+                    "con tabica".into(),
+                ),
             };
             report.items.push(Item {
                 section: Section::StairsAndRamps,
-                status: Status::Fails,
+                status: if i == I::OpenRisers {
+                    Status::Warning
+                } else {
+                    Status::Fails
+                },
                 subject: Subject::Stair(st.id),
                 level: Some(st.level),
                 rule: "SUA 1, 4.2",

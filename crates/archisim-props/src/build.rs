@@ -17,11 +17,11 @@ pub struct Builder {
     pub parts: BTreeMap<&'static str, Vec<[u32; 3]>>,
 }
 
-fn sub(a: P3, b: P3) -> P3 {
+pub fn sub(a: P3, b: P3) -> P3 {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
-fn cross(a: P3, b: P3) -> P3 {
+pub fn cross(a: P3, b: P3) -> P3 {
     [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
@@ -29,7 +29,7 @@ fn cross(a: P3, b: P3) -> P3 {
     ]
 }
 
-fn norm(a: P3) -> P3 {
+pub fn norm(a: P3) -> P3 {
     let l = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
     if l < 1e-12 {
         [0.0, 0.0, 1.0]
@@ -57,16 +57,32 @@ impl Builder {
 
     /// A box from `lo` to `hi` with its edges rounded `r` (0: sharp).
     pub fn rbox(&mut self, role: &'static str, lo: P3, hi: P3, r: f64) {
-        self.rbox_faces(role, lo, hi, r, [true; 6], false);
+        self.rbox_faces(role, lo, hi, r, [true; 6], false, None);
+    }
+
+    /// A cushion: a rounded box whose two big faces swell `puff` in the
+    /// middle, as a stuffed cushion does (its sides stay straight).
+    pub fn pillow(&mut self, role: &'static str, lo: P3, hi: P3, r: f64, puff: f64) {
+        self.rbox_faces(role, lo, hi, r, [true; 6], false, Some(puff));
     }
 
     /// The hollow of a basin: a rounded box without its top, seen from
     /// inside (its faces looking in).
     pub fn hollow(&mut self, role: &'static str, lo: P3, hi: P3, r: f64) {
-        self.rbox_faces(role, lo, hi, r, [true, true, true, true, true, false], true);
+        self.rbox_faces(
+            role,
+            lo,
+            hi,
+            r,
+            [true, true, true, true, true, false],
+            true,
+            None,
+        );
     }
 
-    /// The faces of a rounded box: −x, +x, −y, +y, −z, +z, which to make.
+    /// The faces of a rounded box: −x, +x, −y, +y, −z, +z, which to make;
+    /// with `puff`, swollen as a cushion along its thinnest side.
+    #[allow(clippy::too_many_arguments)]
     fn rbox_faces(
         &mut self,
         role: &'static str,
@@ -75,6 +91,7 @@ impl Builder {
         r: f64,
         which: [bool; 6],
         inside: bool,
+        puff: Option<f64>,
     ) {
         let size = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
         if size.iter().any(|s| *s <= 1e-6) {
@@ -86,6 +103,8 @@ impl Builder {
             .min(size[2] / 2.0)
             .max(0.0);
         let steps = if r > 1e-4 { 4 } else { 0 };
+        // A cushion's straight runs are divided, for it to swell.
+        let runs = if puff.is_some() { 4 } else { 1 };
         // Coordinates along each axis: the rounding at each end, then the
         // straight run.
         let coords = |k: usize| -> Vec<f64> {
@@ -93,6 +112,9 @@ impl Builder {
             for s in 1..=steps {
                 let t = std::f64::consts::FRAC_PI_2 * s as f64 / steps as f64;
                 v.push(lo[k] + r - r * t.cos());
+            }
+            for s in 1..runs {
+                v.push(lo[k] + r + (size[k] - 2.0 * r) * s as f64 / runs as f64);
             }
             for s in (0..steps).rev() {
                 let t = std::f64::consts::FRAC_PI_2 * s as f64 / steps as f64;
@@ -102,8 +124,14 @@ impl Builder {
             v.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
             v
         };
+        // (When the rounding takes all of a side, both ends meet: kept in
+        // order against rounding errors.)
         let inner_lo = [lo[0] + r, lo[1] + r, lo[2] + r];
-        let inner_hi = [hi[0] - r, hi[1] - r, hi[2] - r];
+        let inner_hi = [
+            (hi[0] - r).max(inner_lo[0]),
+            (hi[1] - r).max(inner_lo[1]),
+            (hi[2] - r).max(inner_lo[2]),
+        ];
         let round = |q: P3| -> P3 {
             if r <= 1e-9 {
                 return q;
@@ -125,6 +153,21 @@ impl Builder {
                 ]
             }
         };
+        // The swelling: along the thinnest side, most in the middle of
+        // the big faces, nothing at their edges.
+        let thin = (0..3)
+            .min_by(|a, b| size[*a].total_cmp(&size[*b]))
+            .unwrap_or(2);
+        let swell = |mut q: P3| -> P3 {
+            let Some(puff) = puff else {
+                return q;
+            };
+            let n = |k: usize| ((q[k] - (lo[k] + hi[k]) / 2.0) / (size[k] / 2.0)).clamp(-1.0, 1.0);
+            let (u, v) = ((thin + 1) % 3, (thin + 2) % 3);
+            let f = (1.0 - n(u) * n(u)) * (1.0 - n(v) * n(v));
+            q[thin] += puff * n(thin) * f;
+            q
+        };
         for (f, make) in which.iter().enumerate() {
             if !make {
                 continue;
@@ -140,7 +183,7 @@ impl Builder {
                     q[a] = if positive { hi[a] } else { lo[a] };
                     q[u] = *x;
                     q[v] = *y;
-                    ids[i][j] = self.point(round(q));
+                    ids[i][j] = self.point(swell(round(q)));
                 }
             }
             // u × v = a: counter-clockwise from +a.
@@ -273,6 +316,91 @@ impl Builder {
             })
             .collect();
         self.lathe(role, [c[0], c[1], c[2] - r[2]], &profile, r[0], r[1]);
+    }
+
+    /// An ellipsoid whose half-axes are the vectors `ax`, `ay`, `az`
+    /// (at right angles): a leaf, a pebble, a cushion lying askew.
+    pub fn blob(&mut self, role: &'static str, c: P3, ax: P3, ay: P3, az: P3) {
+        let seg = 12;
+        let rows = 6;
+        // Outwards whatever the hand of the axes.
+        let det = {
+            let x = cross(ax, ay);
+            x[0] * az[0] + x[1] * az[1] + x[2] * az[2]
+        };
+        let at = |b: &mut Builder, phi: f64, t: f64| {
+            let (sp, cp) = phi.sin_cos();
+            let (st, ct) = t.sin_cos();
+            let (x, y, z) = (cp * ct, cp * st, sp);
+            b.point([
+                c[0] + ax[0] * x + ay[0] * y + az[0] * z,
+                c[1] + ax[1] * x + ay[1] * y + az[1] * z,
+                c[2] + ax[2] * x + ay[2] * y + az[2] * z,
+            ])
+        };
+        let half = std::f64::consts::FRAC_PI_2;
+        let bottom = at(self, -half, 0.0);
+        let top = at(self, half, 0.0);
+        let rings: Vec<Vec<u32>> = (1..rows)
+            .map(|i| {
+                let phi = -half + std::f64::consts::PI * i as f64 / rows as f64;
+                (0..seg)
+                    .map(|k| at(self, phi, std::f64::consts::TAU * k as f64 / seg as f64))
+                    .collect()
+            })
+            .collect();
+        let tri = |b: &mut Builder, p: u32, q: u32, r: u32| {
+            if det >= 0.0 {
+                b.tri(role, p, q, r);
+            } else {
+                b.tri(role, p, r, q);
+            }
+        };
+        for k in 0..seg {
+            let k1 = (k + 1) % seg;
+            tri(self, bottom, rings[0][k1], rings[0][k]);
+            let last = rings.len() - 1;
+            tri(self, top, rings[last][k], rings[last][k1]);
+            for j in 0..rings.len() - 1 {
+                tri(self, rings[j][k], rings[j][k1], rings[j + 1][k1]);
+                tri(self, rings[j][k], rings[j + 1][k1], rings[j + 1][k]);
+            }
+        }
+    }
+
+    /// A box turned any way: centred at `c`, its half-sides the vectors
+    /// `ax`, `ay`, `az` (at right angles): a slat or a back that leans.
+    pub fn obox(&mut self, role: &'static str, c: P3, ax: P3, ay: P3, az: P3) {
+        let det = {
+            let x = cross(ax, ay);
+            x[0] * az[0] + x[1] * az[1] + x[2] * az[2]
+        };
+        let corner = |b: &mut Builder, i: usize| {
+            let s = |bit: usize| if i & bit != 0 { 1.0 } else { -1.0 };
+            let (sx, sy, sz) = (s(1), s(2), s(4));
+            b.point([
+                c[0] + ax[0] * sx + ay[0] * sy + az[0] * sz,
+                c[1] + ax[1] * sx + ay[1] * sy + az[1] * sz,
+                c[2] + ax[2] * sx + ay[2] * sy + az[2] * sz,
+            ])
+        };
+        let v: Vec<u32> = (0..8).map(|i| corner(self, i)).collect();
+        // The faces as for an axis box (x, y, z by bits 1, 2, 4).
+        let faces = [
+            [0, 4, 6, 2], // −x
+            [1, 3, 7, 5], // +x
+            [0, 1, 5, 4], // −y
+            [2, 6, 7, 3], // +y
+            [0, 2, 3, 1], // −z
+            [4, 5, 7, 6], // +z
+        ];
+        for f in faces {
+            if det >= 0.0 {
+                self.quad(role, v[f[0]], v[f[1]], v[f[2]], v[f[3]]);
+            } else {
+                self.quad(role, v[f[3]], v[f[2]], v[f[1]], v[f[0]]);
+            }
+        }
     }
 
     /// A slab whose plan is a polygon (counter-clockwise, convex), from

@@ -68,6 +68,8 @@ pub struct Prefs {
     pub price_bank: Option<String>,
     /// The materials' textures in the 3D view (none: as the computer goes).
     pub textures_3d: Option<bool>,
+    /// The quality of the 3D picture (none: as the computer goes).
+    pub quality_3d: Option<crate::view3d::look::Quality>,
 }
 
 impl Default for Prefs {
@@ -82,6 +84,7 @@ impl Default for Prefs {
             recent: Vec::new(),
             price_bank: None,
             textures_3d: None,
+            quality_3d: None,
         }
     }
 }
@@ -118,6 +121,7 @@ impl Prefs {
             "recientes": self.recent,
             "banco_de_precios": self.price_bank,
             "texturas_3d": self.textures_3d,
+            "calidad_3d": self.quality_3d.map(|q| q.key()),
         });
         serde_json::to_string_pretty(&v).unwrap_or_default()
     }
@@ -166,6 +170,10 @@ impl Prefs {
                 .and_then(|x| x.as_str())
                 .map(str::to_string),
             textures_3d: v.get("texturas_3d").and_then(|x| x.as_bool()),
+            quality_3d: v
+                .get("calidad_3d")
+                .and_then(|x| x.as_str())
+                .and_then(crate::view3d::look::Quality::from_key),
         }
     }
 
@@ -217,6 +225,7 @@ mod tests {
             recent: vec!["/proyectos/casa.archisim".into()],
             price_bank: Some("/bancos/bcca.bc3".into()),
             textures_3d: Some(false),
+            quality_3d: Some(crate::view3d::look::Quality::Pretty),
         };
         assert_eq!(Prefs::from_json(&p.to_json()), p);
         // Unknown or broken files give the defaults.

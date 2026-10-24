@@ -1,7 +1,7 @@
 family "Encimera de cocina"
   category kitchen
   host none
-  version 2
+  version 3
   description "Muebles bajos de cocina con encimera, fregadero y placa"
   folder "Cocina"
 
@@ -47,6 +47,8 @@ plan 1:50
       arc center (xc + dx, yc + dy) from (xc + dx, yc + dy - 0.08) to (xc + dx + 0.08, yc + dy) pen thin
 
 outputs
+  # Placed against another of its kind, in line: one, as wide as both.
+  joins = "width"
   generator = "props:counter"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"

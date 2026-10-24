@@ -1,0 +1,32 @@
+family "Manta"
+  category furniture
+  host none
+  version 1
+  description "Manta doblada con flecos, pila de mantas o mantas en una escalera apoyada en la pared"
+  folder "Cojines y mantas"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.45 range 0.20..1.00 label "Ancho"
+    height length = 1.60 range 0.80..2.20 label "Altura de la escalera"
+  section "Materiales"
+    mat material = "Lana cruda" label "Manta"
+  section "Modelo 3D"
+    model3d choice("Doblada", "Pila de mantas", "En escalera") = "Doblada" label "Modelo 3D"
+    mat2   material = "Lana teja" label "Otra manta y flecos"
+    accent material = "Terciopelo salvia" label "Tercera manta"
+    frame  material = "Roble claro" label "Escalera"
+
+body
+  if model3d == "En escalera"
+    box (-width / 2, 0, 0) to (width / 2, 0.34, height) material frame
+  else
+    box (-width / 2, 0, 0) to (width / 2, width * 0.75, 0.1) material mat
+
+plan 1:50
+  polygon (-width / 2, 0.02) (width / 2, 0.02) (width / 2, 0.02 + width * 0.75) (-width / 2, 0.02 + width * 0.75) pen thin
+
+outputs
+  generator = "props:blanket"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -1,0 +1,28 @@
+family "Piano"
+  category furniture
+  host none
+  version 1
+  description "Piano de pared con su banqueta, o piano de cola"
+  folder "Salón"
+
+type_params
+  section "Dimensiones"
+    width length = 1.48 range 1.20..1.60 label "Ancho"
+  section "Materiales"
+    mat material = "Negro mate" label "Caja"
+  section "Modelo 3D"
+    model3d choice("De pared", "De cola") = "De pared" label "Modelo 3D"
+    light material = "Cerámica blanca" label "Teclas"
+    dark  material = "Negro mate" label "Teclas negras"
+    frame material = "Lino gris" label "Banqueta"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.6, 1.22) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.6) (-width / 2, 0.6) pen view
+
+outputs
+  generator = "props:piano"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

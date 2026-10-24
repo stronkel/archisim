@@ -28,10 +28,29 @@ impl ArchiSimApp {
             self.complain("El proyecto no tiene tipos de objeto.");
             return;
         }
-        match self.ed.add_object(&self.object_settings, p) {
+        // Small things rest on the table or shelf under the cursor.
+        // (and, in the Maqueta, furniture goes against the wall near it).
+        let mut s = self.object_settings;
+        let (at, rotation, base) = self.placement_spot(p);
+        let surface = base - s.base_offset;
+        s.rotation = rotation;
+        s.base_offset = base;
+        let before = self.ed.model().objects().count();
+        match self.ed.add_object(&s, at) {
             Ok(id) => {
                 self.ed.selection = [Element::Object(id)].into_iter().collect();
-                self.say("Objeto colocado. Espacio: girarlo 90° antes de colocar el siguiente.");
+                if self.ed.model().objects().count() == before {
+                    self.say("Unido al de al lado: ahora son una sola pieza.");
+                } else if surface > 0.0 {
+                    self.say(format!(
+                        "Colocado encima, a {}.",
+                        crate::units::fmt_len(surface)
+                    ));
+                } else {
+                    self.say(
+                        "Objeto colocado. Espacio: girarlo 90° antes de colocar el siguiente.",
+                    );
+                }
             }
             Err(e) => self.complain(format!("No se puede colocar: {e}.")),
         }

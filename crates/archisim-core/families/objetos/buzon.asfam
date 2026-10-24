@@ -1,7 +1,7 @@
 family "Buzón"
   category street
   host none
-  version 1
+  version 2
   description "Buzón de calle sobre su pie; el punto de inserción es el centro de la trasera y la boca mira hacia delante"
   folder "Mobiliario urbano"
 
@@ -12,6 +12,10 @@ type_params
     height length = 1.10 range 0.50..1.80 label "Altura"
   section "Materiales"
     mat material = "Metal lacado" label "Buzón"
+  section "Modelo 3D"
+    model3d choice("De pie", "Sobre poste", "Buzones de portal") = "De pie" label "Modelo 3D"
+    frame material = "Negro mate" label "Pie y marco"
+    dark  material = "Negro mate" label "Boca"
 
 body
   box (-0.04, depth / 2 - 0.04, 0) to (0.04, depth / 2 + 0.04, height * 0.45) material mat
@@ -26,5 +30,6 @@ plan presentation
   line (-width * 0.3, depth - 0.04) to (width * 0.3, depth - 0.04) pen thin
 
 outputs
+  generator = "props:letter_box"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

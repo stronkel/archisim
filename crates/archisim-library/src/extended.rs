@@ -545,6 +545,7 @@ pub const OTHERS: &[Other] = &[
         "Farola clásica 3,5 m",
         "Farola",
         &[
+            V::T("model3d", "Fernandina"),
             V::N("height", 3.5),
             V::N("arm", 0.0),
             V::N("pole", 0.14),
@@ -573,6 +574,7 @@ pub const OTHERS: &[Other] = &[
         "Baliza de suelo",
         "Farola",
         &[
+            V::T("model3d", "Baliza"),
             V::N("height", 0.6),
             V::N("arm", 0.0),
             V::N("pole", 0.18),
@@ -592,6 +594,7 @@ pub const OTHERS: &[Other] = &[
         "Banco de hormigón 2,4 m",
         "Banco",
         &[
+            V::T("model3d", "Hormigón y madera"),
             V::N("width", 2.4),
             V::N("depth", 0.6),
             V::M("mat", "Hormigón prefabricado", [196, 192, 184]),
@@ -605,12 +608,16 @@ pub const OTHERS: &[Other] = &[
     other(
         "Papelera de madera",
         "Papelera",
-        &[V::M("mat", "Madera tratada", [150, 110, 72])],
+        &[
+            V::T("model3d", "Listones de madera"),
+            V::M("mat", "Madera tratada", [150, 110, 72]),
+        ],
     ),
     other(
         "Bolardo de hormigón",
         "Bolardo",
         &[
+            V::T("model3d", "Hormigón"),
             V::N("width", 0.35),
             V::N("height", 0.5),
             V::M("mat", "Hormigón prefabricado", [196, 192, 184]),
@@ -639,6 +646,7 @@ pub const OTHERS: &[Other] = &[
         "Contenedor verde vidrio",
         "Contenedor de residuos",
         &[
+            V::T("model3d", "Iglú de vidrio"),
             V::N("width", 1.2),
             V::N("depth", 1.2),
             V::N("height", 1.6),

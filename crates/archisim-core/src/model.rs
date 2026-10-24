@@ -38,6 +38,7 @@ mod roofs;
 mod sections;
 mod services;
 mod site;
+mod stair_layout;
 mod stairs;
 mod structure;
 mod sun;
@@ -66,6 +67,7 @@ pub use roofs::*;
 pub use sections::*;
 pub use services::*;
 pub use site::*;
+pub use stair_layout::*;
 pub use stairs::*;
 pub use structure::*;
 pub use sun::*;
@@ -2714,6 +2716,19 @@ impl Model {
             })
         })?;
         self.add_family(&source)
+    }
+
+    /// The type values after a stretch by the handles: the family's
+    /// `stretch` parameters (a sofa's seats, a table's chairs…) follow the
+    /// new measurement in `values`. A family without them, or whose
+    /// formulas fail, leaves the values as they are.
+    pub fn follow_stretch(&self, family: FamilyId, values: &mut Values) {
+        let Some(f) = self.families.get(&family) else {
+            return;
+        };
+        if let Ok(changed) = f.def().evaluate_stretch(values) {
+            values.extend(changed);
+        }
     }
 
     /// Default values of one scope of a family, with material names turned

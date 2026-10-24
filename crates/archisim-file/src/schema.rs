@@ -563,6 +563,98 @@ pub(crate) struct Stair {
     pub usage: StairUse,
     #[serde(default = "both", skip_serializing_if = "is_both")]
     pub railings: Railings,
+    /// Form and build (version 33); a stair without it is one of flights
+    /// and landings on a concrete slab, as all older ones are.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<StairDesign>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum StairForm {
+    Landings,
+    Winders,
+    Spiral,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum StairStructure {
+    Slab,
+    Stringers,
+    Spine,
+    Cantilever,
+    Newel,
+}
+
+/// The form and build of a stair (version 33).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StairDesign {
+    pub form: StairForm,
+    /// Spiral: angle turned, radians, counter-clockwise if positive.
+    #[serde(default)]
+    pub sweep: f64,
+    /// Spiral: radius of the newel or eye.
+    pub core: f64,
+    pub structure: StairStructure,
+    pub closed_risers: bool,
+    pub tread: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tread_material: Option<u64>,
+    /// Width and depth of the stringers.
+    pub stringer: [f64; 2],
+}
+
+impl StairDesign {
+    fn of(d: &core::StairDesign) -> Option<StairDesign> {
+        (*d != core::StairDesign::default()).then(|| StairDesign {
+            form: match d.form {
+                core::StairForm::Landings => StairForm::Landings,
+                core::StairForm::Winders => StairForm::Winders,
+                core::StairForm::Spiral => StairForm::Spiral,
+            },
+            sweep: d.sweep,
+            core: d.core,
+            structure: match d.structure {
+                core::StairStructure::Slab => StairStructure::Slab,
+                core::StairStructure::Stringers => StairStructure::Stringers,
+                core::StairStructure::Spine => StairStructure::Spine,
+                core::StairStructure::Cantilever => StairStructure::Cantilever,
+                core::StairStructure::Newel => StairStructure::Newel,
+            },
+            closed_risers: d.closed_risers,
+            tread: d.tread,
+            tread_material: d.tread_material.map(|m| m.0),
+            stringer: d.stringer,
+        })
+    }
+
+    fn into_core(d: Option<&StairDesign>) -> core::StairDesign {
+        let Some(d) = d else {
+            return core::StairDesign::default();
+        };
+        core::StairDesign {
+            form: match d.form {
+                StairForm::Landings => core::StairForm::Landings,
+                StairForm::Winders => core::StairForm::Winders,
+                StairForm::Spiral => core::StairForm::Spiral,
+            },
+            sweep: d.sweep,
+            core: d.core,
+            structure: match d.structure {
+                StairStructure::Slab => core::StairStructure::Slab,
+                StairStructure::Stringers => core::StairStructure::Stringers,
+                StairStructure::Spine => core::StairStructure::Spine,
+                StairStructure::Cantilever => core::StairStructure::Cantilever,
+                StairStructure::Newel => core::StairStructure::Newel,
+            },
+            closed_risers: d.closed_risers,
+            tread: d.tread,
+            tread_material: d.tread_material.map(core::MaterialId),
+            stringer: d.stringer,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2833,6 +2925,7 @@ impl ProjectFile {
                         core::Railings::Right => Railings::Right,
                         core::Railings::Both => Railings::Both,
                     },
+                    design: StairDesign::of(&s.design),
                 })
                 .collect(),
             draw_layers: crate::drafting::layers_out(&p.draw_layers),
@@ -3227,6 +3320,7 @@ impl ProjectFile {
                             Railings::Right => core::Railings::Right,
                             Railings::Both => core::Railings::Both,
                         },
+                        design: StairDesign::into_core(s.design.as_ref()),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,

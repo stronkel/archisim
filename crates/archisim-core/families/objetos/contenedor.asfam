@@ -1,7 +1,7 @@
 family "Contenedor de residuos"
   category street
   host none
-  version 1
+  version 2
   description "Contenedor de residuos con tapa; el punto de inserción es el centro de la trasera y la tapa abre hacia delante"
   folder "Mobiliario urbano"
 
@@ -12,6 +12,10 @@ type_params
     height length = 1.30 range 0.80..2.00 label "Altura"
   section "Materiales"
     mat material = "Plástico verde" label "Contenedor"
+  section "Modelo 3D"
+    model3d choice("Carga lateral", "Iglú de vidrio", "Soterrado") = "Carga lateral" label "Modelo 3D"
+    frame material = "Metal lacado" label "Pedal y losa"
+    dark  material = "Negro mate" label "Ruedas y bocas"
 
 body
   box (-width / 2, 0, 0.1) to (width / 2, depth, height) material mat
@@ -25,5 +29,6 @@ plan presentation
   line (-width / 2, depth * 0.35) to (width / 2, depth * 0.35) pen thin
 
 outputs
+  generator = "props:container"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"
