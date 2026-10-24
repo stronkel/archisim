@@ -235,7 +235,7 @@ Orden propuesto, **pendiente de que Antonio lo confirme**:
 | C7 | **Deudas** | Escaleras: mesetas partidas a 45°, meseta de llegada de las de caracol. Buhardillas sobre limahoyas que pasan por un encuentro | S | — |
 
 Pendiente de Antonio, fuera de la tabla:
-- **#54 (remates v0.48)**: rehacerlo sobre la 0.56 o cerrarlo.
+- **#54 (remates v0.48)**: Antonio pidió rehacerlo sobre la 0.56 (24/10/2026): **en curso, rama `bloque/remates-2` (v0.57)**. Toca texturas ligeras, puertas y ventanas en muros curvos, instalaciones (pendientes, codos y tes, radiadores, HS 4 y HS 5), presupuesto con descomposición y holguras de interferencias; las buhardillas se quedan las de la 0.53.
 - Decisiones **D4** (nombre), **D5** (normas de dibujo), **D7** (IFC reales de prueba), **D8–D12** (disciplinas y mediciones); **catálogo real de AD5** (2.2) y **reglas del CTE** que quiera añadir.
 
 ## Propuesta de orden
