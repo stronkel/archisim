@@ -340,6 +340,11 @@ impl View3dState {
         (self.scene.lo, self.scene.hi)
     }
 
+    /// The box around each element of the project in the scene.
+    pub fn element_bounds(&self) -> std::collections::BTreeMap<Element, (glam::Vec3, glam::Vec3)> {
+        self.scene.element_bounds()
+    }
+
     /// The box around some elements, if they have any 3D.
     pub fn bounds_of(&self, elements: &BTreeSet<Element>) -> Option<(glam::Vec3, glam::Vec3)> {
         self.scene.bounds_of(elements)
@@ -464,12 +469,13 @@ impl View3dState {
             self.camera
                 .fit(self.scene.lo, self.scene.hi, size.x / size.y);
         }
+        // Nothing to pick here: either button turns it, the wheel moves it.
         let delta = response.drag_delta();
-        if response.dragged_by(PointerButton::Primary) {
-            self.camera.orbit(glam::Vec2::new(delta.x, delta.y));
-        } else if response.dragged_by(PointerButton::Middle)
+        if response.dragged_by(PointerButton::Primary)
             || response.dragged_by(PointerButton::Secondary)
         {
+            self.camera.orbit(glam::Vec2::new(delta.x, delta.y));
+        } else if response.dragged_by(PointerButton::Middle) {
             self.camera.pan(glam::Vec2::new(delta.x, delta.y), size.y);
         }
         if response.double_clicked() {
@@ -622,16 +628,15 @@ impl ArchiSimApp {
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect);
         let v = &mut self.v3d;
 
-        // Navigation.
+        // Navigation: the right button held turns the view (with Shift,
+        // the wheel pressed too), the wheel pressed moves it.
         let shift = ctx.input(|i| i.modifiers.shift);
         let dragging_box = v.section_drag.is_some() || grabbing_object;
-        if (response.dragged_by(PointerButton::Primary) && !dragging_box)
+        if response.dragged_by(PointerButton::Secondary)
             || (shift && response.dragged_by(PointerButton::Middle))
         {
             v.camera.orbit(delta);
-        } else if response.dragged_by(PointerButton::Middle)
-            || response.dragged_by(PointerButton::Secondary)
-        {
+        } else if response.dragged_by(PointerButton::Middle) {
             v.camera.pan(delta, size.y);
         }
         if response.double_clicked_by(PointerButton::Middle) {
@@ -650,6 +655,14 @@ impl ArchiSimApp {
             }
         }
 
+        // The left button picks and moves: a drag moves what is selected
+        // or opens a selection window.
+        if !dragging_box && !self.tool_in_3d() {
+            self.left_drag_3d(&ctx, &response, rect);
+        } else {
+            self.drag3d = None;
+        }
+
         // A tool in use draws and places here as in the plan (R14).
         let tool3d = self.tool_in_3d();
         if tool3d {
@@ -658,6 +671,15 @@ impl ArchiSimApp {
             self.cursor3d = None;
         }
 
+        // A right click (not held: that turns the view) opens the menu of
+        // what is under the cursor.
+        if !tool3d && response.clicked_by(PointerButton::Secondary) {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let e = self.element_at_3d(rect, pos).map(|h| h.0);
+                let frame = ctx.cumulative_frame_nr();
+                self.open_context_menu(pos, e, None, frame);
+            }
+        }
         // Selection: a click picks what is under the cursor.
         if !tool3d && response.clicked_by(PointerButton::Primary) {
             if let Some(pos) = response.interact_pointer_pos() {
@@ -754,6 +776,7 @@ impl ArchiSimApp {
         let v = &self.v3d;
         draw_section_box(&painter, rect, v);
         self.draw_object_grips_3d(&painter, rect);
+        self.draw_drag_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);
         if tool3d {
             self.draw_tool_3d(&painter, rect);
@@ -768,7 +791,8 @@ impl ArchiSimApp {
         let on_handle = v.section_hover.is_some()
             || v.section_drag.is_some()
             || self.object_grip_hover.is_some()
-            || self.object_grip.is_some();
+            || self.object_grip.is_some()
+            || self.object_turn.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);
 

@@ -48,7 +48,7 @@ impl Editor {
     /// What the views draw (see [`Shown`]).
     pub fn shown(&self) -> Shown<'_> {
         let model = self.model();
-        if !model.has_modules() {
+        if !model.has_modules() && self.hidden.is_empty() {
             return Shown::Plain(model);
         }
         let mut cache = self.flat.0.borrow_mut();
@@ -64,6 +64,16 @@ impl Editor {
                 Some(format!("{}: {}", e.element, explain(&e.error))),
             ),
         };
+        let mut flat = flat;
+        if !self.hidden.is_empty() {
+            let gone: Vec<_> = self
+                .hidden
+                .iter()
+                .copied()
+                .filter(|e| crate::drag::exists(&flat, *e))
+                .collect();
+            let _ = super::remove_items(&mut flat, &gone);
+        }
         let flat = Rc::new(flat);
         *cache = Some((self.revision(), flat.clone(), problem));
         Shown::Flat(flat)

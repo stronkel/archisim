@@ -6,6 +6,51 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 · v0.49: manejo común, menú del clic derecho y barra del objeto (UI1)
+
+Rama `bloque/manejo`, pull request para Antonio. Sin cambios de formato ni de IFC.
+
+Antonio aprobó el concepto de interfaz (artefacto «ArchiSim · concepto de interfaz», seis tableros) después de pedir sus cambios. Pidió quitar la barra negra de teclas, usar una barra del objeto como la de Paralives, cambiar el ratón (izquierdo elige y mueve, rueda desplaza, derecho mantenido gira, un clic derecho abre un menú), usar flechas y un aro distintos para estirar y girar, y que los objetos crezcan solo hacia donde se estiran. Este es el primer bloque (UI1). Los de después son el catálogo en árbol con la cocina por módulos (UI2) y las fichas y diálogos unificados con el plano de carpinterías (UI3).
+
+**Hecho**
+- **Ratón**, igual en planta y en 3D:
+  - **izquierdo**: un clic selecciona; arrastrar en vacío abre una ventana de selección (de izquierda a derecha, lo que queda dentro; al revés, lo que toca); arrastrar lo seleccionado o un mueble lo **mueve** sobre su plano, con la distancia en una etiqueta;
+  - **rueda pulsada**: desplaza la vista; girar la rueda acerca y aleja;
+  - **derecho mantenido**: gira la vista 3D; en planta, desplaza.
+- **Menú del clic derecho** (un solo clic, sin arrastrar), en planta y en 3D:
+  - sobre un elemento: Propiedades, Cortar, Copiar, Pegar, Duplicar, Ocultar, Aislar, Seleccionar todos los de este tipo (también objetos), Llevar a la planta y Borrar;
+  - en vacío: Pegar, Seleccionar todo y Mostrar todo;
+  - Pegar pone la copia donde se abrió el menú; Cortar no borra nada hasta pegar, y entonces mueve;
+  - Ocultar y Aislar valen para la sesión y no tocan el proyecto ni el IFC;
+  - Ctrl+C, Ctrl+X y Ctrl+V hacen lo mismo, y Esc cierra el menú sin perder la selección.
+- **Tiradores de los objetos**:
+  - **flechas azules** en los lados derecho e izquierdo y en el frente (en 3D, también arriba); el objeto **crece solo hacia la flecha** y el lado contrario se queda donde estaba (se marca con un punto blanco); con **Alt**, crece por los dos lados;
+  - **punto naranja** sobre un arco, delante del objeto, para girarlo a mano: de 15 en 15°, y de grado en grado si el cursor se aleja; mientras se gira, el anillo se ve entero;
+  - en 3D, las flechas quedan un poco fuera del objeto, para que un mueble pequeño se pueda coger por su cuerpo y no por un tirador.
+- **Sin el cartel negro de teclas** sobre el dibujo. Lo que hace el clic con la herramienta en uso aparece en gris al final de la barra de arriba; el resto, al dejar el cursor encima.
+- **Barra del objeto** en la Maqueta, en lugar de la tarjeta flotante:
+  - abajo a la izquierda, con su dibujo y su nombre en una etiqueta amarilla;
+  - Girar, Invertir (puertas, ventanas y muros), Duplicar, Igualar y Borrar;
+  - **sus materiales** como muestras redondas, que abren los colores del proyecto: cambian solo ese objeto (si su tipo lo comparten otros, se le hace uno propio);
+  - Más….
+- **Puertas y ventanas en alzado** en las tarjetas del catálogo de la Maqueta y en la barra del objeto; las tarjetas son algo más grandes, con el nombre entero en dos líneas.
+- Pruebas nuevas: el menú del clic derecho en planta (Ocultar, Aislar, Copiar y Pegar, Cortar y Pegar), los materiales de la barra, la vista 3D con el botón derecho (gira sin mover nada, un clic abre el menú, el izquierdo arrastrando mueve) y el estirado por un solo lado y con Alt en planta y en 3D.
+- Revisado en la ventana real (Xvfb): el menú en planta y en 3D, girar con el derecho, las flechas y el arco en planta, la barra del coche con sus muestras y el catálogo de ventanas en alzado.
+
+**Pendiente**
+- UI2: el catálogo en árbol (grupo → categoría con iconos → tipo) y la cocina por módulos (encimera que se une, cajones, tiradores, fregadero, placa, muebles altos, campanas y estilos).
+- UI3: fichas y diálogos unificados (que nada aparezca en una esquina, como «Plantas») y el plano de carpinterías con alzados.
+- Mover en 3D se hace sobre el plano del punto que se coge; todavía no se pega a las paredes ni muestra cotas temporales como en planta.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`out/demo.archisim`). En planta, haz clic derecho sobre un muro: debe salir el menú. Prueba Ocultar y después, con clic derecho en vacío, Mostrar todo. Prueba Copiar y luego clic derecho en otro sitio → Pegar.
+2. Pulsa F3. Mantén el botón derecho y arrastra: la vista gira y no se mueve nada. Con la rueda pulsada, desplaza. Selecciona el coche con el izquierdo y arrástralo: se mueve por el suelo. En vacío, arrastra para hacer una ventana de selección (de izquierda a derecha y al revés).
+3. Con el coche seleccionado, en planta o en 3D, estira una flecha azul: debe crecer solo hacia ese lado. Repítelo con Alt pulsado: crece por los dos. Coge el punto naranja y gíralo.
+4. Entra en la Maqueta. Selecciona el coche o un mueble: abajo a la izquierda sale su barra. Cambia el color de la carrocería con su muestra redonda. Mira el catálogo Construir → Ventanas: deben verse en alzado.
+5. Dime si el menú tiene lo que usas y si la barra del objeto te deja hacer sin teclado lo que hacías con teclas.
+
+---
+
 ## 2026-10-23 · v0.48: entorno Maqueta y cubiertas (buhardillas, tejas y canalones)
 
 Rama `bloque/maqueta`, pull request para Antonio. Formato `.archisim` versión 32 (abre todas las anteriores). Diseño en `docs/MAQUETA.md`, hoja de ruta §8.

@@ -317,6 +317,29 @@ impl Scene {
         self.opaque.is_empty() && self.glass.is_empty()
     }
 
+    /// The box around the triangles of each element of the project.
+    pub fn element_bounds(&self) -> std::collections::BTreeMap<Element, (Vec3, Vec3)> {
+        let tris = self
+            .opaque
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .chain(self.glass.as_chunks::<3>().0);
+        let mut out = std::collections::BTreeMap::new();
+        for (i, t) in tris.enumerate() {
+            let Owner::Model(e) = self.owners[i] else {
+                continue;
+            };
+            for v in t {
+                let p = Vec3::from_array(v.pos);
+                out.entry(e)
+                    .and_modify(|b: &mut (Vec3, Vec3)| *b = (b.0.min(p), b.1.max(p)))
+                    .or_insert((p, p));
+            }
+        }
+        out
+    }
+
     /// The box around the triangles of some elements.
     pub fn bounds_of(&self, elements: &BTreeSet<Element>) -> Option<(Vec3, Vec3)> {
         let tris = self

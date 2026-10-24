@@ -119,6 +119,9 @@ pub struct Editor {
     /// The level shown in the plan and where new elements go.
     pub level: LevelId,
     pub selection: BTreeSet<Element>,
+    /// What is hidden in the views for now (right click → Ocultar or
+    /// Aislar); not saved with the project.
+    hidden: BTreeSet<Element>,
     /// In a shared project, what the person has reserved: edits to
     /// anything else are refused.
     pub team: Option<crate::team::Guard>,
@@ -148,6 +151,7 @@ impl Editor {
             revision: 0,
             geo: Default::default(),
             flat: Default::default(),
+            hidden: BTreeSet::new(),
             level,
             selection: BTreeSet::new(),
             team: None,
@@ -207,6 +211,30 @@ impl Editor {
 
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// What is hidden in the views for now.
+    pub fn hidden(&self) -> &BTreeSet<Element> {
+        &self.hidden
+    }
+
+    /// Hides elements in the views (not in the project: it is still
+    /// there, exported and measured).
+    pub fn hide(&mut self, items: impl IntoIterator<Item = Element>) {
+        let before = self.hidden.len();
+        self.hidden.extend(items);
+        if self.hidden.len() != before {
+            self.selection.retain(|e| !self.hidden.contains(e));
+            self.revision += 1;
+        }
+    }
+
+    /// Shows again everything hidden.
+    pub fn show_all(&mut self) {
+        if !self.hidden.is_empty() {
+            self.hidden.clear();
+            self.revision += 1;
+        }
     }
 
     /// Whether there are changes since the project was opened or saved.
@@ -625,78 +653,7 @@ impl Editor {
             return Ok(0);
         }
         let n = items.len();
-        self.transact("Borrar", |m| {
-            // Doors and windows first: their wall may be deleted too.
-            for e in &items {
-                if let Element::Opening(id) = e {
-                    if m.opening(*id).is_some() {
-                        m.remove_opening(*id)?;
-                    }
-                }
-            }
-            // Dormers, the last of each roof first (unless the roof goes
-            // too).
-            let mut dormers: Vec<(archisim_core::RoofId, u16)> = items
-                .iter()
-                .filter_map(|e| match e {
-                    Element::Dormer(r, i) if !items.contains(&Element::Roof(*r)) => Some((*r, *i)),
-                    _ => None,
-                })
-                .collect();
-            dormers.sort_by_key(|d| std::cmp::Reverse(d.1));
-            for (r, i) in dormers {
-                m.remove_dormer(r, usize::from(i))?;
-            }
-            for e in &items {
-                match e {
-                    Element::Wall(id) => {
-                        m.remove_wall(*id)?;
-                    }
-                    Element::Slab(id) => {
-                        m.remove_slab(*id)?;
-                    }
-                    Element::Dimension(id) => {
-                        m.remove_dimension(*id)?;
-                    }
-                    Element::Mark(id) => {
-                        m.remove_elevation_mark(*id)?;
-                    }
-                    e @ (Element::Column(_)
-                    | Element::Beam(_)
-                    | Element::Section(_)
-                    | Element::Roof(_)
-                    | Element::Stair(_)
-                    | Element::Terrain(_)
-                    | Element::CurtainWall(_)
-                    | Element::Railing(_)
-                    | Element::Object(_)
-                    | Element::Footing(_)
-                    | Element::Grid(_)
-                    | Element::RefPlane(_)
-                    | Element::Module(_)
-                    | Element::Mass(_)
-                    | Element::Plot(_)
-                    | Element::Road(_)
-                    | Element::Planting(_)
-                    | Element::Run(_)
-                    | Element::Edge(_)
-                    | Element::Device(_)) => remove_element(m, *e)?,
-                    Element::Draft(id) => {
-                        m.remove_draft(*id)?;
-                    }
-                    Element::Room(id) => {
-                        m.remove_room(*id)?;
-                    }
-                    Element::Tag(id) => {
-                        if m.tag(*id).is_some() {
-                            m.remove_tag(*id)?;
-                        }
-                    }
-                    Element::Opening(_) | Element::Dormer(..) => {}
-                }
-            }
-            Ok(())
-        })?;
+        self.transact("Borrar", |m| remove_items(m, &items))?;
         self.selection.clear();
         Ok(n)
     }
@@ -1481,6 +1438,81 @@ pub fn default_tag_point(m: &Model, target: archisim_core::TagTarget) -> Option<
         }
         archisim_core::TagTarget::Room(r) => m.room(r).map(|r| r.label - Point2::new(0.0, 0.6)),
     }
+}
+
+/// Takes elements out of a model: doors and windows first (their wall may
+/// go too), then dormers, then the rest.
+pub(crate) fn remove_items(m: &mut Model, items: &[Element]) -> Result<(), ModelError> {
+    // Doors and windows first: their wall may be deleted too.
+    for e in items {
+        if let Element::Opening(id) = e {
+            if m.opening(*id).is_some() {
+                m.remove_opening(*id)?;
+            }
+        }
+    }
+    // Dormers, the last of each roof first (unless the roof goes
+    // too).
+    let mut dormers: Vec<(archisim_core::RoofId, u16)> = items
+        .iter()
+        .filter_map(|e| match e {
+            Element::Dormer(r, i) if !items.contains(&Element::Roof(*r)) => Some((*r, *i)),
+            _ => None,
+        })
+        .collect();
+    dormers.sort_by_key(|d| std::cmp::Reverse(d.1));
+    for (r, i) in dormers {
+        m.remove_dormer(r, usize::from(i))?;
+    }
+    for e in items {
+        match e {
+            Element::Wall(id) => {
+                m.remove_wall(*id)?;
+            }
+            Element::Slab(id) => {
+                m.remove_slab(*id)?;
+            }
+            Element::Dimension(id) => {
+                m.remove_dimension(*id)?;
+            }
+            Element::Mark(id) => {
+                m.remove_elevation_mark(*id)?;
+            }
+            e @ (Element::Column(_)
+            | Element::Beam(_)
+            | Element::Section(_)
+            | Element::Roof(_)
+            | Element::Stair(_)
+            | Element::Terrain(_)
+            | Element::CurtainWall(_)
+            | Element::Railing(_)
+            | Element::Object(_)
+            | Element::Footing(_)
+            | Element::Grid(_)
+            | Element::RefPlane(_)
+            | Element::Module(_)
+            | Element::Mass(_)
+            | Element::Plot(_)
+            | Element::Road(_)
+            | Element::Planting(_)
+            | Element::Run(_)
+            | Element::Edge(_)
+            | Element::Device(_)) => remove_element(m, *e)?,
+            Element::Draft(id) => {
+                m.remove_draft(*id)?;
+            }
+            Element::Room(id) => {
+                m.remove_room(*id)?;
+            }
+            Element::Tag(id) => {
+                if m.tag(*id).is_some() {
+                    m.remove_tag(*id)?;
+                }
+            }
+            Element::Opening(_) | Element::Dormer(..) => {}
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

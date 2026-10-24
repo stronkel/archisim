@@ -168,7 +168,7 @@ pub const MISSIONS: &[Mission] = &[
                 |o, _| o.view == ViewKind::ThreeD,
             ),
             step(
-                "Arrastra para girar y usa la rueda para acercarte. Vuelve después a la planta con su pestaña, arriba.",
+                "Mantén el botón derecho y arrastra para girar; la rueda acerca y, pulsada, desplaza. Vuelve después a la planta con su pestaña, arriba.",
                 "tab:plan",
                 |o, _| o.view == ViewKind::Plan,
             ),

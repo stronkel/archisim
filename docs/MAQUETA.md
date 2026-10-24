@@ -115,6 +115,19 @@ Propiedades de la cubierta → **Cubrición**:
 
 Pendiente de MQ1: «solo los muros de delante recortados», miniaturas en 3D, arrastrar objetos por el suelo en 3D sin herramienta, que la habitación sea un solo paso de Deshacer (hoy son tres: muros, suelo y local).
 
+## 6 bis. Manejo común y barra del objeto (v0.49, rama `bloque/manejo`)
+
+Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), la primera vuelta:
+
+- **Ratón, igual en planta y en 3D**: el botón izquierdo selecciona (clic), abre una ventana de selección arrastrando en vacío (de izquierda a derecha, lo que queda dentro; de derecha a izquierda, lo que toca) y **mueve** arrastrando lo seleccionado o un mueble; la rueda pulsada desplaza la vista y girarla acerca y aleja; el **botón derecho mantenido gira** la vista 3D (en planta, desplaza). Así, girar la vista ya no mueve nada sin querer.
+- **Menú del clic derecho** (un solo clic, sin arrastrar) sobre un elemento: Propiedades, Cortar, Copiar, Pegar, Duplicar, Ocultar, Aislar, Seleccionar todos los de este tipo, Llevar a la planta y Borrar; en vacío: Pegar, Seleccionar todo y Mostrar todo. Ocultar y Aislar son de la sesión (no se guardan ni cambian el IFC). Cortar no borra nada: Pegar lo mueve donde se abrió el menú. Ctrl+C, Ctrl+X y Ctrl+V hacen lo mismo.
+- **Tiradores con forma propia**: flecha azul para estirar, en la dirección en que crece; **crece solo hacia la flecha** y el lado opuesto se queda donde estaba (punto blanco mientras se estira); con **Alt**, por los dos lados. **Punto naranja** delante del objeto, sobre su anillo, para girarlo a mano: de 15 en 15°, y de grado en grado lejos del objeto. En 3D, las flechas están un poco fuera del objeto, para que un mueble pequeño se pueda coger por su cuerpo.
+- **Sin el cartel de teclas sobre el dibujo**: lo que hace el clic con la herramienta en uso está en gris al final de la barra de arriba (el resto, al dejar el cursor encima).
+- **Barra del objeto** en la Maqueta, en lugar de la tarjeta flotante: abajo a la izquierda, sobre el catálogo, su dibujo y su nombre; Girar, Invertir (puertas, ventanas y muros), Duplicar, Igualar (cuentagotas), Borrar; **sus materiales** como muestras redondas que abren los colores del proyecto (solo cambian ese objeto: si su tipo lo comparten otros, se le hace uno propio); Más…
+- **Puertas y ventanas en alzado** en las tarjetas del catálogo y en la barra del objeto, con el nombre entero en dos líneas.
+
+Pendiente del concepto: catálogo en árbol (grupo → categoría con iconos → tipo), módulos de cocina con encimera continua y sus estilos, fichas y diálogos unificados (sin ventanas que aparecen en una esquina), y el plano de carpinterías.
+
 ## 7. Bloques
 
 | Bloque | Contenido |
@@ -126,3 +139,6 @@ Pendiente de MQ1: «solo los muros de delante recortados», miniaturas en 3D, ar
 | **MQ2** | Muebles modulares que se unen solos (encimeras, estanterías, bancos corridos), rueda de color por pieza |
 | **MQ3** | Pinceles de Exterior: subir, bajar, alisar y aplanar terreno; pintar césped o grava; esparcir plantas; caminos con una curva arrastrable |
 | **MQ4** | Flechas y aros sobre los volúmenes de Concepto para empujar, girar y escalar |
+| **UI1** | Manejo común: ratón, menú del clic derecho, tiradores en flecha y anillo, estirar por un lado, barra del objeto (§6 bis) |
+| **UI2** | Catálogo en árbol y módulos de cocina con encimera continua y estilos |
+| **UI3** | Fichas, diálogos y avisos unificados; plano de carpinterías con alzados |
