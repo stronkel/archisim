@@ -143,6 +143,7 @@ impl ArchiSimApp {
         let mut rename_view: Option<(archisim_core::PlanViewId, String)> = None;
         let mut open = None;
         let mut levels_dialog = false;
+        let mut new_level_at: Option<egui::Rect> = None;
         let mut make_elevations = false;
         let mut sections: Vec<(archisim_core::SectionId, String, bool)> = self
             .ed
@@ -245,6 +246,18 @@ impl ArchiSimApp {
                     });
                 }
             }
+            // A new level, in a bubble beside this button.
+            let r = ui.add(
+                egui::Button::new(
+                    egui::RichText::new("+ Añadir planta")
+                        .color(super::theme::Palette::current(ui.ctx()).accent),
+                )
+                .frame(false),
+            );
+            super::missions_ui::mark(ui.ctx(), "button:Añadir planta", r.rect);
+            if r.clicked() {
+                new_level_at = Some(r.rect);
+            }
             sub_header(ui, "3D", None);
             let r = super::widgets::list_row_draggable(
                 ui,
@@ -302,6 +315,9 @@ impl ArchiSimApp {
         });
         if levels_dialog {
             self.show_levels = true;
+        }
+        if let Some(at) = new_level_at {
+            self.open_new_level(at);
         }
         if let Some(id) = open_saved {
             self.open_saved_view(id);

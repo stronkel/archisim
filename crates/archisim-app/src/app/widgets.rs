@@ -259,45 +259,6 @@ fn list_row_with(
     resp
 }
 
-/// The message of the last action, as a card in the corner of `area`.
-pub fn toast(painter: &egui::Painter, area: Rect, text: &str, error: bool, alpha: f32, p: Palette) {
-    if alpha <= 0.0 || area.width() < 160.0 {
-        return;
-    }
-    let font = FontId::proportional(12.5);
-    let max = (area.width() - 60.0).min(560.0);
-    let job = egui::text::LayoutJob {
-        wrap: egui::text::TextWrapping {
-            max_width: max,
-            max_rows: 3,
-            ..Default::default()
-        },
-        ..egui::text::LayoutJob::single_section(
-            text.to_owned(),
-            egui::TextFormat::simple(font, p.text.gamma_multiply(alpha)),
-        )
-    };
-    let g = painter.layout_job(job);
-    let r = Rect::from_min_size(
-        area.left_top() + Vec2::new(14.0, 14.0),
-        g.size() + Vec2::new(38.0, 16.0),
-    );
-    painter.rect(
-        r,
-        CornerRadius::same(9),
-        p.panel.gamma_multiply(alpha),
-        Stroke::new(1.0, p.line.gamma_multiply(alpha)),
-        StrokeKind::Inside,
-    );
-    let dot = if error { p.bad } else { p.good };
-    painter.circle_filled(
-        Pos2::new(r.left() + 15.0, r.top() + 16.5),
-        4.0,
-        dot.gamma_multiply(alpha),
-    );
-    painter.galley(Pos2::new(r.left() + 28.0, r.top() + 8.0), g, p.text);
-}
-
 thread_local! {
     /// Where the last click was, and the size of the window: where a
     /// dialog opened by it appears.
@@ -341,4 +302,64 @@ pub fn dialog<'a>(title: impl Into<egui::WidgetText>) -> egui::Window<'a> {
         .pivot(pivot)
         .default_pos(Pos2::new(at.x + gap, at.y))
         .constrain(true)
+}
+
+/// A side panel (concepto de interfaz del 24/10/2026): the managers —
+/// Plantas, Capas, Estilos, Parámetros, Biblioteca — come in from the
+/// right over the navigator, as tall as the window between its bars, and
+/// do not cover the drawing more than they need. They slide in (0,15 s)
+/// so it is seen where they come from.
+pub fn side_sheet<'a>(ctx: &egui::Context, title: &str, width: f32) -> egui::Window<'a> {
+    let screen = ctx.content_rect();
+    let frame = ctx.cumulative_frame_nr();
+    let now = ctx.input(|i| i.time);
+    let id = egui::Id::unique(("side-sheet", title.to_string()));
+    // When it was opened: it was not drawn the frame before.
+    let (last, start) = ctx
+        .data(|d| d.get_temp::<(u64, f64)>(id))
+        .unwrap_or((0, now));
+    let start = if last + 1 >= frame { start } else { now };
+    ctx.data_mut(|d| d.insert_temp(id, (frame, start)));
+    let t = ((now - start) / 0.15).clamp(0.0, 1.0) as f32;
+    if t < 1.0 {
+        ctx.request_repaint();
+    }
+    let w = width.min(screen.width() - 40.0);
+    let slide = (1.0 - t) * (w + 20.0);
+    let (top, bottom) = (62.0, 52.0);
+    let h = (screen.height() - top - bottom - 30.0).max(200.0);
+    egui::Window::new(title.to_string())
+        .id(id)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-10.0 + slide, top))
+        // Wide enough for what it holds, never off the screen; as tall as
+        // the space between the bars, scrolling.
+        .min_width(w)
+        .max_width((screen.width() - 40.0).max(w))
+        .min_height(h)
+        .max_height(h)
+        .vscroll(true)
+}
+
+/// A dialog only for deciding (purge, a conflict, an import): in the
+/// middle, the window behind dimmed; it does not close until something is
+/// chosen.
+pub fn decision<'a>(ctx: &egui::Context, title: &str) -> egui::Window<'a> {
+    let screen = ctx.content_rect();
+    ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Middle,
+        egui::Id::unique("decision-dim"),
+    ))
+    .rect_filled(
+        screen,
+        CornerRadius::ZERO,
+        egui::Color32::from_black_alpha(70),
+    );
+    egui::Window::new(title.to_string())
+        .collapsible(false)
+        .resizable(false)
+        .order(egui::Order::Foreground)
+        .pivot(Align2::CENTER_CENTER)
+        .default_pos(screen.center())
 }

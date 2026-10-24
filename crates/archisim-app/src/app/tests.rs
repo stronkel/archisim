@@ -2328,7 +2328,7 @@ fn inclined_slab_with_its_arrow() {
     h.app.ed.selection = [Element::Slab(slab.id)].into_iter().collect();
     h.frame();
     let to = a.to;
-    let north = Point2::new(a.from.x, a.from.y + 4.0);
+    let north = Point2::new(a.from.x, a.from.y + 3.0);
     h.drag(to, north);
     let turned = h.model().slab(slab.id).unwrap().slope.unwrap();
     assert!(

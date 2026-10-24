@@ -214,6 +214,7 @@ Al probar inserciones pidió además buhardillas que se adapten a la cubierta (n
 | UI1 | Concepto de interfaz del 24/10/2026, primera vuelta: ratón (izquierdo elige y mueve, rueda desplaza, derecho mantenido gira), menú del clic derecho, flechas y anillo, estirar por un solo lado, barra del objeto con materiales, ventanas en alzado en el catálogo, sin cartel de teclas | ✅ v0.54 (`bloque/manejo`, unida a la 0.53) |
 | UI2 | Catálogo en árbol (grupo → tema → clase); cocina por módulos: bajos que juntan su encimera (cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero, esquina), columnas, altos y campanas; frentes liso, con marco, ranurado y con cristal; cajones, tirador y frente en la barra, para un módulo o toda la fila | ✅ v0.55 (`bloque/cocina`) |
 | UI3 | Diálogos junto al botón que los abre (nada aparece en una esquina sobre las herramientas) y con la misma forma; plano de carpinterías en A3 con alzados, secciones y datos (Archivo → Plano de carpinterías) | ✅ v0.55 (`bloque/cocina`) |
+| UI4 | Interfaz en islas (paneles como tarjetas sobre fondo cálido); paneles laterales para gestionar, burbuja junto al botón para lo corto (Añadir planta con su sección), diálogo central con fondo oscurecido para decidir; avisos abajo con Deshacer; tarjeta de tipo con Planta · Alzado · 3D | ✅ v0.56 (`bloque/islas`) |
 
 ## Propuesta de orden
 

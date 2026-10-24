@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (3) · v0.56: la interfaz en islas, avisos con Deshacer y tres maneras de abrir las cosas (UI4)
+
+Rama `bloque/islas`, sobre la 0.55 (lleva dentro #59), pull request para Antonio. Sin cambios de formato ni de IFC.
+
+Antonio preguntó si se me había olvidado el rediseño de la interfaz del concepto. Se me había quedado a medias: las láminas «Técnica» y «Piezas comunes». Esto es lo que faltaba.
+
+**Hecho**
+- **Ventana en islas**: las fichas, Propiedades, el dibujo y el Navegador son tarjetas con esquinas redondeadas y sombra suave, separadas sobre un fondo cálido; el gris de antes pasa a una paleta crema.
+- **Tres maneras de abrir las cosas**, cada una para lo suyo:
+  - **panel lateral**, que entra deslizándose por la derecha y ocupa todo el alto entre las barras, para lo que se gestiona: Plantas, Capas de dibujo, Estilos de presentación, Parámetros del proyecto y Biblioteca;
+  - **burbuja junto a su botón**, para lo corto: «+ Añadir planta» (en el Navegador, bajo las plantas) pide nombre, altura y si va encima o debajo, dibuja una pequeña sección con la planta nueva y explica qué pasa («Se pone a +3,55. Cubierta sube 3,00 m»);
+  - **diálogo en el centro con el fondo oscurecido**, solo para decidir: el tipo ya está en el proyecto, purgar tipos sin usar, informe de importación.
+- **Avisos abajo en el centro**, con un punto verde o rojo, y **Deshacer** en el mismo aviso cuando lo que se acaba de hacer cambió el modelo.
+- **Tarjeta de tipo de puerta y ventana** con Planta · Alzado · 3D: por defecto en alzado, que es como se reconoce una carpintería.
+- La caja de búsqueda de la barra superior ya no se monta sobre deshacer y rehacer cuando el nombre del fichero es largo.
+
+**Pendiente**
+- Del concepto quedan detalles menores: unificar todos los interruptores y botones con el mismo dibujo, y las opciones de colocación de huecos «Por el centro / Desde un extremo / Repartidas».
+- La lista anterior sigue esperando el orden de Antonio: exportar `.glb`, render con texturas y de noche, pinceles de exterior, segunda vuelta de la cocina, detalles de la Maqueta, flechas de Concepto, deudas de escaleras y buhardillas, más láminas de documentación, decisiones D4, D5, D7, D8–D12, el catálogo de AD5 y las reglas del CTE.
+- #54 (remates) espera su decisión: rehacerlo sobre la 0.56 o cerrarlo.
+
+**Qué debe probar Antonio**
+1. Abrir la demo: `cargo run --release -p archisim-app -- out/demo.archisim`. La ventana debe verse en tarjetas separadas sobre fondo crema.
+2. Navegador → Proyecto → «+ Añadir planta»: la burbuja sale junto al botón. Cambiar la altura y «Encima / Debajo» y mirar la sección y la frase de abajo; «Añadir planta» y comprobar en «Plantas…» que las de encima han subido.
+3. Justo después, abajo en el centro, el aviso con **Deshacer**: pulsarlo y ver que la planta desaparece y las demás vuelven a su cota.
+4. «Plantas…», Capas, Biblioteca: entran por la derecha, con todo el alto. Purgar tipos (en Biblioteca): sale en el centro, con el fondo oscurecido.
+5. Seleccionar una ventana: en Propiedades, la tarjeta del tipo con Planta · Alzado · 3D.
+
+---
+
 ## 2026-10-24 (2) · v0.55: cocina por módulos, catálogo en árbol, diálogos y plano de carpinterías (UI2 y UI3)
 
 Rama `bloque/cocina`, pull request para Antonio. Sin cambios de formato (familias nuevas, que los proyectos cargan de la biblioteca al usarlas) ni de IFC (los módulos son `IfcFurniture`).

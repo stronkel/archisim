@@ -515,9 +515,8 @@ impl ArchiSimApp {
         let mut set: Option<DrawLayer> = None;
         let mut remove: Option<DrawLayerId> = None;
         let mut add = false;
-        super::widgets::dialog("Capas de dibujo")
+        super::widgets::side_sheet(ctx, "Capas de dibujo", 620.0)
             .open(&mut open)
-            .default_width(620.0)
             .show(ctx, |ui| {
                 egui::Grid::new("layers-grid")
                     .striped(true)

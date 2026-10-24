@@ -399,6 +399,10 @@ pub struct ArchiSimApp {
     pub show_layers: bool,
     /// The levels dialog is open.
     pub show_levels: bool,
+    /// The bubble «Nueva planta», while open.
+    new_level: Option<levels_ui::NewLevel>,
+    /// How the type card of doors and windows shows them.
+    opening_card_view: properties::CardView,
     /// The intersection priorities window, whether it lists unused
     /// materials too, and the bar being dragged (material, value).
     pub show_priorities: bool,
@@ -569,6 +573,11 @@ pub struct ArchiSimApp {
     message_serial: u64,
     /// The message last aged and when it appeared (seconds).
     message_seen: (u64, f64),
+    /// The revision a message was said at, when it told of a change that
+    /// can be undone (its toast offers «Deshacer»).
+    message_undo: Option<u64>,
+    /// The revision at the last message.
+    said_rev: u64,
     /// Fonts and theme installed in the context.
     styled: bool,
     pub v3d: View3dState,
@@ -697,6 +706,8 @@ impl ArchiSimApp {
             text_draft: None,
             show_layers: false,
             show_levels: false,
+            new_level: None,
+            opening_card_view: Default::default(),
             show_priorities: false,
             curtain_types: Default::default(),
             vivero: Default::default(),
@@ -781,6 +792,8 @@ impl ArchiSimApp {
             side_width: SIDE_WIDTH,
             message_serial: 0,
             message_seen: (0, 0.0),
+            message_undo: None,
+            said_rev: 0,
             styled: false,
             v3d: View3dState::with_look(
                 prefs
@@ -805,6 +818,10 @@ impl ArchiSimApp {
 
     fn say(&mut self, text: impl Into<String>) {
         self.message_serial += 1;
+        // «Deshacer» only for a message that follows a change.
+        let rev = self.ed.revision();
+        self.message_undo = (rev != self.said_rev).then_some(rev);
+        self.said_rev = rev;
         self.message = Some(Message {
             text: text.into(),
             error: false,
@@ -821,6 +838,7 @@ impl ArchiSimApp {
 
     fn complain(&mut self, text: impl Into<String>) {
         self.message_serial += 1;
+        self.said_rev = self.ed.revision();
         self.message = Some(Message {
             text: text.into(),
             error: true,
@@ -1622,6 +1640,8 @@ impl ArchiSimApp {
             self.technical_frame(ui);
         }
         self.context_menu_ui(&ctx);
+        self.toast_area(&ctx);
+        self.new_level_bubble(&ctx);
         self.after_frame(&ctx);
     }
 
@@ -1629,17 +1649,51 @@ impl ArchiSimApp {
     /// Properties on the left, the navigator on the right, tabs of views.
     fn technical_frame(&mut self, ui: &mut Ui) {
         let p = theme::Palette::current(ui.ctx());
-        let bar = |fill| {
+        // Islands (concepto de interfaz del 24/10/2026): white rounded
+        // cards with a soft shadow, a little apart, on warm paper.
+        ui.painter()
+            .rect_filled(ui.max_rect(), egui::CornerRadius::ZERO, p.ground);
+        let gap = 5;
+        let island = |m: egui::Margin| {
             egui::Frame::new()
-                .fill(fill)
-                .inner_margin(egui::Margin::symmetric(10, 3))
+                .fill(p.panel)
+                .corner_radius(egui::CornerRadius::same(14))
                 .stroke(Stroke::new(1.0, p.line))
+                .shadow(egui::epaint::Shadow {
+                    offset: [0, 2],
+                    blur: 10,
+                    spread: 0,
+                    color: Color32::from_black_alpha(14),
+                })
+                .outer_margin(m)
+        };
+        let side = |l: i8, r: i8| egui::Margin {
+            left: l,
+            right: r,
+            top: gap,
+            bottom: gap,
         };
         egui::Panel::top("top-bar")
-            .frame(bar(p.panel))
+            .frame(
+                island(egui::Margin {
+                    left: gap * 2,
+                    right: gap * 2,
+                    top: gap * 2,
+                    bottom: gap,
+                })
+                .inner_margin(egui::Margin::symmetric(10, 3)),
+            )
             .show(ui, |ui| self.top_bar(ui));
         egui::Panel::bottom("bottom-bar")
-            .frame(bar(p.panel))
+            .frame(
+                island(egui::Margin {
+                    left: gap * 2,
+                    right: gap * 2,
+                    top: gap,
+                    bottom: gap * 2,
+                })
+                .inner_margin(egui::Margin::symmetric(10, 3)),
+            )
             .show(ui, |ui| self.bottom_bar(ui));
         // The drawing stays in the middle of the window: the column on the
         // right (navigator) is as wide as the two on the left (disciplines,
@@ -1647,20 +1701,9 @@ impl ArchiSimApp {
         // both sides.
         egui::Panel::left("disciplines")
             .resizable(false)
-            .exact_size(RAIL_WIDTH)
-            .frame(
-                egui::Frame::new()
-                    .fill(p.panel)
-                    .inner_margin(egui::Margin::symmetric(4, 0))
-                    .stroke(Stroke::new(1.0, p.line)),
-            )
+            .exact_size(RAIL_WIDTH + (gap * 3) as f32)
+            .frame(island(side(gap * 2, gap)).inner_margin(egui::Margin::symmetric(4, 6)))
             .show(ui, |ui| self.discipline_rail(ui));
-        let column = || {
-            egui::Frame::new()
-                .fill(p.panel)
-                .inner_margin(egui::Margin::symmetric(10, 0))
-                .stroke(Stroke::new(1.0, p.line))
-        };
         // The tools of the discipline and, below them, Properties, as
         // Revit's palette: choosing a tool and its type is a short move of
         // the mouse.
@@ -1669,18 +1712,25 @@ impl ArchiSimApp {
             .default_size(SIDE_WIDTH - RAIL_WIDTH)
             .min_size(MIN_SIDE_WIDTH - RAIL_WIDTH)
             .max_size(MAX_SIDE_WIDTH - RAIL_WIDTH)
-            .frame(column())
+            .frame(island(side(gap, gap)).inner_margin(egui::Margin::symmetric(10, 6)))
             .show(ui, |ui| self.tool_column(ui));
         self.side_width = RAIL_WIDTH + shown.response.rect.width();
         if self.show_navigator {
-            let panel = egui::Panel::right("navigator").frame(column());
+            let panel = egui::Panel::right("navigator")
+                .frame(island(side(gap, gap * 2)).inner_margin(egui::Margin::symmetric(10, 6)));
             // Mirrors the left side.
             panel
                 .resizable(false)
                 .exact_size(self.side_width)
                 .show(ui, |ui| self.navigator(ui));
         }
-        egui::CentralPanel::no_frame().show(ui, |ui| {
+        let centre = egui::Frame::new()
+            .fill(p.panel)
+            .corner_radius(egui::CornerRadius::same(14))
+            .stroke(Stroke::new(1.0, p.line))
+            .outer_margin(side(gap, gap))
+            .inner_margin(egui::Margin::same(1));
+        egui::CentralPanel::default().frame(centre).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             self.tab_strip(ui);
             if self.mode != ViewMode::Schedule {
@@ -2037,7 +2087,7 @@ impl ArchiSimApp {
         if let Some(text) = &self.import_report {
             let mut open = true;
             let mut close = false;
-            widgets::dialog("Informe de importación")
+            widgets::decision(ctx, "Informe de importación")
                 .open(&mut open)
                 .default_width(520.0)
                 .resizable(true)

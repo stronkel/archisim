@@ -186,10 +186,8 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        super::widgets::dialog("Parámetros del proyecto")
+        super::widgets::side_sheet(ctx, "Parámetros del proyecto", 720.0)
             .open(&mut open)
-            .default_width(720.0)
-            .default_height(520.0)
             .show(ctx, |ui| self.params_contents(ui));
         self.params.open = open;
     }

@@ -18,10 +18,8 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        super::widgets::dialog("Plantas")
+        super::widgets::side_sheet(ctx, "Plantas", 560.0)
             .open(&mut open)
-            .resizable(false)
-            .default_width(560.0)
             .show(ctx, |ui| self.levels_table(ui));
         self.show_levels = open;
     }
@@ -181,5 +179,228 @@ impl ArchiSimApp {
             Some(false) => self.level_to_delete = None,
             None => {}
         }
+    }
+}
+
+/// The bubble «Nueva planta» (concepto de interfaz del 24/10/2026): its
+/// name, the height of the storey, above or below the level shown, and
+/// what will happen to the levels it moves.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewLevel {
+    /// The button it comes from.
+    pub at: egui::Rect,
+    pub name: String,
+    pub height: f64,
+    pub above: bool,
+    /// The frame it opened in (its click does not close it).
+    pub opened: u64,
+}
+
+impl ArchiSimApp {
+    pub(super) fn open_new_level(&mut self, at: egui::Rect) {
+        let n = self.ed.model().levels().len();
+        self.new_level = Some(NewLevel {
+            at,
+            name: format!("Planta {n}"),
+            height: DEFAULT_STOREY_HEIGHT,
+            above: true,
+            opened: 0,
+        });
+    }
+
+    /// Where the new level goes and which levels move, by how much: its
+    /// elevation, the levels pushed (name, from, to).
+    pub(super) fn new_level_plan(&self, d: &NewLevel) -> (f64, Vec<(String, f64, f64)>) {
+        let model = self.ed.model();
+        let mut levels: Vec<(String, f64)> = model
+            .levels()
+            .into_iter()
+            .map(|l| (l.name.clone(), l.elevation))
+            .collect();
+        levels.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let here = model.level(self.ed.level).map_or(0.0, |l| l.elevation);
+        if d.above {
+            let next = levels.iter().map(|l| l.1).find(|e| *e > here + 1e-6);
+            let at = next.unwrap_or(here + d.height);
+            let moved = levels
+                .iter()
+                .filter(|l| l.1 >= at - 1e-6)
+                .map(|l| (l.0.clone(), l.1, l.1 + d.height))
+                .collect();
+            (at, moved)
+        } else {
+            let at = here - d.height;
+            let moved = levels
+                .iter()
+                .filter(|l| l.1 < here - 1e-6)
+                .map(|l| (l.0.clone(), l.1, l.1 - d.height))
+                .collect();
+            (at, moved)
+        }
+    }
+
+    /// The bubble, if open.
+    pub(super) fn new_level_bubble(&mut self, ctx: &egui::Context) {
+        let Some(mut d) = self.new_level.clone() else {
+            return;
+        };
+        let frame = ctx.cumulative_frame_nr();
+        if d.opened == 0 {
+            d.opened = frame;
+        }
+        let p = super::theme::Palette::current(ctx);
+        let (at, moved) = self.new_level_plan(&d);
+        let here = self
+            .ed
+            .model()
+            .level(self.ed.level)
+            .map(|l| l.name.clone())
+            .unwrap_or_default();
+        let mut add = false;
+        let mut cancel = false;
+        let area = egui::Area::new(Id::unique("new-level"))
+            .order(egui::Order::Foreground)
+            .pivot(egui::Align2::RIGHT_TOP)
+            .fixed_pos(egui::pos2(d.at.left() - 10.0, d.at.top() - 40.0))
+            .constrain(true)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style())
+                    .inner_margin(14)
+                    .show(ui, |ui| {
+                        ui.set_width(300.0);
+                        ui.label(
+                            egui::RichText::new("Nueva planta")
+                                .strong()
+                                .size(15.0)
+                                .color(p.text),
+                        );
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("Nombre").small().color(p.muted));
+                        ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(280.0));
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new("Altura de la planta")
+                                .small()
+                                .color(p.muted),
+                        );
+                        if let Some(v) =
+                            super::length_field(ui, Id::unique("new-level-height"), d.height, 120.0)
+                        {
+                            if v > 0.5 {
+                                d.height = v;
+                            }
+                        }
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.selectable_value(&mut d.above, true, format!("Encima de {here}"));
+                            ui.selectable_value(&mut d.above, false, "Debajo");
+                        });
+                        ui.add_space(8.0);
+                        // The levels, as a little section, the new one marked.
+                        let mut rows: Vec<(String, f64, bool)> = self
+                            .ed
+                            .model()
+                            .levels()
+                            .into_iter()
+                            .map(|l| {
+                                let e = moved
+                                    .iter()
+                                    .find(|m| m.0 == l.name && (m.1 - l.elevation).abs() < 1e-9)
+                                    .map_or(l.elevation, |m| m.2);
+                                (l.name.clone(), e, false)
+                            })
+                            .collect();
+                        rows.push((d.name.clone(), at, true));
+                        rows.sort_by(|a, b| b.1.total_cmp(&a.1));
+                        for (name, e, new) in &rows {
+                            ui.horizontal(|ui| {
+                                let (r, _) = ui.allocate_exact_size(
+                                    egui::vec2(60.0, 14.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().line_segment(
+                                    [r.left_center(), r.right_center()],
+                                    egui::Stroke::new(
+                                        if *new { 2.5 } else { 1.2 },
+                                        if *new { p.accent } else { p.muted },
+                                    ),
+                                );
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "{name}  {}",
+                                        super::fmt_level(*e)
+                                    ))
+                                    .size(12.0)
+                                    .color(if *new {
+                                        p.accent
+                                    } else {
+                                        p.text
+                                    }),
+                                );
+                            });
+                        }
+                        ui.add_space(6.0);
+                        let mut note = format!("Se pone a {}.", super::fmt_level(at));
+                        match moved.len() {
+                            0 => {}
+                            1 => note.push_str(&format!(
+                                " «{}» {} {} con todo lo que tiene.",
+                                moved[0].0,
+                                if d.above { "sube" } else { "baja" },
+                                crate::units::fmt_len(d.height)
+                            )),
+                            n => note.push_str(&format!(
+                                " Las {n} plantas de {} {} {} con todo lo que tienen.",
+                                if d.above { "encima" } else { "debajo" },
+                                if d.above { "suben" } else { "bajan" },
+                                crate::units::fmt_len(d.height)
+                            )),
+                        }
+                        ui.label(egui::RichText::new(note).size(12.0).color(p.muted));
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Cancelar").clicked() {
+                                cancel = true;
+                            }
+                            let b = egui::Button::new(
+                                egui::RichText::new("Añadir planta").color(egui::Color32::WHITE),
+                            )
+                            .fill(p.accent);
+                            if ui.add(b).clicked() {
+                                add = true;
+                            }
+                        });
+                    });
+            });
+        let outside = ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|q| !area.response.rect.contains(q))
+        });
+        if cancel
+            || ctx.input(|i| i.key_pressed(egui::Key::Escape))
+            || (outside && frame > d.opened)
+        {
+            self.new_level = None;
+            return;
+        }
+        if add {
+            self.new_level = None;
+            let r = self.ed.insert_level(&d.name, at, d.height, d.above);
+            match r {
+                Ok(_) => {
+                    self.say(format!(
+                        "«{}» añadida a {}.",
+                        d.name.trim(),
+                        super::fmt_level(at)
+                    ));
+                    self.fit_requested = true;
+                }
+                Err(e) => self.complain(format!("No se puede añadir la planta: {e}.")),
+            }
+            return;
+        }
+        self.new_level = Some(d);
     }
 }

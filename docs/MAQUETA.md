@@ -178,6 +178,18 @@ Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), 
 - **Plano de carpinterías** (Archivo → Plano de carpinterías): cada tipo de puerta y ventana del proyecto en alzado a 1:50 con sus medidas, su sección y sus datos (familia, medidas, apertura, carpintería, unidades), seis por hoja A3, en PDF.
 - `archisim cocina out/`: una cocina con columna, cajoneras, fregadero, lavavajillas, horno, placa y botellero, altos y campana, en cuatro filas con cada frente.
 
+
+## 6 sexies. Ventana en islas y maneras de abrir (v0.56, rama `bloque/islas`)
+
+Lo que faltaba de las láminas «Técnica» y «Piezas comunes» del concepto:
+
+- **Islas**: cada panel del entorno Técnica es una tarjeta (radio 14, sombra) separada por 5 px sobre el fondo `Palette::ground`; paleta clara cálida.
+- **Panel lateral** (`widgets::side_sheet`): para lo que se gestiona (Plantas, Capas, Estilos de presentación, Parámetros, Biblioteca). Entra deslizándose en 0,15 s, pegado a la derecha y con todo el alto entre las barras.
+- **Burbuja junto al botón**: para lo corto. «+ Añadir planta» en el Navegador abre `levels_ui::new_level_bubble` con nombre, altura, encima o debajo, una pequeña sección y la consecuencia («Cubierta sube 3,00 m»); lo hace `Editor::insert_level` en un solo paso que se deshace.
+- **Diálogo de decisión** (`widgets::decision`): en el centro con el fondo oscurecido, para lo que pide elegir (tipo repetido, purgar, informe de importación).
+- **Avisos** (`chrome::toast_area`): abajo en el centro, con «Deshacer» solo si el último cambio tocó el modelo.
+- **Tarjeta de tipo** de puertas y ventanas con Planta · Alzado · 3D (`properties::CardView`, alzado por defecto).
+
 ## 7. Bloques
 
 | Bloque | Contenido |
