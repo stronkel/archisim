@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use archisim_core::{Arrangement, Model, NewObject, NewPlanting, Point2};
+use archisim_core::{Arrangement, Model, NewObject, NewPlanting, NewSection, Point2, SectionKind};
 
 /// Room each plant is given in its row: its width and this.
 const GAP: f64 = 1.5;
@@ -16,9 +16,21 @@ pub fn build() -> Result<Model, Box<dyn std::error::Error>> {
     let mut group = "";
     let mut x = 0.0;
     let mut row_depth: f64 = 0.0;
+    // Each row seen from the south, as an elevation of its own.
+    let elevation = |m: &mut Model, group: &str, y: f64, depth: f64, x_end: f64| {
+        m.add_section(NewSection {
+            name: group.to_string(),
+            kind: SectionKind::Elevation,
+            start: Point2::new(-2.0, y - depth - 1.0),
+            end: Point2::new(x_end + 2.0, y - depth - 1.0),
+            depth: depth + 2.0,
+        })
+        .map(|_| ())
+    };
     for e in archisim_library::flora::FLORA_CATALOGUE {
         if e.group != group {
             if !group.is_empty() {
+                elevation(&mut m, group, y, row_depth, x)?;
                 y -= row_depth + GAP * 2.0;
             }
             group = e.group;
@@ -41,6 +53,7 @@ pub fn build() -> Result<Model, Box<dyn std::error::Error>> {
         x += w / 2.0 + GAP;
         row_depth = row_depth.max(w);
     }
+    elevation(&mut m, group, y, row_depth, x)?;
     y -= row_depth + GAP * 3.0 + 8.0;
     // An avenue of plane trees, a little irregular, and a bed of
     // rosemary and lavender.
@@ -128,6 +141,34 @@ pub fn write(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let svg = dir.join("vivero-tecnico.svg");
     std::fs::write(&svg, archisim_plan::render_plan(&t, level, &options))?;
     println!("  Planta 1:200 técnica: {}", svg.display());
+    // Each row seen from the south: technical, and in a presentation
+    // style (colour).
+    let presentation = m.presentation_styles().next().map(|p| p.id);
+    for sec in m.sections() {
+        let drawing = archisim_plan::section::section_drawing(&m, sec);
+        let slug: String = sec
+            .name
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
+        for (suffix, style) in [("tecnico", None), ("color", presentation)] {
+            let mut options = archisim_plan::PlanOptions {
+                scale: 100.0,
+                ..Default::default()
+            };
+            options.style.presentation = style;
+            let svg = dir.join(format!("vivero-alzado-{slug}-{suffix}.svg"));
+            std::fs::write(
+                &svg,
+                archisim_plan::section::render_section(&m, &drawing, &options),
+            )?;
+        }
+        println!(
+            "  Alzado de «{}» 1:100: vivero-alzado-{slug}-….svg",
+            sec.name
+        );
+    }
     Ok(())
 }
 

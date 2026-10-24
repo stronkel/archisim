@@ -1,7 +1,7 @@
 family "Persona"
   category people
   host none
-  version 2
+  version 3
   description "Figura humana de pie, para dar escala; mira hacia delante"
   folder "Personas"
 
@@ -10,6 +10,9 @@ type_params
     height length = 1.75 range 0.80..2.20 label "Estatura"
   section "Materiales"
     mat material = "Figura" label "Figura"
+    mat2 material = "Figura" label "Pantalón y zapatos"
+    skin material = "Figura" label "Piel"
+    hair material = "Figura" label "Pelo"
   section "Modelo 3D"
     model3d choice("Hombre", "Mujer", "Caminando") = "Hombre" label "Modelo 3D"
 

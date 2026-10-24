@@ -36,6 +36,7 @@ mod grow;
 mod mesh;
 mod plan;
 mod rng;
+mod side;
 
 #[cfg(test)]
 mod tests;
@@ -43,6 +44,7 @@ mod tests;
 pub use grow::{Branch, Clump, ClumpKind, Frond, FrondKind, Plant};
 pub use mesh::{FloraMesh, Lod};
 pub use plan::{Look, PlanOptions, PlanStyle, Shape, Stroke, Tone};
+pub use side::SideOptions;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};

@@ -1547,6 +1547,36 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 220] = [
 /// Choices and materials of the library's types that are not the family's
 /// (the cosy ones): by parameter, a yes/no or a material's name.
 const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
+    (
+        "Persona",
+        &[
+            ("mat", T("Pana azul petróleo")),
+            ("mat2", T("Lino arena")),
+            ("skin", T("Piel")),
+            ("hair", T("Pelo castaño")),
+        ],
+    ),
+    (
+        "Mujer",
+        &[
+            ("mat", T("Lana teja")),
+            ("mat2", T("Lana carbón")),
+            ("skin", T("Piel morena")),
+            ("hair", T("Pelo negro")),
+        ],
+    ),
+    (
+        "Niño",
+        &[
+            ("mat", T("Terciopelo mostaza")),
+            ("mat2", T("Vaquero")),
+            ("skin", T("Piel")),
+            ("hair", T("Pelo castaño")),
+        ],
+    ),
+    ("Turismo", &[("body_mat", T("Chapa salvia"))]),
+    ("Todoterreno", &[("body_mat", T("Chapa crema"))]),
+    ("Furgoneta", &[("body_mat", T("Chapa teja"))]),
     ("Bajo con puerta 45", &[("unit", C("Puertas"))]),
     ("Bajo con dos puertas 80", &[("unit", C("Puertas"))]),
     ("Bajo fregadero 80", &[("unit", C("Fregadero"))]),
@@ -2003,6 +2033,15 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Naranja", "other", [236, 140, 40]),
     ("Manzana verde", "other", [150, 190, 70]),
     ("Cera", "other", [246, 240, 226]),
+    // People and cars in the same style (C1).
+    ("Piel", "other", [226, 188, 154]),
+    ("Piel morena", "other", [172, 124, 92]),
+    ("Pelo castaño", "other", [98, 70, 48]),
+    ("Pelo negro", "other", [46, 42, 40]),
+    ("Vaquero", "fabric", [88, 114, 150]),
+    ("Chapa salvia", "metal", [146, 170, 146]),
+    ("Chapa crema", "metal", [232, 220, 194]),
+    ("Chapa teja", "metal", [184, 96, 70]),
     // The collections' (v0.50): Mediterranean…
     ("Lino blanco", "fabric", [242, 238, 228]),
     ("Lino añil", "fabric", [58, 86, 140]),

@@ -2124,7 +2124,7 @@ fn draw_opening(s: &mut String, model: &Model, o: &OpeningGeometry, scale: f64, 
 
 /// The marks of a family's plan symbol, through `world` (family axes to
 /// plan).
-fn draw_marks(
+pub(crate) fn draw_marks(
     s: &mut String,
     model: &Model,
     marks: Vec<Mark>,

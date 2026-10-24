@@ -52,6 +52,9 @@ fn candidates(role: &str) -> &'static [&'static str] {
         "weave" => &["weave", "frame"],
         "mat2" => &["mat2"],
         "flowers" => &["flowers", "leaves"],
+        // People (C1): face and hands, hair.
+        "skin" => &["skin"],
+        "hair" => &["hair"],
         _ => &[],
     }
 }

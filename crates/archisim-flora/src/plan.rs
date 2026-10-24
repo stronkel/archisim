@@ -107,6 +107,9 @@ pub enum Tone {
     Bark,
     Flowers,
     Fruit,
+    /// The paper's white: under a drawing of lines, it hides what is
+    /// behind the plant (seen from the side).
+    Paper,
 }
 
 /// One mark of the drawing, in metres from the foot of the plant.
@@ -335,6 +338,14 @@ impl Plant {
 
     /// The plant drawn in plan.
     pub fn plan(&self, o: &PlanOptions) -> Vec<Shape> {
+        self.draw(o, false)
+    }
+
+    /// The plant drawn in plan (`side` false) or, already turned by
+    /// [`crate::side`] so that its `x` is across the view and its `y` up,
+    /// as seen from the side: the same styles, with the trunks standing up
+    /// from the ground instead of their ring at the foot.
+    pub(crate) fn draw(&self, o: &PlanOptions, side: bool) -> Vec<Shape> {
         let w = (self.radius * 2.0).max(self.species.width * 0.3).max(1e-3);
         let crown_mm = o.crown_mm.max(0.1);
         // Metres per mm of paper.
@@ -354,8 +365,27 @@ impl Plant {
         {
             style = PlanStyle::Outline;
         }
+        if side {
+            // From the side, the rays of the radial style mean nothing; and
+            // a palm (a grass, a rosette) is its fronds whatever the style.
+            if style == PlanStyle::Radial {
+                style = PlanStyle::Foliage;
+            }
+            // The technical circle: from the side, the crown's outline
+            // (an ellipse would not say whether it is a cypress or a pine).
+            if style == PlanStyle::Circle {
+                style = PlanStyle::Outline;
+            }
+            if !self.fronds.is_empty() && style != PlanStyle::Watercolor {
+                style = PlanStyle::Fronds;
+            }
+        }
         if style == PlanStyle::Fronds && self.fronds.is_empty() {
-            style = PlanStyle::Radial;
+            style = if side {
+                PlanStyle::Foliage
+            } else {
+                PlanStyle::Radial
+            };
         }
         // Palms and rosettes have no branches nor clumps to draw.
         if !self.fronds.is_empty()
@@ -538,9 +568,16 @@ impl Plant {
                     ));
                 }
             }
+            PlanStyle::Fronds if side && o.look == Look::Lines => {
+                fills = Vec::new();
+                lines = self.fronds_hiding(crown_mm);
+            }
             PlanStyle::Fronds => {
                 fills = Vec::new();
-                self.frond_marks(&mut lines, &mut fills, crown_mm);
+                // Seen from the side the fronds overlap: only their
+                // outlines (leaflets would make a net of them).
+                let leaflets = if side { f64::INFINITY } else { 25.0 };
+                self.frond_marks(&mut lines, &mut fills, crown_mm, leaflets);
             }
             PlanStyle::Watercolor => {}
         }
@@ -611,8 +648,45 @@ impl Plant {
             }
             self.blossoms(&mut out, mpm, crown_mm);
         }
+        if side
+            && !coloured
+            && !matches!(
+                style,
+                PlanStyle::Branches | PlanStyle::Leaves | PlanStyle::BranchesLeaves
+            )
+        {
+            // Lines only: the plant hides what is behind it (not when
+            // drawn by its branches or loose leaves, with no edge).
+            for f in &fills {
+                out.push(Shape::Fill {
+                    points: f.clone(),
+                    tone: Tone::Paper,
+                    opacity: 1.0,
+                });
+            }
+        }
         if o.look != Look::Colour && style != PlanStyle::Watercolor {
             out.extend(lines);
+        }
+        // Seen from the side, the trunks stand from the ground up to the
+        // crown (the branches' styles drew them already).
+        if side {
+            // (Without lines, the branches' styles drew none of them.)
+            if !matches!(style, PlanStyle::Branches | PlanStyle::BranchesLeaves)
+                || o.look == Look::Colour
+            {
+                let crown = if self.fronds.is_empty() {
+                    silhouette.clone()
+                } else {
+                    Vec::new()
+                };
+                // Under the crown: where it goes into it, the crown hides it.
+                let mut trunks = Vec::new();
+                self.standing_trunks(&mut trunks, &crown, mpm, coloured, o.look);
+                trunks.extend(out);
+                out = trunks;
+            }
+            return out;
         }
         // The trunk, if it shows.
         if !matches!(style, PlanStyle::Watercolor | PlanStyle::Fronds)
@@ -642,6 +716,60 @@ impl Plant {
             }
         }
         out
+    }
+
+    /// The trunks seen from the side, up to where they go into the crown
+    /// (`crown`, empty for palms: their trunk shows to the fronds), as
+    /// tapering outlines; filled with bark when the drawing has colour.
+    fn standing_trunks(
+        &self,
+        out: &mut Vec<Shape>,
+        crown: &[P2],
+        mpm: f64,
+        coloured: bool,
+        look: Look,
+    ) {
+        let r_mean = self.radius.max(1e-3);
+        for b in self.branches.iter().filter(|b| b.level == 0) {
+            let mut cut = b.clone();
+            if crown.len() >= 3 {
+                // Into the crown a little, so it does not stop at its edge.
+                let deep = r_mean * 0.25;
+                let inner: Vec<P2> = crown
+                    .iter()
+                    .map(|p| {
+                        let d = [p[0] - self.center[0], p[1] - self.center[1]];
+                        let l = d[0].hypot(d[1]).max(1e-9);
+                        let k = ((l - deep) / l).max(0.0);
+                        [self.center[0] + d[0] * k, self.center[1] + d[1] * k]
+                    })
+                    .collect();
+                if let Some(i) = b.points.iter().position(|p| inside(&inner, [p[0], p[1]])) {
+                    let keep = (i + 1).max(2).min(b.points.len());
+                    cut.points.truncate(keep);
+                    cut.radii.truncate(keep);
+                }
+            }
+            // Visible on paper, however thin.
+            for r in cut.radii.iter_mut() {
+                *r = r.max(mpm * 0.25);
+            }
+            let Some(o) = tapered(&cut) else {
+                continue;
+            };
+            out.push(Shape::Fill {
+                points: o.clone(),
+                tone: if coloured { Tone::Bark } else { Tone::Paper },
+                opacity: 1.0,
+            });
+            if look != Look::Colour || !coloured {
+                out.push(Shape::Line {
+                    points: o,
+                    closed: true,
+                    stroke: Stroke::Thin,
+                });
+            }
+        }
     }
 
     /// Branches seen from above: limbs as tapering outlines when wide
@@ -846,110 +974,152 @@ impl Plant {
 
     /// Fronds seen from above: the outline of each leaf, its midrib and,
     /// big enough on paper, its leaflets or pleats.
-    fn frond_marks(&self, lines: &mut Vec<Shape>, fills: &mut Vec<Vec<P2>>, crown_mm: f64) {
+    fn frond_marks(
+        &self,
+        lines: &mut Vec<Shape>,
+        fills: &mut Vec<Vec<P2>>,
+        crown_mm: f64,
+        leaflets: f64,
+    ) {
         for f in &self.fronds {
-            let m = f.rachis.len();
-            if m < 2 {
-                continue;
-            }
-            let pts: Vec<P2> = f.rachis.iter().map(|p| [p[0], p[1]]).collect();
-            let side = [f.side[0], f.side[1]];
-            let sl = side[0].hypot(side[1]).max(1e-9);
-            let side = [side[0] / sl, side[1] / sl];
-            match f.kind {
-                FrondKind::Pinnate | FrondKind::Blade | FrondKind::Sword => {
-                    let mut left = Vec::new();
-                    let mut right = Vec::new();
-                    for (i, p) in pts.iter().enumerate() {
-                        let s = i as f64 / (m - 1) as f64;
-                        let w = match f.kind {
-                            FrondKind::Pinnate => {
-                                f.width * (PI * s.powf(0.75)).sin().max(0.0).powf(0.6)
-                            }
-                            _ => f.width * (1.0 - s).powf(0.8),
-                        };
-                        left.push([p[0] + side[0] * w, p[1] + side[1] * w]);
-                        right.push([p[0] - side[0] * w, p[1] - side[1] * w]);
-                    }
-                    let mut outline = left.clone();
-                    outline.extend(right.iter().rev());
-                    if f.kind == FrondKind::Pinnate && crown_mm > 25.0 {
-                        // Leaflets as a zigzag along each side.
-                        let mut zig = Vec::new();
-                        for i in 0..m {
-                            zig.push(pts[i]);
-                            zig.push(left[i]);
-                        }
-                        lines.push(Shape::Line {
-                            points: zig,
-                            closed: false,
-                            stroke: Stroke::Thin,
-                        });
-                        let mut zag = Vec::new();
-                        for i in 0..m {
-                            zag.push(pts[i]);
-                            zag.push(right[i]);
-                        }
-                        lines.push(Shape::Line {
-                            points: zag,
-                            closed: false,
-                            stroke: Stroke::Thin,
-                        });
-                    } else {
-                        lines.push(Shape::Line {
-                            points: outline.clone(),
-                            closed: true,
-                            stroke: Stroke::Thin,
-                        });
-                    }
-                    if crown_mm > 12.0 {
-                        lines.push(Shape::Line {
-                            points: pts.clone(),
-                            closed: false,
-                            stroke: Stroke::Thin,
-                        });
-                    }
-                    fills.push(outline);
-                }
-                FrondKind::Fan => {
-                    lines.push(Shape::Line {
-                        points: pts.clone(),
-                        closed: false,
-                        stroke: Stroke::Thin,
-                    });
-                    let c = pts[m - 1];
-                    let d = [pts[m - 1][0] - pts[m - 2][0], pts[m - 1][1] - pts[m - 2][1]];
-                    let dl = d[0].hypot(d[1]).max(1e-9);
-                    let d = [d[0] / dl, d[1] / dl];
-                    let mut wedge = vec![c];
-                    let segs = 12;
-                    for k in 0..=segs {
-                        let a = (-80.0 + 160.0 * k as f64 / segs as f64).to_radians();
-                        let r = f.width * if k % 2 == 0 { 1.0 } else { 0.88 };
-                        let e = [
-                            c[0] + r * (a.cos() * d[0] - a.sin() * d[1]),
-                            c[1] + r * (a.cos() * d[1] + a.sin() * d[0]),
-                        ];
-                        if crown_mm > 20.0 && k % 2 == 0 {
-                            lines.push(Shape::Line {
-                                points: vec![c, e],
-                                closed: false,
-                                stroke: Stroke::Thin,
-                            });
-                        }
-                        wedge.push(e);
-                    }
-                    lines.push(Shape::Line {
-                        points: wedge.clone(),
-                        closed: true,
-                        stroke: Stroke::Thin,
-                    });
-                    fills.push(wedge);
-                }
-            }
+            frond_mark(f, lines, fills, crown_mm, leaflets);
         }
     }
 
+    /// The fronds seen from the side in lines: far to near, each one's
+    /// paper under its own lines, so the near ones hide the far ones.
+    fn fronds_hiding(&self, crown_mm: f64) -> Vec<Shape> {
+        let mut order: Vec<&crate::grow::Frond> = self.fronds.iter().collect();
+        let depth = |f: &crate::grow::Frond| {
+            f.rachis.iter().map(|p| p[2]).sum::<f64>() / f.rachis.len().max(1) as f64
+        };
+        order.sort_by(|a, b| depth(a).total_cmp(&depth(b)));
+        let mut out = Vec::new();
+        for f in order {
+            let (mut lines, mut fills) = (Vec::new(), Vec::new());
+            frond_mark(f, &mut lines, &mut fills, crown_mm, f64::INFINITY);
+            for points in fills {
+                out.push(Shape::Fill {
+                    points,
+                    tone: Tone::Paper,
+                    opacity: 1.0,
+                });
+            }
+            out.extend(lines);
+        }
+        out
+    }
+}
+
+/// One frond seen from above (or turned, from the side): its outline, its
+/// midrib and, big enough on paper, its leaflets or pleats.
+fn frond_mark(
+    f: &crate::grow::Frond,
+    lines: &mut Vec<Shape>,
+    fills: &mut Vec<Vec<P2>>,
+    crown_mm: f64,
+    leaflets: f64,
+) {
+    let m = f.rachis.len();
+    if m < 2 {
+        return;
+    }
+    let pts: Vec<P2> = f.rachis.iter().map(|p| [p[0], p[1]]).collect();
+    let side = [f.side[0], f.side[1]];
+    let sl = side[0].hypot(side[1]).max(1e-9);
+    let side = [side[0] / sl, side[1] / sl];
+    match f.kind {
+        FrondKind::Pinnate | FrondKind::Blade | FrondKind::Sword => {
+            let mut left = Vec::new();
+            let mut right = Vec::new();
+            for (i, p) in pts.iter().enumerate() {
+                let s = i as f64 / (m - 1) as f64;
+                let w = match f.kind {
+                    FrondKind::Pinnate => f.width * (PI * s.powf(0.75)).sin().max(0.0).powf(0.6),
+                    _ => f.width * (1.0 - s).powf(0.8),
+                };
+                left.push([p[0] + side[0] * w, p[1] + side[1] * w]);
+                right.push([p[0] - side[0] * w, p[1] - side[1] * w]);
+            }
+            let mut outline = left.clone();
+            outline.extend(right.iter().rev());
+            if f.kind == FrondKind::Pinnate && crown_mm > leaflets {
+                // Leaflets as a zigzag along each side.
+                let mut zig = Vec::new();
+                for i in 0..m {
+                    zig.push(pts[i]);
+                    zig.push(left[i]);
+                }
+                lines.push(Shape::Line {
+                    points: zig,
+                    closed: false,
+                    stroke: Stroke::Thin,
+                });
+                let mut zag = Vec::new();
+                for i in 0..m {
+                    zag.push(pts[i]);
+                    zag.push(right[i]);
+                }
+                lines.push(Shape::Line {
+                    points: zag,
+                    closed: false,
+                    stroke: Stroke::Thin,
+                });
+            } else {
+                lines.push(Shape::Line {
+                    points: outline.clone(),
+                    closed: true,
+                    stroke: Stroke::Thin,
+                });
+            }
+            if crown_mm > 12.0 {
+                lines.push(Shape::Line {
+                    points: pts.clone(),
+                    closed: false,
+                    stroke: Stroke::Thin,
+                });
+            }
+            fills.push(outline);
+        }
+        FrondKind::Fan => {
+            lines.push(Shape::Line {
+                points: pts.clone(),
+                closed: false,
+                stroke: Stroke::Thin,
+            });
+            let c = pts[m - 1];
+            let d = [pts[m - 1][0] - pts[m - 2][0], pts[m - 1][1] - pts[m - 2][1]];
+            let dl = d[0].hypot(d[1]).max(1e-9);
+            let d = [d[0] / dl, d[1] / dl];
+            let mut wedge = vec![c];
+            let segs = 12;
+            for k in 0..=segs {
+                let a = (-80.0 + 160.0 * k as f64 / segs as f64).to_radians();
+                let r = f.width * if k % 2 == 0 { 1.0 } else { 0.88 };
+                let e = [
+                    c[0] + r * (a.cos() * d[0] - a.sin() * d[1]),
+                    c[1] + r * (a.cos() * d[1] + a.sin() * d[0]),
+                ];
+                if crown_mm > 20.0 && k % 2 == 0 {
+                    lines.push(Shape::Line {
+                        points: vec![c, e],
+                        closed: false,
+                        stroke: Stroke::Thin,
+                    });
+                }
+                wedge.push(e);
+            }
+            lines.push(Shape::Line {
+                points: wedge.clone(),
+                closed: true,
+                stroke: Stroke::Thin,
+            });
+            fills.push(wedge);
+        }
+    }
+}
+
+impl Plant {
     /// Flowers and fruit as spots of their colour.
     fn blossoms(&self, out: &mut Vec<Shape>, mpm: f64, crown_mm: f64) {
         if crown_mm < 8.0 {

@@ -16,6 +16,7 @@ mod cubiertas;
 mod demo;
 mod equipo;
 mod escaleras;
+mod figuras;
 mod formas;
 mod grande;
 mod modelos;
@@ -75,6 +76,10 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim figuras [carpeta]
+      Árboles, palmeras, arbustos, personas y coches en fila delante de
+      un muro, vistos desde el sur como los dibuja un arquitecto: alzado
+      1:50 técnico y en color y axonometría en SVG. Por defecto: ./out
   archisim cocina [carpeta]
       Una cocina por módulos: columna, cajoneras, fregadero, lavavajillas,
       horno, placa y botellero con su encimera continua, muebles altos y
@@ -216,6 +221,10 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("figuras") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(figuras::write(&dir))
         }
         Some("cocina") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
