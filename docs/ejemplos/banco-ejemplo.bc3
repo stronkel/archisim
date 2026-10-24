@@ -82,3 +82,71 @@
 ~T|IEM010|Base de enchufe de 16 A con toma de tierra, mecanismo y caja, cableado incluido.|
 ~C|IEM020|ud|Interruptor|28.00|22102026|0|
 ~T|IEM020|Interruptor sencillo con mecanismo y caja, cableado incluido.|
+~C|mo001|h|Oficial 1ª de construcción|21.50|22102026|1|
+~C|mo002|h|Peón ordinario de construcción|19.80|22102026|1|
+~C|mq001|h|Maquinaria y medios auxiliares|12.00|22102026|2|
+~C|%CD|%|Costes directos complementarios|0|22102026|0|
+~C|mtDPT010|ud|Materiales de demolición de partición interior de fábrica|5.80|22102026|3|
+~D|DPT010|mo001\1\0.099\mo002\1\0.068\mq001\1\0.032\mtDPT010\1\1\%CD\1\2\|
+~C|mtDLC010|ud|Materiales de desmontaje de carpintería exterior o interior|10.81|22102026|3|
+~D|DLC010|mo001\1\0.185\mo002\1\0.128\mq001\1\0.06\mtDLC010\1\1\%CD\1\2\|
+~C|mtFFZ010|ud|Materiales de fachada de doble hoja de fábrica con aislamiento|46.22|22102026|3|
+~D|FFZ010|mo001\1\0.789\mo002\1\0.545\mq001\1\0.257\mtFFZ010\1\1\%CD\1\2\|
+~C|mtFFQ010|ud|Materiales de tabique de ladrillo cerámico hueco doble|14.30|22102026|3|
+~D|FFQ010|mo001\1\0.244\mo002\1\0.168\mq001\1\0.079\mtFFQ010\1\1\%CD\1\2\|
+~C|mtFFQ020|ud|Materiales de tabique de placa de yeso laminado|18.77|22102026|3|
+~D|FFQ020|mo001\1\0.32\mo002\1\0.221\mq001\1\0.104\mtFFQ020\1\1\%CD\1\2\|
+~C|mtESS010|ud|Materiales de solera de hormigón armado sobre encachado|17.52|22102026|3|
+~D|ESS010|mo001\1\0.298\mo002\1\0.206\mq001\1\0.097\mtESS010\1\1\%CD\1\2\|
+~C|mtEHS010|ud|Materiales de pilar de hormigón armado|242.36|22102026|3|
+~D|EHS010|mo001\1\4.133\mo002\1\2.856\mq001\1\1.346\mtEHS010\1\1\%CD\1\2\|
+~C|mtEHV010|ud|Materiales de viga de hormigón armado|227.37|22102026|3|
+~D|EHV010|mo001\1\3.877\mo002\1\2.679\mq001\1\1.263\mtEHV010\1\1\%CD\1\2\|
+~C|mtEHE010|ud|Materiales de escalera de losa de hormigón armado|1088.24|22102026|3|
+~D|EHE010|mo001\1\18.559\mo002\1\12.824\mq001\1\6.046\mtEHE010\1\1\%CD\1\2\|
+~C|mtQAD010|ud|Materiales de cubierta plana invertida con acabado de grava|40.12|22102026|3|
+~D|QAD010|mo001\1\0.684\mo002\1\0.473\mq001\1\0.223\mtQAD010\1\1\%CD\1\2\|
+~C|mtQTT010|ud|Materiales de cubierta inclinada de teja cerámica|32.29|22102026|3|
+~D|QTT010|mo001\1\0.551\mo002\1\0.381\mq001\1\0.179\mtQTT010\1\1\%CD\1\2\|
+~C|mtLPM010|ud|Materiales de puerta de entrada de madera maciza|541.17|22102026|3|
+~D|LPM010|mo001\1\9.229\mo002\1\6.378\mq001\1\3.007\mtLPM010\1\1\%CD\1\2\|
+~C|mtLPM020|ud|Materiales de puerta de paso de madera lacada|155.89|22102026|3|
+~D|LPM020|mo001\1\2.658\mo002\1\1.837\mq001\1\0.866\mtLPM020\1\1\%CD\1\2\|
+~C|mtLCL010|ud|Materiales de carpintería de aluminio con rotura de puente térmico|187.07|22102026|3|
+~D|LCL010|mo001\1\3.19\mo002\1\2.204\mq001\1\1.039\mtLCL010\1\1\%CD\1\2\|
+~C|mtLVC010|ud|Materiales de ventana de aluminio de una hoja practicable|173.54|22102026|3|
+~D|LVC010|mo001\1\2.959\mo002\1\2.045\mq001\1\0.964\mtLVC010\1\1\%CD\1\2\|
+~C|mtLVC020|ud|Materiales de ventana de aluminio de dos hojas practicables|305.87|22102026|3|
+~D|LVC020|mo001\1\5.217\mo002\1\3.605\mq001\1\1.699\mtLVC020\1\1\%CD\1\2\|
+~C|mtLVC030|ud|Materiales de balconera corredera de aluminio de dos hojas|523.54|22102026|3|
+~D|LVC030|mo001\1\8.928\mo002\1\6.17\mq001\1\2.908\mtLVC030\1\1\%CD\1\2\|
+~C|mtLVF010|ud|Materiales de fijo de aluminio pequeño|82.37|22102026|3|
+~D|LVF010|mo001\1\1.404\mo002\1\0.97\mq001\1\0.458\mtLVF010\1\1\%CD\1\2\|
+~C|mtLFM010|ud|Materiales de muro cortina de montantes y travesaños|226.48|22102026|3|
+~D|LFM010|mo001\1\3.862\mo002\1\2.669\mq001\1\1.258\mtLFM010\1\1\%CD\1\2\|
+~C|mtRSG010|ud|Materiales de solado de gres porcelánico|22.60|22102026|3|
+~D|RSG010|mo001\1\0.385\mo002\1\0.266\mq001\1\0.125\mtRSG010\1\1\%CD\1\2\|
+~C|mtRSM010|ud|Materiales de tarima flotante de roble|27.47|22102026|3|
+~D|RSM010|mo001\1\0.468\mo002\1\0.324\mq001\1\0.153\mtRSM010\1\1\%CD\1\2\|
+~C|mtRIP010|ud|Materiales de pintura plástica lisa en paramentos|4.65|22102026|3|
+~D|RIP010|mo001\1\0.079\mo002\1\0.055\mq001\1\0.026\mtRIP010\1\1\%CD\1\2\|
+~C|mtRTC010|ud|Materiales de falso techo continuo de placa de yeso|16.24|22102026|3|
+~D|RTC010|mo001\1\0.277\mo002\1\0.191\mq001\1\0.09\mtRTC010\1\1\%CD\1\2\|
+~C|mtFDD010|ud|Materiales de barandilla metálica|65.88|22102026|3|
+~D|FDD010|mo001\1\1.124\mo002\1\0.776\mq001\1\0.366\mtFDD010\1\1\%CD\1\2\|
+~C|mtIFI010|ud|Materiales de tubería de agua fría de multicapa|6.58|22102026|3|
+~D|IFI010|mo001\1\0.112\mo002\1\0.078\mq001\1\0.037\mtIFI010\1\1\%CD\1\2\|
+~C|mtIFI020|ud|Materiales de tubería de agua caliente aislada|8.60|22102026|3|
+~D|IFI020|mo001\1\0.146\mo002\1\0.101\mq001\1\0.048\mtIFI020\1\1\%CD\1\2\|
+~C|mtISS010|ud|Materiales de bajante y colector de PVC de 110 mm|11.64|22102026|3|
+~D|ISS010|mo001\1\0.199\mo002\1\0.137\mq001\1\0.065\mtISS010\1\1\%CD\1\2\|
+~C|mtIVK010|ud|Materiales de conducto rectangular de extracción|20.30|22102026|3|
+~D|IVK010|mo001\1\0.346\mo002\1\0.239\mq001\1\0.113\mtIVK010\1\1\%CD\1\2\|
+~C|mtICG010|ud|Materiales de caldera de condensación mural|1264.70|22102026|3|
+~D|ICG010|mo001\1\21.569\mo002\1\14.904\mq001\1\7.026\mtICG010\1\1\%CD\1\2\|
+~C|mtIII010|ud|Materiales de luminaria empotrada LED|50.59|22102026|3|
+~D|III010|mo001\1\0.863\mo002\1\0.596\mq001\1\0.281\mtIII010\1\1\%CD\1\2\|
+~C|mtIEM010|ud|Materiales de base de enchufe|18.82|22102026|3|
+~D|IEM010|mo001\1\0.321\mo002\1\0.222\mq001\1\0.105\mtIEM010\1\1\%CD\1\2\|
+~C|mtIEM020|ud|Materiales de interruptor|16.46|22102026|3|
+~D|IEM020|mo001\1\0.281\mo002\1\0.194\mq001\1\0.092\mtIEM020\1\1\%CD\1\2\|

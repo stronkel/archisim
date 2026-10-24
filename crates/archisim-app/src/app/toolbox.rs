@@ -479,6 +479,27 @@ const SERVICES: &[Tile] = &[
         "",
         "Interruptores y pulsadores",
     ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Radiator),
+        Glyph::Fixture,
+        "Radiador",
+        "",
+        "Radiadores de la calefacción",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Grille),
+        Glyph::Duct,
+        "Rejilla",
+        "",
+        "Rejillas de retorno o extracción, en pared",
+    ),
+    tile(
+        Pick::Device(archisim_core::DeviceKind::Diffuser),
+        Glyph::Duct,
+        "Difusor",
+        "",
+        "Difusores de impulsión, en techo",
+    ),
 ];
 
 const SITE: &[Tile] = &[

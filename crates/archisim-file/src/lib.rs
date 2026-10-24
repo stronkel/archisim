@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 33;
+pub const CURRENT_VERSION: u32 = 34;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -285,9 +285,18 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // budget's items (`prices`); older ones have none. 31 → 32:
             // roofs' `dormers` and `covering`; older ones have none.
             // 32 → 33: stairs' `design` (winders, spirals, stringers…);
-            // older ones are of flights and landings on a slab.
-            9..=32 => {
-                let mut v = value;
+            // older ones are of flights and landings on a slab. ArchiSim
+            // 0.48 wrote its own version 32, with dormers placed by the
+            // middle of their front (`position`): those are set apart and
+            // placed again on opening. 33 → 34: the slope of runs, the
+            // decomposition of prices and the budget's overheads, profit
+            // and VAT (`budget`); older ones have none.
+            9..=33 => {
+                let mut v = if version == 32 {
+                    legacy_dormers(value)
+                } else {
+                    value
+                };
                 if let Value::Object(map) = &mut v {
                     map.insert("version".into(), Value::from(version + 1));
                 }
@@ -298,6 +307,31 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
         version += 1;
     }
     Ok(value)
+}
+
+/// ArchiSim 0.48's version 32 dormers (by `position`) moved to each
+/// roof's `legacy_dormers`, read apart; the others are left as they are.
+fn legacy_dormers(mut value: Value) -> Value {
+    let Some(roofs) = value.get_mut("roofs").and_then(Value::as_array_mut) else {
+        return value;
+    };
+    for roof in roofs {
+        let Some(map) = roof.as_object_mut() else {
+            continue;
+        };
+        let Some(Value::Array(list)) = map.remove("dormers") else {
+            continue;
+        };
+        let (old, new): (Vec<Value>, Vec<Value>) =
+            list.into_iter().partition(|d| d.get("position").is_some());
+        if !new.is_empty() {
+            map.insert("dormers".into(), Value::Array(new));
+        }
+        if !old.is_empty() {
+            map.insert("legacy_dormers".into(), Value::Array(old));
+        }
+    }
+    value
 }
 
 /// Drawing layers and drafting elements, written by every file since
@@ -984,8 +1018,34 @@ mod tests {
                 price: 28.4,
                 text: "Hoja de partición interior de ladrillo…".into(),
                 bank: "Banco de prueba".into(),
+                // Its decomposition (version 32).
+                pieces: vec![
+                    archisim_core::PricePiece {
+                        code: "mo021".into(),
+                        unit: "h".into(),
+                        summary: "Oficial 1ª construcción".into(),
+                        kind: 1,
+                        quantity: 0.6,
+                        price: 21.5,
+                    },
+                    archisim_core::PricePiece {
+                        code: "%".into(),
+                        unit: "%".into(),
+                        summary: "Costes directos complementarios".into(),
+                        kind: 0,
+                        quantity: 2.0,
+                        price: 0.0,
+                    },
+                ],
             }),
         )
+        .unwrap();
+        // Overheads, profit and VAT of the budget (version 32).
+        m.set_budget_settings(archisim_core::BudgetSettings {
+            overheads: 0.15,
+            profit: 0.06,
+            vat: 0.1,
+        })
         .unwrap();
         // Saved plans, level styles, templates, reference planes and the
         // technical lettering (version 27).
@@ -1083,6 +1143,18 @@ mod tests {
                 elevation: 0.4,
                 width: 0.02,
                 height: 0.02,
+                slope: 0.0,
+            })
+            .unwrap();
+            // A drain with its slope (version 32).
+            m.add_run(archisim_core::NewRun {
+                level: levels[0],
+                system: archisim_core::ServiceSystem::Drainage,
+                path: vec![Point2::new(0.5, 1.0), Point2::new(3.5, 1.0)],
+                elevation: 0.3,
+                width: 0.11,
+                height: 0.11,
+                slope: 0.02,
             })
             .unwrap();
             m.add_run(archisim_core::NewRun {
@@ -1092,6 +1164,7 @@ mod tests {
                 elevation: 2.6,
                 width: 0.3,
                 height: 0.2,
+                slope: 0.0,
             })
             .unwrap();
             m.add_device(archisim_core::NewDevice {
@@ -1477,7 +1550,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 33", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 34", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1504,7 +1577,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 33"));
+        assert!(to_string(&opened).contains("\"version\": 34"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1675,7 +1748,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 33", "\"version\": 3", 1)
+            .replacen("\"version\": 34", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1737,7 +1810,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 33", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 34", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2181,7 +2254,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 33", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 34", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2190,10 +2263,63 @@ mod tests {
         assert!(err.to_string().contains("bends too much"), "{err}");
     }
 
+    /// ArchiSim 0.48 wrote its own version 32, with dormers by the middle
+    /// of their front: they open as dormers of today, where they were.
+    #[test]
+    fn dormers_of_archisim_0_48_are_placed_again() {
+        let mut m = sample();
+        let level = m.levels()[0].id;
+        let st = m.slab_types().next().unwrap().id;
+        let roof = m
+            .add_roof(NewRoof {
+                roof_type: st,
+                level,
+                outline: vec![
+                    Point2::new(20.0, 0.0),
+                    Point2::new(30.0, 0.0),
+                    Point2::new(30.0, 8.0),
+                    Point2::new(20.0, 8.0),
+                ],
+                slopes: vec![Some(0.6), None, Some(0.6), None],
+                base_offset: 3.0,
+                overhang: 0.4,
+            })
+            .unwrap();
+        let wall = m.materials().next().unwrap().id;
+        let text = to_string(&m).replacen("\"version\": 34", "\"version\": 32", 1);
+        let mut v: Value = serde_json::from_str(&text).unwrap();
+        let roofs = v["roofs"].as_array_mut().unwrap();
+        let at = roofs.iter().position(|r| r["id"] == roof.0).unwrap();
+        roofs[at]["dormers"] = serde_json::json!([{
+            "position": [25.0, 1.2],
+            "width": 1.2,
+            "height": 0.3,
+            "kind": "shed",
+            "pitch": 0.05,
+            "wall_material": wall.0,
+            "window": true
+        }]);
+        let opened = from_str(&serde_json::to_string_pretty(&v).unwrap()).unwrap();
+        let r = opened.roof(roof).unwrap();
+        assert_eq!(r.dormers.len(), 1);
+        let d = &r.dormers[0];
+        assert_eq!(d.kind, DormerKind::Shed);
+        assert!((d.width - 1.2).abs() < 1e-9 && (d.pitch - 0.05).abs() < 1e-9);
+        assert_eq!(d.wall_material, wall);
+        assert!(r.dormer_shape(d).is_some());
+        // Saved again, it is of today's version and keeps it.
+        let again = to_string(&opened);
+        assert!(!again.contains("legacy_dormers"));
+        assert_eq!(
+            from_str(&again).unwrap().roof(roof).unwrap().dormers.len(),
+            1
+        );
+    }
+
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 33,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 34,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -2239,11 +2365,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 33", "\"version\": 34"),
-            Err(FileError::TooNew { version: 34 })
+            edited("\"version\": 34", "\"version\": 35"),
+            Err(FileError::TooNew { version: 35 })
         ));
         assert!(matches!(
-            edited("\"version\": 33", "\"version\": 0"),
+            edited("\"version\": 34", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(

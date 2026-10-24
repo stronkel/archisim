@@ -12,6 +12,16 @@ use archisim_core::{DeviceKind, LevelId, Model, Point2};
 use crate::lettering::{text_path, Align};
 use crate::{num, path, pens, pt};
 
+/// «2», «1,5».
+fn percent(slope: f64) -> String {
+    let v = (slope * 1000.0).round() / 10.0;
+    if (v - v.round()).abs() < 1e-9 {
+        format!("{v:.0}")
+    } else {
+        format!("{v:.1}").replace('.', ",")
+    }
+}
+
 fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
@@ -82,7 +92,16 @@ pub fn draw_services(
                         u = u * -1.0;
                     }
                     let h = 2.0 * k;
-                    let text = format!("{} {}", r.system.name(), r.size_text());
+                    let text = if r.slope > 0.0 {
+                        format!(
+                            "{} {} · {} %",
+                            r.system.name(),
+                            r.size_text(),
+                            percent(r.slope)
+                        )
+                    } else {
+                        format!("{} {}", r.system.name(), r.size_text())
+                    };
                     let half = archisim_draft::font::text_width(&text, h) / 2.0;
                     let n = u.perp_left();
                     let side = r.width / 2.0 + 1.0 * k + h / 2.0;
@@ -138,6 +157,49 @@ pub fn draw_services(
                 }
             }
         });
+    }
+    // Arrows the way a sloping run falls, in the middle of each stretch.
+    for r in runs.iter().filter(|r| r.slope > 0.0) {
+        let colour = hex(r.system.color());
+        for w in r.path.windows(2) {
+            let Some(u) = (w[1] - w[0]).normalized() else {
+                continue;
+            };
+            if w[0].distance(w[1]) < 6.0 * k {
+                continue;
+            }
+            let m = w[0] + (w[1] - w[0]) * 0.5;
+            let n = u.perp_left() * (1.0 * k);
+            let tip = m + u * (1.2 * k);
+            let back = m - u * (1.2 * k);
+            let _ = writeln!(
+                s,
+                r#"<path d="M{} L{} L{} Z" fill="{colour}" stroke="none"/>"#,
+                pt(tip),
+                pt(back + n),
+                pt(back - n)
+            );
+        }
+    }
+    // Tees of pipes: a dot where a branch joins.
+    for f in model.run_fittings() {
+        if f.kind != archisim_core::FittingKind::Tee {
+            continue;
+        }
+        let Some(r) = runs.iter().find(|r| r.id == f.run) else {
+            continue;
+        };
+        if r.is_duct() || !visible(&[f.position]) {
+            continue;
+        }
+        let _ = writeln!(
+            s,
+            r#"<circle cx="{}" cy="{}" r="{}" fill="{}" stroke="none"/>"#,
+            num(f.position.x),
+            num(-f.position.y),
+            num((r.width / 2.0 * 1.4).max(0.7 * k)),
+            hex(r.system.color())
+        );
     }
     for d in devices {
         let o = d.outline();
@@ -200,6 +262,47 @@ fn draw_device(s: &mut String, d: &archisim_core::ServiceDevice, k: f64) {
         DeviceKind::Switch => {
             circle(s, c, r * 0.6, "white");
             line(s, rot(r * 0.4, r * 0.4), rot(r * 1.2, r * 1.2));
+        }
+        DeviceKind::Radiator | DeviceKind::Grille | DeviceKind::Diffuser => {
+            let o = d.outline();
+            let _ = writeln!(
+                s,
+                r#"<path d="{}" fill="white" stroke="{ink}" stroke-width="{}"/>"#,
+                path(&o),
+                num(pens().cut * k)
+            );
+            let (hx, hy) = (d.width / 2.0, d.depth / 2.0);
+            match d.kind {
+                // Its elements, across.
+                DeviceKind::Radiator => {
+                    let n = ((d.width / 0.1).round() as usize).clamp(3, 20);
+                    for i in 1..n {
+                        let x = -hx + d.width * i as f64 / n as f64;
+                        line(s, rot(x, -hy), rot(x, hy));
+                    }
+                }
+                // Its slats, along.
+                DeviceKind::Grille => {
+                    for i in 1..4 {
+                        let y = -hy + d.depth * i as f64 / 4.0;
+                        line(s, rot(-hx, y), rot(hx, y));
+                    }
+                }
+                // Its cross and its inner square.
+                _ => {
+                    line(s, o[0], o[2]);
+                    line(s, o[1], o[3]);
+                    let q: Vec<Point2> = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
+                        .into_iter()
+                        .map(|(x, y)| rot(x * hx, y * hy))
+                        .collect();
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{}" fill="none" stroke="{ink}" stroke-width="{w}"/>"#,
+                        path(&q)
+                    );
+                }
+            }
         }
         DeviceKind::Equipment => {
             let o = d.outline();

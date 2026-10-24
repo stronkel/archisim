@@ -407,7 +407,7 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
                     r.guid.to_string(),
                     r.system.code().to_string(),
                     r.path.iter().map(|p| [q(p.x), q(p.y)]).collect(),
-                    [q(r.elevation), q(r.width), q(r.height)],
+                    [q(r.elevation), q(r.width), q(r.height), q(r.slope * 100.0)],
                 )
             })
             .collect();
@@ -876,4 +876,4 @@ fn material_name(m: &Model, id: archisim_core::MaterialId) -> Option<&str> {
 }
 
 /// A pipe or duct compared: GUID, system, path and sizes in millimetres.
-type RunKey = (String, String, Vec<[i64; 2]>, [i64; 3]);
+type RunKey = (String, String, Vec<[i64; 2]>, [i64; 4]);

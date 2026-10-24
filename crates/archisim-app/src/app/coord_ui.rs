@@ -502,6 +502,7 @@ impl ArchiSimApp {
             )
             .weak(),
         );
+        self.clash_rules(ui);
         match &self.coord.clashes_checked {
             None => {
                 ui.label("Aún no se ha comprobado.");
@@ -523,7 +524,7 @@ impl ArchiSimApp {
                     ui.strong("#");
                     ui.strong("Proyecto");
                     ui.strong("Vínculo");
-                    ui.strong("Entra");
+                    ui.strong("Entra / separación");
                     ui.strong("Planta");
                     ui.end_row();
                     for (i, c) in self.coord.clashes.iter().enumerate() {
@@ -540,7 +541,19 @@ impl ArchiSimApp {
                             .map(|l| l.name())
                             .unwrap_or_default();
                         ui.label(format!("{} ({link})", c.theirs_label));
-                        ui.label(archisim_coord::versions::metres(c.depth));
+                        match c.clearance {
+                            None => ui.label(archisim_coord::versions::metres(c.depth)),
+                            Some(gap) => ui
+                                .label(
+                                    RichText::new(format!(
+                                        "a {} (holgura {})",
+                                        archisim_coord::versions::metres(gap),
+                                        archisim_coord::versions::metres(gap + c.depth)
+                                    ))
+                                    .color(egui::Color32::from_rgb(200, 140, 0)),
+                                )
+                                .on_hover_text("No se meten uno en otro, pero están más cerca de lo que pide la regla"),
+                        };
                         ui.label(c.storey.clone().unwrap_or_default());
                         ui.end_row();
                     }
@@ -992,6 +1005,90 @@ impl ArchiSimApp {
                 self.say("Ese elemento no se puede seleccionar en el proyecto.");
             }
         }
+    }
+}
+
+impl ArchiSimApp {
+    /// The rules of the clash check by pairs of disciplines: whether the
+    /// pair is checked, and the clearance it asks.
+    fn clash_rules(&mut self, ui: &mut Ui) {
+        use archisim_coord::{ClashRule, Discipline};
+        egui::CollapsingHeader::new("Reglas por disciplinas y holguras")
+            .id_salt("clash-rules")
+            .show(ui, |ui| {
+                ui.label(
+                    RichText::new(
+                        "Qué parejas de disciplinas se comprueban y qué separación libre piden \
+                         (holgura). Lo que no está en la lista se comprueba sin holgura. La \
+                         disciplina de cada elemento sale de su clase IFC.",
+                    )
+                    .weak(),
+                );
+                let mut remove = None;
+                egui::Grid::new("clash-rules-grid")
+                    .num_columns(5)
+                    .striped(true)
+                    .spacing([10.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.strong("Disciplina");
+                        ui.strong("con");
+                        ui.strong("Comprobar");
+                        ui.strong("Holgura (mm)");
+                        ui.label("");
+                        ui.end_row();
+                        for (i, r) in self.coord.rules.iter_mut().enumerate() {
+                            for (j, d) in [&mut r.a, &mut r.b].into_iter().enumerate() {
+                                egui::ComboBox::from_id_salt(("rule-d", i, j))
+                                    .selected_text(d.name())
+                                    .width(150.0)
+                                    .show_ui(ui, |ui| {
+                                        for x in Discipline::ALL {
+                                            ui.selectable_value(d, x, x.name());
+                                        }
+                                    });
+                            }
+                            ui.checkbox(&mut r.check, "");
+                            let mut mm = r.clearance * 1000.0;
+                            if ui
+                                .add_enabled(
+                                    r.check,
+                                    egui::DragValue::new(&mut mm).range(0.0..=1000.0).speed(1.0),
+                                )
+                                .changed()
+                            {
+                                r.clearance = mm / 1000.0;
+                            }
+                            if ui
+                                .small_button("✕")
+                                .on_hover_text("Quitar la regla")
+                                .clicked()
+                            {
+                                remove = Some(i);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                if let Some(i) = remove {
+                    self.coord.rules.remove(i);
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Añadir regla").clicked() {
+                        self.coord.rules.push(ClashRule {
+                            a: Discipline::Architecture,
+                            b: Discipline::Plumbing,
+                            check: true,
+                            clearance: 0.0,
+                        });
+                    }
+                    if ui
+                        .button("Las de ArchiSim")
+                        .on_hover_text("Vuelve a las reglas con las que empieza ArchiSim")
+                        .clicked()
+                    {
+                        self.coord.rules = archisim_coord::default_rules();
+                    }
+                });
+            });
     }
 }
 

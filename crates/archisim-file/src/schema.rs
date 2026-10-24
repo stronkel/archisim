@@ -126,6 +126,10 @@ pub(crate) struct ProjectFile {
     /// Prices of the budget's items (version 31).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prices: Vec<PriceOf>,
+    /// Overheads, profit and VAT of the budget (version 34; absent: 13, 6
+    /// and 21 %).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<Budget>,
     /// Saved plans, the looks of the levels' plans, view templates and
     /// reference planes (version 27).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -703,6 +707,23 @@ pub(crate) struct Roof {
     /// Tiles and gutters (version 32).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub covering: Option<RoofCovering>,
+    /// Dormers as ArchiSim 0.48 wrote them (its own version 32, set apart
+    /// by [`crate::migrate`]): placed again, by their front's middle, as
+    /// the dormers of the roof on opening; never written.
+    #[serde(default, skip_serializing)]
+    pub legacy_dormers: Vec<LegacyDormer>,
+}
+
+/// A dormer as ArchiSim 0.48 wrote it: the middle of its front in plan.
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct LegacyDormer {
+    pub position: Xy,
+    pub width: f64,
+    pub height: f64,
+    /// `shed` or `gable`.
+    pub kind: String,
+    pub pitch: f64,
+    pub wall_material: u64,
 }
 
 /// A dormer or roof window on a plane of a roof (version 32): the side
@@ -808,6 +829,9 @@ pub(crate) struct Run {
     pub elevation: f64,
     pub width: f64,
     pub height: f64,
+    /// Fall along the path (version 34).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub slope: f64,
 }
 
 /// A device (version 20).
@@ -961,6 +985,37 @@ pub(crate) struct PriceOf {
     pub text: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub bank: String,
+    /// Its decomposition (version 34).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pieces: Vec<PieceOf>,
+}
+
+/// A piece of a price's decomposition (version 34).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PieceOf {
+    pub code: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub unit: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub kind: u8,
+    pub quantity: f64,
+    pub price: f64,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
+}
+
+/// Overheads, profit and VAT (version 34).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Budget {
+    pub overheads: f64,
+    pub profit: f64,
+    pub vat: f64,
 }
 
 impl PriceOf {
@@ -973,6 +1028,18 @@ impl PriceOf {
             price: c.price,
             text: c.text.clone(),
             bank: c.bank.clone(),
+            pieces: c
+                .pieces
+                .iter()
+                .map(|p| PieceOf {
+                    code: p.code.clone(),
+                    unit: p.unit.clone(),
+                    summary: p.summary.clone(),
+                    kind: p.kind,
+                    quantity: p.quantity,
+                    price: p.price,
+                })
+                .collect(),
         }
     }
 
@@ -986,6 +1053,18 @@ impl PriceOf {
                 price: self.price,
                 text: self.text,
                 bank: self.bank,
+                pieces: self
+                    .pieces
+                    .into_iter()
+                    .map(|p| core::PricePiece {
+                        code: p.code,
+                        unit: p.unit,
+                        summary: p.summary,
+                        kind: p.kind,
+                        quantity: p.quantity,
+                        price: p.price,
+                    })
+                    .collect(),
             },
         )
     }
@@ -2602,6 +2681,7 @@ impl ProjectFile {
                             spacing: g.spacing,
                         }),
                     }),
+                    legacy_dormers: Vec::new(),
                 })
                 .collect(),
             terrains: p
@@ -2657,6 +2737,11 @@ impl ProjectFile {
                 .map(PresentationStyleOf::out)
                 .collect(),
             prices: p.prices.iter().map(|(k, c)| PriceOf::out(k, c)).collect(),
+            budget: (p.budget != core::BudgetSettings::default()).then_some(Budget {
+                overheads: p.budget.overheads,
+                profit: p.budget.profit,
+                vat: p.budget.vat,
+            }),
             plan_views: p
                 .plan_views
                 .iter()
@@ -2804,6 +2889,7 @@ impl ProjectFile {
                     elevation: r.elevation,
                     width: r.width,
                     height: r.height,
+                    slope: r.slope,
                 })
                 .collect(),
             devices: p
@@ -2944,6 +3030,56 @@ impl ProjectFile {
     // ---- File → model --------------------------------------------------
 
     pub fn into_model(self) -> Result<core::Model, FileError> {
+        let legacy: Vec<(u64, Vec<LegacyDormer>)> = self
+            .roofs
+            .iter()
+            .filter(|r| !r.legacy_dormers.is_empty())
+            .map(|r| {
+                let list = r
+                    .legacy_dormers
+                    .iter()
+                    .map(|d| LegacyDormer {
+                        position: d.position,
+                        width: d.width,
+                        height: d.height,
+                        kind: d.kind.clone(),
+                        pitch: d.pitch,
+                        wall_material: d.wall_material,
+                    })
+                    .collect();
+                (r.id, list)
+            })
+            .collect();
+        let mut model = self.into_model_as_written()?;
+        // ArchiSim 0.48's dormers, placed again where their fronts were:
+        // one that no longer fits on its roof is left out.
+        for (roof, list) in legacy {
+            for d in list {
+                let Some(kind) = core::DormerKind::from_code(&d.kind) else {
+                    continue;
+                };
+                let roof = core::RoofId(roof);
+                let Ok(i) =
+                    model.add_dormer(roof, kind, core::Point2::new(d.position[0], d.position[1]))
+                else {
+                    continue;
+                };
+                let wall = core::MaterialId(d.wall_material);
+                let has_wall = model.material(wall).is_some();
+                let _ = model.edit_dormer(roof, i, |x| {
+                    x.width = d.width;
+                    x.height = d.height;
+                    x.pitch = d.pitch;
+                    if has_wall {
+                        x.wall_material = wall;
+                    }
+                });
+            }
+        }
+        Ok(model)
+    }
+
+    fn into_model_as_written(self) -> Result<core::Model, FileError> {
         if self.units != crate::UNITS {
             return Err(FileError::Units(self.units));
         }
@@ -3230,6 +3366,13 @@ impl ProjectFile {
             appearances: Vec::new(),
             presentation_styles: Vec::new(),
             prices: self.prices.into_iter().map(PriceOf::into_core).collect(),
+            budget: self.budget.map_or_else(core::BudgetSettings::default, |b| {
+                core::BudgetSettings {
+                    overheads: b.overheads,
+                    profit: b.profit,
+                    vat: b.vat,
+                }
+            }),
             plan_views: Vec::new(),
             level_styles: Vec::new(),
             view_templates: Vec::new(),
@@ -3674,6 +3817,7 @@ impl ProjectFile {
                 elevation: r.elevation,
                 width: r.width,
                 height: r.height,
+                slope: r.slope,
             });
         }
         for d in self.devices {

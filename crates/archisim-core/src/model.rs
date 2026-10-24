@@ -274,6 +274,34 @@ impl Wall {
         self.arc().is_some()
     }
 
+    /// Where a door or window `width` wide centred `along` the drawn line
+    /// stands: the point of its centre and the direction it runs. In a
+    /// straight wall, the line itself; in a curved one, the tangent at its
+    /// centre, moved towards the centre of the curve by half how far the
+    /// curve parts from the tangent at its sides, so the straight frame
+    /// stays inside the wall's thickness at both ends.
+    pub fn opening_frame(&self, along: f64, width: f64) -> Option<(Point2, Vec2)> {
+        match self.arc() {
+            Some(arc) => {
+                let f = (along / arc.length()).clamp(0.0, 1.0);
+                let p = arc.point(f, 0.0);
+                let u = arc.tangent(f);
+                let (r, half) = (arc.radius, width / 2.0);
+                let sag = if half < r {
+                    r - (r * r - half * half).sqrt()
+                } else {
+                    0.0
+                };
+                let inward = (arc.centre - p).normalized().unwrap_or(Vec2::new(0.0, 0.0));
+                Some((p + inward * (sag / 2.0), u))
+            }
+            None => {
+                let u = (self.end - self.start).normalized()?;
+                Some((self.start + u * along, u))
+            }
+        }
+    }
+
     /// The point of the drawn line at fraction `f` (0 = start, 1 = end),
     /// moved `offset` to the left.
     pub fn point_at(&self, f: f64, offset: f64) -> Point2 {
@@ -833,7 +861,9 @@ pub enum ModelError {
     /// A curved wall bends more than its thickness allows (its inner face
     /// would have no radius left), or almost closes on itself.
     ArcTooTight,
-    /// Doors and windows cannot be placed in curved walls yet.
+    /// A door or window too wide for the curve of its wall (it is straight:
+    /// the wall would part from its ends by more than half its thickness),
+    /// or a corner window in a curved wall.
     OpeningInCurvedWall,
     /// A hole of a slab crosses its outline or another hole, or is not a
     /// valid outline itself.
@@ -990,9 +1020,10 @@ impl fmt::Display for ModelError {
             ModelError::ArcTooTight => {
                 write!(f, "the curved wall bends too much for its thickness")
             }
-            ModelError::OpeningInCurvedWall => {
-                write!(f, "doors and windows cannot go in curved walls yet")
-            }
+            ModelError::OpeningInCurvedWall => write!(
+                f,
+                "the door or window is too wide for the curve of its wall (or turns a corner of a curved wall)"
+            ),
             ModelError::NonPositive(what) => write!(f, "{what} must be greater than zero"),
             ModelError::NotFinite(what) => write!(f, "{what} is not a valid number"),
             ModelError::DuplicateId(id) => write!(f, "id {id} is used by more than one element"),
@@ -1274,6 +1305,8 @@ pub struct ModelParts {
     pub sun: Sun,
     /// Prices of the budget's items, by their keys.
     pub prices: Vec<(String, PriceConcept)>,
+    /// Overheads, profit and VAT of the budget.
+    pub budget: BudgetSettings,
     pub plot_area: Option<f64>,
     /// Plots and roads of the site.
     pub plots: Vec<Plot>,
@@ -1388,6 +1421,7 @@ pub struct Model {
     ref_planes: BTreeMap<RefPlaneId, RefPlane>,
     sun: Sun,
     prices: BTreeMap<String, PriceConcept>,
+    budget: BudgetSettings,
     plot_area: Option<f64>,
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
@@ -1467,6 +1501,7 @@ impl Model {
             ref_planes: BTreeMap::new(),
             sun: Sun::default(),
             prices: BTreeMap::new(),
+            budget: BudgetSettings::default(),
             plot_area: None,
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
@@ -2290,9 +2325,6 @@ impl Model {
     /// Bends a wall (or straightens it, with 0): its ends stay where they
     /// are and its line becomes the arc of that bulge (see [`Arc`]).
     pub fn set_wall_bulge(&mut self, id: WallId, bulge: f64) -> Result<(), ModelError> {
-        if bulge.abs() >= MIN_BULGE && self.openings.values().any(|o| o.wall == id) {
-            return Err(ModelError::OpeningInCurvedWall);
-        }
         self.edit_wall(id, |w| {
             w.bulge = if bulge.abs() < MIN_BULGE { 0.0 } else { bulge };
         })
@@ -3337,14 +3369,26 @@ impl Model {
             .walls
             .get(&spec.wall)
             .ok_or(ModelError::UnknownWall(spec.wall))?;
-        if wall.is_curved() {
-            return Err(ModelError::OpeningInCurvedWall);
-        }
         let thickness = self
             .wall_types
             .get(&wall.wall_type)
             .ok_or(ModelError::UnknownWallType(wall.wall_type))?
             .thickness();
+        // In a curved wall the door or window is straight, square to the
+        // wall at its centre: the curve must not part from its ends by more
+        // than half the wall; and it cannot turn a corner.
+        if let Some(arc) = wall.arc() {
+            let half = otype.width / 2.0;
+            let r = arc.radius;
+            let sag = if half < r {
+                r - (r * r - half * half).sqrt()
+            } else {
+                f64::INFINITY
+            };
+            if corner.is_some() || sag > thickness / 2.0 + EPSILON {
+                return Err(ModelError::OpeningInCurvedWall);
+            }
+        }
         finite(spec.along, "opening position")?;
         finite(spec.sill, "sill height")?;
         if let Some(s) = spec.setback {
@@ -3924,6 +3968,7 @@ impl Model {
                 .iter()
                 .map(|(k, c)| (k.clone(), c.clone()))
                 .collect(),
+            budget: self.budget,
             plot_area: self.plot_area,
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
@@ -4257,6 +4302,12 @@ impl Model {
                     error,
                 })?;
         }
+        model
+            .set_budget_settings(parts.budget)
+            .map_err(|error| RestoreError {
+                element: "budget".into(),
+                error,
+            })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
@@ -4367,7 +4418,7 @@ mod tests {
         m.flip_wall(id).unwrap();
         assert_eq!(m.wall(id).unwrap().bulge, -1.0);
         assert!(m.wall(id).unwrap().midpoint().approx_eq(before));
-        // No doors or windows yet.
+        // Doors and windows, straight, square to the wall at their centre.
         let otype = m
             .add_opening_type(NewOpeningType {
                 name: "P".into(),
@@ -4389,8 +4440,26 @@ mod tests {
             hand: Hand::Left,
             setback: None,
         };
+        let door_in_curve = m.add_opening(op.clone()).unwrap();
+        m.remove_opening(door_in_curve).unwrap();
+        // Too wide for the curve: 3,5 m in a radius of 2.
+        let wide = m
+            .add_opening_type(NewOpeningType {
+                name: "Ancha".into(),
+                kind: OpeningKind::Door(DoorOperation::SingleSwing),
+                width: 3.5,
+                height: 2.0,
+                frame_width: 0.05,
+                frame_depth: 0.08,
+                frame_material: brick,
+                panel_material: brick,
+            })
+            .unwrap();
         assert_eq!(
-            m.add_opening(op.clone()),
+            m.add_opening(NewOpening {
+                opening_type: wide,
+                ..op.clone()
+            }),
             Err(ModelError::OpeningInCurvedWall)
         );
         // Too tight: a 4 cm radius for a 10 cm wall.
@@ -4413,15 +4482,28 @@ mod tests {
         flat.bulge = 1e-9;
         let f = m.add_wall(flat).unwrap();
         assert_eq!(m.wall(f).unwrap().bulge, 0.0);
-        // Bending a wall keeps its ends; a wall with a door cannot bend.
+        // Bending a wall keeps its ends; a wall with a door bends while
+        // the door still fits in the curve.
         m.set_wall_bulge(f, 0.5).unwrap();
         assert!(m.wall(f).unwrap().is_curved());
         m.set_wall_bulge(f, 0.0).unwrap();
-        let mut door = op;
+        let mut door = op.clone();
         door.wall = f;
         m.add_opening(door).unwrap();
+        m.set_wall_bulge(f, 0.5).unwrap();
+        // A wide door does not let its wall bend that much.
+        let mut flat2 = spec(lvl, t);
+        flat2.start = Point2::new(0.0, 10.0);
+        flat2.end = Point2::new(4.0, 10.0);
+        let g = m.add_wall(flat2).unwrap();
+        m.add_opening(NewOpening {
+            opening_type: wide,
+            wall: g,
+            ..op.clone()
+        })
+        .unwrap();
         assert_eq!(
-            m.set_wall_bulge(f, 0.5),
+            m.set_wall_bulge(g, 0.5),
             Err(ModelError::OpeningInCurvedWall)
         );
         // A type thick enough to close the curve (radius 2) is refused.

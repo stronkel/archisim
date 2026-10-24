@@ -1152,7 +1152,7 @@ fn draw_layers(
     k: f64,
 ) {
     if g.arc.is_some() {
-        draw_curved_layers(s, model, g, gi, k);
+        draw_curved_layers(s, model, g, gi, pieces, k);
         return;
     }
     let (a, b) = g.axis;
@@ -1739,7 +1739,7 @@ fn face_edge_at(
 
 fn draw_cut_lines(s: &mut String, g: &WallGeometry, pieces: &[WallPiece], cut_plane: f64, k: f64) {
     if let Some(arc) = &g.arc {
-        draw_curved_cut_lines(s, g, arc, k);
+        draw_curved_cut_lines(s, g, arc, pieces, k);
         return;
     }
     let (a, b) = g.axis;
@@ -2352,7 +2352,14 @@ fn runs_on(poly: &[Point2], on: impl Fn(Point2) -> bool) -> Vec<Vec<Point2>> {
 
 /// The layers of a curved wall: each band filled with its material, the
 /// insulation zigzag along the curve and thin lines between layers.
-fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize, k: f64) {
+fn draw_curved_layers(
+    s: &mut String,
+    model: &Model,
+    g: &WallGeometry,
+    gi: usize,
+    pieces: &[WallPiece],
+    k: f64,
+) {
     let (Some(arc), Some(wtype)) = (
         g.arc.as_ref(),
         model
@@ -2370,7 +2377,15 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
         let Some(mat) = model.material(band.material) else {
             continue;
         };
-        fill_cut(s, mat, &band.polygon, &format!("cut-{gi}-{li}-0"), k);
+        // Cut where its doors and windows are (square to the curve).
+        let bits: Vec<Vec<Point2>> = pieces
+            .iter()
+            .map(|p| archisim_geom::clip_arc_span(&band.polygon, arc, p.from, p.to))
+            .filter(|p| !p.is_empty())
+            .collect();
+        for (pi, bit) in bits.iter().enumerate() {
+            fill_cut(s, mat, bit, &format!("cut-{gi}-{li}-{pi}"), k);
+        }
         if poche().is_none()
             && (mat.cut_pattern == CutPattern::Insulation
                 || band.function == LayerFunction::Insulation)
@@ -2388,21 +2403,27 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
                 f += df;
                 up = !up;
             }
-            let zz = clip_polyline(&zigzag, &band.polygon);
-            if !zz.is_empty() {
-                let _ = writeln!(
-                    s,
-                    r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
-                    num(pens().hatch * k)
-                );
+            for bit in &bits {
+                let zz = clip_polyline(&zigzag, bit);
+                if !zz.is_empty() {
+                    let _ = writeln!(
+                        s,
+                        r#"<path d="{zz}" fill="none" stroke="{INK}" stroke-width="{}" stroke-linejoin="miter"/>"#,
+                        num(pens().hatch * k)
+                    );
+                }
             }
         }
     }
     for li in 0..g.layers.len().saturating_sub(1) {
         let off = tops[li + 1];
-        for run in runs_on(&g.layers[li].polygon, |p| {
-            (arc.project(p).1 - off).abs() < 1e-6
-        }) {
+        let runs: Vec<Vec<Point2>> = pieces
+            .iter()
+            .map(|p| archisim_geom::clip_arc_span(&g.layers[li].polygon, arc, p.from, p.to))
+            .filter(|p| !p.is_empty())
+            .flat_map(|bit| runs_on(&bit, |p| (arc.project(p).1 - off).abs() < 1e-6))
+            .collect();
+        for run in runs {
             let _ = writeln!(
                 s,
                 r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
@@ -2415,26 +2436,44 @@ fn draw_curved_layers(s: &mut String, model: &Model, g: &WallGeometry, gi: usize
 
 /// The cut lines of a curved wall: both faces, and the ends that are not
 /// joined to another wall.
-fn draw_curved_cut_lines(s: &mut String, g: &WallGeometry, arc: &archisim_core::Arc, k: f64) {
+fn draw_curved_cut_lines(
+    s: &mut String,
+    g: &WallGeometry,
+    arc: &archisim_core::Arc,
+    pieces: &[WallPiece],
+    k: f64,
+) {
     let mut d = String::new();
     let off = |p: Point2| arc.project(p).1;
+    let along = |p: Point2| arc.project(p).0 * arc.length();
     let near = |x: f64, y: f64| (x - y).abs() < 1e-6;
-    for face in [g.exterior_offset, g.interior_offset] {
-        for run in runs_on(&g.outline, |p| near(off(p), face)) {
-            d.push_str(&open_path(&run));
-            d.push(' ');
+    // The jambs of the doors and windows cut here.
+    let jambs: Vec<f64> = pieces
+        .iter()
+        .flat_map(|p| [p.from, p.to])
+        .flatten()
+        .collect();
+    for piece in pieces {
+        let ring = archisim_geom::clip_arc_span(&g.outline, arc, piece.from, piece.to);
+        for face in [g.exterior_offset, g.interior_offset] {
+            for run in runs_on(&ring, |p| near(off(p), face)) {
+                d.push_str(&open_path(&run));
+                d.push(' ');
+            }
         }
-    }
-    let ring = &g.outline;
-    for i in 0..ring.len() {
-        let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
-        if near(off(p), off(q)) {
-            continue;
-        }
-        let at_start = arc.project(p).0 + arc.project(q).0 < 1.0;
-        let cut = if at_start { &g.start_cut } else { &g.end_cut };
-        if *cut == EndCut::Square {
-            let _ = write!(d, "M{} L{} ", pt(p), pt(q));
+        for i in 0..ring.len() {
+            let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+            if near(off(p), off(q)) {
+                continue;
+            }
+            let at_jamb = jambs
+                .iter()
+                .any(|j| (along(p) - j).abs() < 1e-4 && (along(q) - j).abs() < 1e-4);
+            let at_start = arc.project(p).0 + arc.project(q).0 < 1.0;
+            let cut = if at_start { &g.start_cut } else { &g.end_cut };
+            if at_jamb || *cut == EndCut::Square {
+                let _ = write!(d, "M{} L{} ", pt(p), pt(q));
+            }
         }
     }
     let _ = writeln!(

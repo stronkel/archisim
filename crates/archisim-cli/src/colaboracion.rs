@@ -208,11 +208,23 @@ fn clashes(model: &Path, links: &[&Path], tolerance: f64, bcf_path: Option<&Path
         let found = archisim_coord::find_clashes(&me, &other, &opts);
         for c in &found {
             let (x, y) = (&me.elements[c.a], &other.elements[c.b]);
+            let what = match c.kind {
+                archisim_coord::ClashKind::Hard => archisim_coord::versions::metres(c.depth),
+                archisim_coord::ClashKind::Clearance => format!(
+                    "a {}, holgura {}",
+                    archisim_coord::versions::metres(c.gap),
+                    archisim_coord::versions::metres(c.gap + c.depth)
+                ),
+            };
             println!(
-                "    ✘ {} × {}: {} ({}) en X {:.2}, Y {:.2}, Z {:.2}",
+                "    {} {} × {}: {what} ({}) en X {:.2}, Y {:.2}, Z {:.2}",
+                if c.kind == archisim_coord::ClashKind::Hard {
+                    "✘"
+                } else {
+                    "△"
+                },
                 label(x),
                 label(y),
-                archisim_coord::versions::metres(c.depth),
                 x.storey
                     .as_deref()
                     .or(y.storey.as_deref())

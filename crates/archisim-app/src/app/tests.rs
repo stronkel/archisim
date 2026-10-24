@@ -1805,7 +1805,7 @@ fn elements_change_level_and_other_levels_show() {
 /// The geometry methods of the wall and slab tools, click by click: a
 /// rectangle of walls, a circle, an arc, a rectangle by its typed size and
 /// a rectangular slab; then a curved wall bent with its handle, and a door
-/// refused in a curved wall. With `ARCHISIM_TEST_OUT` set, leaves
+/// in a curved wall. With `ARCHISIM_TEST_OUT` set, leaves
 /// `modos.archisim` and `modos.ifc` there.
 #[test]
 fn construction_modes_by_clicks() {
@@ -1900,13 +1900,32 @@ fn construction_modes_by_clicks() {
     assert_eq!(h.app.ed.undo_label(), Some("Curvar muro"));
     assert_eq!((bent.start, bent.end), (arc_wall.start, arc_wall.end));
 
-    // No doors in curved walls yet: the click says why.
+    // A door goes in a curved wall too, straight and square to the wall
+    // at its centre.
     h.type_text("p");
     let before = h.model().openings().count();
     h.click_at(p(9.0, 5.0));
-    assert_eq!(h.model().openings().count(), before);
-    let msg = h.app.message.clone().unwrap();
-    assert!(msg.error && msg.text.contains("curvos"), "{msg:?}");
+    assert_eq!(
+        h.model().openings().count(),
+        before + 1,
+        "{:?}",
+        h.app.message
+    );
+    let door = h
+        .model()
+        .openings()
+        .find(|o| h.model().wall(o.wall).is_some_and(|w| w.is_curved()))
+        .expect("a door in a curved wall")
+        .clone();
+    let g = archisim_geom::opening_geometry(h.model(), door.id).unwrap();
+    let wall = h.model().wall(door.wall).unwrap();
+    let arc = wall.arc().unwrap();
+    // Its centre on the arc (moved in by half the sagitta), its frame
+    // along the tangent there.
+    let mid = (g.t0 + g.t1) / 2.0;
+    let f = mid / arc.length();
+    assert!((g.origin + g.u * mid).distance(arc.point(f, 0.0)) < 0.05);
+    assert!((g.u.dot(arc.tangent(f)) - 1.0).abs() < 1e-9);
     h.key(Key::Escape);
 
     // Saved, opened and exported as it is; the IFC comes back the same.
@@ -6130,6 +6149,7 @@ fn budget_takes_a_price_from_a_bank() {
             price: c.price,
             text: c.text,
             bank: "Banco de prueba".into(),
+            pieces: Vec::new(),
         }),
     );
     assert_eq!(h.app.ed.undo_label(), Some("Precio de partida"));

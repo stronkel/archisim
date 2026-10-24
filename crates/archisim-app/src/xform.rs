@@ -542,6 +542,7 @@ pub fn run_spec(
         elevation: x.elevation,
         width: x.width,
         height: x.height,
+        slope: x.slope,
     }
 }
 

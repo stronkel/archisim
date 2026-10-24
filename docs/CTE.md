@@ -42,6 +42,19 @@ Un local puede fijar su propia densidad en **Propiedades → Ocupación (CTE)** 
 - **Escaleras**: la comprobación de cada escalera (huella, tabica, 2C + H, anchura, tramos, altura por tramo y pasamanos, en uso general o restringido). Aviso si una escalera de uso restringido está en un edificio que no es de viviendas.
 - **Rampas**: los forjados inclinados entre el 4 % y el 20 %. Uso general, hasta el 12 %; en un itinerario accesible, 10 % si miden menos de 3 m, 8 % si menos de 6 m y 6 % en el resto, con tramos de 9 m como máximo.
 
+## Agua y saneamiento (HS 4 y HS 5) · v0.57
+
+Sobre las tuberías dibujadas con la herramienta Tubería, en cada planta:
+
+- **Aparatos sanitarios**: los objetos que ArchiSim reconoce como inodoro, bidé, lavabo, ducha, bañera, fregadero (el mueble de cocina con fregadero), lavadora o lavavajillas (por el modelo 3D que genera ArchiSim, o porque el nombre del tipo lo dice: «Lavabo…», «Inodoro…»).
+- **Desagüe** (HS 5, tabla 4.1, uso privado): la tubería de saneamiento más cercana a cada aparato (a menos de 1,5 m) tiene que tener al menos el diámetro de su derivación: lavabo y bidé 32 mm; ducha, bañera, fregadero, lavavajillas y lavadora 40 mm; inodoro con cisterna 100 mm. Se da también su número de unidades de desagüe (UD).
+- **Agua fría y caliente** (HS 4, tabla 4.2, cobre o plástico): la tubería de agua fría (y la de caliente, salvo inodoro y lavadora) más cercana tiene que tener al menos 12 mm; bañera y lavadora, 20 mm.
+- Si en el proyecto hay saneamiento (o agua) dibujado y un aparato no tiene ninguna tubería cerca, sale un aviso. Si no hay ninguna tubería dibujada, no se comprueba.
+- **Pendientes del saneamiento**: las derivaciones (menos de 75 mm) entre el 2 % y el 5 %; los colectores colgados, al menos el 1 %; los enterrados (los que bajan por debajo de su planta), al menos el 2 %.
+- El diámetro que se compara es el dibujado (la herramienta pide el exterior); los mínimos del CTE son nominales, así que se admite 1,5 mm menos.
+
+**A comprobar por Antonio**: los valores de las tablas 4.1 de HS 5 y 4.2 de HS 4 están escritos de memoria del texto del CTE y no los he podido contrastar con el documento oficial desde aquí. Las pendientes sí están contrastadas.
+
 ## Superficies
 
 Superficie útil de cada local, por uso y por planta; superficie construida de cada planta (lo que encierran las caras exteriores de los muros, con los muros, sin patios de más de 1 m²) y del edificio, con la ocupación.
@@ -54,7 +67,8 @@ Superficie útil de cada local, por uso y por planta; superficie construida de c
 - Barandillas: altura según la diferencia de cota (0,90 / 1,10 m).
 - Superficies mínimas de las normas de habitabilidad de cada comunidad o del planeamiento: no son del CTE.
 - Ascensores accesibles, plazas de aparcamiento accesibles y la reserva de plazas.
+- Diámetros de bajantes y colectores por las unidades de desagüe que recogen (HS 5, tablas 4.3 a 4.5), caudales y diámetros de los tramos de la red de agua (HS 4, tablas 2.1 y 4.3), y la distancia de los aparatos a la bajante.
 
 ## Fuentes
 
-Texto del CTE DB-SI (sección SI 3) y DB-SUA (Anejo A, SUA 1 y SUA 9) consultado en normatia.com el 20/10/2026.
+Texto del CTE DB-SI (sección SI 3) y DB-SUA (Anejo A, SUA 1 y SUA 9) consultado en normatia.com el 20/10/2026. Pendientes de saneamiento de HS 5 contrastadas en certicalia.com («Pendiente mínima de saneamiento según el CTE») el 23/10/2026.

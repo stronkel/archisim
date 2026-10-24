@@ -1,7 +1,10 @@
 //! The budget in the Mediciones tab (bloque 7 de la revisión del
 //! 22/10/2026): the items of the measurements by chapters, each with its
 //! price — from a price bank in BC3 opened here, or typed — and its amount;
-//! the BC3 exported carries them to Presto.
+//! the BC3 exported carries them to Presto. Each price can show how it is
+//! made up (its pieces, from the bank, whose yields and prices can be
+//! changed here), and the end of the table goes from the execution budget
+//! to the contract one with the overheads, profit and VAT of the project.
 
 use archisim_core::PriceConcept;
 use archisim_export::bc3_read::{read_bank, unit_key, Bank};
@@ -16,6 +19,8 @@ pub struct BudgetState {
     /// The bank of the preferences was tried already.
     tried_saved: bool,
     pub pick: Option<Pick>,
+    /// Items whose decomposition is shown, by key.
+    pub open: std::collections::BTreeSet<String>,
 }
 
 /// Choosing a concept of the bank for an item.
@@ -44,6 +49,22 @@ pub fn euros(v: f64) -> String {
 
 fn quantity(v: f64) -> String {
     format!("{:.2}", v).replace('.', ",")
+}
+
+/// A number typed in Spanish («1.234,5»), or `None`.
+fn parse_es(text: &str) -> Option<f64> {
+    let t = text.trim().trim_end_matches('%').trim();
+    let t = if t.contains(',') {
+        t.replace('.', "").replace(',', ".")
+    } else {
+        t.to_string()
+    };
+    t.parse::<f64>().ok().filter(|v| v.is_finite())
+}
+
+fn percent(v: f64) -> String {
+    let p = (v * 1000.0).round() / 10.0;
+    format!("{p}").replace('.', ",")
 }
 
 impl ArchiSimApp {
@@ -115,6 +136,8 @@ impl ArchiSimApp {
         let mut actions: Vec<(String, Option<PriceConcept>)> = Vec::new();
         let mut open_bank = false;
         let mut pick = None;
+        let mut toggles: Vec<String> = Vec::new();
+        let mut budget_change: Option<archisim_core::BudgetSettings> = None;
         ui.horizontal(|ui| {
             ui.label(
                 egui::RichText::new("Presupuesto")
@@ -211,6 +234,8 @@ impl ArchiSimApp {
                                     ..Default::default()
                                 });
                                 c.price = v.max(0.0);
+                                // A price typed by hand has no pieces.
+                                c.pieces.clear();
                                 actions.push((it.key.clone(), Some(c)));
                             }
                         }
@@ -232,6 +257,19 @@ impl ArchiSimApp {
                                         concept.map_or("", |c| c.unit.as_str()),
                                         it.unit
                                     ));
+                            }
+                            if let Some(c) = concept.filter(|c| !c.pieces.is_empty()) {
+                                let open = self.budget.open.contains(&it.key);
+                                if ui
+                                    .small_button(if open { "▾" } else { "▸" })
+                                    .on_hover_text(format!(
+                                        "Descomposición: {} piezas",
+                                        c.pieces.len()
+                                    ))
+                                    .clicked()
+                                {
+                                    toggles.push(it.key.clone());
+                                }
                             }
                             if ui
                                 .small_button("Partida…")
@@ -255,6 +293,82 @@ impl ArchiSimApp {
                             }
                         });
                         ui.end_row();
+                        // Its pieces, under it.
+                        let Some(c) = concept
+                            .filter(|c| !c.pieces.is_empty() && self.budget.open.contains(&it.key))
+                        else {
+                            continue;
+                        };
+                        let amounts = archisim_core::piece_amounts(&c.pieces);
+                        let small =
+                            |t: &str| egui::RichText::new(t.to_string()).small().color(p.muted);
+                        for (i, (piece, a)) in c.pieces.iter().zip(&amounts).enumerate() {
+                            ui.label(small(&format!("   {}", piece.code)));
+                            ui.label(small(&piece.unit));
+                            ui.label(small(&format!("{} · {}", piece.kind_name(), piece.summary)));
+                            let mut edited: Option<archisim_core::PricePiece> = None;
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if let Some(t) = super::text_edit_committed(
+                                        ui,
+                                        egui::Id::unique(("piece-q", &it.key, i)),
+                                        &format!("{}", (piece.quantity * 1000.0).round() / 1000.0)
+                                            .replace('.', ","),
+                                        60.0,
+                                    ) {
+                                        if let Some(v) = parse_es(&t) {
+                                            edited = Some(archisim_core::PricePiece {
+                                                quantity: v.max(0.0),
+                                                ..piece.clone()
+                                            });
+                                        }
+                                    }
+                                },
+                            );
+                            if piece.is_percent() {
+                                ui.label(small("%"));
+                            } else if let Some(t) = super::text_edit_committed(
+                                ui,
+                                egui::Id::unique(("piece-p", &it.key, i)),
+                                &format!("{:.2}", piece.price).replace('.', ","),
+                                70.0,
+                            ) {
+                                if let Some(v) = parse_es(&t) {
+                                    edited = Some(archisim_core::PricePiece {
+                                        price: v.max(0.0),
+                                        ..piece.clone()
+                                    });
+                                }
+                            }
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| ui.label(small(&euros(*a))),
+                            );
+                            ui.label("");
+                            ui.end_row();
+                            if let Some(np) = edited {
+                                let mut nc = c.clone();
+                                nc.pieces[i] = np;
+                                nc.reprice();
+                                actions.push((it.key.clone(), Some(nc)));
+                            }
+                        }
+                        let total: f64 = amounts.iter().sum();
+                        if (total - c.price).abs() >= 0.005 {
+                            ui.label("");
+                            ui.label("");
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "   La descomposición suma {} € y el precio es {} €",
+                                    euros(total),
+                                    euros(c.price)
+                                ))
+                                .small()
+                                .color(p.bad),
+                            );
+                            ui.end_row();
+                        }
                     }
                     grand += chapter_total;
                     ui.label("");
@@ -267,15 +381,94 @@ impl ArchiSimApp {
                     });
                     ui.end_row();
                 }
+                // From the execution budget to the contract one.
+                let settings = model.budget_settings();
+                let t = settings.totals(grand);
+                let total_row = |ui: &mut Ui, name: &str, v: f64, strong: bool| {
+                    ui.label("");
+                    ui.label("");
+                    let n = egui::RichText::new(name.to_string());
+                    ui.label(if strong { n.strong() } else { n });
+                    ui.label("");
+                    ui.label("");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let e = egui::RichText::new(euros(v));
+                        ui.label(if strong { e.strong() } else { e })
+                    });
+                    ui.end_row();
+                };
+                total_row(
+                    ui,
+                    "Presupuesto de ejecución material (PEM)",
+                    t.execution,
+                    true,
+                );
+                let mut new_settings = settings;
+                for (i, (name, frac, v)) in [
+                    ("Gastos generales", settings.overheads, t.overheads),
+                    ("Beneficio industrial", settings.profit, t.profit),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    ui.label("");
+                    ui.label("");
+                    ui.label(name);
+                    ui.label("");
+                    ui.horizontal(|ui| {
+                        if let Some(text) = super::text_edit_committed(
+                            ui,
+                            egui::Id::unique(("budget-pct", i)),
+                            &percent(frac),
+                            44.0,
+                        ) {
+                            if let Some(x) = parse_es(&text) {
+                                let x = (x / 100.0).clamp(0.0, 1.0);
+                                if i == 0 {
+                                    new_settings.overheads = x;
+                                } else {
+                                    new_settings.profit = x;
+                                }
+                            }
+                        }
+                        ui.label("%");
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(euros(v))
+                    });
+                    ui.end_row();
+                }
+                total_row(
+                    ui,
+                    "Presupuesto de ejecución por contrata (PEC)",
+                    t.contract,
+                    true,
+                );
                 ui.label("");
                 ui.label("");
-                ui.label(egui::RichText::new("Presupuesto de ejecución material").strong());
+                ui.label("IVA");
                 ui.label("");
-                ui.label("");
+                ui.horizontal(|ui| {
+                    if let Some(text) = super::text_edit_committed(
+                        ui,
+                        egui::Id::unique("budget-vat"),
+                        &percent(settings.vat),
+                        44.0,
+                    ) {
+                        if let Some(x) = parse_es(&text) {
+                            new_settings.vat = (x / 100.0).clamp(0.0, 1.0);
+                        }
+                    }
+                    ui.label("%");
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new(euros(grand)).strong())
+                    ui.label(euros(t.vat))
                 });
                 ui.end_row();
+                total_row(ui, "Presupuesto total (PEC con IVA)", t.total, true);
+                if new_settings != settings {
+                    budget_change = Some(new_settings);
+                }
             });
         if chapters.is_empty() {
             ui.label(
@@ -285,8 +478,21 @@ impl ArchiSimApp {
             );
         }
         drop(shown);
+        for key in toggles {
+            if !self.budget.open.remove(&key) {
+                self.budget.open.insert(key);
+            }
+        }
         for (key, c) in actions {
             self.set_item_price(&key, c);
+        }
+        if let Some(b) = budget_change {
+            let r = self.ed.transact("Gastos generales, beneficio e IVA", |m| {
+                m.set_budget_settings(b)
+            });
+            if let Err(e) = r {
+                self.complain(e);
+            }
         }
         if open_bank {
             self.choose_price_bank();
@@ -356,14 +562,7 @@ impl ArchiSimApp {
                                         |ui| ui.label(euros(c.price)),
                                     );
                                     if ui.small_button("Asignar").clicked() {
-                                        chosen = Some(PriceConcept {
-                                            code: c.code.clone(),
-                                            unit: c.unit.clone(),
-                                            summary: c.summary.clone(),
-                                            price: c.price,
-                                            text: c.text.clone(),
-                                            bank: bank.name.clone(),
-                                        });
+                                        chosen = bank.price_concept(&c.code);
                                     }
                                     ui.end_row();
                                 }

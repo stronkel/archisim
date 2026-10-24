@@ -970,7 +970,30 @@ impl<'a> Exporter<'a> {
         // The void: the rough opening through the whole wall thickness. It
         // overshoots the faces, and the base or top when it reaches them, so
         // the boolean cut is clean.
-        let m = 0.05;
+        let mut m = 0.05;
+        // In a curved wall the void is square to the wall at its centre:
+        // placed on the tangent there, and deeper by how far the faces
+        // curve away at its sides.
+        let mut frame = None;
+        if let Some(wl) = self.model.wall(og.wall).filter(|w| w.is_curved()) {
+            if let Some(arc) = wl.arc() {
+                let chord = (wl.end - wl.start).normalized().unwrap_or(og.u);
+                let n = chord.perp_left();
+                let p = og.origin + og.u * mid - wl.start;
+                let r = arc
+                    .radius_at(og.exterior_offset)
+                    .abs()
+                    .min(arc.radius_at(og.interior_offset).abs());
+                let half = w / 2.0;
+                if half < r {
+                    m += r - (r * r - half * half).sqrt();
+                }
+                frame = Some((
+                    Point2::new(p.dot(chord), p.dot(n)),
+                    archisim_core::Vec2::new(og.u.dot(chord), og.u.dot(n)),
+                ));
+            }
+        }
         let below = if (og.sill - wall_base).abs() < EPSILON {
             m
         } else {
@@ -986,8 +1009,21 @@ impl<'a> Exporter<'a> {
         } else {
             derived_guid(guid, "opening")
         };
-        let loc = self.point3(mid, 0.0, og.sill - wall_base);
-        let void_pl = self.placement(Some(wall_pl), loc, None);
+        let void_pl = match frame {
+            Some((at, dir)) => {
+                let loc = self.point3(at.x, at.y, og.sill - wall_base);
+                let d = self.w.add(format!(
+                    "IFCDIRECTION(({},{},0.))",
+                    real(dir.x),
+                    real(dir.y)
+                ));
+                self.placement(Some(wall_pl), loc, Some(d))
+            }
+            None => {
+                let loc = self.point3(mid, 0.0, og.sill - wall_base);
+                self.placement(Some(wall_pl), loc, None)
+            }
+        };
         let outline = self.polyline(
             &[
                 Point2::new(-w / 2.0, og.interior_offset - m),

@@ -290,7 +290,11 @@ mod tests {
             .find(|t| t.name == "Sofá acogedor de 3 plazas")
             .unwrap();
         let (model, _) = crate::type_preview::object_model(&lib, t).unwrap();
-        let mut r = Renderer::new(&device, view_formats, true);
+        let mut r = Renderer::new(
+            &device,
+            view_formats,
+            crate::view3d::render::TextureMode::Full,
+        );
         let (w, h, px) = draw(&mut r, &device, &queue, &model, [160, 116]).unwrap();
         assert_eq!([w, h], [160, 116]);
         let px = px.as_chunks::<4>().0;

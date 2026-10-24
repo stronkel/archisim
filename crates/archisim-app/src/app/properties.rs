@@ -867,21 +867,41 @@ impl ArchiSimApp {
                 }
             });
             let mut textures = self.v3d.textures;
-            ui.horizontal(|ui| {
-                ui.add_space(4.0);
-                ui.checkbox(&mut textures, "Texturas de los materiales")
-                    .on_hover_text(
-                        "Ladrillo, madera, piedra… dibujados en las caras. Apagadas, el 3D es más ligero (en los Mac con Intel vienen apagadas porque su tarjeta gráfica se queda colgada con ellas)",
-                    );
-            });
+            super::props::row(
+                ui,
+                "Texturas",
+                "Ladrillo, madera, piedra… dibujados en las caras. «Ligeras» las dibuja más sencillas, para tarjetas gráficas antiguas (las de los Mac con Intel se quedaban colgadas con las completas); sin texturas, colores lisos",
+                |ui, w| {
+                    egui::ComboBox::from_id_salt("textures-3d")
+                        .width(w - 8.0)
+                        .selected_text(textures.label())
+                        .show_ui(ui, |ui| {
+                            for m in crate::view3d::render::TextureMode::ALL {
+                                ui.selectable_value(&mut textures, m, m.label());
+                            }
+                        });
+                },
+            );
             if textures != self.v3d.textures {
                 self.v3d.set_textures(textures);
-                self.prefs.textures_3d = Some(textures);
+                self.prefs.textures_3d = Some(textures.key().to_string());
             }
-            ui.horizontal(|ui| {
-                ui.add_space(4.0);
-                self.quality_buttons(ui);
+            let mut quality = self.v3d.quality;
+            super::props::row(ui, "Imagen", quality.hint(), |ui, w| {
+                egui::ComboBox::from_id_salt("quality-3d")
+                    .width(w - 8.0)
+                    .selected_text(quality.name())
+                    .show_ui(ui, |ui| {
+                        for q in crate::view3d::look::Quality::ALL {
+                            ui.selectable_value(&mut quality, q, q.name())
+                                .on_hover_text(q.hint());
+                        }
+                    });
             });
+            if quality != self.v3d.quality {
+                self.v3d.quality = quality;
+                self.prefs.quality_3d = Some(quality);
+            }
         });
         self.render_group(ui);
         self.section_box_group(ui);

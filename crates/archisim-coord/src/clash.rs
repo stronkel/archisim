@@ -8,23 +8,81 @@
 //! its openings, is a penetration. Elements that only touch (a wall on a
 //! slab, a beam against a column face) never clash; a pipe through an
 //! opening that was left for it does not either.
+//!
+//! Rules by pairs of disciplines say which pairs are checked and the
+//! clearance (holgura) each asks: a duct must stay 5 cm from a beam, say.
+//! Elements that do not get into each other but come closer than that
+//! are a clearance clash: the gap found is reported.
 
 use std::collections::{HashMap, HashSet};
 
 use archisim_ifc::import::geometry::{cross, dot, sub, P3};
 
-use crate::elements::{Element, ModelElements};
+use crate::elements::{Discipline, Element, ModelElements};
 use crate::mesh::Tri;
+
+/// What kind of clash.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClashKind {
+    /// One gets into the other.
+    Hard,
+    /// They do not touch, but they are closer than the clearance asked.
+    Clearance,
+}
 
 /// A clash between an element of one set and one of the other.
 #[derive(Debug, Clone)]
 pub struct Clash {
     pub a: usize,
     pub b: usize,
-    /// The deepest point found, in metres.
+    /// The deepest point found (a clearance clash: the closest), metres.
     pub point: P3,
-    /// How far that point is inside the other element.
+    /// How far that point is inside the other element; a clearance clash:
+    /// how much short of the clearance it is.
     pub depth: f64,
+    pub kind: ClashKind,
+    /// A clearance clash: the gap found between them.
+    pub gap: f64,
+}
+
+/// What is checked between two disciplines.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClashRule {
+    pub a: Discipline,
+    pub b: Discipline,
+    /// Whether the pair is checked at all.
+    pub check: bool,
+    /// The free space asked between them, metres (0: only clashes).
+    pub clearance: f64,
+}
+
+impl ClashRule {
+    pub fn is_for(&self, a: Discipline, b: Discipline) -> bool {
+        (self.a == a && self.b == b) || (self.a == b && self.b == a)
+    }
+}
+
+/// The rules ArchiSim starts with: clearances between the installations
+/// and the structure, and between water and electricity; the site against
+/// the building is not checked (the terrain under the footings).
+pub fn default_rules() -> Vec<ClashRule> {
+    use Discipline::*;
+    let rule = |a, b, check, clearance| ClashRule {
+        a,
+        b,
+        check,
+        clearance,
+    };
+    vec![
+        rule(Mechanical, Structure, true, 0.05),
+        rule(Plumbing, Structure, true, 0.03),
+        rule(Electrical, Structure, true, 0.0),
+        rule(Mechanical, Plumbing, true, 0.025),
+        rule(Plumbing, Electrical, true, 0.03),
+        rule(Mechanical, Electrical, true, 0.0),
+        rule(Site, Architecture, false, 0.0),
+        rule(Site, Structure, false, 0.0),
+    ]
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +91,9 @@ pub struct ClashOptions {
     pub tolerance: f64,
     /// Classes never checked (spaces, furniture…), upper case.
     pub ignore_classes: HashSet<String>,
+    /// By pairs of disciplines; a pair without a rule is checked, with no
+    /// clearance.
+    pub rules: Vec<ClashRule>,
 }
 
 impl Default for ClashOptions {
@@ -47,7 +108,18 @@ impl Default for ClashOptions {
             .into_iter()
             .map(String::from)
             .collect(),
+            rules: default_rules(),
         }
+    }
+}
+
+impl ClashOptions {
+    /// Whether a pair of disciplines is checked, and its clearance.
+    pub fn rule(&self, a: Discipline, b: Discipline) -> (bool, f64) {
+        self.rules
+            .iter()
+            .find(|r| r.is_for(a, b))
+            .map_or((true, 0.0), |r| (r.check, r.clearance.max(0.0)))
     }
 }
 
@@ -88,6 +160,26 @@ pub(crate) fn prepare(el: &Element, step: f64) -> Option<Prepared<'_>> {
         hi,
         samples,
     })
+}
+
+/// The closest the points of `a` come to `b` from outside it, if closer
+/// than `clearance`: (point, gap).
+fn closest_gap(a: &Prepared, b: &Prepared, clearance: f64) -> Option<(P3, f64)> {
+    let tris = &b.el.mesh.triangles;
+    let mut best: Option<(P3, f64)> = None;
+    for &p in &a.samples {
+        if (0..3).any(|i| p[i] < b.lo[i] - clearance || p[i] > b.hi[i] + clearance) {
+            continue;
+        }
+        let d = tris
+            .iter()
+            .map(|t| point_triangle(p, t))
+            .fold(f64::INFINITY, f64::min);
+        if d < clearance && best.is_none_or(|(_, g)| d < g) {
+            best = Some((p, d));
+        }
+    }
+    best
 }
 
 fn overlap(a: &Prepared, b: &Prepared, tol: f64) -> bool {
@@ -239,8 +331,22 @@ pub fn find_clashes(
     let opts = &ClashOptions {
         tolerance: opts.tolerance.max(0.0005),
         ignore_classes: opts.ignore_classes.clone(),
+        rules: opts.rules.clone(),
     };
-    let step = (opts.tolerance * 2.0).clamp(0.01, 0.05);
+    let widest = opts
+        .rules
+        .iter()
+        .filter(|r| r.check)
+        .map(|r| r.clearance)
+        .fold(0.0_f64, f64::max);
+    // Fine enough for the smallest clearance asked.
+    let finest = opts
+        .rules
+        .iter()
+        .filter(|r| r.check && r.clearance > 0.0)
+        .map(|r| r.clearance)
+        .fold(f64::INFINITY, f64::min);
+    let step = (opts.tolerance * 2.0).min(finest / 2.0).clamp(0.01, 0.05);
     let keep = |e: &Element| !opts.ignore_classes.contains(&e.class);
     let a: Vec<(usize, Prepared)> = left
         .elements
@@ -256,13 +362,14 @@ pub fn find_clashes(
         .filter(|(_, e)| keep(e))
         .filter_map(|(i, e)| prepare(e, step).map(|p| (i, p)))
         .collect();
-    // Broad phase: a grid of 2 m cells in plan.
+    // Broad phase: a grid of 2 m cells in plan (the elements grown by the
+    // widest clearance).
     const CELL: f64 = 2.0;
     let cell = |v: f64| (v / CELL).floor() as i64;
     let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
     for (k, (_, p)) in b.iter().enumerate() {
-        for x in cell(p.lo[0])..=cell(p.hi[0]) {
-            for y in cell(p.lo[1])..=cell(p.hi[1]) {
+        for x in cell(p.lo[0] - widest)..=cell(p.hi[0] + widest) {
+            for y in cell(p.lo[1] - widest)..=cell(p.hi[1] + widest) {
                 grid.entry((x, y)).or_default().push(k);
             }
         }
@@ -282,7 +389,34 @@ pub fn find_clashes(
         for k in cands {
             let (ib, pb) = &b[k];
             // The same element in both (a copy of the model linked): not a clash.
-            if pa.el.global_id == pb.el.global_id || !overlap(pa, pb, opts.tolerance) {
+            if pa.el.global_id == pb.el.global_id {
+                continue;
+            }
+            let (check, clearance) = opts.rule(pa.el.discipline, pb.el.discipline);
+            if !check {
+                continue;
+            }
+            if !overlap(pa, pb, opts.tolerance) {
+                // Apart: closer than the clearance?
+                if clearance > 0.0 && overlap(pa, pb, -clearance) {
+                    let gap = match (
+                        closest_gap(pa, pb, clearance),
+                        closest_gap(pb, pa, clearance),
+                    ) {
+                        (Some(x), Some(y)) => Some(if x.1 <= y.1 { x } else { y }),
+                        (x, y) => x.or(y),
+                    };
+                    if let Some((point, g)) = gap {
+                        out.push(Clash {
+                            a: *ia,
+                            b: *ib,
+                            point,
+                            depth: clearance - g,
+                            kind: ClashKind::Clearance,
+                            gap: g,
+                        });
+                    }
+                }
                 continue;
             }
             let hit = match (
@@ -298,10 +432,37 @@ pub fn find_clashes(
                     b: *ib,
                     point,
                     depth,
+                    kind: ClashKind::Hard,
+                    gap: 0.0,
                 });
+            } else if clearance > 0.0 {
+                // Overlapping boxes but no penetration: still within the
+                // clearance?
+                let gap = match (
+                    closest_gap(pa, pb, clearance),
+                    closest_gap(pb, pa, clearance),
+                ) {
+                    (Some(x), Some(y)) => Some(if x.1 <= y.1 { x } else { y }),
+                    (x, y) => x.or(y),
+                };
+                if let Some((point, g)) = gap {
+                    out.push(Clash {
+                        a: *ia,
+                        b: *ib,
+                        point,
+                        depth: clearance - g,
+                        kind: ClashKind::Clearance,
+                        gap: g,
+                    });
+                }
             }
         }
     }
-    out.sort_by(|x, y| y.depth.total_cmp(&x.depth));
+    // Clashes first, deepest first; then clearances, the tightest first.
+    out.sort_by(|x, y| {
+        (x.kind == ClashKind::Clearance)
+            .cmp(&(y.kind == ClashKind::Clearance))
+            .then(y.depth.total_cmp(&x.depth))
+    });
     out
 }
