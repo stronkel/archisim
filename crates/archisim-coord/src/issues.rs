@@ -107,13 +107,22 @@ pub fn clashes_to_bcf(
             continue;
         }
         let storey = ea.storey.as_ref().or(eb.storey.as_ref());
-        let text = format!(
-            "{} y {} se meten {} uno en otro{}.",
-            label(ea),
-            label(eb),
-            metres(c.depth),
-            storey.map(|s| format!(" ({s})")).unwrap_or_default()
-        );
+        let at = storey.map(|s| format!(" ({s})")).unwrap_or_default();
+        let text = match c.kind {
+            crate::ClashKind::Hard => format!(
+                "{} y {} se meten {} uno en otro{at}.",
+                label(ea),
+                label(eb),
+                metres(c.depth),
+            ),
+            crate::ClashKind::Clearance => format!(
+                "{} y {} quedan a {}, menos de la holgura de {}{at}.",
+                label(ea),
+                label(eb),
+                metres(c.gap),
+                metres(c.gap + c.depth),
+            ),
+        };
         if let Some(&i) = existing.get(&key) {
             let t = &mut bcf.topics[i];
             let was = t.status.clone().unwrap_or_default();
@@ -148,7 +157,14 @@ pub fn clashes_to_bcf(
             topic_type: Some(CLASH_TYPE.into()),
             status: Some(OPEN.into()),
             title: format!("{} × {}", label(ea), label(eb)),
-            priority: Some(if c.depth > 0.1 { "Alta" } else { "Normal" }.into()),
+            priority: Some(
+                if c.kind == crate::ClashKind::Hard && c.depth > 0.1 {
+                    "Alta"
+                } else {
+                    "Normal"
+                }
+                .into(),
+            ),
             index: Some(next_index),
             labels,
             creation_date: date.clone(),

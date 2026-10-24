@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use archisim_core::{DeviceKind, GlobalId, LevelId, ServiceSystem};
+use archisim_core::{DeviceKind, FittingKind, GlobalId, LevelId, Point2, ServiceSystem};
 
 use crate::step::{list, real, string, Ref};
 use crate::{derived_guid, Exporter};
@@ -41,18 +41,24 @@ impl Exporter<'_> {
                     real(r.width / 2.0)
                 ))
             };
+            let zs = r.point_elevations();
+            let k = (1.0 + r.slope * r.slope).sqrt();
             for (i, w) in r.path.windows(2).enumerate() {
                 let (a, b) = (w[0], w[1]);
                 let Some(u) = (b - a).normalized() else {
                     continue;
                 };
-                let len = a.distance(b);
+                // Along its slope.
+                let len = a.distance(b) * k;
                 // Along the stretch (local z), across it to the left (x),
                 // up (y).
-                let loc = self.point3(a.x, a.y, r.elevation);
-                let axis = self
-                    .w
-                    .add(format!("IFCDIRECTION(({},{},0.))", real(u.x), real(u.y)));
+                let loc = self.point3(a.x, a.y, zs[i]);
+                let axis = self.w.add(format!(
+                    "IFCDIRECTION(({},{},{}))",
+                    real(u.x / k),
+                    real(u.y / k),
+                    real(-r.slope / k)
+                ));
                 let across = self
                     .w
                     .add(format!("IFCDIRECTION(({},{},0.))", real(-u.y), real(u.x)));
@@ -122,6 +128,12 @@ impl Exporter<'_> {
                             real(v)
                         )));
                     }
+                    if r.slope > 0.0 {
+                        props.push(self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('Slope',$,IFCREAL({}),$)",
+                            real(r.slope)
+                        )));
+                    }
                 }
                 self.pset(el, &guid, "ArchiSim_Run", &props);
                 contained.entry(r.level).or_default().push(el);
@@ -159,6 +171,9 @@ impl Exporter<'_> {
                 DeviceKind::Light => ("IFCLIGHTFIXTURE", "POINTSOURCE"),
                 DeviceKind::Socket => ("IFCOUTLET", "POWEROUTLET"),
                 DeviceKind::Switch => ("IFCSWITCHINGDEVICE", "TOGGLESWITCH"),
+                DeviceKind::Radiator => ("IFCSPACEHEATER", "RADIATOR"),
+                DeviceKind::Grille => ("IFCAIRTERMINAL", "GRILLE"),
+                DeviceKind::Diffuser => ("IFCAIRTERMINAL", "DIFFUSER"),
             };
             let object_type = if predefined == "USERDEFINED" {
                 string(d.kind.name())
@@ -206,8 +221,14 @@ impl Exporter<'_> {
                 DeviceKind::Light => lighting.push(el),
                 DeviceKind::Socket | DeviceKind::Switch => electrical.push(el),
                 DeviceKind::Equipment => {}
+                k => {
+                    if let Some(s) = k.system() {
+                        by_system.entry(s).or_default().push(el);
+                    }
+                }
             }
         }
+        self.write_fittings(storeys, contained, &mut by_system);
         // One distribution system per system, serving the building.
         let mut systems: Vec<(String, &str, Vec<Ref>)> = by_system
             .into_iter()
@@ -235,6 +256,98 @@ impl Exporter<'_> {
                 "IFCRELSERVICESBUILDINGS({},$,$,$,{sys},({building}))",
                 string(derived_guid(&guid, "serves").as_str())
             ));
+        }
+    }
+
+    /// Elbows and tees (`IfcPipeFitting`, `IfcDuctFitting`: `BEND`,
+    /// `JUNCTION`): a short sleeve along each way out of them. They follow
+    /// from the runs, so `ArchiSim_Fitting` only says so (the import skips
+    /// them).
+    fn write_fittings(
+        &mut self,
+        storeys: &BTreeMap<LevelId, (Ref, Ref)>,
+        contained: &mut BTreeMap<LevelId, Vec<Ref>>,
+        by_system: &mut BTreeMap<ServiceSystem, Vec<Ref>>,
+    ) {
+        let model = self.model;
+        for f in model.run_fittings() {
+            let Some(r) = model.run(f.run) else {
+                continue;
+            };
+            let Some(&(_, storey_pl)) = storeys.get(&r.level) else {
+                continue;
+            };
+            let grow = 0.01_f64.max(r.width * 0.15);
+            let profile = if r.is_duct() {
+                self.w.add(format!(
+                    "IFCRECTANGLEPROFILEDEF(.AREA.,$,$,{},{})",
+                    real(r.width + grow),
+                    real(r.height + grow)
+                ))
+            } else {
+                self.w.add(format!(
+                    "IFCCIRCLEPROFILEDEF(.AREA.,$,$,{})",
+                    real((r.width + grow) / 2.0)
+                ))
+            };
+            let leg = (r.width.max(r.height) * 0.75).max(0.03);
+            let mut ways: Vec<Point2> = vec![-f.from, f.to];
+            if f.kind == FittingKind::Tee {
+                ways.push(f.from);
+            }
+            let mut items = Vec::new();
+            for d in ways {
+                let o = self.point3(f.position.x, f.position.y, f.elevation);
+                let axis = self
+                    .w
+                    .add(format!("IFCDIRECTION(({},{},0.))", real(d.x), real(d.y)));
+                let across = self
+                    .w
+                    .add(format!("IFCDIRECTION(({},{},0.))", real(-d.y), real(d.x)));
+                let ap = self
+                    .w
+                    .add(format!("IFCAXIS2PLACEMENT3D({o},{axis},{across})"));
+                items.push(self.w.add(format!(
+                    "IFCEXTRUDEDAREASOLID({profile},{ap},{},{})",
+                    self.z,
+                    real(leg)
+                )));
+            }
+            let body = self.w.add(format!(
+                "IFCSHAPEREPRESENTATION({},'Body','SweptSolid',{})",
+                self.body_ctx,
+                list(&items)
+            ));
+            let shape = self
+                .w
+                .add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,({body}))"));
+            let pl = self.placement(Some(storey_pl), self.origin, None);
+            let class = if r.is_duct() {
+                "IFCDUCTFITTING"
+            } else {
+                "IFCPIPEFITTING"
+            };
+            let predefined = match f.kind {
+                FittingKind::Elbow => "BEND",
+                FittingKind::Tee => "JUNCTION",
+            };
+            let el = self.w.add(format!(
+                "{class}({},$,{},$,$,{pl},{shape},$,.{predefined}.)",
+                string(f.guid.as_str()),
+                string(&format!(
+                    "{} {} {}",
+                    f.kind.name(),
+                    r.system.name(),
+                    r.size_text()
+                ))
+            ));
+            let props = vec![self.w.add(format!(
+                "IFCPROPERTYSINGLEVALUE('Run',$,IFCIDENTIFIER({}),$)",
+                string(r.guid.as_str())
+            ))];
+            self.pset(el, &f.guid, "ArchiSim_Fitting", &props);
+            contained.entry(r.level).or_default().push(el);
+            by_system.entry(r.system).or_default().push(el);
         }
     }
 }

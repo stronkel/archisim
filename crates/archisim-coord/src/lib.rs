@@ -16,7 +16,7 @@ pub mod issues;
 pub mod mesh;
 pub mod versions;
 
-pub use clash::{find_clashes, Clash, ClashOptions};
+pub use clash::{default_rules, find_clashes, Clash, ClashKind, ClashOptions, ClashRule};
 pub use elements::{elements_of, read_elements, Discipline, Element, ModelElements};
 pub use issues::{clashes_to_bcf, ids_to_bcf, Author};
 pub use versions::{compare, Change, VersionReport};

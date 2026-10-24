@@ -2062,8 +2062,21 @@ impl<'a> Importer<'a> {
             f64::INFINITY,
             f64::NEG_INFINITY,
         );
+        // In a curved wall: square to the wall at its centre, measured
+        // along the tangent there from the centre's place on the arc.
+        let arc = self.model.wall(frame.id).and_then(|w| w.arc());
+        let tangent = arc.map(|a| {
+            let fs: Vec<f64> = body.all_points().map(|p| a.project(p2(p)).0).collect();
+            let lo = fs.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = fs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let f = (lo + hi) / 2.0;
+            (a.point(f, 0.0), a.tangent(f), f * a.length())
+        });
         for p in body.all_points() {
-            let t = (p2(p) - frame.origin).dot(frame.u);
+            let t = match tangent {
+                Some((c, u, s)) => s + (p2(p) - c).dot(u),
+                None => (p2(p) - frame.origin).dot(frame.u),
+            };
             t0 = t0.min(t);
             t1 = t1.max(t);
             z0 = z0.min(p[2]);
@@ -2186,11 +2199,21 @@ impl<'a> Importer<'a> {
         let frame = self
             .frame_of(wall, &vbody)
             .ok_or("su muro no se ha importado")?;
-        let (origin, n) = (frame.origin, frame.n);
         let wall_id = frame.id;
         let (exterior, thickness) = (frame.exterior, frame.thickness);
         let level_elevation = frame.level_elevation;
         let (t0, t1, z0, z1) = self.rough_opening(wall, &vbody)?;
+        // Across the wall: square to it at the centre (in a curved wall,
+        // its tangent there).
+        let (origin, n) = match self
+            .model
+            .wall(wall_id)
+            .filter(|w| w.is_curved())
+            .and_then(|w| w.opening_frame((t0 + t1) / 2.0, t1 - t0))
+        {
+            Some((c, u)) => (c, u.perp_left()),
+            None => (frame.origin, frame.n),
+        };
         let (width, height) = (snap(t1 - t0), snap(z1 - z0));
 
         // Type, operation and hand.

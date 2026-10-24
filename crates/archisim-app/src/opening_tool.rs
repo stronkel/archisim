@@ -73,24 +73,33 @@ pub fn placement<G: Geo + ?Sized>(
     let model = geo.model();
     let wall_id = wall_at(geo, level, cursor, tolerance)?;
     let wall = model.wall(wall_id)?;
-    if wall.is_curved() {
-        // Not yet: the application says so on the click.
-        return None;
-    }
     let otype = model.opening_type(s.opening_type)?;
     let width = otype.width;
     let thickness = model.wall_type(wall.wall_type)?.thickness();
-    let u = (wall.end - wall.start).normalized()?;
-    let n = u.perp_left();
     let len = wall.length();
-
-    let raw = (cursor - wall.start).dot(u);
+    // Along the wall (the arc, in a curved wall) and across it.
+    let (raw, across) = match wall.arc() {
+        Some(arc) => {
+            let (f, off) = arc.project(cursor);
+            (f * len, off)
+        }
+        None => {
+            let u = (wall.end - wall.start).normalized()?;
+            (
+                (cursor - wall.start).dot(u),
+                (cursor - wall.start).dot(u.perp_left()),
+            )
+        }
+    };
     let mut along = (raw / FREE_STEP).round() * FREE_STEP;
     if len >= width {
         along = along.clamp(width / 2.0, len - width / 2.0);
     }
+    // Its frame: the wall, or the tangent at its centre in a curved one.
+    let (c, u) = wall.opening_frame(along, width)?;
+    let origin = c - u * along;
+    let n = u.perp_left();
     let (ext, int) = wall.face_offsets(thickness);
-    let across = (cursor - wall.start).dot(n);
     let opens_to = if across > (ext + int) / 2.0 {
         WallSide::Exterior
     } else {
@@ -115,7 +124,7 @@ pub fn placement<G: Geo + ?Sized>(
         opening: archisim_core::OpeningId(0),
         wall: wall_id,
         kind: otype.kind,
-        origin: wall.start,
+        origin,
         u,
         n,
         t0: along - width / 2.0,

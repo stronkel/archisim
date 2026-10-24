@@ -86,6 +86,8 @@ pub struct ClashRow {
     pub theirs_label: String,
     pub point: [f64; 3],
     pub depth: f64,
+    /// Too close rather than into each other: the gap found.
+    pub clearance: Option<f64>,
     pub storey: Option<String>,
 }
 
@@ -114,6 +116,8 @@ pub struct Coord {
     /// When the clash check last ran (`None`: never).
     pub clashes_checked: Option<String>,
     pub tolerance_mm: f64,
+    /// Which pairs of disciplines are checked and their clearances.
+    pub rules: Vec<archisim_coord::ClashRule>,
     pub requirements: Option<Requirements>,
     /// Linked elements painted in a colour (clash, issue), by
     /// (link, element index).
@@ -142,7 +146,17 @@ impl Coord {
     pub fn new() -> Coord {
         Coord {
             tolerance_mm: 10.0,
+            rules: archisim_coord::default_rules(),
             ..Coord::default()
+        }
+    }
+
+    /// The tolerance and rules of the clash check.
+    pub fn clash_options(&self) -> ClashOptions {
+        ClashOptions {
+            tolerance: self.tolerance_mm.max(0.5) / 1000.0,
+            rules: self.rules.clone(),
+            ..ClashOptions::default()
         }
     }
 
@@ -394,10 +408,7 @@ impl Coord {
             return Err("No hay ningún modelo vinculado visible con el que comprobar.".into());
         }
         let ours = project_elements(model)?;
-        let opts = ClashOptions {
-            tolerance: self.tolerance_mm.max(0.5) / 1000.0,
-            ..ClashOptions::default()
-        };
+        let opts = self.clash_options();
         let mut rows = Vec::new();
         for (li, l) in self.links.iter().enumerate() {
             if !l.visible {
@@ -414,12 +425,19 @@ impl Coord {
                     theirs_label: element_label(b),
                     point: c.point,
                     depth: c.depth,
+                    clearance: (c.kind == archisim_coord::ClashKind::Clearance).then_some(c.gap),
                     storey: a.storey.clone().or_else(|| b.storey.clone()),
                 });
             }
         }
-        rows.sort_by(|x, y| y.depth.total_cmp(&x.depth));
+        rows.sort_by(|x, y| {
+            x.clearance
+                .is_some()
+                .cmp(&y.clearance.is_some())
+                .then(y.depth.total_cmp(&x.depth))
+        });
         let n = rows.len();
+        let close = rows.iter().filter(|r| r.clearance.is_some()).count();
         self.clashes = rows;
         self.clashes_checked = Some(archisim_bcf::now());
         self.highlight.clear();
@@ -427,10 +445,17 @@ impl Coord {
             self.highlight.insert((c.link, c.theirs), CLASH_RED);
         }
         self.bump();
-        Ok(match n {
-            0 => "Sin interferencias con los modelos vinculados.".into(),
-            1 => "1 interferencia con los modelos vinculados.".into(),
-            n => format!("{n} interferencias con los modelos vinculados."),
+        let hard = n - close;
+        Ok(match (hard, close) {
+            (0, 0) => "Sin interferencias con los modelos vinculados.".into(),
+            (h, 0) => format!(
+                "{h} interferencia{} con los modelos vinculados.",
+                if h == 1 { "" } else { "s" }
+            ),
+            (h, c) => format!(
+                "{h} interferencia{} y {c} sin la holgura pedida con los modelos vinculados.",
+                if h == 1 { "" } else { "s" }
+            ),
         })
     }
 
@@ -438,10 +463,7 @@ impl Coord {
     /// none is open), keeping the history of each pair.
     pub fn clashes_to_issues(&mut self, model: &Model, author: &str) -> Result<String, String> {
         let ours = project_elements(model)?;
-        let opts = ClashOptions {
-            tolerance: self.tolerance_mm.max(0.5) / 1000.0,
-            ..ClashOptions::default()
-        };
+        let opts = self.clash_options();
         let issues = self.issues.get_or_insert_with(|| Issues {
             path: None,
             bcf: Bcf::default(),
@@ -614,6 +636,25 @@ impl Coord {
                         self.tolerance_mm = v;
                     }
                 }
+                ["regla", a, b, check, mm] => {
+                    let (Some(a), Some(b), Ok(mm)) = (
+                        archisim_coord::Discipline::from_code(a),
+                        archisim_coord::Discipline::from_code(b),
+                        mm.parse::<f64>(),
+                    ) else {
+                        continue;
+                    };
+                    let rule = archisim_coord::ClashRule {
+                        a,
+                        b,
+                        check: *check != "0",
+                        clearance: (mm / 1000.0).max(0.0),
+                    };
+                    match self.rules.iter_mut().find(|r| r.is_for(a, b)) {
+                        Some(r) => *r = rule,
+                        None => self.rules.push(rule),
+                    }
+                }
                 _ => {}
             }
         }
@@ -655,6 +696,21 @@ impl Coord {
         if (self.tolerance_mm - 10.0).abs() > 1e-9 {
             any = true;
             s += &format!("tolerancia\t{}\n", self.tolerance_mm);
+        }
+        // The rules that are not ArchiSim's own.
+        let defaults = archisim_coord::default_rules();
+        for r in &self.rules {
+            if defaults.contains(r) {
+                continue;
+            }
+            any = true;
+            s += &format!(
+                "regla\t{}\t{}\t{}\t{}\n",
+                r.a.code(),
+                r.b.code(),
+                u8::from(r.check),
+                (r.clearance * 1000.0).round()
+            );
         }
         let file = Self::sidecar(project);
         if any {
@@ -810,11 +866,13 @@ mod tests {
         // Kept beside the project, opened again.
         let project = dir.join("casa.archisim");
         c.tolerance_mm = 5.0;
+        c.rules[0].clearance = 0.08;
         c.save_beside(&project).unwrap();
         let mut again = Coord::new();
         assert!(again.project_changed(Some(&project)).is_empty());
         assert_eq!(again.links.len(), 1);
         assert_eq!(again.tolerance_mm, 5.0);
+        assert_eq!(again.rules, c.rules);
         assert!(again.issues.is_some());
 
         // The engineer moves the beam out of the wall: reload shows it.

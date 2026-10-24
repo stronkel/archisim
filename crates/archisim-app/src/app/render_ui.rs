@@ -239,10 +239,15 @@ impl ArchiSimApp {
                 ui,
                 "Calidad",
                 "Borrador para ver la luz en unos segundos; Alta para presentar",
-                |ui, _| {
-                    for q in RenderQuality::ALL {
-                        ui.selectable_value(&mut self.render.quality, q, q.label());
-                    }
+                |ui, w| {
+                    egui::ComboBox::from_id_salt("render-quality")
+                        .width(w - 8.0)
+                        .selected_text(self.render.quality.label())
+                        .show_ui(ui, |ui| {
+                            for q in RenderQuality::ALL {
+                                ui.selectable_value(&mut self.render.quality, q, q.label());
+                            }
+                        });
                 },
             );
             ui.add_space(4.0);

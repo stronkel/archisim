@@ -65,6 +65,40 @@ impl Bank {
         found
     }
 
+    /// A concept as the project keeps it: with its pieces (one level, each
+    /// with its price in the bank) and the bank's name.
+    pub fn price_concept(&self, code: &str) -> Option<archisim_core::PriceConcept> {
+        let c = self.concepts.get(code)?;
+        let pieces = self
+            .children
+            .get(code)
+            .map(|kids| {
+                kids.iter()
+                    .map(|(k, f)| {
+                        let p = self.concepts.get(k);
+                        archisim_core::PricePiece {
+                            code: k.clone(),
+                            unit: p.map(|p| p.unit.clone()).unwrap_or_default(),
+                            summary: p.map(|p| p.summary.clone()).unwrap_or_default(),
+                            kind: p.map_or(0, |p| p.kind),
+                            quantity: *f,
+                            price: p.map_or(0.0, |p| p.price),
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Some(archisim_core::PriceConcept {
+            code: c.code.clone(),
+            unit: c.unit.clone(),
+            summary: c.summary.clone(),
+            price: c.price,
+            text: c.text.clone(),
+            bank: self.name.clone(),
+            pieces,
+        })
+    }
+
     /// The chapters above a concept, from the root: their summaries.
     pub fn path_of(&self, code: &str) -> Vec<String> {
         let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
@@ -224,6 +258,14 @@ pub fn read_bank(bytes: &[u8]) -> Result<Bank, BankError> {
     Ok(bank)
 }
 
+fn is_percent(bank: &Bank, code: &str) -> bool {
+    code.starts_with('%')
+        || bank
+            .concepts
+            .get(code)
+            .is_some_and(|c| c.unit.trim() == "%")
+}
+
 fn price_of(
     bank: &Bank,
     given: &BTreeMap<String, bool>,
@@ -239,10 +281,18 @@ fn price_of(
         return own;
     }
     let p = match bank.children.get(code) {
-        Some(kids) if !kids.is_empty() => kids
-            .iter()
-            .map(|(k, f)| f * price_of(bank, given, k, memo, depth + 1))
-            .sum(),
+        Some(kids) if !kids.is_empty() => {
+            // A percentage (`%…`) is of the pieces above it.
+            let mut sum = 0.0;
+            for (k, f) in kids {
+                sum += if is_percent(bank, k) {
+                    sum * f / 100.0
+                } else {
+                    f * price_of(bank, given, k, memo, depth + 1)
+                };
+            }
+            sum
+        }
         _ => own,
     };
     memo.insert(code.to_string(), p);

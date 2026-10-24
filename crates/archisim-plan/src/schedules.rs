@@ -798,7 +798,7 @@ fn services(model: &Model) -> Vec<Item> {
     let new = |id: u64| model.phase(id) == Phase::New;
     let mut runs: BTreeMap<(archisim_core::ServiceSystem, String), Vec<Measured>> = BTreeMap::new();
     for r in model.runs().filter(|r| new(r.id.0)) {
-        let len = r.length();
+        let len = r.true_length();
         runs.entry((r.system, r.size_text()))
             .or_default()
             .push(Measured {
@@ -826,6 +826,53 @@ fn services(model: &Model) -> Vec<Item> {
             lines,
         })
         .collect();
+    // Elbows and tees, by units: they follow from the paths.
+    let mut fittings: BTreeMap<
+        (
+            archisim_core::ServiceSystem,
+            archisim_core::FittingKind,
+            String,
+        ),
+        Vec<Measured>,
+    > = BTreeMap::new();
+    for f in model.run_fittings() {
+        let Some(r) = model.run(f.run).filter(|r| new(r.id.0)) else {
+            continue;
+        };
+        fittings
+            .entry((r.system, f.kind, r.size_text()))
+            .or_default()
+            .push(Measured {
+                comment: format!(
+                    "{} de la {} {} · {}",
+                    f.kind.name(),
+                    if r.is_duct() {
+                        "red de conductos"
+                    } else {
+                        "tubería"
+                    },
+                    r.id.0,
+                    level_name(r.level)
+                ),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: 1.0,
+            });
+    }
+    items.extend(
+        fittings
+            .into_iter()
+            .enumerate()
+            .map(|(i, ((system, kind, size), lines))| Item {
+                code: format!("P{:02}", i + 1),
+                key: format!("pieza:{}:{}:{size}", system.name(), kind.name()),
+                unit: "ud",
+                summary: format!("{} {} {size}", kind.name(), system.name()),
+                lines,
+            }),
+    );
     let mut devices: BTreeMap<(archisim_core::DeviceKind, String), Vec<Measured>> = BTreeMap::new();
     for d in model.devices().filter(|d| new(d.id.0)) {
         devices

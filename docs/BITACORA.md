@@ -6,6 +6,40 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (5) · v0.57: los remates de la 0.48, rehechos sobre la 0.56
+
+Rama `bloque/remates-2`, pull request para Antonio (sustituye a #54). **Formato `.archisim` versión 34**: abre todas las anteriores, también los ficheros guardados con la 0.48, que tenía su propia versión 32.
+
+Antonio pidió rehacer sobre la versión actual los remates del 23/10, que se habían quedado en una rama de la 0.48. Casi todo se ha traído tal cual. Las buhardillas no: la 0.53 ya tenía unas más completas (ventanas de cubierta, tejas y canalones), así que se quedan esas. Las buhardillas de un fichero de la 0.48 se colocan de nuevo, al abrirlo, en el mismo punto y con sus medidas.
+
+**Hecho**
+- **Texturas ligeras en 3D**: en las propiedades de la vista 3D, Texturas «Completas», «Ligeras» o «Sin texturas». Las ligeras se dibujan más sencillas, para las tarjetas gráficas de los Mac con Intel, y son las de serie en esos Mac. Ahora incluyen también las telas, fibras, terrazo y mármol de la Maqueta. Texturas, Imagen y la calidad del Renderizado son listas desplegables, para que el panel no se ensanche.
+- **Puertas y ventanas en muros curvos**: el hueco es recto y en escuadra con el muro en su centro. Se ven en planta y 3D, salen en el IFC y se importan.
+- **Instalaciones, segunda vuelta**:
+  - pendiente de las tuberías;
+  - codos y tes que salen solos del trazado (en el IFC, `IfcPipeFitting` e `IfcDuctFitting`);
+  - radiadores, rejillas y difusores;
+  - comprobación CTE de diámetros y pendientes (HS 4 y HS 5).
+- **Presupuesto**:
+  - la descomposición de cada partida, que se abre con ▸;
+  - totales con gastos generales, beneficio industrial, PEC e IVA;
+  - en el BC3, la descomposición (`~D`) y los porcentajes (`~K`).
+- **Interferencias**: reglas por parejas de disciplinas y holguras. Lo que queda demasiado cerca sale en ámbar y se puede pasar a incidencias BCF.
+- Revisado en la ventana real: la vista 3D con texturas ligeras y la tabla de Mediciones con su presupuesto.
+
+**Pendiente**
+- En Mediciones, el botón «Partida…» queda al borde derecho y hay que desplazar la tabla para verlo.
+- Lo demás, en `docs/HOJA_DE_RUTA.md` §9 (C1–C7), a la espera del orden de Antonio.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`out/demo.archisim`) y pulsa F3. En Propiedades, cambia Texturas a «Ligeras» y luego a «Sin texturas»: el 3D debe cambiar sin colgarse. En el MacBook con Intel deben salir «Ligeras» de serie.
+2. Dibuja un muro curvo (Muro → arco) y pon en él una puerta y una ventana: deben quedar rectas, en escuadra con el muro. Mira la planta, el 3D y exporta el IFC.
+3. Disciplina Instalaciones: dibuja una tubería de saneamiento con un quiebro y dale pendiente en Propiedades. Mira el codo en 3D y pon un radiador. Después, Colaboración → Comprobación CTE: deben salir diámetros y pendientes.
+4. Pestaña Mediciones: abre `docs/ejemplos/banco-ejemplo.bc3` con «Abrir banco BC3…», asigna una partida y despliega su descomposición con ▸. Mira los totales con GG, BI e IVA y exporta el BC3.
+5. Si guardaste algún proyecto con la 0.48 y buhardillas, ábrelo: las buhardillas deben seguir donde estaban.
+
+---
+
 ## 2026-10-24 (4) · Hoja de ruta común entre conversaciones
 
 En `main`, solo documentación (sin cambios de código, formato ni IFC).

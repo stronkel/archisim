@@ -221,6 +221,8 @@ impl ArchiSimApp {
             Subject::Opening(o) => Some(Element::Opening(o)),
             Subject::Stair(s) => Some(Element::Stair(s)),
             Subject::Slab(s) => Some(Element::Slab(s)),
+            Subject::Object(o) => Some(Element::Object(o)),
+            Subject::Run(r) => Some(Element::Run(r)),
             Subject::Building | Subject::Level(_) => None,
         };
         if let Some(level) = i.level {

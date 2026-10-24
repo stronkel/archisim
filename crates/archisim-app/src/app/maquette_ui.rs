@@ -445,24 +445,6 @@ impl ArchiSimApp {
         });
     }
 
-    /// The quality of the 3D picture (in both environments): kept for
-    /// this computer.
-    pub(super) fn quality_buttons(&mut self, ui: &mut Ui) {
-        use crate::view3d::look::Quality;
-        ui.spacing_mut().item_spacing.x = 2.0;
-        ui.label("Imagen");
-        for q in Quality::ALL {
-            if ui
-                .selectable_label(self.v3d.quality == q, q.name())
-                .on_hover_text(q.hint())
-                .clicked()
-            {
-                self.v3d.quality = q;
-                self.prefs.quality_3d = Some(q);
-            }
-        }
-    }
-
     /// The picture's quality and its light (day, evening or night), as
     /// two short lists: the Maqueta's bar has little room.
     fn look_menus(&mut self, ui: &mut Ui) {
