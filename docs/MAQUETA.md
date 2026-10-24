@@ -169,7 +169,14 @@ Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), 
 - **Barra del objeto** en la Maqueta, en lugar de la tarjeta flotante: abajo a la izquierda, sobre el catálogo, su dibujo y su nombre; Girar, Invertir (puertas, ventanas y muros), Duplicar, Igualar (cuentagotas), Borrar; **sus materiales** como muestras redondas que abren los colores del proyecto (solo cambian ese objeto: si su tipo lo comparten otros, se le hace uno propio); Más…
 - **Puertas y ventanas en alzado** en las tarjetas del catálogo y en la barra del objeto, con el nombre entero en dos líneas.
 
-Pendiente del concepto: catálogo en árbol (grupo → categoría con iconos → tipo), módulos de cocina con encimera continua y sus estilos, fichas y diálogos unificados (sin ventanas que aparecen en una esquina), y el plano de carpinterías.
+## 6 quinquies. Cocina por módulos, catálogo en árbol, diálogos y carpinterías (v0.55, rama `bloque/cocina`)
+
+- **Catálogo en tres niveles**: grupo (Construir, Amueblar, Exterior), tema (Cocina, Ventanas…) y, debajo, sus clases como fichas: «Todas», Bajos, Altos, Columnas, Campanas, Islas… en la cocina; Practicables, Correderas, Guillotina… en las ventanas; las carpetas de la biblioteca en lo demás.
+- **Cocina por módulos**, como en Paralives: el **módulo bajo** (familia «Módulo bajo de cocina») es cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero o esquina, con su encimera, que llega al borde del módulo: puestos uno junto a otro (se pegan solos al acercarlos), las encimeras forman una sola. La **columna** es despensa, horno y microondas o frigorífico integrado. El mueble alto lleva también estilo de frente. Frentes: liso, con marco, ranurado o con cristal.
+- **La barra del objeto** enseña lo que se puede cambiar del mueble: qué lleva, cuántos cajones o puertas (botones 0 1 2 3 4), frente y tirador (en una lista, con «a toda la fila» para los módulos que se tocan en línea) y sus materiales. Su tarjeta lo dibuja en 3D.
+- **Diálogos**: se abren junto al botón que los llama (a su izquierda si está a la derecha de la ventana), no plegables, con la misma forma redondeada y sombra; «Tipos y materiales», grande, en el centro.
+- **Plano de carpinterías** (Archivo → Plano de carpinterías): cada tipo de puerta y ventana del proyecto en alzado a 1:50 con sus medidas, su sección y sus datos (familia, medidas, apertura, carpintería, unidades), seis por hoja A3, en PDF.
+- `archisim cocina out/`: una cocina con columna, cajoneras, fregadero, lavavajillas, horno, placa y botellero, altos y campana, en cuatro filas con cada frente.
 
 ## 7. Bloques
 

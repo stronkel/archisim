@@ -176,11 +176,13 @@ fn style(p: Palette, dark: bool) -> egui::Style {
     v.panel_fill = p.panel;
     v.window_fill = p.panel;
     v.window_stroke = Stroke::new(1.0, p.line);
-    v.window_corner_radius = CornerRadius::same(10);
-    v.menu_corner_radius = CornerRadius::same(8);
+    // Dialogs, sheets and menus: one family of rounded cards with a soft
+    // shadow (concepto de interfaz del 24/10/2026).
+    v.window_corner_radius = CornerRadius::same(14);
+    v.menu_corner_radius = CornerRadius::same(12);
     v.window_shadow = Shadow {
-        offset: [0, 6],
-        blur: 24,
+        offset: [0, 10],
+        blur: 32,
         spread: 0,
         color: Color32::from_black_alpha(if dark { 110 } else { 38 }),
     };

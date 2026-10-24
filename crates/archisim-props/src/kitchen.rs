@@ -2,7 +2,7 @@
 //! washing machine. Axes as the furniture's: the back on the wall.
 
 use crate::build::Builder;
-use crate::fronts::{self, Handle};
+use crate::fronts::{self, Handle, Style};
 use crate::Params;
 
 /// Doors of a run of units: as many as fit, about 60 cm each, with the
@@ -128,6 +128,354 @@ pub fn counter(b: &mut Builder, p: &Params) {
     }
 }
 
+/// What a base unit of a modular kitchen holds, as the `unit` choice of
+/// its family lists them.
+pub const UNITS: &[&str] = &[
+    "Cajonera",
+    "Puertas",
+    "Fregadero",
+    "Horno",
+    "Lavavajillas",
+    "Placa",
+    "Botellero",
+    "Esquina",
+];
+
+/// A base unit of a modular kitchen (concepto de interfaz del 24/10/2026,
+/// as in Paralives): one module with its worktop, which meets the
+/// worktop of the module beside it flush, so a run of them reads as one
+/// top. `unit` says what it is: drawers, doors, the sink (two doors under
+/// a basin and tap), an oven under a drawer, a dishwasher, a hob over
+/// drawers, a bottle rack or a blind corner.
+pub fn base_unit(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 0.6);
+    let d = p.get("depth", 0.6);
+    let h = p.get("height", 0.9);
+    let unit = p.get("unit", 1.0).round() as i32;
+    let kind = Handle::of(p, Handle::Bar);
+    let style = Style::of(p);
+    let x0 = -w / 2.0;
+    let x1 = w / 2.0;
+    let top = 0.03;
+    let face = d - 0.04;
+    let (z0, z1) = (0.105, h - top - 0.005);
+    b.rbox(
+        "plinth",
+        [x0 + 0.002, 0.0, 0.0],
+        [x1 - 0.002, d - 0.08, 0.1],
+        0.0,
+    );
+    let sink = unit == 3;
+    let (sx0, sx1) = (x0 + 0.06, x1 - 0.06);
+    if sink && w >= 0.45 {
+        // Lower under the basin, so it is seen.
+        b.rbox("mat", [x0, 0.0, 0.1], [x1, face, h - 0.21], 0.0);
+    } else {
+        b.rbox("mat", [x0, 0.0, 0.1], [x1, face, h - top], 0.0);
+    }
+    let drawers = p.get("drawers", 3.0).round().clamp(0.0, 4.0) as usize;
+    let doors = p
+        .get("doors", if w > 0.6 { 2.0 } else { 1.0 })
+        .round()
+        .clamp(1.0, 2.0) as usize;
+    let door_row = |b: &mut Builder, za: f64, zb: f64, n: usize| {
+        let fw = w / n as f64;
+        for i in 0..n {
+            let a = x0 + i as f64 * fw;
+            fronts::styled_door(
+                b,
+                a,
+                a + fw,
+                za,
+                zb,
+                face,
+                kind,
+                i % 2 == 1 || n == 1,
+                zb - 0.08,
+                style,
+            );
+        }
+    };
+    match unit {
+        // Drawers (none: one door).
+        1 if drawers > 0 => {
+            fronts::styled_drawers(b, x0, x1, z0, z1, face, drawers, kind, style, true)
+        }
+        1 | 2 => door_row(b, z0, z1, doors),
+        3 => door_row(b, z0, z1, doors),
+        4 => {
+            // A drawer, the oven's door with its glass and handle.
+            let zd = z1 - 0.14;
+            fronts::styled_drawer(b, x0, x1, zd, z1, face, kind, style);
+            b.rbox(
+                "dark",
+                [x0 + 0.01, face, z0 + 0.02],
+                [x1 - 0.01, face + 0.02, zd - 0.01],
+                0.004,
+            );
+            b.rbox(
+                "glass",
+                [x0 + 0.06, face + 0.02, z0 + 0.12],
+                [x1 - 0.06, face + 0.022, zd - 0.12],
+                0.0,
+            );
+            b.cyl(
+                "metal",
+                [x0 + 0.08, face + 0.05, zd - 0.05],
+                [x1 - 0.08, face + 0.05, zd - 0.05],
+                0.008,
+            );
+            b.rbox(
+                "dark",
+                [x0 + 0.04, face + 0.02, zd - 0.04],
+                [x1 - 0.04, face + 0.022, zd - 0.015],
+                0.0,
+            );
+        }
+        // A dishwasher: an integrated front, its handle along the top.
+        5 => fronts::styled_drawer(b, x0, x1, z0, z1, face, kind, style),
+        // A hob over drawers.
+        6 => fronts::styled_drawers(b, x0, x1, z0, z1, face, drawers.max(2), kind, style, true),
+        // A bottle rack: open, with its shelves.
+        7 => {
+            let n = ((z1 - z0) / 0.13).floor().max(1.0) as usize;
+            b.rbox(
+                "dark",
+                [x0 + 0.015, 0.01, z0],
+                [x1 - 0.015, face - 0.01, z1],
+                0.0,
+            );
+            for i in 0..=n {
+                let z = z0 + i as f64 * (z1 - z0) / n as f64;
+                b.rbox(
+                    "mat",
+                    [x0 + 0.01, 0.02, z],
+                    [x1 - 0.01, face + 0.01, z + 0.015],
+                    0.0,
+                );
+            }
+        }
+        // A blind corner: a fixed panel and a door.
+        _ => {
+            let blind = (w * 0.45).max(0.0);
+            fronts::styled_door(
+                b,
+                x0,
+                x0 + blind,
+                z0,
+                z1,
+                face,
+                Handle::None,
+                true,
+                z1 - 0.08,
+                style,
+            );
+            fronts::styled_door(
+                b,
+                x0 + blind,
+                x1,
+                z0,
+                z1,
+                face,
+                kind,
+                false,
+                z1 - 0.08,
+                style,
+            );
+        }
+    }
+    // The worktop: flush with the module's sides, so the next one meets it.
+    let (tlo, thi) = ([x0, 0.0, h - top], [x1, d, h]);
+    if sink && w >= 0.45 {
+        let (sy0, sy1) = (0.1, d - 0.12);
+        b.framed_top("top", tlo, thi, [sx0, sy0], [sx1, sy1]);
+        b.hollow("metal", [sx0, sy0, h - 0.2], [sx1, sy1, h], 0.03);
+        tap(b, (sx0 + sx1) / 2.0, 0.05, h, 0.16);
+    } else {
+        b.rbox("top", tlo, thi, 0.0);
+    }
+    if unit == 6 {
+        let (cx, cy) = (0.0, d / 2.0);
+        let hw = (w / 2.0 - 0.04).min(0.38);
+        b.rbox(
+            "dark",
+            [cx - hw, cy - 0.25, h],
+            [cx + hw, cy + 0.25, h + 0.006],
+            0.004,
+        );
+        let burners: &[(f64, f64, f64)] = if hw > 0.33 {
+            &[
+                (-0.2, -0.11, 0.09),
+                (0.0, 0.1, 0.1),
+                (0.2, -0.11, 0.07),
+                (-0.2, 0.12, 0.07),
+                (0.2, 0.12, 0.07),
+            ]
+        } else {
+            &[
+                (-0.13, -0.11, 0.09),
+                (0.13, -0.11, 0.07),
+                (-0.13, 0.11, 0.07),
+                (0.13, 0.11, 0.09),
+            ]
+        };
+        for (dx, dy, r) in burners {
+            b.cone(
+                "ring",
+                [cx + dx, cy + dy, h + 0.006],
+                [cx + dx, cy + dy, h + 0.008],
+                *r,
+                *r,
+                24,
+            );
+        }
+    }
+}
+
+/// What a tall unit holds, as the `tall` choice of its family lists them.
+pub const TALLS: &[&str] = &["Despensa", "Horno y microondas", "Frigorífico integrado"];
+
+/// A tall unit of a modular kitchen: a larder with two doors, an oven and
+/// a microwave between doors, or an integrated fridge.
+pub fn tall_unit(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 0.6);
+    let d = p.get("depth", 0.6);
+    let h = p.get("height", 2.1);
+    let tall = p.get("tall", 1.0).round() as i32;
+    let kind = Handle::of(p, Handle::Bar);
+    let style = Style::of(p);
+    let (x0, x1) = (-w / 2.0, w / 2.0);
+    let face = d - 0.02;
+    b.rbox(
+        "plinth",
+        [x0 + 0.002, 0.0, 0.0],
+        [x1 - 0.002, d - 0.06, 0.1],
+        0.0,
+    );
+    b.rbox("mat", [x0, 0.0, 0.1], [x1, face, h], 0.0);
+    let (z0, z1) = (0.105, h - 0.005);
+    match tall {
+        2 => {
+            let (oa, ob) = (0.8, 1.38);
+            fronts::styled_door(
+                b,
+                x0,
+                x1,
+                z0,
+                oa - 0.005,
+                face,
+                kind,
+                true,
+                oa - 0.08,
+                style,
+            );
+            b.rbox(
+                "dark",
+                [x0 + 0.01, face, oa],
+                [x1 - 0.01, face + 0.02, ob],
+                0.004,
+            );
+            b.rbox(
+                "glass",
+                [x0 + 0.06, face + 0.02, oa + 0.1],
+                [x1 - 0.06, face + 0.022, ob - 0.14],
+                0.0,
+            );
+            b.cyl(
+                "metal",
+                [x0 + 0.08, face + 0.05, ob - 0.07],
+                [x1 - 0.08, face + 0.05, ob - 0.07],
+                0.008,
+            );
+            let (ma, mb) = (ob + 0.01, ob + 0.39);
+            b.rbox(
+                "dark",
+                [x0 + 0.01, face, ma],
+                [x1 - 0.01, face + 0.02, mb],
+                0.004,
+            );
+            b.rbox(
+                "glass",
+                [x0 + 0.05, face + 0.02, ma + 0.06],
+                [x1 - 0.15, face + 0.022, mb - 0.06],
+                0.0,
+            );
+            fronts::styled_door(
+                b,
+                x0,
+                x1,
+                mb + 0.005,
+                z1,
+                face,
+                kind,
+                true,
+                mb + 0.08,
+                style,
+            );
+        }
+        3 => {
+            let split = 0.1 + (h - 0.1) * 0.42;
+            fronts::styled_door(
+                b,
+                x0,
+                x1,
+                z0,
+                split - 0.003,
+                face,
+                kind,
+                true,
+                split - 0.1,
+                style,
+            );
+            fronts::styled_door(
+                b,
+                x0,
+                x1,
+                split + 0.003,
+                z1,
+                face,
+                kind,
+                true,
+                split + 0.1,
+                style,
+            );
+        }
+        _ => {
+            let split = 0.1 + (h - 0.1) * 0.62;
+            let n = if w > 0.6 { 2 } else { 1 };
+            let fw = w / n as f64;
+            for i in 0..n {
+                let a = x0 + i as f64 * fw;
+                let left = i % 2 == 1 || n == 1;
+                fronts::styled_door(
+                    b,
+                    a,
+                    a + fw,
+                    z0,
+                    split - 0.003,
+                    face,
+                    kind,
+                    left,
+                    split - 0.1,
+                    style,
+                );
+                fronts::styled_door(
+                    b,
+                    a,
+                    a + fw,
+                    split + 0.003,
+                    z1,
+                    face,
+                    kind,
+                    left,
+                    split + 0.1,
+                    style,
+                );
+            }
+        }
+    }
+}
+
 /// Wall units, at their height over the floor.
 pub fn wall_cabinet(b: &mut Builder, p: &Params) {
     let w = p.get("width", 1.2);
@@ -144,9 +492,10 @@ pub fn wall_cabinet(b: &mut Builder, p: &Params) {
     };
     let fw = w / n as f64;
     let kind = Handle::of(p, Handle::Bar);
+    let style = Style::of(p);
     for i in 0..n {
         let a = x0 + i as f64 * fw;
-        fronts::door(
+        fronts::styled_door(
             b,
             a,
             a + fw,
@@ -156,6 +505,7 @@ pub fn wall_cabinet(b: &mut Builder, p: &Params) {
             kind,
             i % 2 == 0,
             z0 + 0.08,
+            style,
         );
     }
 }

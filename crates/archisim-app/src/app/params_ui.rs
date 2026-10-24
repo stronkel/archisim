@@ -186,7 +186,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Parámetros del proyecto")
+        super::widgets::dialog("Parámetros del proyecto")
             .open(&mut open)
             .default_width(720.0)
             .default_height(520.0)

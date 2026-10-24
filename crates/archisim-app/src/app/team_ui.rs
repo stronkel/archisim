@@ -490,7 +490,7 @@ impl ArchiSimApp {
         self.team_dialog(ctx);
         if self.team.is_some() && self.team_ui.open {
             let mut open = true;
-            egui::Window::new("Equipo")
+            super::widgets::dialog("Equipo")
                 .open(&mut open)
                 .default_width(380.0)
                 .default_height(520.0)

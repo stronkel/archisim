@@ -368,7 +368,7 @@ impl ArchiSimApp {
         let mut start = None;
         let mut size = self.prefs.text_size;
         let mut reset = false;
-        egui::Window::new("Misiones de iniciación")
+        super::widgets::dialog("Misiones de iniciación")
             .open(&mut open)
             .collapsible(false)
             .resizable(false)

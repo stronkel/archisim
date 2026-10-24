@@ -297,3 +297,48 @@ pub fn toast(painter: &egui::Painter, area: Rect, text: &str, error: bool, alpha
     );
     painter.galley(Pos2::new(r.left() + 28.0, r.top() + 8.0), g, p.text);
 }
+
+thread_local! {
+    /// Where the last click was, and the size of the window: where a
+    /// dialog opened by it appears.
+    static LAST_CLICK: std::cell::Cell<(Pos2, egui::Vec2)> =
+        const { std::cell::Cell::new((Pos2::new(200.0, 120.0), egui::Vec2::new(1440.0, 900.0))) };
+}
+
+/// Notes the click of this frame (called once a frame, before any window).
+pub fn note_click(ctx: &egui::Context) {
+    let size = ctx.content_rect().size();
+    let at = ctx.input(|i| {
+        i.pointer
+            .any_pressed()
+            .then(|| i.pointer.interact_pos())
+            .flatten()
+    });
+    LAST_CLICK.with(|c| {
+        let (p, _) = c.get();
+        c.set((at.unwrap_or(p), size));
+    });
+}
+
+/// A dialog of the application (concepto de interfaz del 24/10/2026): it
+/// opens next to the button that called it — to its left when that is on
+/// the right half of the window, to its right otherwise — and never in a
+/// corner over the tools; it cannot be folded away. After that, egui
+/// remembers where it was moved.
+pub fn dialog<'a>(title: impl Into<egui::WidgetText>) -> egui::Window<'a> {
+    let (at, size) = LAST_CLICK.with(|c| c.get());
+    let right = at.x > size.x / 2.0;
+    let low = at.y > size.y * 0.6;
+    let pivot = match (right, low) {
+        (true, false) => egui::Align2::RIGHT_TOP,
+        (false, false) => egui::Align2::LEFT_TOP,
+        (true, true) => egui::Align2::RIGHT_BOTTOM,
+        (false, true) => egui::Align2::LEFT_BOTTOM,
+    };
+    let gap = if right { -16.0 } else { 16.0 };
+    egui::Window::new(title)
+        .collapsible(false)
+        .pivot(pivot)
+        .default_pos(Pos2::new(at.x + gap, at.y))
+        .constrain(true)
+}

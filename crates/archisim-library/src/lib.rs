@@ -766,8 +766,10 @@ pub enum StudioValue {
     N(f64),
     B(bool),
     T(&'static str),
+    /// A value chosen by name (a choice parameter).
+    C(&'static str),
 }
-use StudioValue::{B, N, T};
+use StudioValue::{B, C, N, T};
 
 pub mod collections;
 pub mod extended;
@@ -800,7 +802,7 @@ pub fn add_studio_types(m: &mut Model) -> Result<Vec<OpeningTypeId>, ModelError>
                 match x {
                     N(n) => archisim_core::Value::Number(*n),
                     B(b) => archisim_core::Value::Bool(*b),
-                    T(t) => archisim_core::Value::Text((*t).into()),
+                    T(t) | C(t) => archisim_core::Value::Text((*t).into()),
                 },
             );
         }
@@ -821,7 +823,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 205] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 220] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -845,6 +847,55 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 205] = [
     ),
     ("Muebles de cocina 240", "Encimera de cocina", &[]),
     ("Muebles altos de cocina 120", "Mueble alto de cocina", &[]),
+    // The modular kitchen (concepto de interfaz del 24/10/2026): modules
+    // that join their worktops, each with its own drawers and fronts.
+    ("Bajo cajonera 60", "Módulo bajo de cocina", &[]),
+    (
+        "Bajo cajonera 40",
+        "Módulo bajo de cocina",
+        &[("width", 0.4)],
+    ),
+    (
+        "Bajo con puerta 45",
+        "Módulo bajo de cocina",
+        &[("width", 0.45)],
+    ),
+    (
+        "Bajo con dos puertas 80",
+        "Módulo bajo de cocina",
+        &[("width", 0.8), ("doors", 2.0)],
+    ),
+    (
+        "Bajo fregadero 80",
+        "Módulo bajo de cocina",
+        &[("width", 0.8), ("doors", 2.0)],
+    ),
+    ("Bajo horno 60", "Módulo bajo de cocina", &[]),
+    ("Bajo lavavajillas 60", "Módulo bajo de cocina", &[]),
+    (
+        "Bajo placa 90",
+        "Módulo bajo de cocina",
+        &[("width", 0.9), ("drawers", 2.0)],
+    ),
+    ("Botellero 15", "Módulo bajo de cocina", &[("width", 0.15)]),
+    (
+        "Bajo de esquina 100",
+        "Módulo bajo de cocina",
+        &[("width", 1.0)],
+    ),
+    ("Columna despensa 60", "Columna de cocina", &[]),
+    ("Columna horno y microondas 60", "Columna de cocina", &[]),
+    ("Columna frigorífico 60", "Columna de cocina", &[]),
+    (
+        "Alto con puerta 40",
+        "Mueble alto de cocina",
+        &[("width", 0.4), ("doors", 1.0)],
+    ),
+    (
+        "Alto vitrina 80",
+        "Mueble alto de cocina",
+        &[("width", 0.8), ("doors", 2.0)],
+    ),
     ("Frigorífico 60", "Frigorífico", &[]),
     ("Lavadora 60", "Lavadora", &[]),
     ("Inodoro", "Inodoro", &[]),
@@ -1496,6 +1547,23 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 205] = [
 /// Choices and materials of the library's types that are not the family's
 /// (the cosy ones): by parameter, a yes/no or a material's name.
 const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
+    ("Bajo con puerta 45", &[("unit", C("Puertas"))]),
+    ("Bajo con dos puertas 80", &[("unit", C("Puertas"))]),
+    ("Bajo fregadero 80", &[("unit", C("Fregadero"))]),
+    ("Bajo horno 60", &[("unit", C("Horno"))]),
+    ("Bajo lavavajillas 60", &[("unit", C("Lavavajillas"))]),
+    ("Bajo placa 90", &[("unit", C("Placa"))]),
+    ("Botellero 15", &[("unit", C("Botellero"))]),
+    ("Bajo de esquina 100", &[("unit", C("Esquina"))]),
+    (
+        "Columna horno y microondas 60",
+        &[("tall", C("Horno y microondas"))],
+    ),
+    (
+        "Columna frigorífico 60",
+        &[("tall", C("Frigorífico integrado"))],
+    ),
+    ("Alto vitrina 80", &[("front_style", C("Cristal"))]),
     (
         "Sofá acogedor de 3 plazas",
         &[
@@ -2030,6 +2098,7 @@ pub(crate) fn entry_values(
                     Some(mat) => Value::Material(mat.id.0),
                     None => continue,
                 },
+                C(t) => Value::Text((*t).into()),
             };
             values.insert((*k).into(), v);
         }

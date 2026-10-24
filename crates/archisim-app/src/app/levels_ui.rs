@@ -18,7 +18,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Plantas")
+        super::widgets::dialog("Plantas")
             .open(&mut open)
             .resizable(false)
             .default_width(560.0)

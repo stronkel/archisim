@@ -145,7 +145,7 @@ impl ArchiSimApp {
         let mut open = true;
         let mut again = false;
         let mut save = false;
-        egui::Window::new("Renderizado")
+        super::widgets::dialog("Renderizado")
             .open(&mut open)
             .pivot(egui::Align2::CENTER_CENTER)
             .default_pos(ctx.content_rect().center())

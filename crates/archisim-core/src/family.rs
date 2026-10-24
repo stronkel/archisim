@@ -100,7 +100,7 @@ const SYSTEM_SOURCES: [&str; 10] = [
 
 /// Recipes of the system object families (furniture, sanitary ware,
 /// kitchen, the site, people and vehicles), placed on a level with no wall.
-const OBJECT_SOURCES: [&str; 75] = [
+const OBJECT_SOURCES: [&str; 77] = [
     include_str!("../families/objetos/mesa.asfam"),
     include_str!("../families/objetos/silla.asfam"),
     include_str!("../families/objetos/sofa.asfam"),
@@ -147,6 +147,8 @@ const OBJECT_SOURCES: [&str; 75] = [
     include_str!("../families/objetos/banera.asfam"),
     include_str!("../families/objetos/estanteria.asfam"),
     include_str!("../families/objetos/mueble_alto.asfam"),
+    include_str!("../families/objetos/modulo_bajo.asfam"),
+    include_str!("../families/objetos/columna_cocina.asfam"),
     include_str!("../families/objetos/arbol.asfam"),
     include_str!("../families/objetos/arbusto.asfam"),
     include_str!("../families/objetos/vegetacion.asfam"),

@@ -10,6 +10,7 @@
 
 mod app;
 mod cad;
+mod carpentry;
 mod coord;
 mod crash;
 mod dim_tool;

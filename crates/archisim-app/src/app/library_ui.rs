@@ -53,7 +53,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Biblioteca")
+        super::widgets::dialog("Biblioteca")
             .open(&mut open)
             .default_width(560.0)
             .default_height(520.0)
@@ -404,7 +404,7 @@ impl ArchiSimApp {
         }
         .unwrap_or_default();
         let mut choice = None;
-        egui::Window::new("El tipo ya está en el proyecto")
+        super::widgets::dialog("El tipo ya está en el proyecto")
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
@@ -449,7 +449,7 @@ impl ArchiSimApp {
             return;
         };
         let mut done = None;
-        egui::Window::new("Purgar tipos sin usar")
+        super::widgets::dialog("Purgar tipos sin usar")
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {

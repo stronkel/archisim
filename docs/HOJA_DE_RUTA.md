@@ -212,8 +212,8 @@ Al probar inserciones pidió además buhardillas que se adapten a la cubierta (n
 | V1 | Imagen: sombras, penumbra guardada, luz de ilustración, texturas como imagen, niveles de calidad | — |
 | MQ2–MQ4 | Muebles modulares, pinceles de Exterior, flechas y aros en Concepto | — |
 | UI1 | Concepto de interfaz del 24/10/2026, primera vuelta: ratón (izquierdo elige y mueve, rueda desplaza, derecho mantenido gira), menú del clic derecho, flechas y anillo, estirar por un solo lado, barra del objeto con materiales, ventanas en alzado en el catálogo, sin cartel de teclas | ✅ v0.54 (`bloque/manejo`, unida a la 0.53) |
-| UI2 | Catálogo en árbol; cocina por módulos (encimera continua, cajones, tiradores, fregadero, placa, altos y campanas, estilos) | — |
-| UI3 | Fichas y diálogos unificados (nada aparece en una esquina); plano de carpinterías con alzados | — |
+| UI2 | Catálogo en árbol (grupo → tema → clase); cocina por módulos: bajos que juntan su encimera (cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero, esquina), columnas, altos y campanas; frentes liso, con marco, ranurado y con cristal; cajones, tirador y frente en la barra, para un módulo o toda la fila | ✅ v0.55 (`bloque/cocina`) |
+| UI3 | Diálogos junto al botón que los abre (nada aparece en una esquina sobre las herramientas) y con la misma forma; plano de carpinterías en A3 con alzados, secciones y datos (Archivo → Plano de carpinterías) | ✅ v0.55 (`bloque/cocina`) |
 
 ## Propuesta de orden
 

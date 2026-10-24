@@ -6629,3 +6629,104 @@ fn collections_restyle_the_catalog_and_the_selection() {
     h.app.apply_collection_to_selection();
     assert_eq!(h.model().object(id).unwrap().object_type, sofa);
 }
+
+/// The modular kitchen in the Maqueta: the catalog's Cocina theme has its
+/// kinds (Bajos, Altos, Columnas…); modules placed side by side make a
+/// row, and a choice of the bar goes to one module or to the whole row.
+#[test]
+fn kitchen_modules_in_a_row() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_maquette(true);
+    h.frame();
+    let ctx = h.ctx.clone();
+    let names = h
+        .app
+        .catalog_cards_pub(&ctx, super::maquette_ui::CatalogGroup::Furnish, "Cocina");
+    assert!(names.iter().any(|n| n == "Bajo fregadero 80"), "{names:?}");
+    let kinds = h
+        .app
+        .catalog_kinds_pub(&ctx, super::maquette_ui::CatalogGroup::Furnish, "Cocina");
+    for k in ["Bajos", "Altos", "Columnas", "Campanas"] {
+        assert!(kinds.iter().any(|x| x == k), "{kinds:?}");
+    }
+    // Three modules, side by side against an imaginary wall.
+    let level = h.app.ed.level;
+    let mut ids = Vec::new();
+    let mut x = 0.0;
+    for name in ["Bajo cajonera 60", "Bajo fregadero 80", "Bajo cajonera 40"] {
+        let id = h
+            .app
+            .ed
+            .transact("Módulo", |m| {
+                let t = archisim_library::add_object_entry(m, name)?;
+                let (lo, hi) = m.object_type_box_3d(t).unwrap();
+                let w = hi[0] - lo[0];
+                let id = m.add_object(archisim_core::NewObject {
+                    level,
+                    object_type: t,
+                    position: p(x + w / 2.0, 0.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })?;
+                Ok((id, w))
+            })
+            .unwrap();
+        x += id.1;
+        ids.push(id.0);
+    }
+    // One apart: not in the row.
+    let alone = h
+        .app
+        .ed
+        .transact("Módulo", |m| {
+            let t = archisim_library::add_object_entry(m, "Bajo cajonera 60")?;
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(5.0, 0.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    let row = h.app.row_of(ids[1]);
+    assert_eq!(row.len(), 3, "{row:?}");
+    assert!(!row.contains(&alone));
+    // The front «Marco» to the whole row; the one apart keeps «Liso».
+    h.app.ed.selection = [Element::Object(ids[0])].into_iter().collect();
+    h.app.bar_set_value_pub(
+        "front_style",
+        archisim_core::Value::Text("Marco".into()),
+        true,
+    );
+    let style = |h: &Harness, id| {
+        let m = h.model();
+        let t = m.object_type(m.object(id).unwrap().object_type).unwrap();
+        t.values.get("front_style").cloned()
+    };
+    for id in &ids {
+        assert_eq!(
+            style(&h, *id),
+            Some(archisim_core::Value::Text("Marco".into()))
+        );
+    }
+    assert_eq!(
+        style(&h, alone),
+        Some(archisim_core::Value::Text("Liso".into()))
+    );
+    // And the drawers of only one.
+    h.app
+        .bar_set_value_pub("drawers", archisim_core::Value::Number(2.0), false);
+    let m = h.model();
+    let n = |id| match m
+        .object_type(m.object(id).unwrap().object_type)
+        .unwrap()
+        .values
+        .get("drawers")
+    {
+        Some(archisim_core::Value::Number(n)) => *n,
+        _ => -1.0,
+    };
+    assert_eq!(n(ids[0]), 2.0);
+    assert_eq!(n(ids[2]), 3.0);
+}

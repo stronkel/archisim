@@ -34,6 +34,87 @@ impl Handle {
     }
 }
 
+/// How a front is made (concepto de interfaz del 24/10/2026, cocina por
+/// módulos): flat, with a frame round a sunk panel, with upright grooves,
+/// or a frame with glass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Style {
+    Plain,
+    Frame,
+    Slats,
+    Glass,
+}
+
+/// Their names, as the `front_style` choice of the families lists them.
+pub const STYLES: &[&str] = &["Liso", "Marco", "Ranurado", "Cristal"];
+
+impl Style {
+    /// The style asked for (`front_style`: 1 plain … 4 glass).
+    pub fn of(p: &Params) -> Style {
+        match p.get("front_style", 0.0).round() as i32 {
+            2 => Style::Frame,
+            3 => Style::Slats,
+            4 => Style::Glass,
+            _ => Style::Plain,
+        }
+    }
+}
+
+/// Dresses the face of a front from `x0` to `x1` and `z0` to `z1`, whose
+/// face is at `y`, in a style. Drawers too narrow for a frame stay plain;
+/// glass becomes a frame on drawers.
+#[allow(clippy::too_many_arguments)]
+pub fn dress(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    z0: f64,
+    z1: f64,
+    y: f64,
+    style: Style,
+    door: bool,
+) {
+    let (w, h) = (x1 - x0, z1 - z0);
+    let rail = 0.055_f64.min(w * 0.2).min(h * 0.2);
+    match style {
+        Style::Plain => {}
+        Style::Frame | Style::Glass if rail < 0.02 => {}
+        Style::Frame | Style::Glass => {
+            let t = 0.008;
+            // The frame stands out of the front; the panel stays behind.
+            for (lo, hi) in [
+                ([x0, y, z0], [x1, y + t, z0 + rail]),
+                ([x0, y, z1 - rail], [x1, y + t, z1]),
+                ([x0, y, z0 + rail], [x0 + rail, y + t, z1 - rail]),
+                ([x1 - rail, y, z0 + rail], [x1, y + t, z1 - rail]),
+            ] {
+                b.rbox("mat", lo, hi, 0.0);
+            }
+            if style == Style::Glass && door {
+                b.rbox(
+                    "glass",
+                    [x0 + rail, y - 0.001, z0 + rail],
+                    [x1 - rail, y + 0.003, z1 - rail],
+                    0.0,
+                );
+            }
+        }
+        Style::Slats => {
+            let n = ((w / 0.035).floor() as usize).max(2);
+            let step = w / n as f64;
+            for i in 1..n {
+                let x = x0 + i as f64 * step;
+                b.rbox(
+                    "dark",
+                    [x - 0.002, y - 0.001, z0 + 0.01],
+                    [x + 0.002, y + 0.001, z1 - 0.01],
+                    0.0,
+                );
+            }
+        }
+    }
+}
+
 /// How far a front stands out of its carcass.
 pub const FRONT: f64 = 0.018;
 
@@ -92,6 +173,31 @@ pub fn handle(b: &mut Builder, kind: Handle, x: f64, y: f64, z: f64, horizontal:
 /// face is at `y`; its handle near the top, across.
 #[allow(clippy::too_many_arguments)]
 pub fn drawer(b: &mut Builder, x0: f64, x1: f64, z0: f64, z1: f64, y: f64, kind: Handle) {
+    styled_drawer(b, x0, x1, z0, z1, y, kind, Style::Plain);
+}
+
+/// A drawer front in a style (see [`drawer`]).
+#[allow(clippy::too_many_arguments)]
+pub fn styled_drawer(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    z0: f64,
+    z1: f64,
+    y: f64,
+    kind: Handle,
+    style: Style,
+) {
+    dress(
+        b,
+        x0 + 0.002,
+        x1 - 0.002,
+        z0 + 0.002,
+        z1 - 0.002,
+        y + FRONT,
+        style,
+        false,
+    );
     b.rbox(
         "mat",
         [x0 + 0.002, y - 0.002, z0 + 0.002],
@@ -125,6 +231,33 @@ pub fn door(
     hinge_left: bool,
     hz: f64,
 ) {
+    styled_door(b, x0, x1, z0, z1, y, kind, hinge_left, hz, Style::Plain);
+}
+
+/// A door in a style (see [`door`]).
+#[allow(clippy::too_many_arguments)]
+pub fn styled_door(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    z0: f64,
+    z1: f64,
+    y: f64,
+    kind: Handle,
+    hinge_left: bool,
+    hz: f64,
+    style: Style,
+) {
+    dress(
+        b,
+        x0 + 0.002,
+        x1 - 0.002,
+        z0 + 0.002,
+        z1 - 0.002,
+        y + FRONT,
+        style,
+        true,
+    );
     b.rbox(
         "mat",
         [x0 + 0.002, y - 0.002, z0 + 0.002],
@@ -161,10 +294,40 @@ pub fn drawers(
     n: usize,
     kind: Handle,
 ) {
+    styled_drawers(b, x0, x1, z0, z1, y, n, kind, Style::Plain, false);
+}
+
+/// A column of `n` drawers in a style; with `graded`, the top one is
+/// shallow and the others share the rest (a kitchen's drawer unit).
+#[allow(clippy::too_many_arguments)]
+pub fn styled_drawers(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    z0: f64,
+    z1: f64,
+    y: f64,
+    n: usize,
+    kind: Handle,
+    style: Style,
+    graded: bool,
+) {
     let n = n.max(1);
-    let h = (z1 - z0) / n as f64;
+    let total = z1 - z0;
+    let top = if graded && n >= 3 {
+        total * 0.22
+    } else {
+        total / n as f64
+    };
+    let rest = if graded && n >= 3 {
+        (total - top) / (n - 1) as f64
+    } else {
+        total / n as f64
+    };
+    let mut z = z1;
     for i in 0..n {
-        let z = z0 + i as f64 * h;
-        drawer(b, x0, x1, z, z + h, y, kind);
+        let h = if i == 0 { top } else { rest };
+        styled_drawer(b, x0, x1, z - h, z, y, kind, style);
+        z -= h;
     }
 }

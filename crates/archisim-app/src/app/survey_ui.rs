@@ -236,7 +236,7 @@ impl ArchiSimApp {
         let mut go = false;
         let mut cancel = false;
         let terrain_here = self.level_terrain();
-        egui::Window::new("Importar topografía")
+        super::widgets::dialog("Importar topografía")
             .open(&mut open)
             .default_width(620.0)
             .resizable(true)

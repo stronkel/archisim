@@ -255,6 +255,13 @@ impl ArchiSimApp {
                 self.export_sheets(true);
             }
             if ui
+                .button("Plano de carpinterías (PDF)…")
+                .on_hover_text("Cada tipo de puerta y ventana en alzado a 1:50, con sus medidas, su sección y sus datos, en hojas A3")
+                .clicked()
+            {
+                self.export_carpentry();
+            }
+            if ui
                 .button("Exportar mediciones (BC3)…")
                 .on_hover_text("Muros, forjados, carpinterías y acabados de locales, por tipo, para Presto, Arquímedes y otros")
                 .clicked()

@@ -1,7 +1,7 @@
 family "Mueble alto de cocina"
   category kitchen
   host none
-  version 4
+  version 5
   description "Muebles altos colgados sobre la encimera (en planta, discontinuos)"
   folder "Cocina"
 
@@ -13,6 +13,7 @@ type_params
     elevation length = 1.45 range 1.10..2.00 label "Altura desde el suelo"
     doors     integer = 2 range 1..12 label "Puertas"
   section "Frentes"
+    front_style choice("Liso", "Marco", "Ranurado", "Cristal") = "Liso" label "Frente"
     handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
     mat material = "Madera de pino" label "Muebles"

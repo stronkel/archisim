@@ -714,7 +714,7 @@ impl ArchiSimApp {
         let draft = self.text_draft.get_or_insert_with(String::new);
         let mut accept = false;
         let mut cancel = false;
-        egui::Window::new("Texto")
+        super::widgets::dialog("Texto")
             .collapsible(false)
             .resizable(true)
             .default_width(360.0)

@@ -6,6 +6,45 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (2) · v0.55: cocina por módulos, catálogo en árbol, diálogos y plano de carpinterías (UI2 y UI3)
+
+Rama `bloque/cocina`, pull request para Antonio. Sin cambios de formato (familias nuevas, que los proyectos cargan de la biblioteca al usarlas) ni de IFC (los módulos son `IfcFurniture`).
+
+Antonio dio por buena la 0.54 («funciona todo, sigue con lo que falta»): se unió a `main` (#58, que llevaba dentro #56 y #57). Esto es lo que faltaba del concepto.
+
+**Hecho**
+- **Catálogo en árbol**: grupo → tema → clase. Debajo de los temas, una fila de fichas con sus clases y «Todas»:
+  - en Cocina: Bajos, Altos, Columnas, Campanas, Islas, Sobre la encimera, Electrodomésticos, Cocinas enteras;
+  - en Ventanas y Puertas: Practicables, Abatibles, Correderas, Guillotina…;
+  - en lo demás, las carpetas de la biblioteca.
+- **Cocina por módulos**:
+  - módulos bajos de 15 a 120 cm (cajonera, puertas, fregadero con grifo, horno, lavavajillas, placa sobre cajones, botellero, esquina), cada uno con su encimera hasta su borde. Al acercar uno a otro se pegan, y las encimeras se ven como una sola;
+  - columnas (despensa, horno y microondas, frigorífico integrado);
+  - frentes liso, con marco, ranurado o con cristal, también en los muebles altos (hay «Alto vitrina 80» con cristal);
+  - 15 tipos nuevos en la biblioteca.
+- **Barra del objeto**: además de girar, duplicar y los materiales, enseña lo que se puede elegir del mueble según su receta: «Qué lleva», cajones y puertas como botones, frente y tirador en una lista con «a toda la fila» para los módulos que se tocan en línea. La tarjeta dibuja el mueble en 3D.
+- **Diálogos**: todos se abren junto al botón que los llama (Plantas…, Biblioteca, CTE…), no en la esquina sobre las herramientas; no se pliegan y tienen las mismas esquinas redondeadas y sombra. «Tipos y materiales», que es grande, sale en el centro.
+- **Plano de carpinterías** (Archivo → Plano de carpinterías (PDF)…):
+  - cada tipo de puerta y ventana que usa el proyecto, en alzado desde el exterior a 1:50, con ancho y alto acotados, su sección y sus datos: familia, medidas, apertura, carpintería y unidades;
+  - seis por hoja A3, con cajetín. Los dibujos son los mismos del diálogo de tipos, que salen de las recetas.
+- `archisim cocina out/`: la cocina de ejemplo en cuatro filas, una por frente (proyecto, IFC, planta y axonometría).
+- Pruebas: módulos y estilos distintos en `archisim-props`; en la app, el tema Cocina con sus clases, la fila de módulos y «a toda la fila» frente a un solo módulo; las hojas de carpinterías y su PDF; la cocina de ejemplo con su 3D.
+- Revisado en la ventana real: la cocina en la Maqueta con la barra de un módulo, el catálogo de Cocina con sus clases, el diálogo Plantas junto a su botón y las hojas de carpinterías de la demo.
+
+**Pendiente**
+- Encimeras de verdad continuas en el IFC y las mediciones (hoy cada módulo mide la suya); módulos de esquina en L con su encimera en ángulo; islas por módulos.
+- Rueda de color libre (hoy, la paleta acogedora y los materiales del proyecto).
+- Más hojas de documentación con el mismo cajetín (memoria de carpinterías, cuadro de superficies).
+
+**Qué debe probar Antonio**
+1. `archisim cocina out/` y abre `out/cocina.archisim`. Entra en la Maqueta, selecciona un módulo y, en su barra, cambia «Qué lleva» (de cajonera a fregadero), los cajones, el frente y el tirador. Prueba «a toda la fila».
+2. En un proyecto tuyo: Amueblar → Cocina → Bajos. Pon una cajonera, un fregadero y un lavavajillas uno junto a otro contra una pared: deben pegarse y verse con una sola encimera. Estira el último hasta el muro con su flecha.
+3. Construir → Ventanas: prueba las fichas Practicables, Correderas y las demás.
+4. Navegador → Plantas…: el diálogo debe salir junto al botón, no arriba a la izquierda.
+5. Archivo → Plano de carpinterías (PDF)… con la demo o con un proyecto de AD5. Ábrelo y dime qué datos faltan para que valga como plano del estudio.
+
+---
+
 ## 2026-10-24 · v0.54: manejo común, menú del clic derecho y barra del objeto (UI1), unido a la 0.53
 
 Rama `bloque/manejo`, pull request para Antonio. Sin cambios de formato ni de IFC.

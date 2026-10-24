@@ -229,6 +229,8 @@ pub(super) struct Item {
     note: String,
     pub category: &'static str,
     pub folder: String,
+    /// The family it is made from (empty for a plant or a model).
+    pub family: String,
     pub thumb: Option<Thumb>,
 }
 
@@ -281,6 +283,7 @@ impl ArchiSimApp {
                     note: format!("{size} · {family}"),
                     category,
                     folder,
+                    family: family.clone(),
                     thumb,
                 });
             }
@@ -317,6 +320,7 @@ impl ArchiSimApp {
                     note: format!("{size} · {family} · biblioteca"),
                     category,
                     folder,
+                    family: family.clone(),
                     thumb,
                 });
             }
@@ -356,6 +360,7 @@ impl ArchiSimApp {
                     note: format!("{size} · planta generada · {}", e.group),
                     category: "Entorno",
                     folder: e.group.to_string(),
+                    family: String::new(),
                     thumb,
                 });
             }
@@ -405,6 +410,7 @@ impl ArchiSimApp {
                     note: format!("{size} · {family} · biblioteca del estudio"),
                     category,
                     folder,
+                    family: family.clone(),
                     thumb,
                 });
             }
@@ -443,6 +449,7 @@ impl ArchiSimApp {
                     note: format!("{size} · modelo 3D ({file}) · biblioteca del estudio"),
                     category,
                     folder: "Modelos 3D".into(),
+                    family: String::new(),
                     thumb,
                 });
             }

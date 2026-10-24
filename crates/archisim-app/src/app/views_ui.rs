@@ -291,7 +291,7 @@ impl ArchiSimApp {
         let mut apply = None;
         let mut save_as = None;
         let mut delete_template = None;
-        egui::Window::new(title)
+        super::widgets::dialog(title)
             .id(egui::Id::unique("vg-window"))
             .open(&mut open)
             .default_width(780.0)

@@ -1,0 +1,37 @@
+family "Columna de cocina"
+  category kitchen
+  host none
+  version 1
+  description "Un módulo alto hasta el techo de los muebles: despensa, horno y microondas o frigorífico integrado"
+  folder "Cocina"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.30..1.20 label "Ancho"
+    depth  length = 0.60 range 0.45..0.70 label "Fondo"
+    height length = 2.15 range 1.80..2.60 label "Altura"
+  section "Módulo"
+    tall choice("Despensa", "Horno y microondas", "Frigorífico integrado") = "Despensa" label "Qué lleva"
+  section "Frentes"
+    front_style choice("Liso", "Marco", "Ranurado", "Cristal") = "Liso" label "Frente"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
+  section "Materiales"
+    mat material = "Madera de pino" label "Frentes"
+  section "Modelo 3D"
+    model3d choice("Columna") = "Columna" label "Modelo 3D"
+    metal material = "Cromado" label "Tiradores"
+    dark material = "Negro mate" label "Horno"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin
+  line (width / 2, 0) to (-width / 2, depth) pen thin
+
+outputs
+  joins = "row"
+  generator = "props:tall_unit"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

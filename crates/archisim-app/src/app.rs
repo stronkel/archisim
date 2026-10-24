@@ -376,6 +376,8 @@ pub struct ArchiSimApp {
     /// The Maqueta's catalog: group and theme shown.
     catalog_group: maquette_ui::CatalogGroup,
     catalog_theme: &'static str,
+    /// The kind chosen within the theme (None: all).
+    catalog_sub: Option<String>,
     /// Properties of the selection in a window (Más…, in the Maqueta).
     maquette_props: bool,
     /// The wall tool's rectangle makes a room: its walls, floor and room.
@@ -684,6 +686,7 @@ impl ArchiSimApp {
             maquette_return: None,
             catalog_group: Default::default(),
             catalog_theme: "Habitaciones",
+            catalog_sub: None,
             maquette_props: false,
             room_walls: false,
             ground_grid: false,
@@ -1582,6 +1585,7 @@ impl ArchiSimApp {
             theme::apply(&ctx, self.dark);
         }
         missions_ui::clear_marks(&ctx);
+        widgets::note_click(&ctx);
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);
@@ -2014,7 +2018,7 @@ impl ArchiSimApp {
             }
         }
         if self.show_shortcuts {
-            egui::Window::new("Ratón y teclado")
+            widgets::dialog("Ratón y teclado")
                 .open(&mut self.show_shortcuts)
                 .resizable(false)
                 .show(ctx, |ui| {
@@ -2033,7 +2037,7 @@ impl ArchiSimApp {
         if let Some(text) = &self.import_report {
             let mut open = true;
             let mut close = false;
-            egui::Window::new("Informe de importación")
+            widgets::dialog("Informe de importación")
                 .open(&mut open)
                 .default_width(520.0)
                 .resizable(true)
@@ -2064,7 +2068,7 @@ impl ArchiSimApp {
         self.cte_dialog(ctx);
         self.coord_dialog(ctx);
         if self.show_about {
-            egui::Window::new("Acerca de ArchiSim")
+            widgets::dialog("Acerca de ArchiSim")
                 .open(&mut self.show_about)
                 .resizable(false)
                 .show(ctx, |ui| {

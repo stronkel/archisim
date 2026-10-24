@@ -10,6 +10,7 @@
 //! archisim --version
 //! ```
 
+mod cocina;
 mod colaboracion;
 mod cubiertas;
 mod demo;
@@ -74,6 +75,11 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim cocina [carpeta]
+      Una cocina por módulos: columna, cajoneras, fregadero, lavavajillas,
+      horno, placa y botellero con su encimera continua, muebles altos y
+      campana, en cuatro filas (frentes liso, con marco, ranurado y con
+      cristal): cocina.archisim, cocina.ifc, planta y axonometría en SVG.
   archisim escaleras [carpeta]
       Todas las escaleras: recta, en L y en U con meseta o compensadas, de
       caracol con mástil y helicoidal de losa, de zancas, de zanca central
@@ -210,6 +216,10 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("cocina") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(cocina::write(&dir))
         }
         Some("escaleras") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

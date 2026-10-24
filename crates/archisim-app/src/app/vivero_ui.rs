@@ -97,7 +97,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Vivero · especies de vegetación")
+        super::widgets::dialog("Vivero · especies de vegetación")
             .open(&mut open)
             .default_size([1100.0, 700.0])
             .resizable(true)

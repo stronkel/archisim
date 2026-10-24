@@ -46,7 +46,7 @@ impl ArchiSimApp {
             return;
         }
         let mut open = true;
-        egui::Window::new("Comprobación CTE")
+        super::widgets::dialog("Comprobación CTE")
             .open(&mut open)
             .default_width(620.0)
             .default_height(560.0)
