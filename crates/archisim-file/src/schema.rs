@@ -202,6 +202,92 @@ pub(crate) struct ObjectType {
     /// (version 35).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub own: Option<OwnOf>,
+    /// Its own drawings for elevations (version 35).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elevation: Vec<ElevationOf>,
+    /// Its picture for presentation plans (version 35).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_image: Option<PlanImageOf>,
+}
+
+/// A picture for presentation plans (version 35): PNG in base64.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PlanImageOf {
+    pub source: String,
+    pub png: String,
+    pub aspect: f64,
+}
+
+/// A drawing of an object type for elevations (version 35): a DXF's
+/// items (`x` across from its middle, `y` up from its foot, 1 high) or a
+/// PNG (base64) with its width over its height.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ElevationOf {
+    pub source: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub side: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<SymbolItemOf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub png: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect: Option<f64>,
+}
+
+impl ElevationOf {
+    pub(crate) fn out(f: &core::ElevationFigure) -> Self {
+        match &f.art {
+            core::ElevationArt::Lines(items) => ElevationOf {
+                source: f.source.clone(),
+                side: f.side,
+                items: SymbolOf::out(&core::PlanSymbol {
+                    source: String::new(),
+                    fit: true,
+                    items: items.clone(),
+                })
+                .items,
+                png: None,
+                aspect: None,
+            },
+            core::ElevationArt::Image { png, aspect } => ElevationOf {
+                source: f.source.clone(),
+                side: f.side,
+                items: Vec::new(),
+                png: Some(crate::meshes::encode(png)),
+                aspect: Some(*aspect),
+            },
+        }
+    }
+
+    pub(crate) fn into_core(self, element: &str) -> Result<core::ElevationFigure, FileError> {
+        let art = match self.png {
+            Some(b64) => core::ElevationArt::Image {
+                png: std::sync::Arc::new(crate::meshes::decode(&b64).ok_or_else(|| {
+                    FileError::Value {
+                        element: element.to_string(),
+                        message: "elevation picture is not base64".into(),
+                    }
+                })?),
+                aspect: self.aspect.unwrap_or(1.0),
+            },
+            None => core::ElevationArt::Lines(
+                SymbolOf {
+                    source: String::new(),
+                    fit: true,
+                    items: self.items,
+                }
+                .into_core(element)?
+                .items,
+            ),
+        };
+        Ok(core::ElevationFigure {
+            source: self.source,
+            side: self.side,
+            art,
+        })
+    }
 }
 
 /// Whose own type it is (version 35).
@@ -2725,6 +2811,12 @@ impl ProjectFile {
                         object: w.object.0,
                         base: w.base.0,
                     }),
+                    elevation: t.elevation.iter().map(ElevationOf::out).collect(),
+                    plan_image: t.plan_image.as_ref().map(|i| PlanImageOf {
+                        source: i.source.clone(),
+                        png: crate::meshes::encode(&i.png),
+                        aspect: i.aspect,
+                    }),
                 })
                 .collect(),
             meshes: p.meshes.iter().map(crate::meshes::mesh_out).collect(),
@@ -3698,6 +3790,24 @@ impl ProjectFile {
                     object: core::ObjectId(w.object),
                     base: core::ObjectTypeId(w.base),
                 }),
+                elevation: t
+                    .elevation
+                    .into_iter()
+                    .map(|f| f.into_core(&element))
+                    .collect::<Result<Vec<_>, FileError>>()?,
+                plan_image: match t.plan_image {
+                    None => None,
+                    Some(i) => Some(core::PlanImage {
+                        png: std::sync::Arc::new(crate::meshes::decode(&i.png).ok_or_else(
+                            || FileError::Value {
+                                element: element.clone(),
+                                message: "plan picture is not base64".into(),
+                            },
+                        )?),
+                        source: i.source,
+                        aspect: i.aspect,
+                    }),
+                },
             });
         }
         for m in self.meshes {

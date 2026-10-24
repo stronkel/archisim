@@ -43,6 +43,96 @@ pub struct ObjectType {
     /// Not offered in the catalogue nor the galleries; it goes with its
     /// object.
     pub own: Option<OwnType>,
+    /// Its own drawings for elevations, sections and axonometries (from
+    /// a DXF or a PNG), drawn instead of the one ArchiSim makes.
+    pub elevation: Vec<ElevationFigure>,
+    /// A picture (PNG) for presentation plans, drawn instead of its
+    /// symbol, as large as its plan box.
+    pub plan_image: Option<PlanImage>,
+}
+
+/// A picture of an object type seen from above, for presentation plans.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanImage {
+    pub source: String,
+    pub png: std::sync::Arc<Vec<u8>>,
+    /// Its width over its height.
+    pub aspect: f64,
+}
+
+/// A drawing of an object type seen from the front or from the side, for
+/// elevations, sections and axonometries: drawn standing at its foot, as
+/// tall as the object (keeping its proportion), facing the viewer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElevationFigure {
+    /// Where it came from (the file's name), to show.
+    pub source: String,
+    /// Seen from its side (along its `x`); otherwise from its front.
+    pub side: bool,
+    pub art: ElevationArt,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ElevationArt {
+    /// A DXF's lines, arcs, circles and fills, `x` across from its middle
+    /// and `y` up from its lowest point, 1 high.
+    Lines(Vec<SymbolItem>),
+    /// A picture with transparency (PNG): its bytes and its width over its
+    /// height.
+    Image {
+        png: std::sync::Arc<Vec<u8>>,
+        aspect: f64,
+    },
+}
+
+impl ElevationArt {
+    /// Its width over its height.
+    pub fn aspect(&self) -> f64 {
+        match self {
+            ElevationArt::Image { aspect, .. } => *aspect,
+            ElevationArt::Lines(items) => {
+                let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+                for i in items {
+                    for p in shape_extent(&i.shape) {
+                        lo = lo.min(p.x);
+                        hi = hi.max(p.x);
+                    }
+                }
+                if lo > hi {
+                    1.0
+                } else {
+                    hi - lo
+                }
+            }
+        }
+    }
+}
+
+/// The points that bound a drawn shape (enough for its box).
+pub fn shape_extent(shape: &crate::Shape) -> Vec<Point2> {
+    use crate::Shape;
+    let ring = |c: Point2, r: f64| vec![c + Vec2::new(r, r), c - Vec2::new(r, r)];
+    match shape {
+        Shape::Line { a, b } => vec![*a, *b],
+        Shape::Polyline(p) => p.points.clone(),
+        Shape::Circle { centre, radius } | Shape::Arc { centre, radius, .. } => {
+            ring(*centre, *radius)
+        }
+        Shape::Ellipse { centre, axis, .. } => ring(*centre, axis.length()),
+        Shape::Point { at } => vec![*at],
+        Shape::Hatch(h) => h.loops.iter().flat_map(|l| l.points.clone()).collect(),
+        Shape::Text(_) | Shape::Dim(_) => Vec::new(),
+    }
+}
+
+/// Which of its drawings an object shows to a view, and whether flipped.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShownFigure {
+    pub figure: ElevationFigure,
+    /// Drawn the other way round (seen from its back, or its other side).
+    pub flip: bool,
+    /// How tall it is drawn, metres.
+    pub height: f64,
 }
 
 /// Whose own type an object type is, and the type it was made from.
@@ -259,9 +349,120 @@ impl Model {
                 mesh: None,
                 symbol: None,
                 own: None,
+                elevation: Vec::new(),
+                plan_image: None,
             },
         );
         Ok(id)
+    }
+
+    /// Gives an object type a picture for presentation plans (none: its
+    /// symbol).
+    pub fn set_object_type_plan_image(
+        &mut self,
+        id: ObjectTypeId,
+        image: Option<PlanImage>,
+    ) -> Result<(), ModelError> {
+        if let Some(i) = &image {
+            if i.png.is_empty() || !(i.aspect.is_finite() && i.aspect > 0.0) {
+                return Err(ModelError::InvalidShape("a plan picture needs a picture"));
+            }
+        }
+        let t = self
+            .object_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownObjectType(id))?;
+        t.plan_image = image;
+        Ok(())
+    }
+
+    /// Gives an object type its own drawings for elevations (none: the
+    /// ones ArchiSim makes).
+    pub fn set_object_type_elevation(
+        &mut self,
+        id: ObjectTypeId,
+        figures: Vec<ElevationFigure>,
+    ) -> Result<(), ModelError> {
+        for f in &figures {
+            let ok = match &f.art {
+                ElevationArt::Lines(items) => !items.is_empty(),
+                ElevationArt::Image { png, aspect } => {
+                    !png.is_empty() && aspect.is_finite() && *aspect > 0.0
+                }
+            };
+            if !ok {
+                return Err(ModelError::InvalidShape(
+                    "an elevation drawing needs something drawn",
+                ));
+            }
+        }
+        let t = self
+            .object_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownObjectType(id))?;
+        t.elevation = figures;
+        Ok(())
+    }
+
+    /// How tall an object is: a plant, as it grew; anything else, its
+    /// type's 3D.
+    pub fn figure_height(&self, id: ObjectId) -> f64 {
+        if let Some(p) = self.object_plant(id) {
+            return p.height.max(0.05);
+        }
+        let Some(o) = self.objects.get(&id) else {
+            return 1.0;
+        };
+        self.object_type_box_3d(o.object_type)
+            .map_or(1.0, |(lo, hi)| (hi[2] - lo[2]).max(0.05))
+    }
+
+    /// The drawing of its own an object shows to a view looking along
+    /// `toward` (level, in the project's axes): from the side or the
+    /// front as it is seen, a DXF in a technical view and a picture in a
+    /// presentation (either, if it has only one). `None`: ArchiSim draws
+    /// it.
+    pub fn shown_figure(
+        &self,
+        id: ObjectId,
+        toward: [f64; 2],
+        presenting: bool,
+    ) -> Option<ShownFigure> {
+        let o = self.objects.get(&id)?;
+        let t = self.object_types.get(&o.object_type)?;
+        if t.elevation.is_empty() {
+            return None;
+        }
+        // The view in the object's axes: its front looks towards +y.
+        let (sn, cs) = (-o.rotation).sin_cos();
+        let local = [
+            toward[0] * cs - toward[1] * sn,
+            toward[0] * sn + toward[1] * cs,
+        ];
+        let side = local[0].abs() > local[1].abs();
+        let fits = |f: &&ElevationFigure| f.side == side;
+        let image = |f: &&ElevationFigure| matches!(f.art, ElevationArt::Image { .. });
+        let wanted = |f: &&ElevationFigure| image(f) == presenting;
+        let pick = t
+            .elevation
+            .iter()
+            .filter(fits)
+            .find(wanted)
+            .or_else(|| t.elevation.iter().find(fits))
+            .or_else(|| t.elevation.iter().find(wanted))
+            .or_else(|| t.elevation.first())?;
+        // A front seen from behind, a side seen from the other side: the
+        // other way round. Drawings of a side show it looking along -x.
+        let flip = if pick.side {
+            local[0] > 0.0
+        } else {
+            local[1] > 0.0
+        };
+        Some(ShownFigure {
+            figure: pick.clone(),
+            flip,
+            height: self.figure_height(id),
+        })
     }
 
     /// The object's own type ([`OwnType`]): the one it has, or a copy of

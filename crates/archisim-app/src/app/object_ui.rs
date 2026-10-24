@@ -312,6 +312,7 @@ impl ArchiSimApp {
             });
         }
         self.symbol_group(ui, o.object_type);
+        self.elevation_group(ui, o.object_type);
         group(ui, "object-identity", "Datos de identidad", |ui| {
             props::id_row(ui, "GlobalId", &o.guid.to_string());
         });
@@ -378,6 +379,55 @@ impl ArchiSimApp {
                 }
             });
         });
+        // A picture for presentation plans.
+        let picture = self
+            .ed
+            .model()
+            .object_type(t)
+            .and_then(|x| x.plan_image.as_ref().map(|i| i.source.clone()));
+        let mut picture_add = false;
+        let mut picture_remove = false;
+        ui.horizontal(|ui| {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("Imagen en planta de presentación").strong());
+        });
+        ui.horizontal(|ui| {
+            ui.add_space(4.0);
+            match &picture {
+                Some(src) => {
+                    ui.label(src);
+                    if ui.small_button("Quitar").clicked() {
+                        picture_remove = true;
+                    }
+                }
+                None => {
+                    if ui
+                        .button("PNG…")
+                        .on_hover_text("Una imagen vista desde arriba (con fondo transparente), dibujada en las plantas de presentación en lugar del símbolo")
+                        .clicked()
+                    {
+                        picture_add = true;
+                    }
+                }
+            }
+        });
+        if picture_add {
+            let mut d = rfd::FileDialog::new()
+                .set_title("Imagen para plantas de presentación (PNG)")
+                .add_filter("Imagen PNG", &["png"]);
+            if let Some(dir) = self.start_dir() {
+                d = d.set_directory(dir);
+            }
+            if let Some(path) = d.pick_file() {
+                self.set_plan_image_from(t, &path);
+            }
+        }
+        if picture_remove {
+            let r = self.ed.transact("Quitar imagen en planta", |m| {
+                m.set_object_type_plan_image(t, None)
+            });
+            self.report(r, "Imagen quitada: vuelve el símbolo.");
+        }
         if import {
             self.pick_symbol(t);
         }
@@ -414,6 +464,177 @@ impl ArchiSimApp {
                 m.set_object_type_symbol(t, Some(symbol))
             });
             self.report(r, "Tamaño del símbolo cambiado.");
+        }
+    }
+
+    /// The type's own drawings for elevations, sections and axonometries:
+    /// a DXF (technical) or a PNG (presentation), from the front or the
+    /// side.
+    fn elevation_group(&mut self, ui: &mut Ui, t: ObjectTypeId) {
+        let Some(ty) = self.ed.model().object_type(t) else {
+            return;
+        };
+        let figures = ty.elevation.clone();
+        let users = self.ed.model().object_type_users(t);
+        let mut add: Option<(bool, bool)> = None;
+        let mut remove: Option<usize> = None;
+        group(ui, "object-elevation", "Dibujo en alzado", |ui| {
+            if figures.is_empty() {
+                props::note(
+                    ui,
+                    "El que hace ArchiSim. Puedes poner el tuyo: un DXF (para las vistas técnicas) o una imagen PNG con fondo transparente (para las de presentación), visto de frente o de lado. Se dibuja de pie, tan alto como el objeto, mirando a quien mira, en alzados, secciones y axonometrías.",
+                );
+            }
+            for (i, f) in figures.iter().enumerate() {
+                let what = match (&f.art, f.side) {
+                    (archisim_core::ElevationArt::Lines(_), false) => "DXF de frente",
+                    (archisim_core::ElevationArt::Lines(_), true) => "DXF de lado",
+                    (archisim_core::ElevationArt::Image { .. }, false) => "Imagen de frente",
+                    (archisim_core::ElevationArt::Image { .. }, true) => "Imagen de lado",
+                };
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(what).strong());
+                    ui.label(&f.source);
+                    if ui.small_button("Quitar").clicked() {
+                        remove = Some(i);
+                    }
+                });
+            }
+            let hint = if users > 1 {
+                format!("Lo dibujarán los {users} objetos de este tipo")
+            } else {
+                "Lo dibujará este objeto (es el único de su tipo)".to_string()
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(4.0);
+                for (label, image, side) in [
+                    ("DXF de frente…", false, false),
+                    ("DXF de lado…", false, true),
+                    ("PNG de frente…", true, false),
+                    ("PNG de lado…", true, true),
+                ] {
+                    if ui.button(label).on_hover_text(&hint).clicked() {
+                        add = Some((image, side));
+                    }
+                }
+            });
+        });
+        if let Some((image, side)) = add {
+            let mut d = rfd::FileDialog::new().set_title(if image {
+                "Imagen para alzados (PNG con fondo transparente)"
+            } else {
+                "Dibujo para alzados (DXF)"
+            });
+            d = if image {
+                d.add_filter("Imagen PNG", &["png"])
+            } else {
+                d.add_filter("Dibujo DXF", &["dxf"])
+            };
+            if let Some(dir) = self.start_dir() {
+                d = d.set_directory(dir);
+            }
+            if let Some(path) = d.pick_file() {
+                self.add_elevation_from(t, &path, side);
+            }
+        }
+        if let Some(i) = remove {
+            let mut list = figures;
+            list.remove(i);
+            let r = self.ed.transact("Quitar dibujo en alzado", |m| {
+                m.set_object_type_elevation(t, list)
+            });
+            self.report(r, "Dibujo en alzado quitado.");
+        }
+    }
+
+    /// Puts a PNG as the type's picture for presentation plans.
+    pub(super) fn set_plan_image_from(&mut self, t: ObjectTypeId, path: &std::path::Path) {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                self.complain(format!("No se puede leer {}: {e}.", path.display()));
+                return;
+            }
+        };
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        match archisim_export::symbol::elevation_from_png(&bytes, &name, false) {
+            Ok(archisim_core::ElevationFigure {
+                art: archisim_core::ElevationArt::Image { png, aspect },
+                ..
+            }) => {
+                let img = archisim_core::PlanImage {
+                    source: name.clone(),
+                    png,
+                    aspect,
+                };
+                let r = self.ed.transact("Imagen en planta", |m| {
+                    m.set_object_type_plan_image(t, Some(img))
+                });
+                self.report(r, &format!("{name}: en las plantas de presentación."));
+            }
+            Ok(_) => {}
+            Err(e) => self.complain(format!("No se puede usar {name}: {e}.")),
+        }
+    }
+
+    /// Adds a DXF or a PNG as a drawing of the type for elevations (a
+    /// drawing of the same kind and view it had is replaced).
+    pub(super) fn add_elevation_from(
+        &mut self,
+        t: ObjectTypeId,
+        path: &std::path::Path,
+        side: bool,
+    ) {
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(e) => {
+                self.complain(format!("No se puede leer {}: {e}.", path.display()));
+                return;
+            }
+        };
+        let name = path.file_name().map_or_else(
+            || path.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let is_png = name.to_lowercase().ends_with(".png");
+        let figure = if is_png {
+            archisim_export::symbol::elevation_from_png(&bytes, &name, side)
+        } else {
+            archisim_export::symbol::elevation_from_dxf(&bytes, &name, side)
+        };
+        match figure {
+            Ok(f) => {
+                let mut list = self
+                    .ed
+                    .model()
+                    .object_type(t)
+                    .map(|x| x.elevation.clone())
+                    .unwrap_or_default();
+                let image = |x: &archisim_core::ElevationFigure| {
+                    matches!(x.art, archisim_core::ElevationArt::Image { .. })
+                };
+                list.retain(|x| !(x.side == f.side && image(x) == image(&f)));
+                list.push(f);
+                let r = self
+                    .ed
+                    .transact("Dibujo en alzado", |m| m.set_object_type_elevation(t, list));
+                self.report(
+                    r,
+                    &format!(
+                        "{name}: se dibujará en alzados y secciones {}.",
+                        if is_png {
+                            "de presentación"
+                        } else {
+                            "técnicos (y en los de presentación si no hay imagen)"
+                        }
+                    ),
+                );
+            }
+            Err(e) => self.complain(format!("No se puede usar {name}: {e}.")),
         }
     }
 

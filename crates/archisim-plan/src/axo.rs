@@ -86,7 +86,13 @@ struct FigureMark {
     closed: bool,
     fill: Option<([u8; 3], f64)>,
     stroke: Option<f64>,
+    /// A picture instead: its bytes, its size in its own units and the
+    /// SVG matrix that puts it in the picture.
+    image: Option<Picture>,
 }
+
+/// A picture's bytes, width, height and SVG matrix.
+type Picture = (std::sync::Arc<Vec<u8>>, f64, f64, [f64; 6]);
 
 /// The picture: faces from far to near, and its extent (picture metres).
 pub struct AxoDrawing {
@@ -144,10 +150,17 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     let solids = archisim_geom::solid::without_plants(|| model_solids(model));
-    // Plants stand up to the viewer as figures (below), not by their mesh.
+    // Objects with their own drawing for elevations, and plants, stand up
+    // to the viewer as figures (below), not by their mesh.
+    let toward = [-f.toward[0], -f.toward[1]];
+    let customs: std::collections::HashSet<archisim_core::ObjectId> = model
+        .objects()
+        .filter(|o| model.shown_figure(o.id, toward, true).is_some())
+        .map(|o| o.id)
+        .collect();
     let plants: std::collections::HashSet<archisim_core::ObjectId> = model
         .objects()
-        .filter(|o| model.type_grows(o.object_type))
+        .filter(|o| model.type_grows(o.object_type) || customs.contains(&o.id))
         .map(|o| o.id)
         .collect();
     for solid in solids {
@@ -234,12 +247,35 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
         }
     }
     // Each plant seen from where the picture looks, standing at its foot:
-    // its marks (in its presentation style) lifted into the picture.
-    let toward = [-f.toward[0], -f.toward[1]];
+    // its marks (in its presentation style) lifted into the picture; an
+    // object with its own drawing, that one.
     for &id in &plants {
         let Some(o) = model.object(id) else {
             continue;
         };
+        if let Some(shown) = model.shown_figure(id, toward, true) {
+            let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+            let foot = [o.position.x, o.position.y, z0];
+            let figure = custom_marks(&f, foot, &shown);
+            for m in &figure {
+                for p in &m.pts {
+                    lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                    hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+                }
+            }
+            let middle = [foot[0], foot[1], foot[2] + shown.height / 2.0];
+            let base = f.project(foot);
+            faces.push(Face {
+                pts: [base, base, base],
+                depth: dot(middle, f.toward),
+                fill: [0, 0, 0],
+                edges: [false; 3],
+                grey: model.dimmed(focus, id.0),
+                on_ground: false,
+                figure: Some(figure),
+            });
+            continue;
+        }
         let Some(marks) = model.plant_side_marks(id, toward, true, 100.0) else {
             continue;
         };
@@ -284,6 +320,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                         closed: true,
                         fill,
                         stroke: width(pen),
+                        image: None,
                     });
                 }
                 Mark::Line { from, to, pen, .. } => figure.push(FigureMark {
@@ -291,6 +328,7 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                     closed: false,
                     fill: None,
                     stroke: width(pen),
+                    image: None,
                 }),
                 Mark::Arc { .. } => {}
             }
@@ -437,6 +475,93 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
     s
 }
 
+/// An object's own drawing standing at `foot`, facing the picture.
+fn custom_marks(f: &Frame, foot: P3, shown: &archisim_core::ShownFigure) -> Vec<FigureMark> {
+    use archisim_core::{ElevationArt, Shape};
+    let h = shown.height;
+    let sx = if shown.flip { -1.0 } else { 1.0 };
+    let at = |x: f64, up: f64| {
+        f.project([
+            foot[0] + f.right[0] * x * sx,
+            foot[1] + f.right[1] * x * sx,
+            foot[2] + up,
+        ])
+    };
+    let mut out = Vec::new();
+    match &shown.figure.art {
+        ElevationArt::Lines(items) => {
+            for item in items {
+                let colour = item.color.unwrap_or([26, 26, 26]);
+                let pts = |p: &Point2| at(p.x * h, p.y * h);
+                if let Shape::Hatch(hatch) = &item.shape {
+                    for l in &hatch.loops {
+                        let ring: Vec<Point2> = archisim_draft::loop_polygon(l, 1e-3)
+                            .iter()
+                            .map(pts)
+                            .collect();
+                        out.push(FigureMark {
+                            pts: ring,
+                            closed: true,
+                            fill: Some((colour, 1.0)),
+                            stroke: None,
+                            image: None,
+                        });
+                    }
+                    continue;
+                }
+                let closed = matches!(&item.shape, Shape::Polyline(p) if p.closed)
+                    || matches!(&item.shape, Shape::Circle { .. });
+                let mut runs: Vec<Vec<Point2>> = Vec::new();
+                for seg in archisim_draft::shape_segs(&item.shape) {
+                    let q = seg.tessellate(1e-3);
+                    match runs.last_mut() {
+                        Some(last) if last.last().is_some_and(|x| x.approx_eq(q[0])) => {
+                            last.extend_from_slice(&q[1..]);
+                        }
+                        _ => runs.push(q),
+                    }
+                }
+                for r in runs {
+                    out.push(FigureMark {
+                        pts: r.iter().map(pts).collect(),
+                        closed,
+                        fill: closed.then_some(([255, 255, 255], 1.0)),
+                        stroke: Some(item.weight.unwrap_or(0.1)),
+                        image: None,
+                    });
+                }
+            }
+        }
+        ElevationArt::Image { png, aspect } => {
+            let w = h * aspect;
+            let p0 = f.project(foot);
+            let o = f.project([0.0, 0.0, 0.0]);
+            let r = f.project(f.right) - o;
+            let z = f.project([0.0, 0.0, 1.0]) - o;
+            // Its pixels (x right, y down, in metres here) into the
+            // picture (y up, written as -y).
+            let (a, b) = (r.x * sx, -r.y * sx);
+            let (c, d) = (-z.x, z.y);
+            let e = p0.x - (w / 2.0) * r.x * sx + h * z.x;
+            let ff = -(p0.y - (w / 2.0) * r.y * sx + h * z.y);
+            let corners = [
+                at(-w / 2.0, 0.0),
+                at(w / 2.0, 0.0),
+                at(w / 2.0, h),
+                at(-w / 2.0, h),
+            ];
+            out.push(FigureMark {
+                pts: corners.to_vec(),
+                closed: true,
+                fill: None,
+                stroke: None,
+                image: Some((png.clone(), w, h, [a, b, c, d, e, ff])),
+            });
+        }
+    }
+    out
+}
+
 /// A plant's marks in the picture (grey when its discipline is).
 fn draw_figure(s: &mut String, marks: &[FigureMark], grey: bool, k: f64) {
     let tone = |[r, g, b]: [u8; 3]| -> String {
@@ -450,6 +575,22 @@ fn draw_figure(s: &mut String, marks: &[FigureMark], grey: bool, k: f64) {
     };
     let ink = if grey { "#a9a9a9" } else { "#222" };
     for m in marks {
+        if let Some((png, w, h, t)) = &m.image {
+            let _ = writeln!(
+                s,
+                r#"<image width="{}" height="{}" preserveAspectRatio="none" transform="matrix({} {} {} {} {} {})" href="data:image/png;base64,{}"/>"#,
+                num(*w),
+                num(*h),
+                num(t[0]),
+                num(t[1]),
+                num(t[2]),
+                num(t[3]),
+                num(t[4]),
+                num(t[5]),
+                crate::base64(png)
+            );
+            continue;
+        }
         if m.pts.len() < 2 {
             continue;
         }

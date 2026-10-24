@@ -510,6 +510,10 @@ impl ArchiSimApp {
         let cur = items
             .iter()
             .find(|i| current.is_some_and(|c| i.pick == ObjectPick::Project(c)));
+        // The chosen one in 3D, as the Maqueta's cards show them.
+        self.thumbs3d.begin();
+        let cur_3d = cur
+            .and_then(|c| self.card_thumb_3d(&ctx, super::maquette_ui::CatalogAct::Object(c.pick)));
         let mut picked = None;
         let frame = egui::Frame::new()
             .fill(p.raised)
@@ -518,7 +522,10 @@ impl ArchiSimApp {
             .inner_margin(egui::Margin::same(10));
         frame.show(ui, |ui| {
             ui.set_width(ui.available_width());
-            if let Some(t) = cur.and_then(|c| c.thumb) {
+            if let Some(t) = cur_3d {
+                props::paper(ui, t, Vec2::new(ui.available_width(), 130.0));
+                ui.add_space(6.0);
+            } else if let Some(t) = cur.and_then(|c| c.thumb) {
                 props::paper(ui, t, Vec2::new(ui.available_width(), 130.0));
                 ui.label(
                     egui::RichText::new("Planta · el frente, hacia arriba")
@@ -546,6 +553,9 @@ impl ArchiSimApp {
             }
             picked = self.object_gallery(ui, &button, salt, current, &items);
         });
+        if self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
         picked
     }
 
@@ -683,11 +693,21 @@ impl ArchiSimApp {
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing.x = 8.0;
                                         for item in row {
+                                            // In 3D when it can be drawn so
+                                            // (a few more each frame).
+                                            let thumb = self
+                                                .card_thumb_3d(
+                                                    ui.ctx(),
+                                                    super::maquette_ui::CatalogAct::Object(
+                                                        item.pick,
+                                                    ),
+                                                )
+                                                .or(item.thumb);
                                             let tile = TypeItem {
                                                 id: (),
                                                 name: item.name.clone(),
                                                 note: item.note.clone(),
-                                                thumb: item.thumb,
+                                                thumb,
                                                 caption: "",
                                             };
                                             let selected = current.is_some_and(|c| {

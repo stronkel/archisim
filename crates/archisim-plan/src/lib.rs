@@ -2024,6 +2024,16 @@ fn draw_objects(
             model.object_plan_symbol(o.id, scale).map_err(|_| ())
         };
         overrides::open(s, category);
+        // In a presentation, a picture of its own, if it has one.
+        let picture = model
+            .object_type(o.object_type)
+            .and_then(|t| t.plan_image.as_ref())
+            .filter(|_| presenting && marks.is_ok());
+        if let Some(img) = picture {
+            dim::element(s, o.id.0, |s| draw_plan_image(s, model, o, img));
+            overrides::close(s);
+            continue;
+        }
         // A symbol brought from a DXF, drawn instead of the family's.
         let symbol = model
             .object_type(o.object_type)
@@ -2048,6 +2058,34 @@ fn draw_objects(
         overrides::close(s);
     }
     s.push_str("</g>\n");
+}
+
+/// An object's picture for presentation plans: in its type's plan box
+/// (keeping its proportion), turned and placed as the object, its top
+/// towards the object's front.
+fn draw_plan_image(
+    s: &mut String,
+    model: &Model,
+    o: &archisim_core::Object,
+    img: &archisim_core::PlanImage,
+) {
+    let (lo, hi) = model
+        .object_type_box(o.object_type)
+        .unwrap_or(([-0.5, -0.5], [0.5, 0.5]));
+    let (w, d) = ((hi[0] - lo[0]).max(0.01), (hi[1] - lo[1]).max(0.01));
+    let c = o.to_plan((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0);
+    let _ = writeln!(
+        s,
+        r#"<image x="{}" y="{}" width="{}" height="{}" preserveAspectRatio="xMidYMid meet" transform="translate({},{}) rotate({})" href="data:image/png;base64,{}"/>"#,
+        num(-w / 2.0),
+        num(-d / 2.0),
+        num(w),
+        num(d),
+        num(c.x),
+        num(-c.y),
+        num(-o.rotation.to_degrees()),
+        base64(&img.png)
+    );
 }
 
 /// An object's plan symbol from a DXF: centred on its type's plan box (and
@@ -2495,6 +2533,31 @@ fn open_path(pts: &[Point2]) -> String {
 
 pub(crate) fn pt(p: Point2) -> String {
     format!("{},{}", num(p.x), num(-p.y))
+}
+
+/// Bytes as base64 (standard alphabet, with padding), for pictures put
+/// in a drawing.
+pub(crate) fn base64(bytes: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for c in bytes.chunks(3) {
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
+        out.push(A[(n >> 18) as usize & 63] as char);
+        out.push(A[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 {
+            A[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            A[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 pub(crate) fn path(poly: &[Point2]) -> String {

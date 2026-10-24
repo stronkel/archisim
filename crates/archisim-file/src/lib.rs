@@ -291,7 +291,8 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // placed again on opening. 33 → 34: the slope of runs, the
             // decomposition of prices and the budget's overheads, profit
             // and VAT (`budget`); older ones have none. 34 → 35: object
-            // types of one object (`own`); older ones have none.
+            // types of one object (`own`) and their own drawings for
+            // elevations (`elevation`); older ones have none.
             9..=34 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
