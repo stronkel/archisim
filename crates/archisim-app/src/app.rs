@@ -281,6 +281,18 @@ pub struct ArchiSimApp {
     /// Stretching an object by a handle in the 3D view.
     object_grip: Option<grips3d::ObjectGrip3d>,
     object_grip_hover: Option<grips3d::SizeKey>,
+    /// The turning handle of an object, taken in the 3D view.
+    object_turn: Option<grips3d::ObjectTurn3d>,
+    /// The menu of a right click, while it is open.
+    context_menu: Option<context_menu::ContextMenu>,
+    /// The material of the object whose colours are open in its bar, and
+    /// where its swatch is.
+    bar_swatches: Option<String>,
+    bar_swatch_at: Option<eframe::egui::Rect>,
+    /// A left drag in the 3D view (moving or a selection window).
+    drag3d: Option<mouse3d::Drag3d>,
+    /// What Cortar or Copiar kept.
+    clipboard: Option<context_menu::Clipboard>,
     render: render_ui::RenderState,
     budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
@@ -603,6 +615,12 @@ impl ArchiSimApp {
             // (never in the tests).
             object_grip: None,
             object_grip_hover: None,
+            object_turn: None,
+            context_menu: None,
+            clipboard: None,
+            drag3d: None,
+            bar_swatches: None,
+            bar_swatch_at: None,
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
@@ -1355,6 +1373,14 @@ impl ArchiSimApp {
         }
     }
 
+    pub(super) fn select_all_pub(&mut self) {
+        self.select_all();
+    }
+
+    pub(super) fn delete_pub(&mut self) {
+        self.delete();
+    }
+
     fn select_all(&mut self) {
         self.ed.selection = crate::pick::elements_on_level(self.ed.model(), self.ed.level)
             .into_iter()
@@ -1542,6 +1568,13 @@ impl ArchiSimApp {
         // Texts are measured and drawn in the project's lettering.
         archisim_draft::font::set_font(self.ed.model().graphics.font);
         self.handle_close(&ctx);
+        // Escape with the right click's menu open only closes it (the
+        // selection stays).
+        if self.context_menu.is_some()
+            && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape))
+        {
+            self.context_menu = None;
+        }
         self.handle_shortcuts(&ctx);
         self.command_search_window(&ctx);
         self.drop_locked_from_selection();
@@ -1563,6 +1596,7 @@ impl ArchiSimApp {
         } else {
             self.technical_frame(ui);
         }
+        self.context_menu_ui(&ctx);
         self.after_frame(&ctx);
     }
 
@@ -1768,6 +1802,35 @@ impl ArchiSimApp {
         if consume(cmd, Key::A) {
             self.set_tool(Tool::Arrow);
             self.select_all();
+        }
+        // Cortar, Copiar and Pegar (also in the right click's menu); egui
+        // turns the keys into its own events on most systems.
+        let (copy, cut, paste) = ctx.input(|i| {
+            let mut v = (false, false, false);
+            for e in &i.events {
+                match e {
+                    egui::Event::Copy => v.0 = true,
+                    egui::Event::Cut => v.1 = true,
+                    egui::Event::Paste(_) => v.2 = true,
+                    _ => {}
+                }
+            }
+            v
+        });
+        let sheet = !matches!(self.mode, ViewMode::Plan | ViewMode::ThreeD);
+        if !sheet && self.tool == Tool::Arrow {
+            if (copy || consume(cmd, Key::C)) && !self.ed.selection.is_empty() {
+                self.copy_selection(false);
+            }
+            if (cut || consume(cmd, Key::X)) && !self.ed.selection.is_empty() {
+                self.copy_selection(true);
+            }
+            if (paste || consume(cmd, Key::V)) && self.clipboard.is_some() {
+                let at = (self.mode == ViewMode::Plan)
+                    .then(|| self.cursor.map(|c| c.point))
+                    .flatten();
+                self.paste_at(at);
+            }
         }
         if consume(Modifiers::NONE, Key::Home) {
             self.fit_active_view();
@@ -2197,6 +2260,7 @@ mod cad_ui;
 mod chrome;
 mod concept_ui;
 mod context_bar;
+mod context_menu;
 mod coord_ui;
 mod cte_ui;
 mod curtain_types_ui;
@@ -2207,6 +2271,7 @@ mod foundation_ui;
 mod ghost3d;
 mod glyphs;
 mod grips3d;
+mod handles;
 mod hatch_ui;
 mod icons;
 mod levels_ui;
@@ -2216,7 +2281,9 @@ mod mesh_ui;
 mod methods_ui;
 mod missions_ui;
 mod module_ui;
+mod mouse3d;
 mod navigator;
+mod object_bar;
 mod object_gallery;
 mod object_ui;
 mod paint_ui;

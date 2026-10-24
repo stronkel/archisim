@@ -116,9 +116,9 @@ struct Card {
 }
 
 /// Height of the catalog at the bottom.
-const CATALOG_HEIGHT: f32 = 156.0;
+const CATALOG_HEIGHT: f32 = 172.0;
 /// Size of a card.
-const CARD: Vec2 = Vec2::new(96.0, 92.0);
+const CARD: Vec2 = Vec2::new(112.0, 108.0);
 /// Spacing of the ground grid.
 pub const GRID_STEP: f64 = 0.5;
 
@@ -203,7 +203,8 @@ impl ArchiSimApp {
             self.view_3d(ui);
         });
         let ctx = ui.ctx().clone();
-        self.maquette_card(&ctx);
+        let bottom = ctx.content_rect().bottom() - CATALOG_HEIGHT;
+        self.object_bar(&ctx, bottom);
         self.maquette_more(&ctx);
     }
 
@@ -333,9 +334,12 @@ impl ArchiSimApp {
                 .opening_types()
                 .filter(|t| t.is_door() == door)
                 .map(|t| {
-                    let key = format!("maqueta:open:{}:{sig}", t.id.0);
-                    let thumb =
-                        thumbs.get(ctx, key, || crate::type_preview::opening_model(model, t));
+                    // In elevation: in plan, one window is a line like any
+                    // other (concepto de interfaz del 24/10/2026).
+                    let key = format!("maqueta:elev:{}:{:?}:{sig}", t.id.0, t.values);
+                    let thumb = thumbs.get_drawing(ctx, key, CARD - Vec2::new(16.0, 46.0), || {
+                        crate::type_drawing::opening_elevation(model, t)
+                    });
                     Card {
                         act: if door {
                             CatalogAct::Door(t.id)
@@ -623,7 +627,7 @@ impl ArchiSimApp {
                         );
                         let pic = Rect::from_min_size(
                             rect.min + Vec2::new(8.0, 6.0),
-                            Vec2::new(CARD.x - 16.0, CARD.y - 34.0),
+                            Vec2::new(CARD.x - 16.0, CARD.y - 46.0),
                         );
                         match &c.thumb {
                             Some(t) => {
@@ -643,19 +647,22 @@ impl ArchiSimApp {
                                 if on { p.accent } else { p.text },
                             ),
                         }
+                        // The whole name, in two lines if it needs them.
                         let name = egui::text::LayoutJob {
-                            wrap: egui::text::TextWrapping::truncate_at_width(CARD.x - 10.0),
+                            wrap: egui::text::TextWrapping {
+                                max_width: CARD.x - 10.0,
+                                max_rows: 2,
+                                break_anywhere: false,
+                                overflow_character: Some('…'),
+                            },
+                            halign: egui::Align::Center,
                             ..egui::text::LayoutJob::single_section(
                                 c.name.clone(),
                                 egui::TextFormat::simple(FontId::proportional(11.5), p.text),
                             )
                         };
                         let g = painter.layout_job(name);
-                        painter.galley(
-                            Pos2::new(rect.center().x - g.size().x / 2.0, rect.bottom() - 22.0),
-                            g,
-                            p.text,
-                        );
+                        painter.galley(Pos2::new(rect.center().x, rect.bottom() - 36.0), g, p.text);
                         if resp.on_hover_text(&c.name).clicked() {
                             take = Some(c.act);
                         }
@@ -667,145 +674,8 @@ impl ArchiSimApp {
         }
     }
 
-    /// Where the card of the selection goes: over the middle of what is
-    /// selected, as seen in the 3D view.
-    fn selection_anchor(&self) -> Option<Pos2> {
-        let rect = self.v3d.canvas;
-        let model = self.ed.model();
-        let mut pts = Vec::new();
-        let mut z = 0.0;
-        for e in &self.ed.selection {
-            let Some(o) = crate::pick::outline(&self.ed, *e) else {
-                continue;
-            };
-            pts.extend(o);
-            z = match *e {
-                Element::Dormer(r, i) => model
-                    .roof(r)
-                    .and_then(|x| {
-                        x.dormers
-                            .get(usize::from(i))
-                            .and_then(|d| x.dormer_shape(d))
-                    })
-                    .map(|s| {
-                        model
-                            .roof(r)
-                            .and_then(|x| model.level(x.level))
-                            .map_or(0.0, |l| l.elevation)
-                            + s.ridge_z
-                    })
-                    .unwrap_or(z),
-                Element::Roof(r) => model
-                    .roof(r)
-                    .map(|x| model.level(x.level).map_or(0.0, |l| l.elevation) + x.top_range().1)
-                    .unwrap_or(z),
-                _ => self.v3d.level_z as f64 + 1.6,
-            };
-        }
-        if pts.is_empty() {
-            return None;
-        }
-        let n = pts.len() as f64;
-        let c = pts.iter().fold(Point2::new(0.0, 0.0), |a, q| a + *q) * (1.0 / n);
-        let s = self.v3d.camera.project_to_screen(
-            glam::Vec3::new(c.x as f32, c.y as f32, z as f32),
-            glam::Vec2::new(rect.width(), rect.height()),
-        )?;
-        let at = rect.min + Vec2::new(s.x, s.y);
-        rect.contains(at).then_some(at)
-    }
-
-    /// The card next to what is selected: what it is, and quick actions.
-    fn maquette_card(&mut self, ctx: &egui::Context) {
-        if self.ed.selection.is_empty() || self.tool != Tool::Arrow {
-            return;
-        }
-        let Some(at) = self.selection_anchor() else {
-            return;
-        };
-        let p = Palette::current(ctx);
-        let label = super::context_bar::selection_label(self.ed.selection.iter());
-        let single =
-            (self.ed.selection.len() == 1).then(|| *self.ed.selection.iter().next().expect("one"));
-        let name = single.map(|e| self.element_title(e)).unwrap_or_default();
-        let mut act = None;
-        egui::Area::new(Id::unique("maquette-card"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(at + Vec2::new(40.0, -150.0))
-            .show(ctx, |ui| {
-                egui::Frame::new()
-                    .fill(p.panel)
-                    .stroke(Stroke::new(1.0, p.line))
-                    .corner_radius(CornerRadius::same(10))
-                    .inner_margin(egui::Margin::same(8))
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(&label)
-                                .font(strong_font(12.5))
-                                .color(p.text),
-                        );
-                        if !name.is_empty() {
-                            ui.label(egui::RichText::new(&name).small().color(p.muted));
-                        }
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 4.0;
-                            if ui
-                                .button("⟳ Girar")
-                                .on_hover_text("Un cuarto de vuelta")
-                                .clicked()
-                            {
-                                act = Some(CardAct::Turn);
-                            }
-                            if ui
-                                .button("⧉ Duplicar")
-                                .on_hover_text("Una copia al lado, seleccionada")
-                                .clicked()
-                            {
-                                act = Some(CardAct::Duplicate);
-                            }
-                            if single.is_some()
-                                && ui
-                                    .button("Cuentagotas")
-                                    .on_hover_text("La herramienta para poner otro igual")
-                                    .clicked()
-                            {
-                                act = Some(CardAct::Eyedropper);
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 4.0;
-                            if ui
-                                .button("Más…")
-                                .on_hover_text("Todas sus propiedades")
-                                .clicked()
-                            {
-                                act = Some(CardAct::More);
-                            }
-                            if ui.button("🗑 Borrar").on_hover_text("Supr").clicked() {
-                                act = Some(CardAct::Delete);
-                            }
-                        });
-                    });
-            });
-        match act {
-            Some(CardAct::Turn) => self.card_turn(),
-            Some(CardAct::Duplicate) => self.card_duplicate(),
-            Some(CardAct::Eyedropper) => {
-                if let Some(e) = single {
-                    self.eyedropper(e);
-                }
-            }
-            Some(CardAct::More) => self.maquette_props = true,
-            Some(CardAct::Delete) => match self.ed.delete_selection() {
-                Ok(n) => self.say(format!("{n} borrado(s).")),
-                Err(e) => self.complain(format!("No se puede borrar: {e}.")),
-            },
-            None => {}
-        }
-    }
-
     /// A short name of what an element is (its type).
-    fn element_title(&self, e: Element) -> String {
+    pub(super) fn element_title(&self, e: Element) -> String {
         let m = self.ed.model();
         match e {
             Element::Object(id) => m
@@ -837,12 +707,10 @@ impl ArchiSimApp {
         .unwrap_or_default()
     }
 
-    #[cfg(test)]
     pub(super) fn card_turn_pub(&mut self) {
         self.card_turn()
     }
 
-    #[cfg(test)]
     pub(super) fn card_duplicate_pub(&mut self) {
         self.card_duplicate()
     }
@@ -1001,15 +869,6 @@ impl ArchiSimApp {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum CardAct {
-    Turn,
-    Duplicate,
-    Eyedropper,
-    More,
-    Delete,
 }
 
 /// The point snapped to the ground grid, if it is on.

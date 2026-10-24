@@ -1,11 +1,13 @@
 //! Stretching furniture in the 3D view (bloque 5 de la revisión del
-//! 22/10/2026): with one object selected, blue handles on its right and
+//! 22/10/2026): with one object selected, blue arrows on its right and
 //! left sides, its front and its top change its width, depth and height
 //! as the mouse drags them, as the plan's handles do (a type shared with
-//! other objects is copied, so only this one changes).
+//! other objects is copied, so only this one changes). It grows only
+//! towards the arrow, the opposite side staying put (with Alt, about its
+//! middle); the orange dot on the ring in front of it turns it.
 
-use archisim_core::{ObjectId, Value};
-use eframe::egui::{self, Color32, PointerButton, Pos2, Rect, Stroke};
+use archisim_core::ObjectId;
+use eframe::egui::{self, PointerButton, Pos2, Rect};
 
 use super::*;
 
@@ -27,6 +29,27 @@ impl SizeKey {
         }
     }
 
+    /// What stays put when it grows only towards this handle.
+    fn keep(self) -> crate::drag::Keep {
+        use crate::drag::Keep;
+        match self {
+            SizeKey::Width(true) => Keep::Low(0),
+            SizeKey::Width(false) => Keep::High(0),
+            SizeKey::Depth => Keep::Low(1),
+            SizeKey::Height => Keep::Low(2),
+        }
+    }
+
+    /// The way it grows, in the object's axes.
+    fn dir(self) -> glam::DVec3 {
+        match self {
+            SizeKey::Width(true) => glam::DVec3::X,
+            SizeKey::Width(false) => glam::DVec3::NEG_X,
+            SizeKey::Depth => glam::DVec3::Y,
+            SizeKey::Height => glam::DVec3::Z,
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             SizeKey::Width(_) => "Ancho",
@@ -45,10 +68,26 @@ pub struct ObjectGrip3d {
     pub start: glam::DVec3,
     pub before: f64,
     pub now: f64,
+    /// Alt: on both sides, about its middle.
+    pub both: bool,
+    /// Where on the screen it was taken.
+    pub press: Pos2,
+}
+
+/// The turning handle being dragged: the angle the object would take.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ObjectTurn3d {
+    pub object: ObjectId,
+    pub angle: f64,
 }
 
 /// How near a handle the cursor takes it, in screen points.
 const REACH: f32 = 11.0;
+
+/// How far out of the object an arrow starts, and where it is taken, in
+/// screen points.
+const ARROW_GAP: f32 = 6.0;
+pub(super) const ARROW_GRAB: f32 = ARROW_GAP + 9.0;
 
 impl ArchiSimApp {
     /// The object selected alone, if it is one.
@@ -64,18 +103,7 @@ impl ArchiSimApp {
 
     /// A measurement of an object's type (its own value or the family's).
     fn object_size(&self, id: ObjectId, key: &str) -> Option<f64> {
-        let model = self.ed.model();
-        let t = model.object_type(model.object(id)?.object_type)?;
-        if let Some(Value::Number(v)) = t.values.get(key) {
-            return Some(*v);
-        }
-        let d = model
-            .family_defaults(t.family, archisim_family::ParamScope::Type)
-            .ok()?;
-        match d.get(key) {
-            Some(Value::Number(v)) => Some(*v),
-            _ => None,
-        }
+        crate::drag::type_number(self.ed.model(), id, key)
     }
 
     /// The handles of the object selected, in the model.
@@ -132,11 +160,43 @@ impl ArchiSimApp {
             .map(|s| Pos2::new(rect.min.x + s.x, rect.min.y + s.y))
     }
 
-    /// The handle under a point of the screen.
+    /// Where a handle's arrow is on the screen: the point on the object's
+    /// side it starts from, and the way it points. The arrow is drawn
+    /// outside the object, so a small object can still be taken by its
+    /// body.
+    pub(super) fn handle_on_screen(
+        &self,
+        rect: Rect,
+        key: SizeKey,
+        at: glam::DVec3,
+    ) -> Option<(Pos2, egui::Vec2)> {
+        let rot = self
+            .single_object()
+            .and_then(|id| self.ed.model().object(id))
+            .map_or(0.0, |o| o.rotation);
+        let (c, s) = (rot.cos(), rot.sin());
+        let d = key.dir();
+        let world = glam::DVec3::new(d.x * c - d.y * s, d.x * s + d.y * c, d.z);
+        let p = self.to_screen_3d(rect, at)?;
+        let dir = self
+            .to_screen_3d(rect, at + world * 0.1)
+            .map_or(egui::Vec2::X, |q| q - p);
+        let dir = if dir.length() > 1e-3 {
+            dir.normalized()
+        } else {
+            egui::Vec2::X
+        };
+        Some((p, dir))
+    }
+
+    /// The handle under a point of the screen (on its arrow).
     fn object_handle_at(&self, rect: Rect, pos: Pos2) -> Option<(ObjectId, SizeKey, glam::DVec3)> {
         self.object_handles_3d()
             .into_iter()
-            .filter_map(|h| self.to_screen_3d(rect, h.2).map(|s| (h, s.distance(pos))))
+            .filter_map(|h| {
+                self.handle_on_screen(rect, h.1, h.2)
+                    .map(|(p, d)| (h, (p + d * ARROW_GRAB).distance(pos)))
+            })
             .filter(|(_, d)| *d <= REACH)
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(h, _)| h)
@@ -157,9 +217,8 @@ impl ArchiSimApp {
                 .map(|h| h.1);
         }
         if response.drag_started_by(PointerButton::Primary) {
-            let taken = ctx
-                .input(|i| i.pointer.press_origin())
-                .and_then(|p| self.object_handle_at(rect, p));
+            let press = ctx.input(|i| i.pointer.press_origin());
+            let taken = press.and_then(|p| self.object_handle_at(rect, p));
             self.object_grip = taken.and_then(|(id, key, at)| {
                 let before = self.object_size(id, key.key())?;
                 Some(ObjectGrip3d {
@@ -168,13 +227,48 @@ impl ArchiSimApp {
                     start: at,
                     before,
                     now: before,
+                    both: false,
+                    press: press.unwrap_or(Pos2::ZERO),
                 })
             });
+            if self.object_grip.is_none() {
+                self.object_turn = ctx
+                    .input(|i| i.pointer.press_origin())
+                    .filter(|p| self.on_turn_handle(rect, *p))
+                    .and_then(|_| self.single_object())
+                    .and_then(|id| {
+                        let angle = self.ed.model().object(id)?.rotation;
+                        Some(ObjectTurn3d { object: id, angle })
+                    });
+            }
+        }
+        if let Some(mut t) = self.object_turn {
+            if response.dragged_by(PointerButton::Primary) {
+                if let Some(at) = response
+                    .interact_pointer_pos()
+                    .and_then(|p| self.ground_at(rect, p, t.object))
+                {
+                    if let Some(a) = crate::drag::turn_angle(self.ed.model(), t.object, at) {
+                        t.angle = a;
+                        self.object_turn = Some(t);
+                    }
+                }
+            }
+            if response.drag_stopped() {
+                self.object_turn = None;
+                let r = self.ed.transact("Girar objeto", |m| {
+                    crate::drag::turn_object(m, t.object, t.angle)
+                });
+                self.report(r, &format!("Girado a {:.0}°.", t.angle.to_degrees()));
+            }
+            return true;
         }
         let Some(mut g) = self.object_grip else {
             return false;
         };
         if response.dragged_by(PointerButton::Primary) {
+            g.both = ctx.input(|i| i.modifiers.alt);
+            self.object_grip = Some(g);
             if let Some(pos) = response.interact_pointer_pos() {
                 if let Some(v) = self.grip_value(&g, rect, pos) {
                     g.now = v;
@@ -185,8 +279,17 @@ impl ArchiSimApp {
         if response.drag_stopped() {
             self.object_grip = None;
             if (g.now - g.before).abs() > 1e-6 {
+                let keep = if g.both {
+                    match g.key {
+                        SizeKey::Width(_) => crate::drag::Keep::Middle(0),
+                        SizeKey::Depth => crate::drag::Keep::Middle(1),
+                        SizeKey::Height => crate::drag::Keep::Low(2),
+                    }
+                } else {
+                    g.key.keep()
+                };
                 let r = self.ed.transact("Estirar objeto", |m| {
-                    crate::drag::set_object_size(m, g.object, g.key.key(), g.now)
+                    crate::drag::resize_object(m, g.object, g.key.key(), g.now, keep)
                 });
                 self.report(
                     r,
@@ -198,7 +301,17 @@ impl ArchiSimApp {
     }
 
     /// The measurement a handle gives with the cursor at `pos`.
+    /// (Measured from where the arrow was taken, not from the object's
+    /// side: the arrow is a little outside it.)
     fn grip_value(&self, g: &ObjectGrip3d, rect: Rect, pos: Pos2) -> Option<f64> {
+        let now = self.grip_delta(g, rect, pos)?;
+        let then = self.grip_delta(g, rect, g.press).unwrap_or(0.0);
+        let v = ((g.before + now - then) * 100.0).round() / 100.0;
+        Some(v.max(0.05))
+    }
+
+    /// How far the cursor at `pos` is from the handle, along its way.
+    fn grip_delta(&self, g: &ObjectGrip3d, rect: Rect, pos: Pos2) -> Option<f64> {
         let local = pos - rect.min;
         let ray = self.v3d.camera.ray(
             glam::Vec2::new(local.x, local.y),
@@ -231,38 +344,102 @@ impl ArchiSimApp {
                 }
                 let q = o + d * t - g.start;
                 let (x, y) = (q.x * c + q.y * s, -q.x * s + q.y * c);
+                let k = if g.both { 2.0 } else { 1.0 };
                 match g.key {
-                    SizeKey::Width(true) => 2.0 * x,
-                    SizeKey::Width(false) => -2.0 * x,
-                    _ => y,
+                    SizeKey::Width(true) => k * x,
+                    SizeKey::Width(false) => -k * x,
+                    _ => k * y,
                 }
             }
         };
-        let v = ((g.before + delta) * 100.0).round() / 100.0;
-        Some(v.max(0.05))
+        Some(delta)
+    }
+
+    /// Where the cursor is on the floor the object stands on.
+    fn ground_at(&self, rect: Rect, pos: Pos2, id: ObjectId) -> Option<archisim_core::Point2> {
+        let model = self.ed.model();
+        let o = model.object(id)?;
+        let z = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+        let local = pos - rect.min;
+        let ray = self.v3d.camera.ray(
+            glam::Vec2::new(local.x, local.y),
+            glam::Vec2::new(rect.width(), rect.height()),
+        );
+        let (or, d) = (ray.origin.as_dvec3(), ray.dir.as_dvec3());
+        if d.z.abs() < 1e-9 {
+            return None;
+        }
+        let t = (z - or.z) / d.z;
+        (t > 0.0).then(|| {
+            let q = or + d * t;
+            archisim_core::Point2::new(q.x, q.y)
+        })
+    }
+
+    /// The turning handle of the object selected and its middle, on the
+    /// floor, in the model.
+    fn turn_handle_3d(&self) -> Option<(glam::DVec3, glam::DVec3)> {
+        if self.tool != Tool::Arrow {
+            return None;
+        }
+        let id = self.single_object()?;
+        let model = self.ed.model();
+        let o = model.object(id)?;
+        let z = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+        let h = crate::drag::turn_handle(model, id)?;
+        let m = crate::drag::object_middle(model, id)?;
+        Some((glam::DVec3::new(h.x, h.y, z), glam::DVec3::new(m.x, m.y, z)))
+    }
+
+    fn on_turn_handle(&self, rect: Rect, pos: Pos2) -> bool {
+        self.turn_handle_3d()
+            .and_then(|(h, _)| self.to_screen_3d(rect, h))
+            .is_some_and(|s| s.distance(pos) <= REACH)
     }
 
     /// The handles, and the new size while one is dragged.
     pub(super) fn draw_object_grips_3d(&self, painter: &egui::Painter, rect: Rect) {
         let handles = self.object_handles_3d();
         for (_, key, at) in &handles {
-            let Some(p) = self.to_screen_3d(rect, *at) else {
+            let Some((p, dir)) = self.handle_on_screen(rect, *key, *at) else {
                 continue;
             };
             let hot = self.object_grip_hover == Some(*key)
                 || self.object_grip.is_some_and(|g| g.key == *key);
-            let r = if hot { 6.5 } else { 5.0 };
-            painter.rect_filled(
-                Rect::from_center_size(p, egui::vec2(2.0 * r, 2.0 * r)),
-                1.5,
-                ACCENT,
-            );
-            painter.rect_stroke(
-                Rect::from_center_size(p, egui::vec2(2.0 * r, 2.0 * r)),
-                1.5,
-                Stroke::new(1.5, Color32::WHITE),
-                egui::StrokeKind::Outside,
-            );
+            super::handles::arrow(painter, p + dir * (ARROW_GAP + 3.0), dir, ACCENT, hot);
+        }
+        // The side that stays put while one is dragged.
+        if let Some(g) = self.object_grip.filter(|g| !g.both) {
+            let opposite = match g.key {
+                SizeKey::Width(r) => handles.iter().find(|h| h.1 == SizeKey::Width(!r)),
+                _ => None,
+            };
+            if let Some(p) = opposite.and_then(|h| self.to_screen_3d(rect, h.2)) {
+                super::handles::pin(painter, p);
+            }
+        }
+        if let Some((h, m)) = self.turn_handle_3d() {
+            if let (Some(hp), Some(mp)) = (self.to_screen_3d(rect, h), self.to_screen_3d(rect, m)) {
+                let hot = self.object_turn.is_some()
+                    || painter
+                        .ctx()
+                        .pointer_hover_pos()
+                        .is_some_and(|p| p.distance(hp) <= REACH);
+                super::handles::turn(painter, mp, hp, hot);
+            }
+        }
+        if let Some(t) = self.object_turn {
+            if let Some(hp) = self
+                .turn_handle_3d()
+                .and_then(|(h, _)| self.to_screen_3d(rect, h))
+            {
+                super::handles::tag(
+                    painter,
+                    hp,
+                    format!("{:.0}°", t.angle.to_degrees()),
+                    super::handles::TURN,
+                );
+            }
         }
         if let Some(g) = self.object_grip {
             if let Some(p) = handles
@@ -270,12 +447,13 @@ impl ArchiSimApp {
                 .find(|h| h.1 == g.key)
                 .and_then(|h| self.to_screen_3d(rect, h.2))
             {
-                let text = format!("{} {}", g.key.label(), crate::units::fmt_len(g.now));
-                let font = egui::FontId::proportional(12.0);
-                let galley = painter.layout_no_wrap(text, font, Color32::WHITE);
-                let r = Rect::from_min_size(p + egui::vec2(12.0, -26.0), galley.size()).expand(4.0);
-                painter.rect_filled(r, 4.0, Color32::from_rgba_unmultiplied(20, 24, 32, 220));
-                painter.galley(r.min + egui::vec2(4.0, 4.0), galley, Color32::WHITE);
+                let text = format!(
+                    "{} {} → {}",
+                    g.key.label(),
+                    crate::units::fmt_len(g.before),
+                    crate::units::fmt_len(g.now)
+                );
+                super::handles::tag(painter, p, text, ACCENT);
             }
         }
     }

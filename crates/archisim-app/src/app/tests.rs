@@ -539,17 +539,77 @@ fn the_3d_view_shows_the_model_and_selects_by_clicking() {
         h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
         vec![Element::Wall(north)]
     );
-    // Dragging orbits the camera; the selection stays.
+    // The right button held turns the camera; nothing moves and the
+    // selection stays.
     let yaw = h.app.v3d.camera.yaw;
-    h.button(PointerButton::Primary, true);
+    let before = h.model().wall(north).unwrap().start;
+    h.button(PointerButton::Secondary, true);
     for i in 1..=5 {
         h.pos = pos + Vec2::new(20.0 * i as f32, 0.0);
         h.events.push(Event::PointerMoved(h.pos));
         h.frame();
     }
-    h.button(PointerButton::Primary, false);
+    h.button(PointerButton::Secondary, false);
     assert!(h.app.v3d.camera.yaw < yaw, "turned");
     assert_eq!(h.app.ed.selection.len(), 1);
+    assert_eq!(h.model().wall(north).unwrap().start, before);
+    assert!(
+        h.app.context_menu.is_none(),
+        "a held right button is no click"
+    );
+    // A single right click on it opens its menu; Escape closes it.
+    let size = h.app.v3d.canvas.size();
+    let vp = h.app.v3d.camera.view_proj(size.x / size.y);
+    let ndc = vp.project_point3(target);
+    let pos = h.app.v3d.canvas.min
+        + Vec2::new((ndc.x + 1.0) / 2.0 * size.x, (1.0 - ndc.y) / 2.0 * size.y);
+    h.pos = pos;
+    h.events.push(Event::PointerMoved(pos));
+    h.frame();
+    h.button(PointerButton::Secondary, true);
+    h.button(PointerButton::Secondary, false);
+    h.frame();
+    assert_eq!(
+        h.app.context_menu.as_ref().and_then(|m| m.element),
+        Some(Element::Wall(north))
+    );
+    h.key(Key::Escape);
+    assert!(h.app.context_menu.is_none());
+    // The left button dragged on it moves it over its plane.
+    h.time += 1.0;
+    h.button(PointerButton::Primary, true);
+    for i in 1..=6 {
+        h.pos = pos + Vec2::new(0.0, 6.0 * i as f32);
+        h.events.push(Event::PointerMoved(h.pos));
+        h.frame();
+    }
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    let after = h.model().wall(north).unwrap().start;
+    assert!(after.distance(before) > 0.05, "{before:?} {after:?}");
+    h.app.ed.undo();
+    assert_eq!(h.model().wall(north).unwrap().start, before);
+    // From an empty corner, a window of selection: from left to right it
+    // takes what is wholly inside (the whole view: everything).
+    let canvas = h.app.v3d.canvas;
+    h.app.ed.selection.clear();
+    h.pos = canvas.min + Vec2::new(2.0, 2.0);
+    h.events.push(Event::PointerMoved(h.pos));
+    h.frame();
+    if h.app.element_at_3d(canvas, h.pos).is_none() {
+        h.button(PointerButton::Primary, true);
+        for i in 1..=6 {
+            h.pos = canvas.min
+                + (canvas.size() - Vec2::splat(4.0)) * (i as f32 / 6.0)
+                + Vec2::splat(2.0);
+            h.events.push(Event::PointerMoved(h.pos));
+            h.frame();
+        }
+        h.button(PointerButton::Primary, false);
+        h.frame();
+        assert!(h.app.ed.selection.len() >= 2, "{:?}", h.app.ed.selection);
+        h.app.ed.selection = [Element::Wall(north)].into_iter().collect();
+    }
     // Supr deletes from the 3D view too; a tool key takes the tool there
     // (it draws in the 3D view, R14).
     h.key(Key::Delete);
@@ -5592,8 +5652,11 @@ fn objects_are_stretched_in_the_3d_view() {
             .find(|x| x.1 == key)
             .unwrap()
             .2;
-        let from = screen_3d(h, at.x, at.y, at.z);
-        let end = screen_3d(h, to.x, to.y, to.z);
+        // Taken by its arrow, just outside the object.
+        let canvas = h.app.v3d.canvas;
+        let (base, dir) = h.app.handle_on_screen(canvas, key, at).unwrap();
+        let from = base + dir * super::grips3d::ARROW_GRAB;
+        let end = from + (screen_3d(h, to.x, to.y, to.z) - screen_3d(h, at.x, at.y, at.z));
         h.pos = from;
         h.events.push(Event::PointerMoved(from));
         h.frame();
@@ -5608,7 +5671,15 @@ fn objects_are_stretched_in_the_3d_view() {
         h.frame();
         at
     };
-    // The right side 0,3 m further: 0,6 m wider (it stays centred).
+    // The right side 0,3 m further: 0,3 m wider, the left side where it
+    // was.
+    let left = h
+        .app
+        .object_handles_3d()
+        .into_iter()
+        .find(|x| x.1 == SizeKey::Width(false))
+        .unwrap()
+        .2;
     let at = h
         .app
         .object_handles_3d()
@@ -5629,7 +5700,15 @@ fn objects_are_stretched_in_the_3d_view() {
         Some(archisim_core::Value::Number(v)) => *v,
         other => panic!("{other:?}"),
     };
-    assert!((width - 1.8).abs() < 0.03, "{width} {:?}", h.app.message);
+    assert!((width - 1.5).abs() < 0.03, "{width} {:?}", h.app.message);
+    let left_now = h
+        .app
+        .object_handles_3d()
+        .into_iter()
+        .find(|x| x.1 == SizeKey::Width(false))
+        .unwrap()
+        .2;
+    assert!(left_now.distance(left) < 0.02, "{left:?} {left_now:?}");
     // The top 0,2 m up.
     let at = h
         .app
@@ -5995,4 +6074,103 @@ fn maquette_room_in_3d() {
     let m = h.model();
     assert_eq!(m.walls().count(), 4, "{:?}", h.app.message);
     assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
+}
+
+/// Concepto de interfaz del 24/10/2026: a single right click on a wall
+/// opens its menu; what it hides goes from the views (not from the
+/// project), and what it copies is pasted where the menu was opened.
+#[test]
+fn right_click_menu_in_the_plan() {
+    use super::context_menu::MenuAct;
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    assert_eq!(h.app.tool, Tool::Arrow);
+    let walls = h.model().walls().count();
+    // A right click on the west wall.
+    h.move_to(p(-0.1, 4.5));
+    h.button(PointerButton::Secondary, true);
+    h.button(PointerButton::Secondary, false);
+    h.frame();
+    let menu = h.app.context_menu.clone().expect("the menu is open");
+    let Some(Element::Wall(west)) = menu.element else {
+        panic!("{:?}", menu.element);
+    };
+    assert_eq!(
+        h.app.ed.selection.iter().copied().collect::<Vec<_>>(),
+        vec![Element::Wall(west)]
+    );
+    // Ocultar: out of what the views draw, still in the project.
+    h.app.context_menu = None;
+    h.app.menu_act(MenuAct::Hide, &menu);
+    assert!(h.app.ed.shown().wall(west).is_none());
+    assert!(h.model().wall(west).is_some());
+    assert!(h.app.ed.selection.is_empty());
+    h.app.menu_act(MenuAct::ShowAll, &menu);
+    assert!(h.app.ed.shown().wall(west).is_some());
+    // Aislar: only it is drawn.
+    h.app.ed.selection = [Element::Wall(west)].into_iter().collect();
+    h.app.menu_act(MenuAct::Isolate, &menu);
+    assert_eq!(h.app.ed.shown().walls().count(), 1);
+    h.app.menu_act(MenuAct::ShowAll, &menu);
+    // Copiar and Pegar where the cursor is: a copy with its middle there.
+    h.app.ed.selection = [Element::Wall(west)].into_iter().collect();
+    h.app.menu_act(MenuAct::Copy, &menu);
+    let at = super::context_menu::ContextMenu::at_for_tests(p(20.0, 4.5));
+    h.app.menu_act(MenuAct::Paste, &at);
+    assert_eq!(h.model().walls().count(), walls + 1);
+    let copy = h.model().walls().last().unwrap();
+    let mid = Point2::new(
+        (copy.start.x + copy.end.x) / 2.0,
+        (copy.start.y + copy.end.y) / 2.0,
+    );
+    assert!(
+        (mid.y - 4.5).abs() < 0.2 && mid.x > 19.5 && mid.x < 20.5,
+        "{mid:?}"
+    );
+    // Cortar and Pegar: it moves (no copy is left behind).
+    let id = copy.id;
+    h.app.ed.selection = [Element::Wall(id)].into_iter().collect();
+    h.app.menu_act(MenuAct::Cut, &menu);
+    let at = super::context_menu::ContextMenu::at_for_tests(p(25.0, 4.5));
+    h.app.menu_act(MenuAct::Paste, &at);
+    assert_eq!(h.model().walls().count(), walls + 1);
+    assert!(h.app.clipboard.is_none());
+}
+
+/// The bar of the Maqueta: the materials of a sofa are its swatches, and a
+/// colour picked there changes only this sofa.
+#[test]
+fn maquette_object_bar_changes_materials() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
+        super::object_gallery::ObjectPick::Library("Sofá de 3 plazas"),
+    ));
+    h.click_at(p(2.5, 2.0));
+    h.click_at(p(6.5, 2.0));
+    let ids: Vec<_> = h.model().objects().map(|o| o.id).collect();
+    assert_eq!(ids.len(), 2, "{:?}", h.app.message);
+    let mats = h.app.object_materials(ids[0]);
+    assert!(!mats.is_empty(), "a sofa has materials");
+    let (key, _, now, _) = mats[0].clone();
+    let other = h
+        .model()
+        .materials()
+        .map(|m| m.id.0)
+        .find(|m| *m != now)
+        .unwrap();
+    h.app
+        .ed
+        .transact("Cambiar material", |m| {
+            crate::drag::set_object_value(m, ids[0], &key, archisim_core::Value::Material(other))
+        })
+        .unwrap();
+    assert_eq!(h.app.object_materials(ids[0])[0].2, other);
+    assert_eq!(
+        h.app.object_materials(ids[1])[0].2,
+        now,
+        "the other sofa keeps its own"
+    );
 }
