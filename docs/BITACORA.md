@@ -24,7 +24,7 @@ Antonio confirmó el orden C1–C7 de la hoja de ruta común (§9). Este es C1.
   - rehechos en el estilo de la biblioteca acogedora: figuras redondeadas con ropa, piel y pelo de colores, y coches de formas suaves con ruedas gruesas;
   - en alzados y secciones, por su **silueta**: blanca con su contorno en técnico, y cada pieza en su color en presentación.
 - Los cuerpos lisos (un árbol de la biblioteca que no es generado, un mueble redondo) dibujan ahora su contorno en alzado, que antes salía en blanco.
-- Los alzados pesan mucho menos: el sur de la demo pasa de 38 MB a 25 MB, y el de `figuras` es de 0,6 MB.
+- Los alzados pesan mucho menos: el sur de la demo pasa de 38 MB a 24 MB, y el de `figuras` es de 0,6 MB.
 - `archisim figuras out/`: árboles, palmeras, arbustos, personas, coches y una bicicleta en fila delante de un muro, en alzado 1:50 técnico y en color y en axonometría. `archisim vivero out/` escribe también un alzado de cada fila del vivero.
 
 **Pendiente**
