@@ -1,7 +1,16 @@
 //! The stair tool ("Escalera") and the properties of a selected stair:
-//! risers, treads and the checks of the Spanish code (CTE DB-SUA 1).
+//! its form (straight, L, U, spiral or any walking line; landings or
+//! winders), what carries it, its risers and treads and the checks of the
+//! Spanish code (CTE DB-SUA 1).
+//!
+//! A ready-made stair is drawn with two clicks: its foot (a spiral's
+//! centre) and the direction it sets off in; it is as long as the height
+//! asks. Space turns it the other way while drawing.
 
-use archisim_core::{Stair, StairId, StairIssue, StairUse};
+use archisim_core::{
+    MaterialId, Stair, StairDesign, StairForm, StairId, StairIssue, StairPreset, StairStructure,
+    StairUse,
+};
 use eframe::egui::{self, Id, Ui};
 
 use super::icons::Icon;
@@ -61,17 +70,101 @@ pub fn issue_text(i: &StairIssue) -> String {
             fmt_m(height),
             fmt_m(max)
         ),
+        StairIssue::NarrowEdge { going, min } => format!(
+            "Peldaño curvo de {} cm en su lado estrecho: mínimo {} cm",
+            cm(going),
+            cm(min)
+        ),
+        StairIssue::WideEdge { going, max } => format!(
+            "Peldaño curvo de {} cm en su lado ancho: máximo {} cm",
+            cm(going),
+            cm(max)
+        ),
+        StairIssue::OpenRisers => {
+            "Sin tabica: no vale en zonas de uso público ni para evacuar hacia arriba".to_string()
+        }
     }
+}
+
+/// The ready-made shapes, with their Spanish names.
+pub const PRESETS: [(StairPreset, &str); 5] = [
+    (StairPreset::Straight, "Recta"),
+    (StairPreset::LShape, "En L"),
+    (StairPreset::UShape, "En U (ida y vuelta)"),
+    (StairPreset::Spiral, "De caracol"),
+    (StairPreset::Free, "Libre (línea de huella)"),
+];
+
+/// What carries the treads, with their Spanish names.
+pub const STRUCTURES: [(StairStructure, &str); 5] = [
+    (StairStructure::Slab, "Losa de hormigón"),
+    (StairStructure::Stringers, "Dos zancas laterales"),
+    (StairStructure::Spine, "Zanca central"),
+    (StairStructure::Cantilever, "Peldaños volados (empotrados)"),
+    (StairStructure::Newel, "Mástil central"),
+];
+
+/// The structures a stair of a form may have.
+fn structures_for(form: StairForm) -> Vec<(StairStructure, &'static str)> {
+    STRUCTURES
+        .iter()
+        .copied()
+        .filter(|(s, _)| *s != StairStructure::Newel || form == StairForm::Spiral)
+        .map(|(s, n)| match (form, s) {
+            (StairForm::Spiral, StairStructure::Slab) => (s, "Losa helicoidal"),
+            (StairForm::Spiral, StairStructure::Stringers) => (s, "Zancas helicoidales"),
+            _ => (s, n),
+        })
+        .collect()
+}
+
+/// The form's name.
+fn form_name(d: &StairDesign) -> &'static str {
+    match d.form {
+        StairForm::Landings => "Tramos y mesetas",
+        StairForm::Winders => "Peldaños compensados",
+        StairForm::Spiral => "De caracol",
+    }
+}
+
+/// Degrees with a decimal comma, any angle (a spiral turns more than
+/// once).
+fn degrees_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> {
+    let shown = format!("{:.1}", value.to_degrees()).replace('.', ",");
+    let mut text = ui
+        .ctx()
+        .data(|d| d.get_temp::<String>(id.with("buffer")))
+        .unwrap_or_else(|| shown.clone());
+    let r = ui.add(
+        egui::TextEdit::singleline(&mut text)
+            .id(id)
+            .desired_width(width),
+    );
+    if r.has_focus() {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(id.with("buffer"), text));
+        return None;
+    }
+    if r.lost_focus() {
+        ui.ctx().data_mut(|d| d.remove::<String>(id.with("buffer")));
+        if text != shown && !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            return text
+                .trim()
+                .trim_end_matches('°')
+                .replace(',', ".")
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .map(f64::to_radians);
+        }
+    }
+    None
 }
 
 /// A one-line summary: risers × height, treads × going.
 fn summary(stair: &Stair) -> String {
     let l = stair.layout();
-    let going = l
-        .flights
-        .iter()
-        .map(|f| f.going)
-        .fold(f64::INFINITY, f64::min);
+    let going = l.going();
     format!(
         "{} tabicas de {} cm · {} huellas de {} cm",
         l.risers(),
@@ -91,6 +184,26 @@ impl ArchiSimApp {
         {
             return;
         }
+        if self.stair_settings.preset != StairPreset::Free {
+            let Some(foot) = self.stair_tool.points.first().copied() else {
+                self.stair_tool.points.push(p);
+                self.say(if self.stair_settings.preset == StairPreset::Spiral {
+                    "Clic hacia donde arranca el primer peldaño · Espacio: girar al otro lado."
+                } else {
+                    "Clic hacia donde sube · Espacio: girar al otro lado."
+                });
+                return;
+            };
+            if foot.distance(p) < 0.05 {
+                return;
+            }
+            self.stair_tool.points.clear();
+            let r = self
+                .ed
+                .add_preset_stair(&self.stair_settings, foot, p - foot);
+            self.stair_made(r);
+            return;
+        }
         self.stair_tool.points.push(p);
         if self.stair_tool.points.len() == 2 {
             self.say("Clic: otro tramo (en el giro, una meseta) · Intro o doble clic: terminar.");
@@ -99,11 +212,19 @@ impl ArchiSimApp {
 
     /// Builds the stair drawn so far.
     pub(super) fn finish_stair(&mut self) {
+        if self.stair_settings.preset != StairPreset::Free {
+            return;
+        }
         let path = std::mem::take(&mut self.stair_tool.points);
         if path.len() < 2 {
             return;
         }
-        match self.ed.add_stair(&self.stair_settings, path) {
+        let r = self.ed.add_stair(&self.stair_settings, path);
+        self.stair_made(r);
+    }
+
+    fn stair_made(&mut self, r: crate::editor::EditResult<StairId>) {
+        match r {
             Ok(id) => {
                 self.ed.selection = [Element::Stair(id)].into_iter().collect();
                 let s = self.ed.model().stair(id).cloned();
@@ -124,7 +245,50 @@ impl ArchiSimApp {
         }
     }
 
-    /// The stair being drawn, with its flights, landings and steps.
+    /// Turns the ready-made stair being drawn the other way.
+    pub(super) fn flip_stair_turn(&mut self) -> bool {
+        if self.tool != Tool::Stair
+            || self.stair_settings.preset == StairPreset::Free
+            || self.stair_settings.preset == StairPreset::Straight
+            || self.stair_tool.points.is_empty()
+        {
+            return false;
+        }
+        self.stair_settings.left = !self.stair_settings.left;
+        true
+    }
+
+    /// The stair the tool would make with the cursor where it is.
+    fn stair_being_drawn(&self, c: Point2) -> Option<Stair> {
+        let s = &self.stair_settings;
+        let model = self.ed.model();
+        let (path, design) = if s.preset == StairPreset::Free {
+            let mut path = self.stair_tool.points.clone();
+            path.push(c);
+            (path, s.free_design())
+        } else {
+            let foot = *self.stair_tool.points.first()?;
+            s.preset_on(model, self.ed.level, foot, c - foot)?
+        };
+        Some(Stair {
+            id: StairId(0),
+            guid: Default::default(),
+            level: self.ed.level,
+            path,
+            width: s.width,
+            going: s.going,
+            base_offset: 0.0,
+            top: archisim_core::WallTop::Unconnected,
+            height: s.height_on(model, self.ed.level),
+            waist: s.waist,
+            material: s.material,
+            usage: s.usage,
+            railings: archisim_core::Railings::Both,
+            design,
+        })
+    }
+
+    /// The stair being drawn, with its treads and landings.
     pub(super) fn draw_stair_preview(&self, painter: &egui::Painter, rect: Rect) {
         let (Tool::Stair, Some(c)) = (self.tool, self.cursor) else {
             return;
@@ -132,63 +296,52 @@ impl ArchiSimApp {
         if self.stair_tool.points.is_empty() {
             return;
         }
-        let mut path = self.stair_tool.points.clone();
-        path.push(c.point);
-        let s = &self.stair_settings;
-        let model = self.ed.model();
-        let height = s.height_on(model, self.ed.level);
-        let l = archisim_core::layout(&path, s.width, s.going, height, 0.0);
+        let probe = self.stair_being_drawn(c.point);
+        let l = probe.as_ref().map(Stair::layout);
         let ink = Stroke::new(1.5, ACCENT);
-        for f in &l.flights {
-            let o = f.outline(s.width);
-            painter.add(Shape::closed_line(self.polygon(rect, &o), ink));
-            let u = f.direction();
-            let n = u.perp_left() * (s.width / 2.0);
-            for i in 1..f.treads {
-                let p = f.start + u * (i as f64 * f.going);
-                painter.line_segment(
-                    [
-                        self.view.to_screen(rect, p - n),
-                        self.view.to_screen(rect, p + n),
-                    ],
+        if let Some(l) = &l {
+            for st in &l.steps {
+                painter.add(Shape::closed_line(
+                    self.polygon(rect, &st.outline()),
                     Stroke::new(1.0, ACCENT),
-                );
+                ));
             }
+            for landing in &l.landings {
+                painter.add(Shape::closed_line(
+                    self.polygon(rect, &landing.outline),
+                    ink,
+                ));
+            }
+            let screen: Vec<Pos2> = l
+                .walk
+                .iter()
+                .map(|p| self.view.to_screen(rect, *p))
+                .collect();
+            painter.add(Shape::line(screen, Stroke::new(1.0, ACCENT)));
         }
-        for landing in &l.landings {
-            painter.add(Shape::closed_line(
-                self.polygon(rect, &landing.outline),
-                ink,
-            ));
-        }
-        let screen: Vec<Pos2> = path.iter().map(|p| self.view.to_screen(rect, *p)).collect();
-        painter.add(Shape::line(screen, Stroke::new(1.0, ACCENT)));
-        let probe = Stair {
-            id: StairId(0),
-            guid: Default::default(),
-            level: self.ed.level,
-            path: path.clone(),
-            width: s.width,
-            going: s.going,
-            base_offset: 0.0,
-            top: archisim_core::WallTop::Unconnected,
-            height,
-            waist: s.waist,
-            material: s.material,
-            usage: s.usage,
-            railings: archisim_core::Railings::Both,
+        let text = match &probe {
+            Some(s) if l.as_ref().is_some_and(|l| !l.steps.is_empty()) => {
+                let check = match s.issues().first() {
+                    None => "  ✓ CTE".to_string(),
+                    Some(i) => format!("  ✗ {}", issue_text(i)),
+                };
+                format!("{}{check}", summary(s))
+            }
+            _ => "No cabe: más alto o menos ancho".to_string(),
         };
-        let check = match probe.issues().first() {
-            None if !l.flights.is_empty() => "  ✓ CTE".to_string(),
-            None => String::new(),
-            Some(i) => format!("  ✗ {}", issue_text(i)),
-        };
-        self.draw_label(
-            painter,
-            rect,
-            c.point,
-            format!("{}{check}", summary(&probe)),
+        self.draw_label(painter, rect, c.point, text);
+    }
+
+    /// The materials of the model, and "the stair's" first.
+    fn tread_materials(&self) -> Vec<(Option<MaterialId>, String)> {
+        let mut v: Vec<(Option<MaterialId>, String)> = vec![(None, "El de la escalera".into())];
+        v.extend(
+            self.ed
+                .model()
+                .materials()
+                .map(|m| (Some(m.id), m.name.clone())),
         );
+        v
     }
 
     pub(super) fn stair_tool_properties(&mut self, ui: &mut Ui) {
@@ -204,6 +357,98 @@ impl ArchiSimApp {
                 .map(|l| (l.id, l.name.clone()))
                 .collect()
         };
+        let materials = self.tread_materials();
+        let preset = self.stair_settings.preset;
+        group(ui, "tool-stair-form", "Forma", |ui| {
+            row(ui, "Forma", "Hecha (dos clics) o libre", |ui, w| {
+                let p = choice(ui, "tool-stair-preset", w, preset, &PRESETS);
+                if p != preset {
+                    self.stair_settings.preset = p;
+                    self.stair_tool.points.clear();
+                    // A spiral round its newel; the others on a slab, unless
+                    // asked otherwise.
+                    match (p, self.stair_settings.structure) {
+                        (StairPreset::Spiral, StairStructure::Slab) => {
+                            self.stair_settings.structure = StairStructure::Newel;
+                            self.stair_settings.closed_risers = false;
+                            // 1,84 m across: treads of 5,5 cm by the newel
+                            // and 42 cm outside, 24 cm at the walking line.
+                            self.stair_settings.width = 0.8;
+                            self.stair_settings.going = 0.24;
+                            self.stair_settings.core = 0.12;
+                            self.stair_settings.usage = StairUse::Restricted;
+                        }
+                        (q, StairStructure::Newel) if q != StairPreset::Spiral => {
+                            self.stair_settings.structure = StairStructure::Slab;
+                            self.stair_settings.closed_risers = true;
+                        }
+                        _ => {}
+                    }
+                }
+            });
+            if matches!(
+                preset,
+                StairPreset::LShape | StairPreset::UShape | StairPreset::Free
+            ) {
+                row(ui, "Giros", "Meseta o peldaños compensados", |ui, w| {
+                    self.stair_settings.winders = choice(
+                        ui,
+                        "tool-stair-winders",
+                        w,
+                        self.stair_settings.winders,
+                        &[(false, "Con meseta"), (true, "Peldaños compensados")],
+                    );
+                });
+            }
+            if matches!(
+                preset,
+                StairPreset::LShape | StairPreset::UShape | StairPreset::Spiral
+            ) {
+                row(
+                    ui,
+                    "Gira hacia",
+                    "Subiendo · Espacio al dibujar",
+                    |ui, w| {
+                        self.stair_settings.left = choice(
+                            ui,
+                            "tool-stair-left",
+                            w,
+                            self.stair_settings.left,
+                            &[(true, "La izquierda"), (false, "La derecha")],
+                        );
+                    },
+                );
+            }
+            if preset == StairPreset::UShape {
+                row(ui, "Ojo (mm)", "Hueco entre los dos tramos", |ui, w| {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique("tool-stair-gap"),
+                        self.stair_settings.gap,
+                        w - 8.0,
+                    ) {
+                        self.stair_settings.gap = v.max(0.0);
+                    }
+                });
+            }
+            if preset == StairPreset::Spiral {
+                row(
+                    ui,
+                    "Radio del mástil (mm)",
+                    "Donde empiezan los peldaños",
+                    |ui, w| {
+                        if let Some(v) = length_field(
+                            ui,
+                            Id::unique("tool-stair-core"),
+                            self.stair_settings.core,
+                            w - 8.0,
+                        ) {
+                            self.stair_settings.core = v.max(0.0);
+                        }
+                    },
+                );
+            }
+        });
         group(ui, "tool-stair", "Escalera", |ui| {
             row(
                 ui,
@@ -235,16 +480,23 @@ impl ArchiSimApp {
                     }
                 },
             );
-            row(ui, "Losa (mm)", "Espesor bajo los peldaños", |ui, w| {
-                if let Some(v) = length_field(
+            if preset != StairPreset::Free {
+                row(
                     ui,
-                    Id::unique("tool-stair-waist"),
-                    self.stair_settings.waist,
-                    w - 8.0,
-                ) {
-                    self.stair_settings.waist = v;
-                }
-            });
+                    "Tabica máx. (mm)",
+                    "Las justas para no pasarla",
+                    |ui, w| {
+                        if let Some(v) = length_field(
+                            ui,
+                            Id::unique("tool-stair-riser"),
+                            self.stair_settings.riser,
+                            w - 8.0,
+                        ) {
+                            self.stair_settings.riser = v.max(0.05);
+                        }
+                    },
+                );
+            }
             row(ui, "Uso", "Para comprobar el CTE DB-SUA", |ui, w| {
                 self.stair_settings.usage =
                     choice(ui, "tool-stair-use", w, self.stair_settings.usage, &USES);
@@ -289,14 +541,99 @@ impl ArchiSimApp {
                 );
             }
         });
+        let form = match preset {
+            StairPreset::Spiral => StairForm::Spiral,
+            _ => StairForm::Landings,
+        };
+        group(ui, "tool-stair-build", "Estructura y peldaños", |ui| {
+            row(ui, "Estructura", "Lo que lleva los peldaños", |ui, w| {
+                self.stair_settings.structure = choice(
+                    ui,
+                    "tool-stair-structure",
+                    w,
+                    self.stair_settings.structure,
+                    &structures_for(form),
+                );
+            });
+            let st = self.stair_settings.structure;
+            if st == StairStructure::Slab {
+                row(ui, "Losa (mm)", "Espesor bajo los peldaños", |ui, w| {
+                    if let Some(v) = length_field(
+                        ui,
+                        Id::unique("tool-stair-waist"),
+                        self.stair_settings.waist,
+                        w - 8.0,
+                    ) {
+                        self.stair_settings.waist = v;
+                    }
+                });
+            } else {
+                row(ui, "Tabicas", "Peldaño cerrado o abierto", |ui, w| {
+                    self.stair_settings.closed_risers = choice(
+                        ui,
+                        "tool-stair-risers",
+                        w,
+                        self.stair_settings.closed_risers,
+                        &[(true, "Con tabica"), (false, "Sin tabica (abierta)")],
+                    );
+                });
+            }
+            if matches!(st, StairStructure::Stringers | StairStructure::Spine) {
+                row(ui, "Zanca (mm)", "Ancho × canto", |ui, w| {
+                    let [a, b] = self.stair_settings.stringer;
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let half = (w - 12.0) / 2.0;
+                    if let Some(v) = length_field(ui, Id::unique("tool-stair-sw"), a, half) {
+                        self.stair_settings.stringer[0] = v;
+                    }
+                    if let Some(v) = length_field(ui, Id::unique("tool-stair-sd"), b, half) {
+                        self.stair_settings.stringer[1] = v;
+                    }
+                });
+            }
+            row(ui, "Peldañeado", "Material de las huellas", |ui, w| {
+                let o: Vec<_> = materials.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                self.stair_settings.tread_material = choice(
+                    ui,
+                    "tool-stair-tread-mat",
+                    w,
+                    self.stair_settings.tread_material,
+                    &o,
+                );
+            });
+            if st != StairStructure::Slab || self.stair_settings.tread_material.is_some() {
+                row(
+                    ui,
+                    "Grosor de huella (mm)",
+                    "Del peldaño o de su acabado",
+                    |ui, w| {
+                        if let Some(v) = length_field(
+                            ui,
+                            Id::unique("tool-stair-tread"),
+                            self.stair_settings.tread,
+                            w - 8.0,
+                        ) {
+                            self.stair_settings.tread = v.clamp(0.005, 0.3);
+                        }
+                    },
+                );
+            }
+        });
         // How long the flights must be for comfortable steps.
-        let risers = (height / 0.175).ceil().max(1.0) as usize;
+        let risers = (height / self.stair_settings.riser.max(0.05) - 1e-9)
+            .ceil()
+            .max(1.0) as usize;
         let length = (risers - 1) as f64 * self.stair_settings.going;
         ui.add_space(6.0);
+        let how = match preset {
+            StairPreset::Free => "Dibuja la línea de huella del pie a la llegada: cada clic, un tramo; en los giros, meseta o peldaños compensados.".to_string(),
+            StairPreset::Spiral => "Clic en el centro y clic hacia donde arranca: da las vueltas que pida la altura.".to_string(),
+            _ => "Clic en el arranque y clic hacia donde sube: mide lo que pida la altura. Espacio gira al otro lado.".to_string(),
+        };
         props::note(
             ui,
             &format!(
-                "Dibuja la línea de huella del pie a la llegada: cada clic, un tramo; en los giros, meseta. Para {}, unas {risers} tabicas de {} cm: unos {} m de tramos.",
+                "{how} Para {}, {risers} tabicas de {} cm: unos {} m de línea de huella.",
                 crate::units::fmt_len(height),
                 cm(height / risers as f64),
                 fmt_m(length)
@@ -311,7 +648,12 @@ impl ArchiSimApp {
         };
         let l = s.layout();
         props::title(ui, "Escalera · 1 seleccionada");
-        super::properties::view_card(ui, Icon::Stair, &summary(&s), "IfcStair");
+        super::properties::view_card(
+            ui,
+            Icon::Stair,
+            &format!("{} · {}", form_name(&s.design), summary(&s)),
+            "IfcStair",
+        );
         let above: Vec<(archisim_core::LevelId, String)> = {
             let z = model.level(s.level).map_or(0.0, |l| l.elevation);
             model
@@ -322,11 +664,14 @@ impl ArchiSimApp {
                 .collect()
         };
         group(ui, "stair-size", "Dimensiones", |ui| {
-            for (label, hint, value, key) in [
+            let mut sizes = vec![
                 ("Ancho (mm)", "De tramos y mesetas", s.width, 0),
                 ("Huella (mm)", "La que se busca en cada tramo", s.going, 1),
-                ("Losa (mm)", "Espesor bajo los peldaños", s.waist, 2),
-            ] {
+            ];
+            if s.design.structure == StairStructure::Slab {
+                sizes.push(("Losa (mm)", "Espesor bajo los peldaños", s.waist, 2));
+            }
+            for (label, hint, value, key) in sizes {
                 row(ui, label, hint, |ui, w| {
                     if let Some(v) =
                         length_field(ui, Id::unique(("stair-size", id.0, key)), value, w - 8.0)
@@ -427,6 +772,160 @@ impl ArchiSimApp {
                 );
             }
         });
+        let materials = self.tread_materials();
+        group(ui, "stair-build", "Forma y estructura", |ui| {
+            let d = s.design;
+            if d.form == StairForm::Spiral {
+                text_row(ui, "Forma", "", form_name(&d));
+                row(
+                    ui,
+                    "Giro total (°)",
+                    "Del primer peldaño al último",
+                    |ui, w| {
+                        if let Some(v) = degrees_field(
+                            ui,
+                            Id::unique(("stair-sweep", id.0)),
+                            d.sweep.abs(),
+                            w - 8.0,
+                        ) {
+                            let sign = if d.sweep < 0.0 { -1.0 } else { 1.0 };
+                            let r = self.ed.edit_stair("Giro de la escalera", id, |s| {
+                                s.design.sweep = sign * v.abs()
+                            });
+                            self.report(r, "Giro cambiado.");
+                        }
+                    },
+                );
+                row(ui, "Sentido", "Subiendo", |ui, w| {
+                    let left = d.sweep >= 0.0;
+                    let pick = choice(
+                        ui,
+                        ("stair-sense", id.0),
+                        w,
+                        left,
+                        &[(true, "Gira a la izquierda"), (false, "Gira a la derecha")],
+                    );
+                    if pick != left {
+                        let r = self.ed.edit_stair("Sentido de la escalera", id, |s| {
+                            s.design.sweep = -s.design.sweep
+                        });
+                        self.report(r, "Sentido cambiado.");
+                    }
+                });
+                row(
+                    ui,
+                    "Radio del mástil (mm)",
+                    "Donde empiezan los peldaños",
+                    |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("stair-core", id.0)), d.core, w - 8.0)
+                        {
+                            let r = self
+                                .ed
+                                .edit_stair("Mástil de la escalera", id, |s| s.design.core = v);
+                            self.report(r, "Mástil cambiado.");
+                        }
+                    },
+                );
+            } else {
+                row(ui, "Forma", "En los giros", |ui, w| {
+                    let f = choice(
+                        ui,
+                        ("stair-form", id.0),
+                        w,
+                        d.form,
+                        &[
+                            (StairForm::Landings, "Tramos y mesetas"),
+                            (StairForm::Winders, "Peldaños compensados"),
+                        ],
+                    );
+                    if f != d.form {
+                        let r = self
+                            .ed
+                            .edit_stair("Forma de la escalera", id, |s| s.design.form = f);
+                        self.report(r, "Forma cambiada.");
+                    }
+                });
+            }
+            row(ui, "Estructura", "Lo que lleva los peldaños", |ui, w| {
+                let st = choice(
+                    ui,
+                    ("stair-structure", id.0),
+                    w,
+                    d.structure,
+                    &structures_for(d.form),
+                );
+                if st != d.structure {
+                    let r = self
+                        .ed
+                        .edit_stair("Estructura de la escalera", id, |s| s.design.structure = st);
+                    self.report(r, "Estructura cambiada.");
+                }
+            });
+            if d.structure != StairStructure::Slab {
+                row(ui, "Tabicas", "Peldaño cerrado o abierto", |ui, w| {
+                    let c = choice(
+                        ui,
+                        ("stair-risers", id.0),
+                        w,
+                        d.closed_risers,
+                        &[(true, "Con tabica"), (false, "Sin tabica (abierta)")],
+                    );
+                    if c != d.closed_risers {
+                        let r = self
+                            .ed
+                            .edit_stair("Tabicas", id, |s| s.design.closed_risers = c);
+                        self.report(r, "Tabicas cambiadas.");
+                    }
+                });
+            }
+            if matches!(
+                d.structure,
+                StairStructure::Stringers | StairStructure::Spine
+            ) {
+                row(ui, "Zanca (mm)", "Ancho × canto", |ui, w| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let half = (w - 12.0) / 2.0;
+                    for (i, v) in d.stringer.iter().enumerate() {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("stair-stringer", id.0, i)), *v, half)
+                        {
+                            let r = self
+                                .ed
+                                .edit_stair("Zancas", id, |s| s.design.stringer[i] = v);
+                            self.report(r, "Zancas cambiadas.");
+                        }
+                    }
+                });
+            }
+            row(ui, "Peldañeado", "Material de las huellas", |ui, w| {
+                let o: Vec<_> = materials.iter().map(|(v, n)| (*v, n.as_str())).collect();
+                let m = choice(ui, ("stair-tread-mat", id.0), w, d.tread_material, &o);
+                if m != d.tread_material {
+                    let r = self
+                        .ed
+                        .edit_stair("Peldañeado", id, |s| s.design.tread_material = m);
+                    self.report(r, "Peldañeado cambiado.");
+                }
+            });
+            if d.structure != StairStructure::Slab || d.tread_material.is_some() {
+                row(
+                    ui,
+                    "Grosor de huella (mm)",
+                    "Del peldaño o de su acabado",
+                    |ui, w| {
+                        if let Some(v) =
+                            length_field(ui, Id::unique(("stair-tread", id.0)), d.tread, w - 8.0)
+                        {
+                            let r = self
+                                .ed
+                                .edit_stair("Grosor de huella", id, |s| s.design.tread = v);
+                            self.report(r, "Huella cambiada.");
+                        }
+                    },
+                );
+            }
+        });
         group(ui, "stair-steps", "Peldaños", |ui| {
             text_row(
                 ui,
@@ -434,12 +933,20 @@ impl ArchiSimApp {
                 "Todas iguales",
                 &format!("{} × {} cm", l.risers(), cm(l.riser)),
             );
-            for (i, f) in l.flights.iter().enumerate() {
+            for (i, run) in l.runs.iter().enumerate() {
+                let going = l.steps[run.steps.clone()]
+                    .iter()
+                    .map(|st| st.going)
+                    .fold(f64::INFINITY, f64::min);
                 text_row(
                     ui,
                     &format!("Tramo {}", i + 1),
-                    "Huellas y su fondo",
-                    &format!("{} × {} cm", f.treads, cm(f.going)),
+                    "Huellas y la menor, en la línea de huella",
+                    &format!(
+                        "{} × {} cm",
+                        run.steps.len(),
+                        cm(if going.is_finite() { going } else { 0.0 })
+                    ),
                 );
             }
             text_row(ui, "Mesetas", "", &l.landings.len().to_string());

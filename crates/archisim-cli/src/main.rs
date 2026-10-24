@@ -14,6 +14,7 @@ mod colaboracion;
 mod cubiertas;
 mod demo;
 mod equipo;
+mod escaleras;
 mod formas;
 mod grande;
 mod modelos;
@@ -73,6 +74,12 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim escaleras [carpeta]
+      Todas las escaleras: recta, en L y en U con meseta o compensadas, de
+      caracol con mástil y helicoidal de losa, de zancas, de zanca central
+      y de peldaños volados, con y sin tabica: escaleras.archisim,
+      escaleras.ifc, plantas y axonometría en SVG. Por defecto: ./out
+
   archisim cubiertas [carpeta]
       Lo que llevan las cubiertas: buhardillas a dos aguas, a un agua y
       planas, ventanas de cubierta, tejas de cada clase, caballetes,
@@ -203,6 +210,10 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("escaleras") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(escaleras::write(&dir))
         }
         Some("cubiertas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

@@ -2356,7 +2356,9 @@ fn stair_tool() {
     h.key(Key::Escape);
     h.type_text("e");
     assert_eq!(h.app.tool, Tool::Stair);
-    // An L: 2,8 m up, then 2 m to the right, inside the room.
+    // Any walking line. An L: 2,8 m up, then 2 m to the right, inside the
+    // room.
+    h.app.stair_settings.preset = archisim_core::StairPreset::Free;
     h.click_at(p(1.0, 1.0));
     h.click_at(p(1.0, 4.3));
     h.click_at(p(3.8, 4.3));
@@ -2389,6 +2391,48 @@ fn stair_tool() {
     );
     h.key(Key::Delete);
     assert_eq!(h.model().stairs().count(), 0);
+}
+
+/// Ready-made stairs: a U with a landing from two clicks (Space turns it
+/// the other way while drawing), as long as the height asks; a spiral
+/// round its newel.
+#[test]
+fn ready_made_stairs() {
+    let mut h = Harness::new(Editor::new_project());
+    let pb = h.app.ed.level;
+    h.app.ed.add_level("Planta 1", 2.97).unwrap();
+    h.app.ed.level = pb;
+    h.frame();
+    h.type_text("e");
+    assert_eq!(h.app.tool, Tool::Stair);
+    h.app.stair_settings.preset = archisim_core::StairPreset::UShape;
+    h.click_at(p(0.0, 0.0));
+    h.move_to(p(0.0, 2.0));
+    h.key(Key::Space);
+    assert!(!h.app.stair_settings.left);
+    h.click_at(p(0.0, 2.0));
+    let m = h.model();
+    assert_eq!(m.stairs().count(), 1, "{:?}", h.app.message);
+    let s = m.stairs().next().unwrap().clone();
+    let l = s.layout();
+    assert_eq!(l.risers(), 17);
+    assert_eq!(l.landings.len(), 1);
+    // Up the y axis, then back on its right (x > 0).
+    assert!(s.path[1].y > 1.0 && s.path[2].x > 0.5, "{:?}", s.path);
+    // A spiral.
+    h.app.stair_settings.preset = archisim_core::StairPreset::Spiral;
+    h.app.stair_settings.structure = archisim_core::StairStructure::Newel;
+    h.click_at(p(6.0, 0.0));
+    h.click_at(p(7.0, 0.0));
+    let spiral = h
+        .model()
+        .stairs()
+        .find(|x| x.design.form == archisim_core::StairForm::Spiral)
+        .cloned()
+        .expect("spiral");
+    assert_eq!(spiral.layout().risers(), 17);
+    let svg = archisim_plan::render_plan(h.model(), pb, &archisim_plan::PlanOptions::default());
+    assert_eq!(svg.matches("class=\"stair\"").count(), 2);
 }
 
 /// The terrain tool (R): points with their heights, Enter to make the

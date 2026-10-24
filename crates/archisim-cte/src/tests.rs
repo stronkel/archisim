@@ -326,6 +326,7 @@ fn stairs_are_the_exits_of_upper_floors() {
         waist: 0.15,
         material,
         usage: StairUse::General,
+        design: Default::default(),
     })
     .unwrap();
     // Upstairs, one office of 16 × 6 over the corridor and offices.

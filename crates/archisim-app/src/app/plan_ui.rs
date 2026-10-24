@@ -522,6 +522,9 @@ impl ArchiSimApp {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F8)) {
             self.toggle_ortho();
         }
+        if space && self.flip_stair_turn() {
+            return;
+        }
         if self.command_keys(&events, enter, escape, backspace, space) {
             return;
         }

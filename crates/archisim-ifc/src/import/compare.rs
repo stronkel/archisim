@@ -611,6 +611,22 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && close(s.waist, t.waist)
             && s.usage == t.usage
             && s.railings == t.railings
+            && s.design.form == t.design.form
+            && s.design.structure == t.design.structure
+            && s.design.closed_risers == t.design.closed_risers
+            && (s.design.sweep - t.design.sweep).abs() < 1e-6
+            && close(s.design.core, t.design.core)
+            && close(s.design.tread, t.design.tread)
+            && close(s.design.stringer[0], t.design.stringer[0])
+            && close(s.design.stringer[1], t.design.stringer[1])
+            && s.design
+                .tread_material
+                .and_then(|m| a.material(m))
+                .map(|m| &m.name)
+                == t.design
+                    .tread_material
+                    .and_then(|m| b.material(m))
+                    .map(|m| &m.name)
             && level_guid(a, s.level) == level_guid(b, t.level)
             && match (s.top, t.top) {
                 (

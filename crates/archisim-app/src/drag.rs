@@ -822,7 +822,13 @@ pub fn apply(
             .map(|_| None),
         Grip::StairPoint { stair, index } => model
             .edit_stair(stair, |s| {
-                if let Some(p) = s.path.get_mut(index) {
+                // A spiral's centre takes its first riser with it.
+                if index == 0 && s.design.form == archisim_core::StairForm::Spiral {
+                    let d = drag.to - s.path[0];
+                    for p in &mut s.path {
+                        *p = *p + d;
+                    }
+                } else if let Some(p) = s.path.get_mut(index) {
                     *p = drag.to;
                 }
             })
@@ -1379,7 +1385,9 @@ pub(crate) fn copy(
                     waist: s.waist,
                     material: s.material,
                     usage: s.usage,
+                    design: s.design,
                 })?;
+                model.edit_stair(new, |x| x.railings = s.railings)?;
                 copies.insert(Element::Stair(new));
             }
             Element::Roof(id) => {

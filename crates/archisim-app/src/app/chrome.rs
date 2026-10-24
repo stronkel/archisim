@@ -702,7 +702,13 @@ impl ArchiSimApp {
             Tool::Roof => "Clic: siguiente esquina · Clic en la primera o Intro: cerrar · Esc: quitar la última",
             Tool::Terrain if self.terrain_settings.line => "Escribe la cota en Propiedades y clic: vértices de la línea de nivel · Intro o doble clic: terminarla · Esc: quitar el último",
             Tool::Terrain => "Escribe la cota en Propiedades y clic: punto del terreno (sobre uno que ya existe: le pone la cota) · Intro o doble clic: crear · Esc: quitar el último",
-            Tool::Stair if self.stair_tool.points.is_empty() => "Clic: pie de la escalera (inicio de la línea de huella) · Esc: flecha",
+            Tool::Stair if self.stair_tool.points.is_empty() => match self.stair_settings.preset {
+                archisim_core::StairPreset::Free => "Clic: pie de la escalera (inicio de la línea de huella) · Esc: flecha",
+                archisim_core::StairPreset::Spiral => "Clic: centro de la escalera de caracol · Esc: flecha",
+                _ => "Clic: arranque de la escalera (el pie de su primer peldaño) · Esc: flecha",
+            },
+            Tool::Stair if self.stair_settings.preset == archisim_core::StairPreset::Spiral => "Clic: hacia donde arranca el primer peldaño · Espacio: girar al otro lado · Esc: quitar el centro",
+            Tool::Stair if self.stair_settings.preset != archisim_core::StairPreset::Free => "Clic: hacia donde sube (mide lo que pide la altura) · Espacio: girar al otro lado · Esc: quitar el arranque",
             Tool::Stair => "Clic: final del tramo o giro (meseta) · Intro, doble clic o clic derecho: terminar · Esc: quitar el último punto",
             Tool::Cad => "Clic o coordenadas + Intro: punto · Intro, Espacio o botón derecho: aceptar · Esc: terminar · F8: orto",
         }

@@ -6,6 +6,36 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (2) · v0.53: escaleras en L, en U, compensadas y de caracol, con zancas, zanca central, peldaños volados o mástil
+
+Rama nueva `bloque/escaleras`, sacada de `bloque/maqueta-2`, con su pull request para que Antonio la revise. **Formato `.archisim` versión 33** (las escaleras guardan su forma y estructura en `design`; las de versiones anteriores se abren como tramos y mesetas sobre losa, igual que eran). Detalle en `docs/ESCALERAS.md`.
+
+Antonio pidió mejorar mucho la forma de crear escaleras: en U, «diferentes tipos de castelillete», caracol. Lo he entendido como tipos de **estructura** (losa, zancas laterales, zanca central, peldaños volados, mástil); si quería decir otra cosa, que lo diga.
+
+**Hecho**
+- Formas hechas en dos clics, que miden lo que pide la altura: recta, en L, en U (con su ojo) y de caracol; y la libre de siempre. Espacio gira la L, la U o el caracol al otro lado mientras se dibuja; la vista previa dice tabicas, huellas y si cumple el CTE.
+- Giros con meseta o con **peldaños compensados**, repartidos en cuatro peldaños antes y después, todos con la misma huella en la línea de huella (a 50 cm del lado interior).
+- Estructura: losa (helicoidal en caracol), dos zancas laterales, zanca central, peldaños volados, mástil central. Con o sin tabica, y material del peldañeado (madera, piedra) con su grosor.
+- Barandillas con pasamanos, listón bajo, postes y barrotes a 11 cm, siguiendo la escalera por las mesetas y los giros; la de caracol, solo por fuera.
+- Planta genérica para todas (línea de corte en zigzag, lo de encima a trazos, mástil, línea de huella con su flecha), 3D y IFC (`IfcStair` con su forma, `WINDER`/`SPIRAL`, zancas `IfcMember STRINGER`), importación de vuelta igual.
+- CTE: huella en la línea de huella, lado ancho ≤ 44 cm, lado estrecho ≥ 5 cm en vivienda, aviso de escaleras sin tabica en uso general.
+- En la Maqueta, Construir → Escaleras: diez tarjetas con su miniatura en 3D (recta, L con meseta, L compensada, U con meseta, U compensada, caracol, de zancas, de zanca central, de peldaños volados, libre). Las escaleras ya no se cortan con los «muros recortados»: se ven enteras, como los muebles.
+- Propiedades de una escalera: forma (meseta o compensada), giro total y sentido del caracol, radio del mástil, estructura, tabicas, zancas, peldañeado.
+- `archisim escaleras out/`: las diez, cada una hasta la planta primera.
+
+**Pendiente**
+- Las mesetas partidas a 45° y la meseta de llegada de las de caracol.
+- El `.glb` del proyecto para D5 o Twinmotion.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- escaleras out/` y abre `out/escaleras.archisim`: diez escaleras, todas de 17 tabicas de 17,5 cm. Míralas en planta (baja y primera) y en la Maqueta.
+2. Herramienta Escalera → Forma «En U (ida y vuelta)»: clic en el arranque, mueve el ratón hacia donde sube (pulsa Espacio para que gire al otro lado) y clic. Prueba «Giros: peldaños compensados» y mira el reparto de los peldaños.
+3. «De caracol»: clic en el centro y clic hacia donde arranca. Cambia la estructura a «Losa helicoidal» o «Zancas helicoidales».
+4. Selecciona una escalera y cambia en Propiedades → Forma y estructura: compensada ↔ meseta, zancas, sin tabica, peldañeado de madera.
+5. Exporta el IFC y ábrelo en ArchiCAD o Revit: las escaleras deben llegar con sus tramos, zancas y materiales, y con su tipo (en U, compensada, de caracol).
+
+---
+
 ## 2026-10-24 (1) · v0.52: cámara alrededor de la selección, mobiliario urbano, chimeneas y más mobiliario
 
 Misma rama `bloque/maqueta-2` y pull request #56. Sin cambios de formato `.archisim` ni de IFC (las familias de mobiliario urbano suben de versión con los mismos parámetros y un «Modelo 3D»). Detalle en `docs/BIBLIOTECA_3D.md` y `docs/MAQUETA.md` §6 sexies.
