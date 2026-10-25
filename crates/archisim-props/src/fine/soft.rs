@@ -457,7 +457,7 @@ fn dist2(a: [f32; 3], b: [f32; 3]) -> f32 {
 /// A slow, smooth wobble (each component from −1 to 1) that depends on
 /// the place and the seed: never the same twice, never jagged.
 pub fn wobble_at(p: P3, seed: u32) -> P3 {
-    let s = seed as f64 * 1.618_033_988;
+    let s = seed as f64 * 1.737_219;
     let f = |k: f64| -> f64 {
         let a = (p[0] * 9.1 + p[1] * 3.7 + s * 2.3 + k).sin();
         let b = (p[1] * 7.3 - p[2] * 5.1 + s * 1.1 + k * 2.0).sin();
