@@ -29,7 +29,7 @@ pub struct GhostCache {
 #[derive(Debug, Clone)]
 enum Would {
     Walls(Vec<NewWall>),
-    Opening(archisim_core::NewOpening),
+    Openings(Vec<archisim_core::NewOpening>),
     Column(NewColumn),
     Beam(NewBeam),
     Slab(NewSlab),
@@ -73,7 +73,7 @@ impl ArchiSimApp {
                 if pl.problem.is_some() {
                     return None;
                 }
-                Would::Opening(pl.spec.clone())
+                Would::Openings(pl.specs())
             }
             Tool::Column => {
                 let s = &self.column_settings;
@@ -224,9 +224,15 @@ fn build_ghost(model: &Model, would: Would) -> Option<Vec<Solid>> {
                 .flat_map(|id| solid::wall_solids(&m, *id))
                 .collect()
         }
-        Would::Opening(spec) => {
-            let id = m.add_opening(spec).ok()?;
-            solid::opening_solids(&m, id)
+        Would::Openings(specs) => {
+            let mut v = Vec::new();
+            for spec in specs {
+                let id = m.add_opening(spec).ok()?;
+                v.push(id);
+            }
+            v.iter()
+                .flat_map(|id| solid::opening_solids(&m, *id))
+                .collect()
         }
         Would::Column(spec) => {
             let id = m.add_column(spec).ok()?;
@@ -399,10 +405,16 @@ fn build_plan_ghost(model: &Model, would: Would) -> Option<(Model, Vec<Element>)
             .map(|w| m.add_wall(w).map(Element::Wall))
             .collect::<Result<Vec<_>, _>>()
             .ok()?,
-        Would::Opening(spec) => {
-            let wall = spec.wall;
-            let id = m.add_opening(spec).ok()?;
-            vec![Element::Opening(id), Element::Wall(wall)]
+        Would::Openings(specs) => {
+            let mut made = Vec::new();
+            for spec in specs {
+                let wall = spec.wall;
+                made.push(Element::Opening(m.add_opening(spec).ok()?));
+                if !made.contains(&Element::Wall(wall)) {
+                    made.push(Element::Wall(wall));
+                }
+            }
+            made
         }
         Would::Column(spec) => vec![Element::Column(m.add_column(spec).ok()?)],
         Would::Beam(spec) => vec![Element::Beam(m.add_beam(spec).ok()?)],

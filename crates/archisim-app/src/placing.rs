@@ -243,6 +243,9 @@ pub fn snap_alongside(
 /// same height and turned the same way, side by side and in line: they
 /// become one, as wide as both, and `id` goes. Returns the one kept.
 pub fn join_alongside(m: &mut Model, id: ObjectId) -> Option<ObjectId> {
+    if let Some(k) = corner_sofa(m, id) {
+        return Some(k);
+    }
     let o = m.object(id)?.clone();
     let t = m.object_type(o.object_type)?.clone();
     if m.evaluate_object(id)
@@ -308,6 +311,130 @@ pub fn join_alongside(m: &mut Model, id: ObjectId) -> Option<ObjectId> {
         m.edit_object(other.id, |x| x.position = mid).ok()?;
         m.remove_object(id).ok()?;
         return Some(other.id);
+    }
+    None
+}
+
+/// The values of an object type: its own over its family's defaults.
+fn type_values(m: &Model, t: ObjectTypeId) -> Option<archisim_core::family::Values> {
+    let ty = m.object_type(t)?;
+    let mut v = m
+        .family_defaults(ty.family, archisim_core::family::ParamScope::Type)
+        .ok()?;
+    v.extend(ty.values.clone());
+    Some(v)
+}
+
+/// How far the arm of an L of two straight sofas may be from where it
+/// would make a corner sofa (m).
+const CORNER_GAP: f64 = 0.06;
+
+/// If the sofa `id` was placed in an L with another straight sofa of the
+/// same depth and height (the end of one against the front of the other,
+/// turned a quarter): both become one corner sofa, as long as the first
+/// and with its arm as long as the second. Returns the corner sofa.
+pub fn corner_sofa(m: &mut Model, id: ObjectId) -> Option<ObjectId> {
+    let o = m.object(id)?.clone();
+    let sofa = |m: &Model, x: &archisim_core::Object| -> Option<(f64, f64, f64)> {
+        let t = m.object_type(x.object_type)?;
+        let f = m.family(t.family)?;
+        if f.def().name != "Sofá" {
+            return None;
+        }
+        let v = type_values(m, x.object_type)?;
+        let num = |k: &str| match v.get(k) {
+            Some(archisim_core::family::Value::Number(n)) => Some(*n),
+            _ => None,
+        };
+        Some((num("width")?, num("depth")?, num("height")?))
+    };
+    sofa(m, &o)?;
+    let others: Vec<_> = m
+        .objects()
+        .filter(|x| {
+            x.id != id && x.level == o.level && (x.base_offset - o.base_offset).abs() < 0.01
+        })
+        .cloned()
+        .collect();
+    for other in others {
+        if sofa(m, &other).is_none() {
+            continue;
+        }
+        // Either of the two may be the long one.
+        for (a, b) in [(&o, &other), (&other, &o)] {
+            let (Some((wa, da, ha)), Some((wb, db, hb))) = (sofa(m, a), sofa(m, b)) else {
+                continue;
+            };
+            if (da - db).abs() > 0.02 || (ha - hb).abs() > 0.02 {
+                continue;
+            }
+            // `b` in the frame of `a`: x along it, y forward.
+            let (c, s) = (a.rotation.cos(), a.rotation.sin());
+            let d = b.position - a.position;
+            let local = Point2::new(d.x * c + d.y * s, -d.x * s + d.y * c);
+            let turn = (b.rotation - a.rotation).rem_euclid(std::f64::consts::TAU);
+            let quarter = std::f64::consts::FRAC_PI_2;
+            let side = if (turn - quarter).abs() < 0.02 {
+                // Its back on a's right end, facing left: the arm on the right.
+                "Derecha"
+            } else if (turn - 3.0 * quarter).abs() < 0.02 {
+                "Izquierda"
+            } else {
+                continue;
+            };
+            let x = if side == "Derecha" {
+                wa / 2.0
+            } else {
+                -wa / 2.0
+            };
+            let y = da + wb / 2.0;
+            if (local.x - x).abs() > CORNER_GAP || (local.y - y).abs() > CORNER_GAP {
+                continue;
+            }
+            let (a, b) = (a.clone(), b.clone());
+            let base = archisim_library::add_object_entry(m, "Sofá rinconera 260×170").ok()?;
+            let corner = m.object_type(base)?.clone();
+            let va = type_values(m, a.object_type)?;
+            let vb = type_values(m, b.object_type)?;
+            let mut values = corner.values.clone();
+            use archisim_core::family::Value;
+            let length2 = ((da + wb) * 1000.0).round() / 1000.0;
+            values.insert("width".into(), Value::Number(wa));
+            values.insert("length2".into(), Value::Number(length2));
+            values.insert("depth".into(), Value::Number(da));
+            values.insert("side".into(), Value::Text(side.into()));
+            for k in [
+                "seat", "height", "places", "mat", "model3d", "cushion", "frame",
+            ] {
+                if let Some(v) = va.get(k) {
+                    values.insert(k.into(), v.clone());
+                }
+            }
+            if let Some(Value::Number(n)) = vb.get("places") {
+                values.insert("places2".into(), Value::Number((n - 1.0).max(1.0)));
+            }
+            let name = format!("Sofá rinconera {:.0}×{:.0}", wa * 100.0, length2 * 100.0);
+            let existing = m
+                .object_types()
+                .find(|t| t.name == name && t.family == corner.family)
+                .map(|t| t.id);
+            let t = match existing {
+                Some(t) => t,
+                None => m.add_object_type(&name, corner.family, values).ok()?,
+            };
+            let new = m
+                .add_object(archisim_core::NewObject {
+                    level: a.level,
+                    object_type: t,
+                    position: a.position,
+                    rotation: a.rotation,
+                    base_offset: a.base_offset,
+                })
+                .ok()?;
+            m.remove_object(a.id).ok()?;
+            m.remove_object(b.id).ok()?;
+            return Some(new);
+        }
     }
     None
 }
@@ -448,5 +575,44 @@ mod tests {
             "{q:?}"
         );
         let _ = c;
+    }
+
+    #[test]
+    fn two_sofas_in_an_l_become_a_corner_sofa() {
+        let (mut m, _, _) = room();
+        // A three-seater along the north wall facing south, and a
+        // two-seater down from its east end, facing west.
+        let a = place(
+            &mut m,
+            "Sofá de 3 plazas",
+            Point2::new(3.0, 3.7),
+            std::f64::consts::PI,
+            0.0,
+        );
+        let wa = type_values(&m, m.object(a).unwrap().object_type).unwrap();
+        let num = |v: &archisim_core::family::Values, k: &str| match v.get(k) {
+            Some(archisim_core::family::Value::Number(n)) => *n,
+            _ => panic!("{k}"),
+        };
+        let (w, d) = (num(&wa, "width"), num(&wa, "depth"));
+        let b = place(&mut m, "Sofá de 3 plazas", Point2::new(0.0, 0.0), 0.0, 0.0);
+        let wb = num(
+            &type_values(&m, m.object(b).unwrap().object_type).unwrap(),
+            "width",
+        );
+        // In a's frame (turned half round), its left end is at x = 3 + w/2.
+        m.edit_object(b, |x| {
+            x.rotation = std::f64::consts::PI - std::f64::consts::FRAC_PI_2;
+            x.position = Point2::new(3.0 + w / 2.0, 3.7 - d - wb / 2.0);
+        })
+        .unwrap();
+        let kept = join_alongside(&mut m, b).expect("a corner sofa");
+        assert!(m.object(a).is_none() && m.object(b).is_none());
+        let v = type_values(&m, m.object(kept).unwrap().object_type).unwrap();
+        assert_eq!(v.get("side").and_then(|v| v.as_text()), Some("Izquierda"));
+        assert!((num(&v, "width") - w).abs() < 1e-9);
+        assert!((num(&v, "length2") - (d + wb)).abs() < 1e-6);
+        let o = m.object(kept).unwrap();
+        assert!((o.position.x - 3.0).abs() < 1e-9 && (o.position.y - 3.7).abs() < 1e-9);
     }
 }

@@ -4,6 +4,7 @@
 //! (or Shift + wheel button), drag with the wheel or the right button to
 //! pan, roll the wheel to zoom where the cursor is, click to select.
 
+use super::widgets::SwitchExt as _;
 use std::collections::BTreeSet;
 
 use eframe::egui::{
@@ -967,6 +968,7 @@ impl ArchiSimApp {
         draw_section_box(&painter, rect, v);
         self.draw_object_grips_3d(&painter, rect);
         self.draw_drag_3d(&painter, rect);
+        self.draw_clearances_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);
         if tool3d {
             self.draw_tool_3d(&painter, rect);
@@ -1089,7 +1091,7 @@ impl ArchiSimApp {
                 "Activa",
                 "Recorta el modelo fuera de la caja (interiores, secciones en perspectiva)",
                 |ui, _| {
-                    ui.checkbox(&mut on, "");
+                    ui.switch(&mut on, "");
                 },
             );
             if on != self.v3d.section.is_some() {

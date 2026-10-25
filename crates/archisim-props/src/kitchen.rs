@@ -285,8 +285,16 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
             );
         }
     }
-    // The worktop: flush with the module's sides, so the next one meets it.
-    let (tlo, thi) = ([x0, 0.0, h - top], [x1, d, h]);
+    // The worktop: flush with the module's sides, so the next one meets
+    // it; it may overhang in front (a breakfast bar) or behind (an
+    // island), and carry an upstand on its back edge.
+    let front = p.get("overhang", 0.0).max(0.0);
+    let back = p.get("overhang_back", 0.0).max(0.0);
+    let up = p.get("upstand", 0.0).max(0.0);
+    let (tlo, thi) = ([x0, -back, h - top], [x1, d + front, h]);
+    if up > 1e-3 {
+        b.rbox("top", [x0, -back, h], [x1, -back + UPSTAND, h + up], 0.0);
+    }
     if let (true, Some(([sx0, sy0], [sx1, sy1]))) = (sink, hole) {
         b.framed_top("top", tlo, thi, [sx0, sy0], [sx1, sy1]);
         b.hollow("metal", [sx0, sy0, h - 0.2], [sx1, sy1, h], 0.03);
@@ -350,6 +358,9 @@ pub const SINK_UNIT: f64 = 3.0;
 
 /// The thickness of a base module's worktop (m).
 pub const WORKTOP: f64 = 0.03;
+
+/// Thickness of a worktop's upstand (copete), m.
+pub const UPSTAND: f64 = 0.02;
 
 /// What a tall unit holds, as the `tall` choice of its family lists them.
 pub const TALLS: &[&str] = &["Despensa", "Horno y microondas", "Frigorífico integrado"];

@@ -5,6 +5,7 @@
 //! their colour. The work itself (folder, changes, reservations) is in
 //! `archisim-team`; the guard of the edits in `crate::team`.
 
+use super::widgets::SwitchExt as _;
 use std::path::{Path, PathBuf};
 
 use archisim_core::Point2;
@@ -842,8 +843,8 @@ impl ArchiSimApp {
         });
 
         group(ui, "team-options", "Opciones", |ui| {
-            ui.checkbox(&mut team.share_cursor, "Enseñar mi cursor a los demás");
-            ui.checkbox(&mut team.show_cursors, "Ver los cursores de los demás");
+            ui.switch(&mut team.share_cursor, "Enseñar mi cursor a los demás");
+            ui.switch(&mut team.show_cursors, "Ver los cursores de los demás");
             ui.label(
                 egui::RichText::new(
                     "Con Google Drive, lo de los demás llega con unos segundos de retraso.",

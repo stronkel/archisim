@@ -39,6 +39,8 @@ enum MethodAct {
     /// Roof tool: clicks put a dormer of this kind on a roof (none: draw
     /// roofs again).
     Dormer(archisim_core::DormerKind),
+    /// Door and window tools: how they are placed along the wall.
+    Place(crate::opening_tool::OpeningPlace),
     /// Not for this tool.
     None,
 }
@@ -276,8 +278,8 @@ impl ArchiSimApp {
                 ),
                 Tool::Dimension => return Some(("Cota", self.dim_methods())),
                 Tool::Wall => ("Muro", None, "Varita", ""),
-                Tool::Door => ("Puerta", None, "Varita", ""),
-                Tool::Window => ("Ventana", None, "Varita", ""),
+                Tool::Door => return Some(("Puerta", self.opening_methods())),
+                Tool::Window => return Some(("Ventana", self.opening_methods())),
                 Tool::Column => ("Pilar", None, "Varita", ""),
                 Tool::Beam => ("Viga", None, "Varita", ""),
                 Tool::Section => ("Sección", None, "Varita", ""),
@@ -563,6 +565,42 @@ impl ArchiSimApp {
         .collect()
     }
 
+    /// How the door and window tools place along the clear stretch of
+    /// the wall under the cursor.
+    fn opening_methods(&self) -> Vec<Method> {
+        use crate::opening_tool::OpeningPlace as P;
+        let now = self.opening_settings().place;
+        let m = |icon, place: P, hint| Method {
+            mark: Mark::Icon(icon),
+            name: place.name(),
+            hint,
+            act: MethodAct::Place(place),
+            on: std::mem::discriminant(&now) == std::mem::discriminant(&place),
+        };
+        vec![
+            m(
+                Icon::PlaceFree,
+                P::Free,
+                "Su centro donde está el cursor (al centímetro); luego, clic en una cota azul para ajustarla",
+            ),
+            m(
+                Icon::PlaceCentre,
+                P::Centre,
+                "En el centro del tramo libre del muro: entre los muros que lo encuentran y las otras puertas y ventanas, en la cara hacia la que abre",
+            ),
+            m(
+                Icon::PlaceEnd,
+                P::FromEnd(self.place_gap),
+                "La jamba a la distancia que digas del extremo del tramo libre más cercano al cursor",
+            ),
+            m(
+                Icon::PlaceSpread,
+                P::Spread(self.place_count),
+                "Las que digas en el tramo libre, con el mismo machón entre ellas y en los extremos",
+            ),
+        ]
+    }
+
     fn footing_methods(&self) -> Vec<Method> {
         use crate::editor::FootingMode;
         let mode = self.footing_settings.mode;
@@ -723,6 +761,7 @@ impl ArchiSimApp {
                 }
             }
             MethodAct::Footing(mode) => self.set_footing_mode(mode),
+            MethodAct::Place(place) => self.opening_settings_mut().place = place,
             MethodAct::MassMode(mode) => self.set_mass_mode(mode),
             MethodAct::Spline => self.set_draw_method(super::methods_ui::DrawMethod::Spline),
             MethodAct::PickLine => self.set_draw_method(super::methods_ui::DrawMethod::PickLine),
@@ -735,6 +774,64 @@ impl ArchiSimApp {
     /// Which line of a wall or road the clicks draw: exterior face, axis
     /// or interior face (left edge, axis or right edge of a road), as
     /// three drawings of the wall seen in plan with the line marked.
+    /// The settings of the door or window tool in use (the door's
+    /// otherwise).
+    pub(super) fn opening_settings(&self) -> crate::opening_tool::OpeningSettings {
+        if self.tool == Tool::Window {
+            self.window_settings
+        } else {
+            self.door_settings
+        }
+    }
+
+    pub(super) fn opening_settings_mut(&mut self) -> &mut crate::opening_tool::OpeningSettings {
+        if self.tool == Tool::Window {
+            &mut self.window_settings
+        } else {
+            &mut self.door_settings
+        }
+    }
+
+    /// «Desde un extremo»: the distance; «Repartidas»: how many.
+    fn place_fields(&mut self, ui: &mut Ui) {
+        use crate::opening_tool::OpeningPlace as P;
+        if !matches!(self.tool, Tool::Door | Tool::Window) {
+            return;
+        }
+        let place = self.opening_settings().place;
+        match place {
+            P::FromEnd(d) => {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Distancia").small());
+                let typed = super::text_edit_committed(
+                    ui,
+                    egui::Id::unique("bar-place-gap"),
+                    &crate::units::fmt_len(d),
+                    64.0,
+                )
+                .and_then(|t| crate::units::parse_length(&t));
+                if let Some(d) = typed.filter(|d| *d >= 0.0) {
+                    self.place_gap = d;
+                    self.opening_settings_mut().place = P::FromEnd(d);
+                }
+            }
+            P::Spread(n) => {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Cuántas").small());
+                let mut k = n as u32;
+                if ui
+                    .add(egui::DragValue::new(&mut k).range(1..=20))
+                    .on_hover_text("Cuántas en el tramo libre, con machones iguales")
+                    .changed()
+                {
+                    self.place_count = k as usize;
+                    self.opening_settings_mut().place = P::Spread(k as usize);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn reference_buttons(&mut self, ui: &mut Ui) {
         use super::urban_ui::RoadReference;
         use archisim_core::ReferenceLine;
@@ -885,6 +982,7 @@ impl ArchiSimApp {
                     self.apply_method(act);
                 }
                 self.reference_buttons(ui);
+                self.place_fields(ui);
                 self.length_angle_fields(ui);
                 self.tool_step(ui);
                 return;

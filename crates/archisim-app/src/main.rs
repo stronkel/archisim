@@ -35,6 +35,7 @@ mod type_preview;
 mod units;
 mod view;
 mod view3d;
+mod wall_faces;
 mod wall_tool;
 mod xform;
 

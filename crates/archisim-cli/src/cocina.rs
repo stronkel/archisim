@@ -160,25 +160,58 @@ fn corner_and_island(m: &mut Model, wall: archisim_core::WallTypeId) -> Res {
         })?;
         Ok(())
     };
+    // A type of the library with some values changed (a copy of it,
+    // named after what changes).
+    let variant = |m: &mut Model,
+                   name: &str,
+                   what: &str,
+                   set: &[(&str, f64)]|
+     -> Result<archisim_core::ObjectTypeId, Box<dyn std::error::Error>> {
+        let base = archisim_library::add_object_entry(m, name)?;
+        let t = m.object_type(base).ok_or("type")?.clone();
+        let mut values = t.values.clone();
+        for (k, v) in set {
+            values.insert((*k).into(), archisim_core::family::Value::Number(*v));
+        }
+        Ok(m.add_object_type(format!("{name} {what}"), t.family, values)?)
+    };
+    let place = |m: &mut Model, t: archisim_core::ObjectTypeId, at: Point2, rotation: f64| -> Res {
+        m.add_object(NewObject {
+            level,
+            object_type: t,
+            position: at,
+            rotation,
+            base_offset: 0.0,
+        })?;
+        Ok(())
+    };
     let pi = std::f64::consts::PI;
     let quarter = std::f64::consts::FRAC_PI_2;
-    // Along the back wall, looking south, to the corner (x = 3).
+    // Along the back wall, looking south, to the corner (x = 3); with a
+    // 10 cm upstand against the walls.
+    let upstand = [("upstand", 0.1)];
     for (name, x) in [
         ("Bajo cajonera 60", 0.7),
         ("Bajo fregadero 80", 1.4),
         ("Bajo lavavajillas 60", 2.1),
         ("Bajo cajonera 60", 2.7),
     ] {
-        put(m, name, Point2::new(x, y0), pi)?;
+        let t = variant(m, name, "con copete", &upstand)?;
+        place(m, t, Point2::new(x, y0), pi)?;
     }
     // Down the side wall, looking west: the first against the corner
     // module's front.
-    put(m, "Bajo cajonera 60", Point2::new(3.0, y0 - 0.9), quarter)?;
-    put(m, "Bajo placa 90", Point2::new(3.0, y0 - 1.65), quarter)?;
-    // The island: three modules each way, backs together.
+    let t = variant(m, "Bajo cajonera 60", "con copete", &upstand)?;
+    place(m, t, Point2::new(3.0, y0 - 0.9), quarter)?;
+    let t = variant(m, "Bajo placa 90", "con copete", &upstand)?;
+    place(m, t, Point2::new(3.0, y0 - 1.65), quarter)?;
+    // The island: three modules each way, backs together; on the south
+    // side the worktop overhangs 30 cm, a bar to sit at.
+    let bar = variant(m, "Bajo cajonera 60", "con vuelo", &[("overhang", 0.3)])?;
+    let plain = archisim_library::add_object_entry(m, "Bajo cajonera 60")?;
     for x in [0.6, 1.2, 1.8] {
-        put(m, "Bajo cajonera 60", Point2::new(x, y0 - 2.6), pi)?;
-        put(m, "Bajo cajonera 60", Point2::new(x, y0 - 2.6), 0.0)?;
+        place(m, bar, Point2::new(x, y0 - 2.6), pi)?;
+        place(m, plain, Point2::new(x, y0 - 2.6), 0.0)?;
     }
     put(m, "Sofá rinconera 260×170", Point2::new(6.5, y0 - 0.5), pi)?;
     Ok(())
@@ -247,6 +280,22 @@ mod tests {
             .map(|i| i.total())
             .sum();
         assert!((tops - (4.0 * 4.05 + 4.1 + 3.6)).abs() < 1e-6, "{tops}");
+        // The L's upstand, all along its backs; the island's bar.
+        let upstands: f64 = items
+            .iter()
+            .filter(|i| i.key.starts_with("copete:"))
+            .map(|i| i.total())
+            .sum();
+        assert!((upstands - 4.1).abs() < 1e-6, "{upstands}");
+        let island = runs
+            .iter()
+            .find(|r| r.members.len() == 6 && r.sinks.is_empty())
+            .unwrap();
+        assert!(
+            (island.area - 1.8 * (0.9 + 0.6)).abs() < 1e-6,
+            "{}",
+            island.area
+        );
         let units: f64 = items
             .iter()
             .filter(|i| i.key.starts_with("mueble:"))

@@ -1,6 +1,7 @@
 //! The railing tool ("Barandilla"): its line clicked point by point, for
 //! terraces, flat roofs and voids; height, foot and posts in Properties.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::RailingId;
 use eframe::egui::{self, Id, Ui};
 
@@ -90,7 +91,7 @@ impl ArchiSimApp {
                 "Vidrio",
                 "Paneles de vidrio entre montantes en vez de barrotes",
                 |ui, _| {
-                    ui.checkbox(&mut self.railing_settings.glass, "");
+                    ui.switch(&mut self.railing_settings.glass, "");
                 },
             );
         });
@@ -147,7 +148,7 @@ impl ArchiSimApp {
                 "Paneles de vidrio entre montantes en vez de barrotes",
                 |ui, _| {
                     let mut on = r.glass.is_some();
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         let res = self.ed.set_railing_glass(id, on);
                         self.report(res, "Barandilla cambiada.");
                     }

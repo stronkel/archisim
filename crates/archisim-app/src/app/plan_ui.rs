@@ -1964,79 +1964,89 @@ impl ArchiSimApp {
         let (Some(pl), Some(c)) = (&self.placement, self.cursor) else {
             return;
         };
-        let g = &pl.geometry;
         let color = if pl.problem.is_some() {
             Color32::from_rgb(210, 40, 40)
         } else {
             ACCENT
         };
-        let to = |t: f64, off: f64| self.view.to_screen(rect, g.point(t, off));
-        let foot = self.polygon(rect, &g.footprint());
-        painter.add(Shape::convex_polygon(
-            foot,
-            color.gamma_multiply(0.18),
-            Stroke::new(1.5, color),
-        ));
-        // Frame faces.
-        let stroke = Stroke::new(1.0, color);
-        for off in [g.frame_exterior, g.frame_interior] {
-            painter.line_segment([to(g.t0, off), to(g.t1, off)], stroke);
-        }
-        match g.kind {
-            OpeningKind::Void => {}
-            OpeningKind::Door(op) => {
-                use archisim_core::DoorOperation as D;
-                let face = g.swing_frame_face();
-                let out = g.swing_dir();
-                let mut leaves: Vec<(f64, f64)> = Vec::new(); // (hinge t, free t)
-                match op {
-                    D::SingleSwing => {
-                        if g.hinge_at_start() {
-                            leaves.push((g.t0, g.t1));
-                        } else {
-                            leaves.push((g.t1, g.t0));
+        // Every one a click would place (several, spread out).
+        for g in pl.geometries() {
+            let to = |t: f64, off: f64| self.view.to_screen(rect, g.point(t, off));
+            let foot = self.polygon(rect, &g.footprint());
+            painter.add(Shape::convex_polygon(
+                foot,
+                color.gamma_multiply(0.18),
+                Stroke::new(1.5, color),
+            ));
+            // Frame faces.
+            let stroke = Stroke::new(1.0, color);
+            for off in [g.frame_exterior, g.frame_interior] {
+                painter.line_segment([to(g.t0, off), to(g.t1, off)], stroke);
+            }
+            match g.kind {
+                OpeningKind::Void => {}
+                OpeningKind::Door(op) => {
+                    use archisim_core::DoorOperation as D;
+                    let face = g.swing_frame_face();
+                    let out = g.swing_dir();
+                    let mut leaves: Vec<(f64, f64)> = Vec::new(); // (hinge t, free t)
+                    match op {
+                        D::SingleSwing => {
+                            if g.hinge_at_start() {
+                                leaves.push((g.t0, g.t1));
+                            } else {
+                                leaves.push((g.t1, g.t0));
+                            }
                         }
+                        D::DoubleSwing => {
+                            let mid = (g.t0 + g.t1) / 2.0;
+                            leaves.push((g.t0, mid));
+                            leaves.push((g.t1, mid));
+                        }
+                        D::Sliding | D::Folding | D::Pivot | D::Overhead | D::Rolling => {}
                     }
-                    D::DoubleSwing => {
-                        let mid = (g.t0 + g.t1) / 2.0;
-                        leaves.push((g.t0, mid));
-                        leaves.push((g.t1, mid));
+                    for (hinge, free) in leaves {
+                        let r = (free - hinge).abs();
+                        let h = g.point(hinge, face);
+                        let along = g.u * (free - hinge).signum();
+                        // Leaf open at 90°, and the arc its edge sweeps.
+                        painter.line_segment(
+                            [
+                                self.view.to_screen(rect, h),
+                                self.view.to_screen(rect, h + out * r),
+                            ],
+                            Stroke::new(2.0, color),
+                        );
+                        let arc: Vec<Pos2> = (0..=24)
+                            .map(|i| {
+                                let a = i as f64 / 24.0 * std::f64::consts::FRAC_PI_2;
+                                self.view.to_screen(
+                                    rect,
+                                    h + along * (r * a.cos()) + out * (r * a.sin()),
+                                )
+                            })
+                            .collect();
+                        painter.add(Shape::line(arc, Stroke::new(1.0, color)));
                     }
-                    D::Sliding | D::Folding | D::Pivot | D::Overhead | D::Rolling => {}
                 }
-                for (hinge, free) in leaves {
-                    let r = (free - hinge).abs();
-                    let h = g.point(hinge, face);
-                    let along = g.u * (free - hinge).signum();
-                    // Leaf open at 90°, and the arc its edge sweeps.
-                    painter.line_segment(
-                        [
-                            self.view.to_screen(rect, h),
-                            self.view.to_screen(rect, h + out * r),
-                        ],
-                        Stroke::new(2.0, color),
-                    );
-                    let arc: Vec<Pos2> = (0..=24)
-                        .map(|i| {
-                            let a = i as f64 / 24.0 * std::f64::consts::FRAC_PI_2;
-                            self.view
-                                .to_screen(rect, h + along * (r * a.cos()) + out * (r * a.sin()))
-                        })
-                        .collect();
-                    painter.add(Shape::line(arc, Stroke::new(1.0, color)));
+                OpeningKind::Window(_) => {
+                    let mid = (g.frame_exterior + g.frame_interior) / 2.0;
+                    painter.line_segment([to(g.t0, mid), to(g.t1, mid)], Stroke::new(2.0, color));
                 }
-            }
-            OpeningKind::Window(_) => {
-                let mid = (g.frame_exterior + g.frame_interior) / 2.0;
-                painter.line_segment([to(g.t0, mid), to(g.t1, mid)], Stroke::new(2.0, color));
             }
         }
+        let g = &pl.geometry;
         let side = match g.opens_to {
             WallSide::Interior => "abre al interior",
             WallSide::Exterior => "abre al exterior",
         };
         let text = match &pl.problem {
             Some(p) => format!("No cabe: {p}"),
+            None if !pl.more.is_empty() => format!(
+                "{} repartidas · machón {}   {side}",
+                pl.more.len() + 1,
+                crate::units::fmt_len(pl.more[0].1.t0 - pl.geometry.t1)
+            ),
             None => format!(
                 "{} ◂ ▸ {}   {side}",
                 crate::units::fmt_len(pl.before),

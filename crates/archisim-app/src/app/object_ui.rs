@@ -2,6 +2,7 @@
 //! from the project's object types, placed with a click (back side on the
 //! point, Space turns it 90°); their properties and type sizes.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{ObjectId, ObjectTypeId, ParamKind, ParamScope, Value};
 use eframe::egui::{self, Id, Ui};
 
@@ -843,7 +844,7 @@ pub(super) fn param_row(
         (ParamKind::Bool, Value::Bool(b)) => {
             row(ui, &label, "", |ui, _| {
                 let mut on = *b;
-                if ui.checkbox(&mut on, "").changed() {
+                if ui.switch(&mut on, "").changed() {
                     out = Some(Value::Bool(on));
                 }
             });

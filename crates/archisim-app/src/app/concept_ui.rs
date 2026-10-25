@@ -10,6 +10,7 @@
 //! measures and leaves a guide; Pintar gives a volume a material; and
 //! Convertir turns volumes into walls, slabs and a roof, remembering them.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{Deform, MassId, MassShape, MaterialId, Point2};
 use eframe::egui::{self, ComboBox, Id, Ui};
 
@@ -1528,10 +1529,10 @@ impl ArchiSimApp {
             );
             ui.horizontal_wrapped(|ui| {
                 if !round {
-                    ui.checkbox(&mut f.vertical, "Esquinas");
+                    ui.switch(&mut f.vertical, "Esquinas");
                 }
-                ui.checkbox(&mut f.top, "Arriba");
-                ui.checkbox(&mut f.bottom, "Abajo");
+                ui.switch(&mut f.top, "Arriba");
+                ui.switch(&mut f.bottom, "Abajo");
             });
         });
         let any = f.vertical || f.top || f.bottom;

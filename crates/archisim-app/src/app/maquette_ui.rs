@@ -6,6 +6,7 @@
 //! cut away and the grid. «Técnica · Maqueta» switches between the two
 //! environments, keeping the selection.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{DormerKind, LevelId, OpeningTypeId, Point2};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2,
@@ -424,7 +425,7 @@ impl ArchiSimApp {
             ui.separator();
             self.cutaway_buttons(ui);
             ui.separator();
-            ui.checkbox(&mut self.ground_grid, "Cuadrícula")
+            ui.switch(&mut self.ground_grid, "Cuadrícula")
                 .on_hover_text(
                 "Cuadrícula de 50 cm en el suelo de la planta, y los clics se ajustan a ella (G)",
             );

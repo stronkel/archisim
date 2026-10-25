@@ -3,6 +3,7 @@
 //! the active view, cursor position), plus what floats over the drawing:
 //! the keys of the next step and the message of the last action.
 
+use super::widgets::SwitchExt as _;
 use eframe::egui::{self, FontId, Rect, Sense, Ui, Vec2};
 
 use super::icons::{self, Icon};
@@ -353,19 +354,19 @@ impl ArchiSimApp {
                 self.fit_active_view();
             }
             ui.separator();
-            ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
-            ui.checkbox(&mut self.show_grid, "Rejilla");
-            ui.checkbox(&mut self.thin_lines, "Líneas finas (planta, alzados y 3D)");
+            ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
+            ui.switch(&mut self.show_grid, "Rejilla");
+            ui.switch(&mut self.thin_lines, "Líneas finas (planta, alzados y 3D)");
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
-            ui.checkbox(&mut self.show_underlay, "Calco de la planta inferior");
-            ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
+            ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
+            ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.separator();
-            ui.checkbox(&mut self.show_properties, "Propiedades");
-            ui.checkbox(&mut self.show_navigator, "Navegador");
+            ui.switch(&mut self.show_properties, "Propiedades");
+            ui.switch(&mut self.show_navigator, "Navegador");
             if ui
-                .checkbox(&mut self.attenuate, "Atenuar por disciplina")
+                .switch(&mut self.attenuate, "Atenuar por disciplina")
                 .on_hover_text("En Estructura, Instalaciones, Urbanismo o Concepto, lo que no es de la disciplina se ve en gris")
                 .changed()
             {
@@ -375,11 +376,11 @@ impl ArchiSimApp {
                     self.view_style.focus = archisim_core::DisciplineFocus::None;
                 }
             }
-            ui.checkbox(&mut self.pin_command_line, "Línea de órdenes fija")
+            ui.switch(&mut self.pin_command_line, "Línea de órdenes fija")
                 .on_hover_text("Sin marcar, lo que escribes sale junto al cursor y el paso de la orden en marcha, en la barra bajo las pestañas");
             super::missions_ui::text_size_row(ui, &mut self.prefs.text_size);
             super::missions_ui::units_row(ui, &mut self.prefs.units);
-            ui.checkbox(&mut self.keys_autocad, "Teclas de AutoCAD")
+            ui.switch(&mut self.keys_autocad, "Teclas de AutoCAD")
                 .on_hover_text("Marcado: se escribe la orden y se pulsa Intro (L, PL, M de muro…). Sin marcar: M, F, P, V, C y N cambian de herramienta al momento, como en ArchiCAD");
             ui.separator();
             if ui.button("Plantas…").clicked() {

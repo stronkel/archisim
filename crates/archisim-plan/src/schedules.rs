@@ -821,22 +821,52 @@ fn kitchen(model: &Model) -> Vec<Item> {
             quantity: run.length,
         });
     }
+    // Upstands (copetes), by material, measured along.
+    let mut upstands: BTreeMap<archisim_core::MaterialId, Vec<Measured>> = BTreeMap::new();
+    for run in model.worktops() {
+        if run.upstands.is_empty() || !run.members.iter().all(|m| new(m.0)) {
+            continue;
+        }
+        let length: f64 = run.upstands.iter().map(|(e, _)| e[0].distance(e[1])).sum();
+        let height = run.upstands.iter().map(|(_, h)| *h).fold(0.0, f64::max);
+        upstands.entry(run.material).or_default().push(Measured {
+            comment: format!("Copete · {}", level_name(run.level)),
+            units: 1.0,
+            length,
+            width: 0.0,
+            height,
+            quantity: length,
+        });
+    }
+    let name_of = |m: archisim_core::MaterialId| {
+        model
+            .material(m)
+            .map_or("?".to_string(), |m| m.name.clone())
+    };
     let mut items: Vec<Item> = tops
         .into_iter()
         .enumerate()
-        .map(|(i, (m, lines))| {
-            let name = model
-                .material(m)
-                .map_or("?".to_string(), |m| m.name.clone());
-            Item {
-                code: format!("E{:02}", i + 1),
-                key: format!("encimera:{}", m.0),
-                unit: "m",
-                summary: format!("Encimera de {name}"),
-                lines,
-            }
+        .map(|(i, (m, lines))| Item {
+            code: format!("E{:02}", i + 1),
+            key: format!("encimera:{}", m.0),
+            unit: "m",
+            summary: format!("Encimera de {}", name_of(m)),
+            lines,
         })
         .collect();
+    let first = items.len();
+    items.extend(
+        upstands
+            .into_iter()
+            .enumerate()
+            .map(|(i, (m, lines))| Item {
+                code: format!("E{:02}", first + i + 1),
+                key: format!("copete:{}", m.0),
+                unit: "m",
+                summary: format!("Copete de {}", name_of(m)),
+                lines,
+            }),
+    );
     let mut units: BTreeMap<archisim_core::ObjectTypeId, Vec<Measured>> = BTreeMap::new();
     for o in model.objects().filter(|o| new(o.id.0)) {
         let Some(t) = model.object_type(o.object_type) else {

@@ -1340,6 +1340,23 @@ pub fn worktop_solids(
             side(h[i], h[(i + 1) % h.len()]);
         }
     }
+    // The upstands: a strip standing on each back edge, towards the front.
+    for ([a, b], height) in &run.upstands {
+        let Some(u) = (*b - *a).normalized() else {
+            continue;
+        };
+        let n = u.perp_left() * archisim_core::props::UPSTAND;
+        let ring = [*a, *b, *b + n, *a + n];
+        let (lo, hi) = (z1, z1 + height);
+        tris.push([at(ring[0], hi), at(ring[1], hi), at(ring[2], hi)]);
+        tris.push([at(ring[0], hi), at(ring[2], hi), at(ring[3], hi)]);
+        for i in 0..4 {
+            // Outside to the right of each edge, as the ring runs CCW.
+            let (p, q) = (ring[i], ring[(i + 1) % 4]);
+            tris.push([at(p, lo), at(q, lo), at(q, hi)]);
+            tris.push([at(p, lo), at(q, hi), at(p, hi)]);
+        }
+    }
     vec![Solid {
         owner,
         material: run.material,

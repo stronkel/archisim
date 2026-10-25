@@ -232,6 +232,70 @@ fn slab_door_and_window_tools() {
     assert_eq!(h.app.tool, Tool::Arrow);
 }
 
+/// Windows centred on the free stretch of a façade, from its end and
+/// spread out with equal piers, chosen on the tool's bar; the spread ones
+/// go in one step to undo.
+#[test]
+fn windows_centred_from_an_end_and_spread() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.type_text("v");
+    assert_eq!(h.app.tool, Tool::Window);
+    let names: Vec<_> = h.app.method_states().into_iter().map(|m| m.0).collect();
+    assert_eq!(
+        names,
+        ["Libre", "Por el centro", "Desde un extremo", "Repartidas"]
+    );
+    // North façade: x 0 to 12 on its outer face; inside it runs clear
+    // between the side walls' inner faces.
+    let north = h.model().walls().nth(1).unwrap().id;
+    let t = h
+        .model()
+        .wall_type(h.model().wall(north).unwrap().wall_type)
+        .unwrap()
+        .thickness();
+    h.app.choose_method("Por el centro");
+    h.frame();
+    h.click_at(p(2.0, 8.8));
+    let o = h.model().openings().last().unwrap().clone();
+    assert!((o.along - 6.0).abs() < 1e-3, "{}", o.along);
+    // From the end: its jamb at 30 cm from the inner face of the east
+    // wall (the end nearest the cursor).
+    h.app.choose_method("Desde un extremo");
+    h.frame();
+    h.click_at(p(11.0, 8.8));
+    let o = h.model().openings().last().unwrap().clone();
+    let w = h.model().opening_type(o.opening_type).unwrap().width;
+    assert!(
+        (o.along - (12.0 - t - 0.3 - w / 2.0)).abs() < 1e-3,
+        "{}",
+        o.along
+    );
+    // Three spread on the south façade, in one step.
+    h.app.choose_method("Repartidas");
+    h.app.place_count = 3;
+    h.app.window_settings.place = crate::opening_tool::OpeningPlace::Spread(3);
+    let before = h.model().openings().count();
+    h.frame();
+    h.click_at(p(6.0, 0.2));
+    assert_eq!(
+        h.model().openings().count(),
+        before + 3,
+        "{:?}",
+        h.app.message
+    );
+    let south = h.model().walls().nth(3).unwrap().id;
+    let mut alongs: Vec<f64> = h.model().openings_in_wall(south).map(|o| o.along).collect();
+    alongs.sort_by(f64::total_cmp);
+    // Equal piers: the middle one in the middle.
+    assert!((alongs[1] - 6.0).abs() < 1e-3, "{alongs:?}");
+    assert!((alongs[0] + alongs[2] - 12.0).abs() < 2e-3, "{alongs:?}");
+    assert_eq!(h.app.ed.undo_label(), Some("Colocar 3 ventanas repartidas"));
+    h.app.ed.undo();
+    assert_eq!(h.model().openings().count(), before);
+}
+
 #[test]
 fn slab_outline_with_typed_lengths_and_escape() {
     let mut h = Harness::new(Editor::new_project());
@@ -6319,6 +6383,14 @@ fn maquette_environment() {
     assert_eq!(m.walls().count(), 4, "{:?}", h.app.message);
     assert_eq!(m.slabs().count(), 1, "{:?}", h.app.message);
     assert_eq!(m.rooms().count(), 1, "{:?}", h.app.message);
+    // One Undo takes the whole room back, and Redo brings it again.
+    assert_eq!(h.app.ed.undo_label(), Some("Habitación"));
+    h.app.ed.undo();
+    assert_eq!(h.model().walls().count(), 0);
+    assert_eq!(h.model().slabs().count(), 0);
+    assert_eq!(h.model().rooms().count(), 0);
+    h.app.ed.redo();
+    assert_eq!(h.model().rooms().count(), 1);
     // A sofa from the catalog (loaded from the library), placed; the
     // card turns and copies it.
     {
@@ -6347,6 +6419,89 @@ fn maquette_environment() {
 
 /// In the Maqueta, a room drawn in the 3D view by two clicks on the
 /// ground: four walls, their floor and their room.
+/// A sofa dragged in 3D near a corner: its back against one wall and its
+/// side pulled to the other, with its clear distances to the walls shown
+/// while it moves (C3).
+#[test]
+fn moved_in_3d_into_a_corner_with_clearances() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    h.frame();
+    h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
+    h.app.v3d.camera.pitch = 1.3;
+    h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
+    h.app.v3d.camera.distance = 14.0;
+    h.frame();
+    h.app.catalog_take(super::maquette_ui::CatalogAct::Room);
+    h.frame();
+    for q in [screen_3d(&h, 0.0, 0.0, 0.0), screen_3d(&h, 6.0, 4.0, 0.0)] {
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+        h.click_screen(q);
+        h.frame();
+    }
+    h.key(Key::Escape);
+    let level = h.app.ed.level;
+    let sofa_type = h.app.ed.library_object_type("Sofá de 3 plazas").unwrap();
+    let sofa = h
+        .app
+        .ed
+        .transact("Sofá", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: sofa_type,
+                position: p(3.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    h.frame();
+    let faces = crate::wall_faces::faces(h.model(), level, &Default::default());
+    // Dragged by its seat towards the north-west corner, its side a few
+    // centimetres short of the north wall.
+    let from = screen_3d(&h, 3.0, 2.5, 0.3);
+    let to = screen_3d(&h, 0.55, 3.15, 0.3);
+    h.pos = from;
+    h.events.push(Event::PointerMoved(from));
+    h.frame();
+    h.button(PointerButton::Primary, true);
+    for k in 1..=8 {
+        let q = from + (to - from) * (k as f32 / 8.0);
+        h.pos = q;
+        h.events.push(Event::PointerMoved(q));
+        h.frame();
+    }
+    assert!(
+        !h.app.move_clear.is_empty(),
+        "no clear distances while moved"
+    );
+    h.button(PointerButton::Primary, false);
+    h.frame();
+    assert!(h.app.move_clear.is_empty());
+    let outline = h.model().object_outline(sofa);
+    let top = outline.iter().map(|q| q.y).fold(f64::MIN, f64::max);
+    let west = outline.iter().map(|q| q.x).fold(f64::MAX, f64::min);
+    // Its side on the north wall's inner face, its back on the west one.
+    let on = |horizontal: bool, v: f64| {
+        faces.iter().any(|f| {
+            let (a, b) = (f.a, f.b);
+            if horizontal {
+                (a.y - b.y).abs() < 1e-9 && (a.y - v).abs() < 2e-3
+            } else {
+                (a.x - b.x).abs() < 1e-9 && (a.x - v).abs() < 2e-3
+            }
+        })
+    };
+    assert!(
+        on(true, top),
+        "side not on the north wall: {top} {outline:?}"
+    );
+    assert!(on(false, west), "back not on the west wall: {west}");
+}
+
 /// Placing as in Paralives: in the Maqueta a sofa dragged near a wall
 /// goes against it facing the room, as it is drawn while dragged; a vase
 /// placed over the table rests on it.

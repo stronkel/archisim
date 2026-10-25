@@ -6,6 +6,41 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 (5) · v0.64: detalles de la Maqueta y de la interfaz (C3)
+
+Rama `bloque/c3-maqueta`, encima de `bloque/arboles-dxf` (#68), con pull request para Antonio. Sin cambios de formato ni de IFC (las encimeras con copete salen en el `IfcFurniture` «Encimera» de siempre).
+
+Antonio pidió seguir la hoja de ruta en orden (C3 → C4 → C5 → C6 → C7) con los remates de A1, C2 y F1. Los de la cocina van aquí.
+
+**Hecho**
+- **Habitación en un solo Deshacer**: sus cuatro muros, su suelo y su local se deshacen y rehacen de una vez («Habitación»).
+- **Mover en 3D junto a las paredes**: un mueble (o lo que esté seleccionado) arrastrado en 3D se pega a la cara del muro cuando se acerca a menos de 15 cm, y después a la del muro que la cruza, en la esquina. Mientras se mueve, unas cotas azules como las temporales de la planta miden lo que queda libre hasta los muros en sus cuatro lados. Los muros, puertas y ventanas no se pegan: siguen sus reglas.
+- **Puertas y ventanas por el centro, desde un extremo o repartidas**, en la barra de la herramienta:
+  - **Libre**: como siempre, donde está el cursor;
+  - **Por el centro**: en el centro del tramo libre del muro, entre los muros que lo encuentran y las otras carpinterías, medido en la cara hacia la que abre;
+  - **Desde un extremo**: la jamba a la distancia que se escribe (30 cm de partida) del extremo más cercano al cursor;
+  - **Repartidas**: las que se digan (2 de partida), con machones iguales entre ellas y en los extremos, todas en un paso. Si no caben, lo dice: «no caben 3 de 1,80 en el tramo libre de 4,20».
+- **Un mismo dibujo para los sí o no**: las casillas de todos los paneles y diálogos son ahora interruptores, como «Rejilla» o «Calco» en Propiedades.
+- **Cocina** (remates de C2):
+  - los módulos bajos tienen **Vuelo delante** y **Vuelo detrás** (sección Encimera): la encimera sale más que el mueble, para una barra con taburetes;
+  - y **Copete**: una tira de 2 cm de grueso en el borde de atrás. En un tramo solo va donde no hay otro módulo detrás, así que en una isla espalda con espalda no sale. Se ve en 3D, va en el IFC con la encimera y se mide aparte en Mediciones («Copete de …», en metros).
+  - **Dos sofás en L se convierten en una rinconera**: un sofá recto con la espalda contra el extremo de otro y el lado contra su frente, del mismo fondo y altura, se une con él en un «Sofá rinconera» del largo del primero y con el brazo del segundo, a la derecha o a la izquierda.
+- `archisim cocina` pone copete a la L y una barra de 30 cm a un lado de la isla.
+
+**Pendiente**
+- Mientras se arrastra un mueble en 3D, sus flechas y el punto de giro se quedan donde estaba hasta soltarlo.
+- La encimera de un tramo se sigue dibujando en planta módulo a módulo.
+
+**Qué debe probar Antonio**
+1. Maqueta → Construir → Habitación, dos clics. Ctrl+Z una vez: deben irse los cuatro muros, el suelo y el local. Ctrl+Y: vuelven.
+2. En la Maqueta, coge un sofá y llévalo hacia una pared: se pega a ella y, cerca de la esquina, también a la otra. Mira las cotas azules mientras lo mueves.
+3. Herramienta Ventana. En la barra de arriba, elige **Por el centro** y pasa por la fachada de un dormitorio: la ventana se centra entre los tabiques. Prueba **Desde un extremo** con 0,30 y **Repartidas** con 3 en una fachada larga. Ctrl+Z quita las tres a la vez.
+4. Mira los paneles: Propiedades de la vista (Rejilla, Calco), Capas, Coordinación. Todo lo que era una casilla es ahora un interruptor.
+5. `cargo run --release -p archisim-cli -- cocina out/cocina` y abre `out/cocina/cocina.archisim`: la L con copete y la isla con barra. Mira en 3D la barra y el copete, y en Mediciones el capítulo 10.
+6. Coloca dos «Sofá de 3 plazas» en L (el segundo girado, con la espalda contra el extremo del primero): al soltarlo se hacen una rinconera.
+
+---
+
 ## 2026-10-25 · v0.60: tramas de presentación (T1)
 
 Rama `bloque/tramas`, encima de `bloque/figuras-2` (#63), con pull request para Antonio. **Formato `.archisim` versión 36**: abre todas las anteriores. Solo sube para que una versión anterior del programa avise de que el fichero es más nuevo.

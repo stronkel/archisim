@@ -191,6 +191,15 @@ Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), 
 - **IFC**: la encimera de cada tramo es un `IfcFurniture` «Encimera» (tipo `IfcFurnitureType` por material), con su material y el pset `ArchiSim_Worktop` (largo, superficie y los módulos); el tipo de un módulo bajo lleva dos geometrías, con y sin encimera, y los del tramo usan la segunda. Al importar, ArchiSim no lee la encimera como objeto: vuelve a salir de sus módulos.
 - `archisim cocina out/` lleva además una cocina en L con fregadero y placa, una isla de seis módulos y un sofá rinconera.
 
+## 6 octies. Detalles de la Maqueta y de la interfaz (C3, v0.64, rama `bloque/c3-maqueta`)
+
+- **Habitación en un paso**: sus cuatro muros, su suelo y su local se deshacen y rehacen juntos («Habitación» en Deshacer). `Document::join_last` junta los últimos pasos; la app lo usa con `Editor::undo_mark` y `Editor::join_since`.
+- **Mover en 3D junto a las paredes**: lo que se arrastra en 3D (con la flecha o como mueble) se pega a la cara de un muro cuando se acerca a menos de 15 cm, y después a otra cara que la cruce (una esquina). Mientras se mueve, unas cotas azules como las temporales de la planta miden lo que queda libre hasta los muros en las cuatro direcciones de la pieza (`wall_faces`: `faces`, `snap_delta`, `clearances`; en la app, `take_for_move`, `near_walls`, `object_near_walls` y `draw_clearances_3d`). Los muros y lo que va en ellos se mueven con sus propias reglas y no se pegan.
+- **Puertas y ventanas por el centro, desde un extremo o repartidas**: en la barra de la herramienta, cuatro maneras (`OpeningPlace`). El tramo libre es el del muro bajo el cursor en la cara hacia la que abre: entre los muros que lo encuentran y las otras puertas y ventanas (`opening_tool::clear_span`, que usa `temp_dims::face_stops`). «Desde un extremo» pide la distancia de la jamba al extremo más cercano al cursor; «Repartidas», cuántas, con machones iguales entre ellas y en los extremos, en un solo paso.
+- **Un dibujo para todos los sí o no**: las casillas de egui son interruptores (`widgets::switch`, también como `ui.switch` con `SwitchExt`); las opciones excluyentes de los diálogos, botones seleccionables.
+- **Cocina**: los módulos bajos tienen «Vuelo delante», «Vuelo detrás» (una barra para sentarse) y «Copete» (sección Encimera). En un tramo, el copete va solo en los módulos sin otro módulo detrás (`WorktopRun::upstands`), se dibuja en 3D y en el IFC con la encimera y se mide aparte (`copete:<material>`).
+- **Dos sofás en L hacen una rinconera**: un sofá recto colocado con su espalda contra el extremo de otro y su lado contra el frente de este, del mismo fondo y altura, se convierte con él en un «Sofá rinconera» del largo del primero y con el brazo del segundo (`placing::corner_sofa`, llamada desde `join_alongside`).
+
 ## 6 sexies. Ventana en islas y maneras de abrir (v0.56, rama `bloque/islas`)
 
 Lo que faltaba de las láminas «Técnica» y «Piezas comunes» del concepto:

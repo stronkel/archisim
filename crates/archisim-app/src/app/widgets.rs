@@ -108,6 +108,96 @@ pub fn chip(ui: &mut Ui, on: &mut bool, label: &str, hint: &str) -> Response {
     resp
 }
 
+/// An on/off switch with its label, the one drawing for every yes-or-no
+/// of the interface (it replaces egui's check boxes): a rounded track,
+/// accent when on, with its knob sliding to the right.
+pub fn switch(ui: &mut Ui, on: &mut bool, text: impl Into<egui::WidgetText>) -> Response {
+    let p = Palette::current(ui.ctx());
+    let text: egui::WidgetText = text.into();
+    let track = Vec2::new(28.0, 16.0);
+    let galley = (!text.is_empty()).then(|| {
+        text.into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Body,
+        )
+    });
+    let gap = 7.0;
+    let width = track.x + galley.as_ref().map_or(0.0, |g| gap + g.size().x);
+    let height = ui
+        .spacing()
+        .interact_size
+        .y
+        .min(22.0)
+        .max(galley.as_ref().map_or(0.0, |g| g.size().y));
+    let (rect, mut resp) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
+    if resp.clicked() {
+        *on = !*on;
+        resp.mark_changed();
+    }
+    resp.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::Role::CheckBox,
+            ui.is_enabled(),
+            *on,
+            galley.as_ref().map_or("", |g| g.text()),
+        )
+    });
+    if ui.is_rect_visible(rect) {
+        let enabled = ui.is_enabled();
+        let t = ui.ctx().animate_bool(resp.id, *on);
+        let r = Rect::from_min_size(
+            Pos2::new(rect.left(), rect.center().y - track.y / 2.0),
+            track,
+        );
+        let painter = ui.painter();
+        let (fill, stroke) = if *on {
+            (p.accent, p.accent)
+        } else if resp.hovered() && enabled {
+            (p.accent_soft, p.accent)
+        } else {
+            (p.raised, p.line)
+        };
+        let fill = if enabled {
+            fill
+        } else {
+            fill.gamma_multiply(0.5)
+        };
+        painter.rect(
+            r,
+            CornerRadius::same(8),
+            fill,
+            Stroke::new(1.0, stroke),
+            StrokeKind::Inside,
+        );
+        let knob = egui::lerp((r.left() + 8.0)..=(r.right() - 8.0), t);
+        painter.circle(
+            Pos2::new(knob, r.center().y),
+            5.5,
+            egui::Color32::WHITE,
+            Stroke::new(1.0, if *on { p.accent } else { p.line }),
+        );
+        if let Some(g) = galley {
+            let at = Pos2::new(r.right() + gap, rect.center().y - g.size().y / 2.0);
+            let colour = if enabled { p.text } else { p.faint };
+            painter.galley(at, g, colour);
+        }
+    }
+    resp
+}
+
+/// [`switch`] as a method of `Ui`, where egui would take a check box.
+pub trait SwitchExt {
+    fn switch(&mut self, on: &mut bool, text: impl Into<egui::WidgetText>) -> Response;
+}
+
+impl SwitchExt for Ui {
+    fn switch(&mut self, on: &mut bool, text: impl Into<egui::WidgetText>) -> Response {
+        switch(self, on, text)
+    }
+}
+
 /// A square button with an icon; `active` tints it with the accent.
 pub fn icon_button(ui: &mut Ui, icon: Icon, hint: &str, active: bool) -> Response {
     icon_button_sized(ui, icon, hint, active, Vec2::new(28.0, 26.0), true)

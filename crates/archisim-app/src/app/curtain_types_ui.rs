@@ -11,6 +11,7 @@
 //! follows it; a change that would leave a wall of the type without room
 //! between its frames is refused.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     CurtainCaps, CurtainDesign, CurtainDivision, CurtainJoint, CurtainLouvres, CurtainProfile,
     CurtainRest, CurtainTypeId, MaterialId, Model,
@@ -642,7 +643,7 @@ impl ArchiSimApp {
             "Por fuera de los marcos: tapajuntas sobre cada perfil y lamas horizontales de sombra.",
         );
         let mut caps = d.caps.is_some();
-        if ui.checkbox(&mut caps, "Tapajuntas exteriores").changed() {
+        if ui.switch(&mut caps, "Tapajuntas exteriores").changed() {
             d.caps = caps.then_some(CurtainCaps {
                 width: d.mullion.width + 0.01,
                 depth: 0.02,
@@ -671,7 +672,7 @@ impl ArchiSimApp {
             });
         }
         let mut louvres = d.louvres.is_some();
-        if ui.checkbox(&mut louvres, "Lamas horizontales").changed() {
+        if ui.switch(&mut louvres, "Lamas horizontales").changed() {
             d.louvres = louvres.then_some(CurtainLouvres {
                 depth: 0.2,
                 thickness: 0.03,

@@ -171,6 +171,8 @@ impl ArchiSimApp {
             });
             if let Some(mv) = self.object_move {
                 self.ed.selection = [Element::Object(mv.object)].into_iter().collect();
+                let z = self.level_z_3d() as f64 + mv.now.2 + 0.01;
+                self.take_for_move(z);
             }
         }
         let Some(mut mv) = self.object_move else {
@@ -180,6 +182,7 @@ impl ArchiSimApp {
             if let Some(pos) = response.interact_pointer_pos() {
                 if let Some(floor) = self.floor_at(rect, pos, 0.0) {
                     mv.now = self.object_spot(&mv, floor + mv.grab);
+                    mv.now.0 = self.object_near_walls(&mv);
                     mv.on_wall = {
                         let m = self.ed.model();
                         m.object(mv.object).is_some_and(|o| {
@@ -195,6 +198,7 @@ impl ArchiSimApp {
         }
         if response.drag_stopped() {
             self.object_move = None;
+            self.move_clear.clear();
             self.v3d.set_overlay(None, || None);
             let (at, rotation, base) = mv.now;
             let id = mv.object;
@@ -241,6 +245,39 @@ impl ArchiSimApp {
         let at = crate::placing::snap_alongside(m, o.level, o.object_type, at, rot, Some(o.id))
             .unwrap_or(at);
         (at, rot, o.base_offset)
+    }
+
+    /// Where a dragged object goes once pulled to the faces of the walls
+    /// near it (its sides into a corner, as well as its back against the
+    /// wall); keeps its clear distances to draw them. Small things that
+    /// rest on others are not pulled.
+    fn object_near_walls(&mut self, mv: &ObjectMove3d) -> Point2 {
+        let (at, rot, _) = mv.now;
+        let m = self.ed.model();
+        let Some(o) = m.object(mv.object) else {
+            return at;
+        };
+        if self.rests_on_surfaces(o.object_type) || self.move_points.is_empty() {
+            self.move_clear.clear();
+            return at;
+        }
+        // Its outline where it would go: as it is now, moved and turned.
+        let (c0, s0) = (o.rotation.cos(), o.rotation.sin());
+        let (c1, s1) = (rot.cos(), rot.sin());
+        let pts: Vec<Point2> = self
+            .move_points
+            .iter()
+            .map(|p| {
+                let d = *p - o.position;
+                let local = Point2::new(d.x * c0 + d.y * s0, -d.x * s0 + d.y * c0);
+                at + Point2::new(local.x * c1 - local.y * s1, local.x * s1 + local.y * c1)
+            })
+            .collect();
+        let d = crate::wall_faces::snap_delta(&self.move_faces, &pts, Point2::new(0.0, 0.0));
+        let moved: Vec<Point2> = pts.iter().map(|p| *p + d).collect();
+        self.move_clear =
+            crate::wall_faces::clearances(&self.move_faces, &moved, Point2::new(c1, s1));
+        at + d
     }
 
     /// The object drawn where it would go, while dragged.

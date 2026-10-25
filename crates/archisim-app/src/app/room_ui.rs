@@ -1,5 +1,6 @@
 //! Properties of rooms and tags.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{RoomId, TagId, TagTarget};
 use eframe::egui::{Id, Ui};
 
@@ -102,7 +103,7 @@ impl ArchiSimApp {
                 "Sigue a los muros",
                 "Su contorno se rehace desde su rótulo cuando cambian los muros que lo cierran",
                 |ui, _| {
-                    ui.checkbox(&mut new.bounded, "");
+                    ui.switch(&mut new.bounded, "");
                 },
             );
         });
@@ -170,7 +171,7 @@ impl ArchiSimApp {
                 "Dibujar el suelo",
                 "Rellena el local en planta con una trama y sus colores (tarima, baldosa, césped…)",
                 |ui, _| {
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         new.floor_fill = on.then_some(archisim_core::FloorFill {
                             pattern: archisim_core::HatchPattern::Decking,
                             color: [168, 128, 86],
@@ -203,7 +204,7 @@ impl ArchiSimApp {
             row(ui, "Fondo", "Color detrás de la trama", |ui, _| {
                 ui.horizontal(|ui| {
                     let mut bg = f.background.is_some();
-                    if ui.checkbox(&mut bg, "").changed() {
+                    if ui.switch(&mut bg, "").changed() {
                         f.background = bg.then_some(f.background.unwrap_or([240, 240, 236]));
                     }
                     if let Some(c) = &mut f.background {
@@ -279,7 +280,7 @@ impl ArchiSimApp {
                 "Línea de referencia",
                 "Una línea hasta el elemento",
                 |ui, _| {
-                    ui.checkbox(&mut leader, "");
+                    ui.switch(&mut leader, "");
                 },
             );
         });

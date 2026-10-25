@@ -3,6 +3,7 @@
 //! and the studio's, kept in the library folder (`Estilos.aspres`). A
 //! view takes one in its Visibilidad group.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{PresentationStyle, PresentationStyleId, Rgb};
 use eframe::egui::{self, Color32, RichText, Ui};
 
@@ -204,7 +205,7 @@ impl ArchiSimApp {
                 ui.label("Macizado de muros y pilares");
                 ui.horizontal(|ui| {
                     let mut on = d.poche.is_some();
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         d.poche = on.then_some(d.poche.unwrap_or([40, 40, 40]));
                     }
                     if let Some(c) = &mut d.poche {
@@ -244,7 +245,7 @@ impl ArchiSimApp {
 
                 ui.label("Sombras")
                     .on_hover_text("Del sol del proyecto (día y hora en las propiedades del proyecto, sin nada seleccionado)");
-                ui.checkbox(&mut d.shadows, "arrojadas sobre el suelo");
+                ui.switch(&mut d.shadows, "arrojadas sobre el suelo");
                 ui.end_row();
 
                 ui.label("Grueso de las líneas");

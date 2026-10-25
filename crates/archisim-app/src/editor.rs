@@ -525,6 +525,18 @@ impl Editor {
         Ok(result)
     }
 
+    /// How many steps can be undone (to join the ones made since, with
+    /// [`Editor::join_since`]).
+    pub fn undo_mark(&self) -> usize {
+        self.doc.undo_len()
+    }
+
+    /// Joins the steps made since `mark` into one called `label`.
+    pub fn join_since(&mut self, mark: usize, label: &str) {
+        let n = self.doc.undo_len().saturating_sub(mark);
+        self.doc.join_last(n, label);
+    }
+
     pub fn undo_label(&self) -> Option<&str> {
         self.doc.undo_label()
     }

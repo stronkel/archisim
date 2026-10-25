@@ -59,6 +59,7 @@ impl ArchiSimApp {
                         self.ed.selection.insert(e);
                     }
                     let from = Point2::new(at.x as f64, at.y as f64);
+                    self.take_for_move(at.z as f64);
                     Some(Drag3d::Move {
                         from,
                         to: from,
@@ -80,7 +81,7 @@ impl ArchiSimApp {
                         z,
                         to: self
                             .on_plane_3d(rect, pos, z)
-                            .map_or(to, |p| self.moved_to(from, p)),
+                            .map_or(to, |p| self.near_walls(from, self.moved_to(from, p))),
                     },
                     Drag3d::Window { start, .. } => Drag3d::Window { start, now: pos },
                 });
@@ -92,6 +93,7 @@ impl ArchiSimApp {
         }
         if response.drag_stopped() {
             self.drag3d = None;
+            self.move_clear.clear();
             self.v3d.set_overlay(None, || None);
             match d {
                 Drag3d::Move { from, to, .. } => {
@@ -156,6 +158,79 @@ impl ArchiSimApp {
                 .collect();
             Some(crate::view3d::scene::Scene::of_solids(&m, solids))
         });
+    }
+
+    /// Before moving the selection in 3D: the faces of the walls of its
+    /// level it can be pulled to, and its points; the clear distances are
+    /// drawn at height `z`.
+    pub(super) fn take_for_move(&mut self, z: f64) {
+        let sel = self.ed.selection.clone();
+        self.move_points = crate::wall_faces::selection_points(&self.ed, &sel);
+        self.move_faces = if self.move_points.is_empty() {
+            Vec::new()
+        } else {
+            crate::wall_faces::faces(&self.ed, self.ed.level, &sel)
+        };
+        // Measured along the object's own sides when it is one.
+        self.move_axis = match sel.iter().next() {
+            Some(Element::Object(id)) if sel.len() == 1 => self
+                .ed
+                .model()
+                .object(*id)
+                .map_or(Point2::new(1.0, 0.0), |o| {
+                    Point2::new(o.rotation.cos(), o.rotation.sin())
+                }),
+            _ => Point2::new(1.0, 0.0),
+        };
+        self.move_clear.clear();
+        self.move_clear_z = z;
+    }
+
+    /// The end of a move from `from` to `to`, pulled to the faces of the
+    /// walls near what is moved; keeps its clear distances to draw them.
+    fn near_walls(&mut self, from: Point2, to: Point2) -> Point2 {
+        if self.move_points.is_empty() {
+            return to;
+        }
+        let d = crate::wall_faces::snap_delta(&self.move_faces, &self.move_points, to - from);
+        let moved: Vec<Point2> = self.move_points.iter().map(|p| *p + d).collect();
+        self.move_clear = crate::wall_faces::clearances(&self.move_faces, &moved, self.move_axis);
+        from + d
+    }
+
+    /// The clear distances of what is being moved to the walls around it,
+    /// as the plan's temporary dimensions.
+    pub(super) fn draw_clearances_3d(&self, painter: &egui::Painter, rect: Rect) {
+        if self.move_clear.is_empty() {
+            return;
+        }
+        let size = glam::Vec2::new(rect.width(), rect.height());
+        let z = self.move_clear_z as f32;
+        let screen = |p: Point2| {
+            self.v3d
+                .camera
+                .project_to_screen(glam::Vec3::new(p.x as f32, p.y as f32, z), size)
+                .map(|s| Pos2::new(rect.min.x + s.x, rect.min.y + s.y))
+        };
+        let blue = super::TRACK_LINE;
+        for c in &self.move_clear {
+            let (Some(a), Some(b)) = (screen(c.from), screen(c.to)) else {
+                continue;
+            };
+            painter.line_segment([a, b], Stroke::new(1.0, blue));
+            let dir = (b - a).normalized();
+            let tick = egui::vec2(-dir.y, dir.x) * 4.0;
+            for q in [a, b] {
+                painter.line_segment([q - tick, q + tick], Stroke::new(1.5, blue));
+            }
+            let text = crate::units::fmt_len(c.value());
+            let galley = painter.layout_no_wrap(text, egui::FontId::monospace(12.0), blue);
+            let r = Rect::from_center_size(a + (b - a) * 0.5, galley.size())
+                .expand2(egui::vec2(4.0, 2.0));
+            painter.rect_filled(r, 3.0, Color32::WHITE);
+            painter.rect_stroke(r, 3.0, Stroke::new(1.0, blue), egui::StrokeKind::Inside);
+            painter.galley(r.min + egui::vec2(4.0, 2.0), galley, blue);
+        }
     }
 
     /// Where the cursor is on the horizontal plane at height `z`.

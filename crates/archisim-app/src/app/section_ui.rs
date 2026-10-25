@@ -2,6 +2,7 @@
 //! (drawn by `archisim_plan::section` from the same solids as the 3D and
 //! the IFC) and their properties.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{SectionId, SectionKind};
 use archisim_plan::section::{render_section, section_drawing, SectionDrawing};
 use eframe::egui::{self, Id, Ui};
@@ -496,7 +497,7 @@ impl ArchiSimApp {
                 "Alturas entre plantas a la izquierda y, en una sección, la altura libre de cada local cortado",
                 |ui, _| {
                     let mut on = s.heights;
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         let r = self
                             .ed
                             .edit_section("Acotar alturas de la sección", id, |s| s.heights = on);

@@ -25,7 +25,7 @@ mod sanitary;
 mod street;
 mod vehicles;
 
-pub use kitchen::{sink_hole, SINK_UNIT, WORKTOP};
+pub use kitchen::{sink_hole, SINK_UNIT, UPSTAND, WORKTOP};
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};

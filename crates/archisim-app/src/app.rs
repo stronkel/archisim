@@ -296,6 +296,14 @@ pub struct ArchiSimApp {
     clipboard: Option<context_menu::Clipboard>,
     /// Furniture dragged along the floor in the Maqueta.
     object_move: Option<placing::ObjectMove3d>,
+    /// While something is moved in 3D: the wall faces it is pulled to,
+    /// its plan points when taken, and its clear distances now (with the
+    /// height they are drawn at).
+    move_faces: Vec<crate::wall_faces::Face>,
+    move_points: Vec<Point2>,
+    move_axis: Point2,
+    pub(super) move_clear: Vec<crate::wall_faces::Clearance>,
+    move_clear_z: f64,
     render: render_ui::RenderState,
     budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
@@ -445,6 +453,10 @@ pub struct ArchiSimApp {
     pub types: TypesDialog,
     /// Where the door or window tool would place its element now.
     placement: Option<Placement>,
+    /// Door and window tools: the distance from the end of the wall
+    /// («Desde un extremo») and how many («Repartidas»).
+    pub place_gap: f64,
+    pub place_count: usize,
     pub show_reference_lines: bool,
     pub message: Option<Message>,
     /// Snapped point under the cursor, in model metres.
@@ -663,6 +675,11 @@ impl ArchiSimApp {
             bar_rgb: None,
             bar_swatch_at: None,
             object_move: None,
+            move_faces: Vec::new(),
+            move_points: Vec::new(),
+            move_axis: Point2::new(1.0, 0.0),
+            move_clear: Vec::new(),
+            move_clear_z: 0.0,
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
@@ -747,6 +764,8 @@ impl ArchiSimApp {
             level_to_delete: None,
             types: TypesDialog::default(),
             placement: None,
+            place_gap: 0.30,
+            place_count: 2,
             show_reference_lines: false,
             message: None,
             cursor: None,
@@ -1456,6 +1475,7 @@ impl ArchiSimApp {
 
     /// Builds the walls asked for by the wall tool.
     fn build_walls(&mut self, pieces: Vec<Piece>) {
+        let mark = self.ed.undo_mark();
         match self.ed.add_walls(&self.wall_settings, &pieces) {
             Ok(ids) if self.room_walls && self.wall_tool.mode == WallMode::Rectangle => {
                 // A room (Los Sims'): its floor and its room inside the
@@ -1473,6 +1493,8 @@ impl ArchiSimApp {
                     self.slab_settings.top_offset,
                 );
                 let room = self.ed.add_room_in_room(&self.room_settings, c);
+                // One step to undo: walls, floor and room.
+                self.ed.join_since(mark, "Habitación");
                 self.ed.selection = ids.iter().map(|id| Element::Wall(*id)).collect();
                 match (floor, room) {
                     (Ok(_), Ok(_)) => {
@@ -1629,6 +1651,30 @@ impl ArchiSimApp {
             return;
         }
         let door = self.tool == Tool::Door;
+        if !pl.more.is_empty() {
+            // Spread out: all of them in one step.
+            let specs = pl.specs();
+            let n = specs.len();
+            let mark = self.ed.undo_mark();
+            let mut ids = Vec::new();
+            for spec in specs {
+                match self.ed.add_opening(spec) {
+                    Ok(id) => ids.push(id),
+                    Err(e) => {
+                        self.complain(format!("No se puede colocar: {e}."));
+                        break;
+                    }
+                }
+            }
+            let what = if door { "puertas" } else { "ventanas" };
+            self.ed
+                .join_since(mark, &format!("Colocar {n} {what} repartidas"));
+            if ids.len() == n {
+                self.ed.selection = ids.into_iter().map(Element::Opening).collect();
+                self.say(format!("{n} {what} repartidas con machones iguales."));
+            }
+            return;
+        }
         match self.ed.add_opening(pl.spec) {
             Ok(id) => {
                 // Selected, with its temporary dimensions and arrows, to
@@ -2361,6 +2407,7 @@ pub fn default_opening_settings(model: &Model, door: bool) -> OpeningSettings {
         sill: if door { 0.0 } else { 0.9 },
         hand: Hand::Left,
         setback: None,
+        place: Default::default(),
     }
 }
 
@@ -2417,7 +2464,7 @@ pub fn length_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> 
     }
 }
 
-fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<String> {
+pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<String> {
     let buffer_id = id.with("buffer");
     let mut text = ui
         .ctx()

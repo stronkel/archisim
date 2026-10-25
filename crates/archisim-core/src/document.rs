@@ -79,6 +79,28 @@ impl Document {
         Some(label)
     }
 
+    /// Joins the last `n` steps into one called `label`, so a single Undo
+    /// takes them all back (a room: its walls, its floor and its room).
+    /// Does nothing if there are fewer than two of them.
+    pub fn join_last(&mut self, n: usize, label: impl Into<String>) {
+        if n < 2 || self.undo.len() < n {
+            return;
+        }
+        let first = self.undo.len() - n;
+        let before = self.undo.drain(first..).next().map(|s| s.before);
+        if let Some(before) = before {
+            self.undo.push(Step {
+                label: label.into(),
+                before,
+            });
+        }
+    }
+
+    /// How many steps can be undone.
+    pub fn undo_len(&self) -> usize {
+        self.undo.len()
+    }
+
     pub fn undo_label(&self) -> Option<&str> {
         self.undo.last().map(|s| s.label.as_str())
     }
@@ -114,5 +136,19 @@ mod tests {
         assert_eq!(doc.redo().as_deref(), Some("Crear planta"));
         assert!(doc.model().level(lvl).is_some());
         assert!(doc.redo().is_none());
+    }
+
+    #[test]
+    fn steps_joined_undo_together() {
+        let mut doc = Document::new(Model::new("P"));
+        doc.transact("A", |m| Ok(m.add_level("PB", 0.0))).unwrap();
+        doc.transact("B", |m| Ok(m.add_level("P1", 3.0))).unwrap();
+        doc.transact("C", |m| Ok(m.add_level("P2", 6.0))).unwrap();
+        doc.join_last(2, "B y C");
+        assert_eq!(doc.undo_len(), 2);
+        assert_eq!(doc.undo().as_deref(), Some("B y C"));
+        assert_eq!(doc.model().levels().len(), 1);
+        assert_eq!(doc.redo().as_deref(), Some("B y C"));
+        assert_eq!(doc.model().levels().len(), 3);
     }
 }

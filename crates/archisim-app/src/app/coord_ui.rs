@@ -3,6 +3,7 @@
 //! Navisworks, Solibri or BIMcollab but inside the modelling program.
 //! The logic is in `crate::coord`; this is what the person sees.
 
+use super::widgets::SwitchExt as _;
 use std::path::PathBuf;
 
 use archisim_core::Point2;
@@ -367,7 +368,7 @@ impl ArchiSimApp {
                     ui.horizontal(|ui| {
                         let mut visible = l.visible;
                         if ui
-                            .checkbox(&mut visible, "")
+                            .switch(&mut visible, "")
                             .on_hover_text("Visible")
                             .changed()
                         {
@@ -390,7 +391,7 @@ impl ArchiSimApp {
                     });
                     ui.horizontal(|ui| {
                         let mut t = l.transparent;
-                        if ui.checkbox(&mut t, "Transparente").changed() {
+                        if ui.switch(&mut t, "Transparente").changed() {
                             action = Some((i, if t { "glass" } else { "solid" }));
                         }
                         if ui
@@ -423,7 +424,7 @@ impl ArchiSimApp {
                                 r.unchanged
                             ));
                             let mut show = l.show_changes;
-                            if ui.checkbox(&mut show, "Colorear cambios").changed() {
+                            if ui.switch(&mut show, "Colorear cambios").changed() {
                                 action = Some((i, if show { "changes" } else { "nochanges" }));
                             }
                         });
@@ -1047,7 +1048,7 @@ impl ArchiSimApp {
                                         }
                                     });
                             }
-                            ui.checkbox(&mut r.check, "");
+                            ui.switch(&mut r.check, "");
                             let mut mm = r.clearance * 1000.0;
                             if ui
                                 .add_enabled(

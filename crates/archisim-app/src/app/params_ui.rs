@@ -3,6 +3,7 @@
 //! the group of the properties palette where each element's values are
 //! given.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     parse_shared_parameters, shared_parameters_text, NewUserParameter, ParamCategory, UserKind,
     UserParameterId, Value,
@@ -301,7 +302,7 @@ impl ArchiSimApp {
             ui.label("Del tipo").on_hover_text(
                 "Del tipo: todos los elementos del tipo tienen el mismo valor (se da en Tipos y materiales). Si no, cada elemento el suyo.",
             );
-            ui.checkbox(&mut d.by_type, "");
+            ui.switch(&mut d.by_type, "");
             ui.end_row();
             ui.label("Valor por defecto");
             ui.text_edit_singleline(&mut d.default).on_hover_text(
@@ -317,7 +318,7 @@ impl ArchiSimApp {
         ui.horizontal_wrapped(|ui| {
             for c in ParamCategory::ALL {
                 let mut on = d.categories.contains(&c);
-                if ui.checkbox(&mut on, c.label()).changed() {
+                if ui.switch(&mut on, c.label()).changed() {
                     if on {
                         d.categories.push(c);
                     } else {
@@ -536,9 +537,7 @@ fn param_value_row(
         }
         (UserKind::Bool, Value::Bool(b)) => {
             let mut on = *b;
-            ui.checkbox(&mut on, "")
-                .changed()
-                .then_some(Value::Bool(on))
+            ui.switch(&mut on, "").changed().then_some(Value::Bool(on))
         }
         (UserKind::Length, Value::Number(n)) => {
             length_field(ui, field, *n, w - 8.0).map(Value::Number)

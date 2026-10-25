@@ -6,6 +6,7 @@
 //!   Restricciones, Construcción, Dimensiones and Datos de identidad);
 //! - with nothing selected, the active view and the project.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     DimensionId, ElevationMarkId, Hand, OpeningId, OpeningKind, SlabId, WallId, WallSide, WallTop,
     WallTypeId,
@@ -498,7 +499,7 @@ impl ArchiSimApp {
         group(ui, "tool-slab-method", "Contorno", |ui| {
             if !self.slab_settings.wand {
                 ui.add_space(2.0);
-                ui.checkbox(
+                ui.switch(
                     &mut self.slab_settings.hole,
                     "Hueco en un forjado (escalera, patinillo)",
                 )
@@ -781,25 +782,25 @@ impl ArchiSimApp {
                 },
             );
             row(ui, "Líneas de referencia", "", |ui, _| {
-                ui.checkbox(&mut self.show_reference_lines, "");
+                ui.switch(&mut self.show_reference_lines, "");
             });
             row(
                 ui,
                 "Líneas finas",
                 "Todas las líneas a un píxel (apagado: grosor real a la escala de la vista)",
                 |ui, _| {
-                    ui.checkbox(&mut self.thin_lines, "");
+                    ui.switch(&mut self.thin_lines, "");
                 },
             );
             row(ui, "Rejilla", "Cuadrícula de 1 m y 5 m", |ui, _| {
-                ui.checkbox(&mut self.show_grid, "");
+                ui.switch(&mut self.show_grid, "");
             });
             row(
                 ui,
                 "Calco",
                 "La planta de debajo en gris, para dibujar encima",
                 |ui, _| {
-                    ui.checkbox(&mut self.show_underlay, "");
+                    ui.switch(&mut self.show_underlay, "");
                 },
             );
         });
@@ -1554,7 +1555,7 @@ impl ArchiSimApp {
         group(ui, "slab-slope", "Pendiente", |ui| {
             let mut on = s.slope.is_some();
             row(ui, "Inclinado", "Rampa o forjado en pendiente", |ui, _| {
-                if ui.checkbox(&mut on, "").changed() {
+                if ui.switch(&mut on, "").changed() {
                     let slope = on.then(|| default_slope(s, Point2::new(1.0, 0.0), 0.05));
                     let r = self.ed.set_slab_slope(id, slope);
                     self.report(
@@ -2077,9 +2078,7 @@ fn instance_param_row(
             }
             (ParamKind::Bool, Some(Value::Bool(b))) => {
                 let mut on = *b;
-                ui.checkbox(&mut on, "")
-                    .changed()
-                    .then_some(Value::Bool(on))
+                ui.switch(&mut on, "").changed().then_some(Value::Bool(on))
             }
             (ParamKind::Length, Some(Value::Number(v))) => {
                 length_field(ui, field, *v, w - 8.0).map(Value::Number)

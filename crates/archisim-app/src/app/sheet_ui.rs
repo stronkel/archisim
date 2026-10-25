@@ -2,6 +2,7 @@
 //! can be selected, moved and opened; 2D drafting works on it as in a
 //! plan), its properties and those of the selected view, and new sheets.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     NewSheet, NewViewport, ScheduleKind, Sheet, SheetId, SheetTable, TableId, ViewRef, Viewport,
     ViewportId,
@@ -677,7 +678,7 @@ impl ArchiSimApp {
                 }
             });
             row(ui, "Marco y cajetín", "", |ui, _| {
-                ui.checkbox(&mut new.title_block, "");
+                ui.switch(&mut new.title_block, "");
             });
             let styles: Vec<(Option<archisim_core::PresentationStyleId>, String)> =
                 std::iter::once((None, "Técnica (sin estilo)".to_string()))
@@ -942,7 +943,7 @@ impl ArchiSimApp {
                 },
             );
             row(ui, "Mostrar título", "", |ui, _| {
-                ui.checkbox(&mut new.show_title, "");
+                ui.switch(&mut new.show_title, "");
             });
         });
         group(ui, "vp-crop", "Recorte", |ui| {
@@ -959,7 +960,7 @@ impl ArchiSimApp {
                 "Recorte propio",
                 "Sin recorte, la vista muestra toda la planta o la sección",
                 |ui, _| {
-                    if ui.checkbox(&mut custom, "").changed() {
+                    if ui.switch(&mut custom, "").changed() {
                         new.crop = custom.then_some((lo, hi));
                     }
                 },

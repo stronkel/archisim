@@ -38,6 +38,11 @@ pub struct WorktopRun {
     pub pieces: Vec<[Point2; 4]>,
     /// The openings of the sinks in plan.
     pub sinks: Vec<[Point2; 4]>,
+    /// The upstands (copetes) along the back edges of the modules that
+    /// carry one and have no other module behind them: the edge, from
+    /// end to end with the worktop on its left, and the height over the
+    /// worktop.
+    pub upstands: Vec<([Point2; 2], f64)>,
     /// Length measured along the modules' fronts: the sum of their widths
     /// (m), as a worktop is priced.
     pub length: f64,
@@ -58,6 +63,12 @@ struct Top {
     /// The piece a little larger, to see what it touches.
     reach: [Point2; 4],
     sink: Option<[Point2; 4]>,
+    /// Its back edge (worktop on its left) and its upstand's height.
+    back: [Point2; 2],
+    upstand: f64,
+    /// A strip just behind its back edge, to see whether another module
+    /// is there.
+    behind: [Point2; 4],
 }
 
 impl Model {
@@ -79,6 +90,10 @@ impl Model {
             number("depth", 0.6),
             number("height", 0.9),
         );
+        // What the worktop overhangs in front and behind, and its upstand.
+        let front = number("overhang", 0.0).max(0.0);
+        let back = number("overhang_back", 0.0).max(0.0);
+        let upstand = number("upstand", 0.0).max(0.0);
         let material = match values.get("top") {
             Some(Value::Material(m)) if self.materials.contains_key(&MaterialId(*m)) => {
                 MaterialId(*m)
@@ -109,9 +124,22 @@ impl Model {
             material,
             top: o.base_offset + h,
             width: w,
-            piece: rect(-w / 2.0, 0.0, w / 2.0, d),
-            reach: rect(-w / 2.0 - TOUCH, -TOUCH, w / 2.0 + TOUCH, d + TOUCH),
+            piece: rect(-w / 2.0, -back, w / 2.0, d + front),
+            reach: rect(
+                -w / 2.0 - TOUCH,
+                -back - TOUCH,
+                w / 2.0 + TOUCH,
+                d + front + TOUCH,
+            ),
             sink,
+            back: [o.to_plan(-w / 2.0, -back), o.to_plan(w / 2.0, -back)],
+            upstand,
+            behind: rect(
+                -w / 2.0 + TOUCH,
+                -back - 4.0 * TOUCH,
+                w / 2.0 - TOUCH,
+                -back,
+            ),
         })
     }
 
@@ -201,6 +229,15 @@ fn runs_of(tops: &[Top], fewest: usize) -> Vec<WorktopRun> {
                 thickness: crate::props::WORKTOP,
                 pieces: g.iter().map(|t| t.piece).collect(),
                 sinks: g.iter().filter_map(|t| t.sink).collect(),
+                upstands: g
+                    .iter()
+                    .filter(|t| t.upstand > 1e-3)
+                    .filter(|t| {
+                        !g.iter()
+                            .any(|o| o.id != t.id && overlap(&t.behind, &o.piece) > 1e-6)
+                    })
+                    .map(|t| (t.back, t.upstand))
+                    .collect(),
                 length: g.iter().map(|t| t.width).sum(),
                 area: g
                     .iter()
@@ -346,5 +383,34 @@ mod tests {
         let b = place(&mut m, l, drawers, 0.9, 0.0, 0.0);
         m.edit_object(b, |o| o.base_offset = 0.1).unwrap();
         assert!(m.worktop_run_of(a).is_none());
+    }
+
+    #[test]
+    fn overhang_and_upstand() {
+        let (mut m, l, drawers, _) = kitchen();
+        let fam = m.object_type(drawers).unwrap().family;
+        let mut values = m.object_type(drawers).unwrap().values.clone();
+        values.insert("overhang".into(), Value::Number(0.3));
+        values.insert("upstand".into(), Value::Number(0.1));
+        let bar = m.add_object_type("Isla con vuelo", fam, values).unwrap();
+        // An island of two back to back: one with its bar overhang, the
+        // other with an upstand that no module stands behind... except
+        // the first one: none.
+        let a = place(&mut m, l, bar, 0.0, 0.0, 0.0);
+        let b = place(&mut m, l, drawers, 0.0, 0.0, std::f64::consts::PI);
+        let r = m.worktop_run_of(a).expect("a run");
+        assert_eq!(r.members, vec![a, b]);
+        assert!(r.upstands.is_empty(), "{:?}", r.upstands);
+        // 0.6 × 0.9 for the bar module, 0.6 × 0.6 for the other.
+        assert!((r.area - (0.6 * 0.9 + 0.36)).abs() < 1e-9, "{}", r.area);
+        // Against a wall, side by side: the upstand all along.
+        let c = place(&mut m, l, bar, 5.0, 0.0, 0.0);
+        let d = place(&mut m, l, bar, 5.6, 0.0, 0.0);
+        let r = m.worktop_run_of(c).expect("a run");
+        assert_eq!(r.members, vec![c, d]);
+        assert_eq!(r.upstands.len(), 2);
+        assert!((r.upstands[0].1 - 0.1).abs() < 1e-9);
+        let along: f64 = r.upstands.iter().map(|(e, _)| e[0].distance(e[1])).sum();
+        assert!((along - 1.2).abs() < 1e-9);
     }
 }
