@@ -79,6 +79,18 @@ Tres niveles de detalle: la planta entera (unos miles de caras; un ciprés, unas
 
 En el IFC cada planta lleva su propia malla (`IfcTriangulatedFaceSet` por material, con el color de cada cara), con la clase de su familia (`IfcGeographicElement` VEGETATION en IFC 4.3) y sus valores (`ArchiSim_FamilyValues`) para leerla de vuelta idéntica.
 
+## 4 bis. En alzados, secciones y axonometrías (C1, v0.58)
+
+En los alzados y las secciones las plantas no se dibujan con su malla 3D, sino como las dibuja un arquitecto: la misma planta vista de lado (su copa, su tronco, sus frondas), con los estilos de la planta.
+
+- **Técnico** (vistas sin estilo de presentación): el estilo técnico de la especie, en líneas, con la copa en blanco, de modo que tapa lo que queda detrás. El «círculo» técnico se dibuja como el contorno real de la copa: un ciprés es alto y un pino piñonero plano.
+- **Presentación** (vistas y planos con estilo de presentación): el estilo y el aspecto de presentación de la especie (contorno, dentado, nube, a mano, follaje, punteado, ramas, hojas, acuarela) con sus colores, sus flores y sus frutos.
+- El tronco sube desde el suelo hasta la copa. Las palmeras, las gramíneas y las rosetas se dibujan siempre por sus frondas, de la más lejana a la más cercana, para que unas tapen a otras.
+- La planta se pone en el orden de profundidad del dibujo: tapa lo que tiene detrás y la tapa lo que tiene delante. Las que quedan delante del plano de una sección no se dibujan.
+- En las **axonometrías**, cada árbol se levanta de pie mirando a quien mira, con su estilo de presentación, en el orden de profundidad del resto del modelo.
+
+`archisim figuras out/` pone en fila árboles, palmeras, arbustos, personas y coches delante de un muro y escribe su alzado 1:50, técnico y en color, y su axonometría. `archisim vivero out/` escribe además un alzado de cada fila del vivero, técnico y en color.
+
 ## 5. Plantaciones
 
 Urbanismo → **Plantación** (tecla J): una línea (con clics, con **Spline** o con **Elegir línea** de un dibujo o DXF) o un contorno cerrado, y:
@@ -104,7 +116,6 @@ Lo que se cambia es la especie: cambian todas sus plantas del proyecto.
 ## 7. Pendiente
 
 - Tiradores en 3D para el alto y el ancho (en planta ya está: el tirador del borde de la copa cambia el ancho y, con Ctrl, también el alto).
-- En secciones y alzados, las hojas de las palmeras salen como trazos sueltos y las copas solo con su relleno: falta su contorno.
 - Hojas con textura (con M3): hoy las matas de hojas son cuerpos facetados de color.
 - Setos como masa continua en planta (hoy, plantas juntas).
 - Estaciones (hoja caduca en invierno, colores de otoño) por vista.

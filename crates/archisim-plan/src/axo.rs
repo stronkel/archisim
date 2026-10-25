@@ -74,6 +74,18 @@ struct Face {
     grey: bool,
     /// Lies on the ground (no higher than the lowest level and flat).
     on_ground: bool,
+    /// A plant standing up to the viewer, drawn as architects draw trees
+    /// (its marks, in the picture), instead of the triangle `pts`.
+    figure: Option<Vec<FigureMark>>,
+}
+
+/// A mark of a plant in the picture: a shape filled (colour and opacity)
+/// and or drawn (paper millimetres).
+struct FigureMark {
+    pts: Vec<Point2>,
+    closed: bool,
+    fill: Option<([u8; 3], f64)>,
+    stroke: Option<f64>,
 }
 
 /// The picture: faces from far to near, and its extent (picture metres).
@@ -131,10 +143,18 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
     let ground_z = model.levels().first().map_or(0.0, |l| l.elevation) + 0.02;
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    let solids = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
-        model_solids(model)
-    });
+    let solids = archisim_geom::solid::without_plants(|| model_solids(model));
+    // Plants stand up to the viewer as figures (below), not by their mesh.
+    let plants: std::collections::HashSet<archisim_core::ObjectId> = model
+        .objects()
+        .filter(|o| model.type_grows(o.object_type))
+        .map(|o| o.id)
+        .collect();
     for solid in solids {
+        if matches!(solid.owner, archisim_geom::solid::SolidOwner::Object(o) if plants.contains(&o))
+        {
+            continue;
+        }
         let mat = model.material(solid.material);
         if mat.is_some_and(|m| m.category == "glass") {
             // Glass would hide what is behind it.
@@ -209,8 +229,89 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 edges,
                 grey,
                 on_ground: t.iter().all(|p| p[2] <= ground_z) && n[2] > 0.9,
+                figure: None,
             });
         }
+    }
+    // Each plant seen from where the picture looks, standing at its foot:
+    // its marks (in its presentation style) lifted into the picture.
+    let toward = [-f.toward[0], -f.toward[1]];
+    for &id in &plants {
+        let Some(o) = model.object(id) else {
+            continue;
+        };
+        let Some(marks) = model.plant_side_marks(id, toward, true, 100.0) else {
+            continue;
+        };
+        let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+        let foot = [o.position.x, o.position.y, z0];
+        let at = |p: [f64; 2]| {
+            f.project([
+                foot[0] + f.right[0] * p[0],
+                foot[1] + f.right[1] * p[0],
+                foot[2] + p[1],
+            ])
+        };
+        let mut figure = Vec::new();
+        let mut top: f64 = 0.0;
+        for m in marks {
+            use archisim_core::family::{Mark, Pen};
+            let width = |pen: Pen| match pen {
+                Pen::View => Some(0.18),
+                Pen::None => None,
+                _ => Some(0.1),
+            };
+            match m {
+                Mark::Polygon {
+                    points,
+                    pen,
+                    filled,
+                    tint,
+                    opacity,
+                    ..
+                } => {
+                    let fill = match tint.and_then(|t| model.material(archisim_core::MaterialId(t)))
+                    {
+                        Some(m) => Some((m.cut_color, opacity)),
+                        None if filled => Some(([255, 255, 255], 1.0)),
+                        None => None,
+                    };
+                    for q in &points {
+                        top = top.max(q[1]);
+                    }
+                    figure.push(FigureMark {
+                        pts: points.into_iter().map(at).collect(),
+                        closed: true,
+                        fill,
+                        stroke: width(pen),
+                    });
+                }
+                Mark::Line { from, to, pen, .. } => figure.push(FigureMark {
+                    pts: vec![at(from), at(to)],
+                    closed: false,
+                    fill: None,
+                    stroke: width(pen),
+                }),
+                Mark::Arc { .. } => {}
+            }
+        }
+        for m in &figure {
+            for p in &m.pts {
+                lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+            }
+        }
+        let middle = [foot[0], foot[1], foot[2] + top / 2.0];
+        let base = f.project(foot);
+        faces.push(Face {
+            pts: [base, base, base],
+            depth: dot(middle, f.toward),
+            fill: [0, 0, 0],
+            edges: [false; 3],
+            grey: model.dimmed(focus, id.0),
+            on_ground: false,
+            figure: Some(figure),
+        });
     }
     if faces.is_empty() {
         lo = Point2::new(0.0, 0.0);
@@ -264,6 +365,10 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
     for (i, face) in d.faces.iter().enumerate() {
         if i == d.ground && !d.shadows.is_empty() {
             draw_axo_shadows(&mut s, d);
+        }
+        if let Some(marks) = &face.figure {
+            draw_figure(&mut s, marks, face.grey, k);
+            continue;
         }
         if !face.pts.iter().any(inside) {
             // Wholly outside the crop (a tree of the far corner).
@@ -330,6 +435,50 @@ pub fn render_axo(d: &AxoDrawing, crop: (Point2, Point2), scale: f64) -> String 
     }
     s.push_str("</g>\n</svg>\n");
     s
+}
+
+/// A plant's marks in the picture (grey when its discipline is).
+fn draw_figure(s: &mut String, marks: &[FigureMark], grey: bool, k: f64) {
+    let tone = |[r, g, b]: [u8; 3]| -> String {
+        if grey {
+            let v = (255.0 - (255.0 - (0.3 * r as f64 + 0.59 * g as f64 + 0.11 * b as f64)) * 0.38)
+                as u8;
+            format!("#{v:02x}{v:02x}{v:02x}")
+        } else {
+            format!("#{r:02x}{g:02x}{b:02x}")
+        }
+    };
+    let ink = if grey { "#a9a9a9" } else { "#222" };
+    for m in marks {
+        if m.pts.len() < 2 {
+            continue;
+        }
+        let mut d = String::new();
+        for (i, p) in m.pts.iter().enumerate() {
+            let _ = write!(
+                d,
+                "{}{} {}",
+                if i == 0 { "M" } else { "L" },
+                num(p.x),
+                num(-p.y)
+            );
+        }
+        if m.closed {
+            d.push('Z');
+        }
+        let fill = match m.fill {
+            Some((c, op)) if op < 1.0 => {
+                format!(r#"fill="{}" fill-opacity="{}""#, tone(c), num(op))
+            }
+            Some((c, _)) => format!(r#"fill="{}""#, tone(c)),
+            None => r#"fill="none""#.to_string(),
+        };
+        let stroke = match m.stroke {
+            Some(w) => format!(r#"stroke="{ink}" stroke-width="{}""#, num(w * k)),
+            None => r#"stroke="none""#.to_string(),
+        };
+        let _ = writeln!(s, r#"<path d="{d}" {fill} {stroke}/>"#);
+    }
 }
 
 fn draw_axo_shadows(s: &mut String, d: &AxoDrawing) {

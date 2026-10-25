@@ -229,59 +229,45 @@ impl Model {
                 crown_mm,
             }
         };
-        let tint = |tone: flora::Tone| match tone {
-            flora::Tone::Leaves => l.materials.leaves,
-            flora::Tone::Bark => l.materials.bark,
-            flora::Tone::Flowers => l.materials.flowers,
-            flora::Tone::Fruit => l.materials.fruit,
+        plant_shape_marks(l, plant.plan(&options))
+    }
+
+    /// A placed plant seen from the side, looking along `toward` (level,
+    /// in the project's axes), for elevations and sections: of
+    /// presentation or technical, at a drawing scale (1:`scale`). Each
+    /// point is `[across, up]` in metres from its foot, `across` to the
+    /// viewer's right.
+    pub fn plant_side_marks(
+        &self,
+        id: ObjectId,
+        toward: [f64; 2],
+        presenting: bool,
+        scale: f64,
+    ) -> Option<Vec<Mark>> {
+        let l = self.plant_look(id)?;
+        let o = self.objects.get(&id)?;
+        // The view in the plant's own axes (it is turned with its object).
+        let (sn, cs) = (-o.rotation).sin_cos();
+        let local = [
+            toward[0] * cs - toward[1] * sn,
+            toward[0] * sn + toward[1] * cs,
+        ];
+        let plant = flora::plant(&l.species, l.seed, l.variation);
+        let options = flora::SideOptions {
+            style: if presenting {
+                l.presentation
+            } else {
+                l.technical
+            },
+            look: if presenting {
+                l.look
+            } else {
+                flora::Look::Lines
+            },
+            opacity: l.opacity,
+            m_per_mm: scale.max(1.0) / 1000.0,
         };
-        let mut marks = Vec::new();
-        for s in plant.plan(&options) {
-            match s {
-                flora::Shape::Fill {
-                    points,
-                    tone,
-                    opacity,
-                } => marks.push(Mark::Polygon {
-                    points,
-                    pen: Pen::None,
-                    style: LineStyle::Continuous,
-                    filled: true,
-                    tint: Some(tint(tone).0),
-                    opacity,
-                }),
-                flora::Shape::Line {
-                    points,
-                    closed,
-                    stroke,
-                } => {
-                    let pen = match stroke {
-                        flora::Stroke::Outline => Pen::View,
-                        flora::Stroke::Thin => Pen::Thin,
-                    };
-                    if closed && points.len() >= 3 {
-                        marks.push(Mark::Polygon {
-                            points,
-                            pen,
-                            style: LineStyle::Continuous,
-                            filled: false,
-                            tint: None,
-                            opacity: 1.0,
-                        });
-                    } else {
-                        for w in points.windows(2) {
-                            marks.push(Mark::Line {
-                                from: w[0],
-                                to: w[1],
-                                pen,
-                                style: LineStyle::Continuous,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        marks
+        Some(plant_shape_marks(&l, plant.side(local, &options)))
     }
 
     /// The level of detail the views take for the plants: the most
@@ -339,4 +325,64 @@ impl Model {
         }
         (mesh, parts)
     }
+}
+
+/// Plant shapes as marks: fills tinted with the plant's materials (the
+/// paper's white untinted), lines with the view pen (outline) or thin.
+fn plant_shape_marks(l: &PlantLook, shapes: Vec<flora::Shape>) -> Vec<Mark> {
+    let tint = |tone: flora::Tone| match tone {
+        flora::Tone::Leaves => Some(l.materials.leaves.0),
+        flora::Tone::Bark => Some(l.materials.bark.0),
+        flora::Tone::Flowers => Some(l.materials.flowers.0),
+        flora::Tone::Fruit => Some(l.materials.fruit.0),
+        flora::Tone::Paper => None,
+    };
+    let mut marks = Vec::new();
+    for s in shapes {
+        match s {
+            flora::Shape::Fill {
+                points,
+                tone,
+                opacity,
+            } => marks.push(Mark::Polygon {
+                points,
+                pen: Pen::None,
+                style: LineStyle::Continuous,
+                filled: true,
+                tint: tint(tone),
+                opacity,
+            }),
+
+            flora::Shape::Line {
+                points,
+                closed,
+                stroke,
+            } => {
+                let pen = match stroke {
+                    flora::Stroke::Outline => Pen::View,
+                    flora::Stroke::Thin => Pen::Thin,
+                };
+                if closed && points.len() >= 3 {
+                    marks.push(Mark::Polygon {
+                        points,
+                        pen,
+                        style: LineStyle::Continuous,
+                        filled: false,
+                        tint: None,
+                        opacity: 1.0,
+                    });
+                } else {
+                    for w in points.windows(2) {
+                        marks.push(Mark::Line {
+                            from: w[0],
+                            to: w[1],
+                            pen,
+                            style: LineStyle::Continuous,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    marks
 }

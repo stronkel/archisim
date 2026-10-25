@@ -6,6 +6,39 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (6) · v0.58: C1, árboles, personas y coches en alzado, sección y axonometría
+
+Rama `bloque/c1-figuras`, pull request para Antonio. Sin cambios de formato ni de IFC: la familia «Persona» pasa a la versión 3, con más materiales, y los proyectos la cogen de la biblioteca al actualizar familias.
+
+Antonio confirmó el orden C1–C7 de la hoja de ruta común (§9). Este es C1.
+
+**Hecho**
+- **Plantas en alzados y secciones** como las dibuja un arquitecto, no con la red de triángulos de su 3D:
+  - la misma planta vista de lado: copa, tronco desde el suelo, frondas;
+  - en técnico, el estilo técnico de la especie en líneas y en blanco, de modo que tapa lo de detrás;
+  - en las vistas y planos con estilo de presentación, su estilo y sus colores (nube, follaje, acuarela, ramas, flores, frutos);
+  - las palmeras por sus frondas, de la más lejana a la más cercana;
+  - cada planta en su sitio del orden de profundidad: el edificio la tapa o ella tapa al edificio.
+- **Axonometrías**: cada árbol de pie mirando a quien mira, con su estilo de presentación, sin facetas.
+- **Personas y coches**:
+  - rehechos en el estilo de la biblioteca acogedora: figuras redondeadas con ropa, piel y pelo de colores, y coches de formas suaves con ruedas gruesas;
+  - en alzados y secciones, por su **silueta**: blanca con su contorno en técnico, y cada pieza en su color en presentación.
+- Los cuerpos lisos (un árbol de la biblioteca que no es generado, un mueble redondo) dibujan ahora su contorno en alzado, que antes salía en blanco.
+- Los alzados pesan mucho menos: el sur de la demo pasa de 38 MB a 24 MB, y el de `figuras` es de 0,6 MB.
+- `archisim figuras out/`: árboles, palmeras, arbustos, personas, coches y una bicicleta en fila delante de un muro, en alzado 1:50 técnico y en color y en axonometría. `archisim vivero out/` escribe también un alzado de cada fila del vivero.
+
+**Pendiente**
+- En las axonometrías, las personas y los coches siguen con su volumen 3D, que es como se ven bien en 3D.
+- C2 (cocina y muebles, segunda vuelta) es lo siguiente.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- figuras out/figuras` y abre en el navegador `out/figuras/figuras-alzado-tecnico.svg`, `figuras-alzado-color.svg` y `figuras-3d.svg`. Mira si los árboles, las personas y los coches están dibujados como los quieres en un alzado.
+2. Abre la demo, ve a la pestaña «Alzado Sur» (Navegador → Proyecto → Secciones y alzados) y mira los árboles y el coche. Cambia en Propiedades el estilo de una planta (técnico y de presentación) y míralo en el alzado.
+3. Abre el plano A-03 Presentación: la sección y la vista 3D deben llevar los árboles en color.
+4. `cargo run --release -p archisim-cli -- vivero out/vivero`: un alzado por cada grupo de especies (`vivero-alzado-*-color.svg` y `-tecnico.svg`).
+
+---
+
 ## 2026-10-24 (5) · v0.57: los remates de la 0.48, rehechos sobre la 0.56
 
 Rama `bloque/remates-2`, pull request para Antonio (sustituye a #54). **Formato `.archisim` versión 34**: abre todas las anteriores, también los ficheros guardados con la 0.48, que tenía su propia versión 32.

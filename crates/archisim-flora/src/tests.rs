@@ -445,70 +445,104 @@ fn pictures() {
                 });
                 let ox = cell * (i as f64 + 0.5);
                 let oy = cell * (j as f64 + 0.5);
-                for sh in shapes {
-                    let (pts, closed, stroke, fill, op) = match &sh {
-                        Shape::Line {
-                            points,
-                            closed,
-                            stroke,
-                        } => (points, *closed, Some(*stroke), None, 1.0),
-                        Shape::Fill {
-                            points,
-                            tone,
-                            opacity,
-                        } => (points, true, None, Some(*tone), *opacity),
-                    };
-                    let mut d = String::new();
-                    for (n, q) in pts.iter().enumerate() {
-                        d.push_str(&format!(
-                            "{}{:.2},{:.2} ",
-                            if n == 0 { "M" } else { "L" },
-                            ox + q[0] * k,
-                            oy - q[1] * k
-                        ));
-                    }
-                    if closed {
-                        d.push('Z');
-                    }
-                    let fill = match fill {
-                        Some(Tone::Leaves) => format!(
-                            "rgb({},{},{})",
-                            colors.leaves[0], colors.leaves[1], colors.leaves[2]
-                        ),
-                        Some(Tone::Bark) => format!(
-                            "rgb({},{},{})",
-                            colors.bark[0], colors.bark[1], colors.bark[2]
-                        ),
-                        Some(Tone::Flowers) => format!(
-                            "rgb({},{},{})",
-                            colors.flowers[0], colors.flowers[1], colors.flowers[2]
-                        ),
-                        Some(Tone::Fruit) => format!(
-                            "rgb({},{},{})",
-                            colors.fruit[0], colors.fruit[1], colors.fruit[2]
-                        ),
-                        None => "none".into(),
-                    };
-                    let w = match stroke {
-                        Some(Stroke::Outline) => 0.9,
-                        Some(Stroke::Thin) => 0.45,
-                        None => 0.0,
-                    };
-                    let stroke = if w > 0.0 { "black" } else { "none" };
-                    svg.push_str(&format!(
-                        "<path d='{d}' fill='{fill}' fill-opacity='{op}' stroke='{stroke}' stroke-width='{w}'/>\n"
-                    ));
-                }
+                svg.push_str(&svg_paths(&shapes, ox, oy, k, &colors));
             }
         }
         svg.push_str("</svg>\n");
         std::fs::write(format!("{dir}/{name}-planta.svg"), svg).unwrap();
+        // Seen from the side: a row per look, a column per style.
+        let span = p.height.max(p.radius * 2.0).max(0.1);
+        let k = cell * 0.9 / span;
+        let mut side = format!(
+            "<svg xmlns='http://www.w3.org/2000/svg' width='{}' height='{}' style='background:white'>\n",
+            cell * styles.len() as f64,
+            cell * looks.len() as f64
+        );
+        for (j, look) in looks.iter().enumerate() {
+            for (i, style) in styles.iter().enumerate() {
+                let shapes = p.side(
+                    [0.0, 1.0],
+                    &SideOptions {
+                        style: *style,
+                        look: *look,
+                        opacity: 0.6,
+                        m_per_mm: span / 70.0,
+                    },
+                );
+                let ox = cell * (i as f64 + 0.5);
+                let oy = cell * (j as f64 + 0.95);
+                side.push_str(&svg_paths(&shapes, ox, oy, k, &colors));
+            }
+        }
+        side.push_str("</svg>\n");
+        std::fs::write(format!("{dir}/{name}-alzado.svg"), side).unwrap();
         for lod in Lod::ALL {
             let m = p.mesh(&colors, lod);
             let img = render(&m, 360);
             std::fs::write(format!("{dir}/{name}-3d-{lod:?}.ppm"), img).unwrap();
         }
     }
+}
+
+/// SVG paths of some shapes, `k` pixels a metre from `(ox, oy)`, `y` up.
+fn svg_paths(shapes: &[Shape], ox: f64, oy: f64, k: f64, colors: &Colors) -> String {
+    let mut out = String::new();
+    for sh in shapes {
+        let (pts, closed, stroke, fill, op) = match &sh {
+            Shape::Line {
+                points,
+                closed,
+                stroke,
+            } => (points, *closed, Some(*stroke), None, 1.0),
+            Shape::Fill {
+                points,
+                tone,
+                opacity,
+            } => (points, true, None, Some(*tone), *opacity),
+        };
+        let mut d = String::new();
+        for (n, q) in pts.iter().enumerate() {
+            d.push_str(&format!(
+                "{}{:.2},{:.2} ",
+                if n == 0 { "M" } else { "L" },
+                ox + q[0] * k,
+                oy - q[1] * k
+            ));
+        }
+        if closed {
+            d.push('Z');
+        }
+        let fill = match fill {
+            Some(Tone::Leaves) => format!(
+                "rgb({},{},{})",
+                colors.leaves[0], colors.leaves[1], colors.leaves[2]
+            ),
+            Some(Tone::Bark) => format!(
+                "rgb({},{},{})",
+                colors.bark[0], colors.bark[1], colors.bark[2]
+            ),
+            Some(Tone::Flowers) => format!(
+                "rgb({},{},{})",
+                colors.flowers[0], colors.flowers[1], colors.flowers[2]
+            ),
+            Some(Tone::Fruit) => format!(
+                "rgb({},{},{})",
+                colors.fruit[0], colors.fruit[1], colors.fruit[2]
+            ),
+            Some(Tone::Paper) => "white".into(),
+            None => "none".into(),
+        };
+        let w = match stroke {
+            Some(Stroke::Outline) => 0.9,
+            Some(Stroke::Thin) => 0.45,
+            None => 0.0,
+        };
+        let stroke = if w > 0.0 { "black" } else { "none" };
+        out.push_str(&format!(
+            "<path d='{d}' fill='{fill}' fill-opacity='{op}' stroke='{stroke}' stroke-width='{w}'/>\n"
+        ));
+    }
+    out
 }
 
 /// A small z-buffer drawing of a mesh, seen from the south a little from

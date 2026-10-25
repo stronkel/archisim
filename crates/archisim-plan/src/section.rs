@@ -63,6 +63,34 @@ struct Face {
     /// An opening line of a door or window (thin): `Some(true)` dashed, as
     /// when its leaves open away from the viewer.
     opening_line: Option<bool>,
+    /// A plant drawn as architects draw them seen from the side, not by
+    /// its mesh: its marks are made when the drawing is written, of
+    /// presentation or technical as the view is (`poly` is only the box
+    /// round it, to pick it).
+    figure: Option<Figure>,
+}
+
+/// A plant, a person or a car seen from the side in a section or
+/// elevation, drawn whole rather than face by face.
+#[derive(Debug, Clone)]
+enum Figure {
+    /// A plant: its marks are made when the drawing is written.
+    Plant {
+        object: archisim_core::ObjectId,
+        /// Its foot, in the drawing.
+        at: Point2,
+        /// The direction the section looks, in plan.
+        toward: [f64; 2],
+        /// The drawing's `x` runs to the viewer's left (marks are drawn
+        /// to the viewer's right).
+        flip: bool,
+    },
+    /// A person or a car: what each of its materials covers, the largest
+    /// first, and its silhouette.
+    Body {
+        pieces: Vec<(MaterialId, Vec<archisim_geom::junctions::Shape>)>,
+        outline: Vec<archisim_geom::junctions::Shape>,
+    },
 }
 
 /// Faces are split until no edge is longer than this, so that painting
@@ -163,6 +191,12 @@ impl SectionDrawing {
             .map(|f| f.owner)
     }
 
+    /// Whether an object is seen in the section (cut or beyond).
+    pub fn pick_object(&self, id: archisim_core::ObjectId) -> bool {
+        let me = SolidOwner::Object(id);
+        self.cuts.iter().any(|c| c.3 == me) || self.faces.iter().any(|f| f.owner == me)
+    }
+
     /// What an element looks like in the section, to highlight it: the
     /// loops of its cut, and its faces seen beyond (pieces of polygons).
     pub fn shape_of(&self, owner: SolidOwner) -> (Vec<Vec<Point2>>, Vec<Vec<Point2>>) {
@@ -212,6 +246,74 @@ impl SectionDrawing {
     }
 }
 
+/// The path of shapes with their holes (to fill with `evenodd`).
+fn shapes_path(shapes: &[archisim_geom::junctions::Shape]) -> String {
+    let mut d = String::new();
+    for (outer, holes) in shapes {
+        d.push_str(&path(outer));
+        for h in holes {
+            d.push(' ');
+            d.push_str(&path(h));
+        }
+        d.push(' ');
+    }
+    d.trim_end().to_string()
+}
+
+/// A person or a car as architects draw them seen from the side: in a
+/// presentation, each material in its colour; otherwise white, its
+/// pieces (glass, wheels, face) in thin lines. Its outline over all.
+fn draw_body(
+    out: &mut String,
+    model: &Model,
+    pieces: &[(MaterialId, Vec<archisim_geom::junctions::Shape>)],
+    outline: &[archisim_geom::junctions::Shape],
+    presenting: bool,
+    k: f64,
+) {
+    let whole = shapes_path(outline);
+    if presenting {
+        for (m, shapes) in pieces {
+            let [r, g, b] = model.material(*m).map_or([200, 200, 200], |m| m.cut_color);
+            let _ = writeln!(
+                out,
+                r#"<path d="{}" fill="rgb({r},{g},{b})" fill-rule="evenodd" stroke="none"/>"#,
+                shapes_path(shapes)
+            );
+        }
+    } else {
+        let _ = writeln!(
+            out,
+            r#"<path d="{whole}" fill="white" fill-rule="evenodd" stroke="none"/>"#
+        );
+        for (_, shapes) in pieces.iter().skip(1) {
+            let _ = writeln!(
+                out,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                shapes_path(shapes),
+                num(pens().thin * k)
+            );
+        }
+    }
+    let _ = writeln!(
+        out,
+        r#"<path d="{whole}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+        num(pens().view * k)
+    );
+}
+
+/// The points of a mark (an arc by its ends and centre).
+fn mark_points(m: &archisim_core::family::Mark) -> Vec<[f64; 2]> {
+    use archisim_core::family::Mark;
+    match m {
+        Mark::Line { from, to, .. } => vec![*from, *to],
+        Mark::Polygon { points, .. } => points.clone(),
+        Mark::Arc {
+            center, from, to, ..
+        } => vec![*center, *from, *to],
+    }
+}
+
 pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     let mut d = SectionDrawing {
         title: sec.title(),
@@ -238,10 +340,62 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
     }
 
     let mut faces: Vec<(f64, Face)> = Vec::new();
-    let all = archisim_geom::solid::with_plant_detail(archisim_core::flora::Lod::Medium, || {
-        model_solids(model)
-    });
+    let all = archisim_geom::solid::without_plants(|| model_solids(model));
+    // Plants are drawn as figures (below), not by their mesh.
+    let plants: std::collections::HashSet<archisim_core::ObjectId> = model
+        .objects()
+        .filter(|o| model.type_grows(o.object_type))
+        .map(|o| o.id)
+        .collect();
+    // People and vehicles: drawn by their silhouette (below).
+    let bodies: std::collections::HashSet<archisim_core::ObjectId> = model
+        .objects()
+        .filter(|o| !plants.contains(&o.id))
+        .filter(|o| {
+            model
+                .object_type(o.object_type)
+                .and_then(|t| model.family(t.family))
+                .is_some_and(|f| matches!(f.def().category.as_str(), "people" | "vehicle"))
+        })
+        .map(|o| o.id)
+        .collect();
+    // Their faces seen from the section, flat on the drawing, by
+    // material; and how deep they are.
+    #[allow(clippy::type_complexity)]
+    let mut body_faces: HashMap<
+        archisim_core::ObjectId,
+        (Vec<(MaterialId, Vec<[Point2; 3]>)>, f64, usize),
+    > = HashMap::new();
     for solid in all {
+        if matches!(solid.owner, SolidOwner::Object(o) if plants.contains(&o)) {
+            continue;
+        }
+        if let SolidOwner::Object(o) = solid.owner {
+            if bodies.contains(&o) {
+                let entry = body_faces.entry(o).or_default();
+                let mut tris = Vec::new();
+                for t in &solid.triangles {
+                    let n = cross(sub(t[1], t[0]), sub(t[2], t[0]));
+                    if dot(n, view) > -1e-12 {
+                        continue;
+                    }
+                    let ds = t.map(depth_of);
+                    if ds.iter().all(|v| *v < plane) || ds.iter().all(|v| *v > sec.depth) {
+                        continue;
+                    }
+                    entry.1 += ds.iter().sum::<f64>() / 3.0;
+                    entry.2 += 1;
+                    tris.push(t.map(to2));
+                }
+                if !tris.is_empty() {
+                    match entry.0.iter_mut().find(|(m, _)| *m == solid.material) {
+                        Some((_, v)) => v.extend(tris),
+                        None => entry.0.push((solid.material, tris)),
+                    }
+                }
+                continue;
+            }
+        }
         let glass = model
             .material(solid.material)
             .is_some_and(|m| m.category == "glass");
@@ -264,25 +418,17 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 edge_faces.entry(k).or_default().push(i);
             }
         }
-        // The leaves of a plant: only their sharpest turns, or a crown
-        // would be a net of facets.
-        let crease = match solid.owner {
-            SolidOwner::Object(o)
-                if model
-                    .plant_look(o)
-                    .is_some_and(|l| solid.material != l.materials.bark) =>
-            {
-                0.2
-            }
-            _ => CREASE_COS,
-        };
+        let crease = CREASE_COS;
+        // A corner, or the outline of a rounded body (a crown, a car, a
+        // person): the face on its other side looks away from the viewer.
         let is_corner = |a: P3, b: P3, me: usize| {
             let (a, b) = (key(a), key(b));
             let k = if a <= b { (a, b) } else { (b, a) };
             match edge_faces.get(&k) {
-                Some(list) if list.len() >= 2 => list
-                    .iter()
-                    .any(|&j| j != me && dot(normals[j], normals[me]) < crease),
+                Some(list) if list.len() >= 2 => list.iter().any(|&j| {
+                    j != me
+                        && (dot(normals[j], normals[me]) < crease || dot(normals[j], view) > -1e-3)
+                }),
                 _ => true,
             }
         };
@@ -363,6 +509,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                         fill: if glass { GLASS } else { [255, 255, 255] },
                         edges: Vec::new(),
                         opening_line: None,
+                        figure: None,
                     },
                 ));
                 // Each edge is painted on its own, a little ahead of where
@@ -378,11 +525,113 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                             fill: [0, 0, 0],
                             edges: vec![(to2(a), to2(b))],
                             opening_line: None,
+                            figure: None,
                         },
                     ));
                 }
             }
         }
+    }
+    // Plants behind the line and within the depth, as figures: standing
+    // at their foot, at its depth among the faces.
+    let right = Point2::new(look.y, -look.x);
+    for &id in &plants {
+        let Some(obj) = model.object(id) else {
+            continue;
+        };
+        let z0 = model.level(obj.level).map_or(0.0, |l| l.elevation) + obj.base_offset;
+        let foot = [obj.position.x, obj.position.y, z0];
+        let depth = depth_of(foot);
+        if depth < plane || depth > sec.depth {
+            continue;
+        }
+        let toward = [look.x, look.y];
+        let flip = right.dot(u) < 0.0;
+        let at = to2(foot);
+        // The box round its technical drawing, to pick it and to frame
+        // the drawing.
+        let Some(marks) = model.plant_side_marks(id, toward, false, 100.0) else {
+            continue;
+        };
+        let (mut a, mut b) = ([f64::MAX; 2], [f64::MIN; 2]);
+        for p in marks.iter().flat_map(mark_points) {
+            for k in 0..2 {
+                a[k] = a[k].min(p[k]);
+                b[k] = b[k].max(p[k]);
+            }
+        }
+        if a[0] > b[0] {
+            continue;
+        }
+        let x = |v: f64| at.x + if flip { -v } else { v };
+        let (x0, x1) = (x(a[0]).min(x(b[0])), x(a[0]).max(x(b[0])));
+        let poly = vec![
+            Point2::new(x0, at.y + a[1]),
+            Point2::new(x1, at.y + a[1]),
+            Point2::new(x1, at.y + b[1]),
+            Point2::new(x0, at.y + b[1]),
+        ];
+        for q in &poly {
+            grow_to(&mut lo, &mut hi, *q);
+        }
+        faces.push((
+            depth,
+            Face {
+                owner: SolidOwner::Object(id),
+                poly,
+                fill: [255, 255, 255],
+                edges: Vec::new(),
+                opening_line: None,
+                figure: Some(Figure::Plant {
+                    object: id,
+                    at,
+                    toward,
+                    flip,
+                }),
+            },
+        ));
+    }
+    for (id, (by_material, depth_sum, count)) in body_faces {
+        if count == 0 {
+            continue;
+        }
+        // Traced on a centimetre grid: a fifth of a millimetre at 1:50.
+        let cell = 0.01;
+        let all: Vec<[Point2; 3]> = by_material.iter().flat_map(|(_, t)| t.clone()).collect();
+        let outline = archisim_geom::cover::cover(&all, cell);
+        if outline.is_empty() {
+            continue;
+        }
+        let mut pieces: Vec<(MaterialId, Vec<archisim_geom::junctions::Shape>)> = by_material
+            .iter()
+            .map(|(m, t)| (*m, archisim_geom::cover::cover(t, cell)))
+            .filter(|(_, s)| !s.is_empty())
+            .collect();
+        pieces.sort_by(|a, b| {
+            archisim_geom::junctions::area(&b.1).total_cmp(&archisim_geom::junctions::area(&a.1))
+        });
+        let poly: Vec<Point2> = outline.iter().flat_map(|(o, _)| o.clone()).collect();
+        let (mut a, mut b) = (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        );
+        for q in &poly {
+            a = Point2::new(a.x.min(q.x), a.y.min(q.y));
+            b = Point2::new(b.x.max(q.x), b.y.max(q.y));
+        }
+        grow_to(&mut lo, &mut hi, a);
+        grow_to(&mut lo, &mut hi, b);
+        faces.push((
+            depth_sum / count as f64,
+            Face {
+                owner: SolidOwner::Object(id),
+                poly: vec![a, Point2::new(b.x, a.y), b, Point2::new(a.x, b.y)],
+                fill: [255, 255, 255],
+                edges: Vec::new(),
+                opening_line: None,
+                figure: Some(Figure::Body { pieces, outline }),
+            },
+        ));
     }
     // Opening lines of the doors and windows seen beyond the cut, on the
     // face that looks at the section: as drawn if their leaves open
@@ -404,6 +653,7 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     fill: [0, 0, 0],
                     edges: vec![(to2(a), to2(b))],
                     opening_line: Some(l.dashed || !towards),
+                    figure: None,
                 },
             ));
         }
@@ -927,6 +1177,8 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         None => true,
     };
 
+    // Plants drawn in colour in a presentation view, in lines otherwise.
+    let presenting = crate::presentation::style_of(model, &options.style).is_some();
     // Beyond: far to near.
     s.push_str("<g id=\"beyond\" stroke-linejoin=\"round\" stroke-linecap=\"round\">\n");
     let mut edges = String::new();
@@ -944,6 +1196,33 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
     // One face of what is seen beyond, into `out` (its loose edges into
     // `edges`, drawn together).
     let face = |out: &mut String, edges: &mut String, f: &Face| {
+        if let Some(fig) = &f.figure {
+            if !visible(&f.poly) {
+                return;
+            }
+            flush(out, edges);
+            match fig {
+                Figure::Plant {
+                    object,
+                    at,
+                    toward,
+                    flip,
+                } => {
+                    if let Some(marks) =
+                        model.plant_side_marks(*object, *toward, presenting, options.scale)
+                    {
+                        let world = |p: [f64; 2]| {
+                            Point2::new(at.x + if *flip { -p[0] } else { p[0] }, at.y + p[1])
+                        };
+                        crate::draw_marks(out, model, marks, &world, k);
+                    }
+                }
+                Figure::Body { pieces, outline } => {
+                    draw_body(out, model, pieces, outline, presenting, k);
+                }
+            }
+            return;
+        }
         if let Some(dashed) = f.opening_line {
             flush(out, edges);
             let mut dashes = String::new();

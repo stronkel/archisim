@@ -1192,11 +1192,28 @@ pub fn with_plant_detail<T>(lod: archisim_core::flora::Lod, f: impl FnOnce() -> 
     out
 }
 
+thread_local! {
+    static NO_PLANTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with the plants left without solids: drawings that draw them
+/// as figures (elevations, sections, axonometries) need not grow their
+/// meshes.
+pub fn without_plants<T>(f: impl FnOnce() -> T) -> T {
+    let old = NO_PLANTS.with(|c| c.replace(true));
+    let out = f();
+    NO_PLANTS.with(|c| c.set(old));
+    out
+}
+
 /// Solids of a plant grown by ArchiSim: one per material, at the level of
 /// detail the views take ([`Model::plant_detail`]), turned and placed.
 /// `None` for an object that is not a plant.
 pub fn plant_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Solid>> {
     let o = model.object(id)?;
+    if NO_PLANTS.with(|c| c.get()) {
+        return model.type_grows(o.object_type).then(Vec::new);
+    }
     let (mesh, parts) = model.plant_mesh(id, plant_lod(model))?;
     let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
     let place = |p: [f32; 3]| -> P3 {

@@ -25,6 +25,7 @@
 //! wall (or one of its layers) into the solid pieces between openings.
 
 pub mod anchors;
+pub mod cover;
 pub mod csg;
 pub mod forms;
 pub mod index;

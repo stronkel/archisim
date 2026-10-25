@@ -183,6 +183,19 @@ Antonio: «el mobiliario urbano sigue siendo muy básico y cuando pongo una faro
 
 Para el programador: `archisim-props::street` y `archisim-props::extras`; lo que brilla y alumbra de noche, `view3d::scene::glow_materials` (lámparas 4,5 m; farolas 11 m).
 
+## Personas y coches en el estilo acogedor (C1, v0.58)
+
+Personas y coches se rehicieron con las formas suaves de la biblioteca acogedora:
+
+- **Personas**: figuras de maqueta redondeadas (hombre, mujer con vestido y persona caminando), con la ropa (`mat`), el pantalón y los zapatos (`mat2`), la piel (`skin`) y el pelo (`hair`) cada uno en su material. Si el tipo trae un solo material, la figura sale de un color, como antes. En la biblioteca, «Persona», «Mujer» y «Niño» traen colores de la paleta (pana azul petróleo, lana teja, terciopelo mostaza, vaquero; piel; pelo castaño o negro).
+- **Coches**: carrocería y parachoques muy redondeados, faros y espejos redondos, ruedas gruesas con tapacubos abombado. «Turismo», «Todoterreno» y «Furgoneta» traen chapa salvia, crema y teja.
+
+En los **alzados y secciones** las personas y los coches (categorías personas y vehículos) se dibujan por su **silueta**, no cara a cara:
+- en técnico, en blanco con su contorno y las piezas (lunas, ruedas, cara) en línea fina;
+- en presentación, cada material en su color.
+
+La silueta sale de los triángulos de su 3D vistos desde la sección, pintados en una rejilla de 1 cm y contorneados (`archisim_geom::cover`). En 3D y en las axonometrías se ven con su volumen.
+
 ## Pendiente
 
 - Estanterías con objetos (hecho en v0.52); muebles en L; más colecciones (rústica, industrial) si Antonio las quiere.
