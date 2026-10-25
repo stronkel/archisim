@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 · v0.69: pincel único, cubiertas del suelo, rocas (C8)
+
+Rama `bloque/c8-pincel`, encima de `bloque/c7-deudas` (#73), con pull request para Antonio. **Formato `.archisim` versión 39** (el aspecto de un material puede llevar hierba y flores; abre todas las anteriores). Pedido por Antonio el 26/10/2026 tras probar C5, con una captura de Paralives.
+
+**Hecho**
+- **Un solo Pincel, en Técnica y en Maqueta**: en Técnica está en la ficha Urbanismo (tecla `PI`); en la Maqueta, en Exterior → Terreno y caminos. Ya no hay un pincel por cada terreno.
+- **Modos** (botones arriba del panel y en la barra contextual): Pintar, Borrar, Subir, Bajar, Suavizar, Allanar y Esparcir. Borrar quita lo pintado (vuelve a verse el terreno) y, si se quiere, las plantas y rocas que haya debajo.
+- **Cabezales**: redondo, cuadrado, difuminado (más pequeño en el borde, para trazos suaves) y salpicado (manchas sueltas). Tamaño y fuerza con deslizadores; el contorno del pincel se ve en planta y en 3D.
+- **Paleta de cubiertas** con muestras dibujadas: césped, césped natural, hierba alta, pradera seca, pradera con flores amarillas, flores silvestres, margaritas, amapolas; tierra, tierra oscura, camino de tierra, arena, grava, losas de piedra, hojarasca y corteza de pino. Cada una es un material del proyecto (se crea la primera vez que se usa).
+- **Hierba y flores de verdad**: las cubiertas de césped y pradera levantan en 3D matas de hierba con su altura y flores de colores; en planta, trazos de hierba y puntos de flores. En el render y en el `.glb` también. Al pasar de unas 16 000 matas se aclaran para que la vista siga fluida.
+- **Rocas y elementos naturales** (categoría nueva, en Urbanismo → Rocas y en la Maqueta → Exterior → Rocas y troncos): roca angulosa, canto rodado, laja, peña de 2 m, roca con musgo, grupos de rocas, de cantos y con musgo, cantos rodados sueltos, tronco caído y tocón. Varias variantes de forma por roca. IFC `IfcGeographicElement`.
+- **Esparcir** coloca plantas o rocas sobre el terreno, giradas al azar y sin pisarse; con «Variar» alterna las variantes de la misma roca.
+
+**Pendiente**
+- Lo que diga Antonio del pincel. Ideas que no entraron: pintar sobre forjados y cubiertas (ahora solo terreno), más especies de flor, rocas con textura de estratos.
+
+**Qué debe probar Antonio**
+1. Abre la demo, ficha Urbanismo → Pincel. En Propiedades: elige «Flores silvestres», cabezal cuadrado, y pinta sobre el terreno en planta. Mira el resultado en la Maqueta.
+2. Cambia a Borrar y pasa por encima: debe volver el terreno de antes.
+3. Prueba los cabezales difuminado y salpicado con «Grava» y «Camino de tierra».
+4. Modo Esparcir → elige «Roca angulosa 80» con «Variar» encendido, y pinta: deben salir rocas de varias formas. Bórralas con Borrar y «Plantas y rocas» activado.
+5. En la Maqueta: Exterior → Terreno y caminos → Pincel, y el panel flotante; Exterior → Rocas y troncos.
+6. Subir, Bajar, Suavizar y Allanar sobre el terreno, y Deshacer.
+7. Exporta el IFC (rocas y troncos como elementos geográficos) y el `.glb` (Archivo → Exportar modelo 3D) y ábrelo en Blender o D5: la hierba va dentro.
+
+---
+
 ## 2026-10-25 (9) · v0.68: deudas de escaleras y buhardillas (C7)
 
 Rama `bloque/c7-deudas`, encima de `bloque/c6-documentacion` (#72), con pull request para Antonio. **Formato `.archisim` versión 38** (las escaleras guardan si sus mesetas van partidas y la meseta de llegada de las de caracol; abre todas las anteriores). Con esto el orden C1–C7 queda hecho.

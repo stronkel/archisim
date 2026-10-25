@@ -65,6 +65,7 @@ impl CatalogGroup {
                 "Jardín y terraza",
                 "Vegetación",
                 "Mobiliario urbano",
+                "Rocas y troncos",
                 "Gente y coches",
                 "Terreno y caminos",
                 "Formas",
@@ -208,7 +209,8 @@ pub enum CatalogAct {
     Road,
     Terrain,
     /// An Exterior brush (MQ3).
-    Brush(crate::brush::BrushKind),
+    /// The Exterior brush.
+    Brush,
     Volume,
     Form(crate::editor::MassMode),
 }
@@ -318,6 +320,8 @@ impl ArchiSimApp {
         let bottom = ctx.content_rect().bottom() - CATALOG_HEIGHT;
         self.object_bar(&ctx, bottom);
         self.maquette_more(&ctx);
+        let top = ctx.content_rect().top() + 44.0;
+        self.brush_panel_maquette(&ctx, top, bottom);
     }
 
     /// Walking as in a game: W A S D forwards, left, back and right along
@@ -673,17 +677,11 @@ impl ArchiSimApp {
                 ]
             }
             (CatalogGroup::Outside, "Terreno y caminos") => vec![
+                card(CatalogAct::Brush, "Pincel", Glyph::Brush),
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
                 card(CatalogAct::Road, "Camino o calle", Glyph::Road),
                 card(CatalogAct::Planting, "Plantación", Glyph::Planting),
-            ]
-            .into_iter()
-            .chain(
-                super::context_bar::BRUSHES
-                    .iter()
-                    .map(|(k, g)| card(CatalogAct::Brush(*k), k.name(), *g)),
-            )
-            .collect(),
+            ],
             (CatalogGroup::Outside, "Formas") => vec![
                 card(CatalogAct::Volume, "Volumen", Glyph::Volume),
                 card(CatalogAct::Form(MassMode::Sphere), "Esfera", Glyph::Sphere),
@@ -740,6 +738,7 @@ impl ArchiSimApp {
                                 i.category == "Mobiliario urbano" && i.folder != "Jardín y terraza"
                             }
                             "Gente y coches" => matches!(i.category, "Gente" | "Vehículos"),
+                            "Rocas y troncos" => i.category == "Elementos naturales",
                             _ => false,
                         },
                         CatalogGroup::Build => false,
@@ -804,7 +803,7 @@ impl ArchiSimApp {
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
-            CatalogAct::Brush(k) => self.tool == Tool::Brush && self.brush.kind == k,
+            CatalogAct::Brush => self.tool == Tool::Brush,
             CatalogAct::Volume => {
                 self.tool == Tool::Mass
                     && self.mass_settings.what == crate::editor::MassWhat::Volume
@@ -899,7 +898,10 @@ impl ArchiSimApp {
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
-            CatalogAct::Brush(k) => self.take_brush(k),
+            CatalogAct::Brush => {
+                let mode = self.brush.mode;
+                self.take_brush(mode);
+            }
             CatalogAct::Volume => self.pick(Pick::Concept(super::concept_ui::ConceptPick::Volume)),
             CatalogAct::Form(m) => {
                 self.pick(Pick::Concept(super::concept_ui::ConceptPick::Form));

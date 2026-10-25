@@ -102,8 +102,9 @@ fn vs_model(v: VertexIn) -> VertexOut {
     // A nudge along the line of sight, 0.02 % of the distance: invisible,
     // but it settles which element wins where two touch on an edge.
     vp.z = vp.z * (1.0 + min(v.bias, 1.0) * 0.0002);
-    // 1: foliage; 2: what glows at night (lampshades, bulbs, flames).
-    out.soft = select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5);
+    // 1: foliage; 2: what glows at night (lampshades, bulbs, flames); 3:
+    // grass and flowers on the ground.
+    out.soft = select(select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5), 3.0, v.bias > 3.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -506,6 +507,28 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((w + noise(p * 9.0)) * 9.0)));
             return base * (0.97 + 0.03 * noise(p * 4.0)) * (1.0 - 0.32 * vein - 0.12 * fine);
         }
+        // Soil: a mottle with clods and, here and there, a light stone.
+        case 19: {
+            let c = cells(p * 5.0);
+            let clod = smoothstep(0.0, 0.3, c.y - c.x);
+            let v = 0.78 + 0.25 * noise(p * 3.0) + 0.12 * noise(p * 17.0);
+            let stone = (1.0 - smoothstep(0.1, 0.16, c.x)) * step(0.85, c.z);
+            return mix(base * v * (0.82 + 0.18 * clod), base * 1.3 + vec3<f32>(0.08, 0.08, 0.07), stone);
+        }
+        // Fallen leaves: one in each cell, ochre, rust or brown, over the
+        // darker ground.
+        case 20: {
+            let c = cells(p * 2.5);
+            let leaf = 1.0 - smoothstep(0.26, 0.33, c.x);
+            var tint = vec3<f32>(0.5, 0.31, 0.14);
+            if (c.z > 0.66) {
+                tint = vec3<f32>(0.66, 0.47, 0.18);
+            } else if (c.z > 0.33) {
+                tint = vec3<f32>(0.4, 0.2, 0.1);
+            }
+            let ground = base * (0.72 + 0.25 * noise(p * 6.0));
+            return mix(ground, tint, leaf * 0.85);
+        }
         default: {
             return base;
         }
@@ -544,7 +567,7 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     let lit = sunlit(i.world, i.normal);
     let base = textured(i.color.rgb, i.world, i.normal, i.tex);
     var color = shade(i.normal, base, lit) + base * lamplight(i.world, i.normal);
-    if (i.soft > 1.5) {
+    if (i.soft > 1.5 && i.soft < 2.5) {
         // A lampshade or a bulb at night: it glows.
         let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;
         color = mix(color, glow, g.atmos.y);

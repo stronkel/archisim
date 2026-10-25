@@ -20,14 +20,20 @@ pub enum ObjectScope {
     Vegetation,
     /// Street furniture.
     Street,
+    /// Rocks, logs and stumps.
+    Nature,
 }
 
 impl ObjectScope {
     /// The part of the library of a gallery category, if it is one.
     pub fn of_category(category: &str) -> Option<Self> {
-        [ObjectScope::Vegetation, ObjectScope::Street]
-            .into_iter()
-            .find(|s| s.categories().contains(&category))
+        [
+            ObjectScope::Vegetation,
+            ObjectScope::Street,
+            ObjectScope::Nature,
+        ]
+        .into_iter()
+        .find(|s| s.categories().contains(&category))
     }
 
     /// The gallery categories it shows, the first open.
@@ -35,6 +41,7 @@ impl ObjectScope {
         match self {
             ObjectScope::Vegetation => &["Entorno", "Gente", "Vehículos"],
             ObjectScope::Street => &["Mobiliario urbano"],
+            ObjectScope::Nature => &["Elementos naturales"],
         }
     }
 
@@ -43,6 +50,7 @@ impl ObjectScope {
         match self {
             ObjectScope::Vegetation => "Olivo",
             ObjectScope::Street => "Farola 4,5 m",
+            ObjectScope::Nature => "Roca angulosa 80",
         }
     }
 
@@ -50,6 +58,7 @@ impl ObjectScope {
         match self {
             ObjectScope::Vegetation => "Vegetación",
             ObjectScope::Street => "Mobiliario urbano",
+            ObjectScope::Nature => "Rocas y elementos naturales",
         }
     }
 }
@@ -195,11 +204,12 @@ impl FolderObjects {
 
 /// The gallery's categories: their name and the family categories in
 /// them.
-const CATEGORIES: [(&str, &[&str]); 6] = [
+const CATEGORIES: [(&str, &[&str]); 7] = [
     ("Mobiliario", &["furniture", "kitchen"]),
     ("Sanitarios", &["sanitary"]),
     ("Entorno", &["site"]),
     ("Mobiliario urbano", &["street"]),
+    ("Elementos naturales", &["nature"]),
     ("Gente", &["people"]),
     ("Vehículos", &["vehicle"]),
 ];

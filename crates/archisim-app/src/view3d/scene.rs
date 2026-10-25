@@ -70,6 +70,10 @@ pub struct LinkedPart<'a> {
 pub struct Scene {
     pub opaque: Vec<Vertex>,
     pub glass: Vec<Vertex>,
+    /// The grass and flowers on painted ground: drawn after the opaque
+    /// model without changing its normals and distances (no contour lines
+    /// between the blades), not picked.
+    pub grass: Vec<Vertex>,
     /// Element of each opaque triangle, then of each glass triangle.
     owners: Vec<Owner>,
     pub lo: Vec3,
@@ -325,7 +329,10 @@ impl Scene {
                 archisim_geom::solid::texture_of(model, m, is_object)
                     .map_or([0.0, 0.0], |(t, scale)| [t.number() as f32, scale as f32])
             };
-            let own_tex = if dimmed || ghost {
+            // Grass and flowers: their own colours, no contour lines at all
+            // (thousands of blades would be drawn as as many).
+            let grass = matches!(solid.owner, SolidOwner::Growth(_));
+            let own_tex = if dimmed || ghost || grass {
                 [0.0, 0.0]
             } else {
                 texture_of(solid.material)
@@ -348,7 +355,9 @@ impl Scene {
                 // Faces looking up give way where another element rests on
                 // them: the floor under a wall, the top of a wall under the
                 // roof slab.
-                let bias = if glows {
+                let bias = if grass {
+                    4.0
+                } else if glows {
                     3.0
                 } else if soft {
                     2.0
@@ -363,7 +372,9 @@ impl Scene {
                     s.lo = s.lo.min(v);
                     s.hi = s.hi.max(v);
                 }
-                let target = if is_glass {
+                let target = if grass {
+                    &mut s.grass
+                } else if is_glass {
                     &mut s.glass
                 } else {
                     &mut s.opaque
@@ -394,7 +405,9 @@ impl Scene {
                         select,
                     });
                 }
-                if is_glass {
+                if grass {
+                    // Not picked: the terrain under it is.
+                } else if is_glass {
                     glass_owners.push(owner);
                 } else {
                     s.owners.push(owner);

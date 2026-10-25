@@ -183,6 +183,7 @@ pub fn install_extended(dir: &Path) -> Result<usize, String> {
         let folder = match category.as_str() {
             "site" => "Entorno",
             "street" => "Mobiliario urbano",
+            "nature" => "Elementos naturales",
             "people" => "Personas",
             "vehicle" => "Vehículos",
             _ => "Otros",

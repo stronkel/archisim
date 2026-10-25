@@ -11,14 +11,16 @@
 use super::*;
 
 /// Families whose objects ArchiSim places on a level: furniture, sanitary
-/// ware, kitchen units, the site (vegetation, street furniture), people
+/// ware, kitchen units, the site (vegetation, street furniture, rocks and
+/// other natural things), people
 /// and vehicles.
-pub const OBJECT_CATEGORIES: [&str; 7] = [
+pub const OBJECT_CATEGORIES: [&str; 8] = [
     "furniture",
     "sanitary",
     "kitchen",
     "site",
     "street",
+    "nature",
     "people",
     "vehicle",
 ];
@@ -1015,7 +1017,7 @@ mod tests {
             assert!(!ev.parts.is_empty(), "{name}");
             let category = m.family(f).unwrap().def().category.clone();
             // Trees, shrubs and people stand on their point.
-            let centred = name == "Mesa" || category == "people" || {
+            let centred = name == "Mesa" || category == "people" || category == "nature" || {
                 (category == "site" && name != "Seto")
                     || matches!(
                         name.as_str(),

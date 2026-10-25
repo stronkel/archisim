@@ -6610,7 +6610,7 @@ fn concept_volume_arrows_in_3d() {
 fn exterior_brushes() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.app.take_brush(crate::brush::BrushKind::Raise);
+    h.app.take_brush(crate::brush::BrushMode::Raise);
     assert_eq!(h.app.tool, Tool::Brush);
     h.app.brush.radius = 3.0;
     h.app.brush.strength = 0.3;
@@ -6623,26 +6623,103 @@ fn exterior_brushes() {
     assert!(h.model().terrains().next().is_none(), "one step");
     h.app.ed.redo();
     // Lawn.
-    h.app.take_brush(crate::brush::BrushKind::Lawn);
+    h.app.take_brush(crate::brush::BrushMode::Paint);
     h.drag(p(-2.0, 2.0), p(3.0, 2.0));
     let t = h.model().terrains().next().unwrap().clone();
     let lawn: f64 = t.patches.iter().map(|p| p.area()).sum();
     assert!(lawn > 25.0, "{lawn}");
     assert_eq!(h.app.ed.undo_label(), Some("Pintar césped"));
     // Plants, standing on the ground.
-    h.app.take_brush(crate::brush::BrushKind::Plants);
+    h.app.take_brush(crate::brush::BrushMode::Scatter);
     h.app.brush.strength = 3.0;
     h.frame();
     let before = h.model().objects().count();
     h.drag(p(1.0, 3.0), p(5.0, 3.0));
     let made: Vec<_> = h.model().objects().skip(before).cloned().collect();
     assert!(made.len() >= 2, "{} {:?}", made.len(), h.app.message);
-    assert_eq!(h.app.ed.undo_label(), Some("Esparcir plantas"));
+    assert_eq!(h.app.ed.undo_label(), Some("Esparcir"));
     let ground = h.model().terrains().next().unwrap().clone();
     for o in &made {
         let z = ground.height_at(o.position).unwrap();
         assert!((o.base_offset - z).abs() < 1e-6);
     }
+}
+
+/// The brush in Técnica (C8): one tool from Urbanismo, painting a meadow
+/// with flowers with a square head (its grass and flowers grow in 3D),
+/// rubbing out a stroke of it, and scattering rocks of two variants.
+#[test]
+fn the_brush_in_tecnica() {
+    use crate::brush::{BrushHead, BrushMode};
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.pick(super::toolbox::Pick::Tool(Tool::Brush));
+    h.frame();
+    assert_eq!(h.app.tool, Tool::Brush);
+    h.app.set_brush_mode(BrushMode::Paint);
+    h.app.brush.head = BrushHead::Square;
+    h.app.brush.radius = 1.0;
+    h.app.brush.cover = archisim_library::ground::GROUND_COVERS
+        .iter()
+        .position(|c| c.name == "Flores silvestres")
+        .unwrap();
+    h.drag(p(0.0, 0.0), p(6.0, 0.0));
+    let t = h.model().terrains().next().unwrap().clone();
+    let area: f64 = t.patches.iter().map(|p| p.area()).sum();
+    // A band 2 m wide from -1 to 7: 16 m².
+    assert!((area - 16.0).abs() < 0.5, "{area}");
+    assert_eq!(h.app.ed.undo_label(), Some("Pintar flores silvestres"));
+    let meadow = t.patches[0].material;
+    assert!(h.model().appearance(meadow).growth.is_some());
+    let grass = archisim_geom::growth::growth_solids(h.model(), t.id);
+    assert_eq!(grass.len(), 1);
+    assert!(grass[0].triangles.len() > 500);
+    assert!(archisim_geom::solid::model_solids(h.model())
+        .iter()
+        .any(|s| matches!(s.owner, archisim_geom::solid::SolidOwner::Growth(_))));
+    // Rubbed out across the middle.
+    h.app.set_brush_mode(BrushMode::Erase);
+    h.app.brush.head = BrushHead::Round;
+    h.app.brush.radius = 0.5;
+    h.drag(p(3.0, -2.0), p(3.0, 2.0));
+    let t = h.model().terrains().next().unwrap().clone();
+    let left: f64 = t.patches.iter().map(|p| p.area()).sum();
+    assert!(left < area - 1.5 && left > area - 2.6, "{left}");
+    // Rocks of two variants, scattered in turn.
+    let rock = h
+        .app
+        .ed
+        .transact("Roca", |m| {
+            archisim_library::add_object_entry(m, "Roca angulosa 80")
+        })
+        .unwrap();
+    h.app
+        .ed
+        .transact("Roca", |m| {
+            archisim_library::add_object_entry(m, "Roca angulosa 80 (2)")
+        })
+        .unwrap();
+    h.app.set_brush_mode(BrushMode::Scatter);
+    h.app.brush.species = Some(rock);
+    h.app.brush.strength = 6.0;
+    let before: std::collections::HashSet<_> = h.model().objects().map(|o| o.id).collect();
+    h.drag(p(0.0, 5.0), p(6.0, 5.0));
+    let kinds: std::collections::HashSet<_> = h
+        .model()
+        .objects()
+        .filter(|o| !before.contains(&o.id))
+        .map(|o| o.object_type)
+        .collect();
+    assert!(kinds.len() >= 2, "variants in turn: {kinds:?}");
+    let model3d = |t| {
+        h.model()
+            .object_type(t)
+            .unwrap()
+            .values
+            .get("model3d")
+            .cloned()
+    };
+    assert!(kinds.iter().all(|t| model3d(*t) == model3d(rock)));
 }
 
 /// Placing as in Paralives: in the Maqueta a sofa dragged near a wall

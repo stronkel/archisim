@@ -135,6 +135,9 @@ pub struct Renderer {
     pictures_bind: wgpu::BindGroup,
     pictures_pending: bool,
     model_pipeline: wgpu::RenderPipeline,
+    /// The grass: as the model, leaving the normals and distances as they
+    /// are.
+    grass_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
     shadow_layout: wgpu::BindGroupLayout,
     shadow_sampler: wgpu::Sampler,
@@ -160,6 +163,7 @@ pub struct Renderer {
     edges_layout: wgpu::BindGroupLayout,
     targets: Option<Targets>,
     opaque: Option<(wgpu::Buffer, u32)>,
+    grass: Option<(wgpu::Buffer, u32)>,
     glass: Option<(wgpu::Buffer, u32)>,
     /// What is being stretched, drawn over the scene (whose own copy of
     /// it is hidden): its opaque and glass triangles.
@@ -439,6 +443,43 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let grass_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("grass"),
+            layout: Some(&model_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_model"),
+                compilation_options: Default::default(),
+                buffers: &[Some(vertex_layout.clone())],
+            },
+            primitive,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_model"),
+                compilation_options: Default::default(),
+                targets: &[
+                    Some(COLOR_FORMAT.into()),
+                    Some(wgpu::ColorTargetState {
+                        format: NORMAL_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::empty(),
+                    }),
+                ],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let glass_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("glass"),
             layout: Some(&model_layout),
@@ -539,6 +580,7 @@ impl Renderer {
             pictures,
             pictures_bind,
             model_pipeline,
+            grass_pipeline,
             shadow_pipeline,
             shadow_layout,
             shadow_sampler,
@@ -556,6 +598,7 @@ impl Renderer {
             edges_layout,
             targets: None,
             opaque: None,
+            grass: None,
             glass: None,
             overlay: None,
             view_formats,
@@ -638,6 +681,7 @@ impl Renderer {
         self.uploads += 1;
         self.bounds = (scene.lo, scene.hi);
         self.opaque = upload("opaque", &scene.opaque);
+        self.grass = upload("grass", &scene.grass);
         self.glass = upload("glass", &scene.glass);
         self.selected = scene.opaque.iter().any(|v| v.select > 0.5);
         self.lamps = scene.lamps.clone();
@@ -947,6 +991,14 @@ impl Renderer {
             let over = self.overlay.as_ref().and_then(|o| o.0.as_ref());
             for (buf, n) in self.opaque.iter().chain(over) {
                 pass.set_pipeline(&self.model_pipeline);
+                pass.set_bind_group(0, &self.globals_bind, &[]);
+                pass.set_bind_group(1, shadow_bind, &[]);
+                pass.set_bind_group(2, &self.pictures_bind, &[]);
+                pass.set_vertex_buffer(0, buf.slice(..));
+                pass.draw(0..*n, 0..1);
+            }
+            if let Some((buf, n)) = &self.grass {
+                pass.set_pipeline(&self.grass_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_bind_group(1, shadow_bind, &[]);
                 pass.set_bind_group(2, &self.pictures_bind, &[]);

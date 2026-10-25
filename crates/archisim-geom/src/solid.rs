@@ -49,6 +49,8 @@ pub enum SolidOwner {
     /// A pipe or duct.
     Run(archisim_core::RunId),
     Device(archisim_core::DeviceId),
+    /// The grass and flowers on a terrain's painted areas.
+    Growth(archisim_core::TerrainId),
 }
 
 impl SolidOwner {
@@ -64,6 +66,7 @@ impl SolidOwner {
             SolidOwner::Dormer(x, _) => x.0,
             SolidOwner::Stair(x) => x.0,
             SolidOwner::Terrain(x) => x.0,
+            SolidOwner::Growth(x) => x.0,
             SolidOwner::CurtainWall(x) => x.0,
             SolidOwner::Railing(x) => x.0,
             SolidOwner::Object(x) => x.0,
@@ -1200,6 +1203,12 @@ pub fn without_plants<T>(f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// Whether the grass on painted areas is grown: not for the drawings that
+/// leave the plants out or take them less detailed (sections, shadows).
+pub fn growth_wanted() -> bool {
+    !NO_PLANTS.with(|c| c.get()) && PLANT_CAP.with(|c| c.get()).is_none()
+}
+
 /// Solids of a plant grown by ArchiSim: one per material, at the level of
 /// detail the views take ([`Model::plant_detail`]), turned and placed.
 /// `None` for an object that is not a plant.
@@ -1403,6 +1412,9 @@ fn free_parts(a: Point2, b: Point2, rings: &[Vec<Point2>], own: usize) -> Vec<(P
 /// [`object_mesh_solids`] (its textures) or of [`plant_solids`], in the
 /// same order; `None` for any other solid.
 pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>> {
+    if let SolidOwner::Growth(_) = s.owner {
+        return crate::growth::growth_colors(model, s);
+    }
     let SolidOwner::Object(id) = s.owner else {
         return None;
     };
@@ -2346,6 +2358,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     }
     for t in model.terrains() {
         out.extend(terrain_solids(model, t.id));
+        if growth_wanted() {
+            out.extend(crate::growth::growth_solids(model, t.id));
+        }
     }
     for c in model.curtain_walls() {
         out.extend(curtain_wall_solids(model, c.id));
@@ -2843,7 +2858,9 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
             model.roof(r).is_some_and(|r| r.level == level)
         }
         SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
-        SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
+        SolidOwner::Terrain(t) | SolidOwner::Growth(t) => {
+            model.terrain(t).is_some_and(|t| t.level == level)
+        }
         SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),
         SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),

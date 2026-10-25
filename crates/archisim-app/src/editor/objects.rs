@@ -39,7 +39,7 @@ impl Editor {
             .is_some_and(|f| {
                 matches!(
                     f.def().category.as_str(),
-                    "site" | "street" | "people" | "vehicle"
+                    "site" | "street" | "nature" | "people" | "vehicle"
                 )
             });
         let ground = outdoors

@@ -664,7 +664,7 @@ pub fn of_solid(owner: archisim_geom::solid::SolidOwner) -> Element {
         SolidOwner::Roof(id) => Element::Roof(id),
         SolidOwner::Dormer(id, i) => Element::Dormer(id, i),
         SolidOwner::Stair(id) => Element::Stair(id),
-        SolidOwner::Terrain(id) => Element::Terrain(id),
+        SolidOwner::Terrain(id) | SolidOwner::Growth(id) => Element::Terrain(id),
         SolidOwner::CurtainWall(id) => Element::CurtainWall(id),
         SolidOwner::Railing(id) => Element::Railing(id),
         SolidOwner::Object(id) => Element::Object(id),

@@ -976,6 +976,7 @@ mod tests {
                 color: None,
                 texture: Some(TextureKind::Brick),
                 scale: None,
+                growth: None,
             },
         )
         .unwrap();

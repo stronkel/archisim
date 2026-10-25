@@ -20,18 +20,6 @@ use crate::wall_tool::WallMode;
 
 pub const CONTEXT_BAR_HEIGHT: f32 = 40.0;
 
-/// The brushes with the drawing of their button.
-pub(super) const BRUSHES: [(crate::brush::BrushKind, Glyph); 8] = [
-    (crate::brush::BrushKind::Raise, Glyph::Terrain),
-    (crate::brush::BrushKind::Lower, Glyph::Terrain),
-    (crate::brush::BrushKind::Smooth, Glyph::Terrain),
-    (crate::brush::BrushKind::Flatten, Glyph::Terrain),
-    (crate::brush::BrushKind::Lawn, Glyph::Planting),
-    (crate::brush::BrushKind::Gravel, Glyph::Hatch),
-    (crate::brush::BrushKind::Path, Glyph::Road),
-    (crate::brush::BrushKind::Plants, Glyph::Tree),
-];
-
 /// What a method button does.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum MethodAct {
@@ -53,8 +41,8 @@ enum MethodAct {
     Dormer(archisim_core::DormerKind),
     /// Door and window tools: how they are placed along the wall.
     Place(crate::opening_tool::OpeningPlace),
-    /// The Exterior brush: which one.
-    Brush(crate::brush::BrushKind),
+    /// The Exterior brush: what it does.
+    Brush(crate::brush::BrushMode),
     /// Not for this tool.
     None,
 }
@@ -616,16 +604,16 @@ impl ArchiSimApp {
         ]
     }
 
-    /// The Exterior brushes.
+    /// What the Exterior brush does.
     fn brush_methods(&self) -> Vec<Method> {
-        BRUSHES
+        crate::brush::BrushMode::ALL
             .iter()
-            .map(|(kind, glyph)| Method {
-                mark: Mark::Glyph(*glyph),
-                name: kind.name(),
-                hint: kind.hint(),
-                act: MethodAct::Brush(*kind),
-                on: self.brush.kind == *kind,
+            .map(|mode| Method {
+                mark: Mark::Glyph(super::brush_ui::mode_glyph(*mode)),
+                name: mode.name(),
+                hint: mode.hint(),
+                act: MethodAct::Brush(*mode),
+                on: self.brush.mode == *mode,
             })
             .collect()
     }
@@ -791,7 +779,7 @@ impl ArchiSimApp {
             }
             MethodAct::Footing(mode) => self.set_footing_mode(mode),
             MethodAct::Place(place) => self.opening_settings_mut().place = place,
-            MethodAct::Brush(kind) => self.set_brush_kind(kind),
+            MethodAct::Brush(mode) => self.set_brush_mode(mode),
             MethodAct::MassMode(mode) => self.set_mass_mode(mode),
             MethodAct::Spline => self.set_draw_method(super::methods_ui::DrawMethod::Spline),
             MethodAct::PickLine => self.set_draw_method(super::methods_ui::DrawMethod::PickLine),

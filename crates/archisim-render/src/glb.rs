@@ -94,6 +94,7 @@ fn element_name(model: &Model, owner: SolidOwner) -> String {
         SolidOwner::Dormer(..) => "Buhardilla",
         SolidOwner::Stair(_) => "Escalera",
         SolidOwner::Terrain(_) => "Terreno",
+        SolidOwner::Growth(_) => "Hierba",
         SolidOwner::CurtainWall(_) => "Muro cortina",
         SolidOwner::Railing(_) => "Barandilla",
         SolidOwner::Object(id) => {

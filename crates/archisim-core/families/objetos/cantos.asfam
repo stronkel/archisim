@@ -1,0 +1,38 @@
+family "Cantos rodados"
+  category nature
+  host none
+  version 1
+  description "Piedras redondeadas esparcidas sobre una mancha del terreno; el punto de inserción es su centro"
+  folder "Elementos naturales"
+
+type_params
+  section "Dimensiones"
+    width   length = 1.20 range 0.20..8.00 label "Largo"
+    depth   length = 1.20 range 0.20..8.00 label "Ancho"
+    height  length = 0.08 range 0.02..0.40 label "Tamaño de las piedras"
+    variant integer = 1 range 1..99 label "Variante"
+  section "Materiales"
+    mat material = "Roca caliza" label "Piedra"
+  section "Modelo 3D"
+    model3d choice("Cantos rodados") = "Cantos rodados" label "Modelo 3D"
+
+body
+  box (-width / 2, -depth / 2, 0) to (width / 2, depth / 2, height) material mat
+
+plan 1:50
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (width / 2 * cos(t0), depth / 2 * sin(t0)) to (width / 2 * cos(t1), depth / 2 * sin(t1)) pen thin
+  repeat k in 0..9
+    let a = 2.399963 * k
+    let rr = 0.42 * sqrt((k + 0.5) / 9)
+    repeat i in 0..6
+      let t0 = 6.283185307 * i / 6
+      let t1 = 6.283185307 * (i + 1) / 6
+      line (width * rr * cos(a) + height * 0.8 * cos(t0), depth * rr * sin(a) + height * 0.7 * sin(t0)) to (width * rr * cos(a) + height * 0.8 * cos(t1), depth * rr * sin(a) + height * 0.7 * sin(t1)) pen view
+
+outputs
+  generator = "props:pebbles"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

@@ -197,6 +197,7 @@ impl Tool {
             "h" => Some(Tool::Pipe),
             "d" => Some(Tool::Duct),
             "q" => Some(Tool::RefPlane),
+            "pi" => Some(Tool::Brush),
             _ => None,
         }
     }

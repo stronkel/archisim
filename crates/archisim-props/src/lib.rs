@@ -20,6 +20,7 @@ mod furniture;
 mod garden;
 mod home;
 mod kitchen;
+mod nature;
 mod people;
 mod sanitary;
 mod street;
@@ -202,6 +203,18 @@ pub const KINDS: &[(&str, &[&str])] = &[
         &["Con olivo", "Ánfora", "Con gramíneas", "Con lavanda"],
     ),
     ("pergola", &["De madera", "De lamas", "Con cañizo"]),
+    // Natural things of the site (C8).
+    (
+        "rock",
+        &["Canto rodado", "Roca angulosa", "Laja", "Roca con musgo"],
+    ),
+    (
+        "rock_group",
+        &["Rocas angulosas", "Cantos rodados", "Con musgo"],
+    ),
+    ("pebbles", &["Cantos rodados"]),
+    ("log", &["Tronco caído"]),
+    ("stump", &["Tocón"]),
     ("car", &["Berlina", "Compacto", "Todoterreno"]),
     // Street furniture (v0.52).
     (
@@ -352,6 +365,11 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "lounger" => garden::lounger(&mut b, p),
         "parasol" => garden::parasol(&mut b, p),
         "big_pot" => garden::big_pot(&mut b, p),
+        "rock" => nature::rock_prop(&mut b, p),
+        "rock_group" => nature::rock_group(&mut b, p),
+        "pebbles" => nature::pebbles(&mut b, p),
+        "log" => nature::log(&mut b, p),
+        "stump" => nature::stump(&mut b, p),
         "pergola" => garden::pergola(&mut b, p),
         "bench" => street::bench(&mut b, p),
         "streetlight" => street::streetlight(&mut b, p),

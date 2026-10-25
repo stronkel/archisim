@@ -1,0 +1,39 @@
+family "Tocón"
+  category nature
+  host none
+  version 1
+  description "Tocón de un árbol cortado, con sus raíces y el corte; el punto de inserción es su centro"
+  folder "Elementos naturales"
+
+type_params
+  section "Dimensiones"
+    width   length = 0.60 range 0.15..3.00 label "Diámetro"
+    height  length = 0.45 range 0.08..2.00 label "Altura"
+  section "Materiales"
+    mat material = "Corteza" label "Corteza"
+  section "Modelo 3D"
+    model3d choice("Tocón") = "Tocón" label "Modelo 3D"
+    bark material = "Corteza" label "Corteza"
+    wood material = "Madera de tronco" label "Madera del corte"
+
+body
+  box (-width / 2, -width / 2, 0) to (width / 2, width / 2, height) material mat
+
+plan 1:50
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (0 + width / 2 * cos(t0), 0 + width / 2 * sin(t0)) to (0 + width / 2 * cos(t1), 0 + width / 2 * sin(t1)) pen view
+  repeat j in 0..12
+    let t0 = 6.283185307 * j / 12
+    let t1 = 6.283185307 * (j + 1) / 12
+    line (0 + width * 0.3 * cos(t0), 0 + width * 0.3 * sin(t0)) to (0 + width * 0.3 * cos(t1), 0 + width * 0.3 * sin(t1)) pen thin
+  repeat k in 0..8
+    let t0 = 6.283185307 * k / 8
+    let t1 = 6.283185307 * (k + 1) / 8
+    line (0 + width * 0.12 * cos(t0), 0 + width * 0.12 * sin(t0)) to (0 + width * 0.12 * cos(t1), 0 + width * 0.12 * sin(t1)) pen thin
+
+outputs
+  generator = "props:stump"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

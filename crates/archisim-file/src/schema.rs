@@ -1086,6 +1086,23 @@ pub(crate) struct AppearanceOf {
     pub texture: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<f64>,
+    /// Grass and flowers growing on it (version 39).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub growth: Option<GrowthOf>,
+}
+
+/// Grass and flowers growing on a material painted over the ground
+/// (version 39): height (m), tufts per m², flower colours and flowers per
+/// m².
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GrowthOf {
+    pub height: f64,
+    pub density: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flowers: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_nothing")]
+    pub bloom: f64,
 }
 
 /// Chamfered or rounded edges of a volume (version 26).
@@ -2893,6 +2910,16 @@ impl ProjectFile {
                     color: a.color.map(crate::drafting::hex),
                     texture: a.texture.map(|t| t.code().to_string()),
                     scale: a.scale,
+                    growth: a.growth.map(|g| GrowthOf {
+                        height: g.height,
+                        density: g.density,
+                        flowers: g
+                            .flower_colours()
+                            .iter()
+                            .map(|c| crate::drafting::hex(*c))
+                            .collect(),
+                        bloom: g.bloom,
+                    }),
                 })
                 .collect(),
             presentation_styles: p
@@ -3934,12 +3961,26 @@ impl ProjectFile {
                 .color
                 .map(|c| crate::drafting::parse_hex(&element, &c))
                 .transpose()?;
+            let growth = match a.growth {
+                Some(g) => {
+                    let flowers = g
+                        .flowers
+                        .iter()
+                        .map(|c| crate::drafting::parse_hex(&element, c))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Some(core::Growth::flowering(
+                        g.height, g.density, &flowers, g.bloom,
+                    ))
+                }
+                None => None,
+            };
             parts.appearances.push((
                 core::MaterialId(a.material),
                 core::Appearance {
                     color,
                     texture,
                     scale: a.scale,
+                    growth,
                 },
             ));
         }

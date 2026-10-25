@@ -1,70 +1,67 @@
-//! The Exterior brushes of the Maqueta (MQ3, C5): dragged over the
-//! ground they raise it, lower it, smooth it or flatten it, paint lawn or
-//! gravel on it, or scatter plants. No screen here: `app/brush_ui` takes
-//! the mouse and calls these once for each dab of a stroke.
+//! The Exterior brush (MQ3 in C5, one brush in C8, as in Paralives): it
+//! paints covers over the ground (lawns, meadows with flowers, earths,
+//! sand, gravel, paving), rubs them out, raises, lowers, smooths or
+//! flattens the ground, or scatters plants and rocks; with a round, square,
+//! uneven or splattering head. No screen here: `app/brush_ui` takes the
+//! mouse and calls these once for each dab of a stroke.
 
 use archisim_core::{
-    LevelId, MaterialId, Model, ModelError, NewObject, NewTerrain, ObjectTypeId, Point2, Sculpt,
-    SurveyPoint, TerrainId, TerrainPatch,
+    LevelId, MaterialId, Model, ModelError, NewObject, NewTerrain, ObjectId, ObjectTypeId, Point2,
+    Sculpt, SurveyPoint, TerrainId, TerrainPatch,
 };
 use archisim_geom::junctions::{self, Shape};
 
-/// What a brush does.
+/// What the brush does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BrushKind {
+pub enum BrushMode {
+    /// Paints the cover chosen.
+    Paint,
+    /// Rubs out what is painted (and, if asked, plants and rocks).
+    Erase,
     Raise,
     Lower,
     Smooth,
     /// To the height where the stroke began.
     Flatten,
-    Lawn,
-    Gravel,
-    /// A path of stone slabs.
-    Path,
-    /// Plants of the species chosen, scattered.
-    Plants,
+    /// Plants or rocks of the type chosen, scattered.
+    Scatter,
 }
 
-impl BrushKind {
-    pub const ALL: [BrushKind; 8] = [
-        BrushKind::Raise,
-        BrushKind::Lower,
-        BrushKind::Smooth,
-        BrushKind::Flatten,
-        BrushKind::Lawn,
-        BrushKind::Gravel,
-        BrushKind::Path,
-        BrushKind::Plants,
+impl BrushMode {
+    pub const ALL: [BrushMode; 7] = [
+        BrushMode::Paint,
+        BrushMode::Erase,
+        BrushMode::Raise,
+        BrushMode::Lower,
+        BrushMode::Smooth,
+        BrushMode::Flatten,
+        BrushMode::Scatter,
     ];
 
     pub fn name(self) -> &'static str {
         match self {
-            BrushKind::Raise => "Subir",
-            BrushKind::Lower => "Bajar",
-            BrushKind::Smooth => "Alisar",
-            BrushKind::Flatten => "Aplanar",
-            BrushKind::Lawn => "Césped",
-            BrushKind::Gravel => "Grava",
-            BrushKind::Path => "Camino",
-            BrushKind::Plants => "Esparcir plantas",
+            BrushMode::Paint => "Pintar",
+            BrushMode::Erase => "Borrar",
+            BrushMode::Raise => "Subir",
+            BrushMode::Lower => "Bajar",
+            BrushMode::Smooth => "Alisar",
+            BrushMode::Flatten => "Aplanar",
+            BrushMode::Scatter => "Esparcir",
         }
     }
 
     pub fn hint(self) -> &'static str {
         match self {
-            BrushKind::Raise => {
+            BrushMode::Paint => "Arrastra para pintar sobre el terreno lo elegido en la paleta",
+            BrushMode::Erase => "Arrastra para borrar lo pintado (y, si lo pides, plantas y rocas)",
+            BrushMode::Raise => {
                 "Arrastra sobre el terreno para levantarlo, más en el centro del pincel"
             }
-            BrushKind::Lower => "Arrastra para hundirlo",
-            BrushKind::Smooth => "Arrastra para suavizar los bultos y los escalones",
-            BrushKind::Flatten => "Arrastra para dejarlo a la altura del punto donde empiezas",
-            BrushKind::Lawn => "Arrastra para pintar césped sobre el terreno",
-            BrushKind::Gravel => "Arrastra para pintar grava sobre el terreno",
-            BrushKind::Path => {
-                "Arrastra a lo largo de un camino para pavimentarlo con losas de piedra"
-            }
-            BrushKind::Plants => {
-                "Arrastra para esparcir plantas de la especie elegida, separadas entre sí"
+            BrushMode::Lower => "Arrastra para hundirlo",
+            BrushMode::Smooth => "Arrastra para suavizar los bultos y los escalones",
+            BrushMode::Flatten => "Arrastra para dejarlo a la altura del punto donde empiezas",
+            BrushMode::Scatter => {
+                "Arrastra para esparcir plantas o rocas del tipo elegido, separadas entre sí"
             }
         }
     }
@@ -72,14 +69,56 @@ impl BrushKind {
     /// What it is called in Deshacer.
     pub fn undo_label(self) -> &'static str {
         match self {
-            BrushKind::Raise => "Subir terreno",
-            BrushKind::Lower => "Bajar terreno",
-            BrushKind::Smooth => "Alisar terreno",
-            BrushKind::Flatten => "Aplanar terreno",
-            BrushKind::Lawn => "Pintar césped",
-            BrushKind::Gravel => "Pintar grava",
-            BrushKind::Path => "Pintar camino",
-            BrushKind::Plants => "Esparcir plantas",
+            BrushMode::Paint => "Pintar el terreno",
+            BrushMode::Erase => "Borrar con el pincel",
+            BrushMode::Raise => "Subir terreno",
+            BrushMode::Lower => "Bajar terreno",
+            BrushMode::Smooth => "Alisar terreno",
+            BrushMode::Flatten => "Aplanar terreno",
+            BrushMode::Scatter => "Esparcir",
+        }
+    }
+
+    /// Whether it changes the ground's height.
+    pub fn sculpts(self) -> bool {
+        matches!(
+            self,
+            BrushMode::Raise | BrushMode::Lower | BrushMode::Smooth | BrushMode::Flatten
+        )
+    }
+
+    /// Whether the head's shape counts (the sculpting brushes are round,
+    /// softer at their edge).
+    pub fn has_head(self) -> bool {
+        !self.sculpts()
+    }
+}
+
+/// The shape of the brush's head.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrushHead {
+    Round,
+    Square,
+    /// Round, its edge uneven: strokes that look laid by hand.
+    Soft,
+    /// A splatter of little blots inside the circle.
+    Splatter,
+}
+
+impl BrushHead {
+    pub const ALL: [BrushHead; 4] = [
+        BrushHead::Round,
+        BrushHead::Square,
+        BrushHead::Soft,
+        BrushHead::Splatter,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            BrushHead::Round => "Redondo",
+            BrushHead::Square => "Cuadrado",
+            BrushHead::Soft => "Borde irregular",
+            BrushHead::Splatter => "Salpicado",
         }
     }
 }
@@ -87,24 +126,37 @@ impl BrushKind {
 /// The brush's settings.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BrushSettings {
-    pub kind: BrushKind,
-    /// Its radius (m).
+    pub mode: BrushMode,
+    pub head: BrushHead,
+    /// Its radius (half the side of the square head), m.
     pub radius: f64,
     /// How much each dab does: metres up or down at its middle, or from 0
     /// to 1 for smoothing and flattening; plants per 10 m².
     pub strength: f64,
-    /// The species scattered (none: the first in the project, or an olive
-    /// tree from the library).
+    /// The cover painted: its index in
+    /// `archisim_library::ground::GROUND_COVERS`.
+    pub cover: usize,
+    /// The type scattered (none: the first plant in the project, or an
+    /// olive tree from the library).
     pub species: Option<ObjectTypeId>,
+    /// Scatter the other types of the same family too, in turn (rocks of
+    /// every variant).
+    pub vary: bool,
+    /// Rubbing out takes the plants and rocks under the brush too.
+    pub erase_plants: bool,
 }
 
 impl Default for BrushSettings {
     fn default() -> Self {
         BrushSettings {
-            kind: BrushKind::Raise,
+            mode: BrushMode::Paint,
+            head: BrushHead::Round,
             radius: 2.0,
             strength: 0.15,
+            cover: 0,
             species: None,
+            vary: true,
+            erase_plants: false,
         }
     }
 }
@@ -147,29 +199,12 @@ pub fn material_named(m: &mut Model, name: &str, category: &str, rgb: [u8; 3]) -
     m.add_material(name, category, rgb, archisim_core::CutPattern::Solid)
 }
 
-/// What a painting brush paints: its material (made with its texture if
-/// the project has none).
-pub fn paint_material(m: &mut Model, kind: BrushKind) -> Option<MaterialId> {
-    use archisim_core::TextureKind as T;
-    let (name, category, rgb, texture) = match kind {
-        BrushKind::Lawn => ("Césped", "grass", [112, 158, 82], T::Grass),
-        BrushKind::Gravel => ("Grava", "gravel", [196, 190, 176], T::Gravel),
-        BrushKind::Path => ("Losas de piedra", "stone", [182, 172, 156], T::Stone),
-        _ => return None,
-    };
-    let fresh = !m.materials().any(|x| x.name == name);
-    let id = material_named(m, name, category, rgb);
-    if fresh {
-        let _ = m.set_appearance(
-            id,
-            archisim_core::Appearance {
-                color: None,
-                texture: Some(texture),
-                scale: None,
-            },
-        );
-    }
-    Some(id)
+/// The cover painted: its material, made with how it looks (and what
+/// grows on it) if the project has none.
+pub fn cover_material(m: &mut Model, cover: usize) -> MaterialId {
+    let covers = &archisim_library::ground::GROUND_COVERS;
+    let c = &covers[cover.min(covers.len() - 1)];
+    archisim_library::ground::cover_material(m, c)
 }
 
 /// A circle as a polygon of 32 sides, counter-clockwise.
@@ -182,51 +217,108 @@ pub fn circle(c: Point2, r: f64) -> Vec<Point2> {
         .collect()
 }
 
-/// Shapes of the core's regions.
-fn shapes(regions: &[(Vec<Point2>, Vec<Vec<Point2>>)]) -> Vec<Shape> {
-    regions.to_vec()
+/// The shape one dab of the head leaves at `at`: a circle, a square, a
+/// circle with an uneven edge or a splatter of blots (both changing from
+/// dab to dab with `seed`).
+pub fn dab_shape(head: BrushHead, at: Point2, radius: f64, seed: u64) -> Vec<Shape> {
+    let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+    match head {
+        BrushHead::Round => vec![(circle(at, radius), Vec::new())],
+        BrushHead::Square => {
+            let r = radius;
+            vec![(
+                vec![
+                    at + Point2::new(-r, -r),
+                    at + Point2::new(r, -r),
+                    at + Point2::new(r, r),
+                    at + Point2::new(-r, r),
+                ],
+                Vec::new(),
+            )]
+        }
+        BrushHead::Soft => {
+            let phase = [rng.next(), rng.next(), rng.next()].map(|x| x * std::f64::consts::TAU);
+            let ring = (0..40)
+                .map(|i| {
+                    let a = i as f64 / 40.0 * std::f64::consts::TAU;
+                    let f = 0.82
+                        + 0.1 * (3.0 * a + phase[0]).sin()
+                        + 0.06 * (5.0 * a + phase[1]).sin()
+                        + 0.04 * (9.0 * a + phase[2]).sin();
+                    at + Point2::new(a.cos(), a.sin()) * (radius * f)
+                })
+                .collect();
+            vec![(ring, Vec::new())]
+        }
+        BrushHead::Splatter => {
+            let blots: Vec<Shape> = (0..7)
+                .map(|_| {
+                    let (u, v) = (rng.next(), rng.next());
+                    let r = radius * 0.72 * u.sqrt();
+                    let a = v * std::f64::consts::TAU;
+                    let size = radius * (0.12 + 0.2 * rng.next());
+                    (
+                        circle(at + Point2::new(r * a.cos(), r * a.sin()), size),
+                        Vec::new(),
+                    )
+                })
+                .collect();
+            junctions::union(&blots, &[])
+        }
+    }
+}
+
+/// Whether `p` is inside any of `shapes`.
+pub fn inside(shapes: &[Shape], p: Point2) -> bool {
+    shapes.iter().any(|(o, holes)| {
+        archisim_core::point_in_polygon(p, o)
+            && !holes.iter().any(|h| archisim_core::point_in_polygon(p, h))
+    })
 }
 
 /// One dab of a sculpting brush.
 pub fn sculpt(
     m: &mut Model,
     terrain: TerrainId,
-    kind: BrushKind,
+    mode: BrushMode,
     at: Point2,
     radius: f64,
     strength: f64,
     flat: f64,
 ) -> Result<(), ModelError> {
-    let how = match kind {
-        BrushKind::Raise => Sculpt::Raise,
-        BrushKind::Lower => Sculpt::Lower,
-        BrushKind::Smooth => Sculpt::Smooth,
-        BrushKind::Flatten => Sculpt::Flatten(flat),
+    let how = match mode {
+        BrushMode::Raise => Sculpt::Raise,
+        BrushMode::Lower => Sculpt::Lower,
+        BrushMode::Smooth => Sculpt::Smooth,
+        BrushMode::Flatten => Sculpt::Flatten(flat),
         _ => return Ok(()),
     };
     m.edit_terrain(terrain, |t| t.sculpt(at, radius, how, strength))
 }
 
-/// One dab of paint: `material` over a circle (inside the terrain); the
-/// other patches give way under it.
+/// The part of `dab` over the terrain.
+fn on_terrain(t: &archisim_core::Terrain, dab: Vec<Shape>) -> Vec<Shape> {
+    let edge: Vec<Point2> = t.boundary().iter().map(|i| t.points[*i].at).collect();
+    if edge.len() >= 3 {
+        junctions::intersection(&dab, &[(archisim_geom::ensure_ccw(edge), Vec::new())])
+    } else {
+        dab
+    }
+}
+
+/// One dab of paint: `material` over `dab` (inside the terrain); the other
+/// patches give way under it.
 pub fn paint(
     m: &mut Model,
     terrain: TerrainId,
     material: MaterialId,
-    at: Point2,
-    radius: f64,
+    dab: Vec<Shape>,
 ) -> Result<(), ModelError> {
     let t = m
         .terrain(terrain)
         .ok_or(ModelError::UnknownTerrain(terrain))?
         .clone();
-    let edge: Vec<Point2> = t.boundary().iter().map(|i| t.points[*i].at).collect();
-    let dab: Vec<Shape> = vec![(circle(at, radius), Vec::new())];
-    let dab = if edge.len() >= 3 {
-        junctions::intersection(&dab, &[(archisim_geom::ensure_ccw(edge), Vec::new())])
-    } else {
-        dab
-    };
+    let dab = on_terrain(&t, dab);
     if dab.is_empty() {
         return Ok(());
     }
@@ -235,14 +327,16 @@ pub fn paint(
     for p in &t.patches {
         let regions = if p.material == material {
             painted = true;
-            junctions::union(&shapes(&p.regions), &dab)
+            junctions::union(&p.regions, &dab)
         } else {
-            junctions::difference(&shapes(&p.regions), &dab)
+            junctions::difference(&p.regions, &dab)
         };
-        patches.push(TerrainPatch {
-            material: p.material,
-            regions,
-        });
+        if !regions.is_empty() {
+            patches.push(TerrainPatch {
+                material: p.material,
+                regions,
+            });
+        }
     }
     if !painted {
         patches.push(TerrainPatch {
@@ -251,6 +345,50 @@ pub fn paint(
         });
     }
     m.edit_terrain(terrain, |t| t.set_patches(patches))
+}
+
+/// One dab of the rubber: what is painted under `dab` goes (the bare
+/// ground shows again), and, with `plants`, the plants and rocks standing
+/// in it. Returns how many plants and rocks went.
+pub fn erase(
+    m: &mut Model,
+    level: LevelId,
+    dab: Vec<Shape>,
+    plants: bool,
+) -> Result<usize, ModelError> {
+    let terrains: Vec<TerrainId> = m.terrains_on_level(level).map(|t| t.id).collect();
+    for id in terrains {
+        let Some(t) = m.terrain(id) else { continue };
+        if t.patches.is_empty() {
+            continue;
+        }
+        let patches: Vec<TerrainPatch> = t
+            .patches
+            .iter()
+            .filter_map(|p| {
+                let regions = junctions::difference(&p.regions, &dab);
+                (!regions.is_empty()).then_some(TerrainPatch {
+                    material: p.material,
+                    regions,
+                })
+            })
+            .collect();
+        if patches != t.patches {
+            m.edit_terrain(id, |t| t.set_patches(patches))?;
+        }
+    }
+    if !plants {
+        return Ok(0);
+    }
+    let gone: Vec<ObjectId> = m
+        .objects()
+        .filter(|o| o.level == level && is_scattered(m, o.object_type) && inside(&dab, o.position))
+        .map(|o| o.id)
+        .collect();
+    for id in &gone {
+        m.remove_object(*id)?;
+    }
+    Ok(gone.len())
 }
 
 /// A small, repeatable random number generator.
@@ -274,28 +412,66 @@ pub fn is_plant(m: &Model, t: ObjectTypeId) -> bool {
             .is_some_and(|f| f.def().category == "site")
 }
 
-/// One dab of the plants brush: plants of `species` in the circle, about
-/// `density` per 10 m², none nearer another plant than its own width. They
-/// stand on the terrain. Returns the plants made.
+/// Whether an object type is something the brush scatters: a plant, or a
+/// rock or other natural thing.
+pub fn is_scattered(m: &Model, t: ObjectTypeId) -> bool {
+    is_plant(m, t)
+        || m.object_type(t)
+            .and_then(|x| m.family(x.family))
+            .is_some_and(|f| f.def().category == "nature")
+}
+
+/// The types scattered in turn with `t`: itself, and with `vary` the
+/// other types of its family and model (not a grown species: those vary
+/// already).
+pub fn scatter_types(m: &Model, t: ObjectTypeId, vary: bool) -> Vec<ObjectTypeId> {
+    let Some(ty) = m.object_type(t) else {
+        return Vec::new();
+    };
+    if !vary || m.type_grows(t) {
+        return vec![t];
+    }
+    // Of the same family and model (rounded pebbles with rounded pebbles).
+    let model3d = |x: &archisim_core::ObjectType| x.values.get("model3d").cloned();
+    let mut v: Vec<ObjectTypeId> = m
+        .object_types()
+        .filter(|x| x.family == ty.family && x.own.is_none() && model3d(x) == model3d(ty))
+        .map(|x| x.id)
+        .collect();
+    if !v.contains(&t) {
+        v.insert(0, t);
+    }
+    v
+}
+
+/// One dab of the scattering brush: plants or rocks of `types` (in turn)
+/// over `dab` (inside the circle round `at` of `radius`), about `density`
+/// per 10 m², none nearer another plant or rock than its own width. They
+/// stand on the terrain. Returns those made.
+#[allow(clippy::too_many_arguments)]
 pub fn scatter(
     m: &mut Model,
     level: LevelId,
-    species: ObjectTypeId,
+    types: &[ObjectTypeId],
+    dab: &[Shape],
     at: Point2,
     radius: f64,
     density: f64,
     seed: u64,
-) -> Result<Vec<archisim_core::ObjectId>, ModelError> {
+) -> Result<Vec<ObjectId>, ModelError> {
+    let Some(&first) = types.first() else {
+        return Ok(Vec::new());
+    };
     let (lo, hi) = m
-        .object_type_box_3d(species)
+        .object_type_box_3d(first)
         .unwrap_or(([-0.5, -0.5, 0.0], [0.5, 0.5, 1.0]));
     let spacing = ((hi[0] - lo[0]).max(hi[1] - lo[1]) * 0.8).max(0.3);
     let area = std::f64::consts::PI * radius * radius;
     let wanted = ((area / 10.0) * density.max(0.1)).round().max(1.0) as usize;
     let elevation = m.level(level).map_or(0.0, |l| l.elevation);
-    let plants: Vec<Point2> = m
+    let standing: Vec<Point2> = m
         .objects()
-        .filter(|o| o.level == level && is_plant(m, o.object_type))
+        .filter(|o| o.level == level && is_scattered(m, o.object_type))
         .map(|o| o.position)
         .collect();
     let mut rng = Rng(seed | 1);
@@ -309,7 +485,10 @@ pub fn scatter(
         let r = radius * u.sqrt();
         let a = v * std::f64::consts::TAU;
         let p = at + Point2::new(r * a.cos(), r * a.sin());
-        if plants
+        if !inside(dab, p) {
+            continue;
+        }
+        if standing
             .iter()
             .chain(placed.iter())
             .any(|q| q.distance(p) < spacing)
@@ -320,9 +499,10 @@ pub fn scatter(
             .terrains_on_level(level)
             .find_map(|t| t.height_at(p))
             .unwrap_or(elevation);
+        let object_type = types[(rng.next() * types.len() as f64) as usize % types.len()];
         let id = m.add_object(NewObject {
             level,
-            object_type: species,
+            object_type,
             position: p,
             rotation: rng.next() * std::f64::consts::TAU,
             base_offset: ground - elevation,
@@ -353,7 +533,7 @@ mod tests {
             sculpt(
                 &mut m,
                 t,
-                BrushKind::Raise,
+                BrushMode::Raise,
                 Point2::new(1.5, 1.5),
                 3.0,
                 0.25,
@@ -374,7 +554,7 @@ mod tests {
             sculpt(
                 &mut m,
                 t,
-                BrushKind::Flatten,
+                BrushMode::Flatten,
                 Point2::new(1.5, 1.5),
                 3.0,
                 0.5,
@@ -395,8 +575,9 @@ mod tests {
         let (mut m, _, t) = site();
         let lawn = material_named(&mut m, "Césped", "grass", [110, 160, 80]);
         let gravel = material_named(&mut m, "Grava", "gravel", [190, 185, 170]);
-        paint(&mut m, t, lawn, Point2::new(0.0, 0.0), 2.0).unwrap();
-        paint(&mut m, t, lawn, Point2::new(1.5, 0.0), 2.0).unwrap();
+        let round = |x: f64, r: f64| dab_shape(BrushHead::Round, Point2::new(x, 0.0), r, 1);
+        paint(&mut m, t, lawn, round(0.0, 2.0)).unwrap();
+        paint(&mut m, t, lawn, round(1.5, 2.0)).unwrap();
         let area = |m: &Model, mat| {
             m.terrain(t)
                 .unwrap()
@@ -410,11 +591,56 @@ mod tests {
         let a = area(&m, lawn);
         assert!(a > one * 1.2 && a < one * 2.0, "two dabs joined: {a}");
         // Gravel over part of the lawn: the lawn gives way.
-        paint(&mut m, t, gravel, Point2::new(0.0, 0.0), 1.0).unwrap();
+        paint(&mut m, t, gravel, round(0.0, 1.0)).unwrap();
         let after = area(&m, lawn);
         assert!((a - after - area(&m, gravel)).abs() < 0.05, "{a} {after}");
         // Out of the terrain: nothing.
-        paint(&mut m, t, gravel, Point2::new(100.0, 100.0), 1.0).unwrap();
+        paint(
+            &mut m,
+            t,
+            gravel,
+            dab_shape(BrushHead::Round, Point2::new(100.0, 100.0), 1.0, 1),
+        )
+        .unwrap();
         assert!(area(&m, gravel) < std::f64::consts::PI + 0.01);
+        // Rubbed out in the middle: a ring of gravel is left.
+        let before = area(&m, gravel);
+        let l = m.levels()[0].id;
+        erase(&mut m, l, round(0.0, 0.5), false).unwrap();
+        let after = area(&m, gravel);
+        assert!(
+            (before - after - std::f64::consts::PI * 0.25).abs() < 0.05,
+            "{before} {after}"
+        );
+    }
+
+    #[test]
+    fn heads_and_scattering_rocks() {
+        let at = Point2::new(0.0, 0.0);
+        let area = |v: &[Shape]| junctions::area(v);
+        let round = area(&dab_shape(BrushHead::Round, at, 1.0, 3));
+        let square = area(&dab_shape(BrushHead::Square, at, 1.0, 3));
+        let soft = area(&dab_shape(BrushHead::Soft, at, 1.0, 3));
+        let splat = dab_shape(BrushHead::Splatter, at, 1.0, 3);
+        assert!((square - 4.0).abs() < 1e-9 && round > 3.0 && round < 3.15);
+        assert!(soft > 1.5 && soft < round, "{soft}");
+        assert!(!splat.is_empty() && area(&splat) < round * 0.6);
+        // Two variants of a rock scattered in turn, standing on the ground,
+        // and rubbed out again.
+        let (mut m, l, _) = site();
+        let a = archisim_library::add_object_entry(&mut m, "Roca angulosa 80").unwrap();
+        let b = archisim_library::add_object_entry(&mut m, "Roca angulosa 80 (2)").unwrap();
+        let types = scatter_types(&m, a, true);
+        assert!(types.contains(&a) && types.contains(&b));
+        let dab = dab_shape(BrushHead::Round, at, 4.0, 3);
+        let made = scatter(&mut m, l, &types, &dab, at, 4.0, 3.0, 7).unwrap();
+        assert!(made.len() >= 3, "{}", made.len());
+        let kinds: std::collections::HashSet<ObjectTypeId> = made
+            .iter()
+            .map(|o| m.object(*o).unwrap().object_type)
+            .collect();
+        assert_eq!(kinds.len(), 2);
+        let gone = erase(&mut m, l, dab, true).unwrap();
+        assert_eq!(gone, made.len());
     }
 }

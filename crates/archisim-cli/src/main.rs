@@ -420,6 +420,7 @@ fn library_folder(category: &str) -> &'static str {
         "kitchen" => "Cocina",
         "site" => "Entorno",
         "street" => "Mobiliario urbano",
+        "nature" => "Elementos naturales",
         "people" => "Personas",
         "vehicle" => "Vehículos",
         _ => "Otros",

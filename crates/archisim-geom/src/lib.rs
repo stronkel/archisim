@@ -28,6 +28,7 @@ pub mod anchors;
 pub mod cover;
 pub mod csg;
 pub mod forms;
+pub mod growth;
 pub mod index;
 pub mod joins;
 pub mod junctions;

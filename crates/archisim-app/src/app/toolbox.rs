@@ -546,6 +546,20 @@ const SITE: &[Tile] = &[
         "Las especies de vegetación con todos sus parámetros, en 3D y en planta: crear y ajustar especies",
     ),
     tile(
+        Pick::Tool(Tool::Brush),
+        Glyph::Brush,
+        "Pincel",
+        "PI",
+        "Pinta el terreno con césped, praderas con flores, tierra, arena, grava o losas; bórralo; súbelo, bájalo, alísalo o aplánalo; esparce plantas y rocas",
+    ),
+    tile(
+        Pick::Objects(super::object_gallery::ObjectScope::Nature),
+        Glyph::Rock,
+        "Rocas",
+        "",
+        "Rocas, cantos rodados, lajas, grupos de rocas, troncos caídos y tocones",
+    ),
+    tile(
         Pick::Objects(super::object_gallery::ObjectScope::Street),
         Glyph::StreetLamp,
         "Mobiliario urbano",

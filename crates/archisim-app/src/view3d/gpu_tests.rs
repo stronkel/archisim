@@ -193,6 +193,7 @@ fn pictures_look_like_the_full_textures() {
                 color: Some([170, 80, 60]),
                 texture: Some(archisim_core::TextureKind::Brick),
                 scale: Some(0.24),
+                growth: None,
             },
         )
         .unwrap();
@@ -580,4 +581,86 @@ fn thin_lines_draw_less_ink() {
         (thin as f64) > thick as f64 * 0.3 && (thin as f64) < thick as f64 * 0.8,
         "{thin} / {thick}"
     );
+}
+
+/// Meadows painted with the brush (C8): their grass and flowers drawn in
+/// their colours, without contour lines between the blades.
+#[test]
+fn a_meadow_in_flower() {
+    use super::look::Quality;
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let mut m = archisim_core::Model::new("Pradera");
+    let level = m.add_level("PB", 0.0);
+    let t =
+        crate::brush::ensure_terrain(&mut m, level, archisim_core::Point2::new(0.0, 0.0)).unwrap();
+    let cover = |name: &str| {
+        archisim_library::ground::GROUND_COVERS
+            .iter()
+            .position(|c| c.name == name)
+            .unwrap()
+    };
+    for (name, x, y) in [
+        ("Flores silvestres", 0.0, 0.0),
+        ("Margaritas", 4.0, 0.0),
+        ("Hierba alta", 0.0, 4.0),
+        ("Camino de tierra", 4.0, 4.0),
+    ] {
+        let mat = crate::brush::cover_material(&mut m, cover(name));
+        let dab = crate::brush::dab_shape(
+            crate::brush::BrushHead::Square,
+            archisim_core::Point2::new(x, y),
+            2.0,
+            1,
+        );
+        crate::brush::paint(&mut m, t, mat, dab).unwrap();
+    }
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [480, 320];
+    let mut camera = Camera::default();
+    camera.fit(
+        glam::Vec3::new(-2.0, -2.0, 0.0),
+        glam::Vec3::new(2.0, 2.0, 0.4),
+        size[0] as f32 / size[1] as f32,
+    );
+    let mut r = Renderer::new(
+        &device,
+        view_formats,
+        crate::view3d::render::TextureMode::Full,
+    );
+    r.set_scene(&device, &scene);
+    r.set_look(Quality::Normal, Some(glam::Vec3::new(-0.6, -0.5, 0.6)));
+    r.render(&device, &queue, &camera, size, 1);
+    let px = r.read_pixels(&device, &queue).unwrap().2;
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        resvg::tiny_skia::Pixmap::from_vec(
+            px.clone(),
+            resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+        )
+        .unwrap()
+        .save_png(dir.join("pradera.png"))
+        .unwrap();
+    }
+    let pixels = px.as_chunks::<4>().0;
+    let green = pixels
+        .iter()
+        .filter(|p| {
+            u32::from(p[1]) > u32::from(p[0]) + 15 && u32::from(p[1]) > u32::from(p[2]) + 15
+        })
+        .count();
+    let flowers = pixels
+        .iter()
+        .filter(|p| (p[0] > 200 && p[2] < 120 && p[1] < 190) || (p[2] > 170 && p[0] < 190))
+        .count();
+    let ink = pixels
+        .iter()
+        .filter(|p| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]) < 90)
+        .count();
+    assert!(green > 8_000, "green {green}");
+    assert!(flowers > 150, "flowers {flowers}");
+    assert!(ink < pixels.len() / 25, "ink {ink}");
 }

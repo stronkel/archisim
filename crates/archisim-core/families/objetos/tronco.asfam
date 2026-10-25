@@ -1,0 +1,29 @@
+family "Tronco caído"
+  category nature
+  host none
+  version 1
+  description "Tronco tumbado en el suelo, con su corteza, los cortes y algún muñón de rama; el punto de inserción es su centro"
+  folder "Elementos naturales"
+
+type_params
+  section "Dimensiones"
+    width   length = 2.40 range 0.40..12.00 label "Largo"
+    height  length = 0.45 range 0.08..2.00 label "Diámetro"
+  section "Materiales"
+    mat material = "Corteza" label "Corteza"
+  section "Modelo 3D"
+    model3d choice("Tronco caído") = "Tronco caído" label "Modelo 3D"
+    bark material = "Corteza" label "Corteza"
+    wood material = "Madera de tronco" label "Madera del corte"
+
+body
+  box (-width / 2, -height / 2, 0) to (width / 2, height / 2, height) material mat
+
+plan 1:50
+  polygon (-width / 2, -height / 2) (width / 2, -height * 0.44) (width / 2, height * 0.44) (-width / 2, height / 2) pen view
+  line (-width * 0.3, 0) to (width * 0.2, height * 0.08) pen thin
+
+outputs
+  generator = "props:log"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

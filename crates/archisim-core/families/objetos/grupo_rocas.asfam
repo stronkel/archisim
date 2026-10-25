@@ -1,0 +1,45 @@
+family "Grupo de rocas"
+  category nature
+  host none
+  version 1
+  description "Una roca grande con otras más pequeñas y piedras alrededor; el punto de inserción es su centro"
+  folder "Elementos naturales"
+
+type_params
+  section "Dimensiones"
+    width   length = 2.00 range 0.40..12.00 label "Largo"
+    depth   length = 1.60 range 0.40..12.00 label "Ancho"
+    height  length = 0.90 range 0.10..4.00 label "Altura de la mayor"
+    variant integer = 1 range 1..99 label "Variante"
+  section "Materiales"
+    mat material = "Roca caliza" label "Piedra"
+  section "Modelo 3D"
+    model3d choice("Rocas angulosas", "Cantos rodados", "Con musgo") = "Rocas angulosas" label "Modelo 3D"
+    moss material = "Musgo" label "Musgo"
+
+body
+  box (-width / 2, -depth / 2, 0) to (width / 2, depth / 2, height) material mat
+
+plan 1:50
+  repeat i in 0..12
+    let t0 = 6.283185307 * i / 12
+    let t1 = 6.283185307 * (i + 1) / 12
+    line (-width * 0.12 + width * 0.27 * cos(t0), depth * 0.05 + depth * 0.3 * sin(t0)) to (-width * 0.12 + width * 0.27 * cos(t1), depth * 0.05 + depth * 0.3 * sin(t1)) pen view
+  repeat k in 0..4
+    let a = 6.283185307 * k / 4
+    let cx = cos(a) * width * 0.3 + width * 0.05
+    let cy = sin(a) * depth * 0.3
+    repeat i in 0..8
+      let t0 = 6.283185307 * i / 8
+      let t1 = 6.283185307 * (i + 1) / 8
+      line (cx + width * 0.09 * cos(t0), cy + depth * 0.09 * sin(t0)) to (cx + width * 0.09 * cos(t1), cy + depth * 0.09 * sin(t1)) pen view
+
+plan presentation
+  cloud center (-width * 0.12, depth * 0.05) radius (width + depth) * 0.14 lobes 9 jitter 0.25 pen thin tint mat
+  cloud center (width * 0.32, 0) radius (width + depth) * 0.06 lobes 7 jitter 0.25 pen thin tint mat
+  cloud center (-width * 0.05, -depth * 0.3) radius (width + depth) * 0.05 lobes 7 jitter 0.25 pen thin tint mat
+
+outputs
+  generator = "props:rock_group"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

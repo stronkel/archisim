@@ -301,6 +301,31 @@ fn pattern(kind: TextureKind, p: [f64; 2]) -> Lin {
                 );
             Lin::base((0.97 + 0.03 * g(4.0, 4.0).noise(p)) * (1.0 - 0.32 * vein - 0.12 * fine))
         }
+        TextureKind::Soil => {
+            let c = g(5.0, 5.0).cells(p);
+            let clod = smoothstep(0.0, 0.3, c[1] - c[0]);
+            let v = 0.78 + 0.25 * g(3.0, 3.0).noise(p) + 0.12 * g(17.0, 17.0).noise(p);
+            let stone = (1.0 - smoothstep(0.1, 0.16, c[0])) * if c[2] >= 0.85 { 1.0 } else { 0.0 };
+            Lin::base(v * (0.82 + 0.18 * clod)).mix(
+                Lin {
+                    a: 1.3,
+                    b: [0.08, 0.08, 0.07],
+                },
+                stone,
+            )
+        }
+        TextureKind::Leaves => {
+            let c = g(2.5, 2.5).cells(p);
+            let leaf = 1.0 - smoothstep(0.26, 0.33, c[0]);
+            let tint = if c[2] > 0.66 {
+                [0.66, 0.47, 0.18]
+            } else if c[2] > 0.33 {
+                [0.4, 0.2, 0.1]
+            } else {
+                [0.5, 0.31, 0.14]
+            };
+            Lin::base(0.72 + 0.25 * g(6.0, 6.0).noise(p)).mix(Lin::fixed(tint), leaf * 0.85)
+        }
     }
 }
 
