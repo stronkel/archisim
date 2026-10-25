@@ -107,6 +107,57 @@ Antonio confirmó el orden C1–C7 de la hoja de ruta común (§9). Este es C1.
 
 ---
 
+## 2026-10-25 (2) · v0.61: alzados que se abren y se mueven sin espera, y líneas finas en planta y 3D (F1)
+
+Rama `bloque/fluidez`, pull request para Antonio. Sin cambios de formato ni de IFC.
+
+Antonio dio por buenas la 0.58, la 0.59 y la 0.60: unidas a `main` (#62, #63, #64). Además pidió líneas finas también en planta y en 3D, y que el programa no tardase al abrir un alzado ni al desplazar con el botón derecho.
+
+**Lo que pasaba**
+- Al desplazar o acercar, la planta, los alzados y los planos se volvían a dibujar enteros a cada movimiento del ratón.
+- El alzado sur de la demo tardaba 1,8 s en cada uno de esos dibujos. Era un dibujo de 24 MB:
+  - 148.000 triángulos blancos, cada uno suelto;
+  - los muebles de dentro de la casa, aunque los tapa la fachada.
+
+**Hecho**
+- **Desplazar y acercar sin espera** en planta, alzados, secciones y planos:
+  - mientras se arrastra o se gira la rueda, se mueve la imagen ya dibujada;
+  - al pararse (0,15 s sin moverse y el botón suelto), se dibuja una vez con todo su detalle;
+  - lo que entra por los bordes sale en blanco hasta ese momento.
+- **Alzados y secciones más ligeros**, con el mismo dibujo (comparado píxel a píxel con el de antes):
+  - lo que queda entero detrás de algo opaco (el interior, la cara de atrás de las cosas) ya no se dibuja;
+  - los triángulos blancos seguidos van en un solo trazo;
+  - fuera, las astillas de menos de 1 mm², que son caras vistas de canto;
+  - el dibujo de cada árbol visto de lado se guarda, en lugar de rehacerlo a cada redibujo.
+- **Volver a un alzado ya abierto** es inmediato: se guardan los cuatro últimos mientras el modelo no cambie.
+- Medido en la demo (`archisim medir vistas out/demo.archisim`):
+
+  | | Antes | Ahora |
+  |---|---|---|
+  | Redibujo del alzado sur entero | 1,8 s | 0,3–0,4 s, solo al soltar |
+  | Abrir el alzado sur | unos 2 s | unos 0,6 s |
+  | Peso del alzado sur (SVG y PDF) | 24 MB | 5,6 MB |
+
+- **Líneas finas**:
+  - ficha «Líneas finas» en la barra de abajo de la planta y de la vista 3D, como ya estaba en alzados y secciones (el icono «Grosor real» de los forzados desaparece);
+  - en 3D, las aristas pasan de dos píxeles a uno, también en la Maqueta;
+  - la misma opción vale para todas las vistas, y está también en el menú Vista y en Propiedades de la planta.
+- Orden nueva: `archisim medir vistas proyecto.archisim`, lo que tarda cada alzado, sección y planta en pantalla.
+
+**Pendiente**
+- El dibujo final, al soltar, sigue tardando unas décimas en los alzados grandes. Si molesta, el siguiente paso es dibujarlo en segundo plano.
+- C2 (cocina y muebles, segunda vuelta) es lo siguiente, en `bloque/c2-cocina`.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`. En el Navegador → Proyecto, doble clic en «Alzado Sur»: debe abrirse en menos de un segundo.
+2. En el alzado, mantén el botón derecho y arrastra: el dibujo debe seguir al ratón sin retraso. Al soltar, se completa lo que entra por los bordes. Lo mismo con la rueda para acercar.
+3. Haz lo mismo en la planta y en un plano (A-03).
+4. Abajo a la izquierda, en la planta, pulsa «Líneas finas»: todas las líneas a un píxel. Vuelve a pulsar: grosor real.
+5. F3 (vista 3D): pulsa «Líneas finas» en la barra de abajo. Las aristas deben verse más finas, y la barandilla y la escalera más claras.
+6. Si tienes un proyecto de AD5 grande, ábrelo y pasa `cargo run --release -p archisim-cli -- medir vistas tuproyecto.archisim`. Mándame lo que salga.
+
+---
+
 ## 2026-10-24 (5) · v0.57: los remates de la 0.48, rehechos sobre la 0.56
 
 Rama `bloque/remates-2`, pull request para Antonio (sustituye a #54). **Formato `.archisim` versión 34**: abre todas las anteriores, también los ficheros guardados con la 0.48, que tenía su propia versión 32.

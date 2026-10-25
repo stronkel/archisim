@@ -39,6 +39,25 @@ pub struct SectionKey {
     hidden: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
 }
 
+impl SectionKey {
+    /// Whether `other` is the same picture of another region or size (the
+    /// view has only moved or zoomed). A picture marked to be drawn again
+    /// (size 0, after the model changed) is not.
+    fn same_but_view(&self, other: &SectionKey) -> bool {
+        self.size != [0, 0]
+            && *other
+                == SectionKey {
+                    lo: other.lo,
+                    hi: other.hi,
+                    size: other.size,
+                    ..self.clone()
+                }
+    }
+}
+
+/// How many sections seen before keep their drawing.
+const STASHED: usize = 4;
+
 /// The drawing of the section shown, worked out once per revision of the
 /// model, and its picture on screen.
 pub struct SectionCache {
@@ -157,6 +176,17 @@ impl ArchiSimApp {
         if fresh {
             return;
         }
+        // A section seen before, unchanged since: back to it as it was.
+        let up_to_date = |c: &SectionCache| {
+            c.revision == revision && c.section == id && c.phase_view == phase_view
+        };
+        if let Some(i) = self.section_stash.iter().position(up_to_date) {
+            let back = self.section_stash.remove(i);
+            if let Some(old) = self.section_cache.replace(back) {
+                self.stash_section(old);
+            }
+            return;
+        }
         let shown = self.ed.shown();
         let model: &archisim_core::Model = &shown;
         let Some(sec) = model.section(id) else {
@@ -164,7 +194,16 @@ impl ArchiSimApp {
         };
         let phased = archisim_plan::phases::phase_model(model, phase_view);
         let drawing = section_drawing(phased.as_ref().unwrap_or(model), sec);
-        let picture = self.section_cache.take().and_then(|c| c.picture);
+        // The texture of the one shown before is reused when it was this
+        // section; another section is put aside to come back to.
+        let picture = match self.section_cache.take() {
+            Some(c) if c.section == id => c.picture,
+            Some(c) => {
+                self.stash_section(c);
+                None
+            }
+            None => None,
+        };
         self.section_cache = Some(SectionCache {
             revision,
             section: id,
@@ -176,6 +215,20 @@ impl ArchiSimApp {
                 (k, t)
             }),
         });
+    }
+
+    /// Keeps the drawing of a section no longer shown, to go back to it,
+    /// with the few most recent ones (out of date ones are dropped).
+    fn stash_section(&mut self, c: SectionCache) {
+        let revision = self.ed.revision();
+        self.section_stash
+            .retain(|s| s.section != c.section && s.revision == revision);
+        if c.revision == revision {
+            self.section_stash.push(c);
+        }
+        if self.section_stash.len() > STASHED {
+            self.section_stash.remove(0);
+        }
     }
 
     pub(super) fn section_view(&mut self, ui: &mut Ui) {
@@ -293,12 +346,25 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
+        let moving = self.view_moving(ctx);
+        if let Some((old, tex)) = self
+            .section_cache
+            .as_ref()
+            .and_then(|c| c.picture.as_ref())
+            .filter(|p| p.0 != key)
+        {
+            if moving && old.same_but_view(&key) {
+                self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                return;
+            }
+        }
         let shown = self.ed.shown();
         let model: &archisim_core::Model = &shown;
         let Some(cache) = self.section_cache.as_mut() else {
             return;
         };
         if cache.picture.as_ref().map(|p| &p.0) != Some(&key) {
+            self.view_moved_at = None;
             let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
             let options = archisim_plan::PlanOptions {
                 viewport: Some((lo, hi)),

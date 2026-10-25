@@ -126,7 +126,7 @@ type Drawn = (
     Option<CutRule>,
     bool,
     u64,
-    (Quality, Option<[i32; 3]>),
+    (Quality, Option<[i32; 3]>, bool),
     Option<crate::view3d::look::Atmosphere>,
 );
 
@@ -169,6 +169,8 @@ pub struct View3dState {
     section_hover: Option<Face>,
     /// Pixels a point of the picture (2: supersampled), for its edges.
     edge_step: u32,
+    /// Contours one pixel wide (the app's "Líneas finas").
+    pub thin_lines: bool,
     /// How the materials' textures (brick, wood, stone…) are drawn.
     pub textures: TextureMode,
     /// What is being stretched, as it will be, drawn in place of the
@@ -215,6 +217,7 @@ impl Default for View3dState {
             section_drag: None,
             section_hover: None,
             edge_step: 2,
+            thin_lines: false,
             textures: default_textures(),
             cutaway: Cutaway::Up,
             level_z: 0.0,
@@ -511,6 +514,7 @@ impl View3dState {
             (
                 self.quality,
                 self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
+                self.thin_lines,
             ),
             self.atmosphere.clone(),
         );
@@ -524,6 +528,7 @@ impl View3dState {
                 .set_shadow_focus(Some(shadow_focus(&self.camera)));
             gpu.renderer.set_transparent(self.under);
             gpu.renderer.set_atmosphere(self.atmosphere.clone());
+            gpu.renderer.thin_lines = self.thin_lines;
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
@@ -663,6 +668,7 @@ impl View3dState {
             .set_shadow_focus(Some(shadow_focus(&self.camera)));
         gpu.renderer.set_transparent(self.under);
         gpu.renderer.set_atmosphere(self.atmosphere.clone());
+        gpu.renderer.thin_lines = self.thin_lines;
         gpu.renderer.render(
             &gpu.state.device,
             &gpu.state.queue,
@@ -902,6 +908,7 @@ impl ArchiSimApp {
         // The picture, over the ground grid when it is on.
         let (px, ss) = picture_size(size, ctx.pixels_per_point(), v.quality);
         v.edge_step = ss;
+        v.thin_lines = self.thin_lines;
         // In the Maqueta, the sky, the haze and the grid are drawn with the
         // picture; elsewhere the grid goes under it.
         if self.maquette {

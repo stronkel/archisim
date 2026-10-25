@@ -33,6 +33,20 @@ pub struct PlanKey {
     pub ceiling: bool,
 }
 
+impl PlanKey {
+    /// Whether `other` is the same picture of another region or size: the
+    /// view has only moved or zoomed.
+    pub fn same_but_view(&self, other: &PlanKey) -> bool {
+        let moved = PlanKey {
+            lo: other.lo,
+            hi: other.hi,
+            size: other.size,
+            ..self.clone()
+        };
+        moved == *other
+    }
+}
+
 /// Draws the region `lo`–`hi` of a level into an image of `size` pixels,
 /// at 1:50 with the default cut plane.
 #[cfg(test)]
@@ -147,6 +161,46 @@ mod tests {
         assert!(brick.r() > brick.b(), "{brick:?}");
         // Inside the room the ground slab is drawn below the cut plane.
         assert!(px(3.0, 2.0).a() > 0);
+    }
+
+    /// Moving or zooming the view only changes where and how big: the
+    /// picture can be moved with it until it is drawn again; anything
+    /// else (the model, the style, thin lines) cannot.
+    #[test]
+    fn moving_the_view_keeps_the_picture() {
+        let (_, lvl, _) = room();
+        let key = PlanKey {
+            revision: 3,
+            level: lvl,
+            lo: Point2::new(0.0, 0.0),
+            hi: Point2::new(10.0, 8.0),
+            size: [800, 640],
+            show_reference_lines: false,
+            scale: 50.0,
+            cut_plane: 1.1,
+            reference_level: None,
+            thin_lines: false,
+            phase_view: Default::default(),
+            style: Default::default(),
+            ceiling: false,
+        };
+        let moved = PlanKey {
+            lo: Point2::new(2.0, 1.0),
+            hi: Point2::new(14.0, 9.0),
+            size: [900, 600],
+            ..key.clone()
+        };
+        assert!(key.same_but_view(&moved));
+        let edited = PlanKey {
+            revision: 4,
+            ..moved.clone()
+        };
+        assert!(!key.same_but_view(&edited));
+        let thin = PlanKey {
+            thin_lines: true,
+            ..moved
+        };
+        assert!(!key.same_but_view(&thin));
     }
 }
 

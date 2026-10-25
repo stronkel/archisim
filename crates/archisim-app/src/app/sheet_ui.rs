@@ -161,6 +161,7 @@ impl ArchiSimApp {
                 .fit_exact(rect, Point2::new(0.0, 0.0), Point2::new(w, h), 30.0);
         }
         // Pan and zoom as in plan.
+        let before = self.view;
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
@@ -175,6 +176,9 @@ impl ArchiSimApp {
             if (factor - 1.0).abs() > 1e-6 {
                 self.view.zoom_at(rect, pos, factor);
             }
+        }
+        if self.view != before {
+            self.view_moved_at = Some(std::time::Instant::now());
         }
         self.sheet_cursor(&ctx, &response, rect, id);
         if ctx.memory(|m| m.focused().is_none()) {
@@ -278,7 +282,14 @@ impl ArchiSimApp {
             hi,
             size,
         };
+        if let Some((old, tex)) = self.sheet_image.as_ref().filter(|p| p.0 != key) {
+            if old.revision == key.revision && old.sheet == key.sheet && self.view_moving(ctx) {
+                self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                return;
+            }
+        }
         if self.sheet_image.as_ref().map(|p| &p.0) != Some(&key) {
+            self.view_moved_at = None;
             let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
             let svg = render_sheet(
                 &self.ed.shown(),

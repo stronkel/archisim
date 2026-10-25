@@ -447,3 +447,52 @@ fn streetlights_and_fires_are_lamps() {
     let high = scene.lamps.iter().map(|l| l[2]).fold(0.0f32, f32::max);
     assert!(high > 2.5, "{high}");
 }
+
+/// Thin lines: the contours of the room are one pixel wide instead of
+/// two, so the picture has about half the dark ink.
+#[test]
+fn thin_lines_draw_less_ink() {
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let size = [480, 320];
+    let (m, _, _) = room();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+    r.set_scene(&device, &scene);
+    let mut ink = |thin: bool| {
+        r.thin_lines = thin;
+        r.render(&device, &queue, &camera, size, 1);
+        let (_, _, px) = r.read_pixels(&device, &queue).expect("picture");
+        let dark = px
+            .chunks(4)
+            .filter(|p| p[..3].iter().all(|c| *c < 90))
+            .count();
+        if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+            let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap();
+            let name = if thin {
+                "vista3d-finas.png"
+            } else {
+                "vista3d-gruesas.png"
+            };
+            pixmap
+                .save_png(std::path::Path::new(&dir).join(name))
+                .unwrap();
+        }
+        dark
+    };
+    let thick = ink(false);
+    let thin = ink(true);
+    assert!(thick > 100, "{thick}");
+    assert!(
+        (thin as f64) > thick as f64 * 0.3 && (thin as f64) < thick as f64 * 0.8,
+        "{thin} / {thick}"
+    );
+}

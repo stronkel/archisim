@@ -3,6 +3,10 @@
 
 use super::*;
 
+/// How long the plan or a section waits, after it stops moving, to be
+/// drawn again in full.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
+
 impl ArchiSimApp {
     pub(super) fn plan_view(&mut self, ui: &mut Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
@@ -22,13 +26,22 @@ impl ArchiSimApp {
 
         self.navigate(&ctx, &response, rect);
         let reference = self.reference_level();
-        self.other_walls = archisim_plan::other_level_walls(
-            self.ed.model(),
+        let walls_key = (
+            self.ed.revision(),
             self.ed.level,
-            self.cut_plane,
+            self.cut_plane.to_bits(),
             reference,
-        )
-        .ids();
+        );
+        if self.other_walls_key != Some(walls_key) {
+            self.other_walls = archisim_plan::other_level_walls(
+                self.ed.model(),
+                self.ed.level,
+                self.cut_plane,
+                reference,
+            )
+            .ids();
+            self.other_walls_key = Some(walls_key);
+        }
         self.track_cursor(&ctx, &response, rect);
         self.sculpt_follow(&ctx);
         // Keys go to the plan unless a field is being typed in (a temporary
@@ -154,7 +167,49 @@ impl ArchiSimApp {
         }
     }
 
+    /// Whether the plan or section view is being moved: since it last
+    /// moved, less than [`SETTLE`] has gone by or the button that moves
+    /// it is still held. Until it stops, the picture drawn before is moved
+    /// with the view (drawing it again at every step is what made moving
+    /// around slow); once it stops, it is drawn once, in full.
+    pub(super) fn view_moving(&self, ctx: &egui::Context) -> bool {
+        let Some(at) = self.view_moved_at else {
+            return false;
+        };
+        let held = ctx.input(|i| {
+            i.pointer.button_down(PointerButton::Secondary)
+                || i.pointer.button_down(PointerButton::Middle)
+        });
+        let left = SETTLE.saturating_sub(at.elapsed());
+        if left.is_zero() && !held {
+            return false;
+        }
+        ctx.request_repaint_after(left.max(std::time::Duration::from_millis(16)));
+        true
+    }
+
+    /// Paints a picture drawn for the region `lo`–`hi` where that region
+    /// is now on screen.
+    pub(super) fn paint_moved(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        tex: &egui::TextureHandle,
+        lo: Point2,
+        hi: Point2,
+    ) {
+        let a = self.view.to_screen(rect, Point2::new(lo.x, hi.y));
+        let b = self.view.to_screen(rect, Point2::new(hi.x, lo.y));
+        painter.image(
+            tex.id(),
+            Rect::from_min_max(a, b),
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            Color32::WHITE,
+        );
+    }
+
     pub(super) fn navigate(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+        let before = self.view;
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
@@ -169,6 +224,9 @@ impl ArchiSimApp {
             if (factor - 1.0).abs() > 1e-6 {
                 self.view.zoom_at(rect, pos, factor);
             }
+        }
+        if self.view != before {
+            self.view_moved_at = Some(std::time::Instant::now());
         }
     }
 
@@ -1374,7 +1432,15 @@ impl ArchiSimApp {
             style: self.view_style.clone(),
             ceiling: self.active_ceiling(),
         };
+        let stale = self.plan.as_ref().filter(|p| p.0 != key);
+        if let Some((old, tex)) = stale {
+            if old.same_but_view(&key) && self.view_moving(ctx) {
+                self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                return;
+            }
+        }
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
+            self.view_moved_at = None;
             let started = std::time::Instant::now();
             let shadows = self.plan_shadows();
             let mut options = self.screen_plan_options(lo, hi);

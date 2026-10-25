@@ -68,6 +68,14 @@ struct Face {
     /// presentation or technical as the view is (`poly` is only the box
     /// round it, to pick it).
     figure: Option<Figure>,
+    /// How near to the section its nearest point is (the depth it is
+    /// hidden from); `-∞` for what is never left out (figures).
+    near: f64,
+    /// How far its farthest point is, for an opaque face that hides what
+    /// is behind it; `NaN` for anything else.
+    far: f64,
+    /// Entirely behind opaque faces: not drawn (see [`mark_hidden`]).
+    hidden: bool,
 }
 
 /// A plant, a person or a car seen from the side in a section or
@@ -600,6 +608,12 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     continue;
                 };
                 let centre = poly.iter().map(|q| depth_of(*q)).sum::<f64>() / poly.len() as f64;
+                let span = poly
+                    .iter()
+                    .map(|q| depth_of(*q))
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                        (a.min(v), b.max(v))
+                    });
                 let poly2: Vec<Point2> = poly.iter().map(|q| to2(*q)).collect();
                 for q in &poly2 {
                     grow_to(&mut lo, &mut hi, *q);
@@ -613,6 +627,9 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                         edges: Vec::new(),
                         opening_line: None,
                         figure: None,
+                        near: span.0,
+                        far: if glass { f64::NAN } else { span.1 },
+                        hidden: false,
                     },
                 ));
                 // Each edge is painted on its own, a little ahead of where
@@ -629,6 +646,9 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                             edges: vec![(to2(a), to2(b))],
                             opening_line: None,
                             figure: None,
+                            near: at,
+                            far: f64::NAN,
+                            hidden: false,
                         },
                     ));
                 }
@@ -691,6 +711,9 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     toward,
                     flip,
                 }),
+                near: f64::NEG_INFINITY,
+                far: f64::NAN,
+                hidden: false,
             },
         ));
     }
@@ -733,6 +756,9 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     toward,
                     flip: right.dot(u) < 0.0,
                 }),
+                near: f64::NEG_INFINITY,
+                far: f64::NAN,
+                hidden: false,
             },
         ));
     }
@@ -775,6 +801,9 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                 edges: Vec::new(),
                 opening_line: None,
                 figure: Some(Figure::Body { pieces, outline }),
+                near: f64::NEG_INFINITY,
+                far: f64::NAN,
+                hidden: false,
             },
         ));
     }
@@ -799,10 +828,14 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     edges: vec![(to2(a), to2(b))],
                     opening_line: Some(l.dashed || !towards),
                     figure: None,
+                    near: da.min(db) - EDGE_LEAD,
+                    far: f64::NAN,
+                    hidden: false,
                 },
             ));
         }
     }
+    mark_hidden(&mut faces, lo, hi);
     faces.sort_by(|a, b| b.0.total_cmp(&a.0));
     d.faces = faces.into_iter().map(|(_, f)| f).collect();
     d.levels = model
@@ -1257,6 +1290,185 @@ pub fn elevations_around(model: &Model) -> Vec<NewSection> {
 
 /// Writes a section drawing to SVG, with the same options as a plan
 /// (scale, viewport for the screen, thin lines).
+/// Spacing of the points that decide what is hidden (m).
+const HIDING_STEP: f64 = 0.025;
+/// Most points: a larger drawing spaces them more.
+const HIDING_POINTS: f64 = 4.0e6;
+
+/// Marks what is seen beyond the cut but entirely behind opaque faces
+/// (the furniture inside a house in its elevation, the back of things):
+/// painted far to near, it would be covered anyway, and drawing it made
+/// sections and elevations slow. On a grid of points over the drawing,
+/// each point keeps the farthest depth of the nearest opaque face over
+/// it; what has every point round it, with a margin, covered nearer than
+/// itself is hidden. Only a gap narrower than the spacing (2.5 cm) could
+/// let something unseen through, and its edges are drawn anyway.
+fn mark_hidden(faces: &mut [(f64, Face)], lo: Point2, hi: Point2) {
+    let (w, h) = (hi.x - lo.x, hi.y - lo.y);
+    if !(w > 0.0 && h > 0.0) || faces.is_empty() {
+        return;
+    }
+    let step = HIDING_STEP.max((w * h / HIDING_POINTS).sqrt());
+    let nx = (w / step).ceil() as usize + 1;
+    let ny = (h / step).ceil() as usize + 1;
+    let mut front = vec![f64::INFINITY; nx * ny];
+    // The first point at or after `v`, and the last at or before it.
+    let first = |v: f64, from: f64, n: usize| (((v - from) / step).ceil().max(0.0) as usize).min(n);
+    let last = |v: f64, from: f64, n: usize| {
+        let k = ((v - from) / step).floor();
+        if k < 0.0 {
+            None
+        } else {
+            Some((k as usize).min(n - 1))
+        }
+    };
+    for (_, f) in faces.iter() {
+        if f.far.is_nan() || f.poly.len() < 3 {
+            continue;
+        }
+        let poly = &f.poly;
+        let turn = twice_area(poly).signum();
+        if turn == 0.0 {
+            continue;
+        }
+        let inside = |p: Point2| {
+            let n = poly.len();
+            (0..n).all(|i| {
+                let (a, b) = (poly[i], poly[(i + 1) % n]);
+                ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) * turn >= -1e-12
+            })
+        };
+        let (mut a, mut b) = (poly[0], poly[0]);
+        for p in poly {
+            a = Point2::new(a.x.min(p.x), a.y.min(p.y));
+            b = Point2::new(b.x.max(p.x), b.y.max(p.y));
+        }
+        let (Some(i1), Some(j1)) = (last(b.x, lo.x, nx), last(b.y, lo.y, ny)) else {
+            continue;
+        };
+        for j in first(a.y, lo.y, ny)..=j1 {
+            for i in first(a.x, lo.x, nx)..=i1 {
+                let p = Point2::new(lo.x + i as f64 * step, lo.y + j as f64 * step);
+                if inside(p) {
+                    let c = &mut front[j * nx + i];
+                    *c = c.min(f.far);
+                }
+            }
+        }
+    }
+    for (_, f) in faces.iter_mut() {
+        if !f.near.is_finite() {
+            continue;
+        }
+        let pts = f
+            .poly
+            .iter()
+            .copied()
+            .chain(f.edges.iter().flat_map(|(a, b)| [*a, *b]));
+        let mut any = false;
+        let (mut a, mut b) = (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        );
+        for p in pts {
+            any = true;
+            a = Point2::new(a.x.min(p.x), a.y.min(p.y));
+            b = Point2::new(b.x.max(p.x), b.y.max(p.y));
+        }
+        if !any {
+            continue;
+        }
+        // Two points of margin (its lines are drawn with a width), and at
+        // least one point on each side of it.
+        let margin = 2.0 * step;
+        let (i0, j0) = (
+            (((a.x - margin - lo.x) / step).floor().max(0.0) as usize).min(nx - 1),
+            (((a.y - margin - lo.y) / step).floor().max(0.0) as usize).min(ny - 1),
+        );
+        let (i1, j1) = (
+            (((b.x + margin - lo.x) / step).ceil().max(0.0) as usize).min(nx - 1),
+            (((b.y + margin - lo.y) / step).ceil().max(0.0) as usize).min(ny - 1),
+        );
+        let limit = f.near - 0.005;
+        f.hidden = (j0..=j1).all(|j| (i0..=i1).all(|i| front[j * nx + i] < limit));
+    }
+}
+
+/// Faces under this area (m², a square millimetre) are not drawn: faces
+/// seen edge-on, a fraction of a pixel at any scale, and an elevation has
+/// thousands of them.
+const SLIVER: f64 = 1e-6;
+
+/// Twice the signed area of a polygon (positive anticlockwise).
+fn twice_area(poly: &[Point2]) -> f64 {
+    let n = poly.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            a.x * b.y - b.x * a.y
+        })
+        .sum()
+}
+
+/// Whether a face is too small to be seen.
+fn sliver(poly: &[Point2]) -> bool {
+    twice_area(poly).abs() * 0.5 < SLIVER
+}
+
+/// What is seen beyond, waiting to be written in order: the faces of one
+/// colour in a row as a single path (an elevation has tens of thousands
+/// of them, and one element each made its picture slow to draw), then
+/// the loose edges after them, together.
+#[derive(Default)]
+struct Pending {
+    fill: Option<[u8; 3]>,
+    faces: String,
+    edges: String,
+}
+
+impl Pending {
+    /// Adds a face, after what is waiting: it joins the faces waiting if
+    /// it has their colour and no edge came between them.
+    fn face(&mut self, out: &mut String, fill: [u8; 3], poly: &[Point2], k: f64) {
+        if !self.edges.is_empty() || self.fill != Some(fill) {
+            self.flush(out, k);
+            self.fill = Some(fill);
+        }
+        // All turning the same way: in one path (non-zero rule) two faces
+        // turning opposite ways would cancel out where they overlap.
+        if twice_area(poly) < 0.0 {
+            let back: Vec<Point2> = poly.iter().rev().copied().collect();
+            self.faces.push_str(&path(&back));
+        } else {
+            self.faces.push_str(&path(poly));
+        }
+        self.faces.push(' ');
+    }
+
+    /// Writes what is waiting, faces first.
+    fn flush(&mut self, out: &mut String, k: f64) {
+        if let (Some([r, g, b]), false) = (self.fill, self.faces.is_empty()) {
+            let _ = writeln!(
+                out,
+                r#"<path d="{}" fill="rgb({r},{g},{b})" stroke="rgb({r},{g},{b})" stroke-width="{}"/>"#,
+                self.faces.trim_end(),
+                num(0.15 * k)
+            );
+        }
+        self.faces.clear();
+        self.fill = None;
+        if !self.edges.is_empty() {
+            let _ = writeln!(
+                out,
+                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
+                self.edges.trim_end(),
+                num(pens().view * k)
+            );
+            self.edges.clear();
+        }
+    }
+}
+
 pub fn render_section(model: &Model, d: &SectionDrawing, options: &PlanOptions) -> String {
     let _font = crate::lettering::use_font(model.graphics.font);
     let pens = options
@@ -1326,21 +1538,11 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
     let presenting = crate::presentation::style_of(model, &options.style).is_some();
     // Beyond: far to near.
     s.push_str("<g id=\"beyond\" stroke-linejoin=\"round\" stroke-linecap=\"round\">\n");
-    let mut edges = String::new();
-    let flush = |s: &mut String, edges: &mut String| {
-        if !edges.is_empty() {
-            let _ = writeln!(
-                s,
-                r#"<path d="{}" fill="none" stroke="{INK}" stroke-width="{}"/>"#,
-                edges.trim_end(),
-                num(pens().view * k)
-            );
-            edges.clear();
-        }
-    };
+    let mut edges = Pending::default();
+    let flush = |s: &mut String, edges: &mut Pending| edges.flush(s, k);
     // One face of what is seen beyond, into `out` (its loose edges into
     // `edges`, drawn together).
-    let face = |out: &mut String, edges: &mut String, f: &Face| {
+    let face = |out: &mut String, edges: &mut Pending, f: &Face| {
         if let Some(fig) = &f.figure {
             if !visible(&f.poly) {
                 return;
@@ -1404,31 +1606,27 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
         if f.poly.is_empty() {
             for (a, b) in &f.edges {
                 if visible(&[*a, *b]) {
-                    let _ = write!(edges, "M{} L{} ", pt(*a), pt(*b));
+                    let _ = write!(edges.edges, "M{} L{} ", pt(*a), pt(*b));
                 }
             }
             return;
         }
-        if !visible(&f.poly) {
+        if !visible(&f.poly) || sliver(&f.poly) {
             return;
         }
-        flush(out, edges);
-        let [r, g, b] = f.fill;
-        let _ = writeln!(
-            out,
-            r#"<path d="{}" fill="rgb({r},{g},{b})" stroke="rgb({r},{g},{b})" stroke-width="{}"/>"#,
-            path(&f.poly),
-            num(0.15 * k)
-        );
+        edges.face(out, f.fill, &f.poly, k);
     };
+    // Hidden faces stay out unless some elements are hidden from the
+    // view: what hid them may be among those.
+    let all_faces = !options.style.hidden_disciplines.is_empty();
     for f in &d.faces {
-        if crate::dim::is_hidden(f.owner.id()) {
+        if crate::dim::is_hidden(f.owner.id()) || (f.hidden && !all_faces) {
             continue;
         }
         if crate::dim::is_dimmed(f.owner.id()) {
             // In grey, on its own.
             flush(&mut s, &mut edges);
-            let (mut t, mut te) = (String::new(), String::new());
+            let (mut t, mut te) = (String::new(), Pending::default());
             face(&mut t, &mut te, f);
             flush(&mut t, &mut te);
             s.push_str(&crate::dim::grey(&t));
@@ -1673,5 +1871,114 @@ mod tests {
         let mut plan = String::new();
         draw_markers(&mut plan, &m, 0.05);
         assert_eq!(plan.matches("<circle").count(), 6);
+    }
+
+    /// What is wholly behind a wall seen beyond is left out (it would be
+    /// covered anyway); what shows over it is kept.
+    #[test]
+    fn leaves_out_what_is_hidden() {
+        let mut m = Model::new("t");
+        let l = m.add_level("PB", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 120, 90], CutPattern::Diagonal);
+        let wt = m
+            .add_wall_type(
+                "Muro",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.2,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let mut wall = |a: Point2, b: Point2, height: f64| {
+            m.add_wall(NewWall {
+                wall_type: wt,
+                level: l,
+                start: a,
+                end: b,
+                reference: ReferenceLine::Center,
+                height,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap()
+        };
+        let front = wall(Point2::new(-2.0, 4.0), Point2::new(10.0, 4.0), 3.0);
+        let behind = wall(Point2::new(1.0, 7.0), Point2::new(3.0, 7.0), 2.0);
+        let taller = wall(Point2::new(5.0, 7.0), Point2::new(7.0, 7.0), 4.0);
+        let sec = m
+            .add_section(NewSection {
+                name: "A".into(),
+                kind: SectionKind::Section,
+                start: Point2::new(-3.0, 2.0),
+                end: Point2::new(11.0, 2.0),
+                depth: 10.0,
+            })
+            .unwrap();
+        let d = section_drawing(&m, m.section(sec).unwrap());
+        let of = |w| {
+            d.faces
+                .iter()
+                .filter(move |f| f.owner == SolidOwner::Wall(w))
+                .collect::<Vec<_>>()
+        };
+        assert!(!of(behind).is_empty() && of(behind).iter().all(|f| f.hidden));
+        assert!(of(taller).iter().any(|f| !f.hidden && !f.poly.is_empty()));
+        assert!(of(front).iter().any(|f| !f.hidden && !f.poly.is_empty()));
+        // The hidden faces are not written, and the white faces go
+        // together in few paths.
+        let screen = PlanOptions {
+            viewport: Some((Point2::new(-3.0, -1.0), Point2::new(11.0, 5.0))),
+            px_per_mm: Some(1.0),
+            ..PlanOptions::default()
+        };
+        let svg = render_section(&m, &d, &screen);
+        let fills = d
+            .faces
+            .iter()
+            .filter(|f| !f.poly.is_empty() && !f.hidden)
+            .count();
+        assert!(
+            svg.matches("<path").count() < fills,
+            "{}",
+            svg.matches("<path").count()
+        );
+        // With a discipline hidden, nothing is left out (what hid a face
+        // may be hidden).
+        let mut hiding = screen.clone();
+        hiding
+            .style
+            .hidden_disciplines
+            .insert(archisim_core::ElementDiscipline::Services);
+        let all = render_section(&m, &d, &hiding);
+        assert!(all.len() > svg.len());
+    }
+
+    /// Faces in one path all turn the same way, or overlaps would cancel.
+    #[test]
+    fn joined_faces_turn_the_same_way() {
+        let mut p = Pending::default();
+        let mut out = String::new();
+        let square = [
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(1.0, 1.0),
+            Point2::new(0.0, 1.0),
+        ];
+        let back: Vec<Point2> = square.iter().rev().copied().collect();
+        p.face(&mut out, [255, 255, 255], &square, 1.0);
+        p.face(&mut out, [255, 255, 255], &back, 1.0);
+        p.flush(&mut out, 1.0);
+        assert_eq!(out.matches("<path").count(), 1);
+        let d = out.split('"').nth(1).unwrap();
+        let first: Vec<&str> = d.split('Z').take(2).collect();
+        assert_eq!(first[0].trim(), first[1].trim(), "{d}");
+        assert!(sliver(&[
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(2.0, 1e-7)
+        ]));
     }
 }

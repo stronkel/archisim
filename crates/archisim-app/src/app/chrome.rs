@@ -355,7 +355,7 @@ impl ArchiSimApp {
             ui.separator();
             ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
             ui.checkbox(&mut self.show_grid, "Rejilla");
-            ui.checkbox(&mut self.thin_lines, "Líneas finas (sin marcar: grosor real)");
+            ui.checkbox(&mut self.thin_lines, "Líneas finas (planta, alzados y 3D)");
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
@@ -471,6 +471,8 @@ impl ArchiSimApp {
                 ViewMode::Plan => {
                     self.scale_and_zoom(ui);
                     ui.separator();
+                    self.thin_lines_chip(ui);
+                    ui.separator();
                     self.drawing_segments(ui);
                     ui.separator();
                     self.snap_toggles(ui);
@@ -478,12 +480,7 @@ impl ArchiSimApp {
                 ViewMode::Section => {
                     self.scale_and_zoom(ui);
                     ui.separator();
-                    chip(
-                        ui,
-                        &mut self.thin_lines,
-                        "Líneas finas",
-                        "Todas las líneas a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista",
-                    );
+                    self.thin_lines_chip(ui);
                 }
                 ViewMode::Sheet(id) => {
                     let paper = self
@@ -538,6 +535,8 @@ impl ArchiSimApp {
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();
                     }
+                    ui.separator();
+                    self.thin_lines_chip(ui);
                     ui.separator();
                     self.cutaway_buttons(ui);
                 }
@@ -594,6 +593,18 @@ impl ArchiSimApp {
                 }
             });
         });
+    }
+
+    /// ArchiCAD's "Líneas finas": every line one pixel wide, in plan,
+    /// sections, elevations and 3D; off, the true weight at the scale of
+    /// the view (in 3D, contours two pixels wide).
+    fn thin_lines_chip(&mut self, ui: &mut Ui) {
+        chip(
+            ui,
+            &mut self.thin_lines,
+            "Líneas finas",
+            "Todas las líneas a un píxel, sin grosor, en planta, alzados, secciones y 3D; apagado, cada línea con su grosor real a la escala de la vista",
+        );
     }
 
     /// The scale of the view and the zoom, at the left of the bottom bar.

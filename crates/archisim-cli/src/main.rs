@@ -126,6 +126,7 @@ Uso:
       Escribe el informe en pantalla y, si se da, en CSV.
 
   archisim medir [n] [carpeta]
+  archisim medir vistas proyecto.archisim   lo que tarda cada alzado y planta en pantalla
       Repite la vivienda de prueba en una rejilla de n × n (20 por defecto:
       400 viviendas, 2800 muros) y mide cuánto tarda cada trabajo: planta,
       3D, varita mágica, guardar y abrir, exportar e importar el IFC. Deja
@@ -275,6 +276,14 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("medir") if args.get(1).map(String::as_str) == Some("vistas") => {
+            let path = PathBuf::from(
+                args.get(2)
+                    .map(String::as_str)
+                    .unwrap_or("out/demo.archisim"),
+            );
+            report(grande::measure_views(&path))
+        }
         Some("medir") => {
             let n = args.get(1).and_then(|a| a.parse().ok()).unwrap_or(20);
             let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));

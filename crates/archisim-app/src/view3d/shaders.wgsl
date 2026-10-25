@@ -15,7 +15,8 @@ struct Globals {
     view: mat4x4<f32>,
     // xyz: direction towards the sun; w: unused.
     sun: vec4<f32>,
-    // x: pixel step for contour detection; y: contour strength; z = 1
+    // x: pixel step for contour detection; y: contour strength, negative
+    // for thin lines (one pixel wide); z = 1
     // when something is selected (outlined); w = 1 while what is
     // selected is drawn stretched over the scene.
     edges: vec4<f32>,
@@ -649,6 +650,18 @@ fn depth_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
     return select(0.0, 1.0, kink > 0.03);
 }
 
+// A step in depth seen from the nearer of its two surfaces only: the
+// line of a thin-line step is drawn on one pixel, not on both sides.
+fn near_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
+    if (depth_step(a, c, b) < 0.5) {
+        return 0.0;
+    }
+    let ia = 1.0 / abs(a.w);
+    let ib = 1.0 / abs(b.w);
+    let ic = 1.0 / abs(c.w);
+    return select(0.0, 1.0, 2.0 * ic > ia + ib);
+}
+
 // Where the line of sight through a pixel meets the ground (w = 1), or
 // its direction (w = 0) when it looks above the horizon.
 fn sight(pos: vec2<f32>) -> vec4<f32> {
@@ -709,8 +722,17 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let r = sample_nd(p + vec2<i32>(s, 0));
     let u = sample_nd(p - vec2<i32>(0, s));
     let d = sample_nd(p + vec2<i32>(0, s));
-    var e = max(max(crease(c, r), crease(c, d)), max(crease(c, l), crease(c, u)));
-    e = max(e, max(depth_step(l, c, r), depth_step(u, c, d)));
+    var e = 0.0;
+    if (g.edges.y < 0.0) {
+        // Thin lines: an edge is marked on one side only (towards the
+        // right and down for a crease, on the nearer surface for a step in
+        // depth), so it is one pixel wide instead of two.
+        e = max(crease(c, r), crease(c, d));
+        e = max(e, max(near_step(l, c, r), near_step(u, c, d)));
+    } else {
+        e = max(max(crease(c, r), crease(c, d)), max(crease(c, l), crease(c, u)));
+        e = max(e, max(depth_step(l, c, r), depth_step(u, c, d)));
+    }
     // The outline of what is selected, a little thicker than the
     // contours, in its own colour: its faces keep theirs.
     // No loops here: the shader compiler of Windows (FXC) refuses to
@@ -742,7 +764,7 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
     // The ink: darker at night, or it would be lighter than the scene.
     let ink = vec3<f32>(0.05, 0.05, 0.06) * (1.0 - 0.9 * g.atmos.y);
-    return vec4<f32>(ink, max(e * g.edges.y, shade_corner));
+    return vec4<f32>(ink, max(e * abs(g.edges.y), shade_corner));
 }
 
 // How far the surface through `c` bends inwards between two samples on

@@ -75,6 +75,91 @@ fn timed<T>(what: &str, f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// Draws `svg` into a `w` × `h` image, as the screen does.
+fn rasterise(svg: &str, w: u32, h: u32) -> resvg::tiny_skia::Pixmap {
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(w.max(1), h.max(1)).expect("image");
+    if let Ok(tree) = resvg::usvg::Tree::from_str(svg, &resvg::usvg::Options::default()) {
+        let s = tree.size();
+        let t =
+            resvg::tiny_skia::Transform::from_scale(w as f32 / s.width(), h as f32 / s.height());
+        resvg::render(&tree, t, &mut pixmap.as_mut());
+    }
+    pixmap
+}
+
+/// Measures what the screen does with the views of a project
+/// ("archisim medir vistas proyecto.archisim"): every section and
+/// elevation (working it out, and its picture of the whole and of a
+/// close-up, as when moving around in it) and each plan.
+pub fn measure_views(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let m = timed("Abrir el proyecto", || archisim_file::open(path))?;
+    // A 1600 × 1000 px view, as the application draws it.
+    let (w, h) = (1600u32, 1000u32);
+    let picture = |options: &PlanOptions, svg: &dyn Fn(&PlanOptions) -> String, name: &str| {
+        let (lo, hi) = options.viewport.unwrap_or_default();
+        let px_per_mm = w as f64 / (hi.x - lo.x) * options.scale / 1000.0;
+        let options = PlanOptions {
+            px_per_mm: Some(px_per_mm),
+            ..options.clone()
+        };
+        let t = Instant::now();
+        let s = svg(&options);
+        let svg_ms = t.elapsed().as_secs_f64() * 1000.0;
+        let t = Instant::now();
+        let pixmap = rasterise(&s, w, h);
+        let raster_ms = t.elapsed().as_secs_f64() * 1000.0;
+        println!(
+            "  {name:<40} dibujo {svg_ms:>8.1} ms · imagen {raster_ms:>8.1} ms · {:>6.2} MB",
+            s.len() as f64 / 1e6
+        );
+        if let Some(dir) = std::env::var_os("ARCHISIM_MEDIR_IMAGENES") {
+            let file = name.replace([' ', ',', '/'], "-");
+            let _ = pixmap.save_png(Path::new(&dir).join(format!("{file}.png")));
+        }
+    };
+    // A view of the region lo–hi with the window's proportions.
+    let framed = |lo: Point2, hi: Point2| {
+        let c = (lo + hi) * 0.5;
+        let half_w = ((hi.x - lo.x) / 2.0).max((hi.y - lo.y) / 2.0 * w as f64 / h as f64);
+        let half_h = half_w * h as f64 / w as f64;
+        (
+            c - Point2::new(half_w, half_h),
+            c + Point2::new(half_w, half_h),
+        )
+    };
+    for sec in m.sections() {
+        let d = timed(&format!("{}: calcularlo", sec.title()), || {
+            archisim_plan::section::section_drawing(&m, sec)
+        });
+        let render = |o: &PlanOptions| archisim_plan::section::render_section(&m, &d, o);
+        let all = PlanOptions {
+            viewport: Some(framed(d.lo, d.hi)),
+            ..PlanOptions::default()
+        };
+        picture(&all, &render, &format!("{} entero", sec.title()));
+        let mid = (d.lo + d.hi) * 0.5;
+        let close = PlanOptions {
+            viewport: Some(framed(
+                mid - Point2::new(4.0, 2.5),
+                mid + Point2::new(4.0, 2.5),
+            )),
+            ..PlanOptions::default()
+        };
+        picture(&close, &render, &format!("{} de cerca", sec.title()));
+    }
+    for level in m.levels() {
+        let (lo, hi) = archisim_plan::sheet::level_extent(&m, level.id, 50.0)
+            .unwrap_or((Point2::new(-10.0, -10.0), Point2::new(30.0, 30.0)));
+        let render = |o: &PlanOptions| render_plan(&m, level.id, o);
+        let all = PlanOptions {
+            viewport: Some(framed(lo, hi)),
+            ..PlanOptions::default()
+        };
+        picture(&all, &render, &format!("Planta {} entera", level.name));
+    }
+    Ok(())
+}
+
 /// Builds the grid, measures every job and leaves the files in `dir`
 /// (grande.archisim and grande.ifc, to open them in the application).
 pub fn measure(n: usize, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {

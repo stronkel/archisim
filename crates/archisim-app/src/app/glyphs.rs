@@ -90,7 +90,6 @@ pub enum Glyph {
     SnapEdge,
     SnapTrack,
     Ortho,
-    LineWeight,
     Hatch,
     Line,
 }
@@ -295,9 +294,6 @@ impl Glyph {
                 r##"<path d="M2 10h16M10 2v16" stroke-dasharray="2 1.6"/><circle cx="10" cy="10" r="2.2"/>"##
             }
             Glyph::Ortho => r##"<path d="M4 3v13h13"/><path d="M4 12h4v4" stroke-width="0.9"/>"##,
-            Glyph::LineWeight => {
-                r##"<path d="M3 5h14" stroke-width="0.6"/><path d="M3 10h14" stroke-width="1.4"/><path d="M3 15.5h14" stroke-width="2.6"/>"##
-            }
             Glyph::Hatch => {
                 r##"<rect x="3" y="3" width="14" height="14"/><path d="M3 9l6-6M3 15L15 3M7 17l10-10M13 17l4-4" stroke-width="0.8"/>"##
             }
@@ -397,7 +393,6 @@ impl Glyph {
         Glyph::SnapEdge,
         Glyph::SnapTrack,
         Glyph::Ortho,
-        Glyph::LineWeight,
         Glyph::Hatch,
         Glyph::Line,
     ];

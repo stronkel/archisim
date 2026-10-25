@@ -327,6 +327,9 @@ pub struct ArchiSimApp {
     /// The section shown: its drawing (worked out once per revision) and
     /// its picture on screen.
     pub section_cache: Option<section_ui::SectionCache>,
+    /// Drawings of the sections seen before, kept for going back to their
+    /// tabs without working them out again (most recent last).
+    section_stash: Vec<section_ui::SectionCache>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
     pub room_settings: crate::editor::RoomSettings,
@@ -478,6 +481,13 @@ pub struct ArchiSimApp {
     /// The witness end being dragged.
     anchor_drag: Option<(crate::temp_dims::Slot, crate::temp_dims::End)>,
     plan: Option<(PlanKey, TextureHandle)>,
+    /// When the plan or section view last moved (panning or zooming)
+    /// since its picture was last drawn in full: while it moves, the last
+    /// picture is moved with it instead of being drawn again.
+    view_moved_at: Option<std::time::Instant>,
+    /// What [`ArchiSimApp::other_walls`] was worked out for: revision,
+    /// level, cut plane and reference level.
+    other_walls_key: Option<(u64, LevelId, u64, Option<LevelId>)>,
     /// The sun's shadows of the plan's level, while the model and the
     /// level do not change (worked out once, not at each redraw).
     shadow_cache: Option<(
@@ -673,6 +683,7 @@ impl ArchiSimApp {
             spline_points: Vec::new(),
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
+            section_stash: Vec::new(),
             section_hover: None,
             room_settings: Default::default(),
             roof_settings,
@@ -750,6 +761,8 @@ impl ArchiSimApp {
             temp_anchors: Default::default(),
             anchor_drag: None,
             plan: None,
+            view_moved_at: None,
+            other_walls_key: None,
             shadow_cache: None,
             pending: None,
             allow_close: false,

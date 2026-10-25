@@ -168,6 +168,8 @@ pub struct Renderer {
     cut: Option<super::cutaway::CutRule>,
     /// Something of the scene is selected: the contour pass outlines it.
     selected: bool,
+    /// Contours one pixel wide (ArchiCAD's "thin lines"), instead of two.
+    pub thin_lines: bool,
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
@@ -491,6 +493,7 @@ impl Renderer {
             clip: None,
             cut: None,
             selected: false,
+            thin_lines: false,
             transparent: false,
             atmosphere: None,
             lamps: Vec::new(),
@@ -717,7 +720,7 @@ impl Renderer {
             sun: [sun.x, sun.y, sun.z, 0.0],
             edges: [
                 edge_step.max(1) as f32,
-                1.0,
+                if self.thin_lines { -1.0 } else { 1.0 },
                 if self.selected || self.overlay.is_some() {
                     1.0
                 } else {

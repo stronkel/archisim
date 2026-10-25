@@ -458,15 +458,6 @@ impl ArchiSimApp {
         ) {
             self.toggle_ortho();
         }
-        let mut real = !self.thin_lines;
-        if toggle(
-            ui,
-            Glyph::LineWeight,
-            &mut real,
-            "Grosor real: cada línea con su grosor a la escala de la vista (apagado: líneas finas, todas a un píxel)",
-        ) {
-            self.thin_lines = !real;
-        }
     }
 }
 
