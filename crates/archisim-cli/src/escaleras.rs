@@ -2,7 +2,8 @@
 //! side, each up to the floor above: straight, in L and in U with a
 //! landing or with winders, spiral round a newel and with a helicoidal
 //! slab, on a slab, on stringers, on a central stringer and built into a
-//! wall, with closed and open risers; to see them in plan, in 3D and in
+//! wall, with closed and open risers, with split landings and a
+//! spiral's landing at its head; to see them in plan, in 3D and in
 //! the IFC.
 
 use std::path::Path;
@@ -25,9 +26,12 @@ struct Sample {
     treads: bool,
     /// Inside a dwelling (CTE "uso restringido").
     dwelling: bool,
+    /// Landings split at 45°; a spiral's landing at its head.
+    split: bool,
+    arrival: bool,
 }
 
-const SAMPLES: [Sample; 10] = [
+const SAMPLES: [Sample; 12] = [
     Sample {
         name: "Recta de losa",
         preset: StairPreset::Straight,
@@ -36,6 +40,8 @@ const SAMPLES: [Sample; 10] = [
         closed: true,
         treads: false,
         dwelling: false,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "En L con meseta, peldañeado de piedra",
@@ -45,6 +51,8 @@ const SAMPLES: [Sample; 10] = [
         closed: true,
         treads: true,
         dwelling: false,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "En L compensada",
@@ -54,6 +62,8 @@ const SAMPLES: [Sample; 10] = [
         closed: true,
         treads: false,
         dwelling: false,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "En U con meseta",
@@ -63,6 +73,8 @@ const SAMPLES: [Sample; 10] = [
         closed: true,
         treads: false,
         dwelling: false,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "En U compensada, zancas de acero (vivienda)",
@@ -72,15 +84,19 @@ const SAMPLES: [Sample; 10] = [
         closed: false,
         treads: true,
         dwelling: true,
+        split: false,
+        arrival: false,
     },
     Sample {
-        name: "De caracol con mástil",
+        name: "De caracol con mástil y meseta de llegada",
         preset: StairPreset::Spiral,
         winders: false,
         structure: StairStructure::Newel,
         closed: false,
         treads: true,
         dwelling: true,
+        split: false,
+        arrival: true,
     },
     Sample {
         name: "Helicoidal de losa",
@@ -90,6 +106,8 @@ const SAMPLES: [Sample; 10] = [
         closed: true,
         treads: false,
         dwelling: true,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "Recta de zanca central",
@@ -99,6 +117,8 @@ const SAMPLES: [Sample; 10] = [
         closed: false,
         treads: true,
         dwelling: false,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "En L de peldaños volados",
@@ -108,6 +128,8 @@ const SAMPLES: [Sample; 10] = [
         closed: false,
         treads: true,
         dwelling: false,
+        split: false,
+        arrival: false,
     },
     Sample {
         name: "Recta de zancas con tabica",
@@ -117,6 +139,30 @@ const SAMPLES: [Sample; 10] = [
         closed: true,
         treads: true,
         dwelling: false,
+        split: false,
+        arrival: false,
+    },
+    Sample {
+        name: "En L con meseta partida (vivienda)",
+        preset: StairPreset::LShape,
+        winders: false,
+        structure: StairStructure::Slab,
+        closed: true,
+        treads: true,
+        dwelling: true,
+        split: true,
+        arrival: false,
+    },
+    Sample {
+        name: "En U con mesetas partidas, zancas (vivienda)",
+        preset: StairPreset::UShape,
+        winders: false,
+        structure: StairStructure::Stringers,
+        closed: true,
+        treads: true,
+        dwelling: true,
+        split: true,
+        arrival: false,
     },
 ];
 
@@ -155,6 +201,7 @@ pub fn build() -> Res<Model> {
         let spec = PresetSpec {
             preset: s.preset,
             winders: s.winders,
+            split: s.split,
             left: true,
             width,
             going,
@@ -193,6 +240,12 @@ pub fn build() -> Res<Model> {
                 closed_risers: s.closed,
                 tread: if slab { 0.03 } else { 0.05 },
                 tread_material: s.treads.then_some(if slab { stone } else { wood }),
+                split: s.split,
+                arrival: if s.arrival {
+                    std::f64::consts::FRAC_PI_2
+                } else {
+                    0.0
+                },
                 ..Default::default()
             },
         })?;

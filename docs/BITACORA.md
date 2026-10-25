@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 (9) · v0.68: deudas de escaleras y buhardillas (C7)
+
+Rama `bloque/c7-deudas`, encima de `bloque/c6-documentacion` (#72), con pull request para Antonio. **Formato `.archisim` versión 38** (las escaleras guardan si sus mesetas van partidas y la meseta de llegada de las de caracol; abre todas las anteriores). Con esto el orden C1–C7 queda hecho.
+
+**Hecho**
+- **Mesetas partidas a 45°**: en una L, la meseta del giro se parte por la diagonal en dos peldaños triangulares; en una U, en tres. La escalera queda de un solo tramo y con las tabicas justas (la forma hecha quita los peldaños que sobran de los tramos). En la herramienta: Giros → «Meseta partida a 45°»; en Propiedades: Forma → «Mesetas partidas a 45°»; en la Maqueta: Construir → Escaleras → «En L con meseta partida». Planta, 3D, IFC (tramo `WINDER`, escalera `QUARTER_WINDING_STAIR`/`HALF_WINDING_STAIR`) y vuelta del IFC.
+- **CTE**: las mesetas partidas solo se admiten en uso restringido (DB-SUA 1, 4.2.1). En uso general salen como incumplimiento; en vivienda no se les piden los 5 y 44 cm de los peldaños curvos.
+- **Meseta de llegada de las de caracol**: un sector a la altura de la planta de arriba que sigue el giro, 90° por defecto en las nuevas; en Propiedades, «Meseta de llegada (°)» (0 la quita). La barandilla sigue por ella.
+- **Buhardillas donde se juntan dos limahoyas**: en una cubierta en T o en cruz, por encima del punto donde llegan las dos limahoyas el faldón principal son dos caras en el mismo plano. Antes una buhardilla sobre la línea entre ellas «no cabía»; ahora cuenta como un solo faldón y corta las dos caras, con las tejas alrededor. Esa línea tampoco se dibuja ya como limahoya.
+- `archisim escaleras out/`: doce escaleras (L y U con mesetas partidas, caracol con meseta de llegada). `archisim cubiertas out/`: una casa en T con su buhardilla sobre el encuentro.
+
+**Pendiente**
+- Lo que diga Antonio de C1–C7. Del orden pactado no queda nada.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- escaleras out/` y abre `out/escaleras.archisim`: las dos últimas son la L y la U con mesetas partidas; la de caracol con mástil lleva la meseta de llegada. Míralas en planta baja y primera y en la Maqueta.
+2. Herramienta Escalera → Forma «En L» → Giros «Meseta partida a 45°», y dibújala. Selecciónala y cambia en Propiedades la Forma entre «Tramos y mesetas», «Mesetas partidas» y «Peldaños compensados»; mira la comprobación del CTE con uso general y con uso restringido.
+3. Una de caracol: cambia «Meseta de llegada (°)» a 120 y a 0.
+4. `cargo run -p archisim-cli -- cubiertas out/` y abre `out/cubiertas.archisim`: la casa en T de abajo tiene una buhardilla justo encima de donde se juntan las limahoyas. Prueba a colocar otra en el mismo sitio en tu propia cubierta en T.
+5. Exporta el IFC de los dos y ábrelos en ArchiCAD o Revit.
+
+---
+
 ## 2026-10-25 (8) · v0.67: memoria de carpinterías y cuadro de superficies (C6)
 
 Rama `bloque/c6-documentacion`, encima de `bloque/c5-exterior` (#71), con pull request para Antonio. Sin cambios de formato ni de IFC.

@@ -615,6 +615,8 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             && s.design.structure == t.design.structure
             && s.design.closed_risers == t.design.closed_risers
             && (s.design.sweep - t.design.sweep).abs() < 1e-6
+            && s.design.split == t.design.split
+            && (s.design.arrival - t.design.arrival).abs() < 1e-6
             && close(s.design.core, t.design.core)
             && close(s.design.tread, t.design.tread)
             && close(s.design.stringer[0], t.design.stringer[0])

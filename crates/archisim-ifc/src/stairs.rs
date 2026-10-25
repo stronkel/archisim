@@ -44,12 +44,14 @@ impl Exporter<'_> {
             // flight its profile swept, each landing a slab. Any other, piece
             // by piece as its faces.
             let exact = d.form == StairForm::Landings
+                && !d.split
                 && d.structure == StairStructure::Slab
                 && d.finish() == 0.0;
             let mut parts = Vec::new();
             let mut own_material = Vec::new();
             if !exact {
                 let flight_type = match d.form {
+                    StairForm::Landings if d.split && l.steps.iter().any(|s| s.turned) => "WINDER",
                     StairForm::Landings => "STRAIGHT",
                     StairForm::Winders => "WINDER",
                     StairForm::Spiral => "SPIRAL",
@@ -356,6 +358,18 @@ impl Exporter<'_> {
                 "IFCPROPERTYSINGLEVALUE('Sweep',$,IFCPLANEANGLEMEASURE({}),$)",
                 real(d.sweep)
             )));
+            if d.split {
+                props.push(
+                    self.w
+                        .add("IFCPROPERTYSINGLEVALUE('SplitLandings',$,IFCBOOLEAN(.T.),$)"),
+                );
+            }
+            if d.arrival > 0.0 {
+                props.push(self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('ArrivalLanding',$,IFCPLANEANGLEMEASURE({}),$)",
+                    real(d.arrival)
+                )));
+            }
             for (key, v) in [
                 ("Core", d.core),
                 ("Tread", d.tread),
@@ -449,6 +463,14 @@ fn stair_shape(stair: &Stair, l: &StairLayout) -> &'static str {
             0 => "STRAIGHT_RUN_STAIR",
             1 => "QUARTER_WINDING_STAIR",
             2 if turns.len() == 2 && (stair.path.len() == 4) && is_u(stair) => "HALF_WINDING_STAIR",
+            2 => "TWO_QUARTER_WINDING_STAIR",
+            3 => "THREE_QUARTER_WINDING_STAIR",
+            _ => "USERDEFINED",
+        },
+        StairForm::Landings if stair.design.split && l.runs.len() == 1 => match quarters {
+            0 => "STRAIGHT_RUN_STAIR",
+            1 => "QUARTER_WINDING_STAIR",
+            2 if is_u(stair) => "HALF_WINDING_STAIR",
             2 => "TWO_QUARTER_WINDING_STAIR",
             3 => "THREE_QUARTER_WINDING_STAIR",
             _ => "USERDEFINED",

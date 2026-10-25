@@ -93,6 +93,15 @@ impl<'a> Importer<'a> {
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0)
                 * self.geo.angle;
+            design.split = self
+                .property_own(id, "ArchiSim_Stair", "SplitLandings")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            design.arrival = self
+                .property_own(id, "ArchiSim_Stair", "ArrivalLanding")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0)
+                * self.geo.angle;
             design.core = number("Core").unwrap_or(design.core);
             design.tread = number("Tread").unwrap_or(design.tread);
             design.stringer = [

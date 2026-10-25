@@ -181,6 +181,8 @@ pub struct StairCard {
     pub preset: archisim_core::StairPreset,
     pub winders: bool,
     pub structure: archisim_core::StairStructure,
+    /// Landings split at 45°.
+    pub split: bool,
 }
 
 /// What a card of the catalog does.
@@ -640,6 +642,7 @@ impl ArchiSimApp {
                             preset,
                             winders,
                             structure,
+                            split: false,
                         }),
                         name,
                         Glyph::Stair,
@@ -648,6 +651,16 @@ impl ArchiSimApp {
                 vec![
                     stair(P::Straight, false, S::Slab, "Recta"),
                     stair(P::LShape, false, S::Slab, "En L con meseta"),
+                    card(
+                        CatalogAct::Stair(StairCard {
+                            preset: P::LShape,
+                            winders: false,
+                            structure: S::Slab,
+                            split: true,
+                        }),
+                        "En L con meseta partida",
+                        Glyph::Stair,
+                    ),
                     stair(P::LShape, true, S::Slab, "En L compensada"),
                     stair(P::UShape, false, S::Slab, "En U con meseta"),
                     stair(P::UShape, true, S::Slab, "En U compensada"),
@@ -768,6 +781,7 @@ impl ArchiSimApp {
                 self.tool == Tool::Stair
                     && s.preset == c.preset
                     && s.winders == c.winders
+                    && s.split == c.split
                     && s.structure == c.structure
             }
             CatalogAct::Railing => self.tool == Tool::Railing,
@@ -852,7 +866,12 @@ impl ArchiSimApp {
                 let s = &mut self.stair_settings;
                 s.preset = c.preset;
                 s.winders = c.winders;
+                s.split = c.split;
                 s.structure = c.structure;
+                // Split landings: only in a dwelling's stair (CTE).
+                if c.split {
+                    s.usage = StairUse::Restricted;
+                }
                 // Concrete closed, the others open; a spiral narrower and
                 // steeper, for a dwelling.
                 s.closed_risers = c.structure == S::Slab;

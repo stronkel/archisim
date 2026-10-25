@@ -73,6 +73,25 @@ fn ok(poly: &[Point2]) -> bool {
     poly.len() >= 3 && archisim_core::signed_area(poly).abs() > 1e-9
 }
 
+/// One piece of a roof's plane less what its dormers take: its outline
+/// with the holes all inside it, or, if a dormer reaches over its edge
+/// into a piece of another side in the same plane, what is left of it.
+pub fn roof_plane_shapes(
+    roof: &archisim_core::Roof,
+    plane: &archisim_core::RoofPlane,
+) -> Vec<Shape> {
+    let (inside, crossing) = roof.plane_cuts(plane);
+    let whole = (crate::ensure_ccw(plane.outline.clone()), inside);
+    if crossing.is_empty() {
+        return vec![whole];
+    }
+    let cut: Vec<Shape> = crossing
+        .into_iter()
+        .map(|h| (crate::ensure_ccw(h), Vec::new()))
+        .collect();
+    junctions::difference(&[whole], &cut)
+}
+
 /// The pieces of a dormer, each with what it is.
 pub fn dormer_parts(model: &Model, id: RoofId, index: usize) -> Vec<(DormerPart, Solid)> {
     let Some(roof) = model.roof(id) else {
@@ -355,8 +374,8 @@ pub fn tile_solids(model: &Model, id: RoofId) -> Vec<Solid> {
         let covered: Vec<Shape> = roof
             .dormers
             .iter()
-            .filter(|d| d.side == plane.side)
             .filter_map(|d| roof.dormer_shape(d))
+            .filter(|s| s.over.contains(&plane.side))
             .flat_map(|s| {
                 let mut v = vec![s.footprint];
                 v.extend(s.planes.into_iter().map(|p| p.outline));

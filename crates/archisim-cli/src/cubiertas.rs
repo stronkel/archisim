@@ -2,7 +2,8 @@
 //! §5), on a small house with a gabled roof and a garage with a hipped
 //! one: gabled, shed and flat dormers and roof windows, tiles of every
 //! kind with their ridge tiles, gutters and downpipes, to see them in 3D,
-//! in an axonometry, in the roof plan and in the IFC.
+//! in an axonometry, in the roof plan and in the IFC; and a house in T
+//! with a dormer where the wing's valleys meet.
 
 use std::path::Path;
 
@@ -108,6 +109,41 @@ pub fn build() -> Res<Model> {
             },
         )?;
     }
+    // A house in T: the wing's two valleys meet on the main roof, and
+    // above that point the main plane is two faces side by side; a gabled
+    // dormer stands over the line between them.
+    let t = [
+        Point2::new(0.0, -16.0),
+        Point2::new(4.0, -16.0),
+        Point2::new(4.0, -20.0),
+        Point2::new(8.0, -20.0),
+        Point2::new(8.0, -16.0),
+        Point2::new(12.0, -16.0),
+        Point2::new(12.0, -4.0),
+        Point2::new(0.0, -4.0),
+    ];
+    let clockwise: Vec<Point2> = t.iter().rev().copied().collect();
+    let tw = walls(&mut m, &clockwise, 3.0)?;
+    let r = m.add_roof(NewRoof {
+        roof_type: lib.pitched_roof,
+        level,
+        outline: t.to_vec(),
+        slopes: vec![Some(0.55)],
+        base_offset: 3.0,
+        overhang: 0.45,
+    })?;
+    for w in tw {
+        m.set_wall_roof(w, Some(r))?;
+    }
+    m.add_dormer(r, DormerKind::Gable, Point2::new(6.0, -13.8))?;
+    m.set_roof_covering(
+        r,
+        RoofCovering {
+            tiles: Some(TileKind::Arabic),
+            tile_material: None,
+            gutter,
+        },
+    )?;
     Ok(m)
 }
 

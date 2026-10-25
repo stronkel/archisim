@@ -978,22 +978,16 @@ pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
     for plane in roof.planes() {
         let slope = plane.slope;
         // The dormers on this plane (on this piece of it) cut it.
-        let holes: Vec<Vec<Point2>> = roof
-            .plane_holes(plane.side)
-            .into_iter()
-            .filter(|h| {
-                h.iter()
-                    .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
-            })
-            .collect();
-        out.extend(layered_plate(
-            SolidOwner::Roof(id),
-            &plane.outline,
-            &holes,
-            &|p| level + roof.base_offset + slope.rise_at(p),
-            &|t| slope.vertical(t),
-            &stype.layers,
-        ));
+        for (outline, holes) in crate::roof_parts::roof_plane_shapes(roof, &plane) {
+            out.extend(layered_plate(
+                SolidOwner::Roof(id),
+                &outline,
+                &holes,
+                &|p| level + roof.base_offset + slope.rise_at(p),
+                &|t| slope.vertical(t),
+                &stype.layers,
+            ));
+        }
     }
     out
 }

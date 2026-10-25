@@ -83,6 +83,9 @@ pub fn issue_text(i: &StairIssue) -> String {
         StairIssue::OpenRisers => {
             "Sin tabica: no vale en zonas de uso público ni para evacuar hacia arriba".to_string()
         }
+        StairIssue::SplitLanding => {
+            "Mesetas partidas a 45°: solo en escaleras de uso restringido".to_string()
+        }
     }
 }
 
@@ -121,6 +124,7 @@ fn structures_for(form: StairForm) -> Vec<(StairStructure, &'static str)> {
 /// The form's name.
 fn form_name(d: &StairDesign) -> &'static str {
     match d.form {
+        StairForm::Landings if d.split => "Mesetas partidas a 45°",
         StairForm::Landings => "Tramos y mesetas",
         StairForm::Winders => "Peldaños compensados",
         StairForm::Spiral => "De caracol",
@@ -390,14 +394,24 @@ impl ArchiSimApp {
                 preset,
                 StairPreset::LShape | StairPreset::UShape | StairPreset::Free
             ) {
-                row(ui, "Giros", "Meseta o peldaños compensados", |ui, w| {
-                    self.stair_settings.winders = choice(
+                row(ui, "Giros", "Meseta, partida o compensados", |ui, w| {
+                    let now = (
+                        self.stair_settings.winders,
+                        self.stair_settings.split && !self.stair_settings.winders,
+                    );
+                    let (winders, split) = choice(
                         ui,
                         "tool-stair-winders",
                         w,
-                        self.stair_settings.winders,
-                        &[(false, "Con meseta"), (true, "Peldaños compensados")],
+                        now,
+                        &[
+                            ((false, false), "Con meseta"),
+                            ((false, true), "Meseta partida a 45°"),
+                            ((true, false), "Peldaños compensados"),
+                        ],
                     );
+                    self.stair_settings.winders = winders;
+                    self.stair_settings.split = split;
                 });
             }
             if matches!(
@@ -444,6 +458,21 @@ impl ArchiSimApp {
                             w - 8.0,
                         ) {
                             self.stair_settings.core = v.max(0.0);
+                        }
+                    },
+                );
+                row(
+                    ui,
+                    "Meseta de llegada (°)",
+                    "En la planta de arriba; 0, sin meseta",
+                    |ui, w| {
+                        if let Some(v) = degrees_field(
+                            ui,
+                            Id::unique("tool-stair-arrival"),
+                            self.stair_settings.arrival,
+                            w - 8.0,
+                        ) {
+                            self.stair_settings.arrival = v.abs().min(std::f64::consts::PI);
                         }
                     },
                 );
@@ -827,22 +856,44 @@ impl ArchiSimApp {
                         }
                     },
                 );
+                row(
+                    ui,
+                    "Meseta de llegada (°)",
+                    "En la planta de arriba; 0, sin meseta",
+                    |ui, w| {
+                        if let Some(v) = degrees_field(
+                            ui,
+                            Id::unique(("stair-arrival", id.0)),
+                            d.arrival,
+                            w - 8.0,
+                        ) {
+                            let v = v.abs().min(std::f64::consts::PI);
+                            let r = self
+                                .ed
+                                .edit_stair("Meseta de llegada", id, |s| s.design.arrival = v);
+                            self.report(r, "Meseta de llegada cambiada.");
+                        }
+                    },
+                );
             } else {
                 row(ui, "Forma", "En los giros", |ui, w| {
+                    let now = (d.form, d.split && d.form == StairForm::Landings);
                     let f = choice(
                         ui,
                         ("stair-form", id.0),
                         w,
-                        d.form,
+                        now,
                         &[
-                            (StairForm::Landings, "Tramos y mesetas"),
-                            (StairForm::Winders, "Peldaños compensados"),
+                            ((StairForm::Landings, false), "Tramos y mesetas"),
+                            ((StairForm::Landings, true), "Mesetas partidas a 45°"),
+                            ((StairForm::Winders, false), "Peldaños compensados"),
                         ],
                     );
-                    if f != d.form {
-                        let r = self
-                            .ed
-                            .edit_stair("Forma de la escalera", id, |s| s.design.form = f);
+                    if f != now {
+                        let r = self.ed.edit_stair("Forma de la escalera", id, |s| {
+                            s.design.form = f.0;
+                            s.design.split = f.1;
+                        });
                         self.report(r, "Forma cambiada.");
                     }
                 });

@@ -209,6 +209,7 @@ pub fn stair_model(c: super::maquette_ui::StairCard) -> Option<(Model, LevelId)>
         c.preset
     };
     s.winders = c.winders;
+    s.split = c.split;
     s.structure = c.structure;
     s.closed_risers = c.structure == archisim_core::StairStructure::Slab;
     s.top = crate::editor::TopChoice::Unconnected;
@@ -268,6 +269,7 @@ mod tests {
                         preset,
                         winders,
                         structure,
+                        split: !winders && preset == P::LShape,
                     };
                     let (m, _) = stair_model(c).unwrap_or_else(|| panic!("{c:?}"));
                     assert_eq!(m.stairs().count(), 1);

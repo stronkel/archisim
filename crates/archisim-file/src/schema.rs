@@ -729,6 +729,16 @@ pub(crate) struct StairDesign {
     pub tread_material: Option<u64>,
     /// Width and depth of the stringers.
     pub stringer: [f64; 2],
+    /// Landings split at 45° (version 38).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub split: bool,
+    /// Spiral: angle of the landing at its head, radians (version 38).
+    #[serde(default, skip_serializing_if = "is_nothing")]
+    pub arrival: f64,
+}
+
+fn is_nothing(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl StairDesign {
@@ -752,6 +762,8 @@ impl StairDesign {
             tread: d.tread,
             tread_material: d.tread_material.map(|m| m.0),
             stringer: d.stringer,
+            split: d.split,
+            arrival: d.arrival,
         })
     }
 
@@ -778,6 +790,8 @@ impl StairDesign {
             tread: d.tread,
             tread_material: d.tread_material.map(core::MaterialId),
             stringer: d.stringer,
+            split: d.split,
+            arrival: d.arrival,
         }
     }
 }

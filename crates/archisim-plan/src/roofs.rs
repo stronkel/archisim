@@ -106,16 +106,11 @@ fn draw_tiles(s: &mut String, roof: &Roof, k: f64) {
             continue;
         };
         let across = u.perp_left();
-        let holes: Vec<Vec<Point2>> = roof
-            .plane_holes(plane.side)
-            .into_iter()
-            .filter(|h| {
-                h.iter()
-                    .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
-            })
-            .collect();
-        let rings: Vec<&Vec<Point2>> = std::iter::once(&plane.outline)
-            .chain(holes.iter())
+        // The plane less its dormers (each piece left, with its holes).
+        let shapes = archisim_geom::roof_parts::roof_plane_shapes(roof, &plane);
+        let rings: Vec<&Vec<Point2>> = shapes
+            .iter()
+            .flat_map(|(o, hs)| std::iter::once(o).chain(hs.iter()))
             .collect();
         let from = plane.slope.from;
         let (along, gap) = match (kind.ribs(), kind.course()) {

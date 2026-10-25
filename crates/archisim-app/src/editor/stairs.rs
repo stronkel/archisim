@@ -24,6 +24,10 @@ pub struct StairSettings {
     pub preset: StairPreset,
     /// Turns with winders instead of landings.
     pub winders: bool,
+    /// Landings split at 45° (when not winders).
+    pub split: bool,
+    /// A spiral's landing at its head, radians (0, none).
+    pub arrival: f64,
     /// Ready-made shapes turn left (counter-clockwise) walking up.
     pub left: bool,
     /// The riser height aimed at by ready-made shapes.
@@ -57,6 +61,8 @@ pub fn default_stair_settings(model: &Model) -> StairSettings {
         height: 3.0,
         preset: StairPreset::Straight,
         winders: false,
+        split: false,
+        arrival: std::f64::consts::FRAC_PI_2,
         left: true,
         riser: 0.175,
         gap: 0.2,
@@ -100,6 +106,12 @@ impl StairSettings {
             tread: self.tread,
             tread_material: self.tread_material,
             stringer: self.stringer,
+            split: self.split && !self.winders && form == StairForm::Landings,
+            arrival: if form == StairForm::Spiral {
+                self.arrival
+            } else {
+                0.0
+            },
         }
     }
 
@@ -108,6 +120,7 @@ impl StairSettings {
         PresetSpec {
             preset: self.preset,
             winders: self.winders,
+            split: self.split,
             left: self.left,
             width: self.width,
             going: self.going,

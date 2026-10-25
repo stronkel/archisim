@@ -99,6 +99,7 @@ Un elemento propio que vive en una cubierta: clic en un faldón y se adapta a é
 - **Parámetros**: ancho, altura del frente, pendiente propia, retranqueo desde el alero (se fija al pinchar), ventana del frente (ancho y alto) y materiales (frente y laterales, carpintería, cubierta propia).
 - Se coloca por el punto medio del frente, sobre el faldón; el frente mira siempre aguas abajo. Se mueve arrastrándolo y sigue al faldón si la cubierta cambia (si el punto queda fuera de la cubierta, se avisa y no se dibuja).
 - **La cubierta se corta sola** donde está la buhardilla; los laterales bajan hasta la cara inferior del faldón.
+- **Donde se juntan dos limahoyas** (una cubierta en T o en cruz), por encima de ese punto el faldón principal son dos caras en el mismo plano, una por cada trozo de su alero. Desde v0.68 una buhardilla puede quedar encima de la línea entre ellas: cuenta como un solo faldón y corta las dos caras (`DormerShape::over`, `Roof::plane_cuts`; el resto de cada cara, `archisim_geom::roof_parts::roof_plane_shapes`, en 3D, planta e IFC). Esa línea ya no se toma por limahoya. Sigue sin poder pasar por encima de una limatesa, de una limahoya o de la cumbrera.
 - **IFC**: la buhardilla es un `IfcElementAssembly` (`ObjectType` «Buhardilla») con su frente y sus laterales (`IfcWall`), su cubierta (`IfcSlab` `ROOF`) y su ventana (`IfcWindow`); el hueco en el faldón, un `IfcOpeningElement`. Se lee de vuelta por su `ArchiSim_Dormer`.
 
 ### 5.2 Tejas y canalones

@@ -160,6 +160,10 @@ pub struct DormerShape {
     pub ridge_z: f64,
     /// Its own roof.
     pub planes: Vec<DormerPlane>,
+    /// The sides whose planes it cuts: its own, and those in the same
+    /// plane as it that it reaches over (past where two valleys meet, the
+    /// plane of a roof is two faces side by side).
+    pub over: Vec<usize>,
 }
 
 impl DormerShape {
@@ -489,6 +493,7 @@ impl Roof {
                     eave_z: f.z0,
                     ridge_z: f.z0,
                     planes: Vec::new(),
+                    over: vec![d.side],
                 }
             }
             DormerKind::Gable => {
@@ -524,6 +529,7 @@ impl Roof {
                     eave_z,
                     ridge_z: eave_z + p * hw,
                     planes: vec![left, right],
+                    over: vec![d.side],
                 }
             }
             DormerKind::Shed | DormerKind::Flat => {
@@ -549,16 +555,37 @@ impl Roof {
                     eave_z,
                     ridge_z: eave_z,
                     planes: vec![plane],
+                    over: vec![d.side],
                 }
             }
         };
-        // All of it on its plane, a little in from its edges.
+        // All of it on its plane, a little in from its edges: on the
+        // pieces of the roof in that plane (its own side's, and those of
+        // other sides in the same plane, as the two faces past where two
+        // valleys meet), away from the edges they do not share.
         let planes = self.planes();
+        let own = planes.iter().find(|pl| pl.side == d.side)?;
+        let same: Vec<&RoofPlane> = planes
+            .iter()
+            .filter(|pl| pl.side == d.side || coplanar(own, pl, self.base_offset))
+            .collect();
+        let shared = |piece: usize, a: Point2, b: Point2| {
+            let mid = a + (b - a) * 0.5;
+            same.iter()
+                .enumerate()
+                .any(|(j, pl)| j != piece && edge_distance(mid, &pl.outline) < 1e-6)
+        };
         let on = |q: Point2| {
-            planes
-                .iter()
-                .filter(|pl| pl.side == d.side)
-                .any(|pl| point_in_polygon(q, &pl.outline) && edge_distance(q, &pl.outline) > 0.02)
+            same.iter().enumerate().any(|(i, pl)| {
+                if !point_in_polygon(q, &pl.outline) {
+                    return false;
+                }
+                let n = pl.outline.len();
+                (0..n).all(|k| {
+                    let (a, b) = (pl.outline[k], pl.outline[(k + 1) % n]);
+                    shared(i, a, b) || edge_distance(q, &[a, b]) > 0.02
+                })
+            })
         };
         if !shape.footprint.iter().all(|q| on(*q)) {
             return None;
@@ -571,17 +598,48 @@ impl Roof {
                 return None;
             }
         }
+        let mut shape = shape;
+        shape.over = Vec::new();
+        for pl in &same {
+            if !shape.over.contains(&pl.side)
+                && signed_area(&clip_to_convex(&pl.outline, &shape.footprint)).abs() > 1e-6
+            {
+                shape.over.push(pl.side);
+            }
+        }
+        if !shape.over.contains(&d.side) {
+            shape.over.insert(0, d.side);
+        }
         Some(shape)
     }
 
-    /// The holes the dormers make in the plane rising from `side`.
+    /// The holes the dormers make in the plane rising from `side`: their
+    /// footprints, whole (one may reach over the edge of a piece of that
+    /// plane into another side's piece in the same plane; see
+    /// [`Roof::plane_cuts`]).
     pub fn plane_holes(&self, side: usize) -> Vec<Vec<Point2>> {
         self.dormers
             .iter()
-            .filter(|d| d.side == side)
             .filter_map(|d| self.dormer_shape(d))
+            .filter(|s| s.over.contains(&side))
             .map(|s| s.footprint)
             .collect()
+    }
+
+    /// What the dormers take out of one piece of the roof: the holes all
+    /// inside it, and the footprints that cross its edge (to be taken
+    /// from its outline).
+    pub fn plane_cuts(&self, plane: &RoofPlane) -> (Vec<Vec<Point2>>, Vec<Vec<Point2>>) {
+        let mut inside = Vec::new();
+        let mut crossing = Vec::new();
+        for h in self.plane_holes(plane.side) {
+            if h.iter().all(|q| point_in_polygon(*q, &plane.outline)) {
+                inside.push(h);
+            } else if signed_area(&clip_to_convex(&plane.outline, &h)).abs() > 1e-6 {
+                crossing.push(h);
+            }
+        }
+        (inside, crossing)
     }
 
     /// Where a dormer at `at` (in plan) would stand: the side whose plane
@@ -638,9 +696,12 @@ impl Roof {
                     .normalized()
                     .map_or(Vec2::new(0.0, 0.0), |u| u.perp_left());
                 let z = self.top_at(mid);
-                let convex = self.top_at(mid + n * 0.05) < z - 1e-6
-                    && self.top_at(mid - n * 0.05) < z - 1e-6;
-                if convex == ridges {
+                let (za, zb) = (self.top_at(mid + n * 0.05), self.top_at(mid - n * 0.05));
+                let convex = za < z - 1e-6 && zb < z - 1e-6;
+                let concave = za > z + 1e-6 && zb > z + 1e-6;
+                // Two faces in one plane (past where two valleys meet) do
+                // not make either.
+                if (ridges && convex) || (!ridges && concave) {
                     out.push((p, q));
                 }
             }
@@ -704,6 +765,37 @@ impl Roof {
         }
         out
     }
+}
+
+/// Two pieces of a roof in the same plane: the same height at three
+/// points.
+fn coplanar(a: &RoofPlane, b: &RoofPlane, base: f64) -> bool {
+    let z = |pl: &RoofPlane, p: Point2| base + pl.slope.rise_at(p);
+    let o = a.outline[0];
+    [o, o + Vec2::new(1.0, 0.0), o + Vec2::new(0.0, 1.0)]
+        .iter()
+        .all(|p| (z(a, *p) - z(b, *p)).abs() < 1e-6)
+}
+
+/// The part of `poly` inside the convex counter-clockwise polygon `clip`.
+pub fn clip_to_convex(poly: &[Point2], clip: &[Point2]) -> Vec<Point2> {
+    let mut clip = clip.to_vec();
+    if signed_area(&clip) < 0.0 {
+        clip.reverse();
+    }
+    let n = clip.len();
+    let mut out = poly.to_vec();
+    for i in 0..n {
+        if out.len() < 3 {
+            return Vec::new();
+        }
+        let (a, b) = (clip[i], clip[(i + 1) % n]);
+        let Some(inward) = (b - a).normalized().map(|u| u.perp_left()) else {
+            continue;
+        };
+        out = clip_half_plane(&out, -inward, -inward.dot(a));
+    }
+    out
 }
 
 /// Shortest distance from `p` to the edges of a polygon.
@@ -1077,5 +1169,74 @@ mod tests {
         assert!(runs.iter().all(|g| g.downpipes.len() == 3));
         // At the eave, 0.5 m out at 50 %: 25 cm under the base.
         assert!((runs[0].z - 2.75).abs() < 1e-9);
+    }
+
+    /// A T: past where its two valleys meet, the main plane is two faces
+    /// side by side (one per piece of its eave). A dormer over the line
+    /// between them stands, cuts both and is tiled round.
+    #[test]
+    fn over_where_two_valleys_meet() {
+        let (mut m, _) = setup();
+        let t = m.roofs().next().unwrap().roof_type;
+        let l = m.levels()[0].id;
+        let p = |x, y| Point2::new(x, y);
+        let r = m
+            .add_roof(NewRoof {
+                roof_type: t,
+                level: l,
+                outline: vec![
+                    p(20.0, 4.0),
+                    p(24.0, 4.0),
+                    p(24.0, 0.0),
+                    p(28.0, 0.0),
+                    p(28.0, 4.0),
+                    p(32.0, 4.0),
+                    p(32.0, 16.0),
+                    p(20.0, 16.0),
+                ],
+                slopes: vec![Some(0.5)],
+                base_offset: 3.0,
+                overhang: 0.5,
+            })
+            .unwrap();
+        let roof = m.roof(r).unwrap();
+        // The valleys meet at (26, 6); the faces of the two pieces of the
+        // eave meet on x = 26 above it, which is neither ridge nor valley.
+        assert_eq!(roof.valley_lines().len(), 2);
+        let i = m
+            .add_dormer(r, DormerKind::Gable, Point2::new(26.0, 6.2))
+            .unwrap();
+        let roof = m.roof(r).unwrap();
+        let s = roof.dormer_shape(&roof.dormers[i]).unwrap();
+        assert_eq!(s.over.len(), 2, "{:?}", s.over);
+        let pieces: Vec<RoofPlane> = roof
+            .planes()
+            .into_iter()
+            .filter(|pl| s.over.contains(&pl.side))
+            .collect();
+        let taken: f64 = pieces
+            .iter()
+            .map(|pl| {
+                let (inside, crossing) = roof.plane_cuts(pl);
+                assert!(inside.is_empty());
+                crossing
+                    .iter()
+                    .map(|h| signed_area(&clip_to_convex(&pl.outline, h)).abs())
+                    .sum::<f64>()
+            })
+            .sum();
+        assert!((taken - signed_area(&s.footprint).abs()).abs() < 1e-9);
+        // The roof's surface is less the footprint, on the slope.
+        let whole = {
+            let mut bare = roof.clone();
+            bare.dormers.clear();
+            bare.surface_area()
+        };
+        let k = (1.0f64 + 0.25).sqrt();
+        assert!((whole - roof.surface_area() - taken * k).abs() < 1e-9);
+        // Still not over a hip or the ridge.
+        assert!(m
+            .add_dormer(r, DormerKind::Gable, Point2::new(26.0, 8.5))
+            .is_err());
     }
 }
