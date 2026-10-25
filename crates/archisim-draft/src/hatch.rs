@@ -129,6 +129,7 @@ pub fn families(p: HatchPattern) -> &'static [Family] {
         HatchPattern::LawnStripes => LAWN_STRIPES,
         HatchPattern::LawnDots => LAWN_DOTS,
         HatchPattern::Water => WATER,
+        other => crate::textures::stand_in(other),
     }
 }
 
@@ -213,7 +214,14 @@ pub fn hatch_lines(h: &Hatch, k: f64) -> Option<Vec<(Point2, Point2)>> {
         // Drawn as filled bands (`hatch_bands`).
         return Some(out);
     }
-    if procedural(h.pattern) {
+    if crate::textures::is_texture(h.pattern) {
+        // Piece by piece; too dense for that, with its plain lines.
+        if crate::textures::draw(&polys, h.pattern, unit, h.angle, &mut out).is_some() {
+            return Some(out);
+        }
+        out.clear();
+    }
+    if procedural(h.pattern) && !crate::textures::is_texture(h.pattern) {
         draw_procedural(&polys, h.pattern, unit, h.angle, &mut out)?;
         return Some(out);
     }
@@ -226,17 +234,18 @@ pub fn hatch_lines(h: &Hatch, k: f64) -> Option<Vec<(Point2, Point2)>> {
 /// Patterns drawn piece by piece, each piece a little different (stones,
 /// grain, dots), rather than as repeating lines.
 pub fn procedural(p: HatchPattern) -> bool {
-    matches!(
-        p,
-        HatchPattern::Stone
-            | HatchPattern::WoodGrain
-            | HatchPattern::GravelDots
-            | HatchPattern::LawnDots
-    )
+    crate::textures::is_texture(p)
+        || matches!(
+            p,
+            HatchPattern::Stone
+                | HatchPattern::WoodGrain
+                | HatchPattern::GravelDots
+                | HatchPattern::LawnDots
+        )
 }
 
 /// A number in [0, 1) that is always the same for the same cell.
-fn noise(i: i64, j: i64, k: u64) -> f64 {
+pub(crate) fn noise(i: i64, j: i64, k: u64) -> f64 {
     let mut x = (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ (j as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F)
         ^ k.wrapping_mul(0x1656_67B1_9E37_79F9);
@@ -386,7 +395,7 @@ fn draw_procedural(
 }
 
 /// Whether a point is inside the polygons (even-odd).
-fn inside(polys: &[Vec<Point2>], q: Point2) -> bool {
+pub(crate) fn inside(polys: &[Vec<Point2>], q: Point2) -> bool {
     let mut odd = false;
     for poly in polys {
         let m = poly.len();
@@ -404,7 +413,12 @@ fn inside(polys: &[Vec<Point2>], q: Point2) -> bool {
 }
 
 /// The parts of the segment `a`–`b` inside the polygons (even-odd).
-fn clip_segment(polys: &[Vec<Point2>], a: Point2, b: Point2, out: &mut Vec<(Point2, Point2)>) {
+pub(crate) fn clip_segment(
+    polys: &[Vec<Point2>],
+    a: Point2,
+    b: Point2,
+    out: &mut Vec<(Point2, Point2)>,
+) {
     let d = b - a;
     let mut ts = vec![0.0, 1.0];
     for poly in polys {

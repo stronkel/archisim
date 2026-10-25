@@ -6,6 +6,38 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 · v0.60: tramas de presentación (T1)
+
+Rama `bloque/tramas`, encima de `bloque/figuras-2` (#63), con pull request para Antonio. **Formato `.archisim` versión 36**: abre todas las anteriores. Solo sube para que una versión anterior del programa avise de que el fichero es más nuevo.
+
+Lo que pidió Antonio: «patrones de relleno para dibujo arquitectónico con un grosor de línea fina, solo en gris, en un formato estilizado para presentaciones limpias con un toque humano».
+
+**Hecho**
+- 28 tramas nuevas, dibujadas de cero para ArchiSim:
+  - **Madera**: en tablas, vetas, terminada, pino, roble, arce, abedul, fresno, nogal y caoba.
+  - **Metal**: cepillado, perforado, chapa lagrimada, chapa grecada y malla.
+  - **Hormigón**: visto, en bruto, desnudo, adoquín en espiga y encofrado con tablas.
+  - **Piedra**: grava gruesa, caliza, bloques, sillería, terrazo, camino de piedras, adoquín en abanico y mampostería.
+- Van a tamaño real y pieza a pieza: cada tabla, piedra o agujero es distinto. Las juntas van al tresbolillo; las vetas siguen la ondulación de su tabla sin cruzarse; hay catedrales, nudos y radios del roble.
+- El trazo es a mano: las líneas ondulan un poco y a veces no llegan a la esquina.
+- Si se cambia el contorno, lo que queda dentro no se mueve.
+- En un área muy grande se dibujan con líneas sencillas en lugar de con un relleno macizo.
+- En el selector de tramas salen por familias: Madera, Metal, Hormigón y Piedra.
+- En DXF, las tramas dibujadas pieza a pieza (también las de P1: piedra irregular, veta, grava y césped punteados) van como líneas, no como un patrón aproximado.
+- `archisim tramas out/` hace una lámina con todas a 1:20 y a 1:50 (SVG, PDF, DXF y proyecto).
+
+**Pendiente**
+- Ajustes de densidad y de carácter de cada trama según lo que diga Antonio al verlas impresas.
+- Los DXF de árboles y arbustos que mandó Antonio el 25/10/2026 son de CAD素材.com, una biblioteca de otros. No entran en el repositorio. Propuesta: una orden para cargar los bloques de un DXF en su biblioteca local.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- tramas out/tramas` y abre `out/tramas/tramas.pdf`: hoja 1 a 1:20, hoja 2 a 1:50. Mira si alguna trama está demasiado cargada o vacía.
+2. Abre `out/tramas/tramas.archisim`, elige un cuadro y cambia su patrón en Propiedades → Sombreado → Patrón. Las tramas nuevas están abajo, por familias.
+3. En un proyecto, elige un local y, en **Pavimento en planta**, pon Roble o Terrazo. Gira la trama y cambia su escala.
+4. Exporta a DXF un plano con una de estas tramas y ábrelo en AutoCAD.
+
+---
+
 ## 2026-10-24 (7) · v0.59: Tab entre elementos, cambios por ejemplar, galería en 3D y dibujos propios en alzado
 
 Rama `bloque/figuras-2`, sobre C1 (lleva dentro #62), pull request para Antonio. **Formato `.archisim` versión 35**: abre todas las anteriores.

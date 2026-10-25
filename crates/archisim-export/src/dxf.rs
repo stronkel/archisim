@@ -461,7 +461,26 @@ impl Dxf {
                     self.hatch(&name, &back, &loops, None);
                 }
                 let bands = archisim_draft::hatch::hatch_bands(h);
-                if bands.is_empty() {
+                let drawn = archisim_draft::hatch::procedural(h.pattern)
+                    .then(|| archisim_draft::hatch::hatch_lines(h, k))
+                    .flatten();
+                if let Some(lines) = drawn {
+                    // Drawn piece by piece (stones, grain, textures): its
+                    // lines as they are, a dot as a tiny circle.
+                    for (a, b) in lines {
+                        let shape = if a.approx_eq(b) {
+                            Shape::Circle {
+                                centre: a,
+                                radius: k * 0.08,
+                            }
+                        } else {
+                            Shape::Line { a, b }
+                        };
+                        let mut sub = d.clone();
+                        sub.shape = shape;
+                        self.draft(model, &sub, k);
+                    }
+                } else if bands.is_empty() {
                     let pattern = hatch_def(h, k);
                     self.hatch(&name, &look, &loops, pattern);
                 } else {

@@ -18,10 +18,11 @@ pub fn paint_swatch(ui: &Ui, rect: Rect, pattern: HatchPattern, ink: Rgb, paper:
     painter.rect_filled(rect, 3.0, paper.map_or(Color32::WHITE, colour));
     // The square: 1,2 m of plan at 1:50 (patterns at real size: tiles,
     // setts, decking…), a little more for the lawn's bands.
-    let side = if pattern == HatchPattern::LawnStripes {
-        4.5
-    } else {
-        1.2
+    let side = match pattern {
+        HatchPattern::LawnStripes => 4.5,
+        HatchPattern::Setts | HatchPattern::RockyPath => 2.4,
+        p if p.texture().is_some() => 1.6,
+        _ => 1.2,
     };
     let k = side / 24.0; // 24 mm of paper across
     let h = Hatch {
@@ -188,8 +189,9 @@ pub fn inline_grid(
     chosen
 }
 
-/// Every pattern in pictures, the technical ones and those of presentation
-/// apart, `columns` to a row; the one clicked.
+/// Every pattern in pictures, the technical ones, those of presentation
+/// and the textures by family (wood, metal, concrete, stone) apart,
+/// `columns` to a row, in a scrolling list; the one clicked.
 fn pattern_grid(
     ui: &mut Ui,
     current: HatchPattern,
@@ -198,43 +200,63 @@ fn pattern_grid(
     columns: usize,
 ) -> Option<HatchPattern> {
     let mut chosen = None;
-    for (title, presentation) in [("Técnicas", false), ("Presentación", true)] {
-        ui.label(egui::RichText::new(title).strong());
-        let list: Vec<HatchPattern> = HatchPattern::ALL
-            .into_iter()
-            .filter(|p| p.is_presentation() == presentation)
-            .collect();
-        for row in list.chunks(columns) {
-            ui.horizontal(|ui| {
-                for p in row {
-                    let r = ui
-                        .vertical(|ui| {
-                            ui.set_width(96.0);
-                            let (rect, r) =
-                                ui.allocate_exact_size(Vec2::new(96.0, 56.0), Sense::click());
-                            paint_swatch(ui, rect, *p, ink, paper);
-                            if *p == current {
-                                let pal = Palette::current(ui.ctx());
-                                ui.painter().rect_stroke(
-                                    rect,
-                                    3.0,
-                                    Stroke::new(2.0, pal.accent),
-                                    egui::StrokeKind::Outside,
-                                );
+    egui::ScrollArea::vertical()
+        .max_height(520.0)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            for (title, list) in pattern_sections() {
+                ui.label(egui::RichText::new(title).strong());
+                for row in list.chunks(columns) {
+                    ui.horizontal(|ui| {
+                        for p in row {
+                            let r = ui
+                                .vertical(|ui| {
+                                    ui.set_width(96.0);
+                                    let (rect, r) = ui
+                                        .allocate_exact_size(Vec2::new(96.0, 56.0), Sense::click());
+                                    paint_swatch(ui, rect, *p, ink, paper);
+                                    if *p == current {
+                                        let pal = Palette::current(ui.ctx());
+                                        ui.painter().rect_stroke(
+                                            rect,
+                                            3.0,
+                                            Stroke::new(2.0, pal.accent),
+                                            egui::StrokeKind::Outside,
+                                        );
+                                    }
+                                    ui.label(egui::RichText::new(p.label()).small());
+                                    r
+                                })
+                                .inner;
+                            if r.clicked() {
+                                chosen = Some(*p);
                             }
-                            ui.label(egui::RichText::new(p.label()).small());
-                            r
-                        })
-                        .inner;
-                    if r.clicked() {
-                        chosen = Some(*p);
-                    }
+                        }
+                    });
+                    ui.add_space(4.0);
                 }
-            });
-            ui.add_space(4.0);
+            }
+        });
+    chosen
+}
+
+/// The patterns in the picker's sections, in order: technical, the
+/// presentation ones and the textures by family.
+pub fn pattern_sections() -> Vec<(&'static str, Vec<HatchPattern>)> {
+    let mut out: Vec<(&'static str, Vec<HatchPattern>)> =
+        vec![("Técnicas", Vec::new()), ("Presentación", Vec::new())];
+    for p in HatchPattern::ALL {
+        let title = match p.texture() {
+            Some(family) => family,
+            None if p.is_presentation() => "Presentación",
+            None => "Técnicas",
+        };
+        match out.iter_mut().find(|(t, _)| *t == title) {
+            Some((_, list)) => list.push(p),
+            None => out.push((title, vec![p])),
         }
     }
-    chosen
+    out
 }
 
 /// The opacity of a fill, as a slider in percent; the new value if moved.

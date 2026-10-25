@@ -31,6 +31,28 @@
 
 Cada elemento pertenece a una **vista**: la planta de un nivel o una hoja de plano.
 
+### Tramas de presentación (v0.60)
+
+Además de las técnicas (diagonal, hormigón, terreno…) y las de presentación de P1 (tarima, piedra irregular, césped, agua…), hay 28 **texturas** pedidas por Antonio el 25/10/2026. Son diseños propios de ArchiSim: gris, línea fina y un toque de dibujo a mano.
+
+| Familia | Tramas |
+|---|---|
+| Madera | Madera en tablas, Vetas de madera, Madera terminada, Pino, Roble, Arce, Abedul, Fresno, Nogal, Caoba |
+| Metal | Metal cepillado, Metal perforado, Chapa lagrimada, Chapa grecada, Malla metálica |
+| Hormigón | Hormigón visto, Hormigón en bruto, Hormigón desnudo, Adoquín de hormigón, Hormigón encofrado con tablas |
+| Piedra | Grava gruesa, Piedra caliza, Bloques de piedra, Sillería, Terrazo, Camino de piedras, Adoquín en abanico, Mampostería |
+
+Cómo se dibujan:
+
+- **A su tamaño real**, como las baldosas o la tarima. Una tabla de pino mide 14 cm, un adoquín 20 × 10 cm y un sillar 60 × 30 cm, así que se ven a cualquier escala del tamaño que tienen. La escala de la trama las agranda o las achica, y el giro las gira.
+- **Pieza a pieza.** Cada tabla, piedra o agujero es un poco distinto: tablas de largos diferentes con las juntas al tresbolillo, vetas que siguen la ondulación de su tabla sin cruzarse, catedrales, nudos y radios en el roble.
+- **Con trazo a mano.** Las líneas ondulan un poco y a veces se quedan cortas antes de la esquina, para que el dibujo no se vea mecánico.
+- **Siempre igual en el mismo sitio.** Cada pieza sale de donde está, no del contorno. Si se cambia el contorno de un local, lo que queda dentro no se mueve.
+- **En un área muy grande**, más de un par de cientos de metros cuadrados según la trama, se dibujan con sus líneas sencillas, sin pieza a pieza.
+- **En DXF** van como líneas, igual que en pantalla y en PDF.
+
+En el selector de tramas salen en su familia: Madera, Metal, Hormigón y Piedra. `archisim tramas out/` hace una lámina con todas a 1:20 y a 1:50, en SVG, PDF y DXF, y el proyecto `tramas.archisim`.
+
 ### Capas de dibujo
 
 Como las capas de AutoCAD: nombre, color, grosor (mm), tipo de línea, visible, bloqueada (no se selecciona ni se modifica) e imprimible. Cada elemento de dibujo tiene su capa y puede **cambiar color, grosor o tipo de línea** («PorCapa» si no). Capa «0» siempre presente. La capa actual se elige en la barra de propiedades del dibujo.
