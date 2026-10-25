@@ -78,9 +78,112 @@ pub fn symbol_from_dxf(bytes: &[u8], source: &str, fit: bool) -> Result<PlanSymb
     })
 }
 
+/// A drawing for elevations from a DXF (C1, 24/10/2026): the whole
+/// drawing (texts and dimensions left out), its middle on `x` = 0, its
+/// lowest point on `y` = 0 and 1 high, so the object draws it as tall as
+/// itself. `side`: it shows the object seen from its side.
+pub fn elevation_from_dxf(
+    bytes: &[u8],
+    source: &str,
+    side: bool,
+) -> Result<archisim_core::ElevationFigure, String> {
+    let sym = symbol_from_dxf(bytes, source, false)?;
+    let pts: Vec<Point2> = sym
+        .items
+        .iter()
+        .flat_map(|i| extent_points(&i.shape))
+        .collect();
+    let Some(first) = pts.first().copied() else {
+        return Err("el dibujo no tiene líneas, arcos ni rellenos".into());
+    };
+    let (lo, hi) = pts.iter().fold((first, first), |(lo, hi), p| {
+        (
+            Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+            Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+        )
+    });
+    let height = hi.y - lo.y;
+    if height < 1e-9 {
+        return Err("el dibujo no tiene altura".into());
+    }
+    let origin = Point2::new(0.0, 0.0);
+    let foot = Point2::new((lo.x + hi.x) / 2.0, lo.y);
+    let t = Transform::translate(origin - foot).then(&Transform::scale(origin, 1.0 / height));
+    let items = sym
+        .items
+        .into_iter()
+        .map(|i| SymbolItem {
+            shape: transform_shape(&i.shape, &t),
+            ..i
+        })
+        .collect();
+    Ok(archisim_core::ElevationFigure {
+        source: source.to_string(),
+        side,
+        art: archisim_core::ElevationArt::Lines(items),
+    })
+}
+
+/// A picture for elevations from a PNG (with transparency): kept as it
+/// is, with its width over its height.
+pub fn elevation_from_png(
+    bytes: &[u8],
+    source: &str,
+    side: bool,
+) -> Result<archisim_core::ElevationFigure, String> {
+    // The size is in the first chunk (IHDR), after the signature.
+    const SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
+    if bytes.len() < 24 || bytes[..8] != SIGNATURE || &bytes[12..16] != b"IHDR" {
+        return Err("no es una imagen PNG".into());
+    }
+    let be = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+    let (w, h) = (be(&bytes[16..20]), be(&bytes[20..24]));
+    if w == 0 || h == 0 {
+        return Err("la imagen no tiene tamaño".into());
+    }
+    Ok(archisim_core::ElevationFigure {
+        source: source.to_string(),
+        side,
+        art: archisim_core::ElevationArt::Image {
+            png: std::sync::Arc::new(bytes.to_vec()),
+            aspect: w as f64 / h as f64,
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_drawing_stands_for_an_elevation() {
+        // A trunk and a crown, 6 high, away from the origin.
+        let dxf = "0\nSECTION\n2\nENTITIES\n\
+0\nLINE\n8\nT\n10\n10\n20\n5\n30\n0\n11\n10\n21\n8\n31\n0\n\
+0\nCIRCLE\n8\nC\n10\n10\n20\n9\n30\n0\n40\n2\n\
+0\nENDSEC\n0\nEOF\n";
+        let f = elevation_from_dxf(dxf.as_bytes(), "arbol.dxf", false).unwrap();
+        let archisim_core::ElevationArt::Lines(items) = &f.art else {
+            panic!("{f:?}");
+        };
+        match &items[0].shape {
+            Shape::Line { a, b } => {
+                assert!(a.distance(Point2::new(0.0, 0.0)) < 1e-9, "{a:?}");
+                assert!((b.y - 0.5).abs() < 1e-9, "{b:?}");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!((f.art.aspect() - 4.0 / 6.0).abs() < 1e-9);
+        // A PNG of 40 × 80: half as wide as high.
+        let mut png = vec![137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13];
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&40u32.to_be_bytes());
+        png.extend_from_slice(&80u32.to_be_bytes());
+        let f = elevation_from_png(&png, "p.png", true).unwrap();
+        assert!((f.art.aspect() - 0.5).abs() < 1e-12);
+        assert!(f.side);
+        assert!(elevation_from_png(b"GIF89a", "x", false).is_err());
+    }
 
     #[test]
     fn a_drawing_becomes_a_symbol() {

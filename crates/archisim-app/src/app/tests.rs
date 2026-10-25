@@ -6750,3 +6750,62 @@ fn kitchen_modules_in_a_row() {
     assert_eq!(n(ids[0]), 2.0);
     assert_eq!(n(ids[2]), 3.0);
 }
+
+/// Tab over a grid line lying on a wall: the arrow takes the grid line
+/// first; Tab goes on to the wall, a click selects it; Shift+Tab goes
+/// back. Elsewhere Tab still switches to the Maqueta.
+#[test]
+fn tab_goes_through_what_overlaps() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.app
+        .ed
+        .transact("eje", |m| {
+            m.add_grid(archisim_core::NewGrid {
+                name: "A".into(),
+                start: p(-2.0, 0.0),
+                end: p(14.0, 0.0),
+            })
+        })
+        .unwrap();
+    assert_eq!(h.app.tool, Tool::Arrow);
+    h.move_to(p(6.0, 0.0));
+    h.frame();
+    let first = h.app.hover;
+    assert!(
+        matches!(first, Some(Element::Grid(_))),
+        "{first:?} {:?}",
+        h.app.under_cursor
+    );
+    assert!(h.app.under_cursor.len() >= 2);
+    h.key(Key::Tab);
+    assert!(!h.app.maquette, "Tab over two elements does not switch");
+    h.frame();
+    assert!(
+        matches!(h.app.hover, Some(Element::Wall(_))),
+        "{:?}",
+        h.app.hover
+    );
+    h.click_at(p(6.0, 0.0));
+    assert_eq!(h.app.ed.selection.len(), 1);
+    assert!(matches!(
+        h.app.ed.selection.iter().next(),
+        Some(Element::Wall(_))
+    ));
+    // Back with Shift+Tab.
+    h.set_modifiers(Modifiers::SHIFT);
+    h.key(Key::Tab);
+    h.set_modifiers(Modifiers::NONE);
+    h.frame();
+    assert!(
+        matches!(h.app.hover, Some(Element::Grid(_))),
+        "{:?}",
+        h.app.hover
+    );
+    // Moving away forgets it.
+    h.move_to(p(6.0, 4.5));
+    h.frame();
+    assert!(h.app.tab_pick.is_none());
+}

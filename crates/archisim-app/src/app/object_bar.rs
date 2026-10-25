@@ -33,6 +33,8 @@ enum BarAct {
     /// Give a value to a measure or choice of its type (to its whole row
     /// of modules with `true`).
     SetValue(String, Value, bool),
+    /// Take what was changed on it to every object of its type.
+    ToType,
 }
 
 /// A count or a choice of the object's type the bar offers: how many
@@ -204,6 +206,19 @@ impl ArchiSimApp {
             .filter(|t| !t.is_empty())
             .unwrap_or(label);
         let flips = matches!(single, Some(Element::Opening(_)) | Some(Element::Wall(_)));
+        // Changed in the Maqueta: it has its own type, which can go to all
+        // of the type it came from.
+        let own = match single {
+            Some(Element::Object(id)) => {
+                let m = self.ed.model();
+                m.object(id)
+                    .and_then(|o| m.object_type(o.object_type))
+                    .and_then(|t| t.own)
+                    .and_then(|w| m.object_type(w.base))
+                    .map(|b| b.name.clone())
+            }
+            _ => None,
+        };
         let object = match single {
             Some(Element::Object(id)) => Some(id),
             _ => None,
@@ -320,6 +335,19 @@ impl ArchiSimApp {
                                     }
                                 }
                                 bar_gap(ui, p);
+                                if let Some(base) = &own {
+                                    if ui
+                                        .add(egui::Button::new(
+                                            egui::RichText::new("Aplicar a todos").color(p.accent),
+                                        ).frame(false))
+                                        .on_hover_text(format!(
+                                            "Lo cambiado en este objeto pasa al tipo «{base}» y a todos los suyos"
+                                        ))
+                                        .clicked()
+                                    {
+                                        act = Some(BarAct::ToType);
+                                    }
+                                }
                                 if ui
                                     .add(egui::Button::new(
                                         egui::RichText::new("Más…").color(p.accent),
@@ -402,6 +430,12 @@ impl ArchiSimApp {
             }
             BarAct::Delete => self.delete_pub(),
             BarAct::More => self.maquette_props = true,
+            BarAct::ToType => {
+                if let Some(id) = object {
+                    let r = self.ed.object_changes_to_type(id);
+                    self.report(r, "Aplicado a todos los del tipo.");
+                }
+            }
             BarAct::Swatches(key) => {
                 self.bar_swatches = if self.bar_swatches.as_deref() == Some(key.as_str()) {
                     None

@@ -448,6 +448,11 @@ pub struct ArchiSimApp {
     /// Pintar takes the paint off instead (Quitar pintura).
     paint_erase: bool,
     hover: Option<Element>,
+    /// Every element under the cursor in plan, first the one `hover`
+    /// would take; and where Tab was pressed and how many times, to go
+    /// through them (as in Revit).
+    under_cursor: Vec<Element>,
+    tab_pick: Option<(Point2, usize)>,
     /// The handle of the selection under the cursor, if any.
     hover_grip: Option<Grip>,
     /// A vertex picked with a click (Supr takes it away): `vertex_ui`.
@@ -731,6 +736,8 @@ impl ArchiSimApp {
             cursor3d: None,
             paint_erase: false,
             hover: None,
+            under_cursor: Vec::new(),
+            tab_pick: None,
             hover_grip: None,
             vertex: None,
             mesh_import: None,
@@ -1857,6 +1864,33 @@ impl ArchiSimApp {
         // (egui moves the focus between buttons with Tab: only a text
         // field keeps it.)
         let in_text = typing_in_text(ctx);
+        // Tab over several elements in plan, with the arrow: the next of
+        // them (Shift+Tab, the one before); a click takes it.
+        let overlapping = !self.maquette
+            && self.tool == Tool::Arrow
+            && self.hover.is_some()
+            && self.under_cursor.len() > 1
+            && self.temp_edit.is_none()
+            && !in_text;
+        if overlapping {
+            let back = consume(Modifiers::SHIFT, Key::Tab);
+            if back || consume(Modifiers::NONE, Key::Tab) {
+                let n = self.under_cursor.len();
+                let at = self.cursor.map_or(Point2::new(0.0, 0.0), |c| c.point);
+                let i = self.tab_pick.map_or(0, |(_, i)| i % n);
+                let i = if back { (i + n - 1) % n } else { (i + 1) % n };
+                self.tab_pick = Some((at, i));
+                self.hover = self.under_cursor.get(i).copied();
+                if let Some(e) = self.hover {
+                    let name = context_bar::element_name(&e);
+                    self.say(format!(
+                        "Tab: {name} ({} de {n}). Clic para elegirlo.",
+                        i + 1
+                    ));
+                }
+                ctx.request_repaint();
+            }
+        }
         if self.temp_edit.is_none() && !in_text && consume(Modifiers::NONE, Key::Tab) {
             ctx.memory_mut(|m| {
                 if let Some(id) = m.focused() {

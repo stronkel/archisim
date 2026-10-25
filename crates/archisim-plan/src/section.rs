@@ -85,6 +85,15 @@ enum Figure {
         /// to the viewer's right).
         flip: bool,
     },
+    /// An object with its own drawing for elevations (a DXF, a PNG):
+    /// which one, flipped or not, is decided when the drawing is written
+    /// (a DXF in technical, a picture in presentation).
+    Custom {
+        object: archisim_core::ObjectId,
+        at: Point2,
+        toward: [f64; 2],
+        flip: bool,
+    },
     /// A person or a car: what each of its materials covers, the largest
     /// first, and its silhouette.
     Body {
@@ -302,6 +311,89 @@ fn draw_body(
     );
 }
 
+/// An object's own drawing for elevations standing at `at`: a DXF's lines
+/// (over white where they close, so it hides what is behind it) or a
+/// picture. `axis_flip`: the drawing's `x` runs to the viewer's left.
+pub(crate) fn draw_custom(
+    out: &mut String,
+    shown: &archisim_core::ShownFigure,
+    at: Point2,
+    axis_flip: bool,
+    k: f64,
+) {
+    use archisim_core::ElevationArt;
+    let h = shown.height;
+    let mirror = shown.flip != axis_flip;
+    match &shown.figure.art {
+        ElevationArt::Lines(items) => {
+            use archisim_draft::Transform;
+            let origin = Point2::new(0.0, 0.0);
+            let mut t = Transform::scale(origin, h);
+            if mirror {
+                t = t.then(&Transform::mirror(origin, Point2::new(0.0, 1.0)));
+            }
+            let t = t.then(&Transform::translate(at - origin));
+            // Paper under what closes: it hides what is behind.
+            for item in items {
+                let shape = archisim_draft::transform_shape(&item.shape, &t);
+                let ring: Option<Vec<Point2>> = match &shape {
+                    archisim_core::Shape::Polyline(p) if p.closed && p.points.len() >= 3 => {
+                        Some(p.points.clone())
+                    }
+                    archisim_core::Shape::Circle { centre, radius } => Some(
+                        (0..32)
+                            .map(|i| {
+                                let a = std::f64::consts::TAU * i as f64 / 32.0;
+                                *centre + archisim_core::Vec2::new(a.cos(), a.sin()) * *radius
+                            })
+                            .collect(),
+                    ),
+                    _ => None,
+                };
+                if let Some(r) = ring {
+                    let _ = writeln!(
+                        out,
+                        r#"<path d="{}" fill="white" stroke="none"/>"#,
+                        path(&r)
+                    );
+                }
+            }
+            out.push_str("<g fill=\"none\">\n");
+            for item in items {
+                let look = archisim_core::DraftLook {
+                    color: item.color.unwrap_or([26, 26, 26]),
+                    weight: item.weight.unwrap_or(pens().thin),
+                    line: archisim_core::LineStyle::Continuous,
+                };
+                let shape = archisim_draft::transform_shape(&item.shape, &t);
+                crate::drafting::draw_shape(out, &shape, &look, k);
+            }
+            out.push_str("</g>\n");
+        }
+        ElevationArt::Image { png, aspect } => {
+            let w = h * aspect;
+            let (x, y) = (at.x - w / 2.0, -(at.y + h));
+            let turn = if mirror {
+                format!(
+                    r#" transform="translate({},0) scale(-1,1)""#,
+                    num(2.0 * at.x)
+                )
+            } else {
+                String::new()
+            };
+            let _ = writeln!(
+                out,
+                r#"<image x="{}" y="{}" width="{}" height="{}" preserveAspectRatio="none" href="data:image/png;base64,{}"{turn}/>"#,
+                num(x),
+                num(y),
+                num(w),
+                num(h),
+                crate::base64(png)
+            );
+        }
+    }
+}
+
 /// The points of a mark (an arc by its ends and centre).
 fn mark_points(m: &archisim_core::family::Mark) -> Vec<[f64; 2]> {
     use archisim_core::family::Mark;
@@ -341,16 +433,26 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
 
     let mut faces: Vec<(f64, Face)> = Vec::new();
     let all = archisim_geom::solid::without_plants(|| model_solids(model));
+    // Objects with drawings of their own for elevations: those (below).
+    let customs: std::collections::HashSet<archisim_core::ObjectId> = model
+        .objects()
+        .filter(|o| {
+            model
+                .object_type(o.object_type)
+                .is_some_and(|t| !t.elevation.is_empty())
+        })
+        .map(|o| o.id)
+        .collect();
     // Plants are drawn as figures (below), not by their mesh.
     let plants: std::collections::HashSet<archisim_core::ObjectId> = model
         .objects()
-        .filter(|o| model.type_grows(o.object_type))
+        .filter(|o| model.type_grows(o.object_type) && !customs.contains(&o.id))
         .map(|o| o.id)
         .collect();
     // People and vehicles: drawn by their silhouette (below).
     let bodies: std::collections::HashSet<archisim_core::ObjectId> = model
         .objects()
-        .filter(|o| !plants.contains(&o.id))
+        .filter(|o| !plants.contains(&o.id) && !customs.contains(&o.id))
         .filter(|o| {
             model
                 .object_type(o.object_type)
@@ -367,7 +469,8 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
         (Vec<(MaterialId, Vec<[Point2; 3]>)>, f64, usize),
     > = HashMap::new();
     for solid in all {
-        if matches!(solid.owner, SolidOwner::Object(o) if plants.contains(&o)) {
+        if matches!(solid.owner, SolidOwner::Object(o) if plants.contains(&o) || customs.contains(&o))
+        {
             continue;
         }
         if let SolidOwner::Object(o) = solid.owner {
@@ -587,6 +690,48 @@ pub fn section_drawing(model: &Model, sec: &SectionLine) -> SectionDrawing {
                     at,
                     toward,
                     flip,
+                }),
+            },
+        ));
+    }
+    for &id in &customs {
+        let Some(obj) = model.object(id) else {
+            continue;
+        };
+        let z0 = model.level(obj.level).map_or(0.0, |l| l.elevation) + obj.base_offset;
+        let foot = [obj.position.x, obj.position.y, z0];
+        let depth = depth_of(foot);
+        if depth < plane || depth > sec.depth {
+            continue;
+        }
+        let toward = [look.x, look.y];
+        let Some(shown) = model.shown_figure(id, toward, false) else {
+            continue;
+        };
+        let at = to2(foot);
+        let w = shown.height * shown.figure.art.aspect();
+        let poly = vec![
+            Point2::new(at.x - w / 2.0, at.y),
+            Point2::new(at.x + w / 2.0, at.y),
+            Point2::new(at.x + w / 2.0, at.y + shown.height),
+            Point2::new(at.x - w / 2.0, at.y + shown.height),
+        ];
+        for q in &poly {
+            grow_to(&mut lo, &mut hi, *q);
+        }
+        faces.push((
+            depth,
+            Face {
+                owner: SolidOwner::Object(id),
+                poly,
+                fill: [255, 255, 255],
+                edges: Vec::new(),
+                opening_line: None,
+                figure: Some(Figure::Custom {
+                    object: id,
+                    at,
+                    toward,
+                    flip: right.dot(u) < 0.0,
                 }),
             },
         ));
@@ -1219,6 +1364,16 @@ fn render_section_inner(model: &Model, d: &SectionDrawing, options: &PlanOptions
                 }
                 Figure::Body { pieces, outline } => {
                     draw_body(out, model, pieces, outline, presenting, k);
+                }
+                Figure::Custom {
+                    object,
+                    at,
+                    toward,
+                    flip,
+                } => {
+                    if let Some(shown) = model.shown_figure(*object, *toward, presenting) {
+                        draw_custom(out, &shown, *at, *flip, k);
+                    }
                 }
             }
             return;

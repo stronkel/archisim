@@ -196,6 +196,34 @@ En los **alzados y secciones** las personas y los coches (categorías personas y
 
 La silueta sale de los triángulos de su 3D vistos desde la sección, pintados en una rejilla de 1 cm y contorneados (`archisim_geom::cover`). En 3D y en las axonometrías se ven con su volumen.
 
+## Dibujos propios en alzado y en planta (v0.59, pedido por Antonio el 24/10/2026)
+
+En Propiedades de un objeto, **Dibujo en alzado** permite cargarle al tipo sus propios dibujos:
+
+- **DXF de frente** o **DXF de lado**, para las vistas técnicas;
+- **PNG de frente** o **PNG de lado**, una imagen con fondo transparente, para las de presentación.
+
+Se dibujan en alzados, secciones y axonometrías en lugar de lo que hace ArchiSim:
+- de pie en su sitio, tan altos como el objeto (un árbol, como ha crecido), manteniendo su proporción;
+- mirando a quien mira, y del revés si se ve por detrás o por el otro lado;
+- en su orden de profundidad: las partes cerradas del DXF van en blanco y tapan lo de detrás.
+
+Si el tipo solo tiene uno de los dos, ese sirve para todo.
+
+**Imagen en planta de presentación**: un PNG visto desde arriba, que en las plantas de presentación sustituye al símbolo. Se dibuja del tamaño del objeto en planta, girado con él y con su parte de arriba hacia el frente del objeto.
+
+Los ficheros se copian dentro del proyecto (en base64), así que se abre igual en otro ordenador. `docs/ejemplos/arbol-alzado.dxf`, `persona-alzado.png` y `arbol-planta.png` son ejemplos dibujados para ArchiSim (`scripts/make_elevation_examples.py`), y `archisim figuras out/` los usa.
+
+## Lo que se cambia en la Maqueta es del ejemplar (v0.59)
+
+Al cambiar en la Maqueta las medidas, los colores o las opciones (cajones, frente, tirador) de una pieza, solo cambia esa pieza:
+- recibe un tipo propio, «<tipo> (ejemplar)», que no sale en el catálogo ni en las galerías;
+- el tipo del que salió, el de la biblioteca, no cambia, y lo que se coloque después sale como siempre;
+- «Aplicar a todos», en la barra del objeto, lleva lo cambiado al tipo y a todas sus piezas;
+- al borrar la pieza se borra su tipo propio.
+
+Cambiar el tipo desde Propiedades, en Técnica, sigue cambiando todas las piezas del tipo, como en Revit.
+
 ## Pendiente
 
 - Estanterías con objetos (hecho en v0.52); muebles en L; más colecciones (rústica, industrial) si Antonio las quiere.

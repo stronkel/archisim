@@ -6,6 +6,42 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-24 (7) · v0.59: Tab entre elementos, cambios por ejemplar, galería en 3D y dibujos propios en alzado
+
+Rama `bloque/figuras-2`, sobre C1 (lleva dentro #62), pull request para Antonio. **Formato `.archisim` versión 35**: abre todas las anteriores.
+
+Lo que pidió Antonio al ver C1.
+
+**Hecho**
+- **Tab en planta**, como en Revit: con la flecha sobre varios elementos que se pisan (un eje sobre un muro, un muro sobre un forjado), Tab pasa al siguiente, Mayús+Tab al anterior, y el clic elige el resaltado. Abajo aparece cuál es («Tab: Muro (2 de 3)»). Fuera de ahí, Tab sigue cambiando entre Técnica y Maqueta.
+- **Lo que se cambia en la Maqueta es del ejemplar**:
+  - medidas, colores y opciones de una pieza cambian solo esa pieza, que recibe su tipo propio «(ejemplar)»;
+  - el tipo de la biblioteca no cambia;
+  - «Aplicar a todos», en la barra del objeto, lo lleva al tipo y a todas sus piezas;
+  - al borrar la pieza se va su tipo propio.
+- **Galería de objetos de Técnica en 3D**, como el catálogo de la Maqueta (la tarjeta del objeto elegido también).
+- **Dibujos propios en alzado** (Propiedades del objeto → Dibujo en alzado):
+  - DXF de frente o de lado para las vistas técnicas, y PNG con fondo transparente para las de presentación;
+  - se dibujan de pie en alzados, secciones y axonometrías, tan altos como el objeto, mirando a quien mira y en su orden de profundidad.
+- **Imagen PNG en planta de presentación**, en lugar del símbolo, del tamaño del objeto y girada con él.
+- Ejemplos dibujados para ArchiSim en `docs/ejemplos` (árbol en DXF, persona en PNG, árbol en planta en PNG), que usa `archisim figuras`.
+
+**Pendiente**
+- Varios dibujos por especie, para que una fila de árboles no se repita (hoy, uno de frente y uno de lado por tipo).
+- Las imágenes de planta de las plantas con tamaño propio usan el tamaño de su tipo.
+- C2 sigue.
+
+**Qué debe probar Antonio**
+1. Abre un proyecto con un eje sobre un muro. Con la flecha, pon el cursor encima y pulsa Tab: se resalta el muro. Haz clic y queda elegido. Pulsa Mayús+Tab para volver al eje.
+2. En la Maqueta, coloca dos sofás iguales del catálogo. Cambia el color o el ancho de uno: el otro no cambia, y uno nuevo del catálogo sale como el original. Pulsa «Aplicar a todos» en la barra: cambian los dos.
+3. En Técnica, herramienta Objeto: la galería y la tarjeta del objeto se ven en 3D.
+4. Selecciona un árbol. En Propiedades → Dibujo en alzado, carga `docs/ejemplos/arbol-alzado.dxf` (DXF de frente) y mira un alzado y la vista 3D de un plano. Prueba con un DXF vuestro.
+5. Carga `docs/ejemplos/persona-alzado.png` en una persona (PNG de frente) y mira un alzado con estilo de presentación (por ejemplo, la sección del plano A-03).
+6. En Propiedades → Símbolo de planta → Imagen en planta de presentación, carga `docs/ejemplos/arbol-planta.png` en un árbol y mira la planta de presentación.
+7. `cargo run --release -p archisim-cli -- figuras out/figuras`: al final de la fila están el olivo dibujado (DXF y PNG en planta) y la persona en imagen.
+
+---
+
 ## 2026-10-24 (6) · v0.58: C1, árboles, personas y coches en alzado, sección y axonometría
 
 Rama `bloque/c1-figuras`, pull request para Antonio. Sin cambios de formato ni de IFC: la familia «Persona» pasa a la versión 3, con más materiales, y los proyectos la cogen de la biblioteca al actualizar familias.
