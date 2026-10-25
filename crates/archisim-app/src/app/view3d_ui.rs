@@ -191,11 +191,11 @@ pub struct View3dState {
 }
 
 /// Full textures, except on Intel Macs: their AMD graphics drivers (on
-/// recent macOS, often patched) hang drawing them, so they draw the light
-/// ones.
+/// recent macOS, often patched) hang drawing them, so they look them up in
+/// pictures made once (C4; before, the light ones).
 pub fn default_textures() -> TextureMode {
     if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-        TextureMode::Light
+        TextureMode::Pictures
     } else {
         TextureMode::Full
     }
@@ -478,7 +478,14 @@ impl View3dState {
         if self.gpu.is_none() {
             crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
         }
-        let textures = self.textures;
+        // With OpenGL (older cards, Linux without Vulkan), the pictures'
+        // texture is not seen: the light textures instead.
+        let textures = match self.textures {
+            TextureMode::Pictures if state.adapter.get_info().backend == wgpu::Backend::Gl => {
+                TextureMode::Light
+            }
+            t => t,
+        };
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
             renderer: Renderer::new(
                 &state.device,

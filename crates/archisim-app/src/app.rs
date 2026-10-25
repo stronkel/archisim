@@ -341,6 +341,11 @@ pub struct ArchiSimApp {
     /// Drawings of the sections seen before, kept for going back to their
     /// tabs without working them out again (most recent last).
     section_stash: Vec<section_ui::SectionCache>,
+    /// Pictures of a section and a sheet being drawn aside, and the model
+    /// those threads draw from.
+    section_pending: Option<background::Pending<section_ui::SectionKey>>,
+    sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
+    shared_model: Option<(u64, std::sync::Arc<archisim_core::Model>)>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
     pub room_settings: crate::editor::RoomSettings,
@@ -707,6 +712,9 @@ impl ArchiSimApp {
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
             section_stash: Vec::new(),
+            section_pending: None,
+            sheet_pending: None,
+            shared_model: None,
             section_hover: None,
             room_settings: Default::default(),
             roof_settings,
@@ -1261,6 +1269,28 @@ impl ArchiSimApp {
         if let Some(path) = d.save_file() {
             match self.ed.export_ifc(&path, schema) {
                 Ok(()) => self.say(format!("{title} exportado en {}.", path.display())),
+                Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+            }
+        }
+    }
+
+    /// The project as a `.glb`, for D5, Twinmotion or Blender.
+    fn export_glb(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Exportar modelo 3D (glTF)")
+            .add_filter("glTF", &["glb"])
+            .set_file_name(format!("{}.glb", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.save_file() {
+            let bytes = archisim_render::glb::project_glb(&self.ed.shown());
+            match std::fs::write(&path, &bytes) {
+                Ok(()) => self.say(format!(
+                    "Modelo 3D exportado ({:.1} MB) en {}.",
+                    bytes.len() as f64 / 1e6,
+                    path.display()
+                )),
                 Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
             }
         }
@@ -2485,6 +2515,7 @@ pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) 
 }
 
 mod annotation_ui;
+mod background;
 mod bottom_segments;
 mod budget_ui;
 mod cad_ui;

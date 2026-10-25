@@ -56,6 +56,24 @@ impl SectionKey {
     }
 }
 
+/// How a section is drawn for the picture of `key`.
+fn section_options(key: &SectionKey) -> archisim_plan::PlanOptions {
+    let (lo, hi) = (key.lo, key.hi);
+    let px_per_m = key.size[0] as f64 / (hi.x - lo.x).max(1e-9);
+    archisim_plan::PlanOptions {
+        viewport: Some((lo, hi)),
+        scale: key.scale,
+        thin_lines: key.thin_lines,
+        px_per_mm: Some(px_per_m * key.scale / 1000.0),
+        style: archisim_core::ViewStyle {
+            focus: key.focus,
+            hidden_disciplines: key.hidden.clone(),
+            ..Default::default()
+        },
+        ..archisim_plan::PlanOptions::default()
+    }
+}
+
 /// How many sections seen before keep their drawing.
 const STASHED: usize = 4;
 
@@ -65,7 +83,7 @@ pub struct SectionCache {
     revision: u64,
     section: SectionId,
     phase_view: archisim_plan::phases::PhaseView,
-    drawing: SectionDrawing,
+    drawing: std::sync::Arc<SectionDrawing>,
     picture: Option<(SectionKey, TextureHandle)>,
 }
 
@@ -209,7 +227,7 @@ impl ArchiSimApp {
             revision,
             section: id,
             phase_view,
-            drawing,
+            drawing: std::sync::Arc::new(drawing),
             picture: picture.map(|(mut k, t)| {
                 // Same texture, new picture.
                 k.size = [0, 0];
@@ -348,15 +366,53 @@ impl ArchiSimApp {
             hidden: self.hidden_disciplines.clone(),
         };
         let moving = self.view_moving(ctx);
-        if let Some((old, tex)) = self
+        let only_moved = self
             .section_cache
             .as_ref()
             .and_then(|c| c.picture.as_ref())
-            .filter(|p| p.0 != key)
-        {
-            if moving && old.same_but_view(&key) {
-                self.paint_moved(painter, rect, tex, old.lo, old.hi);
-                return;
+            .is_some_and(|p| p.0 != key && p.0.same_but_view(&key));
+        if only_moved {
+            // While it moves, and then while its new picture is made aside,
+            // the old one moved.
+            let ready = match &self.section_pending {
+                Some(p) if p.key == key => p.take(),
+                _ if moving => None,
+                _ => {
+                    let model = self.shared_model();
+                    let Some(drawing) = self.section_cache.as_ref().map(|c| c.drawing.clone())
+                    else {
+                        return;
+                    };
+                    let options = section_options(&key);
+                    let size = key.size;
+                    self.section_pending =
+                        Some(super::background::Pending::start(key.clone(), move || {
+                            let svg = render_section(&model, &drawing, &options);
+                            crate::plan_image::rasterize_svg(&svg, size)
+                        }));
+                    None
+                }
+            };
+            match ready {
+                Some(image) => {
+                    self.section_pending = None;
+                    self.view_moved_at = None;
+                    if let Some((k, tex)) =
+                        self.section_cache.as_mut().and_then(|c| c.picture.as_mut())
+                    {
+                        tex.set(image, TextureOptions::LINEAR);
+                        *k = key.clone();
+                    }
+                }
+                None => {
+                    if let Some((old, tex)) =
+                        self.section_cache.as_ref().and_then(|c| c.picture.as_ref())
+                    {
+                        self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                    }
+                    ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                    return;
+                }
             }
         }
         let shown = self.ed.shown();
@@ -366,19 +422,8 @@ impl ArchiSimApp {
         };
         if cache.picture.as_ref().map(|p| &p.0) != Some(&key) {
             self.view_moved_at = None;
-            let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
-            let options = archisim_plan::PlanOptions {
-                viewport: Some((lo, hi)),
-                scale: key.scale,
-                thin_lines: key.thin_lines,
-                px_per_mm: Some(px_per_m * key.scale / 1000.0),
-                style: archisim_core::ViewStyle {
-                    focus: key.focus,
-                    hidden_disciplines: key.hidden.clone(),
-                    ..Default::default()
-                },
-                ..archisim_plan::PlanOptions::default()
-            };
+            self.section_pending = None;
+            let options = section_options(&key);
             let svg = render_section(model, &cache.drawing, &options);
             let image = crate::plan_image::rasterize_svg(&svg, size);
             match &mut cache.picture {

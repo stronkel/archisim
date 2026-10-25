@@ -219,6 +219,13 @@ impl ArchiSimApp {
             {
                 self.export_ifc(archisim_ifc::Schema::Ifc4);
             }
+            if ui
+                .button("Exportar modelo 3D (glTF) para D5, Twinmotion, Blender…")
+                .on_hover_text("El proyecto entero en un .glb: un objeto por elemento, y los materiales con su nombre, su color y su textura")
+                .clicked()
+            {
+                self.export_glb();
+            }
             let section = matches!(self.mode, ViewMode::Section);
             let what = if section {
                 "Exportar sección o alzado (PDF, DXF, SVG)"

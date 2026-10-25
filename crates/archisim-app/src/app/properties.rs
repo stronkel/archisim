@@ -871,7 +871,7 @@ impl ArchiSimApp {
             super::props::row(
                 ui,
                 "Texturas",
-                "Ladrillo, madera, piedra… dibujados en las caras. «Ligeras» las dibuja más sencillas, para tarjetas gráficas antiguas (las de los Mac con Intel se quedaban colgadas con las completas); sin texturas, colores lisos",
+                "Ladrillo, madera, piedra… dibujados en las caras. «En imagen» son las mismas, sacadas de imágenes hechas una vez: más ligeras para tarjetas gráficas lentas (las de los Mac con Intel). «Ligeras» las dibuja más sencillas; sin texturas, colores lisos",
                 |ui, w| {
                     egui::ComboBox::from_id_salt("textures-3d")
                         .width(w - 8.0)

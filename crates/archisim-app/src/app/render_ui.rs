@@ -99,6 +99,13 @@ impl ArchiSimApp {
             height: ((width as f64 / aspect).round() as usize).max(16),
             samples,
             sky_rays,
+            // The light and the textures of the 3D view.
+            light: match self.v3d.light {
+                crate::view3d::look::Light::Day => archisim_render::Light::Day,
+                crate::view3d::look::Light::Evening => archisim_render::Light::Evening,
+                crate::view3d::look::Light::Night => archisim_render::Light::Night,
+            },
+            textures: self.v3d.textures != crate::view3d::render::TextureMode::Off,
         };
         let slot = Arc::new(Mutex::new(None));
         let progress = Arc::new(AtomicU32::new(0));
@@ -257,7 +264,7 @@ impl ArchiSimApp {
                 if ui
                     .add_enabled(!busy, egui::Button::new("Renderizar"))
                     .on_hover_text(
-                        "Una imagen realista desde esta cámara: el sol del proyecto, sus sombras y la luz del cielo",
+                        "Una imagen realista desde esta cámara, con la luz y las texturas de la vista 3D: el sol del proyecto y sus sombras, la luz del cielo y, al atardecer y de noche, las lámparas encendidas con sus sombras",
                     )
                     .clicked()
                 {

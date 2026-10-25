@@ -6,6 +6,39 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 (6) · v0.65: salida para visualización (C4)
+
+Rama `bloque/c4-visualizacion`, encima de `bloque/c3-maqueta` (#69), con pull request para Antonio. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **El proyecto para D5, Twinmotion o Blender**: Archivo → **Exportar modelo 3D (glTF)…** guarda todo el proyecto en un `.glb`:
+  - un objeto por elemento, con su nombre («Muro 12», «Sofá de 3 plazas 40»);
+  - los materiales con su nombre y su color; los que tienen textura (ladrillo, madera, piedra, telas…) la llevan como imagen, puesta igual que en la vista 3D, para cambiarla en el programa de render si se quiere; el vidrio, transparente;
+  - a escala y de pie. También `archisim glb proyecto.archisim`, y la demo y `archisim exportar` lo dejan junto al IFC.
+- **Render con texturas, atardecer y noche**: Renderizar usa la luz de la vista 3D (Día, Atardecer o Noche) y sus texturas.
+  - De noche se encienden las lámparas, las velas, la chimenea y las farolas; brillan y alumbran lo que tienen cerca, **con sus sombras**.
+  - Al atardecer, sol bajo y anaranjado, cielo cálido y lámparas a media luz.
+  - En la línea de órdenes, `--atardecer`, `--noche` y `--sin-texturas`.
+- **Texturas «En imagen»** en la vista 3D (Propiedades de la vista 3D → Texturas):
+  - son las mismas texturas, sacadas de imágenes que se hacen una vez en lugar de calcularse en cada punto;
+  - es lo que usan ahora **por defecto los Mac con Intel**, en vez de las ligeras;
+  - las mismas imágenes van en el render y en el `.glb`.
+- **Alzados y planos sin espera al soltar** (remate de F1): al acabar de mover o acercar un alzado, una sección o un plano, el dibujo nuevo se hace aparte y, mientras tanto, se sigue viendo el anterior en su sitio.
+
+**Pendiente**
+- Con OpenGL (tarjetas antiguas o Linux sin Vulkan), «En imagen» no se ve bien: allí se usan las ligeras.
+- El `.glb` de la demo pesa unos 44 MB, casi todo de los árboles. Si D5 o Twinmotion van lentos, se puede exportar la vegetación más ligera.
+- Las sombras de las lámparas están en el render. En la vista 3D en tiempo real, las lámparas alumbran sin sombras.
+
+**Qué debe probar Antonio**
+1. Abre la demo, Archivo → **Exportar modelo 3D (glTF)…**, y ábrelo en D5 o en Twinmotion (o en Blender: Archivo → Importar → glTF). Mira que entre a escala y de pie, que los materiales tengan sus nombres y que el ladrillo y la madera lleven su textura.
+2. En la Maqueta, pon **Noche** (arriba, «Luz») y en Propiedades de la vista 3D → **Renderizar**: las lámparas encendidas con sus sombras. Repite con Atardecer.
+3. En tu MacBook: Propiedades de la vista 3D → Texturas debe decir **En imagen**. Mira que el ladrillo y la madera se vean como en el PC y que el 3D no vaya más lento.
+4. Abre un alzado y desplázalo con el botón derecho, o acércalo con la rueda: al soltar, la imagen no se congela; el dibujo fino aparece un momento después.
+5. `cargo run --release -p archisim-cli -- render out/demo.archisim out/noche.png 1600 --noche`.
+
+---
+
 ## 2026-10-25 (5) · v0.64: detalles de la Maqueta y de la interfaz (C3)
 
 Rama `bloque/c3-maqueta`, encima de `bloque/arboles-dxf` (#68), con pull request para Antonio. Sin cambios de formato ni de IFC (las encimeras con copete salen en el `IfcFurniture` «Encimera» de siempre).

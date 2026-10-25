@@ -283,14 +283,56 @@ impl ArchiSimApp {
             hi,
             size,
         };
-        if let Some((old, tex)) = self.sheet_image.as_ref().filter(|p| p.0 != key) {
-            if old.revision == key.revision && old.sheet == key.sheet && self.view_moving(ctx) {
-                self.paint_moved(painter, rect, tex, old.lo, old.hi);
-                return;
+        let only_moved = self.sheet_image.as_ref().is_some_and(|(old, _)| {
+            *old != key && old.revision == key.revision && old.sheet == key.sheet
+        });
+        if only_moved {
+            // While it moves, and then while its new picture is made aside
+            // (remate de F1), the old one moved.
+            let moving = self.view_moving(ctx);
+            let ready = match &self.sheet_pending {
+                Some(p) if p.key == key => p.take(),
+                _ if moving => None,
+                _ => {
+                    let model = self.shared_model();
+                    let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
+                    self.sheet_pending =
+                        Some(super::background::Pending::start(key.clone(), move || {
+                            let svg = render_sheet(
+                                &model,
+                                id,
+                                &SheetOptions {
+                                    region: Some((lo, hi)),
+                                    px_per_mm: Some(px_per_m * MM),
+                                    ..Default::default()
+                                },
+                            );
+                            crate::plan_image::rasterize_svg(&svg, size)
+                        }));
+                    None
+                }
+            };
+            match ready {
+                Some(image) => {
+                    self.sheet_pending = None;
+                    self.view_moved_at = None;
+                    if let Some((k, tex)) = self.sheet_image.as_mut() {
+                        tex.set(image, TextureOptions::LINEAR);
+                        *k = key.clone();
+                    }
+                }
+                None => {
+                    if let Some((old, tex)) = self.sheet_image.as_ref() {
+                        self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                    }
+                    ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                    return;
+                }
             }
         }
         if self.sheet_image.as_ref().map(|p| &p.0) != Some(&key) {
             self.view_moved_at = None;
+            self.sheet_pending = None;
             let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
             let svg = render_sheet(
                 &self.ed.shown(),

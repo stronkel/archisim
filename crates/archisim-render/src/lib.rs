@@ -11,7 +11,11 @@
 //! finds what each ray meets; rows are shared among the processor's
 //! threads.
 
+pub mod glb;
+pub mod textures;
+
 use archisim_core::Model;
+pub(crate) use archisim_geom::solid::texture_of;
 use archisim_geom::solid::{model_solids, painted_color, solid_color, solid_vertex_colors};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -85,6 +89,65 @@ impl View {
     }
 }
 
+/// The light of the picture, as the 3D view's: day, evening (a low,
+/// warm sun and the lamps beginning to glow) or night (the lamps alone,
+/// under a dark sky).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Light {
+    #[default]
+    Day,
+    Evening,
+    Night,
+}
+
+impl Light {
+    pub const ALL: [Light; 3] = [Light::Day, Light::Evening, Light::Night];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Light::Day => "Día",
+            Light::Evening => "Atardecer",
+            Light::Night => "Noche",
+        }
+    }
+
+    /// The sun's light (none at night).
+    fn sun(self) -> Option<V3> {
+        match self {
+            Light::Day => Some(SUN),
+            Light::Evening => Some([2.5, 1.55, 0.85]),
+            Light::Night => None,
+        }
+    }
+
+    /// The sky's light on a face open to all of it.
+    fn sky_light(self) -> V3 {
+        match self {
+            Light::Day => SKY_LIGHT,
+            Light::Evening => [0.42, 0.40, 0.50],
+            Light::Night => [0.045, 0.06, 0.11],
+        }
+    }
+
+    /// How much the lamps are lit.
+    fn lamps(self) -> f64 {
+        match self {
+            Light::Day => 0.0,
+            Light::Evening => 0.55,
+            Light::Night => 1.0,
+        }
+    }
+
+    /// The sky's colour at the horizon and at the zenith.
+    fn sky_colours(self) -> (V3, V3) {
+        match self {
+            Light::Day => ([0.78, 0.84, 0.92], [0.36, 0.52, 0.80]),
+            Light::Evening => ([0.98, 0.72, 0.50], [0.32, 0.38, 0.62]),
+            Light::Night => ([0.07, 0.09, 0.16], [0.015, 0.025, 0.06]),
+        }
+    }
+}
+
 /// How the picture is made.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Options {
@@ -94,6 +157,9 @@ pub struct Options {
     pub samples: usize,
     /// Rays to the sky from each point, for the shade of corners.
     pub sky_rays: usize,
+    pub light: Light,
+    /// The materials' textures (as the 3D view's).
+    pub textures: bool,
 }
 
 impl Default for Options {
@@ -103,6 +169,8 @@ impl Default for Options {
             height: 1000,
             samples: 2,
             sky_rays: 12,
+            light: Light::Day,
+            textures: true,
         }
     }
 }
@@ -123,7 +191,26 @@ struct Tri {
     n: V3,
     /// Linear colour.
     albedo: V3,
+    /// Its colour as given (sRGB, 0–1), for its texture.
+    srgb: V3,
     glass: bool,
+    /// Its texture (`TextureKind::number`, 0 none) and the size of its
+    /// piece, metres.
+    tex: u8,
+    scale: f32,
+    /// The object it belongs to (0: not an object), so that a lamp's
+    /// light is not stopped by its own shade.
+    owner: u64,
+    /// It glows at night (a lampshade, a bulb, a flame).
+    glow: bool,
+}
+
+/// Where a lamp's light comes from, how far it reaches, and its object.
+#[derive(Debug, Clone, Copy)]
+struct Lamp {
+    at: V3,
+    reach: f64,
+    owner: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -141,6 +228,10 @@ struct Scene {
     tris: Vec<Tri>,
     nodes: Vec<Node>,
     sun: Option<V3>,
+    light: Light,
+    lamps: Vec<Lamp>,
+    /// The pictures of the textures used, by `TextureKind::number`.
+    tiles: Vec<Option<std::sync::Arc<textures::Tile>>>,
 }
 
 fn srgb_to_linear(c: u8) -> f64 {
@@ -182,16 +273,30 @@ fn scene_box(model: &Model) -> (V3, V3) {
 }
 
 impl Scene {
-    fn build(model: &Model) -> Scene {
+    fn build(model: &Model, opt: &Options) -> Scene {
         let mut tris = Vec::new();
         let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+        let mut tiles: Vec<Option<std::sync::Arc<textures::Tile>>> = vec![None; 32];
+        let mut lamps: std::collections::BTreeMap<u64, (V3, f64, f64)> = Default::default();
         for s in model_solids(model) {
             let glass = model
                 .material(s.material)
                 .is_some_and(|m| m.category == "glass");
             let base = solid_color(model, &s);
             let per_vertex = solid_vertex_colors(model, &s);
+            let (owner, is_object) = match s.owner {
+                archisim_geom::solid::SolidOwner::Object(o) => (o.0 | 1 << 63, true),
+                _ => (0, false),
+            };
+            let glow = match s.owner {
+                archisim_geom::solid::SolidOwner::Object(o) => {
+                    let (mats, reach) = archisim_geom::solid::glow_materials(model, o);
+                    mats.contains(&s.material).then_some(reach)
+                }
+                _ => None,
+            };
             for (i, t) in s.triangles.iter().enumerate() {
+                let painted = archisim_geom::solid::painted_material(model, &s, t);
                 let rgb = per_vertex
                     .as_ref()
                     .and_then(|v| v.get(i))
@@ -215,13 +320,39 @@ impl Scene {
                         hi[k] = hi[k].max(p[k]);
                     }
                 }
+                // Its texture, unless its colours come from its vertices.
+                let texture = (opt.textures && !glass && per_vertex.is_none())
+                    .then(|| texture_of(model, painted.unwrap_or(s.material), is_object))
+                    .flatten();
+                let (tex, scale) = match texture {
+                    Some((kind, scale)) => {
+                        let k = kind.number() as usize;
+                        if k < tiles.len() && tiles[k].is_none() {
+                            tiles[k] = Some(textures::tile(kind));
+                        }
+                        (k as u8, scale as f32)
+                    }
+                    None => (0, 0.0),
+                };
+                if let Some(reach) = glow {
+                    let e = lamps.entry(owner).or_insert(([0.0; 3], 0.0, reach));
+                    for p in t {
+                        e.0 = add(e.0, *p);
+                        e.1 += 1.0;
+                    }
+                }
                 tris.push(Tri {
                     a: t[0],
                     e1,
                     e2,
                     n: norm(n),
                     albedo: rgb.map(srgb_to_linear),
+                    srgb: rgb.map(|c| c as f64 / 255.0),
                     glass,
+                    tex,
+                    scale,
+                    owner,
+                    glow: glow.is_some(),
                 });
             }
         }
@@ -243,14 +374,35 @@ impl Scene {
                     e2: sub(d, a),
                     n: [0.0, 0.0, 1.0],
                     albedo,
+                    srgb: [0.68, 0.71, 0.63],
                     glass: false,
+                    tex: 0,
+                    scale: 0.0,
+                    owner: 0,
+                    glow: false,
                 });
             }
         }
+        let lamps = if opt.light.lamps() > 0.0 {
+            lamps
+                .into_iter()
+                .filter(|(_, (_, n, _))| *n > 0.0)
+                .map(|(owner, (sum, n, reach))| Lamp {
+                    at: mul(sum, 1.0 / n),
+                    reach,
+                    owner,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let mut scene = Scene {
             tris,
             nodes: Vec::new(),
-            sun: model.sun_direction(),
+            sun: model.sun_direction().filter(|_| opt.light.sun().is_some()),
+            light: opt.light,
+            lamps,
+            tiles,
         };
         scene.build_bvh();
         scene
@@ -400,18 +552,22 @@ impl Scene {
 
     /// How much light gets through to `o` along `d` (glass lets most of
     /// it, anything else none).
-    fn transmit(&self, o: V3, d: V3, tmax: f64) -> f64 {
+    fn transmit(&self, o: V3, d: V3, tmax: f64, skip: u64) -> f64 {
         let mut o = o;
         let mut left = tmax;
         let mut light = 1.0;
-        for _ in 0..4 {
+        for _ in 0..8 {
             match self.hit(o, d, 1e-4, left) {
                 None => return light,
                 Some((t, i)) => {
-                    if !self.tris[i].glass {
+                    let tri = &self.tris[i];
+                    if skip != 0 && tri.owner == skip {
+                        // The lamp's own shade or bulb: on through it.
+                    } else if !tri.glass {
                         return 0.0;
+                    } else {
+                        light *= 0.75;
                     }
-                    light *= 0.75;
                     o = add(o, mul(d, t));
                     left -= t;
                 }
@@ -434,19 +590,27 @@ impl Rng {
 }
 
 /// The colour of the sky looking along `d`.
-fn sky(d: V3) -> V3 {
+fn sky(light: Light, d: V3) -> V3 {
     let t = d[2].clamp(-1.0, 1.0);
-    let horizon = [0.78, 0.84, 0.92];
+    let (horizon, zenith) = light.sky_colours();
     if t < 0.0 {
         // Below the horizon, where nothing was modelled: a pale haze, as
         // the backdrop of a model photographed on a table.
         let k = (-t).powf(0.5);
-        return add(mul(horizon, 1.0 - k), mul([0.86, 0.86, 0.83], k));
+        let floor = match light {
+            Light::Night => [0.05, 0.05, 0.06],
+            _ => [0.86, 0.86, 0.83],
+        };
+        return add(mul(horizon, 1.0 - k), mul(floor, k));
     }
-    let zenith = [0.36, 0.52, 0.80];
     let k = t.powf(0.6);
     add(mul(horizon, 1.0 - k), mul(zenith, k))
 }
+
+/// The warm light of a lamp.
+const LAMP: V3 = [1.0, 0.72, 0.42];
+/// How bright a lamp is near it.
+const LAMP_POWER: f64 = 2.2;
 
 const SUN: V3 = [3.1, 2.95, 2.7];
 const SKY_LIGHT: V3 = [0.62, 0.70, 0.82];
@@ -459,7 +623,7 @@ impl Scene {
         let mut out = [0.0; 3];
         for _ in 0..6 {
             let Some((t, i)) = self.hit(o, d, 1e-4, 1e9) else {
-                return add(out, had(throughput, sky(d)));
+                return add(out, had(throughput, sky(self.light, d)));
             };
             let tri = &self.tris[i];
             let p = add(o, mul(d, t));
@@ -472,7 +636,7 @@ impl Scene {
                 // tinted.
                 let r = 0.08 + 0.3 * (1.0 + dot(d, n)).powi(5);
                 let refl = sub(d, mul(n, 2.0 * dot(d, n)));
-                out = add(out, had(throughput, mul(sky(refl), r)));
+                out = add(out, had(throughput, mul(sky(self.light, refl), r)));
                 throughput = had(throughput, mul([0.86, 0.92, 0.92], 1.0 - r));
                 o = p;
                 continue;
@@ -480,12 +644,34 @@ impl Scene {
             let lift = add(p, mul(n, 1e-4));
             // The sun, if this point sees it.
             let mut light = [0.0; 3];
-            if let Some(s) = self.sun {
+            if let (Some(s), Some(sun)) = (self.sun, self.light.sun()) {
                 let ns = dot(n, s);
                 if ns > 0.0 {
-                    let pass = self.transmit(lift, s, 1e9);
-                    light = add(light, mul(SUN, ns * pass));
+                    let pass = self.transmit(lift, s, 1e9, 0);
+                    light = add(light, mul(sun, ns * pass));
                 }
+            }
+            // The lamps that reach it and that it sees (their shadows).
+            let lit = self.light.lamps();
+            for lamp in &self.lamps {
+                let to = sub(lamp.at, p);
+                let dist = dot(to, to).sqrt().max(0.05);
+                if dist > lamp.reach {
+                    continue;
+                }
+                let dir = mul(to, 1.0 / dist);
+                let face = dot(n, dir);
+                if face <= 0.0 && tri.owner != lamp.owner {
+                    continue;
+                }
+                let fall = 1.0 - dist / lamp.reach;
+                let pass = if tri.owner == lamp.owner {
+                    1.0
+                } else {
+                    self.transmit(lift, dir, dist, lamp.owner)
+                };
+                let k = LAMP_POWER * lit * fall * fall * face.max(0.25) * pass;
+                light = add(light, mul(LAMP, k));
             }
             // The sky, less what the surroundings hide (cosine-weighted).
             let (tx, ty) = basis(n);
@@ -507,11 +693,36 @@ impl Scene {
             } else {
                 open / sky_rays as f64
             };
-            light = add(light, mul(SKY_LIGHT, 0.25 + 0.75 * ao));
-            out = add(out, had(throughput, had(tri.albedo, light)));
+            light = add(light, mul(self.light.sky_light(), 0.25 + 0.75 * ao));
+            let albedo = self.albedo(tri, p, d);
+            out = add(out, had(throughput, had(albedo, light)));
+            if tri.glow && lit > 0.0 {
+                // A lampshade, a bulb, a flame: it glows.
+                let glow = mul(add(mul(albedo, 0.6), [0.55, 0.42, 0.25]), 1.6 * lit);
+                out = add(out, had(throughput, glow));
+            }
             return out;
         }
         out
+    }
+}
+
+impl Scene {
+    /// The colour of a triangle at `p`, with its texture, seen along `d`.
+    fn albedo(&self, tri: &Tri, p: V3, d: V3) -> V3 {
+        if tri.tex == 0 {
+            return tri.albedo;
+        }
+        let Some(tile) = self.tiles.get(tri.tex as usize).and_then(|t| t.as_ref()) else {
+            return tri.albedo;
+        };
+        let q = textures::texture_point(p, tri.n, tri.scale as f64);
+        let mut c = tile.apply(tri.srgb, q);
+        if tile.kind == archisim_core::TextureKind::Velvet {
+            let k = textures::velvet_sheen(dot(tri.n, d));
+            c = c.map(|v| v * (1.0 + k));
+        }
+        c.map(|v| srgb_to_linear((v.clamp(0.0, 1.0) * 255.0).round() as u8))
     }
 }
 
@@ -529,7 +740,7 @@ fn basis(n: V3) -> (V3, V3) {
 /// Renders the model. `progress` hears how much is done (0 to 1), from
 /// any thread.
 pub fn render(model: &Model, view: &View, opt: &Options, progress: &(dyn Fn(f64) + Sync)) -> Image {
-    let scene = Scene::build(model);
+    let scene = Scene::build(model, opt);
     let (w, h) = (opt.width.max(1), opt.height.max(1));
     let forward = norm(sub(view.target, view.eye));
     let right = norm(cross(forward, [0.0, 0.0, 1.0]));
@@ -654,6 +865,7 @@ mod tests {
                 height: 50,
                 samples: 1,
                 sky_rays: 4,
+                ..Default::default()
             },
             &|_| {},
         );
@@ -666,5 +878,118 @@ mod tests {
         let max = img.rgb.chunks(3).map(lum).max().unwrap();
         let min = img.rgb.chunks(3).map(lum).min().unwrap();
         assert!(max > min + 120, "{min} {max}");
+    }
+
+    /// A corner of two walls and a floor lamp in front of it.
+    fn lamp_corner() -> Model {
+        let mut m = Model::new("Lámpara");
+        let pb = m.add_level("PB", 0.0);
+        let lib = archisim_library::add_library(&mut m).unwrap();
+        for (a, b) in [((0.0, 0.0), (4.0, 0.0)), ((0.0, 0.0), (0.0, 4.0))] {
+            m.add_wall(NewWall {
+                wall_type: lib.facade,
+                level: pb,
+                start: Point2::new(a.0, a.1),
+                end: Point2::new(b.0, b.1),
+                reference: ReferenceLine::Center,
+                height: 2.7,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: WallTop::Unconnected,
+            })
+            .unwrap();
+        }
+        let t = archisim_library::add_object_entry(&mut m, "Lámpara de pie").unwrap();
+        m.add_object(NewObject {
+            level: pb,
+            object_type: t,
+            position: Point2::new(1.0, 1.0),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .unwrap();
+        m
+    }
+
+    #[test]
+    fn at_night_the_lamps_light_the_walls() {
+        let m = lamp_corner();
+        let view = View {
+            eye: [4.0, 4.0, 1.6],
+            target: [0.5, 0.5, 1.0],
+            fov_y: 1.0,
+            perspective: true,
+            half_height: 2.0,
+        };
+        let opt = |light| Options {
+            width: 60,
+            height: 40,
+            samples: 1,
+            sky_rays: 2,
+            light,
+            textures: true,
+        };
+        let lum = |img: &Image| -> f64 {
+            img.rgb.iter().map(|&v| v as f64).sum::<f64>() / img.rgb.len() as f64
+        };
+        let day = render(&m, &view, &opt(Light::Day), &|_| {});
+        let night = render(&m, &view, &opt(Light::Night), &|_| {});
+        // Darker than the day, but the lamp and the walls near it glow:
+        // some pixels are well lit and warm (more red than blue).
+        assert!(
+            lum(&night) < lum(&day) * 0.7,
+            "{} {}",
+            lum(&night),
+            lum(&day)
+        );
+        let warm = night
+            .rgb
+            .chunks(3)
+            .filter(|p| p[0] as i32 > 120 && p[0] as i32 > p[2] as i32 + 25)
+            .count();
+        assert!(warm > 20, "{warm}");
+        // Without the lamp, night is nearly black.
+        let mut dark = m.clone();
+        let lamp = dark.objects().next().unwrap().id;
+        dark.remove_object(lamp).unwrap();
+        let none = render(&dark, &view, &opt(Light::Night), &|_| {});
+        assert!(
+            lum(&none) < lum(&night) * 0.6,
+            "{} {}",
+            lum(&none),
+            lum(&night)
+        );
+    }
+
+    #[test]
+    fn textures_show_in_the_picture() {
+        let mut m = lamp_corner();
+        // The façade's outer leaf in brick.
+        let brick = m
+            .materials()
+            .find(|x| x.name == "Ladrillo perforado")
+            .map(|x| x.id)
+            .unwrap();
+        m.set_appearance(
+            brick,
+            archisim_core::Appearance {
+                color: None,
+                texture: Some(TextureKind::Brick),
+                scale: None,
+            },
+        )
+        .unwrap();
+        let view = View::fit(&m);
+        let opt = |textures| Options {
+            width: 60,
+            height: 40,
+            samples: 1,
+            sky_rays: 0,
+            light: Light::Day,
+            textures,
+        };
+        let a = render(&m, &view, &opt(true), &|_| {});
+        let b = render(&m, &view, &opt(false), &|_| {});
+        assert_ne!(a.rgb, b.rgb);
     }
 }

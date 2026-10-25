@@ -2335,6 +2335,30 @@ fn sections_and_elevations() {
     assert_eq!(h.app.active_section(), Some(sec.id));
     h.frame();
     assert!(h.app.section_cache.is_some(), "drawn");
+    // Zoomed: the new picture is made aside, the old one shown meanwhile,
+    // until it is ready.
+    let rect = h.app.canvas;
+    let saved = h.app.view;
+    h.app.view.zoom_at(rect, rect.center(), 1.3);
+    h.frame();
+    assert!(h.app.section_pending.is_some(), "drawn aside");
+    for _ in 0..200 {
+        if h.app.section_pending.is_none() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        h.frame();
+    }
+    assert!(h.app.section_pending.is_none(), "the new picture arrived");
+    h.app.view = saved;
+    h.frame();
+    for _ in 0..200 {
+        if h.app.section_pending.is_none() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        h.frame();
+    }
     // Elements are selected in the section (R5): the west wall where it is
     // cut, the north wall seen beyond; Esc clears.
     h.click_at(p(0.8, 1.5));

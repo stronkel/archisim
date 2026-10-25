@@ -2443,6 +2443,66 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
     }]
 }
 
+/// How far a lamp's light reaches at night, metres; a streetlight's.
+pub const LAMP_REACH: f64 = 4.5;
+pub const STREET_REACH: f64 = 11.0;
+
+/// The materials of an object that glow at night: the shade and the bulb
+/// of a lamp (also of a bedside table's), a candle's flame, the fire of a
+/// fireplace, a streetlight's lantern; and how far its light reaches.
+pub fn glow_materials(
+    model: &Model,
+    o: archisim_core::ObjectId,
+) -> (Vec<archisim_core::MaterialId>, f64) {
+    let none = (Vec::new(), 0.0);
+    let Some(t) = model
+        .object(o)
+        .and_then(|ob| model.object_type(ob.object_type))
+    else {
+        return none;
+    };
+    let Some(kind) = model.family_prop(t.family) else {
+        return none;
+    };
+    let (keys, reach): (&[&str], f64) = match kind.as_str() {
+        "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
+        "fireplace" => (&["flame"], LAMP_REACH),
+        "streetlight" => (&["light"], STREET_REACH),
+        _ => return none,
+    };
+    let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {
+        return none;
+    };
+    let mats = keys
+        .iter()
+        .filter_map(|k| match t.values.get(*k).or(defaults.get(*k)) {
+            Some(archisim_core::Value::Material(m)) => Some(archisim_core::MaterialId(*m)),
+            _ => None,
+        })
+        .collect();
+    (mats, reach)
+}
+
+/// The texture a material is seen with and the size of its piece
+/// (metres): its appearance's, or, for furniture (`is_object`) whose
+/// material has no appearance of its own, the one its name suggests
+/// (linen, wool, rattan…). The 3D view, the rendered pictures and the
+/// `.glb` lay it the same way.
+pub fn texture_of(
+    model: &Model,
+    material: archisim_core::MaterialId,
+    is_object: bool,
+) -> Option<(archisim_core::TextureKind, f64)> {
+    let a = model.appearance(material);
+    let t = a.texture.or_else(|| {
+        let x = model.material(material)?;
+        (is_object && a.is_plain())
+            .then(|| archisim_core::TextureKind::suggested(&x.name, &x.category))
+            .flatten()
+    })?;
+    Some((t, a.scale.unwrap_or_else(|| t.default_scale())))
+}
+
 /// The colour a solid is shown with: a pipe's or duct's that of its
 /// system, a device's a light grey, the rest their material's.
 pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {

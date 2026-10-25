@@ -285,6 +285,10 @@ fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
     return select(1.0, sum / count, inside);
 }
 
+// The level of detail of the textures' pictures at this pixel (set at the
+// start of the fragment; only the pictures' textures use it).
+var<private> tex_level: f32;
+
 // ---- Textures -------------------------------------------------------------
 //
 // Drawn from each point's position on its face (no images, nothing to
@@ -337,6 +341,10 @@ fn joint(t: f32, width: f32) -> f32 {
     let f = fract(t);
     let e = min(f, 1.0 - f);
     return smoothstep(width * 0.5, width, e);
+}
+
+fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {
+    return 0.0;
 }
 
 fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {
@@ -512,6 +520,7 @@ struct ModelOut {
 @fragment
 fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     var out: ModelOut;
+    tex_level = tex_lod(i.world, i.normal, i.tex);
     if (stretched(i.picked)) {
         discard;
     }

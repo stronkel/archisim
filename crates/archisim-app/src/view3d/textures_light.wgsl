@@ -4,6 +4,10 @@
 // the full ones (AMD on Intel Macs): no `switch`, no loops, no remainders
 // of real numbers; stones and gravel from smooth noise instead of cells.
 
+fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {
+    return 0.0;
+}
+
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(123.34, 456.21));
     let r = q + dot(q, q + 45.32);
