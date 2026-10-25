@@ -21,6 +21,7 @@ mod formas;
 mod grande;
 mod modelos;
 mod muestrario;
+mod taller;
 mod tramas;
 mod vivero;
 
@@ -77,6 +78,10 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim taller [carpeta]
+      El taller de modelos: cada mueble nuevo, en revisión, delante del
+      de la biblioteca al que sustituiría: taller.archisim, taller.ifc,
+      axonometría y planta en SVG. Por defecto: ./out
   archisim tramas [carpeta]
       Las tramas de presentación (madera, metal, hormigón y piedra), cada
       una en un cuadro con su nombre, a 1:20 y a 1:50: tramas.archisim,
@@ -260,6 +265,10 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("taller") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(taller::write(&dir))
         }
         Some("tramas") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

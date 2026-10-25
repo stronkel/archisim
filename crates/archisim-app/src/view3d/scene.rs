@@ -223,6 +223,11 @@ impl Scene {
         let s = self;
         // What glows of each object, for its light.
         let mut lit: std::collections::BTreeMap<u64, (Vec3, f32, f32)> = Default::default();
+        // The stuffed fabric of each object.
+        let mut fabric_of: std::collections::HashMap<
+            archisim_core::ObjectId,
+            Vec<archisim_core::MaterialId>,
+        > = Default::default();
         for solid in solids {
             let id = solid.owner.id();
             if model.hidden_by_discipline(&disciplines.hidden, id) {
@@ -267,37 +272,49 @@ impl Scene {
                 }),
                 _ => false,
             };
-            let smooth: Option<std::collections::HashMap<[i64; 3], Vec3>> = soft.then(|| {
-                let mut acc: std::collections::HashMap<[i64; 3], Vec3> = Default::default();
-                for tri in &solid.triangles {
-                    let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
-                    let n = (p[1] - p[0]).cross(p[2] - p[0]);
-                    for v in tri {
-                        *acc.entry(vertex_key(v)).or_default() += n;
+            // Stuffed fabric (the workshop's upholstery): it has no sharp
+            // edge, so it is shaded smooth all over, and outlined only
+            // where it ends against what is behind, never at its own seams
+            // and folds (drawn as foliage is, bias 2).
+            let fabric = match solid.owner {
+                SolidOwner::Object(o) if !soft => fabric_of
+                    .entry(o)
+                    .or_insert_with(|| model.object_soft_materials(o))
+                    .contains(&solid.material),
+                _ => false,
+            };
+            let smooth: Option<std::collections::HashMap<[i64; 3], Vec3>> =
+                (soft || fabric).then(|| {
+                    let mut acc: std::collections::HashMap<[i64; 3], Vec3> = Default::default();
+                    for tri in &solid.triangles {
+                        let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                        let n = (p[1] - p[0]).cross(p[2] - p[0]);
+                        for v in tri {
+                            *acc.entry(vertex_key(v)).or_default() += n;
+                        }
                     }
-                }
-                acc
-            });
+                    acc
+                });
             // Furniture: rounded edges and cushions shaded smooth (the
             // faces of each corner that turn less than ~40° share their
             // normal), so they are drawn soft, without a contour line at
             // every facet of a rounding; real edges stay sharp.
-            let creased: Option<std::collections::HashMap<[i64; 3], Vec<Vec3>>> = (!soft
-                && matches!(solid.owner, SolidOwner::Object(_)))
-            .then(|| {
-                let mut acc: std::collections::HashMap<[i64; 3], Vec<Vec3>> = Default::default();
-                for tri in &solid.triangles {
-                    let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
-                    let n = (p[1] - p[0]).cross(p[2] - p[0]);
-                    if n.length_squared() < 1e-14 {
-                        continue;
+            let creased: Option<std::collections::HashMap<[i64; 3], Vec<Vec3>>> =
+                (!soft && !fabric && matches!(solid.owner, SolidOwner::Object(_))).then(|| {
+                    let mut acc: std::collections::HashMap<[i64; 3], Vec<Vec3>> =
+                        Default::default();
+                    for tri in &solid.triangles {
+                        let p = tri.map(|v| Vec3::new(v[0] as f32, v[1] as f32, v[2] as f32));
+                        let n = (p[1] - p[0]).cross(p[2] - p[0]);
+                        if n.length_squared() < 1e-14 {
+                            continue;
+                        }
+                        for v in tri {
+                            acc.entry(vertex_key(v)).or_default().push(n);
+                        }
                     }
-                    for v in tri {
-                        acc.entry(vertex_key(v)).or_default().push(n);
-                    }
-                }
-                acc
-            });
+                    acc
+                });
             // A lampshade, a bulb or a flame: it glows at night, and its
             // middle is where the lamp's light comes from.
             let (glows, reach) = match solid.owner {
@@ -350,7 +367,7 @@ impl Scene {
                 // roof slab.
                 let bias = if glows {
                     3.0
-                } else if soft {
+                } else if soft || fabric {
                     2.0
                 } else if opening {
                     -1.0

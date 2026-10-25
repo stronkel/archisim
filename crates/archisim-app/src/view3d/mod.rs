@@ -11,3 +11,5 @@ pub mod section_box;
 
 #[cfg(test)]
 pub(crate) mod gpu_tests;
+#[cfg(test)]
+mod studio_tests;
