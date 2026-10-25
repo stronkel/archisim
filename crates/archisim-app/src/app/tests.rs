@@ -6860,3 +6860,67 @@ fn modules_dragged_in_plan_join() {
         [30, 30, 30]
     );
 }
+
+/// A DXF that is a library of trees (one block each): importing it opens
+/// the choice, each drawing seen as the plan draws it; the one clicked
+/// goes to the type, and the type's pictures show it.
+#[test]
+fn a_tree_is_chosen_from_a_library_dxf() {
+    let mut h = Harness::new(Editor::new_project());
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name.starts_with("Árbol"))
+        .expect("a tree in the library")
+        .id;
+    let block = |name: &str, r: f64| {
+        format!("0\nBLOCK\n8\n0\n2\n{name}\n70\n0\n10\n0\n20\n0\n30\n0\n0\nCIRCLE\n8\n0\n10\n0\n20\n0\n30\n0\n40\n{r}\n0\nLINE\n8\n0\n10\n-{r}\n20\n0\n30\n0\n11\n{r}\n21\n0\n31\n0\n0\nENDBLK\n8\n0\n")
+    };
+    let insert =
+        |name: &str, x: f64| format!("0\nINSERT\n8\nARBOLES\n2\n{name}\n10\n{x}\n20\n0\n30\n0\n");
+    let dxf = format!(
+        "0\nSECTION\n2\nBLOCKS\n{}{}{}0\nENDSEC\n0\nSECTION\n2\nENTITIES\n{}{}{}0\nENDSEC\n0\nEOF\n",
+        block("Uno", 500.0),
+        block("Dos", 450.0),
+        block("Tres", 520.0),
+        insert("Uno", 0.0),
+        insert("Dos", 1500.0),
+        insert("Tres", 3000.0),
+    );
+    let dir = std::env::temp_dir().join(format!("archisim-symlib-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("arboles.dxf");
+    std::fs::write(&path, dxf).unwrap();
+    h.app.set_symbol_from(t, &path);
+    // Not yet: first, the choice.
+    assert!(h.model().object_type(t).unwrap().symbol.is_none());
+    let picker = h.app.symbol_picker.as_ref().expect("the choice is open");
+    assert_eq!(picker.sets[0].symbols.len(), 3);
+    assert!(picker.fit);
+    // Shown: its pictures are made, a few each frame.
+    for _ in 0..4 {
+        h.frame();
+    }
+    assert!(h.app.thumbs.count() >= 3, "{}", h.app.thumbs.count());
+    h.app.use_library_symbol(0, 1);
+    assert!(h.app.symbol_picker.is_none());
+    let sym = h.model().object_type(t).unwrap().symbol.clone().unwrap();
+    assert_eq!(sym.source, "arboles.dxf · 2");
+    // The type's preview draws it: its plan is not the family's.
+    let ty = h.model().object_type(t).unwrap().clone();
+    let (with, level) = crate::type_preview::object_model(h.model(), &ty).unwrap();
+    assert!(with
+        .object_type(with.objects().next().unwrap().object_type)
+        .unwrap()
+        .symbol
+        .is_some());
+    let mut bare = ty.clone();
+    bare.symbol = None;
+    let (without, _) = crate::type_preview::object_model(h.model(), &bare).unwrap();
+    let options = archisim_plan::PlanOptions::default();
+    assert_ne!(
+        archisim_plan::render_plan(&with, level, &options),
+        archisim_plan::render_plan(&without, without.levels()[0].id, &options)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

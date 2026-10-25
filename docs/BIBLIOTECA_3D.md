@@ -230,7 +230,7 @@ Cambiar el tipo desde Propiedades, en Técnica, sigue cambiando todas las piezas
 
 - Llevar los accesorios en los ficheros `.astipos` de la biblioteca (al abrir un IFC de ArchiSim ya vuelven a sus tipos; los de otros programas se leen como revestimientos que no se importan).
 - Accesorios en muros curvos e inclinados, y en los bordes de las cubiertas inclinadas (canalones, remates).
-- Elegir un bloque de un DXF con muchos (una biblioteca de árboles en un solo fichero); hoy se trae el dibujo entero.
+- ~~Elegir un bloque de un DXF con muchos~~: hecho en v0.63 (A1), con miniaturas y la carpeta «Símbolos de planta» de la biblioteca.
 
 - Más objetos: electrodomésticos de encastre, campana, aparatos de iluminación, mobiliario de oficina, plantas de interior en maceta.
 - Un cuarto nivel de detalle para las vistas lejanas de modelos muy grandes (hoy ya son ligeros).

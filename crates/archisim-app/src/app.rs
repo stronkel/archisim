@@ -567,6 +567,8 @@ pub struct ArchiSimApp {
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
     thumbs: thumbs::Thumbs,
+    /// The choice of a plan symbol among the drawings of a library DXF.
+    pub symbol_picker: Option<symbol_pick::SymbolPicker>,
     /// The 3D pictures of the Maqueta's catalog.
     thumbs3d: thumbs3d::Thumbs3d,
     /// The command line stays shown (Vista); otherwise it shows only while
@@ -805,6 +807,7 @@ impl ArchiSimApp {
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
+            symbol_picker: None,
             thumbs3d: Default::default(),
             pin_command_line: false,
             attenuate: true,
@@ -1845,6 +1848,7 @@ impl ArchiSimApp {
         self.presentation_dialog(&ctx);
         self.render_window(&ctx);
         self.price_pick_window(&ctx);
+        self.symbol_pick_window(&ctx);
         self.missions_frame(&ctx);
         self.start_screen(&ctx);
         self.sync_prefs(&ctx);
@@ -2493,6 +2497,7 @@ mod stair_ui;
 mod start_ui;
 mod structure_ui;
 mod survey_ui;
+mod symbol_pick;
 mod tabs;
 mod team_ui;
 mod temp_ui;

@@ -107,6 +107,42 @@ Antonio confirmó el orden C1–C7 de la hoja de ruta común (§9). Este es C1.
 
 ---
 
+## 2026-10-25 (4) · v0.63: árboles en planta elegidos de un DXF, viéndolos (A1)
+
+Rama `bloque/arboles-dxf`, encima de `bloque/c2-cocina` (#67), con pull request para Antonio. Sin cambios de formato ni de IFC: el símbolo de planta del tipo ya se guardaba desde el bloque 6.
+
+Antonio mandó un DXF con 76 árboles en planta, un bloque cada uno, y pidió usarlos como dibujo en planta viendo una previsualización al elegir. Los bloques se llaman «樹木平面（CAD素材.com）…»: son de la biblioteca de CAD素材.com, de terceros. Antonio puede usarlos en sus proyectos y en su biblioteca, pero el fichero no entra en el repositorio, que es GPL y de sala limpia.
+
+**Hecho**
+- **Elegir entre los dibujos de un DXF que es una biblioteca**:
+  - en Propiedades → Símbolo de planta → «Importar DXF…», si el fichero tiene dos o más bloques colocados, se abre una ventana con todos ellos;
+  - cada dibujo se ve como lo dibujará la planta en ese tipo, a su tamaño y en líneas finas;
+  - van numerados como se leen en la lámina, por filas desde arriba a la izquierda; con el cursor encima, el nombre del bloque;
+  - un clic se lo pone al tipo, en un paso de Deshacer.
+  - Un DXF con un solo dibujo sigue entrando entero, como antes.
+- **Tu biblioteca de símbolos**:
+  - el DXF importado se copia a la carpeta «Símbolos de planta» de la biblioteca (Documentos/ArchiSim/Biblioteca, o la que tengas elegida);
+  - el botón «De mi biblioteca…» abre la misma ventana con los DXF de esa carpeta, uno por pestaña, sin buscar el fichero.
+- **Previsualización con su dibujo**:
+  - la tarjeta del tipo en Propiedades y la galería de objetos enseñan su planta con el símbolo, en lugar del 3D, cuando el tipo tiene un dibujo propio;
+  - las miniaturas de tipo llevan ya el símbolo y la imagen de planta (antes salía siempre el dibujo de la familia).
+- Los árboles se estiran a la copa del tipo, como los demás símbolos de vegetación: el mismo dibujo vale para un olivo de 4 m y una encina de 9 m.
+- Probado con el DXF de Antonio, desde fuera del repositorio: 76 dibujos, en el orden de la lámina, y la encina de la demo dibujada con el árbol 7.
+
+**Pendiente**
+- Varios dibujos por especie, para que una hilera no repita el mismo árbol.
+- El mismo DXF para los dibujos de alzado (hoy el alzado toma el fichero entero).
+- Un DXF de personas o coches funciona igual, pero los objetos que no son de vegetación usan el tamaño del dibujo y no el del objeto.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`cargo run --release -p archisim-app -- out/demo.archisim`) y selecciona la encina, el árbol grande a la derecha de la casa.
+2. En Propiedades, baja a «Símbolo de planta» y pulsa «Importar DXF…». Elige tu fichero de árboles: debe abrirse la ventana con los 76 dibujos.
+3. Haz clic en uno: la encina debe dibujarse con él en planta, y la tarjeta de arriba debe enseñar su planta. Prueba Deshacer.
+4. Selecciona otro árbol y pulsa «De mi biblioteca…»: deben salir los mismos 76 sin buscar el fichero.
+5. Mira la planta de presentación (plano A-03) y a 1:100: el dibujo del DXF sustituye al de ArchiSim.
+
+---
+
 ## 2026-10-25 (3) · v0.62: C2, cocina y muebles, segunda vuelta
 
 Rama `bloque/c2-cocina`, encima de `bloque/fluidez` (#66), con pull request para Antonio. Sin cambios de formato: los tramos de encimera se calculan, no se guardan. El IFC cambia: lleva una encimera por tramo.

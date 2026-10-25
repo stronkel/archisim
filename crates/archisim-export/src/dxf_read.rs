@@ -112,8 +112,26 @@ impl Ent {
     }
 }
 
+/// One block placed in a drawing, on its own: a drawing of many trees,
+/// people or cars as a library, one block each.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Placed {
+    /// The block's name.
+    pub name: String,
+    /// Where it is placed, in metres.
+    pub at: Point2,
+    /// What it draws, placed (in metres, as in the whole drawing).
+    pub items: Vec<ItemDef>,
+}
+
 /// Reads a DXF file (ASCII; UTF-8, or Windows-1252 as older files are).
 pub fn read(bytes: &[u8]) -> Result<Drawing, String> {
+    read_with_blocks(bytes).map(|(d, _)| d)
+}
+
+/// [`read`], and each block placed in the model space on its own, in
+/// the order of the file; a block placed again is given once.
+pub fn read_with_blocks(bytes: &[u8]) -> Result<(Drawing, Vec<Placed>), String> {
     let text = match std::str::from_utf8(bytes) {
         Ok(t) => t.to_string(),
         Err(_) => bytes.iter().map(|b| cp1252(*b)).collect(),
@@ -175,7 +193,32 @@ pub fn read(bytes: &[u8]) -> Result<Drawing, String> {
     }
     d.items = out;
     d.skipped = skipped;
-    Ok(d)
+    let mut placed: Vec<Placed> = Vec::new();
+    for e in entities.iter().filter(|e| e.kind == "INSERT") {
+        let name = decode(e.get(2).unwrap_or(""));
+        if placed.iter().any(|p| p.name == name) || !blocks.contains_key(&name) {
+            continue;
+        }
+        let mut items = Vec::new();
+        let mut ignored = BTreeMap::new();
+        convert(
+            e,
+            &blocks,
+            &Affine::scale(unit),
+            None,
+            0,
+            &mut items,
+            &mut ignored,
+        );
+        if !items.is_empty() {
+            placed.push(Placed {
+                name,
+                at: Point2::new(e.f(10) * unit, e.f(20) * unit),
+                items,
+            });
+        }
+    }
+    Ok((d, placed))
 }
 
 fn header(sec: &[(i32, String)], d: &mut Drawing) {

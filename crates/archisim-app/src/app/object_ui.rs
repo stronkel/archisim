@@ -329,6 +329,8 @@ impl ArchiSimApp {
         let mut import = false;
         let mut fit_to = None;
         let mut remove = false;
+        let mut from_library = false;
+        let has_library = super::symbol_pick::has_library_files();
         group(ui, "object-symbol", "Símbolo de planta", |ui| {
             match &symbol {
                 None => props::note(
@@ -374,11 +376,25 @@ impl ArchiSimApp {
                 {
                     import = true;
                 }
+                if has_library
+                    && ui
+                        .button("De mi biblioteca…")
+                        .on_hover_text(format!(
+                            "Elegir entre los dibujos de los DXF de la carpeta «{}» de tu biblioteca, viéndolos",
+                            super::symbol_pick::FOLDER
+                        ))
+                        .clicked()
+                {
+                    from_library = true;
+                }
                 if symbol.is_some() && ui.button("Quitar").clicked() {
                     remove = true;
                 }
             });
         });
+        if from_library {
+            self.pick_from_library(t);
+        }
         // A picture for presentation plans.
         let picture = self
             .ed
@@ -652,14 +668,45 @@ impl ArchiSimApp {
         }
     }
 
-    pub(super) fn set_symbol_from(&mut self, t: ObjectTypeId, path: &std::path::Path) {
-        let fit = self.ed.model().type_grows(t)
+    /// Whether a symbol is stretched to the type (vegetation, people,
+    /// site) or keeps the drawing's size (the rest).
+    pub(super) fn symbol_fits(&self, t: ObjectTypeId) -> bool {
+        self.ed.model().type_grows(t)
             || self
                 .ed
                 .model()
                 .object_type(t)
                 .and_then(|ty| self.ed.model().family(ty.family))
-                .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people"));
+                .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people"))
+    }
+
+    pub(super) fn set_symbol_from(&mut self, t: ObjectTypeId, path: &std::path::Path) {
+        let fit = self.symbol_fits(t);
+        // A library (a sheet of trees, one block each): choose one,
+        // seeing them; the file is kept in the user's library.
+        match super::symbol_pick::read_set(path, fit) {
+            Ok(set) if !set.symbols.is_empty() => {
+                let n = set.symbols.len();
+                let kept = super::symbol_pick::keep_in_library(path);
+                self.symbol_picker = Some(super::symbol_pick::SymbolPicker {
+                    target: t,
+                    fit,
+                    sets: vec![set],
+                    shown: 0,
+                });
+                let note = if kept.is_some() {
+                    format!(
+                        " Guardado en tu biblioteca, carpeta «{}».",
+                        super::symbol_pick::FOLDER
+                    )
+                } else {
+                    String::new()
+                };
+                self.say(format!("{n} dibujos en el fichero: elige uno.{note}"));
+                return;
+            }
+            _ => {}
+        }
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {

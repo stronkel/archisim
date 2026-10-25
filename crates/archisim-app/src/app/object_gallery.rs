@@ -225,6 +225,9 @@ fn size_note(lo: [f64; 2], hi: [f64; 2]) -> String {
 /// One type the gallery offers.
 pub(super) struct Item {
     pub pick: ObjectPick,
+    /// It has a plan drawing of its own (a DXF symbol): its picture is
+    /// its plan, not its 3D.
+    pub own_plan: bool,
     pub name: String,
     note: String,
     pub category: &'static str,
@@ -275,10 +278,16 @@ impl ArchiSimApp {
                     .map(|(lo, hi)| size_note(lo, hi))
                     .unwrap_or_default();
                 let family = def.map_or(String::new(), |d| d.name.clone());
-                let key = format!("object:{family}:{:?}:{sig}", t.values);
+                // Its own plan drawing changes the picture too.
+                let drawn = t
+                    .symbol
+                    .as_ref()
+                    .map(|x| (x.source.clone(), x.items.len(), x.fit));
+                let key = format!("object:{family}:{:?}:{drawn:?}:{sig}", t.values);
                 let thumb = thumbs.get(ctx, key, || crate::type_preview::object_model(model, t));
                 items.push(Item {
                     pick: ObjectPick::Project(t.id),
+                    own_plan: t.symbol.is_some(),
                     name: t.name.clone(),
                     note: format!("{size} · {family}"),
                     category,
@@ -316,6 +325,7 @@ impl ArchiSimApp {
                 });
                 items.push(Item {
                     pick: ObjectPick::Library(name),
+                    own_plan: false,
                     name: name.to_string(),
                     note: format!("{size} · {family} · biblioteca"),
                     category,
@@ -356,6 +366,7 @@ impl ArchiSimApp {
                 });
                 items.push(Item {
                     pick: ObjectPick::Library(e.name),
+                    own_plan: false,
                     name: e.name.to_string(),
                     note: format!("{size} · planta generada · {}", e.group),
                     category: "Entorno",
@@ -406,6 +417,7 @@ impl ArchiSimApp {
                 });
                 items.push(Item {
                     pick: ObjectPick::Folder(*fi, *ti),
+                    own_plan: t.symbol.is_some(),
                     name: t.name.clone(),
                     note: format!("{size} · {family} · biblioteca del estudio"),
                     category,
@@ -445,6 +457,7 @@ impl ArchiSimApp {
                 });
                 items.push(Item {
                     pick: ObjectPick::FolderModel(i),
+                    own_plan: false,
                     name: t.name.clone(),
                     note: format!("{size} · modelo 3D ({file}) · biblioteca del estudio"),
                     category,
@@ -512,7 +525,10 @@ impl ArchiSimApp {
             .find(|i| current.is_some_and(|c| i.pick == ObjectPick::Project(c)));
         // The chosen one in 3D, as the Maqueta's cards show them.
         self.thumbs3d.begin();
+        // With a plan drawing of its own (a tree from a DXF), its plan:
+        // that is what was chosen for it.
         let cur_3d = cur
+            .filter(|c| !c.own_plan)
             .and_then(|c| self.card_thumb_3d(&ctx, super::maquette_ui::CatalogAct::Object(c.pick)));
         let mut picked = None;
         let frame = egui::Frame::new()
@@ -695,14 +711,17 @@ impl ArchiSimApp {
                                         for item in row {
                                             // In 3D when it can be drawn so
                                             // (a few more each frame).
-                                            let thumb = self
-                                                .card_thumb_3d(
+                                            let thumb = if item.own_plan {
+                                                item.thumb
+                                            } else {
+                                                self.card_thumb_3d(
                                                     ui.ctx(),
                                                     super::maquette_ui::CatalogAct::Object(
                                                         item.pick,
                                                     ),
                                                 )
-                                                .or(item.thumb);
+                                                .or(item.thumb)
+                                            };
                                             let tile = TypeItem {
                                                 id: (),
                                                 name: item.name.clone(),

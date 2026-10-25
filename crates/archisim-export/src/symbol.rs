@@ -36,9 +36,105 @@ fn extent_points(shape: &Shape) -> Vec<Point2> {
 /// and fills, each with the colour and weight it has in the drawing.
 pub fn symbol_from_dxf(bytes: &[u8], source: &str, fit: bool) -> Result<PlanSymbol, String> {
     let d = dxf_read::read(bytes)?;
-    let layer = |name: &str| d.layers.iter().find(|l| l.name == name);
-    let mut items: Vec<SymbolItem> = d
+    symbol_of(&d, &d.items, source, fit)
+}
+
+/// One of the symbols a DXF that is a library (a sheet of trees, of
+/// people…) holds: one per block placed in it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LibrarySymbol {
+    /// The block's name in the drawing.
+    pub block: String,
+    /// Its number as read on the sheet: by rows, from the top left.
+    pub number: usize,
+    pub symbol: PlanSymbol,
+    /// Its size in the drawing (the largest side), metres.
+    pub size: f64,
+}
+
+/// The symbols of a DXF: one per block placed in its model space, in the
+/// order they are read on the sheet (by rows from the top, each row from
+/// the left), each centred and fitted like [`symbol_from_dxf`]. Empty
+/// when the drawing places fewer than two blocks: then it is one
+/// drawing, taken whole by [`symbol_from_dxf`]. `source` names the file.
+pub fn symbols_from_dxf(
+    bytes: &[u8],
+    source: &str,
+    fit: bool,
+) -> Result<Vec<LibrarySymbol>, String> {
+    let (d, placed) = dxf_read::read_with_blocks(bytes)?;
+    if placed.len() < 2 {
+        return Ok(Vec::new());
+    }
+    let mut found: Vec<(Point2, String, PlanSymbol, f64)> = Vec::new();
+    for p in &placed {
+        let Ok(raw) = symbol_of(&d, &p.items, "", false) else {
+            continue;
+        };
+        let size = symbol_size(&raw);
+        let Ok(sym) = symbol_of(&d, &p.items, "", fit) else {
+            continue;
+        };
+        found.push((p.at, p.name.clone(), sym, size));
+    }
+    // Rows: blocks whose places are less than half a typical block apart
+    // vertically.
+    let mut sizes: Vec<f64> = found.iter().map(|f| f.3).collect();
+    sizes.sort_by(f64::total_cmp);
+    let typical = sizes.get(sizes.len() / 2).copied().unwrap_or(1.0).max(1e-6);
+    found.sort_by(|a, b| b.0.y.total_cmp(&a.0.y));
+    let mut rows: Vec<Vec<(Point2, String, PlanSymbol, f64)>> = Vec::new();
+    for f in found {
+        match rows.last_mut() {
+            Some(r) if (r[0].0.y - f.0.y).abs() < typical / 2.0 => r.push(f),
+            _ => rows.push(vec![f]),
+        }
+    }
+    let mut out = Vec::new();
+    for mut row in rows {
+        row.sort_by(|a, b| a.0.x.total_cmp(&b.0.x));
+        for (_, block, mut symbol, size) in row {
+            let number = out.len() + 1;
+            symbol.source = format!("{source} · {number}");
+            out.push(LibrarySymbol {
+                block,
+                number,
+                symbol,
+                size,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// The largest side of a symbol's drawing.
+fn symbol_size(s: &PlanSymbol) -> f64 {
+    let pts: Vec<Point2> = s
         .items
+        .iter()
+        .flat_map(|i| extent_points(&i.shape))
+        .collect();
+    let Some(first) = pts.first().copied() else {
+        return 0.0;
+    };
+    let (lo, hi) = pts.iter().fold((first, first), |(lo, hi), p| {
+        (
+            Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+            Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+        )
+    });
+    (hi.x - lo.x).max(hi.y - lo.y)
+}
+
+/// A symbol from some elements of a drawing (see [`symbol_from_dxf`]).
+fn symbol_of(
+    d: &dxf_read::Drawing,
+    elements: &[dxf_read::ItemDef],
+    source: &str,
+    fit: bool,
+) -> Result<PlanSymbol, String> {
+    let layer = |name: &str| d.layers.iter().find(|l| l.name == name);
+    let mut items: Vec<SymbolItem> = elements
         .iter()
         .filter(|i| !matches!(i.shape, Shape::Text(_) | Shape::Dim(_)))
         .filter(|i| layer(&i.layer).is_none_or(|l| l.visible))
@@ -212,5 +308,74 @@ mod tests {
         assert!(
             symbol_from_dxf(b"0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n", "x", true).is_err()
         );
+    }
+
+    /// A sheet of blocks (a library of trees): one symbol each, numbered
+    /// by rows from the top left, a block placed twice given once; a
+    /// drawing with a single block is one drawing.
+    #[test]
+    fn a_sheet_of_blocks_is_a_library() {
+        let block = |name: &str, r: f64| {
+            format!("0\nBLOCK\n8\n0\n2\n{name}\n70\n0\n10\n0\n20\n0\n30\n0\n0\nCIRCLE\n8\n0\n10\n0\n20\n0\n30\n0\n40\n{r}\n0\nENDBLK\n8\n0\n")
+        };
+        let insert = |name: &str, x: f64, y: f64| {
+            format!("0\nINSERT\n8\nARBOLES\n2\n{name}\n10\n{x}\n20\n{y}\n30\n0\n")
+        };
+        let dxf = format!(
+            "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n0\nSECTION\n2\nBLOCKS\n{}{}{}0\nENDSEC\n0\nSECTION\n2\nENTITIES\n{}{}{}{}0\nENDSEC\n0\nEOF\n",
+            block("A", 500.0),
+            block("B", 400.0),
+            block("C", 600.0),
+            // Bottom row first in the file, then the top row (right, left).
+            insert("C", 1000.0, 0.0),
+            insert("B", 3000.0, 2000.0),
+            insert("A", 1000.0, 2000.0),
+            insert("A", 5000.0, 0.0),
+        );
+        let lib = symbols_from_dxf(dxf.as_bytes(), "arboles.dxf", true).unwrap();
+        let names: Vec<&str> = lib.iter().map(|s| s.block.as_str()).collect();
+        assert_eq!(names, ["A", "B", "C"]);
+        assert_eq!(lib[1].number, 2);
+        assert_eq!(lib[1].symbol.source, "arboles.dxf · 2");
+        // Each fitted to a square of 1, its own size kept in metres.
+        assert!((lib[1].size - 0.8).abs() < 1e-9, "{}", lib[1].size);
+        match &lib[2].symbol.items[0].shape {
+            Shape::Circle { centre, radius } => {
+                assert!(centre.distance(Point2::new(0.0, 0.0)) < 1e-9);
+                assert!((radius - 0.5).abs() < 1e-9);
+            }
+            other => panic!("{other:?}"),
+        }
+        // One block placed: no library.
+        let one = format!(
+            "0\nSECTION\n2\nBLOCKS\n{}0\nENDSEC\n0\nSECTION\n2\nENTITIES\n{}0\nENDSEC\n0\nEOF\n",
+            block("A", 500.0),
+            insert("A", 0.0, 0.0)
+        );
+        assert!(symbols_from_dxf(one.as_bytes(), "x", true)
+            .unwrap()
+            .is_empty());
+    }
+
+    /// A real library (`ARCHISIM_ARBOLES_DXF`, not in the repository: the
+    /// drawings are someone else's): how many trees it gives.
+    #[test]
+    #[ignore]
+    fn reads_a_real_library() {
+        let Some(path) = std::env::var_os("ARCHISIM_ARBOLES_DXF") else {
+            return;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let lib = symbols_from_dxf(&bytes, "arboles.dxf", true).unwrap();
+        println!("{} símbolos", lib.len());
+        for s in lib.iter().take(5) {
+            println!(
+                "{} · {:.2} m · {} piezas",
+                s.number,
+                s.size,
+                s.symbol.items.len()
+            );
+        }
+        assert!(!lib.is_empty());
     }
 }
