@@ -336,6 +336,7 @@ fn plant_shape_marks(l: &PlantLook, shapes: Vec<flora::Shape>) -> Vec<Mark> {
         flora::Tone::Flowers => Some(l.materials.flowers.0),
         flora::Tone::Fruit => Some(l.materials.fruit.0),
         flora::Tone::Paper => None,
+        flora::Tone::Ink => Some(crate::family::INK_TINT),
     };
     let mut marks = Vec::new();
     for s in shapes {

@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 (2) · v0.61: árboles en línea (T2)
+
+Rama `bloque/arboles-linea`, encima de `bloque/tramas` (#64), con pull request. Sin cambios de formato; la familia Vegetación pasa a la versión 2.
+
+Antonio pidió árboles en planta y alzado «en ese estilo», el de unas bibliotecas de CAD que no se pueden redistribuir, pero sin copiarlos. Miré sus dibujos solo para sacar los rasgos generales del género, y los estilos nuevos salen del generador de plantas de ArchiSim: cada árbol se dibuja desde sus propias ramas y matas de hojas, así que no hay ninguna forma calcada.
+
+**Hecho**
+- Cuatro estilos nuevos para el dibujo de la vegetación, en planta y en alzado:
+  - **Corona**: rosetas de hojas alrededor del borde, con el centro abierto.
+  - **Silueta**: la copa maciza en el color de la línea, con su borde de hojas y las ramas en blanco a través; en alzado, el tronco también macizo.
+  - **Ramitos**: ramas con foliolos a pares, como plumas.
+  - **Ramas y borde**: la estructura de ramas dentro de un contorno dentado.
+- Se eligen en Propiedades, como los demás estilos (técnico, de presentación o el de cada ejemplar).
+- `archisim vivero out/` dibuja el vivero entero en cada estilo, en planta (1:200) y en alzado (1:100).
+
+**Pendiente**
+- Los proyectos que ya tenían árboles los ven después de Biblioteca → Actualizar familias.
+- Ajustes según lo que diga Antonio: grosor de las rosetas de la corona, densidad de los ramitos.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- vivero out/vivero` y abre `out/vivero/vivero-silueta-planta.svg`, `vivero-corona-planta.svg`, `vivero-ramitos-planta.svg` y `vivero-ramas-y-borde-planta.svg`, y los `…-alzado-1.svg` de cada uno.
+2. En un proyecto, elige un árbol y, en Propiedades → Dibujo en planta, pon el estilo de presentación en «silueta» y el color en «líneas». Mira la planta y un alzado.
+3. En un proyecto antiguo: Biblioteca → Actualizar familias, y después lo mismo.
+
+---
+
 ## 2026-10-25 · v0.60: tramas de presentación (T1)
 
 Rama `bloque/tramas`, encima de `bloque/figuras-2` (#63), con pull request para Antonio. **Formato `.archisim` versión 36**: abre todas las anteriores. Solo sube para que una versión anterior del programa avise de que el fichero es más nuevo.

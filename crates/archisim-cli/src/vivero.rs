@@ -169,6 +169,56 @@ pub fn write(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             sec.name
         );
     }
+    // The line drawings of trees (25/10/2026): every plant in each of the
+    // four styles, in plan and in the elevations, lines only.
+    for (name, slug) in [
+        ("corona", "corona"),
+        ("silueta", "silueta"),
+        ("ramitos", "ramitos"),
+        ("ramas y borde", "ramas-y-borde"),
+    ] {
+        let mut t = m.clone();
+        let ids: Vec<_> = t.object_types().map(|x| x.id).collect();
+        for id in ids {
+            if !t.type_grows(id) {
+                continue;
+            }
+            let Some(mut v) = t.object_type(id).map(|x| x.values.clone()) else {
+                continue;
+            };
+            for (k, val) in [
+                ("style", name),
+                ("tech_style", name),
+                ("look", "líneas"),
+                ("plan_drawing", "presentación"),
+            ] {
+                v.insert(k.into(), archisim_core::Value::Text(val.into()));
+            }
+            t.set_object_type_values(id, v)?;
+        }
+        let plan = archisim_plan::PlanOptions {
+            scale: 200.0,
+            ..Default::default()
+        };
+        std::fs::write(
+            dir.join(format!("vivero-{slug}-planta.svg")),
+            archisim_plan::render_plan(&t, level, &plan),
+        )?;
+        let mut rows = String::new();
+        for (i, sec) in t.sections().enumerate() {
+            let drawing = archisim_plan::section::section_drawing(&t, sec);
+            let options = archisim_plan::PlanOptions {
+                scale: 100.0,
+                ..Default::default()
+            };
+            std::fs::write(
+                dir.join(format!("vivero-{slug}-alzado-{}.svg", i + 1)),
+                archisim_plan::section::render_section(&t, &drawing, &options),
+            )?;
+            rows = format!("{} alzados", i + 1);
+        }
+        println!("  Estilo «{name}»: vivero-{slug}-planta.svg y {rows}");
+    }
     Ok(())
 }
 

@@ -51,7 +51,7 @@ Las medidas y colores son una propuesta para que Antonio los corrija: se cambian
 
 ## 3. Dibujo en planta
 
-Trece estilos, sacados de la propia planta crecida:
+Diecisiete estilos, sacados de la propia planta crecida:
 
 | Estilo | Cómo es |
 |---|---|
@@ -68,6 +68,12 @@ Trece estilos, sacados de la propia planta crecida:
 | Radial | Líneas del tronco al borde (pinos, coníferas, retamas, gramíneas) |
 | Frondas | Las hojas de palmeras, pitas y yucas, con sus foliolos |
 | Acuarela | Manchas de color superpuestas, sin líneas |
+| Corona | Grupos de hojas en roseta alrededor del borde de la copa, el centro abierto |
+| Silueta | La copa maciza, del color de la línea, con su borde de hojas y las ramas en blanco a través de ella; en alzado, tronco macizo |
+| Ramitos | Las ramas con foliolos a pares a lo largo de las ramillas, como plumas |
+| Ramas y borde | Las ramas dentro de un contorno dentado |
+
+Los cuatro últimos (v0.61, pedidos por Antonio el 25/10/2026) son dibujos de línea con aire de biblioteca de CAD. Son diseño propio: salen del mismo árbol crecido, así que cada ejemplar es distinto. Valen igual en planta y en alzado. Los proyectos que ya tenían la familia Vegetación los ven después de **Biblioteca → Actualizar familias** (la familia pasa a la versión 2). `archisim vivero out/` dibuja todo el vivero en cada uno: `vivero-<estilo>-planta.svg` y sus alzados.
 
 En las axonometrías de los planos, las copas se dibujan por su contorno (no por cada faceta) y, en las secciones, rellenas; las sombras usan la versión más ligera.
 
