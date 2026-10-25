@@ -277,10 +277,66 @@ pub enum HatchPattern {
     LawnDots,
     /// A sheet of water: short ripples.
     Water,
+    /// Timber boards with their joints and grain.
+    WoodBoards,
+    /// Flat-sawn grain: cathedral figures, no joints.
+    WoodVeins,
+    /// Finished timber: long smooth boards, little grain.
+    WoodFinished,
+    /// Pine boards: bold cathedrals and knots.
+    Pine,
+    /// Oak strips: straight grain and ray flecks.
+    Oak,
+    /// Maple strips: faint, quiet grain.
+    Maple,
+    /// Birch panels: fine wavy grain and flecks.
+    Birch,
+    /// Ash boards: strong cathedrals and open pores.
+    Ash,
+    /// Walnut boards: swirling grain.
+    Walnut,
+    /// Mahogany boards: ribbon stripes.
+    Mahogany,
+    /// Brushed metal sheets with seams and streaks.
+    MetalBrushed,
+    /// Perforated metal: round holes, staggered.
+    MetalPerforated,
+    /// Tread plate: raised lenses.
+    DiamondPlate,
+    /// Profiled (corrugated) sheet seen face on.
+    Corrugated,
+    /// Expanded metal mesh.
+    MetalMesh,
+    /// Fair-faced concrete: formwork panels and tie holes.
+    ConcreteFinished,
+    /// Raw concrete: dense stipple and aggregate.
+    ConcreteRough,
+    /// Bare concrete: light stipple, pores, hairline cracks.
+    ConcreteBare,
+    /// Concrete pavers 20 × 10 cm in herringbone.
+    ConcretePavers,
+    /// Board-formed concrete: the print of the boards.
+    BoardFormed,
+    /// Gravel: small rounded stones.
+    Pebbles,
+    /// Limestone slabs in courses, with fossils.
+    Limestone,
+    /// Rough stone blocks in courses.
+    StoneBlocks,
+    /// Cut stone 60 × 30 cm with drafted margins.
+    Ashlar,
+    /// Terrazzo: marble chips.
+    Terrazzo,
+    /// Rounded flat stones with grit between.
+    RockyPath,
+    /// Setts laid in segmental arcs.
+    Setts,
+    /// Rubble walling roughly in courses.
+    Rubble,
 }
 
 impl HatchPattern {
-    pub const ALL: [HatchPattern; 22] = [
+    pub const ALL: [HatchPattern; 50] = [
         HatchPattern::Solid,
         HatchPattern::Lines,
         HatchPattern::Grid,
@@ -303,6 +359,34 @@ impl HatchPattern {
         HatchPattern::LawnStripes,
         HatchPattern::LawnDots,
         HatchPattern::Water,
+        HatchPattern::WoodBoards,
+        HatchPattern::WoodVeins,
+        HatchPattern::WoodFinished,
+        HatchPattern::Pine,
+        HatchPattern::Oak,
+        HatchPattern::Maple,
+        HatchPattern::Birch,
+        HatchPattern::Ash,
+        HatchPattern::Walnut,
+        HatchPattern::Mahogany,
+        HatchPattern::MetalBrushed,
+        HatchPattern::MetalPerforated,
+        HatchPattern::DiamondPlate,
+        HatchPattern::Corrugated,
+        HatchPattern::MetalMesh,
+        HatchPattern::ConcreteFinished,
+        HatchPattern::ConcreteRough,
+        HatchPattern::ConcreteBare,
+        HatchPattern::ConcretePavers,
+        HatchPattern::BoardFormed,
+        HatchPattern::Pebbles,
+        HatchPattern::Limestone,
+        HatchPattern::StoneBlocks,
+        HatchPattern::Ashlar,
+        HatchPattern::Terrazzo,
+        HatchPattern::RockyPath,
+        HatchPattern::Setts,
+        HatchPattern::Rubble,
     ];
 
     pub fn code(self) -> &'static str {
@@ -329,6 +413,34 @@ impl HatchPattern {
             HatchPattern::LawnStripes => "lawn_stripes",
             HatchPattern::LawnDots => "lawn_dots",
             HatchPattern::Water => "water",
+            HatchPattern::WoodBoards => "wood_boards",
+            HatchPattern::WoodVeins => "wood_veins",
+            HatchPattern::WoodFinished => "wood_finished",
+            HatchPattern::Pine => "pine",
+            HatchPattern::Oak => "oak",
+            HatchPattern::Maple => "maple",
+            HatchPattern::Birch => "birch",
+            HatchPattern::Ash => "ash",
+            HatchPattern::Walnut => "walnut",
+            HatchPattern::Mahogany => "mahogany",
+            HatchPattern::MetalBrushed => "metal_brushed",
+            HatchPattern::MetalPerforated => "metal_perforated",
+            HatchPattern::DiamondPlate => "diamond_plate",
+            HatchPattern::Corrugated => "corrugated",
+            HatchPattern::MetalMesh => "metal_mesh",
+            HatchPattern::ConcreteFinished => "concrete_finished",
+            HatchPattern::ConcreteRough => "concrete_rough",
+            HatchPattern::ConcreteBare => "concrete_bare",
+            HatchPattern::ConcretePavers => "concrete_pavers",
+            HatchPattern::BoardFormed => "board_formed",
+            HatchPattern::Pebbles => "pebbles",
+            HatchPattern::Limestone => "limestone",
+            HatchPattern::StoneBlocks => "stone_blocks",
+            HatchPattern::Ashlar => "ashlar",
+            HatchPattern::Terrazzo => "terrazzo",
+            HatchPattern::RockyPath => "rocky_path",
+            HatchPattern::Setts => "setts",
+            HatchPattern::Rubble => "rubble",
         }
     }
 
@@ -360,6 +472,34 @@ impl HatchPattern {
             HatchPattern::LawnStripes => "Césped en franjas",
             HatchPattern::LawnDots => "Césped punteado",
             HatchPattern::Water => "Lámina de agua",
+            HatchPattern::WoodBoards => "Madera en tablas",
+            HatchPattern::WoodVeins => "Vetas de madera",
+            HatchPattern::WoodFinished => "Madera terminada",
+            HatchPattern::Pine => "Pino",
+            HatchPattern::Oak => "Roble",
+            HatchPattern::Maple => "Arce",
+            HatchPattern::Birch => "Abedul",
+            HatchPattern::Ash => "Fresno",
+            HatchPattern::Walnut => "Nogal",
+            HatchPattern::Mahogany => "Caoba",
+            HatchPattern::MetalBrushed => "Metal cepillado",
+            HatchPattern::MetalPerforated => "Metal perforado",
+            HatchPattern::DiamondPlate => "Chapa lagrimada",
+            HatchPattern::Corrugated => "Chapa grecada",
+            HatchPattern::MetalMesh => "Malla metálica",
+            HatchPattern::ConcreteFinished => "Hormigón visto",
+            HatchPattern::ConcreteRough => "Hormigón en bruto",
+            HatchPattern::ConcreteBare => "Hormigón desnudo",
+            HatchPattern::ConcretePavers => "Adoquín de hormigón",
+            HatchPattern::BoardFormed => "Hormigón encofrado con tablas",
+            HatchPattern::Pebbles => "Grava gruesa",
+            HatchPattern::Limestone => "Piedra caliza",
+            HatchPattern::StoneBlocks => "Bloques de piedra",
+            HatchPattern::Ashlar => "Sillería",
+            HatchPattern::Terrazzo => "Terrazo",
+            HatchPattern::RockyPath => "Camino de piedras",
+            HatchPattern::Setts => "Adoquín en abanico",
+            HatchPattern::Rubble => "Mampostería",
         }
     }
 
@@ -375,7 +515,25 @@ impl HatchPattern {
                 | HatchPattern::Stone
                 | HatchPattern::Decking
                 | HatchPattern::LawnStripes
-        )
+        ) || self.texture().is_some()
+    }
+
+    /// The family of a presentation texture, for lists: «Madera»,
+    /// «Metal», «Hormigón» or «Piedra»; `None` for the other patterns.
+    pub fn texture(self) -> Option<&'static str> {
+        use HatchPattern::*;
+        match self {
+            WoodBoards | WoodVeins | WoodFinished | Pine | Oak | Maple | Birch | Ash | Walnut
+            | Mahogany => Some("Madera"),
+            MetalBrushed | MetalPerforated | DiamondPlate | Corrugated | MetalMesh => Some("Metal"),
+            ConcreteFinished | ConcreteRough | ConcreteBare | ConcretePavers | BoardFormed => {
+                Some("Hormigón")
+            }
+            Pebbles | Limestone | StoneBlocks | Ashlar | Terrazzo | RockyPath | Setts | Rubble => {
+                Some("Piedra")
+            }
+            _ => None,
+        }
     }
 
     /// Presentation patterns (textures for plans and site plans), after
@@ -392,7 +550,7 @@ impl HatchPattern {
                 | HatchPattern::LawnStripes
                 | HatchPattern::LawnDots
                 | HatchPattern::Water
-        )
+        ) || self.texture().is_some()
     }
 }
 

@@ -21,6 +21,7 @@ mod formas;
 mod grande;
 mod modelos;
 mod muestrario;
+mod tramas;
 mod vivero;
 
 use std::path::{Path, PathBuf};
@@ -76,6 +77,10 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim tramas [carpeta]
+      Las tramas de presentación (madera, metal, hormigón y piedra), cada
+      una en un cuadro con su nombre, a 1:20 y a 1:50: tramas.archisim,
+      SVG, PDF y DXF. Por defecto: ./out
   archisim figuras [carpeta]
       Árboles, palmeras, arbustos, personas y coches en fila delante de
       un muro, vistos desde el sur como los dibuja un arquitecto: alzado
@@ -221,6 +226,10 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("tramas") => {
+            let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
+            report(tramas::write(&dir))
         }
         Some("figuras") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

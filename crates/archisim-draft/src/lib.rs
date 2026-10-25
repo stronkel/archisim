@@ -19,6 +19,7 @@ pub mod outline;
 pub mod region;
 pub mod seg;
 pub mod snaps;
+pub mod textures;
 pub mod transform;
 
 pub use measure::*;

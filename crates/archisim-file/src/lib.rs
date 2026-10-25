@@ -48,7 +48,7 @@ use serde_json::Value;
 /// Value of the `format` field.
 pub const FORMAT: &str = "ArchiSim";
 /// File layout written by this version of ArchiSim.
-pub const CURRENT_VERSION: u32 = 35;
+pub const CURRENT_VERSION: u32 = 36;
 /// File name extension, without the dot.
 pub const EXTENSION: &str = "archisim";
 /// Length unit of every number in the file.
@@ -292,8 +292,10 @@ pub fn migrate(value: Value, from: u64) -> Result<Value, FileError> {
             // decomposition of prices and the budget's overheads, profit
             // and VAT (`budget`); older ones have none. 34 → 35: object
             // types of one object (`own`) and their own drawings for
-            // elevations (`elevation`); older ones have none.
-            9..=34 => {
+            // elevations (`elevation`); older ones have none. 35 → 36:
+            // the presentation textures (wood, metal, concrete, stone) as
+            // hatch patterns; nothing changes in older files.
+            9..=35 => {
                 let mut v = if version == 32 {
                     legacy_dormers(value)
                 } else {
@@ -917,9 +919,9 @@ mod tests {
         let mut r = m.room(room).unwrap().clone();
         r.usage = "Estar".into();
         r.height = Some(2.6);
-        // A wooden floor drawn in plan (version 22).
+        // A wooden floor drawn in plan (version 22), in oak (version 36).
         r.floor_fill = Some(archisim_core::FloorFill {
-            pattern: archisim_core::HatchPattern::Decking,
+            pattern: archisim_core::HatchPattern::Oak,
             color: [120, 80, 40],
             background: Some([230, 210, 180]),
             scale: 1.0,
@@ -1571,7 +1573,7 @@ mod tests {
         let back = from_str(&text).unwrap();
         assert_eq!(back, m);
         // A version 6 file has none of them and still opens.
-        let v6 = to_string(&sample()).replacen("\"version\": 35", "\"version\": 6", 1);
+        let v6 = to_string(&sample()).replacen("\"version\": 36", "\"version\": 6", 1);
         assert_eq!(from_str(&v6).unwrap().columns().count(), 0);
     }
 
@@ -1598,7 +1600,7 @@ mod tests {
         let opened = from_str(&old).unwrap();
         assert_same_project(&opened, &m);
         // Saved again, it is a version 5 file.
-        assert!(to_string(&opened).contains("\"version\": 35"));
+        assert!(to_string(&opened).contains("\"version\": 36"));
     }
 
     /// The project as ArchiSim 0.10–0.13 wrote it (file version 2): door and
@@ -1769,7 +1771,7 @@ mod tests {
         let start = text.find("      \"top\": {").unwrap();
         let end = start + text[start..].find("}\n").unwrap() + 2;
         let old = format!("{}{}", &text[..start], &text[end..])
-            .replacen("\"version\": 35", "\"version\": 3", 1)
+            .replacen("\"version\": 36", "\"version\": 3", 1)
             .replace("\"base_offset\": -0.1,\n", "\"base_offset\": -0.1\n");
         let opened = from_str(&old).unwrap();
         let w = opened.wall(tied.id).unwrap();
@@ -1831,7 +1833,7 @@ mod tests {
         assert!(back.opening_type(void).unwrap().is_void());
         assert_eq!(back.opening_type(void).unwrap().mark, "H-01");
         // Version 5 (ArchiSim 0.19): no holes, no voids.
-        let v5 = to_string(&sample()).replacen("\"version\": 35", "\"version\": 5", 1);
+        let v5 = to_string(&sample()).replacen("\"version\": 36", "\"version\": 5", 1);
         assert!(from_str(&v5).unwrap().slabs().all(|s| s.holes.is_empty()));
     }
 
@@ -2275,7 +2277,7 @@ mod tests {
         assert_same_project(&back, &m);
         assert_eq!(back.wall(curved).unwrap().bulge, -0.4);
         // Version 4 (ArchiSim 0.17–0.18): no bulge anywhere.
-        let v4 = to_string(&sample()).replacen("\"version\": 35", "\"version\": 4", 1);
+        let v4 = to_string(&sample()).replacen("\"version\": 36", "\"version\": 4", 1);
         let opened = from_str(&v4).unwrap();
         assert!(opened.walls().all(|w| w.bulge == 0.0));
         // A bend tighter than the wall is thick is refused on opening.
@@ -2307,7 +2309,7 @@ mod tests {
             })
             .unwrap();
         let wall = m.materials().next().unwrap().id;
-        let text = to_string(&m).replacen("\"version\": 35", "\"version\": 32", 1);
+        let text = to_string(&m).replacen("\"version\": 36", "\"version\": 32", 1);
         let mut v: Value = serde_json::from_str(&text).unwrap();
         let roofs = v["roofs"].as_array_mut().unwrap();
         let at = roofs.iter().position(|r| r["id"] == roof.0).unwrap();
@@ -2340,7 +2342,7 @@ mod tests {
     #[test]
     fn layout_is_readable() {
         let text = to_string(&sample());
-        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 35,\n"));
+        assert!(text.starts_with("{\n  \"format\": \"ArchiSim\",\n  \"version\": 36,\n"));
         // A wall tied to a level says which, and how far from it; a free
         // wall has no `top`.
         assert!(text.contains("\"top\": {\n        \"level\": "));
@@ -2386,11 +2388,11 @@ mod tests {
             Err(FileError::NotAProject)
         ));
         assert!(matches!(
-            edited("\"version\": 35", "\"version\": 36"),
-            Err(FileError::TooNew { version: 36 })
+            edited("\"version\": 36", "\"version\": 37"),
+            Err(FileError::TooNew { version: 37 })
         ));
         assert!(matches!(
-            edited("\"version\": 35", "\"version\": 0"),
+            edited("\"version\": 36", "\"version\": 0"),
             Err(FileError::UnknownVersion(0))
         ));
         assert!(matches!(
