@@ -528,7 +528,7 @@ impl ArchiSimApp {
                 self.hover = None;
                 self.hover_grip = None;
                 let variant = drag_variant(ctx, d.grip);
-                let to = d.target(s.point);
+                let to = self.join_snap(d, d.target(s.point));
                 let fresh = self
                     .drag_preview
                     .as_ref()

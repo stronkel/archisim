@@ -1222,7 +1222,26 @@ impl Editor {
     pub fn drag(&mut self, drag: &crate::drag::Drag) -> EditResult<&'static str> {
         let label = crate::drag::label(self.model(), drag);
         let selection = self.selection.clone();
-        let new_selection = self.transact(label, |m| crate::drag::apply(m, &selection, drag))?;
+        let new_selection = self.transact(label, |m| {
+            let moved = crate::drag::apply(m, &selection, drag)?;
+            if drag.grip != crate::drag::Grip::Body {
+                return Ok(moved);
+            }
+            // Furniture made to join (a sofa, a shelf) dropped against
+            // another of its kind becomes one with it, as when placed.
+            let mut kept = moved.clone().unwrap_or_else(|| selection.clone());
+            let mut joined = false;
+            for e in kept.clone() {
+                if let Element::Object(id) = e {
+                    if let Some(other) = crate::placing::join_alongside(m, id) {
+                        kept.remove(&e);
+                        kept.insert(Element::Object(other));
+                        joined = true;
+                    }
+                }
+            }
+            Ok(if joined { Some(kept) } else { moved })
+        })?;
         if let Some(s) = new_selection {
             self.selection = s;
         }

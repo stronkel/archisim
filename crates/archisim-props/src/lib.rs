@@ -25,6 +25,8 @@ mod sanitary;
 mod street;
 mod vehicles;
 
+pub use kitchen::{sink_hole, SINK_UNIT, WORKTOP};
+
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -80,6 +82,7 @@ impl PropMesh {
 /// What can be made, with the name of each model (`style`).
 pub const KINDS: &[(&str, &[&str])] = &[
     ("sofa", &["Contemporáneo", "Clásico", "Nórdico"]),
+    ("corner_sofa", &["Contemporáneo", "Clásico", "Nórdico"]),
     ("chair", &["Madera", "Tubo metálico", "Tapizada"]),
     ("table", &["Cuatro patas", "Patas metálicas", "Caballetes"]),
     (
@@ -277,6 +280,7 @@ pub const CHOICES: &[(&str, &[&str])] = &[
         "pedestal",
         &["Sin cajonera", "A la izquierda", "A la derecha"],
     ),
+    ("side", &["Derecha", "Izquierda"]),
 ];
 
 /// The number of a value chosen by name (see [`CHOICES`]).
@@ -298,6 +302,7 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
     let mut b = build::Builder::default();
     match kind {
         "sofa" => furniture::sofa(&mut b, p),
+        "corner_sofa" => furniture::corner_sofa(&mut b, p),
         "chair" => furniture::chair(&mut b, p),
         "table" => furniture::table(&mut b, p),
         "coffee_table" => furniture::coffee_table(&mut b, p),

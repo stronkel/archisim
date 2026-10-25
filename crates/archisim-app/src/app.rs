@@ -286,6 +286,9 @@ pub struct ArchiSimApp {
     /// The material of the object whose colours are open in its bar, and
     /// where its swatch is.
     bar_swatches: Option<String>,
+    /// The colour being chosen on the free colour wheel of the swatches,
+    /// for the piece it was opened on (applied with its button).
+    bar_rgb: Option<(String, [u8; 3])>,
     bar_swatch_at: Option<eframe::egui::Rect>,
     /// A left drag in the 3D view (moving or a selection window).
     drag3d: Option<mouse3d::Drag3d>,
@@ -655,6 +658,7 @@ impl ArchiSimApp {
             clipboard: None,
             drag3d: None,
             bar_swatches: None,
+            bar_rgb: None,
             bar_swatch_at: None,
             object_move: None,
             render: Default::default(),
@@ -1557,13 +1561,36 @@ impl ArchiSimApp {
         }
     }
 
+    /// Where a piece of furniture made to join others (`joins` in its
+    /// recipe: kitchen modules, sofas, shelves…) dragged by its body in
+    /// plan goes to touch the one beside it, as when it is placed; `to`
+    /// itself for anything else, or a distance typed in.
+    pub(super) fn join_snap(&self, d: &DragState, to: Point2) -> Point2 {
+        if d.grip != Grip::Body || !d.typed.is_empty() || self.ed.selection.len() != 1 {
+            return to;
+        }
+        let Some(crate::pick::Element::Object(id)) = self.ed.selection.first().copied() else {
+            return to;
+        };
+        let m = self.ed.model();
+        let Some(o) = m.object(id) else {
+            return to;
+        };
+        let moved = o.position + (to - d.from);
+        match crate::placing::snap_alongside(m, o.level, o.object_type, moved, o.rotation, Some(id))
+        {
+            Some(q) => d.from + (q - o.position),
+            None => to,
+        }
+    }
+
     /// Drops the dragged selection at `cursor` (or at the typed distance).
     fn finish_drag(&mut self, cursor: Point2, variant: bool) {
         let Some(d) = self.drag.take() else {
             return;
         };
         self.drag_preview = None;
-        let to = d.target(cursor);
+        let to = self.join_snap(&d, d.target(cursor));
         if to.approx_eq(d.from) {
             return;
         }

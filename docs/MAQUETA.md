@@ -134,7 +134,7 @@ Pendiente de MQ1: miniaturas en 3D, arrastrar objetos por el suelo en 3D sin her
 - **Contra la pared al colocar**: en la Maqueta, un mueble que se coloca cerca de un muro ya se pone de espaldas a él.
 - **Piezas que se unen**: dos muebles de cocina, muebles altos, estanterías, aparadores o sofás del mismo tipo de fondo y altura, colocados uno junto a otro en línea, se convierten en uno solo tan largo como los dos (y, por la sección `stretch` de su receta, con sus puertas o plazas). Lo dice la salida `joins = "width"` de la receta. Al colocar y al arrastrar en la Maqueta; un paso de Deshacer.
 
-Pendiente: unirse también al arrastrar en planta; muebles en L (sofá rinconera, cocina en esquina).
+Desde v0.62 (C2) también al arrastrar en planta, y los módulos bajos de cocina se juntan además en esquina y espalda con espalda (§6 septies).
 
 ## 6 quater. Colecciones (v0.50)
 
@@ -178,6 +178,18 @@ Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), 
 - **Plano de carpinterías** (Archivo → Plano de carpinterías): cada tipo de puerta y ventana del proyecto en alzado a 1:50 con sus medidas, su sección y sus datos (familia, medidas, apertura, carpintería, unidades), seis por hoja A3, en PDF.
 - `archisim cocina out/`: una cocina con columna, cajoneras, fregadero, lavavajillas, horno, placa y botellero, altos y campana, en cuatro filas con cada frente.
 
+
+## 6 septies. Cocina y muebles, segunda vuelta (C2, v0.62, rama `bloque/c2-cocina`)
+
+- **Una encimera de verdad** sobre los módulos bajos que se tocan, a la misma altura y del mismo material: en fila, en L, en U o en isla. En 3D, en secciones, en alzados y en el IFC es una sola pieza, con el hueco de cada fregadero, y los módulos van sin la suya. Se calcula de dónde están los módulos (`Model::worktop_runs`), no se guarda: separado del tramo, un módulo recupera su encimera.
+- **Cocina en esquina**: un módulo girado un cuarto de vuelta, acercado al extremo de una fila, se pega con su lateral contra el frente del último módulo y su trasera a paño con el extremo de la fila, como en una esquina de dos paredes (también al revés, la fila hacia el tramo). La encimera sale en L.
+- **Isla por módulos**: dos módulos espalda con espalda se pegan por la trasera, con sus extremos alineados; varias parejas hacen una isla bajo una sola encimera.
+- **Pegarse al arrastrar en planta**: lo que se pega al colocar y al arrastrar en 3D (módulos de cocina, sofás, estanterías…) se pega también al arrastrarlo en planta; los que se unen en uno (sofás, estanterías) se unen al soltar.
+- **Sofá rinconera** (familia «Sofá rinconera»): un tramo a lo largo del respaldo y otro hacia delante, a la derecha o a la izquierda; plazas en cada tramo y la de la esquina; los tres modelos del sofá. En la biblioteca, «Sofá rinconera 260×170» y «300×200».
+- **Color libre**: en la barra del objeto, las muestras de una pieza tienen «Color libre», una rueda de color y «Aplicar»: un material como el que tenía (con su textura: la madera sigue con veta, la tela con su trama) en ese color, llamado «<material> #RRGGBB». Un paso de Deshacer.
+- **Mediciones**: capítulo «10 Mobiliario de cocina», con las encimeras por material en metros a lo largo de los frentes (`encimera:<material>`) y los muebles de cocina por tipo en unidades (`mueble:<tipo>`), con sus precios del banco como las demás partidas.
+- **IFC**: la encimera de cada tramo es un `IfcFurniture` «Encimera» (tipo `IfcFurnitureType` por material), con su material y el pset `ArchiSim_Worktop` (largo, superficie y los módulos); el tipo de un módulo bajo lleva dos geometrías, con y sin encimera, y los del tramo usan la segunda. Al importar, ArchiSim no lee la encimera como objeto: vuelve a salir de sus módulos.
+- `archisim cocina out/` lleva además una cocina en L con fregadero y placa, una isla de seis módulos y un sofá rinconera.
 
 ## 6 sexies. Ventana en islas y maneras de abrir (v0.56, rama `bloque/islas`)
 

@@ -2,7 +2,9 @@
 //! 24/10/2026): a run of base units against a wall — fridge column,
 //! drawers, sink, dishwasher, oven, hob, bottle rack — their worktops
 //! meeting as one, wall units over them and a hood over the hob; and the
-//! same run with framed, grooved and glazed fronts, to compare.
+//! same run with framed, grooved and glazed fronts, to compare. Then (C2)
+//! a kitchen in an L in a corner, an island of modules back to back and a
+//! corner sofa: each run of modules under one worktop.
 
 use std::path::Path;
 
@@ -122,7 +124,64 @@ pub fn build() -> Res<Model> {
             }
         }
     }
+    corner_and_island(&mut m, wall)?;
     Ok(m)
+}
+
+/// A kitchen in an L against two walls, an island back to back in front
+/// of it, and a corner sofa beside them.
+fn corner_and_island(m: &mut Model, wall: archisim_core::WallTypeId) -> Res {
+    let level = m.levels()[0].id;
+    let y0 = -16.0;
+    let add_wall = |m: &mut Model, a: Point2, b: Point2| -> Res {
+        m.add_wall(NewWall {
+            wall_type: wall,
+            level,
+            start: a,
+            end: b,
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        Ok(())
+    };
+    add_wall(m, Point2::new(-0.2, y0), Point2::new(3.0, y0))?;
+    add_wall(m, Point2::new(3.0, y0), Point2::new(3.0, y0 - 3.5))?;
+    let put = |m: &mut Model, name: &str, at: Point2, rotation: f64| -> Res {
+        let t = archisim_library::add_object_entry(m, name)?;
+        m.add_object(NewObject {
+            level,
+            object_type: t,
+            position: at,
+            rotation,
+            base_offset: 0.0,
+        })?;
+        Ok(())
+    };
+    let pi = std::f64::consts::PI;
+    let quarter = std::f64::consts::FRAC_PI_2;
+    // Along the back wall, looking south, to the corner (x = 3).
+    for (name, x) in [
+        ("Bajo cajonera 60", 0.7),
+        ("Bajo fregadero 80", 1.4),
+        ("Bajo lavavajillas 60", 2.1),
+        ("Bajo cajonera 60", 2.7),
+    ] {
+        put(m, name, Point2::new(x, y0), pi)?;
+    }
+    // Down the side wall, looking west: the first against the corner
+    // module's front.
+    put(m, "Bajo cajonera 60", Point2::new(3.0, y0 - 0.9), quarter)?;
+    put(m, "Bajo placa 90", Point2::new(3.0, y0 - 1.65), quarter)?;
+    // The island: three modules each way, backs together.
+    for x in [0.6, 1.2, 1.8] {
+        put(m, "Bajo cajonera 60", Point2::new(x, y0 - 2.6), pi)?;
+        put(m, "Bajo cajonera 60", Point2::new(x, y0 - 2.6), 0.0)?;
+    }
+    put(m, "Sofá rinconera 260×170", Point2::new(6.5, y0 - 0.5), pi)?;
+    Ok(())
 }
 
 pub fn write(dir: &Path) -> Res {
@@ -147,7 +206,7 @@ pub fn write(dir: &Path) -> Res {
         archisim_plan::render_plan(&m, m.levels()[0].id, &options),
     )?;
     println!(
-        "Cocina por módulos: {} piezas en cuatro filas (frentes liso, con marco, ranurado y con cristal).",
+        "Cocina por módulos: {} piezas en cuatro filas (frentes liso, con marco, ranurado y con cristal), una cocina en L, una isla y un sofá rinconera.",
         m.objects().count()
     );
     println!("  Proyecto: {}", project.display());
@@ -162,9 +221,38 @@ mod tests {
     fn the_modules_stand_side_by_side_with_their_3d() {
         let m = super::build().unwrap();
         assert!(m.objects().all(|o| m.type_has_prop(o.object_type)));
-        // Four rows of eight base units, five wall units and a hood.
-        assert_eq!(m.objects().count(), 4 * (8 + 5 + 1));
+        // Four rows of eight base units, five wall units and a hood; the
+        // L (six), the island (six) and the sofa.
+        assert_eq!(m.objects().count(), 4 * (8 + 5 + 1) + 6 + 6 + 1);
         let solids = archisim_geom::solid::model_solids(&m);
         assert!(solids.len() > 50);
+        // A worktop for each row of base units (the column at its end
+        // is not under it), one for the L and one for the island.
+        let runs = m.worktop_runs();
+        assert_eq!(runs.len(), 4 + 2, "{}", runs.len());
+        assert!(runs
+            .iter()
+            .any(|r| r.members.len() == 6 && r.sinks.len() == 1));
+        assert!(runs
+            .iter()
+            .any(|r| r.members.len() == 6 && r.sinks.is_empty()));
+        // Measured: worktops in metres along the fronts (each row 4,05 m,
+        // the L 4,10 m, the island 3,60 m) and the modules by units.
+        let chapters = archisim_plan::schedules::measurements(&m);
+        let (_, title, items) = chapters.iter().find(|c| c.0 == "10").expect("chapter 10");
+        assert_eq!(*title, "Mobiliario de cocina");
+        let tops: f64 = items
+            .iter()
+            .filter(|i| i.key.starts_with("encimera:"))
+            .map(|i| i.total())
+            .sum();
+        assert!((tops - (4.0 * 4.05 + 4.1 + 3.6)).abs() < 1e-6, "{tops}");
+        let units: f64 = items
+            .iter()
+            .filter(|i| i.key.starts_with("mueble:"))
+            .map(|i| i.total())
+            .sum();
+        // Every object of a kitchen family: all but the sofa.
+        assert_eq!(units as usize, m.objects().count() - 1);
     }
 }

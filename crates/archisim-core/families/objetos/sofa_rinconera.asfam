@@ -1,0 +1,69 @@
+family "Sofá rinconera"
+  category furniture
+  host none
+  version 1
+  description "Sofá en L: un tramo a lo largo del respaldo y otro hacia delante, a la derecha o a la izquierda, con la plaza de la esquina"
+  folder "Sofás y sillones"
+
+type_params
+  section "Dimensiones"
+    width   length = 2.60 range 1.60..4.00 label "Largo"
+    length2 length = 1.70 range 1.20..3.00 label "Largo del lado"
+    depth   length = 0.90 range 0.70..1.10 label "Fondo"
+    seat    length = 0.42 range 0.30..0.60 label "Altura del asiento"
+    height  length = 0.80 range 0.60..1.20 label "Altura del respaldo"
+    side    choice("Derecha", "Izquierda") = "Derecha" label "Rinconera"
+    places  integer = 2 range 1..5 label "Plazas a lo largo"
+    places2 integer = 1 range 1..4 label "Plazas en el lado"
+  section "Materiales"
+    mat material = "Tela" label "Tapicería"
+  section "Modelo 3D"
+    model3d choice("Contemporáneo", "Clásico", "Nórdico") = "Contemporáneo" label "Modelo 3D"
+    cushion material = "Tela" label "Cojines"
+    frame material = "Madera de pino" label "Patas"
+
+require length2 > depth + 0.3 else "El lado tiene que salir más que el fondo del sofá"
+require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+  if side == "Derecha"
+    box (width / 2 - depth, depth, 0) to (width / 2, length2, height) material mat
+  if side == "Izquierda"
+    box (-width / 2, depth, 0) to (-width / 2 + depth, length2, height) material mat
+
+plan 1:50
+  if side == "Derecha"
+    polygon (-width / 2, 0) (width / 2, 0) (width / 2, length2) (width / 2 - depth, length2) (width / 2 - depth, depth) (-width / 2, depth) pen view
+    line (-width / 2 + 0.2, 0.2) to (width / 2 - 0.2, 0.2) pen thin
+    line (width / 2 - 0.2, 0.2) to (width / 2 - 0.2, length2 - 0.2) pen thin
+    line (-width / 2 + 0.2, 0.2) to (-width / 2 + 0.2, depth) pen thin
+    line (width / 2 - depth, length2 - 0.2) to (width / 2 - 0.2, length2 - 0.2) pen thin
+    let pw = (width - 0.4) / places
+    repeat i in 1..places
+      line (-width / 2 + 0.2 + i * pw, 0.2) to (-width / 2 + 0.2 + i * pw, depth) pen thin
+    let pl = (length2 - 0.2 - depth) / places2
+    repeat i in 0..places2
+      line (width / 2 - depth, depth + i * pl) to (width / 2 - 0.2, depth + i * pl) pen thin
+  if side == "Izquierda"
+    polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2 + depth, depth) (-width / 2 + depth, length2) (-width / 2, length2) pen view
+    line (-width / 2 + 0.2, 0.2) to (width / 2 - 0.2, 0.2) pen thin
+    line (-width / 2 + 0.2, 0.2) to (-width / 2 + 0.2, length2 - 0.2) pen thin
+    line (width / 2 - 0.2, 0.2) to (width / 2 - 0.2, depth) pen thin
+    line (-width / 2 + 0.2, length2 - 0.2) to (-width / 2 + depth, length2 - 0.2) pen thin
+    let pw = (width - 0.4) / places
+    repeat i in 1..places
+      line (width / 2 - 0.2 - i * pw, 0.2) to (width / 2 - 0.2 - i * pw, depth) pen thin
+    let pl = (length2 - 0.2 - depth) / places2
+    repeat i in 0..places2
+      line (-width / 2 + 0.2, depth + i * pl) to (-width / 2 + depth, depth + i * pl) pen thin
+
+outputs
+  generator = "props:corner_sofa"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SOFA"
+
+# Stretched by its handles, a seat more (or less) along its back when the
+# seats would be too wide (or narrow).
+stretch
+  places = if (width - 0.4) / places >= 0.5 and (width - 0.4) / places <= 0.8 then places else (width - 0.4) / 0.62

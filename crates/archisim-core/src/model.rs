@@ -45,6 +45,7 @@ mod sun;
 mod sweeps;
 mod urban;
 mod views;
+mod worktops;
 pub use appearance::*;
 pub use concept::*;
 pub use curtain::*;
@@ -74,6 +75,7 @@ pub use sun::*;
 pub use sweeps::*;
 pub use urban::*;
 pub use views::*;
+pub use worktops::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
 #[derive(Debug, Clone, PartialEq)]

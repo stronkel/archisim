@@ -124,8 +124,14 @@ impl Exporter<'_> {
     ) {
         let model = self.model;
         let mut typed: BTreeMap<ObjectTypeId, (Ref, Vec<Ref>)> = BTreeMap::new();
-        // Types with a 3D model: its representation map.
-        let mut mapped: BTreeMap<ObjectTypeId, Ref> = BTreeMap::new();
+        // Types with a 3D model: its representation map, whole and, for
+        // base modules under a worktop run, without their own worktop.
+        let mut mapped: BTreeMap<(ObjectTypeId, bool), Ref> = BTreeMap::new();
+        let under_run: std::collections::BTreeSet<archisim_core::ObjectId> = model
+            .worktop_runs()
+            .into_iter()
+            .flat_map(|r| r.members)
+            .collect();
         for o in model.objects() {
             let Some(&(_, storey_pl)) = storeys.get(&o.level) else {
                 continue;
@@ -157,8 +163,25 @@ impl Exporter<'_> {
                 } else {
                     ""
                 };
-                let map = self.mesh_map(o.id);
-                let maps = map.map_or("$".to_string(), |m| format!("({m})"));
+                // Which of its two models its objects need.
+                let mut needs = [false, false];
+                for x in model.objects().filter(|x| x.object_type == t.id) {
+                    needs[usize::from(under_run.contains(&x.id))] = true;
+                }
+                let mut maps_of_type = Vec::new();
+                for bare in [false, true] {
+                    if needs[usize::from(bare)] {
+                        if let Some(m) = self.mesh_map(o.id, bare) {
+                            mapped.insert((t.id, bare), m);
+                            maps_of_type.push(m);
+                        }
+                    }
+                }
+                let maps = if maps_of_type.is_empty() {
+                    "$".to_string()
+                } else {
+                    list(&maps_of_type)
+                };
                 let ty = self.w.add(format!(
                     "{type_entity}({},$,{},$,$,{},{maps},$,{element_type},{assembly}.{predefined}.)",
                     string(t.guid.as_str()),
@@ -166,9 +189,6 @@ impl Exporter<'_> {
                     list(&props)
                 ));
                 slot.insert((ty, Vec::new()));
-                if let Some(m) = map {
-                    mapped.insert(t.id, m);
-                }
             }
             // Placed at its point, turned, at its height on the storey.
             let at = self.point3(o.position.x, o.position.y, o.base_offset);
@@ -181,7 +201,7 @@ impl Exporter<'_> {
             let plant = self.plant_body(o.id);
             let rep = if let Some(rep) = plant {
                 rep
-            } else if let Some(&map) = mapped.get(&t.id) {
+            } else if let Some(&map) = mapped.get(&(t.id, under_run.contains(&o.id))) {
                 let op = self.w.add(format!(
                     "IFCCARTESIANTRANSFORMATIONOPERATOR3D($,$,{},$,$)",
                     self.origin
@@ -274,7 +294,7 @@ impl Exporter<'_> {
     /// object's own axes and at its type's size: one triangulated face set
     /// per material, styled with it and, if its faces differ in colour (a
     /// texture), with the colour of each face.
-    fn mesh_map(&mut self, object: archisim_core::ObjectId) -> Option<Ref> {
+    fn mesh_map(&mut self, object: archisim_core::ObjectId, bare: bool) -> Option<Ref> {
         let model = self.model;
         let items = match model.object_mesh(object) {
             Some((mesh, k, _)) => {
@@ -287,8 +307,11 @@ impl Exporter<'_> {
                 self.tessellation(&level.positions, &level.colors, &groups, k)
             }
             None => {
-                // A model ArchiSim makes from the type's measurements.
-                let (mesh, parts) = model.object_prop(object)?;
+                // A model ArchiSim makes from the type's measurements
+                // (without its worktop: the run's goes on its own).
+                let t = model.object(object)?.object_type;
+                let skip: &[&str] = if bare { &["top"] } else { &[] };
+                let (mesh, parts) = model.type_prop_without(t, skip)?;
                 let groups: Vec<(MaterialId, &[[u32; 3]])> =
                     parts.iter().map(|(m, t)| (*m, t.as_slice())).collect();
                 // One colour per material: no colour list per face.
@@ -426,5 +449,88 @@ impl Exporter<'_> {
             self.body_ctx,
             list(&items)
         )))
+    }
+}
+
+impl Exporter<'_> {
+    /// The worktop of each run of base modules (`docs/MAQUETA.md` §6
+    /// quinquies): an `IfcFurniture` («Encimera») over its modules, with
+    /// the openings of its sinks, its length and area. It carries
+    /// `ArchiSim_Worktop`, so ArchiSim does not read it back as an object
+    /// of its own: it comes back from its modules.
+    pub(crate) fn write_worktops(
+        &mut self,
+        materials: &BTreeMap<MaterialId, Ref>,
+        storeys: &BTreeMap<LevelId, (Ref, Ref)>,
+        contained: &mut BTreeMap<LevelId, Vec<Ref>>,
+    ) {
+        let model = self.model;
+        // One type per material of worktop, with the worktops of it.
+        let mut types: BTreeMap<MaterialId, Vec<Ref>> = BTreeMap::new();
+        for run in model.worktop_runs() {
+            let Some(&(_, storey_pl)) = storeys.get(&run.level) else {
+                continue;
+            };
+            let Some(first) = model.object(run.members[0]) else {
+                continue;
+            };
+            let guid = derived_guid(&first.guid, "worktop");
+            let storey_z = model.level(run.level).map_or(0.0, |l| l.elevation);
+            let solids = archisim_geom::solid::worktop_solids(
+                model,
+                &run,
+                archisim_geom::solid::SolidOwner::Object(first.id),
+            );
+            let refs: Vec<&archisim_geom::solid::Solid> = solids.iter().collect();
+            let Some(shape) = self.solids_shape(&refs, storey_z) else {
+                continue;
+            };
+            let pl = self.placement(Some(storey_pl), self.origin, None);
+            let el = self.w.add(format!(
+                "IFCFURNITURE({},$,'Encimera',$,'Encimera',{pl},{shape},$,.USERDEFINED.)",
+                string(guid.as_str()),
+            ));
+            self.material_of(materials, el, &guid, run.material);
+            let members: Vec<String> = run
+                .members
+                .iter()
+                .filter_map(|m| model.object(*m))
+                .map(|o| o.guid.as_str().to_string())
+                .collect();
+            let props = [
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Length',$,IFCLENGTHMEASURE({}),$)",
+                    real(run.length)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Area',$,IFCAREAMEASURE({}),$)",
+                    real(run.area)
+                )),
+                self.w.add(format!(
+                    "IFCPROPERTYSINGLEVALUE('Modules',$,IFCTEXT({}),$)",
+                    string(&members.join(" "))
+                )),
+            ];
+            self.pset(el, &guid, "ArchiSim_Worktop", &props);
+            contained.entry(run.level).or_default().push(el);
+            types.entry(run.material).or_default().push(el);
+        }
+        for (m, users) in types {
+            let name = model
+                .material(m)
+                .map_or("Encimera".to_string(), |x| format!("Encimera · {}", x.name));
+            let guid = derived_guid(&model.project_guid, &format!("worktop-type-{}", m.0));
+            let ty = self.w.add(format!(
+                "IFCFURNITURETYPE({},$,{},$,$,$,$,$,'Encimera',.NOTDEFINED.,.USERDEFINED.)",
+                string(guid.as_str()),
+                string(&name)
+            ));
+            self.material_of(materials, ty, &guid, m);
+            self.w.add(format!(
+                "IFCRELDEFINESBYTYPE({},$,$,$,{},{ty})",
+                string(derived_guid(&guid, "defines").as_str()),
+                list(&users)
+            ));
+        }
     }
 }

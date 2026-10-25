@@ -107,6 +107,56 @@ Antonio confirmó el orden C1–C7 de la hoja de ruta común (§9). Este es C1.
 
 ---
 
+## 2026-10-25 (3) · v0.62: C2, cocina y muebles, segunda vuelta
+
+Rama `bloque/c2-cocina`, encima de `bloque/fluidez` (#66), con pull request para Antonio. Sin cambios de formato: los tramos de encimera se calculan, no se guardan. El IFC cambia: lleva una encimera por tramo.
+
+**Hecho**
+- **Encimera continua de verdad**:
+  - qué es un tramo: los módulos bajos que se tocan, a la misma altura y con la encimera del mismo material, en fila, en L, en U o en isla;
+  - en 3D, secciones, alzados y axonometrías el tramo tiene una sola encimera, con el hueco de cada fregadero, sin juntas ni grietas, y los módulos van sin la suya;
+  - separado del tramo, un módulo recupera su encimera.
+- **Cocina en esquina**:
+  - un módulo girado un cuarto de vuelta, acercado al extremo de una fila, se pega con su lateral contra el frente del último y su trasera a paño con el final de la fila;
+  - también al revés, la fila hacia el tramo;
+  - la encimera sale en L.
+- **Isla por módulos**: los módulos espalda con espalda se pegan por la trasera, con los extremos alineados, y hacen una isla con una sola encimera.
+- **Pegarse al arrastrar en planta**: lo que se pegaba al colocar o al arrastrar en 3D también se pega al arrastrarlo en planta (módulos, sofás, estanterías…). Los que se unen en uno, como sofás y estanterías, se unen al soltar.
+- **Sofá rinconera** (familia nueva):
+  - tramo a lo largo y tramo hacia delante, a la derecha o a la izquierda, con plazas en cada uno y la de la esquina, y los tres modelos del sofá;
+  - en la biblioteca, 260×170 y 300×200;
+  - en la barra del objeto: el lado, las plazas de cada tramo y sus materiales.
+- **Color libre** en la barra del objeto:
+  - las muestras de una pieza tienen al final «Color libre», con rueda, campos R, G y B y «Aplicar»;
+  - crea un material como el de la pieza en ese color, conservando su textura, y se deshace en un paso;
+  - el color de la **encimera** se aplica a todo su tramo, para que siga siendo una sola.
+- **Mediciones**: capítulo «10 Mobiliario de cocina»:
+  - encimeras por material, en metros a lo largo de los frentes, también la de un módulo suelto;
+  - muebles de cocina por tipo, en unidades.
+- **IFC**:
+  - cada tramo es un `IfcFurniture` «Encimera», con su tipo por material, su material y el pset `ArchiSim_Worktop` (largo, superficie y módulos);
+  - los módulos del tramo usan la geometría de su tipo sin encimera;
+  - al importar, la encimera no se lee como objeto: vuelve a salir de los módulos (la cocina de ejemplo vuelve con sus 69 piezas).
+- `archisim cocina out/` lleva además una cocina en L con fregadero y placa, una isla de seis módulos y un sofá rinconera.
+- Revisado en la ventana real: la L y la isla en la Maqueta, el sofá rinconera con su barra y el color libre aplicado a unos frentes.
+
+**Pendiente**
+- El vuelo de la encimera de la isla (hoy, a paño con los módulos) y los remates de la encimera contra la pared (copete).
+- Que un sofá recto acercado en esquina a otro se convierta en un rinconera.
+- En planta, la encimera del tramo aún se ve como los rectángulos de cada módulo.
+- C3 (detalles de la Maqueta y de la interfaz) es lo siguiente.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- cocina out/cocina` y abre `out/cocina/cocina.archisim`. En la Maqueta, al fondo: la cocina en L y la isla tienen una encimera de una pieza, con el hueco del fregadero.
+2. Desde Amueblar → Cocina → Bajos, pon un módulo; gíralo con el anillo un cuarto de vuelta y acércalo al extremo de la fila de la L: debe pegarse en esquina. Pon dos espalda con espalda para empezar una isla.
+3. En Técnica, en planta, selecciona un módulo de la isla y arrástralo un poco lejos y de vuelta: al acercarlo a otro, debe pegarse.
+4. Selecciona un módulo del tramo y, en la barra del objeto, cambia «Encimera» a otro color: debe cambiar la encimera entera. Prueba «Frentes» → «Color libre»: elige un color con la rueda y pulsa «Aplicar».
+5. Amueblar → Sofás y sillones → «Sofá rinconera 260×170». En su barra, cambia «Rinconera» a Izquierda y las plazas de cada tramo.
+6. Pestaña Mediciones: capítulo «10 Mobiliario de cocina», con las encimeras en metros y los módulos por unidades.
+7. Exporta el IFC de la cocina y ábrelo en ArchiCAD o Revit: cada tramo debe salir como un mueble «Encimera».
+
+---
+
 ## 2026-10-25 (2) · v0.61: alzados que se abren y se mueven sin espera, y líneas finas en planta y 3D (F1)
 
 Rama `bloque/fluidez`, pull request para Antonio. Sin cambios de formato ni de IFC.

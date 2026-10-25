@@ -8,6 +8,155 @@ use crate::build::Builder;
 use crate::fronts::{self, Handle, FRONT};
 use crate::Params;
 
+/// A corner sofa (C2): a sofa along its back (`width`) and a second one
+/// coming forward at one end (`length2`, on the right with `side` 1, on
+/// the left with 2), meeting in a corner seat. The same pieces as the
+/// straight [`sofa`] and its three models: an arm at each free end, the
+/// back along both, a cushion per place (`places` along, `places2` on the
+/// leg) and the corner's own.
+pub fn corner_sofa(b: &mut Builder, p: &Params) {
+    let w = p.get("width", 2.6);
+    let l2 = p.get("length2", 1.7);
+    let d = p.get("depth", 0.9);
+    let seat = p.get("seat", 0.42);
+    let h = p.get("height", 0.8);
+    let places = p.get("places", 2.0).round().max(1.0);
+    let places2 = p.get("places2", 1.0).round().max(1.0);
+    let left = p.get("side", 1.0).round() as i32 == 2;
+    let style = p.style();
+    let x0 = -w / 2.0;
+    let x1 = w / 2.0;
+    let l2 = l2.max(d + 0.3);
+    let arm = (w * 0.08).clamp(0.12, 0.22);
+    let arm_h = (seat + 0.2).min(h - 0.02);
+    let back = 0.2;
+    let (foot, base_r) = match style {
+        3 => (0.16, 0.03),
+        2 => (0.0, 0.04),
+        _ => (0.05, 0.02),
+    };
+    let base_top = seat - 0.12;
+    // Built with the leg on the right; on the left, mirrored.
+    let mx = |x: f64| if left { -x } else { x };
+    let corners = |lo: [f64; 3], hi: [f64; 3]| {
+        let (a, c) = (mx(lo[0]), mx(hi[0]));
+        ([a.min(c), lo[1], lo[2]], [a.max(c), hi[1], hi[2]])
+    };
+    let rbox = |b: &mut Builder, role: &'static str, lo: [f64; 3], hi: [f64; 3], r: f64| {
+        let (lo, hi) = corners(lo, hi);
+        b.rbox(role, lo, hi, r);
+    };
+    let pillow = |b: &mut Builder, lo: [f64; 3], hi: [f64; 3], r: f64, puff: f64| {
+        let (lo, hi) = corners(lo, hi);
+        b.pillow("cushion", lo, hi, r, puff);
+    };
+    // Legs or plinth.
+    match style {
+        3 => {
+            for (x, y) in [
+                (x0 + 0.08, 0.08),
+                (x0 + 0.08, d - 0.08),
+                (x1 - 0.08, 0.08),
+                (x1 - 0.08, l2 - 0.08),
+                (x1 - d + 0.08, l2 - 0.08),
+                (x1 - d + 0.08, d - 0.08),
+            ] {
+                let (x, dx) = (mx(x), if mx(x) < 0.0 { -0.03 } else { 0.03 });
+                b.cone("frame", [x + dx, y, 0.004], [x, y, foot], 0.015, 0.022, 10);
+            }
+        }
+        1 => {
+            rbox(
+                b,
+                "frame",
+                [x0 + 0.04, 0.04, 0.0],
+                [x1 - 0.04, d - 0.04, foot],
+                0.005,
+            );
+            rbox(
+                b,
+                "frame",
+                [x1 - d + 0.04, d - 0.04, 0.0],
+                [x1 - 0.04, l2 - 0.04, foot],
+                0.005,
+            );
+        }
+        _ => {}
+    }
+    // The back along both, and the base under both seats.
+    rbox(b, "mat", [x0, 0.0, foot], [x1, back, h], base_r);
+    rbox(
+        b,
+        "mat",
+        [x1 - back, back - 0.02, foot],
+        [x1, l2, h],
+        base_r,
+    );
+    rbox(
+        b,
+        "mat",
+        [x0, back - 0.02, foot],
+        [x1 - back + 0.02, d, base_top],
+        base_r,
+    );
+    rbox(
+        b,
+        "mat",
+        [x1 - d, d - 0.02, foot],
+        [x1 - back + 0.02, l2, base_top],
+        base_r,
+    );
+    // An arm at each free end: the far end of the back, the end of the leg.
+    let arm_r = if style == 3 { 0.04 } else { 0.03 };
+    rbox(b, "mat", [x0, 0.0, foot], [x0 + arm, d, arm_h], arm_r);
+    rbox(b, "mat", [x1 - d, l2 - arm, foot], [x1, l2, arm_h], arm_r);
+    // Seats: along the back to the corner (the corner seat is the last),
+    // then down the leg.
+    let along = (x1 - back) - (x0 + arm);
+    let pw = along / places;
+    let top = if style == 2 { h - 0.02 } else { h + 0.04 };
+    for i in 0..places as usize {
+        let a = x0 + arm + i as f64 * pw + 0.005;
+        let c = a + pw - 0.01;
+        pillow(b, [a, back, base_top], [c, d - 0.01, seat], 0.05, 0.025);
+        pillow(
+            b,
+            [a, back - 0.02, seat - 0.02],
+            [c, back + 0.17, top],
+            0.06,
+            0.035,
+        );
+    }
+    let leg = (l2 - arm) - d;
+    let pl = leg / places2;
+    for i in 0..places2 as usize {
+        let a = d + i as f64 * pl + 0.005;
+        let c = a + pl - 0.01;
+        pillow(
+            b,
+            [x1 - d + 0.01, a, base_top],
+            [x1 - back, c, seat],
+            0.05,
+            0.025,
+        );
+        pillow(
+            b,
+            [x1 - back - 0.17, a, seat - 0.02],
+            [x1 - back + 0.02, c, top],
+            0.06,
+            0.035,
+        );
+    }
+    // The corner's back cushion, along the leg's back.
+    pillow(
+        b,
+        [x1 - back - 0.17, back + 0.17, seat - 0.02],
+        [x1 - back + 0.02, d - 0.005, top],
+        0.06,
+        0.035,
+    );
+}
+
 /// Sofas (and armchairs, with one place): 1 contemporary, on a plinth,
 /// with loose cushions; 2 classic, rolled arms and a skirt; 3 Nordic, on
 /// slim wooden legs.

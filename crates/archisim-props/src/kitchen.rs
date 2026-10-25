@@ -156,7 +156,7 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
     let style = Style::of(p);
     let x0 = -w / 2.0;
     let x1 = w / 2.0;
-    let top = 0.03;
+    let top = WORKTOP;
     let face = d - 0.04;
     let (z0, z1) = (0.105, h - top - 0.005);
     b.rbox(
@@ -166,12 +166,13 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
         0.0,
     );
     let sink = unit == 3;
-    let (sx0, sx1) = (x0 + 0.06, x1 - 0.06);
-    if sink && w >= 0.45 {
+    let hole = sink_hole(w, d);
+    if sink && hole.is_some() {
         // Lower under the basin, so it is seen.
         b.rbox("mat", [x0, 0.0, 0.1], [x1, face, h - 0.21], 0.0);
     } else {
-        b.rbox("mat", [x0, 0.0, 0.1], [x1, face, h - top], 0.0);
+        // Its top is always under a worktop (its own or its run's).
+        b.open_box("mat", [x0, 0.0, 0.1], [x1, face, h - top]);
     }
     let drawers = p.get("drawers", 3.0).round().clamp(0.0, 4.0) as usize;
     let doors = p
@@ -286,8 +287,7 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
     }
     // The worktop: flush with the module's sides, so the next one meets it.
     let (tlo, thi) = ([x0, 0.0, h - top], [x1, d, h]);
-    if sink && w >= 0.45 {
-        let (sy0, sy1) = (0.1, d - 0.12);
+    if let (true, Some(([sx0, sy0], [sx1, sy1]))) = (sink, hole) {
         b.framed_top("top", tlo, thi, [sx0, sy0], [sx1, sy1]);
         b.hollow("metal", [sx0, sy0, h - 0.2], [sx1, sy1, h], 0.03);
         tap(b, (sx0 + sx1) / 2.0, 0.05, h, 0.16);
@@ -331,6 +331,25 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
         }
     }
 }
+
+/// The opening of a sink module's worktop for its basin, in the module's
+/// own axes (`x` across from its centre, `y` from its back): none when
+/// the module is too narrow for a basin. A worktop run over several
+/// modules leaves the same opening.
+pub fn sink_hole(width: f64, depth: f64) -> Option<([f64; 2], [f64; 2])> {
+    (width >= 0.45).then(|| {
+        (
+            [-width / 2.0 + 0.06, 0.1],
+            [width / 2.0 - 0.06, depth - 0.12],
+        )
+    })
+}
+
+/// The unit number of a sink among a base module's `unit` choices.
+pub const SINK_UNIT: f64 = 3.0;
+
+/// The thickness of a base module's worktop (m).
+pub const WORKTOP: f64 = 0.03;
 
 /// What a tall unit holds, as the `tall` choice of its family lists them.
 pub const TALLS: &[&str] = &["Despensa", "Horno y microondas", "Frigorífico integrado"];

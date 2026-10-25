@@ -6809,3 +6809,54 @@ fn tab_goes_through_what_overlaps() {
     h.frame();
     assert!(h.app.tab_pick.is_none());
 }
+
+/// A base kitchen module dragged in plan near another goes to touch it,
+/// as when it is placed: one worktop over both.
+#[test]
+fn modules_dragged_in_plan_join() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let add = |h: &mut Harness, x: f64| {
+        h.app
+            .ed
+            .transact("Módulo", |m| {
+                let t = archisim_library::add_object_entry(m, "Bajo cajonera 60")?;
+                m.add_object(archisim_core::NewObject {
+                    level,
+                    object_type: t,
+                    position: p(x, 0.0),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })
+            })
+            .unwrap()
+    };
+    let a = add(&mut h, 0.3);
+    let b = add(&mut h, 3.0);
+    h.app.fit_requested = true;
+    h.frame();
+    h.frame();
+    assert!(h.model().worktop_run_of(a).is_none());
+    h.click_at(p(3.0, 0.3));
+    assert!(h.app.ed.selection.contains(&Element::Object(b)));
+    // Dropped 15 cm short of the first one's end.
+    h.drag(p(3.0, 0.3), p(1.05, 0.3));
+    let at = h.model().object(b).unwrap().position;
+    assert!((at.x - 0.9).abs() < 1e-6 && at.y.abs() < 1e-6, "{at:?}");
+    let run = h.model().worktop_run_of(a).expect("one worktop");
+    assert_eq!(run.members, vec![a, b]);
+    // The worktop's colour on one goes to the whole run, in one step:
+    // still one worktop.
+    h.app
+        .ed
+        .paint_object_piece_rgb(b, "top", [30, 30, 30])
+        .unwrap();
+    let run = h.model().worktop_run_of(a).expect("still one worktop");
+    assert_eq!(h.model().surface_color(run.material), [30, 30, 30]);
+    h.app.ed.undo();
+    assert_ne!(
+        h.model()
+            .surface_color(h.model().worktop_run_of(a).unwrap().material),
+        [30, 30, 30]
+    );
+}

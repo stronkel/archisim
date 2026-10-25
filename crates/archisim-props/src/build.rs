@@ -66,6 +66,21 @@ impl Builder {
         self.rbox_faces(role, lo, hi, r, [true; 6], false, Some(puff));
     }
 
+    /// A box without its top face: for what always has something over it
+    /// (a kitchen module's body under its worktop), so no view that paints
+    /// faces far to near shows it through.
+    pub fn open_box(&mut self, role: &'static str, lo: P3, hi: P3) {
+        self.rbox_faces(
+            role,
+            lo,
+            hi,
+            0.0,
+            [true, true, true, true, true, false],
+            false,
+            None,
+        );
+    }
+
     /// The hollow of a basin: a rounded box without its top, seen from
     /// inside (its faces looking in).
     pub fn hollow(&mut self, role: &'static str, lo: P3, hi: P3, r: f64) {

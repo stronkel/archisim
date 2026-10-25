@@ -1246,19 +1246,146 @@ pub fn prop_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Sol
         let q = o.to_plan(p[0] as f64, p[1] as f64);
         [q.x, q.y, z0 + p[2] as f64]
     };
-    Some(
-        parts
-            .iter()
-            .map(|(material, tris)| Solid {
-                owner: SolidOwner::Object(id),
-                material: *material,
-                triangles: tris
-                    .iter()
-                    .map(|t| t.map(|i| place(mesh.positions[i as usize])))
-                    .collect(),
-            })
-            .collect(),
-    )
+    let mut out: Vec<Solid> = parts
+        .iter()
+        .map(|(material, tris)| Solid {
+            owner: SolidOwner::Object(id),
+            material: *material,
+            triangles: tris
+                .iter()
+                .map(|t| t.map(|i| place(mesh.positions[i as usize])))
+                .collect(),
+        })
+        .collect();
+    // The first module of a worktop run carries the run's worktop.
+    if let Some(run) = model.worktop_run_of(id).filter(|r| r.members[0] == id) {
+        out.extend(worktop_solids(model, &run, SolidOwner::Object(id)));
+    }
+    Some(out)
+}
+
+/// The solid of a worktop run: one slab over all its modules. Its top and
+/// bottom faces go module by module (no long thin triangles: views that
+/// paint faces far to near order them well), its edges only round the
+/// whole outline and its sinks (no joints).
+pub fn worktop_solids(
+    model: &Model,
+    run: &archisim_core::WorktopRun,
+    owner: SolidOwner,
+) -> Vec<Solid> {
+    let z1 = model.level(run.level).map_or(0.0, |l| l.elevation) + run.top;
+    let z0 = z1 - run.thickness;
+    let at = |p: Point2, z: f64| [p.x, p.y, z];
+    let shape = |r: &[Point2; 4]| (ensure_ccw(r.to_vec()), Vec::new());
+    let sinks: Vec<crate::junctions::Shape> = run.sinks.iter().map(shape).collect();
+    let mut tris: Vec<[P3; 3]> = Vec::new();
+    // Faces: each module's part, not already covered by another's.
+    let mut covered: Vec<crate::junctions::Shape> = Vec::new();
+    for piece in &run.pieces {
+        let overlaps =
+            crate::junctions::area(&crate::junctions::intersection(&[shape(piece)], &covered))
+                > 1e-6;
+        let own = if overlaps {
+            // Modules overlapping (rare): what is left of this one.
+            let own = crate::junctions::difference(&[shape(piece)], &covered);
+            crate::junctions::difference(&own, &sinks)
+        } else {
+            // Side by side, the usual: the piece exactly as it is, with
+            // the openings of its sinks, so it meets its neighbours'
+            // corners with no crack between them.
+            let inside = |q: &[Point2; 4]| {
+                let c = q.iter().fold(Point2::new(0.0, 0.0), |a, p| {
+                    Point2::new(a.x + p.x / 4.0, a.y + p.y / 4.0)
+                });
+                crate::junctions::inside(c, piece)
+            };
+            let holes: Vec<Vec<Point2>> = run
+                .sinks
+                .iter()
+                .filter(|q| inside(q))
+                .map(|q| q.to_vec())
+                .collect();
+            vec![(ensure_ccw(piece.to_vec()), holes)]
+        };
+        covered = crate::junctions::union(&covered, &[shape(piece)]);
+        for (outer, holes) in own {
+            let poly = with_holes(&outer, &holes);
+            for [a, b, c] in triangulate(&poly) {
+                // Top seen from above: counter-clockwise. Bottom: reversed.
+                tris.push([at(poly[a], z1), at(poly[b], z1), at(poly[c], z1)]);
+                tris.push([at(poly[a], z0), at(poly[c], z0), at(poly[b], z0)]);
+            }
+        }
+    }
+    // Edges: the sides of each module's piece that no other piece
+    // touches (no joints, and on the same corners as the faces), and
+    // round each sink; outside to the right of each edge.
+    let mut side = |p: Point2, q: Point2| {
+        tris.push([at(p, z0), at(q, z0), at(q, z1)]);
+        tris.push([at(p, z0), at(q, z1), at(p, z1)]);
+    };
+    let rings: Vec<Vec<Point2>> = run.pieces.iter().map(|p| ensure_ccw(p.to_vec())).collect();
+    for (k, ring) in rings.iter().enumerate() {
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            for (p, q) in free_parts(a, b, &rings, k) {
+                side(p, q);
+            }
+        }
+    }
+    for sink in &run.sinks {
+        let mut h = ensure_ccw(sink.to_vec());
+        h.reverse();
+        for i in 0..h.len() {
+            side(h[i], h[(i + 1) % h.len()]);
+        }
+    }
+    vec![Solid {
+        owner,
+        material: run.material,
+        triangles: tris,
+    }]
+}
+
+/// The parts of the edge `a`–`b` of piece `own` that no other piece's
+/// edge lies on (where two pieces of a worktop touch, no side is made).
+fn free_parts(a: Point2, b: Point2, rings: &[Vec<Point2>], own: usize) -> Vec<(Point2, Point2)> {
+    let ab = b - a;
+    let len2 = ab.dot(ab);
+    if len2 < 1e-12 {
+        return Vec::new();
+    }
+    let t_of = |p: Point2| (p - a).dot(ab) / len2;
+    let on_line = |p: Point2| ((p - a).cross(ab)).abs() / len2.sqrt() < 1e-6;
+    let mut covered: Vec<(f64, f64)> = Vec::new();
+    for (k, ring) in rings.iter().enumerate() {
+        if k == own {
+            continue;
+        }
+        for i in 0..ring.len() {
+            let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+            if on_line(p) && on_line(q) {
+                let (t0, t1) = (t_of(p), t_of(q));
+                let (lo, hi) = (t0.min(t1).max(0.0), t0.max(t1).min(1.0));
+                if hi - lo > 1e-9 {
+                    covered.push((lo, hi));
+                }
+            }
+        }
+    }
+    covered.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let mut out = Vec::new();
+    let mut t = 0.0;
+    for (lo, hi) in covered {
+        if lo > t + 1e-9 {
+            out.push((a + ab * t, a + ab * lo));
+        }
+        t = t.max(hi);
+    }
+    if t < 1.0 - 1e-9 {
+        out.push((a + ab * t, b));
+    }
+    out
 }
 
 /// The colours of the corners of each triangle of a solid of
@@ -3864,5 +3991,87 @@ mod sweep_tests {
             triangles: sweep_segment(&sq, [0.0, 0.0, 1.0], [0.0, 4.0, 1.0]),
         };
         assert!((s.volume() - 4.0).abs() < 1e-9, "{}", s.volume());
+    }
+}
+
+#[cfg(test)]
+mod worktop_tests {
+    use super::*;
+    use archisim_core::{CutPattern, NewObject, ParamScope, Value};
+
+    /// Four base modules along a wall, the second a sink, and one turned
+    /// a quarter up the next wall (an L): one worktop over all of them,
+    /// whose top face is their tops less the sink's opening, and modules
+    /// without a top of their own.
+    #[test]
+    fn a_run_has_one_worktop() {
+        let mut m = Model::new("cocina");
+        let l = m.add_level("PB", 0.0);
+        let stone = m.add_material("Encimera", "stone", [230, 230, 225], CutPattern::Solid);
+        let wood = m.add_material("Pino", "wood", [200, 170, 120], CutPattern::Solid);
+        let fam = m.system_family("Módulo bajo de cocina").unwrap();
+        let mut values = m.family_defaults(fam, ParamScope::Type).unwrap();
+        values.insert("top".into(), Value::Material(stone.0));
+        values.insert("mat".into(), Value::Material(wood.0));
+        let drawers = m.add_object_type("Cajonera", fam, values.clone()).unwrap();
+        values.insert("unit".into(), Value::Text("Fregadero".into()));
+        values.insert("width".into(), Value::Number(0.8));
+        let sink = m.add_object_type("Fregadero", fam, values).unwrap();
+        let mut place = |t, x: f64, y: f64, rotation: f64| {
+            m.add_object(NewObject {
+                object_type: t,
+                level: l,
+                position: Point2::new(x, y),
+                rotation,
+                base_offset: 0.0,
+            })
+            .unwrap()
+        };
+        let a = place(drawers, 0.3, 0.0, 0.0);
+        let b = place(sink, 1.0, 0.0, 0.0);
+        let c = place(drawers, 1.7, 0.0, 0.0);
+        // The corner, then up the right-hand wall (x = 2.6), facing left.
+        let e = place(drawers, 2.3, 0.0, 0.0);
+        let d = place(drawers, 2.6, 0.9, std::f64::consts::FRAC_PI_2);
+        // An island: three each way, backs together.
+        let mut island = Vec::new();
+        for x in [10.3, 10.9, 11.5] {
+            island.push(place(drawers, x, 5.0, std::f64::consts::PI));
+            island.push(place(drawers, x, 5.0, 0.0));
+        }
+        let run = m.worktop_run_of(a).expect("a run");
+        assert_eq!(run.members, vec![a, b, c, e, d]);
+        // The top face of the worktop, at 0.90.
+        let top_area = |solids: &[Solid]| -> f64 {
+            solids
+                .iter()
+                .filter(|s| s.material == stone)
+                .flat_map(|s| s.triangles.iter())
+                .filter(|t| t.iter().all(|p| (p[2] - 0.9).abs() < 1e-6))
+                .map(|t| {
+                    let u = [t[1][0] - t[0][0], t[1][1] - t[0][1]];
+                    let v = [t[2][0] - t[0][0], t[2][1] - t[0][1]];
+                    (u[0] * v[1] - u[1] * v[0]).abs() / 2.0
+                })
+                .sum()
+        };
+        let first = object_solids(&m, a);
+        let want = run.area;
+        let got = top_area(&first);
+        assert!((got - want).abs() < 1e-6, "{got} m² against {want}");
+        // The others carry no worktop.
+        // (A sink keeps the rim of its basin, a few cm², level with it.)
+        for o in [b, c, e, d] {
+            let left = top_area(&object_solids(&m, o));
+            assert!(left < 0.01, "{o:?}: {left}");
+        }
+        let run = m.worktop_run_of(island[0]).expect("an island");
+        assert_eq!(run.members.len(), 6);
+        let got = top_area(&object_solids(&m, run.members[0]));
+        assert!((got - 6.0 * 0.36).abs() < 1e-6, "island: {got} m²");
+        // Taken out of the run, a module has its own top again.
+        m.edit_object(d, |o| o.position = Point2::new(6.0, 6.0))
+            .unwrap();
+        assert!(top_area(&object_solids(&m, d)) > 0.3);
     }
 }

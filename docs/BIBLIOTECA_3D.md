@@ -235,3 +235,8 @@ Cambiar el tipo desde Propiedades, en Técnica, sigue cambiando todas las piezas
 - Más objetos: electrodomésticos de encastre, campana, aparatos de iluminación, mobiliario de oficina, plantas de interior en maceta.
 - Un cuarto nivel de detalle para las vistas lejanas de modelos muy grandes (hoy ya son ligeros).
 - Biblioteca ampliada descargable con modelos CC0 (Poly Haven, Kenney) importados por L1.
+
+## Sofá rinconera y encimera continua (C2, v0.62)
+
+- **Sofá rinconera** (`props:corner_sofa`, familia «Sofá rinconera»): largo a lo largo del respaldo y largo del lado, hacia la derecha o la izquierda (`side`); plazas en cada tramo (`places`, `places2`) y la de la esquina; un brazo en cada extremo libre; los tres modelos del sofá (contemporáneo sobre zócalo, clásico, nórdico de patas). En la biblioteca, 260×170 y 300×200.
+- **Encimera continua**: los módulos bajos que se tocan forman un tramo con una sola encimera (`Model::worktop_runs`, en `archisim-core::model::worktops`), hecha por `archisim_geom::solid::worktop_solids` y llevada por el primer módulo del tramo; el cuerpo del módulo ya no tiene tapa (`Builder::open_box`), porque siempre lleva una encimera encima. El hueco del fregadero lo da `archisim_props::sink_hole` al módulo y al tramo.

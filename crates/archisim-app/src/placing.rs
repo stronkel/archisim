@@ -158,9 +158,18 @@ pub fn snap_alongside(
     }
     let (lo, hi) = m.object_type_box_3d(t)?;
     let w = hi[0] - lo[0];
+    let d = hi[1] - lo[1];
     let along = Vec2::new(rot.cos(), rot.sin());
     let across = Vec2::new(-rot.sin(), rot.cos());
+    // Base kitchen modules also meet in a corner and back to back (an
+    // island): under one worktop.
+    let base_unit = m.family_prop(ty.family).as_deref() == Some("base_unit");
     let mut best: Option<(f64, Point2)> = None;
+    let mut offer = |gap: f64, q: Point2| {
+        if gap <= JOIN_PULL && best.is_none_or(|(g, _)| gap < g) {
+            best = Some((gap, q));
+        }
+    };
     for o in m
         .objects()
         .filter(|o| o.level == level && Some(o.id) != skip)
@@ -171,14 +180,48 @@ pub fn snap_alongside(
         if ot.family != ty.family {
             continue;
         }
-        let turn = (o.rotation - rot).rem_euclid(std::f64::consts::TAU);
-        if turn.min(std::f64::consts::TAU - turn) > 0.02 {
-            continue;
-        }
         let Some((olo, ohi)) = m.object_type_box_3d(o.object_type) else {
             continue;
         };
         let ow = ohi[0] - olo[0];
+        let od = ohi[1] - olo[1];
+        let turn = (o.rotation - rot).rem_euclid(std::f64::consts::TAU);
+        let near =
+            |a: f64| (turn - a).abs() < 0.02 || (turn - a - std::f64::consts::TAU).abs() < 0.02;
+        if base_unit && !near(0.0) {
+            // In the other's axes (x along it, y from its back to its front).
+            let (oc, os) = (o.rotation.cos(), o.rotation.sin());
+            let to_world =
+                |x: f64, y: f64| o.position + Vec2::new(x * oc - y * os, x * os + y * oc);
+            let (mc, ms) = (rot.cos(), rot.sin());
+            let from_me = |x: f64, y: f64| Vec2::new(x * mc - y * ms, x * ms + y * mc);
+            let quarter = std::f64::consts::FRAC_PI_2;
+            if near(-quarter) || near(quarter) {
+                // A corner. This one's side against the other's front, its
+                // back flush with the other's end; or the other way round.
+                let sign = if near(-quarter) { 1.0 } else { -1.0 };
+                let q = to_world(sign * ow / 2.0, od + w / 2.0);
+                offer(q.distance(at), q);
+                let q = o.position - from_me(-sign * w / 2.0, d + ow / 2.0);
+                offer(q.distance(at), q);
+            } else if near(std::f64::consts::PI) {
+                // Back to back: an island. Their backs on one line, ends
+                // or middles in line when near.
+                let rel = at - o.position;
+                let x = rel.dot(Vec2::new(oc, os));
+                let best_x = [0.0, (ow - w) / 2.0, (w - ow) / 2.0]
+                    .into_iter()
+                    .filter(|c| (x - c).abs() < 0.1)
+                    .min_by(|a, b| (x - a).abs().total_cmp(&(x - b).abs()))
+                    .unwrap_or(x);
+                let q = to_world(best_x, 0.0);
+                offer(q.distance(at), q);
+            }
+            continue;
+        }
+        if !near(0.0) {
+            continue;
+        }
         let d = at - o.position;
         if d.dot(across).abs() > 0.15 {
             continue;
@@ -190,9 +233,7 @@ pub fn snap_alongside(
         }
         let sign = if side >= 0.0 { 1.0 } else { -1.0 };
         let q = o.position + along * (sign * (w + ow) / 2.0);
-        if best.is_none_or(|(g, _)| gap.abs() < g) {
-            best = Some((gap.abs(), q));
-        }
+        offer(gap.abs(), q);
     }
     best.map(|(_, q)| q)
 }
@@ -364,5 +405,48 @@ mod tests {
             (q.x - 4.4).abs() < 1e-6 && (q.y - 1.0).abs() < 1e-6,
             "{q:?}"
         );
+    }
+
+    /// Base kitchen modules also meet in a corner and back to back.
+    #[test]
+    fn kitchen_modules_meet_in_a_corner_and_back_to_back() {
+        let (mut m, level, _) = room();
+        let quarter = std::f64::consts::FRAC_PI_2;
+        let a = place(&mut m, "Bajo cajonera 60", Point2::new(2.3, 0.0), 0.0, 0.0);
+        let t = m.object(a).unwrap().object_type;
+        // Turned a quarter, brought near the end of its front: its side
+        // against that front, its back flush with that end.
+        let q = snap_alongside(&m, level, t, Point2::new(2.5, 1.0), quarter, None).unwrap();
+        assert!(
+            (q.x - 2.6).abs() < 1e-6 && (q.y - 0.9).abs() < 1e-6,
+            "{q:?}"
+        );
+        // The other way round: the row's piece brought to the leg.
+        let b = place(
+            &mut m,
+            "Bajo cajonera 60",
+            Point2::new(2.6, 0.9),
+            quarter,
+            0.0,
+        );
+        let q = snap_alongside(&m, level, t, Point2::new(2.2, 0.1), 0.0, Some(a)).unwrap();
+        assert!((q.x - 2.3).abs() < 1e-6 && q.y.abs() < 1e-6, "{q:?}");
+        assert!(m.worktop_run_of(b).is_some());
+        // Back to back, nearly in line: on one line, ends together.
+        let c = place(&mut m, "Bajo cajonera 60", Point2::new(6.0, 2.0), 0.0, 0.0);
+        let q = snap_alongside(
+            &m,
+            level,
+            t,
+            Point2::new(6.05, 1.9),
+            std::f64::consts::PI,
+            Some(a),
+        )
+        .unwrap();
+        assert!(
+            (q.x - 6.0).abs() < 1e-6 && (q.y - 2.0).abs() < 1e-6,
+            "{q:?}"
+        );
+        let _ = c;
     }
 }

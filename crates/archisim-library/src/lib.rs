@@ -823,10 +823,21 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 220] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 222] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
+    ("Sofá rinconera 260×170", "Sofá rinconera", &[]),
+    (
+        "Sofá rinconera 300×200",
+        "Sofá rinconera",
+        &[
+            ("width", 3.0),
+            ("length2", 2.0),
+            ("places", 3.0),
+            ("places2", 2.0),
+        ],
+    ),
     (
         "Sillón",
         "Sofá",
@@ -2090,6 +2101,30 @@ pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {
             );
         }
     }
+    Some(id)
+}
+
+/// A material like `base` in any colour (the free colour wheel of the
+/// Maqueta): same kind and texture (wood stays grain, fabric weave), its
+/// colour `rgb`. Named «<base> #RRGGBB»: the same colour again finds it.
+pub fn colour_material(m: &mut Model, base: MaterialId, rgb: [u8; 3]) -> Option<MaterialId> {
+    let b = m.material(base)?.clone();
+    // The base name without a colour it was given before.
+    let stem = match b.name.rsplit_once(" #") {
+        Some((s, hex)) if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) => s,
+        _ => b.name.as_str(),
+    };
+    let name = format!("{stem} #{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+    let id = material_named(m, &name, &b.category, rgb, b.cut_pattern);
+    let look = m.appearance(base);
+    let _ = m.set_appearance(
+        id,
+        archisim_core::Appearance {
+            color: Some(rgb),
+            texture: look.texture,
+            scale: look.scale,
+        },
+    );
     Some(id)
 }
 

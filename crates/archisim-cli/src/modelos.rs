@@ -185,6 +185,7 @@ const ROWS: &[&[&str]] = &[
     ],
     &[
         "Sofá de 3 plazas",
+        "Sofá rinconera 260×170",
         "Sofá clásico de 3 plazas",
         "Sofá nórdico de 2 plazas",
         "Sillón",
