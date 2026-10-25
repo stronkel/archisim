@@ -1474,11 +1474,176 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
         out.push([low(a), low(b), p3(b)]);
         out.push([low(a), p3(b), p3(a)]);
     }
-    vec![Solid {
+    let mut solids = vec![Solid {
         owner: SolidOwner::Terrain(id),
         material: t.material,
         triangles: out,
-    }]
+    }];
+    // The areas painted over it: a thin closed layer each, on the ground.
+    let surface: Vec<[P3; 3]> = tris
+        .iter()
+        .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
+        .collect();
+    for patch in &t.patches {
+        let layer = patch_layer(&surface, &patch.regions, PATCH_THICKNESS);
+        if !layer.is_empty() {
+            solids.push(Solid {
+                owner: SolidOwner::Terrain(id),
+                material: patch.material,
+                triangles: layer,
+            });
+        }
+    }
+    solids
+}
+
+/// How thick the layer of a painted area of a terrain is (m): enough not
+/// to flicker with the ground under it.
+pub const PATCH_THICKNESS: f64 = 0.02;
+
+/// A layer `thick` deep over the parts of `surface` (triangles, counter-
+/// clockwise seen from above) inside `regions`: its top, its bottom on the
+/// surface and its edges where the regions end.
+pub fn patch_layer(
+    surface: &[[P3; 3]],
+    regions: &[(Vec<Point2>, Vec<Vec<Point2>>)],
+    thick: f64,
+) -> Vec<[P3; 3]> {
+    let shapes: Vec<crate::junctions::Shape> = regions
+        .iter()
+        .filter(|(o, _)| o.len() >= 3)
+        .map(|(o, h)| (ensure_ccw(o.clone()), h.clone()))
+        .collect();
+    if shapes.is_empty() {
+        return Vec::new();
+    }
+    // The edges of the regions, to tell an edge of a piece that is the
+    // region's (it gets a side) from one inside it.
+    let mut borders: Vec<(Point2, Point2)> = Vec::new();
+    for (o, holes) in &shapes {
+        for ring in std::iter::once(o).chain(holes.iter()) {
+            for i in 0..ring.len() {
+                borders.push((ring[i], ring[(i + 1) % ring.len()]));
+            }
+        }
+    }
+    let on_border = |a: Point2, b: Point2| {
+        let m = (a + b) * 0.5;
+        borders.iter().any(|(p, q)| {
+            let pq = *q - *p;
+            let len = pq.length();
+            if len < 1e-9 {
+                return false;
+            }
+            let t = (m - *p).dot(pq) / (len * len);
+            (-1e-6..=1.0 + 1e-6).contains(&t) && ((m - *p).cross(pq)).abs() / len < 1e-5
+        })
+    };
+    // The pieces of each triangle inside the regions, each with the
+    // triangle's plane: z = c + gx·(x − x0) + gy·(y − y0).
+    struct Piece {
+        shape: crate::junctions::Shape,
+        plane: [f64; 5],
+    }
+    let mut pieces: Vec<Piece> = Vec::new();
+    for tri in surface {
+        let flat: Vec<Point2> = tri.iter().map(|p| Point2::new(p[0], p[1])).collect();
+        let e1 = [
+            tri[1][0] - tri[0][0],
+            tri[1][1] - tri[0][1],
+            tri[1][2] - tri[0][2],
+        ];
+        let e2 = [
+            tri[2][0] - tri[0][0],
+            tri[2][1] - tri[0][1],
+            tri[2][2] - tri[0][2],
+        ];
+        let n = [
+            e1[1] * e2[2] - e1[2] * e2[1],
+            e1[2] * e2[0] - e1[0] * e2[2],
+            e1[0] * e2[1] - e1[1] * e2[0],
+        ];
+        if n[2].abs() < 1e-12 {
+            continue;
+        }
+        let plane = [tri[0][2], -n[0] / n[2], -n[1] / n[2], tri[0][0], tri[0][1]];
+        for shape in crate::junctions::intersection(&[(ensure_ccw(flat), Vec::new())], &shapes) {
+            pieces.push(Piece { shape, plane });
+        }
+    }
+    // Every corner of every piece splits the edges of the others that pass
+    // through it (two triangles share an edge, and a region's corner may
+    // lie on it): no T-junctions, so the layer is closed.
+    let corners: Vec<Point2> = pieces
+        .iter()
+        .flat_map(|p| p.shape.0.iter().chain(p.shape.1.iter().flatten()).copied())
+        .collect();
+    let split = |ring: &[Point2]| -> Vec<Point2> {
+        let mut v = Vec::new();
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            v.push(a);
+            let ab = b - a;
+            let len2 = ab.dot(ab);
+            if len2 < 1e-18 {
+                continue;
+            }
+            let mut on: Vec<(f64, Point2)> = corners
+                .iter()
+                .filter_map(|c| {
+                    let t = (*c - a).dot(ab) / len2;
+                    let off = (*c - a).cross(ab).abs() / len2.sqrt();
+                    (t > 1e-9 && t < 1.0 - 1e-9 && off < 1e-7).then_some((t, *c))
+                })
+                .collect();
+            on.sort_by(|x, y| x.0.total_cmp(&y.0));
+            on.dedup_by(|x, y| (x.0 - y.0).abs() < 1e-12);
+            v.extend(on.into_iter().map(|(_, c)| c));
+        }
+        v
+    };
+    let mut out = Vec::new();
+    for piece in &pieces {
+        let [c, gx, gy, x0, y0] = piece.plane;
+        let z = |p: Point2| c + gx * (p.x - x0) + gy * (p.y - y0);
+        let outer = split(&ensure_ccw(piece.shape.0.clone()));
+        let holes: Vec<Vec<Point2>> = piece
+            .shape
+            .1
+            .iter()
+            .map(|h| {
+                let mut h = ensure_ccw(h.clone());
+                h.reverse();
+                split(&h)
+            })
+            .collect();
+        let poly = with_holes(&outer, &holes);
+        for [a, b, cc] in triangulate(&poly) {
+            let (pa, pb, pc) = (poly[a], poly[b], poly[cc]);
+            let up = |p: Point2| [p.x, p.y, z(p) + thick];
+            let down = |p: Point2| [p.x, p.y, z(p)];
+            out.push([up(pa), up(pb), up(pc)]);
+            out.push([down(pa), down(pc), down(pb)]);
+        }
+        // Sides where the region ends: outside to the right of each edge
+        // of the counter-clockwise outline (holes run the other way).
+        for ring in std::iter::once(&outer).chain(holes.iter()) {
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                if !on_border(a, b) {
+                    continue;
+                }
+                let (za, zb) = (z(a), z(b));
+                out.push([[a.x, a.y, za], [b.x, b.y, zb], [b.x, b.y, zb + thick]]);
+                out.push([
+                    [a.x, a.y, za],
+                    [b.x, b.y, zb + thick],
+                    [a.x, a.y, za + thick],
+                ]);
+            }
+        }
+    }
+    out
 }
 
 /// A straight bar of a railing: from `a` to `b` (the middle of its end
@@ -3236,6 +3401,24 @@ mod tests {
         let solids = terrain_solids(&m, id);
         assert_closed(&solids);
         assert!(solids[0].volume() > 100.0);
+        // A lawn painted on it, across the triangles, with a hole: a thin
+        // closed layer, as large as the lawn.
+        m.edit_terrain(id, |t| {
+            t.patches = vec![archisim_core::TerrainPatch {
+                material: mat,
+                regions: vec![(
+                    vec![p(2.0, 2.0), p(8.0, 2.0), p(8.0, 7.0), p(2.0, 7.0)],
+                    vec![vec![p(4.0, 3.0), p(5.0, 3.0), p(5.0, 4.0), p(4.0, 4.0)]],
+                )],
+            }]
+        })
+        .unwrap();
+        let solids = terrain_solids(&m, id);
+        assert_eq!(solids.len(), 2);
+        assert_closed(&solids);
+        // Its volume: area (30 − 1) by its thickness, sloping a little.
+        let v = solids[1].volume();
+        assert!((v - 29.0 * PATCH_THICKNESS).abs() < 0.05, "{v}");
     }
 
     /// A gable wall under a two-slope roof: built up to the ridge and

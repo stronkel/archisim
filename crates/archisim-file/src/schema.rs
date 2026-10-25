@@ -198,6 +198,9 @@ pub(crate) struct ObjectType {
     /// A plan symbol from a DXF (version 30).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<SymbolOf>,
+    /// More plan symbols, taken in turn by its objects (version 37).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub more_symbols: Vec<SymbolOf>,
     /// The type of one object only, and the type it was made from
     /// (version 35).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -636,6 +639,26 @@ pub(crate) struct Terrain {
     /// Contour lines drawn by hand, as point indices (optional).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lines: Vec<Vec<usize>>,
+    /// Areas painted over it (version 37, optional).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub patches: Vec<TerrainPatch>,
+}
+
+/// An area of a terrain painted with another material (version 37): its
+/// regions, each an outline and its holes, as `[x, y]`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TerrainPatch {
+    pub material: u64,
+    pub regions: Vec<TerrainRegion>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TerrainRegion {
+    pub outline: Vec<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<[f64; 2]>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -2794,6 +2817,24 @@ impl ProjectFile {
                     depth: t.depth,
                     contour: t.contour,
                     lines: t.lines,
+                    patches: t
+                        .patches
+                        .into_iter()
+                        .map(|p| TerrainPatch {
+                            material: p.material.0,
+                            regions: p
+                                .regions
+                                .into_iter()
+                                .map(|(o, holes)| TerrainRegion {
+                                    outline: o.iter().map(|q| [q.x, q.y]).collect(),
+                                    holes: holes
+                                        .iter()
+                                        .map(|h| h.iter().map(|q| [q.x, q.y]).collect())
+                                        .collect(),
+                                })
+                                .collect(),
+                        })
+                        .collect(),
                 })
                 .collect(),
             object_types: p
@@ -2807,6 +2848,7 @@ impl ProjectFile {
                     values: values_out(&t.values),
                     mesh: t.mesh.map(|m| m.0),
                     symbol: t.symbol.as_ref().map(SymbolOf::out),
+                    more_symbols: t.more_symbols.iter().map(SymbolOf::out).collect(),
                     own: t.own.map(|w| OwnOf {
                         object: w.object.0,
                         base: w.base.0,
@@ -3436,6 +3478,25 @@ impl ProjectFile {
                         depth: t.depth,
                         contour: t.contour,
                         lines: t.lines.clone(),
+                        patches: t
+                            .patches
+                            .iter()
+                            .map(|p| core::TerrainPatch {
+                                material: core::MaterialId(p.material),
+                                regions: p
+                                    .regions
+                                    .iter()
+                                    .map(|r| {
+                                        let pts = |v: &[[f64; 2]]| -> Vec<core::Point2> {
+                                            v.iter()
+                                                .map(|q| core::Point2::new(q[0], q[1]))
+                                                .collect()
+                                        };
+                                        (pts(&r.outline), r.holes.iter().map(|h| pts(h)).collect())
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
@@ -3786,6 +3847,11 @@ impl ProjectFile {
                 values,
                 mesh: t.mesh.map(core::MeshId),
                 symbol: t.symbol.map(|s| s.into_core(&element)).transpose()?,
+                more_symbols: t
+                    .more_symbols
+                    .into_iter()
+                    .map(|s| s.into_core(&element))
+                    .collect::<Result<Vec<_>, _>>()?,
                 own: t.own.map(|w| core::OwnType {
                     object: core::ObjectId(w.object),
                     base: core::ObjectTypeId(w.base),

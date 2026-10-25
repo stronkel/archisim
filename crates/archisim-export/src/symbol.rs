@@ -184,6 +184,16 @@ pub fn elevation_from_dxf(
     side: bool,
 ) -> Result<archisim_core::ElevationFigure, String> {
     let sym = symbol_from_dxf(bytes, source, false)?;
+    elevation_from_symbol(sym, side)
+}
+
+/// A drawing for elevations from a plan symbol at its own size (one of a
+/// library's blocks): standing at the middle of its foot, 1 high.
+pub fn elevation_from_symbol(
+    sym: archisim_core::PlanSymbol,
+    side: bool,
+) -> Result<archisim_core::ElevationFigure, String> {
+    let source = sym.source.clone();
     let pts: Vec<Point2> = sym
         .items
         .iter()
@@ -214,7 +224,7 @@ pub fn elevation_from_dxf(
         })
         .collect();
     Ok(archisim_core::ElevationFigure {
-        source: source.to_string(),
+        source,
         side,
         art: archisim_core::ElevationArt::Lines(items),
     })

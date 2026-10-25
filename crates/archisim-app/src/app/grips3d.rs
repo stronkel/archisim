@@ -273,7 +273,7 @@ impl ArchiSimApp {
             });
         }
         let Some(mut g) = self.object_grip else {
-            if self.object_move.is_none() && self.drag3d.is_none() {
+            if self.object_move.is_none() && self.drag3d.is_none() && self.mass_grip.is_none() {
                 self.v3d.set_overlay(None, || None);
             }
             return false;

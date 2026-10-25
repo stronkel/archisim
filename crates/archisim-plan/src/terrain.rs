@@ -5,7 +5,7 @@
 
 use std::fmt::Write as _;
 
-use archisim_core::{Point2, Terrain};
+use archisim_core::{Model, Point2, Terrain};
 
 use crate::lettering::{text_path, Align};
 use crate::{annotate, num, pens, pt, INK};
@@ -27,8 +27,32 @@ fn height(z: f64) -> String {
     }
 }
 
-pub fn draw_terrain(s: &mut String, t: &Terrain, k: f64) {
+pub fn draw_terrain(s: &mut String, model: &Model, t: &Terrain, k: f64) {
     let _ = writeln!(s, r#"<g class="terrain" stroke-linecap="round">"#);
+    // The areas painted over it (lawn, gravel…), in their colour, under
+    // the contour lines.
+    for patch in &t.patches {
+        let [r, g, b] = model.surface_color(patch.material);
+        let mut d = String::new();
+        for (outer, holes) in &patch.regions {
+            for ring in std::iter::once(outer).chain(holes.iter()) {
+                if ring.len() < 3 {
+                    continue;
+                }
+                let pts: Vec<String> = ring.iter().map(|q| pt(*q)).collect();
+                let _ = write!(d, "M{} Z ", pts.join(" L"));
+            }
+        }
+        if d.is_empty() {
+            continue;
+        }
+        let _ = writeln!(
+            s,
+            r##"<path class="terrain-patch" d="{}" fill="#{r:02x}{g:02x}{b:02x}" fill-opacity="0.55" fill-rule="evenodd" stroke="{CONTOUR}" stroke-width="{}"/>"##,
+            d.trim_end(),
+            num(pens().hatch * k)
+        );
+    }
     let th = annotate::TEXT_HEIGHT * 0.8 * k;
     let step = t.contour;
     let lines = t.contours();

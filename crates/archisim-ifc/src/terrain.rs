@@ -25,7 +25,8 @@ impl Exporter<'_> {
             let solids = archisim_geom::solid::terrain_solids(model, t.id);
             let mut pts: Vec<String> = Vec::new();
             let mut faces: Vec<String> = Vec::new();
-            for tri in solids.iter().flat_map(|s| s.triangles.iter()) {
+            // The ground only: the areas painted over it are not part of it.
+            for tri in solids.iter().take(1).flat_map(|s| s.triangles.iter()) {
                 let base = pts.len();
                 for p in tri {
                     pts.push(format!(

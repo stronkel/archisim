@@ -205,6 +205,8 @@ pub enum CatalogAct {
     Planting,
     Road,
     Terrain,
+    /// An Exterior brush (MQ3).
+    Brush(crate::brush::BrushKind),
     Volume,
     Form(crate::editor::MassMode),
 }
@@ -661,7 +663,14 @@ impl ArchiSimApp {
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
                 card(CatalogAct::Road, "Camino o calle", Glyph::Road),
                 card(CatalogAct::Planting, "Plantación", Glyph::Planting),
-            ],
+            ]
+            .into_iter()
+            .chain(
+                super::context_bar::BRUSHES
+                    .iter()
+                    .map(|(k, g)| card(CatalogAct::Brush(*k), k.name(), *g)),
+            )
+            .collect(),
             (CatalogGroup::Outside, "Formas") => vec![
                 card(CatalogAct::Volume, "Volumen", Glyph::Volume),
                 card(CatalogAct::Form(MassMode::Sphere), "Esfera", Glyph::Sphere),
@@ -781,6 +790,7 @@ impl ArchiSimApp {
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
+            CatalogAct::Brush(k) => self.tool == Tool::Brush && self.brush.kind == k,
             CatalogAct::Volume => {
                 self.tool == Tool::Mass
                     && self.mass_settings.what == crate::editor::MassWhat::Volume
@@ -870,6 +880,7 @@ impl ArchiSimApp {
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
+            CatalogAct::Brush(k) => self.take_brush(k),
             CatalogAct::Volume => self.pick(Pick::Concept(super::concept_ui::ConceptPick::Volume)),
             CatalogAct::Form(m) => {
                 self.pick(Pick::Concept(super::concept_ui::ConceptPick::Form));

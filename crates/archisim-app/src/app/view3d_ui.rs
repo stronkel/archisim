@@ -790,6 +790,7 @@ impl ArchiSimApp {
 
         // Handles of the object selected (bloque 5): its size.
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
+            | self.mass_grips_3d(&ctx, &response, rect)
             | self.object_drag_3d(&ctx, &response, rect);
         // With something selected, the camera turns about it.
         let pivot = if self.ed.selection.is_empty() {
@@ -974,11 +975,13 @@ impl ArchiSimApp {
         let v = &self.v3d;
         draw_section_box(&painter, rect, v);
         self.draw_object_grips_3d(&painter, rect);
+        self.draw_mass_grips_3d(&painter, rect);
         self.draw_drag_3d(&painter, rect);
         self.draw_clearances_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);
         if tool3d {
             self.draw_tool_3d(&painter, rect);
+            self.draw_brush_3d(&painter, rect);
         }
         let v = &mut self.v3d;
         draw_north(
@@ -991,6 +994,8 @@ impl ArchiSimApp {
             || v.section_drag.is_some()
             || self.object_grip_hover.is_some()
             || self.object_grip.is_some()
+            || self.mass_grip_hover.is_some()
+            || self.mass_grip.is_some()
             || self.object_move.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);

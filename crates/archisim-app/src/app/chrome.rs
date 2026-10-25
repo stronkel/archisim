@@ -715,6 +715,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Planting => self.planting_hint(),
+            Tool::Brush => self.brush_hint(),
             Tool::TeamZone if self.team_ui.zone_start.is_some() => "Clic: esquina opuesta de la zona · Esc o botón derecho: anular",
             Tool::TeamZone => "Clic: primera esquina de la zona que reservas · Esc: flecha",
             Tool::Pipe | Tool::Duct | Tool::Device => self.services_hint(),

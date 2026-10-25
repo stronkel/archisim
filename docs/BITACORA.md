@@ -6,6 +6,43 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 (7) · v0.66: Exterior y Concepto en la Maqueta (C5)
+
+Rama `bloque/c5-exterior`, encima de `bloque/c4-visualizacion` (#70), con pull request para Antonio. **Formato `.archisim` versión 37**: abre todas las anteriores. Guarda las zonas pintadas sobre el terreno y los varios dibujos de planta de un tipo. El IFC no cambia: el terreno sale igual y las zonas pintadas no van en él.
+
+**Hecho**
+- **Pinceles de Exterior** (Maqueta → Exterior → Terreno y caminos; o la herramienta Pincel, con sus maneras en la barra de arriba):
+  - **Subir, Bajar, Alisar y Aplanar** el terreno arrastrando, más en el centro del pincel que en el borde. «Aplanar» lo deja a la altura del punto donde empiezas.
+  - **Césped, Grava y Camino** pintan zonas sobre el terreno. Si pintas una encima de otra, la de debajo se recorta. En planta salen con su color; en 3D, como una capa fina con su textura.
+  - **Esparcir plantas** de la especie que elijas en Propiedades, separadas según su tamaño y apoyadas en el terreno.
+  - Si la planta no tiene terreno, el primer trazo crea uno llano de 40 × 40 m.
+  - Cada trazo, sea largo o corto, se deshace de una vez.
+  - Radio y fuerza (o densidad, en las plantas) en la barra.
+- **Flechas y aros en los volúmenes de Concepto** (en 3D, con un volumen seleccionado):
+  - flechas en los cuatro lados para empujar ese lado (con Alt, por los dos);
+  - una flecha arriba para la altura (por plantas enteras si el volumen va por plantas);
+  - un cuadrado en una esquina para escalarlo entero;
+  - el aro naranja para girarlo, de 15 en 15° o libre con Mayús.
+  - Mientras arrastras se ve como quedará.
+- **Árboles** (remates de A1):
+  - al elegir dibujos de un DXF con muchos, el interruptor **«Varios dibujos, que se alternan»** deja elegir varios; cada árbol toma uno, siempre el mismo, y una fila de olivos ya no es el mismo dibujo repetido;
+  - el **dibujo en alzado** también se elige de esos DXF, viéndolo: Propiedades del objeto → Dibujo en alzado → «De mi biblioteca, de frente…» o «de lado…», o al cargar un DXF con varios bloques.
+
+**Pendiente**
+- Las zonas pintadas no van al IFC.
+- Esparcir plantas no cuenta las plantas de una Plantación que ya estén allí.
+- Los caminos se pintan a mano alzada. Para uno con su sección y bordillos sigue estando Camino o calle.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo, Tab a la Maqueta, Exterior → Terreno y caminos → **Subir**. Arrastra sobre el suelo varias veces: sale una loma. Prueba **Alisar** y **Aplanar** encima, y Ctrl+Z: cada trazo se deshace entero.
+2. **Césped** y **Camino**: pinta una pradera y atraviésala con un camino. Mira la planta (Técnica): las dos zonas con su color.
+3. **Esparcir plantas**: en Propiedades elige la especie (por ejemplo Olivo) y arrastra. Cambia la densidad en la barra.
+4. Exterior → Formas → **Volumen**, dibuja uno y selecciónalo en 3D: tira de las flechas de los lados y de arriba, del cuadrado de la esquina y del aro.
+5. Con un tipo de árbol, «Símbolo de planta» → «De mi biblioteca…», enciende **«Varios dibujos, que se alternan»**, elige tres y «Usar». Pon una fila de árboles: verás los tres dibujos repartidos.
+6. Abre un proyecto guardado con una versión anterior: debe abrirse igual.
+
+---
+
 ## 2026-10-25 (6) · v0.65: salida para visualización (C4)
 
 Rama `bloque/c4-visualizacion`, encima de `bloque/c3-maqueta` (#69), con pull request para Antonio. Sin cambios de formato ni de IFC.

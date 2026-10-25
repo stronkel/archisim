@@ -465,9 +465,9 @@ impl ArchiSimApp {
             let k = if fit { 1.0 / size } else { size };
             let origin = Point2::new(0.0, 0.0);
             let tr = archisim_draft::Transform::scale(origin, k);
-            let symbol = archisim_core::PlanSymbol {
+            let scaled = |x: &archisim_core::PlanSymbol| archisim_core::PlanSymbol {
                 fit,
-                items: s
+                items: x
                     .items
                     .iter()
                     .map(|i| archisim_core::SymbolItem {
@@ -475,10 +475,19 @@ impl ArchiSimApp {
                         ..i.clone()
                     })
                     .collect(),
-                ..s
+                ..x.clone()
             };
+            // Every drawing of the type (when it has several).
+            let more = self
+                .ed
+                .model()
+                .object_type(t)
+                .map(|x| x.more_symbols.clone())
+                .unwrap_or_default();
+            let all: Vec<archisim_core::PlanSymbol> =
+                std::iter::once(&s).chain(more.iter()).map(scaled).collect();
             let r = self.ed.transact("Tamaño del símbolo", |m| {
-                m.set_object_type_symbol(t, Some(symbol))
+                m.set_object_type_symbols(t, all)
             });
             self.report(r, "Tamaño del símbolo cambiado.");
         }
@@ -495,6 +504,7 @@ impl ArchiSimApp {
         let users = self.ed.model().object_type_users(t);
         let mut add: Option<(bool, bool)> = None;
         let mut remove: Option<usize> = None;
+        let mut from_library: Option<bool> = None;
         group(ui, "object-elevation", "Dibujo en alzado", |ui| {
             if figures.is_empty() {
                 props::note(
@@ -523,8 +533,22 @@ impl ArchiSimApp {
             } else {
                 "Lo dibujará este objeto (es el único de su tipo)".to_string()
             };
+            let library = super::symbol_pick::has_library_files();
             ui.horizontal_wrapped(|ui| {
                 ui.add_space(4.0);
+                for (label, side) in [("De mi biblioteca, de frente…", false), ("De mi biblioteca, de lado…", true)] {
+                    if library
+                        && ui
+                            .button(label)
+                            .on_hover_text(format!(
+                                "Elegir entre los dibujos de los DXF de la carpeta «{}» de tu biblioteca, viéndolos",
+                                super::symbol_pick::FOLDER
+                            ))
+                            .clicked()
+                    {
+                        from_library = Some(side);
+                    }
+                }
                 for (label, image, side) in [
                     ("DXF de frente…", false, false),
                     ("DXF de lado…", false, true),
@@ -537,6 +561,9 @@ impl ArchiSimApp {
                 }
             });
         });
+        if let Some(side) = from_library {
+            self.pick_from_library_for(t, super::symbol_pick::PickFor::Elevation { side });
+        }
         if let Some((image, side)) = add {
             let mut d = rfd::FileDialog::new().set_title(if image {
                 "Imagen para alzados (PNG con fondo transparente)"
@@ -618,6 +645,24 @@ impl ArchiSimApp {
             |n| n.to_string_lossy().into_owned(),
         );
         let is_png = name.to_lowercase().ends_with(".png");
+        // A library (a sheet of trees, one block each): choose one, seeing
+        // them; the file is kept in the user's library.
+        if !is_png {
+            if let Ok(set) = super::symbol_pick::read_set(path, false) {
+                if !set.symbols.is_empty() {
+                    let n = set.symbols.len();
+                    super::symbol_pick::keep_in_library(path);
+                    self.symbol_picker = Some(super::symbol_pick::SymbolPicker::new(
+                        t,
+                        false,
+                        vec![set],
+                        super::symbol_pick::PickFor::Elevation { side },
+                    ));
+                    self.say(format!("{n} dibujos en el fichero: elige uno."));
+                    return;
+                }
+            }
+        }
         let figure = if is_png {
             archisim_export::symbol::elevation_from_png(&bytes, &name, side)
         } else {
@@ -689,12 +734,12 @@ impl ArchiSimApp {
             Ok(set) if !set.symbols.is_empty() => {
                 let n = set.symbols.len();
                 let kept = super::symbol_pick::keep_in_library(path);
-                self.symbol_picker = Some(super::symbol_pick::SymbolPicker {
-                    target: t,
+                self.symbol_picker = Some(super::symbol_pick::SymbolPicker::new(
+                    t,
                     fit,
-                    sets: vec![set],
-                    shown: 0,
-                });
+                    vec![set],
+                    super::symbol_pick::PickFor::Plan,
+                ));
                 let note = if kept.is_some() {
                     format!(
                         " Guardado en tu biblioteca, carpeta «{}».",

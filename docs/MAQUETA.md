@@ -191,6 +191,17 @@ Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), 
 - **IFC**: la encimera de cada tramo es un `IfcFurniture` «Encimera» (tipo `IfcFurnitureType` por material), con su material y el pset `ArchiSim_Worktop` (largo, superficie y los módulos); el tipo de un módulo bajo lleva dos geometrías, con y sin encimera, y los del tramo usan la segunda. Al importar, ArchiSim no lee la encimera como objeto: vuelve a salir de sus módulos.
 - `archisim cocina out/` lleva además una cocina en L con fregadero y placa, una isla de seis módulos y un sofá rinconera.
 
+## 6 nonies. Exterior y Concepto en la Maqueta (C5, v0.66, rama `bloque/c5-exterior`)
+
+- **Pinceles de Exterior** (MQ3): en el catálogo, Exterior → Terreno y caminos, y como herramienta Pincel (`Tool::Brush`) con sus maneras en la barra:
+  - **Subir**, **Bajar**, **Alisar** y **Aplanar** (a la altura del punto donde empieza el trazo) el terreno, más en el centro del pincel que en el borde. Donde el terreno tiene pocos puntos, el pincel añade los que necesita bajo él y un anillo justo fuera, para que lo levantado no incline el resto (`Terrain::sculpt`, `Sculpt`, `densify`).
+  - **Césped**, **Grava** y **Camino** pintan zonas sobre el terreno (`Terrain::patches`, `TerrainPatch`: material y regiones con huecos, que no se pisan entre sí; formato versión 37). Se ven en planta con su color y en 3D como una capa de 2 cm sobre el suelo (`solid::patch_layer`, cerrada y sin juntas en T); el IFC lleva solo el terreno.
+  - **Esparcir plantas** de la especie elegida en Propiedades, separadas según su tamaño y de pie sobre el terreno (`brush::scatter`).
+  - Sin terreno en la planta, el primer trazo hace uno llano de 40 × 40 m. Cada trazo, sea cual sea su largo, es un solo paso de Deshacer. Radio y fuerza (o densidad) en la barra.
+  - Lógica sin pantalla en `brush` (`BrushKind`, `BrushSettings`, `ensure_terrain`, `sculpt`, `paint`, `paint_material`, `scatter`); ratón y dibujo en `app/brush_ui`.
+- **Flechas y aros en los volúmenes de Concepto** (MQ4): con un volumen seleccionado en 3D, flechas azules en sus cuatro lados (empujan ese lado; con Alt, por los dos), una arriba (altura; por plantas si el volumen va por plantas), un cuadrado en una esquina de arriba (escala todo) y un aro naranja (gira, de 15 en 15° o libre con Mayús). Se dibuja como quedará mientras se arrastra (`app/mass_grips3d`, `apply_mass_grip`).
+- **Árboles** (remates de A1): en la elección de dibujos de un DXF con muchos, «Varios dibujos, que se alternan» deja elegir varios; cada pieza toma uno, siempre el mismo (`ObjectType::more_symbols`, `Model::object_symbol`, `set_object_type_symbols`). Y el dibujo en alzado también se elige de esos DXF, viéndolo (`symbol_pick::PickFor::Elevation`, `archisim_export::symbol::elevation_from_symbol`).
+
 ## 6 octies. Detalles de la Maqueta y de la interfaz (C3, v0.64, rama `bloque/c3-maqueta`)
 
 - **Habitación en un paso**: sus cuatro muros, su suelo y su local se deshacen y rehacen juntos («Habitación» en Deshacer). `Document::join_last` junta los últimos pasos; la app lo usa con `Editor::undo_mark` y `Editor::join_since`.

@@ -37,6 +37,10 @@ pub struct ObjectType {
     /// A plan symbol brought from a DXF, drawn instead of the family's
     /// (bloque 6 de la revisión del 22/10/2026).
     pub symbol: Option<PlanSymbol>,
+    /// More plan symbols of the same species (remate de A1): each object
+    /// of the type takes one of them or `symbol`, always the same one, so
+    /// a row of trees is not all one drawing.
+    pub more_symbols: Vec<PlanSymbol>,
     /// A type of one object only: what was changed on that object in the
     /// Maqueta (its size, its colours, its drawers), leaving the type it
     /// came from as it was (as ArchiCAD keeps each object's own values).
@@ -308,7 +312,44 @@ impl Model {
             .get_mut(&id)
             .ok_or(ModelError::UnknownObjectType(id))?;
         t.symbol = symbol;
+        t.more_symbols.clear();
         Ok(())
+    }
+
+    /// Several plan symbols for an object type, that its objects take in
+    /// turn (the first is its `symbol`); none: the family's drawing.
+    pub fn set_object_type_symbols(
+        &mut self,
+        id: ObjectTypeId,
+        symbols: Vec<PlanSymbol>,
+    ) -> Result<(), ModelError> {
+        let mut it = symbols.into_iter();
+        self.set_object_type_symbol(id, it.next())?;
+        let more: Vec<PlanSymbol> = it.filter(|s| !s.items.is_empty()).collect();
+        if let Some(t) = self.object_types.get_mut(&id) {
+            t.more_symbols = more;
+        }
+        Ok(())
+    }
+
+    /// The plan symbol an object is drawn with: its type's, or one of its
+    /// type's several, chosen by the object (always the same for it).
+    pub fn object_symbol(&self, id: ObjectId) -> Option<&PlanSymbol> {
+        let o = self.objects.get(&id)?;
+        let t = self.object_types.get(&o.object_type)?;
+        let first = t.symbol.as_ref()?;
+        if t.more_symbols.is_empty() {
+            return Some(first);
+        }
+        // A mix of the id's bits, so neighbours differ.
+        let mut h = id.0.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        h ^= h >> 29;
+        let i = (h % (t.more_symbols.len() as u64 + 1)) as usize;
+        if i == 0 {
+            Some(first)
+        } else {
+            t.more_symbols.get(i - 1)
+        }
     }
 
     /// Sets an object's own instance values (checked against its family).
@@ -348,6 +389,7 @@ impl Model {
                 values,
                 mesh: None,
                 symbol: None,
+                more_symbols: Vec::new(),
                 own: None,
                 elevation: Vec::new(),
                 plan_image: None,
@@ -532,6 +574,7 @@ impl Model {
         if let Some(b) = self.object_types.get_mut(&own.base) {
             b.mesh = t.mesh;
             b.symbol = t.symbol.clone();
+            b.more_symbols = t.more_symbols.clone();
         }
         self.edit_object(id, |o| o.object_type = own.base)?;
         self.object_types.remove(&t.id);

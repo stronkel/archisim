@@ -84,6 +84,7 @@ impl ArchiSimApp {
         self.draw_roof_preview(&painter, rect);
         self.draw_stair_preview(&painter, rect);
         self.draw_terrain_preview(&painter, rect);
+        self.draw_brush_plan(&painter, rect);
         self.draw_curtain_preview(&painter, rect);
         self.draw_railing_preview(&painter, rect);
         self.draw_object_preview(&painter, rect);
@@ -137,6 +138,7 @@ impl ArchiSimApp {
             | Tool::MassOffset
             | Tool::Tape
             | Tool::Plot
+            | Tool::Brush
             | Tool::Road
             | Tool::Planting
             | Tool::Pipe
@@ -497,6 +499,10 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Brush => {
+                self.cursor = Some(Snap::at(raw, SnapKind::Free));
+                self.hover = None;
+            }
             Tool::Door | Tool::Window => {
                 let settings = if self.tool == Tool::Door {
                     self.door_settings
@@ -823,6 +829,10 @@ impl ArchiSimApp {
                         self.set_tool(Tool::Arrow);
                     }
                 }
+                Tool::Brush => {
+                    self.end_brush_stroke();
+                    self.set_tool(Tool::Arrow);
+                }
                 Tool::Pipe | Tool::Duct => {
                     if self.run_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
@@ -1132,6 +1142,7 @@ impl ArchiSimApp {
                     self.set_tool(Tool::Arrow);
                 }
             }
+            Tool::Brush => self.brush_clicks(ctx, response),
             Tool::Planting => {
                 if response.double_clicked_by(PointerButton::Primary)
                     || response.clicked_by(PointerButton::Secondary)

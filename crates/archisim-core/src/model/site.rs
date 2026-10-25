@@ -37,7 +37,46 @@ pub struct Terrain {
     /// by index, each two points at least. They pick their points
     /// together, to give them a height at once.
     pub lines: Vec<Vec<usize>>,
+    /// Areas painted over it (lawn, gravel…) with the Exterior brushes
+    /// (MQ3, C5): a material and the regions it covers in plan, each an
+    /// outline and its holes. Two patches never overlap.
+    pub patches: Vec<TerrainPatch>,
 }
+
+/// An area of a terrain covered by another material.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerrainPatch {
+    pub material: MaterialId,
+    /// Outlines (counter-clockwise) and their holes.
+    pub regions: Vec<(Vec<Point2>, Vec<Vec<Point2>>)>,
+}
+
+impl TerrainPatch {
+    /// Its area in plan.
+    pub fn area(&self) -> f64 {
+        self.regions
+            .iter()
+            .map(|(o, holes)| {
+                signed_area(o).abs() - holes.iter().map(|h| signed_area(h).abs()).sum::<f64>()
+            })
+            .sum()
+    }
+}
+
+/// What an Exterior brush does to the ground under it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Sculpt {
+    /// Up by the amount (at the middle; less towards the edge).
+    Raise,
+    Lower,
+    /// Towards the mean of the points round each one.
+    Smooth,
+    /// Towards this height (from project zero).
+    Flatten(f64),
+}
+
+/// How far apart the points a brush adds are, at least (m).
+pub const SCULPT_STEP: f64 = 0.5;
 
 /// Data needed to create a terrain.
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +120,110 @@ impl Terrain {
             .into_iter()
             .map(|l| l.into_iter().filter_map(|i| map[i]).collect::<Vec<_>>())
             .filter(|l| l.len() >= 2)
+            .collect();
+    }
+
+    /// Works the ground with a brush of `radius` at `center`: raises,
+    /// lowers, smooths or flattens it by `amount` (metres up or down at
+    /// its middle for raising and lowering; between 0 and 1, how much,
+    /// for the others), less towards its edge. Where its points are
+    /// sparse, it first adds some under the brush, on the surface as it
+    /// is, so there is ground to shape.
+    pub fn sculpt(&mut self, center: Point2, radius: f64, how: Sculpt, amount: f64) {
+        if radius <= 1e-6 {
+            return;
+        }
+        self.densify(center, radius);
+        let weight = |p: Point2| {
+            let d = p.distance(center) / radius;
+            if d >= 1.0 {
+                0.0
+            } else {
+                let w = 1.0 - d * d;
+                w * w
+            }
+        };
+        let near: Vec<usize> = (0..self.points.len())
+            .filter(|&i| weight(self.points[i].at) > 0.0)
+            .collect();
+        let before: Vec<SurveyPoint> = self.points.clone();
+        for &i in &near {
+            let p = before[i];
+            let w = weight(p.at);
+            let z = match how {
+                Sculpt::Raise => p.z + amount * w,
+                Sculpt::Lower => p.z - amount * w,
+                Sculpt::Flatten(h) => p.z + (h - p.z) * (amount.clamp(0.0, 1.0) * w),
+                Sculpt::Smooth => {
+                    let reach = (radius * 0.35).max(SCULPT_STEP * 1.6);
+                    let (sum, n) = before
+                        .iter()
+                        .filter(|q| q.at.distance(p.at) <= reach)
+                        .fold((0.0, 0.0), |(s, n), q| (s + q.z, n + 1.0));
+                    let mean = if n > 0.0 { sum / n } else { p.z };
+                    p.z + (mean - p.z) * (amount.clamp(0.0, 1.0) * w)
+                }
+            };
+            self.points[i].z = z;
+        }
+    }
+
+    /// Adds points under a brush, on a grid, where there are none near:
+    /// at the height the surface has there (inside it) or the nearest
+    /// point's (outside, which widens the terrain).
+    fn densify(&mut self, center: Point2, radius: f64) {
+        let step = (radius / 4.0).max(SCULPT_STEP);
+        let tris = self.triangles();
+        let height = |pts: &[SurveyPoint], p: Point2| -> f64 {
+            for [a, b, c] in &tris {
+                let (pa, pb, pc) = (pts[*a], pts[*b], pts[*c]);
+                if let Some((u, v, w)) = barycentric(p, pa.at, pb.at, pc.at) {
+                    return u * pa.z + v * pb.z + w * pc.z;
+                }
+            }
+            pts.iter()
+                .min_by(|x, y| x.at.distance(p).total_cmp(&y.at.distance(p)))
+                .map_or(0.0, |q| q.z)
+        };
+        // A ring of points just outside the brush too, at the height they
+        // have: what is raised does not slope the ground beyond.
+        let reach = radius + 1.5 * step;
+        let n = (reach / step).ceil() as i64;
+        let mut added = Vec::new();
+        for j in -n..=n {
+            for i in -n..=n {
+                // On a grid of the project's, not of the brush, so strokes
+                // over the same ground share their points.
+                let g = Point2::new(
+                    ((center.x / step).round() + i as f64) * step,
+                    ((center.y / step).round() + j as f64) * step,
+                );
+                if g.distance(center) > reach {
+                    continue;
+                }
+                let free = self
+                    .points
+                    .iter()
+                    .chain(added.iter())
+                    .all(|q: &SurveyPoint| q.at.distance(g) > step * 0.7);
+                if free {
+                    added.push(SurveyPoint {
+                        at: g,
+                        z: height(&self.points, g),
+                    });
+                }
+            }
+        }
+        self.points.extend(added);
+    }
+
+    /// Paints `material` over the regions `shapes` (outlines and holes,
+    /// already joined with what that material covered): the other
+    /// patches give way where they meet. Patches left empty go.
+    pub fn set_patches(&mut self, patches: Vec<TerrainPatch>) {
+        self.patches = patches
+            .into_iter()
+            .filter(|p| p.regions.iter().any(|(o, _)| o.len() >= 3))
             .collect();
     }
 
@@ -708,6 +851,7 @@ impl Model {
                 depth: spec.depth,
                 contour: spec.contour,
                 lines: spec.lines,
+                patches: Vec::new(),
             },
         );
         Ok(id)

@@ -111,6 +111,9 @@ pub enum Tool {
     Road,
     /// Plants along a line or over an area.
     Planting,
+    /// The Exterior brushes: shape the ground, paint lawn or gravel,
+    /// scatter plants (MQ3).
+    Brush,
     /// Pipes, by their path.
     Pipe,
     /// Ducts, by their path.
@@ -296,6 +299,13 @@ pub struct ArchiSimApp {
     clipboard: Option<context_menu::Clipboard>,
     /// Furniture dragged along the floor in the Maqueta.
     object_move: Option<placing::ObjectMove3d>,
+    /// A handle of a Concepto volume being dragged in 3D, and the one
+    /// under the cursor.
+    mass_grip: Option<mass_grips3d::MassGrip3d>,
+    /// The Exterior brush and the stroke being made with it.
+    pub(super) brush: crate::brush::BrushSettings,
+    brush_stroke: Option<brush_ui::BrushStroke>,
+    mass_grip_hover: Option<mass_grips3d::MassKey>,
     /// While something is moved in 3D: the wall faces it is pulled to,
     /// its plan points when taken, and its clear distances now (with the
     /// height they are drawn at).
@@ -680,6 +690,10 @@ impl ArchiSimApp {
             bar_rgb: None,
             bar_swatch_at: None,
             object_move: None,
+            mass_grip: None,
+            brush: Default::default(),
+            brush_stroke: None,
+            mass_grip_hover: None,
             move_faces: Vec::new(),
             move_points: Vec::new(),
             move_axis: Point2::new(1.0, 0.0),
@@ -2517,6 +2531,7 @@ pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) 
 mod annotation_ui;
 mod background;
 mod bottom_segments;
+mod brush_ui;
 mod budget_ui;
 mod cad_ui;
 mod chrome;
@@ -2540,6 +2555,7 @@ mod icons;
 mod levels_ui;
 mod library_ui;
 mod maquette_ui;
+mod mass_grips3d;
 mod mesh_ui;
 mod methods_ui;
 mod missions_ui;

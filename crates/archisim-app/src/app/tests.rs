@@ -6526,6 +6526,125 @@ fn moved_in_3d_into_a_corner_with_clearances() {
     assert!(on(false, west), "back not on the west wall: {west}");
 }
 
+/// MQ4: a Concepto volume selected in 3D has arrows and a ring; dragging
+/// the arrow on top raises it, the one on a side pushes that side out.
+#[test]
+fn concept_volume_arrows_in_3d() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.key(Key::Tab);
+    h.frame();
+    h.app.v3d.camera.pitch = 0.5;
+    h.app.v3d.camera.yaw = -2.2;
+    h.app.v3d.camera.target = glam::Vec3::new(2.0, 1.5, 1.5);
+    h.app.v3d.camera.distance = 16.0;
+    let level = h.app.ed.level;
+    let mat = h.model().materials().next().unwrap().id;
+    let id = h
+        .app
+        .ed
+        .transact("Volumen", |m| {
+            m.add_mass(archisim_core::NewMass {
+                name: "Volumen 1".into(),
+                level,
+                shape: archisim_core::MassShape::Prism(vec![
+                    p(0.0, 0.0),
+                    p(4.0, 0.0),
+                    p(4.0, 3.0),
+                    p(0.0, 3.0),
+                ]),
+                base_offset: 0.0,
+                height: 3.0,
+                floor_height: None,
+                material: mat,
+            })
+        })
+        .unwrap();
+    h.app.ed.selection = [Element::Mass(id)].into_iter().collect();
+    h.frame();
+    let handles = h.app.mass_handles_3d();
+    assert_eq!(handles.len(), 7, "four sides, top, corner and ring");
+    let rect = h.app.v3d.canvas;
+    let grab = |h: &Harness, key| {
+        let (_, k, at) = h
+            .app
+            .mass_handles_3d()
+            .into_iter()
+            .find(|x| x.1 == key)
+            .unwrap();
+        h.app.mass_grab_point(rect, k, at).unwrap()
+    };
+    let drag = |h: &mut Harness, from: Pos2, to: Pos2| {
+        h.pos = from;
+        h.events.push(Event::PointerMoved(from));
+        h.frame();
+        h.button(PointerButton::Primary, true);
+        for k in 1..=8 {
+            let q = from + (to - from) * (k as f32 / 8.0);
+            h.pos = q;
+            h.events.push(Event::PointerMoved(q));
+            h.frame();
+        }
+        h.button(PointerButton::Primary, false);
+        h.frame();
+    };
+    // Up: taller.
+    let from = grab(&h, super::mass_grips3d::MassKey::Height);
+    drag(&mut h, from, from + egui::vec2(0.0, -60.0));
+    let tall = h.model().mass(id).unwrap().height;
+    assert!(tall > 3.5, "{tall} {:?}", h.app.message);
+    // The east side out: wider, the west side where it was.
+    let from = grab(&h, super::mass_grips3d::MassKey::Side(0, true));
+    let east = screen_3d(&h, 6.0, 1.5, tall / 2.0);
+    let dir = (east - screen_3d(&h, 4.0, 1.5, tall / 2.0)).normalized();
+    drag(&mut h, from, from + dir * 40.0);
+    let (lo, hi, _, _) = super::mass_grips3d::mass_box(h.model(), id).unwrap();
+    assert!(hi[0] > 4.3 && lo[0].abs() < 1e-9, "{lo:?} {hi:?}");
+    assert_eq!(h.app.ed.undo_label(), Some("Empujar lado del volumen"));
+}
+
+/// MQ3: the Exterior brushes, dragged over the plan. Raising makes a
+/// terrain where there is none and lifts it; the stroke is one step to
+/// undo; lawn paints over it; plants are scattered on it.
+#[test]
+fn exterior_brushes() {
+    let mut h = Harness::new(Editor::new_project());
+    h.frame();
+    h.app.take_brush(crate::brush::BrushKind::Raise);
+    assert_eq!(h.app.tool, Tool::Brush);
+    h.app.brush.radius = 3.0;
+    h.app.brush.strength = 0.3;
+    h.drag(p(0.0, 0.0), p(4.0, 0.0));
+    let t = h.model().terrains().next().expect("a terrain made").clone();
+    let top = t.height_at(p(2.0, 0.0)).unwrap();
+    assert!(top > 0.25, "{top}");
+    assert_eq!(h.app.ed.undo_label(), Some("Subir terreno"));
+    h.app.ed.undo();
+    assert!(h.model().terrains().next().is_none(), "one step");
+    h.app.ed.redo();
+    // Lawn.
+    h.app.take_brush(crate::brush::BrushKind::Lawn);
+    h.drag(p(-2.0, 2.0), p(3.0, 2.0));
+    let t = h.model().terrains().next().unwrap().clone();
+    let lawn: f64 = t.patches.iter().map(|p| p.area()).sum();
+    assert!(lawn > 25.0, "{lawn}");
+    assert_eq!(h.app.ed.undo_label(), Some("Pintar césped"));
+    // Plants, standing on the ground.
+    h.app.take_brush(crate::brush::BrushKind::Plants);
+    h.app.brush.strength = 3.0;
+    h.frame();
+    let before = h.model().objects().count();
+    h.drag(p(1.0, 3.0), p(5.0, 3.0));
+    let made: Vec<_> = h.model().objects().skip(before).cloned().collect();
+    assert!(made.len() >= 2, "{} {:?}", made.len(), h.app.message);
+    assert_eq!(h.app.ed.undo_label(), Some("Esparcir plantas"));
+    let ground = h.model().terrains().next().unwrap().clone();
+    for o in &made {
+        let z = ground.height_at(o.position).unwrap();
+        assert!((o.base_offset - z).abs() < 1e-6);
+    }
+}
+
 /// Placing as in Paralives: in the Maqueta a sofa dragged near a wall
 /// goes against it facing the room, as it is drawn while dragged; a vase
 /// placed over the table rests on it.
@@ -7101,5 +7220,52 @@ fn a_tree_is_chosen_from_a_library_dxf() {
         archisim_plan::render_plan(&with, level, &options),
         archisim_plan::render_plan(&without, without.levels()[0].id, &options)
     );
+    // Several drawings of the species: each tree takes one of them.
+    h.app.set_symbol_from(t, &path);
+    if let Some(p) = h.app.symbol_picker.as_mut() {
+        p.many = true;
+    }
+    h.app.use_library_symbols(&[(0, 0), (0, 2)]);
+    let ty = h.model().object_type(t).unwrap().clone();
+    assert_eq!(ty.symbol.as_ref().unwrap().source, "arboles.dxf · 1");
+    assert_eq!(ty.more_symbols.len(), 1);
+    let level = h.app.ed.level;
+    let ids: Vec<_> = (0..12)
+        .map(|i| {
+            h.app
+                .ed
+                .transact("Árbol", |m| {
+                    m.add_object(archisim_core::NewObject {
+                        level,
+                        object_type: t,
+                        position: p(i as f64 * 3.0, 20.0),
+                        rotation: 0.0,
+                        base_offset: 0.0,
+                    })
+                })
+                .unwrap()
+        })
+        .collect();
+    let sources: std::collections::BTreeSet<String> = ids
+        .iter()
+        .map(|id| h.model().object_symbol(*id).unwrap().source.clone())
+        .collect();
+    assert_eq!(sources.len(), 2, "both drawings used: {sources:?}");
+    // A drawing for elevations from the same sheet, seen from the front.
+    h.app.add_elevation_from(t, &path, false);
+    let picker = h.app.symbol_picker.as_ref().expect("the choice is open");
+    assert_eq!(
+        picker.purpose,
+        super::symbol_pick::PickFor::Elevation { side: false }
+    );
+    assert!(!picker.fit);
+    h.app.use_library_symbol(0, 1);
+    let ty = h.model().object_type(t).unwrap().clone();
+    assert_eq!(ty.elevation.len(), 1);
+    assert!(!ty.elevation[0].side);
+    assert!(matches!(
+        ty.elevation[0].art,
+        archisim_core::ElevationArt::Lines(_)
+    ));
     let _ = std::fs::remove_dir_all(&dir);
 }
