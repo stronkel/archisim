@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-25 (8) · v0.67: memoria de carpinterías y cuadro de superficies (C6)
+
+Rama `bloque/c6-documentacion`, encima de `bloque/c5-exterior` (#71), con pull request para Antonio. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **Memoria de carpinterías** (Archivo → Memoria de carpinterías (PDF)…): hojas A3 con el mismo cajetín que el plano de carpinterías, ocho tipos por hoja. Cada tipo con su marca, su nombre, un alzado pequeño a 1:100 y su descripción con palabras: «Ventana de 2 hojas practicables, de 1,80 m de ancho por 1,30 m de alto (medidas del hueco), con antepecho a 0,90 m. Carpintería de aluminio lacado, con marco de 6 cm de cara vista y 7 cm de fondo; acristalamiento de vidrio doble.», la descripción que tenga el tipo, la familia, las unidades por planta y la situación: en qué locales está, y las puertas entre qué dos locales.
+- **Cuadro de superficies** (Archivo → Cuadro de superficies (PDF)…): la superficie útil de cada local por plantas (número, nombre, uso y m², con la útil de la planta), el resumen por plantas con la útil y la construida, y la útil por usos. Las cifras son las mismas de la comprobación CTE. Si una planta tiene muchos locales, la lista sigue en la columna siguiente o en otra hoja.
+- **Plano de carpinterías**: cada tipo dice ahora también el **antepecho** de las ventanas («0,90 m», «0,90 y 1,10 m» si hay varios, «sin antepecho» en las balconeras) y la **situación** (unidades por planta). «2 hojas practicables» concuerda en plural.
+
+**Pendiente**
+- Lo que Antonio eche en falta del plano y de la memoria (otras columnas, otro orden, el texto de la memoria a su manera).
+- C7: mesetas partidas a 45°, meseta de llegada de las de caracol, buhardillas sobre limahoyas.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`cargo run --release -p archisim-app -- out/demo.archisim`).
+2. Archivo → **Memoria de carpinterías (PDF)…** y guárdala. Ábrela: comprueba que la descripción de cada puerta y ventana es la que pondrías en una memoria y que la situación (los locales) es la correcta.
+3. Archivo → **Cuadro de superficies (PDF)…**: compara los m² con los de la tabla de Superficies y con la comprobación CTE.
+4. Archivo → **Plano de carpinterías (PDF)…**: mira las filas nuevas de Antepecho y Situación.
+
+---
+
 ## 2026-10-25 (7) · v0.66: Exterior y Concepto en la Maqueta (C5)
 
 Rama `bloque/c5-exterior`, encima de `bloque/c4-visualizacion` (#70), con pull request para Antonio. **Formato `.archisim` versión 37**: abre todas las anteriores. Guarda las zonas pintadas sobre el terreno y los varios dibujos de planta de un tipo. El IFC no cambia: el terreno sale igual y las zonas pintadas no van en él.

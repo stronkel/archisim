@@ -267,7 +267,21 @@ impl ArchiSimApp {
                 .on_hover_text("Cada tipo de puerta y ventana en alzado a 1:50, con sus medidas, su sección y sus datos, en hojas A3")
                 .clicked()
             {
-                self.export_carpentry();
+                self.export_document(crate::documents::Document::Carpentry);
+            }
+            if ui
+                .button("Memoria de carpinterías (PDF)…")
+                .on_hover_text("Cada tipo de puerta y ventana descrito con palabras: medidas, apertura, materiales, antepecho, unidades por planta y en qué locales está")
+                .clicked()
+            {
+                self.export_document(crate::documents::Document::CarpentryReport);
+            }
+            if ui
+                .button("Cuadro de superficies (PDF)…")
+                .on_hover_text("Superficie útil de cada local por plantas, superficie construida de cada planta y superficie útil por usos")
+                .clicked()
+            {
+                self.export_document(crate::documents::Document::Areas);
             }
             if ui
                 .button("Exportar mediciones (BC3)…")
