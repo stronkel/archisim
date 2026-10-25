@@ -233,6 +233,7 @@ Orden **confirmado por Antonio el 24/10/2026**: de C1 a C7, uno tras otro.
 | C5 | **Exterior y Concepto en la Maqueta** (MQ3–MQ4) | Pinceles de Exterior (césped, caminos, plantaciones pintadas); flechas y aros en Concepto | M | — |
 | C6 | **Documentación** | Más láminas con el cajetín del plano de carpinterías: memoria de carpinterías, cuadro de superficies; lo que Antonio eche en falta del plano de carpinterías | M | — |
 | C7 | **Deudas** | Escaleras: mesetas partidas a 45°, meseta de llegada de las de caracol. Buhardillas sobre limahoyas que pasan por un encuentro | S | — |
+| T1 | **Tramas de presentación** (pedidas por Antonio el 25/10/2026) | Madera (pino, roble, arce, abedul, fresno, nogal, caoba, terminada, tablas, vetas), metal (cepillado, perforado, chapa lagrimada, grecado, malla), hormigón (terminado, bruto, desnudo, adoquín, encofrado de tablas) y piedra (grava, caliza, bloques, sillería, terrazo, camino, adoquín, mampostería): gris, línea fina, trazo a mano | M | en curso (`bloque/tramas`) |
 
 Pendiente de Antonio, fuera de la tabla:
 - **#54 (remates v0.48)**: rehecho sobre la 0.56 como v0.57 (rama `bloque/remates-2`, 24/10/2026): texturas ligeras, puertas y ventanas en muros curvos, instalaciones (pendientes, codos y tes, radiadores, HS 4 y HS 5), presupuesto con descomposición y holguras de interferencias; las buhardillas se quedan las de la 0.53.
