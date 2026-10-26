@@ -54,6 +54,7 @@ fn round_top(b: &mut Builder, role: &'static str, c: [f64; 2], rx: f64, ry: f64,
 }
 
 /// A top of planks along `x`, a little gap between them.
+#[allow(clippy::too_many_arguments)]
 fn planks(
     b: &mut Builder,
     role: &'static str,

@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (6) · Paquete 1b: sillas, taburetes y mesas de las ocho colecciones
+
+Rama `bloque/paquete-1a` (la misma de la tanda 1a). Sin cambios de formato ni de IFC; es el taller, no entra nada en la biblioteca.
+
+Antonio, al ver la tanda 1a: «me parece muy bueno hasta ahora». Decidió además (26/10/2026) que el mobiliario de diseño protegido (LC2, Togo, Eames Lounge, Barcelona, Egg, Wassily…) no se modela ni con otro nombre: se mejorará la importación de los modelos oficiales de los fabricantes (carpeta «Diseño» de la biblioteca, tras el paquete 1), habrá un paquete «Diseño» de clásicos de dominio público (Calvet, Thonet nº 14, Hill House, Café Museum, Postsparkasse, Windsor, bergère Luis XV) y piezas propias con el gesto de cada época.
+
+**Hecho**
+- Ocho **sillas**, ocho **taburetes** y 24 **mesas** (comedor, centro y auxiliar), una por colección (detalle en `docs/BIBLIOTECA_3D.md`, «Tanda 1b»).
+- Prueba nueva: los materiales de cada pieza del taller existen en la paleta.
+- IFC del taller validado (68 piezas nuevas delante de las que sustituirían).
+
+**Pendiente**
+- Lo que diga Antonio de las sillas, los taburetes y las mesas.
+- Tanda 1c: almacenaje (aparadores, librerías, muebles de TV, vitrinas), alfombras, cortinas y chimeneas por colección.
+- Al aprobar el paquete 1: llevarlo a la biblioteca, añadir las colecciones nuevas a `archisim_library::collections` y quitar los modelos antiguos.
+
+**Qué debe probar Antonio**
+1. Mira las láminas de mesas que te mando en el chat.
+2. `git checkout bloque/paquete-1a` y `cargo run --release -p archisim-cli -- taller out/taller`; abre `out/taller/taller.archisim` y en la Maqueta recorre las filas de sillas, taburetes y mesas.
+3. Selecciona una mesa de comedor y cambia el «Modelo 3D», el largo y el ancho; comprueba que las patas y los travesaños siguen al tablero.
+
+---
+
 ## 2026-10-26 (5) · Paquete 1a: sofás, butacas y pufs de las ocho colecciones
 
 Rama `bloque/paquete-1a`, encima de `bloque/taller-2` (#76). Sin cambios de formato ni de IFC; es el taller, no entra nada en la biblioteca.

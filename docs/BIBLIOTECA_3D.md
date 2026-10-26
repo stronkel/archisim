@@ -305,3 +305,16 @@ En el taller, 24 modelos, uno por pieza y colección (rama `bloque/paquete-1a`):
 - Materiales nuevos de la paleta: Tela gris, Pino viejo, Lino crudo, Cuero coñac y Terciopelo verde botella.
 
 Pesos: sofás 14.000–21.000 triángulos (clásico 34.000), butacas 7.000–20.000, pufs 2.000–11.000.
+
+### Tanda 1b: sillas, taburetes y mesas de las ocho colecciones (26/10/2026)
+
+En el taller, 40 modelos más (rama `bloque/paquete-1a`):
+
+- **Sillas** («Silla (taller)», `props:fine_chair`): nórdica de roble con respaldo curvado; andaluza de enea; años 50 de carcasa sobre patas de compás; japandi de cordel; contemporánea de tubo; rústica de tablillas; industrial de chapa de acero; Luis XVI con medallón ovalado tapizado.
+- **Taburetes** («Taburete (taller)», `props:fine_stool`), de bar o bajos según la altura del asiento, uno por colección.
+- **Mesas de comedor** («Mesa de comedor (taller)», `props:fine_dining_table`): nórdica de patas cónicas; mediterránea encalada con faldón; años 50 ovalada; japandi de tablones sobre dos pies con travesaño; contemporánea de tablero fino sobre patas de acero en V; rústica de tablones con balda baja; industrial de tablones sobre marcos de acero; clásica redonda sobre pie torneado de tres garras curvas con su remate.
+- **Mesas de centro** («Mesa de centro (taller)», `props:fine_coffee_table`): nórdica redonda de dos tableros; mediterránea con balda de lamas; años 50 ovalada; japandi en caja abierta con dos huecos; contemporánea de mármol sobre aro de acero; rústica en baúl con flejes y cerradura; industrial de tablones con ruedas; clásica de mármol sobre patas torneadas con balda.
+- **Mesas auxiliares** («Mesa auxiliar (taller)», `props:fine_side_table`): nórdica de bandeja con borde; mediterránea de cerámica en forma de diábolo; años 50 de dos pisos; japandi de tablero redondo sobre dos tablas encajadas en cruz; contemporánea en C de chapa doblada con tablero de madera; rústica de tronco con su corteza; industrial de cubo de acero con cajón; velador clásico de tres garras.
+- Material nuevo de la paleta: Corteza de pino. Una prueba comprueba que todos los materiales que piden las piezas existen en la paleta (antes, si no existía, la pieza se quedaba con el de la receta sin avisar).
+
+Pesos: sillas y taburetes 1.000–8.000 triángulos, mesas 450–6.000.
