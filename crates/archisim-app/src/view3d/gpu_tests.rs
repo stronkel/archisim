@@ -718,6 +718,13 @@ fn demo_cut_pictures() {
             super::render::CapStyle::Flat([30, 30, 30]),
         ),
         ("corte-cerca", 0.9, 0.6, 2, super::render::CapStyle::Layers),
+        (
+            "corte-ventana",
+            1.0,
+            0.9,
+            3,
+            super::render::CapStyle::Layers,
+        ),
     ] {
         let mut camera = Camera {
             pitch,
@@ -735,10 +742,21 @@ fn demo_cut_pictures() {
         }
         camera.fit(lo, hi, size[0] as f32 / size[1] as f32);
         camera.distance *= if cut == 2 { 0.12 } else { 0.6 };
+        if cut == 3 {
+            // At the first window, cut halfway up it.
+            let o = m
+                .openings()
+                .find(|o| !m.opening_type(o.opening_type).is_some_and(|t| t.is_door()))
+                .unwrap();
+            let g = archisim_geom::opening_geometry(&m, o.id).unwrap();
+            let c = g.point((g.t0 + g.t1) / 2.0, 0.0);
+            camera.target = glam::Vec3::new(c.x as f32, c.y as f32, (o.sill + 0.6) as f32);
+            camera.distance = 3.5;
+        }
         let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
         r.set_scene(&device, &scene);
         let mut b = super::section_box::SectionBox::around(scene.lo, scene.hi);
-        if cut == 0 || cut == 2 {
+        if cut == 0 || cut == 2 || cut == 3 {
             b.hi.z = 1.5;
         } else {
             b.hi.x = (lo.x + hi.x) / 2.0;

@@ -2215,6 +2215,44 @@ pub(crate) struct WallType {
     /// Skirtings, bands, cornices and copings (version 29).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sweeps: Vec<WallSweepOf>,
+    /// Which finish wraps round free ends (version 41). Absent: none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_ends: Option<WrapOf>,
+    /// Which finish wraps into the reveals of doors and windows (version
+    /// 41). Absent: the exterior render of a façade whose first layer is a
+    /// finish, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_inserts: Option<WrapOf>,
+}
+
+/// Revit's «Envolver» of a wall type (version 41).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WrapOf {
+    None,
+    Exterior,
+    Interior,
+    Both,
+}
+
+impl WrapOf {
+    fn out(w: core::Wrap) -> Self {
+        match w {
+            core::Wrap::None => WrapOf::None,
+            core::Wrap::Exterior => WrapOf::Exterior,
+            core::Wrap::Interior => WrapOf::Interior,
+            core::Wrap::Both => WrapOf::Both,
+        }
+    }
+
+    fn into_core(self) -> core::Wrap {
+        match self {
+            WrapOf::None => core::Wrap::None,
+            WrapOf::Exterior => core::Wrap::Exterior,
+            WrapOf::Interior => core::Wrap::Interior,
+            WrapOf::Both => core::Wrap::Both,
+        }
+    }
 }
 
 /// An accessory of a wall type (version 29).
@@ -2530,6 +2568,10 @@ impl ProjectFile {
                     guid: t.guid.to_string(),
                     layers: layers_out(&t.layers),
                     sweeps: t.sweeps.iter().map(WallSweepOf::out).collect(),
+                    wrap_ends: (t.wrap_ends != core::Wrap::None).then(|| WrapOf::out(t.wrap_ends)),
+                    wrap_inserts: (t.wrap_inserts
+                        != core::Wrap::inserts_by_default(t.function, &t.layers))
+                    .then(|| WrapOf::out(t.wrap_inserts)),
                     name: t.name,
                     function: match t.function {
                         core::WallFunction::Exterior => WallFunction::Exterior,
@@ -3741,16 +3783,23 @@ impl ProjectFile {
                 .into_iter()
                 .map(|w| w.into_core(&element))
                 .collect::<Result<Vec<_>, _>>()?;
+            let function = match t.function {
+                WallFunction::Exterior => core::WallFunction::Exterior,
+                WallFunction::Interior => core::WallFunction::Interior,
+            };
+            let layers = layers_in(t.layers);
             parts.wall_types.push(core::WallType {
                 sweeps,
                 id: core::WallTypeId(t.id),
                 guid: guid(&format!("wall type {}", t.id), &t.guid)?,
                 name: t.name,
-                function: match t.function {
-                    WallFunction::Exterior => core::WallFunction::Exterior,
-                    WallFunction::Interior => core::WallFunction::Interior,
-                },
-                layers: layers_in(t.layers),
+                function,
+                wrap_ends: t.wrap_ends.map_or(core::Wrap::None, WrapOf::into_core),
+                wrap_inserts: t.wrap_inserts.map_or_else(
+                    || core::Wrap::inserts_by_default(function, &layers),
+                    WrapOf::into_core,
+                ),
+                layers,
             });
         }
         for w in self.walls {

@@ -1352,3 +1352,22 @@ fn dormers_tiles_and_gutters_round_trip() {
     let diffs = differences(&m, &model);
     assert!(diffs.is_empty(), "{}", diffs.join("\n"));
 }
+
+/// Revit's «Envolver» of a wall type, which IFC cannot say, goes in
+/// ArchiSim's own set on the type and comes back.
+#[test]
+fn wall_type_wrapping_round_trip() {
+    use archisim_core::Wrap;
+    let mut m = model();
+    let t = m.walls().next().unwrap().wall_type;
+    m.set_wall_type_wrap(t, Wrap::Both, Wrap::Interior).unwrap();
+    let ifc = export(&m);
+    assert!(ifc.contains("'WrapEnds',$,IFCLABEL('both')"));
+    let Imported { model, .. } = import_ifc(&ifc).unwrap();
+    let name = &m.wall_type(t).unwrap().name;
+    let back = model.wall_types().find(|x| &x.name == name).unwrap();
+    assert_eq!(
+        (back.wrap_ends, back.wrap_inserts),
+        (Wrap::Both, Wrap::Interior)
+    );
+}

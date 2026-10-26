@@ -6,6 +6,35 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (6) · v0.73: envolver capas y cortes macizos en 3D (E16)
+
+Rama `bloque/e16-envolver`, montada sobre `bloque/e14-modificar` (#78), con pull request para Antonio. **Formato `.archisim` versión 41** (el envolvente de los tipos de muro; abre todas las anteriores). Pedido por Antonio el 26/10/2026: «Envolver en extremos» como Revit, también en las jambas de puertas y ventanas y en 3D; y que lo cortado en 3D se vea macizo.
+
+**Hecho**
+- **Envolver** en el tipo de muro (Tipos y materiales → muro → grupo «Envolver»), con dos opciones de cuatro valores (Ninguno, Exterior, Interior, Ambos):
+  - **En extremos**: en un extremo libre (cuadrado, también los de «No permitir unión»), el acabado da la vuelta y tapa los cantos de las demás capas, en una franja tan ancha como él. Con Ambos, el exterior tapa hasta el acabado interior.
+  - **En huecos**: el acabado entra en las jambas, el dintel y el alféizar de puertas y ventanas hasta la carpintería (el exterior, desde la fachada hasta el marco; el interior, desde la habitación hasta el marco).
+  - En **planta**, **3D** (y por tanto secciones, alzados, render y `.glb`) e **IFC** (en un grupo de propiedades propio del tipo, `ArchiSim_WallType`, que vuelve al importar; la forma del muro en IFC no cambia, como en Revit). En 3D se decide por capas enteras: una capa entra en el remate si su mitad queda por fuera del marco.
+  - Las fachadas que ya había siguen como se dibujaban: el revoco exterior envuelve los huecos y los extremos no.
+- **Lo cortado en 3D se ve macizo** (caja de sección y muros recortados de la Maqueta). Antes se veía la cara interior del otro lado del muro, y parecía hueco. Ahora:
+  - **Capas** (por defecto): cada capa con su color de corte, el mismo del poché de la planta, y una línea fina entre capas.
+  - **Blanco, Negro o Gris**: todo lo cortado de un color liso.
+  - Se elige en Propiedades de la vista 3D → Caja de sección → «Lo cortado», y en la Maqueta junto a los botones de muros recortados.
+
+**Pendiente**
+- Los tipos de muro guardados en la biblioteca (`.astipos`) no llevan todavía el envolvente (tampoco llevan los accesorios).
+- En 3D, una capa partida por el marco entra entera o no entra (en planta el remate llega justo al marco).
+- Los forjados cortados en 3D se ven macizos pero sin línea entre sus capas.
+
+**Qué debe probar Antonio**
+1. Descarga la versión del pull request. Abre la demo y pon la vista 3D con la caja de sección activa (Propiedades → Caja de sección → «Planta en 3D»): los muros cortados deben verse macizos, con el ladrillo y los enlucidos de su color. Cambia «Lo cortado» a Negro y a Blanco.
+2. En la Maqueta, muros «Recortados»: lo mismo, con el selector junto a los botones.
+3. Tipos y materiales → un muro de fachada → «Envolver»: pon «En extremos: Exterior». Dibuja un muro suelto de ese tipo: en planta y en 3D el revoco debe dar la vuelta en las puntas.
+4. «En huecos: Interior» en un tipo con ventana: el enlucido debe entrar en las jambas hasta el marco. Prueba Ambos.
+5. Exporta el IFC y vuelve a importarlo: el tipo debe conservar sus opciones.
+
+---
+
 ## 2026-10-26 (5) · v0.72: Modificar como Revit, uniones, atajos de Revit y anclajes de los objetos (E14, E15)
 
 Rama `bloque/e14-modificar`, pull request #78. **Formato `.archisim` versión 40** (los extremos de muro que no se unen; abre todas las anteriores); sin cambios de IFC; la familia Ventana practicable sube a la versión 8. Segunda vuelta el mismo día, tras probar Antonio la primera: Reflejar como Revit, deshacer, permitir unión, atajos de Revit y Tab. Antonio dio el visto bueno a E1 (unido a `main` como v0.71, #77) y respondió D25–D28.
