@@ -292,6 +292,7 @@ Antonio aprobó la calidad del taller y quiere **toda** la biblioteca así. El i
 3. **Los modelos antiguos se quitan** de la biblioteca al aprobar cada paquete; quedan en las versiones anteriores.
 4. **Comercio, hostelería y oficinas** entran como paquete 7: ArchiSim es para cualquier edificio, no solo viviendas.
 5. **Bloques técnicos al final**: copas de árbol con hojas por textura (A) y luz de la Maqueta (B).
+6. **Mobiliario de diseño** (26/10/2026): las piezas de autor aún protegidas (LC2/LC3, Togo, Marshmallow, Lounge Chair, Barcelona, Huevo, Wassily…) no se modelan, ni con otro nombre. Se usan (a) importando los modelos 3D oficiales de los fabricantes a una carpeta «Diseño» de la biblioteca de cada usuario, con importación afinada (bloque propio tras el paquete 1); (b) modelando clásicos de dominio público (Calvet de Gaudí, Thonet nº 14 y mecedora, Hill House, Café Museum de Loos, butaca de Otto Wagner, Windsor, bergère; el Chesterfield ya está en la colección clásica) como paquete «Diseño»; (c) con piezas originales que recogen el gesto de una época sin parecerse a ningún modelo concreto.
 
 ### Tanda 1a: sofás, butacas y pufs de las ocho colecciones (26/10/2026)
 
