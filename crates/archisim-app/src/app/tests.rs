@@ -7523,3 +7523,33 @@ fn objects_mirror_and_snap_to_their_corners() {
     let r = m.object(id).unwrap().rotation;
     assert!(r.sin().abs() < 1e-9 && r.cos() > 0.0, "{r}");
 }
+
+/// Revit's «Reflejar - elegir eje» (MM): with a wall selected, one click on
+/// another wall takes its line as the axis and leaves the mirrored copy;
+/// «Reflejar - dibujar eje» (DM) takes two points.
+#[test]
+fn mirror_picks_a_line_as_axis_and_copies() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let w = add_test_wall(&mut h, p(1.0, 0.0), p(1.0, 3.0));
+    let _axis = add_test_wall(&mut h, p(4.0, -2.0), p(4.0, 6.0));
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "mm");
+    h.click_at(p(4.0, 5.0));
+    let m = h.model();
+    assert_eq!(m.walls().count(), 3, "the original stays");
+    assert!(m.wall(w).unwrap().start.approx_eq(p(1.0, 0.0)));
+    let xs: Vec<f64> = m.walls().map(|x| x.start.x).collect();
+    assert!(xs.iter().any(|x| (x - 7.0).abs() < 1e-9), "{xs:?}");
+    // DM: an axis drawn with two points (y = 4.5), the original kept.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "dm");
+    h.click_at(p(0.0, 4.5));
+    h.click_at(p(2.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.walls().count(), 4);
+    assert!(m
+        .walls()
+        .any(|x| (x.start.y - 9.0).abs() < 1e-9 || (x.end.y - 9.0).abs() < 1e-9));
+}

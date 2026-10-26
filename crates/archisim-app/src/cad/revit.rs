@@ -393,3 +393,153 @@ impl Command for AlignTo {
         self.reference.map(|(e, _)| e).into_iter().collect()
     }
 }
+
+// ---- Reflejar ------------------------------------------------------------------
+
+/// Revit's mirror: the selection mirrored about a line picked in the
+/// drawing (a face or the location line of a wall, a grid, a reference
+/// plane, a 2D line: «Reflejar - elegir eje», MM) or about an axis drawn
+/// with two points («Reflejar - dibujar eje», DM). As in Revit, the
+/// mirrored copy is made and the original stays, unless «Mover» is chosen.
+pub struct Mirror {
+    draw: bool,
+    copy: bool,
+    items: Option<BTreeSet<Element>>,
+    first: Option<Point2>,
+}
+
+impl Mirror {
+    pub fn new(draw: bool) -> Self {
+        Self {
+            draw,
+            copy: true,
+            items: None,
+            first: None,
+        }
+    }
+
+    fn mirror(&mut self, a: Point2, b: Point2) -> Step {
+        let Some(items) = self.items.clone() else {
+            return Step::Next;
+        };
+        Step::Done(Some(Changes {
+            label: if self.copy {
+                "Reflejar (copia)"
+            } else {
+                "Reflejar"
+            },
+            changes: vec![Change::Transform {
+                items,
+                t: archisim_draft::Transform::mirror(a, b),
+                copy: self.copy,
+            }],
+        }))
+    }
+}
+
+/// The selection a mirror takes: doors and windows go with their walls.
+fn mirror_selection(cx: &Ctx<'_, dyn Geo + '_>) -> BTreeSet<Element> {
+    cx.selection
+        .iter()
+        .copied()
+        .filter(|e| !matches!(e, Element::Opening(_)))
+        .collect()
+}
+
+const MIRROR_OPTS: [Opt; 2] = [opt("D", "Dibujar eje"), opt("C", "Copia sí/no")];
+const MIRROR_PICK_OPTS: [Opt; 2] = [opt("E", "Elegir eje"), opt("C", "Copia sí/no")];
+
+impl Command for Mirror {
+    fn name(&self) -> &'static str {
+        if self.draw {
+            "REFLEJARDIB"
+        } else {
+            "REFLEJAR"
+        }
+    }
+
+    fn start(&mut self, cx: &Ctx<'_, dyn Geo + '_>, _st: &mut CadSettings) -> Step {
+        let sel = mirror_selection(cx);
+        if !sel.is_empty() {
+            self.items = Some(sel);
+        }
+        Step::Next
+    }
+
+    fn prompt(&self) -> Prompt {
+        if self.items.is_none() {
+            return Prompt::new("Designe objetos e Intro", Want::Select);
+        }
+        let copy = if self.copy {
+            "se hace una copia"
+        } else {
+            "se mueve"
+        };
+        match (self.draw, self.first) {
+            (false, _) => Prompt::new(
+                format!("Designe la línea del eje (cara o eje de muro, eje, línea…); {copy}"),
+                Want::Pick,
+            )
+            .opts(&MIRROR_OPTS),
+            (true, None) => Prompt::new(format!("Primer punto del eje; {copy}"), Want::Point)
+                .opts(&MIRROR_PICK_OPTS),
+            (true, Some(_)) => Prompt::new("Segundo punto del eje", Want::Point),
+        }
+    }
+
+    fn feed(&mut self, input: Input, cx: &Ctx<'_, dyn Geo + '_>, _st: &mut CadSettings) -> Step {
+        if self.items.is_none() {
+            if input == Input::Enter {
+                let sel = mirror_selection(cx);
+                if sel.is_empty() {
+                    return Step::Refuse("Seleccione antes lo que se refleja.".into());
+                }
+                self.items = Some(sel);
+            }
+            return Step::Next;
+        }
+        match input {
+            Input::Option("C") => {
+                self.copy = !self.copy;
+                Step::Next
+            }
+            Input::Option("D") => {
+                self.draw = true;
+                Step::Next
+            }
+            Input::Option("E") => {
+                self.draw = false;
+                self.first = None;
+                Step::Next
+            }
+            Input::Pick(e, at) if !self.draw => match nearest_line(cx, e, at) {
+                Some(l) => self.mirror(l.a, l.b),
+                None => {
+                    Step::Refuse("Ese elemento no tiene una línea recta que sirva de eje.".into())
+                }
+            },
+            Input::Point(p) if self.draw => match self.first {
+                None => {
+                    self.first = Some(p);
+                    Step::Next
+                }
+                Some(a) if a.distance(p) > 1e-6 => self.mirror(a, p),
+                Some(_) => Step::Refuse("Los dos puntos del eje coinciden.".into()),
+            },
+            Input::Enter => Step::Done(None),
+            _ => Step::Next,
+        }
+    }
+
+    fn base(&self) -> Option<Point2> {
+        self.first
+    }
+
+    fn preview(&self, cx: &Ctx<'_, dyn Geo + '_>, _st: &CadSettings) -> Vec<Shape> {
+        // The axis being drawn.
+        match self.first {
+            Some(a) if self.draw => vec![Shape::Line { a, b: cx.cursor }],
+            _ => Vec::new(),
+        }
+    }
+}

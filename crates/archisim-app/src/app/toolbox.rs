@@ -880,11 +880,19 @@ pub const ORDERS: &[Order] = &[
     ),
     order(
         EDIT,
-        "Simetría",
+        "Reflejar",
+        "REFLEJAR",
+        Icon::Mirror,
+        "MM",
+        "Reflejar eligiendo una línea como eje (DM: dibujar el eje); deja la copia",
+    ),
+    order(
+        EDIT,
+        "Simetría (AutoCAD)",
         "SIMETRIA",
         Icon::Mirror,
         "SI",
-        "Reflejar respecto a una línea",
+        "Simetría de AutoCAD: dos puntos del eje y si se borra el original",
     ),
     order(
         EDIT,

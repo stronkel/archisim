@@ -512,6 +512,10 @@ pub const ALIASES: &[(&str, Launch)] = &[
     ("MATCHPROP", Launch::Command("IGUALARPROP")),
     ("DIVIDE", Launch::Command("DIVIDE")),
     ("DIV", Launch::Command("DIVIDE")),
+    ("REFLEJAR", Launch::Command("REFLEJAR")),
+    ("MM", Launch::Command("REFLEJAR")),
+    ("REFLEJARDIB", Launch::Command("REFLEJARDIB")),
+    ("DM", Launch::Command("REFLEJARDIB")),
     ("ALINEACARA", Launch::Command("ALINEACARA")),
     ("ALC", Launch::Command("ALINEACARA")),
     ("ESQUINA", Launch::Command("ESQUINA")),
@@ -616,6 +620,8 @@ pub fn launch(word: &str) -> Option<Launch> {
 /// A new command by its name.
 pub fn new_command(name: &str) -> Option<Box<dyn Command>> {
     Some(match name {
+        "REFLEJAR" => Box::new(revit::Mirror::new(false)),
+        "REFLEJARDIB" => Box::new(revit::Mirror::new(true)),
         "ALINEACARA" => Box::new(revit::AlignTo::default()),
         "ESQUINA" => Box::new(revit::Corner::default()),
         "LIMITE" => Box::new(revit::ToLimit::new(true)),

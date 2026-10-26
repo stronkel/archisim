@@ -94,11 +94,11 @@ const TRANSFORM: &[Order] = &[
         hint: "Centro y ángulo (o ángulo de referencia y final)",
     },
     Order {
-        command: "SIMETRIA",
+        command: "REFLEJAR",
         mark: Mark::Icon(Icon::Mirror),
-        name: "Simetría",
-        key: "SI",
-        hint: "Dos puntos del eje; las puertas y ventanas cambian de mano",
+        name: "Reflejar",
+        key: "MM",
+        hint: "Como Reflejar de Revit: pincha una línea como eje (cara o eje de muro, eje, línea) y sale la copia reflejada; D: dibujar el eje con dos puntos (DM); C: mover en vez de copiar. Las puertas y ventanas cambian de mano",
     },
     Order {
         command: "ESCALA",
@@ -259,7 +259,9 @@ fn order_applies(command: &str, sel: &[Element]) -> bool {
         "DESPLAZA" | "COPIA" | "GIRA" | "MATRIZ" | "ALINEAR" => !sel.is_empty(),
         // Mirrored: what has a plan to mirror (doors and windows go with
         // their wall); the rest of the phase-2 elements are not mirrored.
-        "SIMETRIA" => !sel.is_empty() && sel.iter().all(crate::xform::mirrors),
+        "SIMETRIA" | "REFLEJAR" | "REFLEJARDIB" => {
+            !sel.is_empty() && sel.iter().all(crate::xform::mirrors)
+        }
         // Picked one by one, as in Revit: no selection needed.
         "ALINEACARA" | "ESQUINA" | "LIMITE1" | "LIMITE" => true,
         // The orders of the 2D geometry: on lines, arcs and polylines.
