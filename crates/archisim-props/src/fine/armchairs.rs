@@ -61,7 +61,15 @@ fn pillow(b: &mut Builder, s: &Sizes, y: f64, z: f64) {
 /// outer face on `y = 0`, round the vertical through `c`: `x` becomes the
 /// length along the circle of radius `r` (0 at the back), `y` the depth
 /// in from it; the top comes down towards the front by `drop`.
-fn wrap(b: &mut Builder, start: usize, c: [f64; 2], r: f64, span: f64, z0: f64, drop: f64) {
+pub(super) fn wrap(
+    b: &mut Builder,
+    start: usize,
+    c: [f64; 2],
+    r: f64,
+    span: f64,
+    z0: f64,
+    drop: f64,
+) {
     b.transform_from(start, |q| {
         let a = q[0] / r;
         let rr = r - q[1];

@@ -9,6 +9,7 @@
 //! wooden legs that splay a little.
 
 pub mod armchairs;
+pub mod chairs;
 pub mod lamp;
 pub mod plant;
 pub mod shape;
@@ -61,6 +62,32 @@ pub const KINDS: &[(&str, &[&str])] = &[
             "Clásica",
         ],
     ),
+    (
+        "fine_chair",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_stool",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     ("fine_plant", &["Espatifilo", "Pilea"]),
     ("fine_sink_unit", &["Fregadero de acero"]),
     ("fine_streetlight", &["Columna de fundición"]),
@@ -100,6 +127,8 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
             }
         }
         "fine_pouf" => armchairs::pouf(b, p),
+        "fine_chair" => chairs::chair(b, p),
+        "fine_stool" => chairs::stool(b, p),
         "fine_plant" => plant::potted_plant(b, p),
         "fine_sink_unit" => sink::sink_unit(b, p),
         "fine_streetlight" => lamp::streetlight(b, p),
