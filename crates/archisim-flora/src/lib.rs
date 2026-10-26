@@ -31,6 +31,7 @@ macro_rules! names {
     };
 }
 
+mod ad5;
 mod envelope;
 mod grow;
 mod mesh;

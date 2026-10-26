@@ -47,6 +47,14 @@ pub enum PlanStyle {
     Sprigs,
     /// The branches inside a leafy edge.
     BranchesEdge,
+    /// AD5's drawing: overlapping crowns in washes, with rings of dashes.
+    Ad5Circles,
+    /// AD5's drawing: clusters of leaves over a light wash.
+    Ad5Clusters,
+    /// AD5's drawing: rays from the trunk to the edge.
+    Ad5Star,
+    /// AD5's drawing: the crown's ring with an irregular mass of leaves.
+    Ad5Crown,
 }
 
 names!(PlanStyle {
@@ -67,7 +75,29 @@ names!(PlanStyle {
     Silhouette => "silueta",
     Sprigs => "ramitos",
     BranchesEdge => "ramas y borde",
+    Ad5Circles => "AD5 círculos",
+    Ad5Clusters => "AD5 racimos",
+    Ad5Star => "AD5 estrella",
+    Ad5Crown => "AD5 copa",
 });
+
+impl PlanStyle {
+    /// AD5's drawing a style lays on the plant, if it is one of theirs.
+    pub(crate) fn ad5(self) -> Option<&'static str> {
+        match self {
+            PlanStyle::Ad5Circles => Some("círculos"),
+            PlanStyle::Ad5Clusters => Some("racimos"),
+            PlanStyle::Ad5Star => Some("estrella"),
+            PlanStyle::Ad5Crown => Some("copa"),
+            _ => None,
+        }
+    }
+
+    /// Whether it is one of AD5's drawings.
+    pub fn is_ad5(self) -> bool {
+        self.ad5().is_some()
+    }
+}
 
 /// Lines, colour, or both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -383,6 +413,14 @@ impl Plant {
             style = PlanStyle::Outline;
         }
         if side {
+            // AD5's drawings are drawings in plan: from the side, the
+            // nearest of ArchiSim's.
+            style = match style {
+                PlanStyle::Ad5Circles => PlanStyle::Cloud,
+                PlanStyle::Ad5Clusters | PlanStyle::Ad5Star => PlanStyle::Foliage,
+                PlanStyle::Ad5Crown => PlanStyle::Outline,
+                s => s,
+            };
             // From the side, the rays of the radial style mean nothing; and
             // a palm (a grass, a rosette) is its fronds whatever the style.
             if style == PlanStyle::Radial {
@@ -423,6 +461,12 @@ impl Plant {
         let soft = smooth_ring(&raw, 3);
         let silhouette = self.outline_points(&soft);
         let perimeter_mm = TAU * (soft.iter().sum::<f64>() / n as f64) / mpm;
+
+        if let Some(d) = style.ad5().and_then(crate::ad5::drawing) {
+            let mut out = self.ad5_marks(d, o, &raw, mpm, crown_mm, &mut rng);
+            self.plan_trunk(&mut out, mpm, o.look != Look::Lines, o.look);
+            return out;
+        }
 
         let mut fills: Vec<Vec<P2>> = vec![silhouette.clone()];
         let mut lines: Vec<Shape> = Vec::new();
@@ -629,6 +673,11 @@ impl Plant {
                 self.frond_marks(&mut lines, &mut fills, crown_mm, leaflets);
             }
             PlanStyle::Watercolor => {}
+            // (Drawn above.)
+            PlanStyle::Ad5Circles
+            | PlanStyle::Ad5Clusters
+            | PlanStyle::Ad5Star
+            | PlanStyle::Ad5Crown => {}
         }
 
         let mut out = Vec::new();
@@ -759,27 +808,149 @@ impl Plant {
         if !matches!(style, PlanStyle::Watercolor | PlanStyle::Fronds)
             || self.species.habit == crate::Habit::Palm
         {
-            let tr = self.trunk_radius(mpm);
-            let foot = self
-                .branches
-                .iter()
-                .find(|b| b.level == 0)
-                .map(|b| [b.points[0][0], b.points[0][1]])
-                .unwrap_or([0.0, 0.0]);
-            let ring = circle(foot, tr, 16);
-            if coloured {
+            self.plan_trunk(&mut out, mpm, coloured, o.look);
+        }
+        out
+    }
+
+    /// The trunk's ring at the foot, filled with bark when the drawing
+    /// has colour.
+    fn plan_trunk(&self, out: &mut Vec<Shape>, mpm: f64, coloured: bool, look: Look) {
+        let tr = self.trunk_radius(mpm);
+        let foot = self
+            .branches
+            .iter()
+            .find(|b| b.level == 0)
+            .map(|b| [b.points[0][0], b.points[0][1]])
+            .unwrap_or([0.0, 0.0]);
+        let ring = circle(foot, tr, 16);
+        if coloured {
+            out.push(Shape::Fill {
+                points: ring.clone(),
+                tone: Tone::Bark,
+                opacity: 1.0,
+            });
+        }
+        if look != Look::Colour || !coloured {
+            out.push(Shape::Line {
+                points: ring,
+                closed: true,
+                stroke: Stroke::Thin,
+            });
+        }
+    }
+
+    /// AD5's drawing laid on this plant: turned at the plant's own angle
+    /// and stretched, round its centre, to the outline of its crown (a
+    /// cypress gets it narrow, a wide pine wide). Washes in the leaves'
+    /// colour with AD5's opacity (at the default opacity of 0.55; more or
+    /// less with the species' own), its lines, and tufts of grass where
+    /// AD5 had a grass pattern.
+    fn ad5_marks(
+        &self,
+        d: &crate::ad5::Drawing,
+        o: &PlanOptions,
+        raw: &[f64],
+        mpm: f64,
+        crown_mm: f64,
+        rng: &mut Rng,
+    ) -> Vec<Shape> {
+        use crate::ad5::LineKind;
+        let n = raw.len();
+        // The crown's reach, smoothed over some 30°: its general shape,
+        // not each clump of leaves.
+        let reach = smooth_ring(raw, (n / 24).max(1));
+        let (s, c) = rng.range(0.0, TAU).sin_cos();
+        let c0 = self.center;
+        let place = |p: &P2| -> P2 {
+            let q = [p[0] * c - p[1] * s, p[0] * s + p[1] * c];
+            let t = q[1].atan2(q[0]).rem_euclid(TAU) / TAU * n as f64;
+            let i = (t.floor() as usize) % n;
+            let u = t - t.floor();
+            let r = reach[i] * (1.0 - u) + reach[(i + 1) % n] * u;
+            [c0[0] + q[0] * r, c0[1] + q[1] * r]
+        };
+        let mut out = Vec::new();
+        let coloured = o.look != Look::Lines;
+        if coloured {
+            let strongest = d.washes.iter().map(|w| w.0).fold(0.0, f64::max);
+            let opacity = |op: f64| match o.look {
+                Look::Filled => (op / strongest.max(1e-3)).min(1.0),
+                _ => (op * o.opacity / 0.55).clamp(0.02, 1.0),
+            };
+            for (op, pts) in &d.washes {
                 out.push(Shape::Fill {
-                    points: ring.clone(),
-                    tone: Tone::Bark,
-                    opacity: 1.0,
+                    points: pts.iter().map(place).collect(),
+                    tone: Tone::Leaves,
+                    opacity: opacity(*op),
                 });
             }
-            if o.look != Look::Colour || !coloured {
-                out.push(Shape::Line {
+            if d.washes.is_empty() {
+                // Drawn by lines only (the star): a light wash of the
+                // crown under them, so it has its colour.
+                let ring: Vec<P2> = circle([0.0, 0.0], 1.0, 72).iter().map(place).collect();
+                out.push(Shape::Fill {
                     points: ring,
-                    closed: true,
-                    stroke: Stroke::Thin,
+                    tone: Tone::Leaves,
+                    opacity: opacity(0.2),
                 });
+            }
+            self.blossoms(&mut out, mpm, crown_mm);
+        }
+        if o.look == Look::Colour {
+            return out;
+        }
+        for (kind, pts) in &d.lines {
+            out.push(Shape::Line {
+                points: pts.iter().map(place).collect(),
+                closed: *kind != LineKind::Open,
+                stroke: if *kind == LineKind::Outline {
+                    Stroke::Outline
+                } else {
+                    Stroke::Thin
+                },
+            });
+        }
+        // Tufts of grass, upright on the paper, about 1.6 mm apart (only
+        // where they can be told apart).
+        if crown_mm >= 20.0 {
+            let step = 1.6 * mpm;
+            let size = 0.55 * mpm;
+            for patch in &d.patches {
+                let poly: Vec<P2> = patch.iter().map(place).collect();
+                let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+                for p in &poly {
+                    lo = [lo[0].min(p[0]), lo[1].min(p[1])];
+                    hi = [hi[0].max(p[0]), hi[1].max(p[1])];
+                }
+                let mut y = lo[1] + step * 0.5;
+                let mut row = 0;
+                while y < hi[1] {
+                    let mut x = lo[0] + step * if row % 2 == 0 { 0.3 } else { 0.8 };
+                    while x < hi[0] {
+                        let b = [x + rng.signed() * step * 0.2, y + rng.signed() * step * 0.2];
+                        if inside(&poly, b) && inside(&poly, [b[0], b[1] + size]) {
+                            let h = size * rng.range(0.8, 1.15);
+                            out.push(Shape::Line {
+                                points: vec![
+                                    [b[0] - h * 0.6, b[1] + h * 0.6],
+                                    b,
+                                    [b[0] + h * 0.6, b[1] + h * 0.6],
+                                ],
+                                closed: false,
+                                stroke: Stroke::Thin,
+                            });
+                            out.push(Shape::Line {
+                                points: vec![b, [b[0], b[1] + h]],
+                                closed: false,
+                                stroke: Stroke::Thin,
+                            });
+                        }
+                        x += step;
+                    }
+                    y += step * 0.87;
+                    row += 1;
+                }
             }
         }
         out

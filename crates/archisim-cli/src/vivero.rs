@@ -171,11 +171,16 @@ pub fn write(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     }
     // The line drawings of trees (25/10/2026): every plant in each of the
     // four styles, in plan and in the elevations, lines only.
-    for (name, slug) in [
-        ("corona", "corona"),
-        ("silueta", "silueta"),
-        ("ramitos", "ramitos"),
-        ("ramas y borde", "ramas-y-borde"),
+    // AD5's own drawings (26/10/2026), in colour as the studio uses them.
+    for (name, slug, look) in [
+        ("corona", "corona", "líneas"),
+        ("silueta", "silueta", "líneas"),
+        ("ramitos", "ramitos", "líneas"),
+        ("ramas y borde", "ramas-y-borde", "líneas"),
+        ("AD5 círculos", "ad5-circulos", "transparente"),
+        ("AD5 racimos", "ad5-racimos", "transparente"),
+        ("AD5 estrella", "ad5-estrella", "transparente"),
+        ("AD5 copa", "ad5-copa", "transparente"),
     ] {
         let mut t = m.clone();
         let ids: Vec<_> = t.object_types().map(|x| x.id).collect();
@@ -189,7 +194,7 @@ pub fn write(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             for (k, val) in [
                 ("style", name),
                 ("tech_style", name),
-                ("look", "líneas"),
+                ("look", look),
                 ("plan_drawing", "presentación"),
             ] {
                 v.insert(k.into(), archisim_core::Value::Text(val.into()));

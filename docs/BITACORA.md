@@ -6,9 +6,9 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-26 (3) · M1, segunda entrega del taller: planta, fregadero y farola
+## 2026-10-26 (4) · M1, segunda entrega del taller: planta, fregadero y farola
 
-Rama `bloque/taller-2`, encima de `main` (v0.69), con pull request para Antonio. Sin cambios de formato (la familia Vegetación no cambia) y sin versión nueva: es el taller, no entra nada en la biblioteca.
+Rama `bloque/taller-2`, encima de `main` (v0.70), con pull request para Antonio. Sin cambios de formato (la familia Vegetación no cambia) y sin versión nueva: es el taller, no entra nada en la biblioteca.
 
 Pedido por Antonio el 26/10/2026 con ocho capturas, cuatro nuestras y sus contrapartidas de Paralives: «las hojas son planos estáticos antinaturales, los cojines no se recuestan sobre los respaldos, el fregadero son unos tubos extruidos que ni se tocan, en la farola hay elementos al aire… quiero que sean visualmente preciosos». Pidió también decompilar la biblioteca de Paralives para remodelarla: no se hace (sus modelos son de su estudio y su licencia no lo permite; principio de sala limpia), así que los modelos se hacen desde cero con el mismo cuidado.
 
@@ -34,6 +34,29 @@ Pedido por Antonio el 26/10/2026 con ocho capturas, cuatro nuestras y sus contra
 3. Selecciona la planta y cambia en Propiedades el «Modelo 3D» entre Espatifilo y Pilea, la altura y el diámetro de la maceta.
 4. Selecciona el fregadero y cambia el ancho (0,60 – 1,20), las puertas y el tirador.
 5. Abre `out/taller/taller.ifc` en ArchiCAD o Revit: las piezas nuevas deben verse con su forma, como mobiliario.
+
+---
+
+## 2026-10-26 (3) · v0.70: árboles de AD5 en planta (T3)
+
+Pedido por Antonio el 26/10/2026, con el DXF «Árboles AD5 Planta» (cuatro árboles dibujados en el estudio): tenerlos en planta como una visualización más bonita. Directamente en `main`: es pequeño y no cambia el formato `.archisim` ni el IFC. La familia Vegetación pasa a la versión 3.
+
+**Hecho**
+- **Cuatro estilos de planta nuevos** en la familia Vegetación, para cualquier especie: **AD5 círculos** (tres copas superpuestas en manchas transparentes con anillos discontinuos), **AD5 racimos** (racimos de hojas sobre una mancha clara, con matas de hierba dentro), **AD5 estrella** (rayos del tronco al borde) y **AD5 copa** (el círculo de la copa con una masa irregular de hojas). Se eligen como «Estilo de presentación» o «Estilo técnico» del tipo, o como «Estilo» de un ejemplar.
+- Cada árbol lleva el dibujo **a la medida de su copa**, estirado lo justo para seguir su contorno, y **girado distinto en cada ejemplar**: una alineación no se ve repetida.
+- Las manchas llevan el **color de hojas de la especie** con la **opacidad que tenían en AD5** (con la opacidad por defecto); en «líneas» quedan solo las líneas, en «rellena» las manchas opacas, en «solo color» sin líneas. El tronco es el de cada planta. Las flores de las especies que florecen salen encima.
+- En alzado y sección, que no son dibujos de lado, se dibujan con el estilo de ArchiSim más parecido (nube, follaje o contorno).
+- El DXF se convierte con `scripts/make_ad5_trees.py` a `crates/archisim-flora/src/ad5_trees.txt`; el DXF no se sube al repositorio. La trama de hierba del DXF no se copia: ArchiSim dibuja sus propias matas.
+- `archisim vivero out/vivero` dibuja todo el vivero en cada estilo AD5: `vivero-ad5-circulos-planta.svg`, `…-racimos-…`, `…-estrella-…`, `…-copa-…`.
+
+**Pendiente**
+- Lo que diga Antonio. Ideas: líneas en el verde de AD5 en lugar de con la plumilla de la vista (hoy van en tinta, como el resto del dibujo); un dibujo de lado propio de AD5 para los alzados.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- vivero out/vivero` y abre en el navegador `out/vivero/vivero-ad5-circulos-planta.svg` y los otros tres: compáralos con tus bloques de AutoCAD.
+2. En un proyecto tuyo con árboles: **Biblioteca → Actualizar familias** (para que la familia Vegetación pase a la versión 3). Selecciona un árbol → Propiedades → «Estilo de presentación» → «AD5 copa» (y los otros tres). Cambia también «Color en presentación» a líneas, rellena y solo color.
+3. Haz una plantación en línea (Urbanismo → Plantación) con «AD5 círculos»: los árboles deben verse girados unos respecto a otros.
+4. Mira un alzado con esos árboles: deben salir dibujados de lado, no con el dibujo de planta.
 
 ---
 

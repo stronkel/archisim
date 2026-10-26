@@ -1,7 +1,7 @@
 family "Vegetación"
   category site
   host none
-  version 2
+  version 3
   description "Planta generada por ArchiSim: árbol, conífera, palmera, arbusto, mata, gramínea o roseta. Cada ejemplar crece distinto según su semilla; el punto de inserción es el pie del tronco"
   folder "Vegetación"
 
@@ -38,8 +38,8 @@ type_params
     fruits  material = "Fruto" label "Fruto"
   section "Dibujo en planta"
     plan_drawing choice("presentación", "según el estilo", "técnico") = "presentación" label "Dibujo en planta"
-    tech_style choice("círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela", "corona", "silueta", "ramitos", "ramas y borde") = "círculo" label "Estilo técnico"
-    style choice("círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela", "corona", "silueta", "ramitos", "ramas y borde") = "contorno" label "Estilo de presentación"
+    tech_style choice("círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela", "corona", "silueta", "ramitos", "ramas y borde", "AD5 círculos", "AD5 racimos", "AD5 estrella", "AD5 copa") = "círculo" label "Estilo técnico"
+    style choice("círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela", "corona", "silueta", "ramitos", "ramas y borde", "AD5 círculos", "AD5 racimos", "AD5 estrella", "AD5 copa") = "contorno" label "Estilo de presentación"
     look choice("líneas", "transparente", "rellena", "solo color") = "transparente" label "Color en presentación"
     opacity number = 0.55 range 0.05..1.00 label "Opacidad"
 
@@ -51,7 +51,7 @@ instance_params
     variation number = 0.50 range 0.00..1.00 label "Variación"
   section "Dibujo"
     drawing choice("del tipo", "presentación", "según el estilo", "técnico") = "del tipo" label "Dibujo en planta"
-    style_own choice("del tipo", "círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela", "corona", "silueta", "ramitos", "ramas y borde") = "del tipo" label "Estilo"
+    style_own choice("del tipo", "círculo", "contorno", "dentado", "nube", "a mano", "ramas", "hojas", "ramas y hojas", "follaje", "punteado", "radial", "frondas", "acuarela", "corona", "silueta", "ramitos", "ramas y borde", "AD5 círculos", "AD5 racimos", "AD5 estrella", "AD5 copa") = "del tipo" label "Estilo"
     look_own choice("del tipo", "líneas", "transparente", "rellena", "solo color") = "del tipo" label "Color"
     opacity_own number = 0.00 range 0.00..1.00 label "Opacidad (0: la del tipo)"
     color_own bool = false label "Color propio"
