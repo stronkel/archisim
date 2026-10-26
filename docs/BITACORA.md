@@ -6,15 +6,20 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-26 (5) · v0.72: Modificar como Revit y anclajes de los objetos (E14, E15)
+## 2026-10-26 (5) · v0.72: Modificar como Revit, uniones, atajos de Revit y anclajes de los objetos (E14, E15)
 
-Rama `bloque/e14-modificar`, con pull request para Antonio. Sin cambios de formato `.archisim` ni de IFC; la familia Ventana practicable sube a la versión 8. Antonio dio el visto bueno a E1 (unido a `main` como v0.71, #77) y respondió D25–D28.
+Rama `bloque/e14-modificar`, pull request #78. **Formato `.archisim` versión 40** (los extremos de muro que no se unen; abre todas las anteriores); sin cambios de IFC; la familia Ventana practicable sube a la versión 8. Segunda vuelta el mismo día, tras probar Antonio la primera: Reflejar como Revit, deshacer, permitir unión, atajos de Revit y Tab. Antonio dio el visto bueno a E1 (unido a `main` como v0.71, #77) y respondió D25–D28.
 
 **Hecho**
 - **Cuatro órdenes nuevas en Modificar**, en un grupo propio al final de la barra (no hace falta seleccionar antes, como en Revit):
   - **Alinear caras** (`ALC`): la línea de referencia (cara o eje de un muro, un eje, un plano de referencia, una línea 2D, el canto de cualquier cosa) y después la cara del elemento que se lleva a ella. Se mueve en perpendicular, como al arrastrarlo: los muros unidos se alargan para seguirlo.
   - **Esquina** (`ESQ`, la TR de Revit): dos muros, cada uno por la parte que se queda; se alargan o se recortan hasta cerrar la esquina. Sigue activa para la siguiente esquina.
   - **Hasta límite** (`LIM1`) y **Varios al límite** (`LIM`): el límite (eje de un muro, eje, plano de referencia o línea) y después el muro o los muros, por la parte que se queda.
+- **Reflejar como Revit** (sustituye a Simetría en la barra): con lo seleccionado, un clic en una línea (cara o eje de muro, eje, línea 2D) la toma como eje y sale la copia reflejada (MM); con la opción D, el eje se dibuja con dos puntos (DM); C cambia entre copiar y mover. La Simetría de AutoCAD (SI, con sus tres pasos) sigue en el buscador.
+- **Deshacer**: Ctrl+Z no funcionaba mientras un botón de la barra (Esquina, por ejemplo) tenía el foco del teclado; ahora sí. Y U (DESHACER) escrito dentro de una orden deshace el último paso sin salir de ella.
+- **Permitir / No permitir unión** en cada extremo de muro, como Revit: clic derecho cerca del extremo, o en Propiedades → Construcción → «Unión al inicio» / «Unión al final». Un extremo sin unión queda libre y cuadrado aunque toque otro muro (ninguno de los dos se ingletea ni hace T ahí), y al mover un muro el otro no lo sigue.
+- **Atajos de teclado como Revit**, por defecto: dos letras y la herramienta empieza sin Intro (WA muro, DR puerta, WN ventana, CM componente, SB suelo, CL pilar, BM viga, GR rejilla, RP plano de referencia, DI cota, EL cota de nivel, TX texto, RM habitación, TG etiquetar, MV mover, CO copiar, RO rotar, RE escala, MM y DM reflejar, AR matriz, AL alinear, TR esquina, OF desfase, MA igualar propiedades, DE borrar, ZA/ZE/ZF zoom, TL líneas finas, HH/EH ocultar, HR mostrar, PT pintar, SF dividir cara; y algunos propios: RF cubierta, ST escalera, RA barandilla, CW muro cortina, FT cimentación, SE sección). **KS** abre la lista (también en el menú, «Atajos de teclado y ratón»). En Vista → Teclas se elige Revit, AutoCAD (orden + Intro) o ArchiCAD (una letra).
+- **Tab ya no cambia a la Maqueta**: solo recorre los elementos que se pisan bajo el cursor, como en Revit. La Maqueta es **F4** (o el interruptor de arriba).
 - **Simetría** ya vale para objetos, pilares, vigas, barandillas, ejes y planos de referencia. Un mueble va a su sitio simétrico, girado para mirar al lado simétrico (no se construye «al revés»). **Escala** se apaga cuando lo seleccionado no se puede escalar, en lugar de fallar.
 - **Puntos de anclaje de los objetos en planta**: las esquinas, los puntos medios de los lados, las aristas y el centro de la caja de cada objeto, y su punto de inserción, son puntos de forzado. Valen para arrastrar, Mover, Copiar, Girar, Simetría y Matriz desde una esquina exacta. Los árboles solo dan su tronco.
 - **D28**: el giro de las hojas de las ventanas no se dibuja en planta salvo que el tipo lo pida («Giro de las hojas en planta»), y entonces va con guiones.
@@ -23,6 +28,7 @@ Rama `bloque/e14-modificar`, con pull request para Antonio. Sin cambios de forma
 **Pendiente**
 - E15 en alzado, sección y 3D: hoy en esas vistas no se mueve con puntos de forzado (en 3D se arrastra sobre el suelo; en alzado y sección no se edita). Va con E7 (vistas de dibujo) o en un bloque propio, como diga Antonio.
 - Recortar y extender muros curvos.
+- «Envolver en extremos» (Revit): que la capa de acabado dé la vuelta en un extremo libre. Hoy un extremo sin unión queda cuadrado con todas las capas cortadas; hace falta que Antonio diga si va por tipo de muro (Ninguno / Exterior / Interior, como Revit) y si también en las jambas en 3D.
 
 **Qué debe probar Antonio**
 1. Descarga la versión del pull request y abre la demo. En proyectos tuyos, **Biblioteca → Actualizar familias**.
@@ -30,7 +36,11 @@ Rama `bloque/e14-modificar`, con pull request para Antonio. Sin cambios de forma
 3. Un muro largo como límite y tres tabiques que no llegan o que se pasan: **Varios al límite** → pincha el muro largo y después cada tabique; Intro.
 4. **Alinear caras**: pincha la cara de un muro y después la cara paralela de otro muro: se coloca a haces. Prueba también con un mueble contra la cara de un muro.
 5. Coloca un mueble y empieza un Mover: al acercarte a sus esquinas deben salir los forzados. Haz una **Simetría** de un mueble: debe quedar en el lado simétrico mirando hacia el otro lado.
-6. Ventanas: en planta, sin giro. Editar tipo → Representación → «Giro de las hojas en planta»: aparece a guiones.
+6. Ventanas: en planta, sin giro.
+7. **Reflejar**: selecciona un muro o un mueble, MM y pincha la cara de otro muro: sale la copia reflejada en un solo clic. DM y dos clics: eje dibujado.
+8. **Deshacer**: haz una Esquina con el botón de la barra y pulsa Ctrl+Z: se deshace. Dentro de la orden, U + Intro también.
+9. **Permitir unión**: dos muros en L; clic derecho cerca de la esquina sobre uno → «No permitir unión en este extremo»: los dos quedan cuadrados, solapados. Mueve uno: el otro no lo sigue. Vuelve a permitirla desde el mismo menú o en Propiedades.
+10. **Atajos**: escribe WA, DR, MV, MM, AL, TR… sin Intro. KS para la lista. Comprueba que Tab sobre dos elementos que se pisan ya no te lleva a la Maqueta (F4 sí). Editar tipo → Representación → «Giro de las hojas en planta»: aparece a guiones.
 
 ---
 

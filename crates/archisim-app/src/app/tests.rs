@@ -35,6 +35,7 @@ impl Harness {
         // The drawing tests were written with ArchiCAD's keys (M, F… at
         // once); the AutoCAD command line has its own tests.
         h.app.keys_autocad = false;
+        h.app.keys_revit = false;
         h.frame();
         h.frame();
         h
@@ -7611,4 +7612,40 @@ fn a_wall_end_that_may_not_join() {
     let mut m = h.model().clone();
     crate::drag::move_selection(&mut m, &sel, archisim_core::Vec2::new(0.0, 1.0)).unwrap();
     assert!(m.wall(b).unwrap().start.approx_eq(p(4.0, 0.0)));
+}
+
+/// Revit's keys: two letters start the tool at once, without Enter; in
+/// the middle of an order waiting for a pick, they start the new one.
+#[test]
+fn revit_shortcuts_start_tools_at_once() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_revit = true;
+    h.type_text("wa");
+    h.frame();
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("tr");
+    h.frame();
+    assert_eq!(
+        h.app.cad_prompt().map(|p| p.want),
+        Some(crate::cad::Want::Pick)
+    );
+    h.type_text("al");
+    h.frame();
+    assert!(h
+        .app
+        .cad_prompt()
+        .is_some_and(|p| p.text.contains("referencia")));
+    h.key(Key::Escape);
+    h.type_text("ks");
+    h.frame();
+    assert!(h.app.show_shortcuts);
+    // Cycling the key styles: Revit → AutoCAD → ArchiCAD → Revit.
+    h.app.cycle_keys();
+    assert!(!h.app.keys_revit && h.app.keys_autocad);
+    h.app.cycle_keys();
+    assert!(!h.app.keys_revit && !h.app.keys_autocad);
+    h.app.cycle_keys();
+    assert!(h.app.keys_revit);
 }
