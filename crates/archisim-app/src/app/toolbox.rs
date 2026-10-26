@@ -888,7 +888,7 @@ pub const ORDERS: &[Order] = &[
     ),
     order(
         EDIT,
-        "Simetría (AutoCAD)",
+        "Simetría",
         "SIMETRIA",
         Icon::Mirror,
         "SI",
@@ -1476,6 +1476,8 @@ mod tests {
         assert_eq!(names("zapata")[0], "Zapata");
         assert_eq!(names("girar")[0], "Girar");
         assert_eq!(names("simetria")[0], "Simetría");
+        assert_eq!(names("reflejar")[0], "Reflejar");
+        assert!(names("MM").contains(&"Reflejar"));
         assert_eq!(names("tuberia")[0], "Tubería");
         assert!(names("EQ").contains(&"Desfase"));
         // Each tool once, in its home discipline.
