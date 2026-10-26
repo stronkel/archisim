@@ -318,3 +318,15 @@ En el taller, 40 modelos más (rama `bloque/paquete-1a`):
 - Material nuevo de la paleta: Corteza de pino. Una prueba comprueba que todos los materiales que piden las piezas existen en la paleta (antes, si no existía, la pieza se quedaba con el de la receta sin avisar).
 
 Pesos: sillas y taburetes 1.000–8.000 triángulos, mesas 450–6.000.
+
+### Tanda 1c: almacenaje de las ocho colecciones (26/10/2026)
+
+En el taller, 32 modelos más (`archisim_props::fine::storage`): cada pieza se arma con frentes (`Panel`: liso, cuarterón con moldura, rejilla, cristal, cristal con junquillos, listones, acanalado, tablas y malla de acero), tiradores (`Pull`: pomo torneado, pomo de latón, argolla, concha, barra, lengüeta de cuero, uñero) y patas (cónicas abiertas, de compás, peonza Luis XVI, zócalo retranqueado), y se viste: libros en filas con huecos, pilas tumbadas, alguno inclinado y jarrones (`books`), cerámica en las vitrinas (`display`), cestas de enea y el televisor.
+
+- **Aparadores** («Aparador (taller)», `props:fine_sideboard`): nórdico de patas abiertas con uñeros; mediterráneo encalado de rejilla; años 50 acanalado en nogal con latón; japandi de puertas correderas de listones; contemporáneo lacado con encimera de terrazo, sin tiradores; rústico de tablas con bisagras de forja y argollas; industrial con bastidor de acero, malla y conchas; Luis XVI con cuarterones, pilastras acanaladas y mármol.
+- **Librerías** («Librería (taller)», `props:fine_bookcase`, con «Con libros»): nórdica abierta; mediterránea con hornacina en arco sobre armario de rejilla; años 50 de baldas de nogal en montantes negros sobre mueble con patas de compás; japandi de huecos escalonados; contemporánea en retícula lacada con algunos huecos cerrados; rústica de tablón con puertas de tablas; industrial de acero con aspas laterales; clásica con cornisa, pilastras y cuarterones.
+- **Muebles de TV** («Mueble de TV (taller)», `props:fine_tv_unit`, con «Con televisor»).
+- **Vitrinas** («Vitrina (taller)», `props:fine_vitrine`): con vidrio, baldas de vidrio y cerámica dentro; la clásica con arco de junquillo en la cabeza de las puertas.
+- Materiales nuevos: Vidrio claro, Lacado blanco y arena, Fresno oscuro, cinco colores de lomos de libro y Pantalla de televisor.
+
+Pesos: 4.500–42.000 triángulos (las librerías llenas y las japandi de listones, las que más).

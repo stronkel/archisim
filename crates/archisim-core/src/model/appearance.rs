@@ -179,7 +179,7 @@ impl TextureKind {
             TextureKind::Terrazzo
         } else if has("Mármol") {
             TextureKind::Marble
-        } else if has("Microcemento") {
+        } else if has("Microcemento") || has("Cal ") {
             TextureKind::Plaster
         } else {
             match category {

@@ -1,0 +1,30 @@
+family "Alfombra (taller)"
+  category furniture
+  host none
+  version 1
+  description "Alfombra por colecciones (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.00 range 0.60..5.00 label "Largo"
+    depth  length = 1.40 range 0.40..4.00 label "Ancho"
+  section "Materiales"
+    mat    material = "Lana cruda" label "Fondo"
+    mat2   material = "Lana teja" label "Dibujo"
+    accent material = "Lana oliva" label "Dibujo (2)"
+    fringe material = "Lana cruda" label "Flecos"
+    weave  material = "Paja" label "Fibra"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, 0.012) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:fine_rug"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
