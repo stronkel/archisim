@@ -34,6 +34,47 @@ fn frustum(b: &mut Builder, role: &'static str, lo: [f64; 4], hi: [f64; 4], z0: 
     }
 }
 
+/// A block from `(x0, y0, z0)` to `(x1, y1, z1)` with rectangular holes
+/// through it (`[xa, xb, za, zb]` each), built in upright strips so that
+/// what is behind a hole shows.
+#[allow(clippy::too_many_arguments)]
+fn holed(
+    b: &mut Builder,
+    role: &'static str,
+    x0: f64,
+    x1: f64,
+    y0: f64,
+    y1: f64,
+    z0: f64,
+    z1: f64,
+    holes: &[[f64; 4]],
+) {
+    let mut xs = vec![x0, x1];
+    for h in holes {
+        xs.push(h[0].clamp(x0, x1));
+        xs.push(h[1].clamp(x0, x1));
+    }
+    xs.sort_by(|a, c| a.total_cmp(c));
+    xs.dedup_by(|a, c| (*a - *c).abs() < 1e-6);
+    for k in 0..xs.len() - 1 {
+        let (xa, xb) = (xs[k], xs[k + 1]);
+        let xm = (xa + xb) / 2.0;
+        let mut cuts: Vec<[f64; 2]> = holes
+            .iter()
+            .filter(|h| h[0] < xm && xm < h[1])
+            .map(|h| [h[2].max(z0), h[3].min(z1)])
+            .collect();
+        cuts.sort_by(|a, c| a[0].total_cmp(&c[0]));
+        let mut z = z0;
+        for c in cuts.iter().chain(std::iter::once(&[z1, z1])) {
+            if c[0] > z + 1e-6 {
+                b.rbox(role, [xa, y0, z], [xb, y1, c[0]], 0.0);
+            }
+            z = z.max(c[1]);
+        }
+    }
+}
+
 /// Tongues of fire along `x0`…`x1` rising from `z` at depth `y`.
 fn flames(b: &mut Builder, x0: f64, x1: f64, y: f64, z: f64, tall: f64) {
     let n = (((x1 - x0) / 0.06).round() as usize).max(2);
@@ -195,8 +236,8 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 0.006,
             );
             firebox(b, oa, ob, bench, oz, d, d - 0.05, fire);
-            for k in 0..((ob - oa) / 0.012) as usize {
-                let x = oa + 0.006 + 0.012 * k as f64;
+            for k in 0..((ob - oa) / 0.03) as usize {
+                let x = oa + 0.015 + 0.03 * k as f64;
                 b.cyl(
                     "metal",
                     [x, d + 0.03, bench],
@@ -220,9 +261,21 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
         // Japandi: a block of microcement with a long low fire on pebbles
         // and a niche of stacked logs.
         4 => {
-            b.rbox("mat", [x0, 0.0, 0.0], [x1, d, h], 0.006);
             let (oa, ob) = (x0 + 0.08, x0 + w * 0.68);
             let (za, zb) = (0.32, 0.6_f64.min(h - 0.2));
+            let (na, nb) = (x0 + w * 0.74, x1 - 0.08);
+            let (nz0, nz1) = (0.08, h - 0.12);
+            holed(
+                b,
+                "mat",
+                x0,
+                x1,
+                0.0,
+                d,
+                0.0,
+                h,
+                &[[oa, ob, za, zb], [na, nb, nz0, nz1]],
+            );
             firebox(b, oa, ob, za, zb, d, d - 0.08, false);
             if fire {
                 for k in 0..(((ob - oa) / 0.05) as usize) {
@@ -243,9 +296,8 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                     (zb - za) * 0.6,
                 );
             }
-            let (na, nb) = (x0 + w * 0.74, x1 - 0.08);
-            let (nz0, nz1) = (0.08, h - 0.12);
-            b.rbox("dark", [na, 0.05, nz0], [nb, d - 0.001, nz1], 0.0);
+
+            b.rbox("dark", [na, 0.04, nz0], [nb, 0.06, nz1], 0.0);
             b.rbox("mat", [na, 0.08, nz0 - 0.001], [nb, d + 0.001, nz0], 0.0);
             let r = 0.04;
             let cols = (((nb - na) / (2.0 * r)).floor() as usize).max(1);
@@ -265,9 +317,9 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
         // Contemporary: a wide gas fire behind glass in a white wall unit,
         // a slim black frame.
         5 => {
-            b.rbox("mat", [x0, 0.0, 0.0], [x1, d, h], 0.004);
             let (oa, ob) = (x0 + 0.12, x1 - 0.12);
             let (za, zb) = (0.4, (0.4_f64 + 0.42).min(h - 0.15));
+            holed(b, "mat", x0, x1, 0.0, d, 0.0, h, &[[oa, ob, za, zb]]);
             firebox(b, oa, ob, za, zb, d, d - 0.1, false);
             for (lo, hi) in [
                 ([oa - 0.02, d, za - 0.02], [ob + 0.02, d + 0.006, za]),
@@ -370,15 +422,44 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 );
             }
             let top = 0.2 + 0.55;
-            b.rbox("metal", [sa, sy0, 0.2], [sb, sy1, top], 0.008);
+
+            let (ga, gb, gz0, gz1) = (sa + 0.06, sb - 0.06, 0.28, top - 0.1);
+            let t = 0.012;
+            b.rbox("metal", [sa, sy0, 0.2], [sb, sy0 + t, top], 0.004);
+            b.rbox("metal", [sa, sy0, 0.2], [sa + t, sy1, top], 0.004);
+            b.rbox("metal", [sb - t, sy0, 0.2], [sb, sy1, top], 0.004);
+            b.rbox("metal", [sa, sy0, 0.2], [sb, sy1, 0.2 + t], 0.004);
+            b.rbox("metal", [sa, sy0, top - t], [sb, sy1, top], 0.004);
+            holed(
+                b,
+                "metal",
+                sa,
+                sb,
+                sy1 - t,
+                sy1,
+                0.2,
+                top,
+                &[[ga, gb, gz0, gz1]],
+            );
+            b.rbox(
+                "dark",
+                [sa + t, sy0 + t, 0.2 + t],
+                [sb - t, sy0 + t + 0.004, top - t],
+                0.0,
+            );
+            b.rbox(
+                "dark",
+                [sa + t, sy0 + t, 0.2 + t],
+                [sb - t, sy1 - t, 0.2 + t + 0.004],
+                0.0,
+            );
             b.rbox(
                 "metal",
                 [sa - 0.01, sy0 - 0.01, top],
                 [sb + 0.01, sy1 + 0.01, top + 0.012],
                 0.004,
             );
-            let (ga, gb, gz0, gz1) = (sa + 0.06, sb - 0.06, 0.28, top - 0.1);
-            b.rbox("dark", [ga, sy1 - 0.002, gz0], [gb, sy1 + 0.001, gz1], 0.0);
+
             if fire {
                 logs(b, (ga + gb) / 2.0, sy1 - 0.08, gz0, gb - ga);
                 flames(
@@ -454,11 +535,17 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
             let (oa, ob) = (x0 + w * 0.2, x1 - w * 0.2);
             let oz = 0.78_f64.min(h * 0.7);
             let shelf = oz + 0.2;
-            b.rbox(
+
+            holed(
+                b,
                 "mat",
-                [x0 + 0.06, 0.0, 0.03],
-                [x1 - 0.06, d - 0.06, shelf],
+                x0 + 0.06,
+                x1 - 0.06,
                 0.0,
+                d - 0.06,
+                0.03,
+                shelf,
+                &[[oa, ob, 0.03, oz]],
             );
             for (xa, xb) in [(x0, oa), (ob, x1)] {
                 b.rbox("stone", [xa, d - 0.06, 0.03], [xb, d, oz], 0.004);
@@ -505,11 +592,18 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 0.006,
             );
             firebox(b, oa, ob, 0.03, oz, d - 0.06, d - 0.16, fire);
-            b.rbox(
+
+            // The cast iron insert: a frame round the opening.
+            holed(
+                b,
                 "metal",
-                [oa - 0.01, d - 0.08, 0.03],
-                [ob + 0.01, d - 0.06, oz],
-                0.0,
+                oa - 0.04,
+                ob + 0.04,
+                d - 0.075,
+                d - 0.055,
+                0.03,
+                oz + 0.03,
+                &[[oa, ob, 0.0, oz]],
             );
             let fy = d + 0.14;
             for (a, c) in [

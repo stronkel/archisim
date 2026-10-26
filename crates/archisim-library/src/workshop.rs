@@ -1781,7 +1781,7 @@ pub const PIECES: &[Piece] = &[
         family: "Cortina (taller)",
         values: &[
             ("model3d", T("Mediterráneo")),
-            ("sheer", M("Visillo")),
+            ("mat", M("Lino blanco")),
             ("frame", M("Madera encalada")),
             ("accent", M("Lino crudo")),
         ],

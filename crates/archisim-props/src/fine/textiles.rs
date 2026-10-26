@@ -83,19 +83,15 @@ fn border(
 
 /// Knotted fringes along both short ends (at `x = ±w/2`), `len` long.
 fn fringes(b: &mut Builder, w: f64, d: f64, len: f64) {
-    let n = ((d / 0.018).round() as usize).max(4);
     for side in [-1.0f64, 1.0] {
-        for k in 0..n {
-            let y = d * (k as f64 + 0.5) / n as f64;
-            let x = side * w / 2.0;
-            let wob = ((k * 7 + 3) % 5) as f64 * 0.003;
-            b.rbox(
-                "fringe",
-                [x.min(x + side * (len + wob)), y - 0.0035, 0.0],
-                [x.max(x + side * (len + wob)), y + 0.0035, 0.004],
-                0.0,
-            );
-        }
+        let x = side * w / 2.0;
+        // The loose threads as one soft flat strip, a little ragged.
+        b.rbox(
+            "fringe",
+            [x.min(x + side * len), 0.01, 0.0],
+            [x.max(x + side * len), d - 0.01, 0.003],
+            0.0,
+        );
         // The knotted band where they start.
         b.rbox(
             "fringe",
@@ -130,38 +126,35 @@ pub fn rug(b: &mut Builder, p: &Params) {
     let (top, up) = (t, t + 0.0015);
     let c = [0.0, d / 2.0];
     match p.style() {
-        // Mediterranean: a round rug of braided jute, coil on coil.
+        // Mediterranean: a round rug of braided jute, coil on coil: a
+        // disc whose top rises and falls with the coils, two of them dyed.
         2 => {
             let r = w.min(d) / 2.0;
-            let coil = 0.022;
+            let coil = 0.024;
             let n = ((r / coil).floor() as usize).max(2);
+            let mut prof = vec![(0.0, 0.0), (r, 0.0), (r, t * 0.6)];
             for k in 0..n {
+                let rr = r - coil * k as f64;
+                prof.push((rr - coil * 0.5, t * 0.6 + 0.003));
+                prof.push((rr - coil, t * 0.6));
+            }
+            prof.push((0.0, t * 0.6));
+            prof.retain(|q| q.0 >= 0.0);
+            b.lathe("weave", [c[0], c[1], 0.0], &prof, 1.0, 1.0);
+            for k in [3usize, 5] {
                 let rr = r - coil * (k as f64 + 0.5);
-                if rr < coil * 0.5 {
-                    break;
+                if rr < coil {
+                    continue;
                 }
-                let sides = ((rr * 60.0) as usize).clamp(12, 72);
+                let sides = ((rr * 60.0) as usize).clamp(16, 72);
                 let ring: Vec<P3> = (0..sides)
                     .map(|i| {
                         let a = TAU * i as f64 / sides as f64;
-                        [c[0] + rr * a.cos(), c[1] + rr * a.sin(), coil * 0.35]
+                        [c[0] + rr * a.cos(), c[1] + rr * a.sin(), t * 0.6 + 0.001]
                     })
                     .collect();
-                let role = if k % 6 == 2 { "mat2" } else { "weave" };
-                super::soft::tube(b, role, &ring, true, coil * 0.52, 6);
+                super::soft::tube(b, "mat2", &ring, true, coil * 0.42, 6);
             }
-            b.lathe(
-                "weave",
-                [c[0], c[1], 0.0],
-                &[
-                    (0.0, 0.0),
-                    (coil, 0.0),
-                    (coil, coil * 0.7),
-                    (0.0, coil * 0.7),
-                ],
-                1.0,
-                1.0,
-            );
         }
         // Fifties: a soft-cornered rug with floating ovals and shards.
         3 => {
@@ -631,12 +624,13 @@ pub fn curtain(b: &mut Builder, p: &Params) {
     let y = 0.11;
     let tie = if open > 0.3 { Some(h * 0.42) } else { None };
     match p.style() {
-        // Mediterranean: a voile on rings, a wooden pole, rope tie-backs.
+        // Mediterranean: light linen gathered on rings, a wooden pole, rope
+        // tie-backs.
         2 => {
             rod(b, "frame", -w / 2.0 - 0.2, w / 2.0 + 0.2, y, h, 0.016, 0);
             pair(
                 b,
-                "sheer",
+                "mat",
                 w,
                 open,
                 h - 0.03,
