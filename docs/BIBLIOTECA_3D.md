@@ -288,7 +288,7 @@ Para el programador: las formas nuevas están en `archisim-props::fine::shape` (
 Antonio aprobó la calidad del taller y quiere **toda** la biblioteca así. El inventario, zona por zona y comparado con Paralives, está en el documento «Biblioteca de objetos de ArchiSim: inventario frente a Paralives» (claude.ai). Decisiones de Antonio del 26/10/2026:
 
 1. **Orden por paquetes**, cada uno se enseña en el taller y entra en la biblioteca al aprobarse: 1 salón y comedor, 2 cocina y baño, 3 dormitorio, 4 iluminación, 5 exterior y urbano, 6 plantas, decoración y estudio, 7 comercio, hostelería y oficinas.
-2. **Por colecciones**: cada pieza se modela por colección de estilo (no un modelo vestido con materiales distintos). Propuestas cinco: nórdico cálido, mediterráneo, años 50, japandi y contemporáneo (pendiente de confirmar).
+2. **Por colecciones**: cada pieza se modela por colección de estilo (no un modelo vestido con materiales distintos). Ocho, decididas el 26/10/2026: nórdico cálido, mediterráneo, años 50, japandi (las que ya había), contemporáneo, rústica, industrial y clásica (nuevas). No toda pieza existe en todas. El paquete 1 se entrega en tres tandas: 1a sofás, butacas y pufs (24 modelos, uno por pieza y colección); 1b sillas, taburetes y mesas; 1c almacenaje, alfombras, cortinas y chimeneas.
 3. **Los modelos antiguos se quitan** de la biblioteca al aprobar cada paquete; quedan en las versiones anteriores.
 4. **Comercio, hostelería y oficinas** entran como paquete 7: ArchiSim es para cualquier edificio, no solo viviendas.
 5. **Bloques técnicos al final**: copas de árbol con hojas por textura (A) y luz de la Maqueta (B).
