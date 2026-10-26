@@ -1,0 +1,57 @@
+family "Módulo fregadero (taller)"
+  category kitchen
+  host none
+  version 1
+  description "Módulo bajo con fregadero de acero encastrado (ceja sobre la encimera, seno de esquinas redondeadas, válvula) y grifo de caño alto de una pieza (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.80 range 0.45..1.20 label "Ancho"
+    depth  length = 0.60 range 0.45..0.70 label "Fondo"
+    height length = 0.90 range 0.80..0.95 label "Altura"
+  section "Encimera"
+    overhang length = 0.00 range 0.00..0.45 label "Vuelo delante"
+    overhang_back length = 0.00 range 0.00..0.45 label "Vuelo detrás"
+    upstand length = 0.00 range 0.00..0.20 label "Copete"
+  section "Módulo"
+    doors integer = 2 range 1..2 label "Puertas"
+  section "Frentes"
+    front_style choice("Liso", "Marco", "Ranurado", "Cristal") = "Liso" label "Frente"
+    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
+  section "Materiales"
+    mat material = "Madera de pino" label "Frentes"
+    top material = "Encimera" label "Encimera"
+  section "Modelo 3D"
+    model3d choice("Fregadero de acero") = "Fregadero de acero" label "Modelo 3D"
+    metal material = "Cromado" label "Tiradores"
+    sink material = "Acero inoxidable" label "Fregadero y grifo"
+    dark material = "Negro mate" label "Válvula y aireador"
+
+body
+  box (-width / 2, 0, 0.1) to (width / 2, depth - 0.04, height - 0.03) material mat
+  box (-width / 2, -overhang_back, height - 0.03) to (width / 2, depth + overhang, height) material top
+  if upstand > 0
+    box (-width / 2, -overhang_back, height) to (width / 2, -overhang_back + 0.02, height + upstand) material top
+
+plan 1:50
+  polygon (-width / 2, -overhang_back) (width / 2, -overhang_back) (width / 2, depth + overhang) (-width / 2, depth + overhang) pen view
+  if overhang > 0
+    line (-width / 2, depth) to (width / 2, depth) pen thin dashed
+  if overhang_back > 0
+    line (-width / 2, 0) to (width / 2, 0) pen thin dashed
+  let a = width / 2 - 0.06
+  let b0 = 0.1
+  let b1 = depth - 0.12
+  polygon (-a - 0.012, b0 - 0.012) (a + 0.012, b0 - 0.012) (a + 0.012, b1 + 0.012) (-a - 0.012, b1 + 0.012) pen thin
+  polygon (-a + 0.011, b0 + 0.011) (a - 0.011, b0 + 0.011) (a - 0.011, b1 - 0.011) (-a + 0.011, b1 - 0.011) pen thin
+  arc center (0, (b0 + b1) / 2) from (0.046, (b0 + b1) / 2) to (-0.046, (b0 + b1) / 2) pen thin
+  arc center (0, (b0 + b1) / 2) from (-0.046, (b0 + b1) / 2) to (0.046, (b0 + b1) / 2) pen thin
+
+outputs
+  # Placed beside another module, in line: flush, so their worktops meet
+  # (each keeps its own drawers, doors and front).
+  joins = "row"
+  generator = "props:fine_sink_unit"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

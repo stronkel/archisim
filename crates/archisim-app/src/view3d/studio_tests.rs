@@ -116,10 +116,27 @@ fn workshop_pictures() {
     let m = archisim_library::workshop::project().unwrap();
     let size = [1100u32, 760u32];
     let aspect = size[0] as f32 / size[1] as f32;
+    // `ARCHISIM_TALLER_SOLO=pilea`: only the pieces whose name has it.
+    let solo = std::env::var("ARCHISIM_TALLER_SOLO")
+        .ok()
+        .map(|s| s.to_lowercase());
     for (i, piece) in archisim_library::workshop::PIECES.iter().enumerate() {
+        if solo
+            .as_ref()
+            .is_some_and(|s| !piece.name.to_lowercase().contains(s.as_str()))
+        {
+            continue;
+        }
         let new = m.object_types().find(|t| t.name == piece.name).unwrap().id;
         let one = only(&m, &[new]);
         let n = i + 1;
+        // A tall piece (a lamp post) from a little further, to see it all.
+        let (_, tall) = piece_size(&m, new);
+        let back = if tall > 2.0 * piece_width(&m, new) {
+            0.8
+        } else {
+            1.0
+        };
         // The new piece from three sides and close up.
         for (name, yaw, pitch, zoom) in [
             ("tres-cuartos", -62.0, 22.0, 1.0),
@@ -132,13 +149,15 @@ fn workshop_pictures() {
                 &gpu,
                 &one,
                 |lo, hi| {
-                    let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
+                    let mut c = camera(lo, hi, aspect, yaw, pitch, zoom * back);
                     if zoom > 1.0 {
-                        // Close to the end of the seat and its cushion.
+                        // Close to one end and the upper part: a sofa's
+                        // seat and cushion, a plant's leaves, a tap.
+                        let (fx, fz) = detail_of(piece.family);
                         c.target = glam::Vec3::new(
-                            lo.x + (hi.x - lo.x) * 0.25,
+                            lo.x + (hi.x - lo.x) * fx,
                             (lo.y + hi.y) / 2.0,
-                            lo.z + (hi.z - lo.z) * 0.55,
+                            lo.z + (hi.z - lo.z) * fz,
                         );
                     }
                     c
@@ -154,13 +173,17 @@ fn workshop_pictures() {
             let half = [size[0] / 2, size[1]];
             let a = half[0] as f32 / half[1] as f32;
             let width = piece_width(&m, new).max(piece_width(&m, old));
+            let (depth, height) = {
+                let (a, b) = (piece_size(&m, new), piece_size(&m, old));
+                (a.0.max(b.0), a.1.max(b.1))
+            };
             // Each one framed on the same box round it: same size for both.
             let shot = |t: archisim_core::ObjectTypeId| {
                 let o = both.objects().find(|o| o.object_type == t).unwrap();
                 let (x, y) = (o.position.x as f32, o.position.y as f32);
                 (
-                    glam::Vec3::new(x - width / 2.0, y - 1.0, 0.0),
-                    glam::Vec3::new(x + width / 2.0, y, 0.9),
+                    glam::Vec3::new(x - width / 2.0, y - depth, 0.0),
+                    glam::Vec3::new(x + width / 2.0, y, height),
                 )
             };
             let before = {
@@ -190,7 +213,50 @@ fn workshop_pictures() {
     }
 }
 
+/// Where the close-up looks, as shares of the piece's width and height.
+fn detail_of(family: &str) -> (f32, f32) {
+    if family.starts_with("Planta") {
+        (0.55, 0.75)
+    } else if family.starts_with("Módulo") {
+        (0.5, 0.92)
+    } else if family.starts_with("Farola") {
+        (0.5, 0.88)
+    } else {
+        (0.25, 0.55)
+    }
+}
+
+/// Depth and height of a type's model (of its 3D, leaves and all).
+fn piece_size(m: &Model, t: archisim_core::ObjectTypeId) -> (f32, f32) {
+    let positions = if m.type_grows(t) {
+        let Some(o) = m.objects().find(|o| o.object_type == t) else {
+            return (1.0, 0.9);
+        };
+        match m.plant_mesh(o.id, archisim_core::flora::Lod::Low) {
+            Some((mesh, _)) => mesh.positions.clone(),
+            None => return (1.0, 0.9),
+        }
+    } else {
+        match m.type_prop(t) {
+            Some((mesh, _)) => mesh.positions.clone(),
+            None => return (1.0, 0.9),
+        }
+    };
+    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for p in &positions {
+        for k in 0..3 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    }
+    ((hi[1] - lo[1]).max(0.2), hi[2].max(0.2))
+}
+
 fn piece_width(m: &Model, t: archisim_core::ObjectTypeId) -> f32 {
+    if m.type_grows(t) {
+        // A plant: as wide as it is deep.
+        return piece_size(m, t).0;
+    }
     m.object_type_box(t)
         .map_or(1.0, |b| (b.1[0] - b.0[0]) as f32)
 }

@@ -2182,6 +2182,14 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Aceite", "other", [196, 170, 60]),
     ("Lavanda", "vegetation", [150, 120, 190]),
     ("Lacado salvia", "wood", [164, 180, 150]),
+    // The workshop's (M1): plants, a sink and its tap, a lamp post.
+    ("Hoja verde tierna", "vegetation", [122, 166, 84]),
+    ("Tallo verde", "vegetation", [104, 140, 76]),
+    ("Pétalo blanco", "other", [244, 242, 232]),
+    ("Espádice", "other", [232, 214, 152]),
+    ("Acero inoxidable", "metal", [192, 194, 194]),
+    ("Fundición", "metal", [50, 54, 56]),
+    ("Cristal esmerilado", "other", [250, 234, 196]),
 ];
 
 /// A material of the cosy palette, added to the project if it has none of

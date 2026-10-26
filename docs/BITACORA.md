@@ -6,6 +6,37 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (3) · M1, segunda entrega del taller: planta, fregadero y farola
+
+Rama `bloque/taller-2`, encima de `main` (v0.69), con pull request para Antonio. Sin cambios de formato (la familia Vegetación no cambia) y sin versión nueva: es el taller, no entra nada en la biblioteca.
+
+Pedido por Antonio el 26/10/2026 con ocho capturas, cuatro nuestras y sus contrapartidas de Paralives: «las hojas son planos estáticos antinaturales, los cojines no se recuestan sobre los respaldos, el fregadero son unos tubos extruidos que ni se tocan, en la farola hay elementos al aire… quiero que sean visualmente preciosos». Pidió también decompilar la biblioteca de Paralives para remodelarla: no se hace (sus modelos son de su estudio y su licencia no lo permite; principio de sala limpia), así que los modelos se hacen desde cero con el mismo cuidado.
+
+**Hecho**
+- **Planta de interior (taller)**, dos modelos: **espatifilo** en maceta esmaltada (hojas lanceoladas con nervio, venas, pliegue en V, punta caída y giro; peciolos que salen de la tierra y siguen como nervio de la hoja; dos flores blancas) y **pilea** en maceta de barro con plato (hojas redondas sujetas por debajo en peciolos largos). Maceta con grueso, borde y cara interior; tierra con terrones.
+- **Módulo fregadero (taller)**: el módulo de la biblioteca con fregadero de acero encastrado (ceja sobre la encimera, seno de esquinas redondeadas, fondo hacia la válvula, cestillo) y **grifo de caño alto de una pieza** con la maneta naciendo del cuerpo. El mueble ya no se rebaja bajo el seno.
+- **Farola de fundición (taller)**: basa ochavada, un solo torneado de la basa al capitel, cruceta, volutas bajo la bandeja y farol de cuatro caras con montantes, cristales con junquillo, bandas, tejadillo curvo y remate. Nada al aire. Se enciende de noche.
+- Formas nuevas para todo el taller (`fine::shape`): tubos por curvas suaves, torneados de n lados, placas, cáscaras por rectángulos redondeados y hojas con grueso.
+- La prueba del taller vigila un máximo de triángulos por pieza: planta ≤ 17.000 (espatifilo 16.600, pilea 14.650; las de la biblioteca, 1.600), fregadero ≤ 14.000 (5.500; antes 3.000), farola ≤ 12.000 (5.700; antes 1.200). Un sofá tiene 18.500.
+- Fotos de estudio: encuadre por el tamaño real del modelo y `ARCHISIM_TALLER_SOLO` para hacer solo unas.
+- **Cojines**: lo que pedías ya está en el sofá del taller de la entrega anterior (cojines de respaldo recostados, cojines sueltos apoyados y girados), pendiente de tu visto bueno.
+- **Árbol**: probado y descartado por ahora (ramilletes de hojas sueltas: de lejos mejora, de cerca sigue facetado y pesa el triple). Lo que hace bonitos los árboles de Paralives son hojas pintadas en una textura con transparencia; queda propuesto como bloque propio.
+
+**Pendiente**
+- Lo que diga Antonio de las tres piezas: proporciones, colores, si las plantas y la farola están a la altura.
+- Bloque propuesto: copas de árbol con hojas recortadas por textura (vista 3D, render y `.glb`).
+- Bloque propuesto: la luz de la Maqueta (la calidez y la penumbra de los rincones que se ve en Paralives; hoy la penumbra solo sale en calidad «Bonita»).
+- Cuando haya paquete aprobado: sustituir en la biblioteca la planta de interior, el bajo fregadero y la farola fernandina.
+
+**Qué debe probar Antonio**
+1. Mira las fotos del chat (antes y después de cada pieza, con la misma cámara).
+2. `cargo run --release -p archisim-cli -- taller out/taller` y abre `out/taller/taller.archisim`. En la Maqueta (Tab), gira alrededor de cada pieza nueva (delante) y la de la biblioteca (detrás). Pon la luz en Noche y mira la farola.
+3. Selecciona la planta y cambia en Propiedades el «Modelo 3D» entre Espatifilo y Pilea, la altura y el diámetro de la maceta.
+4. Selecciona el fregadero y cambia el ancho (0,60 – 1,20), las puertas y el tirador.
+5. Abre `out/taller/taller.ifc` en ArchiCAD o Revit: las piezas nuevas deben verse con su forma, como mobiliario.
+
+---
+
 ## 2026-10-26 (2) · Todo unido en `main` (v0.69)
 
 Antonio dio el visto bueno el 26/10/2026: unidas en `main` todas las ramas pendientes, en orden: F1 (#66), C2 (#67), A1 (#68), C3 (#69), C4 (#70), C5 (#71), C6 (#72), C7 (#73), C8 (#75), el taller de modelos M1 (#74) y los árboles en línea T2 (#65). T2 se había numerado también v0.61; entra sin cambiar el número de versión, que queda en 0.69. Los conflictos eran solo de documentación (bitácora, hoja de ruta, CLAUDE.md) y de número de versión.

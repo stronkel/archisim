@@ -2641,7 +2641,7 @@ pub fn glow_materials(
     let (keys, reach): (&[&str], f64) = match kind.as_str() {
         "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
         "fireplace" => (&["flame"], LAMP_REACH),
-        "streetlight" => (&["light"], STREET_REACH),
+        "streetlight" | "fine_streetlight" => (&["light"], STREET_REACH),
         _ => return none,
     };
     let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {

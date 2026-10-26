@@ -1,0 +1,41 @@
+family "Planta de interior (taller)"
+  category furniture
+  host none
+  version 1
+  description "Planta en su maceta con hojas de verdad: nervio, venas, caída y tallos que se unen a la hoja (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    height length = 0.75 range 0.30..2.00 label "Altura"
+    pot    length = 0.30 range 0.12..0.80 label "Diámetro de la maceta"
+  section "Materiales"
+    pot_mat material = "Cerámica esmaltada" label "Maceta"
+    leaves  material = "Hoja verde" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas nuevas"
+    stem    material = "Tallo verde" label "Tallos"
+    flowers material = "Pétalo blanco" label "Flores"
+    spadix  material = "Espádice" label "Espiga de la flor"
+    soil    material = "Tierra" label "Tierra"
+  section "Modelo 3D"
+    model3d choice("Espatifilo", "Pilea") = "Espatifilo" label "Modelo 3D"
+
+body
+  box (-pot / 2, 0, 0) to (pot / 2, pot, height) material leaves
+
+plan 1:50
+  let r = pot / 2
+  let c = max(height * 0.4, r)
+  repeat i in 0..16
+    let t0 = 6.283185307 * i / 16
+    let t1 = 6.283185307 * (i + 1) / 16
+    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
+    line (c * cos(t0), r + c * sin(t0)) to (c * cos(t1), r + c * sin(t1)) pen thin
+
+plan presentation
+  cloud center (0, pot / 2) radius max(height * 0.4, pot / 2) lobes 9 jitter 0.2 pen thin tint leaves
+
+outputs
+  generator = "props:fine_plant"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

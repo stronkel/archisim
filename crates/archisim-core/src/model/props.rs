@@ -55,6 +55,10 @@ fn candidates(role: &str) -> &'static [&'static str] {
         // People (C1): face and hands, hair.
         "skin" => &["skin"],
         "hair" => &["hair"],
+        // The workshop's sink and tap (M1).
+        "sink" => &["sink", "metal"],
+        "spadix" => &["spadix", "flowers"],
+        "leaves2" => &["leaves2", "leaves"],
         _ => &[],
     }
 }

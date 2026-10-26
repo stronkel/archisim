@@ -8,6 +8,10 @@
 //! edges, scatter cushions with their seam and pointed corners, and turned
 //! wooden legs that splay a little.
 
+pub mod lamp;
+pub mod plant;
+pub mod shape;
+pub mod sink;
 pub mod soft;
 
 use crate::build::{Builder, P3};
@@ -15,12 +19,20 @@ use crate::Params;
 use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
-pub const KINDS: &[(&str, &[&str])] = &[("fine_sofa", &["Contemporáneo de patas"])];
+pub const KINDS: &[(&str, &[&str])] = &[
+    ("fine_sofa", &["Contemporáneo de patas"]),
+    ("fine_plant", &["Espatifilo", "Pilea"]),
+    ("fine_sink_unit", &["Fregadero de acero"]),
+    ("fine_streetlight", &["Columna de fundición"]),
+];
 
 /// Makes a workshop model, if `kind` is one.
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
         "fine_sofa" => sofa(b, p),
+        "fine_plant" => plant::potted_plant(b, p),
+        "fine_sink_unit" => sink::sink_unit(b, p),
+        "fine_streetlight" => lamp::streetlight(b, p),
         _ => return false,
     }
     true

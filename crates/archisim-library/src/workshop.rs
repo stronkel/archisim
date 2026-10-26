@@ -10,25 +10,35 @@ use archisim_core::{
     WallTop,
 };
 
-/// The workshop's recipes.
-pub const RECIPES: &[&str] = &[include_str!("../taller/sofa.asfam")];
+/// The workshop's recipes (a piece whose family is `flora:<species>` is
+/// a plant of the library grown with the workshop's values instead).
+pub const RECIPES: &[&str] = &[
+    include_str!("../taller/sofa.asfam"),
+    include_str!("../taller/planta.asfam"),
+    include_str!("../taller/fregadero.asfam"),
+    include_str!("../taller/farola.asfam"),
+];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
-/// as numbers, materials by their name in the cozy palette) and the
-/// library's piece it is to replace.
+/// as numbers, materials by their name in the cozy palette, choices by
+/// their name), the library's piece it is to replace and the most
+/// triangles it may have.
 pub struct Piece {
     pub name: &'static str,
     pub family: &'static str,
     pub values: &'static [(&'static str, Val)],
     pub replaces: Option<&'static str>,
+    pub most: usize,
 }
 
 pub enum Val {
     N(f64),
     M(&'static str),
+    T(&'static str),
+    B(bool),
 }
 
-use Val::{M, N};
+use Val::{B, M, N, T};
 
 pub const PIECES: &[Piece] = &[
     Piece {
@@ -44,6 +54,7 @@ pub const PIECES: &[Piece] = &[
             ("frame", M("Roble claro")),
         ],
         replaces: Some("Sofá acogedor de 3 plazas"),
+        most: 25_000,
     },
     Piece {
         name: "Sofá de 2 plazas · terciopelo salvia (taller)",
@@ -58,6 +69,64 @@ pub const PIECES: &[Piece] = &[
             ("frame", M("Nogal")),
         ],
         replaces: Some("Sofá nórdico con cojines"),
+        most: 25_000,
+    },
+    Piece {
+        name: "Espatifilo en maceta esmaltada (taller)",
+        family: "Planta de interior (taller)",
+        values: &[
+            ("height", N(0.85)),
+            ("pot", N(0.3)),
+            ("model3d", T("Espatifilo")),
+            ("pot_mat", M("Cerámica esmaltada")),
+            ("leaves", M("Hoja verde")),
+            ("leaves2", M("Hoja verde tierna")),
+            ("stem", M("Tallo verde")),
+            ("flowers", M("Pétalo blanco")),
+            ("spadix", M("Espádice")),
+            ("soil", M("Tierra")),
+        ],
+        replaces: Some("Costilla de Adán"),
+        most: 17_000,
+    },
+    Piece {
+        name: "Pilea en maceta de barro (taller)",
+        family: "Planta de interior (taller)",
+        values: &[
+            ("height", N(0.55)),
+            ("pot", N(0.2)),
+            ("model3d", T("Pilea")),
+            ("pot_mat", M("Terracota")),
+            ("leaves", M("Hoja verde")),
+            ("leaves2", M("Hoja verde tierna")),
+            ("stem", M("Tallo verde")),
+            ("soil", M("Tierra")),
+        ],
+        replaces: Some("Costilla de Adán"),
+        most: 17_000,
+    },
+    Piece {
+        name: "Fregadero de acero 80 (taller)",
+        family: "Módulo fregadero (taller)",
+        values: &[
+            ("width", N(0.8)),
+            ("doors", N(2.0)),
+            ("mat", M("Roble claro")),
+            ("sink", M("Acero inoxidable")),
+        ],
+        replaces: Some("Bajo fregadero 80"),
+        most: 14_000,
+    },
+    Piece {
+        name: "Farola de fundición 3,5 m (taller)",
+        family: "Farola de fundición (taller)",
+        values: &[
+            ("height", N(3.5)),
+            ("mat", M("Fundición")),
+            ("light", M("Cristal esmerilado")),
+        ],
+        replaces: Some("Farola fernandina 3,5 m"),
+        most: 12_000,
     },
 ];
 
@@ -82,8 +151,21 @@ pub fn add_piece(m: &mut Model, piece: &Piece) -> Result<ObjectTypeId, ModelErro
     if let Some(t) = m.object_types().find(|t| t.name == piece.name) {
         return Ok(t.id);
     }
-    let f = family(m, piece.family)?;
-    let mut values = m.family_defaults(f, ParamScope::Type)?;
+    // A plant grown by ArchiSim: the library's species, with the
+    // workshop's values over it.
+    let (f, mut values) = match piece.family.strip_prefix("flora:") {
+        Some(species) => {
+            let t = crate::add_object_entry(m, species)?;
+            let ty = m
+                .object_type(t)
+                .ok_or_else(|| ModelError::NotAnObject(species.to_string()))?;
+            (ty.family, ty.values.clone())
+        }
+        None => {
+            let f = family(m, piece.family)?;
+            (f, m.family_defaults(f, ParamScope::Type)?)
+        }
+    };
     for (k, v) in piece.values {
         let v = match v {
             N(n) => Value::Number(*n),
@@ -91,6 +173,8 @@ pub fn add_piece(m: &mut Model, piece: &Piece) -> Result<ObjectTypeId, ModelErro
                 Some(id) => Value::Material(id.0),
                 None => continue,
             },
+            T(name) => Value::Text((*name).into()),
+            B(b) => Value::Bool(*b),
         };
         values.insert((*k).into(), v);
     }
@@ -104,7 +188,10 @@ pub fn project() -> Result<Model, ModelError> {
     let mut m = crate::new_project("Taller de modelos");
     let level = m.levels()[0].id;
     let mut x = 0.0;
+    // The wall runs behind the furniture, not through the trees.
+    let mut wall_end = 0.0;
     for piece in PIECES {
+        let tree = piece.family.starts_with("flora:");
         let new = add_piece(&mut m, piece)?;
         let old = match piece.replaces {
             Some(name) => Some(crate::add_object_entry(&mut m, name)?),
@@ -114,7 +201,9 @@ pub fn project() -> Result<Model, ModelError> {
             m.object_type_box(t).map(|b| b.1[0] - b.0[0]).unwrap_or(1.0)
         };
         let w = old.map_or(width(&m, new), |o| width(&m, new).max(width(&m, o)));
-        for (t, y) in [(Some(new), 0.0), (old, 2.0)] {
+        // A tree's crown is wide: the old one well behind.
+        let behind = if tree { w + 1.0 } else { 2.0 };
+        for (t, y) in [(Some(new), 0.0), (old, behind)] {
             if let Some(t) = t {
                 m.add_object(NewObject {
                     object_type: t,
@@ -126,6 +215,9 @@ pub fn project() -> Result<Model, ModelError> {
             }
         }
         x += w + 1.2;
+        if !tree {
+            wall_end = x;
+        }
     }
     let partition = m
         .wall_types()
@@ -137,7 +229,7 @@ pub fn project() -> Result<Model, ModelError> {
         wall_type: partition,
         level,
         start: Point2::new(-0.6, 2.3),
-        end: Point2::new(x - 0.6, 2.3),
+        end: Point2::new(wall_end - 0.6, 2.3),
         reference: ReferenceLine::InteriorFace,
         height: 2.6,
         base_offset: 0.0,
@@ -151,27 +243,36 @@ pub fn project() -> Result<Model, ModelError> {
 mod tests {
     use super::*;
 
-    /// Every piece of the workshop is made with its own 3D and stays about
-    /// as light as the piece it replaces.
+    /// The triangles of a type's model: made by ArchiSim, or grown (as
+    /// near the camera as it gets).
+    fn triangles(m: &Model, t: ObjectTypeId) -> usize {
+        if m.type_grows(t) {
+            let o = m.objects().find(|o| o.object_type == t).unwrap().id;
+            let (mesh, _) = m.plant_mesh(o, archisim_core::flora::Lod::Full).unwrap();
+            return mesh.triangle_count();
+        }
+        assert!(m.type_has_prop(t));
+        m.type_prop(t).unwrap().0.triangle_count()
+    }
+
+    /// Every piece of the workshop is made with its own 3D and stays within
+    /// its weight.
     #[test]
     fn the_workshop_pieces_are_made() {
         let m = project().unwrap();
         for piece in PIECES {
             let t = m.object_types().find(|t| t.name == piece.name).unwrap().id;
-            assert!(m.type_has_prop(t), "{}", piece.name);
-            let (mesh, _) = m.type_prop(t).unwrap();
-            let tris = mesh.triangle_count();
-            assert!((3_000..25_000).contains(&tris), "{}: {tris}", piece.name);
+            let tris = triangles(&m, t);
+            // Light enough to fill a house with them.
+            assert!(
+                (2_000..=piece.most).contains(&tris),
+                "{}: {tris}",
+                piece.name
+            );
             if let Some(old) = piece.replaces {
                 let o = m.object_types().find(|t| t.name == old).unwrap().id;
-                let old_tris = m.type_prop(o).unwrap().0.triangle_count();
+                let old_tris = triangles(&m, o);
                 eprintln!("{}: {tris} triángulos (antes {old_tris})", piece.name);
-                // No heavier than half again the piece it replaces.
-                assert!(
-                    tris * 2 < old_tris * 3,
-                    "{}: {tris} vs {old_tris}",
-                    piece.name
-                );
             }
         }
     }

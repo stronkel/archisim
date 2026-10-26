@@ -1,0 +1,41 @@
+family "Farola de fundición (taller)"
+  category street
+  host none
+  version 1
+  description "Farola de columna de fundición con farol de cuatro caras: basa, fuste, capitel, cruceta, volutas y farol con tejadillo y remate, todo unido (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    height length = 3.50 range 2.20..6.00 label "Altura"
+    pole   length = 0.14 range 0.08..0.30 label "Diámetro del fuste"
+    lamp   length = 0.42 range 0.25..0.80 label "Ancho del farol"
+  section "Materiales"
+    mat   material = "Fundición" label "Fundición"
+    light material = "Cristal esmerilado" label "Cristales"
+  section "Presentación"
+    glow length = 4.00 range 0.00..20.00 label "Radio del círculo de luz"
+  section "Modelo 3D"
+    model3d choice("Columna de fundición") = "Columna de fundición" label "Modelo 3D"
+
+body
+  box (-0.185, -0.185, 0) to (0.185, 0.185, 0.07) material mat
+  box (-pole / 2, -pole / 2, 0) to (pole / 2, pole / 2, height - lamp * 2) material mat
+  box (-lamp / 2, -lamp / 2, height - lamp * 2) to (lamp / 2, lamp / 2, height) material light
+
+plan 1:50
+  repeat i in 0..8
+    let t0 = 6.283185307 * (i + 0.5) / 8
+    let t1 = 6.283185307 * (i + 1.5) / 8
+    line (0.185 * cos(t0), 0.185 * sin(t0)) to (0.185 * cos(t1), 0.185 * sin(t1)) pen view
+  polygon (-lamp / 2, -lamp / 2) (lamp / 2, -lamp / 2) (lamp / 2, lamp / 2) (-lamp / 2, lamp / 2) pen thin dashed
+
+plan presentation
+  if glow > 0
+    cloud center (0, 0) radius glow lobes 24 jitter 0 pen thin tint light opacity 0.22
+  polygon (-lamp / 2, -lamp / 2) (lamp / 2, -lamp / 2) (lamp / 2, lamp / 2) (-lamp / 2, lamp / 2) pen thin tint mat
+
+outputs
+  generator = "props:fine_streetlight"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

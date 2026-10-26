@@ -167,7 +167,7 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
     );
     let sink = unit == 3;
     let hole = sink_hole(w, d);
-    if sink && hole.is_some() {
+    if sink && hole.is_some() && !p.flag("fine_sink", false) {
         // Lower under the basin, so it is seen.
         b.rbox("mat", [x0, 0.0, 0.1], [x1, face, h - 0.21], 0.0);
     } else {
@@ -295,7 +295,10 @@ pub fn base_unit(b: &mut Builder, p: &Params) {
     if up > 1e-3 {
         b.rbox("top", [x0, -back, h], [x1, -back + UPSTAND, h + up], 0.0);
     }
-    if let (true, Some(([sx0, sy0], [sx1, sy1]))) = (sink, hole) {
+    if sink && p.flag("fine_sink", false) {
+        // The workshop's sink module makes its own worktop, basin and tap
+        // (`fine::sink`).
+    } else if let (true, Some(([sx0, sy0], [sx1, sy1]))) = (sink, hole) {
         b.framed_top("top", tlo, thi, [sx0, sy0], [sx1, sy1]);
         b.hollow("metal", [sx0, sy0, h - 0.2], [sx1, sy1, h], 0.03);
         tap(b, (sx0 + sx1) / 2.0, 0.05, h, 0.16);
