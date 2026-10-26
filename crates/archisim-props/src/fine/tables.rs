@@ -685,19 +685,6 @@ pub fn side(b: &mut Builder, p: &Params) {
                 [c[0] + t / 2.0, c[1] + a, h - 0.024],
                 0.003,
             );
-            // A low ring tying the boards, in dark wood.
-            for (q0, q1) in [
-                ([c[0] - a, c[1] - a], [c[0] + a, c[1] - a + 0.016]),
-                ([c[0] - a, c[1] + a - 0.016], [c[0] + a, c[1] + a]),
-            ] {
-                b.rbox("dark", [q0[0], q0[1], 0.06], [q1[0], q1[1], 0.076], 0.002);
-            }
-            for (q0, q1) in [
-                ([c[0] - a, c[1] - a], [c[0] - a + 0.016, c[1] + a]),
-                ([c[0] + a - 0.016, c[1] - a], [c[0] + a, c[1] + a]),
-            ] {
-                b.rbox("dark", [q0[0], q0[1], 0.06], [q1[0], q1[1], 0.076], 0.002);
-            }
         }
         // Contemporary: a sheet of steel folded into a C.
         5 => {
@@ -720,8 +707,8 @@ pub fn side(b: &mut Builder, p: &Params) {
                 [
                     [x0, 0.0, t / 2.0],
                     [x1, 0.0, t / 2.0],
-                    [x1, w, t / 2.0],
-                    [x0, w, t / 2.0],
+                    [x1, w * 0.78, t / 2.0],
+                    [x0, w * 0.78, t / 2.0],
                 ],
                 t,
             );
@@ -739,6 +726,27 @@ pub fn side(b: &mut Builder, p: &Params) {
             // The folds, rounded.
             for z in [t / 2.0, h - t / 2.0] {
                 rod(b, "metal", [x0, t / 2.0, z], [x1, t / 2.0, z], t * 0.7);
+            }
+            // A board laid into the top, its edge set back from the steel.
+            b.rbox(
+                "top",
+                [x0 + 0.012, 0.012, h],
+                [x1 - 0.012, w - 0.012, h + 0.014],
+                0.004,
+            );
+            // Felt pads under the base.
+            for q in [
+                [x0 + 0.03, 0.03],
+                [x1 - 0.03, 0.03],
+                [x0 + 0.03, w * 0.74],
+                [x1 - 0.03, w * 0.74],
+            ] {
+                b.rbox(
+                    "dark",
+                    [q[0] - 0.01, q[1] - 0.01, -0.004],
+                    [q[0] + 0.01, q[1] + 0.01, 0.0],
+                    0.0,
+                );
             }
         }
         // Rustic: a slice of trunk with its bark ring and a top.

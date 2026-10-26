@@ -2194,6 +2194,7 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     // and classic.
     ("Tela gris", "fabric", [150, 150, 148]),
     ("Pino viejo", "wood", [178, 132, 84]),
+    ("Corteza de pino", "wood", [104, 80, 58]),
     ("Lino crudo", "fabric", [222, 208, 184]),
     ("Cuero coñac", "other", [146, 84, 48]),
     ("Terciopelo verde botella", "fabric", [44, 82, 64]),

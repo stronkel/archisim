@@ -994,7 +994,7 @@ pub const PIECES: &[Piece] = &[
         family: "Mesa auxiliar (taller)",
         values: &[
             ("model3d", T("Contemporáneo")),
-            ("top", M("Microcemento")),
+            ("top", M("Roble claro")),
             ("frame", M("Roble claro")),
             ("metal", M("Metal negro")),
             ("stone", M("Mármol")),
@@ -1009,7 +1009,7 @@ pub const PIECES: &[Piece] = &[
         values: &[
             ("model3d", T("Rústica")),
             ("top", M("Pino viejo")),
-            ("frame", M("Corteza")),
+            ("frame", M("Corteza de pino")),
             ("metal", M("Hierro forjado")),
             ("stone", M("Piedra gris")),
             ("ceramic", M("Terracota")),
@@ -1216,6 +1216,21 @@ pub fn project() -> Result<Model, ModelError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_material_of_a_piece_is_in_the_palette() {
+        for piece in PIECES {
+            for (k, v) in piece.values {
+                if let M(name) = v {
+                    assert!(
+                        crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                        "{}: {k} = {name}",
+                        piece.name
+                    );
+                }
+            }
+        }
+    }
 
     /// The triangles of a type's model: made by ArchiSim, or grown (as
     /// near the camera as it gets).
