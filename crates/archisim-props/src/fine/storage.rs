@@ -671,22 +671,29 @@ fn plate_up(b: &mut Builder, x: f64, y: f64, z: f64, r: f64) {
 
 /// Things on the glass shelves of a cabinet: vases, bowls, plates.
 fn display(b: &mut Builder, rng: &mut Rng, x0: f64, x1: f64, d: f64, z: f64, room: f64) {
-    let mut x = x0 + 0.06;
-    while x < x1 - 0.06 {
+    let mut x = x0 + 0.03;
+    loop {
         let k = rng.next();
-        if k < 0.35 {
+        // How wide the next thing is; it must fit before the side.
+        let (w, kind) = if k < 0.35 {
             let h = (room * rng.range(0.55, 0.85)).min(0.3);
-            vase(b, x + h * 0.25, d * 0.5, z, h);
-            x += h * 0.6 + 0.05;
+            (h * 0.6, (0, h))
         } else if k < 0.65 {
             let r = (room * 0.42).min(0.12);
-            plate_up(b, x + r, d * 0.25, z, r);
-            x += 2.0 * r + 0.04;
+            (2.0 * r, (1, r))
         } else {
             let w = (room * 0.5).min(0.16);
-            bowl(b, x + w / 2.0, d * 0.5, z, w);
-            x += w + 0.05;
+            (w, (2, w))
+        };
+        if x + w > x1 - 0.03 {
+            break;
         }
+        match kind {
+            (0, h) => vase(b, x + w / 2.0, d * 0.5, z, h),
+            (1, r) => plate_up(b, x + r, d * 0.25, z, r),
+            (_, w) => bowl(b, x + w / 2.0, d * 0.5, z, w),
+        }
+        x += w + rng.range(0.03, 0.07);
     }
 }
 
@@ -860,15 +867,53 @@ fn arch(
     band: f64,
     top: f64,
 ) {
-    // The spandrels: the board above the arch, cut round it.
+    // The spandrels: the board above the arch, cut round it, each a fan
+    // of triangles from its top corner (the arch's tangents are the side
+    // and the top, so every point of it is seen from there).
     let r = (x1 - x0) / 2.0;
     let cx = (x0 + x1) / 2.0;
-    let n = 16;
-    for k in 0..n {
-        let (a0, a1) = (PI * k as f64 / n as f64, PI * (k + 1) as f64 / n as f64);
-        let (xa, xb) = (cx - r * a0.cos(), cx - r * a1.cos());
-        let za = z + r * a0.sin().min(a1.sin());
-        b.rbox(role, [xa.min(xb), d - band, za], [xa.max(xb), d, top], 0.0);
+    let n = 24;
+    let (yf, yb) = (d, d - band);
+    let tri = |b: &mut Builder, p: [[f64; 2]; 3], y: f64, out: f64| {
+        let [a, c, e] = p;
+        // Its normal along y: (c - a) × (e - a).
+        let ny = (c[1] - a[1]) * (e[0] - a[0]) - (c[0] - a[0]) * (e[1] - a[1]);
+        let (c, e) = if ny * out >= 0.0 { (c, e) } else { (e, c) };
+        let ia = b.point([a[0], y, a[1]]);
+        let ic = b.point([c[0], y, c[1]]);
+        let ie = b.point([e[0], y, e[1]]);
+        b.tri(role, ia, ic, ie);
+    };
+    for side in [-1.0f64, 1.0] {
+        let corner = [cx + side * r, top];
+        let arc: Vec<[f64; 2]> = (0..=n)
+            .map(|k| {
+                let a = PI / 2.0 * k as f64 / n as f64;
+                [cx + side * r * a.cos(), z + r * a.sin()]
+            })
+            .collect();
+        for k in 0..n {
+            let (p, q) = (arc[k], arc[k + 1]);
+            tri(b, [corner, p, q], yf, 1.0);
+            tri(b, [corner, p, q], yb, -1.0);
+            // The soffit of the arch between the faces, looking in.
+            let m = [(p[0] + q[0]) / 2.0, (p[1] + q[1]) / 2.0];
+            let inward = [cx - m[0], z - m[1]];
+            let ids = [
+                b.point([p[0], yf, p[1]]),
+                b.point([q[0], yf, q[1]]),
+                b.point([q[0], yb, q[1]]),
+                b.point([p[0], yb, p[1]]),
+            ];
+            // (q - p) × (0, -1, 0) looks to (−dz, 0, dx)·…: check the side.
+            let (dx, dz) = (q[0] - p[0], q[1] - p[1]);
+            let normal = [dz, -dx];
+            if normal[0] * inward[0] + normal[1] * inward[1] >= 0.0 {
+                b.quad(role, ids[0], ids[1], ids[2], ids[3]);
+            } else {
+                b.quad(role, ids[3], ids[2], ids[1], ids[0]);
+            }
+        }
     }
 }
 

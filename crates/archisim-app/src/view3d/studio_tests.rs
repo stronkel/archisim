@@ -132,7 +132,7 @@ fn workshop_pictures() {
         let n = i + 1;
         // A tall piece (a lamp post) from a little further, to see it all.
         let (_, tall) = piece_size(&m, new);
-        let back = if tall > 2.0 * piece_width(&m, new) {
+        let back = if tall > 1.4 * piece_width(&m, new) {
             0.8
         } else {
             1.0
