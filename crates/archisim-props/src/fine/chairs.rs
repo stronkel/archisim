@@ -364,13 +364,22 @@ pub fn chair(b: &mut Builder, p: &Params) {
                 0.01,
             );
             wrap(b, start, [0.0, r0 + 0.02], r0, 10.0, seat, 0.0);
-            for x in [x0 + 0.02, -x0 - 0.02] {
+            // Two straps from the seat up to the back, where its curve
+            // has brought the sheet forward.
+            for side in [-1.0, 1.0] {
+                let a = (w * 0.5 - 0.035) / r0;
+                let (x, y) = (side * r0 * a.sin(), r0 + 0.02 - r0 * a.cos());
+                let start = b.mark();
                 b.rbox(
                     "metal",
-                    [x - 0.015, 0.03, seat - 0.01],
-                    [x + 0.015, 0.05, seat + 0.1],
+                    [-0.015, 0.002, seat - 0.01],
+                    [0.015, 0.016, seat + 0.1],
                     0.004,
                 );
+                let (sa, ca) = (side * a).sin_cos();
+                b.transform_from(start, |q| {
+                    [x + q[0] * ca - q[1] * sa, y + q[0] * sa + q[1] * ca, q[2]]
+                });
             }
         }
         // Classic: Louis XVI — turned tapered legs, a piped upholstered

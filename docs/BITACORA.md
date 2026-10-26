@@ -15,6 +15,7 @@ Antonio, al ver la tanda 1a: «me parece muy bueno hasta ahora». Decidió adem�
 **Hecho**
 - Ocho **sillas**, ocho **taburetes** y 24 **mesas** (comedor, centro y auxiliar), una por colección (detalle en `docs/BIBLIOTECA_3D.md`, «Tanda 1b»).
 - Prueba nueva: los materiales de cada pieza del taller existen en la paleta.
+- Correcciones tras la primera revisión de Antonio en 3D: el cojín de las butacas nórdica y contemporánea ya no atraviesa el respaldo; en la silla contemporánea el respaldo va sobre las barras; en la rústica las tablillas llegan al asiento; en la industrial el aro une las patas y el respaldo se sujeta con dos pletinas; en la clásica los montantes suben a sujetar el medallón y un husillo lo apoya en el asiento; en la mesa de comedor industrial la barra une los dos marcos bajo el tablero.
 - IFC del taller validado (68 piezas nuevas delante de las que sustituirían).
 
 **Pendiente**
