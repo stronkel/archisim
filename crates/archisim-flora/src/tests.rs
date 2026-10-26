@@ -530,6 +530,7 @@ fn svg_paths(shapes: &[Shape], ox: f64, oy: f64, k: f64, colors: &Colors) -> Str
                 colors.fruit[0], colors.fruit[1], colors.fruit[2]
             ),
             Some(Tone::Paper) => "white".into(),
+            Some(Tone::Ink) => "#2b2b2b".into(),
             None => "none".into(),
         };
         let w = match stroke {
@@ -638,4 +639,69 @@ fn render(m: &FloraMesh, size: usize) -> Vec<u8> {
     let mut out = format!("P6\n{size} {size}\n255\n").into_bytes();
     out.extend(px);
     out
+}
+
+/// The styles of line drawings of trees (25/10/2026): the silhouette is
+/// solid in the lines' colour with its branches in white, from above and
+/// from the side; the crown leaves its middle open; the twigs carry
+/// leaflets.
+#[test]
+fn graphic_styles() {
+    let p = grow(&olive(), 5, 0.5);
+    let plan = |style| {
+        p.plan(&PlanOptions {
+            style,
+            look: Look::Lines,
+            opacity: 0.6,
+            crown_mm: 80.0,
+        })
+    };
+    let side = |style| {
+        p.side(
+            [0.0, 1.0],
+            &crate::SideOptions {
+                style,
+                look: Look::Lines,
+                opacity: 0.6,
+                m_per_mm: 0.05,
+            },
+        )
+    };
+    for shapes in [plan(PlanStyle::Silhouette), side(PlanStyle::Silhouette)] {
+        let tones: Vec<Tone> = shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Fill { tone, .. } => Some(*tone),
+                _ => None,
+            })
+            .collect();
+        let ink = tones.iter().position(|t| *t == Tone::Ink).expect("solid");
+        // The branches come after the solid crown, white over it.
+        assert!(tones[ink..].iter().filter(|t| **t == Tone::Paper).count() > 3);
+    }
+    // The crown's middle is open: its marks keep away from the centre.
+    let c = p.center;
+    let r = p.radius;
+    let near = plan(PlanStyle::Crown)
+        .iter()
+        .filter_map(|s| match s {
+            // (Not the trunk's ring, of 16 points.)
+            Shape::Line { points, .. } if points.len() > 16 => Some(points.clone()),
+            _ => None,
+        })
+        .flatten()
+        .filter(|q| (q[0] - c[0]).hypot(q[1] - c[1]) < r * 0.25)
+        .count();
+    assert_eq!(near, 0);
+    // Leaflets: many more strokes than the branches alone.
+    let count = |style| plan(style).len();
+    assert!(count(PlanStyle::Sprigs) > count(PlanStyle::Branches) * 3);
+    for s in [
+        PlanStyle::Crown,
+        PlanStyle::Silhouette,
+        PlanStyle::Sprigs,
+        PlanStyle::BranchesEdge,
+    ] {
+        assert_eq!(PlanStyle::from_name(s.name()), Some(s));
+    }
 }

@@ -308,6 +308,9 @@ pub fn axo_drawing(model: &Model, axo: &Axo, focus: DisciplineFocus) -> AxoDrawi
                 } => {
                     let fill = match tint.and_then(|t| model.material(archisim_core::MaterialId(t)))
                     {
+                        _ if tint == Some(archisim_core::family::INK_TINT) => {
+                            Some(([26, 26, 26], 1.0))
+                        }
                         Some(m) => Some((m.cut_color, opacity)),
                         None if filled => Some(([255, 255, 255], 1.0)),
                         None => None,

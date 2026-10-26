@@ -41,7 +41,7 @@ pub use ast::{
     Param, ParamKind, ParamScope, Pen, PlanSymbol, Require, Stmt,
 };
 pub use error::FamilyError;
-pub use eval::{Evaluation, Mark, Part, MAX_PARTS, MAX_REPEAT};
+pub use eval::{Evaluation, Mark, Part, INK_TINT, MAX_PARTS, MAX_REPEAT};
 pub use parser::{catalog_text, expand_includes, parse, without_catalog, BUILTINS, PLAN_BUILTINS};
 
 /// A parameter or expression value.

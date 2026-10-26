@@ -6,6 +6,15 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (2) · Todo unido en `main` (v0.69)
+
+Antonio dio el visto bueno el 26/10/2026: unidas en `main` todas las ramas pendientes, en orden: F1 (#66), C2 (#67), A1 (#68), C3 (#69), C4 (#70), C5 (#71), C6 (#72), C7 (#73), C8 (#75), el taller de modelos M1 (#74) y los árboles en línea T2 (#65). T2 se había numerado también v0.61; entra sin cambiar el número de versión, que queda en 0.69. Los conflictos eran solo de documentación (bitácora, hoja de ruta, CLAUDE.md) y de número de versión.
+
+**Qué debe probar Antonio**
+1. Descarga la aplicación de `main` (o `cargo run --release -p archisim-app`) y abre la demo: todo lo de C1–C8 debe estar, además del sofá del taller (`archisim taller out/taller`) y los cuatro estilos de árboles en línea (`archisim vivero out/vivero`).
+
+---
+
 ## 2026-10-26 · v0.69: pincel único, cubiertas del suelo, rocas (C8)
 
 Rama `bloque/c8-pincel`, encima de `bloque/c7-deudas` (#73), con pull request para Antonio. **Formato `.archisim` versión 39** (el aspecto de un material puede llevar hierba y flores; abre todas las anteriores). Pedido por Antonio el 26/10/2026 tras probar C5, con una captura de Paralives.
@@ -206,6 +215,32 @@ Antonio pidió seguir la hoja de ruta en orden (C3 → C4 → C5 → C6 → C7) 
 4. Mira los paneles: Propiedades de la vista (Rejilla, Calco), Capas, Coordinación. Todo lo que era una casilla es ahora un interruptor.
 5. `cargo run --release -p archisim-cli -- cocina out/cocina` y abre `out/cocina/cocina.archisim`: la L con copete y la isla con barra. Mira en 3D la barra y el copete, y en Mediciones el capítulo 10.
 6. Coloca dos «Sofá de 3 plazas» en L (el segundo girado, con la espalda contra el extremo del primero): al soltarlo se hacen una rinconera.
+
+---
+
+## 2026-10-25 (2) · T2: árboles en línea (preparada como v0.61; entra en `main` con la v0.69)
+
+Rama `bloque/arboles-linea`, encima de `bloque/tramas` (#64), con pull request. Sin cambios de formato; la familia Vegetación pasa a la versión 2.
+
+Antonio pidió árboles en planta y alzado «en ese estilo», el de unas bibliotecas de CAD que no se pueden redistribuir, pero sin copiarlos. Miré sus dibujos solo para sacar los rasgos generales del género, y los estilos nuevos salen del generador de plantas de ArchiSim: cada árbol se dibuja desde sus propias ramas y matas de hojas, así que no hay ninguna forma calcada.
+
+**Hecho**
+- Cuatro estilos nuevos para el dibujo de la vegetación, en planta y en alzado:
+  - **Corona**: rosetas de hojas alrededor del borde, con el centro abierto.
+  - **Silueta**: la copa maciza en el color de la línea, con su borde de hojas y las ramas en blanco a través; en alzado, el tronco también macizo.
+  - **Ramitos**: ramas con foliolos a pares, como plumas.
+  - **Ramas y borde**: la estructura de ramas dentro de un contorno dentado.
+- Se eligen en Propiedades, como los demás estilos (técnico, de presentación o el de cada ejemplar).
+- `archisim vivero out/` dibuja el vivero entero en cada estilo, en planta (1:200) y en alzado (1:100).
+
+**Pendiente**
+- Los proyectos que ya tenían árboles los ven después de Biblioteca → Actualizar familias.
+- Ajustes según lo que diga Antonio: grosor de las rosetas de la corona, densidad de los ramitos.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- vivero out/vivero` y abre `out/vivero/vivero-silueta-planta.svg`, `vivero-corona-planta.svg`, `vivero-ramitos-planta.svg` y `vivero-ramas-y-borde-planta.svg`, y los `…-alzado-1.svg` de cada uno.
+2. En un proyecto, elige un árbol y, en Propiedades → Dibujo en planta, pon el estilo de presentación en «silueta» y el color en «líneas». Mira la planta y un alzado.
+3. En un proyecto antiguo: Biblioteca → Actualizar familias, y después lo mismo.
 
 ---
 

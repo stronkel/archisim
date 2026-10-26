@@ -28,6 +28,10 @@ pub struct Part {
     pub line: usize,
 }
 
+/// The `tint` of a [`Mark::Polygon`] filled in the colour of the lines (a
+/// solid silhouette), rather than in a material's.
+pub const INK_TINT: u64 = u64::MAX;
+
 /// One mark of a plan symbol, in the family's own axes (metres, `x` and
 /// `y` as for [`Part`]).
 #[derive(Debug, Clone, PartialEq)]

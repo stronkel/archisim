@@ -2200,6 +2200,7 @@ pub(crate) fn draw_marks(
                 let pts: Vec<Point2> = points.into_iter().map(world).collect();
                 // Tinted: the material's colour, see-through as asked.
                 let fill = match tint.and_then(|m| model.material(archisim_core::MaterialId(m))) {
+                    _ if tint == Some(archisim_core::family::INK_TINT) => format!("{INK}\""),
                     Some(m) => {
                         let [r, g, b] = m.cut_color;
                         let see = if opacity < 1.0 {

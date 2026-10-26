@@ -38,6 +38,15 @@ pub enum PlanStyle {
     Fronds,
     /// Washes of colour, without lines.
     Watercolor,
+    /// Clusters of leaves round the edge of the crown, its middle open.
+    Crown,
+    /// The crown solid, with a leafy edge, and its branches showing white
+    /// through it.
+    Silhouette,
+    /// The branches with leaflets along their twigs, feathery.
+    Sprigs,
+    /// The branches inside a leafy edge.
+    BranchesEdge,
 }
 
 names!(PlanStyle {
@@ -54,6 +63,10 @@ names!(PlanStyle {
     Radial => "radial",
     Fronds => "frondas",
     Watercolor => "acuarela",
+    Crown => "corona",
+    Silhouette => "silueta",
+    Sprigs => "ramitos",
+    BranchesEdge => "ramas y borde",
 });
 
 /// Lines, colour, or both.
@@ -110,6 +123,8 @@ pub enum Tone {
     /// The paper's white: under a drawing of lines, it hides what is
     /// behind the plant (seen from the side).
     Paper,
+    /// The colour of the lines: a crown drawn solid.
+    Ink,
 }
 
 /// One mark of the drawing, in metres from the foot of the plant.
@@ -361,6 +376,8 @@ impl Plant {
                     | PlanStyle::BranchesLeaves
                     | PlanStyle::Stipple
                     | PlanStyle::Foliage
+                    | PlanStyle::Crown
+                    | PlanStyle::Sprigs
             )
         {
             style = PlanStyle::Outline;
@@ -391,7 +408,11 @@ impl Plant {
         if !self.fronds.is_empty()
             && matches!(
                 style,
-                PlanStyle::Branches | PlanStyle::Leaves | PlanStyle::BranchesLeaves
+                PlanStyle::Branches
+                    | PlanStyle::Leaves
+                    | PlanStyle::BranchesLeaves
+                    | PlanStyle::Sprigs
+                    | PlanStyle::BranchesEdge
             )
         {
             style = PlanStyle::Fronds;
@@ -421,22 +442,50 @@ impl Plant {
                 lines.push(line(silhouette.clone(), true, Stroke::Outline));
             }
             PlanStyle::Toothed => {
-                let base = smooth_ring(&raw, 6);
-                let teeth = ((perimeter_mm / 2.6).round() as usize).clamp(20, 120);
-                let depth = (mpm * 0.9).min(0.09 * base.iter().cloned().fold(0.0, f64::max));
-                let mut pts = Vec::with_capacity(teeth * 2);
-                for i in 0..teeth * 2 {
-                    let a =
-                        TAU * i as f64 / (teeth * 2) as f64 + rng.signed() * 0.25 / teeth as f64;
-                    let k = ((a / TAU * n as f64).round() as usize) % n;
-                    let r = if i % 2 == 0 {
-                        base[k] + depth * rng.range(-0.2, 0.3)
-                    } else {
-                        base[k] - depth * rng.range(0.7, 1.2)
-                    };
-                    pts.push([self.center[0] + r * a.cos(), self.center[1] + r * a.sin()]);
-                }
+                let pts = self.toothed(&raw, perimeter_mm, mpm, &mut rng);
                 lines.push(line(pts, true, Stroke::Outline));
+            }
+            PlanStyle::BranchesEdge => {
+                self.branch_lines(&mut lines, crown_mm, mpm, 3);
+                let pts = self.toothed(&raw, perimeter_mm, mpm, &mut rng);
+                fills = vec![pts.clone()];
+                lines.push(line(pts, true, Stroke::Outline));
+            }
+            PlanStyle::Crown => {
+                self.crown_ring(&mut lines, &soft, mpm, &mut rng);
+            }
+            PlanStyle::Sprigs => {
+                self.branch_lines(&mut lines, crown_mm, mpm, 2);
+                self.sprigs(&mut lines, mpm, &mut rng);
+            }
+            PlanStyle::Silhouette => {
+                // The leafy edge of the whole crown: the outermost loops of
+                // its leaf masses (or its outline, without clumps).
+                let loops = self.foliage_loops(mpm);
+                let outer: Vec<Vec<P2>> = loops
+                    .iter()
+                    .filter(|l| area(l) > 0.0)
+                    .filter(|l| {
+                        !loops
+                            .iter()
+                            .any(|m| !std::ptr::eq(*l, m) && area(m) > area(l) && inside(m, l[0]))
+                    })
+                    .cloned()
+                    .collect();
+                if !outer.is_empty() {
+                    fills = outer;
+                }
+                if o.look == Look::Lines {
+                    for f in &fills {
+                        lines.push(Shape::Fill {
+                            points: f.clone(),
+                            tone: Tone::Ink,
+                            opacity: 1.0,
+                        });
+                    }
+                }
+                // The branches, white through the leaves.
+                self.branch_gaps(&mut lines, crown_mm, mpm);
             }
             PlanStyle::Cloud => {
                 let base = smooth_ring(&raw, 8);
@@ -652,7 +701,10 @@ impl Plant {
             && !coloured
             && !matches!(
                 style,
-                PlanStyle::Branches | PlanStyle::Leaves | PlanStyle::BranchesLeaves
+                PlanStyle::Branches
+                    | PlanStyle::Leaves
+                    | PlanStyle::BranchesLeaves
+                    | PlanStyle::Sprigs
             )
         {
             // Lines only: the plant hides what is behind it (not when
@@ -672,8 +724,13 @@ impl Plant {
         // crown (the branches' styles drew them already).
         if side {
             // (Without lines, the branches' styles drew none of them.)
-            if !matches!(style, PlanStyle::Branches | PlanStyle::BranchesLeaves)
-                || o.look == Look::Colour
+            if !matches!(
+                style,
+                PlanStyle::Branches
+                    | PlanStyle::BranchesLeaves
+                    | PlanStyle::Sprigs
+                    | PlanStyle::BranchesEdge
+            ) || o.look == Look::Colour
             {
                 let crown = if self.fronds.is_empty() {
                     silhouette.clone()
@@ -683,6 +740,16 @@ impl Plant {
                 // Under the crown: where it goes into it, the crown hides it.
                 let mut trunks = Vec::new();
                 self.standing_trunks(&mut trunks, &crown, mpm, coloured, o.look);
+                if style == PlanStyle::Silhouette && !coloured {
+                    // A solid crown stands on a solid trunk.
+                    for t in &mut trunks {
+                        if let Shape::Fill { tone, .. } = t {
+                            if *tone == Tone::Paper {
+                                *tone = Tone::Ink;
+                            }
+                        }
+                    }
+                }
                 trunks.extend(out);
                 out = trunks;
             }
@@ -767,6 +834,182 @@ impl Plant {
                     points: o,
                     closed: true,
                     stroke: Stroke::Thin,
+                });
+            }
+        }
+    }
+
+    /// The crown's outline in small teeth, round its radii `raw`.
+    fn toothed(&self, raw: &[f64], perimeter_mm: f64, mpm: f64, rng: &mut Rng) -> Vec<P2> {
+        let n = raw.len();
+        let base = smooth_ring(raw, 6);
+        let teeth = ((perimeter_mm / 2.6).round() as usize).clamp(20, 120);
+        let depth = (mpm * 0.9).min(0.09 * base.iter().cloned().fold(0.0, f64::max));
+        let mut pts = Vec::with_capacity(teeth * 2);
+        for i in 0..teeth * 2 {
+            let a = TAU * i as f64 / (teeth * 2) as f64 + rng.signed() * 0.25 / teeth as f64;
+            let k = ((a / TAU * n as f64).round() as usize) % n;
+            let r = if i % 2 == 0 {
+                base[k] + depth * rng.range(-0.2, 0.3)
+            } else {
+                base[k] - depth * rng.range(0.7, 1.2)
+            };
+            pts.push([self.center[0] + r * a.cos(), self.center[1] + r * a.sin()]);
+        }
+        pts
+    }
+
+    /// Clusters of leaves where the clumps are, round the edge of the
+    /// crown (radii `soft`): each a little rosette of lobes, kept apart,
+    /// the middle of the crown left open.
+    fn crown_ring(&self, lines: &mut Vec<Shape>, soft: &[f64], mpm: f64, rng: &mut Rng) {
+        let n = soft.len();
+        let c = self.center;
+        let r_mean = soft.iter().sum::<f64>() / n as f64;
+        let size = (r_mean * 0.32).max(mpm * 2.2);
+        let mut order: Vec<usize> = (0..self.clumps.len())
+            .filter(|&i| self.clumps[i].kind != ClumpKind::Fruit)
+            .collect();
+        let dist = |i: usize| {
+            let p = self.clumps[i].center;
+            (p[0] - c[0]).hypot(p[1] - c[1])
+        };
+        order.sort_by(|&a, &b| dist(b).total_cmp(&dist(a)));
+        let mut placed: Vec<P2> = Vec::new();
+        let mut place = |p: P2, lines: &mut Vec<Shape>, rng: &mut Rng| {
+            if placed
+                .iter()
+                .any(|q| (q[0] - p[0]).hypot(q[1] - p[1]) < size * 0.82)
+            {
+                return;
+            }
+            placed.push(p);
+            let s = size * rng.range(0.48, 0.6);
+            let lobes = 5 + (rng.f() * 3.0) as usize;
+            let ph = rng.range(0.0, TAU);
+            let pts: Vec<P2> = (0..lobes * 8)
+                .map(|q| {
+                    let a = q as f64 / (lobes * 8) as f64 * TAU;
+                    let bump = ((lobes as f64 * a / 2.0 + ph).sin().abs()).powf(0.6);
+                    let r = s * (0.62 + 0.38 * bump);
+                    [p[0] + r * a.cos(), p[1] + r * a.sin()]
+                })
+                .collect();
+            lines.push(Shape::Line {
+                points: pts,
+                closed: true,
+                stroke: Stroke::Thin,
+            });
+            // A vein or two from its middle.
+            for _ in 0..2 {
+                let a = rng.range(0.0, TAU);
+                lines.push(Shape::Line {
+                    points: vec![p, [p[0] + s * 0.5 * a.cos(), p[1] + s * 0.5 * a.sin()]],
+                    closed: false,
+                    stroke: Stroke::Thin,
+                });
+            }
+        };
+        for i in order {
+            let q = self.clumps[i].center;
+            let (dx, dy) = (q[0] - c[0], q[1] - c[1]);
+            let d = dx.hypot(dy).max(1e-9);
+            let k = ((dy.atan2(dx).rem_euclid(TAU) / TAU * n as f64).round() as usize) % n;
+            let edge = soft[k];
+            if d < edge * 0.5 {
+                continue;
+            }
+            // Inside the outline by half a cluster.
+            let reach = d.min(edge - size * 0.55).max(edge * 0.5);
+            place([c[0] + dx / d * reach, c[1] + dy / d * reach], lines, rng);
+        }
+        // A ring without gaps: fill what the clumps left empty.
+        for i in 0..36 {
+            let a = i as f64 / 36.0 * TAU;
+            let k = ((a / TAU * n as f64).round() as usize) % n;
+            let reach = (soft[k] - size * 0.55).max(soft[k] * 0.5);
+            place([c[0] + reach * a.cos(), c[1] + reach * a.sin()], lines, rng);
+        }
+    }
+
+    /// Leaflets along the twigs: short strokes in pairs, pointing on, a
+    /// feathery drawing of the branches.
+    fn sprigs(&self, lines: &mut Vec<Shape>, mpm: f64, rng: &mut Rng) {
+        let top = self.branches.iter().map(|b| b.level).max().unwrap_or(0);
+        let twig = top.clamp(1, 2);
+        let len = (self.species.clump * 0.3).clamp(mpm * 1.0, mpm * 2.4);
+        let step = len * 0.9;
+        let mut count = 0;
+        for b in self.branches.iter().filter(|b| b.level >= twig) {
+            let pts: Vec<P2> = b.points.iter().map(|p| [p[0], p[1]]).collect();
+            let mut walked = 0.0;
+            let mut next = step * rng.range(0.3, 1.0);
+            for w in pts.windows(2) {
+                let (a, c) = (w[0], w[1]);
+                let d = [c[0] - a[0], c[1] - a[1]];
+                let l = d[0].hypot(d[1]);
+                if l < 1e-9 {
+                    continue;
+                }
+                let u = [d[0] / l, d[1] / l];
+                while next <= walked + l {
+                    let t = (next - walked) / l;
+                    let p = [a[0] + d[0] * t, a[1] + d[1] * t];
+                    for side in [-1.0, 1.0] {
+                        let ang = side * rng.range(0.6, 0.9);
+                        let (cs, sn) = (ang.cos(), ang.sin());
+                        let dir = [u[0] * cs - u[1] * sn, u[0] * sn + u[1] * cs];
+                        let ll = len * rng.range(0.7, 1.1);
+                        lines.push(Shape::Line {
+                            points: vec![p, [p[0] + dir[0] * ll, p[1] + dir[1] * ll]],
+                            closed: false,
+                            stroke: Stroke::Thin,
+                        });
+                    }
+                    count += 1;
+                    next += step * rng.range(0.8, 1.2);
+                }
+                walked += l;
+            }
+            // A leaflet at its tip.
+            if let (Some(a), Some(c)) = (pts.get(pts.len().wrapping_sub(2)), pts.last()) {
+                let d = [c[0] - a[0], c[1] - a[1]];
+                let l = d[0].hypot(d[1]).max(1e-9);
+                lines.push(Shape::Line {
+                    points: vec![*c, [c[0] + d[0] / l * len, c[1] + d[1] / l * len]],
+                    closed: false,
+                    stroke: Stroke::Thin,
+                });
+            }
+            if count > 4000 {
+                break;
+            }
+        }
+    }
+
+    /// The branches as paper-white shapes, to show through a solid crown:
+    /// limbs tapering, the rest thin but visible on paper; the trunk
+    /// itself is left solid.
+    fn branch_gaps(&self, lines: &mut Vec<Shape>, crown_mm: f64, mpm: f64) {
+        let max_level = if crown_mm > 40.0 { 2 } else { 1 };
+        for b in &self.branches {
+            if b.level > max_level || b.level == 0 || self.species.habit == crate::Habit::Palm {
+                continue;
+            }
+            let mut wide = b.clone();
+            let floor = mpm * if b.level == 1 { 0.35 } else { 0.2 };
+            for r in wide.radii.iter_mut() {
+                *r = (*r * 0.8).max(floor);
+            }
+            // Its far end thinner: a twig comes to a point.
+            if let Some(last) = wide.radii.last_mut() {
+                *last = floor * 0.3;
+            }
+            if let Some(o) = tapered(&wide) {
+                lines.push(Shape::Fill {
+                    points: o,
+                    tone: Tone::Paper,
+                    opacity: 1.0,
                 });
             }
         }
