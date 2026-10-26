@@ -1,0 +1,32 @@
+family "Mesa de centro (taller)"
+  category furniture
+  host none
+  version 1
+  description "Mesa de centro por colecciones (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.10 range 0.40..2.00 label "Ancho"
+    depth  length = 0.60 range 0.35..1.20 label "Fondo"
+    height length = 0.40 range 0.25..0.55 label "Altura"
+  section "Materiales"
+    top     material = "Roble claro" label "Tablero"
+    frame   material = "Roble claro" label "Madera y patas"
+    metal   material = "Metal negro" label "Metal"
+    stone   material = "Mármol" label "Piedra"
+    ceramic material = "Cerámica esmaltada" label "Cerámica"
+    dark    material = "Negro mate" label "Detalles oscuros"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, height - 0.04) to (width / 2, depth, height) material top
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:fine_coffee_table"
+  ifc_class = "IfcFurniture"
+  ifc_type = "TABLE"

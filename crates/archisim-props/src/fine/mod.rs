@@ -16,6 +16,7 @@ pub mod shape;
 pub mod sink;
 pub mod sofas;
 pub mod soft;
+pub mod tables;
 
 use crate::build::{Builder, P3};
 use crate::Params;
@@ -88,6 +89,45 @@ pub const KINDS: &[(&str, &[&str])] = &[
             "Clásica",
         ],
     ),
+    (
+        "fine_dining_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_coffee_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_side_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     ("fine_plant", &["Espatifilo", "Pilea"]),
     ("fine_sink_unit", &["Fregadero de acero"]),
     ("fine_streetlight", &["Columna de fundición"]),
@@ -128,6 +168,9 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         }
         "fine_pouf" => armchairs::pouf(b, p),
         "fine_chair" => chairs::chair(b, p),
+        "fine_dining_table" => tables::dining(b, p),
+        "fine_coffee_table" => tables::coffee(b, p),
+        "fine_side_table" => tables::side(b, p),
         "fine_stool" => chairs::stool(b, p),
         "fine_plant" => plant::potted_plant(b, p),
         "fine_sink_unit" => sink::sink_unit(b, p),
