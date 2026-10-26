@@ -615,7 +615,7 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         .filter(|_| show(archisim_core::Category::Terrain))
     {
         overrides::group(&mut s, archisim_core::Category::Terrain, |s| {
-            dim::element(s, t.id.0, |s| terrain::draw_terrain(s, t, k))
+            dim::element(s, t.id.0, |s| terrain::draw_terrain(s, model, t, k))
         });
     }
     if show(archisim_core::Category::Roads) {
@@ -2035,10 +2035,7 @@ fn draw_objects(
             continue;
         }
         // A symbol brought from a DXF, drawn instead of the family's.
-        let symbol = model
-            .object_type(o.object_type)
-            .and_then(|t| t.symbol.as_ref())
-            .filter(|_| marks.is_ok());
+        let symbol = model.object_symbol(o.id).filter(|_| marks.is_ok());
         if let Some(sym) = symbol {
             dim::element(s, o.id.0, |s| draw_symbol(s, model, o, sym, k));
             overrides::close(s);

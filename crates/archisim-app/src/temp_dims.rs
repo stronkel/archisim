@@ -170,6 +170,49 @@ fn cross_line(p: Point2, u: Point2, a: Point2, b: Point2) -> Option<f64> {
     (-EPS..=1.0 + EPS).contains(&s).then_some(t)
 }
 
+/// Where the face line of wall `host` (through `origin`, along `u`, with
+/// normal `n`) stops: its ends, and where other walls meet or cross it, as
+/// distances along `u` from `origin`. Doors and windows are not counted.
+pub(crate) fn face_stops<G: Geo + ?Sized>(
+    geo: &G,
+    host: WallId,
+    origin: Point2,
+    u: Point2,
+    n: Point2,
+) -> Vec<f64> {
+    let model = geo.model();
+    let Some(wall) = model.wall(host) else {
+        return Vec::new();
+    };
+    let mut refs: Vec<f64> = Vec::new();
+    let mut outlines: Vec<Vec<Point2>> = Vec::new();
+    if let Some(hg) = geo.wall_geometry(host) {
+        outlines.push(hg.outline_at(None));
+    }
+    for w in model.walls_on_level(wall.level).filter(|w| w.id != host) {
+        if let Some(wg) = geo.wall_geometry(w.id) {
+            outlines.push(wg.outline.clone());
+        }
+    }
+    let length = wall.length();
+    for poly in &outlines {
+        let k = poly.len();
+        for i in 0..k {
+            if let Some(t) = cross_line(origin, u, poly[i], poly[(i + 1) % k]) {
+                if t > -1.0 && t < length + 1.0 {
+                    refs.push(t);
+                }
+            }
+            // Corners lying on the face (edges along it do not cross it).
+            let p = poly[i];
+            if ((p - origin).dot(n)).abs() < EPS {
+                refs.push((p - origin).dot(u));
+            }
+        }
+    }
+    refs
+}
+
 fn opening_dims<G: Geo + ?Sized>(geo: &G, id: OpeningId, anchors: &Anchors) -> Vec<TempDim> {
     let model = geo.model();
     let Some(o) = model.opening(id) else {
@@ -190,33 +233,7 @@ fn opening_dims<G: Geo + ?Sized>(geo: &G, id: OpeningId, anchors: &Anchors) -> V
         WallSide::Interior => -g.n,
     };
     let origin = g.point(0.0, face);
-    let mut refs: Vec<f64> = Vec::new();
-    // The ends of this wall's face, and where other walls meet or cross it.
-    let mut outlines: Vec<Vec<Point2>> = Vec::new();
-    if let Some(hg) = geo.wall_geometry(host.id) {
-        outlines.push(hg.outline_at(None));
-    }
-    for w in model.walls_on_level(host.level).filter(|w| w.id != host.id) {
-        if let Some(wg) = geo.wall_geometry(w.id) {
-            outlines.push(wg.outline.clone());
-        }
-    }
-    let length = host.length();
-    for poly in &outlines {
-        let n = poly.len();
-        for i in 0..n {
-            if let Some(t) = cross_line(origin, g.u, poly[i], poly[(i + 1) % n]) {
-                if t > -1.0 && t < length + 1.0 {
-                    refs.push(t);
-                }
-            }
-            // Corners lying on the face (edges along it do not cross it).
-            let p = poly[i];
-            if ((p - origin).dot(g.n)).abs() < EPS {
-                refs.push((p - origin).dot(g.u));
-            }
-        }
-    }
+    let mut refs = face_stops(geo, host.id, origin, g.u, g.n);
     // The jambs of the other doors and windows in the wall.
     for other in ops.iter().filter(|x| x.opening != id) {
         refs.push(other.t0);

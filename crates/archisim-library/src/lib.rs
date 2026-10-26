@@ -774,6 +774,7 @@ use StudioValue::{B, C, N, T};
 pub mod collections;
 pub mod extended;
 pub mod flora;
+pub mod ground;
 pub mod imported;
 
 /// Adds the studio's usual door and window types, with the materials they
@@ -823,10 +824,21 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 220] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 236] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
+    ("Sofá rinconera 260×170", "Sofá rinconera", &[]),
+    (
+        "Sofá rinconera 300×200",
+        "Sofá rinconera",
+        &[
+            ("width", 3.0),
+            ("length2", 2.0),
+            ("places", 3.0),
+            ("places2", 2.0),
+        ],
+    ),
     (
         "Sillón",
         "Sofá",
@@ -1379,6 +1391,92 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 220] = [
         "Macetón",
         &[("width", 0.7), ("height", 0.6)],
     ),
+    // Rocks and other natural things of the site (C8).
+    ("Roca angulosa 80", "Roca", &[]),
+    (
+        "Roca angulosa 80 (2)",
+        "Roca",
+        &[
+            ("variant", 2.0),
+            ("width", 0.9),
+            ("depth", 0.55),
+            ("height", 0.45),
+        ],
+    ),
+    (
+        "Roca angulosa 80 (3)",
+        "Roca",
+        &[
+            ("variant", 3.0),
+            ("width", 0.7),
+            ("depth", 0.65),
+            ("height", 0.55),
+        ],
+    ),
+    (
+        "Canto rodado 50",
+        "Roca",
+        &[("width", 0.5), ("depth", 0.4), ("height", 0.3)],
+    ),
+    (
+        "Canto rodado 50 (2)",
+        "Roca",
+        &[
+            ("variant", 2.0),
+            ("width", 0.55),
+            ("depth", 0.35),
+            ("height", 0.25),
+        ],
+    ),
+    (
+        "Laja 120",
+        "Roca",
+        &[("width", 1.2), ("depth", 0.8), ("height", 0.15)],
+    ),
+    (
+        "Peña 2 m",
+        "Roca",
+        &[
+            ("variant", 4.0),
+            ("width", 2.0),
+            ("depth", 1.6),
+            ("height", 1.4),
+        ],
+    ),
+    (
+        "Roca con musgo 1 m",
+        "Roca",
+        &[
+            ("variant", 5.0),
+            ("width", 1.0),
+            ("depth", 0.8),
+            ("height", 0.6),
+        ],
+    ),
+    ("Grupo de rocas", "Grupo de rocas", &[]),
+    (
+        "Grupo de cantos rodados",
+        "Grupo de rocas",
+        &[
+            ("variant", 2.0),
+            ("width", 1.6),
+            ("depth", 1.2),
+            ("height", 0.5),
+        ],
+    ),
+    (
+        "Rocas con musgo",
+        "Grupo de rocas",
+        &[
+            ("variant", 3.0),
+            ("width", 2.4),
+            ("depth", 1.8),
+            ("height", 1.1),
+        ],
+    ),
+    ("Cantos rodados 1,2 m", "Cantos rodados", &[]),
+    ("Tronco caído 2,4 m", "Tronco caído", &[]),
+    ("Tocón 60", "Tocón", &[]),
     ("Pérgola de madera 3×3", "Pérgola", &[]),
     ("Pérgola de lamas 4×3", "Pérgola", &[("width", 4.0)]),
     ("Pérgola con cañizo 3×3", "Pérgola", &[]),
@@ -1547,6 +1645,7 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 220] = [
 /// Choices and materials of the library's types that are not the family's
 /// (the cosy ones): by parameter, a yes/no or a material's name.
 const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
+    ("Peña 2 m", &[("mat", T("Roca granito"))]),
     (
         "Persona",
         &[
@@ -1865,6 +1964,12 @@ const MODELS: &[(&str, &str)] = &[
     ("Sombrilla descentrada 300", "Descentrada"),
     ("Sombrilla de paja 200", "De paja"),
     ("Ánfora de barro", "Ánfora"),
+    ("Canto rodado 50", "Canto rodado"),
+    ("Canto rodado 50 (2)", "Canto rodado"),
+    ("Laja 120", "Laja"),
+    ("Roca con musgo 1 m", "Roca con musgo"),
+    ("Grupo de cantos rodados", "Cantos rodados"),
+    ("Rocas con musgo", "Con musgo"),
     ("Macetón con gramíneas", "Con gramíneas"),
     ("Cuenco con lavanda", "Con lavanda"),
     ("Pérgola de lamas 4×3", "De lamas"),
@@ -1961,6 +2066,7 @@ pub fn add_appearances(m: &mut Model) {
                 color: None,
                 texture: Some(t),
                 scale: (t == TextureKind::Tile).then_some(0.33),
+                growth: None,
             },
         );
     }
@@ -1984,6 +2090,10 @@ fn object_materials(m: &mut Model) {
         ("Madera de pino", "wood", [196, 160, 112]),
         ("Vegetación", "vegetation", [126, 164, 98]),
         ("Corteza", "wood", [112, 86, 62]),
+        ("Roca caliza", "plaster", [178, 172, 160]),
+        ("Roca granito", "plaster", [140, 137, 132]),
+        ("Musgo", "vegetation", [98, 124, 58]),
+        ("Madera de tronco", "wood", [204, 168, 118]),
         ("Figura", "other", [150, 158, 172]),
         ("Carrocería", "metal", [164, 172, 184]),
         ("Neumático", "rubber", [52, 52, 56]),
@@ -2086,10 +2196,36 @@ pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {
                     color: None,
                     texture: Some(t),
                     scale: None,
+                    growth: None,
                 },
             );
         }
     }
+    Some(id)
+}
+
+/// A material like `base` in any colour (the free colour wheel of the
+/// Maqueta): same kind and texture (wood stays grain, fabric weave), its
+/// colour `rgb`. Named «<base> #RRGGBB»: the same colour again finds it.
+pub fn colour_material(m: &mut Model, base: MaterialId, rgb: [u8; 3]) -> Option<MaterialId> {
+    let b = m.material(base)?.clone();
+    // The base name without a colour it was given before.
+    let stem = match b.name.rsplit_once(" #") {
+        Some((s, hex)) if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) => s,
+        _ => b.name.as_str(),
+    };
+    let name = format!("{stem} #{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+    let id = material_named(m, &name, &b.category, rgb, b.cut_pattern);
+    let look = m.appearance(base);
+    let _ = m.set_appearance(
+        id,
+        archisim_core::Appearance {
+            color: Some(rgb),
+            texture: look.texture,
+            scale: look.scale,
+            growth: look.growth,
+        },
+    );
     Some(id)
 }
 

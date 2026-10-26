@@ -11,17 +11,34 @@ Una imagen realista del modelo, hecha por ArchiSim sin programas externos y sin 
 - **Calidad**: *Borrador* (800 píxeles de ancho, unos segundos, para ver la luz), *Normal* (1600) o *Alta* (2800, para presentar).
 - **Renderizar** hace la imagen desde la cámara de la vista 3D, con la forma de la ventana. Se calcula aparte: se puede seguir trabajando mientras la barra avanza. Al terminar se abre la imagen con **Guardar PNG…** y **Volver a renderizar** (desde la cámara de ese momento).
 
-**En la línea de órdenes.** `archisim render proyecto.archisim imagen.png 1600` hace la imagen desde el suroeste con todo el modelo encuadrado.
+**En la línea de órdenes.** `archisim render proyecto.archisim imagen.png 1600` hace la imagen desde el suroeste con todo el modelo encuadrado; `--atardecer` o `--noche` cambian la luz y `--sin-texturas` deja los colores lisos.
+
+**Luz y texturas (C4, v0.65).** La imagen lleva la luz de la vista 3D (Día, Atardecer o Noche, en la Maqueta) y sus texturas (salvo con «Sin texturas»):
+
+- **Atardecer**: el sol del proyecto más bajo de fuerza y anaranjado, el cielo cálido y las lámparas a media luz.
+- **Noche**: sin sol, un cielo azul oscuro y las lámparas encendidas: pantallas, bombillas, velas, chimeneas y farolas brillan y alumbran lo que tienen cerca, **con sus sombras** (la pantalla de una lámpara no tapa su propia luz).
+- **Texturas**: las mismas que la vista 3D (ladrillo, piedra, madera, tablas, hormigón, telas, fibras…), sacadas de imágenes que se repiten sin costura (`archisim_render::textures`).
 
 **Qué lleva la imagen**
 
-- Los mismos sólidos que la vista 3D y el IFC: muros con el color de cada capa, caras pintadas, el color de cada material (las texturas, todavía sin su dibujo), muebles, vegetación, coches, modelos importados.
+- Los mismos sólidos que la vista 3D y el IFC: muros con el color de cada capa, caras pintadas, el color y la textura de cada material, muebles, vegetación, coches, modelos importados.
 - **El sol del proyecto** (Propiedades del proyecto → Sol: día y hora solar, con la latitud de la georreferencia y el norte): luz directa y **sombras arrojadas**, las mismas que las de las plantas y axonometrías de presentación.
 - **La luz del cielo**: cada punto se aclara u oscurece según cuánto cielo ve (los rincones, los aleros y el suelo bajo los árboles quedan en penumbra).
 - **El vidrio** refleja el cielo y deja pasar la luz (y las sombras del vidrio son más suaves).
 - Sin terreno, un suelo claro bajo el edificio; con terreno, el del proyecto. Lo que queda fuera del modelo es una bruma clara, como una maqueta fotografiada.
 
-**Lo que no hace todavía**: luces artificiales, interiores con rebotes de luz entre paredes, reflejos en el suelo, desenfoque, gente y fondos fotográficos. La caja de sección de la vista 3D no recorta la imagen.
+**Lo que no hace todavía**: interiores con rebotes de luz entre paredes, reflejos en el suelo, desenfoque, gente y fondos fotográficos. La caja de sección de la vista 3D no recorta la imagen.
+
+## 1 bis. El proyecto para D5, Twinmotion o Blender (C4, v0.65)
+
+**Archivo → Exportar modelo 3D (glTF) para D5, Twinmotion, Blender…** (o `archisim glb proyecto.archisim modelo.glb`; `archisim exportar` y la demo lo escriben también) guarda el proyecto entero en un solo fichero `.glb` (glTF 2.0):
+
+- Un objeto por elemento, con su nombre («Muro 12», «Sofá de 3 plazas 40»…), y dentro una pieza por material.
+- Los materiales con su nombre y su color; los que tienen textura la llevan como imagen, puesta en cada cara igual que en la vista 3D, para cambiarla por la del programa de render si se quiere. El vidrio va transparente.
+- En metros y con el eje vertical como lo pide glTF, así que entra a escala y de pie.
+- Se comprueba con `python3 scripts/validate_glb.py modelo.glb` (requiere `pip install pygltflib trimesh`).
+
+Las texturas de la vista 3D pueden verse también **«En imagen»** (Propiedades de la vista 3D → Texturas): las mismas, sacadas de esas imágenes en lugar de calcularse en cada píxel. Es lo que usan por defecto los Mac con Intel, que se quedaban colgados con las completas; con OpenGL (tarjetas antiguas) se ven las ligeras.
 
 ## 2. Presupuestos con bancos de precios
 

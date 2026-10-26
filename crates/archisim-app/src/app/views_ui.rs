@@ -11,6 +11,7 @@
 //! (one undoable step once the mouse is let go), and what the model
 //! changes (undo, a teammate) comes back to the view.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     Category, GraphicOverride, LayerLines, LevelId, PlanKind, PlanView, PlanViewId, Rgb, ViewStyle,
     ViewTemplate, ViewTemplateId,
@@ -415,7 +416,7 @@ fn colour_cell(ui: &mut Ui, salt: (Category, &str), value: &mut Option<Rgb>, fal
         ui.horizontal(|ui| {
             let mut set = value.is_some();
             if ui
-                .checkbox(&mut set, "")
+                .switch(&mut set, "")
                 .on_hover_text(
                     "Marcado: un color para toda la categoría; sin marcar: el de cada elemento",
                 )
@@ -440,7 +441,7 @@ fn category_row(ui: &mut Ui, style: &mut ViewStyle, c: Category) {
     let mut g: GraphicOverride = style.graphics(c);
     ui.label(c.label());
     let mut on = style.shows(c);
-    if ui.checkbox(&mut on, "").changed() {
+    if ui.switch(&mut on, "").changed() {
         if on {
             style.hidden.remove(&c);
         } else {
@@ -461,8 +462,8 @@ fn category_row(ui: &mut Ui, style: &mut ViewStyle, c: Category) {
     {
         g.transparency = t.round() as u8;
     }
-    ui.checkbox(&mut g.halftone, "");
-    ui.checkbox(&mut g.patterns, "");
+    ui.switch(&mut g.halftone, "");
+    ui.switch(&mut g.patterns, "");
     let mut w = g.weight as f32;
     if ui
         .add(

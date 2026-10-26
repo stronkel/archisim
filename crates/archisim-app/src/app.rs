@@ -111,6 +111,9 @@ pub enum Tool {
     Road,
     /// Plants along a line or over an area.
     Planting,
+    /// The Exterior brushes: shape the ground, paint lawn or gravel,
+    /// scatter plants (MQ3).
+    Brush,
     /// Pipes, by their path.
     Pipe,
     /// Ducts, by their path.
@@ -194,6 +197,7 @@ impl Tool {
             "h" => Some(Tool::Pipe),
             "d" => Some(Tool::Duct),
             "q" => Some(Tool::RefPlane),
+            "pi" => Some(Tool::Brush),
             _ => None,
         }
     }
@@ -286,6 +290,9 @@ pub struct ArchiSimApp {
     /// The material of the object whose colours are open in its bar, and
     /// where its swatch is.
     bar_swatches: Option<String>,
+    /// The colour being chosen on the free colour wheel of the swatches,
+    /// for the piece it was opened on (applied with its button).
+    bar_rgb: Option<(String, [u8; 3])>,
     bar_swatch_at: Option<eframe::egui::Rect>,
     /// A left drag in the 3D view (moving or a selection window).
     drag3d: Option<mouse3d::Drag3d>,
@@ -293,6 +300,21 @@ pub struct ArchiSimApp {
     clipboard: Option<context_menu::Clipboard>,
     /// Furniture dragged along the floor in the Maqueta.
     object_move: Option<placing::ObjectMove3d>,
+    /// A handle of a Concepto volume being dragged in 3D, and the one
+    /// under the cursor.
+    mass_grip: Option<mass_grips3d::MassGrip3d>,
+    /// The Exterior brush and the stroke being made with it.
+    pub(super) brush: crate::brush::BrushSettings,
+    brush_stroke: Option<brush_ui::BrushStroke>,
+    mass_grip_hover: Option<mass_grips3d::MassKey>,
+    /// While something is moved in 3D: the wall faces it is pulled to,
+    /// its plan points when taken, and its clear distances now (with the
+    /// height they are drawn at).
+    move_faces: Vec<crate::wall_faces::Face>,
+    move_points: Vec<Point2>,
+    move_axis: Point2,
+    pub(super) move_clear: Vec<crate::wall_faces::Clearance>,
+    move_clear_z: f64,
     render: render_ui::RenderState,
     budget: budget_ui::BudgetState,
     /// The first point of the grid line being drawn.
@@ -327,6 +349,14 @@ pub struct ArchiSimApp {
     /// The section shown: its drawing (worked out once per revision) and
     /// its picture on screen.
     pub section_cache: Option<section_ui::SectionCache>,
+    /// Drawings of the sections seen before, kept for going back to their
+    /// tabs without working them out again (most recent last).
+    section_stash: Vec<section_ui::SectionCache>,
+    /// Pictures of a section and a sheet being drawn aside, and the model
+    /// those threads draw from.
+    section_pending: Option<background::Pending<section_ui::SectionKey>>,
+    sheet_pending: Option<background::Pending<sheet_ui::SheetKey>>,
+    shared_model: Option<(u64, std::sync::Arc<archisim_core::Model>)>,
     /// Where the pointer is over the section shown (along, height).
     pub section_hover: Option<Point2>,
     pub room_settings: crate::editor::RoomSettings,
@@ -439,6 +469,10 @@ pub struct ArchiSimApp {
     pub types: TypesDialog,
     /// Where the door or window tool would place its element now.
     placement: Option<Placement>,
+    /// Door and window tools: the distance from the end of the wall
+    /// («Desde un extremo») and how many («Repartidas»).
+    pub place_gap: f64,
+    pub place_count: usize,
     pub show_reference_lines: bool,
     pub message: Option<Message>,
     /// Snapped point under the cursor, in model metres.
@@ -478,6 +512,13 @@ pub struct ArchiSimApp {
     /// The witness end being dragged.
     anchor_drag: Option<(crate::temp_dims::Slot, crate::temp_dims::End)>,
     plan: Option<(PlanKey, TextureHandle)>,
+    /// When the plan or section view last moved (panning or zooming)
+    /// since its picture was last drawn in full: while it moves, the last
+    /// picture is moved with it instead of being drawn again.
+    view_moved_at: Option<std::time::Instant>,
+    /// What [`ArchiSimApp::other_walls`] was worked out for: revision,
+    /// level, cut plane and reference level.
+    other_walls_key: Option<(u64, LevelId, u64, Option<LevelId>)>,
     /// The sun's shadows of the plan's level, while the model and the
     /// level do not change (worked out once, not at each redraw).
     shadow_cache: Option<(
@@ -554,6 +595,8 @@ pub struct ArchiSimApp {
     pub show_navigator: bool,
     /// Pictures of the types for the properties palette.
     thumbs: thumbs::Thumbs,
+    /// The choice of a plan symbol among the drawings of a library DXF.
+    pub symbol_picker: Option<symbol_pick::SymbolPicker>,
     /// The 3D pictures of the Maqueta's catalog.
     thumbs3d: thumbs3d::Thumbs3d,
     /// The command line stays shown (Vista); otherwise it shows only while
@@ -645,8 +688,18 @@ impl ArchiSimApp {
             clipboard: None,
             drag3d: None,
             bar_swatches: None,
+            bar_rgb: None,
             bar_swatch_at: None,
             object_move: None,
+            mass_grip: None,
+            brush: Default::default(),
+            brush_stroke: None,
+            mass_grip_hover: None,
+            move_faces: Vec::new(),
+            move_points: Vec::new(),
+            move_axis: Point2::new(1.0, 0.0),
+            move_clear: Vec::new(),
+            move_clear_z: 0.0,
             render: Default::default(),
             budget: Default::default(),
             start: start_ui::StartScreen {
@@ -673,6 +726,10 @@ impl ArchiSimApp {
             spline_points: Vec::new(),
             section_tool: section_ui::SectionTool::default(),
             section_cache: None,
+            section_stash: Vec::new(),
+            section_pending: None,
+            sheet_pending: None,
+            shared_model: None,
             section_hover: None,
             room_settings: Default::default(),
             roof_settings,
@@ -730,6 +787,8 @@ impl ArchiSimApp {
             level_to_delete: None,
             types: TypesDialog::default(),
             placement: None,
+            place_gap: 0.30,
+            place_count: 2,
             show_reference_lines: false,
             message: None,
             cursor: None,
@@ -750,6 +809,8 @@ impl ArchiSimApp {
             temp_anchors: Default::default(),
             anchor_drag: None,
             plan: None,
+            view_moved_at: None,
+            other_walls_key: None,
             shadow_cache: None,
             pending: None,
             allow_close: false,
@@ -788,6 +849,7 @@ impl ArchiSimApp {
             show_properties: true,
             show_navigator: true,
             thumbs: thumbs::Thumbs::default(),
+            symbol_picker: None,
             thumbs3d: Default::default(),
             pin_command_line: false,
             attenuate: true,
@@ -1227,6 +1289,28 @@ impl ArchiSimApp {
         }
     }
 
+    /// The project as a `.glb`, for D5, Twinmotion or Blender.
+    fn export_glb(&mut self) {
+        let mut d = rfd::FileDialog::new()
+            .set_title("Exportar modelo 3D (glTF)")
+            .add_filter("glTF", &["glb"])
+            .set_file_name(format!("{}.glb", self.file_name_stem()));
+        if let Some(dir) = self.start_dir() {
+            d = d.set_directory(dir);
+        }
+        if let Some(path) = d.save_file() {
+            let bytes = archisim_render::glb::project_glb(&self.ed.shown());
+            match std::fs::write(&path, &bytes) {
+                Ok(()) => self.say(format!(
+                    "Modelo 3D exportado ({:.1} MB) en {}.",
+                    bytes.len() as f64 / 1e6,
+                    path.display()
+                )),
+                Err(e) => self.complain(format!("No se pudo exportar: {e}.")),
+            }
+        }
+    }
+
     /// The plan of the current level as drawn now (cut plane, what the view
     /// shows), at a scale.
     fn plan_export_options(&self, scale: f64) -> archisim_plan::PlanOptions {
@@ -1436,6 +1520,7 @@ impl ArchiSimApp {
 
     /// Builds the walls asked for by the wall tool.
     fn build_walls(&mut self, pieces: Vec<Piece>) {
+        let mark = self.ed.undo_mark();
         match self.ed.add_walls(&self.wall_settings, &pieces) {
             Ok(ids) if self.room_walls && self.wall_tool.mode == WallMode::Rectangle => {
                 // A room (Los Sims'): its floor and its room inside the
@@ -1453,6 +1538,8 @@ impl ArchiSimApp {
                     self.slab_settings.top_offset,
                 );
                 let room = self.ed.add_room_in_room(&self.room_settings, c);
+                // One step to undo: walls, floor and room.
+                self.ed.join_since(mark, "Habitación");
                 self.ed.selection = ids.iter().map(|id| Element::Wall(*id)).collect();
                 match (floor, room) {
                     (Ok(_), Ok(_)) => {
@@ -1544,13 +1631,36 @@ impl ArchiSimApp {
         }
     }
 
+    /// Where a piece of furniture made to join others (`joins` in its
+    /// recipe: kitchen modules, sofas, shelves…) dragged by its body in
+    /// plan goes to touch the one beside it, as when it is placed; `to`
+    /// itself for anything else, or a distance typed in.
+    pub(super) fn join_snap(&self, d: &DragState, to: Point2) -> Point2 {
+        if d.grip != Grip::Body || !d.typed.is_empty() || self.ed.selection.len() != 1 {
+            return to;
+        }
+        let Some(crate::pick::Element::Object(id)) = self.ed.selection.first().copied() else {
+            return to;
+        };
+        let m = self.ed.model();
+        let Some(o) = m.object(id) else {
+            return to;
+        };
+        let moved = o.position + (to - d.from);
+        match crate::placing::snap_alongside(m, o.level, o.object_type, moved, o.rotation, Some(id))
+        {
+            Some(q) => d.from + (q - o.position),
+            None => to,
+        }
+    }
+
     /// Drops the dragged selection at `cursor` (or at the typed distance).
     fn finish_drag(&mut self, cursor: Point2, variant: bool) {
         let Some(d) = self.drag.take() else {
             return;
         };
         self.drag_preview = None;
-        let to = d.target(cursor);
+        let to = self.join_snap(&d, d.target(cursor));
         if to.approx_eq(d.from) {
             return;
         }
@@ -1586,6 +1696,30 @@ impl ArchiSimApp {
             return;
         }
         let door = self.tool == Tool::Door;
+        if !pl.more.is_empty() {
+            // Spread out: all of them in one step.
+            let specs = pl.specs();
+            let n = specs.len();
+            let mark = self.ed.undo_mark();
+            let mut ids = Vec::new();
+            for spec in specs {
+                match self.ed.add_opening(spec) {
+                    Ok(id) => ids.push(id),
+                    Err(e) => {
+                        self.complain(format!("No se puede colocar: {e}."));
+                        break;
+                    }
+                }
+            }
+            let what = if door { "puertas" } else { "ventanas" };
+            self.ed
+                .join_since(mark, &format!("Colocar {n} {what} repartidas"));
+            if ids.len() == n {
+                self.ed.selection = ids.into_iter().map(Element::Opening).collect();
+                self.say(format!("{n} {what} repartidas con machones iguales."));
+            }
+            return;
+        }
         match self.ed.add_opening(pl.spec) {
             Ok(id) => {
                 // Selected, with its temporary dimensions and arrows, to
@@ -1805,6 +1939,7 @@ impl ArchiSimApp {
         self.presentation_dialog(&ctx);
         self.render_window(&ctx);
         self.price_pick_window(&ctx);
+        self.symbol_pick_window(&ctx);
         self.missions_frame(&ctx);
         self.start_screen(&ctx);
         self.sync_prefs(&ctx);
@@ -2317,6 +2452,7 @@ pub fn default_opening_settings(model: &Model, door: bool) -> OpeningSettings {
         sill: if door { 0.0 } else { 0.9 },
         hand: Hand::Left,
         setback: None,
+        place: Default::default(),
     }
 }
 
@@ -2373,7 +2509,7 @@ pub fn length_field(ui: &mut Ui, id: Id, value: f64, width: f32) -> Option<f64> 
     }
 }
 
-fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<String> {
+pub(super) fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<String> {
     let buffer_id = id.with("buffer");
     let mut text = ui
         .ctx()
@@ -2394,7 +2530,9 @@ fn text_edit_committed(ui: &mut Ui, id: Id, shown: &str, width: f32) -> Option<S
 }
 
 mod annotation_ui;
+mod background;
 mod bottom_segments;
+mod brush_ui;
 mod budget_ui;
 mod cad_ui;
 mod chrome;
@@ -2418,6 +2556,7 @@ mod icons;
 mod levels_ui;
 mod library_ui;
 mod maquette_ui;
+mod mass_grips3d;
 mod mesh_ui;
 mod methods_ui;
 mod missions_ui;
@@ -2453,6 +2592,7 @@ mod stair_ui;
 mod start_ui;
 mod structure_ui;
 mod survey_ui;
+mod symbol_pick;
 mod tabs;
 mod team_ui;
 mod temp_ui;

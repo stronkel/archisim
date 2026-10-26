@@ -176,7 +176,7 @@ impl Model {
                 .map(|f| f.def().category.clone())
                 .unwrap_or_default();
             return Some(
-                if matches!(category.as_str(), "site" | "street" | "vehicle") {
+                if matches!(category.as_str(), "site" | "street" | "nature" | "vehicle") {
                     Site
                 } else {
                     Architecture

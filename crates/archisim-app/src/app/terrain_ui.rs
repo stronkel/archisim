@@ -2,6 +2,7 @@
 //! their height; the properties of a terrain (its points, contour lines,
 //! depth); and the project's true north.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{SurveyPoint, TerrainId};
 use eframe::egui::{self, Id, Ui};
 
@@ -678,7 +679,7 @@ impl ArchiSimApp {
                     "Georreferenciado",
                     "Sitúa el proyecto en el mapa (coordenadas UTM del ±0,00)",
                     |ui, _| {
-                        if ui.checkbox(&mut on, "").changed() {
+                        if ui.switch(&mut on, "").changed() {
                             new = on.then(|| archisim_core::Georeference {
                                 crs: "EPSG:25830".into(),
                                 eastings: 0.0,

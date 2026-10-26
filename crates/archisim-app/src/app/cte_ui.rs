@@ -3,6 +3,7 @@
 //! section. A clic on a result selects its element in its plan and, for an
 //! evacuation route, draws it there.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{Accessibility, BuildingUse, LevelId, Point2};
 use archisim_cte::{Report, Section, Status, Subject};
 use eframe::egui::{self, Color32, Shape, Stroke, Ui};
@@ -94,7 +95,7 @@ impl ArchiSimApp {
                     });
                 ui.end_row();
                 ui.label("Extinción automática");
-                ui.checkbox(
+                ui.switch(
                     &mut new.sprinklers,
                     "rociadores en todo el edificio (recorridos +25 %)",
                 );
@@ -122,7 +123,7 @@ impl ArchiSimApp {
             );
             ui.colored_label(p.good, format!("Cumple: {}", report.count(Status::Passes)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.checkbox(&mut self.cte.only_problems, "Solo lo que falla");
+                ui.switch(&mut self.cte.only_problems, "Solo lo que falla");
             });
         });
         let mut pick: Option<archisim_cte::Item> = None;

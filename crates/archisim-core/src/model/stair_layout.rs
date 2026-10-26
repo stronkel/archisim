@@ -320,11 +320,11 @@ impl StairLayout {
                 }
                 push(*b, st.top + self.riser, st.top);
             }
-            if ri + 1 < self.runs.len() {
-                if let Some(l) = self.landings.get(ri) {
-                    for p in of_landing(l) {
-                        push(*p, l.top, l.top);
-                    }
+            // The landing after it: between two runs, or at the head of a
+            // spiral.
+            if let Some(l) = self.landings.get(ri) {
+                for p in of_landing(l) {
+                    push(*p, l.top, l.top);
                 }
             }
         }
@@ -486,6 +486,178 @@ pub fn layout(path: &[Point2], width: f64, going: f64, height: f64, base: f64) -
         runs,
         walk: path.to_vec(),
     }
+}
+
+/// Lays out a stair of flights and landings whose square turns are
+/// split ("mesetas partidas"): the landing of a quarter turn, along its
+/// diagonal from the inner corner to the outer one, into two treads at
+/// 45°; the landing of a U, along both diagonals, into three. The
+/// flights and their split landings make one run; a landing that is not
+/// a square turn stays a landing.
+pub fn split_layout(
+    path: &[Point2],
+    width: f64,
+    going: f64,
+    height: f64,
+    base: f64,
+) -> StairLayout {
+    let plain = layout(path, width, going, height, base);
+    let half = width / 2.0;
+    // The edges, left end first, that split each landing: the back of the
+    // flight before, the diagonals, the front of the flight after.
+    let splits: Vec<Option<Vec<[Point2; 2]>>> = plain
+        .landings
+        .iter()
+        .enumerate()
+        .map(|(i, l)| {
+            let c = &l.centre;
+            if c.len() < 3 || c.len() > 4 {
+                return None;
+            }
+            let (fa, fb) = (&plain.flights[i], &plain.flights[i + 1]);
+            let (ua, ub) = (fa.direction(), fb.direction());
+            let mut edges = vec![[
+                fa.end + ua.perp_left() * half,
+                fa.end - ua.perp_left() * half,
+            ]];
+            let mut turn = 0.0;
+            for m in 1..c.len() - 1 {
+                let u_in = (c[m] - c[m - 1]).normalized()?;
+                let u_out = (c[m + 1] - c[m]).normalized()?;
+                let cross = u_in.cross(u_out);
+                // Square turns only, all the same way.
+                if u_in.dot(u_out).abs() > 0.05 || cross * turn < 0.0 {
+                    return None;
+                }
+                turn = cross;
+                let inner = c[m] + (u_out - u_in) * half;
+                let outer = c[m] + (u_in - u_out) * half;
+                edges.push(if cross > 0.0 {
+                    [inner, outer]
+                } else {
+                    [outer, inner]
+                });
+            }
+            edges.push([
+                fb.start + ub.perp_left() * half,
+                fb.start - ub.perp_left() * half,
+            ]);
+            Some(edges)
+        })
+        .collect();
+    // One riser more per tread of a split landing, one less per landing
+    // gone.
+    let treads = plain.steps.len() + splits.iter().flatten().map(|e| e.len() - 1).sum::<usize>();
+    let runs = 1 + splits.iter().filter(|s| s.is_none()).count();
+    let riser = height / (treads + runs) as f64;
+    let mut steps = Vec::with_capacity(treads);
+    let mut out_runs = Vec::new();
+    let mut landings = Vec::new();
+    let mut flights = plain.flights.clone();
+    let (mut z, mut run_start, mut run_base) = (base, 0, base);
+    for (fi, f) in flights.iter_mut().enumerate() {
+        f.base = z;
+        for k in plain.runs[fi].steps.clone() {
+            z += riser;
+            let mut st = plain.steps[k].clone();
+            st.top = z;
+            steps.push(st);
+        }
+        if fi + 1 == plain.flights.len() {
+            break;
+        }
+        match &splits[fi] {
+            Some(edges) => {
+                for e in edges.windows(2) {
+                    z += riser;
+                    let (front, back) = (e[0], e[1]);
+                    let (a, b) = ((front[0] + front[1]) * 0.5, (back[0] + back[1]) * 0.5);
+                    steps.push(Step {
+                        front,
+                        back,
+                        left: Vec::new(),
+                        right: Vec::new(),
+                        centre: vec![a, b],
+                        top: z,
+                        going: a.distance(b),
+                        turned: true,
+                    });
+                }
+            }
+            None => {
+                z += riser;
+                let mut l = plain.landings[fi].clone();
+                l.top = z;
+                landings.push(l);
+                out_runs.push(Run {
+                    steps: run_start..steps.len(),
+                    base: run_base,
+                });
+                run_start = steps.len();
+                run_base = z;
+            }
+        }
+    }
+    out_runs.push(Run {
+        steps: run_start..steps.len(),
+        base: run_base,
+    });
+    StairLayout {
+        flights,
+        landings,
+        steps,
+        riser,
+        runs: out_runs,
+        walk: plain.walk,
+    }
+}
+
+/// The landing at the head of a spiral ("meseta de llegada"): a sector
+/// of the stair's ring, `angle` on from its last riser the way it turns,
+/// at the floor above (`top`).
+#[allow(clippy::too_many_arguments)]
+pub fn spiral_arrival(
+    l: &mut StairLayout,
+    centre: Point2,
+    start: Vec2,
+    sweep: f64,
+    core: f64,
+    width: f64,
+    top: f64,
+    angle: f64,
+) {
+    if angle <= 1e-6 {
+        return;
+    }
+    let ccw = sweep >= 0.0;
+    let a0 = start.y.atan2(start.x) + sweep;
+    let a1 = a0 + if ccw { angle } else { -angle };
+    let (ri, ro, rc) = (
+        core.max(0.0),
+        core.max(0.0) + width,
+        core.max(0.0) + width / 2.0,
+    );
+    let (rl, rr) = if ccw { (ri, ro) } else { (ro, ri) };
+    let at = |a: f64, r: f64| centre + Vec2::new(a.cos(), a.sin()) * r;
+    let arc = |r: f64| {
+        let mut v = vec![at(a0, r)];
+        v.extend(arc_between(centre, r, a0, a1));
+        v.push(at(a1, r));
+        v
+    };
+    let (left, right, middle) = (arc(rl), arc(rr), arc(rc));
+    let mut outline = right.clone();
+    outline.extend(left.iter().rev().copied());
+    if signed_area(&outline) < 0.0 {
+        outline.reverse();
+    }
+    l.landings.push(Landing {
+        outline,
+        top,
+        left,
+        right,
+        centre: middle,
+    });
 }
 
 /// A polyline moved `d` to its left (negative: to its right), rounded
@@ -925,6 +1097,8 @@ pub struct PresetSpec {
     pub preset: StairPreset,
     /// The turns with winders instead of landings.
     pub winders: bool,
+    /// The landings split at 45° (with landings, not winders).
+    pub split: bool,
     /// Turning left (counter-clockwise) walking up.
     pub left: bool,
     pub width: f64,
@@ -968,9 +1142,18 @@ pub fn preset_stair(
         StairForm::Landings
     };
     // Two flights with a landing: as many risers in the first as in the
-    // second, or one more.
-    let r1 = n.div_ceil(2);
-    let (t1, t2) = (r1 as f64 - 1.0, (n - r1) as f64 - 1.0);
+    // second, or one more. A split landing takes a riser more per tread
+    // it is split into, less the one onto the landing: one in an L, two
+    // in a U.
+    let taken = match spec.preset {
+        _ if !spec.split || spec.winders => 0,
+        StairPreset::LShape => 1,
+        StairPreset::UShape => 2,
+        _ => 0,
+    };
+    let m = n.saturating_sub(taken).max(2);
+    let r1 = m.div_ceil(2);
+    let (t1, t2) = (r1 as f64 - 1.0, (m - r1) as f64 - 1.0);
     match spec.preset {
         StairPreset::Free => None,
         StairPreset::Straight => Some((vec![foot, foot + u * (t * g)], form, 0.0)),
@@ -1042,6 +1225,7 @@ mod tests {
         PresetSpec {
             preset,
             winders,
+            split: false,
             left: true,
             width: 1.0,
             going: 0.28,
@@ -1165,5 +1349,83 @@ mod tests {
             assert!((st.front[0].distance(path[0]) - 0.1).abs() < 1e-9);
             assert!((st.front[1].distance(path[0]) - 1.1).abs() < 1e-9);
         }
+    }
+
+    /// Split landings: an L's landing in two treads at 45°, a U's in
+    /// three; the stair one run, still 17 risers, and its plan the same
+    /// as with whole landings.
+    #[test]
+    fn split_landings() {
+        for (preset, split_treads) in [(StairPreset::LShape, 2), (StairPreset::UShape, 3)] {
+            let mut s = spec(preset, false);
+            s.split = true;
+            let (path, form, _) =
+                preset_stair(&s, Point2::new(0.0, 0.0), Vec2::new(1.0, 0.0)).unwrap();
+            assert_eq!(form, StairForm::Landings);
+            let l = split_layout(&path, 1.0, 0.28, 2.97, 0.0);
+            assert_eq!(l.risers(), 17, "{preset:?}");
+            assert_eq!(l.runs.len(), 1);
+            assert!(l.landings.is_empty());
+            let turned: Vec<&Step> = l.steps.iter().filter(|s| s.turned).collect();
+            assert_eq!(turned.len(), split_treads, "{preset:?}");
+            check(&l);
+            // The corner's treads: a right-angled triangle each, half the
+            // landing's square.
+            let a = signed_area(&turned[0].outline());
+            assert!((a - 0.5).abs() < 1e-9, "{a}");
+            let plain = layout(&path, 1.0, 0.28, 2.97, 0.0);
+            let area = |l: &StairLayout| -> f64 {
+                l.steps
+                    .iter()
+                    .map(|s| signed_area(&s.outline()))
+                    .chain(l.landings.iter().map(|x| signed_area(&x.outline)))
+                    .sum()
+            };
+            assert!((area(&l) - area(&plain)).abs() < 1e-9, "{preset:?}");
+            for left in [true, false] {
+                let side = l.side(left);
+                assert!((side.last().unwrap().z - 2.97).abs() < 1e-9);
+                assert!(side.windows(2).all(|w| w[1].z >= w[0].z - 1e-9));
+            }
+        }
+    }
+
+    /// A spiral's landing at its head: at the floor above, a quarter of
+    /// its ring, and the railings go on round it.
+    #[test]
+    fn a_spirals_arrival() {
+        let s = spec(StairPreset::Spiral, false);
+        let (path, _, sweep) =
+            preset_stair(&s, Point2::new(0.0, 0.0), Vec2::new(1.0, 0.0)).unwrap();
+        let mut l = spiral_layout(
+            path[0],
+            path[1] - path[0],
+            sweep,
+            0.1,
+            1.0,
+            0.28,
+            2.97,
+            0.0,
+            0.5,
+        );
+        let before = l.side(false).len();
+        spiral_arrival(
+            &mut l,
+            path[0],
+            path[1] - path[0],
+            sweep,
+            0.1,
+            1.0,
+            2.97,
+            std::f64::consts::FRAC_PI_2,
+        );
+        assert_eq!(l.landings.len(), 1);
+        assert_eq!(l.risers(), 17);
+        let ring = std::f64::consts::FRAC_PI_4 * (1.1 * 1.1 - 0.1 * 0.1);
+        let a = signed_area(&l.landings[0].outline);
+        assert!((a - ring).abs() < 0.01, "{a} {ring}");
+        let side = l.side(false);
+        assert!(side.len() > before);
+        assert!((side.last().unwrap().z - 2.97).abs() < 1e-9);
     }
 }

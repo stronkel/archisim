@@ -5,6 +5,7 @@
 //! one element: changing its number, species or variation (or moving its
 //! line) makes its plants again.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{Arrangement, NewPlanting, ObjectTypeId, PlantingId, Point2};
 use eframe::egui::{self, Ui};
 
@@ -331,7 +332,7 @@ impl ArchiSimApp {
             "La línea pasa en curva suave por los puntos marcados",
             |ui, _| {
                 let mut on = s.smooth;
-                if ui.checkbox(&mut on, "").changed() {
+                if ui.switch(&mut on, "").changed() {
                     out.smooth = on;
                     changed = true;
                 }

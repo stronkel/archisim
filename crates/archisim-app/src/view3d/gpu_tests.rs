@@ -28,6 +28,16 @@ pub(crate) fn ci_notes() {
     });
 }
 
+/// Whether the only graphics adapter is OpenGL.
+fn gl_only() -> bool {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        ..Default::default()
+    }))
+    .is_ok_and(|a| a.get_info().backend == wgpu::Backend::Gl)
+}
+
 pub(crate) fn gpu() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
     ci_notes();
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
@@ -156,6 +166,82 @@ fn section_box_cuts_and_caps() {
     r.render(&device, &queue, &camera, size, 1);
     let (_, _, full) = r.read_pixels(&device, &queue).unwrap();
     assert_ne!(full, px);
+}
+
+/// The textures looked up in pictures look like the full ones: a brick
+/// wall seen up close differs little between the two, and much from
+/// plain colours.
+#[test]
+fn pictures_look_like_the_full_textures() {
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: texture pictures test skipped.");
+        return;
+    };
+    if gl_only() {
+        // OpenGL does not see the pictures (the app uses the light
+        // textures there).
+        eprintln!("OpenGL: texture pictures test skipped.");
+        return;
+    }
+    let (mut m, _, _) = room();
+    // Every finish in brick, seen up close.
+    let mats: Vec<_> = m.materials().map(|x| x.id).collect();
+    for id in mats {
+        m.set_appearance(
+            id,
+            archisim_core::Appearance {
+                color: Some([170, 80, 60]),
+                texture: Some(archisim_core::TextureKind::Brick),
+                scale: Some(0.24),
+                growth: None,
+            },
+        )
+        .unwrap();
+    }
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [320u32, 240u32];
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    camera.distance *= 0.35;
+    let draw = |mode| {
+        let mut r = Renderer::new(&device, view_formats, mode);
+        r.set_scene(&device, &scene);
+        r.render(&device, &queue, &camera, size, 1);
+        r.read_pixels(&device, &queue).unwrap().2
+    };
+    let full = draw(super::render::TextureMode::Full);
+    let pictures = draw(super::render::TextureMode::Pictures);
+    let off = draw(super::render::TextureMode::Off);
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, px) in [("completas", &full), ("imagen", &pictures), ("lisas", &off)] {
+            let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap();
+            pixmap
+                .save_png(dir.join(format!("texturas-{name}.png")))
+                .unwrap();
+        }
+    }
+    // The same pattern, not in the same place: alike in mean and in
+    // contrast, both far from the plain colour's.
+    let stats = |px: &[u8]| -> (f64, f64) {
+        let v: Vec<f64> = px
+            .chunks(4)
+            .map(|p| (p[0] as f64 + p[1] as f64 + p[2] as f64) / 3.0)
+            .collect();
+        let mean = v.iter().sum::<f64>() / v.len() as f64;
+        let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / v.len() as f64;
+        (mean, var.sqrt())
+    };
+    let (f, p, o) = (stats(&full), stats(&pictures), stats(&off));
+    assert!(f.1 > o.1 * 1.5, "full {f:?} plain {o:?}");
+    assert!(p.1 > o.1 * 1.5, "pictures {p:?} plain {o:?}");
+    assert!((f.0 - p.0).abs() < 12.0, "full {f:?} pictures {p:?}");
+    assert!((f.1 - p.1).abs() < f.1 * 0.35, "full {f:?} pictures {p:?}");
 }
 
 #[test]
@@ -446,4 +532,135 @@ fn streetlights_and_fires_are_lamps() {
     // The streetlight's light is up in its lantern.
     let high = scene.lamps.iter().map(|l| l[2]).fold(0.0f32, f32::max);
     assert!(high > 2.5, "{high}");
+}
+
+/// Thin lines: the contours of the room are one pixel wide instead of
+/// two, so the picture has about half the dark ink.
+#[test]
+fn thin_lines_draw_less_ink() {
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let size = [480, 320];
+    let (m, _, _) = room();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let mut camera = Camera::default();
+    camera.fit(scene.lo, scene.hi, size[0] as f32 / size[1] as f32);
+    let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+    r.set_scene(&device, &scene);
+    let mut ink = |thin: bool| {
+        r.thin_lines = thin;
+        r.render(&device, &queue, &camera, size, 1);
+        let (_, _, px) = r.read_pixels(&device, &queue).expect("picture");
+        let dark = px
+            .chunks(4)
+            .filter(|p| p[..3].iter().all(|c| *c < 90))
+            .count();
+        if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+            let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+                px.clone(),
+                resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+            )
+            .unwrap();
+            let name = if thin {
+                "vista3d-finas.png"
+            } else {
+                "vista3d-gruesas.png"
+            };
+            pixmap
+                .save_png(std::path::Path::new(&dir).join(name))
+                .unwrap();
+        }
+        dark
+    };
+    let thick = ink(false);
+    let thin = ink(true);
+    assert!(thick > 100, "{thick}");
+    assert!(
+        (thin as f64) > thick as f64 * 0.3 && (thin as f64) < thick as f64 * 0.8,
+        "{thin} / {thick}"
+    );
+}
+
+/// Meadows painted with the brush (C8): their grass and flowers drawn in
+/// their colours, without contour lines between the blades.
+#[test]
+fn a_meadow_in_flower() {
+    use super::look::Quality;
+    let Some((device, queue, view_formats)) = gpu() else {
+        eprintln!("No graphics adapter: 3D drawing test skipped.");
+        return;
+    };
+    let mut m = archisim_core::Model::new("Pradera");
+    let level = m.add_level("PB", 0.0);
+    let t =
+        crate::brush::ensure_terrain(&mut m, level, archisim_core::Point2::new(0.0, 0.0)).unwrap();
+    let cover = |name: &str| {
+        archisim_library::ground::GROUND_COVERS
+            .iter()
+            .position(|c| c.name == name)
+            .unwrap()
+    };
+    for (name, x, y) in [
+        ("Flores silvestres", 0.0, 0.0),
+        ("Margaritas", 4.0, 0.0),
+        ("Hierba alta", 0.0, 4.0),
+        ("Camino de tierra", 4.0, 4.0),
+    ] {
+        let mat = crate::brush::cover_material(&mut m, cover(name));
+        let dab = crate::brush::dab_shape(
+            crate::brush::BrushHead::Square,
+            archisim_core::Point2::new(x, y),
+            2.0,
+            1,
+        );
+        crate::brush::paint(&mut m, t, mat, dab).unwrap();
+    }
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [480, 320];
+    let mut camera = Camera::default();
+    camera.fit(
+        glam::Vec3::new(-2.0, -2.0, 0.0),
+        glam::Vec3::new(2.0, 2.0, 0.4),
+        size[0] as f32 / size[1] as f32,
+    );
+    let mut r = Renderer::new(
+        &device,
+        view_formats,
+        crate::view3d::render::TextureMode::Full,
+    );
+    r.set_scene(&device, &scene);
+    r.set_look(Quality::Normal, Some(glam::Vec3::new(-0.6, -0.5, 0.6)));
+    r.render(&device, &queue, &camera, size, 1);
+    let px = r.read_pixels(&device, &queue).unwrap().2;
+    if let Some(dir) = std::env::var_os("ARCHISIM_TEST_OUT") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        resvg::tiny_skia::Pixmap::from_vec(
+            px.clone(),
+            resvg::tiny_skia::IntSize::from_wh(size[0], size[1]).unwrap(),
+        )
+        .unwrap()
+        .save_png(dir.join("pradera.png"))
+        .unwrap();
+    }
+    let pixels = px.as_chunks::<4>().0;
+    let green = pixels
+        .iter()
+        .filter(|p| {
+            u32::from(p[1]) > u32::from(p[0]) + 15 && u32::from(p[1]) > u32::from(p[2]) + 15
+        })
+        .count();
+    let flowers = pixels
+        .iter()
+        .filter(|p| (p[0] > 200 && p[2] < 120 && p[1] < 190) || (p[2] > 170 && p[0] < 190))
+        .count();
+    let ink = pixels
+        .iter()
+        .filter(|p| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]) < 90)
+        .count();
+    assert!(green > 8_000, "green {green}");
+    assert!(flowers > 150, "flowers {flowers}");
+    assert!(ink < pixels.len() / 25, "ink {ink}");
 }

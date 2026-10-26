@@ -8,6 +8,7 @@
 //! uses them. Every change is one undoable step and applies at once to
 //! every element of the type, so the plan and the 3D view follow.
 
+use super::widgets::SwitchExt as _;
 use std::collections::HashMap;
 
 use archisim_core::{
@@ -1245,7 +1246,7 @@ impl ArchiSimApp {
                 |ui, _| {
                     let mut own = a.color.is_some();
                     let mut rgb = a.color.unwrap_or(mat.cut_color);
-                    let changed_own = ui.checkbox(&mut own, "").changed();
+                    let changed_own = ui.switch(&mut own, "").changed();
                     let picked = own && ui.color_edit_button_srgb(&mut rgb).changed();
                     if changed_own || picked {
                         let mut b = a;
@@ -1850,7 +1851,7 @@ fn param_row(
         }
         (ParamKind::Bool, Some(Value::Bool(b))) => {
             let mut on = b;
-            if ui.checkbox(&mut on, "").changed() {
+            if ui.switch(&mut on, "").changed() {
                 set(Value::Bool(on));
             }
         }

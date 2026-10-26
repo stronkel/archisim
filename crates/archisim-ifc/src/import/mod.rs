@@ -110,14 +110,20 @@ pub fn import_ifc(text: &str) -> Result<Imported, ImportError> {
 }
 
 /// The pieces ArchiSim writes for what a roof carries (dormers, tiles,
-/// gutters: `ArchiSim_RoofPart`) come back with their roof, not as
-/// elements of their own: they leave the file before it is read.
+/// gutters: `ArchiSim_RoofPart`) come back with their roof, and the
+/// worktop of a run of kitchen modules (`ArchiSim_Worktop`) with its
+/// modules, not as elements of their own: they leave the file before it
+/// is read.
 fn drop_roof_parts(file: &mut step_read::StepFile) {
     let sets: std::collections::HashSet<u64> = file
         .entities
         .iter()
         .filter(|(_, e)| {
-            e.kind == "IFCPROPERTYSET" && e.arg(2).as_str() == Some("ArchiSim_RoofPart")
+            e.kind == "IFCPROPERTYSET"
+                && matches!(
+                    e.arg(2).as_str(),
+                    Some("ArchiSim_RoofPart") | Some("ArchiSim_Worktop")
+                )
         })
         .map(|(id, _)| *id)
         .collect();

@@ -206,6 +206,14 @@ pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Mo
     }
     let family = m.add_family(&source.family(t.family)?.source).ok()?;
     let ot = m.add_object_type(t.name.clone(), family, values).ok()?;
+    // Its own plan drawing (a DXF symbol, a picture), as the plan draws it.
+    if t.symbol.is_some() {
+        m.set_object_type_symbol(ot, t.symbol.clone()).ok()?;
+    }
+    if t.plan_image.is_some() {
+        m.set_object_type_plan_image(ot, t.plan_image.clone())
+            .ok()?;
+    }
     let id = m
         .add_object(archisim_core::NewObject {
             level,
@@ -346,9 +354,17 @@ pub fn draw(model: &Model, level: LevelId, px_per_m: f64) -> (ColorImage, Point2
                 ((hi.x - lo.x) * px).round().max(1.0) as usize,
                 ((hi.y - lo.y) * px).round().max(1.0) as usize,
             ];
+            // A drawing of its own from a DXF (a tree of a library) in
+            // thin lines: its pens, made smaller with it, would fill it in.
+            let own = model
+                .objects()
+                .next()
+                .and_then(|o| model.object_type(o.object_type))
+                .is_some_and(|t| t.symbol.is_some());
             let options = PlanOptions {
                 scale: (PREVIEW_SCALE * 5.0 * span).max(PREVIEW_SCALE),
                 viewport: Some((lo, hi)),
+                thin_lines: own,
                 ..PlanOptions::default()
             };
             return (rasterize_with(model, level, size, &options), lo, hi);

@@ -38,6 +38,11 @@ pub struct Thumbs {
 }
 
 impl Thumbs {
+    /// Whether the picture for `key` is already made.
+    pub fn has(&self, key: &str) -> bool {
+        self.cache.contains_key(key)
+    }
+
     /// The picture for `key`, drawn from the model `build` gives the first
     /// time it is asked for.
     pub fn get(

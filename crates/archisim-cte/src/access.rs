@@ -376,6 +376,11 @@ pub fn stairs_and_ramps(model: &Model, report: &mut Report) {
                     "sin tabica".into(),
                     "con tabica".into(),
                 ),
+                I::SplitLanding => (
+                    "Mesetas partidas con peldaños a 45°: solo se admiten en escaleras de uso restringido".into(),
+                    "meseta partida".into(),
+                    "meseta entera".into(),
+                ),
             };
             report.items.push(Item {
                 section: Section::StairsAndRamps,

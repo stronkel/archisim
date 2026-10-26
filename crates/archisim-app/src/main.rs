@@ -9,11 +9,13 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod brush;
 mod cad;
 mod carpentry;
 mod coord;
 mod crash;
 mod dim_tool;
+mod documents;
 mod drag;
 mod editor;
 mod flip;
@@ -21,6 +23,7 @@ mod geo;
 mod missions;
 mod open_files;
 mod opening_tool;
+mod paper;
 mod pick;
 mod placing;
 mod plan_image;
@@ -35,6 +38,7 @@ mod type_preview;
 mod units;
 mod view;
 mod view3d;
+mod wall_faces;
 mod wall_tool;
 mod xform;
 

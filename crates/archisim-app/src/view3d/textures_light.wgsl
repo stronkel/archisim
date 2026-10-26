@@ -4,6 +4,10 @@
 // the full ones (AMD on Intel Macs): no `switch`, no loops, no remainders
 // of real numbers; stones and gravel from smooth noise instead of cells.
 
+fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {
+    return 0.0;
+}
+
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(123.34, 456.21));
     let r = q + dot(q, q + 45.32);
@@ -113,6 +117,15 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
         // Marble: grey veins.
         let w = p.x * 1.3 + p.y * 0.7 + noise(p * 1.5) * 3.0;
         out = base * (1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.08, abs(fract(w) - 0.5))));
+    } else if (kind < 19.5) {
+        // Soil: a mottle with light stones.
+        let stone = smoothstep(0.8, 0.86, noise(p * 20.0));
+        out = mix(base * (0.78 + 0.25 * noise(p * 3.0) + 0.12 * noise(p * 17.0)), base * 1.3 + vec3<f32>(0.08, 0.08, 0.07), stone);
+    } else if (kind < 20.5) {
+        // Fallen leaves.
+        let leaf = smoothstep(0.55, 0.62, noise(p * 5.0));
+        let tint = mix(vec3<f32>(0.4, 0.2, 0.1), vec3<f32>(0.66, 0.47, 0.18), noise(p * 1.3));
+        out = mix(base * (0.72 + 0.25 * noise(p * 6.0)), tint, leaf * 0.85);
     }
     return out;
 }

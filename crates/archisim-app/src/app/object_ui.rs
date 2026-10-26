@@ -2,6 +2,7 @@
 //! from the project's object types, placed with a click (back side on the
 //! point, Space turns it 90°); their properties and type sizes.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{ObjectId, ObjectTypeId, ParamKind, ParamScope, Value};
 use eframe::egui::{self, Id, Ui};
 
@@ -329,6 +330,8 @@ impl ArchiSimApp {
         let mut import = false;
         let mut fit_to = None;
         let mut remove = false;
+        let mut from_library = false;
+        let has_library = super::symbol_pick::has_library_files();
         group(ui, "object-symbol", "Símbolo de planta", |ui| {
             match &symbol {
                 None => props::note(
@@ -374,11 +377,25 @@ impl ArchiSimApp {
                 {
                     import = true;
                 }
+                if has_library
+                    && ui
+                        .button("De mi biblioteca…")
+                        .on_hover_text(format!(
+                            "Elegir entre los dibujos de los DXF de la carpeta «{}» de tu biblioteca, viéndolos",
+                            super::symbol_pick::FOLDER
+                        ))
+                        .clicked()
+                {
+                    from_library = true;
+                }
                 if symbol.is_some() && ui.button("Quitar").clicked() {
                     remove = true;
                 }
             });
         });
+        if from_library {
+            self.pick_from_library(t);
+        }
         // A picture for presentation plans.
         let picture = self
             .ed
@@ -448,9 +465,9 @@ impl ArchiSimApp {
             let k = if fit { 1.0 / size } else { size };
             let origin = Point2::new(0.0, 0.0);
             let tr = archisim_draft::Transform::scale(origin, k);
-            let symbol = archisim_core::PlanSymbol {
+            let scaled = |x: &archisim_core::PlanSymbol| archisim_core::PlanSymbol {
                 fit,
-                items: s
+                items: x
                     .items
                     .iter()
                     .map(|i| archisim_core::SymbolItem {
@@ -458,10 +475,19 @@ impl ArchiSimApp {
                         ..i.clone()
                     })
                     .collect(),
-                ..s
+                ..x.clone()
             };
+            // Every drawing of the type (when it has several).
+            let more = self
+                .ed
+                .model()
+                .object_type(t)
+                .map(|x| x.more_symbols.clone())
+                .unwrap_or_default();
+            let all: Vec<archisim_core::PlanSymbol> =
+                std::iter::once(&s).chain(more.iter()).map(scaled).collect();
             let r = self.ed.transact("Tamaño del símbolo", |m| {
-                m.set_object_type_symbol(t, Some(symbol))
+                m.set_object_type_symbols(t, all)
             });
             self.report(r, "Tamaño del símbolo cambiado.");
         }
@@ -478,6 +504,7 @@ impl ArchiSimApp {
         let users = self.ed.model().object_type_users(t);
         let mut add: Option<(bool, bool)> = None;
         let mut remove: Option<usize> = None;
+        let mut from_library: Option<bool> = None;
         group(ui, "object-elevation", "Dibujo en alzado", |ui| {
             if figures.is_empty() {
                 props::note(
@@ -506,8 +533,22 @@ impl ArchiSimApp {
             } else {
                 "Lo dibujará este objeto (es el único de su tipo)".to_string()
             };
+            let library = super::symbol_pick::has_library_files();
             ui.horizontal_wrapped(|ui| {
                 ui.add_space(4.0);
+                for (label, side) in [("De mi biblioteca, de frente…", false), ("De mi biblioteca, de lado…", true)] {
+                    if library
+                        && ui
+                            .button(label)
+                            .on_hover_text(format!(
+                                "Elegir entre los dibujos de los DXF de la carpeta «{}» de tu biblioteca, viéndolos",
+                                super::symbol_pick::FOLDER
+                            ))
+                            .clicked()
+                    {
+                        from_library = Some(side);
+                    }
+                }
                 for (label, image, side) in [
                     ("DXF de frente…", false, false),
                     ("DXF de lado…", false, true),
@@ -520,6 +561,9 @@ impl ArchiSimApp {
                 }
             });
         });
+        if let Some(side) = from_library {
+            self.pick_from_library_for(t, super::symbol_pick::PickFor::Elevation { side });
+        }
         if let Some((image, side)) = add {
             let mut d = rfd::FileDialog::new().set_title(if image {
                 "Imagen para alzados (PNG con fondo transparente)"
@@ -601,6 +645,24 @@ impl ArchiSimApp {
             |n| n.to_string_lossy().into_owned(),
         );
         let is_png = name.to_lowercase().ends_with(".png");
+        // A library (a sheet of trees, one block each): choose one, seeing
+        // them; the file is kept in the user's library.
+        if !is_png {
+            if let Ok(set) = super::symbol_pick::read_set(path, false) {
+                if !set.symbols.is_empty() {
+                    let n = set.symbols.len();
+                    super::symbol_pick::keep_in_library(path);
+                    self.symbol_picker = Some(super::symbol_pick::SymbolPicker::new(
+                        t,
+                        false,
+                        vec![set],
+                        super::symbol_pick::PickFor::Elevation { side },
+                    ));
+                    self.say(format!("{n} dibujos en el fichero: elige uno."));
+                    return;
+                }
+            }
+        }
         let figure = if is_png {
             archisim_export::symbol::elevation_from_png(&bytes, &name, side)
         } else {
@@ -652,14 +714,45 @@ impl ArchiSimApp {
         }
     }
 
-    pub(super) fn set_symbol_from(&mut self, t: ObjectTypeId, path: &std::path::Path) {
-        let fit = self.ed.model().type_grows(t)
+    /// Whether a symbol is stretched to the type (vegetation, people,
+    /// site) or keeps the drawing's size (the rest).
+    pub(super) fn symbol_fits(&self, t: ObjectTypeId) -> bool {
+        self.ed.model().type_grows(t)
             || self
                 .ed
                 .model()
                 .object_type(t)
                 .and_then(|ty| self.ed.model().family(ty.family))
-                .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people"));
+                .is_some_and(|f| matches!(f.def().category.as_str(), "site" | "people"))
+    }
+
+    pub(super) fn set_symbol_from(&mut self, t: ObjectTypeId, path: &std::path::Path) {
+        let fit = self.symbol_fits(t);
+        // A library (a sheet of trees, one block each): choose one,
+        // seeing them; the file is kept in the user's library.
+        match super::symbol_pick::read_set(path, fit) {
+            Ok(set) if !set.symbols.is_empty() => {
+                let n = set.symbols.len();
+                let kept = super::symbol_pick::keep_in_library(path);
+                self.symbol_picker = Some(super::symbol_pick::SymbolPicker::new(
+                    t,
+                    fit,
+                    vec![set],
+                    super::symbol_pick::PickFor::Plan,
+                ));
+                let note = if kept.is_some() {
+                    format!(
+                        " Guardado en tu biblioteca, carpeta «{}».",
+                        super::symbol_pick::FOLDER
+                    )
+                } else {
+                    String::new()
+                };
+                self.say(format!("{n} dibujos en el fichero: elige uno.{note}"));
+                return;
+            }
+            _ => {}
+        }
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
@@ -796,7 +889,7 @@ pub(super) fn param_row(
         (ParamKind::Bool, Value::Bool(b)) => {
             row(ui, &label, "", |ui, _| {
                 let mut on = *b;
-                if ui.checkbox(&mut on, "").changed() {
+                if ui.switch(&mut on, "").changed() {
                     out = Some(Value::Bool(on));
                 }
             });

@@ -2,6 +2,7 @@
 //! lines, texts and hatches), and the drawing layers dialog (AutoCAD's
 //! layer manager).
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     DraftId, DrawLayer, DrawLayerId, LineStyle, Rgb, Shape, TextAlign, LINE_WEIGHTS,
 };
@@ -68,7 +69,7 @@ impl ArchiSimApp {
         let mut out = None;
         row(ui, "Color", "PorCapa: el de la capa", |ui, _w| {
             let mut by_layer = current.is_none();
-            if ui.checkbox(&mut by_layer, "PorCapa").changed() {
+            if ui.switch(&mut by_layer, "PorCapa").changed() {
                 out = Some(if by_layer { None } else { Some([0, 0, 0]) });
             }
             if let Some(mut c) = current {
@@ -214,7 +215,7 @@ impl ArchiSimApp {
                 "Orto (F8)",
                 "Líneas horizontales y verticales",
                 |ui, _w| {
-                    ui.checkbox(&mut st.ortho, "");
+                    ui.switch(&mut st.ortho, "");
                 },
             );
         });
@@ -233,7 +234,7 @@ impl ArchiSimApp {
         let mut out = None;
         row(ui, "Fondo", "Color detrás de la trama", |ui, _w| {
             let mut on = current.is_some();
-            if ui.checkbox(&mut on, "").changed() {
+            if ui.switch(&mut on, "").changed() {
                 out = Some(on.then_some([255, 255, 255]));
             }
             if let Some(mut c) = current {
@@ -459,7 +460,7 @@ impl ArchiSimApp {
                 group(ui, "draft-pline", "Polilínea", |ui| {
                     text_row(ui, "Vértices", "", &p.points.len().to_string());
                     row(ui, "Cerrada", "", |ui, _w| {
-                        ui.checkbox(&mut new.closed, "");
+                        ui.switch(&mut new.closed, "");
                     });
                     row(ui, "Anchura (mm)", "", |ui, _w| {
                         let mut mm = new.width * 1000.0;
@@ -557,9 +558,9 @@ impl ArchiSimApp {
                                     ui.data_mut(|d| d.remove::<String>(id));
                                 }
                             }
-                            ui.checkbox(&mut v.visible, "");
-                            ui.checkbox(&mut v.locked, "");
-                            ui.checkbox(&mut v.printable, "");
+                            ui.switch(&mut v.visible, "");
+                            ui.switch(&mut v.locked, "");
+                            ui.switch(&mut v.printable, "");
                             ui.color_edit_button_srgb(&mut v.color);
                             let opts: Vec<(u64, String)> = LINE_WEIGHTS
                                 .iter()
@@ -670,7 +671,7 @@ impl ArchiSimApp {
             for c in archisim_core::Category::ALL {
                 row(ui, c.label(), "", |ui, _| {
                     let mut on = style.shows(c);
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         if on {
                             style.hidden.remove(&c);
                         } else {
@@ -685,7 +686,7 @@ impl ArchiSimApp {
                 for (id, name) in &layers {
                     row(ui, name, "", |ui, _| {
                         let mut on = style.shows_layer(*id);
-                        if ui.checkbox(&mut on, "").changed() {
+                        if ui.switch(&mut on, "").changed() {
                             if on {
                                 style.hidden_layers.remove(id);
                             } else {

@@ -126,6 +126,7 @@ Uso:
       Escribe el informe en pantalla y, si se da, en CSV.
 
   archisim medir [n] [carpeta]
+  archisim medir vistas proyecto.archisim   lo que tarda cada alzado y planta en pantalla
       Repite la vivienda de prueba en una rejilla de n × n (20 por defecto:
       400 viviendas, 2800 muros) y mide cuánto tarda cada trabajo: planta,
       3D, varita mágica, guardar y abrir, exportar e importar el IFC. Deja
@@ -135,10 +136,15 @@ Uso:
       Convierte una planta o un plano en SVG en una imagen PNG, a 200
       puntos por pulgada si no se dice otra cosa.
 
-  archisim render <proyecto.archisim> [imagen.png] [ancho]
+  archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas]
       Hace una imagen realista del proyecto visto desde el suroeste, con el
-      sol del proyecto, sus sombras y la luz del cielo (1600 píxeles de
-      ancho si no se dice otra cosa).
+      sol del proyecto, sus sombras, la luz del cielo y las texturas de los
+      materiales (1600 píxeles de ancho si no se dice otra cosa). Al
+      atardecer y de noche se encienden las lámparas, con sus sombras.
+
+  archisim glb <proyecto.archisim> [modelo.glb]
+      El proyecto entero en glTF (.glb) para D5, Twinmotion o Blender: un
+      objeto por elemento, los materiales con su nombre, color y textura.
 
   archisim --version        Muestra la versión
   archisim --help           Muestra esta ayuda
@@ -167,22 +173,50 @@ fn main() -> ExitCode {
             }
         },
         Some("render") => {
-            match args.get(1) {
+            // Flags anywhere: the light and no textures.
+            let light = if args.iter().any(|a| a == "--noche") {
+                archisim_render::Light::Night
+            } else if args.iter().any(|a| a == "--atardecer") {
+                archisim_render::Light::Evening
+            } else {
+                archisim_render::Light::Day
+            };
+            let textures = !args.iter().any(|a| a == "--sin-texturas");
+            let plain: Vec<&String> = args
+                .iter()
+                .skip(1)
+                .filter(|a| !a.starts_with("--"))
+                .collect();
+            match plain.first() {
                 Some(project) => {
                     let project = PathBuf::from(project);
-                    let png = args
-                        .get(2)
+                    let png = plain
+                        .get(1)
                         .map(PathBuf::from)
                         .unwrap_or_else(|| project.with_extension("png"));
-                    let width: usize = args.get(3).and_then(|w| w.parse().ok()).unwrap_or(1600);
-                    report(run_render(&project, &png, width))
+                    let width: usize = plain.get(2).and_then(|w| w.parse().ok()).unwrap_or(1600);
+                    report(run_render(&project, &png, width, light, textures))
                 }
                 None => {
-                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho]");
+                    eprintln!("Falta el proyecto: archisim render <proyecto.archisim> [imagen.png] [ancho] [--atardecer | --noche] [--sin-texturas]");
                     ExitCode::FAILURE
                 }
             }
         }
+        Some("glb") => match args.get(1) {
+            Some(project) => {
+                let project = PathBuf::from(project);
+                let out = args
+                    .get(2)
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| project.with_extension("glb"));
+                report(run_glb(&project, &out))
+            }
+            None => {
+                eprintln!("Falta el proyecto: archisim glb <proyecto.archisim> [modelo.glb]");
+                ExitCode::FAILURE
+            }
+        },
         Some("exportar") | Some("export") => match args.get(1) {
             Some(project) => {
                 let project = PathBuf::from(project);
@@ -275,6 +309,14 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("medir") if args.get(1).map(String::as_str) == Some("vistas") => {
+            let path = PathBuf::from(
+                args.get(2)
+                    .map(String::as_str)
+                    .unwrap_or("out/demo.archisim"),
+            );
+            report(grande::measure_views(&path))
+        }
         Some("medir") => {
             let n = args.get(1).and_then(|a| a.parse().ok()).unwrap_or(20);
             let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
@@ -378,6 +420,7 @@ fn library_folder(category: &str) -> &'static str {
         "kitchen" => "Cocina",
         "site" => "Entorno",
         "street" => "Mobiliario urbano",
+        "nature" => "Elementos naturales",
         "people" => "Personas",
         "vehicle" => "Vehículos",
         _ => "Otros",
@@ -440,7 +483,30 @@ fn run_cte(project: &Path, csv: Option<&Path>) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-fn run_render(project: &Path, png: &Path, width: usize) -> Result<(), Box<dyn std::error::Error>> {
+fn run_glb(project: &Path, out: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let model = archisim_file::open(project)
+        .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
+    let model = model.flattened().map_err(|e| format!("{e}"))?;
+    if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    let bytes = archisim_render::glb::project_glb(&model);
+    std::fs::write(out, &bytes)?;
+    println!(
+        "Modelo 3D en glTF ({:.1} MB): {}",
+        bytes.len() as f64 / 1e6,
+        out.display()
+    );
+    Ok(())
+}
+
+fn run_render(
+    project: &Path,
+    png: &Path,
+    width: usize,
+    light: archisim_render::Light,
+    textures: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let model = archisim_file::open(project)
         .map_err(|e| format!("no se puede abrir {}: {e}", project.display()))?;
     let model = model.flattened().map_err(|e| format!("{e}"))?;
@@ -448,6 +514,8 @@ fn run_render(project: &Path, png: &Path, width: usize) -> Result<(), Box<dyn st
     let options = archisim_render::Options {
         width,
         height: width * 5 / 8,
+        light,
+        textures,
         ..Default::default()
     };
     let view = archisim_render::View::fit(&model);
@@ -669,6 +737,14 @@ fn export_all(model: &Model, dir: &Path, stem: &str) -> Result<(), Box<dyn std::
         std::fs::write(&path, t.csv())?;
         println!("  Tabla «{}»: {}", kind.label(), path.display());
     }
+    // The model for D5, Twinmotion or Blender.
+    let glb = dir.join(format!("{stem}.glb"));
+    let flat = model.flattened().unwrap_or_else(|_| model.clone());
+    std::fs::write(&glb, archisim_render::glb::project_glb(&flat))?;
+    println!(
+        "  Modelo 3D en glTF (D5, Twinmotion, Blender): {}",
+        glb.display()
+    );
     let bc3 = dir.join(format!("{stem}.bc3"));
     let date = archisim_export::bc3::bc3_date(&archisim_ifc::utc_now());
     std::fs::write(

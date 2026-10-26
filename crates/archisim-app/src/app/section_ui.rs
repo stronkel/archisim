@@ -2,6 +2,7 @@
 //! (drawn by `archisim_plan::section` from the same solids as the 3D and
 //! the IFC) and their properties.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{SectionId, SectionKind};
 use archisim_plan::section::{render_section, section_drawing, SectionDrawing};
 use eframe::egui::{self, Id, Ui};
@@ -39,13 +40,50 @@ pub struct SectionKey {
     hidden: std::collections::BTreeSet<archisim_core::ElementDiscipline>,
 }
 
+impl SectionKey {
+    /// Whether `other` is the same picture of another region or size (the
+    /// view has only moved or zoomed). A picture marked to be drawn again
+    /// (size 0, after the model changed) is not.
+    fn same_but_view(&self, other: &SectionKey) -> bool {
+        self.size != [0, 0]
+            && *other
+                == SectionKey {
+                    lo: other.lo,
+                    hi: other.hi,
+                    size: other.size,
+                    ..self.clone()
+                }
+    }
+}
+
+/// How a section is drawn for the picture of `key`.
+fn section_options(key: &SectionKey) -> archisim_plan::PlanOptions {
+    let (lo, hi) = (key.lo, key.hi);
+    let px_per_m = key.size[0] as f64 / (hi.x - lo.x).max(1e-9);
+    archisim_plan::PlanOptions {
+        viewport: Some((lo, hi)),
+        scale: key.scale,
+        thin_lines: key.thin_lines,
+        px_per_mm: Some(px_per_m * key.scale / 1000.0),
+        style: archisim_core::ViewStyle {
+            focus: key.focus,
+            hidden_disciplines: key.hidden.clone(),
+            ..Default::default()
+        },
+        ..archisim_plan::PlanOptions::default()
+    }
+}
+
+/// How many sections seen before keep their drawing.
+const STASHED: usize = 4;
+
 /// The drawing of the section shown, worked out once per revision of the
 /// model, and its picture on screen.
 pub struct SectionCache {
     revision: u64,
     section: SectionId,
     phase_view: archisim_plan::phases::PhaseView,
-    drawing: SectionDrawing,
+    drawing: std::sync::Arc<SectionDrawing>,
     picture: Option<(SectionKey, TextureHandle)>,
 }
 
@@ -157,6 +195,17 @@ impl ArchiSimApp {
         if fresh {
             return;
         }
+        // A section seen before, unchanged since: back to it as it was.
+        let up_to_date = |c: &SectionCache| {
+            c.revision == revision && c.section == id && c.phase_view == phase_view
+        };
+        if let Some(i) = self.section_stash.iter().position(up_to_date) {
+            let back = self.section_stash.remove(i);
+            if let Some(old) = self.section_cache.replace(back) {
+                self.stash_section(old);
+            }
+            return;
+        }
         let shown = self.ed.shown();
         let model: &archisim_core::Model = &shown;
         let Some(sec) = model.section(id) else {
@@ -164,18 +213,41 @@ impl ArchiSimApp {
         };
         let phased = archisim_plan::phases::phase_model(model, phase_view);
         let drawing = section_drawing(phased.as_ref().unwrap_or(model), sec);
-        let picture = self.section_cache.take().and_then(|c| c.picture);
+        // The texture of the one shown before is reused when it was this
+        // section; another section is put aside to come back to.
+        let picture = match self.section_cache.take() {
+            Some(c) if c.section == id => c.picture,
+            Some(c) => {
+                self.stash_section(c);
+                None
+            }
+            None => None,
+        };
         self.section_cache = Some(SectionCache {
             revision,
             section: id,
             phase_view,
-            drawing,
+            drawing: std::sync::Arc::new(drawing),
             picture: picture.map(|(mut k, t)| {
                 // Same texture, new picture.
                 k.size = [0, 0];
                 (k, t)
             }),
         });
+    }
+
+    /// Keeps the drawing of a section no longer shown, to go back to it,
+    /// with the few most recent ones (out of date ones are dropped).
+    fn stash_section(&mut self, c: SectionCache) {
+        let revision = self.ed.revision();
+        self.section_stash
+            .retain(|s| s.section != c.section && s.revision == revision);
+        if c.revision == revision {
+            self.section_stash.push(c);
+        }
+        if self.section_stash.len() > STASHED {
+            self.section_stash.remove(0);
+        }
     }
 
     pub(super) fn section_view(&mut self, ui: &mut Ui) {
@@ -293,25 +365,65 @@ impl ArchiSimApp {
             focus: self.screen_focus(),
             hidden: self.hidden_disciplines.clone(),
         };
+        let moving = self.view_moving(ctx);
+        let only_moved = self
+            .section_cache
+            .as_ref()
+            .and_then(|c| c.picture.as_ref())
+            .is_some_and(|p| p.0 != key && p.0.same_but_view(&key));
+        if only_moved {
+            // While it moves, and then while its new picture is made aside,
+            // the old one moved.
+            let ready = match &self.section_pending {
+                Some(p) if p.key == key => p.take(),
+                _ if moving => None,
+                _ => {
+                    let model = self.shared_model();
+                    let Some(drawing) = self.section_cache.as_ref().map(|c| c.drawing.clone())
+                    else {
+                        return;
+                    };
+                    let options = section_options(&key);
+                    let size = key.size;
+                    self.section_pending =
+                        Some(super::background::Pending::start(key.clone(), move || {
+                            let svg = render_section(&model, &drawing, &options);
+                            crate::plan_image::rasterize_svg(&svg, size)
+                        }));
+                    None
+                }
+            };
+            match ready {
+                Some(image) => {
+                    self.section_pending = None;
+                    self.view_moved_at = None;
+                    if let Some((k, tex)) =
+                        self.section_cache.as_mut().and_then(|c| c.picture.as_mut())
+                    {
+                        tex.set(image, TextureOptions::LINEAR);
+                        *k = key.clone();
+                    }
+                }
+                None => {
+                    if let Some((old, tex)) =
+                        self.section_cache.as_ref().and_then(|c| c.picture.as_ref())
+                    {
+                        self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                    }
+                    ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                    return;
+                }
+            }
+        }
         let shown = self.ed.shown();
         let model: &archisim_core::Model = &shown;
         let Some(cache) = self.section_cache.as_mut() else {
             return;
         };
         if cache.picture.as_ref().map(|p| &p.0) != Some(&key) {
-            let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
-            let options = archisim_plan::PlanOptions {
-                viewport: Some((lo, hi)),
-                scale: key.scale,
-                thin_lines: key.thin_lines,
-                px_per_mm: Some(px_per_m * key.scale / 1000.0),
-                style: archisim_core::ViewStyle {
-                    focus: key.focus,
-                    hidden_disciplines: key.hidden.clone(),
-                    ..Default::default()
-                },
-                ..archisim_plan::PlanOptions::default()
-            };
+            self.view_moved_at = None;
+            self.section_pending = None;
+            let options = section_options(&key);
             let svg = render_section(model, &cache.drawing, &options);
             let image = crate::plan_image::rasterize_svg(&svg, size);
             match &mut cache.picture {
@@ -430,7 +542,7 @@ impl ArchiSimApp {
                 "Alturas entre plantas a la izquierda y, en una sección, la altura libre de cada local cortado",
                 |ui, _| {
                     let mut on = s.heights;
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         let r = self
                             .ed
                             .edit_section("Acotar alturas de la sección", id, |s| s.heights = on);

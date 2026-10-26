@@ -198,6 +198,9 @@ pub(crate) struct ObjectType {
     /// A plan symbol from a DXF (version 30).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<SymbolOf>,
+    /// More plan symbols, taken in turn by its objects (version 37).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub more_symbols: Vec<SymbolOf>,
     /// The type of one object only, and the type it was made from
     /// (version 35).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -636,6 +639,26 @@ pub(crate) struct Terrain {
     /// Contour lines drawn by hand, as point indices (optional).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lines: Vec<Vec<usize>>,
+    /// Areas painted over it (version 37, optional).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub patches: Vec<TerrainPatch>,
+}
+
+/// An area of a terrain painted with another material (version 37): its
+/// regions, each an outline and its holes, as `[x, y]`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TerrainPatch {
+    pub material: u64,
+    pub regions: Vec<TerrainRegion>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TerrainRegion {
+    pub outline: Vec<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<[f64; 2]>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -706,6 +729,16 @@ pub(crate) struct StairDesign {
     pub tread_material: Option<u64>,
     /// Width and depth of the stringers.
     pub stringer: [f64; 2],
+    /// Landings split at 45° (version 38).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub split: bool,
+    /// Spiral: angle of the landing at its head, radians (version 38).
+    #[serde(default, skip_serializing_if = "is_nothing")]
+    pub arrival: f64,
+}
+
+fn is_nothing(v: &f64) -> bool {
+    *v == 0.0
 }
 
 impl StairDesign {
@@ -729,6 +762,8 @@ impl StairDesign {
             tread: d.tread,
             tread_material: d.tread_material.map(|m| m.0),
             stringer: d.stringer,
+            split: d.split,
+            arrival: d.arrival,
         })
     }
 
@@ -755,6 +790,8 @@ impl StairDesign {
             tread: d.tread,
             tread_material: d.tread_material.map(core::MaterialId),
             stringer: d.stringer,
+            split: d.split,
+            arrival: d.arrival,
         }
     }
 }
@@ -1049,6 +1086,23 @@ pub(crate) struct AppearanceOf {
     pub texture: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<f64>,
+    /// Grass and flowers growing on it (version 39).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub growth: Option<GrowthOf>,
+}
+
+/// Grass and flowers growing on a material painted over the ground
+/// (version 39): height (m), tufts per m², flower colours and flowers per
+/// m².
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GrowthOf {
+    pub height: f64,
+    pub density: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flowers: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_nothing")]
+    pub bloom: f64,
 }
 
 /// Chamfered or rounded edges of a volume (version 26).
@@ -2794,6 +2848,24 @@ impl ProjectFile {
                     depth: t.depth,
                     contour: t.contour,
                     lines: t.lines,
+                    patches: t
+                        .patches
+                        .into_iter()
+                        .map(|p| TerrainPatch {
+                            material: p.material.0,
+                            regions: p
+                                .regions
+                                .into_iter()
+                                .map(|(o, holes)| TerrainRegion {
+                                    outline: o.iter().map(|q| [q.x, q.y]).collect(),
+                                    holes: holes
+                                        .iter()
+                                        .map(|h| h.iter().map(|q| [q.x, q.y]).collect())
+                                        .collect(),
+                                })
+                                .collect(),
+                        })
+                        .collect(),
                 })
                 .collect(),
             object_types: p
@@ -2807,6 +2879,7 @@ impl ProjectFile {
                     values: values_out(&t.values),
                     mesh: t.mesh.map(|m| m.0),
                     symbol: t.symbol.as_ref().map(SymbolOf::out),
+                    more_symbols: t.more_symbols.iter().map(SymbolOf::out).collect(),
                     own: t.own.map(|w| OwnOf {
                         object: w.object.0,
                         base: w.base.0,
@@ -2837,6 +2910,16 @@ impl ProjectFile {
                     color: a.color.map(crate::drafting::hex),
                     texture: a.texture.map(|t| t.code().to_string()),
                     scale: a.scale,
+                    growth: a.growth.map(|g| GrowthOf {
+                        height: g.height,
+                        density: g.density,
+                        flowers: g
+                            .flower_colours()
+                            .iter()
+                            .map(|c| crate::drafting::hex(*c))
+                            .collect(),
+                        bloom: g.bloom,
+                    }),
                 })
                 .collect(),
             presentation_styles: p
@@ -3436,6 +3519,25 @@ impl ProjectFile {
                         depth: t.depth,
                         contour: t.contour,
                         lines: t.lines.clone(),
+                        patches: t
+                            .patches
+                            .iter()
+                            .map(|p| core::TerrainPatch {
+                                material: core::MaterialId(p.material),
+                                regions: p
+                                    .regions
+                                    .iter()
+                                    .map(|r| {
+                                        let pts = |v: &[[f64; 2]]| -> Vec<core::Point2> {
+                                            v.iter()
+                                                .map(|q| core::Point2::new(q[0], q[1]))
+                                                .collect()
+                                        };
+                                        (pts(&r.outline), r.holes.iter().map(|h| pts(h)).collect())
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
                     })
                 })
                 .collect::<Result<Vec<_>, FileError>>()?,
@@ -3786,6 +3888,11 @@ impl ProjectFile {
                 values,
                 mesh: t.mesh.map(core::MeshId),
                 symbol: t.symbol.map(|s| s.into_core(&element)).transpose()?,
+                more_symbols: t
+                    .more_symbols
+                    .into_iter()
+                    .map(|s| s.into_core(&element))
+                    .collect::<Result<Vec<_>, _>>()?,
                 own: t.own.map(|w| core::OwnType {
                     object: core::ObjectId(w.object),
                     base: core::ObjectTypeId(w.base),
@@ -3854,12 +3961,26 @@ impl ProjectFile {
                 .color
                 .map(|c| crate::drafting::parse_hex(&element, &c))
                 .transpose()?;
+            let growth = match a.growth {
+                Some(g) => {
+                    let flowers = g
+                        .flowers
+                        .iter()
+                        .map(|c| crate::drafting::parse_hex(&element, c))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Some(core::Growth::flowering(
+                        g.height, g.density, &flowers, g.bloom,
+                    ))
+                }
+                None => None,
+            };
             parts.appearances.push((
                 core::MaterialId(a.material),
                 core::Appearance {
                     color,
                     texture,
                     scale: a.scale,
+                    growth,
                 },
             ));
         }

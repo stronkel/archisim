@@ -3,6 +3,10 @@
 
 use super::*;
 
+/// How long the plan or a section waits, after it stops moving, to be
+/// drawn again in full.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(150);
+
 impl ArchiSimApp {
     pub(super) fn plan_view(&mut self, ui: &mut Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
@@ -22,13 +26,22 @@ impl ArchiSimApp {
 
         self.navigate(&ctx, &response, rect);
         let reference = self.reference_level();
-        self.other_walls = archisim_plan::other_level_walls(
-            self.ed.model(),
+        let walls_key = (
+            self.ed.revision(),
             self.ed.level,
-            self.cut_plane,
+            self.cut_plane.to_bits(),
             reference,
-        )
-        .ids();
+        );
+        if self.other_walls_key != Some(walls_key) {
+            self.other_walls = archisim_plan::other_level_walls(
+                self.ed.model(),
+                self.ed.level,
+                self.cut_plane,
+                reference,
+            )
+            .ids();
+            self.other_walls_key = Some(walls_key);
+        }
         self.track_cursor(&ctx, &response, rect);
         self.sculpt_follow(&ctx);
         // Keys go to the plan unless a field is being typed in (a temporary
@@ -71,6 +84,7 @@ impl ArchiSimApp {
         self.draw_roof_preview(&painter, rect);
         self.draw_stair_preview(&painter, rect);
         self.draw_terrain_preview(&painter, rect);
+        self.draw_brush_plan(&painter, rect);
         self.draw_curtain_preview(&painter, rect);
         self.draw_railing_preview(&painter, rect);
         self.draw_object_preview(&painter, rect);
@@ -124,6 +138,7 @@ impl ArchiSimApp {
             | Tool::MassOffset
             | Tool::Tape
             | Tool::Plot
+            | Tool::Brush
             | Tool::Road
             | Tool::Planting
             | Tool::Pipe
@@ -154,7 +169,49 @@ impl ArchiSimApp {
         }
     }
 
+    /// Whether the plan or section view is being moved: since it last
+    /// moved, less than [`SETTLE`] has gone by or the button that moves
+    /// it is still held. Until it stops, the picture drawn before is moved
+    /// with the view (drawing it again at every step is what made moving
+    /// around slow); once it stops, it is drawn once, in full.
+    pub(super) fn view_moving(&self, ctx: &egui::Context) -> bool {
+        let Some(at) = self.view_moved_at else {
+            return false;
+        };
+        let held = ctx.input(|i| {
+            i.pointer.button_down(PointerButton::Secondary)
+                || i.pointer.button_down(PointerButton::Middle)
+        });
+        let left = SETTLE.saturating_sub(at.elapsed());
+        if left.is_zero() && !held {
+            return false;
+        }
+        ctx.request_repaint_after(left.max(std::time::Duration::from_millis(16)));
+        true
+    }
+
+    /// Paints a picture drawn for the region `lo`–`hi` where that region
+    /// is now on screen.
+    pub(super) fn paint_moved(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        tex: &egui::TextureHandle,
+        lo: Point2,
+        hi: Point2,
+    ) {
+        let a = self.view.to_screen(rect, Point2::new(lo.x, hi.y));
+        let b = self.view.to_screen(rect, Point2::new(hi.x, lo.y));
+        painter.image(
+            tex.id(),
+            Rect::from_min_max(a, b),
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            Color32::WHITE,
+        );
+    }
+
     pub(super) fn navigate(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
+        let before = self.view;
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
@@ -169,6 +226,9 @@ impl ArchiSimApp {
             if (factor - 1.0).abs() > 1e-6 {
                 self.view.zoom_at(rect, pos, factor);
             }
+        }
+        if self.view != before {
+            self.view_moved_at = Some(std::time::Instant::now());
         }
     }
 
@@ -439,6 +499,10 @@ impl ArchiSimApp {
                 self.cursor = Some(s);
                 self.hover = None;
             }
+            Tool::Brush => {
+                self.cursor = Some(Snap::at(raw, SnapKind::Free));
+                self.hover = None;
+            }
             Tool::Door | Tool::Window => {
                 let settings = if self.tool == Tool::Door {
                     self.door_settings
@@ -470,7 +534,7 @@ impl ArchiSimApp {
                 self.hover = None;
                 self.hover_grip = None;
                 let variant = drag_variant(ctx, d.grip);
-                let to = d.target(s.point);
+                let to = self.join_snap(d, d.target(s.point));
                 let fresh = self
                     .drag_preview
                     .as_ref()
@@ -764,6 +828,10 @@ impl ArchiSimApp {
                     if self.planting_points.pop().is_none() {
                         self.set_tool(Tool::Arrow);
                     }
+                }
+                Tool::Brush => {
+                    self.end_brush_stroke();
+                    self.set_tool(Tool::Arrow);
                 }
                 Tool::Pipe | Tool::Duct => {
                     if self.run_points.pop().is_none() {
@@ -1074,6 +1142,7 @@ impl ArchiSimApp {
                     self.set_tool(Tool::Arrow);
                 }
             }
+            Tool::Brush => self.brush_clicks(ctx, response),
             Tool::Planting => {
                 if response.double_clicked_by(PointerButton::Primary)
                     || response.clicked_by(PointerButton::Secondary)
@@ -1374,7 +1443,15 @@ impl ArchiSimApp {
             style: self.view_style.clone(),
             ceiling: self.active_ceiling(),
         };
+        let stale = self.plan.as_ref().filter(|p| p.0 != key);
+        if let Some((old, tex)) = stale {
+            if old.same_but_view(&key) && self.view_moving(ctx) {
+                self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                return;
+            }
+        }
         if self.plan.as_ref().map(|p| &p.0) != Some(&key) {
+            self.view_moved_at = None;
             let started = std::time::Instant::now();
             let shadows = self.plan_shadows();
             let mut options = self.screen_plan_options(lo, hi);
@@ -1898,79 +1975,89 @@ impl ArchiSimApp {
         let (Some(pl), Some(c)) = (&self.placement, self.cursor) else {
             return;
         };
-        let g = &pl.geometry;
         let color = if pl.problem.is_some() {
             Color32::from_rgb(210, 40, 40)
         } else {
             ACCENT
         };
-        let to = |t: f64, off: f64| self.view.to_screen(rect, g.point(t, off));
-        let foot = self.polygon(rect, &g.footprint());
-        painter.add(Shape::convex_polygon(
-            foot,
-            color.gamma_multiply(0.18),
-            Stroke::new(1.5, color),
-        ));
-        // Frame faces.
-        let stroke = Stroke::new(1.0, color);
-        for off in [g.frame_exterior, g.frame_interior] {
-            painter.line_segment([to(g.t0, off), to(g.t1, off)], stroke);
-        }
-        match g.kind {
-            OpeningKind::Void => {}
-            OpeningKind::Door(op) => {
-                use archisim_core::DoorOperation as D;
-                let face = g.swing_frame_face();
-                let out = g.swing_dir();
-                let mut leaves: Vec<(f64, f64)> = Vec::new(); // (hinge t, free t)
-                match op {
-                    D::SingleSwing => {
-                        if g.hinge_at_start() {
-                            leaves.push((g.t0, g.t1));
-                        } else {
-                            leaves.push((g.t1, g.t0));
+        // Every one a click would place (several, spread out).
+        for g in pl.geometries() {
+            let to = |t: f64, off: f64| self.view.to_screen(rect, g.point(t, off));
+            let foot = self.polygon(rect, &g.footprint());
+            painter.add(Shape::convex_polygon(
+                foot,
+                color.gamma_multiply(0.18),
+                Stroke::new(1.5, color),
+            ));
+            // Frame faces.
+            let stroke = Stroke::new(1.0, color);
+            for off in [g.frame_exterior, g.frame_interior] {
+                painter.line_segment([to(g.t0, off), to(g.t1, off)], stroke);
+            }
+            match g.kind {
+                OpeningKind::Void => {}
+                OpeningKind::Door(op) => {
+                    use archisim_core::DoorOperation as D;
+                    let face = g.swing_frame_face();
+                    let out = g.swing_dir();
+                    let mut leaves: Vec<(f64, f64)> = Vec::new(); // (hinge t, free t)
+                    match op {
+                        D::SingleSwing => {
+                            if g.hinge_at_start() {
+                                leaves.push((g.t0, g.t1));
+                            } else {
+                                leaves.push((g.t1, g.t0));
+                            }
                         }
+                        D::DoubleSwing => {
+                            let mid = (g.t0 + g.t1) / 2.0;
+                            leaves.push((g.t0, mid));
+                            leaves.push((g.t1, mid));
+                        }
+                        D::Sliding | D::Folding | D::Pivot | D::Overhead | D::Rolling => {}
                     }
-                    D::DoubleSwing => {
-                        let mid = (g.t0 + g.t1) / 2.0;
-                        leaves.push((g.t0, mid));
-                        leaves.push((g.t1, mid));
+                    for (hinge, free) in leaves {
+                        let r = (free - hinge).abs();
+                        let h = g.point(hinge, face);
+                        let along = g.u * (free - hinge).signum();
+                        // Leaf open at 90°, and the arc its edge sweeps.
+                        painter.line_segment(
+                            [
+                                self.view.to_screen(rect, h),
+                                self.view.to_screen(rect, h + out * r),
+                            ],
+                            Stroke::new(2.0, color),
+                        );
+                        let arc: Vec<Pos2> = (0..=24)
+                            .map(|i| {
+                                let a = i as f64 / 24.0 * std::f64::consts::FRAC_PI_2;
+                                self.view.to_screen(
+                                    rect,
+                                    h + along * (r * a.cos()) + out * (r * a.sin()),
+                                )
+                            })
+                            .collect();
+                        painter.add(Shape::line(arc, Stroke::new(1.0, color)));
                     }
-                    D::Sliding | D::Folding | D::Pivot | D::Overhead | D::Rolling => {}
                 }
-                for (hinge, free) in leaves {
-                    let r = (free - hinge).abs();
-                    let h = g.point(hinge, face);
-                    let along = g.u * (free - hinge).signum();
-                    // Leaf open at 90°, and the arc its edge sweeps.
-                    painter.line_segment(
-                        [
-                            self.view.to_screen(rect, h),
-                            self.view.to_screen(rect, h + out * r),
-                        ],
-                        Stroke::new(2.0, color),
-                    );
-                    let arc: Vec<Pos2> = (0..=24)
-                        .map(|i| {
-                            let a = i as f64 / 24.0 * std::f64::consts::FRAC_PI_2;
-                            self.view
-                                .to_screen(rect, h + along * (r * a.cos()) + out * (r * a.sin()))
-                        })
-                        .collect();
-                    painter.add(Shape::line(arc, Stroke::new(1.0, color)));
+                OpeningKind::Window(_) => {
+                    let mid = (g.frame_exterior + g.frame_interior) / 2.0;
+                    painter.line_segment([to(g.t0, mid), to(g.t1, mid)], Stroke::new(2.0, color));
                 }
-            }
-            OpeningKind::Window(_) => {
-                let mid = (g.frame_exterior + g.frame_interior) / 2.0;
-                painter.line_segment([to(g.t0, mid), to(g.t1, mid)], Stroke::new(2.0, color));
             }
         }
+        let g = &pl.geometry;
         let side = match g.opens_to {
             WallSide::Interior => "abre al interior",
             WallSide::Exterior => "abre al exterior",
         };
         let text = match &pl.problem {
             Some(p) => format!("No cabe: {p}"),
+            None if !pl.more.is_empty() => format!(
+                "{} repartidas · machón {}   {side}",
+                pl.more.len() + 1,
+                crate::units::fmt_len(pl.more[0].1.t0 - pl.geometry.t1)
+            ),
             None => format!(
                 "{} ◂ ▸ {}   {side}",
                 crate::units::fmt_len(pl.before),

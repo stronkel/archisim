@@ -2,6 +2,7 @@
 //! can be selected, moved and opened; 2D drafting works on it as in a
 //! plan), its properties and those of the selected view, and new sheets.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{
     NewSheet, NewViewport, ScheduleKind, Sheet, SheetId, SheetTable, TableId, ViewRef, Viewport,
     ViewportId,
@@ -161,6 +162,7 @@ impl ArchiSimApp {
                 .fit_exact(rect, Point2::new(0.0, 0.0), Point2::new(w, h), 30.0);
         }
         // Pan and zoom as in plan.
+        let before = self.view;
         if response.dragged_by(PointerButton::Middle)
             || response.dragged_by(PointerButton::Secondary)
         {
@@ -175,6 +177,9 @@ impl ArchiSimApp {
             if (factor - 1.0).abs() > 1e-6 {
                 self.view.zoom_at(rect, pos, factor);
             }
+        }
+        if self.view != before {
+            self.view_moved_at = Some(std::time::Instant::now());
         }
         self.sheet_cursor(&ctx, &response, rect, id);
         if ctx.memory(|m| m.focused().is_none()) {
@@ -278,7 +283,56 @@ impl ArchiSimApp {
             hi,
             size,
         };
+        let only_moved = self.sheet_image.as_ref().is_some_and(|(old, _)| {
+            *old != key && old.revision == key.revision && old.sheet == key.sheet
+        });
+        if only_moved {
+            // While it moves, and then while its new picture is made aside
+            // (remate de F1), the old one moved.
+            let moving = self.view_moving(ctx);
+            let ready = match &self.sheet_pending {
+                Some(p) if p.key == key => p.take(),
+                _ if moving => None,
+                _ => {
+                    let model = self.shared_model();
+                    let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
+                    self.sheet_pending =
+                        Some(super::background::Pending::start(key.clone(), move || {
+                            let svg = render_sheet(
+                                &model,
+                                id,
+                                &SheetOptions {
+                                    region: Some((lo, hi)),
+                                    px_per_mm: Some(px_per_m * MM),
+                                    ..Default::default()
+                                },
+                            );
+                            crate::plan_image::rasterize_svg(&svg, size)
+                        }));
+                    None
+                }
+            };
+            match ready {
+                Some(image) => {
+                    self.sheet_pending = None;
+                    self.view_moved_at = None;
+                    if let Some((k, tex)) = self.sheet_image.as_mut() {
+                        tex.set(image, TextureOptions::LINEAR);
+                        *k = key.clone();
+                    }
+                }
+                None => {
+                    if let Some((old, tex)) = self.sheet_image.as_ref() {
+                        self.paint_moved(painter, rect, tex, old.lo, old.hi);
+                    }
+                    ctx.request_repaint_after(std::time::Duration::from_millis(30));
+                    return;
+                }
+            }
+        }
         if self.sheet_image.as_ref().map(|p| &p.0) != Some(&key) {
+            self.view_moved_at = None;
+            self.sheet_pending = None;
             let px_per_m = size[0] as f64 / (hi.x - lo.x).max(1e-9);
             let svg = render_sheet(
                 &self.ed.shown(),
@@ -666,7 +720,7 @@ impl ArchiSimApp {
                 }
             });
             row(ui, "Marco y cajetín", "", |ui, _| {
-                ui.checkbox(&mut new.title_block, "");
+                ui.switch(&mut new.title_block, "");
             });
             let styles: Vec<(Option<archisim_core::PresentationStyleId>, String)> =
                 std::iter::once((None, "Técnica (sin estilo)".to_string()))
@@ -931,7 +985,7 @@ impl ArchiSimApp {
                 },
             );
             row(ui, "Mostrar título", "", |ui, _| {
-                ui.checkbox(&mut new.show_title, "");
+                ui.switch(&mut new.show_title, "");
             });
         });
         group(ui, "vp-crop", "Recorte", |ui| {
@@ -948,7 +1002,7 @@ impl ArchiSimApp {
                 "Recorte propio",
                 "Sin recorte, la vista muestra toda la planta o la sección",
                 |ui, _| {
-                    if ui.checkbox(&mut custom, "").changed() {
+                    if ui.switch(&mut custom, "").changed() {
                         new.crop = custom.then_some((lo, hi));
                     }
                 },

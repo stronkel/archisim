@@ -252,7 +252,6 @@ impl Model {
             toward[0] * cs - toward[1] * sn,
             toward[0] * sn + toward[1] * cs,
         ];
-        let plant = flora::plant(&l.species, l.seed, l.variation);
         let options = flora::SideOptions {
             style: if presenting {
                 l.presentation
@@ -267,7 +266,8 @@ impl Model {
             opacity: l.opacity,
             m_per_mm: scale.max(1.0) / 1000.0,
         };
-        Some(plant_shape_marks(&l, plant.side(local, &options)))
+        let side = flora::side_of(&l.species, l.seed, l.variation, local, &options);
+        Some(plant_shape_marks(&l, side.as_ref().clone()))
     }
 
     /// The level of detail the views take for the plants: the most

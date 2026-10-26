@@ -1864,6 +1864,7 @@ impl<'a> Exporter<'a> {
         self.write_accessories(&materials, &storeys, &mut contained);
         self.write_roof_parts(&materials, &storeys, &mut contained);
         self.write_objects(&materials, &storeys, &mut contained);
+        self.write_worktops(&materials, &storeys, &mut contained);
         self.write_footings(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
         self.write_urban(&materials, site, site_pl);

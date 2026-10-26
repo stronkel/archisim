@@ -129,7 +129,15 @@ struct Targets {
 }
 
 pub struct Renderer {
+    /// The textures' pictures (`TextureMode::Pictures`; otherwise one
+    /// pixel), and whether they are still to be sent to the card.
+    pictures: wgpu::Texture,
+    pictures_bind: wgpu::BindGroup,
+    pictures_pending: bool,
     model_pipeline: wgpu::RenderPipeline,
+    /// The grass: as the model, leaving the normals and distances as they
+    /// are.
+    grass_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
     shadow_layout: wgpu::BindGroupLayout,
     shadow_sampler: wgpu::Sampler,
@@ -155,6 +163,7 @@ pub struct Renderer {
     edges_layout: wgpu::BindGroupLayout,
     targets: Option<Targets>,
     opaque: Option<(wgpu::Buffer, u32)>,
+    grass: Option<(wgpu::Buffer, u32)>,
     glass: Option<(wgpu::Buffer, u32)>,
     /// What is being stretched, drawn over the scene (whose own copy of
     /// it is hidden): its opaque and glass triangles.
@@ -168,6 +177,8 @@ pub struct Renderer {
     cut: Option<super::cutaway::CutRule>,
     /// Something of the scene is selected: the contour pass outlines it.
     selected: bool,
+    /// Contours one pixel wide (ArchiCAD's "thin lines"), instead of two.
+    pub thin_lines: bool,
     /// The background left transparent (premultiplied: what is drawn
     /// under the picture, the ground grid, shows where there is no model).
     transparent: bool,
@@ -186,16 +197,20 @@ pub enum TextureMode {
     /// Simpler textures, for graphics drivers that hang on the full ones
     /// (AMD on Intel Macs): no `switch`, no loops.
     Light,
+    /// The full textures looked up in pictures made once on the
+    /// processor: as good as the full ones and lighter for slow cards.
+    Pictures,
     Full,
 }
 
 impl TextureMode {
-    pub const ALL: [TextureMode; 3] = [Self::Full, Self::Light, Self::Off];
+    pub const ALL: [TextureMode; 4] = [Self::Full, Self::Pictures, Self::Light, Self::Off];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Off => "Sin texturas",
             Self::Light => "Ligeras",
+            Self::Pictures => "En imagen",
             Self::Full => "Completas",
         }
     }
@@ -204,6 +219,7 @@ impl TextureMode {
         match self {
             Self::Off => "no",
             Self::Light => "ligeras",
+            Self::Pictures => "imagen",
             Self::Full => "completas",
         }
     }
@@ -227,8 +243,14 @@ pub fn shader_source(mode: TextureMode) -> String {
             include_str!("textures_light.wgsl"),
             &full[b..]
         ),
+        TextureMode::Pictures => format!(
+            "{}{}{}",
+            &full[..a],
+            include_str!("textures_image.wgsl"),
+            &full[b..]
+        ),
         TextureMode::Off => format!(
-            "{}fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {{\n    return base;\n}}\n\n{}",
+            "{}fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {{\n    return 0.0;\n}}\n\nfn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {{\n    return base;\n}}\n\n{}",
             &full[..a],
             &full[b..]
         ),
@@ -304,6 +326,52 @@ impl Renderer {
                 },
             ],
         });
+        let (pictures, pictures_view) = pictures_texture(device, textures);
+        let pictures_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("texture pictures"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        // The group 2 of the model's passes: the textures' pictures.
+        let pictures_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("texture pictures"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let pictures_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("texture pictures"),
+            layout: &pictures_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&pictures_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&pictures_sampler),
+                },
+            ],
+        });
         let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("shadow map"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -313,7 +381,11 @@ impl Renderer {
         });
         let model_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("model"),
-            bind_group_layouts: &[Some(&globals_layout), Some(&shadow_layout)],
+            bind_group_layouts: &[
+                Some(&globals_layout),
+                Some(&shadow_layout),
+                Some(&pictures_layout),
+            ],
             immediate_size: 0,
         });
         let shadow_pipeline_layout =
@@ -367,6 +439,43 @@ impl Renderer {
                 entry_point: Some("fs_model"),
                 compilation_options: Default::default(),
                 targets: &[Some(COLOR_FORMAT.into()), Some(NORMAL_FORMAT.into())],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let grass_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("grass"),
+            layout: Some(&model_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_model"),
+                compilation_options: Default::default(),
+                buffers: &[Some(vertex_layout.clone())],
+            },
+            primitive,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState {
+                count: SAMPLES,
+                ..Default::default()
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_model"),
+                compilation_options: Default::default(),
+                targets: &[
+                    Some(COLOR_FORMAT.into()),
+                    Some(wgpu::ColorTargetState {
+                        format: NORMAL_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::empty(),
+                    }),
+                ],
             }),
             multiview_mask: None,
             cache: None,
@@ -467,7 +576,11 @@ impl Renderer {
             cache: None,
         });
         Self {
+            pictures_pending: textures == TextureMode::Pictures,
+            pictures,
+            pictures_bind,
             model_pipeline,
+            grass_pipeline,
             shadow_pipeline,
             shadow_layout,
             shadow_sampler,
@@ -485,12 +598,14 @@ impl Renderer {
             edges_layout,
             targets: None,
             opaque: None,
+            grass: None,
             glass: None,
             overlay: None,
             view_formats,
             clip: None,
             cut: None,
             selected: false,
+            thin_lines: false,
             transparent: false,
             atmosphere: None,
             lamps: Vec::new(),
@@ -566,6 +681,7 @@ impl Renderer {
         self.uploads += 1;
         self.bounds = (scene.lo, scene.hi);
         self.opaque = upload("opaque", &scene.opaque);
+        self.grass = upload("grass", &scene.grass);
         self.glass = upload("glass", &scene.glass);
         self.selected = scene.opaque.iter().any(|v| v.select > 0.5);
         self.lamps = scene.lamps.clone();
@@ -659,6 +775,10 @@ impl Renderer {
         size: [u32; 2],
         edge_step: u32,
     ) -> &wgpu::Texture {
+        if self.pictures_pending {
+            self.pictures_pending = false;
+            upload_pictures(queue, &self.pictures);
+        }
         let size = [size[0].clamp(1, 8192), size[1].clamp(1, 8192)];
         let aspect = size[0] as f32 / size[1] as f32;
         let light = self
@@ -717,7 +837,7 @@ impl Renderer {
             sun: [sun.x, sun.y, sun.z, 0.0],
             edges: [
                 edge_step.max(1) as f32,
-                1.0,
+                if self.thin_lines { -1.0 } else { 1.0 },
                 if self.selected || self.overlay.is_some() {
                     1.0
                 } else {
@@ -873,6 +993,15 @@ impl Renderer {
                 pass.set_pipeline(&self.model_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_bind_group(1, shadow_bind, &[]);
+                pass.set_bind_group(2, &self.pictures_bind, &[]);
+                pass.set_vertex_buffer(0, buf.slice(..));
+                pass.draw(0..*n, 0..1);
+            }
+            if let Some((buf, n)) = &self.grass {
+                pass.set_pipeline(&self.grass_pipeline);
+                pass.set_bind_group(0, &self.globals_bind, &[]);
+                pass.set_bind_group(1, shadow_bind, &[]);
+                pass.set_bind_group(2, &self.pictures_bind, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
@@ -900,6 +1029,7 @@ impl Renderer {
                 pass.set_pipeline(&self.glass_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_bind_group(1, shadow_bind, &[]);
+                pass.set_bind_group(2, &self.pictures_bind, &[]);
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
@@ -1012,6 +1142,107 @@ fn upload(device: &wgpu::Device, label: &str, v: &[Vertex]) -> Option<(wgpu::Buf
         });
         (buf, v.len() as u32)
     })
+}
+
+/// Mip levels of the textures' pictures.
+fn picture_levels() -> u32 {
+    archisim_render::textures::SIZE.trailing_zeros() + 1
+}
+
+/// The texture of the textures' pictures: one layer for each texture
+/// with all its levels of detail (`Pictures`), or one pixel.
+fn pictures_texture(
+    device: &wgpu::Device,
+    mode: TextureMode,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let full = mode == TextureMode::Pictures;
+    let side = if full {
+        archisim_render::textures::SIZE as u32
+    } else {
+        1
+    };
+    let layers = if full {
+        archisim_core::TextureKind::ALL.len() as u32
+    } else {
+        1
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("texture pictures"),
+        size: wgpu::Extent3d {
+            width: side,
+            height: side,
+            depth_or_array_layers: layers,
+        },
+        mip_level_count: if full { picture_levels() } else { 1 },
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    });
+    (texture, view)
+}
+
+/// Sends the textures' pictures to the card, each layer with its levels
+/// of detail (each a quarter of the one before, its pixels averaged).
+fn upload_pictures(queue: &wgpu::Queue, texture: &wgpu::Texture) {
+    if texture.size().width <= 1 {
+        return;
+    }
+    for kind in archisim_core::TextureKind::ALL {
+        let tile = archisim_render::textures::tile(kind);
+        let layer = kind.number() - 1;
+        let mut level = tile.rgba.clone();
+        let mut n = tile.size;
+        for mip in 0..picture_levels() {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: mip,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: layer,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &level,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * n as u32),
+                    rows_per_image: Some(n as u32),
+                },
+                wgpu::Extent3d {
+                    width: n as u32,
+                    height: n as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
+            if n == 1 {
+                break;
+            }
+            let m = n / 2;
+            let mut next = vec![0u8; m * m * 4];
+            for j in 0..m {
+                for i in 0..m {
+                    for k in 0..4 {
+                        let at = |x: usize, y: usize| level[(y * n + x) * 4 + k] as u32;
+                        let sum = at(2 * i, 2 * j)
+                            + at(2 * i + 1, 2 * j)
+                            + at(2 * i, 2 * j + 1)
+                            + at(2 * i + 1, 2 * j + 1);
+                        next[(j * m + i) * 4 + k] = ((sum + 2) / 4) as u8;
+                    }
+                }
+            }
+            level = next;
+            n = m;
+        }
+    }
 }
 
 /// A shadow map `n` pixels a side, cleared (nothing in shadow).

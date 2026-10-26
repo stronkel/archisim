@@ -6,6 +6,182 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 · v0.69: pincel único, cubiertas del suelo, rocas (C8)
+
+Rama `bloque/c8-pincel`, encima de `bloque/c7-deudas` (#73), con pull request para Antonio. **Formato `.archisim` versión 39** (el aspecto de un material puede llevar hierba y flores; abre todas las anteriores). Pedido por Antonio el 26/10/2026 tras probar C5, con una captura de Paralives.
+
+**Hecho**
+- **Un solo Pincel, en Técnica y en Maqueta**: en Técnica está en la ficha Urbanismo (tecla `PI`); en la Maqueta, en Exterior → Terreno y caminos. Ya no hay un pincel por cada terreno.
+- **Modos** (botones arriba del panel y en la barra contextual): Pintar, Borrar, Subir, Bajar, Suavizar, Allanar y Esparcir. Borrar quita lo pintado (vuelve a verse el terreno) y, si se quiere, las plantas y rocas que haya debajo.
+- **Cabezales**: redondo, cuadrado, difuminado (más pequeño en el borde, para trazos suaves) y salpicado (manchas sueltas). Tamaño y fuerza con deslizadores; el contorno del pincel se ve en planta y en 3D.
+- **Paleta de cubiertas** con muestras dibujadas: césped, césped natural, hierba alta, pradera seca, pradera con flores amarillas, flores silvestres, margaritas, amapolas; tierra, tierra oscura, camino de tierra, arena, grava, losas de piedra, hojarasca y corteza de pino. Cada una es un material del proyecto (se crea la primera vez que se usa).
+- **Hierba y flores de verdad**: las cubiertas de césped y pradera levantan en 3D matas de hierba con su altura y flores de colores; en planta, trazos de hierba y puntos de flores. En el render y en el `.glb` también. Al pasar de unas 16 000 matas se aclaran para que la vista siga fluida.
+- **Rocas y elementos naturales** (categoría nueva, en Urbanismo → Rocas y en la Maqueta → Exterior → Rocas y troncos): roca angulosa, canto rodado, laja, peña de 2 m, roca con musgo, grupos de rocas, de cantos y con musgo, cantos rodados sueltos, tronco caído y tocón. Varias variantes de forma por roca. IFC `IfcGeographicElement`.
+- **Esparcir** coloca plantas o rocas sobre el terreno, giradas al azar y sin pisarse; con «Variar» alterna las variantes de la misma roca.
+
+**Pendiente**
+- Lo que diga Antonio del pincel. Ideas que no entraron: pintar sobre forjados y cubiertas (ahora solo terreno), más especies de flor, rocas con textura de estratos.
+
+**Qué debe probar Antonio**
+1. Abre la demo, ficha Urbanismo → Pincel. En Propiedades: elige «Flores silvestres», cabezal cuadrado, y pinta sobre el terreno en planta. Mira el resultado en la Maqueta.
+2. Cambia a Borrar y pasa por encima: debe volver el terreno de antes.
+3. Prueba los cabezales difuminado y salpicado con «Grava» y «Camino de tierra».
+4. Modo Esparcir → elige «Roca angulosa 80» con «Variar» encendido, y pinta: deben salir rocas de varias formas. Bórralas con Borrar y «Plantas y rocas» activado.
+5. En la Maqueta: Exterior → Terreno y caminos → Pincel, y el panel flotante; Exterior → Rocas y troncos.
+6. Subir, Bajar, Suavizar y Allanar sobre el terreno, y Deshacer.
+7. Exporta el IFC (rocas y troncos como elementos geográficos) y el `.glb` (Archivo → Exportar modelo 3D) y ábrelo en Blender o D5: la hierba va dentro.
+
+---
+
+## 2026-10-25 (9) · v0.68: deudas de escaleras y buhardillas (C7)
+
+Rama `bloque/c7-deudas`, encima de `bloque/c6-documentacion` (#72), con pull request para Antonio. **Formato `.archisim` versión 38** (las escaleras guardan si sus mesetas van partidas y la meseta de llegada de las de caracol; abre todas las anteriores). Con esto el orden C1–C7 queda hecho.
+
+**Hecho**
+- **Mesetas partidas a 45°**: en una L, la meseta del giro se parte por la diagonal en dos peldaños triangulares; en una U, en tres. La escalera queda de un solo tramo y con las tabicas justas (la forma hecha quita los peldaños que sobran de los tramos). En la herramienta: Giros → «Meseta partida a 45°»; en Propiedades: Forma → «Mesetas partidas a 45°»; en la Maqueta: Construir → Escaleras → «En L con meseta partida». Planta, 3D, IFC (tramo `WINDER`, escalera `QUARTER_WINDING_STAIR`/`HALF_WINDING_STAIR`) y vuelta del IFC.
+- **CTE**: las mesetas partidas solo se admiten en uso restringido (DB-SUA 1, 4.2.1). En uso general salen como incumplimiento; en vivienda no se les piden los 5 y 44 cm de los peldaños curvos.
+- **Meseta de llegada de las de caracol**: un sector a la altura de la planta de arriba que sigue el giro, 90° por defecto en las nuevas; en Propiedades, «Meseta de llegada (°)» (0 la quita). La barandilla sigue por ella.
+- **Buhardillas donde se juntan dos limahoyas**: en una cubierta en T o en cruz, por encima del punto donde llegan las dos limahoyas el faldón principal son dos caras en el mismo plano. Antes una buhardilla sobre la línea entre ellas «no cabía»; ahora cuenta como un solo faldón y corta las dos caras, con las tejas alrededor. Esa línea tampoco se dibuja ya como limahoya.
+- `archisim escaleras out/`: doce escaleras (L y U con mesetas partidas, caracol con meseta de llegada). `archisim cubiertas out/`: una casa en T con su buhardilla sobre el encuentro.
+
+**Pendiente**
+- Lo que diga Antonio de C1–C7. Del orden pactado no queda nada.
+
+**Qué debe probar Antonio**
+1. `cargo run -p archisim-cli -- escaleras out/` y abre `out/escaleras.archisim`: las dos últimas son la L y la U con mesetas partidas; la de caracol con mástil lleva la meseta de llegada. Míralas en planta baja y primera y en la Maqueta.
+2. Herramienta Escalera → Forma «En L» → Giros «Meseta partida a 45°», y dibújala. Selecciónala y cambia en Propiedades la Forma entre «Tramos y mesetas», «Mesetas partidas» y «Peldaños compensados»; mira la comprobación del CTE con uso general y con uso restringido.
+3. Una de caracol: cambia «Meseta de llegada (°)» a 120 y a 0.
+4. `cargo run -p archisim-cli -- cubiertas out/` y abre `out/cubiertas.archisim`: la casa en T de abajo tiene una buhardilla justo encima de donde se juntan las limahoyas. Prueba a colocar otra en el mismo sitio en tu propia cubierta en T.
+5. Exporta el IFC de los dos y ábrelos en ArchiCAD o Revit.
+
+---
+
+## 2026-10-25 (8) · v0.67: memoria de carpinterías y cuadro de superficies (C6)
+
+Rama `bloque/c6-documentacion`, encima de `bloque/c5-exterior` (#71), con pull request para Antonio. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **Memoria de carpinterías** (Archivo → Memoria de carpinterías (PDF)…): hojas A3 con el mismo cajetín que el plano de carpinterías, ocho tipos por hoja. Cada tipo con su marca, su nombre, un alzado pequeño a 1:100 y su descripción con palabras: «Ventana de 2 hojas practicables, de 1,80 m de ancho por 1,30 m de alto (medidas del hueco), con antepecho a 0,90 m. Carpintería de aluminio lacado, con marco de 6 cm de cara vista y 7 cm de fondo; acristalamiento de vidrio doble.», la descripción que tenga el tipo, la familia, las unidades por planta y la situación: en qué locales está, y las puertas entre qué dos locales.
+- **Cuadro de superficies** (Archivo → Cuadro de superficies (PDF)…): la superficie útil de cada local por plantas (número, nombre, uso y m², con la útil de la planta), el resumen por plantas con la útil y la construida, y la útil por usos. Las cifras son las mismas de la comprobación CTE. Si una planta tiene muchos locales, la lista sigue en la columna siguiente o en otra hoja.
+- **Plano de carpinterías**: cada tipo dice ahora también el **antepecho** de las ventanas («0,90 m», «0,90 y 1,10 m» si hay varios, «sin antepecho» en las balconeras) y la **situación** (unidades por planta). «2 hojas practicables» concuerda en plural.
+
+**Pendiente**
+- Lo que Antonio eche en falta del plano y de la memoria (otras columnas, otro orden, el texto de la memoria a su manera).
+- C7: mesetas partidas a 45°, meseta de llegada de las de caracol, buhardillas sobre limahoyas.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`cargo run --release -p archisim-app -- out/demo.archisim`).
+2. Archivo → **Memoria de carpinterías (PDF)…** y guárdala. Ábrela: comprueba que la descripción de cada puerta y ventana es la que pondrías en una memoria y que la situación (los locales) es la correcta.
+3. Archivo → **Cuadro de superficies (PDF)…**: compara los m² con los de la tabla de Superficies y con la comprobación CTE.
+4. Archivo → **Plano de carpinterías (PDF)…**: mira las filas nuevas de Antepecho y Situación.
+
+---
+
+## 2026-10-25 (7) · v0.66: Exterior y Concepto en la Maqueta (C5)
+
+Rama `bloque/c5-exterior`, encima de `bloque/c4-visualizacion` (#70), con pull request para Antonio. **Formato `.archisim` versión 37**: abre todas las anteriores. Guarda las zonas pintadas sobre el terreno y los varios dibujos de planta de un tipo. El IFC no cambia: el terreno sale igual y las zonas pintadas no van en él.
+
+**Hecho**
+- **Pinceles de Exterior** (Maqueta → Exterior → Terreno y caminos; o la herramienta Pincel, con sus maneras en la barra de arriba):
+  - **Subir, Bajar, Alisar y Aplanar** el terreno arrastrando, más en el centro del pincel que en el borde. «Aplanar» lo deja a la altura del punto donde empiezas.
+  - **Césped, Grava y Camino** pintan zonas sobre el terreno. Si pintas una encima de otra, la de debajo se recorta. En planta salen con su color; en 3D, como una capa fina con su textura.
+  - **Esparcir plantas** de la especie que elijas en Propiedades, separadas según su tamaño y apoyadas en el terreno.
+  - Si la planta no tiene terreno, el primer trazo crea uno llano de 40 × 40 m.
+  - Cada trazo, sea largo o corto, se deshace de una vez.
+  - Radio y fuerza (o densidad, en las plantas) en la barra.
+- **Flechas y aros en los volúmenes de Concepto** (en 3D, con un volumen seleccionado):
+  - flechas en los cuatro lados para empujar ese lado (con Alt, por los dos);
+  - una flecha arriba para la altura (por plantas enteras si el volumen va por plantas);
+  - un cuadrado en una esquina para escalarlo entero;
+  - el aro naranja para girarlo, de 15 en 15° o libre con Mayús.
+  - Mientras arrastras se ve como quedará.
+- **Árboles** (remates de A1):
+  - al elegir dibujos de un DXF con muchos, el interruptor **«Varios dibujos, que se alternan»** deja elegir varios; cada árbol toma uno, siempre el mismo, y una fila de olivos ya no es el mismo dibujo repetido;
+  - el **dibujo en alzado** también se elige de esos DXF, viéndolo: Propiedades del objeto → Dibujo en alzado → «De mi biblioteca, de frente…» o «de lado…», o al cargar un DXF con varios bloques.
+
+**Pendiente**
+- Las zonas pintadas no van al IFC.
+- Esparcir plantas no cuenta las plantas de una Plantación que ya estén allí.
+- Los caminos se pintan a mano alzada. Para uno con su sección y bordillos sigue estando Camino o calle.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo, Tab a la Maqueta, Exterior → Terreno y caminos → **Subir**. Arrastra sobre el suelo varias veces: sale una loma. Prueba **Alisar** y **Aplanar** encima, y Ctrl+Z: cada trazo se deshace entero.
+2. **Césped** y **Camino**: pinta una pradera y atraviésala con un camino. Mira la planta (Técnica): las dos zonas con su color.
+3. **Esparcir plantas**: en Propiedades elige la especie (por ejemplo Olivo) y arrastra. Cambia la densidad en la barra.
+4. Exterior → Formas → **Volumen**, dibuja uno y selecciónalo en 3D: tira de las flechas de los lados y de arriba, del cuadrado de la esquina y del aro.
+5. Con un tipo de árbol, «Símbolo de planta» → «De mi biblioteca…», enciende **«Varios dibujos, que se alternan»**, elige tres y «Usar». Pon una fila de árboles: verás los tres dibujos repartidos.
+6. Abre un proyecto guardado con una versión anterior: debe abrirse igual.
+
+---
+
+## 2026-10-25 (6) · v0.65: salida para visualización (C4)
+
+Rama `bloque/c4-visualizacion`, encima de `bloque/c3-maqueta` (#69), con pull request para Antonio. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **El proyecto para D5, Twinmotion o Blender**: Archivo → **Exportar modelo 3D (glTF)…** guarda todo el proyecto en un `.glb`:
+  - un objeto por elemento, con su nombre («Muro 12», «Sofá de 3 plazas 40»);
+  - los materiales con su nombre y su color; los que tienen textura (ladrillo, madera, piedra, telas…) la llevan como imagen, puesta igual que en la vista 3D, para cambiarla en el programa de render si se quiere; el vidrio, transparente;
+  - a escala y de pie. También `archisim glb proyecto.archisim`, y la demo y `archisim exportar` lo dejan junto al IFC.
+- **Render con texturas, atardecer y noche**: Renderizar usa la luz de la vista 3D (Día, Atardecer o Noche) y sus texturas.
+  - De noche se encienden las lámparas, las velas, la chimenea y las farolas; brillan y alumbran lo que tienen cerca, **con sus sombras**.
+  - Al atardecer, sol bajo y anaranjado, cielo cálido y lámparas a media luz.
+  - En la línea de órdenes, `--atardecer`, `--noche` y `--sin-texturas`.
+- **Texturas «En imagen»** en la vista 3D (Propiedades de la vista 3D → Texturas):
+  - son las mismas texturas, sacadas de imágenes que se hacen una vez en lugar de calcularse en cada punto;
+  - es lo que usan ahora **por defecto los Mac con Intel**, en vez de las ligeras;
+  - las mismas imágenes van en el render y en el `.glb`.
+- **Alzados y planos sin espera al soltar** (remate de F1): al acabar de mover o acercar un alzado, una sección o un plano, el dibujo nuevo se hace aparte y, mientras tanto, se sigue viendo el anterior en su sitio.
+
+**Pendiente**
+- Con OpenGL (tarjetas antiguas o Linux sin Vulkan), «En imagen» no se ve bien: allí se usan las ligeras.
+- El `.glb` de la demo pesa unos 44 MB, casi todo de los árboles. Si D5 o Twinmotion van lentos, se puede exportar la vegetación más ligera.
+- Las sombras de las lámparas están en el render. En la vista 3D en tiempo real, las lámparas alumbran sin sombras.
+
+**Qué debe probar Antonio**
+1. Abre la demo, Archivo → **Exportar modelo 3D (glTF)…**, y ábrelo en D5 o en Twinmotion (o en Blender: Archivo → Importar → glTF). Mira que entre a escala y de pie, que los materiales tengan sus nombres y que el ladrillo y la madera lleven su textura.
+2. En la Maqueta, pon **Noche** (arriba, «Luz») y en Propiedades de la vista 3D → **Renderizar**: las lámparas encendidas con sus sombras. Repite con Atardecer.
+3. En tu MacBook: Propiedades de la vista 3D → Texturas debe decir **En imagen**. Mira que el ladrillo y la madera se vean como en el PC y que el 3D no vaya más lento.
+4. Abre un alzado y desplázalo con el botón derecho, o acércalo con la rueda: al soltar, la imagen no se congela; el dibujo fino aparece un momento después.
+5. `cargo run --release -p archisim-cli -- render out/demo.archisim out/noche.png 1600 --noche`.
+
+---
+
+## 2026-10-25 (5) · v0.64: detalles de la Maqueta y de la interfaz (C3)
+
+Rama `bloque/c3-maqueta`, encima de `bloque/arboles-dxf` (#68), con pull request para Antonio. Sin cambios de formato ni de IFC (las encimeras con copete salen en el `IfcFurniture` «Encimera» de siempre).
+
+Antonio pidió seguir la hoja de ruta en orden (C3 → C4 → C5 → C6 → C7) con los remates de A1, C2 y F1. Los de la cocina van aquí.
+
+**Hecho**
+- **Habitación en un solo Deshacer**: sus cuatro muros, su suelo y su local se deshacen y rehacen de una vez («Habitación»).
+- **Mover en 3D junto a las paredes**: un mueble (o lo que esté seleccionado) arrastrado en 3D se pega a la cara del muro cuando se acerca a menos de 15 cm, y después a la del muro que la cruza, en la esquina. Mientras se mueve, unas cotas azules como las temporales de la planta miden lo que queda libre hasta los muros en sus cuatro lados. Los muros, puertas y ventanas no se pegan: siguen sus reglas.
+- **Puertas y ventanas por el centro, desde un extremo o repartidas**, en la barra de la herramienta:
+  - **Libre**: como siempre, donde está el cursor;
+  - **Por el centro**: en el centro del tramo libre del muro, entre los muros que lo encuentran y las otras carpinterías, medido en la cara hacia la que abre;
+  - **Desde un extremo**: la jamba a la distancia que se escribe (30 cm de partida) del extremo más cercano al cursor;
+  - **Repartidas**: las que se digan (2 de partida), con machones iguales entre ellas y en los extremos, todas en un paso. Si no caben, lo dice: «no caben 3 de 1,80 en el tramo libre de 4,20».
+- **Un mismo dibujo para los sí o no**: las casillas de todos los paneles y diálogos son ahora interruptores, como «Rejilla» o «Calco» en Propiedades.
+- **Cocina** (remates de C2):
+  - los módulos bajos tienen **Vuelo delante** y **Vuelo detrás** (sección Encimera): la encimera sale más que el mueble, para una barra con taburetes;
+  - y **Copete**: una tira de 2 cm de grueso en el borde de atrás. En un tramo solo va donde no hay otro módulo detrás, así que en una isla espalda con espalda no sale. Se ve en 3D, va en el IFC con la encimera y se mide aparte en Mediciones («Copete de …», en metros).
+  - **Dos sofás en L se convierten en una rinconera**: un sofá recto con la espalda contra el extremo de otro y el lado contra su frente, del mismo fondo y altura, se une con él en un «Sofá rinconera» del largo del primero y con el brazo del segundo, a la derecha o a la izquierda.
+- `archisim cocina` pone copete a la L y una barra de 30 cm a un lado de la isla.
+
+**Pendiente**
+- Mientras se arrastra un mueble en 3D, sus flechas y el punto de giro se quedan donde estaba hasta soltarlo.
+- La encimera de un tramo se sigue dibujando en planta módulo a módulo.
+
+**Qué debe probar Antonio**
+1. Maqueta → Construir → Habitación, dos clics. Ctrl+Z una vez: deben irse los cuatro muros, el suelo y el local. Ctrl+Y: vuelven.
+2. En la Maqueta, coge un sofá y llévalo hacia una pared: se pega a ella y, cerca de la esquina, también a la otra. Mira las cotas azules mientras lo mueves.
+3. Herramienta Ventana. En la barra de arriba, elige **Por el centro** y pasa por la fachada de un dormitorio: la ventana se centra entre los tabiques. Prueba **Desde un extremo** con 0,30 y **Repartidas** con 3 en una fachada larga. Ctrl+Z quita las tres a la vez.
+4. Mira los paneles: Propiedades de la vista (Rejilla, Calco), Capas, Coordinación. Todo lo que era una casilla es ahora un interruptor.
+5. `cargo run --release -p archisim-cli -- cocina out/cocina` y abre `out/cocina/cocina.archisim`: la L con copete y la isla con barra. Mira en 3D la barra y el copete, y en Mediciones el capítulo 10.
+6. Coloca dos «Sofá de 3 plazas» en L (el segundo girado, con la espalda contra el extremo del primero): al soltarlo se hacen una rinconera.
+
+---
+
 ## 2026-10-25 · v0.60: tramas de presentación (T1)
 
 Rama `bloque/tramas`, encima de `bloque/figuras-2` (#63), con pull request para Antonio. **Formato `.archisim` versión 36**: abre todas las anteriores. Solo sube para que una versión anterior del programa avise de que el fichero es más nuevo.
@@ -104,6 +280,143 @@ Antonio confirmó el orden C1–C7 de la hoja de ruta común (§9). Este es C1.
 2. Abre la demo, ve a la pestaña «Alzado Sur» (Navegador → Proyecto → Secciones y alzados) y mira los árboles y el coche. Cambia en Propiedades el estilo de una planta (técnico y de presentación) y míralo en el alzado.
 3. Abre el plano A-03 Presentación: la sección y la vista 3D deben llevar los árboles en color.
 4. `cargo run --release -p archisim-cli -- vivero out/vivero`: un alzado por cada grupo de especies (`vivero-alzado-*-color.svg` y `-tecnico.svg`).
+
+---
+
+## 2026-10-25 (4) · v0.63: árboles en planta elegidos de un DXF, viéndolos (A1)
+
+Rama `bloque/arboles-dxf`, encima de `bloque/c2-cocina` (#67), con pull request para Antonio. Sin cambios de formato ni de IFC: el símbolo de planta del tipo ya se guardaba desde el bloque 6.
+
+Antonio mandó un DXF con 76 árboles en planta, un bloque cada uno, y pidió usarlos como dibujo en planta viendo una previsualización al elegir. Los bloques se llaman «樹木平面（CAD素材.com）…»: son de la biblioteca de CAD素材.com, de terceros. Antonio puede usarlos en sus proyectos y en su biblioteca, pero el fichero no entra en el repositorio, que es GPL y de sala limpia.
+
+**Hecho**
+- **Elegir entre los dibujos de un DXF que es una biblioteca**:
+  - en Propiedades → Símbolo de planta → «Importar DXF…», si el fichero tiene dos o más bloques colocados, se abre una ventana con todos ellos;
+  - cada dibujo se ve como lo dibujará la planta en ese tipo, a su tamaño y en líneas finas;
+  - van numerados como se leen en la lámina, por filas desde arriba a la izquierda; con el cursor encima, el nombre del bloque;
+  - un clic se lo pone al tipo, en un paso de Deshacer.
+  - Un DXF con un solo dibujo sigue entrando entero, como antes.
+- **Tu biblioteca de símbolos**:
+  - el DXF importado se copia a la carpeta «Símbolos de planta» de la biblioteca (Documentos/ArchiSim/Biblioteca, o la que tengas elegida);
+  - el botón «De mi biblioteca…» abre la misma ventana con los DXF de esa carpeta, uno por pestaña, sin buscar el fichero.
+- **Previsualización con su dibujo**:
+  - la tarjeta del tipo en Propiedades y la galería de objetos enseñan su planta con el símbolo, en lugar del 3D, cuando el tipo tiene un dibujo propio;
+  - las miniaturas de tipo llevan ya el símbolo y la imagen de planta (antes salía siempre el dibujo de la familia).
+- Los árboles se estiran a la copa del tipo, como los demás símbolos de vegetación: el mismo dibujo vale para un olivo de 4 m y una encina de 9 m.
+- Probado con el DXF de Antonio, desde fuera del repositorio: 76 dibujos, en el orden de la lámina, y la encina de la demo dibujada con el árbol 7.
+
+**Pendiente**
+- Varios dibujos por especie, para que una hilera no repita el mismo árbol.
+- El mismo DXF para los dibujos de alzado (hoy el alzado toma el fichero entero).
+- Un DXF de personas o coches funciona igual, pero los objetos que no son de vegetación usan el tamaño del dibujo y no el del objeto.
+
+**Qué debe probar Antonio**
+1. Abre la demo (`cargo run --release -p archisim-app -- out/demo.archisim`) y selecciona la encina, el árbol grande a la derecha de la casa.
+2. En Propiedades, baja a «Símbolo de planta» y pulsa «Importar DXF…». Elige tu fichero de árboles: debe abrirse la ventana con los 76 dibujos.
+3. Haz clic en uno: la encina debe dibujarse con él en planta, y la tarjeta de arriba debe enseñar su planta. Prueba Deshacer.
+4. Selecciona otro árbol y pulsa «De mi biblioteca…»: deben salir los mismos 76 sin buscar el fichero.
+5. Mira la planta de presentación (plano A-03) y a 1:100: el dibujo del DXF sustituye al de ArchiSim.
+
+---
+
+## 2026-10-25 (3) · v0.62: C2, cocina y muebles, segunda vuelta
+
+Rama `bloque/c2-cocina`, encima de `bloque/fluidez` (#66), con pull request para Antonio. Sin cambios de formato: los tramos de encimera se calculan, no se guardan. El IFC cambia: lleva una encimera por tramo.
+
+**Hecho**
+- **Encimera continua de verdad**:
+  - qué es un tramo: los módulos bajos que se tocan, a la misma altura y con la encimera del mismo material, en fila, en L, en U o en isla;
+  - en 3D, secciones, alzados y axonometrías el tramo tiene una sola encimera, con el hueco de cada fregadero, sin juntas ni grietas, y los módulos van sin la suya;
+  - separado del tramo, un módulo recupera su encimera.
+- **Cocina en esquina**:
+  - un módulo girado un cuarto de vuelta, acercado al extremo de una fila, se pega con su lateral contra el frente del último y su trasera a paño con el final de la fila;
+  - también al revés, la fila hacia el tramo;
+  - la encimera sale en L.
+- **Isla por módulos**: los módulos espalda con espalda se pegan por la trasera, con los extremos alineados, y hacen una isla con una sola encimera.
+- **Pegarse al arrastrar en planta**: lo que se pegaba al colocar o al arrastrar en 3D también se pega al arrastrarlo en planta (módulos, sofás, estanterías…). Los que se unen en uno, como sofás y estanterías, se unen al soltar.
+- **Sofá rinconera** (familia nueva):
+  - tramo a lo largo y tramo hacia delante, a la derecha o a la izquierda, con plazas en cada uno y la de la esquina, y los tres modelos del sofá;
+  - en la biblioteca, 260×170 y 300×200;
+  - en la barra del objeto: el lado, las plazas de cada tramo y sus materiales.
+- **Color libre** en la barra del objeto:
+  - las muestras de una pieza tienen al final «Color libre», con rueda, campos R, G y B y «Aplicar»;
+  - crea un material como el de la pieza en ese color, conservando su textura, y se deshace en un paso;
+  - el color de la **encimera** se aplica a todo su tramo, para que siga siendo una sola.
+- **Mediciones**: capítulo «10 Mobiliario de cocina»:
+  - encimeras por material, en metros a lo largo de los frentes, también la de un módulo suelto;
+  - muebles de cocina por tipo, en unidades.
+- **IFC**:
+  - cada tramo es un `IfcFurniture` «Encimera», con su tipo por material, su material y el pset `ArchiSim_Worktop` (largo, superficie y módulos);
+  - los módulos del tramo usan la geometría de su tipo sin encimera;
+  - al importar, la encimera no se lee como objeto: vuelve a salir de los módulos (la cocina de ejemplo vuelve con sus 69 piezas).
+- `archisim cocina out/` lleva además una cocina en L con fregadero y placa, una isla de seis módulos y un sofá rinconera.
+- Revisado en la ventana real: la L y la isla en la Maqueta, el sofá rinconera con su barra y el color libre aplicado a unos frentes.
+
+**Pendiente**
+- El vuelo de la encimera de la isla (hoy, a paño con los módulos) y los remates de la encimera contra la pared (copete).
+- Que un sofá recto acercado en esquina a otro se convierta en un rinconera.
+- En planta, la encimera del tramo aún se ve como los rectángulos de cada módulo.
+- C3 (detalles de la Maqueta y de la interfaz) es lo siguiente.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-cli -- cocina out/cocina` y abre `out/cocina/cocina.archisim`. En la Maqueta, al fondo: la cocina en L y la isla tienen una encimera de una pieza, con el hueco del fregadero.
+2. Desde Amueblar → Cocina → Bajos, pon un módulo; gíralo con el anillo un cuarto de vuelta y acércalo al extremo de la fila de la L: debe pegarse en esquina. Pon dos espalda con espalda para empezar una isla.
+3. En Técnica, en planta, selecciona un módulo de la isla y arrástralo un poco lejos y de vuelta: al acercarlo a otro, debe pegarse.
+4. Selecciona un módulo del tramo y, en la barra del objeto, cambia «Encimera» a otro color: debe cambiar la encimera entera. Prueba «Frentes» → «Color libre»: elige un color con la rueda y pulsa «Aplicar».
+5. Amueblar → Sofás y sillones → «Sofá rinconera 260×170». En su barra, cambia «Rinconera» a Izquierda y las plazas de cada tramo.
+6. Pestaña Mediciones: capítulo «10 Mobiliario de cocina», con las encimeras en metros y los módulos por unidades.
+7. Exporta el IFC de la cocina y ábrelo en ArchiCAD o Revit: cada tramo debe salir como un mueble «Encimera».
+
+---
+
+## 2026-10-25 (2) · v0.61: alzados que se abren y se mueven sin espera, y líneas finas en planta y 3D (F1)
+
+Rama `bloque/fluidez`, pull request para Antonio. Sin cambios de formato ni de IFC.
+
+Antonio dio por buenas la 0.58, la 0.59 y la 0.60: unidas a `main` (#62, #63, #64). Además pidió líneas finas también en planta y en 3D, y que el programa no tardase al abrir un alzado ni al desplazar con el botón derecho.
+
+**Lo que pasaba**
+- Al desplazar o acercar, la planta, los alzados y los planos se volvían a dibujar enteros a cada movimiento del ratón.
+- El alzado sur de la demo tardaba 1,8 s en cada uno de esos dibujos. Era un dibujo de 24 MB:
+  - 148.000 triángulos blancos, cada uno suelto;
+  - los muebles de dentro de la casa, aunque los tapa la fachada.
+
+**Hecho**
+- **Desplazar y acercar sin espera** en planta, alzados, secciones y planos:
+  - mientras se arrastra o se gira la rueda, se mueve la imagen ya dibujada;
+  - al pararse (0,15 s sin moverse y el botón suelto), se dibuja una vez con todo su detalle;
+  - lo que entra por los bordes sale en blanco hasta ese momento.
+- **Alzados y secciones más ligeros**, con el mismo dibujo (comparado píxel a píxel con el de antes):
+  - lo que queda entero detrás de algo opaco (el interior, la cara de atrás de las cosas) ya no se dibuja;
+  - los triángulos blancos seguidos van en un solo trazo;
+  - fuera, las astillas de menos de 1 mm², que son caras vistas de canto;
+  - el dibujo de cada árbol visto de lado se guarda, en lugar de rehacerlo a cada redibujo.
+- **Volver a un alzado ya abierto** es inmediato: se guardan los cuatro últimos mientras el modelo no cambie.
+- Medido en la demo (`archisim medir vistas out/demo.archisim`):
+
+  | | Antes | Ahora |
+  |---|---|---|
+  | Redibujo del alzado sur entero | 1,8 s | 0,3–0,4 s, solo al soltar |
+  | Abrir el alzado sur | unos 2 s | unos 0,6 s |
+  | Peso del alzado sur (SVG y PDF) | 24 MB | 5,6 MB |
+
+- **Líneas finas**:
+  - ficha «Líneas finas» en la barra de abajo de la planta y de la vista 3D, como ya estaba en alzados y secciones (el icono «Grosor real» de los forzados desaparece);
+  - en 3D, las aristas pasan de dos píxeles a uno, también en la Maqueta;
+  - la misma opción vale para todas las vistas, y está también en el menú Vista y en Propiedades de la planta.
+- Orden nueva: `archisim medir vistas proyecto.archisim`, lo que tarda cada alzado, sección y planta en pantalla.
+
+**Pendiente**
+- El dibujo final, al soltar, sigue tardando unas décimas en los alzados grandes. Si molesta, el siguiente paso es dibujarlo en segundo plano.
+- C2 (cocina y muebles, segunda vuelta) es lo siguiente, en `bloque/c2-cocina`.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim`. En el Navegador → Proyecto, doble clic en «Alzado Sur»: debe abrirse en menos de un segundo.
+2. En el alzado, mantén el botón derecho y arrastra: el dibujo debe seguir al ratón sin retraso. Al soltar, se completa lo que entra por los bordes. Lo mismo con la rueda para acercar.
+3. Haz lo mismo en la planta y en un plano (A-03).
+4. Abajo a la izquierda, en la planta, pulsa «Líneas finas»: todas las líneas a un píxel. Vuelve a pulsar: grosor real.
+5. F3 (vista 3D): pulsa «Líneas finas» en la barra de abajo. Las aristas deben verse más finas, y la barandilla y la escalera más claras.
+6. Si tienes un proyecto de AD5 grande, ábrelo y pasa `cargo run --release -p archisim-cli -- medir vistas tuproyecto.archisim`. Mándame lo que salga.
 
 ---
 

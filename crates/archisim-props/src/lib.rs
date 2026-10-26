@@ -20,10 +20,13 @@ mod furniture;
 mod garden;
 mod home;
 mod kitchen;
+mod nature;
 mod people;
 mod sanitary;
 mod street;
 mod vehicles;
+
+pub use kitchen::{sink_hole, SINK_UNIT, UPSTAND, WORKTOP};
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -80,6 +83,7 @@ impl PropMesh {
 /// What can be made, with the name of each model (`style`).
 pub const KINDS: &[(&str, &[&str])] = &[
     ("sofa", &["Contemporáneo", "Clásico", "Nórdico"]),
+    ("corner_sofa", &["Contemporáneo", "Clásico", "Nórdico"]),
     ("chair", &["Madera", "Tubo metálico", "Tapizada"]),
     ("table", &["Cuatro patas", "Patas metálicas", "Caballetes"]),
     (
@@ -199,6 +203,18 @@ pub const KINDS: &[(&str, &[&str])] = &[
         &["Con olivo", "Ánfora", "Con gramíneas", "Con lavanda"],
     ),
     ("pergola", &["De madera", "De lamas", "Con cañizo"]),
+    // Natural things of the site (C8).
+    (
+        "rock",
+        &["Canto rodado", "Roca angulosa", "Laja", "Roca con musgo"],
+    ),
+    (
+        "rock_group",
+        &["Rocas angulosas", "Cantos rodados", "Con musgo"],
+    ),
+    ("pebbles", &["Cantos rodados"]),
+    ("log", &["Tronco caído"]),
+    ("stump", &["Tocón"]),
     ("car", &["Berlina", "Compacto", "Todoterreno"]),
     // Street furniture (v0.52).
     (
@@ -277,6 +293,7 @@ pub const CHOICES: &[(&str, &[&str])] = &[
         "pedestal",
         &["Sin cajonera", "A la izquierda", "A la derecha"],
     ),
+    ("side", &["Derecha", "Izquierda"]),
 ];
 
 /// The number of a value chosen by name (see [`CHOICES`]).
@@ -298,6 +315,7 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
     let mut b = build::Builder::default();
     match kind {
         "sofa" => furniture::sofa(&mut b, p),
+        "corner_sofa" => furniture::corner_sofa(&mut b, p),
         "chair" => furniture::chair(&mut b, p),
         "table" => furniture::table(&mut b, p),
         "coffee_table" => furniture::coffee_table(&mut b, p),
@@ -347,6 +365,11 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "lounger" => garden::lounger(&mut b, p),
         "parasol" => garden::parasol(&mut b, p),
         "big_pot" => garden::big_pot(&mut b, p),
+        "rock" => nature::rock_prop(&mut b, p),
+        "rock_group" => nature::rock_group(&mut b, p),
+        "pebbles" => nature::pebbles(&mut b, p),
+        "log" => nature::log(&mut b, p),
+        "stump" => nature::stump(&mut b, p),
         "pergola" => garden::pergola(&mut b, p),
         "bench" => street::bench(&mut b, p),
         "streetlight" => street::streetlight(&mut b, p),

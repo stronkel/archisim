@@ -3,6 +3,7 @@
 //! selected copy and the Modules section of the navigator, which says
 //! when a module's file has changed and updates it.
 
+use super::widgets::SwitchExt as _;
 use std::time::{Duration, Instant};
 
 use archisim_core::{ModuleId, ModuleSourceId, ModuleTransform, Point2};
@@ -221,7 +222,7 @@ impl ArchiSimApp {
                     "Simetría",
                     "Para pareadas y adosadas: el módulo reflejado",
                     |ui, _| {
-                        ui.checkbox(&mut self.module_tool.mirror, "");
+                        ui.switch(&mut self.module_tool.mirror, "");
                     },
                 );
                 props::note(ui, "El clic marca dónde va el origen (0,0) del módulo.");
@@ -301,7 +302,7 @@ impl ArchiSimApp {
                 "El módulo reflejado (pareadas, adosadas)",
                 |ui, _| {
                     let mut mirror = p.mirror;
-                    if ui.checkbox(&mut mirror, "").changed() {
+                    if ui.switch(&mut mirror, "").changed() {
                         let r = self
                             .ed
                             .edit_module("Simetría del módulo", id, |m| m.mirror = mirror);

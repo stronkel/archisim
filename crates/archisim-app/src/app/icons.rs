@@ -73,6 +73,11 @@ pub enum Icon {
     DimAngle,
     DimRadius,
     DimArc,
+    /// How the door and window tools place along a wall.
+    PlaceFree,
+    PlaceCentre,
+    PlaceEnd,
+    PlaceSpread,
 }
 
 /// Draws `icon` in `rect` with lines of `color`.
@@ -412,6 +417,51 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 ],
                 st,
             );
+        }
+        Icon::PlaceFree | Icon::PlaceCentre | Icon::PlaceEnd | Icon::PlaceSpread => {
+            // A wall seen in plan (its two faces) with its openings.
+            let gaps: &[(f32, f32)] = match icon {
+                Icon::PlaceFree => &[(12.0, 17.0)],
+                Icon::PlaceCentre => &[(9.0, 15.0)],
+                Icon::PlaceEnd => &[(6.0, 11.0)],
+                _ => &[(5.5, 9.5), (14.5, 18.5)],
+            };
+            let mut x = 2.0;
+            for &(a, b) in gaps.iter().chain(std::iter::once(&(22.0, 22.0))) {
+                if a > x {
+                    line(&[(x, 9.0), (a, 9.0)], st);
+                    line(&[(x, 14.0), (a, 14.0)], st);
+                }
+                if a < 22.0 {
+                    line(&[(a, 9.0), (a, 14.0)], st_thin);
+                    line(&[(b, 9.0), (b, 14.0)], st_thin);
+                    line(&[(a, 11.5), (b, 11.5)], st_thin);
+                }
+                x = b;
+            }
+            match icon {
+                Icon::PlaceFree => closed(
+                    &[(14.5, 15.0), (19.0, 20.0), (16.5, 20.0), (15.5, 22.0)],
+                    st_thin,
+                ),
+                Icon::PlaceCentre => dashed((12.0, 3.0), (12.0, 21.0), st_thin),
+                Icon::PlaceEnd => {
+                    line(&[(2.0, 6.0), (2.0, 17.0)], st);
+                    line(&[(2.0, 19.0), (6.0, 19.0)], st_thin);
+                    line(&[(2.0, 17.5), (2.0, 20.5)], st_thin);
+                    line(&[(6.0, 17.5), (6.0, 20.5)], st_thin);
+                }
+                _ => {
+                    for (a, b) in [(2.0, 5.5), (9.5, 14.5), (18.5, 22.0)] {
+                        line(&[(a, 18.0), (a, 20.0)], st_thin);
+                        line(&[(b, 18.0), (b, 20.0)], st_thin);
+                        line(
+                            &[((a + b) / 2.0 - 0.8, 19.0), ((a + b) / 2.0 + 0.8, 19.0)],
+                            st_thin,
+                        );
+                    }
+                }
+            }
         }
         Icon::GeoWand => {
             line(&[(4.0, 20.0), (15.0, 9.0)], st);

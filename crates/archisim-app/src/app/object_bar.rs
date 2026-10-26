@@ -30,6 +30,8 @@ enum BarAct {
     SetMaterial(String, u64),
     /// Give a piece of the object a colour of the cosy palette.
     PaintPiece(String, &'static str),
+    /// Give a piece of the object any colour (the free colour wheel).
+    PaintRgb(String, [u8; 3]),
     /// Give a value to a measure or choice of its type (to its whole row
     /// of modules with `true`).
     SetValue(String, Value, bool),
@@ -449,6 +451,15 @@ impl ArchiSimApp {
                     self.report(r, &format!("{swatch}."));
                 }
             }
+            BarAct::PaintRgb(key, rgb) => {
+                if let Some(id) = object {
+                    let r = self.ed.paint_object_piece_rgb(id, &key, rgb);
+                    self.report(
+                        r,
+                        &format!("Color libre #{:02X}{:02X}{:02X}.", rgb[0], rgb[1], rgb[2]),
+                    );
+                }
+            }
             BarAct::SetValue(key, v, whole_row) => {
                 if let Some(id) = object {
                     let ids = if whole_row { self.row_of(id) } else { vec![id] };
@@ -474,8 +485,12 @@ impl ArchiSimApp {
             }
             BarAct::SetMaterial(key, m) => {
                 if let Some(id) = object {
+                    let ids = self.ed.piece_mates(id, &key);
                     let r = self.ed.transact("Cambiar material", |model| {
-                        crate::drag::set_object_value(model, id, &key, Value::Material(m))
+                        for id in &ids {
+                            crate::drag::set_object_value(model, *id, &key, Value::Material(m))?;
+                        }
+                        Ok(())
                     });
                     self.report(r, "Material cambiado.");
                 }
@@ -693,6 +708,39 @@ impl ArchiSimApp {
                                     }
                                 });
                         });
+                    // Any colour: a wheel, applied with its button (one
+                    // step to undo, not one per movement of the wheel).
+                    ui.add_space(4.0);
+                    egui::CollapsingHeader::new(
+                        egui::RichText::new("Color libre").small().color(p.muted),
+                    )
+                    .id_salt("object-bar-free-colour")
+                    .show(ui, |ui| {
+                        let start = now
+                            .map(|m| model.surface_color(archisim_core::MaterialId(m)))
+                            .unwrap_or([200, 200, 200]);
+                        let mut rgb = match &self.bar_rgb {
+                            Some((k, c)) if k == key => *c,
+                            _ => start,
+                        };
+                        let mut c = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                        egui::widgets::color_picker::color_picker_color32(
+                            ui,
+                            &mut c,
+                            egui::widgets::color_picker::Alpha::Opaque,
+                        );
+                        rgb = [c.r(), c.g(), c.b()];
+                        if ui
+                            .button(format!(
+                                "Aplicar #{:02X}{:02X}{:02X}",
+                                rgb[0], rgb[1], rgb[2]
+                            ))
+                            .clicked()
+                        {
+                            act = Some(BarAct::PaintRgb(key.to_string(), rgb));
+                        }
+                        self.bar_rgb = Some((key.to_string(), rgb));
+                    });
                 })
             });
         // A click elsewhere closes it.

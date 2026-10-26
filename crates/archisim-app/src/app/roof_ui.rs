@@ -2,6 +2,7 @@
 //! shape (four, two or one slope), pitch, overhang, height and the pitch
 //! or gable of each side.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{DormerKind, GutterShape, RoofId, SlabFunction, TileKind};
 use eframe::egui::{self, Id, Ui};
 
@@ -233,7 +234,7 @@ impl ArchiSimApp {
                 "Planta de encima",
                 "Dibujada sobre los muros de una planta, la cubierta pertenece a la de encima",
                 |ui, _| {
-                    ui.checkbox(&mut self.roof_settings.level_above, "");
+                    ui.switch(&mut self.roof_settings.level_above, "");
                 },
             );
             text_row(ui, "Planta", "", &level_name);
@@ -531,7 +532,7 @@ impl ArchiSimApp {
                 "En los aleros, con sus bajantes hasta la planta más baja",
                 |ui, _| {
                     let mut on = c.gutter.is_some();
-                    if ui.checkbox(&mut on, "").changed() {
+                    if ui.switch(&mut on, "").changed() {
                         c.gutter = if on { default_gutter.clone() } else { None };
                     }
                 },

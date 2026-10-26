@@ -5,6 +5,7 @@
 //! coordinates and absolute heights: it is centred on the project origin
 //! and its heights taken from the one chosen as the project's ±0,00.
 
+use super::widgets::SwitchExt as _;
 use std::path::Path;
 
 use archisim_core::{Point2, SurveyPoint};
@@ -267,7 +268,7 @@ impl ArchiSimApp {
                                     ui.strong("Cotas");
                                     ui.end_row();
                                     for (l, on) in s.layers.iter_mut() {
-                                        ui.checkbox(on, "");
+                                        ui.switch(on, "");
                                         ui.label(&l.name);
                                         ui.label(l.points.to_string());
                                         ui.label(l.contours.to_string());
@@ -298,7 +299,7 @@ impl ArchiSimApp {
                         .map(|(l, _)| l.numbers)
                         .sum();
                     ui.add_enabled_ui(numbers > 0, |ui| {
-                        ui.checkbox(
+                        ui.switch(
                             &mut s.heights_from_texts,
                             "Puntos sin cota: tomar la del texto de cota más cercano (a menos de 2 m)",
                         );
@@ -306,14 +307,14 @@ impl ArchiSimApp {
                     ui.horizontal(|ui| {
                         ui.label("Unidades del dibujo:");
                         for (k, name) in [(1.0, "metros"), (0.01, "centímetros"), (0.001, "milímetros")] {
-                            ui.radio_value(&mut s.unit, k, name);
+                            ui.selectable_value(&mut s.unit, k, name);
                         }
                     });
                 } else {
                     ui.horizontal(|ui| {
                         ui.label("Columnas:");
-                        ui.radio_value(&mut s.swap, false, "X, Y, Z");
-                        ui.radio_value(&mut s.swap, true, "Y, X, Z (norte primero)");
+                        ui.selectable_value(&mut s.swap, false, "X, Y, Z");
+                        ui.selectable_value(&mut s.swap, true, "Y, X, Z (norte primero)");
                     });
                 }
                 ui.add_space(6.0);
@@ -349,12 +350,12 @@ impl ArchiSimApp {
                         }
                         ui.end_row();
                     });
-                ui.checkbox(
+                ui.switch(
                     &mut s.centre,
                     "Centrar el levantamiento en el origen del proyecto (si no, sus coordenadas tal cual)",
                 );
                 if terrain_here.is_some() {
-                    ui.checkbox(&mut s.add, "Añadir al terreno de esta planta (si no, un terreno nuevo)");
+                    ui.switch(&mut s.add, "Añadir al terreno de esta planta (si no, un terreno nuevo)");
                 }
                 ui.add_space(6.0);
                 let survey = s.survey();

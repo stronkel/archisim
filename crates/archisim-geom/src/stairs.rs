@@ -114,7 +114,7 @@ pub fn stair_parts(model: &Model, id: StairId) -> Vec<StairPart> {
         StairStructure::Cantilever | StairStructure::Newel => d.tread,
         StairStructure::Stringers | StairStructure::Spine => d.tread + 0.08,
     };
-    if slab && d.form == StairForm::Landings {
+    if slab && d.form == StairForm::Landings && !d.split {
         // Straight flights: their profile, exact.
         for (i, f) in l.flights.iter().enumerate() {
             let profile = flight_profile(f, r, stair.waist, z0 - finish);
@@ -643,17 +643,22 @@ mod tests {
             StairStructure::Cantilever,
             StairStructure::Newel,
         ] {
-            for (form, path, sweep) in [
-                (StairForm::Landings, l_path.clone(), 0.0),
-                (StairForm::Winders, l_path.clone(), 0.0),
-                (StairForm::Winders, u_path.clone(), 0.0),
-                (StairForm::Landings, u_path.clone(), 0.0),
-                (StairForm::Spiral, spiral.clone(), 7.5),
+            for (form, path, sweep, split, arrival) in [
+                (StairForm::Landings, l_path.clone(), 0.0, false, 0.0),
+                (StairForm::Winders, l_path.clone(), 0.0, false, 0.0),
+                (StairForm::Winders, u_path.clone(), 0.0, false, 0.0),
+                (StairForm::Landings, u_path.clone(), 0.0, false, 0.0),
+                (StairForm::Landings, l_path.clone(), 0.0, true, 0.0),
+                (StairForm::Landings, u_path.clone(), 0.0, true, 0.0),
+                (StairForm::Spiral, spiral.clone(), 7.5, false, 0.0),
+                (StairForm::Spiral, spiral.clone(), 7.5, false, 1.5),
             ] {
                 for finish in [None, Some(())] {
                     let design = StairDesign {
                         form,
                         sweep,
+                        split,
+                        arrival,
                         structure,
                         tread_material: finish.map(|_| MaterialId(0)),
                         ..Default::default()
@@ -667,7 +672,7 @@ mod tests {
                         }
                         assert!(
                             closed(&part.triangles),
-                            "{structure:?} {form:?} {:?}",
+                            "{structure:?} {form:?} {split} {arrival} {:?}",
                             part.kind
                         );
                         assert!(

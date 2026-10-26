@@ -99,6 +99,13 @@ pub struct StairDesign {
     pub tread_material: Option<MaterialId>,
     /// Width and depth of the stringers (or of the central one).
     pub stringer: [f64; 2],
+    /// Flights and landings: each square turn's landing split along its
+    /// diagonal into two treads at 45° ("meseta partida"; a U's, into
+    /// three), so the stair is one run.
+    pub split: bool,
+    /// Spiral: the angle of the landing at its head ("meseta de
+    /// llegada"), at the floor above, turning on the same way; 0, none.
+    pub arrival: f64,
 }
 
 impl Default for StairDesign {
@@ -112,6 +119,8 @@ impl Default for StairDesign {
             tread: 0.04,
             tread_material: None,
             stringer: [0.08, 0.3],
+            split: false,
+            arrival: 0.0,
         }
     }
 }
@@ -266,6 +275,9 @@ pub enum StairIssue {
     /// Steps without risers in a stair of general use (only allowed out of
     /// public areas and not for evacuation upwards).
     OpenRisers,
+    /// Landings split into treads at 45° in a stair of general use (the
+    /// code allows them only in stairs of restricted use).
+    SplitLanding,
 }
 
 /// Extreme values a stair may take at all (not the code's limits).
@@ -284,20 +296,34 @@ pub fn stair_layout(
     edge: f64,
 ) -> StairLayout {
     match design.form {
+        StairForm::Landings if design.split => split_layout(path, width, going, height, base),
         StairForm::Landings => layout(path, width, going, height, base),
         StairForm::Winders => winder_layout(path, width, going, height, base, edge),
         StairForm::Spiral => match path {
-            [c, f, ..] => spiral_layout(
-                *c,
-                *f - *c,
-                design.sweep,
-                design.core,
-                width,
-                going,
-                height,
-                base,
-                edge,
-            ),
+            [c, f, ..] => {
+                let mut l = spiral_layout(
+                    *c,
+                    *f - *c,
+                    design.sweep,
+                    design.core,
+                    width,
+                    going,
+                    height,
+                    base,
+                    edge,
+                );
+                spiral_arrival(
+                    &mut l,
+                    *c,
+                    *f - *c,
+                    design.sweep,
+                    design.core,
+                    width,
+                    base + height,
+                    design.arrival,
+                );
+                l
+            }
             _ => layout(&[], width, going, height, base),
         },
     }
@@ -386,8 +412,14 @@ impl Stair {
             });
         }
         // Curved treads: not too narrow on one side, not too deep on the
+        // other. The treads of a split landing are not curved treads: the
+        // code allows them in a stair of restricted use, and not in any
         // other.
-        let turned = || l.steps.iter().filter(|s| s.turned);
+        let split = self.design.form == StairForm::Landings;
+        if split && self.usage == StairUse::General && l.steps.iter().any(|s| s.turned) {
+            v.push(StairIssue::SplitLanding);
+        }
+        let turned = || l.steps.iter().filter(|s| s.turned && !split);
         let narrow = turned()
             .map(|s| s.side_length(true).min(s.side_length(false)))
             .fold(f64::INFINITY, f64::min);

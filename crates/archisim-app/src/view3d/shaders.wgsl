@@ -15,7 +15,8 @@ struct Globals {
     view: mat4x4<f32>,
     // xyz: direction towards the sun; w: unused.
     sun: vec4<f32>,
-    // x: pixel step for contour detection; y: contour strength; z = 1
+    // x: pixel step for contour detection; y: contour strength, negative
+    // for thin lines (one pixel wide); z = 1
     // when something is selected (outlined); w = 1 while what is
     // selected is drawn stretched over the scene.
     edges: vec4<f32>,
@@ -101,8 +102,9 @@ fn vs_model(v: VertexIn) -> VertexOut {
     // A nudge along the line of sight, 0.02 % of the distance: invisible,
     // but it settles which element wins where two touch on an edge.
     vp.z = vp.z * (1.0 + min(v.bias, 1.0) * 0.0002);
-    // 1: foliage; 2: what glows at night (lampshades, bulbs, flames).
-    out.soft = select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5);
+    // 1: foliage; 2: what glows at night (lampshades, bulbs, flames); 3:
+    // grass and flowers on the ground.
+    out.soft = select(select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5), 3.0, v.bias > 3.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -284,6 +286,10 @@ fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
     return select(1.0, sum / count, inside);
 }
 
+// The level of detail of the textures' pictures at this pixel (set at the
+// start of the fragment; only the pictures' textures use it).
+var<private> tex_level: f32;
+
 // ---- Textures -------------------------------------------------------------
 //
 // Drawn from each point's position on its face (no images, nothing to
@@ -336,6 +342,10 @@ fn joint(t: f32, width: f32) -> f32 {
     let f = fract(t);
     let e = min(f, 1.0 - f);
     return smoothstep(width * 0.5, width, e);
+}
+
+fn tex_lod(world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> f32 {
+    return 0.0;
 }
 
 fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) -> vec3<f32> {
@@ -497,6 +507,28 @@ fn textured(base: vec3<f32>, world: vec3<f32>, n_in: vec3<f32>, tex: vec2<f32>) 
             let fine = 1.0 - smoothstep(0.0, 0.03, abs(sin((w + noise(p * 9.0)) * 9.0)));
             return base * (0.97 + 0.03 * noise(p * 4.0)) * (1.0 - 0.32 * vein - 0.12 * fine);
         }
+        // Soil: a mottle with clods and, here and there, a light stone.
+        case 19: {
+            let c = cells(p * 5.0);
+            let clod = smoothstep(0.0, 0.3, c.y - c.x);
+            let v = 0.78 + 0.25 * noise(p * 3.0) + 0.12 * noise(p * 17.0);
+            let stone = (1.0 - smoothstep(0.1, 0.16, c.x)) * step(0.85, c.z);
+            return mix(base * v * (0.82 + 0.18 * clod), base * 1.3 + vec3<f32>(0.08, 0.08, 0.07), stone);
+        }
+        // Fallen leaves: one in each cell, ochre, rust or brown, over the
+        // darker ground.
+        case 20: {
+            let c = cells(p * 2.5);
+            let leaf = 1.0 - smoothstep(0.26, 0.33, c.x);
+            var tint = vec3<f32>(0.5, 0.31, 0.14);
+            if (c.z > 0.66) {
+                tint = vec3<f32>(0.66, 0.47, 0.18);
+            } else if (c.z > 0.33) {
+                tint = vec3<f32>(0.4, 0.2, 0.1);
+            }
+            let ground = base * (0.72 + 0.25 * noise(p * 6.0));
+            return mix(ground, tint, leaf * 0.85);
+        }
         default: {
             return base;
         }
@@ -511,6 +543,7 @@ struct ModelOut {
 @fragment
 fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     var out: ModelOut;
+    tex_level = tex_lod(i.world, i.normal, i.tex);
     if (stretched(i.picked)) {
         discard;
     }
@@ -534,7 +567,7 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     let lit = sunlit(i.world, i.normal);
     let base = textured(i.color.rgb, i.world, i.normal, i.tex);
     var color = shade(i.normal, base, lit) + base * lamplight(i.world, i.normal);
-    if (i.soft > 1.5) {
+    if (i.soft > 1.5 && i.soft < 2.5) {
         // A lampshade or a bulb at night: it glows.
         let glow = (base * 0.6 + vec3<f32>(0.55, 0.42, 0.25)) * 1.6;
         color = mix(color, glow, g.atmos.y);
@@ -649,6 +682,18 @@ fn depth_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
     return select(0.0, 1.0, kink > 0.03);
 }
 
+// A step in depth seen from the nearer of its two surfaces only: the
+// line of a thin-line step is drawn on one pixel, not on both sides.
+fn near_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
+    if (depth_step(a, c, b) < 0.5) {
+        return 0.0;
+    }
+    let ia = 1.0 / abs(a.w);
+    let ib = 1.0 / abs(b.w);
+    let ic = 1.0 / abs(c.w);
+    return select(0.0, 1.0, 2.0 * ic > ia + ib);
+}
+
 // Where the line of sight through a pixel meets the ground (w = 1), or
 // its direction (w = 0) when it looks above the horizon.
 fn sight(pos: vec2<f32>) -> vec4<f32> {
@@ -709,8 +754,17 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let r = sample_nd(p + vec2<i32>(s, 0));
     let u = sample_nd(p - vec2<i32>(0, s));
     let d = sample_nd(p + vec2<i32>(0, s));
-    var e = max(max(crease(c, r), crease(c, d)), max(crease(c, l), crease(c, u)));
-    e = max(e, max(depth_step(l, c, r), depth_step(u, c, d)));
+    var e = 0.0;
+    if (g.edges.y < 0.0) {
+        // Thin lines: an edge is marked on one side only (towards the
+        // right and down for a crease, on the nearer surface for a step in
+        // depth), so it is one pixel wide instead of two.
+        e = max(crease(c, r), crease(c, d));
+        e = max(e, max(near_step(l, c, r), near_step(u, c, d)));
+    } else {
+        e = max(max(crease(c, r), crease(c, d)), max(crease(c, l), crease(c, u)));
+        e = max(e, max(depth_step(l, c, r), depth_step(u, c, d)));
+    }
     // The outline of what is selected, a little thicker than the
     // contours, in its own colour: its faces keep theirs.
     // No loops here: the shader compiler of Windows (FXC) refuses to
@@ -742,7 +796,7 @@ fn fs_edges(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     }
     // The ink: darker at night, or it would be lighter than the scene.
     let ink = vec3<f32>(0.05, 0.05, 0.06) * (1.0 - 0.9 * g.atmos.y);
-    return vec4<f32>(ink, max(e * g.edges.y, shade_corner));
+    return vec4<f32>(ink, max(e * abs(g.edges.y), shade_corner));
 }
 
 // How far the surface through `c` bends inwards between two samples on

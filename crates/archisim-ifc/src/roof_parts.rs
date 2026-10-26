@@ -23,7 +23,7 @@ use crate::{derived_guid, Exporter};
 impl Exporter<'_> {
     /// A tessellated body of solids, one face set per material, heights
     /// from the storey; `None` if they have no triangles.
-    fn solids_shape(&mut self, solids: &[&Solid], storey_z: f64) -> Option<Ref> {
+    pub(crate) fn solids_shape(&mut self, solids: &[&Solid], storey_z: f64) -> Option<Ref> {
         let mut by_material: BTreeMap<MaterialId, Vec<&Solid>> = BTreeMap::new();
         for s in solids {
             by_material.entry(s.material).or_default().push(s);
@@ -101,7 +101,7 @@ impl Exporter<'_> {
         self.pset(el, guid, "ArchiSim_RoofPart", &props);
     }
 
-    fn material_of(
+    pub(crate) fn material_of(
         &mut self,
         materials: &BTreeMap<MaterialId, Ref>,
         el: Ref,

@@ -367,6 +367,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("07", "Escaleras y barandillas", stairs_and_railings(model)),
         ("08", "Muros cortina", curtain_walls(model)),
         ("09", "Instalaciones", services(model)),
+        ("10", "Mobiliario de cocina", kitchen(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters
@@ -787,6 +788,116 @@ fn curtain_walls(model: &Model) -> Vec<Item> {
                 lines,
             });
         }
+    }
+    items
+}
+
+/// Worktops by material, in metres along the fronts of their modules (a
+/// run of modules is one worktop, `Model::worktops`); kitchen furniture
+/// (the objects of the kitchen families) by type, in units.
+fn kitchen(model: &Model) -> Vec<Item> {
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let new = |id: u64| model.phase(id) == Phase::New;
+    let mut tops: BTreeMap<archisim_core::MaterialId, Vec<Measured>> = BTreeMap::new();
+    for run in model.worktops() {
+        if !run.members.iter().all(|m| new(m.0)) {
+            continue;
+        }
+        let what = match run.members.len() {
+            1 => "Encimera de un módulo".to_string(),
+            n => format!("Encimera de {n} módulos"),
+        };
+        let depth = if run.length > 0.0 {
+            run.area / run.length
+        } else {
+            0.0
+        };
+        tops.entry(run.material).or_default().push(Measured {
+            comment: format!("{what} · {}", level_name(run.level)),
+            units: 1.0,
+            length: run.length,
+            width: depth,
+            height: 0.0,
+            quantity: run.length,
+        });
+    }
+    // Upstands (copetes), by material, measured along.
+    let mut upstands: BTreeMap<archisim_core::MaterialId, Vec<Measured>> = BTreeMap::new();
+    for run in model.worktops() {
+        if run.upstands.is_empty() || !run.members.iter().all(|m| new(m.0)) {
+            continue;
+        }
+        let length: f64 = run.upstands.iter().map(|(e, _)| e[0].distance(e[1])).sum();
+        let height = run.upstands.iter().map(|(_, h)| *h).fold(0.0, f64::max);
+        upstands.entry(run.material).or_default().push(Measured {
+            comment: format!("Copete · {}", level_name(run.level)),
+            units: 1.0,
+            length,
+            width: 0.0,
+            height,
+            quantity: length,
+        });
+    }
+    let name_of = |m: archisim_core::MaterialId| {
+        model
+            .material(m)
+            .map_or("?".to_string(), |m| m.name.clone())
+    };
+    let mut items: Vec<Item> = tops
+        .into_iter()
+        .enumerate()
+        .map(|(i, (m, lines))| Item {
+            code: format!("E{:02}", i + 1),
+            key: format!("encimera:{}", m.0),
+            unit: "m",
+            summary: format!("Encimera de {}", name_of(m)),
+            lines,
+        })
+        .collect();
+    let first = items.len();
+    items.extend(
+        upstands
+            .into_iter()
+            .enumerate()
+            .map(|(i, (m, lines))| Item {
+                code: format!("E{:02}", first + i + 1),
+                key: format!("copete:{}", m.0),
+                unit: "m",
+                summary: format!("Copete de {}", name_of(m)),
+                lines,
+            }),
+    );
+    let mut units: BTreeMap<archisim_core::ObjectTypeId, Vec<Measured>> = BTreeMap::new();
+    for o in model.objects().filter(|o| new(o.id.0)) {
+        let Some(t) = model.object_type(o.object_type) else {
+            continue;
+        };
+        let kitchen = model
+            .family(t.family)
+            .is_some_and(|f| f.def().category == "kitchen");
+        if !kitchen {
+            continue;
+        }
+        units.entry(t.id).or_default().push(Measured {
+            comment: format!("{} · {}", t.name, level_name(o.level)),
+            units: 1.0,
+            length: 0.0,
+            width: 0.0,
+            height: 0.0,
+            quantity: 1.0,
+        });
+    }
+    for (i, (t, lines)) in units.into_iter().enumerate() {
+        let Some(ty) = model.object_type(t) else {
+            continue;
+        };
+        items.push(Item {
+            code: format!("K{:02}", i + 1),
+            key: format!("mueble:{}", t.0),
+            unit: "ud",
+            summary: ty.name.clone(),
+            lines,
+        });
     }
     items
 }

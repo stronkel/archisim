@@ -224,13 +224,13 @@ impl ArchiSimApp {
         }
     }
 
-    /// The carpentry sheets: every door and window type in elevation, as
-    /// a PDF (and the SVG of each sheet beside it).
-    pub(super) fn export_carpentry(&mut self) {
+    /// A document of A3 sheets (the carpentry sheets, the carpentry
+    /// report or the table of areas) as a PDF.
+    pub(super) fn export_document(&mut self, doc: crate::documents::Document) {
         let mut d = rfd::FileDialog::new()
-            .set_title("Plano de carpinterías (PDF)")
+            .set_title(format!("{} (PDF)", doc.title()))
             .add_filter("PDF", &["pdf"])
-            .set_file_name(format!("{}-carpinterias.pdf", self.file_name_stem()));
+            .set_file_name(format!("{}-{}.pdf", self.file_name_stem(), doc.file()));
         if let Some(dir) = self.start_dir() {
             d = d.set_directory(dir);
         }
@@ -238,13 +238,13 @@ impl ArchiSimApp {
             return;
         };
         let model = self.ed.shown();
-        let sheets = crate::carpentry::carpentry_sheets(&model);
-        let r = crate::carpentry::carpentry_pdf(&model)
-            .map_err(|e| e.to_string())
+        let sheets = doc.sheets(&model);
+        let r = crate::documents::pdf_of(&sheets, doc.title())
             .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
         match r {
             Ok(()) => self.say(format!(
-                "Plano de carpinterías: {} hoja(s) A3 en {}.",
+                "{}: {} hoja(s) A3 en {}.",
+                doc.title(),
                 sheets.len(),
                 path.display()
             )),

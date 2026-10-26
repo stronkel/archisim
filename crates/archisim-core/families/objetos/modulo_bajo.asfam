@@ -10,6 +10,10 @@ type_params
     width  length = 0.60 range 0.15..1.20 label "Ancho"
     depth  length = 0.60 range 0.45..0.70 label "Fondo"
     height length = 0.90 range 0.80..0.95 label "Altura"
+  section "Encimera"
+    overhang length = 0.00 range 0.00..0.45 label "Vuelo delante"
+    overhang_back length = 0.00 range 0.00..0.45 label "Vuelo detrás"
+    upstand length = 0.00 range 0.00..0.20 label "Copete"
   section "Módulo"
     unit choice("Cajonera", "Puertas", "Fregadero", "Horno", "Lavavajillas", "Placa", "Botellero", "Esquina") = "Cajonera" label "Qué lleva"
     drawers integer = 3 range 0..4 visible_if unit == "Cajonera" or unit == "Placa" label "Cajones"
@@ -27,10 +31,16 @@ type_params
 
 body
   box (-width / 2, 0, 0.1) to (width / 2, depth - 0.04, height - 0.03) material mat
-  box (-width / 2, 0, height - 0.03) to (width / 2, depth, height) material top
+  box (-width / 2, -overhang_back, height - 0.03) to (width / 2, depth + overhang, height) material top
+  if upstand > 0
+    box (-width / 2, -overhang_back, height) to (width / 2, -overhang_back + 0.02, height + upstand) material top
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  polygon (-width / 2, -overhang_back) (width / 2, -overhang_back) (width / 2, depth + overhang) (-width / 2, depth + overhang) pen view
+  if overhang > 0
+    line (-width / 2, depth) to (width / 2, depth) pen thin dashed
+  if overhang_back > 0
+    line (-width / 2, 0) to (width / 2, 0) pen thin dashed
   if unit == "Fregadero" and width >= 0.45
     polygon (-width / 2 + 0.06, 0.1) (width / 2 - 0.06, 0.1) (width / 2 - 0.06, depth - 0.12) (-width / 2 + 0.06, depth - 0.12) pen thin
   if unit == "Placa"

@@ -46,71 +46,73 @@ impl Exporter<'_> {
             let mut plan = 0.0;
             for plane in roof.planes() {
                 // The plane as an inclined slab: its top face is at the
-                // roof's base along the side it rises from.
-                let part = Slab {
-                    id: SlabId(roof.id.0),
-                    guid: derived_guid(&roof.guid, &format!("plane {}", plane.side)),
-                    slab_type: roof.roof_type,
-                    level: roof.level,
-                    outline: plane.outline.clone(),
-                    top_offset: roof.base_offset,
-                    // Its dormers' footprints (on this piece of it).
-                    holes: roof
-                        .plane_holes(plane.side)
-                        .into_iter()
-                        .filter(|h| {
-                            h.iter()
-                                .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
-                        })
-                        .collect(),
-                    slope: Some(plane.slope),
-                };
-                let (spl, shape) = self.slab_shape(&part, thickness, pl, &[]);
-                let sl = self.w.add(format!(
-                    "IFCSLAB({},$,{},$,{},{spl},{shape},$,.ROOF.)",
-                    string(part.guid.as_str()),
-                    string(&format!("{name} · faldón {}", plane.side + 1)),
-                    string(&rtype.name),
-                ));
-                let usage = self.w.add(format!(
-                    "IFCMATERIALLAYERSETUSAGE({},.AXIS3.,.POSITIVE.,0.,$)",
-                    slab_sets[&roof.roof_type]
-                ));
-                self.w.add(format!(
-                    "IFCRELASSOCIATESMATERIAL({},$,$,$,({sl}),{usage})",
-                    string(derived_guid(&part.guid, "material").as_str())
-                ));
-                self.common_pset(
-                    sl,
-                    roof.id.0,
-                    &part.guid,
-                    "Pset_SlabCommon",
-                    &rtype.name,
-                    true,
-                    rtype.is_load_bearing(),
-                );
-                let area = signed_area(&plane.outline).abs()
-                    - part.holes.iter().map(|h| signed_area(h).abs()).sum::<f64>();
-                plan += area;
-                let surface = area * plane.slope.vertical(1.0);
-                self.quantities(
-                    sl,
-                    &part.guid,
-                    "Qto_SlabBaseQuantities",
-                    &[
-                        ("Width", "IFCQUANTITYLENGTH", thickness),
-                        ("GrossArea", "IFCQUANTITYAREA", surface),
-                        ("NetArea", "IFCQUANTITYAREA", surface),
-                        ("GrossVolume", "IFCQUANTITYVOLUME", surface * thickness),
-                        ("NetVolume", "IFCQUANTITYVOLUME", surface * thickness),
-                    ],
-                );
-                // Typed by the roof's type when it is a roof type (a
-                // floor type would contradict the part's ROOF).
-                if rtype.function == archisim_core::SlabFunction::Roof {
-                    slabs_by_type.entry(roof.roof_type).or_default().push(sl);
+                // roof's base along the side it rises from; less its
+                // dormers' footprints (in one piece unless a dormer reaches
+                // over into the next piece of the same plane).
+                let shapes = archisim_geom::roof_parts::roof_plane_shapes(roof, &plane);
+                for (k, (outline, holes)) in shapes.into_iter().enumerate() {
+                    let key = if k == 0 {
+                        format!("plane {}", plane.side)
+                    } else {
+                        format!("plane {} {k}", plane.side)
+                    };
+                    let part = Slab {
+                        id: SlabId(roof.id.0),
+                        guid: derived_guid(&roof.guid, &key),
+                        slab_type: roof.roof_type,
+                        level: roof.level,
+                        outline,
+                        top_offset: roof.base_offset,
+                        holes,
+                        slope: Some(plane.slope),
+                    };
+                    let (spl, shape) = self.slab_shape(&part, thickness, pl, &[]);
+                    let sl = self.w.add(format!(
+                        "IFCSLAB({},$,{},$,{},{spl},{shape},$,.ROOF.)",
+                        string(part.guid.as_str()),
+                        string(&format!("{name} · faldón {}", plane.side + 1)),
+                        string(&rtype.name),
+                    ));
+                    let usage = self.w.add(format!(
+                        "IFCMATERIALLAYERSETUSAGE({},.AXIS3.,.POSITIVE.,0.,$)",
+                        slab_sets[&roof.roof_type]
+                    ));
+                    self.w.add(format!(
+                        "IFCRELASSOCIATESMATERIAL({},$,$,$,({sl}),{usage})",
+                        string(derived_guid(&part.guid, "material").as_str())
+                    ));
+                    self.common_pset(
+                        sl,
+                        roof.id.0,
+                        &part.guid,
+                        "Pset_SlabCommon",
+                        &rtype.name,
+                        true,
+                        rtype.is_load_bearing(),
+                    );
+                    let area = signed_area(&part.outline).abs()
+                        - part.holes.iter().map(|h| signed_area(h).abs()).sum::<f64>();
+                    plan += area;
+                    let surface = area * plane.slope.vertical(1.0);
+                    self.quantities(
+                        sl,
+                        &part.guid,
+                        "Qto_SlabBaseQuantities",
+                        &[
+                            ("Width", "IFCQUANTITYLENGTH", thickness),
+                            ("GrossArea", "IFCQUANTITYAREA", surface),
+                            ("NetArea", "IFCQUANTITYAREA", surface),
+                            ("GrossVolume", "IFCQUANTITYVOLUME", surface * thickness),
+                            ("NetVolume", "IFCQUANTITYVOLUME", surface * thickness),
+                        ],
+                    );
+                    // Typed by the roof's type when it is a roof type (a
+                    // floor type would contradict the part's ROOF).
+                    if rtype.function == archisim_core::SlabFunction::Roof {
+                        slabs_by_type.entry(roof.roof_type).or_default().push(sl);
+                    }
+                    parts.push(sl);
                 }
-                parts.push(sl);
             }
             self.rel_aggregates(derived_guid(&roof.guid, "planes"), r, &parts);
             self.common_pset(

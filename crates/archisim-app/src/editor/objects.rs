@@ -39,7 +39,7 @@ impl Editor {
             .is_some_and(|f| {
                 matches!(
                     f.def().category.as_str(),
-                    "site" | "street" | "people" | "vehicle"
+                    "site" | "street" | "nature" | "people" | "vehicle"
                 )
             });
         let ground = outdoors
@@ -117,12 +117,60 @@ impl Editor {
         if self.model().object(id).is_none() {
             return Err("el objeto no existe".into());
         }
+        let ids = self.piece_mates(id, key);
         let key = key.to_string();
         let swatch = swatch.to_string();
         self.transact("Color de la pieza", move |m| {
             let mat = archisim_library::palette_material(m, &swatch)
                 .ok_or_else(|| archisim_core::ModelError::NotAnObject(swatch.clone()))?;
-            crate::drag::set_object_value(m, id, &key, Value::Material(mat.0))
+            for id in &ids {
+                crate::drag::set_object_value(m, *id, &key, Value::Material(mat.0))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// The objects a piece's colour goes to: the object, or, for the
+    /// worktop of a base module under a worktop run, every module of the
+    /// run (it is one worktop: given to one module only, that module
+    /// would leave the run).
+    pub fn piece_mates(&self, id: ObjectId, key: &str) -> Vec<ObjectId> {
+        if key == "top" {
+            if let Some(run) = self.model().worktop_run_of(id) {
+                return run.members;
+            }
+        }
+        vec![id]
+    }
+
+    /// Gives one piece of an object (its material parameter `key`) any
+    /// colour, from the free colour wheel: a material like the one it had
+    /// in that colour. Only this object changes, in one step.
+    pub fn paint_object_piece_rgb(&mut self, id: ObjectId, key: &str, rgb: [u8; 3]) -> EditResult {
+        let base = self
+            .model()
+            .object_values(id)
+            .get(key)
+            .or_else(|| {
+                let o = self.model().object(id)?;
+                self.model().object_type(o.object_type)?.values.get(key)
+            })
+            .and_then(|v| match v {
+                Value::Material(m) => Some(archisim_core::MaterialId(*m)),
+                _ => None,
+            });
+        let Some(base) = base.or_else(|| self.model().materials().next().map(|m| m.id)) else {
+            return Err("el proyecto no tiene materiales".into());
+        };
+        let ids = self.piece_mates(id, key);
+        let key = key.to_string();
+        self.transact("Color de la pieza", move |m| {
+            let mat = archisim_library::colour_material(m, base, rgb)
+                .ok_or_else(|| archisim_core::ModelError::NotAnObject("material".into()))?;
+            for id in &ids {
+                crate::drag::set_object_value(m, *id, &key, Value::Material(mat.0))?;
+            }
+            Ok(())
         })
     }
 
@@ -300,5 +348,48 @@ mod tests {
         ed.transact("x", |m| m.remove_object(b).map(|_| ()))
             .unwrap();
         assert!(ed.model().object_type(own_b).is_none());
+    }
+
+    /// The free colour wheel: a piece in any colour, a material like the
+    /// one it had (its texture kept), one step to undo; the same colour
+    /// again reuses that material.
+    #[test]
+    fn a_piece_in_any_colour() {
+        let mut ed = Editor::new_project();
+        let t = ed
+            .model()
+            .object_types()
+            .find(|t| t.name.starts_with("Mesa"))
+            .unwrap()
+            .id;
+        let s = ObjectSettings {
+            object_type: Some(t),
+            ..Default::default()
+        };
+        let a = ed.add_object(&s, Point2::new(2.0, 3.0)).unwrap();
+        let mat_of = |ed: &Editor| {
+            let m = ed.model();
+            let ty = m.object_type(m.object(a).unwrap().object_type).unwrap();
+            match ty.values.get("mat") {
+                Some(Value::Material(x)) => archisim_core::MaterialId(*x),
+                other => panic!("{other:?}"),
+            }
+        };
+        let before = mat_of(&ed);
+        let texture = ed.model().appearance(before).texture;
+        ed.paint_object_piece_rgb(a, "mat", [40, 90, 160]).unwrap();
+        let blue = mat_of(&ed);
+        assert_ne!(blue, before);
+        assert_eq!(ed.model().surface_color(blue), [40, 90, 160]);
+        assert_eq!(ed.model().appearance(blue).texture, texture);
+        assert!(ed.model().material(blue).unwrap().name.ends_with("#285AA0"));
+        // Again in blue from another colour: the same material.
+        ed.paint_object_piece_rgb(a, "mat", [200, 10, 10]).unwrap();
+        ed.paint_object_piece_rgb(a, "mat", [40, 90, 160]).unwrap();
+        assert_eq!(mat_of(&ed), blue);
+        assert!(!ed.model().material(blue).unwrap().name.contains("#C80A0A"));
+        ed.undo();
+        ed.undo();
+        assert_eq!(mat_of(&ed), blue);
     }
 }

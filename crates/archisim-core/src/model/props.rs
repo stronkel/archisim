@@ -95,6 +95,17 @@ impl Model {
         &self,
         t: ObjectTypeId,
     ) -> Option<(Arc<props::PropMesh>, Vec<(MaterialId, Vec<[u32; 3]>)>)> {
+        self.type_prop_without(t, &[])
+    }
+
+    /// [`Model::type_prop`] leaving out the pieces of some roles (a
+    /// base module in a worktop run leaves out its own `top`).
+    #[allow(clippy::type_complexity)]
+    pub fn type_prop_without(
+        &self,
+        t: ObjectTypeId,
+        skip: &[&str],
+    ) -> Option<(Arc<props::PropMesh>, Vec<(MaterialId, Vec<[u32; 3]>)>)> {
         let ty = self.object_types.get(&t)?;
         if ty.mesh.is_some() {
             return None;
@@ -141,6 +152,9 @@ impl Model {
             .or_else(|| self.materials.keys().next().copied())?;
         let mut parts: Vec<(MaterialId, Vec<[u32; 3]>)> = Vec::new();
         for (role, tris) in &mesh.parts {
+            if skip.contains(role) {
+                continue;
+            }
             let m = candidates(role)
                 .iter()
                 .find_map(|c| material_of(c))
@@ -161,6 +175,10 @@ impl Model {
         id: ObjectId,
     ) -> Option<(Arc<props::PropMesh>, Vec<(MaterialId, Vec<[u32; 3]>)>)> {
         let o = self.objects.get(&id)?;
+        // A base module under a worktop run: the run has the worktop.
+        if self.worktop_run_of(id).is_some() {
+            return self.type_prop_without(o.object_type, &["top"]);
+        }
         self.type_prop(o.object_type)
     }
 }

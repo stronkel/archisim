@@ -46,10 +46,15 @@ pub enum TextureKind {
     Terrazzo,
     /// Marble: veins.
     Marble,
+    /// Earth: a mottle with clods and little stones (soil, sand, a dirt
+    /// path).
+    Soil,
+    /// Fallen leaves on the ground ("hojarasca").
+    Leaves,
 }
 
 impl TextureKind {
-    pub const ALL: [TextureKind; 18] = [
+    pub const ALL: [TextureKind; 20] = [
         TextureKind::Brick,
         TextureKind::Stone,
         TextureKind::Tile,
@@ -68,6 +73,8 @@ impl TextureKind {
         TextureKind::Wicker,
         TextureKind::Terrazzo,
         TextureKind::Marble,
+        TextureKind::Soil,
+        TextureKind::Leaves,
     ];
 
     pub fn code(self) -> &'static str {
@@ -90,6 +97,8 @@ impl TextureKind {
             TextureKind::Wicker => "wicker",
             TextureKind::Terrazzo => "terrazzo",
             TextureKind::Marble => "marble",
+            TextureKind::Soil => "soil",
+            TextureKind::Leaves => "leaves",
         }
     }
 
@@ -118,6 +127,8 @@ impl TextureKind {
             TextureKind::Wicker => "Mimbre",
             TextureKind::Terrazzo => "Terrazo",
             TextureKind::Marble => "Mármol",
+            TextureKind::Soil => "Tierra",
+            TextureKind::Leaves => "Hojarasca",
         }
     }
 
@@ -143,6 +154,8 @@ impl TextureKind {
             TextureKind::Wicker => 0.1,
             TextureKind::Terrazzo => 0.25,
             TextureKind::Marble => 0.8,
+            TextureKind::Soil => 0.5,
+            TextureKind::Leaves => 0.4,
         }
     }
 
@@ -194,11 +207,59 @@ pub struct Appearance {
     pub texture: Option<TextureKind>,
     /// The size of the texture's piece, metres (none: the texture's own).
     pub scale: Option<f64>,
+    /// What grows on it, drawn blade by blade in 3D where it covers the
+    /// ground (a meadow, flowers); none for the rest.
+    pub growth: Option<Growth>,
+}
+
+/// Grass and flowers growing on a surface painted over the ground: tufts
+/// of blades and flowers among them, scattered at random (the same each
+/// time) where it is painted.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Growth {
+    /// How tall the grass grows (m); 0: no blades.
+    pub height: f64,
+    /// Tufts per m².
+    pub density: f64,
+    /// The colours of its flowers (the first `colours` of them).
+    pub flowers: [[u8; 3]; 3],
+    pub colours: u8,
+    /// Flowers per m².
+    pub bloom: f64,
+}
+
+impl Growth {
+    /// Grass alone.
+    pub fn grass(height: f64, density: f64) -> Growth {
+        Growth {
+            height,
+            density,
+            flowers: [[0; 3]; 3],
+            colours: 0,
+            bloom: 0.0,
+        }
+    }
+
+    /// Grass with flowers of up to three colours.
+    pub fn flowering(height: f64, density: f64, flowers: &[[u8; 3]], bloom: f64) -> Growth {
+        let mut g = Growth::grass(height, density);
+        for (i, c) in flowers.iter().take(3).enumerate() {
+            g.flowers[i] = *c;
+        }
+        g.colours = flowers.len().min(3) as u8;
+        g.bloom = bloom;
+        g
+    }
+
+    /// The colours of its flowers.
+    pub fn flower_colours(&self) -> &[[u8; 3]] {
+        &self.flowers[..(self.colours as usize).min(3)]
+    }
 }
 
 impl Appearance {
     pub fn is_plain(&self) -> bool {
-        self.color.is_none() && self.texture.is_none()
+        self.color.is_none() && self.texture.is_none() && self.growth.is_none()
     }
 
     /// The texture's piece size.
@@ -235,6 +296,18 @@ impl Model {
             finite(s, "texture size")?;
             if s <= EPSILON {
                 return Err(ModelError::NonPositive("texture size"));
+            }
+        }
+        if let Some(g) = a.growth {
+            for (v, what) in [
+                (g.height, "grass height"),
+                (g.density, "grass density"),
+                (g.bloom, "flowers"),
+            ] {
+                finite(v, what)?;
+                if v < 0.0 {
+                    return Err(ModelError::NonPositive(what));
+                }
             }
         }
         if a.is_plain() {

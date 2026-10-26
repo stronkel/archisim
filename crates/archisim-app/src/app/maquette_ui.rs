@@ -6,6 +6,7 @@
 //! cut away and the grid. «Técnica · Maqueta» switches between the two
 //! environments, keeping the selection.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{DormerKind, LevelId, OpeningTypeId, Point2};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Id, Pos2, Rect, Sense, Stroke, Ui, Vec2,
@@ -64,6 +65,7 @@ impl CatalogGroup {
                 "Jardín y terraza",
                 "Vegetación",
                 "Mobiliario urbano",
+                "Rocas y troncos",
                 "Gente y coches",
                 "Terreno y caminos",
                 "Formas",
@@ -180,6 +182,8 @@ pub struct StairCard {
     pub preset: archisim_core::StairPreset,
     pub winders: bool,
     pub structure: archisim_core::StairStructure,
+    /// Landings split at 45°.
+    pub split: bool,
 }
 
 /// What a card of the catalog does.
@@ -204,6 +208,9 @@ pub enum CatalogAct {
     Planting,
     Road,
     Terrain,
+    /// An Exterior brush (MQ3).
+    /// The Exterior brush.
+    Brush,
     Volume,
     Form(crate::editor::MassMode),
 }
@@ -313,6 +320,8 @@ impl ArchiSimApp {
         let bottom = ctx.content_rect().bottom() - CATALOG_HEIGHT;
         self.object_bar(&ctx, bottom);
         self.maquette_more(&ctx);
+        let top = ctx.content_rect().top() + 44.0;
+        self.brush_panel_maquette(&ctx, top, bottom);
     }
 
     /// Walking as in a game: W A S D forwards, left, back and right along
@@ -424,7 +433,7 @@ impl ArchiSimApp {
             ui.separator();
             self.cutaway_buttons(ui);
             ui.separator();
-            ui.checkbox(&mut self.ground_grid, "Cuadrícula")
+            ui.switch(&mut self.ground_grid, "Cuadrícula")
                 .on_hover_text(
                 "Cuadrícula de 50 cm en el suelo de la planta, y los clics se ajustan a ella (G)",
             );
@@ -637,6 +646,7 @@ impl ArchiSimApp {
                             preset,
                             winders,
                             structure,
+                            split: false,
                         }),
                         name,
                         Glyph::Stair,
@@ -645,6 +655,16 @@ impl ArchiSimApp {
                 vec![
                     stair(P::Straight, false, S::Slab, "Recta"),
                     stair(P::LShape, false, S::Slab, "En L con meseta"),
+                    card(
+                        CatalogAct::Stair(StairCard {
+                            preset: P::LShape,
+                            winders: false,
+                            structure: S::Slab,
+                            split: true,
+                        }),
+                        "En L con meseta partida",
+                        Glyph::Stair,
+                    ),
                     stair(P::LShape, true, S::Slab, "En L compensada"),
                     stair(P::UShape, false, S::Slab, "En U con meseta"),
                     stair(P::UShape, true, S::Slab, "En U compensada"),
@@ -657,6 +677,7 @@ impl ArchiSimApp {
                 ]
             }
             (CatalogGroup::Outside, "Terreno y caminos") => vec![
+                card(CatalogAct::Brush, "Pincel", Glyph::Brush),
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
                 card(CatalogAct::Road, "Camino o calle", Glyph::Road),
                 card(CatalogAct::Planting, "Plantación", Glyph::Planting),
@@ -717,6 +738,7 @@ impl ArchiSimApp {
                                 i.category == "Mobiliario urbano" && i.folder != "Jardín y terraza"
                             }
                             "Gente y coches" => matches!(i.category, "Gente" | "Vehículos"),
+                            "Rocas y troncos" => i.category == "Elementos naturales",
                             _ => false,
                         },
                         CatalogGroup::Build => false,
@@ -758,6 +780,7 @@ impl ArchiSimApp {
                 self.tool == Tool::Stair
                     && s.preset == c.preset
                     && s.winders == c.winders
+                    && s.split == c.split
                     && s.structure == c.structure
             }
             CatalogAct::Railing => self.tool == Tool::Railing,
@@ -780,6 +803,7 @@ impl ArchiSimApp {
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
+            CatalogAct::Brush => self.tool == Tool::Brush,
             CatalogAct::Volume => {
                 self.tool == Tool::Mass
                     && self.mass_settings.what == crate::editor::MassWhat::Volume
@@ -841,7 +865,12 @@ impl ArchiSimApp {
                 let s = &mut self.stair_settings;
                 s.preset = c.preset;
                 s.winders = c.winders;
+                s.split = c.split;
                 s.structure = c.structure;
+                // Split landings: only in a dwelling's stair (CTE).
+                if c.split {
+                    s.usage = StairUse::Restricted;
+                }
                 // Concrete closed, the others open; a spiral narrower and
                 // steeper, for a dwelling.
                 s.closed_risers = c.structure == S::Slab;
@@ -869,6 +898,10 @@ impl ArchiSimApp {
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
+            CatalogAct::Brush => {
+                let mode = self.brush.mode;
+                self.take_brush(mode);
+            }
             CatalogAct::Volume => self.pick(Pick::Concept(super::concept_ui::ConceptPick::Volume)),
             CatalogAct::Form(m) => {
                 self.pick(Pick::Concept(super::concept_ui::ConceptPick::Form));

@@ -99,6 +99,7 @@ Un elemento propio que vive en una cubierta: clic en un faldón y se adapta a é
 - **Parámetros**: ancho, altura del frente, pendiente propia, retranqueo desde el alero (se fija al pinchar), ventana del frente (ancho y alto) y materiales (frente y laterales, carpintería, cubierta propia).
 - Se coloca por el punto medio del frente, sobre el faldón; el frente mira siempre aguas abajo. Se mueve arrastrándolo y sigue al faldón si la cubierta cambia (si el punto queda fuera de la cubierta, se avisa y no se dibuja).
 - **La cubierta se corta sola** donde está la buhardilla; los laterales bajan hasta la cara inferior del faldón.
+- **Donde se juntan dos limahoyas** (una cubierta en T o en cruz), por encima de ese punto el faldón principal son dos caras en el mismo plano, una por cada trozo de su alero. Desde v0.68 una buhardilla puede quedar encima de la línea entre ellas: cuenta como un solo faldón y corta las dos caras (`DormerShape::over`, `Roof::plane_cuts`; el resto de cada cara, `archisim_geom::roof_parts::roof_plane_shapes`, en 3D, planta e IFC). Esa línea ya no se toma por limahoya. Sigue sin poder pasar por encima de una limatesa, de una limahoya o de la cumbrera.
 - **IFC**: la buhardilla es un `IfcElementAssembly` (`ObjectType` «Buhardilla») con su frente y sus laterales (`IfcWall`), su cubierta (`IfcSlab` `ROOF`) y su ventana (`IfcWindow`); el hueco en el faldón, un `IfcOpeningElement`. Se lee de vuelta por su `ArchiSim_Dormer`.
 
 ### 5.2 Tejas y canalones
@@ -134,7 +135,7 @@ Pendiente de MQ1: miniaturas en 3D, arrastrar objetos por el suelo en 3D sin her
 - **Contra la pared al colocar**: en la Maqueta, un mueble que se coloca cerca de un muro ya se pone de espaldas a él.
 - **Piezas que se unen**: dos muebles de cocina, muebles altos, estanterías, aparadores o sofás del mismo tipo de fondo y altura, colocados uno junto a otro en línea, se convierten en uno solo tan largo como los dos (y, por la sección `stretch` de su receta, con sus puertas o plazas). Lo dice la salida `joins = "width"` de la receta. Al colocar y al arrastrar en la Maqueta; un paso de Deshacer.
 
-Pendiente: unirse también al arrastrar en planta; muebles en L (sofá rinconera, cocina en esquina).
+Desde v0.62 (C2) también al arrastrar en planta, y los módulos bajos de cocina se juntan además en esquina y espalda con espalda (§6 septies).
 
 ## 6 quater. Colecciones (v0.50)
 
@@ -175,9 +176,42 @@ Del concepto de interfaz que Antonio aprobó el 24/10/2026 (tableros 1, 2 y 6), 
 - **Cocina por módulos**, como en Paralives: el **módulo bajo** (familia «Módulo bajo de cocina») es cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero o esquina, con su encimera, que llega al borde del módulo: puestos uno junto a otro (se pegan solos al acercarlos), las encimeras forman una sola. La **columna** es despensa, horno y microondas o frigorífico integrado. El mueble alto lleva también estilo de frente. Frentes: liso, con marco, ranurado o con cristal.
 - **La barra del objeto** enseña lo que se puede cambiar del mueble: qué lleva, cuántos cajones o puertas (botones 0 1 2 3 4), frente y tirador (en una lista, con «a toda la fila» para los módulos que se tocan en línea) y sus materiales. Su tarjeta lo dibuja en 3D.
 - **Diálogos**: se abren junto al botón que los llama (a su izquierda si está a la derecha de la ventana), no plegables, con la misma forma redondeada y sombra; «Tipos y materiales», grande, en el centro.
-- **Plano de carpinterías** (Archivo → Plano de carpinterías): cada tipo de puerta y ventana del proyecto en alzado a 1:50 con sus medidas, su sección y sus datos (familia, medidas, apertura, carpintería, unidades), seis por hoja A3, en PDF.
+- **Plano de carpinterías** (Archivo → Plano de carpinterías): cada tipo de puerta y ventana del proyecto en alzado a 1:50 con sus medidas, su sección y sus datos (familia, medidas, apertura, carpintería, antepecho, unidades y en qué plantas; desde v0.67), seis por hoja A3, en PDF.
+- **Memoria de carpinterías** y **cuadro de superficies** (v0.67, C6; Archivo, junto al plano de carpinterías), con el mismo cajetín A3 (`paper`: `sheet`, `TitleBlock`, `wrap`, `PaperTable`; `documents`: `Document`, `pdf_of`). La memoria describe cada tipo con palabras al lado de su alzado a 1:100: medidas del hueco, cómo abre, antepecho, carpintería con su marco y su hoja o vidrio, la descripción del tipo, la familia, las unidades por planta y en qué locales está (las puertas, entre qué dos locales; `carpentry::entries`, mirando un paso a cada lado del centro del hueco). El cuadro de superficies da la superficie útil de cada local por plantas, el resumen por plantas con la superficie construida y la útil por usos, en tres columnas por hoja; una lista que no cabe sigue en la columna siguiente («(sigue)»). Las cifras son las de la comprobación CTE (`archisim_cte::surfaces::table`).
 - `archisim cocina out/`: una cocina con columna, cajoneras, fregadero, lavavajillas, horno, placa y botellero, altos y campana, en cuatro filas con cada frente.
 
+
+## 6 septies. Cocina y muebles, segunda vuelta (C2, v0.62, rama `bloque/c2-cocina`)
+
+- **Una encimera de verdad** sobre los módulos bajos que se tocan, a la misma altura y del mismo material: en fila, en L, en U o en isla. En 3D, en secciones, en alzados y en el IFC es una sola pieza, con el hueco de cada fregadero, y los módulos van sin la suya. Se calcula de dónde están los módulos (`Model::worktop_runs`), no se guarda: separado del tramo, un módulo recupera su encimera.
+- **Cocina en esquina**: un módulo girado un cuarto de vuelta, acercado al extremo de una fila, se pega con su lateral contra el frente del último módulo y su trasera a paño con el extremo de la fila, como en una esquina de dos paredes (también al revés, la fila hacia el tramo). La encimera sale en L.
+- **Isla por módulos**: dos módulos espalda con espalda se pegan por la trasera, con sus extremos alineados; varias parejas hacen una isla bajo una sola encimera.
+- **Pegarse al arrastrar en planta**: lo que se pega al colocar y al arrastrar en 3D (módulos de cocina, sofás, estanterías…) se pega también al arrastrarlo en planta; los que se unen en uno (sofás, estanterías) se unen al soltar.
+- **Sofá rinconera** (familia «Sofá rinconera»): un tramo a lo largo del respaldo y otro hacia delante, a la derecha o a la izquierda; plazas en cada tramo y la de la esquina; los tres modelos del sofá. En la biblioteca, «Sofá rinconera 260×170» y «300×200».
+- **Color libre**: en la barra del objeto, las muestras de una pieza tienen «Color libre», una rueda de color y «Aplicar»: un material como el que tenía (con su textura: la madera sigue con veta, la tela con su trama) en ese color, llamado «<material> #RRGGBB». Un paso de Deshacer.
+- **Mediciones**: capítulo «10 Mobiliario de cocina», con las encimeras por material en metros a lo largo de los frentes (`encimera:<material>`) y los muebles de cocina por tipo en unidades (`mueble:<tipo>`), con sus precios del banco como las demás partidas.
+- **IFC**: la encimera de cada tramo es un `IfcFurniture` «Encimera» (tipo `IfcFurnitureType` por material), con su material y el pset `ArchiSim_Worktop` (largo, superficie y los módulos); el tipo de un módulo bajo lleva dos geometrías, con y sin encimera, y los del tramo usan la segunda. Al importar, ArchiSim no lee la encimera como objeto: vuelve a salir de sus módulos.
+- `archisim cocina out/` lleva además una cocina en L con fregadero y placa, una isla de seis módulos y un sofá rinconera.
+
+## 6 nonies. Exterior y Concepto en la Maqueta (C5, v0.66, rama `bloque/c5-exterior`)
+
+- **Pinceles de Exterior** (MQ3): en el catálogo, Exterior → Terreno y caminos, y como herramienta Pincel (`Tool::Brush`) con sus maneras en la barra:
+  - **Subir**, **Bajar**, **Alisar** y **Aplanar** (a la altura del punto donde empieza el trazo) el terreno, más en el centro del pincel que en el borde. Donde el terreno tiene pocos puntos, el pincel añade los que necesita bajo él y un anillo justo fuera, para que lo levantado no incline el resto (`Terrain::sculpt`, `Sculpt`, `densify`).
+  - **Césped**, **Grava** y **Camino** pintan zonas sobre el terreno (`Terrain::patches`, `TerrainPatch`: material y regiones con huecos, que no se pisan entre sí; formato versión 37). Se ven en planta con su color y en 3D como una capa de 2 cm sobre el suelo (`solid::patch_layer`, cerrada y sin juntas en T); el IFC lleva solo el terreno.
+  - **Esparcir plantas** de la especie elegida en Propiedades, separadas según su tamaño y de pie sobre el terreno (`brush::scatter`).
+  - Sin terreno en la planta, el primer trazo hace uno llano de 40 × 40 m. Cada trazo, sea cual sea su largo, es un solo paso de Deshacer. Radio y fuerza (o densidad) en la barra.
+  - Lógica sin pantalla en `brush` (`BrushKind`, `BrushSettings`, `ensure_terrain`, `sculpt`, `paint`, `paint_material`, `scatter`); ratón y dibujo en `app/brush_ui`.
+- **Flechas y aros en los volúmenes de Concepto** (MQ4): con un volumen seleccionado en 3D, flechas azules en sus cuatro lados (empujan ese lado; con Alt, por los dos), una arriba (altura; por plantas si el volumen va por plantas), un cuadrado en una esquina de arriba (escala todo) y un aro naranja (gira, de 15 en 15° o libre con Mayús). Se dibuja como quedará mientras se arrastra (`app/mass_grips3d`, `apply_mass_grip`).
+- **Árboles** (remates de A1): en la elección de dibujos de un DXF con muchos, «Varios dibujos, que se alternan» deja elegir varios; cada pieza toma uno, siempre el mismo (`ObjectType::more_symbols`, `Model::object_symbol`, `set_object_type_symbols`). Y el dibujo en alzado también se elige de esos DXF, viéndolo (`symbol_pick::PickFor::Elevation`, `archisim_export::symbol::elevation_from_symbol`).
+
+## 6 octies. Detalles de la Maqueta y de la interfaz (C3, v0.64, rama `bloque/c3-maqueta`)
+
+- **Habitación en un paso**: sus cuatro muros, su suelo y su local se deshacen y rehacen juntos («Habitación» en Deshacer). `Document::join_last` junta los últimos pasos; la app lo usa con `Editor::undo_mark` y `Editor::join_since`.
+- **Mover en 3D junto a las paredes**: lo que se arrastra en 3D (con la flecha o como mueble) se pega a la cara de un muro cuando se acerca a menos de 15 cm, y después a otra cara que la cruce (una esquina). Mientras se mueve, unas cotas azules como las temporales de la planta miden lo que queda libre hasta los muros en las cuatro direcciones de la pieza (`wall_faces`: `faces`, `snap_delta`, `clearances`; en la app, `take_for_move`, `near_walls`, `object_near_walls` y `draw_clearances_3d`). Los muros y lo que va en ellos se mueven con sus propias reglas y no se pegan.
+- **Puertas y ventanas por el centro, desde un extremo o repartidas**: en la barra de la herramienta, cuatro maneras (`OpeningPlace`). El tramo libre es el del muro bajo el cursor en la cara hacia la que abre: entre los muros que lo encuentran y las otras puertas y ventanas (`opening_tool::clear_span`, que usa `temp_dims::face_stops`). «Desde un extremo» pide la distancia de la jamba al extremo más cercano al cursor; «Repartidas», cuántas, con machones iguales entre ellas y en los extremos, en un solo paso.
+- **Un dibujo para todos los sí o no**: las casillas de egui son interruptores (`widgets::switch`, también como `ui.switch` con `SwitchExt`); las opciones excluyentes de los diálogos, botones seleccionables.
+- **Cocina**: los módulos bajos tienen «Vuelo delante», «Vuelo detrás» (una barra para sentarse) y «Copete» (sección Encimera). En un tramo, el copete va solo en los módulos sin otro módulo detrás (`WorktopRun::upstands`), se dibuja en 3D y en el IFC con la encimera y se mide aparte (`copete:<material>`).
+- **Dos sofás en L hacen una rinconera**: un sofá recto colocado con su espalda contra el extremo de otro y su lado contra el frente de este, del mismo fondo y altura, se convierte con él en un «Sofá rinconera» del largo del primero y con el brazo del segundo (`placing::corner_sofa`, llamada desde `join_alongside`).
 
 ## 6 sexies. Ventana en islas y maneras de abrir (v0.56, rama `bloque/islas`)
 

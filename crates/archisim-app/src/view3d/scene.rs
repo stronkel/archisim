@@ -70,6 +70,10 @@ pub struct LinkedPart<'a> {
 pub struct Scene {
     pub opaque: Vec<Vertex>,
     pub glass: Vec<Vertex>,
+    /// The grass and flowers on painted ground: drawn after the opaque
+    /// model without changing its normals and distances (no contour lines
+    /// between the blades), not picked.
+    pub grass: Vec<Vertex>,
     /// Element of each opaque triangle, then of each glass triangle.
     owners: Vec<Owner>,
     pub lo: Vec3,
@@ -77,46 +81,6 @@ pub struct Scene {
     /// The lamps: where their light comes from (the middle of what glows)
     /// and how far it reaches, metres.
     pub lamps: Vec<[f32; 4]>,
-}
-
-/// How far a lamp's light reaches at night, metres; a streetlight's.
-const LAMP_REACH: f32 = 4.5;
-const STREET_REACH: f32 = 11.0;
-
-/// The materials of an object that glow at night: the shade and the bulb
-/// of a lamp (also of a bedside table's), a candle's flame, the fire of a
-/// fireplace, a streetlight's lantern; and how far its light reaches.
-fn glow_materials(
-    model: &Model,
-    o: archisim_core::ObjectId,
-) -> (Vec<archisim_core::MaterialId>, f32) {
-    let none = (Vec::new(), 0.0);
-    let Some(t) = model
-        .object(o)
-        .and_then(|ob| model.object_type(ob.object_type))
-    else {
-        return none;
-    };
-    let Some(kind) = model.family_prop(t.family) else {
-        return none;
-    };
-    let (keys, reach): (&[&str], f32) = match kind.as_str() {
-        "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
-        "fireplace" => (&["flame"], LAMP_REACH),
-        "streetlight" => (&["light"], STREET_REACH),
-        _ => return none,
-    };
-    let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {
-        return none;
-    };
-    let mats = keys
-        .iter()
-        .filter_map(|k| match t.values.get(*k).or(defaults.get(*k)) {
-            Some(archisim_core::Value::Material(m)) => Some(archisim_core::MaterialId(*m)),
-            _ => None,
-        })
-        .collect();
-    (mats, reach)
 }
 
 /// A corner as a key, to the tenth of a millimetre.
@@ -342,8 +306,8 @@ impl Scene {
             // middle is where the lamp's light comes from.
             let (glows, reach) = match solid.owner {
                 SolidOwner::Object(o) if !dimmed && !ghost => {
-                    let (mats, reach) = glow_materials(model, o);
-                    (mats.contains(&solid.material), reach)
+                    let (mats, reach) = archisim_geom::solid::glow_materials(model, o);
+                    (mats.contains(&solid.material), reach as f32)
                 }
                 _ => (false, 0.0),
             };
@@ -362,21 +326,13 @@ impl Scene {
             let select = if selected { 1.0 } else { 0.0 };
             let is_object = matches!(solid.owner, SolidOwner::Object(_));
             let texture_of = |m: archisim_core::MaterialId| {
-                let a = model.appearance(m);
-                // Furniture whose material has no appearance of its own:
-                // the texture of what it is (linen, wool, rattan…).
-                let t = a.texture.or_else(|| {
-                    let x = model.material(m)?;
-                    (is_object && a.is_plain())
-                        .then(|| archisim_core::TextureKind::suggested(&x.name, &x.category))
-                        .flatten()
-                });
-                t.map_or([0.0, 0.0], |t| {
-                    let scale = a.scale.unwrap_or_else(|| t.default_scale());
-                    [t.number() as f32, scale as f32]
-                })
+                archisim_geom::solid::texture_of(model, m, is_object)
+                    .map_or([0.0, 0.0], |(t, scale)| [t.number() as f32, scale as f32])
             };
-            let own_tex = if dimmed || ghost {
+            // Grass and flowers: their own colours, no contour lines at all
+            // (thousands of blades would be drawn as as many).
+            let grass = matches!(solid.owner, SolidOwner::Growth(_));
+            let own_tex = if dimmed || ghost || grass {
                 [0.0, 0.0]
             } else {
                 texture_of(solid.material)
@@ -399,7 +355,9 @@ impl Scene {
                 // Faces looking up give way where another element rests on
                 // them: the floor under a wall, the top of a wall under the
                 // roof slab.
-                let bias = if glows {
+                let bias = if grass {
+                    4.0
+                } else if glows {
                     3.0
                 } else if soft {
                     2.0
@@ -414,7 +372,9 @@ impl Scene {
                     s.lo = s.lo.min(v);
                     s.hi = s.hi.max(v);
                 }
-                let target = if is_glass {
+                let target = if grass {
+                    &mut s.grass
+                } else if is_glass {
                     &mut s.glass
                 } else {
                     &mut s.opaque
@@ -445,7 +405,9 @@ impl Scene {
                         select,
                     });
                 }
-                if is_glass {
+                if grass {
+                    // Not picked: the terrain under it is.
+                } else if is_glass {
                     glass_owners.push(owner);
                 } else {
                     s.owners.push(owner);

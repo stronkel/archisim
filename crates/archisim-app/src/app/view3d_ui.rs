@@ -4,6 +4,7 @@
 //! (or Shift + wheel button), drag with the wheel or the right button to
 //! pan, roll the wheel to zoom where the cursor is, click to select.
 
+use super::widgets::SwitchExt as _;
 use std::collections::BTreeSet;
 
 use eframe::egui::{
@@ -126,7 +127,7 @@ type Drawn = (
     Option<CutRule>,
     bool,
     u64,
-    (Quality, Option<[i32; 3]>),
+    (Quality, Option<[i32; 3]>, bool),
     Option<crate::view3d::look::Atmosphere>,
 );
 
@@ -169,6 +170,8 @@ pub struct View3dState {
     section_hover: Option<Face>,
     /// Pixels a point of the picture (2: supersampled), for its edges.
     edge_step: u32,
+    /// Contours one pixel wide (the app's "Líneas finas").
+    pub thin_lines: bool,
     /// How the materials' textures (brick, wood, stone…) are drawn.
     pub textures: TextureMode,
     /// What is being stretched, as it will be, drawn in place of the
@@ -188,11 +191,11 @@ pub struct View3dState {
 }
 
 /// Full textures, except on Intel Macs: their AMD graphics drivers (on
-/// recent macOS, often patched) hang drawing them, so they draw the light
-/// ones.
+/// recent macOS, often patched) hang drawing them, so they look them up in
+/// pictures made once (C4; before, the light ones).
 pub fn default_textures() -> TextureMode {
     if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-        TextureMode::Light
+        TextureMode::Pictures
     } else {
         TextureMode::Full
     }
@@ -215,6 +218,7 @@ impl Default for View3dState {
             section_drag: None,
             section_hover: None,
             edge_step: 2,
+            thin_lines: false,
             textures: default_textures(),
             cutaway: Cutaway::Up,
             level_z: 0.0,
@@ -474,7 +478,14 @@ impl View3dState {
         if self.gpu.is_none() {
             crate::crash::stage("3D: preparar los sombreadores de la tarjeta gráfica");
         }
-        let textures = self.textures;
+        // With OpenGL (older cards, Linux without Vulkan), the pictures'
+        // texture is not seen: the light textures instead.
+        let textures = match self.textures {
+            TextureMode::Pictures if state.adapter.get_info().backend == wgpu::Backend::Gl => {
+                TextureMode::Light
+            }
+            t => t,
+        };
         let gpu = self.gpu.get_or_insert_with(|| Gpu {
             renderer: Renderer::new(
                 &state.device,
@@ -511,6 +522,7 @@ impl View3dState {
             (
                 self.quality,
                 self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
+                self.thin_lines,
             ),
             self.atmosphere.clone(),
         );
@@ -524,6 +536,7 @@ impl View3dState {
                 .set_shadow_focus(Some(shadow_focus(&self.camera)));
             gpu.renderer.set_transparent(self.under);
             gpu.renderer.set_atmosphere(self.atmosphere.clone());
+            gpu.renderer.thin_lines = self.thin_lines;
             gpu.renderer.render(
                 &gpu.state.device,
                 &gpu.state.queue,
@@ -663,6 +676,7 @@ impl View3dState {
             .set_shadow_focus(Some(shadow_focus(&self.camera)));
         gpu.renderer.set_transparent(self.under);
         gpu.renderer.set_atmosphere(self.atmosphere.clone());
+        gpu.renderer.thin_lines = self.thin_lines;
         gpu.renderer.render(
             &gpu.state.device,
             &gpu.state.queue,
@@ -776,6 +790,7 @@ impl ArchiSimApp {
 
         // Handles of the object selected (bloque 5): its size.
         let grabbing_object = self.object_grips_3d(&ctx, &response, rect)
+            | self.mass_grips_3d(&ctx, &response, rect)
             | self.object_drag_3d(&ctx, &response, rect);
         // With something selected, the camera turns about it.
         let pivot = if self.ed.selection.is_empty() {
@@ -902,6 +917,7 @@ impl ArchiSimApp {
         // The picture, over the ground grid when it is on.
         let (px, ss) = picture_size(size, ctx.pixels_per_point(), v.quality);
         v.edge_step = ss;
+        v.thin_lines = self.thin_lines;
         // In the Maqueta, the sky, the haze and the grid are drawn with the
         // picture; elsewhere the grid goes under it.
         if self.maquette {
@@ -959,10 +975,13 @@ impl ArchiSimApp {
         let v = &self.v3d;
         draw_section_box(&painter, rect, v);
         self.draw_object_grips_3d(&painter, rect);
+        self.draw_mass_grips_3d(&painter, rect);
         self.draw_drag_3d(&painter, rect);
+        self.draw_clearances_3d(&painter, rect);
         self.draw_edges_3d(&painter, rect);
         if tool3d {
             self.draw_tool_3d(&painter, rect);
+            self.draw_brush_3d(&painter, rect);
         }
         let v = &mut self.v3d;
         draw_north(
@@ -975,6 +994,8 @@ impl ArchiSimApp {
             || v.section_drag.is_some()
             || self.object_grip_hover.is_some()
             || self.object_grip.is_some()
+            || self.mass_grip_hover.is_some()
+            || self.mass_grip.is_some()
             || self.object_move.is_some();
         let dragging = response.dragged();
         self.draw_overlays(&ctx, &painter, rect);
@@ -1082,7 +1103,7 @@ impl ArchiSimApp {
                 "Activa",
                 "Recorta el modelo fuera de la caja (interiores, secciones en perspectiva)",
                 |ui, _| {
-                    ui.checkbox(&mut on, "");
+                    ui.switch(&mut on, "");
                 },
             );
             if on != self.v3d.section.is_some() {

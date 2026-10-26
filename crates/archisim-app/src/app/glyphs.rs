@@ -90,9 +90,20 @@ pub enum Glyph {
     SnapEdge,
     SnapTrack,
     Ortho,
-    LineWeight,
     Hatch,
     Line,
+    Brush,
+    Eraser,
+    Raise,
+    Lower,
+    Smooth,
+    Flatten,
+    Scatter,
+    Rock,
+    HeadRound,
+    HeadSquare,
+    HeadSoft,
+    HeadSplatter,
 }
 
 impl Glyph {
@@ -295,9 +306,6 @@ impl Glyph {
                 r##"<path d="M2 10h16M10 2v16" stroke-dasharray="2 1.6"/><circle cx="10" cy="10" r="2.2"/>"##
             }
             Glyph::Ortho => r##"<path d="M4 3v13h13"/><path d="M4 12h4v4" stroke-width="0.9"/>"##,
-            Glyph::LineWeight => {
-                r##"<path d="M3 5h14" stroke-width="0.6"/><path d="M3 10h14" stroke-width="1.4"/><path d="M3 15.5h14" stroke-width="2.6"/>"##
-            }
             Glyph::Hatch => {
                 r##"<rect x="3" y="3" width="14" height="14"/><path d="M3 9l6-6M3 15L15 3M7 17l10-10M13 17l4-4" stroke-width="0.8"/>"##
             }
@@ -309,6 +317,38 @@ impl Glyph {
             }
             Glyph::Lock => {
                 r##"<rect x="4.5" y="9" width="11" height="8" rx="1"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>"##
+            }
+            Glyph::Brush => {
+                r##"<path d="M12 3l5 5-6 6-5-5z"/><path d="M6 9c-2 1-3 3-3 8 3 0 6-1 7-3" stroke-width="1"/>"##
+            }
+            Glyph::Eraser => {
+                r##"<path d="M3 13l8-8 6 6-6 6H7z"/><path d="M7 9l6 6M10 17h7" stroke-width="1"/>"##
+            }
+            Glyph::Raise => {
+                r##"<path d="M2 16c3 0 5-8 8-8s5 8 8 8"/><path d="M10 6V2M8 4l2-2 2 2" stroke-width="1"/>"##
+            }
+            Glyph::Lower => {
+                r##"<path d="M2 8c3 0 5 8 8 8s5-8 8-8"/><path d="M10 2v5M8 5l2 2 2-2" stroke-width="1"/>"##
+            }
+            Glyph::Smooth => {
+                r##"<path d="M2 13c4-3 12-3 16 0"/><path d="M3 8l2-2 2 2 2-2 2 2 2-2 2 2 2-2" stroke-width="1"/>"##
+            }
+            Glyph::Flatten => {
+                r##"<path d="M2 14h16"/><path d="M4 10h12M7 6h6" stroke-width="1" stroke-dasharray="2 1.5"/>"##
+            }
+            Glyph::Scatter => {
+                r##"<circle cx="5" cy="6" r="2"/><circle cx="14" cy="5" r="2.5"/><circle cx="9" cy="12" r="2"/><circle cx="15" cy="14" r="2"/><circle cx="5" cy="15" r="1.5"/>"##
+            }
+            Glyph::Rock => {
+                r##"<path d="M3 15l2-6 5-4 5 3 2 7z"/><path d="M5 9l4 2 6-3M9 11l-1 4" stroke-width="0.8"/>"##
+            }
+            Glyph::HeadRound => r##"<circle cx="10" cy="10" r="7"/>"##,
+            Glyph::HeadSquare => r##"<rect x="3.5" y="3.5" width="13" height="13"/>"##,
+            Glyph::HeadSoft => {
+                r##"<circle cx="10" cy="10" r="4.5"/><circle cx="10" cy="10" r="7.5" stroke-width="0.8" stroke-dasharray="1.2 1.6"/>"##
+            }
+            Glyph::HeadSplatter => {
+                r##"<circle cx="7" cy="7" r="2.5"/><circle cx="13.5" cy="8" r="1.8"/><circle cx="9" cy="13.5" r="2"/><circle cx="15" cy="14" r="1.2"/><circle cx="4" cy="13" r="1"/>"##
             }
             Glyph::Search => r##"<circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.6 12.6L17 17"/>"##,
             Glyph::Publish => {
@@ -397,9 +437,20 @@ impl Glyph {
         Glyph::SnapEdge,
         Glyph::SnapTrack,
         Glyph::Ortho,
-        Glyph::LineWeight,
         Glyph::Hatch,
         Glyph::Line,
+        Glyph::Brush,
+        Glyph::Eraser,
+        Glyph::Raise,
+        Glyph::Lower,
+        Glyph::Smooth,
+        Glyph::Flatten,
+        Glyph::Scatter,
+        Glyph::Rock,
+        Glyph::HeadRound,
+        Glyph::HeadSquare,
+        Glyph::HeadSoft,
+        Glyph::HeadSplatter,
     ];
 }
 

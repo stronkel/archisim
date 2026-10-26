@@ -15,42 +15,37 @@ use std::fmt::Write as _;
 use archisim_core::{Model, OpeningType, Point2};
 use archisim_plan::lettering::{self, Align};
 
+use crate::paper::{self, metres, text, INK, MARGIN, PAPER};
+
 use crate::type_drawing::{opening_elevation, opening_section, Drawing, Item, Pen};
 
-/// A3 landscape, in millimetres.
-const PAPER: (f64, f64) = (420.0, 297.0);
-/// Margins and the title block.
-const MARGIN: f64 = 10.0;
-const BLOCK: f64 = 22.0;
 /// Types on a sheet: columns and rows.
 const COLS: usize = 3;
 const ROWS: usize = 2;
 /// Paper millimetres per metre at 1:50.
 const MM_PER_M: f64 = 20.0;
 
-const INK: &str = "#1e1e1e";
-
-/// One type on the sheet.
-struct Entry<'a> {
-    t: &'a OpeningType,
-    count: usize,
-    family: String,
+/// One type on the sheets, with where it is used.
+pub(crate) struct Entry<'a> {
+    pub t: &'a OpeningType,
+    pub count: usize,
+    pub family: String,
+    /// Units by level, in the order of the levels.
+    pub levels: Vec<(String, usize)>,
+    /// The sills it is placed at, from the lowest, without repeats.
+    pub sills: Vec<f64>,
+    /// Where it is: "Cocina", "Cocina / Salón" for a door between two
+    /// rooms, and how many there.
+    pub rooms: Vec<(String, usize)>,
 }
 
-/// The sheets, as SVG documents, and their titles.
-pub fn carpentry_sheets(model: &Model) -> Vec<(String, String)> {
+/// The door and window types of the project, doors first, then windows,
+/// by mark: the ones it uses, or all of them if it uses none.
+pub(crate) fn entries(model: &Model) -> Vec<Entry<'_>> {
     let mut entries: Vec<Entry> = model
         .opening_types()
         .filter(|t| !t.is_void())
-        .map(|t| Entry {
-            t,
-            count: model.opening_type_users(t.id),
-            family: model
-                .family(t.family)
-                .map(|f| f.def().name.clone())
-                .unwrap_or_default(),
-        })
-        // Only what the project uses; all of them if it uses none.
+        .map(|t| entry(model, t))
         .collect();
     if entries.iter().any(|e| e.count > 0) {
         entries.retain(|e| e.count > 0);
@@ -62,6 +57,104 @@ pub fn carpentry_sheets(model: &Model) -> Vec<(String, String)> {
             &b.t.name,
         ))
     });
+    entries
+}
+
+fn entry<'a>(model: &'a Model, t: &'a OpeningType) -> Entry<'a> {
+    let mut by_level: Vec<(f64, String, usize)> = Vec::new();
+    let mut sills: Vec<f64> = Vec::new();
+    let mut rooms: Vec<(String, usize)> = Vec::new();
+    let mut count = 0;
+    for o in model.openings().filter(|o| o.opening_type == t.id) {
+        count += 1;
+        let Some(w) = model.wall(o.wall) else {
+            continue;
+        };
+        if let Some(l) = model.level(w.level) {
+            match by_level.iter_mut().find(|(_, n, _)| *n == l.name) {
+                Some(e) => e.2 += 1,
+                None => by_level.push((l.elevation, l.name.clone(), 1)),
+            }
+        }
+        let sill = (o.sill * 100.0).round() / 100.0;
+        if !sills.iter().any(|s| (s - sill).abs() < 1e-6) {
+            sills.push(sill);
+        }
+        // The rooms a step to each side of its centre.
+        let thickness = model
+            .wall_type(w.wall_type)
+            .map_or(0.2, |wt| wt.thickness());
+        let (ext, int) = w.face_offsets(thickness);
+        let names: Vec<String> = match w.opening_frame(o.along, t.width) {
+            Some((p, u)) => {
+                let n = u.perp_left();
+                [ext + 0.15, int - 0.15]
+                    .iter()
+                    .filter_map(|off| {
+                        let q = p + n * *off;
+                        model
+                            .rooms_on_level(w.level)
+                            .find(|r| r.contains(q))
+                            .map(|r| r.name.clone())
+                    })
+                    .collect()
+            }
+            None => Vec::new(),
+        };
+        let mut names = names;
+        names.sort();
+        names.dedup();
+        if names.is_empty() {
+            continue;
+        }
+        let place = names.join(" / ");
+        match rooms.iter_mut().find(|(n, _)| *n == place) {
+            Some(e) => e.1 += 1,
+            None => rooms.push((place, 1)),
+        }
+    }
+    by_level.sort_by(|a, b| a.0.total_cmp(&b.0));
+    sills.sort_by(f64::total_cmp);
+    rooms.sort();
+    Entry {
+        t,
+        count,
+        family: model
+            .family(t.family)
+            .map(|f| f.def().name.clone())
+            .unwrap_or_default(),
+        levels: by_level.into_iter().map(|(_, n, c)| (n, c)).collect(),
+        sills,
+        rooms,
+    }
+}
+
+/// The sills in words: "0,90 m", "0,90 y 1,10 m", "sin antepecho".
+pub(crate) fn sills_text(sills: &[f64]) -> String {
+    match sills {
+        [] => String::new(),
+        [s] if s.abs() < 0.005 => "sin antepecho".to_string(),
+        [s] => format!("{} m", metres(*s)),
+        _ => {
+            let v: Vec<String> = sills.iter().map(|s| metres(*s)).collect();
+            let (last, rest) = v.split_last().unwrap();
+            format!("{} y {last} m", rest.join(", "))
+        }
+    }
+}
+
+/// Units by level in words: "Planta baja 3, Planta primera 2".
+pub(crate) fn levels_text(levels: &[(String, usize)]) -> String {
+    levels
+        .iter()
+        .map(|(n, c)| format!("{n} {c}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The sheets, as SVG documents, and their titles.
+pub fn carpentry_sheets(model: &Model) -> Vec<(String, String)> {
+    let entries = entries(model);
     let per = COLS * ROWS;
     let pages = entries.len().div_ceil(per).max(1);
     let project = model.project_name.clone();
@@ -76,61 +169,21 @@ pub fn carpentry_sheets(model: &Model) -> Vec<(String, String)> {
 }
 
 /// A mark's letters and number, for sorting P-2 before P-10.
-fn natural(mark: &str) -> (String, u64) {
+pub(crate) fn natural(mark: &str) -> (String, u64) {
     let letters: String = mark.chars().filter(|c| c.is_alphabetic()).collect();
     let digits: String = mark.chars().filter(|c| c.is_ascii_digit()).collect();
     (letters, digits.parse().unwrap_or(0))
 }
 
 fn sheet(model: &Model, entries: &[Entry], project: &str, n: usize, of: usize) -> String {
-    let (w, h) = PAPER;
-    let mut s = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}mm" height="{h}mm" viewBox="0 0 {w} {h}"><rect width="{w}" height="{h}" fill="white"/>"#
-    );
-    // The frame and the title block.
-    let _ = write!(
-        s,
-        r#"<rect x="{MARGIN}" y="{MARGIN}" width="{}" height="{}" fill="none" stroke="{INK}" stroke-width="0.5"/>"#,
-        w - 2.0 * MARGIN,
-        h - 2.0 * MARGIN
-    );
-    let by = h - MARGIN - BLOCK;
-    let _ = write!(
-        s,
-        r#"<line x1="{MARGIN}" y1="{by}" x2="{}" y2="{by}" stroke="{INK}" stroke-width="0.35"/>"#,
-        w - MARGIN
-    );
-    text(&mut s, project, MARGIN + 6.0, by + 9.0, 4.0, Align::Left);
-    text(
-        &mut s,
-        "Carpinterías: alzados desde el exterior y secciones",
-        MARGIN + 6.0,
-        by + 16.0,
-        2.8,
-        Align::Left,
-    );
-    text(
-        &mut s,
-        "E 1:50",
-        w - MARGIN - 70.0,
-        by + 9.0,
-        3.5,
-        Align::Left,
-    );
-    text(
-        &mut s,
-        &format!("Hoja {n} de {of}"),
-        w - MARGIN - 70.0,
-        by + 16.0,
-        2.8,
-        Align::Left,
-    );
-    let _ = write!(
-        s,
-        r#"<line x1="{x}" y1="{by}" x2="{x}" y2="{}" stroke="{INK}" stroke-width="0.35"/>"#,
-        h - MARGIN,
-        x = w - MARGIN - 76.0
-    );
+    let (w, _) = PAPER;
+    let (mut s, by) = paper::sheet(&paper::TitleBlock {
+        project,
+        title: "Carpinterías: alzados desde el exterior y secciones",
+        scale: "E 1:50",
+        sheet: n,
+        sheets: of,
+    });
     // The cells.
     let cw = (w - 2.0 * MARGIN) / COLS as f64;
     let ch = (by - MARGIN) / ROWS as f64;
@@ -176,7 +229,7 @@ fn cell(s: &mut String, model: &Model, e: &Entry, x0: f64, y0: f64, cw: f64, ch:
     text(s, mark, mx, my + 1.4, 3.2, Align::Centre);
     text(s, &t.name, x0 + 22.0, my + 1.4, 3.0, Align::Left);
     // The drawings' room: under the title, over the data.
-    let data_h = 30.0;
+    let data_h = 41.0;
     let (ax, ay) = (x0 + 14.0, y0 + 22.0);
     let room_h = ch - 22.0 - data_h - 6.0;
     let elev = opening_elevation(model, t);
@@ -238,17 +291,34 @@ fn cell(s: &mut String, model: &Model, e: &Entry, x0: f64, y0: f64, cw: f64, ch:
         ),
         ("Apertura", how),
         ("Carpintería", frame),
+        (
+            "Antepecho",
+            if t.is_door() {
+                String::new()
+            } else {
+                sills_text(&e.sills)
+            },
+        ),
         ("Unidades", e.count.to_string()),
+        ("Situación", levels_text(&e.levels)),
     ];
-    for (i, (k, v)) in rows.iter().enumerate() {
+    let shown = rows.iter().filter(|(_, v)| !v.is_empty());
+    for (i, (k, v)) in shown.enumerate() {
         let y = ty + 4.0 + i as f64 * 5.2;
         text(s, k, x0 + 8.0, y, 2.4, Align::Left);
-        text(s, v, x0 + 34.0, y, 2.4, Align::Left);
+        // Long texts (where it is) cut to the cell.
+        let first = paper::wrap(v, 2.4, cw - 40.0);
+        let v = match first.as_slice() {
+            [] => String::new(),
+            [one] => one.clone(),
+            [one, ..] => format!("{one}…"),
+        };
+        text(s, &v, x0 + 34.0, y, 2.4, Align::Left);
     }
 }
 
 /// How a door or window opens, in words.
-fn how_it_opens(t: &OpeningType) -> String {
+pub(crate) fn how_it_opens(t: &OpeningType) -> String {
     use archisim_core::{DoorOperation as D, OpeningKind};
     if let OpeningKind::Door(op) = t.kind {
         return match op {
@@ -279,21 +349,16 @@ fn how_it_opens(t: &OpeningType) -> String {
     let n = words.len();
     let first = words[0];
     if words.iter().all(|w| *w == first) {
-        format!("{n} hoja{} {first}", if n == 1 { "" } else { "s" })
+        if n == 1 {
+            format!("1 hoja {first}")
+        } else if first == "guillotina" {
+            format!("{n} hojas de guillotina")
+        } else {
+            format!("{n} hojas {first}s")
+        }
     } else {
         words.join(" + ")
     }
-}
-
-/// Metres with two decimals and a comma.
-fn metres(v: f64) -> String {
-    format!("{v:.2}").replace('.', ",")
-}
-
-/// A text in ArchiSim's lettering at `(x, y)` of the paper (y down).
-fn text(s: &mut String, t: &str, x: f64, y: f64, h: f64, align: Align) {
-    let d = lettering::text_path(t, Point2::new(x, -y), Point2::new(1.0, 0.0), h, align);
-    let _ = write!(s, r#"<path d="{d}" {}/>"#, lettering::paint(h, INK));
 }
 
 /// A horizontal dimension from `a` to `b` at height `y`.
@@ -348,7 +413,7 @@ fn dim_v(s: &mut String, x: f64, top: f64, bottom: f64, label: &str) {
 
 /// A drawing of the types dialog at `(x, y)` of the paper (its top left),
 /// `k` millimetres per metre, with the pens of paper.
-fn drawing(s: &mut String, d: &Drawing, x: f64, y: f64, k: f64) {
+pub(crate) fn drawing(s: &mut String, d: &Drawing, x: f64, y: f64, k: f64) {
     let px = |v: f64| x + (v - d.lo[0]) * k;
     let py = |v: f64| y + (d.hi[1] - v) * k;
     let pen = |p: Pen| match p {
@@ -402,16 +467,6 @@ fn drawing(s: &mut String, d: &Drawing, x: f64, y: f64, k: f64) {
     }
 }
 
-/// The sheets as one PDF.
-pub fn carpentry_pdf(model: &Model) -> Result<Vec<u8>, String> {
-    let sheets = carpentry_sheets(model);
-    let pages: Vec<archisim_export::pdf::Page> = sheets
-        .iter()
-        .map(|(svg, title)| archisim_export::pdf::Page { svg, title })
-        .collect();
-    archisim_export::pdf::pdf(&pages, "Carpinterías")
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -423,7 +478,7 @@ mod tests {
         let types = m.opening_types().filter(|t| !t.is_void()).count();
         assert_eq!(sheets.len(), types.div_ceil(6));
         assert!(sheets[0].0.contains("width=\"420mm\""));
-        let pdf = super::carpentry_pdf(&m).unwrap();
+        let pdf = crate::documents::pdf_of(&super::carpentry_sheets(&m), "Carpinterías").unwrap();
         assert!(pdf.starts_with(b"%PDF"));
         // To look at them: CARPINTERIAS_OUT=folder (the demo's, if made).
         if let Ok(dir) = std::env::var("CARPINTERIAS_OUT") {
@@ -436,7 +491,7 @@ mod tests {
             }
             std::fs::write(
                 format!("{dir}/carpinterias.pdf"),
-                super::carpentry_pdf(&m).unwrap(),
+                crate::documents::pdf_of(&super::carpentry_sheets(&m), "Carpinterías").unwrap(),
             )
             .unwrap();
         }

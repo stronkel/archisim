@@ -6,6 +6,7 @@
 //! the function of each layer it is in; those defaults are marked on the
 //! scale.
 
+use super::widgets::SwitchExt as _;
 use archisim_core::{LayerFunction, MaterialId, MAX_PRIORITY};
 use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, Ui, Vec2};
 
@@ -127,7 +128,7 @@ impl ArchiSimApp {
         let mut set: Option<(MaterialId, Option<u16>)> = None;
         let mut reset_all = false;
         ui.horizontal(|ui| {
-            ui.checkbox(
+            ui.switch(
                 &mut self.priorities_all,
                 "Ver también los materiales sin usar",
             );

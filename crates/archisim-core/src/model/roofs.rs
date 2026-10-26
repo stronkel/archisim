@@ -376,12 +376,15 @@ impl Roof {
         self.planes()
             .iter()
             .map(|p| {
-                let holes: f64 = self
-                    .plane_holes(p.side)
-                    .iter()
-                    .filter(|h| h.iter().all(|q| point_in_polygon(*q, &p.outline)))
-                    .map(|h| signed_area(h).abs())
-                    .sum();
+                let (inside, crossing) = self.plane_cuts(p);
+                let holes: f64 =
+                    inside
+                        .iter()
+                        .map(|h| signed_area(h).abs())
+                        .chain(crossing.iter().map(|h| {
+                            signed_area(&super::dormers::clip_to_convex(&p.outline, h)).abs()
+                        }))
+                        .sum();
                 (signed_area(&p.outline).abs() - holes) * p.slope.vertical(1.0)
             })
             .sum()
@@ -565,7 +568,7 @@ pub fn grow_convex(poly: &[Point2], d: f64) -> Vec<Point2> {
 }
 
 /// The part of a convex polygon where `g·p <= c`.
-fn clip_half_plane(poly: &[Point2], g: Vec2, c: f64) -> Vec<Point2> {
+pub(crate) fn clip_half_plane(poly: &[Point2], g: Vec2, c: f64) -> Vec<Point2> {
     let f = |p: Point2| g.dot(p) - c;
     let n = poly.len();
     let mut out = Vec::new();

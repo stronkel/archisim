@@ -1,0 +1,39 @@
+family "Roca"
+  category nature
+  host none
+  version 1
+  description "Roca suelta del terreno: canto rodado, roca angulosa, laja o roca con musgo. Cada variante es otra roca; el punto de inserción es su centro"
+  folder "Elementos naturales"
+
+type_params
+  section "Dimensiones"
+    width   length = 0.80 range 0.10..6.00 label "Largo"
+    depth   length = 0.60 range 0.10..6.00 label "Ancho"
+    height  length = 0.50 range 0.05..4.00 label "Altura"
+    variant integer = 1 range 1..99 label "Variante"
+  section "Materiales"
+    mat material = "Roca caliza" label "Piedra"
+  section "Modelo 3D"
+    model3d choice("Canto rodado", "Roca angulosa", "Laja", "Roca con musgo") = "Roca angulosa" label "Modelo 3D"
+    moss material = "Musgo" label "Musgo"
+
+body
+  box (-width / 2, -depth / 2, 0) to (width / 2, depth / 2, height) material mat
+
+plan 1:50
+  repeat i in 0..14
+    let t0 = 6.283185307 * i / 14
+    let t1 = 6.283185307 * (i + 1) / 14
+    let f0 = 1 + 0.1 * sin(3 * t0 + variant) + 0.07 * cos(5 * t0 + 2 * variant)
+    let f1 = 1 + 0.1 * sin(3 * t1 + variant) + 0.07 * cos(5 * t1 + 2 * variant)
+    line (width / 2 * f0 * cos(t0), depth / 2 * f0 * sin(t0)) to (width / 2 * f1 * cos(t1), depth / 2 * f1 * sin(t1)) pen view
+  line (-width * 0.22, -depth * 0.05) to (width * 0.05, depth * 0.12) pen thin
+  line (width * 0.05, depth * 0.12) to (width * 0.25, -depth * 0.08) pen thin
+
+plan presentation
+  cloud center (0, 0) radius (width + depth) / 4 lobes 9 jitter 0.25 pen thin tint mat
+
+outputs
+  generator = "props:rock"
+  ifc_class = "IfcGeographicElement"
+  ifc_type = "USERDEFINED"

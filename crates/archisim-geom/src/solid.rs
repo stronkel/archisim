@@ -49,6 +49,8 @@ pub enum SolidOwner {
     /// A pipe or duct.
     Run(archisim_core::RunId),
     Device(archisim_core::DeviceId),
+    /// The grass and flowers on a terrain's painted areas.
+    Growth(archisim_core::TerrainId),
 }
 
 impl SolidOwner {
@@ -64,6 +66,7 @@ impl SolidOwner {
             SolidOwner::Dormer(x, _) => x.0,
             SolidOwner::Stair(x) => x.0,
             SolidOwner::Terrain(x) => x.0,
+            SolidOwner::Growth(x) => x.0,
             SolidOwner::CurtainWall(x) => x.0,
             SolidOwner::Railing(x) => x.0,
             SolidOwner::Object(x) => x.0,
@@ -978,22 +981,16 @@ pub fn roof_solids(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
     for plane in roof.planes() {
         let slope = plane.slope;
         // The dormers on this plane (on this piece of it) cut it.
-        let holes: Vec<Vec<Point2>> = roof
-            .plane_holes(plane.side)
-            .into_iter()
-            .filter(|h| {
-                h.iter()
-                    .all(|q| archisim_core::point_in_polygon(*q, &plane.outline))
-            })
-            .collect();
-        out.extend(layered_plate(
-            SolidOwner::Roof(id),
-            &plane.outline,
-            &holes,
-            &|p| level + roof.base_offset + slope.rise_at(p),
-            &|t| slope.vertical(t),
-            &stype.layers,
-        ));
+        for (outline, holes) in crate::roof_parts::roof_plane_shapes(roof, &plane) {
+            out.extend(layered_plate(
+                SolidOwner::Roof(id),
+                &outline,
+                &holes,
+                &|p| level + roof.base_offset + slope.rise_at(p),
+                &|t| slope.vertical(t),
+                &stype.layers,
+            ));
+        }
     }
     out
 }
@@ -1206,6 +1203,12 @@ pub fn without_plants<T>(f: impl FnOnce() -> T) -> T {
     out
 }
 
+/// Whether the grass on painted areas is grown: not for the drawings that
+/// leave the plants out or take them less detailed (sections, shadows).
+pub fn growth_wanted() -> bool {
+    !NO_PLANTS.with(|c| c.get()) && PLANT_CAP.with(|c| c.get()).is_none()
+}
+
 /// Solids of a plant grown by ArchiSim: one per material, at the level of
 /// detail the views take ([`Model::plant_detail`]), turned and placed.
 /// `None` for an object that is not a plant.
@@ -1246,25 +1249,172 @@ pub fn prop_solids(model: &Model, id: archisim_core::ObjectId) -> Option<Vec<Sol
         let q = o.to_plan(p[0] as f64, p[1] as f64);
         [q.x, q.y, z0 + p[2] as f64]
     };
-    Some(
-        parts
-            .iter()
-            .map(|(material, tris)| Solid {
-                owner: SolidOwner::Object(id),
-                material: *material,
-                triangles: tris
-                    .iter()
-                    .map(|t| t.map(|i| place(mesh.positions[i as usize])))
-                    .collect(),
-            })
-            .collect(),
-    )
+    let mut out: Vec<Solid> = parts
+        .iter()
+        .map(|(material, tris)| Solid {
+            owner: SolidOwner::Object(id),
+            material: *material,
+            triangles: tris
+                .iter()
+                .map(|t| t.map(|i| place(mesh.positions[i as usize])))
+                .collect(),
+        })
+        .collect();
+    // The first module of a worktop run carries the run's worktop.
+    if let Some(run) = model.worktop_run_of(id).filter(|r| r.members[0] == id) {
+        out.extend(worktop_solids(model, &run, SolidOwner::Object(id)));
+    }
+    Some(out)
+}
+
+/// The solid of a worktop run: one slab over all its modules. Its top and
+/// bottom faces go module by module (no long thin triangles: views that
+/// paint faces far to near order them well), its edges only round the
+/// whole outline and its sinks (no joints).
+pub fn worktop_solids(
+    model: &Model,
+    run: &archisim_core::WorktopRun,
+    owner: SolidOwner,
+) -> Vec<Solid> {
+    let z1 = model.level(run.level).map_or(0.0, |l| l.elevation) + run.top;
+    let z0 = z1 - run.thickness;
+    let at = |p: Point2, z: f64| [p.x, p.y, z];
+    let shape = |r: &[Point2; 4]| (ensure_ccw(r.to_vec()), Vec::new());
+    let sinks: Vec<crate::junctions::Shape> = run.sinks.iter().map(shape).collect();
+    let mut tris: Vec<[P3; 3]> = Vec::new();
+    // Faces: each module's part, not already covered by another's.
+    let mut covered: Vec<crate::junctions::Shape> = Vec::new();
+    for piece in &run.pieces {
+        let overlaps =
+            crate::junctions::area(&crate::junctions::intersection(&[shape(piece)], &covered))
+                > 1e-6;
+        let own = if overlaps {
+            // Modules overlapping (rare): what is left of this one.
+            let own = crate::junctions::difference(&[shape(piece)], &covered);
+            crate::junctions::difference(&own, &sinks)
+        } else {
+            // Side by side, the usual: the piece exactly as it is, with
+            // the openings of its sinks, so it meets its neighbours'
+            // corners with no crack between them.
+            let inside = |q: &[Point2; 4]| {
+                let c = q.iter().fold(Point2::new(0.0, 0.0), |a, p| {
+                    Point2::new(a.x + p.x / 4.0, a.y + p.y / 4.0)
+                });
+                crate::junctions::inside(c, piece)
+            };
+            let holes: Vec<Vec<Point2>> = run
+                .sinks
+                .iter()
+                .filter(|q| inside(q))
+                .map(|q| q.to_vec())
+                .collect();
+            vec![(ensure_ccw(piece.to_vec()), holes)]
+        };
+        covered = crate::junctions::union(&covered, &[shape(piece)]);
+        for (outer, holes) in own {
+            let poly = with_holes(&outer, &holes);
+            for [a, b, c] in triangulate(&poly) {
+                // Top seen from above: counter-clockwise. Bottom: reversed.
+                tris.push([at(poly[a], z1), at(poly[b], z1), at(poly[c], z1)]);
+                tris.push([at(poly[a], z0), at(poly[c], z0), at(poly[b], z0)]);
+            }
+        }
+    }
+    // Edges: the sides of each module's piece that no other piece
+    // touches (no joints, and on the same corners as the faces), and
+    // round each sink; outside to the right of each edge.
+    let mut side = |p: Point2, q: Point2| {
+        tris.push([at(p, z0), at(q, z0), at(q, z1)]);
+        tris.push([at(p, z0), at(q, z1), at(p, z1)]);
+    };
+    let rings: Vec<Vec<Point2>> = run.pieces.iter().map(|p| ensure_ccw(p.to_vec())).collect();
+    for (k, ring) in rings.iter().enumerate() {
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            for (p, q) in free_parts(a, b, &rings, k) {
+                side(p, q);
+            }
+        }
+    }
+    for sink in &run.sinks {
+        let mut h = ensure_ccw(sink.to_vec());
+        h.reverse();
+        for i in 0..h.len() {
+            side(h[i], h[(i + 1) % h.len()]);
+        }
+    }
+    // The upstands: a strip standing on each back edge, towards the front.
+    for ([a, b], height) in &run.upstands {
+        let Some(u) = (*b - *a).normalized() else {
+            continue;
+        };
+        let n = u.perp_left() * archisim_core::props::UPSTAND;
+        let ring = [*a, *b, *b + n, *a + n];
+        let (lo, hi) = (z1, z1 + height);
+        tris.push([at(ring[0], hi), at(ring[1], hi), at(ring[2], hi)]);
+        tris.push([at(ring[0], hi), at(ring[2], hi), at(ring[3], hi)]);
+        for i in 0..4 {
+            // Outside to the right of each edge, as the ring runs CCW.
+            let (p, q) = (ring[i], ring[(i + 1) % 4]);
+            tris.push([at(p, lo), at(q, lo), at(q, hi)]);
+            tris.push([at(p, lo), at(q, hi), at(p, hi)]);
+        }
+    }
+    vec![Solid {
+        owner,
+        material: run.material,
+        triangles: tris,
+    }]
+}
+
+/// The parts of the edge `a`–`b` of piece `own` that no other piece's
+/// edge lies on (where two pieces of a worktop touch, no side is made).
+fn free_parts(a: Point2, b: Point2, rings: &[Vec<Point2>], own: usize) -> Vec<(Point2, Point2)> {
+    let ab = b - a;
+    let len2 = ab.dot(ab);
+    if len2 < 1e-12 {
+        return Vec::new();
+    }
+    let t_of = |p: Point2| (p - a).dot(ab) / len2;
+    let on_line = |p: Point2| ((p - a).cross(ab)).abs() / len2.sqrt() < 1e-6;
+    let mut covered: Vec<(f64, f64)> = Vec::new();
+    for (k, ring) in rings.iter().enumerate() {
+        if k == own {
+            continue;
+        }
+        for i in 0..ring.len() {
+            let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+            if on_line(p) && on_line(q) {
+                let (t0, t1) = (t_of(p), t_of(q));
+                let (lo, hi) = (t0.min(t1).max(0.0), t0.max(t1).min(1.0));
+                if hi - lo > 1e-9 {
+                    covered.push((lo, hi));
+                }
+            }
+        }
+    }
+    covered.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let mut out = Vec::new();
+    let mut t = 0.0;
+    for (lo, hi) in covered {
+        if lo > t + 1e-9 {
+            out.push((a + ab * t, a + ab * lo));
+        }
+        t = t.max(hi);
+    }
+    if t < 1.0 - 1e-9 {
+        out.push((a + ab * t, b));
+    }
+    out
 }
 
 /// The colours of the corners of each triangle of a solid of
 /// [`object_mesh_solids`] (its textures) or of [`plant_solids`], in the
 /// same order; `None` for any other solid.
 pub fn solid_vertex_colors(model: &Model, s: &Solid) -> Option<Vec<[[u8; 3]; 3]>> {
+    if let SolidOwner::Growth(_) = s.owner {
+        return crate::growth::growth_colors(model, s);
+    }
     let SolidOwner::Object(id) = s.owner else {
         return None;
     };
@@ -1330,11 +1480,176 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
         out.push([low(a), low(b), p3(b)]);
         out.push([low(a), p3(b), p3(a)]);
     }
-    vec![Solid {
+    let mut solids = vec![Solid {
         owner: SolidOwner::Terrain(id),
         material: t.material,
         triangles: out,
-    }]
+    }];
+    // The areas painted over it: a thin closed layer each, on the ground.
+    let surface: Vec<[P3; 3]> = tris
+        .iter()
+        .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
+        .collect();
+    for patch in &t.patches {
+        let layer = patch_layer(&surface, &patch.regions, PATCH_THICKNESS);
+        if !layer.is_empty() {
+            solids.push(Solid {
+                owner: SolidOwner::Terrain(id),
+                material: patch.material,
+                triangles: layer,
+            });
+        }
+    }
+    solids
+}
+
+/// How thick the layer of a painted area of a terrain is (m): enough not
+/// to flicker with the ground under it.
+pub const PATCH_THICKNESS: f64 = 0.02;
+
+/// A layer `thick` deep over the parts of `surface` (triangles, counter-
+/// clockwise seen from above) inside `regions`: its top, its bottom on the
+/// surface and its edges where the regions end.
+pub fn patch_layer(
+    surface: &[[P3; 3]],
+    regions: &[(Vec<Point2>, Vec<Vec<Point2>>)],
+    thick: f64,
+) -> Vec<[P3; 3]> {
+    let shapes: Vec<crate::junctions::Shape> = regions
+        .iter()
+        .filter(|(o, _)| o.len() >= 3)
+        .map(|(o, h)| (ensure_ccw(o.clone()), h.clone()))
+        .collect();
+    if shapes.is_empty() {
+        return Vec::new();
+    }
+    // The edges of the regions, to tell an edge of a piece that is the
+    // region's (it gets a side) from one inside it.
+    let mut borders: Vec<(Point2, Point2)> = Vec::new();
+    for (o, holes) in &shapes {
+        for ring in std::iter::once(o).chain(holes.iter()) {
+            for i in 0..ring.len() {
+                borders.push((ring[i], ring[(i + 1) % ring.len()]));
+            }
+        }
+    }
+    let on_border = |a: Point2, b: Point2| {
+        let m = (a + b) * 0.5;
+        borders.iter().any(|(p, q)| {
+            let pq = *q - *p;
+            let len = pq.length();
+            if len < 1e-9 {
+                return false;
+            }
+            let t = (m - *p).dot(pq) / (len * len);
+            (-1e-6..=1.0 + 1e-6).contains(&t) && ((m - *p).cross(pq)).abs() / len < 1e-5
+        })
+    };
+    // The pieces of each triangle inside the regions, each with the
+    // triangle's plane: z = c + gx·(x − x0) + gy·(y − y0).
+    struct Piece {
+        shape: crate::junctions::Shape,
+        plane: [f64; 5],
+    }
+    let mut pieces: Vec<Piece> = Vec::new();
+    for tri in surface {
+        let flat: Vec<Point2> = tri.iter().map(|p| Point2::new(p[0], p[1])).collect();
+        let e1 = [
+            tri[1][0] - tri[0][0],
+            tri[1][1] - tri[0][1],
+            tri[1][2] - tri[0][2],
+        ];
+        let e2 = [
+            tri[2][0] - tri[0][0],
+            tri[2][1] - tri[0][1],
+            tri[2][2] - tri[0][2],
+        ];
+        let n = [
+            e1[1] * e2[2] - e1[2] * e2[1],
+            e1[2] * e2[0] - e1[0] * e2[2],
+            e1[0] * e2[1] - e1[1] * e2[0],
+        ];
+        if n[2].abs() < 1e-12 {
+            continue;
+        }
+        let plane = [tri[0][2], -n[0] / n[2], -n[1] / n[2], tri[0][0], tri[0][1]];
+        for shape in crate::junctions::intersection(&[(ensure_ccw(flat), Vec::new())], &shapes) {
+            pieces.push(Piece { shape, plane });
+        }
+    }
+    // Every corner of every piece splits the edges of the others that pass
+    // through it (two triangles share an edge, and a region's corner may
+    // lie on it): no T-junctions, so the layer is closed.
+    let corners: Vec<Point2> = pieces
+        .iter()
+        .flat_map(|p| p.shape.0.iter().chain(p.shape.1.iter().flatten()).copied())
+        .collect();
+    let split = |ring: &[Point2]| -> Vec<Point2> {
+        let mut v = Vec::new();
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            v.push(a);
+            let ab = b - a;
+            let len2 = ab.dot(ab);
+            if len2 < 1e-18 {
+                continue;
+            }
+            let mut on: Vec<(f64, Point2)> = corners
+                .iter()
+                .filter_map(|c| {
+                    let t = (*c - a).dot(ab) / len2;
+                    let off = (*c - a).cross(ab).abs() / len2.sqrt();
+                    (t > 1e-9 && t < 1.0 - 1e-9 && off < 1e-7).then_some((t, *c))
+                })
+                .collect();
+            on.sort_by(|x, y| x.0.total_cmp(&y.0));
+            on.dedup_by(|x, y| (x.0 - y.0).abs() < 1e-12);
+            v.extend(on.into_iter().map(|(_, c)| c));
+        }
+        v
+    };
+    let mut out = Vec::new();
+    for piece in &pieces {
+        let [c, gx, gy, x0, y0] = piece.plane;
+        let z = |p: Point2| c + gx * (p.x - x0) + gy * (p.y - y0);
+        let outer = split(&ensure_ccw(piece.shape.0.clone()));
+        let holes: Vec<Vec<Point2>> = piece
+            .shape
+            .1
+            .iter()
+            .map(|h| {
+                let mut h = ensure_ccw(h.clone());
+                h.reverse();
+                split(&h)
+            })
+            .collect();
+        let poly = with_holes(&outer, &holes);
+        for [a, b, cc] in triangulate(&poly) {
+            let (pa, pb, pc) = (poly[a], poly[b], poly[cc]);
+            let up = |p: Point2| [p.x, p.y, z(p) + thick];
+            let down = |p: Point2| [p.x, p.y, z(p)];
+            out.push([up(pa), up(pb), up(pc)]);
+            out.push([down(pa), down(pc), down(pb)]);
+        }
+        // Sides where the region ends: outside to the right of each edge
+        // of the counter-clockwise outline (holes run the other way).
+        for ring in std::iter::once(&outer).chain(holes.iter()) {
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                if !on_border(a, b) {
+                    continue;
+                }
+                let (za, zb) = (z(a), z(b));
+                out.push([[a.x, a.y, za], [b.x, b.y, zb], [b.x, b.y, zb + thick]]);
+                out.push([
+                    [a.x, a.y, za],
+                    [b.x, b.y, zb + thick],
+                    [a.x, a.y, za + thick],
+                ]);
+            }
+        }
+    }
+    out
 }
 
 /// A straight bar of a railing: from `a` to `b` (the middle of its end
@@ -2043,6 +2358,9 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
     }
     for t in model.terrains() {
         out.extend(terrain_solids(model, t.id));
+        if growth_wanted() {
+            out.extend(crate::growth::growth_solids(model, t.id));
+        }
     }
     for c in model.curtain_walls() {
         out.extend(curtain_wall_solids(model, c.id));
@@ -2299,6 +2617,66 @@ pub fn device_solids(model: &Model, id: archisim_core::DeviceId) -> Vec<Solid> {
     }]
 }
 
+/// How far a lamp's light reaches at night, metres; a streetlight's.
+pub const LAMP_REACH: f64 = 4.5;
+pub const STREET_REACH: f64 = 11.0;
+
+/// The materials of an object that glow at night: the shade and the bulb
+/// of a lamp (also of a bedside table's), a candle's flame, the fire of a
+/// fireplace, a streetlight's lantern; and how far its light reaches.
+pub fn glow_materials(
+    model: &Model,
+    o: archisim_core::ObjectId,
+) -> (Vec<archisim_core::MaterialId>, f64) {
+    let none = (Vec::new(), 0.0);
+    let Some(t) = model
+        .object(o)
+        .and_then(|ob| model.object_type(ob.object_type))
+    else {
+        return none;
+    };
+    let Some(kind) = model.family_prop(t.family) else {
+        return none;
+    };
+    let (keys, reach): (&[&str], f64) = match kind.as_str() {
+        "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
+        "fireplace" => (&["flame"], LAMP_REACH),
+        "streetlight" => (&["light"], STREET_REACH),
+        _ => return none,
+    };
+    let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {
+        return none;
+    };
+    let mats = keys
+        .iter()
+        .filter_map(|k| match t.values.get(*k).or(defaults.get(*k)) {
+            Some(archisim_core::Value::Material(m)) => Some(archisim_core::MaterialId(*m)),
+            _ => None,
+        })
+        .collect();
+    (mats, reach)
+}
+
+/// The texture a material is seen with and the size of its piece
+/// (metres): its appearance's, or, for furniture (`is_object`) whose
+/// material has no appearance of its own, the one its name suggests
+/// (linen, wool, rattan…). The 3D view, the rendered pictures and the
+/// `.glb` lay it the same way.
+pub fn texture_of(
+    model: &Model,
+    material: archisim_core::MaterialId,
+    is_object: bool,
+) -> Option<(archisim_core::TextureKind, f64)> {
+    let a = model.appearance(material);
+    let t = a.texture.or_else(|| {
+        let x = model.material(material)?;
+        (is_object && a.is_plain())
+            .then(|| archisim_core::TextureKind::suggested(&x.name, &x.category))
+            .flatten()
+    })?;
+    Some((t, a.scale.unwrap_or_else(|| t.default_scale())))
+}
+
 /// The colour a solid is shown with: a pipe's or duct's that of its
 /// system, a device's a light grey, the rest their material's.
 pub fn solid_color(model: &Model, s: &Solid) -> [u8; 3] {
@@ -2480,7 +2858,9 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
             model.roof(r).is_some_and(|r| r.level == level)
         }
         SolidOwner::Stair(s) => model.stair(s).is_some_and(|s| s.level == level),
-        SolidOwner::Terrain(t) => model.terrain(t).is_some_and(|t| t.level == level),
+        SolidOwner::Terrain(t) | SolidOwner::Growth(t) => {
+            model.terrain(t).is_some_and(|t| t.level == level)
+        }
         SolidOwner::CurtainWall(c) => model.curtain_wall(c).is_some_and(|c| c.level == level),
         SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
@@ -3032,6 +3412,24 @@ mod tests {
         let solids = terrain_solids(&m, id);
         assert_closed(&solids);
         assert!(solids[0].volume() > 100.0);
+        // A lawn painted on it, across the triangles, with a hole: a thin
+        // closed layer, as large as the lawn.
+        m.edit_terrain(id, |t| {
+            t.patches = vec![archisim_core::TerrainPatch {
+                material: mat,
+                regions: vec![(
+                    vec![p(2.0, 2.0), p(8.0, 2.0), p(8.0, 7.0), p(2.0, 7.0)],
+                    vec![vec![p(4.0, 3.0), p(5.0, 3.0), p(5.0, 4.0), p(4.0, 4.0)]],
+                )],
+            }]
+        })
+        .unwrap();
+        let solids = terrain_solids(&m, id);
+        assert_eq!(solids.len(), 2);
+        assert_closed(&solids);
+        // Its volume: area (30 − 1) by its thickness, sloping a little.
+        let v = solids[1].volume();
+        assert!((v - 29.0 * PATCH_THICKNESS).abs() < 0.05, "{v}");
     }
 
     /// A gable wall under a two-slope roof: built up to the ridge and
@@ -3864,5 +4262,87 @@ mod sweep_tests {
             triangles: sweep_segment(&sq, [0.0, 0.0, 1.0], [0.0, 4.0, 1.0]),
         };
         assert!((s.volume() - 4.0).abs() < 1e-9, "{}", s.volume());
+    }
+}
+
+#[cfg(test)]
+mod worktop_tests {
+    use super::*;
+    use archisim_core::{CutPattern, NewObject, ParamScope, Value};
+
+    /// Four base modules along a wall, the second a sink, and one turned
+    /// a quarter up the next wall (an L): one worktop over all of them,
+    /// whose top face is their tops less the sink's opening, and modules
+    /// without a top of their own.
+    #[test]
+    fn a_run_has_one_worktop() {
+        let mut m = Model::new("cocina");
+        let l = m.add_level("PB", 0.0);
+        let stone = m.add_material("Encimera", "stone", [230, 230, 225], CutPattern::Solid);
+        let wood = m.add_material("Pino", "wood", [200, 170, 120], CutPattern::Solid);
+        let fam = m.system_family("Módulo bajo de cocina").unwrap();
+        let mut values = m.family_defaults(fam, ParamScope::Type).unwrap();
+        values.insert("top".into(), Value::Material(stone.0));
+        values.insert("mat".into(), Value::Material(wood.0));
+        let drawers = m.add_object_type("Cajonera", fam, values.clone()).unwrap();
+        values.insert("unit".into(), Value::Text("Fregadero".into()));
+        values.insert("width".into(), Value::Number(0.8));
+        let sink = m.add_object_type("Fregadero", fam, values).unwrap();
+        let mut place = |t, x: f64, y: f64, rotation: f64| {
+            m.add_object(NewObject {
+                object_type: t,
+                level: l,
+                position: Point2::new(x, y),
+                rotation,
+                base_offset: 0.0,
+            })
+            .unwrap()
+        };
+        let a = place(drawers, 0.3, 0.0, 0.0);
+        let b = place(sink, 1.0, 0.0, 0.0);
+        let c = place(drawers, 1.7, 0.0, 0.0);
+        // The corner, then up the right-hand wall (x = 2.6), facing left.
+        let e = place(drawers, 2.3, 0.0, 0.0);
+        let d = place(drawers, 2.6, 0.9, std::f64::consts::FRAC_PI_2);
+        // An island: three each way, backs together.
+        let mut island = Vec::new();
+        for x in [10.3, 10.9, 11.5] {
+            island.push(place(drawers, x, 5.0, std::f64::consts::PI));
+            island.push(place(drawers, x, 5.0, 0.0));
+        }
+        let run = m.worktop_run_of(a).expect("a run");
+        assert_eq!(run.members, vec![a, b, c, e, d]);
+        // The top face of the worktop, at 0.90.
+        let top_area = |solids: &[Solid]| -> f64 {
+            solids
+                .iter()
+                .filter(|s| s.material == stone)
+                .flat_map(|s| s.triangles.iter())
+                .filter(|t| t.iter().all(|p| (p[2] - 0.9).abs() < 1e-6))
+                .map(|t| {
+                    let u = [t[1][0] - t[0][0], t[1][1] - t[0][1]];
+                    let v = [t[2][0] - t[0][0], t[2][1] - t[0][1]];
+                    (u[0] * v[1] - u[1] * v[0]).abs() / 2.0
+                })
+                .sum()
+        };
+        let first = object_solids(&m, a);
+        let want = run.area;
+        let got = top_area(&first);
+        assert!((got - want).abs() < 1e-6, "{got} m² against {want}");
+        // The others carry no worktop.
+        // (A sink keeps the rim of its basin, a few cm², level with it.)
+        for o in [b, c, e, d] {
+            let left = top_area(&object_solids(&m, o));
+            assert!(left < 0.01, "{o:?}: {left}");
+        }
+        let run = m.worktop_run_of(island[0]).expect("an island");
+        assert_eq!(run.members.len(), 6);
+        let got = top_area(&object_solids(&m, run.members[0]));
+        assert!((got - 6.0 * 0.36).abs() < 1e-6, "island: {got} m²");
+        // Taken out of the run, a module has its own top again.
+        m.edit_object(d, |o| o.position = Point2::new(6.0, 6.0))
+            .unwrap();
+        assert!(top_area(&object_solids(&m, d)) > 0.3);
     }
 }

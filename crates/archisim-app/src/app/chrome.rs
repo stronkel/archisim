@@ -3,6 +3,7 @@
 //! the active view, cursor position), plus what floats over the drawing:
 //! the keys of the next step and the message of the last action.
 
+use super::widgets::SwitchExt as _;
 use eframe::egui::{self, FontId, Rect, Sense, Ui, Vec2};
 
 use super::icons::{self, Icon};
@@ -218,6 +219,13 @@ impl ArchiSimApp {
             {
                 self.export_ifc(archisim_ifc::Schema::Ifc4);
             }
+            if ui
+                .button("Exportar modelo 3D (glTF) para D5, Twinmotion, Blender…")
+                .on_hover_text("El proyecto entero en un .glb: un objeto por elemento, y los materiales con su nombre, su color y su textura")
+                .clicked()
+            {
+                self.export_glb();
+            }
             let section = matches!(self.mode, ViewMode::Section);
             let what = if section {
                 "Exportar sección o alzado (PDF, DXF, SVG)"
@@ -259,7 +267,21 @@ impl ArchiSimApp {
                 .on_hover_text("Cada tipo de puerta y ventana en alzado a 1:50, con sus medidas, su sección y sus datos, en hojas A3")
                 .clicked()
             {
-                self.export_carpentry();
+                self.export_document(crate::documents::Document::Carpentry);
+            }
+            if ui
+                .button("Memoria de carpinterías (PDF)…")
+                .on_hover_text("Cada tipo de puerta y ventana descrito con palabras: medidas, apertura, materiales, antepecho, unidades por planta y en qué locales está")
+                .clicked()
+            {
+                self.export_document(crate::documents::Document::CarpentryReport);
+            }
+            if ui
+                .button("Cuadro de superficies (PDF)…")
+                .on_hover_text("Superficie útil de cada local por plantas, superficie construida de cada planta y superficie útil por usos")
+                .clicked()
+            {
+                self.export_document(crate::documents::Document::Areas);
             }
             if ui
                 .button("Exportar mediciones (BC3)…")
@@ -353,19 +375,19 @@ impl ArchiSimApp {
                 self.fit_active_view();
             }
             ui.separator();
-            ui.checkbox(&mut self.show_reference_lines, "Líneas de referencia");
-            ui.checkbox(&mut self.show_grid, "Rejilla");
-            ui.checkbox(&mut self.thin_lines, "Líneas finas (sin marcar: grosor real)");
+            ui.switch(&mut self.show_reference_lines, "Líneas de referencia");
+            ui.switch(&mut self.show_grid, "Rejilla");
+            ui.switch(&mut self.thin_lines, "Líneas finas (planta, alzados y 3D)");
             if ui.button("Visibilidad y gráficos…").clicked() {
                 self.views.vg_open = true;
             }
-            ui.checkbox(&mut self.show_underlay, "Calco de la planta inferior");
-            ui.checkbox(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
+            ui.switch(&mut self.show_underlay, "Calco de la planta inferior");
+            ui.switch(&mut self.v3d.camera.perspective, "Perspectiva en 3D");
             ui.separator();
-            ui.checkbox(&mut self.show_properties, "Propiedades");
-            ui.checkbox(&mut self.show_navigator, "Navegador");
+            ui.switch(&mut self.show_properties, "Propiedades");
+            ui.switch(&mut self.show_navigator, "Navegador");
             if ui
-                .checkbox(&mut self.attenuate, "Atenuar por disciplina")
+                .switch(&mut self.attenuate, "Atenuar por disciplina")
                 .on_hover_text("En Estructura, Instalaciones, Urbanismo o Concepto, lo que no es de la disciplina se ve en gris")
                 .changed()
             {
@@ -375,11 +397,11 @@ impl ArchiSimApp {
                     self.view_style.focus = archisim_core::DisciplineFocus::None;
                 }
             }
-            ui.checkbox(&mut self.pin_command_line, "Línea de órdenes fija")
+            ui.switch(&mut self.pin_command_line, "Línea de órdenes fija")
                 .on_hover_text("Sin marcar, lo que escribes sale junto al cursor y el paso de la orden en marcha, en la barra bajo las pestañas");
             super::missions_ui::text_size_row(ui, &mut self.prefs.text_size);
             super::missions_ui::units_row(ui, &mut self.prefs.units);
-            ui.checkbox(&mut self.keys_autocad, "Teclas de AutoCAD")
+            ui.switch(&mut self.keys_autocad, "Teclas de AutoCAD")
                 .on_hover_text("Marcado: se escribe la orden y se pulsa Intro (L, PL, M de muro…). Sin marcar: M, F, P, V, C y N cambian de herramienta al momento, como en ArchiCAD");
             ui.separator();
             if ui.button("Plantas…").clicked() {
@@ -471,6 +493,8 @@ impl ArchiSimApp {
                 ViewMode::Plan => {
                     self.scale_and_zoom(ui);
                     ui.separator();
+                    self.thin_lines_chip(ui);
+                    ui.separator();
                     self.drawing_segments(ui);
                     ui.separator();
                     self.snap_toggles(ui);
@@ -478,12 +502,7 @@ impl ArchiSimApp {
                 ViewMode::Section => {
                     self.scale_and_zoom(ui);
                     ui.separator();
-                    chip(
-                        ui,
-                        &mut self.thin_lines,
-                        "Líneas finas",
-                        "Todas las líneas a un píxel, sin grosor; apagado, cada línea con su grosor real a la escala de la vista",
-                    );
+                    self.thin_lines_chip(ui);
                 }
                 ViewMode::Sheet(id) => {
                     let paper = self
@@ -538,6 +557,8 @@ impl ArchiSimApp {
                     if on != self.v3d.section.is_some() {
                         self.v3d.toggle_section();
                     }
+                    ui.separator();
+                    self.thin_lines_chip(ui);
                     ui.separator();
                     self.cutaway_buttons(ui);
                 }
@@ -594,6 +615,18 @@ impl ArchiSimApp {
                 }
             });
         });
+    }
+
+    /// ArchiCAD's "Líneas finas": every line one pixel wide, in plan,
+    /// sections, elevations and 3D; off, the true weight at the scale of
+    /// the view (in 3D, contours two pixels wide).
+    fn thin_lines_chip(&mut self, ui: &mut Ui) {
+        chip(
+            ui,
+            &mut self.thin_lines,
+            "Líneas finas",
+            "Todas las líneas a un píxel, sin grosor, en planta, alzados, secciones y 3D; apagado, cada línea con su grosor real a la escala de la vista",
+        );
     }
 
     /// The scale of the view and the zoom, at the left of the bottom bar.
@@ -696,6 +729,7 @@ impl ArchiSimApp {
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
             Tool::Planting => self.planting_hint(),
+            Tool::Brush => self.brush_hint(),
             Tool::TeamZone if self.team_ui.zone_start.is_some() => "Clic: esquina opuesta de la zona · Esc o botón derecho: anular",
             Tool::TeamZone => "Clic: primera esquina de la zona que reservas · Esc: flecha",
             Tool::Pipe | Tool::Duct | Tool::Device => self.services_hint(),

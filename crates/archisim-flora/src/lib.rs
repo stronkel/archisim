@@ -351,6 +351,55 @@ pub fn plant(species: &Species, seed: u64, variation: f64) -> Arc<Plant> {
     p
 }
 
+/// What [`side_of`] has drawn: plant, view direction (thousandths),
+/// style, look, opacity and scale.
+type SideKey = (u64, [i64; 2], PlanStyle, Look, u64, u64);
+type SideCache = Mutex<HashMap<SideKey, Arc<Vec<Shape>>>>;
+
+fn side_cache() -> &'static SideCache {
+    static S: OnceLock<SideCache> = OnceLock::new();
+    S.get_or_init(Default::default)
+}
+
+/// [`Plant::side`] of [`plant`], kept: an elevation draws each of its
+/// plants again at every redraw (moving around in it), and the drawing of
+/// one seen from the same side does not change.
+pub fn side_of(
+    species: &Species,
+    seed: u64,
+    variation: f64,
+    toward: [f64; 2],
+    o: &SideOptions,
+) -> Arc<Vec<Shape>> {
+    let s = species.sane();
+    let variation = variation.clamp(0.0, 1.0);
+    let n = (toward[0] * toward[0] + toward[1] * toward[1])
+        .sqrt()
+        .max(1e-12);
+    let key = (
+        s.key(seed, variation),
+        [
+            (toward[0] / n * 1000.0).round() as i64,
+            (toward[1] / n * 1000.0).round() as i64,
+        ],
+        o.style,
+        o.look,
+        o.opacity.to_bits(),
+        o.m_per_mm.to_bits(),
+    );
+    if let Some(d) = side_cache().lock().ok().and_then(|c| c.get(&key).cloned()) {
+        return d;
+    }
+    let d = Arc::new(plant(&s, seed, variation).side(toward, o));
+    if let Ok(mut c) = side_cache().lock() {
+        if c.len() > 4000 {
+            c.clear();
+        }
+        c.insert(key, d.clone());
+    }
+    d
+}
+
 /// A number from a seed and an index, for the plants of a planting.
 pub fn seed_of(seed: u64, index: u64) -> u64 {
     let mut h = rng::Hash::new();
