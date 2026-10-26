@@ -2190,6 +2190,13 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Acero inoxidable", "metal", [192, 194, 194]),
     ("Fundición", "metal", [50, 54, 56]),
     ("Cristal esmerilado", "other", [250, 234, 196]),
+    // The new collections (paquete 1a): contemporary, rustic, industrial
+    // and classic.
+    ("Tela gris", "fabric", [150, 150, 148]),
+    ("Pino viejo", "wood", [178, 132, 84]),
+    ("Lino crudo", "fabric", [222, 208, 184]),
+    ("Cuero coñac", "other", [146, 84, 48]),
+    ("Terciopelo verde botella", "fabric", [44, 82, 64]),
 ];
 
 /// A material of the cosy palette, added to the project if it has none of

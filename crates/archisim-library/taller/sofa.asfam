@@ -2,7 +2,7 @@ family "Sofá (taller)"
   category furniture
   host none
   version 1
-  description "Sofá de cojines de caja con vivos, sobre patas torneadas (modelo del taller, en revisión)"
+  description "Sofá por colecciones: nórdico, mediterráneo, años 50, japandi, contemporáneo, rústico, industrial y clásico (modelo del taller, en revisión)"
   folder "Taller"
 
 type_params
@@ -15,9 +15,10 @@ type_params
   section "Materiales"
     mat material = "Lino arena" label "Tapicería"
     cushion material = "Lino arena" label "Cojines"
-    frame material = "Roble claro" label "Patas"
+    frame material = "Roble claro" label "Madera y patas"
+    metal material = "Metal negro" label "Metal"
   section "Modelo 3D"
-    model3d choice("Contemporáneo de patas") = "Contemporáneo de patas" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
   section "Decoración"
     pillows integer = 2 range 0..4 label "Cojines sueltos"
     pillow  material = "Terciopelo mostaza" label "Cojines sueltos"

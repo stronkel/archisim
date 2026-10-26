@@ -44,6 +44,15 @@ pub struct Soft {
     pub step: f64,
     /// Facets round each edge.
     pub round_steps: usize,
+    /// Buttoned (capitoné): the spacing of the buttons on the big faces
+    /// (metres; 0: none), set in a diamond, with the fabric pleated
+    /// between them.
+    pub tufts: f64,
+    /// How deep each button pulls the fabric in.
+    pub tuft_depth: f64,
+    /// Which of the two big faces are buttoned: the low one, the high one
+    /// (an arm is buttoned inside only, a back on its front).
+    pub tuft_faces: [bool; 2],
 }
 
 impl Soft {
@@ -61,6 +70,9 @@ impl Soft {
             seed: 0,
             step: 0.11,
             round_steps: 4,
+            tufts: 0.0,
+            tuft_depth: 0.0,
+            tuft_faces: [true, true],
         }
     }
 
@@ -173,6 +185,27 @@ impl Soft {
             }
             q[t] -= self.creases * sv[t] * c;
         }
+        // Buttoned: each button pulls the big face in, and the fabric is
+        // pleated along the lines between the buttons (a diamond).
+        let buttoned_side = if sv[t] > 0.0 {
+            self.tuft_faces[1]
+        } else {
+            self.tuft_faces[0]
+        };
+        if self.tufts > 0.0 && self.tuft_depth > 0.0 && sv[t].abs() > 0.5 && buttoned_side {
+            let x = (p[u] - mid[u]) / self.tufts;
+            let y = (p[v] - mid[v]) / (self.tufts * 0.8);
+            // The diamond lattice: buttons where a and b are whole.
+            let (a, b) = (x + y, x - y);
+            let fa = a - a.round();
+            let fb = b - b.round();
+            let button = (-(fa * fa + fb * fb) / 0.09).exp();
+            let pleat = (-(fa * fa) / 0.02).exp().max((-(fb * fb) / 0.02).exp());
+            // Not at the seams: the buttons stop short of the edges.
+            let keep = g(sv[u]).powf(2.0) * g(sv[v]).powf(2.0);
+            let pull = self.tuft_depth * (button + 0.45 * pleat) * keep;
+            q[t] -= pull * sv[t].signum();
+        }
         // Nothing sewn by hand is perfectly regular.
         if self.wobble > 0.0 {
             let n = wobble_at(p, self.seed);
@@ -274,6 +307,86 @@ impl Soft {
     pub fn add(&self, b: &mut Builder, role: &'static str) {
         self.add_faces(b, role, [true; 6]);
         b.soft.insert(role);
+        self.add_buttons(b, role);
+    }
+
+    /// The buttons of a buttoned piece, sitting in the dimples of its two
+    /// big faces.
+    fn add_buttons(&self, b: &mut Builder, role: &'static str) {
+        if self.tufts <= 0.0 || self.tuft_depth <= 0.0 {
+            return;
+        }
+        let t = self.thin();
+        let (u, v) = ((t + 1) % 3, (t + 2) % 3);
+        let size = self.size();
+        let mid = self.mid();
+        let (pu, pv) = (self.tufts, self.tufts * 0.8);
+        // Buttons where x/pu ± y/pv are whole: x = (a+b)/2·pu, y = (a−b)/2·pv.
+        let reach = (size[u] / pu + size[v] / pv).ceil() as i32 + 1;
+        let margin = self.r() + self.tufts * 0.45;
+        for a in -reach..=reach {
+            for bb in -reach..=reach {
+                let x = (a + bb) as f64 / 2.0 * pu;
+                let y = (a - bb) as f64 / 2.0 * pv;
+                if x.abs() > size[u] / 2.0 - margin || y.abs() > size[v] / 2.0 - margin {
+                    continue;
+                }
+                // A seat's underside is never seen.
+                let sides: Vec<f64> = [(-1.0, self.tuft_faces[0]), (1.0, self.tuft_faces[1])]
+                    .into_iter()
+                    .filter(|(sd, on)| *on && !(t == 2 && *sd < 0.0))
+                    .map(|(sd, _)| sd)
+                    .collect();
+                for side in sides {
+                    let mut q = [0.0; 3];
+                    q[t] = if side > 0.0 { self.hi[t] } else { self.lo[t] };
+                    q[u] = mid[u] + x;
+                    q[v] = mid[v] + y;
+                    let (p, n) = self.round(q);
+                    let at = self.shape(p, n);
+                    button(b, role, at, t, side);
+                }
+            }
+        }
+    }
+}
+
+/// A small domed button at `at` on a face looking along axis `t` (`side`
+/// says which way): eight sides, its foot sunk in the fabric.
+fn button(b: &mut Builder, role: &'static str, at: P3, t: usize, side: f64) {
+    let (u, v) = ((t + 1) % 3, (t + 2) % 3);
+    let r = 0.0085;
+    let pt = |b: &mut Builder, rr: f64, a: f64, h: f64| {
+        let mut q = at;
+        q[u] += rr * a.cos();
+        q[v] += rr * a.sin();
+        q[t] += side * h;
+        b.point(q)
+    };
+    let n = 8;
+    let foot: Vec<u32> = (0..n)
+        .map(|k| pt(b, r, TAU * k as f64 / n as f64, -0.004))
+        .collect();
+    let ring: Vec<u32> = (0..n)
+        .map(|k| pt(b, r * 0.75, TAU * k as f64 / n as f64, 0.003))
+        .collect();
+    let top = pt(b, 0.0, 0.0, 0.0045);
+    let bottom = pt(b, 0.0, 0.0, -0.004);
+    // Counter-clockwise from outside whichever way the face looks.
+    let flip = side < 0.0;
+    let tri = |b: &mut Builder, a: u32, c: u32, d: u32| {
+        if flip {
+            b.tri(role, a, d, c);
+        } else {
+            b.tri(role, a, c, d);
+        }
+    };
+    for k in 0..n {
+        let k1 = (k + 1) % n;
+        tri(b, foot[k], foot[k1], ring[k1]);
+        tri(b, foot[k], ring[k1], ring[k]);
+        tri(b, ring[k], ring[k1], top);
+        tri(b, bottom, foot[k1], foot[k]);
     }
 }
 

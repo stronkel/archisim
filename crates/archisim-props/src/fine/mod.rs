@@ -12,6 +12,7 @@ pub mod lamp;
 pub mod plant;
 pub mod shape;
 pub mod sink;
+pub mod sofas;
 pub mod soft;
 
 use crate::build::{Builder, P3};
@@ -20,7 +21,19 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
-    ("fine_sofa", &["Contemporáneo de patas"]),
+    (
+        "fine_sofa",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     ("fine_plant", &["Espatifilo", "Pilea"]),
     ("fine_sink_unit", &["Fregadero de acero"]),
     ("fine_streetlight", &["Columna de fundición"]),
@@ -29,7 +42,16 @@ pub const KINDS: &[(&str, &[&str])] = &[
 /// Makes a workshop model, if `kind` is one.
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
-        "fine_sofa" => sofa(b, p),
+        "fine_sofa" => match p.style() {
+            2 => sofas::mediterranean(b, p),
+            3 => sofas::fifties(b, p),
+            4 => sofas::japandi(b, p),
+            5 => sofas::contemporary(b, p),
+            6 => sofas::rustic(b, p),
+            7 => sofas::industrial(b, p),
+            8 => sofas::classic(b, p),
+            _ => sofa(b, p),
+        },
         "fine_plant" => plant::potted_plant(b, p),
         "fine_sink_unit" => sink::sink_unit(b, p),
         "fine_streetlight" => lamp::streetlight(b, p),
