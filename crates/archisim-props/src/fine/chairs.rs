@@ -268,18 +268,20 @@ pub fn chair(b: &mut Builder, p: &Params) {
             s.crown = 0.012;
             s.welt = 0.004;
             s.add(b, "mat");
+            // The back pad, fixed on the front of the posts and leaning
+            // with them.
+            let (z0, z1) = (seat + 0.05, h - 0.02);
+            let post_y = |z: f64| 0.03 * (1.0 - ((z - z0) / (z1 - z0)).clamp(0.0, 1.0));
             let start = b.mark();
             let mut k = upholstered(
-                [x0 + 0.01, -0.02, seat + 0.14],
-                [-x0 - 0.01, 0.025, h],
+                [x0 + 0.01, r * 0.6, seat + 0.14],
+                [-x0 - 0.01, r * 0.6 + 0.045, h],
                 0.02,
                 56,
             );
             k.crown = 0.01;
             k.add(b, "mat");
-            b.transform_from(start, |q| {
-                [q[0], q[1] - 0.08 * ((q[2] - seat) / (h - seat)), q[2]]
-            });
+            b.transform_from(start, |q| [q[0], q[1] + post_y(q[2]), q[2]]);
         }
         // Rustic: solid square legs, a board seat, slatted back.
         6 => {
@@ -303,8 +305,8 @@ pub fn chair(b: &mut Builder, p: &Params) {
                 let x = x0 + 0.01 + leg + (w - 0.02 - 2.0 * leg) * (k as f64 + 0.5) / 3.0;
                 b.rbox(
                     "frame",
-                    [x - 0.025, 0.03, seat + 0.02],
-                    [x + 0.025, 0.05, h - 0.09],
+                    [x - 0.025, 0.03, seat - 0.005],
+                    [x + 0.025, 0.05, h - 0.085],
                     0.0,
                 );
             }
@@ -337,13 +339,13 @@ pub fn chair(b: &mut Builder, p: &Params) {
                 );
             }
             {
+                // The stretcher runs through the legs where they are at its
+                // height (they lean out towards the foot).
                 let z = 0.16;
-                let pts = [
-                    [x0 + 0.055, d - 0.03, z],
-                    [-x0 - 0.055, d - 0.03, z],
-                    [-x0 - 0.055, 0.04, z],
-                    [x0 + 0.055, 0.04, z],
-                ];
+                let out = 0.035 * (seat - 0.01 - z) / (seat - 0.01);
+                let (xa, xb) = (x0 + 0.04 - out, -x0 - 0.04 + out);
+                let (ya, yb) = (0.06 - out, d - 0.05 + out);
+                let pts = [[xa, yb, z], [xb, yb, z], [xb, ya, z], [xa, ya, z]];
                 super::soft::tube(b, "metal", &pts, true, 0.006, 8);
             }
             b.rbox("metal", [x0, 0.04, seat - 0.012], [-x0, d, seat], 0.008);
@@ -409,20 +411,48 @@ pub fn chair(b: &mut Builder, p: &Params) {
             s.crown = 0.018;
             s.welt = 0.005;
             s.add(b, "mat");
-            // Back posts and the oval medallion.
-            for x in [x0 + 0.03, -x0 - 0.03] {
-                rod(
-                    b,
-                    "frame",
-                    [x, 0.03, seat - 0.01],
-                    [x, 0.02, seat + 0.08],
-                    0.014,
-                );
-            }
+            // The oval medallion, held at its sides by the back posts,
+            // which rise from the back legs and curve in to meet it, and
+            // on a short turned spindle over the seat.
             let (cz, rx, rz) = (
                 seat + 0.08 + (h - seat - 0.08) / 2.0,
                 w / 2.0 - 0.04,
                 (h - seat - 0.1) / 2.0,
+            );
+            for side in [-1.0, 1.0] {
+                let path = curve(
+                    &[
+                        [side * (-x0 - 0.03), 0.03, seat - 0.02],
+                        [side * (-x0 - 0.03), 0.025, seat + 0.06],
+                        [side * (rx + 0.004), 0.02, cz - rz * 0.35],
+                        [side * rx, 0.02, cz],
+                    ],
+                    8,
+                );
+                sweep(
+                    b,
+                    "frame",
+                    &path,
+                    |t| 0.015 - 0.003 * t,
+                    10,
+                    Cap::Flat,
+                    Cap::Round(1.0),
+                );
+            }
+            turned(
+                b,
+                "frame",
+                [0.0, 0.02, seat - 0.01],
+                &[
+                    (0.0, 0.0),
+                    (0.016, 0.0),
+                    (0.01, 0.03),
+                    (0.015, 0.06),
+                    (0.011, cz - rz - seat + 0.02),
+                    (0.0, cz - rz - seat + 0.02),
+                ],
+                12,
+                0.0,
             );
             let ring: Vec<P3> = (0..40)
                 .map(|k| {

@@ -41,8 +41,13 @@ fn pillow(b: &mut Builder, s: &Sizes, y: f64, z: f64) {
         return;
     }
     let size = (s.w * 0.5).clamp(0.34, 0.44);
-    let (sl, cl) = 64f64.to_radians().sin_cos();
-    let yaw: f64 = -0.1;
+    leaning_pillow(b, size, y, z, 64.0, -0.1);
+}
+
+/// A scatter cushion `size` square, its middle at `y`, sitting on `z`,
+/// leaning back `lean` degrees from flat and turned `yaw` radians.
+fn leaning_pillow(b: &mut Builder, size: f64, y: f64, z: f64, lean: f64, yaw: f64) {
+    let (sl, cl) = lean.to_radians().sin_cos();
     let (sy, cy) = yaw.sin_cos();
     knife_pillow(
         b,
@@ -142,7 +147,18 @@ pub fn nordic(b: &mut Builder, p: &Params) {
     seat.welt = 0.005;
     seat.seed = 12;
     seat.add(b, "cushion");
-    pillow(b, &s, c[1] - ri + 0.06, s.seat);
+    // The cushion stands nearly upright in the tub, its back corners
+    // clear of the curved inside of the back.
+    if s.pillows > 0 {
+        let size = (ri * 1.2).clamp(0.3, 0.38);
+        let lean = 76f64;
+        let inside = r - 0.13;
+        let half = size / 2.0;
+        let corner = c[1] - (inside * inside - half * half).max(0.0).sqrt();
+        let top_back = size * lean.to_radians().cos() * 0.5;
+        let y = (corner + top_back).max(c[1] - inside + 0.095) + 0.015;
+        leaning_pillow(b, size, y, s.seat, lean, 0.0);
+    }
 }
 
 /// Mediterranean: a rattan frame — legs, seat ring, arms looping back and

@@ -468,7 +468,8 @@ pub fn contemporary(b: &mut Builder, p: &Params) {
         10.0,
         0.0,
     );
-    scatter(b, &s, -xi0, 0.42, s.seat);
+    // Ahead of the back cushions, which bulge forwards.
+    scatter(b, &s, -xi0, 0.47, s.seat);
 }
 
 /// Rustic: a frame of solid wood, square posts and thick rails, slats in

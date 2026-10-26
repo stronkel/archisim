@@ -232,7 +232,7 @@ pub fn dining(b: &mut Builder, p: &Params) {
             );
         }
         // Industrial: reclaimed planks on two rectangular frames of black
-        // square tube and a long rail.
+        // square tube and a long rail under the top joining them.
         7 => {
             let t = 0.045;
             planks(b, "top", x0, -x0, 0.0, d, h - t, h, 3);
@@ -252,8 +252,8 @@ pub fn dining(b: &mut Builder, p: &Params) {
             super::shape::bar(
                 b,
                 "metal",
-                [x0 + 0.1, c[1], 0.2],
-                [-x0 - 0.1, c[1], 0.2],
+                [x0 + 0.1, c[1], h - t - 0.015],
+                [-x0 - 0.1, c[1], h - t - 0.015],
                 0.03,
                 [0.0, 1.0, 0.0],
             );
