@@ -773,13 +773,28 @@ mod tests {
         )
         .unwrap();
         assert_eq!(m.columns().count(), 3);
-        assert!(transform(
+        // Mirrored across x = 0: the column goes to the other side (they
+        // were refused before E14); scaling is still refused.
+        transform(
             &mut m,
             &sel,
             &Transform::mirror(p(0.0, 0.0), p(0.0, 1.0)),
-            false
+            false,
         )
-        .is_err());
+        .unwrap();
+        let col = sel
+            .iter()
+            .find_map(|e| match e {
+                Element::Column(id) => m.column(*id),
+                _ => None,
+            })
+            .unwrap();
+        assert!(
+            col.position.distance(p(1.0, 3.0)) < 1e-9,
+            "{:?}",
+            col.position
+        );
+        assert!(transform(&mut m, &sel, &Transform::scale(p(0.0, 0.0), 2.0), false).is_err());
     }
 
     #[test]
