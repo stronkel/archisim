@@ -161,6 +161,39 @@ const GEOMETRY: &[Order] = &[
     },
 ];
 
+/// Revit's orders for building elements, picked one by one (they need no
+/// selection beforehand).
+const BUILDING: &[Order] = &[
+    Order {
+        command: "ALINEACARA",
+        mark: Mark::Glyph(Glyph::Align),
+        name: "Alinear caras",
+        key: "ALC",
+        hint: "Como Alinear de Revit: la línea de referencia (cara o eje de muro, eje, línea…) y después la cara del elemento que se lleva a ella",
+    },
+    Order {
+        command: "ESQUINA",
+        mark: Mark::Icon(Icon::Trim),
+        name: "Esquina",
+        key: "ESQ",
+        hint: "Recortar/extender para formar esquina (TR de Revit): dos muros, por la parte que se queda",
+    },
+    Order {
+        command: "LIMITE1",
+        mark: Mark::Icon(Icon::Extend),
+        name: "Hasta límite",
+        key: "LIM1",
+        hint: "Recortar/extender un elemento: el límite (muro, eje, plano de referencia o línea) y el muro, por la parte que se queda",
+    },
+    Order {
+        command: "LIMITE",
+        mark: Mark::Icon(Icon::Extend),
+        name: "Varios al límite",
+        key: "LIM",
+        hint: "Recortar/extender varios elementos: el límite y después todos los muros que lleguen a él (Intro para terminar)",
+    },
+];
+
 /// The name of one element, for «Modificar · Muro (1)».
 pub(super) fn element_name(e: &Element) -> &'static str {
     match e {
@@ -222,8 +255,13 @@ fn order_applies(command: &str, sel: &[Element]) -> bool {
     let drafts_only = sel.iter().all(|e| matches!(e, Element::Draft(_)));
     match command {
         // A door or window lives in its wall: it is not scaled.
-        "ESCALA" => !sel.is_empty() && !sel.iter().any(|e| matches!(e, Element::Opening(_))),
-        "DESPLAZA" | "COPIA" | "GIRA" | "SIMETRIA" | "MATRIZ" | "ALINEAR" => !sel.is_empty(),
+        "ESCALA" => !sel.is_empty() && sel.iter().all(crate::xform::scales),
+        "DESPLAZA" | "COPIA" | "GIRA" | "MATRIZ" | "ALINEAR" => !sel.is_empty(),
+        // Mirrored: what has a plan to mirror (doors and windows go with
+        // their wall); the rest of the phase-2 elements are not mirrored.
+        "SIMETRIA" => !sel.is_empty() && sel.iter().all(crate::xform::mirrors),
+        // Picked one by one, as in Revit: no selection needed.
+        "ALINEACARA" | "ESQUINA" | "LIMITE1" | "LIMITE" => true,
         // The orders of the 2D geometry: on lines, arcs and polylines.
         _ => !sel.is_empty() && drafts_only,
     }
@@ -1017,11 +1055,11 @@ impl ArchiSimApp {
             bar_title(ui, &title, &p);
             let named = names_fit(
                 ui,
-                TRANSFORM.iter().chain(GEOMETRY).map(|o| o.name),
+                TRANSFORM.iter().chain(GEOMETRY).chain(BUILDING).map(|o| o.name),
                 ui.available_width() - 11.0,
             );
             let mut run = None;
-            for (i, group) in [TRANSFORM, GEOMETRY].iter().enumerate() {
+            for (i, group) in [TRANSFORM, GEOMETRY, BUILDING].iter().enumerate() {
                 if i > 0 {
                     bar_separator(ui, &p);
                 }
@@ -1096,7 +1134,12 @@ impl ArchiSimApp {
             return;
         }
         let name = self.cad.as_ref().map(|c| c.name()).unwrap_or_default();
-        let title = match TRANSFORM.iter().chain(GEOMETRY).find(|o| o.command == name) {
+        let title = match TRANSFORM
+            .iter()
+            .chain(GEOMETRY)
+            .chain(BUILDING)
+            .find(|o| o.command == name)
+        {
             Some(o) => format!("Modificar · {}", o.name),
             None => super::toolbox::order_name(name).unwrap_or(name).to_string(),
         };

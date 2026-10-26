@@ -7373,3 +7373,153 @@ fn a_tree_is_chosen_from_a_library_dxf() {
     ));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A straight wall drawn through the model, with the first wall type.
+fn add_test_wall(h: &mut Harness, a: Point2, b: Point2) -> archisim_core::WallId {
+    let level = h.app.ed.level;
+    let wt = h.app.ed.model().wall_types().next().unwrap().id;
+    h.app
+        .ed
+        .transact("Muro", |m| {
+            m.add_wall(archisim_core::NewWall {
+                wall_type: wt,
+                level,
+                start: a,
+                end: b,
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap()
+}
+
+/// Revit's «Recortar/extender para formar esquina»: two walls that do not
+/// meet are extended to their corner; two that cross are cut back to it,
+/// each keeping the part where it was picked.
+#[test]
+fn walls_are_trimmed_and_extended_to_a_corner() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let a = add_test_wall(&mut h, p(0.0, 0.0), p(4.0, 0.0));
+    let b = add_test_wall(&mut h, p(5.0, 1.0), p(5.0, 4.0));
+    command(&mut h, "esq");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(5.0, 3.0));
+    let m = h.model();
+    assert!(m.wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
+    assert!(m.wall(b).unwrap().start.approx_eq(p(5.0, 0.0)));
+    assert!(m.wall(b).unwrap().end.approx_eq(p(5.0, 4.0)));
+    // Still running: two crossing walls, cut back to their corner.
+    let c = add_test_wall(&mut h, p(0.0, 8.0), p(6.0, 8.0));
+    let d = add_test_wall(&mut h, p(4.0, 6.0), p(4.0, 11.0));
+    h.click_at(p(1.0, 8.0));
+    h.click_at(p(4.0, 10.0));
+    h.key(Key::Enter);
+    let m = h.model();
+    assert!(m.wall(c).unwrap().start.approx_eq(p(0.0, 8.0)));
+    assert!(m.wall(c).unwrap().end.approx_eq(p(4.0, 8.0)));
+    assert!(m.wall(d).unwrap().start.approx_eq(p(4.0, 8.0)));
+    assert!(m.wall(d).unwrap().end.approx_eq(p(4.0, 11.0)));
+}
+
+/// «Recortar/extender varios elementos»: every wall picked goes to the
+/// location line of the limit wall, short ones extended and long ones cut.
+#[test]
+fn walls_are_trimmed_and_extended_to_a_limit() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let limit = add_test_wall(&mut h, p(0.0, 5.0), p(8.0, 5.0));
+    let short = add_test_wall(&mut h, p(1.0, 0.0), p(1.0, 3.0));
+    let long = add_test_wall(&mut h, p(3.0, 0.0), p(3.0, 7.0));
+    command(&mut h, "lim");
+    h.click_at(p(6.0, 5.0));
+    h.click_at(p(1.0, 1.0));
+    h.click_at(p(3.0, 1.0));
+    h.key(Key::Enter);
+    let m = h.model();
+    assert!(m.wall(short).unwrap().end.approx_eq(p(1.0, 5.0)));
+    assert!(m.wall(long).unwrap().end.approx_eq(p(3.0, 5.0)));
+    assert!(m.wall(limit).unwrap().start.approx_eq(p(0.0, 5.0)));
+}
+
+/// Revit's «Alinear»: the face of one wall brought onto the face of
+/// another, parallel to it.
+#[test]
+fn a_wall_face_is_aligned_to_another() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let r = add_test_wall(&mut h, p(0.0, 0.0), p(6.0, 0.0));
+    let w = add_test_wall(&mut h, p(0.0, 3.0), p(6.0, 3.0));
+    let t = {
+        let m = h.model();
+        m.wall_type(m.wall(r).unwrap().wall_type)
+            .unwrap()
+            .thickness()
+    };
+    command(&mut h, "alc");
+    // The north face of the first wall, then the south face of the other.
+    h.click_at(p(3.0, t / 2.0 - 0.01));
+    h.click_at(p(3.0, 3.0 - t / 2.0 + 0.01));
+    h.key(Key::Enter);
+    let y = h.model().wall(w).unwrap().start.y;
+    assert!((y - t).abs() < 1e-6, "{y} {t}");
+}
+
+/// Objects mirrored with SIMETRIA go to the mirrored place, facing the
+/// mirrored way; in plan they give their corners as snap points.
+#[test]
+fn objects_mirror_and_snap_to_their_corners() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Armario 120")
+        .expect("the library's wardrobe")
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Armario", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    // A corner of its box is a snap point.
+    let corner = h.model().object_outline(id)[0];
+    let s = crate::snap::snap_filtered(
+        h.model(),
+        level,
+        corner + archisim_core::Vec2::new(0.02, 0.01),
+        0.1,
+        &[],
+        &Default::default(),
+        crate::snap::SnapFilter::default(),
+        &[],
+    );
+    assert!(s.point.approx_eq(corner), "{s:?}");
+    // Mirrored across x = 5: the middle goes from x to 10 − x and the
+    // front, facing +y, still faces +y.
+    let before = crate::drag::object_middle(h.model(), id).unwrap();
+    let mut m = h.model().clone();
+    let sel = [Element::Object(id)].into_iter().collect();
+    crate::xform::transform(
+        &mut m,
+        &sel,
+        &archisim_draft::Transform::mirror(p(5.0, 0.0), p(5.0, 1.0)),
+        false,
+    )
+    .unwrap();
+    let after = crate::drag::object_middle(&m, id).unwrap();
+    assert!(after.approx_eq(p(10.0 - before.x, before.y)), "{after:?}");
+    let r = m.object(id).unwrap().rotation;
+    assert!(r.sin().abs() < 1e-9 && r.cos() > 0.0, "{r}");
+}

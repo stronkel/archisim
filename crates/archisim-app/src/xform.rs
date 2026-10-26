@@ -372,10 +372,21 @@ fn transform_phase_2(
             Ok(items)
         };
     }
-    if t.is_mirror() || (t.factor() - 1.0).abs() > 1e-9 {
+    if (t.factor() - 1.0).abs() > 1e-9 || (t.is_mirror() && !items.iter().all(mirrors)) {
         return Err(ModelError::InvalidShape(
-            "columns, beams, footings, grid lines, roofs, stairs, curtain walls, railings, objects, terrains and sections can be moved, copied or rotated, not scaled or mirrored",
+            "columns, beams, footings, grid lines, roofs, stairs, curtain walls, railings, objects, terrains and sections can be moved, copied or rotated, not scaled; only objects, columns, beams, railings, grid lines and reference planes are mirrored",
         ));
+    }
+    if t.is_mirror() {
+        let targets = if copy {
+            crate::drag::copy(model, &items, Vec2::new(0.0, 0.0))?
+        } else {
+            items
+        };
+        for e in &targets {
+            mirror_one(model, *e, t)?;
+        }
+        return Ok(targets);
     }
     // A turn: the copies are made in place and then turned.
     let targets = if copy {
@@ -449,6 +460,111 @@ fn transform_phase_2(
         }
     }
     Ok(targets)
+}
+
+/// Whether a selected element can be scaled: the elements of phase 2
+/// (columns, objects, stairs…) keep their size, and a door or window lives
+/// in its wall.
+pub fn scales(e: &Element) -> bool {
+    !matches!(
+        e,
+        Element::Opening(_)
+            | Element::Column(_)
+            | Element::Beam(_)
+            | Element::Section(_)
+            | Element::Roof(_)
+            | Element::Dormer(..)
+            | Element::Stair(_)
+            | Element::Terrain(_)
+            | Element::CurtainWall(_)
+            | Element::Railing(_)
+            | Element::Object(_)
+            | Element::Footing(_)
+            | Element::Grid(_)
+            | Element::RefPlane(_)
+            | Element::Module(_)
+    )
+}
+
+/// Whether a selected element can be mirrored. Walls, slabs, 2D drawing
+/// and the elements of the first phase are mirrored exactly; of the
+/// rest, those with a plan that a mirror keeps: objects and columns (put in
+/// their mirrored place, turned to face the mirrored way: they are not
+/// drawn backwards), beams, railings, grid lines and reference planes.
+pub fn mirrors(e: &Element) -> bool {
+    !matches!(
+        e,
+        Element::Section(_)
+            | Element::Roof(_)
+            | Element::Dormer(..)
+            | Element::Stair(_)
+            | Element::Terrain(_)
+            | Element::CurtainWall(_)
+            | Element::Footing(_)
+            | Element::Module(_)
+    )
+}
+
+/// One element of phase 2 mirrored by `t`. An object or column keeps its
+/// shape (a sofa is not built backwards): its middle goes to the mirrored
+/// place and it turns so that its front faces the mirrored way.
+fn mirror_one(model: &mut Model, e: Element, t: &Transform) -> Result<(), ModelError> {
+    use archisim_core::{Point2, Vec2};
+    // The new turn and insertion point of something placed at `position`,
+    // turned `rotation`, whose middle is `middle`.
+    let place = |position: Point2, rotation: f64, middle: Point2| -> (Point2, f64) {
+        let front = Vec2::new(-rotation.sin(), rotation.cos());
+        let f = t.linear(front);
+        let turned = f.y.atan2(f.x) - std::f64::consts::FRAC_PI_2;
+        let (s, c) = rotation.sin_cos();
+        let off = middle - position;
+        let local = Vec2::new(off.x * c + off.y * s, -off.x * s + off.y * c);
+        let (s2, c2) = turned.sin_cos();
+        let back = Vec2::new(local.x * c2 - local.y * s2, local.x * s2 + local.y * c2);
+        (t.apply(middle) - back, turned)
+    };
+    match e {
+        Element::Object(id) => {
+            let Some(o) = model.object(id) else {
+                return Ok(());
+            };
+            let middle = crate::drag::object_middle(model, id).unwrap_or(o.position);
+            let (p, r) = place(o.position, o.rotation, middle);
+            model.edit_object(id, |o| {
+                o.position = p;
+                o.rotation = r;
+            })?;
+        }
+        Element::Column(id) => {
+            let Some(c) = model.column(id) else {
+                return Ok(());
+            };
+            let (p, r) = place(c.position, c.rotation, c.position);
+            model.edit_column(id, |c| {
+                c.position = p;
+                c.rotation = r;
+            })?;
+        }
+        Element::Beam(id) => model.edit_beam(id, |b| {
+            b.start = t.apply(b.start);
+            b.end = t.apply(b.end);
+        })?,
+        Element::Railing(id) => model.edit_railing(id, |r| {
+            for p in r.path.iter_mut() {
+                *p = t.apply(*p);
+            }
+        })?,
+        Element::Grid(id) => model.edit_grid(id, |g| {
+            g.start = t.apply(g.start);
+            g.end = t.apply(g.end);
+        })?,
+        Element::RefPlane(id) => model.edit_ref_plane(id, |r| {
+            r.start = t.apply(r.start);
+            r.end = t.apply(r.end);
+        })?,
+        _ => {}
+    }
+    Ok(())
 }
 
 /// A room or a tag moved, turned or copied (`walls_too`: with walls).

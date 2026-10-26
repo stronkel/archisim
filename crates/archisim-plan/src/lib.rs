@@ -2987,6 +2987,7 @@ mod tests {
                 panel_material: glass,
             })
             .unwrap();
+        show_plan_swing(&mut m, window);
         m.add_opening(archisim_core::NewOpening {
             opening_type: window,
             wall,
@@ -3108,6 +3109,9 @@ mod tests {
                         panel_material: glass,
                     })
                     .unwrap();
+                // The old symbols drew the windows' swing, continuous; now
+                // it is hidden unless the type asks for it (D28).
+                show_plan_swing(&mut m, t);
                 let is_door = matches!(kind, OpeningKind::Door(_));
                 for opens_to in [WallSide::Interior, WallSide::Exterior] {
                     for hand in [Hand::Left, Hand::Right] {
@@ -3146,6 +3150,93 @@ mod tests {
             }
         }
         assert_eq!(compared, 2 * 2 * 2 * 2 * (3 + 4 * 2));
+    }
+
+    /// Draws a window type's swing in plan, continuous, as before D28 (doors
+    /// have no such parameter and are left as they are).
+    fn show_plan_swing(m: &mut Model, t: archisim_core::OpeningTypeId) {
+        let ty = m.opening_type(t).unwrap();
+        if !ty.values.contains_key("swing_in_plan") {
+            return;
+        }
+        let mut values = ty.values.clone();
+        values.insert("swing_in_plan".into(), archisim_core::Value::Bool(true));
+        values.insert(
+            "swing_line".into(),
+            archisim_core::Value::Text("continuous".into()),
+        );
+        let family = ty.family;
+        m.edit_family_type(t, family, values).unwrap();
+    }
+
+    /// Windows hide their swing in plan unless the type asks for it, and
+    /// then draw it dashed (D28).
+    #[test]
+    fn window_swing_in_plan_only_when_asked_and_dashed() {
+        let mut m = Model::new("Giro");
+        let lvl = m.add_level("PB", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], CutPattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "Muro",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let wall = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(5.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let window = m
+            .add_opening_type(archisim_core::NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.2,
+                height: 1.2,
+                frame_width: 0.06,
+                frame_depth: 0.07,
+                frame_material: brick,
+                panel_material: glass,
+            })
+            .unwrap();
+        m.add_opening(archisim_core::NewOpening {
+            opening_type: window,
+            wall,
+            along: 2.5,
+            sill: 0.9,
+            opens_to: archisim_core::WallSide::Interior,
+            hand: archisim_core::Hand::Left,
+            setback: None,
+        })
+        .unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        assert_eq!(svg.matches(" A0.54,0.54 ").count(), 0, "hidden by default");
+        let ty = m.opening_type(window).unwrap();
+        let mut values = ty.values.clone();
+        values.insert("swing_in_plan".into(), archisim_core::Value::Bool(true));
+        let family = ty.family;
+        m.edit_family_type(window, family, values).unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        let arcs: Vec<&str> = svg.lines().filter(|l| l.contains(" A0.54,0.54 ")).collect();
+        assert_eq!(arcs.len(), 2);
+        assert!(
+            arcs.iter().all(|l| l.contains("stroke-dasharray")),
+            "{arcs:?}"
+        );
     }
 
     /// Rasterises two symbol drawings around the opening and compares them.

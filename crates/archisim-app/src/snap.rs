@@ -300,6 +300,27 @@ pub fn snap_filtered<G: Geo + ?Sized>(
             }
         }
     }
+    // Objects (furniture, fittings, street furniture…): the corners, the
+    // middles of the sides and the edges of their box in plan, and their
+    // insertion point, to move, copy or mirror them from an exact point.
+    // Plants only give their trunk: the box of a crown means nothing. Only
+    // those near the cursor are measured.
+    for o in model.objects_on_level(level) {
+        if skip.contains(&Element::Object(o.id)) || o.position.distance(cursor) > 12.0 + tolerance {
+            continue;
+        }
+        points.push((o.position, SnapKind::Node));
+        if model.plant_look(o.id).is_some() {
+            continue;
+        }
+        let outline = model.object_outline(o.id);
+        if outline.len() >= 3 {
+            outline_snaps(&outline, &mut points, &mut edges);
+            if let Some(c) = crate::drag::object_middle(model, o.id) {
+                points.push((c, SnapKind::Centre));
+            }
+        }
+    }
     for b in model.beams_on_level(level) {
         if skip.contains(&Element::Beam(b.id)) {
             continue;

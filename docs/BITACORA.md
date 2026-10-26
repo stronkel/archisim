@@ -6,6 +6,34 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (5) · v0.72: Modificar como Revit y anclajes de los objetos (E14, E15)
+
+Rama `bloque/e14-modificar`, con pull request para Antonio. Sin cambios de formato `.archisim` ni de IFC; la familia Ventana practicable sube a la versión 8. Antonio dio el visto bueno a E1 (unido a `main` como v0.71, #77) y respondió D25–D28.
+
+**Hecho**
+- **Cuatro órdenes nuevas en Modificar**, en un grupo propio al final de la barra (no hace falta seleccionar antes, como en Revit):
+  - **Alinear caras** (`ALC`): la línea de referencia (cara o eje de un muro, un eje, un plano de referencia, una línea 2D, el canto de cualquier cosa) y después la cara del elemento que se lleva a ella. Se mueve en perpendicular, como al arrastrarlo: los muros unidos se alargan para seguirlo.
+  - **Esquina** (`ESQ`, la TR de Revit): dos muros, cada uno por la parte que se queda; se alargan o se recortan hasta cerrar la esquina. Sigue activa para la siguiente esquina.
+  - **Hasta límite** (`LIM1`) y **Varios al límite** (`LIM`): el límite (eje de un muro, eje, plano de referencia o línea) y después el muro o los muros, por la parte que se queda.
+- **Simetría** ya vale para objetos, pilares, vigas, barandillas, ejes y planos de referencia. Un mueble va a su sitio simétrico, girado para mirar al lado simétrico (no se construye «al revés»). **Escala** se apaga cuando lo seleccionado no se puede escalar, en lugar de fallar.
+- **Puntos de anclaje de los objetos en planta**: las esquinas, los puntos medios de los lados, las aristas y el centro de la caja de cada objeto, y su punto de inserción, son puntos de forzado. Valen para arrastrar, Mover, Copiar, Girar, Simetría y Matriz desde una esquina exacta. Los árboles solo dan su tronco.
+- **D28**: el giro de las hojas de las ventanas no se dibuja en planta salvo que el tipo lo pida («Giro de las hojas en planta»), y entonces va con guiones.
+- Lo de los cubos en el taller: la planta, el fregadero y la farola nuevos están en la rama `bloque/taller-2` de la otra conversación; una versión sin esa rama no tiene esos modelos y los dibuja como cajas. No se ha perdido nada.
+
+**Pendiente**
+- E15 en alzado, sección y 3D: hoy en esas vistas no se mueve con puntos de forzado (en 3D se arrastra sobre el suelo; en alzado y sección no se edita). Va con E7 (vistas de dibujo) o en un bloque propio, como diga Antonio.
+- Recortar y extender muros curvos.
+
+**Qué debe probar Antonio**
+1. Descarga la versión del pull request y abre la demo. En proyectos tuyos, **Biblioteca → Actualizar familias**.
+2. Dibuja dos muros que no se toquen, en ángulo. Barra de arriba → **Esquina**: pincha el primero y el segundo; la esquina se cierra. Haz lo mismo con dos muros que se cruzan, pinchando la parte que quieres conservar.
+3. Un muro largo como límite y tres tabiques que no llegan o que se pasan: **Varios al límite** → pincha el muro largo y después cada tabique; Intro.
+4. **Alinear caras**: pincha la cara de un muro y después la cara paralela de otro muro: se coloca a haces. Prueba también con un mueble contra la cara de un muro.
+5. Coloca un mueble y empieza un Mover: al acercarte a sus esquinas deben salir los forzados. Haz una **Simetría** de un mueble: debe quedar en el lado simétrico mirando hacia el otro lado.
+6. Ventanas: en planta, sin giro. Editar tipo → Representación → «Giro de las hojas en planta»: aparece a guiones.
+
+---
+
 ## 2026-10-26 (4) · v0.71: arreglos rápidos de la lista del 26/10/2026 (E1)
 
 Rama `bloque/d1-arreglos`, con pull request para Antonio. Sin cambios de formato `.archisim` ni de IFC; cinco familias de puertas y ventanas suben de versión. Antonio entregó el 26/10/2026 una lista larga de mejoras; está contrastada con lo que ya hay y ordenada en bloques E1–E13 en `docs/HOJA_DE_RUTA.md` §10, con cuatro decisiones nuevas (D25–D28). Este bloque hace lo rápido.
