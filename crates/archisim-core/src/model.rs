@@ -244,6 +244,11 @@ pub struct Wall {
     pub base_offset: f64,
     /// Where the top of the wall is: a height of its own, or a level.
     pub top: WallTop,
+    /// Whether each end (start, end) may join other walls: Revit's
+    /// «Permitir unión» / «No permitir unión». A disallowed end stays a
+    /// free end, square, even touching another wall, and neither wall
+    /// mitres nor tees into the other there.
+    pub allow_join: [bool; 2],
 }
 
 /// The top constraint of a wall (Revit's "Restricción superior",
@@ -259,6 +264,18 @@ pub enum WallTop {
 }
 
 impl Wall {
+    /// Whether the end at `p` (its start or its end) may join other
+    /// walls. A point that is neither end joins as before.
+    pub fn joins_at(&self, p: Point2) -> bool {
+        if self.start.approx_eq(p) {
+            self.allow_join[0]
+        } else if self.end.approx_eq(p) {
+            self.allow_join[1]
+        } else {
+            true
+        }
+    }
+
     /// Length of the drawn line (along the arc for a curved wall).
     pub fn length(&self) -> f64 {
         match self.arc() {
@@ -1970,6 +1987,7 @@ impl Model {
             height,
             base_offset: spec.base_offset,
             top: spec.top,
+            allow_join: [true, true],
         };
         self.walls.insert(id, wall);
         self.stamp_phase(id.0);
@@ -2027,6 +2045,7 @@ impl Model {
                 height: spec.height,
                 base_offset: spec.base_offset,
                 top: spec.top,
+                allow_join: [true, true],
             };
             let (ext, int) = probe.face_offsets(t);
             let tight = arc.radius_at(ext).min(arc.radius_at(int)) < MIN_INNER_RADIUS;
@@ -2346,6 +2365,17 @@ impl Model {
         reference: ReferenceLine,
     ) -> Result<(), ModelError> {
         self.edit_wall(id, |w| w.reference = reference)
+    }
+
+    /// Revit's «Permitir unión» / «No permitir unión» at one end of a wall
+    /// (`start`: its start, otherwise its end).
+    pub fn set_wall_join(
+        &mut self,
+        id: WallId,
+        start: bool,
+        allow: bool,
+    ) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| w.allow_join[if start { 0 } else { 1 }] = allow)
     }
 
     /// Removes a wall together with the doors and windows it hosts, as Revit
@@ -3536,6 +3566,8 @@ impl Model {
                 && o.level == w.level
                 && !o.is_curved()
                 && (o.start.approx_eq(p) || o.end.approx_eq(p))
+                && w.joins_at(p)
+                && o.joins_at(p)
         });
         let Some(o) = other else {
             return Some(fallback);

@@ -1316,6 +1316,32 @@ impl ArchiSimApp {
                     }
                 },
             );
+            // Revit's «Permitir unión» at each end (also with the right
+            // click on an end).
+            for (i, label) in [(0, "Unión al inicio"), (1, "Unión al final")] {
+                row(
+                    ui,
+                    label,
+                    "Apagada: ese extremo queda libre, cuadrado, aunque toque otro muro (No permitir unión)",
+                    |ui, _| {
+                        let mut on = w.allow_join[i];
+                        ui.switch(&mut on, "");
+                        if on != w.allow_join[i] {
+                            let r = self
+                                .ed
+                                .transact("Unión de muros", |m| m.set_wall_join(id, i == 0, on));
+                            self.report(
+                                r,
+                                if on {
+                                    "Unión permitida."
+                                } else {
+                                    "Unión no permitida: el extremo queda libre."
+                                },
+                            );
+                        }
+                    },
+                );
+            }
         });
         group(ui, "wall-dimensions", "Dimensiones", |ui| {
             row(

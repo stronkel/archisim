@@ -7569,7 +7569,7 @@ fn a_corner_is_undone_while_the_order_runs() {
     assert!(h.model().wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
     // A button of the bar with the keyboard focus, as after clicking it.
     h.ctx
-        .memory_mut(|m| m.request_focus(egui::Id::new("boton-esquina")));
+        .memory_mut(|m| m.request_focus(eframe::egui::Id::unique("boton-esquina")));
     h.set_modifiers(Modifiers::COMMAND);
     h.key(Key::Z);
     h.set_modifiers(Modifiers::NONE);
@@ -7582,4 +7582,33 @@ fn a_corner_is_undone_while_the_order_runs() {
     command(&mut h, "u");
     assert!(h.model().wall(a).unwrap().end.approx_eq(p(4.0, 0.0)));
     assert!(h.app.cad_prompt().is_some(), "Esquina goes on");
+}
+
+/// Revit's «No permitir unión»: two walls meeting in an L stay mitred
+/// until one end may not join; then both ends are square and moving one
+/// wall leaves the other where it is. The right-click menu offers it near
+/// the end.
+#[test]
+fn a_wall_end_that_may_not_join() {
+    let mut h = Harness::new(Editor::new_project());
+    let a = add_test_wall(&mut h, p(0.0, 0.0), p(4.0, 0.0));
+    let b = add_test_wall(&mut h, p(4.0, 0.0), p(4.0, 3.0));
+    let cut = |h: &Harness, id| archisim_geom::wall_geometry(h.model(), id).unwrap();
+    assert!(cut(&h, a).end_cut.is_mitre());
+    let near = super::context_menu::wall_end_near(h.model(), a, p(3.6, 0.1));
+    assert_eq!(near, Some((false, true)));
+    h.app
+        .ed
+        .transact("Unión", |m| m.set_wall_join(a, false, false))
+        .unwrap();
+    assert!(matches!(cut(&h, a).end_cut, archisim_geom::EndCut::Square));
+    assert!(matches!(
+        cut(&h, b).start_cut,
+        archisim_geom::EndCut::Square
+    ));
+    // Moving the first wall north: the second one does not follow.
+    let sel = [Element::Wall(a)].into_iter().collect();
+    let mut m = h.model().clone();
+    crate::drag::move_selection(&mut m, &sel, archisim_core::Vec2::new(0.0, 1.0)).unwrap();
+    assert!(m.wall(b).unwrap().start.approx_eq(p(4.0, 0.0)));
 }

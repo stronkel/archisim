@@ -2305,6 +2305,18 @@ pub(crate) struct Wall {
     /// own height.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top: Option<WallTop>,
+    /// Whether the start and the end may join other walls (version 40,
+    /// Revit's «Permitir unión»). Absent: both may.
+    #[serde(default = "both_join", skip_serializing_if = "joins_both")]
+    pub allow_join: [bool; 2],
+}
+
+fn both_join() -> [bool; 2] {
+    [true, true]
+}
+
+fn joins_both(v: &[bool; 2]) -> bool {
+    v[0] && v[1]
 }
 
 /// A wall's top level and the offset from it (version 4).
@@ -2543,6 +2555,7 @@ impl ProjectFile {
                     },
                     height: w.height,
                     base_offset: w.base_offset,
+                    allow_join: w.allow_join,
                     top: match w.top {
                         core::WallTop::Unconnected => None,
                         core::WallTop::Level { level, offset } => Some(WallTop {
@@ -3756,6 +3769,7 @@ impl ProjectFile {
                 },
                 height: w.height,
                 base_offset: w.base_offset,
+                allow_join: w.allow_join,
                 top: match w.top {
                     None => core::WallTop::Unconnected,
                     Some(t) => core::WallTop::Level {

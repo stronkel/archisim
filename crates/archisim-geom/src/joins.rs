@@ -149,6 +149,9 @@ pub fn tee_end_in(idx: &WallIndex, wall: &Wall, at_start: bool) -> Option<TeeEnd
     if wall.is_curved() {
         return None;
     }
+    if !wall.allow_join[if at_start { 0 } else { 1 }] {
+        return None;
+    }
     let p = if at_start { wall.start } else { wall.end };
     // Ends shared with another wall are corners, not T-junctions.
     let shared = idx.at_end(wall.level, p).iter().any(|o| o.id != wall.id);

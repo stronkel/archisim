@@ -870,8 +870,12 @@ fn joined_at(model: &Model, wall: WallId, start: bool) -> Vec<(WallId, bool)> {
     };
     let p = if start { w.start } else { w.end };
     let mut v = vec![(wall, start)];
+    // An end that may not join drags alone.
+    if !w.joins_at(p) {
+        return v;
+    }
     for o in model.walls_on_level(w.level) {
-        if o.id == wall {
+        if o.id == wall || !o.joins_at(p) {
             continue;
         }
         if o.start.approx_eq(p) {
@@ -1440,11 +1444,19 @@ fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2,
         }
         Curve::Line(Line::new(p, axis)).intersect_near(&c, p + d)
     };
-    let follow = |p: Point2, axis: Option<Point2>| -> Option<Point2> {
+    // `joins`: whether the neighbour's end may join; a disallowed end (on
+    // either wall) stays where it is.
+    let follow = |p: Point2, axis: Option<Point2>, joins: bool| -> Option<Point2> {
+        if !joins {
+            return None;
+        }
         if let Some(h) = hosts
             .iter()
             .find(|h| h.wall.start.approx_eq(p) || h.wall.end.approx_eq(p))
         {
+            if !h.wall.joins_at(p) {
+                return None;
+            }
             return Some(
                 axis.and_then(|a| slide(shifted(h, p), p, a))
                     .unwrap_or(p + d),
@@ -1463,8 +1475,8 @@ fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2,
             // A curved wall has no axis to slide along: only its joined
             // ends follow.
             let axis = (!w.is_curved()).then(|| w.end - w.start);
-            let s = follow(w.start, axis);
-            let e = follow(w.end, axis);
+            let s = follow(w.start, axis, w.allow_join[0]);
+            let e = follow(w.end, axis, w.allow_join[1]);
             (s.is_some() || e.is_some()).then(|| (w.id, s.unwrap_or(w.start), e.unwrap_or(w.end)))
         })
         .collect()

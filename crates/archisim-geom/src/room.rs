@@ -625,6 +625,7 @@ pub fn wall_signatures(model: &Model) -> std::collections::BTreeMap<LevelId, u64
                 v.to_bits().hash(&mut h);
             }
             format!("{:?}", w.reference).hash(&mut h);
+            w.allow_join.hash(&mut h);
             if let Some(t) = model.wall_type(w.wall_type) {
                 t.thickness().to_bits().hash(&mut h);
             }
