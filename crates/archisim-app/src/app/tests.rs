@@ -1392,6 +1392,33 @@ fn disciplines_keys_and_command_search() {
     assert_eq!(h.model().walls().count(), 4);
 }
 
+/// The Maqueta never greys a discipline: entering it with Structure or
+/// Services active, or taking a structure tool inside it, keeps the whole
+/// building in colour (it has no control to change the discipline).
+#[test]
+fn the_maquette_is_never_greyed_by_discipline() {
+    use super::toolbox::Discipline;
+    use archisim_core::{DisciplineFocus, ElementDiscipline};
+    let mut h = Harness::new(Editor::new_project());
+    h.app.set_discipline(Discipline::Structure);
+    assert_eq!(
+        h.app.screen_focus(),
+        DisciplineFocus::Only(ElementDiscipline::Structure)
+    );
+    h.app.set_maquette(true);
+    h.frame();
+    assert_eq!(h.app.screen_focus(), DisciplineFocus::None);
+    h.app.set_discipline(Discipline::Services);
+    h.frame();
+    assert_eq!(h.app.screen_focus(), DisciplineFocus::None);
+    // Back in Técnica, the discipline greys again.
+    h.app.set_maquette(false);
+    assert_eq!(
+        h.app.screen_focus(),
+        DisciplineFocus::Only(ElementDiscipline::Services)
+    );
+}
+
 /// Working in Structure greys the rest of the plan; a discipline hidden
 /// in the navigator leaves the views; one locked cannot be selected; an
 /// element can be given another discipline in Properties.

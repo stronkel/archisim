@@ -1416,7 +1416,9 @@ fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2,
             (Curve::Line(_), _) => {
                 let v = h.wall.end - h.wall.start;
                 let len = v.length();
-                let Some(u) = v.normalized() else { return false };
+                let Some(u) = v.normalized() else {
+                    return false;
+                };
                 let t = (p - h.wall.start).dot(u) / len;
                 let off = (p - h.wall.start).dot(u.perp_left());
                 t > EPS && t < 1.0 - EPS && off > lo - EPS && off < hi + EPS
@@ -1443,7 +1445,10 @@ fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2,
             .iter()
             .find(|h| h.wall.start.approx_eq(p) || h.wall.end.approx_eq(p))
         {
-            return Some(axis.and_then(|a| slide(shifted(h, p), p, a)).unwrap_or(p + d));
+            return Some(
+                axis.and_then(|a| slide(shifted(h, p), p, a))
+                    .unwrap_or(p + d),
+            );
         }
         let axis = axis?;
         hosts

@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (4) · v0.71: arreglos rápidos de la lista del 26/10/2026 (E1)
+
+Rama `bloque/d1-arreglos`, con pull request para Antonio. Sin cambios de formato `.archisim` ni de IFC; cinco familias de puertas y ventanas suben de versión. Antonio entregó el 26/10/2026 una lista larga de mejoras; está contrastada con lo que ya hay y ordenada en bloques E1–E13 en `docs/HOJA_DE_RUTA.md` §10, con cuatro decisiones nuevas (D25–D28). Este bloque hace lo rápido.
+
+**Hecho**
+- **La Maqueta ya no se queda en blanco**: entrar en ella con Estructuras o Instalaciones activas, o coger dentro una herramienta de otra disciplina (pilar, tubería, terreno, volumen), ya no apaga el resto del edificio. La Maqueta enseña siempre todo en color; al volver a Técnica, la atenuación por disciplina sigue como estaba.
+- **Líneas de apertura**: en las puertas (abatible, pivotante, plegable) salen **con guiones** por defecto en alzados y secciones, con su propio parámetro «Líneas de apertura (alzado y sección)»; el giro en planta sigue aparte («Línea del giro (planta)»). En las **ventanas** (practicable, corredera, guillotina) **no salen** en los alzados y secciones del modelo salvo que el tipo lo pida («Líneas de apertura en alzados y secciones del modelo»), y cuando salen van con guiones. En el plano y la memoria de carpinterías y en el diálogo del tipo salen siempre, porque ahí explican el funcionamiento.
+- **Mover un muro unido mueve solo ese muro**, como en Revit: los muros que llegan a él (en esquina o en T) no se desplazan, solo se alargan o acortan sobre su propio eje para seguir tocándolo. Antes, en una esquina el vecino se torcía o se desplazaba con él. Arreglado también que un tabique dibujado hasta el eje del muro (dentro de su grueso) no lo siguiera.
+- **Carpetas al elegir tipo** en Propiedades: muros en «Muros exteriores (fachada)» y «Muros interiores»; forjados por función; puertas y ventanas por familia, como en el diálogo de tipos.
+
+**Pendiente**
+- De E1, nada. Siguiente según el orden propuesto: E2 (galerías visuales en todas las opciones), si Antonio lo confirma.
+- Decisiones D25–D28 (armarios empotrados, hormigón armado, fachadas al detalle, giro de las ventanas en planta).
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de esta rama (GitHub → Actions) y abre la demo o un proyecto tuyo. En proyectos tuyos: **Biblioteca → Actualizar familias**, para que puertas y ventanas tomen las líneas nuevas.
+2. Maqueta: en Técnica elige la disciplina Estructuras, pasa a la Maqueta (Tab): todo debe verse en color. Dentro, coge Terreno o un Volumen del catálogo: sigue en color.
+3. Haz una sección por una puerta y una ventana: la puerta con el triángulo a guiones; la ventana sin triángulo. Selecciona la ventana → Editar tipo → Representación → activa «Líneas de apertura en alzados y secciones del modelo»: aparece a guiones. Archivo → Plano de carpinterías: las ventanas siguen con su triángulo.
+4. Dibuja un rectángulo de muros y un tabique hasta el eje de uno de ellos. Selecciona el muro de arriba y muévelo en diagonal: él se mueve entero, los laterales solo se alargan (no se tuercen) y el tabique lo sigue.
+5. Selecciona un muro → Propiedades → pincha en el nombre del tipo: la galería debe salir en dos carpetas, exteriores e interiores. Igual con una puerta (por familias).
+
+---
+
 ## 2026-10-26 (3) · v0.70: árboles de AD5 en planta (T3)
 
 Pedido por Antonio el 26/10/2026, con el DXF «Árboles AD5 Planta» (cuatro árboles dibujados en el estudio): tenerlos en planta como una visualización más bonita. Directamente en `main`: es pequeño y no cambia el formato `.archisim` ni el IFC. La familia Vegetación pasa a la versión 3.
