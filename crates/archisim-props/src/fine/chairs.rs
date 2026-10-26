@@ -64,6 +64,7 @@ fn turned_leg(b: &mut Builder, at: [f64; 2], top: f64, r: f64) {
 
 /// A board bent round the vertical through `c` (`r` metres): its length
 /// along `x` becomes the arc; for a curved chair back or rail.
+#[allow(clippy::too_many_arguments)]
 fn bent_board(
     b: &mut Builder,
     role: &'static str,
