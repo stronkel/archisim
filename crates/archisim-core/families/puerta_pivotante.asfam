@@ -1,7 +1,7 @@
 family "Puerta pivotante"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta de una hoja que gira sobre un eje vertical separado de la jamba (pivote), como las de entrada de gran formato"
 
 include "piezas"
@@ -19,7 +19,8 @@ type_params
     frame_material material = "Aluminio lacado" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
   section "Representación"
-    swing_line linestyle = "continuous" label "Línea del giro"
+    swing_line linestyle = "continuous" label "Línea del giro (planta)"
+    opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
 
 let f = frame_width
 let c0 = -width / 2 + f
@@ -57,7 +58,7 @@ plan 1:100
 elevation
   let px = if hand == "left" then c0 + pivot else c1 - pivot
   let ox = if hand == "left" then c1 else c0
-  use side_hung_lines(px, ox, 0, height - f, swing_line)
+  use side_hung_lines(px, ox, 0, height - f, opening_lines)
   line (px, 0) to (px, height - f) pen thin dashdot
 
 outputs

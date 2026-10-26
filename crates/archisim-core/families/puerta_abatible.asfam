@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 7
+  version 8
   description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
@@ -36,7 +36,8 @@ type_params
   section "Datos"
     fire_rating choice("—", "EI2 30-C5", "EI2 60-C5", "EI2 90-C5") = "—" label "Resistencia al fuego" ifc "Pset_DoorCommon.FireRating"
   section "Representación"
-    swing_line linestyle = "continuous" label "Línea del giro"
+    swing_line linestyle = "continuous" label "Línea del giro (planta)"
+    opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
 
 # Con premarco, el cerco va dentro de él; con tarja, la hoja llega hasta
 # su travesaño.
@@ -140,12 +141,12 @@ plan 1:20
 elevation
   let split = if hand == "left" then c0 + active else c1 - active
   if leaves == 2
-    use side_hung_lines(c0, split, 0, door_height - frame_width, swing_line)
-    use side_hung_lines(c1, split, 0, door_height - frame_width, swing_line)
+    use side_hung_lines(c0, split, 0, door_height - frame_width, opening_lines)
+    use side_hung_lines(c1, split, 0, door_height - frame_width, opening_lines)
   else if hand == "left"
-    use side_hung_lines(c0, c1, 0, door_height - frame_width, swing_line)
+    use side_hung_lines(c0, c1, 0, door_height - frame_width, opening_lines)
   else
-    use side_hung_lines(c1, c0, 0, door_height - frame_width, swing_line)
+    use side_hung_lines(c1, c0, 0, door_height - frame_width, opening_lines)
 
 # A 1:100, sin cerco y con la hoja como una línea.
 plan 1:100

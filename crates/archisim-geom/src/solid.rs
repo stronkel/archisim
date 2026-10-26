@@ -2156,7 +2156,8 @@ pub fn opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
 }
 
 /// The opening lines a door or window's recipe draws in elevation, in the
-/// model: each segment twice, on the face of the element its leaves open
+/// model (none when its type hides them there,
+/// [`Model::opening_lines_in_views`]): each segment twice, on the face of the element its leaves open
 /// to and on the other, and whether its line style is not continuous. The
 /// last value is the horizontal direction the leaves open to (a viewer on
 /// that side sees the lines as drawn; from the other side, they open away).
@@ -2187,6 +2188,12 @@ pub fn opening_elevation_lines(model: &Model, id: OpeningId) -> (Vec<ElevationLi
     let at = |x: f64, y: f64, z: f64| {
         let p = og.point(mid + sx * x, y_mid + sy * y);
         [p.x, p.y, z_sill + z]
+    };
+    // Windows draw them only when asked (`Model::opening_lines_in_views`).
+    let marks = if model.opening_lines_in_views(id) {
+        marks
+    } else {
+        Vec::new()
     };
     let mut out = Vec::new();
     let mut push = |a: [f64; 2], b: [f64; 2], dashed: bool| {
@@ -3737,6 +3744,40 @@ mod tests {
         // The whole model: 2 wall layers, 2 slab layers, 2 × 2 opening parts.
         assert_eq!(model_solids(&m).len(), 8);
         assert_eq!(level_solids(&m, m.levels()[0].id).len(), 8);
+    }
+
+    /// Doors draw their opening lines in the model's sections and
+    /// elevations, dashed; windows only when their type asks for them.
+    #[test]
+    fn windows_draw_opening_lines_only_when_asked() {
+        let (mut m, w) = model();
+        let ops: Vec<_> = m
+            .openings_in_wall(w)
+            .map(|o| (o.id, o.opening_type))
+            .collect();
+        let mut window = None;
+        for (id, t) in &ops {
+            let ty = m.opening_type(*t).unwrap();
+            let (lines, _) = opening_elevation_lines(&m, *id);
+            if ty.is_door() {
+                assert!(!lines.is_empty());
+                assert!(lines.iter().all(|l| l.dashed), "doors: dashed");
+            } else {
+                assert!(lines.is_empty(), "windows: none by default");
+                window = Some((*id, *t));
+            }
+        }
+        let (id, t) = window.unwrap();
+        let ty = m.opening_type(t).unwrap();
+        let mut values = ty.values.clone();
+        values.insert(
+            archisim_core::OPENING_LINES_IN_VIEWS.into(),
+            archisim_core::Value::Bool(true),
+        );
+        let family = ty.family;
+        m.edit_family_type(t, family, values).unwrap();
+        let (lines, _) = opening_elevation_lines(&m, id);
+        assert!(!lines.is_empty() && lines.iter().all(|l| l.dashed));
     }
 
     /// The system families build the same doors and windows ArchiSim built

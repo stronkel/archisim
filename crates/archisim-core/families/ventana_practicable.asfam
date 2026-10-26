@@ -1,7 +1,7 @@
 family "Ventana practicable"
   category window
   host wall
-  version 6
+  version 7
   description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante, basculante o pivotante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -36,7 +36,9 @@ type_params
     subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
   section "Representación"
-    swing_line linestyle = "continuous" label "Línea del giro"
+    swing_line linestyle = "continuous" label "Línea del giro (planta)"
+    opening_lines_in_views bool = no label "Líneas de apertura en alzados y secciones del modelo"
+    opening_lines linestyle = "dashed" label "Líneas de apertura: tipo de línea"
 
 instance_params
   section "Esquina"
@@ -184,7 +186,7 @@ elevation
     let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
     let a = c0 + i * (clear + f)
     let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
-    use leaf_elevation(op, a, a + clear, z0 + f, zl - f, left, swing_line)
+    use leaf_elevation(op, a, a + clear, z0 + f, zl - f, left, opening_lines)
 
 # A 1:100, el marco y el vidrio.
 plan 1:100

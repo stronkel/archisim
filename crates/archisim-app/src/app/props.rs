@@ -183,6 +183,9 @@ pub struct TypeItem<T> {
     pub thumb: Option<Thumb>,
     /// What the picture shows ("Corte en planta 1:20 · exterior arriba").
     pub caption: &'static str,
+    /// The folder of the gallery it goes in ("Muros exteriores (fachada)",
+    /// the family of a door…); empty for a gallery without folders.
+    pub folder: String,
 }
 
 /// Revit's type selector, with a picture: the type's plan cut (walls,
@@ -367,20 +370,47 @@ fn gallery<T: PartialEq + Copy>(
                         .color(p.muted),
                 );
             }
+            // The folders, in the order the items bring them (as in the
+            // types dialog: exterior walls, interior walls; one per family).
+            let mut folders: Vec<&str> = Vec::new();
+            for i in &shown {
+                if !folders.contains(&i.folder.as_str()) {
+                    folders.push(&i.folder);
+                }
+            }
             egui::ScrollArea::vertical()
                 .max_height(420.0)
                 .show(ui, |ui| {
                     let w = (ui.available_width() - 8.0) / 2.0;
-                    for pair in shown.chunks(2) {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 8.0;
-                            for item in pair {
-                                if tile(ui, w, item, current == Some(item.id)).clicked() {
-                                    picked = Some(item.id);
+                    let mut grid = |ui: &mut Ui, list: &[&TypeItem<T>]| {
+                        for pair in list.chunks(2) {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                for item in pair {
+                                    if tile(ui, w, item, current == Some(item.id)).clicked() {
+                                        picked = Some(item.id);
+                                    }
                                 }
-                            }
-                        });
-                        ui.add_space(2.0);
+                            });
+                            ui.add_space(2.0);
+                        }
+                    };
+                    if folders.len() <= 1 && folders.first().is_none_or(|f| f.is_empty()) {
+                        grid(ui, &shown);
+                    } else {
+                        for f in folders {
+                            let list: Vec<&TypeItem<T>> =
+                                shown.iter().copied().filter(|i| i.folder == f).collect();
+                            let name = if f.is_empty() { "Otros" } else { f };
+                            egui::CollapsingHeader::new(
+                                egui::RichText::new(format!("{name}  ({})", list.len()))
+                                    .font(strong_font(12.5))
+                                    .color(p.text),
+                            )
+                            .id_salt(("type-folder", salt, f))
+                            .default_open(true)
+                            .show(ui, |ui| grid(ui, &list));
+                        }
                     }
                 });
             if picked.is_some() {

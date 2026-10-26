@@ -2073,14 +2073,14 @@ fn empty() -> Drawing {
     layers_section(&Model::new("empty"), &[], false)
 }
 
-fn wall_folder_name(f: WallFunction) -> &'static str {
+pub(super) fn wall_folder_name(f: WallFunction) -> &'static str {
     match f {
         WallFunction::Exterior => "Muros exteriores (fachada)",
         WallFunction::Interior => "Muros interiores",
     }
 }
 
-fn slab_folder_name(f: SlabFunction) -> &'static str {
+pub(super) fn slab_folder_name(f: SlabFunction) -> &'static str {
     match f {
         SlabFunction::Floor => "Forjados de planta",
         SlabFunction::BaseSlab => "Soleras",
