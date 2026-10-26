@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (7) · Paquete 1c: almacenaje, alfombras, cortinas y chimeneas; correcciones de Antonio
+
+Rama `bloque/paquete-1a` (pull request #79, para que Antonio descargue la aplicación). Sin cambios de formato ni de IFC; es el taller.
+
+Antonio miró en 3D las tandas 1a y 1b y pidió corregir siete piezas que flotaban o se atravesaban (hecho, ver la entrada anterior); después: «Perfecto, sigamos con la biblioteca».
+
+**Hecho**
+- Tanda 1c: 56 modelos más, una pieza por colección: aparadores, librerías (con libros), muebles de TV (con televisor), vitrinas (con cerámica), alfombras, cortinas y chimeneas (detalle en `docs/BIBLIOTECA_3D.md`, «Tanda 1c»). Con esto el paquete 1 (salón y comedor) está completo en el taller (124 piezas en total con la planta, el fregadero y la farola).
+- Frentes, tiradores y patas reutilizables para los muebles de los paquetes siguientes (`fine::storage`: `Panel`, `Pull`).
+- La foto del taller encuadra mejor las piezas altas.
+- IFC del taller validado.
+
+**Pendiente**
+- Lo que diga Antonio del paquete 1 completo. Al aprobarlo: llevar las piezas a la biblioteca, añadir las colecciones contemporánea, rústica, industrial y clásica a `archisim_library::collections` y quitar los modelos antiguos.
+- Después: importación mejorada de modelos oficiales de fabricantes (carpeta «Diseño») y paquete 2 (cocina y baño).
+
+**Qué debe probar Antonio**
+1. Mira las láminas que te mando en el chat.
+2. Descarga ArchiSim-Windows del pull request #79 (pestaña Checks), abre `taller.archisim` y recorre en la Maqueta las filas nuevas; en las cortinas, cambia «Abierta» de 0 a 1; en las librerías, apaga «Con libros».
+3. Pon la luz de noche en la Maqueta y mira el fuego de las chimeneas.
+
+---
+
 ## 2026-10-26 (6) · Paquete 1b: sillas, taburetes y mesas de las ocho colecciones
 
 Rama `bloque/paquete-1a` (la misma de la tanda 1a). Sin cambios de formato ni de IFC; es el taller, no entra nada en la biblioteca.

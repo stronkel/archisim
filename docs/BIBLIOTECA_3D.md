@@ -330,3 +330,10 @@ En el taller, 32 modelos más (`archisim_props::fine::storage`): cada pieza se a
 - Materiales nuevos: Vidrio claro, Lacado blanco y arena, Fresno oscuro, cinco colores de lomos de libro y Pantalla de televisor.
 
 Pesos: 4.500–42.000 triángulos (las librerías llenas y las japandi de listones, las que más).
+
+Y, para cerrar el paquete 1, 24 modelos más (`fine::textiles` y `fine::hearth`):
+
+- **Alfombras** («Alfombra (taller)», `props:fine_rug`): nórdica de lana con bandas; mediterránea redonda de yute en espiral con dos vueltas teñidas; años 50 de óvalos y esquirlas; japandi de fibra con ribete; contemporánea en forma de canto rodado con dos alturas de pelo; rústica de trapo a rayas con flecos; industrial kilim de rombos; clásica oriental con cenefas, medallón y esquinas.
+- **Cortinas** («Cortina (taller)», `props:fine_curtain`, con «Abierta»): tela con pliegues de verdad (`drape`: ondas, tablas en la cabecera o fruncido, más hondos abajo, recogidos en el alzapaños), barras con remates, anillas, rieles de techo y alzapaños con borla; la japandi en paneles deslizantes; la clásica con bandó de ondas.
+- **Chimeneas** («Chimenea (taller)», `props:fine_fireplace`): estufa nórdica redonda con su cristal curvo y tiro; campana mediterránea encalada; frente de ladrillo años 50 con banco y rejilla de latón; bloque japandi de microcemento con fuego sobre cantos y leñero; fuego lineal contemporáneo tras vidrio; rústica de sillares con viga de madera y morillos; estufa industrial de chapa con leñero; chimenea Luis XVI de mármol con pilastras acanaladas, frisos con rosetas y guardafuegos. El fuego brilla en la Maqueta como las lámparas (`glow_materials`).
+- Materiales nuevos: Cal blanca, Piedra caliza y Ladrillo visto en la paleta.
