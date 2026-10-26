@@ -399,7 +399,11 @@ fn doors(
         );
         front(b, panel, role, a, e, z0, z1, y);
         // Paired doors meet in the middle; the rest open from the right.
-        let towards_right = if n % 2 == 0 { i < n / 2 } else { i % 2 == 0 };
+        let towards_right = if n.is_multiple_of(2) {
+            i < n / 2
+        } else {
+            i.is_multiple_of(2)
+        };
         let inset = match kind {
             Pull::Bar(_) | Pull::Cup => 0.03,
             Pull::Slot => 0.06,
@@ -592,10 +596,10 @@ fn books(b: &mut Builder, rng: &mut Rng, x0: f64, x1: f64, yf: f64, z: f64, room
         // The last one leans on the run.
         if rng.next() < 0.5 && x + 0.06 < x1 {
             let (w, h) = (rng.range(0.02, 0.035), rng.range(0.7, 0.95) * tall);
-            let lean = 0.32;
+            let lean: f64 = 0.32;
             let start = b.mark();
             b.rbox("books2", [0.0, -depth * 0.9, 0.0], [w, 0.0, h], 0.0);
-            let (s, c) = (lean as f64).sin_cos();
+            let (s, c) = lean.sin_cos();
             let at = x + h * s + 0.003;
             b.transform_from(start, |q| {
                 [at + q[0] * c - q[2] * s, yf + q[1], z + q[0] * s + q[2] * c]
@@ -1306,14 +1310,14 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
     let fill = p.flag("with_books", true);
     // Shelves evenly from `z0` to `z1`, `n` spaces, dressed.
     let dress = |b: &mut Builder,
-                     rng: &mut Rng,
-                     xa: f64,
-                     xb: f64,
-                     za: f64,
-                     zb: f64,
-                     n: usize,
-                     t: f64,
-                     role: &'static str| {
+                 rng: &mut Rng,
+                 xa: f64,
+                 xb: f64,
+                 za: f64,
+                 zb: f64,
+                 n: usize,
+                 t: f64,
+                 role: &'static str| {
         let step = (zb - za) / n as f64;
         for i in 1..n {
             shelf(b, role, xa, xb, d - 0.01, za + step * i as f64, t);
@@ -1461,7 +1465,7 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
                 zs.retain(|z| *z < h - 0.2);
                 let mut bottom = 0.06 + t;
                 for (i, z) in zs.iter().chain(std::iter::once(&(h - t + t))).enumerate() {
-                    let top = *z - if *z < h - 0.01 { t } else { t };
+                    let top = *z - t;
                     if *z < h - 0.01 {
                         shelf(b, "frame", xa, xb, d, *z, t);
                     }
