@@ -51,7 +51,7 @@ Las medidas y colores son una propuesta para que Antonio los corrija: se cambian
 
 ## 3. Dibujo en planta
 
-Diecisiete estilos, sacados de la propia planta crecida:
+Veintiún estilos: diecisiete sacados de la propia planta crecida y cuatro que son los dibujos de AD5:
 
 | Estilo | Cómo es |
 |---|---|
@@ -72,12 +72,22 @@ Diecisiete estilos, sacados de la propia planta crecida:
 | Silueta | La copa maciza, del color de la línea, con su borde de hojas y las ramas en blanco a través de ella; en alzado, tronco macizo |
 | Ramitos | Las ramas con foliolos a pares a lo largo de las ramillas, como plumas |
 | Ramas y borde | Las ramas dentro de un contorno dentado |
+| AD5 círculos | El dibujo de AD5: tres copas superpuestas en manchas transparentes, con anillos discontinuos |
+| AD5 racimos | El dibujo de AD5: racimos de hojas sobre una mancha clara, con matas de hierba dentro de los racimos |
+| AD5 estrella | El dibujo de AD5: rayos del tronco al borde (en color, sobre una mancha clara de la copa) |
+| AD5 copa | El dibujo de AD5: el círculo de la copa con una masa de hojas irregular encima |
 
 Los cuatro últimos (v0.61, pedidos por Antonio el 25/10/2026) son dibujos de línea con aire de biblioteca de CAD. Son diseño propio: salen del mismo árbol crecido, así que cada ejemplar es distinto. Valen igual en planta y en alzado. Los proyectos que ya tenían la familia Vegetación los ven después de **Biblioteca → Actualizar familias** (la familia pasa a la versión 2). `archisim vivero out/` dibuja todo el vivero en cada uno: `vivero-<estilo>-planta.svg` y sus alzados.
 
 En las axonometrías de los planos, las copas se dibujan por su contorno (no por cada faceta) y, en las secciones, rellenas; las sombras usan la versión más ligera.
 
 Cada uno puede ir en **líneas**, **transparente** (color con su opacidad, con la mitad en sombra un poco más oscura), **rellena** o **solo color**; las flores y los frutos salen como manchas de su color. Según el tamaño en el papel, el dibujo se simplifica solo (a 1:500 un árbol pequeño es un círculo).
+
+### Los dibujos de AD5 (v0.70)
+
+Los cuatro estilos «AD5 …» son los árboles de la biblioteca del estudio (26/10/2026), traídos de su DXF con `scripts/make_ad5_trees.py` a `crates/archisim-flora/src/ad5_trees.txt` (el DXF no se guarda en el repositorio). Cada uno se pone sobre la planta a la medida de su copa: se estira lo justo para seguir su contorno (un ciprés lo lleva estrecho; un pino piñonero, ancho) y se gira un ángulo distinto en cada ejemplar, así que una alineación no se ve repetida. Las manchas llevan el color de las hojas de la especie con la opacidad que tenían en AD5 (con la opacidad por defecto, 0,55; más o menos si se cambia); las líneas van con la plumilla de la vista; el tronco es el de la planta. En «líneas» quedan solo las líneas; en «rellena», las manchas opacas; en «solo color», sin líneas. Las matas de hierba de «racimos» son dibujo propio de ArchiSim (no se copia la trama del DXF) y solo salen cuando la copa mide en el papel 2 cm o más. En alzado, que no son dibujos de lado, se dibujan con el estilo de ArchiSim más parecido (nube, follaje o contorno).
+
+Para retocar uno de los cuatro basta cambiar su bloque en el DXF y volver a pasar el script; añadir un quinto pide además su estilo en el programa.
 
 ## 4. 3D
 

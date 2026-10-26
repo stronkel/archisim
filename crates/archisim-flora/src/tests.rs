@@ -705,3 +705,68 @@ fn graphic_styles() {
         assert_eq!(PlanStyle::from_name(s.name()), Some(s));
     }
 }
+
+/// AD5's drawings (26/10/2026): laid on the crown at its size, turned
+/// differently on each plant, with AD5's washes in colour and none in
+/// lines; from the side, one of ArchiSim's.
+#[test]
+fn ad5_styles() {
+    let draw = |seed, style, look| {
+        grow(&olive(), seed, 0.5).plan(&PlanOptions {
+            style,
+            look,
+            opacity: 0.55,
+            crown_mm: 80.0,
+        })
+    };
+    for style in [
+        PlanStyle::Ad5Circles,
+        PlanStyle::Ad5Clusters,
+        PlanStyle::Ad5Star,
+        PlanStyle::Ad5Crown,
+    ] {
+        assert!(style.is_ad5());
+        assert_eq!(PlanStyle::from_name(style.name()), Some(style));
+        let p = grow(&olive(), 5, 0.5);
+        let shapes = draw(5, style, Look::SeeThrough);
+        // Within the crown (a little past it, as AD5 drew some).
+        let far = shapes
+            .iter()
+            .flat_map(|s| match s {
+                Shape::Line { points, .. } | Shape::Fill { points, .. } => points.clone(),
+            })
+            .map(|q| (q[0] - p.center[0]).hypot(q[1] - p.center[1]))
+            .fold(0.0, f64::max);
+        assert!(
+            far < p.radius * 1.35 && far > p.radius * 0.7,
+            "{style:?}: {far}"
+        );
+        assert!(shapes.iter().any(|s| matches!(
+            s,
+            Shape::Fill {
+                tone: Tone::Leaves,
+                ..
+            }
+        )));
+        let lines = draw(5, style, Look::Lines);
+        assert!(!lines.iter().any(|s| matches!(
+            s,
+            Shape::Fill {
+                tone: Tone::Leaves,
+                ..
+            }
+        )));
+        // Another plant, another turn.
+        assert_ne!(lines, draw(6, style, Look::Lines));
+        let side = p.side(
+            [0.0, 1.0],
+            &crate::SideOptions {
+                style,
+                look: Look::Lines,
+                opacity: 0.6,
+                m_per_mm: 0.05,
+            },
+        );
+        assert!(!side.is_empty());
+    }
+}
