@@ -16,6 +16,7 @@ pub mod shape;
 pub mod sink;
 pub mod sofas;
 pub mod soft;
+pub mod storage;
 pub mod tables;
 
 use crate::build::{Builder, P3};
@@ -128,6 +129,58 @@ pub const KINDS: &[(&str, &[&str])] = &[
             "Clásica",
         ],
     ),
+    (
+        "fine_sideboard",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_bookcase",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_tv_unit",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_vitrine",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     ("fine_plant", &["Espatifilo", "Pilea"]),
     ("fine_sink_unit", &["Fregadero de acero"]),
     ("fine_streetlight", &["Columna de fundición"]),
@@ -172,6 +225,10 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_coffee_table" => tables::coffee(b, p),
         "fine_side_table" => tables::side(b, p),
         "fine_stool" => chairs::stool(b, p),
+        "fine_sideboard" => storage::sideboard(b, p),
+        "fine_bookcase" => storage::bookcase(b, p),
+        "fine_tv_unit" => storage::tv_unit(b, p),
+        "fine_vitrine" => storage::vitrine(b, p),
         "fine_plant" => plant::potted_plant(b, p),
         "fine_sink_unit" => sink::sink_unit(b, p),
         "fine_streetlight" => lamp::streetlight(b, p),

@@ -1,0 +1,39 @@
+family "Vitrina (taller)"
+  category furniture
+  host none
+  version 1
+  description "Vitrina por colecciones, con cerámica (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.90 range 0.50..1.60 label "Ancho"
+    depth  length = 0.42 range 0.30..0.60 label "Fondo"
+    height length = 1.85 range 1.20..2.40 label "Altura"
+  section "Materiales"
+    frame   material = "Roble claro" label "Mueble"
+    front   material = "Roble claro" label "Puertas y cajones"
+    top     material = "Roble claro" label "Encimera"
+    stone   material = "Mármol" label "Piedra"
+    metal   material = "Latón" label "Metal y tiradores"
+    glass   material = "Vidrio claro" label "Vidrio"
+    weave   material = "Ratán" label "Rejilla"
+    dark    material = "Negro mate" label "Detalles oscuros"
+    books   material = "Lomo granate" label "Libros"
+    books2  material = "Lomo azul" label "Libros (2)"
+    accent  material = "Lomo ocre" label "Libros (3)"
+    ceramic material = "Cerámica blanca" label "Cerámica"
+    screen  material = "Pantalla de televisor" label "Pantalla"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:fine_vitrine"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"

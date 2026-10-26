@@ -1,0 +1,40 @@
+family "Librería (taller)"
+  category furniture
+  host none
+  version 1
+  description "Librería por colecciones, con libros (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.00 range 0.50..2.40 label "Ancho"
+    depth  length = 0.36 range 0.25..0.60 label "Fondo"
+    height length = 2.00 range 0.80..2.80 label "Altura"
+  section "Materiales"
+    frame   material = "Roble claro" label "Mueble"
+    front   material = "Roble claro" label "Puertas y cajones"
+    top     material = "Roble claro" label "Encimera"
+    stone   material = "Mármol" label "Piedra"
+    metal   material = "Latón" label "Metal y tiradores"
+    glass   material = "Vidrio claro" label "Vidrio"
+    weave   material = "Ratán" label "Rejilla"
+    dark    material = "Negro mate" label "Detalles oscuros"
+    books   material = "Lomo granate" label "Libros"
+    books2  material = "Lomo azul" label "Libros (2)"
+    accent  material = "Lomo ocre" label "Libros (3)"
+    ceramic material = "Cerámica blanca" label "Cerámica"
+    screen  material = "Pantalla de televisor" label "Pantalla"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    with_books bool = yes label "Con libros"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:fine_bookcase"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"
