@@ -8,6 +8,7 @@
 //! edges, scatter cushions with their seam and pointed corners, and turned
 //! wooden legs that splay a little.
 
+pub mod armchairs;
 pub mod lamp;
 pub mod plant;
 pub mod shape;
@@ -23,6 +24,32 @@ use soft::{knife_pillow, Soft};
 pub const KINDS: &[(&str, &[&str])] = &[
     (
         "fine_sofa",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_armchair",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_pouf",
         &[
             "Nórdico cálido",
             "Mediterráneo",
@@ -52,6 +79,27 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
             8 => sofas::classic(b, p),
             _ => sofa(b, p),
         },
+        "fine_armchair" => {
+            // The collections whose armchair is their sofa at one place.
+            let mut one = p.clone();
+            one.set("places", 1.0);
+            for (k, v) in [("width", 0.95), ("depth", 0.88), ("pillows", 1.0)] {
+                if p.get(k, f64::NAN).is_nan() {
+                    one.set(k, v);
+                }
+            }
+            match p.style() {
+                2 => armchairs::mediterranean(b, p),
+                3 => armchairs::fifties(b, p),
+                4 => sofas::japandi(b, &one),
+                5 => sofas::contemporary(b, &one),
+                6 => armchairs::friar(b, p),
+                7 => sofas::industrial(b, &one),
+                8 => armchairs::wingback(b, p),
+                _ => armchairs::nordic(b, p),
+            }
+        }
+        "fine_pouf" => armchairs::pouf(b, p),
         "fine_plant" => plant::potted_plant(b, p),
         "fine_sink_unit" => sink::sink_unit(b, p),
         "fine_streetlight" => lamp::streetlight(b, p),

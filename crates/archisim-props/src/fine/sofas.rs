@@ -38,7 +38,7 @@ impl Sizes {
 
 /// A piece of upholstery with the usual fabric: a little swell, a little
 /// irregularity.
-fn upholstered(lo: P3, hi: P3, r: f64, seed: u32) -> Soft {
+pub(super) fn upholstered(lo: P3, hi: P3, r: f64, seed: u32) -> Soft {
     let mut s = Soft::new(lo, hi, r);
     s.crown = 0.008;
     s.side = 0.006;
@@ -50,7 +50,7 @@ fn upholstered(lo: P3, hi: P3, r: f64, seed: u32) -> Soft {
 /// Seat cushions, one per place, from `x0` to `x1`, `y0` to `y1`, `z0` to
 /// `z1`: stuffed, sat on, with or without piping.
 #[allow(clippy::too_many_arguments)]
-fn seat_cushions(
+pub(super) fn seat_cushions(
     b: &mut Builder,
     places: usize,
     x0: f64,
@@ -81,7 +81,7 @@ fn seat_cushions(
 /// Back cushions, one per place, standing on `z0` against a back at
 /// `back` (y), up to `z1`, `thick`, leant back `tilt` degrees.
 #[allow(clippy::too_many_arguments)]
-fn back_cushions(
+pub(super) fn back_cushions(
     b: &mut Builder,
     places: usize,
     x0: f64,
@@ -152,7 +152,7 @@ fn scatter(b: &mut Builder, s: &Sizes, x_in: f64, y: f64, z: f64) {
 
 /// A tapered wooden leg splayed out along `dir` (compass legs), from its
 /// top at `at`, `top` high, with a brass shoe.
-fn compass_leg(b: &mut Builder, at: [f64; 2], top: f64, dir: [f64; 2], splay: f64) {
+pub(super) fn compass_leg(b: &mut Builder, at: [f64; 2], top: f64, dir: [f64; 2], splay: f64) {
     let start = b.mark();
     turned(
         b,
@@ -182,7 +182,7 @@ fn compass_leg(b: &mut Builder, at: [f64; 2], top: f64, dir: [f64; 2], splay: f6
 }
 
 /// A round turned foot (a bun) under a classic piece.
-fn bun_foot(b: &mut Builder, at: [f64; 2], top: f64) {
+pub(super) fn bun_foot(b: &mut Builder, at: [f64; 2], top: f64) {
     turned(
         b,
         "frame",

@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-26 (5) · Paquete 1a: sofás, butacas y pufs de las ocho colecciones
+
+Rama `bloque/paquete-1a`, encima de `bloque/taller-2` (#76). Sin cambios de formato ni de IFC; es el taller, no entra nada en la biblioteca.
+
+Antonio aprobó la calidad del taller y decidió (26/10/2026): biblioteca entera así, por paquetes (1 salón y comedor … 7 comercio, hostelería y oficinas), **por colecciones** (ocho: nórdico cálido, mediterráneo, años 50, japandi, contemporáneo, rústica, industrial y clásica), quitando los modelos antiguos al aprobar cada paquete, y los bloques técnicos (copas de árbol, luz de la Maqueta) al final. Inventario en el documento «Biblioteca de objetos de ArchiSim: inventario frente a Paralives».
+
+**Hecho**
+- Ocho **sofás**, ocho **butacas** y ocho **pufs**, uno por colección (detalle en `docs/BIBLIOTECA_3D.md`, «Tanda 1a»). Antonio vio los sofás y le parecieron bien.
+- **Capitoné** en la tela rellena: botones en diamante con sus pliegues.
+- Materiales nuevos de la paleta para las colecciones nuevas.
+- IFC del taller validado (28 piezas nuevas delante de las que sustituirían).
+
+**Pendiente**
+- Lo que diga Antonio de las butacas y los pufs.
+- Tanda 1b: sillas, taburetes y mesas por colección; 1c: almacenaje, alfombras, cortinas y chimeneas.
+- Las colecciones contemporánea, rústica, industrial y clásica en `archisim_library::collections` (hoy solo existen en el taller), al meter el paquete en la biblioteca.
+
+**Qué debe probar Antonio**
+1. Mira las láminas de butacas y pufs que te mando en el chat.
+2. `git checkout bloque/paquete-1a` y `cargo run --release -p archisim-cli -- taller out/taller`; abre `out/taller/taller.archisim` y en la Maqueta recorre las filas: delante cada pieza nueva, detrás la de la biblioteca.
+3. Selecciona una butaca y cambia el «Modelo 3D» entre colecciones, el ancho y la altura del respaldo.
+
+---
+
 ## 2026-10-26 (4) · M1, segunda entrega del taller: planta, fregadero y farola
 
 Rama `bloque/taller-2`, encima de `main` (v0.70), con pull request para Antonio. Sin cambios de formato (la familia Vegetación no cambia) y sin versión nueva: es el taller, no entra nada en la biblioteca.

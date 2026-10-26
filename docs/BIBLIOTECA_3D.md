@@ -292,3 +292,15 @@ Antonio aprobó la calidad del taller y quiere **toda** la biblioteca así. El i
 3. **Los modelos antiguos se quitan** de la biblioteca al aprobar cada paquete; quedan en las versiones anteriores.
 4. **Comercio, hostelería y oficinas** entran como paquete 7: ArchiSim es para cualquier edificio, no solo viviendas.
 5. **Bloques técnicos al final**: copas de árbol con hojas por textura (A) y luz de la Maqueta (B).
+
+### Tanda 1a: sofás, butacas y pufs de las ocho colecciones (26/10/2026)
+
+En el taller, 24 modelos, uno por pieza y colección (rama `bloque/paquete-1a`):
+
+- **Sofás** («Sofá (taller)», `props:fine_sofa`, modelos con el nombre de cada colección): nórdico de patas torneadas; mediterráneo de madera encalada con lamas y colchoneta atada; años 50 de brazos finos, respaldo abotonado y patas de compás con puntera de latón; japandi bajo sobre zócalo con tableros; contemporáneo de brazos anchos sobre zócalo oscuro; rústico de madera maciza con postes, travesaños y lamas; industrial de tubo de acero negro y cuero; clásico capitoné con brazos enrollados y patas de bola.
+- **Butacas** («Butaca (taller)», `props:fine_armchair`): nórdica redonda envolvente sobre patas abiertas; mediterránea de ratán con aros, husillos y cojines de lino; años 50 de carcasa sobre patas de compás; frailero rústico de madera y cuero tensado con remates torneados; de orejas clásica con respaldo abotonado. La japandi, la contemporánea y la industrial son su sofá a una plaza.
+- **Pufs** («Puf (taller)», `props:fine_pouf`): tambor con vivos (nórdico, años 50 sobre patas, industrial sobre aro de acero), de esparto en anillos con tapa en espiral, cojín grueso japandi, cubo contemporáneo, banqueta rústica de patas torneadas y asiento de enea, y reposapiés capitoné clásico.
+- **Capitoné** en la tela rellena (`Soft::tufts`, `tuft_depth`, `tuft_faces`): botones en diamante con los pliegues entre ellos, solo en las caras que se ven; necesita una malla fina (paso de 2,6 cm), por eso el sofá clásico pesa unos 34.000 triángulos.
+- Materiales nuevos de la paleta: Tela gris, Pino viejo, Lino crudo, Cuero coñac y Terciopelo verde botella.
+
+Pesos: sofás 14.000–21.000 triángulos (clásico 34.000), butacas 7.000–20.000, pufs 2.000–11.000.

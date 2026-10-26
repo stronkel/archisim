@@ -1,0 +1,41 @@
+family "Butaca (taller)"
+  category furniture
+  host none
+  version 1
+  description "Butaca por colecciones: redonda nórdica, de ratán, de carcasa años 50, japandi, cubo contemporánea, frailero rústico, industrial de cuero y de orejas clásica (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.85 range 0.55..1.30 label "Ancho"
+    depth  length = 0.85 range 0.55..1.20 label "Fondo"
+    seat   length = 0.42 range 0.30..0.55 label "Altura del asiento"
+    height length = 0.80 range 0.60..1.30 label "Altura del respaldo"
+  section "Materiales"
+    mat     material = "Terciopelo salvia" label "Tapicería"
+    cushion material = "Lino arena" label "Cojín"
+    frame   material = "Roble claro" label "Madera y patas"
+    weave   material = "Ratán" label "Ratán"
+    metal   material = "Metal negro" label "Metal"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+  section "Decoración"
+    pillows integer = 1 range 0..1 label "Cojín suelto"
+    pillow  material = "Terciopelo mostaza" label "Cojín suelto"
+
+require seat + 0.15 < height else "El respaldo tiene que subir por encima del asiento"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, seat) material mat
+  box (-width / 2, 0, seat) to (width / 2, 0.15, height) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2 + 0.1, 0.16) to (width / 2 - 0.1, 0.16) pen thin
+  line (-width / 2 + 0.1, 0.16) to (-width / 2 + 0.1, depth) pen thin
+  line (width / 2 - 0.1, 0.16) to (width / 2 - 0.1, depth) pen thin
+
+outputs
+  generator = "props:fine_armchair"
+  ifc_class = "IfcFurniture"
+  ifc_type = "CHAIR"
