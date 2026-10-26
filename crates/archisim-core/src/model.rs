@@ -1198,6 +1198,11 @@ fn kind_is_window(kind: OpeningKind) -> bool {
     matches!(kind, OpeningKind::Window(_))
 }
 
+/// The type parameter of a door or window recipe that says whether its
+/// opening lines are drawn in the model's sections and elevations
+/// ([`Model::opening_lines_in_views`]).
+pub const OPENING_LINES_IN_VIEWS: &str = "opening_lines_in_views";
+
 /// The values the program gives every wall-hosted family: the side the
 /// leaves open to and the handing.
 pub fn opening_builtins(opens_to: WallSide, hand: Hand) -> Values {
@@ -3337,6 +3342,26 @@ impl Model {
         fam.def()
             .evaluate_elevation(&t.values, &o.values, &builtins)
             .map_err(ModelError::Family)
+    }
+
+    /// Whether the opening lines of a door or window are drawn in the
+    /// model's sections and elevations. A recipe may declare the type
+    /// parameter [`OPENING_LINES_IN_VIEWS`] (the windows do, off by default:
+    /// an architect draws them only where they explain something); without
+    /// it they are always drawn. The type's own drawings (type dialog,
+    /// carpentry sheets) always show them.
+    pub fn opening_lines_in_views(&self, id: OpeningId) -> bool {
+        let Some(t) = self
+            .openings
+            .get(&id)
+            .and_then(|o| self.opening_types.get(&o.opening_type))
+        else {
+            return true;
+        };
+        !matches!(
+            t.values.get(OPENING_LINES_IN_VIEWS),
+            Some(Value::Bool(false))
+        )
     }
 
     // ---- Doors and windows ----------------------------------------------

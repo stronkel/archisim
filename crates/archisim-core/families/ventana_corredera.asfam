@@ -1,7 +1,7 @@
 family "Ventana corredera"
   category window
   host wall
-  version 4
+  version 5
   description "Ventana o balconera corredera de 2 a 4 hojas, con marco, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -25,6 +25,8 @@ type_params
     panel_material material = "Vidrio doble" label "Vidrio"
     subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+  section "Representación"
+    opening_lines_in_views bool = no label "Flechas de apertura en alzados y secciones del modelo"
 
 let s = if subframe then subframe_width else 0
 let w = width - 2 * s

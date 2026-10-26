@@ -1345,68 +1345,116 @@ pub(crate) fn move_selection(
 }
 
 /// Walls that are not moved but touch the moved ones, and where their ends
-/// go: an end joined at the end of a moved wall moves with it (the corner
-/// stays closed); an end butting against a face of a moved wall slides
-/// along its own axis to stay against that face (a partition stays
-/// against the wall it meets).
+/// go. As in Revit, only the selected walls move: a neighbour keeps its
+/// line and its end slides along its own axis to stay against the moved
+/// wall, at a corner (L) or butting against it anywhere between its faces
+/// (T: a partition stays against the wall it meets). Only where it cannot
+/// slide (it runs parallel to the moved wall, or it is curved) does the
+/// joined end move with the wall.
 fn followers(model: &Model, moved: &[WallId], d: Point2) -> Vec<(WallId, Point2, Point2)> {
     use archisim_geom::{wall_curve, Curve, Line};
-    let mut ends: Vec<Point2> = Vec::new();
-    // Faces of the moved walls: the line or circle, and the wall it is a
-    // face of (to know whether a point lies on the face itself).
-    let mut faces: Vec<(Curve, &archisim_core::Wall)> = Vec::new();
+    /// A moved wall: its reference curve and the band between its faces
+    /// (offsets from the reference for a straight wall, radii for a
+    /// curved one).
+    struct Host<'a> {
+        wall: &'a archisim_core::Wall,
+        curve: Curve,
+        band: Option<(f64, f64)>,
+    }
+    let mut hosts: Vec<Host> = Vec::new();
     let mut level = None;
     for id in moved {
         let Some(w) = model.wall(*id) else { continue };
-        ends.push(w.start);
-        ends.push(w.end);
         level = Some(w.level);
-        let Some(t) = model.wall_type(w.wall_type).map(|t| t.thickness()) else {
+        let Some(curve) = wall_curve(w, 0.0) else {
             continue;
         };
-        let (ext, int) = w.face_offsets(t);
-        for off in [ext, int] {
-            if let Some(c) = wall_curve(w, off) {
-                faces.push((c, w));
-            }
-        }
+        let band = model.wall_type(w.wall_type).and_then(|t| {
+            let (ext, int) = w.face_offsets(t.thickness());
+            let measure = |c: Curve| match c {
+                Curve::Circle { radius, .. } => radius,
+                Curve::Line(l) => {
+                    let n = (w.end - w.start)
+                        .normalized()
+                        .map_or(Point2::default(), Point2::perp_left);
+                    (l.p - w.start).dot(n)
+                }
+            };
+            let a = measure(wall_curve(w, ext)?);
+            let b = measure(wall_curve(w, int)?);
+            Some((a.min(b), a.max(b)))
+        });
+        hosts.push(Host {
+            wall: w,
+            curve,
+            band,
+        });
     }
     let Some(level) = level else {
         return Vec::new();
     };
-    let on_face = |c: &Curve, w: &archisim_core::Wall, p: Point2| match (c, w.arc()) {
-        (Curve::Circle { centre, radius }, Some(arc)) => {
-            let (f, _) = arc.project(p);
-            (p.distance(*centre) - radius).abs() < 1e-5 && f > 0.0 && f < 1.0
-        }
-        (Curve::Line(l), _) => {
-            let n = (w.end - w.start)
-                .normalized()
-                .map_or(Point2::default(), Point2::perp_left);
-            let off = (l.p - w.start).dot(n);
-            let (a, b) = (w.start + n * off, w.end + n * off);
-            crate::pick::nearest_on_segment(a, b, p).distance(p) < 1e-5
-        }
-        _ => false,
+    const EPS: f64 = 1e-5;
+    // The curve through `p` that runs with a moved wall (its reference
+    // line at a corner, a parallel one or a concentric circle at a T), in
+    // its new place.
+    let shifted = |h: &Host, p: Point2| match h.curve {
+        Curve::Line(l) => Curve::Line(Line::new(p + d, l.d)),
+        Curve::Circle { centre, .. } => Curve::Circle {
+            centre: centre + d,
+            radius: p.distance(centre),
+        },
     };
-    let follow = |p: Point2, axis: Option<Point2>| -> Option<Point2> {
-        if ends.iter().any(|e| e.approx_eq(p)) {
-            return Some(p + d);
+    // Whether `p` lies in a moved wall's band, between its ends.
+    let in_band = |h: &Host, p: Point2| -> bool {
+        let Some((lo, hi)) = h.band else { return false };
+        match (h.curve, h.wall.arc()) {
+            (Curve::Circle { centre, .. }, Some(arc)) => {
+                let (f, _) = arc.project(p);
+                let r = p.distance(centre);
+                f > 0.0 && f < 1.0 && r > lo - EPS && r < hi + EPS
+            }
+            (Curve::Line(_), _) => {
+                let v = h.wall.end - h.wall.start;
+                let len = v.length();
+                let Some(u) = v.normalized() else {
+                    return false;
+                };
+                let t = (p - h.wall.start).dot(u) / len;
+                let off = (p - h.wall.start).dot(u.perp_left());
+                t > EPS && t < 1.0 - EPS && off > lo - EPS && off < hi + EPS
+            }
+            _ => false,
         }
-        let axis = axis?;
-        faces.iter().find_map(|(c, w)| {
-            if !on_face(c, w, p) {
+    };
+    // Slides `p` along the neighbour's axis onto the moved curve; `None`
+    // when they run (nearly) parallel.
+    let slide = |c: Curve, p: Point2, axis: Point2| -> Option<Point2> {
+        if let Curve::Line(l) = c {
+            let (Some(a), Some(b)) = (axis.normalized(), l.d.normalized()) else {
+                return None;
+            };
+            // Under about 3°, the meeting point runs off: not a corner.
+            if a.cross(b).abs() < 0.05 {
                 return None;
             }
-            let moved = match c {
-                Curve::Line(l) => Curve::Line(Line::new(l.p + d, l.d)),
-                Curve::Circle { centre, radius } => Curve::Circle {
-                    centre: *centre + d,
-                    radius: *radius,
-                },
-            };
-            Curve::Line(Line::new(p, axis)).intersect_near(&moved, p + d)
-        })
+        }
+        Curve::Line(Line::new(p, axis)).intersect_near(&c, p + d)
+    };
+    let follow = |p: Point2, axis: Option<Point2>| -> Option<Point2> {
+        if let Some(h) = hosts
+            .iter()
+            .find(|h| h.wall.start.approx_eq(p) || h.wall.end.approx_eq(p))
+        {
+            return Some(
+                axis.and_then(|a| slide(shifted(h, p), p, a))
+                    .unwrap_or(p + d),
+            );
+        }
+        let axis = axis?;
+        hosts
+            .iter()
+            .find(|h| in_band(h, p))
+            .and_then(|h| slide(shifted(h, p), p, axis))
     };
     model
         .walls_on_level(level)
@@ -2430,6 +2478,56 @@ mod tests {
         apply(&mut m, &sel(&[Element::Wall(across)]), &drag).unwrap();
         assert!(m.wall(below).unwrap().end.approx_eq(p(3.0, 2.45)));
         assert_eq!(m.wall(below).unwrap().start, p(3.0, 0.265));
+    }
+
+    #[test]
+    fn moving_a_wall_moves_only_it_and_the_corners_slide_on_their_walls() {
+        let (mut m, _, _) = room();
+        let w = walls(&m);
+        // The north wall 1 m north and 1 m east: it moves; the west and
+        // east walls keep their line and only lengthen to meet it.
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(3.0, 4.0),
+            to: p(4.0, 5.0),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[1])]), &drag).unwrap();
+        assert!(m.wall(w[1]).unwrap().start.approx_eq(p(1.0, 5.0)));
+        assert!(m.wall(w[0]).unwrap().end.approx_eq(p(0.0, 5.0)));
+        assert!(m.wall(w[0]).unwrap().start.approx_eq(p(0.0, 0.0)));
+        assert!(m.wall(w[2]).unwrap().start.approx_eq(p(6.0, 5.0)));
+        assert!(m.wall(w[2]).unwrap().end.approx_eq(p(6.0, 0.0)));
+    }
+
+    #[test]
+    fn a_partition_on_the_axis_of_a_moved_wall_follows_it() {
+        let (mut m, lvl, lib) = room();
+        let w = walls(&m);
+        // A partition drawn up to the axis of the north wall (y = 4), inside
+        // its thickness: it is a T-join, and it follows the wall.
+        let part = m
+            .add_wall(NewWall {
+                wall_type: lib.partition,
+                level: lvl,
+                start: p(3.0, 0.265),
+                end: p(3.0, 4.0),
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let drag = Drag {
+            grip: Grip::Body,
+            from: p(2.0, 4.0),
+            to: p(2.0, 4.5),
+            variant: false,
+        };
+        apply(&mut m, &sel(&[Element::Wall(w[1])]), &drag).unwrap();
+        assert!(m.wall(part).unwrap().end.approx_eq(p(3.0, 4.5)));
+        assert!(m.wall(part).unwrap().start.approx_eq(p(3.0, 0.265)));
     }
 
     /// A measured point of a dimension is a handle: dragged to another

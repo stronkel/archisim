@@ -142,6 +142,7 @@ impl ArchiSimApp {
                     note: grid_note(&t.design),
                     thumb,
                     caption: "Alzado exterior de 3,60 × 3,00 m",
+                    folder: String::new(),
                 }
             })
             .collect()
