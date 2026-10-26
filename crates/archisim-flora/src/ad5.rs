@@ -35,7 +35,9 @@ const DATA: &str = include_str!("ad5_trees.txt");
 
 fn points(words: &[&str]) -> Vec<P2> {
     words
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .filter_map(|w| Some([w[0].parse().ok()?, w[1].parse().ok()?]))
         .collect()
 }
