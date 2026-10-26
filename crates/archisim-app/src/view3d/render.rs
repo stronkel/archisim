@@ -83,6 +83,19 @@ struct Globals {
     /// Lamps lit: position and reach; `lamp_count.x` of them.
     lamps: [[f32; 4]; MAX_LAMPS],
     lamp_count: [f32; 4],
+    /// What a cut shows: xyz a flat colour (linear), w = 1 to use it;
+    /// otherwise each material its own cut colour (`CapStyle`).
+    caps: [f32; 4],
+}
+
+/// What a cut shows in 3D (pedido por Antonio el 26/10/2026: lo cortado se
+/// veía hueco): each material its cut colour, as the plan's poché (a wall
+/// with its layers), or one flat colour for everything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CapStyle {
+    #[default]
+    Layers,
+    Flat([u8; 3]),
 }
 
 /// Lamps that light the scene at night (the nearest to what is looked at).
@@ -173,6 +186,7 @@ pub struct Renderer {
     view_formats: bool,
     /// The section box, if on: everything outside it is cut away.
     clip: Option<(glam::Vec3, glam::Vec3)>,
+    caps: CapStyle,
     /// The cut away walls, if on.
     cut: Option<super::cutaway::CutRule>,
     /// Something of the scene is selected: the contour pass outlines it.
@@ -403,7 +417,7 @@ impl Renderer {
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32, 4 => Float32x2, 5 => Float32x4, 6 => Float32],
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32, 4 => Float32x2, 5 => Float32x4, 6 => Float32, 7 => Float32x3],
         };
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -603,6 +617,7 @@ impl Renderer {
             overlay: None,
             view_formats,
             clip: None,
+            caps: CapStyle::Layers,
             cut: None,
             selected: false,
             thin_lines: false,
@@ -626,6 +641,11 @@ impl Renderer {
     /// Sets (or clears) the section box of the next pictures.
     pub fn set_clip(&mut self, clip: Option<(glam::Vec3, glam::Vec3)>) {
         self.clip = clip;
+    }
+
+    /// What the cuts of the section box and the cut away walls show.
+    pub fn set_caps(&mut self, caps: CapStyle) {
+        self.caps = caps;
     }
 
     /// The quality of the next pictures and the direction towards the sun
@@ -884,6 +904,15 @@ impl Renderer {
             atmos: [sky_on, colours.night, haze_from, haze_from * 5.0 + 60.0],
             lamps,
             lamp_count: [lamp_n as f32, 0.0, 0.0, 0.0],
+            caps: match self.caps {
+                CapStyle::Layers => [0.0, 0.0, 0.0, 0.0],
+                CapStyle::Flat([r, g, b]) => [
+                    super::scene::srgb_to_linear(r),
+                    super::scene::srgb_to_linear(g),
+                    super::scene::srgb_to_linear(b),
+                    1.0,
+                ],
+            },
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);

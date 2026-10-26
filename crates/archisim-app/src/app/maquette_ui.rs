@@ -516,6 +516,11 @@ impl ArchiSimApp {
                 self.v3d.cutaway = c;
             }
         }
+        // What the cut walls show (the same choice as the section box's).
+        if self.v3d.cutaway != Cutaway::Up {
+            ui.separator();
+            super::view3d_ui::caps_choice(ui, &mut self.v3d.caps);
+        }
     }
 
     /// The names on the cards of a theme (for the tests).

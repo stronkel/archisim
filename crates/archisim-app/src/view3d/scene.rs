@@ -31,6 +31,9 @@ pub struct Vertex {
     /// 1 if its element is selected: outlined (the contour pass), its
     /// colours left as they are.
     pub select: f32,
+    /// Linear RGB of the material's cut colour (its poché in plan): what
+    /// its cut shows when a section box or the cut away walls cut it.
+    pub cap: [f32; 3],
 }
 
 /// What the disciplines change in the 3D view: what is greyed and what
@@ -88,7 +91,7 @@ fn vertex_key(v: &[f64; 3]) -> [i64; 3] {
     v.map(|c| (c * 10_000.0).round() as i64)
 }
 
-fn srgb_to_linear(c: u8) -> f32 {
+pub(crate) fn srgb_to_linear(c: u8) -> f32 {
     let c = c as f32 / 255.0;
     if c <= 0.04045 {
         c / 12.92
@@ -132,6 +135,24 @@ impl Scene {
             isolate,
             disciplines,
             &mut glass_owners,
+            false,
+        );
+        // Where the layers of a wall touch: seen only through a cut, so
+        // that a cut wall shows each layer solid in its cut colour.
+        let idx = archisim_geom::WallIndex::new(model);
+        let between: Vec<_> = model
+            .walls()
+            .flat_map(|w| archisim_geom::solid::wall_inner_faces(&idx, w.id))
+            .collect();
+        s.add_solids(
+            model,
+            between,
+            &anchors,
+            selection,
+            isolate,
+            disciplines,
+            &mut glass_owners,
+            true,
         );
         // Painted zones of walls' faces, just off them.
         for (wall, tri, [r, g, b]) in archisim_geom::solid::paint_zone_triangles(model) {
@@ -159,6 +180,7 @@ impl Scene {
                     tex: [0.0, 0.0],
                     cut,
                     select,
+                    cap: rgb,
                 });
             }
             s.owners.push(owner);
@@ -194,6 +216,7 @@ impl Scene {
                         tex: [0.0, 0.0],
                         cut: [cutaway::PLAIN, 0.0, 0.0, 0.0],
                         select: 0.0,
+                        cap: [color[0], color[1], color[2]],
                     });
                 }
                 if see_through {
@@ -223,6 +246,7 @@ impl Scene {
         isolate: bool,
         disciplines: &Disciplines,
         glass_owners: &mut Vec<Owner>,
+        between: bool,
     ) {
         let s = self;
         // What glows of each object, for its light.
@@ -340,6 +364,15 @@ impl Scene {
             }
             let base = tone(archisim_geom::solid::solid_color(model, &solid), dimmed);
             let cut = cut_of(model, anchors, &solid);
+            // The cut of a solid shows its material's cut colour, as the
+            // plan's poché (each layer of a wall its own).
+            let cap = {
+                let c = model
+                    .material(solid.material)
+                    .map_or([200, 200, 200], |m| m.cut_color);
+                let t = tone(c, dimmed);
+                [t[0], t[1], t[2]]
+            };
             let select = if selected { 1.0 } else { 0.0 };
             let is_object = matches!(solid.owner, SolidOwner::Object(_));
             let texture_of = |m: archisim_core::MaterialId| {
@@ -372,7 +405,10 @@ impl Scene {
                 // Faces looking up give way where another element rests on
                 // them: the floor under a wall, the top of a wall under the
                 // roof slab.
-                let bias = if grass {
+                // -2: a face between two layers, drawn only as the cut.
+                let bias = if between {
+                    -2.0
+                } else if grass {
                     4.0
                 } else if glows {
                     3.0
@@ -420,6 +456,7 @@ impl Scene {
                         tex,
                         cut,
                         select,
+                        cap,
                     });
                 }
                 if grass {
@@ -458,6 +495,7 @@ impl Scene {
             false,
             &Default::default(),
             &mut glass_owners,
+            false,
         );
         s.owners.extend(glass_owners);
         for v in s.opaque.iter_mut().chain(&mut s.glass) {

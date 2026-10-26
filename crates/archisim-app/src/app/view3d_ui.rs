@@ -18,7 +18,7 @@ use crate::pick::Element;
 use crate::view3d::camera::Camera;
 use crate::view3d::cutaway::{CutRule, Front};
 use crate::view3d::look::Quality;
-use crate::view3d::render::{Renderer, TextureMode};
+use crate::view3d::render::{CapStyle, Renderer, TextureMode};
 use crate::view3d::scene::{LinkedPart, Owner, Scene};
 use crate::view3d::section_box::{Face, SectionBox};
 
@@ -127,7 +127,7 @@ type Drawn = (
     Option<CutRule>,
     bool,
     u64,
-    (Quality, Option<[i32; 3]>, bool),
+    (Quality, Option<[i32; 3]>, bool, CapStyle),
     Option<crate::view3d::look::Atmosphere>,
 );
 
@@ -162,6 +162,8 @@ pub struct View3dState {
     pub last_ms: f64,
     /// The section box, when it is on.
     pub section: Option<SectionBox>,
+    /// What the cuts show: each material's cut colour or a flat colour.
+    pub caps: CapStyle,
     /// The last section box used, to switch it back on where it was.
     pub section_saved: Option<SectionBox>,
     /// The face of the section box being dragged, and where the drag was.
@@ -214,6 +216,7 @@ impl Default for View3dState {
             canvas: Rect::NOTHING,
             last_ms: 0.0,
             section: None,
+            caps: CapStyle::Layers,
             section_saved: None,
             section_drag: None,
             section_hover: None,
@@ -523,6 +526,7 @@ impl View3dState {
                 self.quality,
                 self.sun.map(|s| (s * 1000.0).round().as_ivec3().to_array()),
                 self.thin_lines,
+                self.caps,
             ),
             self.atmosphere.clone(),
         );
@@ -530,6 +534,7 @@ impl View3dState {
             let started = std::time::Instant::now();
             crate::crash::stage("3D: dibujar en la tarjeta gráfica");
             gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+            gpu.renderer.set_caps(self.caps);
             gpu.renderer.set_cut(cut);
             gpu.renderer.set_look(self.quality, self.sun);
             gpu.renderer
@@ -670,6 +675,7 @@ impl View3dState {
         let cut = self.cut_rule();
         let gpu = self.gpu.as_mut()?;
         gpu.renderer.set_clip(clip.map(|b| (b.lo, b.hi)));
+        gpu.renderer.set_caps(self.caps);
         gpu.renderer.set_cut(cut);
         gpu.renderer.set_look(self.quality, self.sun);
         gpu.renderer
@@ -1109,6 +1115,12 @@ impl ArchiSimApp {
             if on != self.v3d.section.is_some() {
                 self.v3d.toggle_section();
             }
+            row(
+                ui,
+                "Lo cortado",
+                "Cómo se ve lo que corta la caja (y los muros recortados): macizo con sus capas, como el poché de la planta, o de un color liso",
+                |ui, _| caps_choice(ui, &mut self.v3d.caps),
+            );
             let Some(mut b) = self.v3d.section else {
                 super::props::note(
                     ui,
@@ -1207,4 +1219,42 @@ fn shadow_focus(camera: &Camera) -> (glam::Vec3, glam::Vec3) {
         glam::Vec3::new(c.x - r, c.y - r, f32::MIN),
         glam::Vec3::new(c.x + r, c.y + r, f32::MAX),
     )
+}
+
+/// The choice of what a cut shows in 3D: «Capas», «Blanco», «Negro»,
+/// «Gris» (in the section box group and the Maqueta's cut away menu).
+pub(super) fn caps_choice(ui: &mut Ui, caps: &mut CapStyle) {
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        for (name, style, hint) in [
+            (
+                "Capas",
+                CapStyle::Layers,
+                "Cada capa del muro con su color de corte, como en planta",
+            ),
+            (
+                "Blanco",
+                CapStyle::Flat([255, 255, 255]),
+                "Todo lo cortado en blanco",
+            ),
+            (
+                "Negro",
+                CapStyle::Flat([30, 30, 30]),
+                "Todo lo cortado en negro, como un poché",
+            ),
+            (
+                "Gris",
+                CapStyle::Flat([150, 150, 150]),
+                "Todo lo cortado en gris",
+            ),
+        ] {
+            if ui
+                .selectable_label(*caps == style, name)
+                .on_hover_text(hint)
+                .clicked()
+            {
+                *caps = style;
+            }
+        }
+    });
 }

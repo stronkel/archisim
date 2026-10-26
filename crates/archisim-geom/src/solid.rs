@@ -300,6 +300,20 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
 
 /// [`wall_solids`] with the walls around found through an index.
 pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
+    wall_parts_in(idx, id, false)
+}
+
+/// The faces where the layers of a wall touch each other, one solid per
+/// layer, each face looking out of its own layer. They are not part of the
+/// wall's skin (which is one closed solid): the 3D view adds them so that
+/// a cut through the wall shows each layer in its own cut colour instead
+/// of the far side of the wall (it draws them only seen from inside, as
+/// the cut).
+pub fn wall_inner_faces(idx: &WallIndex, id: WallId) -> Vec<Solid> {
+    wall_parts_in(idx, id, true)
+}
+
+fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
     let model = idx.model;
     let (Some(wall), Some(g)) = (model.wall(id), wall_geometry_in(idx, id)) else {
         return Vec::new();
@@ -537,6 +551,7 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     let joined_end = g.end_cut.is_mitre();
 
     let mut tris: Vec<Vec<[P3; 3]>> = vec![Vec::new(); layers];
+    let mut inner_tris: Vec<Vec<[P3; 3]>> = vec![Vec::new(); layers];
     for c in 0..ncols - 1 {
         for r in 0..rows {
             for (k, out) in tris.iter_mut().enumerate() {
@@ -555,6 +570,25 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
                         }
                         _ => None,
                     };
+                    // The part the neighbour covers: a face between two
+                    // layers (only for the cut in the 3D view).
+                    if between {
+                        if let Some((t0, t1)) = theirs {
+                            let (a0, a1) = (own.0.max(t0), own.1.min(t1));
+                            if a1 > a0 + EPSILON {
+                                quad(
+                                    &mut inner_tris[k],
+                                    [
+                                        pt(a0, off, zs[r]),
+                                        pt(a1, off, zs[r]),
+                                        pt(a1, off, zs[r + 1]),
+                                        pt(a0, off, zs[r + 1]),
+                                    ],
+                                    inside,
+                                );
+                            }
+                        }
+                    }
                     let exposed: Vec<(f64, f64)> = match theirs {
                         None => vec![own],
                         Some((t0, t1)) => {
@@ -618,6 +652,19 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
                 }
             }
         }
+    }
+    if between {
+        return wtype
+            .layers
+            .iter()
+            .zip(inner_tris)
+            .filter(|(_, t)| !t.is_empty())
+            .map(|(layer, triangles)| Solid {
+                owner: SolidOwner::Wall(id),
+                material: layer.material,
+                triangles,
+            })
+            .collect();
     }
     let mut solids: Vec<Solid> = wtype
         .layers
