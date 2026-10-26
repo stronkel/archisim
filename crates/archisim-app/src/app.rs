@@ -1976,7 +1976,11 @@ impl ArchiSimApp {
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-        let typing = ctx.memory(|m| m.focused().is_some()) || self.temp_edit.is_some();
+        // Only a text field takes the keys: a button keeps the keyboard
+        // focus after its click (the Esquina of the bar, say), and Ctrl+Z
+        // must still undo then.
+        let in_text = typing_in_text(ctx);
+        let typing = in_text || self.temp_edit.is_some();
         let consume = |m: Modifiers, k: Key| {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
@@ -1994,11 +1998,6 @@ impl ArchiSimApp {
         if consume(Modifiers::CTRL, Key::Space) {
             self.open_command_search();
         }
-        // Tab: Técnica ↔ Maqueta (not while typing in a text field; a
-        // button that has the keyboard focus lets go of it).
-        // (egui moves the focus between buttons with Tab: only a text
-        // field keeps it.)
-        let in_text = typing_in_text(ctx);
         // Tab over several elements in plan, with the arrow: the next of
         // them (Shift+Tab, the one before); a click takes it.
         let overlapping = !self.maquette
@@ -2026,12 +2025,10 @@ impl ArchiSimApp {
                 ctx.request_repaint();
             }
         }
-        if self.temp_edit.is_none() && !in_text && consume(Modifiers::NONE, Key::Tab) {
-            ctx.memory_mut(|m| {
-                if let Some(id) = m.focused() {
-                    m.surrender_focus(id);
-                }
-            });
+        // F4: Técnica ↔ Maqueta. It used to be Tab, which Antonio found
+        // confusing next to Tab for the elements under the cursor (Revit's
+        // Tab): Tab now only does that.
+        if !in_text && consume(Modifiers::NONE, Key::F4) {
             let on = !self.maquette;
             self.set_maquette(on);
         }

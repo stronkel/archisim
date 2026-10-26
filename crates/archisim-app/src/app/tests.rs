@@ -5990,7 +5990,7 @@ fn swatches_paint_one_piece_of_one_object() {
 fn maquette_walks_with_wasd() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(h.app.maquette);
     h.frame();
     let hold = |h: &mut Harness, key: Key, frames: usize| {
@@ -6036,7 +6036,7 @@ fn maquette_walks_with_wasd() {
 fn escape_works_after_clicking_a_card() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(h.app.maquette);
     h.frame();
     h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
@@ -6408,7 +6408,7 @@ fn dormers_with_the_roof_tool() {
 fn maquette_environment() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(h.app.maquette);
     assert_eq!(h.app.mode, ViewMode::ThreeD);
     assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Front);
@@ -6425,7 +6425,7 @@ fn maquette_environment() {
     assert_eq!(h.app.tool, Tool::Wall);
     assert!(h.app.room_walls);
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(!h.app.maquette);
     assert_eq!(h.app.mode, ViewMode::Plan);
     h.click_at(p(0.0, 0.0));
@@ -6477,7 +6477,7 @@ fn maquette_environment() {
 fn moved_in_3d_into_a_corner_with_clearances() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
     h.app.v3d.camera.pitch = 1.3;
@@ -6559,7 +6559,7 @@ fn moved_in_3d_into_a_corner_with_clearances() {
 fn concept_volume_arrows_in_3d() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.camera.pitch = 0.5;
     h.app.v3d.camera.yaw = -2.2;
@@ -6756,7 +6756,7 @@ fn the_brush_in_tecnica() {
 fn maquette_places_like_paralives() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
     h.app.v3d.camera.pitch = 1.3;
@@ -6859,7 +6859,7 @@ fn maquette_places_like_paralives() {
 fn maquette_room_in_3d() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.camera.pitch = 1.2;
     h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
@@ -7552,4 +7552,34 @@ fn mirror_picks_a_line_as_axis_and_copies() {
     assert!(m
         .walls()
         .any(|x| (x.start.y - 9.0).abs() < 1e-9 || (x.end.y - 9.0).abs() < 1e-9));
+}
+
+/// A corner made with Esquina is undone with Ctrl+Z even while the order
+/// is still running and a button of the bar keeps the keyboard focus, and
+/// with U typed in the command line.
+#[test]
+fn a_corner_is_undone_while_the_order_runs() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let a = add_test_wall(&mut h, p(0.0, 0.0), p(4.0, 0.0));
+    let b = add_test_wall(&mut h, p(5.0, 1.0), p(5.0, 4.0));
+    command(&mut h, "esq");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(5.0, 3.0));
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
+    // A button of the bar with the keyboard focus, as after clicking it.
+    h.ctx
+        .memory_mut(|m| m.request_focus(egui::Id::new("boton-esquina")));
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(4.0, 0.0)));
+    assert!(h.model().wall(b).unwrap().start.approx_eq(p(5.0, 1.0)));
+    // Again, and undone with U, the order still running.
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(5.0, 3.0));
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
+    command(&mut h, "u");
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(4.0, 0.0)));
+    assert!(h.app.cad_prompt().is_some(), "Esquina goes on");
 }

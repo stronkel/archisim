@@ -217,6 +217,22 @@ impl ArchiSimApp {
             self.cmdline.log(format!("{} {text}", prompt.line()), false);
             let base = self.cad.as_ref().and_then(|c| c.base());
             let input = cad::typed_input(&prompt, &text, base, cursor);
+            // U (DESHACER) or REHACER typed while a command runs (between
+            // the corners of Esquina, say): the last step is undone and the
+            // command goes on.
+            if let Input::Value(v) = &input {
+                match cad::launch(v) {
+                    Some(cad::Launch::Undo) => {
+                        self.undo();
+                        return;
+                    }
+                    Some(cad::Launch::Redo) => {
+                        self.redo();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
             // Another command typed while one runs: it replaces it.
             if let Input::Value(v) = &input {
                 if prompt.want == Want::Point {

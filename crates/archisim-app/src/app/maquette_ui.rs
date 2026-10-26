@@ -271,7 +271,7 @@ impl ArchiSimApp {
             (
                 true,
                 "Maqueta",
-                "El 3D a pantalla con un catálogo, como Los Sims (Tab con el dibujo activo)",
+                "El 3D a pantalla con un catálogo, como Los Sims (F4)",
             ),
             (
                 false,
