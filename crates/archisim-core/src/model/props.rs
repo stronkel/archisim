@@ -106,6 +106,27 @@ impl Model {
         t: ObjectTypeId,
         skip: &[&str],
     ) -> Option<(Arc<props::PropMesh>, Vec<(MaterialId, Vec<[u32; 3]>)>)> {
+        let (mesh, roles) = self.prop_roles(t)?;
+        let mut parts: Vec<(MaterialId, Vec<[u32; 3]>)> = Vec::new();
+        for ((role, tris), (_, m)) in mesh.parts.iter().zip(&roles) {
+            if skip.contains(role) {
+                continue;
+            }
+            match parts.iter_mut().find(|(x, _)| x == m) {
+                Some((_, v)) => v.extend(tris.iter().copied()),
+                None => parts.push((*m, tris.clone())),
+            }
+        }
+        Some((mesh, parts))
+    }
+
+    /// The model of a type and the material of each of its roles (in the
+    /// order of its parts).
+    #[allow(clippy::type_complexity)]
+    fn prop_roles(
+        &self,
+        t: ObjectTypeId,
+    ) -> Option<(Arc<props::PropMesh>, Vec<(&'static str, MaterialId)>)> {
         let ty = self.object_types.get(&t)?;
         if ty.mesh.is_some() {
             return None;
@@ -150,25 +171,42 @@ impl Model {
                 })
             })
             .or_else(|| self.materials.keys().next().copied())?;
-        let mut parts: Vec<(MaterialId, Vec<[u32; 3]>)> = Vec::new();
-        for (role, tris) in &mesh.parts {
-            if skip.contains(role) {
-                continue;
-            }
-            let m = candidates(role)
-                .iter()
-                .find_map(|c| material_of(c))
-                .or_else(|| material_of(role))
-                .unwrap_or(main);
-            match parts.iter_mut().find(|(x, _)| *x == m) {
-                Some((_, v)) => v.extend(tris.iter().copied()),
-                None => parts.push((m, tris.clone())),
-            }
-        }
-        Some((mesh, parts))
+        let roles = mesh
+            .parts
+            .iter()
+            .map(|(role, _)| {
+                let m = candidates(role)
+                    .iter()
+                    .find_map(|c| material_of(c))
+                    .or_else(|| material_of(role))
+                    .unwrap_or(main);
+                (*role, m)
+            })
+            .collect();
+        Some((mesh, roles))
     }
 
-    /// The model of an object, if ArchiSim makes it.
+    /// The materials of an object drawn as stuffed fabric (see
+    /// `archisim_props::PropMesh::soft`): soft shading, outlined only
+    /// where they end. A material also on a hard piece of the same model
+    /// is drawn as before.
+    pub fn object_soft_materials(&self, id: ObjectId) -> Vec<MaterialId> {
+        let Some(o) = self.objects.get(&id) else {
+            return Vec::new();
+        };
+        let Some((mesh, roles)) = self.prop_roles(o.object_type) else {
+            return Vec::new();
+        };
+        let (soft, hard): (Vec<_>, Vec<_>) = roles.iter().partition(|(r, _)| mesh.soft.contains(r));
+        let mut out: Vec<MaterialId> = soft
+            .into_iter()
+            .map(|(_, m)| m)
+            .filter(|m| !hard.iter().any(|(_, h)| h == m))
+            .collect();
+        out.dedup();
+        out
+    }
+
     #[allow(clippy::type_complexity)]
     pub fn object_prop(
         &self,

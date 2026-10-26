@@ -776,6 +776,7 @@ pub mod extended;
 pub mod flora;
 pub mod ground;
 pub mod imported;
+pub mod workshop;
 
 /// Adds the studio's usual door and window types, with the materials they
 /// need (a subframe of galvanised steel, a stone sill).

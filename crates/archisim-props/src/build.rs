@@ -15,6 +15,8 @@ pub const ROUND: usize = 20;
 pub struct Builder {
     pub positions: Vec<[f32; 3]>,
     pub parts: BTreeMap<&'static str, Vec<[u32; 3]>>,
+    /// The roles of stuffed fabric (see `PropMesh::soft`).
+    pub soft: std::collections::BTreeSet<&'static str>,
 }
 
 pub fn sub(a: P3, b: P3) -> P3 {
@@ -466,5 +468,20 @@ impl Builder {
 
     pub fn triangle_count(&self) -> usize {
         self.parts.values().map(|t| t.len()).sum()
+    }
+
+    /// How many points there are: what [`Builder::transform_from`] moves
+    /// starts here.
+    pub fn mark(&self) -> usize {
+        self.positions.len()
+    }
+
+    /// Moves every point made since `start` (a piece made upright, then
+    /// leant or turned).
+    pub fn transform_from(&mut self, start: usize, f: impl Fn(P3) -> P3) {
+        for p in &mut self.positions[start..] {
+            let q = f([p[0] as f64, p[1] as f64, p[2] as f64]);
+            *p = [q[0] as f32, q[1] as f32, q[2] as f32];
+        }
     }
 }

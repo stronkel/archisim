@@ -15,6 +15,7 @@ mod accessories;
 pub mod build;
 mod cozy;
 mod extras;
+pub mod fine;
 pub mod fronts;
 mod furniture;
 mod garden;
@@ -72,6 +73,10 @@ impl Params {
 pub struct PropMesh {
     pub positions: Vec<[f32; 3]>,
     pub parts: Vec<(&'static str, Vec<[u32; 3]>)>,
+    /// The roles that are stuffed fabric (the workshop's cushions and
+    /// upholstery): drawn soft, outlined only where they end against
+    /// something behind, never at their own folds and seams.
+    pub soft: Vec<&'static str>,
 }
 
 impl PropMesh {
@@ -307,7 +312,11 @@ pub fn choice_number(key: &str, name: &str) -> Option<f64> {
 
 /// The names of the models of a kind.
 pub fn styles(kind: &str) -> &'static [&'static str] {
-    KINDS.iter().find(|k| k.0 == kind).map_or(&[], |k| k.1)
+    KINDS
+        .iter()
+        .chain(fine::KINDS)
+        .find(|k| k.0 == kind)
+        .map_or(&[], |k| k.1)
 }
 
 /// Makes a model. `None` for a kind ArchiSim does not make.
@@ -393,11 +402,16 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         "ceiling_fan" => extras::ceiling_fan(&mut b, p),
         "piano" => extras::piano(&mut b, p),
         "kids_bed" => extras::kids_bed(&mut b, p),
-        _ => return None,
+        _ => {
+            if !fine::make(kind, &mut b, p) {
+                return None;
+            }
+        }
     }
     Some(PropMesh {
         positions: b.positions,
         parts: b.parts.into_iter().collect(),
+        soft: b.soft.into_iter().collect(),
     })
 }
 

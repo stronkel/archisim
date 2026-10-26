@@ -240,3 +240,28 @@ Cambiar el tipo desde Propiedades, en Técnica, sigue cambiando todas las piezas
 
 - **Sofá rinconera** (`props:corner_sofa`, familia «Sofá rinconera»): largo a lo largo del respaldo y largo del lado, hacia la derecha o la izquierda (`side`); plazas en cada tramo (`places`, `places2`) y la de la esquina; un brazo en cada extremo libre; los tres modelos del sofá (contemporáneo sobre zócalo, clásico, nórdico de patas). En la biblioteca, 260×170 y 300×200.
 - **Encimera continua**: los módulos bajos que se tocan forman un tramo con una sola encimera (`Model::worktop_runs`, en `archisim-core::model::worktops`), hecha por `archisim_geom::solid::worktop_solids` y llevada por el primer módulo del tramo; el cuerpo del módulo ya no tiene tapa (`Builder::open_box`), porque siempre lleva una encimera encima. El hueco del fregadero lo da `archisim_props::sink_hole` al módulo y al tramo.
+
+## Taller de modelos de alta calidad (M1, 25/10/2026)
+
+Antonio pidió modelos mejores que los que hay, iguales o mejores que los de Paralives, poco a poco: **primero se enseñan, y cuando haya un paquete aprobado se meten en la biblioteca**. Hasta entonces viven en el **taller**: no están en la biblioteca, ni en el catálogo, ni en la plantilla.
+
+**Qué los hace mejores.** Los muebles de la biblioteca están hechos de cajas redondeadas y cojines hinchados por un solo lado. Los del taller están hechos de **tela rellena** (`fine::soft::Soft`):
+- las caras grandes se abomban y los lados también, menos que ellas;
+- el asiento se hunde un poco por delante de su centro, donde uno se sienta;
+- la tela tira de las esquinas y hace pliegues suaves;
+- nada es del todo regular: cada cojín es un poco distinto;
+- el **vivo** de las costuras es parte de la forma de la tela, a media vuelta del canto, así que se ve como una costura en relieve y no como una raya dibujada;
+- los **cojines sueltos** van cosidos por el canto, gordos en el centro y con las esquinas en punta, apoyados y algo girados, como quedan después de sentarse;
+- las **patas torneadas** se abren un poco hacia fuera.
+
+**Cómo se dibuja la tela en 3D.** Lo que es tela rellena (`PropMesh::soft`) se sombrea suave por completo y solo se perfila donde acaba contra lo de detrás: no lleva rayas en sus propios pliegues y costuras, que antes salían como líneas de puntos. Lo demás se dibuja como siempre, y los muebles de la biblioteca no cambian.
+
+**Peso.** El sofá de 3 plazas del taller tiene unos 18.500 triángulos, lo mismo que el sofá acogedor de la biblioteca (19.100). Una prueba lo vigila: ninguna pieza del taller puede pesar más de vez y media la que sustituye.
+
+**Primera entrega**: el sofá («Sofá (taller)», `props:fine_sofa`, modelo «Contemporáneo de patas»), con las medidas de siempre (largo, fondo, altura del asiento y del respaldo, plazas) y de 0 a 4 cojines sueltos. Dos tipos: 3 plazas en lino arena con cojines mostaza y patas de roble; 2 plazas en terciopelo salvia con un cojín de lino blanco y patas de nogal.
+
+**Cómo verlos**:
+- `archisim taller out/taller`: `taller.archisim` con cada pieza nueva delante de la de la biblioteca que sustituiría, `taller.ifc`, axonometría y planta.
+- `ARCHISIM_TALLER_OUT=out/taller cargo test -p archisim-app workshop_pictures`: fotos de estudio con el mismo dibujo 3D de la Maqueta (tres cuartos, frente, otro lado, detalle, y antes y después).
+
+Para el programador: `archisim-props::fine` (`KINDS`, `make`, `sofa`) y `fine::soft` (`Soft` con `crown`, `side`, `sag`, `creases`, `wobble`, `welt`; `knife_pillow`; `tube`); `Builder::mark`/`transform_from` para inclinar una pieza hecha derecha. Las recetas en `archisim-library/taller/*.asfam` y el proyecto en `archisim_library::workshop` (`PIECES`, `project`). `Model::object_soft_materials` dice qué materiales de un objeto son tela rellena, y `view3d::scene` los dibuja como el follaje (`bias` 2) con las normales suavizadas.

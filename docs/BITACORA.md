@@ -33,6 +33,33 @@ Rama `bloque/c8-pincel`, encima de `bloque/c7-deudas` (#73), con pull request pa
 
 ---
 
+## 2026-10-25 (10) · M1: taller de modelos de alta calidad, primera entrega (el sofá)
+
+Rama `bloque/modelos`, encima de `bloque/c7-deudas` (#73), con pull request para Antonio. Sin cambios de formato ni de IFC, y sin versión nueva: es el taller, no entra nada en la biblioteca.
+
+Lo que pidió Antonio: «necesito crear mejores modelos de los que tenemos, pero ir poco a poco: primero me enseñas lo que hagas y después, cuando tengamos un paquete, los incluimos en la biblioteca. Tienen que ser modelos de alta calidad, iguales o mejores que Paralives».
+
+**Hecho**
+- **Tela rellena** como pieza nueva para los modelos: caras que se abomban, asiento que se hunde donde uno se sienta, pliegues que tiran de las esquinas, pequeñas irregularidades y el vivo de las costuras en relieve. Cojines sueltos cosidos por el canto, con las esquinas en punta. Patas torneadas que se abren un poco.
+- **Primer modelo: el sofá** (familia «Sofá (taller)»), con sus medidas, plazas y de 0 a 4 cojines sueltos. Dos tipos de prueba: 3 plazas en lino arena y 2 plazas en terciopelo salvia.
+- **La tela se dibuja suave en el 3D**: sin las rayas de puntos que salían en los pliegues de los cojines, solo con su contorno. Solo afecta a los modelos del taller; los de la biblioteca se ven igual que antes.
+- Pesa lo mismo que el sofá de la biblioteca (18.500 triángulos frente a 19.100). Una prueba vigila que ninguna pieza del taller pese más de vez y media la que sustituye.
+- `archisim taller out/taller`: cada pieza nueva delante de la que sustituiría, con un tabique detrás (proyecto, IFC validado, axonometría y planta). Fotos de estudio con el dibujo 3D de la Maqueta: `ARCHISIM_TALLER_OUT=out/taller cargo test -p archisim-app workshop_pictures`.
+- Descrito en `docs/BIBLIOTECA_3D.md`, «Taller de modelos de alta calidad».
+
+**Pendiente**
+- Lo que diga Antonio del sofá: proporciones, lo hundido del asiento, el vivo, los cojines sueltos.
+- Las piezas siguientes del paquete, en el orden que diga Antonio. Propuesta: butaca, cama con ropa de cama, silla y mesa de comedor, y después cocina y baño.
+- Cuando el paquete esté aprobado: meterlo en la biblioteca en lugar de los modelos de ahora, en la Maqueta y en las colecciones.
+
+**Qué debe probar Antonio**
+1. Mira las fotos que te mando en el chat: «antes y después» y las vistas del sofá nuevo.
+2. `cargo run --release -p archisim-cli -- taller out/taller` y abre `out/taller/taller.archisim`. Ve a la Maqueta (Tab) y gira alrededor de los sofás: delante, los nuevos; detrás, los de la biblioteca.
+3. Selecciona un sofá nuevo y cambia en Propiedades el largo, las plazas y los cojines sueltos: debe rehacerse con sus cojines.
+4. Abre `out/taller/taller.ifc` en ArchiCAD o Revit: los sofás nuevos deben verse con su forma, como mobiliario.
+
+---
+
 ## 2026-10-25 (9) · v0.68: deudas de escaleras y buhardillas (C7)
 
 Rama `bloque/c7-deudas`, encima de `bloque/c6-documentacion` (#72), con pull request para Antonio. **Formato `.archisim` versión 38** (las escaleras guardan si sus mesetas van partidas y la meseta de llegada de las de caracol; abre todas las anteriores). Con esto el orden C1–C7 queda hecho.
