@@ -37,6 +37,11 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/dormitorio_litera.asfam"),
     include_str!("../taller/dormitorio_galan.asfam"),
     include_str!("../taller/dormitorio_espejo_pie.asfam"),
+    include_str!("../taller/luz_colgante.asfam"),
+    include_str!("../taller/luz_plafon.asfam"),
+    include_str!("../taller/luz_aplique.asfam"),
+    include_str!("../taller/luz_pie.asfam"),
+    include_str!("../taller/luz_mesa.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -609,6 +614,165 @@ fn place_bedroom(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, M
     Ok(at)
 }
 
+/// The lamps of the eight collections (paquete 4).
+pub const LIGHTS: &[Kitchen] = &[
+    Kitchen {
+        collection: "Nórdico cálido",
+        materials: &[
+            ("shade", "Pantalla de lino"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Lacado blanco"),
+            ("frame", "Roble claro"),
+            ("metal", "Metal negro"),
+            ("ceramic", "Cerámica blanca"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Mediterráneo",
+        materials: &[
+            ("shade", "Ratán"),
+            ("weave", "Ratán"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Cal blanca"),
+            ("frame", "Madera encalada"),
+            ("metal", "Hierro forjado"),
+            ("ceramic", "Terracota"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Años 50",
+        materials: &[
+            ("shade", "Cristal esmerilado"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Latón"),
+            ("frame", "Teca"),
+            ("metal", "Latón"),
+            ("ceramic", "Cerámica turquesa"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Japandi",
+        materials: &[
+            ("shade", "Papel de arroz"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Metal negro"),
+            ("frame", "Roble ahumado"),
+            ("metal", "Metal negro"),
+            ("ceramic", "Gres"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Contemporáneo",
+        materials: &[
+            ("shade", "Cristal esmerilado"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Metal negro"),
+            ("frame", "Roble claro"),
+            ("metal", "Metal negro"),
+            ("ceramic", "Cerámica blanca"),
+            ("stone", "Mármol"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Rústica",
+        materials: &[
+            ("shade", "Pantalla de lino"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Hierro forjado"),
+            ("frame", "Pino viejo"),
+            ("metal", "Hierro forjado"),
+            ("ceramic", "Cera"),
+            ("glass", "Vidrio claro"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Industrial",
+        materials: &[
+            ("shade", "Cristal esmerilado"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Metal negro"),
+            ("frame", "Roble ahumado"),
+            ("metal", "Metal negro"),
+            ("ceramic", "Gres"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Clásica",
+        materials: &[
+            ("shade", "Pantalla de lino"),
+            ("bulb", "Cristal esmerilado"),
+            ("body_mat", "Latón"),
+            ("frame", "Lacado marfil"),
+            ("metal", "Latón"),
+            ("ceramic", "Cera"),
+            ("stone", "Mármol"),
+            ("dark", "Metal negro"),
+        ],
+    },
+];
+
+/// Places a collection's lamps along a wall at `y = wall` from `x`
+/// (looking south): a chest of drawers of its bedroom with the table lamp
+/// on it, the wall light, the floor lamp, and the pendant and the ceiling
+/// light hung from a ceiling at 2.6 m before them. Returns where it ends.
+fn place_lights(
+    m: &mut Model,
+    k: &Kitchen,
+    room: &Kitchen,
+    x: f64,
+    wall: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64, base: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: std::f64::consts::PI,
+            base_offset: base,
+        })
+        .map(|_| ())
+    };
+    let chest = kitchen_type(
+        m,
+        room,
+        "Cómoda (taller)",
+        "Cómoda",
+        &[("columns", N(2.0)), ("width", N(1.1))],
+    )?;
+    put(m, chest, x + 0.55, wall, 0.0)?;
+    let lamp = kitchen_type(m, k, "Lámpara de mesa (taller)", "Lámpara de mesa", &[])?;
+    put(m, lamp, x + 0.8, wall, 0.85)?;
+    let sconce = kitchen_type(
+        m,
+        k,
+        "Aplique (taller)",
+        "Aplique",
+        &[("elevation", N(1.8))],
+    )?;
+    put(m, sconce, x + 1.6, wall, 0.0)?;
+    let floor = kitchen_type(m, k, "Lámpara de pie (taller)", "Lámpara de pie", &[])?;
+    put(m, floor, x + 2.3, wall, 0.0)?;
+    let pendant = kitchen_type(
+        m,
+        k,
+        "Lámpara colgante (taller)",
+        "Lámpara colgante",
+        &[("diameter", N(0.5))],
+    )?;
+    put(m, pendant, x + 1.2, wall - 1.4, 0.0)?;
+    let ceiling = kitchen_type(m, k, "Plafón (taller)", "Plafón", &[])?;
+    put(m, ceiling, x + 2.6, wall - 1.4, 0.0)?;
+    Ok(x + 3.2)
+}
+
 /// The pieces of a workshop bathroom, left to right along its wall:
 /// family, label, how far it stands from the one before (m) and its
 /// values. Mirror and towel rail hang over the washbasin's place.
@@ -1023,6 +1187,22 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The lamps, further east, each collection's on its wall.
+    for (k, room) in LIGHTS.iter().zip(BEDROOMS) {
+        let end = place_lights(&mut m, k, room, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     // The bathrooms, further east.
     for k in BATHROOMS {
         let end = place_bathroom(&mut m, k, x, wall)?;
@@ -1048,7 +1228,12 @@ mod tests {
 
     #[test]
     fn every_material_of_a_piece_is_in_the_palette() {
-        for k in KITCHENS.iter().chain(BATHROOMS).chain(BEDROOMS) {
+        for k in KITCHENS
+            .iter()
+            .chain(BATHROOMS)
+            .chain(BEDROOMS)
+            .chain(LIGHTS)
+        {
             for (key, name) in k.materials {
                 assert!(
                     crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
@@ -1182,6 +1367,34 @@ mod tests {
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
                 assert!(
                     (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every lamp of the workshop is made in its collection.
+    #[test]
+    fn the_workshop_lamps_are_made() {
+        let m = project().unwrap();
+        for k in LIGHTS {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    ["Lámpara", "Aplique", "Plafón"]
+                        .iter()
+                        .any(|n| t.name.starts_with(n))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 5, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (50..=30_000).contains(&tris),
                     "{}: {tris}",
                     m.object_type(t).unwrap().name
                 );

@@ -56,13 +56,25 @@ fn picture(
     cam: impl Fn(glam::Vec3, glam::Vec3) -> Camera,
     size: [u32; 2],
 ) -> Pixmap {
+    picture_in(r, gpu, m, cam, size, Light::Day)
+}
+
+/// [`picture`] in a light of the day: by day, at dusk or at night.
+fn picture_in(
+    r: &mut Renderer,
+    gpu: &(eframe::wgpu::Device, eframe::wgpu::Queue, bool),
+    m: &Model,
+    cam: impl Fn(glam::Vec3, glam::Vec3) -> Camera,
+    size: [u32; 2],
+    light: Light,
+) -> Pixmap {
     let scene = Scene::build(m, &BTreeSet::new());
     r.set_scene(&gpu.0, &scene);
     r.set_clip(None);
     r.set_cut(None);
     r.set_transparent(false);
     r.set_atmosphere(Some(Atmosphere {
-        light: Light::Day,
+        light,
         ground_z: 0.0,
         grid: None,
     }));
@@ -774,6 +786,84 @@ fn bedroom_pictures() {
                     c
                 },
                 size,
+            );
+            let slug = k.collection.to_lowercase().replace(' ', "-");
+            pic.save_png(dir.join(format!("{n}-{slug}-{name}.png")))
+                .unwrap();
+        }
+    }
+}
+
+/// The workshop's lamps (paquete 4), each collection's with its wall
+/// (`ARCHISIM_LUCES_OUT=carpeta`): by day and at night.
+#[test]
+fn lamp_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_LUCES_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: lamp pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::workshop::project().unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    for (i, k) in archisim_library::workshop::LIGHTS.iter().enumerate() {
+        let lamp = |name: &str| {
+            name.starts_with("Lámpara") || name.starts_with("Aplique") || name.starts_with("Plafón")
+        };
+        let mine: Vec<_> = m
+            .object_types()
+            .filter(|t| t.name.contains(k.collection) && lamp(&t.name))
+            .map(|t| t.id)
+            .collect();
+        let mut one = m.clone();
+        let (lx0, lx1) = one
+            .objects()
+            .filter(|o| mine.contains(&o.object_type))
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |a, o| {
+                (a.0.min(o.position.x), a.1.max(o.position.x))
+            });
+        // Its lamps and the chest under the table lamp.
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| {
+                !mine.contains(&o.object_type)
+                    && !(o.position.x > lx0 - 1.0 && o.position.x < lx1 + 0.5)
+            })
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let walls: Vec<_> = one
+            .walls()
+            .filter(|w| w.start.x.max(w.end.x) < lx0 - 1.5 || w.start.x.min(w.end.x) > lx1 + 1.5)
+            .map(|w| w.id)
+            .collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        let n = i + 1;
+        for (name, light, yaw, pitch, zoom) in [
+            ("dia", Light::Day, -68.0, 10.0, 1.35),
+            ("noche", Light::Night, -68.0, 10.0, 1.35),
+            ("cerca-noche", Light::Night, -95.0, 4.0, 1.9),
+        ] {
+            let pic = picture_in(
+                &mut r,
+                &gpu,
+                &one,
+                |lo, hi| {
+                    let lo = glam::Vec3::new(lx0 as f32 - 1.0, lo.y.max(-2.0), 0.0);
+                    let hi = glam::Vec3::new(lx1 as f32 + 0.6, hi.y, 2.6);
+                    camera(lo, hi, aspect, yaw, pitch, zoom)
+                },
+                size,
+                light,
             );
             let slug = k.collection.to_lowercase().replace(' ', "-");
             pic.save_png(dir.join(format!("{n}-{slug}-{name}.png")))

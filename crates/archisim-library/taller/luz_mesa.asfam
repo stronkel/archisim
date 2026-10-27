@@ -1,0 +1,37 @@
+family "Lámpara de mesa (taller)"
+  category furniture
+  host none
+  version 1
+  description "Lámpara de mesa como la hace cada colección (la de su mesita, a otra escala) (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    height length = 0.55 range 0.25..1.00 label "Altura"
+  section "Materiales"
+    shade material = "Pantalla de lino" label "Pantalla o difusor (se enciende)"
+    bulb material = "Cristal esmerilado" label "Bombilla o llama (se enciende)"
+    body_mat material = "Lacado blanco" label "Cuerpo"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Latón" label "Metal"
+    ceramic material = "Cerámica blanca" label "Cerámica o vela"
+    weave material = "Ratán" label "Fibra"
+    glass material = "Vidrio claro" label "Vidrio"
+    stone material = "Mármol" label "Piedra"
+    dark material = "Metal negro" label "Cable"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-height * 0.35, 0, 0) to (height * 0.35, height * 0.7, height) material shade
+
+plan 1:50
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (height * 0.33 * cos(t0), height * 0.38 + height * 0.33 * sin(t0)) to (height * 0.33 * cos(t1), height * 0.38 + height * 0.33 * sin(t1)) pen view
+
+outputs
+  generator = "props:table_lamp"
+  ifc_class = "IfcLightFixture"
+  ifc_type = "POINTSOURCE"

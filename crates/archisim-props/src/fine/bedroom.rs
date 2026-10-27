@@ -919,7 +919,7 @@ pub(super) fn bed_frame(
 // ---------------------------------------------------------- lamps
 
 /// The bedside lamp of collection `ix`, standing at `(x, y, z)`.
-fn bedside_lamp(b: &mut Builder, ix: usize, x: f64, y: f64, z: f64) {
+pub(super) fn bedside_lamp(b: &mut Builder, ix: usize, x: f64, y: f64, z: f64) {
     let at = [x, y, z];
     // A shade turned about the vertical: radius at its foot and head.
     let shade = |b: &mut Builder, z0: f64, h: f64, r0: f64, r1: f64| {

@@ -2222,6 +2222,8 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Lacado azul añil", "wood", [64, 94, 140]),
     ("Lacado marfil", "wood", [232, 223, 202]),
     ("Terciopelo verde botella", "fabric", [44, 82, 64]),
+    // The lamps of the collections (paquete 4).
+    ("Papel de arroz", "other", [246, 240, 226]),
 ];
 
 /// A material of the cosy palette, added to the project if it has none of

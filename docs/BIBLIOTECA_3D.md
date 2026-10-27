@@ -348,6 +348,27 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### Paquete 4: la iluminación de las ocho colecciones (27/10/2026)
+
+En el taller (rama `bloque/paquete-4`, `archisim_props::fine::lighting`), cinco piezas nuevas con un modelo por colección. Lo que se enciende de noche es el papel `shade` (pantalla, difusor opal, papel, ratán) y `bulb` (bombilla desnuda, llama de vela): `archisim_geom::solid::glow_materials` los da por encendidos en `pendant`, `ceiling_light`, `wall_light`, `floor_lamp` y `table_lamp`.
+
+| Colección | Colgante | Plafón | Aplique | De pie | De mesa |
+|---|---|---|---|---|---|
+| Nórdico cálido | campana lacada con remate de roble y difusor | cúpula opal con aro de roble | brazo de roble con tambor de lino | trípode de roble con tambor de lino | la de su mesita |
+| Mediterráneo | cúpula de ratán | tambor de ratán | media cúpula de ratán | columna torneada encalada con cono de ratán | jarra de terracota |
+| Años 50 | tres globos opal en varillas de latón | plato opal con aro y remate de latón | conos de latón arriba y abajo | pie de compás con tres conos orientables | pie turquesa |
+| Japandi | farol de papel redondo | caja de papel en bastidor de roble | caja de papel sobre respaldo de roble | columna de papel en bastidor de roble | farol de papel |
+| Contemporáneo | aro luminoso en tres tirantes | disco fino | disco oscuro con halo detrás | de arco sobre pie de mármol | seta |
+| Rústica | rueda de forja con velas y cadenas | cuenco de vidrio con flejes de hierro | farol de forja con vela | candelero de forja con pantalla imperio | candelero |
+| Industrial | campana esmaltada con bombilla | ojo de buey con rejilla | brazo de tubo con jaula | trípode de acero con foco | bombilla en jaula |
+| Clásica | araña de latón de seis brazos con velas y pantallitas | cuenco de alabastro colgado de tres tirantes | dos brazos con velas y pantallitas | columna torneada de latón con tambor | columna de latón |
+
+- Medidas: colgante con «Diámetro», «Cuelga bajo el techo» y «Altura del techo»; plafón con «Diámetro» y «Altura del techo»; aplique con «Altura del centro»; de pie con «Altura» y «Diámetro de la pantalla»; de mesa con «Altura» (se coloca sobre el mueble con el desfase de la base).
+- **IFC**: las familias con `ifc_class = "IfcLightFixture"` se escriben como `IfcLightFixture` con su `IfcLightFixtureType` (`POINTSOURCE`, `DIRECTIONSOURCE` o `SECURITYLIGHTING`) y el importador las lee de vuelta como objetos; los puntos de luz de las instalaciones siguen por su lado.
+- Partes de material: `shade`, `bulb`, `body` (parámetro `body_mat`), `frame`, `metal`, `ceramic`, `weave`, `glass`, `stone` y `dark` (cables).
+- Ocho paredes de lámparas en el taller (`workshop::LIGHTS`, `place_lights`): la cómoda de su dormitorio con la lámpara de mesa encima, el aplique, la lámpara de pie, y la colgante y el plafón a 2,60 m delante; fotos de día y de noche con `ARCHISIM_LUCES_OUT=carpeta cargo test --release -p archisim-app -- lamp_pictures`.
+- Material nuevo: Papel de arroz.
+
 ### Paquete 3, segunda vuelta: el dormitorio completo (27/10/2026)
 
 En el taller (`archisim_props::fine::nursery`), lo que faltaba del dormitorio, uno por colección:

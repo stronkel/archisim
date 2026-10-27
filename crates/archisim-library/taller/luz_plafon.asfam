@@ -1,0 +1,40 @@
+family "Plafón (taller)"
+  category furniture
+  host none
+  version 1
+  description "Plafón de techo como lo hace cada colección (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    diameter length = 0.40 range 0.20..1.20 label "Diámetro"
+    ceiling  length = 2.60 range 2.20..5.00 label "Altura del techo"
+  section "Materiales"
+    shade material = "Pantalla de lino" label "Pantalla o difusor (se enciende)"
+    bulb material = "Cristal esmerilado" label "Bombilla o llama (se enciende)"
+    body_mat material = "Lacado blanco" label "Cuerpo"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Latón" label "Metal"
+    ceramic material = "Cerámica blanca" label "Cerámica o vela"
+    weave material = "Ratán" label "Fibra"
+    glass material = "Vidrio claro" label "Vidrio"
+    stone material = "Mármol" label "Piedra"
+    dark material = "Metal negro" label "Cable"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-diameter / 2, 0, ceiling - 0.15) to (diameter / 2, diameter, ceiling) material shade
+
+plan 1:50
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (diameter / 2 * cos(t0), diameter / 2 + diameter / 2 * sin(t0)) to (diameter / 2 * cos(t1), diameter / 2 + diameter / 2 * sin(t1)) pen thin dashed
+  line (-diameter * 0.35, diameter * 0.15) to (diameter * 0.35, diameter * 0.85) pen thin dashed
+  line (-diameter * 0.35, diameter * 0.85) to (diameter * 0.35, diameter * 0.15) pen thin dashed
+
+outputs
+  generator = "props:ceiling_light"
+  ifc_class = "IfcLightFixture"
+  ifc_type = "POINTSOURCE"

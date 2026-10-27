@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (9) · Paquete 4: la iluminación de las ocho colecciones
+
+Rama `bloque/paquete-4` (sobre `bloque/paquete-3`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca. El IFC gana `IfcLightFixture` para las familias que lo piden (validado).
+
+Antonio, con cocina, baño y dormitorio esperando su revisión: «Paquete 4: iluminación».
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 4»)
+- Cinco lámparas por colección: colgante, plafón, aplique, de pie y de mesa (la de mesa es la de su mesita de noche, a escala). Lo que es pantalla, difusor, papel, ratán, bombilla o llama se enciende de noche en la Maqueta.
+- En el IFC son `IfcLightFixture` con su `IfcLightFixtureType` (punto de luz; el aplique, luz dirigida), y se leen de vuelta como lámparas.
+- Ocho paredes de lámparas en el taller (cómoda con su lámpara, aplique, lámpara de pie, y colgante y plafón a 2,60 m); fotos de día y de noche.
+- Material nuevo en la paleta: Papel de arroz.
+
+**Pendiente**
+- La revisión de Antonio de los paquetes 2, 3 y 4; después, a la biblioteca.
+- Farolas y balizas de exterior van con el paquete 5.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks) y abre `taller.archisim` (te lo mando).
+2. En la Maqueta, las lámparas están entre los dormitorios y los baños: mira las cinco de cada colección.
+3. En la barra de la Maqueta, cambia «Luz: Día» a «Noche» y mira cómo se encienden y cómo iluminan la pared.
+4. Exporta el IFC y ábrelo en tu visor: las lámparas deben salir como luminarias.
+
+---
+
 ## 2026-10-27 (8) · Paquete 3, segunda vuelta: el dormitorio completo
 
 Rama `bloque/paquete-3` (la misma del pull request #86). Sin cambios de formato; en el taller, no en la biblioteca.

@@ -22,6 +22,8 @@ use crate::{derived_guid, Exporter};
 enum Class {
     Furniture,
     Sanitary,
+    /// Lamps (`IfcLightFixture`).
+    Light,
     /// Vegetation and the like (`IfcGeographicElement`).
     Geographic,
     /// People… (`IfcBuildingElementProxy`).
@@ -36,6 +38,7 @@ impl Class {
         match self {
             Class::Furniture => ("IFCFURNITURE", "IFCFURNITURETYPE"),
             Class::Sanitary => ("IFCSANITARYTERMINAL", "IFCSANITARYTERMINALTYPE"),
+            Class::Light => ("IFCLIGHTFIXTURE", "IFCLIGHTFIXTURETYPE"),
             Class::Geographic => ("IFCGEOGRAPHICELEMENT", "IFCGEOGRAPHICELEMENTTYPE"),
             Class::Proxy => ("IFCBUILDINGELEMENTPROXY", "IFCBUILDINGELEMENTPROXYTYPE"),
             Class::Vehicle => ("IFCVEHICLE", "IFCVEHICLETYPE"),
@@ -47,6 +50,7 @@ impl Class {
         match self {
             Class::Furniture => "Pset_FurnitureTypeCommon",
             Class::Sanitary => "Pset_SanitaryTerminalTypeCommon",
+            Class::Light => "Pset_LightFixtureTypeCommon",
             Class::Geographic => "ArchiSim_Phase",
             Class::Proxy => "Pset_BuildingElementProxyCommon",
             Class::Vehicle => "ArchiSim_Phase",
@@ -65,6 +69,7 @@ fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, S
         .to_ascii_lowercase();
     let class = match class.as_str() {
         "ifcsanitaryterminal" => Class::Sanitary,
+        "ifclightfixture" => Class::Light,
         "ifcgeographicelement" => Class::Geographic,
         "ifcbuildingelementproxy" => Class::Proxy,
         "ifcvehicle" if schema == crate::Schema::Ifc4x3 => Class::Vehicle,
@@ -84,6 +89,7 @@ fn ifc_kind(outputs: &archisim_core::Values, schema: crate::Schema) -> (Class, S
             "WASHHANDBASIN",
             "WCSEAT",
         ],
+        Class::Light => &["POINTSOURCE", "DIRECTIONSOURCE", "SECURITYLIGHTING"],
         Class::Furniture => &[
             "CHAIR",
             "TABLE",

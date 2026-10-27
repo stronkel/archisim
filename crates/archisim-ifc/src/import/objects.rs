@@ -1,5 +1,5 @@
 //! Objects written by ArchiSim: an `IfcFurniture` or
-//! `IfcSanitaryTerminal` whose type carries ArchiSim's family data is read
+//! `IfcSanitaryTerminal` (or `IfcLightFixture`) whose type carries ArchiSim's family data is read
 //! back as an object of that family, at its placement. Objects from other
 //! programs are not imported yet.
 
@@ -11,6 +11,9 @@ impl<'a> Importer<'a> {
     pub(super) fn import_objects(&mut self) {
         let mut ids = self.file.of_kind("IFCFURNITURE");
         ids.extend(self.file.of_kind("IFCSANITARYTERMINAL"));
+        // Lamps; an installation's light points, whose types carry no
+        // family, are read with the services.
+        ids.extend(self.file.of_kind("IFCLIGHTFIXTURE"));
         // Vegetation, people and vehicles (terrains have no family).
         ids.extend(self.file.of_kind("IFCGEOGRAPHICELEMENT"));
         ids.extend(self.file.of_kind("IFCBUILDINGELEMENTPROXY"));

@@ -2686,6 +2686,10 @@ pub fn glow_materials(
     };
     let (keys, reach): (&[&str], f64) = match kind.as_str() {
         "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
+        // The lamps of the collections (paquete 4).
+        "pendant" | "ceiling_light" | "wall_light" | "floor_lamp" | "table_lamp" => {
+            (&["shade", "bulb"], LAMP_REACH)
+        }
         "fireplace" => (&["flame"], LAMP_REACH),
         "fine_fireplace" => (&["flame", "flame2"], LAMP_REACH),
         "streetlight" | "fine_streetlight" => (&["light"], STREET_REACH),
