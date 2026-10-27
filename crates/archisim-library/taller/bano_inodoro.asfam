@@ -1,0 +1,45 @@
+family "Inodoro (taller)"
+  category sanitary
+  host none
+  version 1
+  description "Inodoro como lo hace cada colección: suspendido, de pie, adosado o con cisterna alta (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.38 range 0.30..0.60 label "Ancho"
+    depth  length = 0.68 range 0.50..0.90 label "Fondo"
+  section "Materiales"
+    mat material = "Cerámica blanca" label "Porcelana"
+    unit material = "Roble claro" label "Mueble u obra"
+    top material = "Piedra caliza" label "Encimera o piedra"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+    metal material = "Acero inoxidable" label "Grifería y metal"
+    seat material = "Lacado blanco" label "Asiento"
+    glass material = "Vidrio claro" label "Vidrio y espejo"
+    frame material = "Roble claro" label "Marco"
+    wood material = "Roble claro" label "Madera"
+    towel material = "Toalla blanca" label "Toallas y cortina"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    light material = "Cristal esmerilado" label "Luz"
+
+body
+  box (-width / 2, 0, 0.40) to (width / 2, 0.18, 0.80) material mat
+  box (-width / 2 + 0.04, 0.18, 0) to (width / 2 - 0.04, depth, 0.40) material mat
+  box (-width / 2 + 0.06, 0, 0) to (width / 2 - 0.06, 0.18, 0.40) material mat
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.18) (-width / 2, 0.18) pen view
+  let a = width / 2 - 0.02
+  let b = (depth - 0.18) / 2
+  let c = 0.18 + b
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (a * cos(t0), c + b * sin(t0)) to (a * cos(t1), c + b * sin(t1)) pen view
+
+outputs
+  generator = "props:wc"
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "TOILETPAN"

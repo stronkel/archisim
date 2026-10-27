@@ -1,0 +1,39 @@
+family "Toallero (taller)"
+  category sanitary
+  host none
+  version 1
+  description "Toallero como lo hace cada colección, con su toalla (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.60 range 0.30..1.20 label "Ancho"
+    height    length = 0.90 range 0.40..1.80 label "Altura (radiador)"
+    elevation length = 1.10 range 0.20..1.80 label "Altura desde el suelo"
+  section "Materiales"
+    mat material = "Cerámica blanca" label "Porcelana"
+    unit material = "Roble claro" label "Mueble u obra"
+    top material = "Piedra caliza" label "Encimera o piedra"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+    metal material = "Acero inoxidable" label "Grifería y metal"
+    seat material = "Lacado blanco" label "Asiento"
+    glass material = "Vidrio claro" label "Vidrio y espejo"
+    frame material = "Roble claro" label "Marco"
+    wood material = "Roble claro" label "Madera"
+    towel material = "Toalla blanca" label "Toallas y cortina"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    light material = "Cristal esmerilado" label "Luz"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.1, elevation + 0.03) material metal
+
+plan 1:50
+  line (-width / 2, 0.08) to (width / 2, 0.08) pen view dashed
+  line (-width / 2, 0) to (-width / 2, 0.08) pen thin dashed
+  line (width / 2, 0) to (width / 2, 0.08) pen thin dashed
+
+outputs
+  generator = "props:towel_rail"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -6,6 +6,28 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (6) · Paquete 2, tanda 2b: el baño de las ocho colecciones
+
+Rama `bloque/paquete-2b` (sobre `bloque/paquete-2a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, tras ver las cocinas: «sigue con el baño».
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Tanda 2b»)
+- Lavabo, inodoro, bidé, ducha, bañera, espejo y toallero hechos en las ocho colecciones, con sus grifos (los de la cocina a escala de lavabo), mamparas o cortinas, rociadores, bañeras exentas, de patas, de obra o de madera, y toallas en los toalleros.
+- Son modelos nuevos de las familias de siempre: los proyectos antiguos no cambian.
+- Ocho baños montados en el taller, cada uno con su pared; fotos por colección.
+
+**Pendiente**
+- Que Antonio revise los baños (y las cocinas); con su visto bueno, el paquete 2 entero a la biblioteca.
+- Grifería suelta (portarrollos, barra de apoyo) y mampara de esquina para baños accesibles en las colecciones.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks) y abre `taller.archisim` (te lo mando).
+2. En la Maqueta, a la derecha de las cocinas están los ocho baños: mira lavabo y grifo, inodoro y bidé, ducha, bañera, espejo y toallero de cada uno.
+3. Dime, baño por baño, qué cambiarías.
+
+---
+
 ## 2026-10-27 (5) · Paquete 2, tanda 2a: la cocina de las ocho colecciones
 
 Rama `bloque/paquete-2a` (sobre `bloque/diseno`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

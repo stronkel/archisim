@@ -348,6 +348,23 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### Tanda 2b: el baño de las ocho colecciones (27/10/2026)
+
+En el taller (rama `bloque/paquete-2b`), los sanitarios y accesorios de la biblioteca hechos como los hace cada colección (`archisim_props::fine::bath`). Como en la cocina, no son familias nuevas: «Lavabo», «Inodoro», «Bidé», «Ducha», «Bañera», «Espejo» y «Toallero» ganan ocho modelos más, uno por colección, después de los suyos; los proyectos de antes no cambian. Los grifos son los de la cocina a otra escala (`kitchen::tap_scaled`).
+
+| Colección | Lavabo | Inodoro y bidé | Ducha | Bañera | Espejo | Toallero |
+|---|---|---|---|---|---|---|
+| Nórdico cálido | mueble suspendido de roble con lavabo integrado, grifo de caño alto | suspendidos | mampara fija de vidrio, rociador redondo | exenta oval con grifo de pie | redondo de roble con correa | escalera de roble |
+| Mediterráneo | de obra (microcemento) con hornacina en arco y toallas, cuenco cerámico, grifo de cisne | de pie con cisterna | cortina en barra, ducha vista de latón | de obra | de arco | aro de forja |
+| Años 50 | de pedestal | de pie con cisterna | mamparas correderas de vidrio acanalado en marco cromado, rociador de campana | de obra con frente de azulejo | redondo cromado con aplique | barra cromada |
+| Japandi | dos baldas de roble, cuenco de gres, grifo de pared | suspendidos | mampara de perfil negro, sumidero lineal | ofuro de madera con taburete | cápsula | escalera de roble |
+| Contemporáneo | suspendido sin tirador, grifo de pared cuadrado | suspendidos de líneas rectas | vidrio sin perfil, rociador de techo cuadrado | exenta oval con grifo de pie cuadrado | con luz | barra |
+| Rústica | tablón en escuadras de hierro, cuenco de piedra, cesta | con cisterna alta y cadena | cortina | de patas | marco de pino | aro de forja |
+| Industrial | bastidor de acero con balda y pila de hormigón, grifo de tubo | adosado | mampara de cuarterones negros (tipo ventana de acero) | de patas, grifo de muelle | marco de acero colgado de una barra | escalera de tubo negro |
+| Clásica | tocador de mármol sobre patas torneadas de latón, lavabo bajo encimera, barra con toalla | con cisterna alta | mampara con perfil de latón | de patas | dorado con copete | radiador toallero de latón |
+
+Partes de material: `mat` (porcelana), `unit` (mueble u obra), `top` (encimera o piedra), `metal`, `seat`, `glass`, `frame`, `wood`, `towel` (toallas y cortina), `dark` y `light`. Ocho baños montados en el taller (`workshop::BATHROOMS`, `place_bathroom`), cada uno con su pared; fotos con `ARCHISIM_BANOS_OUT=carpeta cargo test --release -p archisim-app -- bathroom_pictures`.
+
 ### Tanda 2a: la cocina de las ocho colecciones (27/10/2026)
 
 En el taller (rama `bloque/paquete-2a`), la cocina por módulos de la biblioteca hecha como la hace cada colección (`archisim_props::fine::kitchen`). No son familias nuevas: «Módulo bajo de cocina», «Columna de cocina», «Mueble alto de cocina» y «Campana extractora» ganan ocho modelos más, uno por colección, después de los suyos («Módulo», «Columna», «Puertas»; «Decorativa» e «Integrada» en la campana), así que los proyectos de antes no cambian y todo lo de la cocina por módulos sigue igual: se pegan, la encimera es continua (`worktop_runs`) y el plano es el de siempre.

@@ -8,6 +8,10 @@ use crate::Params;
 /// Toilets: 1 on the floor with its cistern; 2 hung on the wall, with the
 /// flush plate.
 pub fn wc(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::wc(b, p) {
+        return;
+    }
     let w = p.get("width", 0.38);
     let d = p.get("depth", 0.68);
     let hung = p.style() == 2;
@@ -79,6 +83,10 @@ pub fn wc(b: &mut Builder, p: &Params) {
 
 /// Bidets, hung or on the floor, with their tap.
 pub fn bidet(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::bidet(b, p) {
+        return;
+    }
     let w = p.get("width", 0.36);
     let d = p.get("depth", 0.55);
     let hung = p.style() == 2;
@@ -107,6 +115,10 @@ pub fn bidet(b: &mut Builder, p: &Params) {
 /// Washbasins: 1 on a pedestal; 2 on a vanity unit; 3 hung on the wall.
 /// `height` is the rim's.
 pub fn washbasin(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::washbasin(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6);
     let d = p.get("depth", 0.45);
     let h = p.get("height", 0.85);
@@ -173,6 +185,10 @@ pub fn washbasin(b: &mut Builder, p: &Params) {
 
 /// Baths: a panelled tub with its hollow and a tap at one end.
 pub fn bath(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::bath(b, p) {
+        return;
+    }
     let l = p.get("width", 1.7);
     let w = p.get("depth", 0.7);
     let h = p.get("height", 0.55);
@@ -200,6 +216,10 @@ pub fn bath(b: &mut Builder, p: &Params) {
 /// Shower trays, with their drain and (2, 3) a glass screen on one or
 /// two sides and a shower column.
 pub fn shower(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::shower(b, p) {
+        return;
+    }
     let w = p.get("width", 0.9);
     let d = p.get("depth", 0.9);
     let h = p.get("height", 0.04).max(0.01);

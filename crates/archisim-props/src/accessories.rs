@@ -9,6 +9,10 @@ use crate::Params;
 
 /// Mirrors: 1 framed, 2 frameless, 3 round.
 pub fn mirror(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::mirror(b, p) {
+        return;
+    }
     let w = p.get("width", 0.8);
     let h = p.get("height", 1.0);
     let z0 = p.get("elevation", 1.0);
@@ -44,6 +48,10 @@ pub fn mirror(b: &mut Builder, p: &Params) {
 
 /// Towel rails: 1 a bar on two posts, 2 a heated ladder.
 pub fn towel_rail(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2b).
+    if crate::fine::bath::towel_rail(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6);
     let z = p.get("elevation", 1.1);
     let x0 = -w / 2.0;

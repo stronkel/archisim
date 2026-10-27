@@ -1,0 +1,37 @@
+family "Espejo (taller)"
+  category sanitary
+  host none
+  version 1
+  description "Espejo como lo hace cada colección (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.80 range 0.30..3.00 label "Ancho"
+    height    length = 1.00 range 0.30..2.20 label "Altura"
+    elevation length = 1.00 range 0.00..2.00 label "Altura desde el suelo"
+  section "Materiales"
+    mat material = "Cerámica blanca" label "Porcelana"
+    unit material = "Roble claro" label "Mueble u obra"
+    top material = "Piedra caliza" label "Encimera o piedra"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+    metal material = "Acero inoxidable" label "Grifería y metal"
+    seat material = "Lacado blanco" label "Asiento"
+    glass material = "Vidrio claro" label "Vidrio y espejo"
+    frame material = "Roble claro" label "Marco"
+    wood material = "Roble claro" label "Madera"
+    towel material = "Toalla blanca" label "Toallas y cortina"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    light material = "Cristal esmerilado" label "Luz"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.03, elevation + height) material glass
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.03) (-width / 2, 0.03) pen view dashed
+
+outputs
+  generator = "props:mirror"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -19,6 +19,13 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/cocina_columna.asfam"),
     include_str!("../taller/cocina_alto.asfam"),
     include_str!("../taller/cocina_campana.asfam"),
+    include_str!("../taller/bano_lavabo.asfam"),
+    include_str!("../taller/bano_inodoro.asfam"),
+    include_str!("../taller/bano_bide.asfam"),
+    include_str!("../taller/bano_ducha.asfam"),
+    include_str!("../taller/bano_banera.asfam"),
+    include_str!("../taller/bano_espejo.asfam"),
+    include_str!("../taller/bano_toallero.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -90,8 +97,8 @@ pub const PIECES: &[Piece] = &[
     },
 ];
 
-/// A kitchen of the workshop (paquete 2a): one collection's materials
-/// for every module of its run.
+/// A kitchen or a bathroom of the workshop (paquete 2): one collection's
+/// materials for every piece of it.
 pub struct Kitchen {
     pub collection: &'static str,
     /// Materials by parameter, names of the cozy palette.
@@ -229,6 +236,217 @@ pub const KITCHENS: &[Kitchen] = &[
         ],
     },
 ];
+
+/// The eight bathrooms, one per collection (paquete 2b).
+pub const BATHROOMS: &[Kitchen] = &[
+    Kitchen {
+        collection: "Nórdico cálido",
+        materials: &[
+            ("mat", "Cerámica blanca"),
+            ("unit", "Roble claro"),
+            ("top", "Piedra caliza"),
+            ("metal", "Acero inoxidable"),
+            ("seat", "Lacado blanco"),
+            ("frame", "Roble claro"),
+            ("wood", "Roble claro"),
+            ("towel", "Toalla blanca"),
+            ("dark", "Cuero coñac"),
+        ],
+    },
+    Kitchen {
+        collection: "Mediterráneo",
+        materials: &[
+            ("mat", "Cerámica blanca"),
+            ("unit", "Microcemento"),
+            ("top", "Microcemento"),
+            ("metal", "Latón"),
+            ("seat", "Madera encalada"),
+            ("frame", "Madera encalada"),
+            ("wood", "Enea"),
+            ("towel", "Lino blanco"),
+            ("dark", "Fresno oscuro"),
+        ],
+    },
+    Kitchen {
+        collection: "Años 50",
+        materials: &[
+            ("mat", "Cerámica esmaltada"),
+            ("unit", "Lacado azul celeste"),
+            ("top", "Terrazo"),
+            ("metal", "Acero inoxidable"),
+            ("seat", "Lacado azul celeste"),
+            ("frame", "Nogal"),
+            ("wood", "Nogal"),
+            ("towel", "Toalla blanca"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Japandi",
+        materials: &[
+            ("mat", "Gres"),
+            ("unit", "Roble claro"),
+            ("top", "Piedra gris"),
+            ("metal", "Metal negro"),
+            ("seat", "Roble claro"),
+            ("frame", "Roble claro"),
+            ("wood", "Roble claro"),
+            ("towel", "Lino piedra"),
+            ("dark", "Fresno oscuro"),
+        ],
+    },
+    Kitchen {
+        collection: "Contemporáneo",
+        materials: &[
+            ("mat", "Cerámica blanca"),
+            ("unit", "Lacado arena"),
+            ("top", "Piedra caliza"),
+            ("metal", "Acero inoxidable"),
+            ("seat", "Lacado blanco"),
+            ("frame", "Roble claro"),
+            ("wood", "Roble claro"),
+            ("towel", "Lino gris"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Rústica",
+        materials: &[
+            ("mat", "Cerámica blanca"),
+            ("unit", "Pino viejo"),
+            ("top", "Piedra caliza"),
+            ("metal", "Hierro forjado"),
+            ("seat", "Pino viejo"),
+            ("frame", "Pino viejo"),
+            ("wood", "Enea"),
+            ("towel", "Lino crudo"),
+            ("dark", "Fresno oscuro"),
+        ],
+    },
+    Kitchen {
+        collection: "Industrial",
+        materials: &[
+            ("mat", "Cerámica blanca"),
+            ("unit", "Roble ahumado"),
+            ("top", "Hormigón pulido"),
+            ("metal", "Metal negro"),
+            ("seat", "Roble ahumado"),
+            ("frame", "Roble ahumado"),
+            ("wood", "Roble ahumado"),
+            ("towel", "Lino gris"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Clásica",
+        materials: &[
+            ("mat", "Cerámica blanca"),
+            ("unit", "Lacado marfil"),
+            ("top", "Mármol"),
+            ("metal", "Latón"),
+            ("seat", "Nogal"),
+            ("frame", "Latón"),
+            ("wood", "Nogal"),
+            ("towel", "Toalla blanca"),
+            ("dark", "Fresno oscuro"),
+        ],
+    },
+];
+
+/// The pieces of a workshop bathroom, left to right along its wall:
+/// family, label, how far it stands from the one before (m) and its
+/// values. Mirror and towel rail hang over the washbasin's place.
+const SUITE: &[(&str, &str, f64, Values)] = &[
+    (
+        "Bañera (taller)",
+        "Bañera",
+        0.0,
+        &[("width", N(1.7)), ("depth", N(0.75)), ("height", N(0.55))],
+    ),
+    ("Inodoro (taller)", "Inodoro", 0.3, &[]),
+    ("Bidé (taller)", "Bidé", 0.3, &[]),
+    (
+        "Lavabo (taller)",
+        "Lavabo",
+        0.35,
+        &[("width", N(0.8)), ("depth", N(0.48))],
+    ),
+    (
+        "Toallero (taller)",
+        "Toallero",
+        0.25,
+        &[
+            ("width", N(0.5)),
+            ("elevation", N(1.15)),
+            ("height", N(0.8)),
+        ],
+    ),
+    (
+        "Ducha (taller)",
+        "Ducha",
+        0.3,
+        &[("width", N(0.9)), ("depth", N(0.9))],
+    ),
+];
+
+/// Places a bathroom with its back on a wall along `y = wall` from `x`
+/// (looking south); returns where it ends.
+fn place_bathroom(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let mut at = x;
+    let mut basin = None;
+    for (family_name, label, gap, values) in SUITE {
+        let mut vals: Vec<(&str, Val)> = Vec::new();
+        for (key, v) in values.iter() {
+            vals.push((
+                key,
+                match v {
+                    N(n) => N(*n),
+                    M(n) => M(n),
+                    T(t) => T(t),
+                    B(b) => B(*b),
+                },
+            ));
+        }
+        let t = kitchen_type(m, k, family_name, label, &vals)?;
+        let w = m.object_type_box(t).map_or(0.6, |(lo, hi)| hi[0] - lo[0]);
+        at += gap;
+        let cx = at + w / 2.0;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(cx, wall),
+            rotation: std::f64::consts::PI,
+            base_offset: 0.0,
+        })?;
+        if *label == "Lavabo" {
+            basin = Some(cx);
+        }
+        at += w;
+    }
+    // The mirror over the washbasin.
+    if let Some(cx) = basin {
+        let t = kitchen_type(
+            m,
+            k,
+            "Espejo (taller)",
+            "Espejo",
+            &[
+                ("width", N(0.6)),
+                ("height", N(0.85)),
+                ("elevation", N(1.15)),
+            ],
+        )?;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(cx, wall),
+            rotation: std::f64::consts::PI,
+            base_offset: 0.0,
+        })?;
+    }
+    Ok(at)
+}
 
 /// The modules of a workshop kitchen, left to right: family, width and
 /// what it holds (values by name).
@@ -529,6 +747,22 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The bathrooms, further east.
+    for k in BATHROOMS {
+        let end = place_bathroom(&mut m, k, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     Ok(m)
 }
 
@@ -538,7 +772,7 @@ mod tests {
 
     #[test]
     fn every_material_of_a_piece_is_in_the_palette() {
-        for k in KITCHENS {
+        for k in KITCHENS.iter().chain(BATHROOMS) {
             for (key, name) in k.materials {
                 assert!(
                     crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
@@ -581,8 +815,11 @@ mod tests {
             let mine: Vec<_> = m
                 .objects()
                 .filter(|o| {
-                    m.object_type(o.object_type)
-                        .is_some_and(|t| t.name.contains(k.collection))
+                    m.object_type(o.object_type).is_some_and(|t| {
+                        t.name.contains(k.collection)
+                            && m.family(t.family)
+                                .is_some_and(|f| f.def().category == "kitchen")
+                    })
                 })
                 .collect();
             assert_eq!(mine.len(), RUN.len() + 3, "{}", k.collection);
@@ -599,6 +836,40 @@ mod tests {
             let first = mine.iter().find(|o| m.worktop_run_of(o.id).is_some());
             let run = m.worktop_run_of(first.expect("a worktop run").id).unwrap();
             assert_eq!(run.members.len(), RUN.len() - 1, "{}", k.collection);
+        }
+    }
+
+    /// Every bathroom of the workshop is made in its collection.
+    #[test]
+    fn the_workshop_bathrooms_are_made() {
+        let m = project().unwrap();
+        for k in BATHROOMS {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| {
+                    t.name.contains(k.collection)
+                        && !t.name.contains(" 60")
+                        && !t.name.contains(" 80")
+                })
+                .filter(|t| {
+                    [
+                        "Bañera", "Inodoro", "Bidé", "Lavabo", "Toallero", "Ducha", "Espejo",
+                    ]
+                    .iter()
+                    .any(|n| t.name.starts_with(n))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), SUITE.len() + 1, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (50..=30_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
         }
     }
 

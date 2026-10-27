@@ -61,7 +61,7 @@ enum Sink {
 
 /// The tap.
 #[derive(Clone, Copy, PartialEq)]
-enum Tap {
+pub(super) enum Tap {
     /// A gooseneck mixer of one piece.
     Gooseneck,
     /// A curved spout and a lever on its top.
@@ -555,8 +555,23 @@ fn basin(b: &mut Builder, look: &Look, c: [f64; 2], a: f64, bb: f64, h: f64) {
 /// The tap standing at `at` on the worktop behind the basin, its spout
 /// reaching `reach` forward.
 fn tap(b: &mut Builder, look: &Look, at: P3, reach: f64) {
+    tap_kind(b, look.tap, at, reach);
+}
+
+/// A tap of `kind` standing at `at`, scaled `k` (1: a kitchen's; less: a
+/// washbasin's), its spout reaching `reach` forward (before scaling).
+pub(super) fn tap_scaled(b: &mut Builder, kind: Tap, at: P3, reach: f64, k: f64) {
+    let start = b.mark();
+    tap_kind(b, kind, [0.0; 3], reach);
+    b.transform_from(start, |q| {
+        [at[0] + q[0] * k, at[1] + q[1] * k, at[2] + q[2] * k]
+    });
+}
+
+/// A tap of `kind` standing at `at`.
+fn tap_kind(b: &mut Builder, kind: Tap, at: P3, reach: f64) {
     let [x, y, z] = at;
-    match look.tap {
+    match kind {
         Tap::Gooseneck => super::sink::tap_in(b, "metal", at, reach),
         Tap::Swan => {
             // A turned body, the spout rising out of it in an S and
@@ -615,7 +630,7 @@ fn tap(b: &mut Builder, look: &Look, at: P3, reach: f64) {
             );
         }
         Tap::Bridge | Tap::Twin => {
-            let bridge = look.tap == Tap::Bridge;
+            let bridge = kind == Tap::Bridge;
             let s = if bridge { 0.1 } else { 0.08 };
             if !bridge {
                 // The deck plate.

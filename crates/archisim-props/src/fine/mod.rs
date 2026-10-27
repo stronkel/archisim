@@ -9,6 +9,7 @@
 //! wooden legs that splay a little.
 
 pub mod armchairs;
+pub mod bath;
 pub mod chairs;
 pub mod hearth;
 pub mod kitchen;
