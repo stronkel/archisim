@@ -124,7 +124,7 @@ pub fn draw(
     px: [u32; 2],
 ) -> Option<(u32, u32, Vec<u8>)> {
     let scene = Scene::build(model, &Default::default());
-    if scene.opaque.is_empty() && scene.glass.is_empty() {
+    if scene.is_empty() {
         return None;
     }
     let camera = camera_for(scene.lo, scene.hi, px[0] as f32 / px[1] as f32);

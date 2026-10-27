@@ -2307,6 +2307,46 @@ pub fn mesh_triangles(m: &archisim_core::MassMesh) -> Vec<[P3; 3]> {
 }
 
 pub fn model_solids(model: &Model) -> Vec<Solid> {
+    model_solids_except(model, &Default::default())
+}
+
+/// An object whose model is the same for every object of its type (the
+/// furniture ArchiSim makes): the model in the object's own axes, with
+/// the material of each part, and where the object stands. The 3D view
+/// sends each model to the graphics card once and draws it wherever it
+/// stands, instead of a copy per object.
+pub struct ObjectInstance {
+    pub mesh: std::sync::Arc<archisim_core::props::PropMesh>,
+    pub parts: Vec<(MaterialId, Vec<[u32; 3]>)>,
+    /// Turned this much about the vertical (radians), then moved here.
+    pub rotation: f64,
+    pub origin: P3,
+}
+
+/// The object as an [`ObjectInstance`], if it is one (not a plant, which
+/// grows differently each time, nor a model brought from elsewhere).
+pub fn object_instance(model: &Model, id: archisim_core::ObjectId) -> Option<ObjectInstance> {
+    let o = model.object(id)?;
+    if model.type_grows(o.object_type) || model.object_mesh(id).is_some() {
+        return None;
+    }
+    let (mesh, parts) = model.object_prop(id)?;
+    let z0 = model.level(o.level).map_or(0.0, |l| l.elevation) + o.base_offset;
+    Some(ObjectInstance {
+        mesh,
+        parts,
+        rotation: o.rotation,
+        origin: [o.position.x, o.position.y, z0],
+    })
+}
+
+/// The solids of the model but those of the objects in `skip` (drawn as
+/// instances); a skipped object that carries the worktop of its run
+/// still gives the worktop.
+pub fn model_solids_except(
+    model: &Model,
+    skip: &std::collections::HashSet<archisim_core::ObjectId>,
+) -> Vec<Solid> {
     let mut out = Vec::new();
     let idx = WallIndex::new(model);
     for w in model.walls() {
@@ -2369,6 +2409,12 @@ pub fn model_solids(model: &Model) -> Vec<Solid> {
         out.extend(loose_railing_solids(model, r.id));
     }
     for o in model.objects() {
+        if skip.contains(&o.id) {
+            if let Some(run) = model.worktop_run_of(o.id).filter(|r| r.members[0] == o.id) {
+                out.extend(worktop_solids(model, &run, SolidOwner::Object(o.id)));
+            }
+            continue;
+        }
         out.extend(object_solids(model, o.id));
     }
     for f in model.footings() {
@@ -2640,7 +2686,8 @@ pub fn glow_materials(
     };
     let (keys, reach): (&[&str], f64) = match kind.as_str() {
         "lamp" | "nightstand" | "decor" => (&["shade", "bulb", "flame"], LAMP_REACH),
-        "fireplace" | "fine_fireplace" => (&["flame"], LAMP_REACH),
+        "fireplace" => (&["flame"], LAMP_REACH),
+        "fine_fireplace" => (&["flame", "flame2"], LAMP_REACH),
         "streetlight" | "fine_streetlight" => (&["light"], STREET_REACH),
         _ => return none,
     };

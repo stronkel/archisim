@@ -3201,7 +3201,7 @@ fn imported_models_are_placed_and_drawn() {
     let tris: usize = solids.iter().map(|s| s.triangles.len()).sum();
     assert!(tris > 300, "{tris}");
     let scene = crate::view3d::scene::Scene::build(h.model(), &BTreeSet::new());
-    assert!(scene.opaque.len() >= tris * 3);
+    assert!(scene.triangle_count() >= tris);
     // In plan: its outline (the canopy, about 2.5 m across), drawn with
     // its colour as the trees are.
     let svg = archisim_plan::render_plan(h.model(), level, &h.app.plan_export_options(50.0));

@@ -388,15 +388,15 @@ impl View3dState {
             glam::Vec2::new(pos.x, pos.y),
             glam::Vec2::new(size.x, size.y),
         );
-        let (d, i) = self
+        let h = self
             .scene
             .hit_in(ray, self.clip_box().as_ref(), self.cut_rule().as_ref())?;
-        let [a, b, c] = self.scene.triangles().nth(i)?;
+        let [a, b, c] = h.triangle;
         let mut n = (b - a).cross(c - a).normalize_or_zero();
         if n.dot(ray.dir) > 0.0 {
             n = -n;
         }
-        Some((ray.origin + ray.dir * d, n, self.scene.owner(i)?))
+        Some((ray.origin + ray.dir * h.distance, n, h.owner))
     }
 
     /// The corner or edge midpoint of an element nearest to a point of

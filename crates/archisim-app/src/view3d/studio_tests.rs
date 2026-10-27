@@ -267,17 +267,14 @@ fn piece_width(m: &Model, t: archisim_core::ObjectTypeId) -> f32 {
 fn workshop_scene_size() {
     let m = archisim_library::workshop::project().unwrap();
     let scene = Scene::build(&m, &BTreeSet::new());
-    let mb = |n: usize| n * std::mem::size_of::<super::scene::Vertex>() / (1 << 20);
     eprintln!(
-        "workshop scene: {} opaque vertices ({} MB), {} glass ({} MB)",
-        scene.opaque.len(),
-        mb(scene.opaque.len()),
-        scene.glass.len(),
-        mb(scene.glass.len())
+        "workshop scene: {} triangles, {} groups",
+        scene.triangle_count(),
+        scene.groups.len()
     );
-    // More than one buffer's worth, and it still draws.
+    // A large scene, and it still draws.
     assert!(
-        mb(scene.opaque.len()) > 128,
+        scene.triangle_count() > 2_000_000,
         "the workshop no longer tests big scenes"
     );
     let Some(gpu) = super::gpu_tests::gpu() else {
@@ -293,5 +290,103 @@ fn workshop_scene_size() {
     );
     if let Ok(dir) = std::env::var("ARCHISIM_TALLER_OUT") {
         pic.save_png(Path::new(&dir).join("todo.png")).unwrap();
+    }
+}
+
+/// A dining room repeated: twelve pieces of the workshop placed thirty
+/// times each, as a real project repeats its chairs and tables.
+fn repeated_project() -> Model {
+    let mut m = archisim_library::workshop::project().unwrap();
+    let level = m.levels()[0].id;
+    let names = [
+        "Silla · Nórdico cálido (taller)",
+        "Silla · Clásica (taller)",
+        "Mesa de comedor · Nórdico cálido (taller)",
+        "Sofá · Nórdico cálido (taller)",
+        "Butaca · Contemporáneo (taller)",
+        "Librería · Nórdico cálido (taller)",
+        "Aparador · Clásica (taller)",
+        "Alfombra · Clásica (taller)",
+        "Cortina · Nórdico cálido (taller)",
+        "Mesa de centro · Industrial (taller)",
+        "Taburete · Años 50 (taller)",
+        "Puf · Mediterráneo (taller)",
+    ];
+    for (i, name) in names.iter().enumerate() {
+        let t = m.object_types().find(|t| t.name == *name).unwrap().id;
+        for k in 0..30 {
+            m.add_object(archisim_core::NewObject {
+                object_type: t,
+                level,
+                position: archisim_core::Point2::new(3.0 * k as f64, 8.0 + 3.0 * i as f64),
+                rotation: 0.3 * k as f64,
+                base_offset: 0.0,
+            })
+            .unwrap();
+        }
+    }
+    m
+}
+
+/// What the 3D view costs with the workshop and with a repeated project:
+/// building the scene, memory on the card, and drawing far and near
+/// (`ARCHISIM_MEDIR_3D=1 cargo test --release -p archisim-app --
+/// scene_benchmark --nocapture`).
+#[test]
+fn scene_benchmark() {
+    if std::env::var_os("ARCHISIM_MEDIR_3D").is_none() {
+        return;
+    }
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        return;
+    };
+    for (name, m) in [
+        ("taller", archisim_library::workshop::project().unwrap()),
+        ("repetido", repeated_project()),
+    ] {
+        let t = std::time::Instant::now();
+        let scene = Scene::build(&m, &BTreeSet::new());
+        let build = t.elapsed();
+        let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+        let t = std::time::Instant::now();
+        r.set_scene(&gpu.0, &scene);
+        let upload = t.elapsed();
+        r.set_look(
+            Quality::Pretty,
+            Some(glam::Vec3::new(-0.45, -0.7, 0.75).normalize()),
+        );
+        let mut times = Vec::new();
+        for (view, zoom) in [("todo", 1.0), ("cerca", 8.0)] {
+            let mut cam = camera(scene.lo, scene.hi, 1.5, -62.0, 30.0, zoom);
+            cam.target = scene.lo + (scene.hi - scene.lo) * glam::Vec3::new(0.3, 0.5, 0.2);
+            r.render(&gpu.0, &gpu.1, &cam, [1280, 800], 1);
+            let _ = r.read_pixels(&gpu.0, &gpu.1);
+            let t = std::time::Instant::now();
+            for _ in 0..3 {
+                r.render(&gpu.0, &gpu.1, &cam, [1280, 800], 1);
+                let _ = r.read_pixels(&gpu.0, &gpu.1);
+            }
+            if let (Ok(dir), Some((w, h, px))) = (
+                std::env::var("ARCHISIM_TALLER_OUT"),
+                r.read_pixels(&gpu.0, &gpu.1),
+            ) {
+                let mut pic = Pixmap::new(w, h).unwrap();
+                pic.data_mut().copy_from_slice(&px);
+                pic.save_png(Path::new(&dir).join(format!("medida-{name}-{view}.png")))
+                    .unwrap();
+            }
+            times.push(format!(
+                "{view} {:.0} ms",
+                t.elapsed().as_secs_f64() * 1000.0 / 3.0
+            ));
+        }
+        eprintln!(
+            "{name}: {} objetos, escena {:.0} ms, subida {:.0} ms, {} MB en la tarjeta, fotograma: {}",
+            m.objects().count(),
+            build.as_secs_f64() * 1000.0,
+            upload.as_secs_f64() * 1000.0,
+            r.scene_bytes() >> 20,
+            times.join(", ")
+        );
     }
 }

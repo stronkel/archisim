@@ -69,17 +69,70 @@ struct Globals {
 
 struct VertexIn {
     @location(0) pos: vec3<f32>,
-    @location(1) normal: vec3<f32>,
+    // xyz: the normal (w unused).
+    @location(1) normal: vec4<f32>,
+    // sRGB colour and opacity.
     @location(2) color: vec4<f32>,
-    @location(3) bias: f32,
-    // x: texture (0 none, 1 brick…), y: size of its piece in metres.
-    @location(4) tex: vec2<f32>,
+    // x: the bias plus one; y: 1 if selected (2 stretched); z: the
+    // texture (0 none, 1 brick…).
+    @location(3) misc: vec4<u32>,
+    // The size of the texture's piece, metres.
+    @location(4) tex_size: f32,
     // The element for the cut away walls: kind (0 plain, 1 wall, 2
     // object), a point of it in plan and its base.
     @location(5) cut: vec4<f32>,
-    // 1 if selected.
-    @location(6) picked: f32,
+    // Where the object stands (scene.rs, `Instance`): cos, sin of its
+    // turn and where it goes in plan; its height and scale; its cut (x
+    // below zero: the corner's); flags: selected (below zero: the
+    // corner's), greyed.
+    @location(6) i_place: vec4<f32>,
+    @location(7) i_lift: vec4<f32>,
+    @location(8) i_cut: vec4<f32>,
+    @location(9) i_flags: vec4<f32>,
 };
+
+// A corner where it is, with what the shader needs of it.
+struct Corner {
+    pos: vec3<f32>,
+    normal: vec3<f32>,
+    color: vec4<f32>,
+    bias: f32,
+    tex: vec2<f32>,
+    cut: vec4<f32>,
+    picked: f32,
+};
+
+fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
+    let lo = c / 12.92;
+    let hi = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    return select(hi, lo, c <= vec3<f32>(0.04045));
+}
+
+fn corner(v: VertexIn) -> Corner {
+    var c: Corner;
+    let cs = v.i_place.x;
+    let sn = v.i_place.y;
+    let q = v.pos * v.i_lift.yzw;
+    c.pos = vec3<f32>(
+        cs * q.x - sn * q.y + v.i_place.z,
+        sn * q.x + cs * q.y + v.i_place.w,
+        q.z + v.i_lift.x,
+    );
+    let m = v.normal.xyz / v.i_lift.yzw;
+    c.normal = normalize(vec3<f32>(cs * m.x - sn * m.y, sn * m.x + cs * m.y, m.z) + vec3<f32>(0.0, 0.0, 1e-9));
+    var rgb = srgb_to_linear(v.color.rgb);
+    if (v.i_flags.y > 0.5) {
+        // Greyed by the disciplines, as a reference (as scene.rs `tone`).
+        let lum = 0.3 * rgb.r + 0.59 * rgb.g + 0.11 * rgb.b;
+        rgb = vec3<f32>(1.0 - (1.0 - lum) * 0.35);
+    }
+    c.color = vec4<f32>(rgb, v.color.a);
+    c.bias = f32(v.misc.x) - 1.0;
+    c.tex = vec2<f32>(f32(v.misc.z), v.tex_size);
+    c.cut = select(v.cut, v.i_cut, v.i_cut.x > -0.5);
+    c.picked = select(f32(v.misc.y), v.i_flags.x, v.i_flags.x > -0.5);
+    return c;
+}
 
 struct VertexOut {
     @builtin(position) clip: vec4<f32>,
@@ -96,7 +149,8 @@ struct VertexOut {
 };
 
 @vertex
-fn vs_model(v: VertexIn) -> VertexOut {
+fn vs_model(input: VertexIn) -> VertexOut {
+    let v = corner(input);
     var out: VertexOut;
     var vp = g.view * vec4<f32>(v.pos, 1.0);
     // A nudge along the line of sight, 0.02 % of the distance: invisible,
@@ -608,7 +662,8 @@ struct ShadowOut {
 };
 
 @vertex
-fn vs_shadow(v: VertexIn) -> ShadowOut {
+fn vs_shadow(input: VertexIn) -> ShadowOut {
+    let v = corner(input);
     var out: ShadowOut;
     out.clip = g.sun_vp * vec4<f32>(v.pos, 1.0);
     out.world = v.pos;

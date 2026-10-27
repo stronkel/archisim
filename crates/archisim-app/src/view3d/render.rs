@@ -6,7 +6,7 @@ use eframe::wgpu;
 use eframe::wgpu::util::DeviceExt;
 
 use super::camera::Camera;
-use super::scene::{Scene, Vertex};
+use super::scene::{Chunk, Group, Instance, Scene, Vertex};
 
 /// Colour target format: 8-bit sRGB, so lighting is computed in linear
 /// light and stored gamma-encoded.
@@ -107,8 +107,36 @@ type ShadowKey = (
     [i32; 3],
 );
 
-/// A vertex buffer and how many vertices it has.
-type Triangles = (wgpu::Buffer, u32);
+/// Triangles on the card: their corners, which corners each joins, how
+/// many indices, and the box round them.
+struct GpuMesh {
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    count: u32,
+    lo: glam::Vec3,
+    hi: glam::Vec3,
+}
+
+/// A group's model on the card and where its objects stand.
+struct GpuGroup {
+    opaque: Option<GpuMesh>,
+    levels: Vec<(u32, u32)>,
+    glass: Option<GpuMesh>,
+    instances: Vec<Instance>,
+    bounds: Vec<(glam::Vec3, glam::Vec3)>,
+    radius: f32,
+}
+
+/// Which objects of each group are drawn this picture, as ranges of the
+/// instance buffer: per version of the model, the glass, and for the
+/// shadows (all of them, whether seen or not).
+#[derive(Default, Clone)]
+struct GroupDraws {
+    levels: Vec<std::ops::Range<u32>>,
+    glass: std::ops::Range<u32>,
+    shadow: std::ops::Range<u32>,
+    shadow_level: usize,
+}
 
 /// Render targets of one size.
 struct Targets {
@@ -164,12 +192,18 @@ pub struct Renderer {
     targets: Option<Targets>,
     /// Each kind of triangle in as many buffers as the device's largest
     /// buffer asks for (a big project does not fit in one).
-    opaque: Vec<Triangles>,
-    grass: Vec<Triangles>,
-    glass: Vec<Triangles>,
+    opaque: Vec<GpuMesh>,
+    grass: Vec<GpuMesh>,
+    glass: Vec<GpuMesh>,
+    /// The furniture shared by type.
+    groups: Vec<GpuGroup>,
+    /// Where the objects drawn this picture stand (first, the one of the
+    /// elements drawn once), and room for how many.
+    instance_buffer: wgpu::Buffer,
+    instance_room: u64,
     /// What is being stretched, drawn over the scene (whose own copy of
     /// it is hidden): its opaque and glass triangles.
-    overlay: Option<(Vec<Triangles>, Vec<Triangles>)>,
+    overlay: Option<(Vec<GpuMesh>, Vec<GpuMesh>)>,
     /// The device can view a texture in another format of the same bytes
     /// (wgpu's `VIEW_FORMATS`); otherwise the picture is copied for display.
     view_formats: bool,
@@ -405,7 +439,12 @@ impl Renderer {
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32, 4 => Float32x2, 5 => Float32x4, 6 => Float32],
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Snorm16x4, 2 => Unorm8x4, 3 => Uint8x4, 4 => Float32, 5 => Float32x4],
+        };
+        let instance_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Instance>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &wgpu::vertex_attr_array![6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Float32x4],
         };
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
@@ -422,7 +461,7 @@ impl Renderer {
                 module: &shader,
                 entry_point: Some("vs_model"),
                 compilation_options: Default::default(),
-                buffers: &[Some(vertex_layout.clone())],
+                buffers: &[Some(vertex_layout.clone()), Some(instance_layout.clone())],
             },
             primitive,
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -452,7 +491,7 @@ impl Renderer {
                 module: &shader,
                 entry_point: Some("vs_model"),
                 compilation_options: Default::default(),
-                buffers: &[Some(vertex_layout.clone())],
+                buffers: &[Some(vertex_layout.clone()), Some(instance_layout.clone())],
             },
             primitive,
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -489,7 +528,7 @@ impl Renderer {
                 module: &shader,
                 entry_point: Some("vs_model"),
                 compilation_options: Default::default(),
-                buffers: &[Some(vertex_layout.clone())],
+                buffers: &[Some(vertex_layout.clone()), Some(instance_layout.clone())],
             },
             primitive: wgpu::PrimitiveState {
                 cull_mode: None,
@@ -526,7 +565,7 @@ impl Renderer {
                 module: &shader,
                 entry_point: Some("vs_shadow"),
                 compilation_options: Default::default(),
-                buffers: &[Some(vertex_layout.clone())],
+                buffers: &[Some(vertex_layout.clone()), Some(instance_layout.clone())],
             },
             primitive,
             depth_stencil: Some(wgpu::DepthStencilState {
@@ -602,6 +641,9 @@ impl Renderer {
             opaque: Vec::new(),
             grass: Vec::new(),
             glass: Vec::new(),
+            groups: Vec::new(),
+            instance_buffer: instance_buffer(device, 1024),
+            instance_room: 1024,
             overlay: None,
             view_formats,
             clip: None,
@@ -669,23 +711,42 @@ impl Renderer {
     /// selected element (`Scene::of_solids`).
     pub fn set_overlay(&mut self, device: &wgpu::Device, overlay: Option<&Scene>) {
         self.uploads += 1;
-        self.overlay = overlay.map(|o| {
-            (
-                upload(device, "overlay", &o.opaque),
-                upload(device, "overlay glass", &o.glass),
-            )
-        });
+        self.overlay = overlay.map(|o| (upload(device, &o.opaque), upload(device, &o.glass)));
+    }
+
+    /// How much memory of the graphics card the scene takes, bytes.
+    #[cfg(test)]
+    pub fn scene_bytes(&self) -> u64 {
+        let mesh = |m: &GpuMesh| m.vertices.size() + m.indices.size();
+        self.opaque
+            .iter()
+            .chain(&self.grass)
+            .chain(&self.glass)
+            .map(mesh)
+            .sum::<u64>()
+            + self
+                .groups
+                .iter()
+                .map(|g| {
+                    g.opaque.iter().chain(&g.glass).map(mesh).sum::<u64>()
+                        + (g.instances.len() * std::mem::size_of::<Instance>()) as u64
+                })
+                .sum::<u64>()
     }
 
     /// Uploads the scene's triangles.
     pub fn set_scene(&mut self, device: &wgpu::Device, scene: &Scene) {
-        let upload = |label: &str, v: &[Vertex]| upload(device, label, v);
         self.uploads += 1;
         self.bounds = (scene.lo, scene.hi);
-        self.opaque = upload("opaque", &scene.opaque);
-        self.grass = upload("grass", &scene.grass);
-        self.glass = upload("glass", &scene.glass);
-        self.selected = scene.opaque.iter().any(|v| v.select > 0.5);
+        self.opaque = upload(device, &scene.opaque);
+        self.grass = upload(device, &scene.grass);
+        self.glass = upload(device, &scene.glass);
+        self.groups = scene
+            .groups
+            .iter()
+            .map(|g| upload_group(device, g))
+            .collect();
+        self.selected = scene.has_selection();
         self.lamps = scene.lamps.clone();
     }
 
@@ -889,6 +950,44 @@ impl Renderer {
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);
+        // What is in sight, and which objects in which version.
+        let planes = frustum(vp);
+        let eye = camera.eye();
+        let mut list = vec![Instance::SAME];
+        let mut draws: Vec<GroupDraws> = Vec::with_capacity(self.groups.len());
+        for g in &self.groups {
+            let n = g.levels.len().max(1);
+            let mut by_level: Vec<Vec<Instance>> = vec![Vec::new(); n];
+            for (inst, (lo, hi)) in g.instances.iter().zip(&g.bounds) {
+                if !in_sight(&planes, *lo, *hi) {
+                    continue;
+                }
+                let dist = ((*lo + *hi) / 2.0).distance(eye);
+                by_level[level_for(g.radius, dist, n)].push(*inst);
+            }
+            let mut d = GroupDraws::default();
+            let glass_from = list.len() as u32;
+            for v in by_level {
+                let a = list.len() as u32;
+                list.extend(v);
+                d.levels.push(a..list.len() as u32);
+            }
+            d.glass = glass_from..list.len() as u32;
+            let a = list.len() as u32;
+            list.extend(&g.instances);
+            d.shadow = a..list.len() as u32;
+            d.shadow_level = 1.min(n - 1);
+            draws.push(d);
+        }
+        if list.len() as u64 > self.instance_room {
+            self.instance_room = (list.len() as u64).next_power_of_two();
+            self.instance_buffer = instance_buffer(device, self.instance_room);
+        }
+        queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&list));
+        let same = self
+            .instance_buffer
+            .slice(..std::mem::size_of::<Instance>() as u64);
+        let chunk_seen = |m: &GpuMesh| in_sight(&planes, m.lo, m.hi);
 
         let mut encoder = device.create_command_encoder(&Default::default());
         // 0. The shadow map, only when what casts the shadows changed.
@@ -923,12 +1022,23 @@ impl Renderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
+                pass.set_pipeline(&self.shadow_pipeline);
+                pass.set_bind_group(0, &self.globals_bind, &[]);
                 let over = self.overlay.iter().flat_map(|o| o.0.iter());
-                for (buf, count) in self.opaque.iter().chain(over) {
-                    pass.set_pipeline(&self.shadow_pipeline);
-                    pass.set_bind_group(0, &self.globals_bind, &[]);
-                    pass.set_vertex_buffer(0, buf.slice(..));
-                    pass.draw(0..*count, 0..1);
+                for m in self.opaque.iter().chain(over) {
+                    draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+                }
+                for (g, d) in self.groups.iter().zip(&draws) {
+                    if let Some(m) = &g.opaque {
+                        let (first, count) = g.levels[d.shadow_level];
+                        draw_mesh(
+                            &mut pass,
+                            m,
+                            self.instance_buffer.slice(..),
+                            first..first + count,
+                            d.shadow.clone(),
+                        );
+                    }
                 }
                 *drawn = Some(key);
             }
@@ -990,22 +1100,37 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            let over = self.overlay.iter().flat_map(|o| o.0.iter());
-            for (buf, n) in self.opaque.iter().chain(over) {
-                pass.set_pipeline(&self.model_pipeline);
-                pass.set_bind_group(0, &self.globals_bind, &[]);
-                pass.set_bind_group(1, shadow_bind, &[]);
-                pass.set_bind_group(2, &self.pictures_bind, &[]);
-                pass.set_vertex_buffer(0, buf.slice(..));
-                pass.draw(0..*n, 0..1);
+            pass.set_pipeline(&self.model_pipeline);
+            pass.set_bind_group(0, &self.globals_bind, &[]);
+            pass.set_bind_group(1, shadow_bind, &[]);
+            pass.set_bind_group(2, &self.pictures_bind, &[]);
+            for m in self.opaque.iter().filter(|m| chunk_seen(m)) {
+                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
             }
-            for (buf, n) in &self.grass {
-                pass.set_pipeline(&self.grass_pipeline);
-                pass.set_bind_group(0, &self.globals_bind, &[]);
-                pass.set_bind_group(1, shadow_bind, &[]);
-                pass.set_bind_group(2, &self.pictures_bind, &[]);
-                pass.set_vertex_buffer(0, buf.slice(..));
-                pass.draw(0..*n, 0..1);
+            for m in self.overlay.iter().flat_map(|o| o.0.iter()) {
+                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+            }
+            for (g, d) in self.groups.iter().zip(&draws) {
+                let Some(m) = &g.opaque else {
+                    continue;
+                };
+                for (level, range) in d.levels.iter().enumerate() {
+                    if range.is_empty() {
+                        continue;
+                    }
+                    let (first, count) = g.levels[level];
+                    draw_mesh(
+                        &mut pass,
+                        m,
+                        self.instance_buffer.slice(..),
+                        first..first + count,
+                        range.clone(),
+                    );
+                }
+            }
+            pass.set_pipeline(&self.grass_pipeline);
+            for m in self.grass.iter().filter(|m| chunk_seen(m)) {
+                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
             }
         }
         // 2. The glass over it; the samples are averaged into the picture.
@@ -1026,14 +1151,24 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            pass.set_pipeline(&self.glass_pipeline);
+            pass.set_bind_group(0, &self.globals_bind, &[]);
+            pass.set_bind_group(1, shadow_bind, &[]);
+            pass.set_bind_group(2, &self.pictures_bind, &[]);
             let over = self.overlay.iter().flat_map(|o| o.1.iter());
-            for (buf, n) in self.glass.iter().chain(over) {
-                pass.set_pipeline(&self.glass_pipeline);
-                pass.set_bind_group(0, &self.globals_bind, &[]);
-                pass.set_bind_group(1, shadow_bind, &[]);
-                pass.set_bind_group(2, &self.pictures_bind, &[]);
-                pass.set_vertex_buffer(0, buf.slice(..));
-                pass.draw(0..*n, 0..1);
+            for m in self.glass.iter().filter(|m| chunk_seen(m)).chain(over) {
+                draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+            }
+            for (g, d) in self.groups.iter().zip(&draws) {
+                if let (Some(m), false) = (&g.glass, d.glass.is_empty()) {
+                    draw_mesh(
+                        &mut pass,
+                        m,
+                        self.instance_buffer.slice(..),
+                        0..m.count,
+                        d.glass.clone(),
+                    );
+                }
             }
         }
         // 3. Contour lines in ink.
@@ -1134,24 +1269,112 @@ impl Renderer {
     }
 }
 
-/// Vertex buffers of some triangles (none if there are none), each no
-/// bigger than the device allows (and never more than 128 MB, which every
-/// card takes): Antonio's laptop closed the app on a 600 MB scene.
-fn upload(device: &wgpu::Device, label: &str, v: &[Vertex]) -> Vec<Triangles> {
-    let size = std::mem::size_of::<Vertex>() as u64;
-    let most = device.limits().max_buffer_size.min(128 << 20);
-    // Whole triangles in each buffer.
-    let per = ((most / size) as usize / 3 * 3).max(3);
-    v.chunks(per)
-        .map(|part| {
-            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytemuck::cast_slice(part),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            (buf, part.len() as u32)
-        })
+/// Draws some triangles of a mesh for some objects.
+fn draw_mesh(
+    pass: &mut wgpu::RenderPass,
+    m: &GpuMesh,
+    instances: wgpu::BufferSlice,
+    indices: std::ops::Range<u32>,
+    which: std::ops::Range<u32>,
+) {
+    pass.set_vertex_buffer(0, m.vertices.slice(..));
+    pass.set_vertex_buffer(1, instances);
+    pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
+    pass.draw_indexed(indices, 0, which);
+}
+
+/// One mesh on the card (none if it has no triangles).
+fn upload_mesh(
+    device: &wgpu::Device,
+    mesh: &super::scene::Mesh,
+    lo: glam::Vec3,
+    hi: glam::Vec3,
+) -> Option<GpuMesh> {
+    (!mesh.is_empty()).then(|| GpuMesh {
+        vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("corners"),
+            contents: bytemuck::cast_slice(&mesh.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        }),
+        indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("triangles"),
+            contents: bytemuck::cast_slice(&mesh.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        }),
+        count: mesh.indices.len() as u32,
+        lo,
+        hi,
+    })
+}
+
+/// The chunks of the elements drawn once (each well under the size of
+/// buffer every card takes: 32 768 triangles).
+fn upload(device: &wgpu::Device, chunks: &[Chunk]) -> Vec<GpuMesh> {
+    chunks
+        .iter()
+        .filter_map(|c| upload_mesh(device, &c.mesh, c.lo, c.hi))
         .collect()
+}
+
+fn upload_group(device: &wgpu::Device, g: &Group) -> GpuGroup {
+    GpuGroup {
+        opaque: upload_mesh(device, &g.opaque, g.lo, g.hi),
+        levels: g.levels.clone(),
+        glass: upload_mesh(device, &g.glass, g.lo, g.hi),
+        instances: g.instances.clone(),
+        bounds: g.bounds.clone(),
+        radius: g.radius(),
+    }
+}
+
+fn instance_buffer(device: &wgpu::Device, room: u64) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("instances"),
+        size: room * std::mem::size_of::<Instance>() as u64,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
+}
+
+/// The six planes of what a camera sees (each `n · p + d ≥ 0` inside).
+fn frustum(vp: glam::Mat4) -> [glam::Vec4; 6] {
+    let r = [vp.row(0), vp.row(1), vp.row(2), vp.row(3)];
+    [
+        r[3] + r[0],
+        r[3] - r[0],
+        r[3] + r[1],
+        r[3] - r[1],
+        r[2],
+        r[3] - r[2],
+    ]
+}
+
+/// Whether a box is (perhaps) in sight.
+fn in_sight(planes: &[glam::Vec4; 6], lo: glam::Vec3, hi: glam::Vec3) -> bool {
+    planes.iter().all(|p| {
+        // The corner farthest along the plane's normal.
+        let q = glam::Vec3::new(
+            if p.x >= 0.0 { hi.x } else { lo.x },
+            if p.y >= 0.0 { hi.y } else { lo.y },
+            if p.z >= 0.0 { hi.z } else { lo.z },
+        );
+        p.truncate().dot(q) + p.w >= 0.0
+    })
+}
+
+/// Which version of a model to draw for an object `radius` big whose
+/// middle is `dist` from the eye: the whole of it while it is larger than
+/// a few percent of the view, coarser farther away.
+fn level_for(radius: f32, dist: f32, levels: usize) -> usize {
+    let seen = radius / dist.max(1e-3);
+    let level = if seen > 0.06 {
+        0
+    } else if seen > 0.02 {
+        1
+    } else {
+        2
+    };
+    level.min(levels.saturating_sub(1))
 }
 
 /// Mip levels of the textures' pictures.

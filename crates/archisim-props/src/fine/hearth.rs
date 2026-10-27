@@ -75,7 +75,10 @@ fn holed(
     }
 }
 
-/// Tongues of fire along `x0`…`x1` rising from `z` at depth `y`.
+/// Tongues of fire along `x0`…`x1` rising from `z` at depth `y`: each a
+/// flat flame cut out in two crossed planes (seen from any side, as a
+/// game draws them: a few triangles instead of a solid),
+/// with a paler core in front.
 fn flames(b: &mut Builder, x0: f64, x1: f64, y: f64, z: f64, tall: f64) {
     let n = (((x1 - x0) / 0.06).round() as usize).max(2);
     for k in 0..n {
@@ -86,27 +89,44 @@ fn flames(b: &mut Builder, x0: f64, x1: f64, y: f64, z: f64, tall: f64) {
             * (0.55 + 0.45 * (std::f64::consts::PI * u).sin())
             * (0.8 + 0.25 * ((k * 37 % 11) as f64 / 11.0));
         let r = (x1 - x0) / n as f64 * 0.62;
-        let start = b.mark();
-        turned(
-            b,
-            "flame",
-            [0.0; 3],
-            &[
-                (0.0, 0.0),
-                (r * 0.7, 0.0),
-                (r, h * 0.18),
-                (r * 0.75, h * 0.45),
-                (r * 0.35, h * 0.75),
-                (0.0, h),
-            ],
-            10,
-            0.0,
-        );
         let lean = 0.12 * ((k * 53 % 7) as f64 / 7.0 - 0.5);
-        b.transform_from(start, |q| {
-            [x + q[0] + lean * q[2], y + q[1] * 0.6, z + q[2]]
-        });
+        for (role, wk, hk, ahead) in [("flame", 1.0, 1.0, 0.0), ("flame2", 0.55, 0.62, 0.003)] {
+            let outline = tongue(r * wk, h * hk, lean);
+            // Two planes, each turned 35° off the front: from the front
+            // both read as flames (a plane seen edge on would be a line).
+            for turn in [-0.6_f64, 0.6] {
+                let (sn, cs) = turn.sin_cos();
+                let at = |p: [f64; 2]| -> crate::build::P3 {
+                    [x + p[0] * cs, y + p[0] * sn + ahead, z + p[1]]
+                };
+                let mid = b.point(at([lean * h * hk * 0.3, h * hk * 0.3]));
+                let ids: Vec<u32> = outline.iter().map(|p| b.point(at(*p))).collect();
+                for i in 0..ids.len() {
+                    let j = (i + 1) % ids.len();
+                    // Both faces: it is a sheet.
+                    b.tri(role, mid, ids[i], ids[j]);
+                    b.tri(role, mid, ids[j], ids[i]);
+                }
+            }
+        }
     }
+}
+
+/// The outline of a flame `r` wide at its fullest and `h` tall, leaning
+/// `lean` (sideways per height), round at the foot and pointed at the tip.
+fn tongue(r: f64, h: f64, lean: f64) -> Vec<[f64; 2]> {
+    let n = 8;
+    let half = |t: f64| r * (std::f64::consts::PI * t.powf(0.7)).sin() * (1.0 - 0.2 * t);
+    let mut out = Vec::new();
+    for i in 0..=n {
+        let t = i as f64 / n as f64;
+        out.push([half(t) + lean * h * t * t, h * t]);
+    }
+    for i in (1..n).rev() {
+        let t = i as f64 / n as f64;
+        out.push([-half(t) + lean * h * t * t, h * t]);
+    }
+    out
 }
 
 /// Logs laid across at `(cx, y)` on `z`, `w` across.
@@ -135,17 +155,29 @@ fn logs(b: &mut Builder, cx: f64, y: f64, z: f64, w: f64) {
 /// A dark firebox opening from `x0` to `x1`, `z0` to `z1`, `deep` into
 /// the breast whose face is at `y`: the back and sides inside, the fire.
 #[allow(clippy::too_many_arguments)]
-fn firebox(b: &mut Builder, x0: f64, x1: f64, z0: f64, z1: f64, y: f64, deep: f64, fire: bool) {
+fn firebox(
+    b: &mut Builder,
+    x0: f64,
+    x1: f64,
+    z0: f64,
+    z1: f64,
+    y: f64,
+    deep: f64,
+    fire: bool,
+    wood: bool,
+) {
     let back = (y - deep).max(0.02);
     b.rbox("dark", [x0, back - 0.02, z0], [x1, back, z1], 0.0);
     b.rbox("dark", [x0 - 0.02, back, z0], [x0, y, z1], 0.0);
     b.rbox("dark", [x1, back, z0], [x1 + 0.02, y, z1], 0.0);
     b.rbox("dark", [x0, back, z1], [x1, y, z1 + 0.02], 0.0);
     b.rbox("dark", [x0, back, z0 - 0.02], [x1, y, z0], 0.0);
-    if fire {
-        let w = x1 - x0;
-        let cy = (back + y) / 2.0;
+    let w = x1 - x0;
+    let cy = (back + y) / 2.0;
+    if wood {
         logs(b, (x0 + x1) / 2.0, cy, z0, w * 0.75);
+    }
+    if fire {
         flames(
             b,
             x0 + w * 0.2,
@@ -163,6 +195,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
     let h = p.get("height", 1.2).clamp(0.6, 3.5);
     let d = p.get("depth", 0.4).clamp(0.2, 1.0);
     let fire = p.flag("fire", true);
+    let wood = p.flag("logs", true);
     let (x0, x1) = (-w / 2.0, w / 2.0);
     match p.style() {
         // Mediterranean: a whitewashed chimney with its hood narrowing up
@@ -196,7 +229,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                     h,
                 );
             }
-            firebox(b, oa, ob, 0.06, open_h + 0.06, d, d - 0.06, fire);
+            firebox(b, oa, ob, 0.06, open_h + 0.06, d, d - 0.06, fire, wood);
         }
         // Fifties: a brick surround, a long hearth bench of stone and a
         // slim wooden mantel shelf, a brass screen.
@@ -235,7 +268,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 [x1 + 0.1, d + 0.1, oz + 0.16],
                 0.006,
             );
-            firebox(b, oa, ob, bench, oz, d, d - 0.05, fire);
+            firebox(b, oa, ob, bench, oz, d, d - 0.05, fire, wood);
             for k in 0..((ob - oa) / 0.03) as usize {
                 let x = oa + 0.015 + 0.03 * k as f64;
                 b.cyl(
@@ -276,7 +309,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 h,
                 &[[oa, ob, za, zb], [na, nb, nz0, nz1]],
             );
-            firebox(b, oa, ob, za, zb, d, d - 0.08, false);
+            firebox(b, oa, ob, za, zb, d, d - 0.08, false, false);
             if fire {
                 for k in 0..(((ob - oa) / 0.05) as usize) {
                     let x = oa + 0.03 + 0.05 * k as f64;
@@ -320,7 +353,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
             let (oa, ob) = (x0 + 0.12, x1 - 0.12);
             let (za, zb) = (0.4, (0.4_f64 + 0.42).min(h - 0.15));
             holed(b, "mat", x0, x1, 0.0, d, 0.0, h, &[[oa, ob, za, zb]]);
-            firebox(b, oa, ob, za, zb, d, d - 0.1, false);
+            firebox(b, oa, ob, za, zb, d, d - 0.1, false, false);
             for (lo, hi) in [
                 ([oa - 0.02, d, za - 0.02], [ob + 0.02, d + 0.006, za]),
                 ([oa - 0.02, d, zb], [ob + 0.02, d + 0.006, zb + 0.02]),
@@ -385,7 +418,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 b.rbox("mat", [x0, 0.0, beam_z + 0.2], [x1, d - 0.05, h], 0.01);
             }
             let (oa, ob) = (x0 + jamb, x1 - jamb);
-            firebox(b, oa, ob, 0.08, beam_z, d, d - 0.04, fire);
+            firebox(b, oa, ob, 0.08, beam_z, d, d - 0.04, fire, wood);
             for x in [oa + 0.12, ob - 0.12] {
                 bar(
                     b,
@@ -460,8 +493,10 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 0.004,
             );
 
-            if fire {
+            if wood {
                 logs(b, (ga + gb) / 2.0, sy1 - 0.08, gz0, gb - ga);
+            }
+            if fire {
                 flames(
                     b,
                     ga + 0.05,
@@ -591,7 +626,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 [x1 + 0.03, d + 0.035, shelf - 0.03],
                 0.006,
             );
-            firebox(b, oa, ob, 0.03, oz, d - 0.06, d - 0.16, fire);
+            firebox(b, oa, ob, 0.03, oz, d - 0.06, d - 0.16, fire, wood);
 
             // The cast iron insert: a frame round the opening.
             holed(
@@ -657,8 +692,10 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 48,
                 0.0,
             );
-            if fire {
+            if wood {
                 logs(b, c[0], c[1], dish1 - 0.01, r * 1.3);
+            }
+            if fire {
                 flames(b, c[0] - r * 0.4, c[0] + r * 0.4, c[1], dish1 + 0.03, 0.42);
             }
             // The hood: a funnel flaring out from the flue.
@@ -783,8 +820,10 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                     b.quad("dark", i[3], i[2], i[1], i[0]);
                 }
             }
-            if fire {
+            if wood {
                 logs(b, c[0], c[1] + r * 0.1, z0 - 0.02, r * 1.2);
+            }
+            if fire {
                 flames(
                     b,
                     c[0] - r * 0.4,

@@ -42,6 +42,10 @@ fn candidates(role: &str) -> &'static [&'static str] {
         "pot" => &["pot_mat", "pot"],
         "bulb" => &["bulb", "light"],
         "flame" => &["flame", "bulb", "light"],
+        "flame2" => &["flame2", "flame", "bulb", "light"],
+        // The workshop's fireplaces call their firewood `wood` (`logs`
+        // is whether there is any).
+        "logs" => &["wood", "logs"],
         "fruit2" => &["fruit2", "fruit"],
         "stem" => &["stem", "frame"],
         "pillow" => &["pillow", "cushion"],
