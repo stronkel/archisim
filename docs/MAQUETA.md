@@ -7,7 +7,7 @@
 
 La maqueta **no es otro programa ni otra disciplina**: es otra forma de presentar la misma ventana, sobre el mismo modelo. Las disciplinas dicen *qué* se modela (estructura, instalaciones, urbanismo); la maqueta dice *cómo* se maneja: a ojo, en 3D, eligiendo cosas de un catálogo.
 
-- Un interruptor **Técnica · Maqueta** arriba a la derecha, en el mismo sitio en los dos entornos, y la tecla **Tab** (salvo escribiendo en un campo de texto).
+- Un interruptor **Técnica · Maqueta** arriba a la derecha, en el mismo sitio en los dos entornos, y la tecla **F4** (salvo escribiendo en un campo de texto; hasta la v0.72 era Tab, que ahora solo recorre los elementos bajo el cursor, como en Revit).
 - Todo lo que se hace en la maqueta está a la vez en la planta técnica, las mediciones, el CTE y el IFC, y al revés: son los mismos muros, forjados, cubiertas y objetos.
 - **Lo seleccionado sigue seleccionado al cambiar de entorno**: eliges el sofá en la maqueta, pulsas Técnica y lo tienes en la planta con sus propiedades.
 

@@ -189,9 +189,63 @@ pub struct WallType {
     pub layers: Vec<Layer>,
     /// Skirting boards, bands, cornices and copings along its walls.
     pub sweeps: Vec<WallSweep>,
+    /// Revit's «Envolver en extremos»: which finish turns round a free
+    /// end and covers the ends of the other layers.
+    pub wrap_ends: Wrap,
+    /// Revit's «Envolver en huecos»: which finish turns into the reveals
+    /// of doors and windows, up to the frame (jambs, head and sill).
+    pub wrap_inserts: Wrap,
+}
+
+/// Which finish of a wall type wraps (Revit's «Envolver»): the exterior
+/// one (first layer), the interior one (last layer), both or none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Wrap {
+    #[default]
+    None,
+    Exterior,
+    Interior,
+    Both,
+}
+
+impl Wrap {
+    pub fn exterior(self) -> bool {
+        matches!(self, Wrap::Exterior | Wrap::Both)
+    }
+
+    pub fn interior(self) -> bool {
+        matches!(self, Wrap::Interior | Wrap::Both)
+    }
+
+    /// What wraps into the reveals of a type that does not say: the
+    /// exterior render of a façade whose first layer is a finish (what
+    /// ArchiSim drew before the option existed).
+    pub fn inserts_by_default(function: WallFunction, layers: &[Layer]) -> Wrap {
+        if function == WallFunction::Exterior
+            && layers.len() > 1
+            && layers[0].function == LayerFunction::Finish
+        {
+            Wrap::Exterior
+        } else {
+            Wrap::None
+        }
+    }
 }
 
 impl WallType {
+    /// The layer that wraps on the exterior side and on the interior side
+    /// for a given choice (none if the type has a single layer).
+    pub fn wrapping_layers(&self, wrap: Wrap) -> (Option<usize>, Option<usize>) {
+        let n = self.layers.len();
+        if n < 2 {
+            return (None, None);
+        }
+        (
+            wrap.exterior().then_some(0),
+            wrap.interior().then_some(n - 1),
+        )
+    }
+
     pub fn thickness(&self) -> f64 {
         self.layers.iter().map(|l| l.thickness).sum()
     }
@@ -244,6 +298,11 @@ pub struct Wall {
     pub base_offset: f64,
     /// Where the top of the wall is: a height of its own, or a level.
     pub top: WallTop,
+    /// Whether each end (start, end) may join other walls: Revit's
+    /// «Permitir unión» / «No permitir unión». A disallowed end stays a
+    /// free end, square, even touching another wall, and neither wall
+    /// mitres nor tees into the other there.
+    pub allow_join: [bool; 2],
 }
 
 /// The top constraint of a wall (Revit's "Restricción superior",
@@ -259,6 +318,18 @@ pub enum WallTop {
 }
 
 impl Wall {
+    /// Whether the end at `p` (its start or its end) may join other
+    /// walls. A point that is neither end joins as before.
+    pub fn joins_at(&self, p: Point2) -> bool {
+        if self.start.approx_eq(p) {
+            self.allow_join[0]
+        } else if self.end.approx_eq(p) {
+            self.allow_join[1]
+        } else {
+            true
+        }
+    }
+
     /// Length of the drawn line (along the arc for a curved wall).
     pub fn length(&self) -> f64 {
         match self.arc() {
@@ -1918,11 +1989,30 @@ impl Model {
                 guid: GlobalId::new(),
                 name: name.into(),
                 function,
+                wrap_inserts: Wrap::inserts_by_default(function, &layers),
+                wrap_ends: Wrap::None,
                 layers,
                 sweeps: Vec::new(),
             },
         );
         Ok(id)
+    }
+
+    /// Revit's «Envolver en extremos» and «Envolver en huecos» of a wall
+    /// type.
+    pub fn set_wall_type_wrap(
+        &mut self,
+        id: WallTypeId,
+        ends: Wrap,
+        inserts: Wrap,
+    ) -> Result<(), ModelError> {
+        let t = self
+            .wall_types
+            .get_mut(&id)
+            .ok_or(ModelError::UnknownWallType(id))?;
+        t.wrap_ends = ends;
+        t.wrap_inserts = inserts;
+        Ok(())
     }
 
     fn validate_layers(&self, layers: &[Layer]) -> Result<(), ModelError> {
@@ -1970,6 +2060,7 @@ impl Model {
             height,
             base_offset: spec.base_offset,
             top: spec.top,
+            allow_join: [true, true],
         };
         self.walls.insert(id, wall);
         self.stamp_phase(id.0);
@@ -2027,6 +2118,7 @@ impl Model {
                 height: spec.height,
                 base_offset: spec.base_offset,
                 top: spec.top,
+                allow_join: [true, true],
             };
             let (ext, int) = probe.face_offsets(t);
             let tight = arc.radius_at(ext).min(arc.radius_at(int)) < MIN_INNER_RADIUS;
@@ -2346,6 +2438,17 @@ impl Model {
         reference: ReferenceLine,
     ) -> Result<(), ModelError> {
         self.edit_wall(id, |w| w.reference = reference)
+    }
+
+    /// Revit's «Permitir unión» / «No permitir unión» at one end of a wall
+    /// (`start`: its start, otherwise its end).
+    pub fn set_wall_join(
+        &mut self,
+        id: WallId,
+        start: bool,
+        allow: bool,
+    ) -> Result<(), ModelError> {
+        self.edit_wall(id, |w| w.allow_join[if start { 0 } else { 1 }] = allow)
     }
 
     /// Removes a wall together with the doors and windows it hosts, as Revit
@@ -3536,6 +3639,8 @@ impl Model {
                 && o.level == w.level
                 && !o.is_curved()
                 && (o.start.approx_eq(p) || o.end.approx_eq(p))
+                && w.joins_at(p)
+                && o.joins_at(p)
         });
         let Some(o) = other else {
             return Some(fallback);

@@ -123,6 +123,8 @@ pub(super) enum Action {
     EditSlab(SlabTypeId, String, SlabFunction, Vec<Layer>),
     /// The accessories of a wall type (bloque 5).
     WallSweeps(WallTypeId, Vec<archisim_core::WallSweep>),
+    /// «Envolver en extremos» and «Envolver en huecos».
+    WallWrap(WallTypeId, archisim_core::Wrap, archisim_core::Wrap),
     /// The edge of a slab type.
     SlabEdge(SlabTypeId, Option<archisim_core::SlabEdge>),
     DuplicateOpening(OpeningTypeId),
@@ -1367,6 +1369,37 @@ impl ArchiSimApp {
                 actions.push(Action::EditWall(id, t.name.clone(), t.function, layers));
             }
         });
+        props::group(ui, "types-wall-wrap", "Envolver", |ui| {
+            use archisim_core::Wrap;
+            let options = [
+                (Wrap::None, "Ninguno"),
+                (Wrap::Exterior, "Exterior"),
+                (Wrap::Interior, "Interior"),
+                (Wrap::Both, "Ambos"),
+            ];
+            props::row(
+                ui,
+                "En extremos",
+                "El acabado da la vuelta en los extremos libres del muro y tapa las demás capas (los que no se unen a otro muro)",
+                |ui, w| {
+                    let v = props::choice(ui, ("wt-wrap-ends", id.0), w, t.wrap_ends, &options);
+                    if v != t.wrap_ends {
+                        actions.push(Action::WallWrap(id, v, t.wrap_inserts));
+                    }
+                },
+            );
+            props::row(
+                ui,
+                "En huecos",
+                "El acabado entra en las jambas, el dintel y el alféizar de puertas y ventanas hasta la carpintería",
+                |ui, w| {
+                    let v = props::choice(ui, ("wt-wrap-ins", id.0), w, t.wrap_inserts, &options);
+                    if v != t.wrap_inserts {
+                        actions.push(Action::WallWrap(id, t.wrap_ends, v));
+                    }
+                },
+            );
+        });
         props::group(
             ui,
             "types-wall-sweeps",
@@ -1722,6 +1755,12 @@ impl ArchiSimApp {
                     r,
                     &format!("Tipo de forjado modificado ({n} forjado{}).", plural(n)),
                 );
+            }
+            Action::WallWrap(id, ends, inserts) => {
+                let r = self
+                    .ed
+                    .transact("Envolver", |m| m.set_wall_type_wrap(id, ends, inserts));
+                self.report(r, "Envolver cambiado: lo siguen todos los muros del tipo.");
             }
             Action::WallSweeps(id, v) => {
                 let r = self

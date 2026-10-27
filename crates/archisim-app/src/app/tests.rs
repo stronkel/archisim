@@ -35,6 +35,7 @@ impl Harness {
         // The drawing tests were written with ArchiCAD's keys (M, F… at
         // once); the AutoCAD command line has its own tests.
         h.app.keys_autocad = false;
+        h.app.keys_revit = false;
         h.frame();
         h.frame();
         h
@@ -230,6 +231,37 @@ fn slab_door_and_window_tools() {
     // Escape goes back to the arrow.
     h.key(Key::Escape);
     assert_eq!(h.app.tool, Tool::Arrow);
+}
+
+/// The gallery of types keeps its width while it is open (with folders,
+/// its tiles once widened it at every frame, without end).
+#[test]
+fn type_gallery_keeps_its_width() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let wall = h.model().walls().next().unwrap().id;
+    h.app.ed.selection.insert(Element::Wall(wall));
+    h.frame();
+    h.frame();
+    let button: Rect = h
+        .ctx
+        .data(|d| d.get_temp(egui::Id::unique("test-type-button")))
+        .expect("the type card is shown");
+    h.click_screen(button.center());
+    let width = |h: &Harness| -> f32 {
+        h.ctx
+            .data(|d| d.get_temp::<Rect>(egui::Id::unique("test-type-gallery")))
+            .expect("the gallery is open")
+            .width()
+    };
+    h.frame();
+    let first = width(&h);
+    for _ in 0..30 {
+        h.frame();
+    }
+    let last = width(&h);
+    assert!((last - first).abs() < 1.0, "{first} → {last}");
+    assert!(last < SCREEN.0 / 2.0, "{last}");
 }
 
 /// Windows centred on the free stretch of a façade, from its end and
@@ -5990,7 +6022,7 @@ fn swatches_paint_one_piece_of_one_object() {
 fn maquette_walks_with_wasd() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(h.app.maquette);
     h.frame();
     let hold = |h: &mut Harness, key: Key, frames: usize| {
@@ -6036,7 +6068,7 @@ fn maquette_walks_with_wasd() {
 fn escape_works_after_clicking_a_card() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(h.app.maquette);
     h.frame();
     h.app.catalog_take(super::maquette_ui::CatalogAct::Object(
@@ -6408,7 +6440,7 @@ fn dormers_with_the_roof_tool() {
 fn maquette_environment() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(h.app.maquette);
     assert_eq!(h.app.mode, ViewMode::ThreeD);
     assert_eq!(h.app.v3d.cutaway, super::view3d_ui::Cutaway::Front);
@@ -6425,7 +6457,7 @@ fn maquette_environment() {
     assert_eq!(h.app.tool, Tool::Wall);
     assert!(h.app.room_walls);
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     assert!(!h.app.maquette);
     assert_eq!(h.app.mode, ViewMode::Plan);
     h.click_at(p(0.0, 0.0));
@@ -6477,7 +6509,7 @@ fn maquette_environment() {
 fn moved_in_3d_into_a_corner_with_clearances() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
     h.app.v3d.camera.pitch = 1.3;
@@ -6559,7 +6591,7 @@ fn moved_in_3d_into_a_corner_with_clearances() {
 fn concept_volume_arrows_in_3d() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.camera.pitch = 0.5;
     h.app.v3d.camera.yaw = -2.2;
@@ -6756,7 +6788,7 @@ fn the_brush_in_tecnica() {
 fn maquette_places_like_paralives() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.cutaway = super::view3d_ui::Cutaway::Low;
     h.app.v3d.camera.pitch = 1.3;
@@ -6859,7 +6891,7 @@ fn maquette_places_like_paralives() {
 fn maquette_room_in_3d() {
     let mut h = Harness::new(Editor::new_project());
     h.frame();
-    h.key(Key::Tab);
+    h.key(Key::F4);
     h.frame();
     h.app.v3d.camera.pitch = 1.2;
     h.app.v3d.camera.target = glam::Vec3::new(3.0, 2.0, 0.0);
@@ -7372,4 +7404,279 @@ fn a_tree_is_chosen_from_a_library_dxf() {
         archisim_core::ElevationArt::Lines(_)
     ));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A straight wall drawn through the model, with the first wall type.
+fn add_test_wall(h: &mut Harness, a: Point2, b: Point2) -> archisim_core::WallId {
+    let level = h.app.ed.level;
+    let wt = h.app.ed.model().wall_types().next().unwrap().id;
+    h.app
+        .ed
+        .transact("Muro", |m| {
+            m.add_wall(archisim_core::NewWall {
+                wall_type: wt,
+                level,
+                start: a,
+                end: b,
+                reference: archisim_core::ReferenceLine::Center,
+                height: 2.5,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+        })
+        .unwrap()
+}
+
+/// Revit's «Recortar/extender para formar esquina»: two walls that do not
+/// meet are extended to their corner; two that cross are cut back to it,
+/// each keeping the part where it was picked.
+#[test]
+fn walls_are_trimmed_and_extended_to_a_corner() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let a = add_test_wall(&mut h, p(0.0, 0.0), p(4.0, 0.0));
+    let b = add_test_wall(&mut h, p(5.0, 1.0), p(5.0, 4.0));
+    command(&mut h, "esq");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(5.0, 3.0));
+    let m = h.model();
+    assert!(m.wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
+    assert!(m.wall(b).unwrap().start.approx_eq(p(5.0, 0.0)));
+    assert!(m.wall(b).unwrap().end.approx_eq(p(5.0, 4.0)));
+    // Still running: two crossing walls, cut back to their corner.
+    let c = add_test_wall(&mut h, p(0.0, 8.0), p(6.0, 8.0));
+    let d = add_test_wall(&mut h, p(4.0, 6.0), p(4.0, 11.0));
+    h.click_at(p(1.0, 8.0));
+    h.click_at(p(4.0, 10.0));
+    h.key(Key::Enter);
+    let m = h.model();
+    assert!(m.wall(c).unwrap().start.approx_eq(p(0.0, 8.0)));
+    assert!(m.wall(c).unwrap().end.approx_eq(p(4.0, 8.0)));
+    assert!(m.wall(d).unwrap().start.approx_eq(p(4.0, 8.0)));
+    assert!(m.wall(d).unwrap().end.approx_eq(p(4.0, 11.0)));
+}
+
+/// «Recortar/extender varios elementos»: every wall picked goes to the
+/// location line of the limit wall, short ones extended and long ones cut.
+#[test]
+fn walls_are_trimmed_and_extended_to_a_limit() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let limit = add_test_wall(&mut h, p(0.0, 5.0), p(8.0, 5.0));
+    let short = add_test_wall(&mut h, p(1.0, 0.0), p(1.0, 3.0));
+    let long = add_test_wall(&mut h, p(3.0, 0.0), p(3.0, 7.0));
+    command(&mut h, "lim");
+    h.click_at(p(6.0, 5.0));
+    h.click_at(p(1.0, 1.0));
+    h.click_at(p(3.0, 1.0));
+    h.key(Key::Enter);
+    let m = h.model();
+    assert!(m.wall(short).unwrap().end.approx_eq(p(1.0, 5.0)));
+    assert!(m.wall(long).unwrap().end.approx_eq(p(3.0, 5.0)));
+    assert!(m.wall(limit).unwrap().start.approx_eq(p(0.0, 5.0)));
+}
+
+/// Revit's «Alinear»: the face of one wall brought onto the face of
+/// another, parallel to it.
+#[test]
+fn a_wall_face_is_aligned_to_another() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let r = add_test_wall(&mut h, p(0.0, 0.0), p(6.0, 0.0));
+    let w = add_test_wall(&mut h, p(0.0, 3.0), p(6.0, 3.0));
+    let t = {
+        let m = h.model();
+        m.wall_type(m.wall(r).unwrap().wall_type)
+            .unwrap()
+            .thickness()
+    };
+    command(&mut h, "alc");
+    // The north face of the first wall, then the south face of the other.
+    h.click_at(p(3.0, t / 2.0 - 0.01));
+    h.click_at(p(3.0, 3.0 - t / 2.0 + 0.01));
+    h.key(Key::Enter);
+    let y = h.model().wall(w).unwrap().start.y;
+    assert!((y - t).abs() < 1e-6, "{y} {t}");
+}
+
+/// Objects mirrored with SIMETRIA go to the mirrored place, facing the
+/// mirrored way; in plan they give their corners as snap points.
+#[test]
+fn objects_mirror_and_snap_to_their_corners() {
+    let mut h = Harness::new(Editor::new_project());
+    let level = h.app.ed.level;
+    let t = h
+        .model()
+        .object_types()
+        .find(|t| t.name == "Armario 120")
+        .expect("the library's wardrobe")
+        .id;
+    let id = h
+        .app
+        .ed
+        .transact("Armario", |m| {
+            m.add_object(archisim_core::NewObject {
+                level,
+                object_type: t,
+                position: p(2.0, 2.0),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+        })
+        .unwrap();
+    // A corner of its box is a snap point.
+    let corner = h.model().object_outline(id)[0];
+    let s = crate::snap::snap_filtered(
+        h.model(),
+        level,
+        corner + archisim_core::Vec2::new(0.02, 0.01),
+        0.1,
+        &[],
+        &Default::default(),
+        crate::snap::SnapFilter::default(),
+        &[],
+    );
+    assert!(s.point.approx_eq(corner), "{s:?}");
+    // Mirrored across x = 5: the middle goes from x to 10 − x and the
+    // front, facing +y, still faces +y.
+    let before = crate::drag::object_middle(h.model(), id).unwrap();
+    let mut m = h.model().clone();
+    let sel = [Element::Object(id)].into_iter().collect();
+    crate::xform::transform(
+        &mut m,
+        &sel,
+        &archisim_draft::Transform::mirror(p(5.0, 0.0), p(5.0, 1.0)),
+        false,
+    )
+    .unwrap();
+    let after = crate::drag::object_middle(&m, id).unwrap();
+    assert!(after.approx_eq(p(10.0 - before.x, before.y)), "{after:?}");
+    let r = m.object(id).unwrap().rotation;
+    assert!(r.sin().abs() < 1e-9 && r.cos() > 0.0, "{r}");
+}
+
+/// Revit's «Reflejar - elegir eje» (MM): with a wall selected, one click on
+/// another wall takes its line as the axis and leaves the mirrored copy;
+/// «Reflejar - dibujar eje» (DM) takes two points.
+#[test]
+fn mirror_picks_a_line_as_axis_and_copies() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let w = add_test_wall(&mut h, p(1.0, 0.0), p(1.0, 3.0));
+    let _axis = add_test_wall(&mut h, p(4.0, -2.0), p(4.0, 6.0));
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "mm");
+    h.click_at(p(4.0, 5.0));
+    let m = h.model();
+    assert_eq!(m.walls().count(), 3, "the original stays");
+    assert!(m.wall(w).unwrap().start.approx_eq(p(1.0, 0.0)));
+    let xs: Vec<f64> = m.walls().map(|x| x.start.x).collect();
+    assert!(xs.iter().any(|x| (x - 7.0).abs() < 1e-9), "{xs:?}");
+    // DM: an axis drawn with two points (y = 4.5), the original kept.
+    h.key(Key::Escape);
+    h.app.ed.selection = [Element::Wall(w)].into_iter().collect();
+    command(&mut h, "dm");
+    h.click_at(p(0.0, 4.5));
+    h.click_at(p(2.0, 4.5));
+    let m = h.model();
+    assert_eq!(m.walls().count(), 4);
+    assert!(m
+        .walls()
+        .any(|x| (x.start.y - 9.0).abs() < 1e-9 || (x.end.y - 9.0).abs() < 1e-9));
+}
+
+/// A corner made with Esquina is undone with Ctrl+Z even while the order
+/// is still running and a button of the bar keeps the keyboard focus, and
+/// with U typed in the command line.
+#[test]
+fn a_corner_is_undone_while_the_order_runs() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_autocad = true;
+    let a = add_test_wall(&mut h, p(0.0, 0.0), p(4.0, 0.0));
+    let b = add_test_wall(&mut h, p(5.0, 1.0), p(5.0, 4.0));
+    command(&mut h, "esq");
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(5.0, 3.0));
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
+    // A button of the bar with the keyboard focus, as after clicking it.
+    h.ctx
+        .memory_mut(|m| m.request_focus(eframe::egui::Id::unique("boton-esquina")));
+    h.set_modifiers(Modifiers::COMMAND);
+    h.key(Key::Z);
+    h.set_modifiers(Modifiers::NONE);
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(4.0, 0.0)));
+    assert!(h.model().wall(b).unwrap().start.approx_eq(p(5.0, 1.0)));
+    // Again, and undone with U, the order still running.
+    h.click_at(p(2.0, 0.0));
+    h.click_at(p(5.0, 3.0));
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(5.0, 0.0)));
+    command(&mut h, "u");
+    assert!(h.model().wall(a).unwrap().end.approx_eq(p(4.0, 0.0)));
+    assert!(h.app.cad_prompt().is_some(), "Esquina goes on");
+}
+
+/// Revit's «No permitir unión»: two walls meeting in an L stay mitred
+/// until one end may not join; then both ends are square and moving one
+/// wall leaves the other where it is. The right-click menu offers it near
+/// the end.
+#[test]
+fn a_wall_end_that_may_not_join() {
+    let mut h = Harness::new(Editor::new_project());
+    let a = add_test_wall(&mut h, p(0.0, 0.0), p(4.0, 0.0));
+    let b = add_test_wall(&mut h, p(4.0, 0.0), p(4.0, 3.0));
+    let cut = |h: &Harness, id| archisim_geom::wall_geometry(h.model(), id).unwrap();
+    assert!(cut(&h, a).end_cut.is_mitre());
+    let near = super::context_menu::wall_end_near(h.model(), a, p(3.6, 0.1));
+    assert_eq!(near, Some((false, true)));
+    h.app
+        .ed
+        .transact("Unión", |m| m.set_wall_join(a, false, false))
+        .unwrap();
+    assert!(matches!(cut(&h, a).end_cut, archisim_geom::EndCut::Square));
+    assert!(matches!(
+        cut(&h, b).start_cut,
+        archisim_geom::EndCut::Square
+    ));
+    // Moving the first wall north: the second one does not follow.
+    let sel = [Element::Wall(a)].into_iter().collect();
+    let mut m = h.model().clone();
+    crate::drag::move_selection(&mut m, &sel, archisim_core::Vec2::new(0.0, 1.0)).unwrap();
+    assert!(m.wall(b).unwrap().start.approx_eq(p(4.0, 0.0)));
+}
+
+/// Revit's keys: two letters start the tool at once, without Enter; in
+/// the middle of an order waiting for a pick, they start the new one.
+#[test]
+fn revit_shortcuts_start_tools_at_once() {
+    let mut h = Harness::new(Editor::new_project());
+    h.app.keys_revit = true;
+    h.type_text("wa");
+    h.frame();
+    assert_eq!(h.app.tool, Tool::Wall);
+    h.key(Key::Escape);
+    h.key(Key::Escape);
+    h.type_text("tr");
+    h.frame();
+    assert_eq!(
+        h.app.cad_prompt().map(|p| p.want),
+        Some(crate::cad::Want::Pick)
+    );
+    h.type_text("al");
+    h.frame();
+    assert!(h
+        .app
+        .cad_prompt()
+        .is_some_and(|p| p.text.contains("referencia")));
+    h.key(Key::Escape);
+    h.type_text("ks");
+    h.frame();
+    assert!(h.app.show_shortcuts);
+    // Cycling the key styles: Revit → AutoCAD → ArchiCAD → Revit.
+    h.app.cycle_keys();
+    assert!(!h.app.keys_revit && h.app.keys_autocad);
+    h.app.cycle_keys();
+    assert!(!h.app.keys_revit && !h.app.keys_autocad);
+    h.app.cycle_keys();
+    assert!(h.app.keys_revit);
 }

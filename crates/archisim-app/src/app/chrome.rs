@@ -401,8 +401,27 @@ impl ArchiSimApp {
                 .on_hover_text("Sin marcar, lo que escribes sale junto al cursor y el paso de la orden en marcha, en la barra bajo las pestañas");
             super::missions_ui::text_size_row(ui, &mut self.prefs.text_size);
             super::missions_ui::units_row(ui, &mut self.prefs.units);
-            ui.switch(&mut self.keys_autocad, "Teclas de AutoCAD")
-                .on_hover_text("Marcado: se escribe la orden y se pulsa Intro (L, PL, M de muro…). Sin marcar: M, F, P, V, C y N cambian de herramienta al momento, como en ArchiCAD");
+            ui.horizontal(|ui| {
+                ui.label("Teclas");
+                let mut style = if self.keys_revit {
+                    0
+                } else if self.keys_autocad {
+                    1
+                } else {
+                    2
+                };
+                ui.selectable_value(&mut style, 0, "Revit")
+                    .on_hover_text("Dos letras y la herramienta empieza, como en Revit: WA muro, DR puerta, MV mover, MM reflejar, AL alinear, TR esquina… (KS: la lista)");
+                ui.selectable_value(&mut style, 1, "AutoCAD")
+                    .on_hover_text("Se escribe la orden y se pulsa Intro (L, PL, REC…)");
+                ui.selectable_value(&mut style, 2, "ArchiCAD")
+                    .on_hover_text("M, F, P, V, C y N cambian de herramienta al momento");
+                self.keys_revit = style == 0;
+                self.keys_autocad = style == 1 || (style == 0 && self.keys_autocad);
+                if style == 2 {
+                    self.keys_autocad = false;
+                }
+            });
             ui.separator();
             if ui.button("Plantas…").clicked() {
                 self.show_levels = true;
@@ -448,7 +467,7 @@ impl ArchiSimApp {
             {
                 self.missions.window_open = true;
             }
-            if ui.button("Ratón y teclado").clicked() {
+            if ui.button("Atajos de teclado y ratón (KS)").clicked() {
                 self.show_shortcuts = true;
             }
             if ui.button("Acerca de ArchiSim").clicked() {

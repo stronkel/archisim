@@ -56,6 +56,9 @@ pub struct Prefs {
     pub text_size: TextSize,
     pub dark: bool,
     pub keys_autocad: bool,
+    /// Revit's two-letter shortcuts (WA, DR, MV, MM…), which start at once;
+    /// they take precedence over `keys_autocad`.
+    pub keys_revit: bool,
     /// The unit lengths are shown and typed in.
     pub units: crate::units::LengthUnit,
     /// Ids of the missions done.
@@ -79,6 +82,7 @@ impl Default for Prefs {
             text_size: TextSize::Normal,
             dark: false,
             keys_autocad: true,
+            keys_revit: true,
             units: crate::units::LengthUnit::Metre,
             missions_done: Vec::new(),
             welcomed: false,
@@ -116,6 +120,7 @@ impl Prefs {
             "tamaño_letra": self.text_size.key(),
             "tema_oscuro": self.dark,
             "teclas_autocad": self.keys_autocad,
+            "teclas_revit": self.keys_revit,
             "unidades": self.units.symbol(),
             "misiones_hechas": self.missions_done,
             "bienvenida": self.welcomed,
@@ -142,6 +147,7 @@ impl Prefs {
                 .map_or(d.text_size, TextSize::from_key),
             dark: flag("tema_oscuro", d.dark),
             keys_autocad: flag("teclas_autocad", d.keys_autocad),
+            keys_revit: flag("teclas_revit", d.keys_revit),
             units: v
                 .get("unidades")
                 .and_then(|x| x.as_str())
@@ -225,6 +231,7 @@ mod tests {
             text_size: TextSize::Larger,
             dark: true,
             keys_autocad: false,
+            keys_revit: false,
             units: crate::units::LengthUnit::Centimetre,
             missions_done: vec!["muro".into(), "plano".into()],
             welcomed: true,

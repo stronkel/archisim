@@ -880,11 +880,19 @@ pub const ORDERS: &[Order] = &[
     ),
     order(
         EDIT,
+        "Reflejar",
+        "REFLEJAR",
+        Icon::Mirror,
+        "MM",
+        "Reflejar eligiendo una línea como eje (DM: dibujar el eje); deja la copia",
+    ),
+    order(
+        EDIT,
         "Simetría",
         "SIMETRIA",
         Icon::Mirror,
         "SI",
-        "Reflejar respecto a una línea",
+        "Simetría de AutoCAD: dos puntos del eje y si se borra el original",
     ),
     order(
         EDIT,
@@ -925,6 +933,38 @@ pub const ORDERS: &[Order] = &[
         Icon::Extend,
         "AL",
         "Alargar hasta el borde más próximo (Mayús: recortar)",
+    ),
+    order(
+        EDIT,
+        "Alinear caras",
+        "ALINEACARA",
+        Icon::Move,
+        "ALC",
+        "Como Alinear de Revit: la línea de referencia y después la cara que se lleva a ella",
+    ),
+    order(
+        EDIT,
+        "Esquina",
+        "ESQUINA",
+        Icon::Trim,
+        "ESQ",
+        "Recortar/extender dos muros para formar esquina (TR de Revit)",
+    ),
+    order(
+        EDIT,
+        "Hasta límite",
+        "LIMITE1",
+        Icon::Extend,
+        "LIM1",
+        "Recortar/extender un muro hasta un límite",
+    ),
+    order(
+        EDIT,
+        "Varios al límite",
+        "LIMITE",
+        Icon::Extend,
+        "LIM",
+        "Recortar/extender varios muros hasta el mismo límite",
     ),
     order(
         EDIT,
@@ -1436,6 +1476,8 @@ mod tests {
         assert_eq!(names("zapata")[0], "Zapata");
         assert_eq!(names("girar")[0], "Girar");
         assert_eq!(names("simetria")[0], "Simetría");
+        assert_eq!(names("reflejar")[0], "Reflejar");
+        assert!(names("MM").contains(&"Reflejar"));
         assert_eq!(names("tuberia")[0], "Tubería");
         assert!(names("EQ").contains(&"Desfase"));
         // Each tool once, in its home discipline.

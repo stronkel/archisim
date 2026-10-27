@@ -12,6 +12,7 @@ pub mod dims;
 pub mod draw;
 pub mod inquiry;
 pub mod modify;
+pub mod revit;
 pub mod rooms;
 
 use std::collections::BTreeSet;
@@ -138,6 +139,12 @@ pub enum Change {
         t: Transform,
         copy: bool,
     },
+    /// New ends for a wall, its doors and windows staying where they are in
+    /// plan (trim and extend of walls).
+    WallEnds(archisim_core::WallId, Point2, Point2),
+    /// Moves elements by a vector as dragging them does: the walls joined
+    /// to a moved wall keep their line and stretch to it (Revit's align).
+    MoveBy(BTreeSet<Element>, Point2),
     /// Copies the layer and style of `from` to the elements.
     MatchStyle { from: DraftId, to: Vec<DraftId> },
     /// A room found inside the walls around a point.
@@ -505,6 +512,18 @@ pub const ALIASES: &[(&str, Launch)] = &[
     ("MATCHPROP", Launch::Command("IGUALARPROP")),
     ("DIVIDE", Launch::Command("DIVIDE")),
     ("DIV", Launch::Command("DIVIDE")),
+    ("REFLEJAR", Launch::Command("REFLEJAR")),
+    ("MM", Launch::Command("REFLEJAR")),
+    ("REFLEJARDIB", Launch::Command("REFLEJARDIB")),
+    ("DM", Launch::Command("REFLEJARDIB")),
+    ("ALINEACARA", Launch::Command("ALINEACARA")),
+    ("ALC", Launch::Command("ALINEACARA")),
+    ("ESQUINA", Launch::Command("ESQUINA")),
+    ("ESQ", Launch::Command("ESQUINA")),
+    ("LIMITE", Launch::Command("LIMITE")),
+    ("LIM", Launch::Command("LIMITE")),
+    ("LIMITE1", Launch::Command("LIMITE1")),
+    ("LIM1", Launch::Command("LIMITE1")),
     ("ALINEAR", Launch::Command("ALINEAR")),
     ("ALI", Launch::Command("ALINEAR")),
     ("ALIGN", Launch::Command("ALINEAR")),
@@ -601,6 +620,12 @@ pub fn launch(word: &str) -> Option<Launch> {
 /// A new command by its name.
 pub fn new_command(name: &str) -> Option<Box<dyn Command>> {
     Some(match name {
+        "REFLEJAR" => Box::new(revit::Mirror::new(false)),
+        "REFLEJARDIB" => Box::new(revit::Mirror::new(true)),
+        "ALINEACARA" => Box::new(revit::AlignTo::default()),
+        "ESQUINA" => Box::new(revit::Corner::default()),
+        "LIMITE" => Box::new(revit::ToLimit::new(true)),
+        "LIMITE1" => Box::new(revit::ToLimit::new(false)),
         "LINEA" => Box::new(draw::Line::default()),
         "POL" => Box::new(draw::Pline::default()),
         "RECTANG" => Box::new(draw::Rectangle::default()),

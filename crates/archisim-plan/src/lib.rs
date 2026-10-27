@@ -50,8 +50,8 @@ pub mod urban;
 use std::fmt::Write as _;
 
 use archisim_core::{
-    CutPattern, LayerFunction, LevelId, LineStyle, Mark, Model, Pen, Point2, Slab, WallFunction,
-    WallId, WallSide, EPSILON,
+    CutPattern, LayerFunction, LevelId, LineStyle, Mark, Model, Pen, Point2, Slab, WallId,
+    WallSide, EPSILON,
 };
 use archisim_geom::{
     clip_span, openings_in_wall, wall_geometry_in, wall_pieces, EndCut, OpeningGeometry,
@@ -1061,8 +1061,12 @@ struct JambDetail {
     /// The outer leaf that turns at the jamb to close the cavity, and the
     /// cavity layers it closes (they stop short of the jamb).
     turn: Option<(usize, std::ops::Range<usize>)>,
-    /// The exterior finish (render) that wraps the reveal up to the frame.
+    /// The exterior finish (render) that wraps the reveal up to the frame
+    /// (the type's «Envolver en huecos»).
     wrap: Option<usize>,
+    /// The interior finish that wraps the reveal from the inside up to the
+    /// frame.
+    wrap_in: Option<usize>,
 }
 
 impl JambDetail {
@@ -1083,11 +1087,12 @@ impl JambDetail {
             }
             (end > start && end < layers.len()).then_some((i, start..end))
         });
-        let wrap = (wtype.function == WallFunction::Exterior
-            && layers.len() > 1
-            && layers[0].function == Finish)
-            .then_some(0);
-        Self { turn, wrap }
+        let (wrap, wrap_in) = wtype.wrapping_layers(wtype.wrap_inserts);
+        Self {
+            turn,
+            wrap,
+            wrap_in,
+        }
     }
 
     fn cut_back(&self, layer: usize) -> bool {
@@ -1359,6 +1364,68 @@ fn draw_layers(
                 line(s, local(t, y_in), local(back, y_in), pens().thin, k);
             }
         }
+        // The interior finish wraps the reveal from the room to the frame.
+        if let Some(fin) = jamb.wrap_in {
+            let f = wtype.layers[fin].thickness;
+            let (y_in, y_out) = (tops[fin], o.frame_interior);
+            if let (Some(mat), true) = (
+                model.material(wtype.layers[fin].material),
+                y_out > y_in + EPSILON,
+            ) {
+                let back = t + side * f;
+                fill_cut(
+                    s,
+                    mat,
+                    &rect(t, back, y_in, y_out),
+                    &format!("cut-{gi}-wrapin-{ji}"),
+                    k,
+                );
+                line(s, local(back, y_out), local(back, y_in), pens().thin, k);
+                line(s, local(t, y_out), local(back, y_out), pens().thin, k);
+            }
+        }
+    }
+
+    // «Envolver en extremos»: at a free end the finish turns round and
+    // covers the ends of the other layers, a strip as wide as itself.
+    let (end_ext, end_int) = wtype.wrapping_layers(wtype.wrap_ends);
+    let last = wtype.layers.len().saturating_sub(1);
+    let ends = [
+        (g.start_cut == EndCut::Square, 0.0, 1.0),
+        (g.end_cut == EndCut::Square, len, -1.0),
+    ];
+    for (ei, &(free, t, side)) in ends.iter().enumerate() {
+        // Only where the end is drawn (not inside a door or window).
+        let shown = pieces.iter().any(|p| {
+            if side > 0.0 {
+                p.from.is_none()
+            } else {
+                p.to.is_none()
+            }
+        });
+        if !free || !shown {
+            continue;
+        }
+        let strip = match (end_ext, end_int) {
+            // Both: the exterior finish covers up to the interior one.
+            (Some(e), Some(_)) => Some((e, tops[last], tops[1])),
+            (Some(e), None) => Some((e, tops[last + 1], tops[1])),
+            (None, Some(i)) => Some((i, tops[last], tops[0])),
+            (None, None) => None,
+        };
+        let Some((fin, y0, y1)) = strip else { continue };
+        let Some(mat) = model.material(wtype.layers[fin].material) else {
+            continue;
+        };
+        let back = t + side * wtype.layers[fin].thickness;
+        fill_cut(
+            s,
+            mat,
+            &rect(t, back, y0, y1),
+            &format!("cut-{gi}-endwrap-{ei}"),
+            k,
+        );
+        line(s, local(back, y0), local(back, y1), pens().thin, k);
     }
 }
 
@@ -2958,7 +3025,8 @@ mod tests {
             none,
             JambDetail {
                 turn: None,
-                wrap: None
+                wrap: None,
+                wrap_in: None,
             }
         );
 
@@ -2987,6 +3055,7 @@ mod tests {
                 panel_material: glass,
             })
             .unwrap();
+        show_plan_swing(&mut m, window);
         m.add_opening(archisim_core::NewOpening {
             opening_type: window,
             wall,
@@ -3108,6 +3177,9 @@ mod tests {
                         panel_material: glass,
                     })
                     .unwrap();
+                // The old symbols drew the windows' swing, continuous; now
+                // it is hidden unless the type asks for it (D28).
+                show_plan_swing(&mut m, t);
                 let is_door = matches!(kind, OpeningKind::Door(_));
                 for opens_to in [WallSide::Interior, WallSide::Exterior] {
                     for hand in [Hand::Left, Hand::Right] {
@@ -3146,6 +3218,172 @@ mod tests {
             }
         }
         assert_eq!(compared, 2 * 2 * 2 * 2 * (3 + 4 * 2));
+    }
+
+    /// «Envolver en extremos»: the render turns round the free ends; with
+    /// «Envolver en huecos» interior, the plaster turns into the reveals.
+    #[test]
+    fn finishes_wrap_ends_and_reveals_in_plan() {
+        let mut m = Model::new("Envolver");
+        let lvl = m.add_level("PB", 0.0);
+        let render = m.add_material("Mortero", "plaster", [230, 230, 220], CutPattern::Solid);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let plaster = m.add_material("Yeso", "plaster", [245, 245, 245], CutPattern::Solid);
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], CutPattern::Solid);
+        let layer = |material, thickness, function| Layer {
+            material,
+            thickness,
+            function,
+        };
+        let wt = m
+            .add_wall_type(
+                "Fachada",
+                WallFunction::Exterior,
+                vec![
+                    layer(render, 0.02, LayerFunction::Finish),
+                    layer(brick, 0.2, LayerFunction::Structure),
+                    layer(plaster, 0.015, LayerFunction::Finish),
+                ],
+            )
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let t = m
+            .add_opening_type(archisim_core::NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::Fixed),
+                width: 1.0,
+                height: 1.0,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: brick,
+                panel_material: glass,
+            })
+            .unwrap();
+        m.add_opening(archisim_core::NewOpening {
+            opening_type: t,
+            wall: w,
+            along: 2.0,
+            sill: 0.5,
+            opens_to: archisim_core::WallSide::Interior,
+            hand: archisim_core::Hand::Left,
+            setback: Some(0.08),
+        })
+        .unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        assert_eq!(svg.matches("-endwrap-").count(), 0);
+        assert_eq!(svg.matches("-wrap-").count(), 2, "reveals wrap by default");
+        m.set_wall_type_wrap(
+            wt,
+            archisim_core::Wrap::Exterior,
+            archisim_core::Wrap::Interior,
+        )
+        .unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        assert_eq!(svg.matches("-endwrap-").count(), 2);
+        assert_eq!(svg.matches("-wrap-").count(), 0);
+        assert_eq!(svg.matches("-wrapin-").count(), 2);
+        if let Ok(dir) = std::env::var("PLAN_OUT") {
+            std::fs::write(format!("{dir}/envolver.svg"), &svg).unwrap();
+        }
+    }
+
+    /// Draws a window type's swing in plan, continuous, as before D28 (doors
+    /// have no such parameter and are left as they are).
+    fn show_plan_swing(m: &mut Model, t: archisim_core::OpeningTypeId) {
+        let ty = m.opening_type(t).unwrap();
+        if !ty.values.contains_key("swing_in_plan") {
+            return;
+        }
+        let mut values = ty.values.clone();
+        values.insert("swing_in_plan".into(), archisim_core::Value::Bool(true));
+        values.insert(
+            "swing_line".into(),
+            archisim_core::Value::Text("continuous".into()),
+        );
+        let family = ty.family;
+        m.edit_family_type(t, family, values).unwrap();
+    }
+
+    /// Windows hide their swing in plan unless the type asks for it, and
+    /// then draw it dashed (D28).
+    #[test]
+    fn window_swing_in_plan_only_when_asked_and_dashed() {
+        let mut m = Model::new("Giro");
+        let lvl = m.add_level("PB", 0.0);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], CutPattern::Solid);
+        let wt = m
+            .add_wall_type(
+                "Muro",
+                WallFunction::Exterior,
+                vec![Layer {
+                    material: brick,
+                    thickness: 0.3,
+                    function: LayerFunction::Structure,
+                }],
+            )
+            .unwrap();
+        let wall = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(5.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        let window = m
+            .add_opening_type(archisim_core::NewOpeningType {
+                name: "V".into(),
+                kind: OpeningKind::Window(WindowOperation::DoubleCasement),
+                width: 1.2,
+                height: 1.2,
+                frame_width: 0.06,
+                frame_depth: 0.07,
+                frame_material: brick,
+                panel_material: glass,
+            })
+            .unwrap();
+        m.add_opening(archisim_core::NewOpening {
+            opening_type: window,
+            wall,
+            along: 2.5,
+            sill: 0.9,
+            opens_to: archisim_core::WallSide::Interior,
+            hand: archisim_core::Hand::Left,
+            setback: None,
+        })
+        .unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        assert_eq!(svg.matches(" A0.54,0.54 ").count(), 0, "hidden by default");
+        let ty = m.opening_type(window).unwrap();
+        let mut values = ty.values.clone();
+        values.insert("swing_in_plan".into(), archisim_core::Value::Bool(true));
+        let family = ty.family;
+        m.edit_family_type(window, family, values).unwrap();
+        let svg = render_plan(&m, lvl, &PlanOptions::default());
+        let arcs: Vec<&str> = svg.lines().filter(|l| l.contains(" A0.54,0.54 ")).collect();
+        assert_eq!(arcs.len(), 2);
+        assert!(
+            arcs.iter().all(|l| l.contains("stroke-dasharray")),
+            "{arcs:?}"
+        );
     }
 
     /// Rasterises two symbol drawings around the opening and compares them.
@@ -3238,7 +3476,7 @@ mod num_tests {
         use super::*;
         use archisim_core::{
             CutPattern as Pattern, DoorOperation, Hand, Layer, NewOpening, NewOpeningType, NewWall,
-            OpeningKind, ReferenceLine,
+            OpeningKind, ReferenceLine, WallFunction,
         };
         let mut m = Model::new("Giro");
         let lvl = m.add_level("P1", 0.0);

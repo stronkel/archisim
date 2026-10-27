@@ -36,6 +36,7 @@ pub mod roof_parts;
 pub mod room;
 pub mod sculpt;
 pub mod shadow;
+pub mod slice;
 pub mod solid;
 pub mod stairs;
 pub mod sweeps;
@@ -659,7 +660,15 @@ fn end_cut(idx: &WallIndex, wall: &Wall, end: End) -> EndCut {
         End::Start => wall.start,
         End::End => wall.end,
     };
+    // «No permitir unión» at this end (on this wall or on a wall that
+    // ends here): a free, square end; the walls only touch.
+    if !wall.joins_at(p) {
+        return EndCut::Square;
+    }
     let near = idx.at_end(wall.level, p);
+    if near.iter().any(|o| o.id != wall.id && !o.joins_at(p)) {
+        return EndCut::Square;
+    }
     let mut others = near.into_iter().filter_map(|o| {
         if o.id == wall.id {
             None

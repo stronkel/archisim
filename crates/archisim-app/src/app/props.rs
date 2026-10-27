@@ -167,6 +167,119 @@ pub fn choice<T: PartialEq + Copy>(
     v
 }
 
+/// A choice shown in pictures (the 3D model of a sofa, the crown of a
+/// tree): the chosen one's picture with its name, and under it, opened
+/// with a click, a picture for every option. `options` are the names and
+/// their pictures (none while still being made). Returns the option
+/// clicked.
+pub fn picture_choice(
+    ui: &mut Ui,
+    salt: &str,
+    label: &str,
+    current: &str,
+    options: &[(String, Option<Thumb>)],
+) -> Option<String> {
+    let p = Palette::current(ui.ctx());
+    let mut picked = None;
+    ui.add_space(2.0);
+    ui.label(egui::RichText::new(label).color(p.muted));
+    let width = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 84.0), Sense::click());
+    let resp = resp.on_hover_text("Elegir viendo cada opción");
+    ui.painter().rect(
+        rect,
+        CornerRadius::same(8),
+        p.panel,
+        Stroke::new(1.0, if resp.hovered() { p.accent } else { p.line }),
+        StrokeKind::Inside,
+    );
+    let pic = Rect::from_min_size(rect.min + Vec2::splat(6.0), Vec2::new(96.0, 72.0));
+    ui.painter()
+        .rect_filled(pic, CornerRadius::same(5), egui::Color32::WHITE);
+    if let Some(t) = options.iter().find(|o| o.0 == current).and_then(|o| o.1) {
+        let size = t.fit(pic.size() - Vec2::splat(4.0));
+        ui.painter().image(
+            t.tex,
+            Rect::from_center_size(pic.center(), size),
+            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+            egui::Color32::WHITE,
+        );
+    }
+    let name_width = (rect.right() - pic.right() - 34.0).max(20.0);
+    let job = egui::text::LayoutJob {
+        wrap: egui::text::TextWrapping {
+            max_width: name_width,
+            max_rows: 2,
+            break_anywhere: false,
+            overflow_character: Some('…'),
+        },
+        ..egui::text::LayoutJob::single_section(
+            capitalized(current),
+            egui::TextFormat::simple(strong_font(12.5), p.text),
+        )
+    };
+    let g = ui.painter().layout_job(job);
+    ui.painter().galley(
+        Pos2::new(pic.right() + 10.0, rect.center().y - g.size().y / 2.0),
+        g,
+        p.text,
+    );
+    icons::paint(
+        ui.painter(),
+        Rect::from_center_size(
+            Pos2::new(rect.right() - 16.0, rect.center().y),
+            Vec2::splat(12.0),
+        ),
+        Icon::ChevronDown,
+        p.muted,
+    );
+    egui::Popup::menu(&resp)
+        .width(width.max(300.0))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            egui::ScrollArea::vertical()
+                .max_height(440.0)
+                .id_salt(("picture-choice", salt))
+                .show(ui, |ui| {
+                    // Measured where the tiles go, so the menu keeps its
+                    // width (see the gallery of types).
+                    let w = ((ui.available_width() - 16.0) / 3.0).max(60.0);
+                    for row in options.chunks(3) {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 8.0;
+                            for (name, thumb) in row {
+                                let item = TypeItem {
+                                    id: (),
+                                    name: capitalized(name),
+                                    note: String::new(),
+                                    thumb: *thumb,
+                                    caption: "",
+                                    folder: String::new(),
+                                };
+                                if tile(ui, w, &item, name == current).clicked() {
+                                    picked = Some(name.clone());
+                                }
+                            }
+                        });
+                        ui.add_space(2.0);
+                    }
+                });
+            if picked.is_some() {
+                ui.close();
+            }
+        });
+    ui.add_space(4.0);
+    picked.filter(|v| v != current)
+}
+
+/// The first letter in capitals ("contemporáneo" → "Contemporáneo").
+pub fn capitalized(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 /// What the buttons of the type card ask for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CardAction {
@@ -246,6 +359,9 @@ pub fn type_card<T: PartialEq + Copy>(
         let (rect, resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::click());
         let resp = resp.on_hover_text("Elegir otro tipo");
+        #[cfg(test)]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("test-type-button"), rect));
         ui.painter().rect(
             rect,
             CornerRadius::same(7),
@@ -338,7 +454,7 @@ fn gallery<T: PartialEq + Copy>(
     let p = Palette::current(ui.ctx());
     let search_id = ui.make_persistent_id(("type-search", salt));
     let mut picked = None;
-    egui::Popup::menu(button)
+    let shown = egui::Popup::menu(button)
         .width(button.rect.width().max(320.0))
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
@@ -381,8 +497,11 @@ fn gallery<T: PartialEq + Copy>(
             egui::ScrollArea::vertical()
                 .max_height(420.0)
                 .show(ui, |ui| {
-                    let w = (ui.available_width() - 8.0) / 2.0;
+                    // The tiles' width is taken where they go: inside a
+                    // folder the indent leaves less room, and tiles as wide
+                    // as outside it would widen the gallery at every frame.
                     let mut grid = |ui: &mut Ui, list: &[&TypeItem<T>]| {
+                        let w = ((ui.available_width() - 8.0) / 2.0).max(60.0);
                         for pair in list.chunks(2) {
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 8.0;
@@ -418,6 +537,13 @@ fn gallery<T: PartialEq + Copy>(
                 ui.close();
             }
         });
+    #[cfg(test)]
+    if let Some(r) = shown {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("test-type-gallery"), r.response.rect));
+    }
+    #[cfg(not(test))]
+    let _ = shown;
     picked
 }
 

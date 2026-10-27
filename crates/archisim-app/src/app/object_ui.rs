@@ -268,6 +268,25 @@ impl ArchiSimApp {
                         continue;
                     };
                     let salt = format!("object-tv-{}-{}", t.id.0, p.name);
+                    // What changes its 3D (the model of a sofa, a tree's
+                    // crown), chosen seeing it.
+                    if let (ParamKind::Choice(opts), Value::Text(now)) = (&p.kind, cur) {
+                        if shapes_the_model(&p.name) {
+                            let options = self.choice_pictures(ui.ctx(), &t, &p.name, opts);
+                            let label = if p.label.is_empty() {
+                                &p.name
+                            } else {
+                                &p.label
+                            };
+                            if let Some(v) = props::picture_choice(ui, &salt, label, now, &options)
+                            {
+                                let r =
+                                    self.ed.set_object_type_value(t.id, &p.name, Value::Text(v));
+                                self.report(r, "Tipo de objeto cambiado.");
+                            }
+                            continue;
+                        }
+                    }
                     if let Some(v) = param_row(ui, &salt, p, cur, &materials) {
                         let r = self.ed.set_object_type_value(t.id, &p.name, v);
                         self.report(r, "Tipo de objeto cambiado.");
@@ -846,6 +865,47 @@ impl ArchiSimApp {
                 }
             }
         });
+    }
+}
+
+/// Whether a choice of an object's family shapes its 3D model (and is
+/// chosen in pictures): all but those of its plan drawing.
+pub(super) fn shapes_the_model(name: &str) -> bool {
+    !matches!(
+        name,
+        "look" | "plan_drawing" | "tech_style" | "style" | "drawing" | "side"
+    ) && !name.ends_with("_own")
+}
+
+impl ArchiSimApp {
+    /// A 3D picture of an object type for each option of one of its
+    /// choices (as the Maqueta's cards), made a few each frame.
+    pub(super) fn choice_pictures(
+        &mut self,
+        ctx: &egui::Context,
+        t: &archisim_core::ObjectType,
+        name: &str,
+        options: &[String],
+    ) -> Vec<(String, Option<super::thumbs::Thumb>)> {
+        let sig = self.picture_signature(false);
+        let gpu = self.gpu.as_ref();
+        let model = self.ed.model();
+        let out = options
+            .iter()
+            .map(|o| {
+                let mut ty = t.clone();
+                ty.values.insert(name.to_string(), Value::Text(o.clone()));
+                let key = format!("p:{}:{:?}:{sig}", ty.family.0, ty.values);
+                let thumb = self.thumbs3d.get(ctx, gpu, key, || {
+                    crate::type_preview::object_model(model, &ty)
+                });
+                (o.clone(), thumb)
+            })
+            .collect();
+        if self.thumbs3d.pending {
+            ctx.request_repaint();
+        }
+        out
     }
 }
 

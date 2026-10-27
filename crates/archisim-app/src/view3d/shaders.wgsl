@@ -58,6 +58,9 @@ struct Globals {
     // Lamps lit at night: position and reach; lamp_count.x of them.
     lamps: array<vec4<f32>, 16>,
     lamp_count: vec4<f32>,
+    // What a cut shows: xyz a flat colour, w = 1 to use it; otherwise the
+    // material's cut colour (each layer of a wall its own).
+    caps: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;
@@ -79,6 +82,7 @@ struct VertexIn {
     @location(5) cut: vec4<f32>,
     // 1 if selected.
     @location(6) picked: f32,
+    @location(7) cap: vec3<f32>,
 };
 
 struct VertexOut {
@@ -93,6 +97,7 @@ struct VertexOut {
     @location(6) @interpolate(flat) tex: vec2<f32>,
     @location(7) @interpolate(flat) cut: vec4<f32>,
     @location(8) @interpolate(flat) picked: f32,
+    @location(9) @interpolate(flat) cap: vec3<f32>,
 };
 
 @vertex
@@ -105,6 +110,10 @@ fn vs_model(v: VertexIn) -> VertexOut {
     // 1: foliage; 2: what glows at night (lampshades, bulbs, flames); 3:
     // grass and flowers on the ground.
     out.soft = select(select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5), 3.0, v.bias > 3.5);
+    // -1: a face between two layers of a wall, only seen through a cut.
+    out.soft = select(out.soft, -1.0, v.bias < -1.5);
+    // -2: the filled section of a cut object, on the face of the box.
+    out.soft = select(out.soft, -2.0, v.bias < -2.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -114,6 +123,7 @@ fn vs_model(v: VertexIn) -> VertexOut {
     out.tex = v.tex;
     out.cut = v.cut;
     out.picked = v.picked;
+    out.cap = v.cap;
     return out;
 }
 
@@ -554,14 +564,32 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     // Selected: the distance is written negative, for the contour pass
     // to outline it.
     let mark = select(1.0, -1.0, i.picked > 0.5);
-    if (!front) {
+    if (front && i.soft < -0.5 && i.soft > -1.5) {
+        // Between two layers: never seen from the outside.
+        discard;
+    }
+    if (!front || i.soft < -1.5) {
         // The inside of a solid shows only through a cut.
         if (!kept.on) {
             discard;
         }
         let c = cap(i.world, kept);
-        out.color = vec4<f32>(shade(c.xyz, i.color.rgb, 1.0) * 0.82, 1.0);
-        out.normal_dist = vec4<f32>(normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz), c.w * mark);
+        // Solid, as a poché: the material's cut colour (each layer of a
+        // wall its own) or the one flat colour, barely shaded so that the
+        // faces of the cut still read.
+        let flat_fill = g.caps.w > 0.5;
+        let fill = select(i.cap, g.caps.xyz, flat_fill);
+        let lit = 0.92 + 0.08 * max(dot(c.xyz, normalize(vec3<f32>(0.3, -0.4, 0.86))), 0.0);
+        out.color = vec4<f32>(fill * lit, 1.0);
+        var n = normalize((g.view * vec4<f32>(c.xyz, 0.0)).xyz);
+        if (!flat_fill) {
+            // A thin line between layers, as in plan: the normal written
+            // for the contour pass leans a different way for each cut
+            // colour, so two layers side by side make a crease.
+            let h = fract(sin(dot(i.cap, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.547) * 6.2831853;
+            n = normalize(n + 0.9 * vec3<f32>(cos(h), sin(h), 0.0));
+        }
+        out.normal_dist = vec4<f32>(n, c.w * mark);
         return out;
     }
     let lit = sunlit(i.world, i.normal);

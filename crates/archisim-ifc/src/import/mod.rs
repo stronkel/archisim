@@ -1657,6 +1657,38 @@ impl<'a> Importer<'a> {
             WallFunction::Interior
         };
         let id = self.model.add_wall_type(name, function, layers)?;
+        // Its wrapping, if ArchiSim wrote it.
+        let wrap_of = |name: &str| -> Option<archisim_core::Wrap> {
+            let t = self.ent(ifc_type?)?;
+            for s in t.arg(5).refs() {
+                let set = self.ent(s)?;
+                if set.kind != "IFCPROPERTYSET" || set.arg(2).as_str() != Some("ArchiSim_WallType")
+                {
+                    continue;
+                }
+                for p in set.arg(4).as_list() {
+                    let p = self.deref(p)?;
+                    if p.arg(0).as_str() == Some(name) {
+                        let v = p.arg(2);
+                        let text = v
+                            .as_str()
+                            .or_else(|| v.as_list().first().and_then(|x| x.as_str()))?;
+                        return [
+                            archisim_core::Wrap::None,
+                            archisim_core::Wrap::Exterior,
+                            archisim_core::Wrap::Interior,
+                            archisim_core::Wrap::Both,
+                        ]
+                        .into_iter()
+                        .find(|w| crate::wrap_name(*w) == text);
+                    }
+                }
+            }
+            None
+        };
+        if let (Some(ends), Some(inserts)) = (wrap_of("WrapEnds"), wrap_of("WrapInserts")) {
+            self.model.set_wall_type_wrap(id, ends, inserts)?;
+        }
         if let Some(g) = self.type_guid(ifc_type) {
             self.guids.wall_types.push((id, g));
         }
