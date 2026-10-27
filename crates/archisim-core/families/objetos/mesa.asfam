@@ -1,7 +1,7 @@
 family "Mesa"
   category furniture
   host none
-  version 3
+  version 4
   description "Mesa rectangular de tablero y cuatro patas, con sillas alrededor si se quiere"
   folder "Mesas"
 
@@ -17,10 +17,16 @@ type_params
   section "Sillas"
     chairs integer = 6 range 0..16 label "Sillas alrededor"
   section "Materiales"
-    mat material = "Madera de pino" label "Madera"
+    top      material = "Roble claro" label "Tablero"
+    frame    material = "Roble claro" label "Patas y estructura"
+    metal    material = "Metal negro" label "Metal"
+    stone    material = "Mármol" label "Piedra"
+    ceramic  material = "Cerámica esmaltada" label "Cerámica"
+    dark     material = "Negro mate" label "Detalles oscuros"
+    mat      material = "Lino arena" label "Asientos de las sillas"
+    weave    material = "Enea" label "Enea de las sillas"
   section "Modelo 3D"
-    model3d choice("Cuatro patas", "Patas metálicas", "Caballetes") = "Cuatro patas" label "Modelo 3D"
-    frame material = "Metal lacado" label "Patas metálicas"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 let front = ceil(chairs / 2)
 let back = chairs - front
@@ -49,11 +55,11 @@ component chair_plan(x, y0, dir)
 body
   let t = 0.04
   let l = 0.06
-  box (-width / 2, 0, height - t) to (width / 2, depth, height) material mat
-  box (-width / 2 + 0.04, 0.04, 0) to (-width / 2 + 0.04 + l, 0.04 + l, height - t) material mat
-  box (width / 2 - 0.04 - l, 0.04, 0) to (width / 2 - 0.04, 0.04 + l, height - t) material mat
-  box (-width / 2 + 0.04, depth - 0.04 - l, 0) to (-width / 2 + 0.04 + l, depth - 0.04, height - t) material mat
-  box (width / 2 - 0.04 - l, depth - 0.04 - l, 0) to (width / 2 - 0.04, depth - 0.04, height - t) material mat
+  box (-width / 2, 0, height - t) to (width / 2, depth, height) material top
+  box (-width / 2 + 0.04, 0.04, 0) to (-width / 2 + 0.04 + l, 0.04 + l, height - t) material top
+  box (width / 2 - 0.04 - l, 0.04, 0) to (width / 2 - 0.04, 0.04 + l, height - t) material top
+  box (-width / 2 + 0.04, depth - 0.04 - l, 0) to (-width / 2 + 0.04 + l, depth - 0.04, height - t) material top
+  box (width / 2 - 0.04 - l, depth - 0.04 - l, 0) to (width / 2 - 0.04, depth - 0.04, height - t) material top
   repeat i in 0..front
     use chair(-width / 2 + (i + 0.5) * width / front, depth + 0.02, 1, mat)
   repeat i in 0..back
@@ -67,7 +73,7 @@ plan 1:50
     use chair_plan(-width / 2 + (i + 0.5) * width / back, -0.02, -1)
 
 outputs
-  generator = "props:table"
+  generator = "props:fine_dining_table"
   ifc_class = "IfcFurniture"
   ifc_type = "TABLE"
 

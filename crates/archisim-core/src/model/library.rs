@@ -361,6 +361,15 @@ impl Model {
             let mut v = m.family_defaults(id, scope)?;
             for p in new.def().params_of(scope) {
                 if let Some(x) = old.get(&p.name) {
+                    // A choice the new recipe no longer offers (an old
+                    // model of the 3D) takes the new default.
+                    if let (archisim_family::ParamKind::Choice(options), Value::Text(t)) =
+                        (&p.kind, x)
+                    {
+                        if !options.contains(t) {
+                            continue;
+                        }
+                    }
                     v.insert(p.name.clone(), x.clone());
                 }
             }
@@ -607,6 +616,45 @@ mod tests {
         b.load_catalog_type(&file, &changed, &[], OnConflict::Replace)
             .unwrap();
         assert!((b.opening_type(bt).unwrap().width - 0.9).abs() < 1e-12);
+    }
+
+    /// A project with an old sofa (its model «Clásico», which the new
+    /// family no longer has) takes the new family: the model goes back to
+    /// the default, the rest stays.
+    #[test]
+    fn an_old_model_goes_back_to_the_default() {
+        let mut m = project();
+        let sofa = m.system_family("Sofá").unwrap();
+        let new = m.family(sofa).unwrap().source.clone();
+        let v = m.family(sofa).unwrap().version();
+        let collections = "choice(\"Nórdico cálido\", \"Mediterráneo\", \"Años 50\", \"Japandi\", \"Contemporáneo\", \"Rústica\", \"Industrial\", \"Clásica\") = \"Nórdico cálido\"";
+        assert!(new.contains(collections));
+        let old = new
+            .replacen(
+                &format!("  version {v}"),
+                &format!("  version {}", v - 1),
+                1,
+            )
+            .replacen(
+                collections,
+                "choice(\"Contemporáneo\", \"Clásico\", \"Nórdico\") = \"Clásico\"",
+                1,
+            );
+        m.update_family(sofa, &old).unwrap();
+        let mut values = m.family_defaults(sofa, ParamScope::Type).unwrap();
+        values.insert("width".into(), Value::Number(2.4));
+        let t = m.add_object_type("Sofá viejo", sofa, values).unwrap();
+        assert_eq!(
+            m.object_type(t).unwrap().values.get("model3d"),
+            Some(&Value::Text("Clásico".into()))
+        );
+        m.update_family(sofa, &new).unwrap();
+        let ty = m.object_type(t).unwrap();
+        assert_eq!(
+            ty.values.get("model3d"),
+            Some(&Value::Text("Nórdico cálido".into()))
+        );
+        assert_eq!(ty.values.get("width"), Some(&Value::Number(2.4)));
     }
 
     /// Updating a family keeps the types' values and gives them the new

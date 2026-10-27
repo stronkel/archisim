@@ -228,19 +228,97 @@ pub const KINDS: &[(&str, &[&str])] = &[
     ("fine_streetlight", &["Columna de fundición"]),
 ];
 
+/// A throw folded in three on the seat at the right end of a sofa, its
+/// end hanging over the front.
+fn folded_throw(b: &mut Builder, s: &sofas::Sizes) {
+    let x1 = s.w / 2.0 - (s.w * 0.11).clamp(0.18, 0.28) - 0.02;
+    let x0 = x1 - 0.42;
+    let (y0, y1) = (s.d * 0.42, s.d - 0.02);
+    let mut top = Soft::new([x0, y0, s.seat - 0.005], [x1, y1, s.seat + 0.045], 0.02);
+    top.crown = 0.006;
+    top.side = 0.004;
+    top.creases = 0.004;
+    top.wobble = 0.002;
+    top.seed = 61;
+    top.add(b, "throw");
+    // Over the front edge and down.
+    let mut fall = Soft::new(
+        [x0 + 0.04, y1 - 0.02, s.seat - 0.2],
+        [x1 - 0.02, y1 + 0.02, s.seat + 0.03],
+        0.012,
+    );
+    fall.crown = 0.004;
+    fall.wobble = 0.002;
+    fall.seed = 62;
+    fall.add(b, "throw");
+}
+
+/// The chairs round a dining table (`chairs`, half on each long side, the
+/// odd one in front), in the table's collection; round tables, all round.
+fn chairs_around(b: &mut Builder, p: &Params) {
+    let n = p.get("chairs", 0.0).round().clamp(0.0, 16.0) as usize;
+    if n == 0 {
+        return;
+    }
+    let w = p.get("width", 1.6).clamp(0.6, 3.6);
+    let d = p.get("depth", 0.9).clamp(0.6, 1.4);
+    let mut cp = Params::default();
+    cp.set("style", p.style() as f64);
+    // (x, y) of the chair's back and its turn: the chair looks along +y
+    // before it is turned.
+    let mut spots: Vec<(f64, f64, f64)> = Vec::new();
+    if p.style() == 8 {
+        // The classic table is round, on its pedestal.
+        let r = (w.min(d) / 2.0).max(0.45);
+        for k in 0..n {
+            let a = std::f64::consts::TAU * k as f64 / n as f64 - std::f64::consts::FRAC_PI_2;
+            let reach = r + 0.33;
+            spots.push((
+                reach * a.cos(),
+                r + reach * a.sin(),
+                a + std::f64::consts::FRAC_PI_2,
+            ));
+        }
+    } else {
+        let front = n.div_ceil(2);
+        for (count, y, turn) in [
+            (front, d + 0.4, std::f64::consts::PI),
+            (n - front, -0.4, 0.0),
+        ] {
+            for i in 0..count {
+                let x = -w / 2.0 + w * (i as f64 + 0.5) / count as f64;
+                spots.push((x, y, turn));
+            }
+        }
+    }
+    for (x, y, turn) in spots {
+        let start = b.mark();
+        chairs::chair(b, &cp);
+        let (sn, cs) = turn.sin_cos();
+        b.transform_from(start, |q| {
+            [x + q[0] * cs - q[1] * sn, y + q[0] * sn + q[1] * cs, q[2]]
+        });
+    }
+}
+
 /// Makes a workshop model, if `kind` is one.
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
-        "fine_sofa" => match p.style() {
-            2 => sofas::mediterranean(b, p),
-            3 => sofas::fifties(b, p),
-            4 => sofas::japandi(b, p),
-            5 => sofas::contemporary(b, p),
-            6 => sofas::rustic(b, p),
-            7 => sofas::industrial(b, p),
-            8 => sofas::classic(b, p),
-            _ => sofa(b, p),
-        },
+        "fine_sofa" => {
+            match p.style() {
+                2 => sofas::mediterranean(b, p),
+                3 => sofas::fifties(b, p),
+                4 => sofas::japandi(b, p),
+                5 => sofas::contemporary(b, p),
+                6 => sofas::rustic(b, p),
+                7 => sofas::industrial(b, p),
+                8 => sofas::classic(b, p),
+                _ => sofa(b, p),
+            }
+            if p.flag("throw", false) {
+                folded_throw(b, &sofas::Sizes::of(p));
+            }
+        }
         "fine_armchair" => {
             // The collections whose armchair is their sofa at one place.
             let mut one = p.clone();
@@ -263,7 +341,10 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         }
         "fine_pouf" => armchairs::pouf(b, p),
         "fine_chair" => chairs::chair(b, p),
-        "fine_dining_table" => tables::dining(b, p),
+        "fine_dining_table" => {
+            tables::dining(b, p);
+            chairs_around(b, p);
+        }
         "fine_coffee_table" => tables::coffee(b, p),
         "fine_side_table" => tables::side(b, p),
         "fine_stool" => chairs::stool(b, p),

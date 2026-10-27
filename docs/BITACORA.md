@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (3) · El paquete 1 entra en la biblioteca
+
+Rama `bloque/biblioteca-paquete-1` (sobre `bloque/rendimiento-3d`), con pull request. Sin cambios de formato; el IFC solo cambia por los modelos nuevos (validado).
+
+Antonio, tras ver el paquete 1 en 3D y pedir el rendimiento: «Perfecto, seguimos con lo siguiente», que era llevar el paquete a la biblioteca, añadir las colecciones nuevas y quitar los modelos antiguos.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 1 en la biblioteca»)
+- Las 14 familias del salón y comedor (sofá, butaca, puf, silla, taburete, mesa, mesa de centro, mesa auxiliar, aparador, estantería, mueble de TV, alfombra, cortina y chimenea) dibujan con los modelos nuevos; su «Modelo 3D» son las ocho colecciones. Familia nueva: **Vitrina**. Piezas nuevas: «Vitrina 90» y «Chimenea colgante».
+- La mesa lleva sus sillas alrededor, ahora las de su colección (la clásica, redonda, alrededor del pie); el sofá, cojines y una manta doblada; la estantería, sus baldas.
+- Colecciones nuevas: **Contemporáneo, Rústica, Industrial y Clásica**. Una pieza en una colección toma el modelo de esa colección, salvo que tenga el suyo.
+- Los modelos antiguos ya no se ofrecen; su código sigue para abrir los proyectos de antes. Al actualizar una familia, un modelo que ya no existe pasa al de por defecto (`reapply_family`; prueba `an_old_model_goes_back_to_the_default`).
+- El sofá rinconera sigue con sus modelos de antes: al juntar dos sofás nuevos en L, toma el más parecido.
+- El taller se queda con la planta, el fregadero y la farola. Las pruebas del 3D usan ahora el salón de la biblioteca en las ocho colecciones (`collections_scene`, `scene_benchmark`); `ARCHISIM_COLECCIONES_OUT=carpeta cargo test --release -p archisim-app -- collection_pictures` hace una foto por colección.
+
+**Pendiente**
+- Sofá rinconera con los modelos nuevos.
+- Afinar los colores de cada colección pieza a pieza si Antonio lo pide (la biblioteca los pone por categoría: madera, tela, metal…, no a mano como en el taller).
+- Siguiente bloque: importación mejorada de modelos oficiales de fabricantes (carpeta «Diseño») y paquete 2 (cocina y baño).
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks).
+2. Proyecto nuevo: en la Maqueta, Amueblar, coloca sofás, mesas, aparadores, alfombras… y cámbialos de colección (las ocho).
+3. Abre un proyecto antiguo con muebles: se ve como antes. Si en la Biblioteca pulsas «Actualizar familias», sus muebles pasan a los modelos nuevos.
+
+---
+
 ## 2026-10-27 (2) · Rendimiento 3D: la Maqueta con proyectos grandes
 
 Rama `bloque/rendimiento-3d` (sobre `bloque/paquete-1a`), con pull request. Sin cambios de formato ni de IFC (el IFC sale de `archisim-geom`, que solo gana `object_instance` y `model_solids_except`).

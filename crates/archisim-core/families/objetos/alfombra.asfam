@@ -1,7 +1,7 @@
 family "Alfombra"
   category furniture
   host none
-  version 1
+  version 2
   description "Alfombra lisa, redonda, de rayas o bereber; se pisa, así que va en el suelo de la planta"
   folder "Alfombras"
 
@@ -11,16 +11,19 @@ type_params
     depth     length = 1.40 range 0.40..6.00 label "Ancho"
     thickness length = 0.012 range 0.004..0.040 label "Grueso"
   section "Materiales"
-    mat    material = "Lana cruda" label "Tejido"
-    border material = "Lana teja" label "Ribete y rayas"
+    mat      material = "Lana cruda" label "Fondo"
+    mat2     material = "Lana teja" label "Dibujo"
+    accent   material = "Lana oliva" label "Dibujo (2)"
+    fringe   material = "Lana cruda" label "Flecos"
+    weave    material = "Paja" label "Fibra"
   section "Modelo 3D"
-    model3d choice("Lisa con ribete", "Redonda", "De rayas", "Bereber con flecos") = "Lisa con ribete" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, thickness) material mat
 
 plan 1:50
-  if model3d == "Redonda"
+  if model3d == "Mediterráneo"
     let r = min(width, depth) / 2
     repeat i in 0..24
       let t0 = 6.283185307 * i / 24
@@ -34,10 +37,10 @@ plan presentation
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat opacity 0.8
 
 outputs
-  generator = "props:rug"
+  generator = "props:fine_rug"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"
 
 # Stretched, a round rug stays round.
 stretch
-  depth = if model3d == "Redonda" then width else depth
+  depth = if model3d == "Mediterráneo" then width else depth

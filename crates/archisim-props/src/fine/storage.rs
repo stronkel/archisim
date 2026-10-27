@@ -8,7 +8,7 @@
 //! Roles: `frame` the carcass, `front` doors and drawers, `top` a top of
 //! another material, `stone` a stone top, `metal` steel, brass or iron,
 //! `glass`, `weave` cane or rush, `dark` shadow gaps and leather,
-//! `books`, `books2`, `accent` the books, `ceramic` vases and bowls,
+//! `books`, `books2`, `books3` the books, `ceramic` vases and bowls,
 //! `screen` a television's glass.
 
 use super::shape::{bar, sweep, turned, Cap};
@@ -548,7 +548,7 @@ fn shelf(b: &mut Builder, role: &'static str, x0: f64, x1: f64, d: f64, z: f64, 
 /// then a gap, a lying stack, a vase or a leaning book.
 #[allow(clippy::too_many_arguments)]
 fn books(b: &mut Builder, rng: &mut Rng, x0: f64, x1: f64, yf: f64, z: f64, room: f64, depth: f64) {
-    let roles = ["books", "books2", "accent", "books", "books2"];
+    let roles = ["books", "books2", "books3", "books", "books2"];
     let mut x = x0 + rng.range(0.0, 0.04);
     let tall = room.min(0.32);
     while x < x1 - 0.03 {
@@ -1353,6 +1353,8 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
     let (x0, x1) = (-w / 2.0, w / 2.0);
     let mut rng = Rng(p.get("seed", 7.0) as u32 + 11);
     let fill = p.flag("with_books", true);
+    // Shelves between top and bottom («Baldas intermedias»), if asked.
+    let asked = p.get("shelves", 0.0);
     // Shelves evenly from `z0` to `z1`, `n` spaces, dressed.
     let dress = |b: &mut Builder,
                  rng: &mut Rng,
@@ -1363,6 +1365,12 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
                  n: usize,
                  t: f64,
                  role: &'static str| {
+        // The shelves asked for (spaces one more), or the style's own.
+        let n = if asked > 0.0 {
+            (asked.round() as usize + 1).clamp(1, 10)
+        } else {
+            n
+        };
         let step = (zb - za) / n as f64;
         for i in 1..n {
             shelf(b, role, xa, xb, d - 0.01, za + step * i as f64, t);
@@ -1650,7 +1658,11 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
         // shelves.
         7 => {
             let tube = 0.03;
-            let n = 5;
+            let n = if asked > 0.0 {
+                (asked.round() as usize + 1).clamp(1, 10)
+            } else {
+                5
+            };
             let rails: Vec<f64> = (0..=n)
                 .map(|i| 0.06 + (h - 0.08) * i as f64 / n as f64)
                 .collect();

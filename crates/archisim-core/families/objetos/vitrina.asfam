@@ -1,9 +1,9 @@
-family "Vitrina (taller)"
+family "Vitrina"
   category furniture
   host none
   version 1
-  description "Vitrina por colecciones, con cerámica (modelo del taller, en revisión)"
-  folder "Taller"
+  description "Vitrina acristalada con baldas de vidrio y cerámica"
+  folder "Salón"
 
 type_params
   section "Dimensiones"
@@ -19,11 +19,7 @@ type_params
     glass   material = "Vidrio claro" label "Vidrio"
     weave   material = "Ratán" label "Rejilla"
     dark    material = "Negro mate" label "Detalles oscuros"
-    books   material = "Lomo granate" label "Libros"
-    books2  material = "Lomo azul" label "Libros (2)"
-    accent  material = "Lomo ocre" label "Libros (3)"
     ceramic material = "Cerámica blanca" label "Cerámica"
-    screen  material = "Pantalla de televisor" label "Pantalla"
   section "Modelo 3D"
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 

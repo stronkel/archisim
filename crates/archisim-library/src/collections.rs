@@ -1,10 +1,13 @@
 //! Collections (revisión de Antonio del 23/10/2026): the pieces of the
 //! library in one style, with its palette — nórdico cálido, mediterráneo,
-//! años 50 and japandi. A collection does not list its own furniture: it
+//! años 50 and japandi, and since 26/10/2026 contemporáneo, rústica,
+//! industrial and clásica. A collection does not list its own furniture: it
 //! says what wood, fabrics, metal, ceramic and stone each piece takes, and
 //! which model of the 3D some families take, so every piece of the library
 //! (and of the project) has its version in each collection, named
-//! «Sofá de 3 plazas · Japandi».
+//! «Sofá de 3 plazas · Japandi». The families of the paquete 1 (salón y
+//! comedor, 2026-10) have a model per collection, named as it: a piece
+//! whose model is its family's first takes its collection's.
 //!
 //! What is not furniture keeps its materials: sheets, lampshades, glass,
 //! mirrors, chrome taps, porcelain, plants and what is on the tables.
@@ -65,12 +68,8 @@ pub const COLLECTIONS: &[Collection] = &[
         stone: "Mármol",
         weave: "Ratán",
         models: &[
-            ("Sofá", "Nórdico"),
             ("Cama", "Cabecero tapizado"),
             ("Mesita de noche", "Con patas"),
-            ("Butaca", "Redonda"),
-            ("Aparador", "Nórdico de patas"),
-            ("Taburete", "De madera"),
         ],
     },
     Collection {
@@ -84,12 +83,7 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Terracota",
         stone: "Microcemento",
         weave: "Enea",
-        models: &[
-            ("Cama", "Madera"),
-            ("Mesita de noche", "Cajonera"),
-            ("Butaca", "De ratán"),
-            ("Taburete", "De enea"),
-        ],
+        models: &[("Cama", "Madera"), ("Mesita de noche", "Cajonera")],
     },
     Collection {
         name: "Años 50",
@@ -102,14 +96,7 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Cerámica turquesa",
         stone: "Terrazo",
         weave: "Ratán",
-        models: &[
-            ("Sofá", "Nórdico"),
-            ("Cama", "Madera"),
-            ("Mesita de noche", "Patas cónicas"),
-            ("Butaca", "Baja de patas"),
-            ("Aparador", "Nórdico de patas"),
-            ("Taburete", "Tapizado con respaldo"),
-        ],
+        models: &[("Cama", "Madera"), ("Mesita de noche", "Patas cónicas")],
     },
     Collection {
         name: "Japandi",
@@ -125,10 +112,59 @@ pub const COLLECTIONS: &[Collection] = &[
         models: &[
             ("Cama", "Cabecero de lamas"),
             ("Mesita de noche", "Flotante"),
-            ("Butaca", "Baja de patas"),
-            ("Aparador", "Puertas de lamas"),
-            ("Taburete", "De madera"),
         ],
+    },
+    Collection {
+        name: "Contemporáneo",
+        hint: "Lacado blanco, lino gris y bouclé, metal negro, terrazo y cerámica blanca",
+        wood: "Roble claro",
+        fabric: "Lino gris",
+        soft: "Bouclé crudo",
+        accent: "Lino piedra",
+        metal: "Metal negro",
+        ceramic: "Cerámica blanca",
+        stone: "Terrazo",
+        weave: "Ratán",
+        models: &[],
+    },
+    Collection {
+        name: "Rústica",
+        hint: "Pino viejo, lino crudo y lana teja, hierro forjado, terracota y piedra",
+        wood: "Pino viejo",
+        fabric: "Lino crudo",
+        soft: "Lana cruda",
+        accent: "Lana teja",
+        metal: "Hierro forjado",
+        ceramic: "Terracota",
+        stone: "Piedra gris",
+        weave: "Enea",
+        models: &[],
+    },
+    Collection {
+        name: "Industrial",
+        hint: "Roble ahumado, lino gris y lana carbón, metal negro, gres y microcemento",
+        wood: "Roble ahumado",
+        fabric: "Lino gris",
+        soft: "Lana carbón",
+        accent: "Lana teja",
+        metal: "Metal negro",
+        ceramic: "Gres",
+        stone: "Microcemento",
+        weave: "Enea",
+        models: &[],
+    },
+    Collection {
+        name: "Clásica",
+        hint: "Nogal, terciopelo verde botella y mostaza, latón, mármol y porcelana",
+        wood: "Nogal",
+        fabric: "Terciopelo verde botella",
+        soft: "Lino crudo",
+        accent: "Terciopelo mostaza",
+        metal: "Latón",
+        ceramic: "Cerámica blanca",
+        stone: "Mármol",
+        weave: "Ratán",
+        models: &[],
     },
 ];
 
@@ -159,7 +195,8 @@ pub fn split_name(name: &str) -> (&str, Option<&'static Collection>) {
 /// piece's own (sheets, shades, glass, plants, what is on it).
 const KEEP: &[&str] = &[
     "linen", "shade", "mount", "glass", "bulb", "flame", "leaves", "stem", "soil", "fruit",
-    "fruit2", "books", "books2", "candle", "dark", "light", "screen", "water", "flowers",
+    "fruit2", "books", "books2", "books3", "candle", "dark", "light", "screen", "water", "flowers",
+    "flame2", "wood",
 ];
 
 /// Those that take the accent, and those that take the soft fabric.
@@ -205,10 +242,21 @@ pub fn restyle(
                 if own_model || !is_default {
                     continue;
                 }
-                if let Some((_, model)) = c.models.iter().find(|(fam, _)| *fam == def.name) {
-                    if options.iter().any(|o| o == model) {
-                        out.insert("model3d".into(), Value::Text((*model).into()));
-                    }
+                // Its model named as the collection (the families of the
+                // paquete 1), or the one the collection says.
+                let model = options
+                    .iter()
+                    .find(|o| o.as_str() == c.name)
+                    .map(String::as_str)
+                    .or_else(|| {
+                        c.models
+                            .iter()
+                            .find(|(fam, _)| *fam == def.name)
+                            .map(|x| x.1)
+                            .filter(|m| options.iter().any(|o| o == m))
+                    });
+                if let Some(model) = model {
+                    out.insert("model3d".into(), Value::Text(model.into()));
                 }
                 continue;
             }

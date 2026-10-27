@@ -261,21 +261,75 @@ fn piece_width(m: &Model, t: archisim_core::ObjectTypeId) -> f32 {
         .map_or(1.0, |b| (b.1[0] - b.0[0]) as f32)
 }
 
-/// How big the workshop's scene is: it must fit the graphics card's
-/// buffers (Antonio's laptop closed the app opening it in 3D).
+/// The living and dining room of the library (paquete 1) in each of its
+/// eight collections, a piece of each type standing in a row per
+/// collection; with `copies`, each piece that many times more (as a real
+/// project repeats its chairs).
+fn collections_project(copies: usize) -> Model {
+    use archisim_library::collections::{add_collection_entry, COLLECTIONS};
+    let families = [
+        "Sofá",
+        "Butaca",
+        "Puf",
+        "Silla",
+        "Taburete",
+        "Mesa",
+        "Mesa de centro",
+        "Mesa auxiliar",
+        "Aparador",
+        "Estantería",
+        "Mueble TV",
+        "Vitrina",
+        "Alfombra",
+        "Cortina",
+        "Chimenea",
+    ];
+    let mut m = archisim_library::new_project("Colecciones");
+    let level = m.levels()[0].id;
+    for (row, c) in COLLECTIONS.iter().enumerate() {
+        let mut x = 0.0;
+        for (name, family, _) in archisim_library::OBJECT_CATALOGUE.iter() {
+            if !families.contains(family) {
+                continue;
+            }
+            let t = add_collection_entry(&mut m, name, c).unwrap();
+            for k in 0..=copies {
+                m.add_object(archisim_core::NewObject {
+                    object_type: t,
+                    level,
+                    position: archisim_core::Point2::new(x, 4.0 * row as f64 + 40.0 * k as f64),
+                    rotation: 0.0,
+                    base_offset: 0.0,
+                })
+                .unwrap();
+            }
+            x += 3.2;
+        }
+    }
+    m
+}
+
+/// The library's living room in its eight collections is a large scene,
+/// and it draws (Antonio's laptop closed the app on the workshop's).
 #[test]
-fn workshop_scene_size() {
-    let m = archisim_library::workshop::project().unwrap();
+fn collections_scene() {
+    let m = collections_project(0);
     let scene = Scene::build(&m, &BTreeSet::new());
     eprintln!(
-        "workshop scene: {} triangles, {} groups",
+        "collections scene: {} triangles, {} groups, {} objects",
         scene.triangle_count(),
-        scene.groups.len()
+        scene.groups.len(),
+        m.objects().count()
     );
-    // A large scene, and it still draws.
-    assert!(
-        scene.triangle_count() > 2_000_000,
-        "the workshop no longer tests big scenes"
+    assert!(scene.triangle_count() > 1_000_000, "a large scene");
+    // Every piece is a group of its own (none drawn loose).
+    assert_eq!(
+        scene
+            .groups
+            .iter()
+            .map(|g| g.instances.len())
+            .sum::<usize>(),
+        m.objects().count()
     );
     let Some(gpu) = super::gpu_tests::gpu() else {
         return;
@@ -286,49 +340,16 @@ fn workshop_scene_size() {
         &gpu,
         &m,
         |lo, hi| camera(lo, hi, 1.5, -62.0, 30.0, 1.0),
-        [600, 400],
+        [1200, 800],
     );
     if let Ok(dir) = std::env::var("ARCHISIM_TALLER_OUT") {
-        pic.save_png(Path::new(&dir).join("todo.png")).unwrap();
-    }
-}
-
-/// A dining room repeated: twelve pieces of the workshop placed thirty
-/// times each, as a real project repeats its chairs and tables.
-fn repeated_project() -> Model {
-    let mut m = archisim_library::workshop::project().unwrap();
-    let level = m.levels()[0].id;
-    let names = [
-        "Silla · Nórdico cálido (taller)",
-        "Silla · Clásica (taller)",
-        "Mesa de comedor · Nórdico cálido (taller)",
-        "Sofá · Nórdico cálido (taller)",
-        "Butaca · Contemporáneo (taller)",
-        "Librería · Nórdico cálido (taller)",
-        "Aparador · Clásica (taller)",
-        "Alfombra · Clásica (taller)",
-        "Cortina · Nórdico cálido (taller)",
-        "Mesa de centro · Industrial (taller)",
-        "Taburete · Años 50 (taller)",
-        "Puf · Mediterráneo (taller)",
-    ];
-    for (i, name) in names.iter().enumerate() {
-        let t = m.object_types().find(|t| t.name == *name).unwrap().id;
-        for k in 0..30 {
-            m.add_object(archisim_core::NewObject {
-                object_type: t,
-                level,
-                position: archisim_core::Point2::new(3.0 * k as f64, 8.0 + 3.0 * i as f64),
-                rotation: 0.3 * k as f64,
-                base_offset: 0.0,
-            })
+        pic.save_png(Path::new(&dir).join("colecciones.png"))
             .unwrap();
-        }
     }
-    m
 }
 
-/// What the 3D view costs with the workshop and with a repeated project:
+/// What the 3D view costs with the library's living room in its eight
+/// collections, once and four times over:
 /// building the scene, memory on the card, and drawing far and near
 /// (`ARCHISIM_MEDIR_3D=1 cargo test --release -p archisim-app --
 /// scene_benchmark --nocapture`).
@@ -341,8 +362,8 @@ fn scene_benchmark() {
         return;
     };
     for (name, m) in [
-        ("taller", archisim_library::workshop::project().unwrap()),
-        ("repetido", repeated_project()),
+        ("colecciones", collections_project(0)),
+        ("repetido", collections_project(3)),
     ] {
         let t = std::time::Instant::now();
         let scene = Scene::build(&m, &BTreeSet::new());
@@ -388,5 +409,70 @@ fn scene_benchmark() {
             r.scene_bytes() >> 20,
             times.join(", ")
         );
+    }
+}
+
+/// A picture of the library's living room in each collection
+/// (`ARCHISIM_COLECCIONES_OUT=carpeta`): its pieces in a grid, from above
+/// and to one side.
+#[test]
+fn collection_pictures() {
+    use archisim_library::collections::{add_collection_entry, COLLECTIONS};
+    let Some(dir) = std::env::var_os("ARCHISIM_COLECCIONES_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let families = [
+        "Sofá",
+        "Butaca",
+        "Puf",
+        "Silla",
+        "Taburete",
+        "Mesa",
+        "Mesa de centro",
+        "Mesa auxiliar",
+        "Aparador",
+        "Estantería",
+        "Mueble TV",
+        "Vitrina",
+        "Alfombra",
+        "Cortina",
+        "Chimenea",
+    ];
+    for (i, c) in COLLECTIONS.iter().enumerate() {
+        let mut m = archisim_library::new_project("Colección");
+        let level = m.levels()[0].id;
+        let mut k = 0;
+        for f in families {
+            // The first piece of each family.
+            let Some((name, _, _)) = archisim_library::OBJECT_CATALOGUE.iter().find(|e| e.1 == f)
+            else {
+                continue;
+            };
+            let t = add_collection_entry(&mut m, name, c).unwrap();
+            m.add_object(archisim_core::NewObject {
+                object_type: t,
+                level,
+                position: archisim_core::Point2::new(3.4 * (k % 5) as f64, -3.4 * (k / 5) as f64),
+                rotation: 0.0,
+                base_offset: 0.0,
+            })
+            .unwrap();
+            k += 1;
+        }
+        let pic = picture(
+            &mut r,
+            &gpu,
+            &m,
+            |lo, hi| camera(lo, hi, 1.5, -70.0, 32.0, 1.15),
+            [1500, 1000],
+        );
+        pic.save_png(dir.join(format!("{}-{}.png", i + 1, c.name)))
+            .unwrap();
     }
 }

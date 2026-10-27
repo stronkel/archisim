@@ -23,6 +23,7 @@ fn candidates(role: &str) -> &'static [&'static str] {
         "shade" => &["shade", "linen"],
         "books" => &["books"],
         "books2" => &["books2", "books"],
+        "books3" => &["books3", "books2", "books"],
         "top" => &["top"],
         "plinth" => &["plinth"],
         "dark" => &["dark", "frame"],

@@ -1,7 +1,7 @@
 family "Estantería"
   category furniture
   host none
-  version 4
+  version 5
   description "Estantería de tablero con baldas fijas y trasera"
   folder "Estanterías"
 
@@ -13,26 +13,32 @@ type_params
     shelves integer = 4 range 1..10 label "Baldas intermedias"
     board   length = 0.02 range 0.012..0.05 label "Grueso del tablero"
   section "Materiales"
-    mat material = "Madera de pino" label "Tablero"
+    frame    material = "Roble claro" label "Mueble"
+    front    material = "Roble claro" label "Puertas"
+    top      material = "Roble claro" label "Encimera"
+    stone    material = "Mármol" label "Piedra"
+    metal    material = "Latón" label "Metal y tiradores"
+    glass    material = "Vidrio claro" label "Vidrio"
+    weave    material = "Ratán" label "Rejilla"
+    dark     material = "Negro mate" label "Detalles oscuros"
+    books    material = "Lomo granate" label "Libros"
+    books2   material = "Lomo azul" label "Libros (2)"
+    books3   material = "Lomo ocre" label "Libros (3)"
+    ceramic  material = "Cerámica blanca" label "Cerámica"
   section "Modelo 3D"
-    model3d choice("Con libros", "Con objetos") = "Con libros" label "Modelo 3D"
-    books material = "Libros" label "Libros"
-    books2 material = "Libros claros" label "Libros claros"
-    glaze   material = "Cerámica esmaltada" label "Jarrones"
-    pot_mat material = "Terracota" label "Macetas"
-    leaves  material = "Hoja verde" label "Plantas"
-    weave   material = "Ratán" label "Cestas"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    with_books bool = yes label "Con libros"
 
 require width > 2 * board + 0.1 else "No queda hueco entre los costados"
 require height > (shelves + 2) * board + 0.1 else "No caben tantas baldas"
 
 body
-  box (-width / 2, 0, 0) to (-width / 2 + board, depth, height) material mat
-  box (width / 2 - board, 0, 0) to (width / 2, depth, height) material mat
-  box (-width / 2 + board, 0, 0) to (width / 2 - board, 0.01, height) material mat
+  box (-width / 2, 0, 0) to (-width / 2 + board, depth, height) material frame
+  box (width / 2 - board, 0, 0) to (width / 2, depth, height) material frame
+  box (-width / 2 + board, 0, 0) to (width / 2 - board, 0.01, height) material frame
   let gap = (height - board) / (shelves + 1)
   repeat i in 0..shelves + 2
-    box (-width / 2 + board, 0.01, i * gap) to (width / 2 - board, depth, i * gap + board) material mat
+    box (-width / 2 + board, 0.01, i * gap) to (width / 2 - board, depth, i * gap + board) material frame
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
@@ -44,7 +50,7 @@ plan 1:50
 outputs
   # Placed against another of its kind, in line: one, as wide as both.
   joins = "width"
-  generator = "props:bookcase"
+  generator = "props:fine_bookcase"
   ifc_class = "IfcFurniture"
   ifc_type = "SHELF"
 

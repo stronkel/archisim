@@ -403,12 +403,21 @@ pub fn corner_sofa(m: &mut Model, id: ObjectId) -> Option<ObjectId> {
             values.insert("length2".into(), Value::Number(length2));
             values.insert("depth".into(), Value::Number(da));
             values.insert("side".into(), Value::Text(side.into()));
-            for k in [
-                "seat", "height", "places", "mat", "model3d", "cushion", "frame",
-            ] {
+            for k in ["seat", "height", "places", "mat", "cushion", "frame"] {
                 if let Some(v) = va.get(k) {
                     values.insert(k.into(), v.clone());
                 }
+            }
+            // The corner sofa has three models; the sofa's collection
+            // gives the nearest.
+            let model = match va.get("model3d").and_then(|v| v.as_text()) {
+                Some("Clásica" | "Clásico") => Some("Clásico"),
+                Some("Nórdico cálido" | "Nórdico" | "Años 50") => Some("Nórdico"),
+                Some(_) => Some("Contemporáneo"),
+                None => None,
+            };
+            if let Some(model) = model {
+                values.insert("model3d".into(), Value::Text(model.into()));
             }
             if let Some(Value::Number(n)) = vb.get("places") {
                 values.insert("places2".into(), Value::Number((n - 1.0).max(1.0)));

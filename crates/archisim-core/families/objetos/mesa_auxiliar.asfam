@@ -1,7 +1,7 @@
 family "Mesa auxiliar"
   category furniture
   host none
-  version 1
+  version 2
   description "Mesa auxiliar redonda de pie central, de tres patas o un par de mesas nido"
   folder "Salón"
 
@@ -11,16 +11,20 @@ type_params
     depth  length = 0.50 range 0.25..1.00 label "Fondo (nido)"
     height length = 0.55 range 0.25..0.90 label "Altura"
   section "Materiales"
-    mat   material = "Roble claro" label "Tablero"
-    frame material = "Negro mate" label "Pie y patas"
+    top      material = "Roble claro" label "Tablero"
+    frame    material = "Roble claro" label "Patas y estructura"
+    metal    material = "Metal negro" label "Metal"
+    stone    material = "Mármol" label "Piedra"
+    ceramic  material = "Cerámica esmaltada" label "Cerámica"
+    dark     material = "Negro mate" label "Detalles oscuros"
   section "Modelo 3D"
-    model3d choice("Pie central", "Tres patas", "Nido") = "Pie central" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, height - 0.03) to (width / 2, width, height) material mat
+  box (-width / 2, 0, height - 0.03) to (width / 2, width, height) material top
 
 plan 1:50
-  if model3d == "Nido"
+  if model3d == "Contemporáneo" or model3d == "Industrial"
     polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
   else
     let r = width / 2
@@ -30,6 +34,6 @@ plan 1:50
       line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
 
 outputs
-  generator = "props:side_table"
+  generator = "props:fine_side_table"
   ifc_class = "IfcFurniture"
   ifc_type = "TABLE"

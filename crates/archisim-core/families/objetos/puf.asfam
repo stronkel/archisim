@@ -1,7 +1,7 @@
 family "Puf"
   category furniture
   host none
-  version 1
+  version 2
   description "Puf redondo, de punto o cubo"
   folder "Sofás y sillones"
 
@@ -10,15 +10,19 @@ type_params
     width  length = 0.50 range 0.25..1.20 label "Diámetro o lado"
     height length = 0.40 range 0.15..0.60 label "Altura"
   section "Materiales"
-    mat material = "Lana cruda" label "Tejido"
+    mat      material = "Bouclé crudo" label "Tejido"
+    cushion  material = "Lino arena" label "Cojín"
+    frame    material = "Roble claro" label "Madera y patas"
+    weave    material = "Enea" label "Fibra"
+    metal    material = "Metal negro" label "Metal"
   section "Modelo 3D"
-    model3d choice("Redondo", "De punto", "Cubo") = "Redondo" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
   box (-width / 2, 0, 0) to (width / 2, width, height) material mat
 
 plan 1:50
-  if model3d == "Cubo"
+  if model3d == "Contemporáneo" or model3d == "Japandi"
     polygon (-width / 2, 0) (width / 2, 0) (width / 2, width) (-width / 2, width) pen view
   else
     let r = width / 2
@@ -28,6 +32,6 @@ plan 1:50
       line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen view
 
 outputs
-  generator = "props:pouf"
+  generator = "props:fine_pouf"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

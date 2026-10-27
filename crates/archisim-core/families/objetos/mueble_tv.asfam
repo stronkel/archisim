@@ -1,7 +1,7 @@
 family "Mueble TV"
   category furniture
   host none
-  version 2
+  version 3
   description "Mueble bajo de salón con televisor"
   folder "Salón"
 
@@ -11,17 +11,26 @@ type_params
     depth  length = 0.42 range 0.30..0.60 label "Fondo"
     height length = 0.45 range 0.30..0.80 label "Altura"
   section "Frentes"
-    drawer_fronts bool = no label "Frentes de cajón"
-    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Sin tirador" label "Tirador"
   section "Materiales"
-    mat material = "Madera de pino" label "Madera"
+    frame    material = "Roble claro" label "Mueble"
+    front    material = "Roble claro" label "Puertas y cajones"
+    top      material = "Roble claro" label "Encimera"
+    stone    material = "Mármol" label "Piedra"
+    metal    material = "Latón" label "Metal y tiradores"
+    glass    material = "Vidrio claro" label "Vidrio"
+    weave    material = "Ratán" label "Rejilla y cestas"
+    dark     material = "Negro mate" label "Detalles oscuros"
+    books    material = "Lomo granate" label "Libros"
+    books2   material = "Lomo azul" label "Libros (2)"
+    books3   material = "Lomo ocre" label "Libros (3)"
+    ceramic  material = "Cerámica blanca" label "Cerámica"
+    screen   material = "Pantalla de televisor" label "Pantalla"
   section "Modelo 3D"
-    model3d choice("Con televisor") = "Con televisor" label "Modelo 3D"
-    frame material = "Negro mate" label "Patas y peana"
-    screen material = "Negro mate" label "Pantalla"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    television bool = yes label "Con televisor"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
@@ -33,6 +42,6 @@ plan 1:100
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
 
 outputs
-  generator = "props:tv_unit"
+  generator = "props:fine_tv_unit"
   ifc_class = "IfcFurniture"
   ifc_type = "USERDEFINED"

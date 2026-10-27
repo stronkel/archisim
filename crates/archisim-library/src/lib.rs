@@ -825,7 +825,7 @@ pub type CatalogueEntry = (&'static str, &'static str, &'static [(&'static str, 
 
 /// The object types of the library (v0.25, more in v0.26), in the order of
 /// the gallery.
-pub const OBJECT_CATALOGUE: [CatalogueEntry; 236] = [
+pub const OBJECT_CATALOGUE: [CatalogueEntry; 238] = [
     ("Mesa de comedor 160×90", "Mesa", &[]),
     ("Silla", "Silla", &[]),
     ("Sofá de 3 plazas", "Sofá", &[]),
@@ -1641,6 +1641,12 @@ pub const OBJECT_CATALOGUE: [CatalogueEntry; 236] = [
         "Estantería",
         &[("width", 1.2), ("height", 1.9), ("shelves", 3.0)],
     ),
+    ("Vitrina 90", "Vitrina", &[]),
+    (
+        "Chimenea colgante",
+        "Chimenea",
+        &[("width", 1.2), ("depth", 0.6), ("height", 2.7)],
+    ),
 ];
 
 /// Choices and materials of the library's types that are not the family's
@@ -1719,12 +1725,12 @@ const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
     ),
     (
         "Butaca de ratán",
-        &[("frame", T("Ratán")), ("cushion", T("Lino arena"))],
+        &[("weave", T("Ratán")), ("cushion", T("Lino arena"))],
     ),
     (
         "Butaca baja de patas",
         &[
-            ("mat", T("Nogal")),
+            ("mat", T("Lana teja")),
             ("cushion", T("Lana teja")),
             ("frame", T("Nogal")),
         ],
@@ -1733,25 +1739,22 @@ const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
     ("Puf cubo", &[("mat", T("Terciopelo mostaza"))]),
     (
         "Mesa auxiliar de tres patas",
-        &[("mat", T("Nogal")), ("frame", T("Nogal"))],
+        &[("top", T("Nogal")), ("frame", T("Nogal"))],
     ),
-    ("Mesas nido", &[("mat", T("Nogal")), ("frame", T("Latón"))]),
+    ("Mesas nido", &[("top", T("Nogal")), ("metal", T("Latón"))]),
     (
         "Aparador de lamas 180",
-        &[("mat", T("Nogal")), ("frame", T("Negro mate"))],
+        &[("front", T("Nogal")), ("frame", T("Nogal"))],
     ),
     (
         "Alfombra redonda 160",
-        &[("mat", T("Lana teja")), ("border", T("Lana cruda"))],
+        &[("mat", T("Lana teja")), ("mat2", T("Lana cruda"))],
     ),
     (
         "Alfombra de rayas 240×170",
-        &[
-            ("mat", T("Lana cruda")),
-            ("border", T("Pana azul petróleo")),
-        ],
+        &[("mat", T("Lana cruda")), ("mat2", T("Pana azul petróleo"))],
     ),
-    ("Alfombra bereber 300×200", &[("border", T("Lana cruda"))]),
+    ("Alfombra bereber 300×200", &[("mat2", T("Lana cruda"))]),
     ("Lámpara de mesa", &[("frame", T("Cerámica esmaltada"))]),
     ("Lámpara colgante", &[("shade", T("Ratán"))]),
     (
@@ -1795,7 +1798,7 @@ const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
         "Mesita flotante",
         &[("mat", T("Roble claro")), ("shade", T("Pantalla de lino"))],
     ),
-    ("Taburete de enea", &[("mat", T("Nogal"))]),
+    ("Taburete de enea", &[("frame", T("Nogal"))]),
     (
         "Isla de cocina 180",
         &[("mat", T("Lacado salvia")), ("top", T("Mármol"))],
@@ -1889,13 +1892,12 @@ const LOOKS: &[(&str, &[(&str, StudioValue)])] = &[
 /// first (its «Modelo 3D»).
 const MODELS: &[(&str, &str)] = &[
     ("Sillón", "Contemporáneo"),
-    ("Sofá clásico de 3 plazas", "Clásico"),
-    ("Sofá nórdico de 2 plazas", "Nórdico"),
-    ("Silla metálica", "Tubo metálico"),
-    ("Silla tapizada", "Tapizada"),
-    ("Mesa de caballetes 200×100", "Caballetes"),
-    ("Mesa de patas metálicas 140×80", "Patas metálicas"),
-    ("Mesa de centro de vidrio", "Vidrio y metal"),
+    ("Sofá clásico de 3 plazas", "Clásica"),
+    ("Silla metálica", "Industrial"),
+    ("Silla tapizada", "Contemporáneo"),
+    ("Mesa de caballetes 200×100", "Rústica"),
+    ("Mesa de patas metálicas 140×80", "Industrial"),
+    ("Mesa de centro de vidrio", "Contemporáneo"),
     ("Cama de madera 160×200", "Madera"),
     ("Cama tarima 150×200", "Tarima"),
     ("Inodoro suspendido", "Suspendido"),
@@ -1913,18 +1915,17 @@ const MODELS: &[(&str, &str)] = &[
     ("Furgoneta", "Todoterreno"),
     ("Todoterreno", "Todoterreno"),
     ("Turismo", "Berlina"),
-    ("Sofá nórdico con cojines", "Nórdico"),
-    ("Butaca redonda", "Redonda"),
-    ("Butaca de ratán", "De ratán"),
-    ("Butaca baja de patas", "Baja de patas"),
-    ("Puf de punto", "De punto"),
-    ("Puf cubo", "Cubo"),
-    ("Mesa auxiliar de tres patas", "Tres patas"),
-    ("Mesas nido", "Nido"),
-    ("Aparador de lamas 180", "Puertas de lamas"),
-    ("Alfombra redonda 160", "Redonda"),
-    ("Alfombra de rayas 240×170", "De rayas"),
-    ("Alfombra bereber 300×200", "Bereber con flecos"),
+    ("Butaca de orejas", "Clásica"),
+    ("Butaca de ratán", "Mediterráneo"),
+    ("Butaca baja de patas", "Años 50"),
+    ("Puf de punto", "Japandi"),
+    ("Puf cubo", "Contemporáneo"),
+    ("Mesa auxiliar de tres patas", "Años 50"),
+    ("Mesas nido", "Contemporáneo"),
+    ("Aparador de lamas 180", "Japandi"),
+    ("Alfombra redonda 160", "Mediterráneo"),
+    ("Alfombra de rayas 240×170", "Rústica"),
+    ("Alfombra bereber 300×200", "Industrial"),
     ("Lámpara de mesa", "De mesa"),
     ("Lámpara colgante", "Colgante"),
     ("Lámpara de arco", "De arco"),
@@ -1932,7 +1933,7 @@ const MODELS: &[(&str, &str)] = &[
     ("Cactus", "Cactus"),
     ("Helecho", "Helecho"),
     ("Sansevieria", "Sansevieria"),
-    ("Visillo 160", "Visillo"),
+    ("Visillo 160", "Contemporáneo"),
     ("Frutero", "Frutero"),
     ("Libros y vela", "Libros y vela"),
     ("Cerámicas", "Cerámicas"),
@@ -1941,8 +1942,8 @@ const MODELS: &[(&str, &str)] = &[
     ("Cama de lamas 160", "Cabecero de lamas"),
     ("Mesita de patas cónicas", "Patas cónicas"),
     ("Mesita flotante", "Flotante"),
-    ("Taburete tapizado", "Tapizado con respaldo"),
-    ("Taburete de enea", "De enea"),
+    ("Taburete tapizado", "Años 50"),
+    ("Taburete de enea", "Mediterráneo"),
     ("Mesa de trabajo de cocina 140", "Mesa de trabajo"),
     ("Isla con fregadero 240", "Con fregadero"),
     ("Botes de cristal", "Botes de cristal"),
@@ -2000,8 +2001,9 @@ const MODELS: &[(&str, &str)] = &[
     ("Panel informativo", "Rectangular"),
     ("Bicicleta de carretera", "Carretera"),
     ("Bicicleta de carga", "De carga"),
-    ("Estufa de leña", "Estufa de leña"),
-    ("Chimenea moderna lineal", "Moderna lineal"),
+    ("Chimenea de obra", "Mediterráneo"),
+    ("Chimenea moderna lineal", "Contemporáneo"),
+    ("Chimenea colgante", "Colgante"),
     ("Recibidor con banco", "Recibidor con banco"),
     ("Silla de oficina de malla", "De malla"),
     ("Mesa de teca para seis", "Teca para seis"),
@@ -2011,7 +2013,7 @@ const MODELS: &[(&str, &str)] = &[
     ("Ventilador de techo de ratán", "Aspas de ratán"),
     ("Piano de cola", "De cola"),
     ("Litera 90×190", "Litera"),
-    ("Estantería con objetos 120", "Con objetos"),
+    ("Estantería con objetos 120", "Contemporáneo"),
 ];
 
 /// The leaves of each species (a material of [`object_materials`]) and

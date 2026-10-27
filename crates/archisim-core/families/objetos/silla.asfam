@@ -1,7 +1,7 @@
 family "Silla"
   category furniture
   host none
-  version 1
+  version 2
   description "Silla de cuatro patas con respaldo"
   folder "Sillas"
 
@@ -12,10 +12,12 @@ type_params
     seat   length = 0.45 range 0.30..0.80 label "Altura del asiento"
     height length = 0.90 range 0.50..1.40 label "Altura del respaldo"
   section "Materiales"
-    mat material = "Madera de pino" label "Madera"
+    frame    material = "Roble claro" label "Madera"
+    mat      material = "Lino arena" label "Tapicería"
+    weave    material = "Enea" label "Asiento de enea o cordel"
+    metal    material = "Metal negro" label "Metal"
   section "Modelo 3D"
-    model3d choice("Madera", "Tubo metálico", "Tapizada") = "Madera" label "Modelo 3D"
-    frame material = "Metal lacado" label "Estructura"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 require seat + 0.1 < height else "El respaldo tiene que subir por encima del asiento"
 
@@ -33,6 +35,6 @@ plan 1:50
   line (-width / 2, 0.04) to (width / 2, 0.04) pen thin
 
 outputs
-  generator = "props:chair"
+  generator = "props:fine_chair"
   ifc_class = "IfcFurniture"
   ifc_type = "CHAIR"
