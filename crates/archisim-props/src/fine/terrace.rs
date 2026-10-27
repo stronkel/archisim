@@ -1531,8 +1531,6 @@ pub fn parasol(b: &mut Builder, p: &Params) -> bool {
 
 // ---------------------------------------------------------- big pots
 
-/// Big pots of the collections (after the family's 4 own models): the
-
 /// How far below the rim of a big pot its earth is, metres.
 const SUNK: f64 = 0.04;
 
@@ -1546,7 +1544,8 @@ fn rim(b: &mut Builder, r: f64, w: f64, top: f64, t: f64) {
     b.rbox("pot", [r - t, t, lo], [r, w - t, top], 0.0);
 }
 
-/// collection's pot with a plant of the library's pots in it.
+/// Big pots of the collections (after the family's 4 own models): the
+/// collection's pot, its earth below the rim, and its plant.
 pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
     let Some(ix) = look(p, 4) else {
         return false;
