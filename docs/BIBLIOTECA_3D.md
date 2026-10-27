@@ -348,6 +348,27 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### Paquete 3: el dormitorio de las ocho colecciones (27/10/2026)
+
+En el taller (rama `bloque/paquete-3`), las piezas del dormitorio hechas como las hace cada colección (`archisim_props::fine::bedroom`, con la ropa de cama en `fine::bedding`). Como en la cocina y el baño, «Cama», «Mesita de noche», «Armario» y «Cómoda» ganan ocho modelos más, uno por colección, después de los suyos; los proyectos de antes no cambian. Dos piezas nuevas, con un modelo por colección: **banco a los pies de la cama** (`props:bed_bench`) y **tocador** (`props:dressing_table`: la mesa con su cajón, el espejo en la pared con «Espejo encima» y «Altura del espejo», y el taburete con «Taburete»).
+
+| Colección | Cama | Mesita y lámpara | Armario | Cómoda | Banco | Tocador |
+|---|---|---|---|---|---|---|
+| Nórdico cálido | cabecero tapizado con vivo, base tapizada sobre patas de roble abiertas | roble, cajón sobre hueco; pie de cerámica y pantalla de tambor | lacado con lengüetas de cuero, zócalo de roble | patas abiertas, uñeros | tapizado sobre patas de roble | patas abiertas, espejo redondo de roble, taburete redondo tapizado |
+| Mediterráneo | encalada, cabecero de rejilla en arco sobre dos postes | puerta de rejilla; jarra de terracota y pantalla imperio | puertas de rejilla, pomos, cornisa | encalada con pomos | de enea con travesaños | espejo en arco, taburete de enea |
+| Años 50 | teca, cabecero ancho con ranuras y alas, patas de compás | patas de compás, cajón con barra de latón; pie turquesa y pantalla cónica | sobre patas de compás, barras de latón | patas de compás, barras | de listones sobre patas de compás | dos cajones, espejo redondo de latón |
+| Japandi | tarima baja más ancha que el colchón, cabecero bajo de listones | caja baja sobre zócalo oscuro con libros; farol de papel | correderas de listones | zócalo oscuro, uñeros | losa de roble con cojín | colgado de la pared, espejo cápsula con balda |
+| Contemporáneo | cabecero alto de canales tapizados, base tapizada hasta una sombra | dos cajones sin tirador sobre trineo de acero; lámpara seta | sin tiradores, ranura donde se juntan las puertas | gola | bloque tapizado | consola sobre acero, espejo sin marco, puf cubo |
+| Rústica | postes de pino con remates torneados, cabecero y piecero de tablas (el edredón remetido; edredón acolchado) | patas torneadas, anilla de forja; candelero de hierro | tablas con bisagras de forja, anillas, cornisa | patas de bollo, conchas | baúl con flejes y asas | patas torneadas, espejo de pino, taburete de tres patas |
+| Industrial | tubo de acero negro con barrotes y bastidor de tubo cuadrado | bastidor de tubo, cajón con concha; bombilla en jaula | madera ahumada en bastidor de acero con aspas | bastidor de acero, conchas | tubo cuadrado con cojín de cuero | bastidor de acero, espejo colgado de una barra |
+| Clásica | cabecero capitoné en marco moldurado con copete y roseta, postes con remate, patas Luis XVI; almohadones y rulo | patas Luis XVI, cajones moldurados con pomos de latón, mármol; columna de latón | cuarterones, pomos de latón, cornisa, pilastras | cajones moldurados, mármol | capitoné sobre patas Luis XVI | mármol, espejo con copete, banqueta capitoné |
+
+- **La ropa de cama** (`Cover`): una tela que se apoya en un rectángulo y cae por sus bordes, con la vuelta redondeada, el vuelo hacia el bajo, pliegues que siguen alrededor de las esquinas y las esquinas cayendo como las de un mantel. Así se hacen el edredón (abombado; acolchado en la rústica), la sábana vuelta sobre su cabecera y la manta a los pies. Si hay piecero, el edredón se remete.
+- Partes de material: `frame` (madera o acero de la estructura y el cuerpo), `front` (puertas y cajones), `top`, `stone`, `plinth`, `metal`, `glass`, `weave`, `dark`, `cushion` (tapizado), `linen` (sábanas y almohadas), `duvet`, `spread` (manta: parámetro `spread_mat`), `pillow` (cojines), `shade` (pantalla, brilla de noche), `ceramic` (pie de la lámpara), `bulb`, `books`, `books2` y `mirror_glass`.
+- Ocho dormitorios montados en el taller (`workshop::BEDROOMS`, `place_bedroom`): armario, cómoda, mesita, cama, mesita y tocador contra la pared, y el banco a los pies de la cama; fotos con `ARCHISIM_DORMITORIOS_OUT=carpeta cargo test --release -p archisim-app -- bedroom_pictures`.
+- Pesos: camas 13.000–32.000 triángulos (la ropa de cama, unos 12.000), lo demás 2.000–25.000.
+- De paso: un frente nuevo, `Panel::Moulded` (tablero con moldura), más ligero que el de cuarterones, para los cajones clásicos.
+
 ### Tanda 2b: el baño de las ocho colecciones (27/10/2026)
 
 En el taller (rama `bloque/paquete-2b`), los sanitarios y accesorios de la biblioteca hechos como los hace cada colección (`archisim_props::fine::bath`). Como en la cocina, no son familias nuevas: «Lavabo», «Inodoro», «Bidé», «Ducha», «Bañera», «Espejo» y «Toallero» ganan ocho modelos más, uno por colección, después de los suyos; los proyectos de antes no cambian. Los grifos son los de la cocina a otra escala (`kitchen::tap_scaled`).

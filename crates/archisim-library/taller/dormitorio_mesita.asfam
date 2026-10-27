@@ -1,0 +1,52 @@
+family "Mesita de noche (taller)"
+  category furniture
+  host none
+  version 1
+  description "Mesita de noche como la hace cada colección, con su lámpara (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.45 range 0.30..0.80 label "Ancho"
+    depth  length = 0.40 range 0.30..0.60 label "Fondo"
+    height length = 0.50 range 0.35..0.75 label "Altura"
+  section "Lámpara"
+    lamp bool = yes label "Lámpara encima"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    front material = "Lacado blanco" label "Frentes"
+    top material = "Roble claro" label "Encimera"
+    stone material = "Mármol" label "Piedra"
+    plinth material = "Roble claro" label "Zócalo"
+    metal material = "Latón" label "Tiradores y metal"
+    glass material = "Vidrio claro" label "Vidrio"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    shade material = "Pantalla de lino" label "Pantalla"
+    ceramic material = "Cerámica blanca" label "Pie de la lámpara"
+    bulb material = "Cristal esmerilado" label "Bombilla"
+    books material = "Lomo crema" label "Libros"
+    books2 material = "Lomo azul" label "Libros (2)"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  let r = 0.15
+  let xc = width * 0.06
+  let yc = depth * 0.45
+  repeat i in 0..20
+    let t0 = 6.283185307 * i / 20
+    let t1 = 6.283185307 * (i + 1) / 20
+    line (xc + r * cos(t0), yc + r * sin(t0)) to (xc + r * cos(t1), yc + r * sin(t1)) pen thin
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:nightstand"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

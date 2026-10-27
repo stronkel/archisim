@@ -10,6 +10,8 @@
 
 pub mod armchairs;
 pub mod bath;
+pub mod bedding;
+pub mod bedroom;
 pub mod chairs;
 pub mod hearth;
 pub mod kitchen;

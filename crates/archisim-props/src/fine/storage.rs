@@ -65,6 +65,9 @@ pub(super) enum Panel {
     Planks,
     /// A steel frame round a wire mesh.
     Mesh,
+    /// A plain board with a moulding set in round its face (a light
+    /// panelled drawer).
+    Moulded,
 }
 
 /// A door or drawer front from `x0` to `x1` and `z0` to `z1` on a face at
@@ -95,6 +98,17 @@ pub(super) fn front(
     let (ix0, ix1, iz0, iz1) = (x0 + rail, x1 - rail, z0 + rail, z1 - rail);
     match panel {
         Panel::Flat => b.rbox(role, [x0, y, z0], [x1, y + T, z1], 0.003),
+        Panel::Moulded => {
+            b.rbox(role, [x0, y, z0], [x1, y + T, z1], 0.003);
+            let k = (0.035_f64).min(w * 0.15).min(h * 0.22);
+            let ring = [
+                [x0 + k, y + T, z0 + k],
+                [x1 - k, y + T, z0 + k],
+                [x1 - k, y + T, z1 - k],
+                [x0 + k, y + T, z1 - k],
+            ];
+            super::soft::tube(b, role, &ring, true, 0.004, 6);
+        }
         Panel::Shaker => {
             frame(b, role, T);
             b.rbox(role, [ix0, y, iz0], [ix1, y + T * 0.45, iz1], 0.0);
@@ -377,7 +391,7 @@ pub(super) fn pull(b: &mut Builder, kind: Pull, x: f64, z: f64, y: f64) {
 /// `n` doors side by side from `x0` to `x1`, pulls at the edges where two
 /// meet (or near the right of a single one), at `pz`.
 #[allow(clippy::too_many_arguments)]
-fn doors(
+pub(super) fn doors(
     b: &mut Builder,
     panel: Panel,
     role: &'static str,
@@ -426,7 +440,7 @@ fn doors(
 
 /// `n` drawers stacked from `z0` to `z1`, pulls in their middles.
 #[allow(clippy::too_many_arguments)]
-fn drawers(
+pub(super) fn drawers(
     b: &mut Builder,
     panel: Panel,
     role: &'static str,
@@ -493,7 +507,7 @@ pub(super) fn tapered_leg(
 }
 
 /// A turned "toupie" foot of the Louis XVI pieces, `top` high.
-fn toupie(b: &mut Builder, at: [f64; 2], top: f64) {
+pub(super) fn toupie(b: &mut Builder, at: [f64; 2], top: f64) {
     turned(
         b,
         "frame",
@@ -513,12 +527,12 @@ fn toupie(b: &mut Builder, at: [f64; 2], top: f64) {
 }
 
 /// The four corners of a carcass `x0`…`x1` by `0`…`d`, inset `k`.
-fn corners(x0: f64, x1: f64, d: f64, k: f64) -> [[f64; 2]; 4] {
+pub(super) fn corners(x0: f64, x1: f64, d: f64, k: f64) -> [[f64; 2]; 4] {
     [[x0 + k, k], [x1 - k, k], [x1 - k, d - k], [x0 + k, d - k]]
 }
 
 /// The direction out of each corner of [`corners`].
-const OUT: [[f64; 2]; 4] = [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]];
+pub(super) const OUT: [[f64; 2]; 4] = [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]];
 
 /// An open box: sides, top, bottom and back, `t` thick, open at the front.
 #[allow(clippy::too_many_arguments)]
@@ -788,7 +802,7 @@ pub(super) fn base_moulding(
 }
 
 /// Two iron strap hinges on the hinge side of a door.
-fn straps(b: &mut Builder, x: f64, toward: f64, z0: f64, z1: f64, y: f64) {
+pub(super) fn straps(b: &mut Builder, x: f64, toward: f64, z0: f64, z1: f64, y: f64) {
     for z in [z0 + 0.07, z1 - 0.07] {
         let len = 0.14;
         let xe = x + toward * len;

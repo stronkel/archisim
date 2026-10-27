@@ -1,0 +1,51 @@
+family "Armario (taller)"
+  category furniture
+  host none
+  version 1
+  description "Armario como lo hace cada colección: puertas, cajones abajo y lo que pisa (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.40..6.00 label "Ancho"
+    depth  length = 0.60 range 0.30..1.00 label "Fondo"
+    height length = 2.40 range 0.80..3.00 label "Altura"
+    doors  integer = 2 range 1..12 label "Puertas"
+  section "Frentes"
+    drawers integer = 0 range 0..4 label "Filas de cajones abajo"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    front material = "Lacado blanco" label "Frentes"
+    top material = "Roble claro" label "Encimera"
+    stone material = "Mármol" label "Piedra"
+    plinth material = "Roble claro" label "Zócalo"
+    metal material = "Latón" label "Tiradores y metal"
+    glass material = "Vidrio claro" label "Vidrio"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin
+  let dw = width / doors
+  repeat i in 1..doors
+    line (-width / 2 + i * dw, depth - 0.02) to (-width / 2 + i * dw, depth) pen thin
+  line (-width / 2 + 0.05, depth / 2) to (width / 2 - 0.05, depth / 2) pen thin dashed
+
+plan 1:100
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin
+
+outputs
+  generator = "props:wardrobe"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"
+
+# Stretched, a door more when the doors would be too wide.
+stretch
+  doors = if width / doors >= 0.35 and width / doors <= 0.65 then doors else max(1, round(width / 0.5))

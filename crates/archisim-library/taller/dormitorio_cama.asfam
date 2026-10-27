@@ -1,0 +1,53 @@
+family "Cama (taller)"
+  category furniture
+  host none
+  version 1
+  description "Cama como la hace cada colección: cabecero, estructura, colchón, edredón con la sábana vuelta, almohadas, manta a los pies y cojines (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.50 range 0.80..2.20 label "Ancho del colchón"
+    depth  length = 2.05 range 1.80..2.40 label "Largo"
+    height length = 0.52 range 0.30..0.80 label "Altura del colchón"
+    head   length = 1.10 range 0.50..1.60 label "Altura del cabecero"
+  section "Ropa de cama"
+    spread   bool = yes label "Manta a los pies"
+    cushions integer = 2 range 0..4 label "Cojines"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    front material = "Lacado blanco" label "Frentes"
+    top material = "Roble claro" label "Encimera"
+    stone material = "Mármol" label "Piedra"
+    plinth material = "Roble claro" label "Zócalo"
+    metal material = "Latón" label "Tiradores y metal"
+    glass material = "Vidrio claro" label "Vidrio"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    cushion material = "Bouclé crudo" label "Tapizado"
+    linen material = "Lino blanco" label "Sábanas y almohadas"
+    duvet material = "Lino arena" label "Edredón"
+    spread_mat material = "Terciopelo salvia" label "Manta"
+    pillow material = "Terciopelo salvia" label "Cojines"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.08, head) material frame
+  box (-width / 2, 0.08, 0) to (width / 2, depth, height) material linen
+
+plan 1:50
+  polygon (-width / 2 - 0.06, 0) (width / 2 + 0.06, 0) (width / 2 + 0.06, depth) (-width / 2 - 0.06, depth) pen view
+  line (-width / 2 - 0.06, 0.1) to (width / 2 + 0.06, 0.1) pen thin
+  let pillows = if width >= 1.2 then 2 else 1
+  let pw = (width - 0.1 * (pillows + 1)) / pillows
+  repeat i in 0..pillows
+    let a = -width / 2 + 0.1 + i * (pw + 0.1)
+    polygon (a, 0.16) (a + pw, 0.16) (a + pw, 0.46) (a, 0.46) pen thin
+  line (-width / 2, 0.65) to (width / 2, 0.65) pen thin
+  line (-width / 2, 0.65) to (-width / 2 + 0.35, 1.0) pen thin
+
+outputs
+  generator = "props:bed"
+  ifc_class = "IfcFurniture"
+  ifc_type = "BED"

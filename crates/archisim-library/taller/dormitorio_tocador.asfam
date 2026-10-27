@@ -1,0 +1,46 @@
+family "Tocador (taller)"
+  category furniture
+  host none
+  version 1
+  description "Tocador como lo hace cada colección: la mesa con su cajón, el espejo encima y el taburete (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.00 range 0.60..1.80 label "Ancho"
+    depth  length = 0.45 range 0.30..0.70 label "Fondo"
+    height length = 0.76 range 0.60..0.90 label "Altura"
+  section "Espejo y taburete"
+    mirror bool = yes label "Espejo encima"
+    mirror_height length = 0.75 range 0.30..1.20 visible_if mirror label "Altura del espejo"
+    stool bool = yes label "Taburete"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    front material = "Lacado blanco" label "Frentes"
+    top material = "Roble claro" label "Encimera"
+    stone material = "Mármol" label "Piedra"
+    plinth material = "Roble claro" label "Zócalo"
+    metal material = "Latón" label "Tiradores y metal"
+    glass material = "Vidrio claro" label "Vidrio"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    cushion material = "Bouclé crudo" label "Tapizado"
+    mirror_glass material = "Espejo" label "Espejo"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  let r = min(width * 0.22, 0.25)
+  repeat i in 0..20
+    let t0 = 6.283185307 * i / 20
+    let t1 = 6.283185307 * (i + 1) / 20
+    line (r * cos(t0), depth * 0.55 + r * sin(t0)) to (r * cos(t1), depth * 0.55 + r * sin(t1)) pen thin dashed
+
+outputs
+  generator = "props:dressing_table"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

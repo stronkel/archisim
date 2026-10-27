@@ -603,6 +603,10 @@ pub fn coffee_table(b: &mut Builder, p: &Params) {
 /// Beds: 1 upholstered headboard and base; 2 wooden frame on legs with a
 /// panel headboard; 3 low platform. With mattress, duvet and pillows.
 pub fn bed(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 3).
+    if crate::fine::bedroom::bed(b, p) {
+        return;
+    }
     let w = p.get("width", 1.5);
     let l = p.get("depth", 2.0);
     let top = p.get("height", 0.5);
@@ -774,6 +778,10 @@ pub fn bed(b: &mut Builder, p: &Params) {
 
 /// Bedside tables: a drawer unit with a lamp on it.
 pub fn nightstand(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 3).
+    if crate::fine::bedroom::nightstand(b, p) {
+        return;
+    }
     let w = p.get("width", 0.45);
     let d = p.get("depth", 0.4);
     let h = p.get("height", 0.5);
@@ -887,6 +895,10 @@ fn lamp(b: &mut Builder, x: f64, y: f64, z: f64) {
 
 /// Wardrobes: a carcass on a plinth, doors with their gaps and handles.
 pub fn wardrobe(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 3).
+    if crate::fine::bedroom::wardrobe(b, p) {
+        return;
+    }
     let w = p.get("width", 1.2);
     let d = p.get("depth", 0.6);
     let h = p.get("height", 2.4);
@@ -931,6 +943,10 @@ pub fn wardrobe(b: &mut Builder, p: &Params) {
 /// Chests of drawers: rows of drawers in one or two columns, on a plinth
 /// (1) or on legs (2).
 pub fn chest(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 3).
+    if crate::fine::bedroom::chest(b, p) {
+        return;
+    }
     let w = p.get("width", 1.0);
     let d = p.get("depth", 0.5);
     let h = p.get("height", 0.85);

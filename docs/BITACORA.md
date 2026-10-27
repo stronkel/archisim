@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (7) · Paquete 3: el dormitorio de las ocho colecciones
+
+Rama `bloque/paquete-3` (sobre `bloque/paquete-2b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, con la cocina y el baño esperando su revisión: «Paquete 3: dormitorio».
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 3»)
+- Cama, mesita de noche (con su lámpara), armario y cómoda hechos en las ocho colecciones, como modelos nuevos de las familias de siempre (los proyectos antiguos no cambian).
+- Dos piezas nuevas en el taller: el banco a los pies de la cama y el tocador (mesa con su cajón, espejo en la pared y taburete), uno por colección.
+- La ropa de cama de verdad: el colchón con su sábana, el edredón que cae por los lados y los pies con sus pliegues, la sábana vuelta sobre el edredón, almohadas, manta a los pies y cojines (en la clásica, además, almohadones de respaldo y un rulo).
+- Ocho dormitorios montados en el taller, cada uno con su pared; fotos por colección.
+
+**Pendiente**
+- Que Antonio revise los dormitorios (y la cocina y el baño); con su visto bueno, los paquetes 2 y 3 a la biblioteca: el banco y el tocador como familias nuevas.
+- Cuna, cama infantil y litera en las colecciones (la «Cama infantil» de la biblioteca sigue como está), galán de noche y espejo de pie.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks) y abre `taller.archisim` (te lo mando).
+2. En la Maqueta, a la derecha de los baños están los ocho dormitorios: mira la cama y su ropa, las mesitas con sus lámparas, el armario, la cómoda, el banco y el tocador de cada uno.
+3. Selecciona una cama y cambia en Propiedades «Manta a los pies» y «Cojines», y el ancho: la ropa de cama se rehace.
+4. Dime, dormitorio por dormitorio, qué cambiarías.
+
+---
+
 ## 2026-10-27 (6) · Paquete 2, tanda 2b: el baño de las ocho colecciones
 
 Rama `bloque/paquete-2b` (sobre `bloque/paquete-2a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
