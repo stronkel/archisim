@@ -260,3 +260,38 @@ fn piece_width(m: &Model, t: archisim_core::ObjectTypeId) -> f32 {
     m.object_type_box(t)
         .map_or(1.0, |b| (b.1[0] - b.0[0]) as f32)
 }
+
+/// How big the workshop's scene is: it must fit the graphics card's
+/// buffers (Antonio's laptop closed the app opening it in 3D).
+#[test]
+fn workshop_scene_size() {
+    let m = archisim_library::workshop::project().unwrap();
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let mb = |n: usize| n * std::mem::size_of::<super::scene::Vertex>() / (1 << 20);
+    eprintln!(
+        "workshop scene: {} opaque vertices ({} MB), {} glass ({} MB)",
+        scene.opaque.len(),
+        mb(scene.opaque.len()),
+        scene.glass.len(),
+        mb(scene.glass.len())
+    );
+    // More than one buffer's worth, and it still draws.
+    assert!(
+        mb(scene.opaque.len()) > 128,
+        "the workshop no longer tests big scenes"
+    );
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let pic = picture(
+        &mut r,
+        &gpu,
+        &m,
+        |lo, hi| camera(lo, hi, 1.5, -62.0, 30.0, 1.0),
+        [600, 400],
+    );
+    if let Ok(dir) = std::env::var("ARCHISIM_TALLER_OUT") {
+        pic.save_png(Path::new(&dir).join("todo.png")).unwrap();
+    }
+}

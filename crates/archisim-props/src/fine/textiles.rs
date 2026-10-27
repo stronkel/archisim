@@ -123,7 +123,7 @@ pub fn rug(b: &mut Builder, p: &Params) {
     let w = p.get("width", 2.0).clamp(0.6, 5.0);
     let d = p.get("depth", 1.4).clamp(0.4, 4.0);
     let t = 0.012;
-    let (top, up) = (t, t + 0.0015);
+    let (top, up) = (t, t + 0.0006);
     let c = [0.0, d / 2.0];
     match p.style() {
         // Mediterranean: a round rug of braided jute, coil on coil: a
@@ -156,41 +156,40 @@ pub fn rug(b: &mut Builder, p: &Params) {
                 super::soft::tube(b, "mat2", &ring, true, coil * 0.42, 6);
             }
         }
-        // Fifties: a soft-cornered rug with floating ovals and shards.
+        // Fifties: discs of two colours drifting across the ground in a
+        // loose diagonal, large and small, none touching.
         3 => {
             b.rbox("mat", [-w / 2.0, 0.0, 0.0], [w / 2.0, d, t], 0.006);
-            let shapes: [([f64; 2], f64, f64, &str); 6] = [
-                ([-0.3, 0.32], 0.22, 0.1, "mat2"),
-                ([0.25, 0.68], 0.18, 0.12, "accent"),
-                ([-0.12, 0.8], 0.08, 0.08, "accent"),
-                ([0.36, 0.25], 0.1, 0.06, "mat2"),
-                ([-0.38, 0.62], 0.06, 0.12, "accent"),
-                ([0.05, 0.45], 0.05, 0.05, "mat2"),
+            let m = w.min(d);
+            // (x, y) as fractions of the rug, radius as a fraction of its
+            // shorter side, colour.
+            let discs: [(f64, f64, f64, &str); 11] = [
+                (0.2, 0.28, 0.13, "mat2"),
+                (0.36, 0.62, 0.09, "accent"),
+                (0.5, 0.36, 0.06, "accent"),
+                (0.62, 0.7, 0.12, "mat2"),
+                (0.8, 0.4, 0.08, "accent"),
+                (0.1, 0.7, 0.05, "accent"),
+                (0.9, 0.78, 0.04, "mat2"),
+                (0.46, 0.14, 0.035, "mat2"),
+                (0.74, 0.16, 0.05, "mat2"),
+                (0.28, 0.88, 0.035, "mat2"),
+                (0.55, 0.9, 0.03, "accent"),
             ];
-            for (q, rx, ry, role) in shapes {
-                let at = [q[0] * w, q[1] * d];
-                inlay(
-                    b,
-                    role,
-                    &ellipse(at, rx * w.min(d) * 1.4, ry * w.min(d) * 1.4, 28),
-                    top,
-                    up,
-                );
-            }
-            for (q, a) in [
-                ([-0.1, 0.2], 0.4_f64),
-                ([0.15, 0.85], -0.6),
-                ([0.4, 0.5], 1.2),
-            ] {
-                let at = [q[0] * w, q[1] * d];
-                let s = w.min(d) * 0.12;
-                let (sa, ca) = a.sin_cos();
-                let tri = [
-                    [at[0] + ca * s, at[1] + sa * s],
-                    [at[0] - sa * s * 0.25, at[1] + ca * s * 0.25],
-                    [at[0] - ca * s * 0.4, at[1] - sa * s * 0.4],
-                ];
-                inlay(b, "mat2", &tri, top, up);
+            for (fx, fy, fr, role) in discs {
+                let at = [-w / 2.0 + w * fx, d * fy];
+                let r = m * fr;
+                inlay(b, role, &ellipse(at, r, r, 40), top - 0.001, up);
+                // A ring of the ground colour inside the largest ones.
+                if fr > 0.1 {
+                    inlay(
+                        b,
+                        "mat",
+                        &ellipse(at, r * 0.45, r * 0.45, 32),
+                        top - 0.001,
+                        up + 0.0006,
+                    );
+                }
             }
         }
         // Japandi: woven straw in a fine grid with a dark cloth binding.

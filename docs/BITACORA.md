@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 · Paquete 1: la vista 3D ya no se cierra con proyectos grandes; alfombra años 50 y chimenea colgante
+
+Rama `bloque/paquete-1a` (pull request #79). Sin cambios de formato ni de IFC.
+
+Antonio (27/10/2026, madrugada): al abrir `taller.archisim` la aplicación se cerraba al entrar en la vista 3D, y tuvo que borrar la mitad de las piezas para verlo; todo bien salvo la alfombra años 50, «rara»; echa en falta una chimenea colgante «rollo moderna nórdica» (mandó la foto de una Gyrofocus).
+
+**Hecho**
+- **Vista 3D con modelos grandes**: la escena del taller son 8,7 millones de vértices (600 MB) y la tarjeta solo admite memorias de 256 MB por bloque, así que wgpu paraba el programa. Ahora cada clase de triángulos se sube en bloques de 128 MB como mucho (`view3d::render::upload`); prueba `workshop_scene_size`, que dibuja el taller entero.
+- **Alfombra años 50** rehecha: círculos de dos colores repartidos en diagonal, sin tocarse, los mayores con un aro (sin las esquirlas, que se veían como astillas levantadas); las piezas del dibujo quedan casi a ras.
+- **Chimenea colgante** (modelo «Colgante» de «Chimenea (taller)», pieza «Chimenea colgante · Nórdico cálido»): fuego abierto en un cuenco redondo de acero bajo una campana acampanada, colgados del tiro en medio de la sala, con tres tirantes, nada apoyado en el suelo. La Gyrofocus (Focus, Dominique Imbert) es un diseño protegido, así que no se copia su forma (cuerpo cerrado en gota con una boca); la nuestra es la tipología general de hogar central suspendido.
+- **Llama**: color nuevo de la paleta para el fuego de todas las chimeneas, que con «Luz» casi no se veía sobre fondo claro.
+
+**Pendiente**
+- Lo mismo de la entrada anterior: aprobación del paquete 1 y llevarlo a la biblioteca.
+- Con 600 MB de escena, la Maqueta irá pesada en un portátil: hará falta dibujar con menos detalle los objetos lejanos (niveles de detalle por distancia), sobre todo en el taller, que tiene dos copias de todo.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request #79 (pestaña Checks) cuando termine.
+2. Abre el `taller.archisim` completo (sin borrar nada) y entra en la vista 3D: ya no debe cerrarse. Dime si va muy lento.
+3. Mira la alfombra años 50 y la chimenea colgante, al final de la fila de chimeneas.
+
+---
+
 ## 2026-10-26 (7) · Paquete 1c: almacenaje, alfombras, cortinas y chimeneas; correcciones de Antonio
 
 Rama `bloque/paquete-1a` (pull request #79, para que Antonio descargue la aplicación). Sin cambios de formato ni de IFC; es el taller.

@@ -162,12 +162,14 @@ pub struct Renderer {
     globals_bind: wgpu::BindGroup,
     edges_layout: wgpu::BindGroupLayout,
     targets: Option<Targets>,
-    opaque: Option<(wgpu::Buffer, u32)>,
-    grass: Option<(wgpu::Buffer, u32)>,
-    glass: Option<(wgpu::Buffer, u32)>,
+    /// Each kind of triangle in as many buffers as the device's largest
+    /// buffer asks for (a big project does not fit in one).
+    opaque: Vec<Triangles>,
+    grass: Vec<Triangles>,
+    glass: Vec<Triangles>,
     /// What is being stretched, drawn over the scene (whose own copy of
     /// it is hidden): its opaque and glass triangles.
-    overlay: Option<(Option<Triangles>, Option<Triangles>)>,
+    overlay: Option<(Vec<Triangles>, Vec<Triangles>)>,
     /// The device can view a texture in another format of the same bytes
     /// (wgpu's `VIEW_FORMATS`); otherwise the picture is copied for display.
     view_formats: bool,
@@ -597,9 +599,9 @@ impl Renderer {
             globals_bind,
             edges_layout,
             targets: None,
-            opaque: None,
-            grass: None,
-            glass: None,
+            opaque: Vec::new(),
+            grass: Vec::new(),
+            glass: Vec::new(),
             overlay: None,
             view_formats,
             clip: None,
@@ -921,7 +923,7 @@ impl Renderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                let over = self.overlay.as_ref().and_then(|o| o.0.as_ref());
+                let over = self.overlay.iter().flat_map(|o| o.0.iter());
                 for (buf, count) in self.opaque.iter().chain(over) {
                     pass.set_pipeline(&self.shadow_pipeline);
                     pass.set_bind_group(0, &self.globals_bind, &[]);
@@ -988,7 +990,7 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            let over = self.overlay.as_ref().and_then(|o| o.0.as_ref());
+            let over = self.overlay.iter().flat_map(|o| o.0.iter());
             for (buf, n) in self.opaque.iter().chain(over) {
                 pass.set_pipeline(&self.model_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
@@ -997,7 +999,7 @@ impl Renderer {
                 pass.set_vertex_buffer(0, buf.slice(..));
                 pass.draw(0..*n, 0..1);
             }
-            if let Some((buf, n)) = &self.grass {
+            for (buf, n) in &self.grass {
                 pass.set_pipeline(&self.grass_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_bind_group(1, shadow_bind, &[]);
@@ -1024,7 +1026,7 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            let over = self.overlay.as_ref().and_then(|o| o.1.as_ref());
+            let over = self.overlay.iter().flat_map(|o| o.1.iter());
             for (buf, n) in self.glass.iter().chain(over) {
                 pass.set_pipeline(&self.glass_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
@@ -1132,16 +1134,24 @@ impl Renderer {
     }
 }
 
-/// A vertex buffer of some triangles (none if there are none).
-fn upload(device: &wgpu::Device, label: &str, v: &[Vertex]) -> Option<(wgpu::Buffer, u32)> {
-    (!v.is_empty()).then(|| {
-        let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(label),
-            contents: bytemuck::cast_slice(v),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        (buf, v.len() as u32)
-    })
+/// Vertex buffers of some triangles (none if there are none), each no
+/// bigger than the device allows (and never more than 128 MB, which every
+/// card takes): Antonio's laptop closed the app on a 600 MB scene.
+fn upload(device: &wgpu::Device, label: &str, v: &[Vertex]) -> Vec<Triangles> {
+    let size = std::mem::size_of::<Vertex>() as u64;
+    let most = device.limits().max_buffer_size.min(128 << 20);
+    // Whole triangles in each buffer.
+    let per = ((most / size) as usize / 3 * 3).max(3);
+    v.chunks(per)
+        .map(|part| {
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: bytemuck::cast_slice(part),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            (buf, part.len() as u32)
+        })
+        .collect()
 }
 
 /// Mip levels of the textures' pictures.

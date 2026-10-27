@@ -21,7 +21,7 @@ type_params
     logs   material = "Corteza de pino" label "Leña"
     flame  material = "Luz" label "Fuego"
   section "Modelo 3D"
-    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica", "Colgante") = "Nórdico cálido" label "Modelo 3D"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat

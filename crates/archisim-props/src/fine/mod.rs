@@ -220,6 +220,7 @@ pub const KINDS: &[(&str, &[&str])] = &[
             "Rústica",
             "Industrial",
             "Clásica",
+            "Colgante",
         ],
     ),
     ("fine_plant", &["Espatifilo", "Pilea"]),

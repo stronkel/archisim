@@ -617,6 +617,92 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 b.ellipsoid("metal", [x, fy, 0.085], [0.02, 0.02, 0.025]);
             }
         }
+        // Hanging: an open fire in a round steel dish under a flared hood,
+        // both hung from the flue in the middle of the room, nothing
+        // touching the floor (no closed body, no door: the fire is seen
+        // all round).
+        9 => {
+            let c = [0.0, d.max(0.6)];
+            let r = (w * 0.4).clamp(0.4, 0.65);
+            let (dish0, dish1) = (0.42, 0.6);
+            let (hood0, hood1) = (1.12, 1.62_f64.min(h - 0.2));
+            // The dish: steel outside, dark inside, a rolled rim.
+            turned(
+                b,
+                "metal",
+                [c[0], c[1], dish0],
+                &[
+                    (0.0, 0.0),
+                    (r * 0.3, 0.0),
+                    (r * 0.62, 0.035),
+                    (r * 0.88, 0.09),
+                    (r, dish1 - dish0 - 0.006),
+                    (r * 1.01, dish1 - dish0),
+                    (r * 0.97, dish1 - dish0 + 0.004),
+                    (0.0, dish1 - dish0 + 0.004),
+                ],
+                48,
+                0.0,
+            );
+            turned(
+                b,
+                "dark",
+                [c[0], c[1], dish1 - 0.03],
+                &[
+                    (0.0, 0.0),
+                    (r * 0.93, 0.0),
+                    (r * 0.95, 0.0345),
+                    (0.0, 0.0345),
+                ],
+                48,
+                0.0,
+            );
+            if fire {
+                logs(b, c[0], c[1], dish1 - 0.01, r * 1.3);
+                flames(b, c[0] - r * 0.4, c[0] + r * 0.4, c[1], dish1 + 0.03, 0.42);
+            }
+            // The hood: a funnel flaring out from the flue.
+            turned(
+                b,
+                "metal",
+                [c[0], c[1], hood0],
+                &[
+                    (0.0, 0.0),
+                    (r * 0.97, 0.0),
+                    (r * 1.0, 0.01),
+                    (r * 0.97, 0.025),
+                    (r * 0.78, (hood1 - hood0) * 0.12),
+                    (r * 0.56, (hood1 - hood0) * 0.28),
+                    (r * 0.38, (hood1 - hood0) * 0.48),
+                    (r * 0.26, (hood1 - hood0) * 0.7),
+                    (0.1, hood1 - hood0),
+                    (0.0, hood1 - hood0),
+                ],
+                48,
+                0.0,
+            );
+            // Its sooty inside, seen from below.
+            turned(
+                b,
+                "dark",
+                [c[0], c[1], hood0 - 0.003],
+                &[(0.0, 0.0), (r * 0.94, 0.0), (r * 0.94, 0.003), (0.0, 0.003)],
+                48,
+                0.0,
+            );
+            b.cyl("metal", [c[0], c[1], hood1], [c[0], c[1], h], 0.09);
+            // Three slim hangers from the hood's rim down to the dish's.
+            for k in 0..3 {
+                let a = TAU * k as f64 / 3.0 + TAU / 12.0;
+                let (sa, ca) = a.sin_cos();
+                b.cyl(
+                    "metal",
+                    [c[0] + ca * r * 0.93, c[1] + sa * r * 0.93, hood0 + 0.004],
+                    [c[0] + ca * r * 0.97, c[1] + sa * r * 0.97, dish1],
+                    0.006,
+                );
+            }
+        }
         // Nordic: a round black stove on a stone plate, a glass door, its
         // flue up to the ceiling.
         _ => {
@@ -724,7 +810,7 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
 mod tests {
     #[test]
     fn the_collection_fireplaces_are_made() {
-        for style in 1..=8 {
+        for style in 1..=9 {
             let mut p = crate::Params::default();
             p.set("style", style as f64);
             p.set("height", 2.5);

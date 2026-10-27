@@ -2208,6 +2208,7 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Cal blanca", "stone", [238, 234, 226]),
     ("Piedra caliza", "stone", [198, 184, 156]),
     ("Ladrillo visto", "brick", [176, 98, 72]),
+    ("Llama", "other", [255, 158, 58]),
     ("Lino crudo", "fabric", [222, 208, 184]),
     ("Cuero coñac", "other", [146, 84, 48]),
     ("Terciopelo verde botella", "fabric", [44, 82, 64]),

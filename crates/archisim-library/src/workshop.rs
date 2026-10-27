@@ -1861,6 +1861,7 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Nórdico cálido (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Nórdico cálido")),
             ("metal", M("Metal negro")),
             ("stone", M("Piedra gris")),
@@ -1872,6 +1873,7 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Mediterráneo (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Mediterráneo")),
             ("mat", M("Cal blanca")),
             ("stone", M("Terracota")),
@@ -1883,6 +1885,7 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Años 50 (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Años 50")),
             ("mat", M("Ladrillo visto")),
             ("stone", M("Piedra gris")),
@@ -1896,6 +1899,7 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Japandi (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Japandi")),
             ("mat", M("Microcemento")),
             ("stone", M("Piedra gris")),
@@ -1907,6 +1911,7 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Contemporáneo (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Contemporáneo")),
             ("mat", M("Cal blanca")),
             ("metal", M("Metal negro")),
@@ -1919,6 +1924,7 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Rústica (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Rústica")),
             ("mat", M("Cal blanca")),
             ("stone", M("Piedra caliza")),
@@ -1931,7 +1937,11 @@ pub const PIECES: &[Piece] = &[
     Piece {
         name: "Chimenea · Industrial (taller)",
         family: "Chimenea (taller)",
-        values: &[("model3d", T("Industrial")), ("metal", M("Metal negro"))],
+        values: &[
+            ("flame", M("Llama")),
+            ("model3d", T("Industrial")),
+            ("metal", M("Metal negro")),
+        ],
         replaces: Some("Chimenea de obra"),
         most: 40000,
     },
@@ -1939,12 +1949,25 @@ pub const PIECES: &[Piece] = &[
         name: "Chimenea · Clásica (taller)",
         family: "Chimenea (taller)",
         values: &[
+            ("flame", M("Llama")),
             ("model3d", T("Clásica")),
             ("mat", M("Cal blanca")),
             ("stone", M("Mármol")),
             ("metal", M("Latón")),
         ],
         replaces: Some("Chimenea de obra"),
+        most: 40000,
+    },
+    Piece {
+        name: "Chimenea colgante · Nórdico cálido (taller)",
+        family: "Chimenea (taller)",
+        values: &[
+            ("flame", M("Llama")),
+            ("model3d", T("Colgante")),
+            ("height", N(2.7)),
+            ("metal", M("Metal negro")),
+        ],
+        replaces: Some("Chimenea moderna lineal"),
         most: 40000,
     },
     Piece {
