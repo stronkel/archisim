@@ -1973,7 +1973,8 @@ pub fn towel_rail(b: &mut Builder, p: &Params) -> bool {
                 bar(
                     b,
                     "wood",
-                    [x, foot, 0.0],
+                    // Its foot's corner on the floor, not under it.
+                    [x, foot, 0.006],
                     [x, 0.03, top],
                     0.035,
                     [1.0, 0.0, 0.0],
