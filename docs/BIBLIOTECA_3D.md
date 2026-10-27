@@ -364,8 +364,9 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 | Clásica | redonda de mármol sobre pie de fundición de tres garras; sillas de fundición con volutas y cojín | de mimbre con brazos enrollados | chaise de mimbre | octogonal a rayas con faldón y remate | copa de piedra sobre peana con olivo | columnas toscanas con vigas y trepadora |
 
 - Medidas: la mesa con «Largo», «Fondo», «Altura» y «Sillas alrededor» (las redondas toman el menor como diámetro y reparten las sillas en círculo); el sofá con «Ancho», «Fondo», «Altura del asiento», «Plazas» y «Cojines sueltos»; la tumbona con «Colchoneta».
-- Partes de material: `frame`, `metal`, `weave`, `cushion`, `pillow`, `mat` (lona), `accent` (rayas), `top` (tablero), `masonry` (obra), `pot` (parámetro `pot_mat`), `soil`, `stem`, `leaves`, `flowers` y `dark`.
+- Partes de material: `frame`, `metal`, `weave`, `cushion`, `pillow`, `mat` (lona), `accent` (rayas), `top` (tablero), `masonry` (obra), `pot` (parámetro `pot_mat`), `soil`, `stem`, `leaves`, `leaves2`, `flowers` y `dark`; en la pérgola, además, `vine_stem`, `vine`, `vine2` y `bracts`.
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
+- Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`.
 
 ### Paquete 4: la iluminación de las ocho colecciones (27/10/2026)
 

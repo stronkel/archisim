@@ -68,6 +68,11 @@ fn candidates(role: &str) -> &'static [&'static str] {
         // `toy` and `clothes` are also whether there is one.
         "toy" => &["toy_mat", "pillow", "cushion"],
         "clothes" => &["clothes_mat"],
+        // The terraces' climber (paquete 5a).
+        "vine_stem" => &["vine_stem", "stem", "frame"],
+        "vine" => &["vine", "leaves"],
+        "vine2" => &["vine2", "vine", "leaves2", "leaves"],
+        "bracts" => &["bracts", "flowers", "leaves"],
         _ => &[],
     }
 }

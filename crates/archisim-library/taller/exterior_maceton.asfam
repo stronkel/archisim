@@ -24,6 +24,7 @@ type_params
     stem material = "Corteza de pino" label "Tronco y tallos"
     leaves material = "Hoja verde" label "Hojas"
     flowers material = "Lavanda" label "Flores"
+    leaves2 material = "Hoja verde tierna" label "Hojas claras"
     dark material = "Metal negro" label "Base y sombras"
   section "Modelo 3D"
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"

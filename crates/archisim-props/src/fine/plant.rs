@@ -17,17 +17,17 @@ use std::f64::consts::{PI, TAU};
 const POT_SIDES: usize = 28;
 
 /// A small random number generator (the same plant every time).
-struct Rand(u32);
+pub(super) struct Rand(pub(super) u32);
 
 impl Rand {
-    fn next(&mut self) -> f64 {
+    pub(super) fn next(&mut self) -> f64 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 17;
         self.0 ^= self.0 << 5;
         f64::from(self.0) / f64::from(u32::MAX)
     }
 
-    fn range(&mut self, a: f64, b: f64) -> f64 {
+    pub(super) fn range(&mut self, a: f64, b: f64) -> f64 {
         a + (b - a) * self.next()
     }
 }
@@ -129,7 +129,7 @@ fn terracotta(b: &mut Builder, c: P3, r: f64, h: f64, saucer: f64) {
 
 /// The soil in a pot, `ri` inside its wall at `c`: domed a little, with a
 /// few crumbs on it.
-fn soil_in(b: &mut Builder, c: P3, ri: f64, seed: u32) {
+pub(super) fn soil_in(b: &mut Builder, c: P3, ri: f64, seed: u32) {
     turned(
         b,
         "soil",
@@ -162,7 +162,7 @@ fn soil_in(b: &mut Builder, c: P3, ri: f64, seed: u32) {
 
 /// A stalk from `from` growing up and leaning out towards `out` until it
 /// heads `lean` radians off the vertical, `length` long: its points.
-fn stalk(from: P3, out: [f64; 2], lean: f64, length: f64, wobble: u32) -> Vec<P3> {
+pub(super) fn stalk(from: P3, out: [f64; 2], lean: f64, length: f64, wobble: u32) -> Vec<P3> {
     let n = 14;
     let o = [out[0], out[1], 0.0];
     let up = [0.0, 0.0, 1.0];
@@ -181,7 +181,7 @@ fn stalk(from: P3, out: [f64; 2], lean: f64, length: f64, wobble: u32) -> Vec<P3
 }
 
 /// The direction of the stalk's tip.
-fn heading(pts: &[P3]) -> P3 {
+pub(super) fn heading(pts: &[P3]) -> P3 {
     let n = pts.len();
     norm(crate::build::sub(pts[n - 1], pts[n - 2]))
 }

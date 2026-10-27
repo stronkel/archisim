@@ -12,6 +12,7 @@
 //! a table top of another material, `masonry` a built bench, `pot`
 //! (parameter `pot_mat`), `soil`, `stem`, `leaves`, `flowers`, `dark`.
 
+use super::garden_plants;
 use super::shape::{bar, curve, sweep, turned, Cap};
 use super::sofas::compass_leg;
 use super::soft::{knife_pillow, tube, Soft};
@@ -1525,16 +1526,9 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
     let h = p.get("height", 1.4).clamp(0.3, 2.8);
     let r = w / 2.0;
     let c = [0.0, r];
-    // The plant (the library's style) and the height of its pot there.
-    let plant = [3, 1, 4, 3, 1, 4, 3, 1][ix];
-    let their = match plant {
-        1 => (w * 0.85).min(h * 0.4),
-        3 => (h * 0.4).clamp(0.25, 0.9),
-        _ => (w * 0.45).min(h * 0.5),
-    };
     let mine = match ix {
         0 => (h * 0.45).min(0.8),
-        1 => their,
+        1 => (w * 0.85).min(h * 0.4),
         2 => (w * 0.45).min(h * 0.5) + 0.22,
         3 => (h * 0.3).clamp(0.2, 0.45),
         4 => (h * 0.5).min(0.9),
@@ -1686,7 +1680,8 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
             );
         }
     }
-    // Its earth and its plant, moved up onto this pot.
+    // Its earth and its plant: an olive tree, a tuft of grass or a
+    // lavender bush, made leaf by leaf.
     turned(
         b,
         "soil",
@@ -1695,27 +1690,12 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
         24,
         0.0,
     );
-    let mut q = p.clone();
-    q.set("style", plant as f64);
-    let mut other = Builder::default();
-    crate::garden::big_pot(&mut other, &q);
-    let dz = (mine - their) as f32;
-    // Only the plant's own points, moved up.
-    let mut map: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
-    for (role, tris) in other.parts {
-        if role == "pot" || role == "soil" {
-            continue;
-        }
-        for t in tris {
-            let t = t.map(|v| {
-                *map.entry(v).or_insert_with(|| {
-                    let q = other.positions[v as usize];
-                    b.positions.push([q[0], q[1], q[2] + dz]);
-                    (b.positions.len() - 1) as u32
-                })
-            });
-            b.parts.entry(role).or_default().push(t);
-        }
+    let foot = [c[0], c[1], mine - 0.025];
+    let tall = (h - mine).max(0.2);
+    match ix {
+        1 | 4 | 7 => garden_plants::olive(b, foot, tall, (w * 1.5).max(tall * 0.75)),
+        2 | 5 => garden_plants::lavender(b, foot, tall.min(0.75), w * 1.05),
+        _ => garden_plants::grasses(b, foot, tall, w * 1.4),
     }
     true
 }
@@ -1843,47 +1823,32 @@ pub fn pergola(b: &mut Builder, p: &Params) -> bool {
             [x1 + over, d + over, h + beam * 0.8 + 0.02],
             0.0,
         ),
-        // A climber up a post and over the top (rustic, industrial,
-        // classic).
+        // A bougainvillea up a post and along the beam over it
+        // (rustic, industrial, classic).
         5..=7 => {
             let q = posts[3];
-            let pts: Vec<P3> = (0..=24)
+            let around = post / 2.0 + 0.03;
+            let mut path: Vec<P3> = (0..=30)
                 .map(|k| {
-                    let t = k as f64 / 24.0;
-                    let a = t * TAU * 2.5;
+                    let t = k as f64 / 30.0;
+                    let a = t * TAU * 1.5;
                     [
-                        q[0] + (post / 2.0 + 0.04) * a.cos(),
-                        q[1] + (post / 2.0 + 0.04) * a.sin(),
-                        0.015 + t * (h - 0.015),
+                        q[0] + around * a.cos(),
+                        q[1] + around * a.sin(),
+                        0.015 + t * (h + 0.02 - 0.015),
                     ]
                 })
                 .collect();
-            tube(b, "stem", &pts, false, 0.012, 5);
-            for k in 0..22 {
-                let t = k as f64 / 22.0;
-                let a = t * TAU * 2.5;
-                let z = 0.3 + t * (h - 0.3);
-                let rr = post / 2.0 + 0.08;
-                b.ellipsoid(
-                    "leaves",
-                    [q[0] + rr * a.cos(), q[1] + rr * a.sin(), z],
-                    [0.09, 0.09, 0.07],
-                );
+            let top = path[path.len() - 1];
+            for k in 1..=12 {
+                let u = k as f64 / 12.0;
+                path.push([
+                    top[0] + (q[0] * 0.25 - top[0]) * u,
+                    q[1] + 0.05 * (u * 9.0).sin(),
+                    h + 0.03 + 0.03 * (u * 6.0).sin().abs(),
+                ]);
             }
-            // And along the beam over it, towards the middle.
-            for k in 0..14 {
-                let u = k as f64 / 14.0;
-                let x = q[0] * (1.0 - 0.75 * u);
-                b.ellipsoid(
-                    "leaves",
-                    [
-                        x,
-                        q[1] + 0.06 * (u * 11.0).sin(),
-                        h + 0.06 + 0.04 * (u * 7.0).sin(),
-                    ],
-                    [0.13, 0.11, 0.07],
-                );
-            }
+            garden_plants::climber(b, &path, 7 + ix as u32);
         }
         _ => {}
     }

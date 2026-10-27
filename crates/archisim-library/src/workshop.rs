@@ -792,6 +792,10 @@ pub const TERRACES: &[Kitchen] = &[
             ("mat", "Lino crudo"),
             ("accent", "Lino gris"),
             ("pot_mat", "Microcemento"),
+            ("stem", "Espiga"),
+            ("leaves", "Gramínea"),
+            ("leaves2", "Hoja verde tierna"),
+            ("flowers", "Espiga"),
             ("dark", "Metal negro"),
         ],
     },
@@ -808,6 +812,9 @@ pub const TERRACES: &[Kitchen] = &[
             ("top", "Cerámica esmaltada"),
             ("masonry", "Cal blanca"),
             ("pot_mat", "Terracota"),
+            ("stem", "Corteza de olivo"),
+            ("leaves", "Hoja de olivo"),
+            ("leaves2", "Envés de olivo"),
             ("dark", "Fresno oscuro"),
         ],
     },
@@ -822,6 +829,9 @@ pub const TERRACES: &[Kitchen] = &[
             ("mat", "Lino blanco"),
             ("accent", "Terciopelo mostaza"),
             ("pot_mat", "Cerámica turquesa"),
+            ("stem", "Hoja de lavanda"),
+            ("leaves", "Hoja de lavanda"),
+            ("flowers", "Lavanda"),
             ("dark", "Metal negro"),
         ],
     },
@@ -836,6 +846,10 @@ pub const TERRACES: &[Kitchen] = &[
             ("mat", "Lino piedra"),
             ("accent", "Lino gris"),
             ("pot_mat", "Gres"),
+            ("stem", "Espiga"),
+            ("leaves", "Gramínea"),
+            ("leaves2", "Hoja verde tierna"),
+            ("flowers", "Espiga"),
             ("dark", "Fresno oscuro"),
         ],
     },
@@ -850,6 +864,9 @@ pub const TERRACES: &[Kitchen] = &[
             ("accent", "Tela gris"),
             ("top", "Hormigón pulido"),
             ("pot_mat", "Hormigón pulido"),
+            ("stem", "Corteza de olivo"),
+            ("leaves", "Hoja de olivo"),
+            ("leaves2", "Envés de olivo"),
             ("dark", "Metal negro"),
         ],
     },
@@ -863,6 +880,9 @@ pub const TERRACES: &[Kitchen] = &[
             ("mat", "Lino crudo"),
             ("accent", "Lana teja"),
             ("pot_mat", "Roble ahumado"),
+            ("stem", "Hoja de lavanda"),
+            ("leaves", "Hoja de lavanda"),
+            ("flowers", "Lavanda"),
             ("dark", "Piedra gris"),
         ],
     },
@@ -876,6 +896,10 @@ pub const TERRACES: &[Kitchen] = &[
             ("mat", "Tela gris"),
             ("accent", "Tela gris"),
             ("pot_mat", "Chapa teja"),
+            ("stem", "Espiga"),
+            ("leaves", "Gramínea"),
+            ("leaves2", "Hoja verde tierna"),
+            ("flowers", "Espiga"),
             ("dark", "Metal negro"),
         ],
     },
@@ -892,6 +916,9 @@ pub const TERRACES: &[Kitchen] = &[
             ("top", "Mármol"),
             ("masonry", "Piedra caliza"),
             ("pot_mat", "Piedra caliza"),
+            ("stem", "Corteza de olivo"),
+            ("leaves", "Hoja de olivo"),
+            ("leaves2", "Envés de olivo"),
             ("dark", "Fundición"),
         ],
     },
@@ -939,12 +966,19 @@ fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, 
         "Sombrilla",
         &[("width", N(2.2))],
     )?;
-    put(m, parasol, x + 6.1, front + 0.3)?;
+    // Beside the lounger's head, not through it: a parasol on its pole
+    // stands at its side and shades the head; a cantilever one hangs
+    // its canopy over the head from its arm beside it.
+    if matches!(k.collection, "Contemporáneo" | "Industrial") {
+        put(m, parasol, x + 6.1, front + 0.6)?;
+    } else {
+        put(m, parasol, x + 6.85, front + 0.75)?;
+    }
     let pot = kitchen_type(m, k, "Macetón (taller)", "Macetón", &[])?;
-    put(m, pot, x + 8.1, front)?;
+    put(m, pot, x + 8.6, front)?;
     let chair = kitchen_type(m, k, "Silla de exterior (taller)", "Silla de exterior", &[])?;
-    put(m, chair, x + 8.1, front - 1.2)?;
-    Ok(x + 8.7)
+    put(m, chair, x + 8.6, front - 1.2)?;
+    Ok(x + 9.2)
 }
 
 /// The pieces of a workshop bathroom, left to right along its wall:

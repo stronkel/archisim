@@ -6,6 +6,25 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (11) · Tanda 5a, segunda vuelta: sombrillas y plantas de las terrazas
+
+Rama `bloque/paquete-5a` (el mismo pull request). Sin cambios de formato; en el taller.
+
+Antonio: «Por qué las sombrillas aparecen saliendo desde mitad de la butaca. Las macetas y las enredaderas no están al nivel de las plantas que hiciste al principio».
+
+**Hecho**
+- **Sombrillas**: en el taller cada sombrilla estaba en el mismo punto que su tumbona, así que el mástil salía por el centro. Ahora la de mástil se pone al lado del cabecero y le da sombra; las de brazo lateral (contemporánea e industrial) tienen el pie al lado y el toldo sobre el cabecero. El macetón y la silla suelta se apartan medio metro.
+- **Plantas de los macetones**, rehechas hoja a hoja como la espatifilo y la pilea del taller (`fine::garden_plants`): un **olivo** de dos troncos retorcidos con cinco ramas, ramillas y hojas estrechas de dos verdes (haz y envés plateado); **gramíneas** con unas sesenta hojas largas que se arquean hacia fuera y espigas que cabecean; **lavanda** con su mata de hojas grises y tallos con espigas de flores. Mediterránea, contemporánea y clásica llevan olivo; nórdica, japandi e industrial, gramíneas; años 50 y rústica, lavanda.
+- **Trepadora de las pérgolas** (rústica, industrial, clásica): una buganvilla con su tallo leñoso que sube enroscado al pilar y sigue por la viga, con brotes, hojas acorazonadas en sus tallitos, ramas que cuelgan donde va en horizontal y racimos de brácteas fucsia. Tiene sus propios materiales («Tallo de la trepadora», «Hojas de la trepadora», «Flores de la trepadora»), distintos de los de la planta del macetón.
+- Materiales nuevos en la paleta: hoja y envés de olivo, corteza de olivo, gramínea, espiga, hoja de lavanda, corteza, hoja y flor de buganvilla.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión de este pull request y ve a las terrazas.
+2. Mira cada tumbona con su sombrilla: el mástil va al lado del cabecero, no a través de la tumbona.
+3. Acércate a los macetones y a las pérgolas rústica, industrial y clásica: dime si el olivo, las gramíneas, la lavanda y la buganvilla están ya al nivel de las plantas de interior.
+
+---
+
 ## 2026-10-27 (10) · Paquete 5, tanda 5a: jardín y terraza de las ocho colecciones
 
 Rama `bloque/paquete-5a` (sobre `bloque/paquete-4`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
