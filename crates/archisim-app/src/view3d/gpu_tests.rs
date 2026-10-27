@@ -725,6 +725,20 @@ fn demo_cut_pictures() {
             3,
             super::render::CapStyle::Layers,
         ),
+        (
+            "corte-forjado",
+            0.25,
+            0.25,
+            4,
+            super::render::CapStyle::Layers,
+        ),
+        (
+            "corte-muebles",
+            0.6,
+            0.5,
+            5,
+            super::render::CapStyle::Layers,
+        ),
     ] {
         let mut camera = Camera {
             pitch,
@@ -753,15 +767,43 @@ fn demo_cut_pictures() {
             camera.target = glam::Vec3::new(c.x as f32, c.y as f32, (o.sill + 0.6) as f32);
             camera.distance = 3.5;
         }
+        if cut == 4 {
+            // Across the house, close to the ground floor's slab.
+            let z = std::env::var("ARCHISIM_CUT_SLAB_Z")
+                .ok()
+                .and_then(|z| z.parse().ok())
+                .unwrap_or(0.0);
+            camera.target = glam::Vec3::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0, z);
+            camera.distance = 6.0;
+        }
+        if cut == 5 {
+            // Down on the furniture, cut at 0.6 m.
+            let o = m
+                .objects()
+                .find(|o| {
+                    let want = std::env::var("ARCHISIM_CUT_OBJ").unwrap_or("Sof".into());
+                    m.object_type(o.object_type)
+                        .is_some_and(|t| t.name.contains(&want))
+                })
+                .unwrap_or_else(|| m.objects().next().unwrap());
+            camera.target = glam::Vec3::new(o.position.x as f32, o.position.y as f32, 0.4);
+            camera.distance = 4.0;
+        }
         let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
         r.set_scene(&device, &scene);
         let mut b = super::section_box::SectionBox::around(scene.lo, scene.hi);
-        if cut == 0 || cut == 2 || cut == 3 {
+        if cut == 5 {
+            b.hi.z = std::env::var("ARCHISIM_CUT_Z")
+                .ok()
+                .and_then(|z| z.parse().ok())
+                .unwrap_or(0.6);
+        } else if cut == 0 || cut == 2 || cut == 3 {
             b.hi.z = 1.5;
         } else {
             b.hi.x = (lo.x + hi.x) / 2.0;
         }
         r.set_clip(Some((b.lo, b.hi)));
+        r.set_fill(&device, &scene.object_cut_fill(b.lo, b.hi));
         r.set_caps(caps);
         r.render(&device, &queue, &camera, size, 1);
         let (w, h, px) = r.read_pixels(&device, &queue).unwrap();

@@ -176,6 +176,9 @@ pub struct Renderer {
     edges_layout: wgpu::BindGroupLayout,
     targets: Option<Targets>,
     opaque: Option<(wgpu::Buffer, u32)>,
+    /// The filled sections of the objects the section box cuts
+    /// (`Scene::object_cut_fill`).
+    fill: Option<(wgpu::Buffer, u32)>,
     grass: Option<(wgpu::Buffer, u32)>,
     glass: Option<(wgpu::Buffer, u32)>,
     /// What is being stretched, drawn over the scene (whose own copy of
@@ -615,6 +618,7 @@ impl Renderer {
             grass: None,
             glass: None,
             overlay: None,
+            fill: None,
             view_formats,
             clip: None,
             caps: CapStyle::Layers,
@@ -693,6 +697,12 @@ impl Renderer {
                 upload(device, "overlay glass", &o.glass),
             )
         });
+    }
+
+    /// Uploads (or clears) the filled sections of the objects the section
+    /// box cuts.
+    pub fn set_fill(&mut self, device: &wgpu::Device, fill: &[Vertex]) {
+        self.fill = upload(device, "cut fill", fill);
     }
 
     /// Uploads the scene's triangles.
@@ -1018,7 +1028,8 @@ impl Renderer {
                 multiview_mask: None,
             });
             let over = self.overlay.as_ref().and_then(|o| o.0.as_ref());
-            for (buf, n) in self.opaque.iter().chain(over) {
+            let fill = self.fill.as_ref().filter(|_| self.clip.is_some());
+            for (buf, n) in self.opaque.iter().chain(over).chain(fill) {
                 pass.set_pipeline(&self.model_pipeline);
                 pass.set_bind_group(0, &self.globals_bind, &[]);
                 pass.set_bind_group(1, shadow_bind, &[]);

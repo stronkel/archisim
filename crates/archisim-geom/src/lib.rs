@@ -36,6 +36,7 @@ pub mod roof_parts;
 pub mod room;
 pub mod sculpt;
 pub mod shadow;
+pub mod slice;
 pub mod solid;
 pub mod stairs;
 pub mod sweeps;

@@ -233,6 +233,37 @@ fn slab_door_and_window_tools() {
     assert_eq!(h.app.tool, Tool::Arrow);
 }
 
+/// The gallery of types keeps its width while it is open (with folders,
+/// its tiles once widened it at every frame, without end).
+#[test]
+fn type_gallery_keeps_its_width() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    let wall = h.model().walls().next().unwrap().id;
+    h.app.ed.selection.insert(Element::Wall(wall));
+    h.frame();
+    h.frame();
+    let button: Rect = h
+        .ctx
+        .data(|d| d.get_temp(egui::Id::unique("test-type-button")))
+        .expect("the type card is shown");
+    h.click_screen(button.center());
+    let width = |h: &Harness| -> f32 {
+        h.ctx
+            .data(|d| d.get_temp::<Rect>(egui::Id::unique("test-type-gallery")))
+            .expect("the gallery is open")
+            .width()
+    };
+    h.frame();
+    let first = width(&h);
+    for _ in 0..30 {
+        h.frame();
+    }
+    let last = width(&h);
+    assert!((last - first).abs() < 1.0, "{first} → {last}");
+    assert!(last < SCREEN.0 / 2.0, "{last}");
+}
+
 /// Windows centred on the free stretch of a façade, from its end and
 /// spread out with equal piers, chosen on the tool's bar; the spread ones
 /// go in one step to undo.

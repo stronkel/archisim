@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 · v0.73, segunda vuelta: cortes macizos en todo, galería del modelo 3D, navegación 3D
+
+Misma rama `bloque/e16-envolver` (PR #80), con lo que Antonio vio al probarla: los muros se cortan bien, pero faltaban forjados y objetos; la galería de tipos crecía sola; faltaba elegir el estilo 3D viendo la imagen; el zoom 3D se paraba y el desplazamiento con la rueda iba duro. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **Forjados y cubiertas cortados, macizos y por capas**: igual que los muros, cada capa con su color de corte y una línea entre capas (antes se veía el interior: la cara inferior del forjado).
+- **Objetos cortados, macizos**: un mueble, un electrodoméstico, una persona o un coche cortado por la caja de sección enseña su sección rellena en el plano del corte, con el color de corte de sus piezas. Un módulo de cocina cortado a 60 cm se ve como un bloque, no como la caja vacía de sus tableros; un sofá cortado por el respaldo y los brazos sigue enseñando el asiento entre ellos. Las hojas de los árboles se quedan como están.
+- **La galería de tipos ya no crece sola** hacia la derecha (pasaba al elegir tipo de muro, forjado… desde que tiene carpetas).
+- **Estilo 3D en imagen**: en Propiedades de un objeto, «Tipo», las opciones que cambian su modelo 3D (Modelo 3D de muebles y sanitarios, tirador y frentes de la cocina; porte, forma de la copa y follaje de la vegetación) se eligen en una galería con el 3D de cada opción, como las tarjetas de la Maqueta.
+- **Zoom en 3D**: la rueda acerca hacia lo que hay bajo el cursor (no hacia un punto fijo que podía quedar lejos) y nunca se queda parada: cerca de una superficie va despacio, y si se sigue, la atraviesa.
+- **Desplazar con la rueda pulsada**: lo que se agarra va pegado al cursor, esté cerca o lejos.
+
+**Pendiente**
+- La galería con imagen para el dibujo en planta de los árboles (estilo técnico, de presentación, color) y para los demás desplegables: es el bloque E2.
+- Los objetos solo se rellenan con la caja de sección (con «Muros recortados» de la Maqueta los objetos no se cortan, como antes).
+
+**Qué debe probar Antonio**
+1. Vista 3D → caja de sección por un lado del edificio: el forjado y la cubierta deben verse con sus capas, sin huecos. Baja la tapa de la caja a 0,60 m sobre la cocina y el salón: los muebles cortados deben verse macizos.
+2. Selecciona un muro y abre el selector de tipo: la galería debe quedarse quieta.
+3. Selecciona un sofá y, en Propiedades → Tipo, haz clic en «Modelo 3D»: debe salir una imagen por modelo. Lo mismo con un árbol en «Porte» y «Forma de la copa».
+4. En 3D, acércate con la rueda a una ventana o a un mueble: debe acercarse a lo que señalas sin pararse. Desplaza con la rueda pulsada: lo que agarras debe seguir al ratón.
+
+---
+
 ## 2026-10-26 (6) · v0.73: envolver capas y cortes macizos en 3D (E16)
 
 Rama `bloque/e16-envolver`, montada sobre `bloque/e14-modificar` (#78), con pull request para Antonio. **Formato `.archisim` versión 41** (el envolvente de los tipos de muro; abre todas las anteriores). Pedido por Antonio el 26/10/2026: «Envolver en extremos» como Revit, también en las jambas de puertas y ventanas y en 3D; y que lo cortado en 3D se vea macizo.

@@ -1114,6 +1114,106 @@ pub fn slab_solids_in(idx: &WallIndex, id: SlabId) -> Vec<Solid> {
     )
 }
 
+/// The faces between the layers of a slab, seen only through a cut (as
+/// [`wall_inner_faces`]): each boundary twice, facing up in the colour of
+/// the layer under it and down in the colour of the layer over it, so a
+/// cut slab shows each of its layers solid.
+pub fn slab_inner_faces(idx: &WallIndex, id: SlabId) -> Vec<Solid> {
+    let model = idx.model;
+    let (Some(slab), Some(stype)) = (
+        model.slab(id),
+        model.slab(id).and_then(|s| model.slab_type(s.slab_type)),
+    ) else {
+        return Vec::new();
+    };
+    let level = model.level(slab.level).map_or(0.0, |l| l.elevation);
+    let cuts = crate::junctions::slab_wall_cuts(idx, id);
+    let whole: Vec<crate::junctions::Shape> = vec![(slab.outline.clone(), slab.holes.clone())];
+    let regions = if cuts.iter().any(|c| !c.is_empty()) {
+        crate::junctions::slab_layer_regions(&slab.outline, &slab.holes, &cuts)
+    } else {
+        vec![whole; stype.layers.len()]
+    };
+    plate_between(
+        SolidOwner::Slab(id),
+        &regions,
+        &|p| level + slab.top_at(p),
+        &|t| slab.vertical(t),
+        &stype.layers,
+    )
+}
+
+/// The faces between the layers of a roof's planes, as
+/// [`slab_inner_faces`].
+pub fn roof_inner_faces(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
+    let Some(roof) = model.roof(id) else {
+        return Vec::new();
+    };
+    let Some(stype) = model.slab_type(roof.roof_type) else {
+        return Vec::new();
+    };
+    let level = model.level(roof.level).map_or(0.0, |l| l.elevation);
+    let mut out = Vec::new();
+    for plane in roof.planes() {
+        let slope = plane.slope;
+        for (outline, holes) in crate::roof_parts::roof_plane_shapes(roof, &plane) {
+            let regions = vec![vec![(outline, holes)]; stype.layers.len()];
+            out.extend(plate_between(
+                SolidOwner::Roof(id),
+                &regions,
+                &|p| level + roof.base_offset + slope.rise_at(p),
+                &|t| slope.vertical(t),
+                &stype.layers,
+            ));
+        }
+    }
+    out
+}
+
+/// The faces between the layers of a plate whose layers have the shapes
+/// `regions` (top layer first): where two layers meet, a face down in the
+/// upper one's material and a face up in the lower one's.
+fn plate_between(
+    owner: SolidOwner,
+    regions: &[Vec<crate::junctions::Shape>],
+    top: &dyn Fn(Point2) -> f64,
+    vertical: &dyn Fn(f64) -> f64,
+    layers: &[archisim_core::Layer],
+) -> Vec<Solid> {
+    let at = |p: Point2, depth: f64| [p.x, p.y, top(p) - vertical(depth)];
+    let count = layers.len().min(regions.len());
+    let mut out = Vec::new();
+    let mut depth = 0.0;
+    for i in 0..count.saturating_sub(1) {
+        depth += layers[i].thickness;
+        let (upper, lower) = (&layers[i], &layers[i + 1]);
+        if upper.material == lower.material {
+            continue;
+        }
+        let shared = crate::junctions::intersection(&regions[i], &regions[i + 1]);
+        let (mut down, mut up) = (Vec::new(), Vec::new());
+        for (outer, holes) in &shared {
+            let poly = with_holes(outer, holes);
+            for [x, y, z] in triangulate(&poly) {
+                let (a, b, c) = (at(poly[x], depth), at(poly[y], depth), at(poly[z], depth));
+                up.push([a, b, c]);
+                down.push([a, c, b]);
+            }
+        }
+        out.push(Solid {
+            owner,
+            material: upper.material,
+            triangles: down,
+        });
+        out.push(Solid {
+            owner,
+            material: lower.material,
+            triangles: up,
+        });
+    }
+    out
+}
+
 /// Solids of a roof: each plane as an inclined slab over the part of the
 /// roof it covers, its layers square to it, its edges plumb (two planes
 /// meet on the plumb plane through their hip or ridge).

@@ -190,6 +190,9 @@ pub struct View3dState {
     pub atmosphere: Option<crate::view3d::look::Atmosphere>,
     /// The light the Maqueta is seen with: day, evening or night.
     pub light: crate::view3d::look::Light,
+    /// Where and when the wheel last aimed the camera at what is under the
+    /// cursor (looked up again when the cursor moves or after a pause).
+    zoom_aim: Option<(std::time::Instant, Pos2)>,
 }
 
 /// Full textures, except on Intel Macs: their AMD graphics drivers (on
@@ -232,6 +235,7 @@ impl Default for View3dState {
             sun: None,
             atmosphere: None,
             light: Default::default(),
+            zoom_aim: None,
         }
     }
 }
@@ -242,6 +246,9 @@ struct Gpu {
     texture: Option<egui::TextureId>,
     uploaded: u64,
     overlay_uploaded: u64,
+    /// What the filled sections of the cut objects were made for: the
+    /// scene and the section box.
+    fill_for: Option<(u64, [u32; 6])>,
 }
 
 impl View3dState {
@@ -374,6 +381,14 @@ impl View3dState {
         }
     }
 
+    /// Puts the camera's target at the depth of what is under a point of
+    /// the view (if anything), without changing the picture.
+    pub fn aim_at(&mut self, pos: Pos2, size: Vec2) {
+        if let Some((p, _, _)) = self.hit(pos.to_vec2(), size) {
+            self.camera.retarget(p);
+        }
+    }
+
     /// The element (of the project or linked) under a point of the view.
     pub fn pick(&self, pos: Vec2, size: Vec2) -> Option<Owner> {
         let ray = self.camera.ray(
@@ -503,6 +518,7 @@ impl View3dState {
             texture: None,
             uploaded: 0,
             overlay_uploaded: 0,
+            fill_for: None,
         });
         if gpu.uploaded != self.scene_serial {
             crate::crash::stage("3D: subir la escena a la tarjeta gráfica");
@@ -513,6 +529,18 @@ impl View3dState {
             gpu.renderer
                 .set_overlay(&gpu.state.device, self.overlay.as_ref().map(|o| &o.1));
             gpu.overlay_uploaded = self.overlay_serial;
+        }
+        let fill_for = clip.map(|b| {
+            let (lo, hi) = (b.lo.to_array(), b.hi.to_array());
+            (
+                self.scene_serial,
+                [lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]].map(f32::to_bits),
+            )
+        });
+        if gpu.fill_for != fill_for {
+            let fill = clip.map_or_else(Vec::new, |b| self.scene.object_cut_fill(b.lo, b.hi));
+            gpu.renderer.set_fill(&gpu.state.device, &fill);
+            gpu.fill_for = fill_for;
         }
         let wanted = (
             self.camera,
@@ -821,6 +849,13 @@ impl ArchiSimApp {
                 None => v.camera.orbit(delta),
             }
         } else if response.dragged_by(PointerButton::Middle) {
+            // What was grabbed follows the cursor, however far the target
+            // was: aim at it when the drag starts.
+            if response.drag_started_by(PointerButton::Middle) {
+                if let Some(p) = ctx.input(|i| i.pointer.press_origin()) {
+                    v.aim_at((p - rect.min).to_pos2(), size);
+                }
+            }
             v.camera.pan(delta, size.y);
         }
         if response.double_clicked_by(PointerButton::Middle) {
@@ -831,6 +866,16 @@ impl ArchiSimApp {
             let factor = (-scroll.y / 300.0).exp() / zoom;
             if (factor - 1.0).abs() > 1e-6 {
                 let local = pos - rect.min;
+                // Towards what is under the cursor: looked up once per
+                // turn of the wheel, not at every step of it.
+                let now = std::time::Instant::now();
+                let fresh = v.zoom_aim.is_some_and(|(t, p)| {
+                    now.duration_since(t).as_secs_f32() < 0.4 && p.distance(pos) < 6.0
+                });
+                if !fresh {
+                    v.aim_at(local.to_pos2(), size);
+                }
+                v.zoom_aim = Some((now, pos));
                 v.camera.zoom_at(
                     factor,
                     glam::Vec2::new(local.x, local.y),

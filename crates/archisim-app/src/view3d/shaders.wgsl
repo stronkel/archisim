@@ -112,6 +112,8 @@ fn vs_model(v: VertexIn) -> VertexOut {
     out.soft = select(select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5), 3.0, v.bias > 3.5);
     // -1: a face between two layers of a wall, only seen through a cut.
     out.soft = select(out.soft, -1.0, v.bias < -1.5);
+    // -2: the filled section of a cut object, on the face of the box.
+    out.soft = select(out.soft, -2.0, v.bias < -2.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -562,11 +564,11 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
     // Selected: the distance is written negative, for the contour pass
     // to outline it.
     let mark = select(1.0, -1.0, i.picked > 0.5);
-    if (front && i.soft < -0.5) {
+    if (front && i.soft < -0.5 && i.soft > -1.5) {
         // Between two layers: never seen from the outside.
         discard;
     }
-    if (!front) {
+    if (!front || i.soft < -1.5) {
         // The inside of a solid shows only through a cut.
         if (!kept.on) {
             discard;

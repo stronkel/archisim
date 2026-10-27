@@ -143,6 +143,16 @@ impl Scene {
         let between: Vec<_> = model
             .walls()
             .flat_map(|w| archisim_geom::solid::wall_inner_faces(&idx, w.id))
+            .chain(
+                model
+                    .slabs()
+                    .flat_map(|sl| archisim_geom::solid::slab_inner_faces(&idx, sl.id)),
+            )
+            .chain(
+                model
+                    .roofs()
+                    .flat_map(|r| archisim_geom::solid::roof_inner_faces(model, r.id)),
+            )
             .collect();
         s.add_solids(
             model,
@@ -596,6 +606,106 @@ impl Scene {
             }
         }
         best
+    }
+
+    /// The cut faces of the objects a section box from `lo` to `hi` cuts
+    /// (furniture, appliances, people, cars): on each face of the box that
+    /// goes through one, its section filled whole, in the cut colour of
+    /// the parts it was cut from, so that a kitchen unit reads as a solid
+    /// block and not as the empty box of its panels. Leaves are left as
+    /// they are (their back faces show the cut).
+    pub fn object_cut_fill(&self, lo: Vec3, hi: Vec3) -> Vec<Vertex> {
+        use archisim_geom::slice::{filled_section, Plane};
+        struct Part {
+            tris: Vec<([[f64; 3]; 3], [u32; 3])>,
+            lo: Vec3,
+            hi: Vec3,
+            cut: [f32; 4],
+            select: f32,
+        }
+        let mut parts: Vec<(Element, Part)> = Vec::new();
+        for (t, owner) in self.opaque.as_chunks::<3>().0.iter().zip(&self.owners) {
+            let Owner::Model(e @ Element::Object(_)) = *owner else {
+                continue;
+            };
+            // Leaves, what glows and the grass keep their own look.
+            if t[0].bias > 0.5 {
+                continue;
+            }
+            let i = match parts.iter().position(|(o, _)| *o == e) {
+                Some(i) => i,
+                None => {
+                    parts.push((
+                        e,
+                        Part {
+                            tris: Vec::new(),
+                            lo: Vec3::splat(f32::MAX),
+                            hi: Vec3::splat(f32::MIN),
+                            cut: t[0].cut,
+                            select: t[0].select,
+                        },
+                    ));
+                    parts.len() - 1
+                }
+            };
+            let part = &mut parts[i].1;
+            for v in t {
+                part.lo = part.lo.min(Vec3::from_array(v.pos));
+                part.hi = part.hi.max(Vec3::from_array(v.pos));
+            }
+            part.tris
+                .push((t.map(|v| v.pos.map(f64::from)), t[0].cap.map(f32::to_bits)));
+        }
+        // The box's faces, each with its directions along it so that
+        // u × v points out of the box, towards what was cut away.
+        let faces: [(usize, f32, Vec3, Vec3); 6] = [
+            (0, lo.x, Vec3::Z, Vec3::Y),
+            (0, hi.x, Vec3::Y, Vec3::Z),
+            (1, lo.y, Vec3::X, Vec3::Z),
+            (1, hi.y, Vec3::Z, Vec3::X),
+            (2, lo.z, Vec3::Y, Vec3::X),
+            (2, hi.z, Vec3::X, Vec3::Y),
+        ];
+        let mut out = Vec::new();
+        for (_, part) in &parts {
+            // Only what is partly inside the box.
+            if (0..3).any(|a| part.hi[a] < lo[a] || part.lo[a] > hi[a]) {
+                continue;
+            }
+            for (axis, at, u, v) in faces {
+                if !(part.lo[axis] < at && at < part.hi[axis]) {
+                    continue;
+                }
+                let mut origin = Vec3::ZERO;
+                origin[axis] = at;
+                let plane = Plane {
+                    origin: origin.as_dvec3().to_array(),
+                    u: u.as_dvec3().to_array(),
+                    v: v.as_dvec3().to_array(),
+                };
+                let normal = u.cross(v);
+                for region in filled_section(&part.tris, plane) {
+                    let cap = region.tag.map(f32::from_bits);
+                    let at3 = |p: archisim_core::Point2| origin + u * p.x as f32 + v * p.y as f32;
+                    for [a, b, c] in archisim_geom::solid::triangulate(&region.outline) {
+                        for k in [a, b, c] {
+                            out.push(Vertex {
+                                pos: at3(region.outline[k]).to_array(),
+                                normal: normal.to_array(),
+                                color: [cap[0], cap[1], cap[2], 1.0],
+                                // A cut face: shaded as the caps are.
+                                bias: -3.0,
+                                tex: [0.0, 0.0],
+                                cut: part.cut,
+                                select: part.select,
+                                cap,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Every triangle, opaque then glass, as points.
