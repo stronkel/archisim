@@ -406,7 +406,28 @@ pub fn olive(b: &mut Builder, base: P3, tall: f64, spread: f64) {
                 0.35,
             );
         }
+        // Inside, the leaves behind the leaves: lumps of foliage along
+        // every third twig, so that the crown reads as a mass and the
+        // light does not come through it everywhere.
+        if k % 3 == 0 {
+            let (q, _) = at_along(&twig, 0.55);
+            let r = rx * rnd.range(0.24, 0.32);
+            b.blob(
+                "leaves",
+                q,
+                [r, 0.0, 0.0],
+                [0.0, r * rnd.range(0.8, 1.0), 0.0],
+                [0.0, 0.0, r * 0.8],
+            );
+        }
     }
+    b.blob(
+        "leaves",
+        [base[0], base[1], crown_z],
+        [rx * 0.6, 0.0, 0.0],
+        [0.0, rx * 0.6, 0.0],
+        [0.0, 0.0, rz * 0.6],
+    );
     soft(b);
 }
 
@@ -415,7 +436,7 @@ pub fn olive(b: &mut Builder, base: P3, tall: f64, spread: f64) {
 /// the inner ones upright, and plumes on thin stalks above them.
 pub fn grasses(b: &mut Builder, base: P3, tall: f64, spread: f64) {
     let mut rnd = Rand(0x1f83_d9ab);
-    let n = 130;
+    let n = 190;
     let golden = PI * (3.0 - 5f64.sqrt());
     for i in 0..n {
         let k = i as f64 / (n - 1) as f64;
@@ -428,13 +449,13 @@ pub fn grasses(b: &mut Builder, base: P3, tall: f64, spread: f64) {
         let dir = add(mul(out, lean.sin()), [0.0, 0.0, lean.cos()]);
         let mut l = Blade::new(
             tall * rnd.range(0.7, 1.0) * (1.0 - 0.3 * k),
-            rnd.range(0.012, 0.018),
+            rnd.range(0.018, 0.026),
             Form::Strap,
         );
         l.droop = (0.3 + 2.2 * k * (spread / tall).min(1.5)) * rnd.range(0.8, 1.2);
         l.twist = rnd.range(-0.9, 0.9);
         l.fold = 0.35;
-        l.rows = 7;
+        l.rows = 6;
         // The upper face looks in, towards the middle: it bends out.
         let up = add(mul(out, -lean.cos()), [0.0, 0.0, lean.sin()]);
         let role = if rnd.next() < 0.3 {
@@ -529,9 +550,17 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
         blade(b, role, sub(q, mul(d, 0.02)), d, [0.0, 0.0, 1.0], &l);
     }
     // The flower stalks, from inside the mound, fanning out over it.
-    for i in 0..72 {
+    // Inside, the mound itself, under its leaves.
+    b.blob(
+        "leaves",
+        [base[0], base[1], base[2] + mound * 0.2],
+        [r * 0.85, 0.0, 0.0],
+        [0.0, r * 0.85, 0.0],
+        [0.0, 0.0, mound * 0.72],
+    );
+    for i in 0..60 {
         let a = i as f64 * golden;
-        let k = ((i as f64 + 0.5) / 72.0).sqrt();
+        let k = ((i as f64 + 0.5) / 60.0).sqrt();
         let out = [a.cos(), a.sin(), 0.0];
         let from = [
             base[0] + out[0] * r * 0.45 * k,
@@ -545,7 +574,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
         sweep(b, "stem", &pts, |_| 0.0014, 3, Cap::Flat, Cap::Flat);
         let top = pts[pts.len() - 1];
         let (_, d) = at_along(&pts, 1.0);
-        let spike_len = tall * 0.13;
+        let spike_len = tall * 0.17;
         let spike: Vec<P3> = (0..=8)
             .map(|j| add(top, mul(d, spike_len * j as f64 / 8.0)))
             .collect();
@@ -554,7 +583,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
             b,
             "flowers",
             &spike,
-            |t| 0.0075 * (1.0 - 0.45 * t) * (0.75 + 0.25 * (t * 8.0 * PI).cos().abs()),
+            |t| 0.0095 * (1.0 - 0.45 * t) * (0.75 + 0.25 * (t * 8.0 * PI).cos().abs()),
             6,
             Cap::Round(1.0),
             Cap::Round(1.0),
@@ -563,11 +592,11 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
     soft(b);
 }
 
-/// A bougainvillea growing along `path`: its woody stem, bare and
+/// A bougainvillea growing along `path` from the ground at `ground`: its woody stem, bare and
 /// twisting near the ground; leaves on it thickening as it climbs; and,
 /// where it runs level (along a beam), dense foliage with shoots hanging
 /// from it and clusters of magenta bracts.
-pub fn climber(b: &mut Builder, path: &[P3], seed: u32) {
+pub fn climber(b: &mut Builder, path: &[P3], ground: f64, seed: u32) {
     if path.len() < 2 {
         return;
     }
@@ -581,9 +610,8 @@ pub fn climber(b: &mut Builder, path: &[P3], seed: u32) {
         Cap::Flat,
         Cap::Round(1.0),
     );
-    let ground = path[0][2];
     let leaf = {
-        let mut l = Blade::new(0.08, 0.055, Form::Heart);
+        let mut l = Blade::new(0.095, 0.065, Form::Heart);
         l.droop = 0.5;
         l.fold = 0.2;
         l.rows = 4;
@@ -631,7 +659,7 @@ pub fn climber(b: &mut Builder, path: &[P3], seed: u32) {
         // A shoot now and then: up the post short, hanging from the beam
         // long, with leaves along it and bracts at its end.
         let shoot_every = if level {
-            2
+            3
         } else if height > 0.9 {
             4
         } else {
@@ -746,7 +774,7 @@ mod tests {
             })
             .collect();
         path.extend((1..=10).map(|k| [-0.1 * k as f64, 0.0, 2.45]));
-        climber(&mut b, &path, 1);
+        climber(&mut b, &path, 0.0, 1);
         let n = b.triangle_count();
         assert!((4_000..30_000).contains(&n), "trepadora: {n}");
     }

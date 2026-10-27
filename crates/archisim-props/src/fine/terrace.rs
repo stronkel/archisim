@@ -1839,16 +1839,34 @@ pub fn pergola(b: &mut Builder, p: &Params) -> bool {
                     ]
                 })
                 .collect();
+            // Then along the outer face of the back beam, nearly to its
+            // far end.
             let top = path[path.len() - 1];
-            for k in 1..=12 {
-                let u = k as f64 / 12.0;
+            let face = q[1] + 0.08;
+            let reach = x1 - 0.35 - top[0];
+            for k in 1..=24 {
+                let u = k as f64 / 24.0;
                 path.push([
-                    top[0] + (q[0] * 0.25 - top[0]) * u,
-                    q[1] + 0.05 * (u * 9.0).sin(),
-                    h + 0.03 + 0.03 * (u * 6.0).sin().abs(),
+                    top[0] + reach * u,
+                    face + 0.03 * (u * 13.0).sin(),
+                    h - beam * 0.35 + 0.04 * (u * 9.0).sin(),
                 ]);
             }
-            garden_plants::climber(b, &path, 7 + ix as u32);
+            garden_plants::climber(b, &path, 0.0, 7 + ix as u32);
+            // And an arm over the top of the rafters, towards the front.
+            let over: Vec<P3> = (0..=14)
+                .map(|k| {
+                    let u = k as f64 / 14.0;
+                    [
+                        top[0] + 0.25 + 0.6 * u + 0.05 * (u * 7.0).sin(),
+                        q[1] - (q[1] - d * 0.3) * u,
+                        h + depth + 0.025,
+                    ]
+                })
+                .collect();
+            let mut arm = vec![top];
+            arm.extend(over);
+            garden_plants::climber(b, &arm, 0.0, 31 + ix as u32);
         }
         _ => {}
     }
