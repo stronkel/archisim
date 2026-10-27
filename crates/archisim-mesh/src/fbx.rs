@@ -876,8 +876,10 @@ fn mesh_of(
     let v = g.array("Vertices").unwrap_or_default();
     let idx = g.int_array("PolygonVertexIndex").unwrap_or_default();
     let points: Vec<[f32; 3]> = v
-        .chunks_exact(3)
-        .map(|p| to_ours(apply(m, [p[0], p[1], p[2]])))
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|p| to_ours(apply(m, *p)))
         .collect();
     let uv = g
         .child("LayerElementUV")
