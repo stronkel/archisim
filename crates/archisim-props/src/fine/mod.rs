@@ -25,6 +25,7 @@ pub mod sofas;
 pub mod soft;
 pub mod storage;
 pub mod tables;
+pub mod terrace;
 pub mod textiles;
 
 use crate::build::{Builder, P3};

@@ -42,6 +42,13 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/luz_aplique.asfam"),
     include_str!("../taller/luz_pie.asfam"),
     include_str!("../taller/luz_mesa.asfam"),
+    include_str!("../taller/exterior_mesa.asfam"),
+    include_str!("../taller/exterior_silla.asfam"),
+    include_str!("../taller/exterior_sofa.asfam"),
+    include_str!("../taller/exterior_tumbona.asfam"),
+    include_str!("../taller/exterior_sombrilla.asfam"),
+    include_str!("../taller/exterior_maceton.asfam"),
+    include_str!("../taller/exterior_pergola.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -773,6 +780,173 @@ fn place_lights(
     Ok(x + 3.2)
 }
 
+/// The terraces of the eight collections (paquete 5a).
+pub const TERRACES: &[Kitchen] = &[
+    Kitchen {
+        collection: "Nórdico cálido",
+        materials: &[
+            ("frame", "Roble claro"),
+            ("metal", "Metal negro"),
+            ("cushion", "Lino arena"),
+            ("pillow", "Terciopelo salvia"),
+            ("mat", "Lino crudo"),
+            ("accent", "Lino gris"),
+            ("pot_mat", "Microcemento"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Mediterráneo",
+        materials: &[
+            ("frame", "Madera encalada"),
+            ("metal", "Hierro forjado"),
+            ("weave", "Enea"),
+            ("cushion", "Lino blanco"),
+            ("pillow", "Lino añil"),
+            ("mat", "Paja"),
+            ("accent", "Lino añil"),
+            ("top", "Cerámica esmaltada"),
+            ("masonry", "Cal blanca"),
+            ("pot_mat", "Terracota"),
+            ("dark", "Fresno oscuro"),
+        ],
+    },
+    Kitchen {
+        collection: "Años 50",
+        materials: &[
+            ("frame", "Teca"),
+            ("metal", "Acero inoxidable"),
+            ("weave", "Terciopelo mostaza"),
+            ("cushion", "Lana oliva"),
+            ("pillow", "Terciopelo mostaza"),
+            ("mat", "Lino blanco"),
+            ("accent", "Terciopelo mostaza"),
+            ("pot_mat", "Cerámica turquesa"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Japandi",
+        materials: &[
+            ("frame", "Roble ahumado"),
+            ("metal", "Metal negro"),
+            ("weave", "Lino piedra"),
+            ("cushion", "Lino piedra"),
+            ("pillow", "Lana carbón"),
+            ("mat", "Lino piedra"),
+            ("accent", "Lino gris"),
+            ("pot_mat", "Gres"),
+            ("dark", "Fresno oscuro"),
+        ],
+    },
+    Kitchen {
+        collection: "Contemporáneo",
+        materials: &[
+            ("frame", "Roble claro"),
+            ("metal", "Metal negro"),
+            ("cushion", "Tela gris"),
+            ("pillow", "Terciopelo rosa"),
+            ("mat", "Tela gris"),
+            ("accent", "Tela gris"),
+            ("top", "Hormigón pulido"),
+            ("pot_mat", "Hormigón pulido"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Rústica",
+        materials: &[
+            ("frame", "Pino viejo"),
+            ("metal", "Hierro forjado"),
+            ("cushion", "Lino crudo"),
+            ("pillow", "Lana teja"),
+            ("mat", "Lino crudo"),
+            ("accent", "Lana teja"),
+            ("pot_mat", "Roble ahumado"),
+            ("dark", "Piedra gris"),
+        ],
+    },
+    Kitchen {
+        collection: "Industrial",
+        materials: &[
+            ("frame", "Roble ahumado"),
+            ("metal", "Metal negro"),
+            ("cushion", "Tela gris"),
+            ("pillow", "Pana azul petróleo"),
+            ("mat", "Tela gris"),
+            ("accent", "Tela gris"),
+            ("pot_mat", "Chapa teja"),
+            ("dark", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Clásica",
+        materials: &[
+            ("frame", "Lacado marfil"),
+            ("metal", "Fundición"),
+            ("weave", "Ratán"),
+            ("cushion", "Lino blanco"),
+            ("pillow", "Terciopelo verde botella"),
+            ("mat", "Lino blanco"),
+            ("accent", "Terciopelo verde botella"),
+            ("top", "Mármol"),
+            ("masonry", "Piedra caliza"),
+            ("pot_mat", "Piedra caliza"),
+            ("dark", "Fundición"),
+        ],
+    },
+];
+
+/// Places a collection's terrace from `x` along `y = front` (looking
+/// south): the table with its chairs under the pergola, the sofa, the
+/// sun lounger under its parasol and a big pot. Returns where it ends.
+fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: std::f64::consts::PI,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let pergola = kitchen_type(
+        m,
+        k,
+        "Pérgola (taller)",
+        "Pérgola",
+        &[("width", N(3.2)), ("depth", N(3.0))],
+    )?;
+    put(m, pergola, x + 1.6, front)?;
+    let table = kitchen_type(
+        m,
+        k,
+        "Mesa de exterior (taller)",
+        "Mesa de exterior",
+        &[("width", N(1.6)), ("depth", N(0.9)), ("chairs", N(4.0))],
+    )?;
+    put(m, table, x + 1.6, front - 1.05)?;
+    let sofa = kitchen_type(m, k, "Sofá de exterior (taller)", "Sofá de exterior", &[])?;
+    put(m, sofa, x + 4.3, front)?;
+    let lounger = kitchen_type(m, k, "Tumbona (taller)", "Tumbona", &[])?;
+    put(m, lounger, x + 6.1, front)?;
+    let parasol = kitchen_type(
+        m,
+        k,
+        "Sombrilla (taller)",
+        "Sombrilla",
+        &[("width", N(2.2))],
+    )?;
+    put(m, parasol, x + 6.1, front + 0.3)?;
+    let pot = kitchen_type(m, k, "Macetón (taller)", "Macetón", &[])?;
+    put(m, pot, x + 8.1, front)?;
+    let chair = kitchen_type(m, k, "Silla de exterior (taller)", "Silla de exterior", &[])?;
+    put(m, chair, x + 8.1, front - 1.2)?;
+    Ok(x + 8.7)
+}
+
 /// The pieces of a workshop bathroom, left to right along its wall:
 /// family, label, how far it stands from the one before (m) and its
 /// values. Mirror and towel rail hang over the washbasin's place.
@@ -1203,6 +1377,10 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The terraces, further east, without walls.
+    for k in TERRACES {
+        x = place_terrace(&mut m, k, x, wall)? + 1.8;
+    }
     // The bathrooms, further east.
     for k in BATHROOMS {
         let end = place_bathroom(&mut m, k, x, wall)?;
@@ -1395,6 +1573,42 @@ mod tests {
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
                 assert!(
                     (50..=30_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every terrace of the workshop is made in its collection.
+    #[test]
+    fn the_workshop_terraces_are_made() {
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    [
+                        "Pérgola",
+                        "Mesa de exterior",
+                        "Sofá de exterior",
+                        "Tumbona",
+                        "Sombrilla",
+                        "Macetón",
+                        "Silla de exterior",
+                    ]
+                    .iter()
+                    .any(|n| t.name.starts_with(n))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 7, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (50..=40_000).contains(&tris),
                     "{}: {tris}",
                     m.object_type(t).unwrap().name
                 );

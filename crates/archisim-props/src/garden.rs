@@ -36,6 +36,10 @@ fn lean(b: &mut Builder, role: &'static str, a: P3, e: P3, w: f64, t: f64) {
 /// frame with a sling, 3 a daybed with a thick mattress and cushions. The
 /// head is at the back (`y` 0); `cushion` lays a pad on 1 and 2.
 pub fn lounger(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5).
+    if crate::fine::terrace::lounger(b, p) {
+        return;
+    }
     let w = p.get("width", 0.7).clamp(0.5, 2.0);
     let l = p.get("depth", 2.0).clamp(1.6, 2.4);
     let x0 = -w / 2.0;
@@ -196,6 +200,10 @@ fn pad(b: &mut Builder, w: f64, back_foot: P3, back_top: P3, seat: f64, end: f64
 /// Parasols: 1 round on a central pole, 2 square hanging from an arm
 /// beside it (cantilever), 3 of straw with a fringe (as on the beach).
 pub fn parasol(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5).
+    if crate::fine::terrace::parasol(b, p) {
+        return;
+    }
     let s = p.get("width", 2.5).clamp(1.2, 4.0);
     let h = p.get("height", 2.4).clamp(1.8, 2.9);
     let r = s / 2.0;
@@ -311,6 +319,10 @@ fn canopy(b: &mut Builder, c: P3, r: f64, rise: f64, n: usize, turn: f64) {
 /// amphora, 3 a fibre-cement cube with tall grasses, 4 a low bowl of
 /// lavender. `height` is of the whole (pot and plant).
 pub fn big_pot(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5).
+    if crate::fine::terrace::big_pot(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6).clamp(0.25, 1.4);
     let h = p.get("height", 1.4).clamp(0.3, 2.8);
     let r = w / 2.0;
@@ -464,6 +476,10 @@ pub fn big_pot(b: &mut Builder, p: &Params) {
 /// louvres; 3 of wood with a reed mat on top and a climber up a post.
 /// `height` is of its top.
 pub fn pergola(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5).
+    if crate::fine::terrace::pergola(b, p) {
+        return;
+    }
     let w = p.get("width", 3.0).clamp(1.5, 8.0);
     let d = p.get("depth", 3.0).clamp(1.5, 8.0);
     let h = p.get("height", 2.5).clamp(2.1, 2.95);

@@ -1,0 +1,43 @@
+family "Macetón (taller)"
+  category street
+  host none
+  version 1
+  description "Macetón como lo hace cada colección, con su planta (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.25..1.40 label "Diámetro"
+    height length = 1.40 range 0.30..2.80 label "Altura con la planta"
+  section "Materiales"
+    frame material = "Teca" label "Madera o estructura"
+    metal material = "Metal negro" label "Metal"
+    weave material = "Ratán" label "Cuerda o fibra"
+    cushion material = "Tela de exterior" label "Cojines"
+    pillow material = "Lino añil" label "Cojines sueltos"
+    mat material = "Tela de exterior" label "Lona"
+    accent material = "Lino añil" label "Rayas"
+    top material = "Mármol" label "Tablero"
+    masonry material = "Cal blanca" label "Obra"
+    pot_mat material = "Terracota" label "Maceta"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Corteza de pino" label "Tronco y tallos"
+    leaves material = "Hoja verde" label "Hojas"
+    flowers material = "Lavanda" label "Flores"
+    dark material = "Metal negro" label "Base y sombras"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, width, height * 0.4) material pot_mat
+
+plan 1:50
+  repeat i in 0..20
+    let t0 = 6.283185307 * i / 20
+    let t1 = 6.283185307 * (i + 1) / 20
+    line (width / 2 * cos(t0), width / 2 + width / 2 * sin(t0)) to (width / 2 * cos(t1), width / 2 + width / 2 * sin(t1)) pen view
+
+outputs
+  generator = "props:big_pot"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

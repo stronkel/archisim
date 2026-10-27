@@ -1,0 +1,39 @@
+family "Silla de exterior (taller)"
+  category street
+  host none
+  version 1
+  description "Silla de jardín o terraza como la hace cada colección (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    height length = 0.45 range 0.38..0.50 label "Altura del asiento"
+  section "Materiales"
+    frame material = "Teca" label "Madera o estructura"
+    metal material = "Metal negro" label "Metal"
+    weave material = "Ratán" label "Cuerda o fibra"
+    cushion material = "Tela de exterior" label "Cojines"
+    pillow material = "Lino añil" label "Cojines sueltos"
+    mat material = "Tela de exterior" label "Lona"
+    accent material = "Lino añil" label "Rayas"
+    top material = "Mármol" label "Tablero"
+    masonry material = "Cal blanca" label "Obra"
+    pot_mat material = "Terracota" label "Maceta"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Corteza de pino" label "Tronco y tallos"
+    leaves material = "Hoja verde" label "Hojas"
+    flowers material = "Lavanda" label "Flores"
+    dark material = "Metal negro" label "Base y sombras"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-0.24, 0, 0) to (0.24, 0.5, 0.88) material frame
+
+plan 1:50
+  polygon (-0.48 / 2, 0) (0.48 / 2, 0) (0.48 / 2, 0.5) (-0.48 / 2, 0.5) pen view
+
+outputs
+  generator = "props:garden_chair"
+  ifc_class = "IfcFurniture"
+  ifc_type = "CHAIR"

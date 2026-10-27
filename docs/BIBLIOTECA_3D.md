@@ -348,6 +348,25 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### Paquete 5, tanda 5a: jardín y terraza de las ocho colecciones (27/10/2026)
+
+En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres piezas nuevas (`garden_table` con sus sillas, `garden_chair`, `garden_sofa`) y ocho modelos más, uno por colección, en las familias de siempre «Tumbona» (`lounger`), «Sombrilla» (`parasol`), «Macetón» (`big_pot`) y «Pérgola» (`pergola`), después de los suyos.
+
+| Colección | Mesa y sillas | Sofá | Tumbona | Sombrilla | Macetón | Pérgola |
+|---|---|---|---|---|---|---|
+| Nórdico cálido | tablero de listones sobre patas cónicas; sillas de listones | bastidor de madera con laterales de listones sobre patas abiertas | de listones con respaldo | redonda de lona con mástil de madera | cilindro de hormigón claro con gramíneas | de madera, vigas y viguetas |
+| Mediterráneo | redonda de azulejo sobre pie de forja; sillas de forja con asiento y respaldo de cuerda | banco de obra encalado | encalada con cuerda | de paja con flecos sobre base de barro | de barro con olivo | encalada con cañizo |
+| Años 50 | redonda de teca sobre tres patas de compás; sillas de tubo con cordones | bastidor de tubo bajo sobre patas abiertas | de tubo con cordones | de gajos a rayas con faldón | cuenco esmaltado sobre tres patas, con lavanda | de acero fino con lamas |
+| Japandi | tablones sobre dos caballetes; sillas bajas con respaldo de cuerda | tarima baja de madera | cama baja con colchón y rulo | cuadrada de lona | cuenco de gres con gramíneas | de madera con listones juntos |
+| Contemporáneo | tablero de piedra sobre bastidor negro fino; sillas de aluminio con lona | bastidor de aluminio con brazos planos | de aluminio con lona | descentrada, cuadrada | jardinera cuadrada alta con olivo | de aluminio con lamas orientables |
+| Rústica | tablones sobre caballetes en aspa; sillas de pino macizo | bastidor de vigas viejas | de madera con ruedas | de lona con flecos sobre base de piedra | media barrica con flejes y lavanda | de vigas gruesas con trepadora |
+| Industrial | tablones sobre bastidor de tubo cuadrado; sillas de tubo con listones | tubo cuadrado de acero | de tubo con malla | descentrada, de acero | caja de chapa con gramíneas | de perfiles en H con trepadora |
+| Clásica | redonda de mármol sobre pie de fundición de tres garras; sillas de fundición con volutas y cojín | de mimbre con brazos enrollados | chaise de mimbre | octogonal a rayas con faldón y remate | copa de piedra sobre peana con olivo | columnas toscanas con vigas y trepadora |
+
+- Medidas: la mesa con «Largo», «Fondo», «Altura» y «Sillas alrededor» (las redondas toman el menor como diámetro y reparten las sillas en círculo); el sofá con «Ancho», «Fondo», «Altura del asiento», «Plazas» y «Cojines sueltos»; la tumbona con «Colchoneta».
+- Partes de material: `frame`, `metal`, `weave`, `cushion`, `pillow`, `mat` (lona), `accent` (rayas), `top` (tablero), `masonry` (obra), `pot` (parámetro `pot_mat`), `soil`, `stem`, `leaves`, `flowers` y `dark`.
+- Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
+
 ### Paquete 4: la iluminación de las ocho colecciones (27/10/2026)
 
 En el taller (rama `bloque/paquete-4`, `archisim_props::fine::lighting`), cinco piezas nuevas con un modelo por colección. Lo que se enciende de noche es el papel `shade` (pantalla, difusor opal, papel, ratán) y `bulb` (bombilla desnuda, llama de vela): `archisim_geom::solid::glow_materials` los da por encendidos en `pendant`, `ceiling_light`, `wall_light`, `floor_lamp` y `table_lamp`.

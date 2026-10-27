@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (10) · Paquete 5, tanda 5a: jardín y terraza de las ocho colecciones
+
+Rama `bloque/paquete-5a` (sobre `bloque/paquete-4`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, con los paquetes 2 a 4 esperando su revisión: «Paquete 5: exterior y urbano». Esta tanda es el jardín y la terraza; lo urbano va en la 5b.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 5, tanda 5a»)
+- Tres piezas nuevas con un modelo por colección: **mesa de exterior** (con sus sillas alrededor), **silla de exterior** y **sofá de exterior** (con cojines de asiento, de respaldo y sueltos).
+- «Tumbona», «Sombrilla», «Macetón» y «Pérgola» ganan ocho modelos más, uno por colección, después de los suyos (los proyectos de antes no cambian). El macetón lleva las plantas de siempre (olivo, gramíneas, lavanda) en la maceta de cada colección.
+- Ocho terrazas en el taller: la pérgola con la mesa y sus sillas debajo, el sofá, la tumbona con su sombrilla, el macetón y una silla suelta.
+
+**Pendiente**
+- Tanda 5b: lo urbano (bancos, papeleras, farolas, jardineras, bolardos).
+- La revisión de Antonio de los paquetes 2 a 5.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks) y abre `taller.archisim` (te lo mando).
+2. En la Maqueta, las terrazas están entre las lámparas y los baños: mira mesa, sillas, sofá, tumbona, sombrilla, macetón y pérgola de cada colección.
+3. Selecciona una mesa de exterior y cambia «Sillas alrededor» y el largo: las sillas se reparten de nuevo.
+4. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-27 (9) · Paquete 4: la iluminación de las ocho colecciones
 
 Rama `bloque/paquete-4` (sobre `bloque/paquete-3`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca. El IFC gana `IfcLightFixture` para las familias que lo piden (validado).
