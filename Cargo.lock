@@ -385,6 +385,8 @@ version = "0.70.0"
 dependencies = [
  "archisim-core",
  "archisim-mesh",
+ "archisim-props",
+ "serde_json",
 ]
 
 [[package]]
@@ -392,6 +394,7 @@ name = "archisim-mesh"
 version = "0.70.0"
 dependencies = [
  "i_overlay",
+ "miniz_oxide 0.8.9",
  "png",
  "roxmltree",
  "serde_json",

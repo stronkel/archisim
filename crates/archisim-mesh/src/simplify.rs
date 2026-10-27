@@ -1,5 +1,5 @@
-//! Lighter versions of a mesh for far views (levels of detail), by
-//! vertex clustering: the vertices in each cell of a grid become one (the
+//! Lighter versions of a mesh for far views (levels of detail); when
+//! collapsing edges cannot get there, by vertex clustering: the vertices in each cell of a grid become one (the
 //! one farthest from the middle of the model, so that its size and
 //! outline stay), with their average colour, and the triangles left flat
 //! go away.
@@ -113,13 +113,19 @@ pub fn simplify(mesh: &Mesh, target: usize) -> Mesh {
 pub const LEVELS: [usize; 2] = [4_000, 600];
 
 /// The model and its lighter versions, each clearly lighter than the one
-/// before: the first is the model itself.
+/// before: the first is the model itself. Each is made from the one before
+/// by collapsing edges ([`decimate`](crate::decimate)), which keeps the
+/// shape; a model of loose pieces that will not go down that way (leaves
+/// of a tree) is clustered on a grid.
 pub fn levels_of_detail(mesh: &Mesh) -> Vec<Mesh> {
     let mut out = vec![mesh.clone()];
     for target in LEVELS {
         let last = out.last().map_or(0, |m| m.triangle_count());
         if last > target * 3 / 2 {
-            let m = simplify(mesh, target);
+            let from = out.last().expect("the model is there");
+            let m = crate::decimate(from, target)
+                .filter(|m| m.triangle_count() < last)
+                .unwrap_or_else(|| simplify(mesh, target));
             if m.triangle_count() < last {
                 out.push(m);
             }

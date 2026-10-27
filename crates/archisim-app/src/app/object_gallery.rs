@@ -93,6 +93,9 @@ pub struct FolderObjects {
 pub struct FolderModel {
     pub path: std::path::PathBuf,
     pub kind: archisim_library::imported::ModelKind,
+    /// How it is brought in: who made it (a design piece) and how much
+    /// of it is kept.
+    pub options: archisim_library::imported::ImportOptions,
     pub model: std::sync::Arc<archisim_core::Model>,
     pub object_type: ObjectTypeId,
 }
@@ -137,6 +140,59 @@ pub fn kind_of(path: &std::path::Path) -> archisim_library::imported::ModelKind 
     archisim_library::imported::ModelKind::from_folder(&words)
 }
 
+/// What the library says of a model file: its name, kind and how it is
+/// brought in. A design piece has a file next to it with who made it
+/// (`<name>.json`, written when it was imported); a file in
+/// «Diseño/<Fabricante>/» without one is taken as that manufacturer's.
+pub fn folder_model_info(
+    path: &std::path::Path,
+) -> (
+    String,
+    archisim_library::imported::ModelKind,
+    archisim_library::imported::ImportOptions,
+) {
+    use archisim_library::imported::{ImportOptions, Maker, DEFAULT_DETAIL, DETAILS};
+    let mut name = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().replace(['_', '-'], " "))
+        .unwrap_or_default();
+    let mut kind = kind_of(path);
+    let mut options = ImportOptions::default();
+    let side = path.with_extension("json");
+    if let Some((maker, n, k)) = std::fs::read_to_string(&side)
+        .ok()
+        .and_then(|t| Maker::from_json(&t))
+    {
+        if let Some(n) = n {
+            name = n;
+        }
+        if let Some(k) = k {
+            kind = k;
+        }
+        if !maker.is_empty() {
+            options.maker = Some(maker);
+        }
+    } else {
+        let parts: Vec<String> = path
+            .iter()
+            .map(|c| c.to_string_lossy().into_owned())
+            .collect();
+        if let Some(i) = parts.iter().rposition(|p| p == "Diseño") {
+            if i + 2 < parts.len() {
+                options.maker = Some(Maker {
+                    manufacturer: parts[i + 1].clone(),
+                    product: name.clone(),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    if options.maker.is_some() {
+        options.detail = DETAILS[DEFAULT_DETAIL].1;
+    }
+    (name, kind, options)
+}
+
 /// A model of the folder, read now or taken from the cache.
 fn folder_model(path: &std::path::Path) -> Option<FolderModel> {
     let changed = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
@@ -145,19 +201,21 @@ fn folder_model(path: &std::path::Path) -> Option<FolderModel> {
             return m.clone();
         }
     }
-    let kind = kind_of(path);
+    let (name, kind, options) = folder_model_info(path);
     let made = archisim_mesh::read_file(path, Default::default())
         .ok()
         .and_then(|mesh| {
             let mut model = archisim_core::Model::new("Modelo de la biblioteca");
             model.add_level("Planta baja", 0.0);
-            let name = path.file_stem()?.to_string_lossy().replace(['_', '-'], " ");
             let source = path.file_name()?.to_string_lossy().into_owned();
-            let r = archisim_library::imported::import_mesh(&mut model, mesh, &name, &source, kind)
-                .ok()?;
+            let r = archisim_library::imported::import_mesh_with(
+                &mut model, mesh, &name, &source, kind, &options,
+            )
+            .ok()?;
             Some(FolderModel {
                 path: path.to_path_buf(),
                 kind,
+                options,
                 model: std::sync::Arc::new(model),
                 object_type: r.object_type,
             })
@@ -232,6 +290,21 @@ fn size_note(lo: [f64; 2], hi: [f64; 2]) -> String {
     )
 }
 
+/// «Cassina · diseño de Le Corbusier, 1928»: who made a design piece.
+pub fn maker_note(m: &archisim_library::imported::Maker) -> String {
+    let mut s = m.manufacturer.clone();
+    if !m.designer.is_empty() {
+        if !s.is_empty() {
+            s.push_str(" · ");
+        }
+        s.push_str(&format!("diseño de {}", m.designer));
+        if !m.year.is_empty() {
+            s.push_str(&format!(", {}", m.year));
+        }
+    }
+    s
+}
+
 /// One type the gallery offers.
 pub(super) struct Item {
     pub pick: ObjectPick,
@@ -295,11 +368,15 @@ impl ArchiSimApp {
                     .map(|x| (x.source.clone(), x.items.len(), x.fit));
                 let key = format!("object:{family}:{:?}:{drawn:?}:{sig}", t.values);
                 let thumb = thumbs.get(ctx, key, || crate::type_preview::object_model(model, t));
+                let note = match archisim_library::imported::maker_of(model, t.id) {
+                    Some(mk) => format!("{size} · {}", maker_note(&mk)),
+                    None => format!("{size} · {family}"),
+                };
                 items.push(Item {
                     pick: ObjectPick::Project(t.id),
                     own_plan: t.symbol.is_some(),
                     name: t.name.clone(),
-                    note: format!("{size} · {family}"),
+                    note,
                     category,
                     folder,
                     family: family.clone(),
@@ -465,13 +542,20 @@ impl ArchiSimApp {
                 let thumb = thumbs.get(ctx, format!("objmesh:{}:{sig}", fm.path.display()), || {
                     crate::type_preview::object_model(m, t)
                 });
+                let (note, folder) = match &fm.options.maker {
+                    Some(mk) => (format!("{size} · {}", maker_note(mk)), "Diseño"),
+                    None => (
+                        format!("{size} · modelo 3D ({file}) · biblioteca del estudio"),
+                        "Modelos 3D",
+                    ),
+                };
                 items.push(Item {
                     pick: ObjectPick::FolderModel(i),
                     own_plan: false,
                     name: t.name.clone(),
-                    note: format!("{size} · modelo 3D ({file}) · biblioteca del estudio"),
+                    note,
                     category,
-                    folder: "Modelos 3D".into(),
+                    folder: folder.into(),
                     family: String::new(),
                     thumb,
                 });
@@ -813,7 +897,10 @@ impl ArchiSimApp {
                         return None;
                     }
                 };
-                match self.ed.import_mesh(mesh, &name, &source, fm.kind) {
+                match self
+                    .ed
+                    .import_mesh_with(mesh, &name, &source, fm.kind, &fm.options)
+                {
                     Ok(r) => {
                         self.say(format!(
                             "«{name}» (modelo 3D) cargado de la biblioteca en el proyecto."

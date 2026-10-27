@@ -66,6 +66,9 @@ fn main() -> eframe::Result {
             "ifc" => app.import_path(&path),
             "dxf" => app.open_survey(&path),
             "asequipo" => app.open_team(&path),
+            // A 3D model (or a manufacturer's .zip): a new project and the
+            // dialog to bring it in.
+            _ if archisim_mesh::is_model_file(&path) => app.open_files(vec![path]),
             _ => app.open_path(&path),
         }
     }

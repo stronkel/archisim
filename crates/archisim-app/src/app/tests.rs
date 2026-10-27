@@ -3185,7 +3185,7 @@ fn imported_models_are_placed_and_drawn() {
     h.app.open_files(vec![fixtures.join("arbol.dae")]);
     let imp = h.app.mesh_import.as_ref().expect("the dialog");
     assert_eq!(imp.name, "arbol");
-    let mesh = imp.read.as_ref().unwrap();
+    let mesh = &imp.read.as_ref().unwrap().mesh;
     let (lo, hi) = mesh.bounds();
     assert!((hi[2] - lo[2] - 4.0).abs() < 1e-3, "inches read as such");
     h.app.mesh_import.as_mut().unwrap().kind = archisim_library::imported::ModelKind::Vegetation;
@@ -3231,6 +3231,62 @@ fn imported_models_are_placed_and_drawn() {
             .def()
             .category,
         "furniture"
+    );
+}
+
+/// A design piece as its manufacturer hands it out: the download's .zip
+/// dropped on the window. The dialog takes the FBX inside (with its
+/// texture next to it in the zip), says what else it brings, turns it
+/// round and asks who made it; the type keeps it, its family goes to the
+/// «Diseño» folder, and the IFC carries it in the standard manufacturer
+/// property set.
+#[test]
+fn a_design_piece_from_its_manufacturers_zip() {
+    let mut h = Harness::new(Editor::new_project());
+    let zip = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../archisim-mesh/tests/fixtures/butaca.zip");
+    h.app.open_files(vec![zip]);
+    let imp = h.app.mesh_import.as_mut().expect("the dialog");
+    let l = imp.read.as_ref().unwrap();
+    assert_eq!(l.entry.as_deref(), Some("Butaca Ejemplo/FBX/butaca.fbx"));
+    assert_eq!(l.models.len(), 2);
+    let (lo, hi) = l.mesh.bounds();
+    imp.name = "Butaca Uno".into();
+    imp.turns = 1;
+    imp.design = true;
+    imp.maker.manufacturer = "Muebles Ejemplo".into();
+    imp.maker.designer = "Ana Pérez".into();
+    imp.maker.year = "1958".into();
+    h.frame();
+    h.app.import_mesh_now();
+    for _ in 0..50 {
+        if h.app.mesh_import.is_none() {
+            break;
+        }
+        h.frame();
+    }
+    assert!(h.app.mesh_import.is_none(), "brought in");
+    let t = h
+        .app
+        .object_settings
+        .object_type
+        .expect("the object tool takes it");
+    let m = h.model();
+    let maker = archisim_library::imported::maker_of(m, t).expect("who made it");
+    assert_eq!(maker.manufacturer, "Muebles Ejemplo");
+    let ty = m.object_type(t).unwrap();
+    assert_eq!(m.family(ty.family).unwrap().def().folder, "Diseño");
+    // Turned a quarter: its width is the file's depth.
+    let (blo, bhi) = m.object_type_box(t).unwrap();
+    assert!(((bhi[0] - blo[0]) - (hi[1] - lo[1]) as f64).abs() < 0.02);
+    h.click_at(p(2.0, 2.0));
+    assert_eq!(h.model().objects().count(), 1);
+    let ifc = archisim_ifc::export_ifc(h.model(), &Default::default());
+    assert!(ifc.contains("'Pset_ManufacturerTypeInformation'"));
+    assert!(ifc.contains("IFCLABEL('Muebles Ejemplo')"));
+    assert!(
+        ifc.contains("'ArchiSim_Design'"),
+        "the designer and the year"
     );
 }
 

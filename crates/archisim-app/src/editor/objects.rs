@@ -232,17 +232,19 @@ impl Editor {
 }
 
 impl Editor {
-    /// A 3D model from another program as a new object type of the
-    /// project (one undoable step).
-    pub fn import_mesh(
+    /// Brings a 3D model in as a new object type, turned, lightened and
+    /// with who made it as `options` say (one undoable step; see
+    /// [`archisim_library::imported::import_mesh_with`]).
+    pub fn import_mesh_with(
         &mut self,
         mesh: archisim_mesh::Mesh,
         name: &str,
         source: &str,
         kind: archisim_library::imported::ModelKind,
+        options: &archisim_library::imported::ImportOptions,
     ) -> EditResult<archisim_library::imported::Imported> {
         self.transact("Importar modelo 3D", |m| {
-            archisim_library::imported::import_mesh(m, mesh, name, source, kind)
+            archisim_library::imported::import_mesh_with(m, mesh, name, source, kind, options)
                 .map_err(archisim_core::ModelError::InvalidMesh)
         })
     }

@@ -6,6 +6,38 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (4) · Diseño: los modelos de los fabricantes
+
+Rama `bloque/diseno` (sobre `bloque/biblioteca-paquete-1`), con pull request. Sin cambios de formato; el IFC gana `Pset_ManufacturerTypeInformation` en las piezas de diseño (validado).
+
+Antonio eligió seguir con la importación de modelos de diseño (lo acordado tras el paquete 1) antes del paquete 2.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Diseño: los modelos oficiales de los fabricantes»)
+- ArchiSim lee **FBX** (binario y de texto), **3DS** y **STL**, además de OBJ, glTF y COLLADA, y abre directamente el **.zip** que se descarga del fabricante (elige el mejor modelo de dentro, encuentra sus texturas y dice qué trae que no lee: SketchUp, Revit, ArchiCAD…).
+- Unidades supuestas por el tamaño cuando el fichero no las dice (OBJ, 3DS, STL).
+- **Aligerar sin perder la forma**: los modelos de cientos de miles de caras bajan a 50.000 (o lo que se elija) colapsando aristas; también las versiones de lejos de todos los modelos importados, que antes se deformaban.
+- Diálogo de importar nuevo: planta y alzado con el frente marcado y botones de girar, detalle, y «Pieza de diseño de un fabricante» con fabricante, modelo, referencia, diseñador, año y enlace, que van al tipo y al IFC; «Guardarla en mi biblioteca» la deja en `Modelos 3D/Diseño/<Fabricante>/`.
+- Pestaña **Diseño** en Amueblar (Maqueta) y carpeta «Diseño» en la galería, con el fabricante y el diseñador en la nota.
+- Materiales del modelo con la textura de ArchiSim que dice su nombre (cuero, tela, madera, mármol…), en español, inglés, italiano, alemán y francés.
+- `archisim diseno <modelo o .zip> [carpeta] [Fabricante]`: lo mismo por línea de órdenes, diciendo qué ha leído.
+- Comparativa de aligerado (sofá clásico de 33.948 caras a 4.000 y 1.200, antes y ahora) enviada a Antonio.
+
+**Pendiente**
+- SketchUp (.skp), Rhino (.3dm) y DWG 3D no se leen (formatos cerrados o sin especificación libre): hay que pedir al fabricante FBX, OBJ o 3DS.
+- Aligerar un modelo muy pesado que se deja tal cual en la carpeta de la biblioteca se hace al abrir la galería (unos segundos la primera vez); lo que se importa con el diálogo ya se guarda aligerado.
+- Paquete «Diseño» de clásicos de dominio público (Thonet nº 14, Calvet, Hill House…) y paquete 2 (cocina y baño).
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks).
+2. Descarga de la web de un fabricante el modelo 3D de una pieza (por ejemplo Vitra, Fritz Hansen, Cassina, Knoll, Kartell…) en FBX, OBJ o 3DS; el .zip tal cual vale.
+3. Arrastra el .zip a la ventana de ArchiSim (o Archivo → Importar modelo 3D). Mira en el diálogo: medidas, unidades, planta y alzado. Si el frente no queda abajo en la planta, pulsa «Girar».
+4. Activa «Pieza de diseño de un fabricante», rellena fabricante, modelo y diseñador, deja «Guardarla en mi biblioteca» e importa. Colócala y mírala en la Maqueta.
+5. Exporta el IFC y comprueba en tu visor (o en ArchiCAD) que la pieza lleva fabricante y modelo.
+6. En un proyecto nuevo, Maqueta → Amueblar → Diseño: la pieza debe estar ahí.
+7. Si algo se lee mal, pásame el nombre del fabricante y el formato, o ejecuta `archisim diseno ruta\al\fichero.zip salida` y pégame lo que dice.
+
+---
+
 ## 2026-10-27 (3) · El paquete 1 entra en la biblioteca
 
 Rama `bloque/biblioteca-paquete-1` (sobre `bloque/rendimiento-3d`), con pull request. Sin cambios de formato; el IFC solo cambia por los modelos nuevos (validado).

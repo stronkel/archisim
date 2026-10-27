@@ -59,6 +59,7 @@ impl CatalogGroup {
                 "Dormitorio",
                 "Despacho",
                 "Decoración",
+                "Diseño",
                 "Otros",
             ],
             Self::Outside => &[
@@ -91,6 +92,8 @@ fn room_of(folder: &str) -> &'static str {
         | "Decoración"
         | "Cuadros y espejos"
         | "Cojines y mantas" => "Decoración",
+        // The manufacturers' pieces each user keeps in their library.
+        "Diseño" => "Diseño",
         // In «Exterior».
         "Jardín y terraza" => "Jardín y terraza",
         _ => "Otros",
@@ -1386,6 +1389,7 @@ mod tests {
         assert_eq!(room_of("Mesas"), "Comedor");
         assert_eq!(room_of("Iluminación"), "Decoración");
         assert_eq!(room_of("Modelos 3D"), "Otros");
+        assert_eq!(room_of("Diseño"), "Diseño");
         assert_eq!(
             snap_to_grid(Point2::new(1.26, -0.74)),
             Point2::new(1.5, -0.5)

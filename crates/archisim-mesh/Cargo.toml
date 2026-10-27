@@ -1,6 +1,6 @@
 [package]
 name = "archisim-mesh"
-description = "Reading 3D models (OBJ, glTF, COLLADA) as coloured triangle meshes, with lighter levels of detail and their outline in plan"
+description = "Reading 3D models (FBX, OBJ, glTF, COLLADA, 3DS, STL, inside a zip too) as coloured triangle meshes, with lighter levels of detail and their outline in plan"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -14,3 +14,4 @@ roxmltree = "0.21"
 png = "0.18"
 zune-jpeg = "0.5"
 i_overlay = "9.1"
+miniz_oxide = "0.8"

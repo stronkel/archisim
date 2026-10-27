@@ -1,11 +1,20 @@
 //! 3D models from other programs (SketchUp, Blender, a manufacturer's
 //! catalogue) turned into object types of the project: the model with its
-//! lighter versions, a material per material of the model, and a family
+//! lighter versions, a material per material of the model (of the kind
+//! its name says: leather, fabric, wood, metal, glass…), and a family
 //! written for it whose plan symbol is the model's outline seen from
 //! above, scaled with the type's height, as for any other object.
+//!
+//! A design piece of a manufacturer (an LC2 of Cassina, a Togo of Ligne
+//! Roset) keeps who made it ([`Maker`]): its type has the manufacturer,
+//! the model, the reference, the designer, the year and the link, and the
+//! IFC carries them in `Pset_ManufacturerTypeInformation`. Its file is the
+//! manufacturer's, never ArchiSim's: each user keeps it in the «Diseño»
+//! folder of their own library.
 
 use archisim_core::{
-    CutPattern, MaterialId, MeshGroup, MeshLevel, MeshModel, Model, ObjectTypeId, Values,
+    Appearance, CutPattern, MaterialId, MeshGroup, MeshLevel, MeshModel, Model, ObjectTypeId,
+    TextureKind, Value, Values,
 };
 use archisim_mesh::Mesh;
 
@@ -99,6 +108,314 @@ impl ModelKind {
     }
 }
 
+/// Who made a piece, and which one it is.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Maker {
+    pub manufacturer: String,
+    /// Its name in the catalogue («LC2», «Togo»).
+    pub product: String,
+    /// The manufacturer's reference (its article number).
+    pub reference: String,
+    pub designer: String,
+    pub year: String,
+    /// Its page on the manufacturer's site.
+    pub url: String,
+}
+
+impl Maker {
+    /// Its fields: type parameter, label, property of the IFC.
+    pub const FIELDS: [(&'static str, &'static str, &'static str); 6] = [
+        (
+            "manufacturer",
+            "Fabricante",
+            "Pset_ManufacturerTypeInformation.Manufacturer",
+        ),
+        (
+            "product",
+            "Modelo",
+            "Pset_ManufacturerTypeInformation.ModelLabel",
+        ),
+        (
+            "reference",
+            "Referencia",
+            "Pset_ManufacturerTypeInformation.ModelReference",
+        ),
+        ("designer", "Diseño de", "ArchiSim_Design.Designer"),
+        ("year", "Año", "ArchiSim_Design.Year"),
+        ("url", "Enlace", "ArchiSim_Design.URL"),
+    ];
+
+    pub fn field(&self, i: usize) -> &str {
+        match i {
+            0 => &self.manufacturer,
+            1 => &self.product,
+            2 => &self.reference,
+            3 => &self.designer,
+            4 => &self.year,
+            _ => &self.url,
+        }
+    }
+
+    pub fn field_mut(&mut self, i: usize) -> &mut String {
+        match i {
+            0 => &mut self.manufacturer,
+            1 => &mut self.product,
+            2 => &mut self.reference,
+            3 => &mut self.designer,
+            4 => &mut self.year,
+            _ => &mut self.url,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        (0..6).all(|i| self.field(i).trim().is_empty())
+    }
+
+    /// The file kept next to a design piece in the library: its name, its
+    /// kind and who made it.
+    pub fn to_json(&self, name: &str, kind: ModelKind) -> String {
+        let mut o = serde_json::Map::new();
+        o.insert("nombre".into(), name.into());
+        o.insert("tipo".into(), kind.label().into());
+        for (i, (key, _, _)) in Self::FIELDS.iter().enumerate() {
+            if !self.field(i).is_empty() {
+                o.insert((*key).into(), self.field(i).into());
+            }
+        }
+        serde_json::to_string_pretty(&serde_json::Value::Object(o)).unwrap_or_default() + "\n"
+    }
+
+    /// What [`to_json`](Self::to_json) wrote: who made it, the piece's
+    /// name and its kind (if given).
+    pub fn from_json(text: &str) -> Option<(Maker, Option<String>, Option<ModelKind>)> {
+        let v: serde_json::Value = serde_json::from_str(text).ok()?;
+        let o = v.as_object()?;
+        let mut m = Maker::default();
+        for (i, (key, _, _)) in Self::FIELDS.iter().enumerate() {
+            if let Some(s) = o.get(*key).and_then(|x| x.as_str()) {
+                *m.field_mut(i) = s.to_string();
+            }
+        }
+        let name = o.get("nombre").and_then(|x| x.as_str()).map(String::from);
+        let kind = o
+            .get("tipo")
+            .and_then(|x| x.as_str())
+            .and_then(|t| ModelKind::ALL.into_iter().find(|k| k.label() == t));
+        Some((m, name, kind))
+    }
+}
+
+/// Who made the piece of an object type, if it says.
+pub fn maker_of(model: &Model, object_type: ObjectTypeId) -> Option<Maker> {
+    let t = model.object_type(object_type)?;
+    let mut m = Maker::default();
+    for (i, (key, _, _)) in Maker::FIELDS.iter().enumerate() {
+        if let Some(Value::Text(s)) = t.values.get(*key) {
+            *m.field_mut(i) = s.clone();
+        }
+    }
+    (!m.is_empty()).then_some(m)
+}
+
+/// How a model is brought in.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ImportOptions {
+    /// Quarter turns (anticlockwise seen from above) that bring its front
+    /// to where the file's front is taken to be (−y).
+    pub turns: u8,
+    /// At most these faces in its nearest version (none: as it is).
+    pub detail: Option<usize>,
+    /// Who made it: a design piece.
+    pub maker: Option<Maker>,
+}
+
+impl ImportOptions {
+    /// The same, for a model already [`prepare`]d.
+    pub fn prepared(&self) -> ImportOptions {
+        ImportOptions {
+            turns: 0,
+            detail: None,
+            maker: self.maker.clone(),
+        }
+    }
+}
+
+/// How much detail is kept of a heavy model: its name and the faces of its
+/// nearest version (none: all).
+pub const DETAILS: [(&str, Option<usize>); 4] = [
+    ("Muy alto (150.000 caras)", Some(150_000)),
+    ("Alto (50.000 caras)", Some(50_000)),
+    ("Medio (15.000 caras)", Some(15_000)),
+    ("Todo, sin aligerar", None),
+];
+
+/// The detail of [`DETAILS`] for a model brought in without choosing.
+pub const DEFAULT_DETAIL: usize = 1;
+
+/// What a material of a model is by its name (manufacturers name them:
+/// «Leather_Cognac», «Oak natural», «Chrome»…), in Spanish, English,
+/// Italian, German or French: its category and its texture in 3D.
+pub fn finish_of(name: &str) -> (&'static str, Option<TextureKind>) {
+    let n = name
+        .to_lowercase()
+        .replace(['_', '-', '.'], " ")
+        .replace('á', "a")
+        .replace('é', "e")
+        .replace('í', "i")
+        .replace('ó', "o")
+        .replace('ú', "u");
+    // Short words at the start of a word («lack» is not in «black»), the
+    // others anywhere («nogal» in «nogalcanaletto»).
+    let words: Vec<&str> = n.split_whitespace().collect();
+    let has = |w: &[&str]| {
+        w.iter().any(|x| {
+            if x.chars().count() <= 4 {
+                words.iter().any(|t| t.starts_with(x))
+            } else {
+                n.contains(x)
+            }
+        })
+    };
+    if has(&["glass", "vidrio", "cristal", "vetro", "glas", "verre"]) {
+        ("glass", None)
+    } else if has(&["boucle"]) {
+        ("fabric", Some(TextureKind::Boucle))
+    } else if has(&["velvet", "terciopelo", "velluto", "samt", "velours"]) {
+        ("fabric", Some(TextureKind::Velvet))
+    } else if has(&[
+        "wool", "lana", "knit", "punto", "wolle", "laine", "cashmere",
+    ]) {
+        ("fabric", Some(TextureKind::Knit))
+    } else if has(&[
+        "leather", "cuero", "piel", "pelle", "leder", "cuir", "nappa", "aniline", "suede",
+    ]) {
+        ("fabric", None)
+    } else if has(&[
+        "fabric",
+        "tela",
+        "textil",
+        "tejido",
+        "tessuto",
+        "stoff",
+        "tissu",
+        "linen",
+        "lino",
+        "cotton",
+        "algodon",
+        "cotone",
+        "upholster",
+        "tapiz",
+        "cushion",
+        "cojin",
+        "cuscino",
+        "kvadrat",
+        "felt",
+        "fieltro",
+    ]) {
+        ("fabric", Some(TextureKind::Linen))
+    } else if has(&[
+        "rattan", "ratan", "cane", "wicker", "mimbre", "rush", "enea", "bamboo", "bambu", "straw",
+        "paja", "paglia", "vienna", "weave",
+    ]) {
+        ("wood", Some(TextureKind::Wicker))
+    } else if has(&["marble", "marmol", "marmo", "marmor", "marbre"]) {
+        ("stone", Some(TextureKind::Marble))
+    } else if has(&["terrazzo", "terrazo"]) {
+        ("stone", Some(TextureKind::Terrazzo))
+    } else if has(&[
+        "stone",
+        "piedra",
+        "pietra",
+        "stein",
+        "pierre",
+        "granite",
+        "granito",
+        "travertin",
+        "slate",
+        "pizarra",
+    ]) {
+        ("stone", Some(TextureKind::Stone))
+    } else if has(&[
+        "lacquer", "lacado", "laccato", "lack", "laque", "painted", "pintado",
+    ]) {
+        ("wood", None)
+    } else if has(&[
+        "wood",
+        "madera",
+        "legno",
+        "holz",
+        "bois",
+        "oak",
+        "roble",
+        "rovere",
+        "eiche",
+        "chene",
+        "walnut",
+        "nogal",
+        "noce",
+        "nuss",
+        "noyer",
+        "ash",
+        "fresno",
+        "frassino",
+        "esche",
+        "beech",
+        "haya",
+        "faggio",
+        "buche",
+        "teak",
+        "teca",
+        "pine",
+        "pino",
+        "maple",
+        "arce",
+        "cherry",
+        "cerezo",
+        "elm",
+        "olmo",
+        "birch",
+        "abedul",
+        "veneer",
+        "chapa",
+        "plywood",
+        "contrachapado",
+        "multiplex",
+    ]) {
+        ("wood", Some(TextureKind::Wood))
+    } else if has(&[
+        "chrome", "cromo", "chrom", "steel", "acero", "acciaio", "stahl", "acier", "inox",
+        "alumin", "brass", "laton", "ottone", "messing", "copper", "cobre", "rame", "bronze",
+        "bronce", "iron", "hierro", "ferro", "eisen", "metal", "nickel", "niquel",
+    ]) {
+        ("metal", None)
+    } else if has(&["concrete", "hormigon", "cemento", "beton"]) {
+        ("concrete", Some(TextureKind::Concrete))
+    } else if has(&["ceramic", "ceramica", "porcelain", "porcelana", "keramik"]) {
+        ("ceramic", None)
+    } else if has(&[
+        "plastic",
+        "plastico",
+        "polypropylene",
+        "polipropileno",
+        "abs",
+        "resin",
+        "resina",
+        "acrylic",
+        "acrilico",
+        "polyamide",
+    ]) {
+        ("plastic", None)
+    } else if has(&["rubber", "goma", "caucho", "gomma"]) {
+        ("rubber", None)
+    } else if has(&[
+        "leaf", "leaves", "hoja", "foliage", "plant", "planta", "grass", "cesped",
+    ]) {
+        ("vegetation", None)
+    } else {
+        ("other", None)
+    }
+}
+
 /// What was brought in, for the report.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Imported {
@@ -141,13 +458,45 @@ fn free_name(taken: impl Fn(&str) -> bool, base: &str) -> String {
 /// it).
 pub fn import_mesh(
     model: &mut Model,
-    mut mesh: Mesh,
+    mesh: Mesh,
     name: &str,
     source: &str,
     kind: ModelKind,
 ) -> Result<Imported, String> {
+    import_mesh_with(model, mesh, name, source, kind, &ImportOptions::default())
+}
+
+/// The model turned and lightened as `options` say (the slow part of
+/// bringing a heavy model in, which the application does aside); with
+/// [`ImportOptions::prepared`] it is not done again.
+pub fn prepare(mut mesh: Mesh, options: &ImportOptions) -> Mesh {
+    for _ in 0..options.turns % 4 {
+        for p in &mut mesh.positions {
+            *p = [-p[1], p[0], p[2]];
+        }
+    }
+    if let Some(n) = options.detail {
+        if mesh.triangle_count() > n {
+            mesh = archisim_mesh::decimate(&mesh, n)
+                .unwrap_or_else(|| archisim_mesh::simplify(&mesh, n));
+        }
+    }
+    mesh
+}
+
+/// [`import_mesh`] turned, lightened and with who made it, as `options`
+/// say.
+pub fn import_mesh_with(
+    model: &mut Model,
+    mut mesh: Mesh,
+    name: &str,
+    source: &str,
+    kind: ModelKind,
+    options: &ImportOptions,
+) -> Result<Imported, String> {
     let name = name.trim();
     let name = if name.is_empty() { "Modelo 3D" } else { name };
+    mesh = prepare(mesh, options);
     mesh.centre_on_base();
     if !kind.centred() {
         // Its back on the insertion point and its front towards +y: the
@@ -180,14 +529,27 @@ pub fn import_mesh(
             &format!("{name} · {}", m.name),
         );
         let [r, g, b] = m.color;
+        let (category, texture) = finish_of(&m.name);
         let category = if m.alpha < 0.6 {
             "glass"
         } else if kind == ModelKind::Vegetation && g > r && g >= b {
             "vegetation"
         } else {
-            "other"
+            category
         };
-        materials.push(model.add_material(full, category, m.color, CutPattern::Solid));
+        let id = model.add_material(full, category, m.color, CutPattern::Solid);
+        if let Some(t) = texture.filter(|_| category != "glass") {
+            let _ = model.set_appearance(
+                id,
+                Appearance {
+                    color: None,
+                    texture: Some(t),
+                    scale: None,
+                    growth: None,
+                },
+            );
+        }
+        materials.push(id);
     }
     let levels: Vec<MeshLevel> = archisim_mesh::levels_of_detail(&mesh)
         .into_iter()
@@ -223,10 +585,13 @@ pub fn import_mesh(
         &family_name,
         kind,
         source,
-        size,
-        [lo[0] as f64, lo[1] as f64, hi[0] as f64, hi[1] as f64],
+        (
+            size,
+            [lo[0] as f64, lo[1] as f64, hi[0] as f64, hi[1] as f64],
+        ),
         &main_name,
         &outline,
+        options.maker.as_ref().filter(|m| !m.is_empty()),
     );
     let family = model
         .add_family(&source_text)
@@ -320,10 +685,10 @@ fn recipe(
     name: &str,
     kind: ModelKind,
     source: &str,
-    size: [f64; 3],
-    rect: [f64; 4],
+    (size, rect): ([f64; 3], [f64; 4]),
     main: &str,
     outline: &[(Ring, Vec<Ring>)],
+    maker: Option<&Maker>,
 ) -> String {
     let h = size[2];
     let (ifc_class, ifc_type) = kind.ifc();
@@ -335,7 +700,14 @@ fn recipe(
         "  description \"Modelo 3D importado de {}\"\n",
         quote(source)
     ));
-    s.push_str(&format!("  folder \"{}\"\n\n", kind.label()));
+    s.push_str(&format!(
+        "  folder \"{}\"\n\n",
+        if maker.is_some() {
+            "Diseño"
+        } else {
+            kind.label()
+        }
+    ));
     s.push_str("type_params\n  section \"Dimensiones\"\n");
     s.push_str(&format!(
         "    height length = {} range {}..{} label \"Altura (escala el modelo)\"\n",
@@ -351,9 +723,19 @@ fn recipe(
     }
     s.push_str("  section \"Materiales\"\n");
     s.push_str(&format!(
-        "    mat material = \"{}\" label \"Color en planta\"\n\n",
+        "    mat material = \"{}\" label \"Color en planta\"\n",
         quote(main)
     ));
+    if let Some(m) = maker {
+        s.push_str("  section \"Fabricante\"\n");
+        for (i, (key, label, ifc)) in Maker::FIELDS.iter().enumerate() {
+            s.push_str(&format!(
+                "    {key} text = \"{}\" label \"{label}\" ifc \"{ifc}\"\n",
+                quote(m.field(i))
+            ));
+        }
+    }
+    s.push('\n');
     let k = "height / ".to_string() + &fmt(h);
     s.push_str("body\n");
     s.push_str(&format!("  let k = {k}\n"));
@@ -521,5 +903,107 @@ mod tests {
         .unwrap();
         let fa = m.object_type(again.object_type).unwrap().family;
         assert_ne!(fa, m.object_type(chair.object_type).unwrap().family);
+    }
+
+    #[test]
+    fn a_design_piece_from_a_manufacturers_zip() {
+        let mut m = crate::new_project("Prueba");
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../archisim-mesh/tests/fixtures/butaca.zip");
+        let loaded = archisim_mesh::load(&p, None, Default::default()).unwrap();
+        let full = loaded.mesh.triangle_count();
+        let (lo, hi) = loaded.mesh.bounds();
+        let maker = Maker {
+            manufacturer: "Muebles Ejemplo".into(),
+            product: "Butaca Uno".into(),
+            reference: "BU-01".into(),
+            designer: "Ana Pérez".into(),
+            year: "1958".into(),
+            url: "https://example.com/butaca-uno".into(),
+        };
+        let options = ImportOptions {
+            turns: 1,
+            detail: Some(120),
+            maker: Some(maker.clone()),
+        };
+        let r = import_mesh_with(
+            &mut m,
+            loaded.mesh,
+            "Butaca Uno",
+            "butaca.zip",
+            ModelKind::Furniture,
+            &options,
+        )
+        .unwrap();
+        // Lightened, and turned a quarter: width and depth swap.
+        assert!(
+            r.triangles[0] <= 120 && r.triangles[0] < full,
+            "{:?}",
+            r.triangles
+        );
+        assert!(
+            (r.size[0] - (hi[1] - lo[1]) as f64).abs() < 0.02,
+            "{:?}",
+            r.size
+        );
+        assert!(
+            (r.size[1] - (hi[0] - lo[0]) as f64).abs() < 0.02,
+            "{:?}",
+            r.size
+        );
+        // Who made it, in its type and its folder.
+        assert_eq!(maker_of(&m, r.object_type), Some(maker.clone()));
+        let t = m.object_type(r.object_type).unwrap();
+        let fam = m.family(t.family).unwrap();
+        assert_eq!(fam.def().folder, "Diseño");
+        // Its materials by their names.
+        let mat = |n: &str| {
+            m.materials()
+                .find(|x| x.name == format!("Butaca Uno · {n}"))
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(mat("Vidrio").category, "glass");
+        assert_eq!(mat("Nogal").category, "wood");
+        assert_eq!(
+            m.appearance(mat("Nogal").id).texture,
+            Some(TextureKind::Wood)
+        );
+        assert_eq!(mat("Cuero coñac").category, "fabric");
+        // The file kept next to it in the library.
+        let json = maker.to_json("Butaca Uno", ModelKind::Furniture);
+        let (back, name, kind) = Maker::from_json(&json).unwrap();
+        assert_eq!(back, maker);
+        assert_eq!(name.as_deref(), Some("Butaca Uno"));
+        assert_eq!(kind, Some(ModelKind::Furniture));
+    }
+
+    #[test]
+    fn finishes_by_their_names() {
+        assert_eq!(finish_of("Leather_Cognac_01").0, "fabric");
+        assert_eq!(finish_of("Oak natural"), ("wood", Some(TextureKind::Wood)));
+        assert_eq!(
+            finish_of("Rovere naturale"),
+            ("wood", Some(TextureKind::Wood))
+        );
+        assert_eq!(finish_of("Chrome"), ("metal", None));
+        assert_eq!(finish_of("Stahl verchromt"), ("metal", None));
+        assert_eq!(
+            finish_of("Bouclé blanco"),
+            ("fabric", Some(TextureKind::Boucle))
+        );
+        assert_eq!(
+            finish_of("Mármol Carrara"),
+            ("stone", Some(TextureKind::Marble))
+        );
+        assert_eq!(
+            finish_of("Vienna straw"),
+            ("wood", Some(TextureKind::Wicker))
+        );
+        assert_eq!(finish_of("Lacado negro"), ("wood", None));
+        assert_eq!(finish_of("Material #25"), ("other", None));
+        assert_eq!(finish_of("Black oak"), ("wood", Some(TextureKind::Wood)));
+        assert_eq!(finish_of("Eiche lackiert"), ("wood", None));
+        assert_eq!(finish_of("Black leather"), ("fabric", None));
     }
 }

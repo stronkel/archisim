@@ -218,3 +218,170 @@ fn written_glb_reads_back_the_same() {
         }
     }
 }
+
+/// What Blender says of the chair of `butaca.*` (scripts/make_design_fixtures.py).
+fn blender_chair() -> ([f32; 3], [f32; 3], Vec<(String, usize)>) {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/butaca.json");
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap();
+    let three = |k: &str| {
+        let a = v[k].as_array().unwrap();
+        [0, 1, 2].map(|i| a[i].as_f64().unwrap() as f32)
+    };
+    let mut faces: Vec<(String, usize)> = v["faces"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(k, n)| (k.clone(), n.as_u64().unwrap() as usize))
+        .collect();
+    faces.sort();
+    (three("lo"), three("hi"), faces)
+}
+
+fn faces_by_material(m: &Mesh) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = m
+        .groups
+        .iter()
+        .map(|g| (m.materials[g.material].name.clone(), g.triangles.len()))
+        .collect();
+    out.sort();
+    out
+}
+
+fn same_box(m: &Mesh, lo: [f32; 3], hi: [f32; 3], tol: f32) {
+    let (a, b) = m.bounds();
+    for k in 0..3 {
+        assert!(
+            (a[k] - lo[k]).abs() < tol && (b[k] - hi[k]).abs() < tol,
+            "box {a:?} {b:?}, Blender {lo:?} {hi:?}"
+        );
+    }
+}
+
+#[test]
+fn binary_fbx_in_place_with_its_materials_and_texture() {
+    let m = fixture("butaca.fbx");
+    let (lo, hi, faces) = blender_chair();
+    // Centimetres, y up, parts turned −90° and scaled 100, a hierarchy
+    // turned 30°: where Blender has it, in metres and z up.
+    same_box(&m, lo, hi, 1e-4);
+    assert_eq!(faces_by_material(&m), faces);
+    let mat = |n: &str| m.materials.iter().find(|x| x.name == n).unwrap();
+    let leather = mat("Cuero coñac").color;
+    assert!(
+        leather[0] > leather[1] && leather[1] > leather[2],
+        "{leather:?}"
+    );
+    assert!(mat("Vidrio").alpha < 0.5);
+    // The walnut's texture, from inside the file: its two browns.
+    let walnut = m
+        .groups
+        .iter()
+        .find(|g| m.materials[g.material].name == "Nogal")
+        .unwrap();
+    let mut seen: Vec<Rgb> = walnut
+        .triangles
+        .iter()
+        .flatten()
+        .map(|&i| m.colors[i as usize])
+        .collect();
+    seen.sort();
+    seen.dedup();
+    assert!(seen.len() >= 2, "{seen:?}");
+    assert!(seen.iter().all(|c| c[0] > c[2]), "{seen:?}");
+    // Faces outward: the closed parts enclose a positive volume, as
+    // Blender's (seat 0.8 × 0.8 × 0.16 and back 0.8 × 0.12 × 0.6).
+    let volume: f32 = m
+        .groups
+        .iter()
+        .filter(|g| m.materials[g.material].name == "Cuero coñac")
+        .flat_map(|g| &g.triangles)
+        .map(|t| {
+            let [a, b, c] = t.map(|i| m.positions[i as usize]);
+            (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                / 6.0
+        })
+        .sum();
+    assert!(
+        (volume - (0.8 * 0.8 * 0.16 + 0.8 * 0.12 * 0.6)).abs() < 1e-3,
+        "{volume}"
+    );
+}
+
+#[test]
+fn text_fbx_as_the_binary_one() {
+    let a = fixture("butaca.fbx");
+    let b = fixture("butaca-ascii.fbx");
+    let (lo, hi, _) = blender_chair();
+    same_box(&b, lo, hi, 1e-3);
+    // z up, as 3ds Max writes them.
+    let z = fixture("butaca-z.fbx");
+    same_box(&z, lo, hi, 1e-4);
+    assert_eq!(a.triangle_count(), z.triangle_count());
+    assert_eq!(a.triangle_count(), b.triangle_count());
+    assert_eq!(a.materials.len(), b.materials.len());
+}
+
+#[test]
+fn three_ds_and_stl_in_millimetres_are_guessed() {
+    let (lo, hi, faces) = blender_chair();
+    for f in ["butaca.3ds", "butaca.stl"] {
+        let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(f);
+        let l = load(&p, None, Options::default()).unwrap();
+        assert_eq!(l.guessed_unit, Some(0.001), "{f}");
+        same_box(&l.mesh, lo, hi, 2e-3);
+        assert_eq!(
+            l.mesh.triangle_count(),
+            faces.iter().map(|f| f.1).sum::<usize>(),
+            "{f}"
+        );
+    }
+    let m = fixture("butaca.3ds");
+    assert_eq!(m.materials.len(), 3);
+    assert!(m.materials.iter().any(|x| x.alpha < 0.5));
+    // Given in metres: as it is, 1000 times too big.
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/butaca.stl");
+    let big = read_file(
+        &p,
+        Options {
+            unit: Some(1.0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(big.bounds().1[2] > 1000.0);
+}
+
+#[test]
+fn a_manufacturers_zip_without_unpacking() {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/butaca.zip");
+    let l = load(&p, None, Options::default()).unwrap();
+    // The FBX first; its texture as a file next to it, inside the zip.
+    assert_eq!(l.entry.as_deref(), Some("Butaca Ejemplo/FBX/butaca.fbx"));
+    assert_eq!(l.models.len(), 2);
+    assert!(l.others.is_empty());
+    let walnut = l.mesh.materials.iter().find(|m| m.name == "Nogal").unwrap();
+    assert!(walnut.texture.is_some());
+    let (lo, hi, _) = blender_chair();
+    same_box(&l.mesh, lo, hi, 1e-4);
+    // The 3DS inside, chosen.
+    let l = load(
+        &p,
+        Some("Butaca Ejemplo/3DS/butaca.3ds"),
+        Options::default(),
+    )
+    .unwrap();
+    assert_eq!(l.guessed_unit, Some(0.001));
+    same_box(&l.mesh, lo, hi, 2e-3);
+}
+
+#[test]
+fn units_by_size() {
+    assert_eq!(plausible_unit([0.9, 0.8, 0.75]), 1.0);
+    assert_eq!(plausible_unit([90.0, 80.0, 75.0]), 0.01);
+    assert_eq!(plausible_unit([900.0, 800.0, 750.0]), 0.01);
+    assert_eq!(plausible_unit([2000.0, 900.0, 750.0]), 0.001);
+    assert_eq!(plausible_unit([8.0, 2.0, 12.0]), 1.0);
+}

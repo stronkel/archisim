@@ -1143,6 +1143,8 @@ impl ArchiSimApp {
             .into_iter()
             .partition(|p| archisim_mesh::is_model_file(p));
         if let Some(m) = models.first() {
+            // Over the start screen: into the project behind it.
+            self.start.open = false;
             self.mesh_import = Some(mesh_ui::MeshImport::new(m));
         }
         let (cad, paths): (Vec<PathBuf>, Vec<PathBuf>) = paths.into_iter().partition(|p| {

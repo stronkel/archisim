@@ -14,6 +14,7 @@ mod cocina;
 mod colaboracion;
 mod cubiertas;
 mod demo;
+mod diseno;
 mod equipo;
 mod escaleras;
 mod figuras;
@@ -78,6 +79,12 @@ Uso:
       Todos los muebles, sanitarios, cocina, personas y coches de la
       biblioteca con su 3D hecho por ArchiSim, en filas: modelos.archisim,
       modelos.ifc, axonometría y planta en SVG. Por defecto: ./out
+  archisim diseno <modelo> [carpeta] [Fabricante]
+      Importa el modelo 3D de un fabricante (FBX, OBJ, glTF, COLLADA, 3DS,
+      STL o el .zip tal como se descarga) como pieza de diseño, igual que
+      la aplicación: dice qué ha leído (unidades, caras antes y después de
+      aligerarlo, materiales y su acabado) y escribe diseno.archisim,
+      diseno.ifc y una planta 1:20 en SVG. Por defecto: ./out
   archisim taller [carpeta]
       El taller de modelos: cada mueble nuevo, en revisión, delante del
       de la biblioteca al que sustituiría: taller.archisim, taller.ifc,
@@ -265,6 +272,22 @@ fn main() -> ExitCode {
         Some("modelos") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));
             report(modelos::write(&dir))
+        }
+        Some("diseno") | Some("diseño") => {
+            match args.get(1) {
+                Some(model) => {
+                    let dir = PathBuf::from(args.get(2).map(String::as_str).unwrap_or("out"));
+                    report(diseno::write(
+                        Path::new(model),
+                        &dir,
+                        args.get(3).map(String::as_str),
+                    ))
+                }
+                None => {
+                    eprintln!("Uso: archisim diseno <modelo o .zip del fabricante> [carpeta] [Fabricante]");
+                    ExitCode::FAILURE
+                }
+            }
         }
         Some("taller") => {
             let dir = PathBuf::from(args.get(1).map(String::as_str).unwrap_or("out"));

@@ -1,6 +1,10 @@
 //! 3D models made elsewhere (SketchUp, Blender, a manufacturer's
-//! catalogue) as coloured triangle meshes: OBJ with its MTL, glTF 2.0
-//! (`.gltf` and `.glb`) and COLLADA (`.dae`, what SketchUp exports).
+//! catalogue) as coloured triangle meshes: FBX (binary and text), OBJ with
+//! its MTL, glTF 2.0 (`.gltf` and `.glb`), COLLADA (`.dae`, what SketchUp
+//! exports), 3D Studio (`.3ds`) and STL, also from inside a `.zip` as
+//! manufacturers hand them out ([`load`], [`Zip`]). A file that does not
+//! say its units (OBJ, 3DS, STL) is read in the units that give it a
+//! plausible size ([`plausible_unit`]).
 //!
 //! Every reader gives the same [`Mesh`]: metres, `z` up, one colour per
 //! vertex (the material's, or its texture sampled at the vertex) and the
@@ -13,19 +17,26 @@
 
 mod base64;
 mod dae;
+mod decimate;
+mod fbx;
 mod gltf;
 mod obj;
 mod outline;
 mod simplify;
+mod stl;
+mod tds;
 mod texture;
 mod write;
+mod zip;
 
 #[cfg(test)]
 mod tests;
 
+pub use decimate::decimate;
 pub use outline::outline;
 pub use simplify::{levels_of_detail, simplify};
 pub use write::write_glb;
+pub use zip::{InZip, Zip};
 
 use std::path::Path;
 
@@ -81,7 +92,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::Format(e) => write!(
                 f,
-                "formato «{e}» no admitido (se leen OBJ, glTF, GLB y DAE de COLLADA)"
+                "formato «{e}» no admitido (se leen FBX, OBJ, glTF, GLB, DAE de COLLADA, 3DS y STL, también dentro de un .zip)"
             ),
             Error::Io(e) => write!(f, "no se puede leer {e}"),
             Error::Invalid(e) => write!(f, "fichero no válido: {e}"),
@@ -179,45 +190,150 @@ fn percent_decode(s: &str) -> String {
 }
 
 /// The formats read, by extension.
-pub const EXTENSIONS: [&str; 4] = ["obj", "gltf", "glb", "dae"];
+pub const EXTENSIONS: [&str; 7] = ["fbx", "obj", "gltf", "glb", "dae", "3ds", "stl"];
 
-/// Whether a file name is of a model this crate reads.
+/// Whether a file name is of a model this crate reads (or a `.zip`, which
+/// may hold one).
 pub fn is_model_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+        .map(|e| e.to_ascii_lowercase())
+        .is_some_and(|e| EXTENSIONS.contains(&e.as_str()) || e == "zip")
 }
 
-/// Reads the model at `path`, with the files it refers to from its folder.
-pub fn read_file(path: &Path, options: Options) -> Result<Mesh, Error> {
+/// Whether a format says its units (the others are guessed).
+fn says_units(ext: &str) -> bool {
+    matches!(ext, "fbx" | "gltf" | "glb" | "dae")
+}
+
+/// Metres per unit of a model of `size` (in the file's units) that does
+/// not say its units: metres if it measures up to 12, centimetres up to
+/// 1200 (12 m), millimetres beyond. Inches are never guessed.
+pub fn plausible_unit(size: [f32; 3]) -> f64 {
+    let d = size.iter().fold(0.0f32, |a, b| a.max(*b)) as f64;
+    if d <= 12.0 {
+        1.0
+    } else if d <= 1200.0 {
+        0.01
+    } else {
+        0.001
+    }
+}
+
+/// A model as read from a file, with what was decided reading it.
+#[derive(Debug, Clone)]
+pub struct Loaded {
+    pub mesh: Mesh,
+    /// The units chosen because the file does not say them (metres per
+    /// unit), when they were not given.
+    pub guessed_unit: Option<f64>,
+    /// The model read inside the archive, for a `.zip`.
+    pub entry: Option<String>,
+    /// Every model in the archive that could be read, best first.
+    pub models: Vec<String>,
+    /// Other formats of models the archive brings that are not read.
+    pub others: Vec<&'static str>,
+}
+
+/// Reads the model at `path`, with the files it refers to from its
+/// folder; for a `.zip`, the model `entry` inside (or the best one).
+pub fn load(path: &Path, entry: Option<&str>, options: Options) -> Result<Loaded, Error> {
     let bytes = std::fs::read(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))?;
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
+    if ext == "zip" {
+        let zip = Zip::open(bytes)?;
+        let models = zip.models();
+        let others = zip.other_formats();
+        let Some(name) = entry.map(String::from).or_else(|| models.first().cloned()) else {
+            return Err(Error::Invalid(if others.is_empty() {
+                "el .zip no tiene ningún modelo 3D".into()
+            } else {
+                format!(
+                    "el .zip solo trae {}, que ArchiSim no lee: descargue el modelo en FBX, OBJ o 3DS",
+                    others.join(", ")
+                )
+            }));
+        };
+        let data = zip
+            .read(&name)
+            .ok_or_else(|| Error::Io(format!("{name} dentro del .zip")))?;
+        let folder = name.rsplit_once('/').map_or("", |(a, _)| a).to_string();
+        let inner_ext = Path::new(&name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let (mesh, guessed_unit) =
+            read_guessing(&data, &inner_ext, &InZip { zip: &zip, folder }, options)?;
+        return Ok(Loaded {
+            mesh,
+            guessed_unit,
+            entry: Some(name),
+            models,
+            others,
+        });
+    }
     let folder = path.parent().unwrap_or(Path::new("."));
-    read(&bytes, &ext, &Folder(folder), options)
+    let (mesh, guessed_unit) = read_guessing(&bytes, &ext, &Folder(folder), options)?;
+    Ok(Loaded {
+        mesh,
+        guessed_unit,
+        entry: None,
+        models: Vec::new(),
+        others: Vec::new(),
+    })
 }
 
-/// Reads a model of format `ext` (`obj`, `gltf`, `glb`, `dae`).
+/// Reads the model at `path`, with the files it refers to from its folder
+/// (the best model inside, for a `.zip`).
+pub fn read_file(path: &Path, options: Options) -> Result<Mesh, Error> {
+    load(path, None, options).map(|l| l.mesh)
+}
+
+/// Reads a model of format `ext` (`fbx`, `obj`, `gltf`, `glb`, `dae`,
+/// `3ds`, `stl`).
 pub fn read(
     bytes: &[u8],
     ext: &str,
     files: &dyn Resources,
     options: Options,
 ) -> Result<Mesh, Error> {
+    read_guessing(bytes, ext, files, options).map(|r| r.0)
+}
+
+fn read_guessing(
+    bytes: &[u8],
+    ext: &str,
+    files: &dyn Resources,
+    options: Options,
+) -> Result<(Mesh, Option<f64>), Error> {
     let mut mesh = match ext {
+        "fbx" => fbx::read(bytes, files, options)?,
         "obj" => obj::read(bytes, files, options)?,
         "gltf" | "glb" => gltf::read(bytes, files, options)?,
         "dae" => dae::read(bytes, files, options)?,
+        "3ds" => tds::read(bytes, files, options)?,
+        "stl" => stl::read(bytes, options)?,
         other => return Err(Error::Format(other.to_string())),
     };
     mesh.clean();
     if mesh.triangle_count() == 0 {
         return Err(Error::Empty);
     }
-    Ok(mesh)
+    let mut guessed = None;
+    if options.unit.is_none() && !says_units(ext) {
+        let (lo, hi) = mesh.bounds();
+        let k = plausible_unit([0, 1, 2].map(|i| hi[i] - lo[i]));
+        if k != 1.0 {
+            mesh.scale(k as f32);
+        }
+        guessed = Some(k);
+    }
+    Ok((mesh, guessed))
 }
 
 impl Mesh {
