@@ -13,6 +13,7 @@
 //! (parameter `pot_mat`), `soil`, `stem`, `leaves`, `flowers`, `dark`.
 
 use super::garden_plants;
+use super::plant;
 use super::shape::{bar, curve, sweep, turned, Cap};
 use super::sofas::compass_leg;
 use super::soft::{knife_pillow, tube, Soft};
@@ -1192,7 +1193,21 @@ pub fn lounger(b: &mut Builder, p: &Params) -> bool {
                 for y in [0.1, l - 0.16] {
                     b.rbox("metal", [x, y, 0.0], [x + 0.03, y + 0.06, seat], 0.0);
                 }
-                b.rbox("metal", [x, hinge, seat - 0.04], [x + 0.03, l, seat], 0.0);
+                // The side rail at seat height, from head to foot: the
+                // legs under it, the back's hinge on it.
+                b.rbox("metal", [x, 0.08, seat - 0.04], [x + 0.03, l, seat], 0.0);
+                // A prop from the rail up under the back.
+                let t = 0.55;
+                b.cyl(
+                    "metal",
+                    [x + 0.015, 0.3, seat - 0.01],
+                    [
+                        x + 0.015,
+                        hinge - t * back_len * cl,
+                        seat + t * back_len * sl,
+                    ],
+                    0.01,
+                );
             }
             b.rbox(
                 "mat",
@@ -1517,6 +1532,20 @@ pub fn parasol(b: &mut Builder, p: &Params) -> bool {
 // ---------------------------------------------------------- big pots
 
 /// Big pots of the collections (after the family's 4 own models): the
+
+/// How far below the rim of a big pot its earth is, metres.
+const SUNK: f64 = 0.04;
+
+/// The rim walls of a square planter `2r` by `w`, `t` thick, from its
+/// earth up to `top`.
+fn rim(b: &mut Builder, r: f64, w: f64, top: f64, t: f64) {
+    let lo = top - SUNK;
+    b.rbox("pot", [-r, 0.0, lo], [r, t, top], 0.0);
+    b.rbox("pot", [-r, w - t, lo], [r, w, top], 0.0);
+    b.rbox("pot", [-r, t, lo], [-r + t, w - t, top], 0.0);
+    b.rbox("pot", [r - t, t, lo], [r, w - t, top], 0.0);
+}
+
 /// collection's pot with a plant of the library's pots in it.
 pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
     let Some(ix) = look(p, 4) else {
@@ -1548,7 +1577,9 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
                 (r * 0.92, 0.0),
                 (r, 0.01),
                 (r, mine),
-                (0.0, mine),
+                (r * 0.9, mine),
+                (r * 0.9, mine - SUNK),
+                (0.0, mine - SUNK),
             ],
             40,
             0.0,
@@ -1564,7 +1595,9 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
                 (r * 0.95, mine * 0.85),
                 (r * 1.05, mine * 0.88),
                 (r * 1.05, mine),
-                (0.0, mine),
+                (r * 0.9, mine),
+                (r * 0.9, mine - SUNK),
+                (0.0, mine - SUNK),
             ],
             40,
             0.0,
@@ -1592,7 +1625,9 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
                     (r * 0.5, 0.0),
                     (r * 0.95, (mine - 0.22) * 0.8),
                     (r, mine - 0.22),
-                    (0.0, mine - 0.22),
+                    (r * 0.88, mine - 0.22),
+                    (r * 0.88, mine - 0.22 - SUNK),
+                    (0.0, mine - 0.22 - SUNK),
                 ],
                 40,
                 0.0,
@@ -1608,13 +1643,18 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
                 (r * 0.6, 0.0),
                 (r * 0.95, mine * 0.6),
                 (r, mine),
-                (0.0, mine),
+                (r * 0.9, mine),
+                (r * 0.9, mine - SUNK),
+                (0.0, mine - SUNK),
             ],
             40,
             0.0,
         ),
         // A tall square planter of fibre cement.
-        4 => b.rbox("pot", [-r, 0.0, 0.0], [r, w, mine], 0.01),
+        4 => {
+            b.rbox("pot", [-r, 0.0, 0.0], [r, w, mine - SUNK], 0.0);
+            rim(b, r, w, mine, 0.03);
+        }
         // Half a wine barrel: staves and iron hoops.
         5 => {
             turned(
@@ -1626,7 +1666,9 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
                     (r * 0.88, 0.0),
                     (r, mine * 0.5),
                     (r * 0.94, mine),
-                    (0.0, mine),
+                    (r * 0.86, mine),
+                    (r * 0.86, mine - SUNK),
+                    (0.0, mine - SUNK),
                 ],
                 24,
                 0.0,
@@ -1645,13 +1687,22 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
         }
         // A box of weathered steel.
         6 => {
-            b.rbox("pot", [-r, 0.0, 0.0], [r, w, mine], 0.0);
-            b.rbox(
-                "pot",
-                [-r - 0.01, -0.01, mine - 0.015],
-                [r + 0.01, w + 0.01, mine],
-                0.0,
-            );
+            b.rbox("pot", [-r, 0.0, 0.0], [r, w, mine - SUNK], 0.0);
+            rim(b, r, w, mine, 0.008);
+            // Its lip, folded out.
+            for (lo, hi) in [
+                ([-r - 0.01, -0.01], [r + 0.01, 0.0]),
+                ([-r - 0.01, w], [r + 0.01, w + 0.01]),
+                ([-r - 0.01, 0.0], [-r, w]),
+                ([r, 0.0], [r + 0.01, w]),
+            ] {
+                b.rbox(
+                    "pot",
+                    [lo[0], lo[1], mine - 0.015],
+                    [hi[0], hi[1], mine],
+                    0.0,
+                );
+            }
         }
         // Classic: a stone urn on a plinth.
         _ => {
@@ -1673,24 +1724,40 @@ pub fn big_pot(b: &mut Builder, p: &Params) -> bool {
                     (r * 0.85, (mine - 0.1) * 0.7),
                     (r, (mine - 0.1) * 0.9),
                     (r * 1.08, mine - 0.1),
-                    (0.0, mine - 0.1),
+                    (r * 0.92, mine - 0.1),
+                    (r * 0.92, mine - 0.1 - SUNK),
+                    (0.0, mine - 0.1 - SUNK),
                 ],
                 40,
                 0.0,
             );
         }
     }
-    // Its earth and its plant: an olive tree, a tuft of grass or a
-    // lavender bush, made leaf by leaf.
-    turned(
-        b,
-        "soil",
-        [c[0], c[1], mine - 0.04],
-        &[(0.0, 0.0), (r * 0.9, 0.0), (r * 0.9, 0.02), (0.0, 0.02)],
-        24,
-        0.0,
-    );
-    let foot = [c[0], c[1], mine - 0.025];
+    // Its earth, a little below the rim (domed, with a few crumbs; flat
+    // in the square ones), and its plant: an olive tree, a tuft of grass
+    // or a lavender bush, made leaf by leaf.
+    let earth = mine - SUNK;
+    match ix {
+        4 | 6 => {
+            let t = if ix == 4 { 0.03 } else { 0.008 };
+            b.rbox(
+                "soil",
+                [-r + t, t, earth - 0.006],
+                [r - t, w - t, earth + 0.004],
+                0.0,
+            );
+        }
+        _ => {
+            let inner = match ix {
+                2 => 0.88,
+                5 => 0.86,
+                7 => 0.92,
+                _ => 0.9,
+            };
+            plant::soil_in(b, [c[0], c[1], earth], r * inner, 11 + ix as u32);
+        }
+    }
+    let foot = [c[0], c[1], earth];
     let tall = (h - mine).max(0.2);
     match ix {
         1 | 4 | 7 => garden_plants::olive(b, foot, tall, (w * 1.5).max(tall * 0.75)),

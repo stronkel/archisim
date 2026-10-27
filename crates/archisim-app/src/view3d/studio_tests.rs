@@ -951,6 +951,7 @@ fn terrace_pictures() {
             ),
             ("tumbona", -60.0, 20.0, 2.2, Some((at("Tumbona"), 0.6, 1.0))),
             ("maceton", -75.0, 14.0, 3.6, Some((at("Macetón"), 0.9, 0.3))),
+            ("tierra", -75.0, 48.0, 5.5, Some((at("Macetón"), 0.6, 0.3))),
             ("pergola", -55.0, 10.0, 1.7, Some((at("Pérgola"), 1.4, 1.5))),
         ] {
             let pic = picture(
