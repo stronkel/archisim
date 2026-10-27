@@ -6,6 +6,42 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (2) · Rendimiento 3D: la Maqueta con proyectos grandes
+
+Rama `bloque/rendimiento-3d` (sobre `bloque/paquete-1a`), con pull request. Sin cambios de formato ni de IFC (el IFC sale de `archisim-geom`, que solo gana `object_instance` y `model_solids_except`).
+
+Antonio preguntó por el límite de 256 MB y cómo optimizar los modelos y el programa; decidió (27/10/2026) adelantar este bloque al paquete 2, con las llamas planas.
+
+**Hecho** (todo en `archisim-app::view3d`)
+- **Esquinas compartidas y compactas**: cada esquina se guarda una vez y los triángulos dicen cuáles unen (índices); la esquina ocupa 48 bytes en vez de 72 (normal en 16 bits, color sRGB en 8 bits, datos sueltos en bytes). `scene::Vertex::new`, `Mesh`, `MeshBuilder`.
+- **Muebles por tipo una sola vez**: los objetos que ArchiSim fabrica (todos los de la biblioteca salvo plantas y modelos importados) se suben a la tarjeta una vez por tipo (`Group`) y se dibujan donde está cada uno (`Instance`: giro, posición, corte, selección y atenuación por disciplina en el sombreador). `archisim_geom::solid::object_instance` da el modelo en sus ejes y `model_solids_except` el resto.
+- **Menos detalle a lo lejos**: cada modelo de más de 1.500 triángulos lleva dos versiones más bastas (agrupando esquinas cercanas del mismo color, `coarser`), y cada objeto se dibuja con la que corresponde a lo que ocupa en pantalla (`level_for`). Las sombras usan la intermedia.
+- **Nada fuera de la vista**: los elementos dibujados una vez van en trozos de 32.768 triángulos con su caja, y lo que cae fuera de la cámara no se manda a dibujar (`frustum`, `in_sight`), ni los objetos.
+- La selección por rayo, las cajas de los elementos y el ajuste a vértices en 3D recorren también los objetos colocados (`Scene::hit_in` devuelve el triángulo, `Hit`).
+- **Llamas planas**: cada lengua es una silueta plana en dos planos cruzados (a ±35° del frente), con su corazón más claro (papel `flame2`, «Llama clara»); unas 40 caras por llama en vez de unas 200. En la chimenea, «Con llamas» y «Con leña» por separado (el material de la leña pasa a llamarse `wood`).
+
+**Medidas** (`ARCHISIM_MEDIR_3D=1 cargo test --release -p archisim-app -- scene_benchmark --nocapture`; tarjeta por software, así que los tiempos valen para comparar):
+
+| | antes | ahora |
+|---|---|---|
+| Taller (242 objetos): memoria en la tarjeta | 608 MB | 85 MB |
+| Taller: fotograma | 726 ms | ~140 ms |
+| Proyecto repetido (602 objetos, 12 tipos ×30 más el taller): memoria | 1.311 MB | 85 MB |
+| Proyecto repetido: fotograma | 1.784 ms | ~230 ms |
+
+- Ventana real abierta con Xvfb: el taller completo en la Maqueta, sin cerrarse, de lejos y acercándose.
+
+**Pendiente**
+- Las imágenes recortadas con transparencia (hojas, visillos con dibujo) siguen en el bloque técnico A; las llamas no las necesitaron.
+- Construir la escena del taller sigue tardando unos 2 s (los modelos y sus normales); se puede guardar por tipo entre cambios si molesta.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks).
+2. Abre el `taller.archisim` completo y entra en la Maqueta: muévete, acércate y aléjate. Dime si va fluido en tu portátil y si notas algún mueble que cambie raro al alejarte.
+3. En una chimenea, apaga «Con llamas» y deja «Con leña» (para D5 Render).
+
+---
+
 ## 2026-10-27 · Paquete 1: la vista 3D ya no se cierra con proyectos grandes; alfombra años 50 y chimenea colgante
 
 Rama `bloque/paquete-1a` (pull request #79). Sin cambios de formato ni de IFC.
