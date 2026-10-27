@@ -490,14 +490,14 @@ pub fn grasses(b: &mut Builder, base: P3, tall: f64, spread: f64) {
 }
 
 /// A lavender bush from `base`, `tall` high and `spread` across: a round
-/// mound of hundreds of narrow grey leaves and, above it, stalks each
+/// mound of hundreds of narrow grey leaves, deeper ones too, and, above it, stalks each
 /// ending in a spike of whorled flowers.
 pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
     let mut rnd = Rand(0x5be0_cd19);
     let r = spread / 2.0;
     let mound = tall * 0.45;
     // The mound: leaves all over a dome, pointing out of it.
-    let n = 380;
+    let n = 700;
     let golden = PI * (3.0 - 5f64.sqrt());
     let leaf = {
         let mut l = Blade::new(0.055, 0.008, Form::Lance);
@@ -512,7 +512,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
         let zz = 1.0 - 0.95 * k;
         let rr = (1.0 - zz * zz).max(0.0).sqrt();
         let a = i as f64 * golden;
-        let depth = rnd.range(0.75, 1.0);
+        let depth = rnd.range(0.5, 1.0);
         let normal = norm([rr * a.cos() / r, rr * a.sin() / r, zz / mound]);
         let q = [
             base[0] + r * rr * a.cos() * depth,
@@ -530,6 +530,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
         };
         blade(b, role, sub(q, mul(d, 0.02)), d, [0.0, 0.0, 1.0], &l);
     }
+    // The flower stalks, from inside the mound, fanning out over it.
     // The flower stalks, from inside the mound, fanning out over it.
     // Inside, the mound itself, under its leaves.
     b.blob(
@@ -552,7 +553,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
         let len = (tall - mound * 0.3) * rnd.range(0.82, 1.0) * (1.0 - 0.15 * k);
         let dir = add(mul(out, lean.sin()), [0.0, 0.0, lean.cos()]);
         let pts = wander(from, dir, dir, len, 0.0, 3, 1200 + i);
-        sweep(b, "stem", &pts, |_| 0.0014, 3, Cap::Flat, Cap::Flat);
+        sweep(b, "stem", &pts, |_| 0.002, 4, Cap::Flat, Cap::Flat);
         let top = pts[pts.len() - 1];
         let (_, d) = at_along(&pts, 1.0);
         let spike_len = tall * 0.17;

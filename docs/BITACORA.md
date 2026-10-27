@@ -17,6 +17,7 @@ Antonio: «Por qué las sombrillas aparecen saliendo desde mitad de la butaca. L
 - **Plantas de los macetones**, rehechas hoja a hoja como la espatifilo y la pilea del taller (`fine::garden_plants`): un **olivo** de dos troncos retorcidos con cinco ramas, ramillas y hojas estrechas de dos verdes (haz y envés plateado); **gramíneas** con unas sesenta hojas largas que se arquean hacia fuera y espigas que cabecean; **lavanda** con su mata de hojas grises y tallos con espigas de flores. Mediterránea, contemporánea y clásica llevan olivo; nórdica, japandi e industrial, gramíneas; años 50 y rústica, lavanda.
 - **Trepadora de las pérgolas** (rústica, industrial, clásica): una buganvilla con su tallo leñoso que sube enroscado al pilar y sigue por la viga, con brotes, hojas acorazonadas en sus tallitos, ramas que cuelgan donde va en horizontal y racimos de brácteas fucsia. Tiene sus propios materiales («Tallo de la trepadora», «Hojas de la trepadora», «Flores de la trepadora»), distintos de los de la planta del macetón.
 - Materiales nuevos en la paleta: hoja y envés de olivo, corteza de olivo, gramínea, espiga, hoja de lavanda, corteza, hoja y flor de buganvilla.
+- **Vista 3D**: las hojas menudas (las de estas plantas) se dibujan sin líneas de contorno. Con contorno, cada hoja de olivo o de gramínea salía como un trazo oscuro y la planta se veía negra; ahora se ve su verde. Los muebles y las plantas de interior siguen como estaban.
 
 **Qué debe probar Antonio**
 1. Abre `taller.archisim` (te lo mando) en la versión de este pull request y ve a las terrazas.
