@@ -21,7 +21,8 @@ use super::soft::wobble_at;
 use crate::build::{cross, norm, sub, Builder, P3};
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
-/// The roles of the plants are smooth all over.
+/// The roles of the plants are smooth all over and drawn without
+/// contour lines (`fine`).
 fn soft(b: &mut Builder) {
     for role in [
         "leaves",
@@ -34,6 +35,7 @@ fn soft(b: &mut Builder) {
         "bracts",
     ] {
         b.soft.insert(role);
+        b.fine.insert(role);
     }
 }
 
@@ -406,28 +408,7 @@ pub fn olive(b: &mut Builder, base: P3, tall: f64, spread: f64) {
                 0.35,
             );
         }
-        // Inside, the leaves behind the leaves: lumps of foliage along
-        // every third twig, so that the crown reads as a mass and the
-        // light does not come through it everywhere.
-        if k % 3 == 0 {
-            let (q, _) = at_along(&twig, 0.55);
-            let r = rx * rnd.range(0.24, 0.32);
-            b.blob(
-                "leaves",
-                q,
-                [r, 0.0, 0.0],
-                [0.0, r * rnd.range(0.8, 1.0), 0.0],
-                [0.0, 0.0, r * 0.8],
-            );
-        }
     }
-    b.blob(
-        "leaves",
-        [base[0], base[1], crown_z],
-        [rx * 0.6, 0.0, 0.0],
-        [0.0, rx * 0.6, 0.0],
-        [0.0, 0.0, rz * 0.6],
-    );
     soft(b);
 }
 

@@ -17,6 +17,8 @@ pub struct Builder {
     pub parts: BTreeMap<&'static str, Vec<[u32; 3]>>,
     /// The roles of stuffed fabric (see `PropMesh::soft`).
     pub soft: std::collections::BTreeSet<&'static str>,
+    /// The roles that are many small leaves (see [`crate::PropMesh::fine`]).
+    pub fine: std::collections::BTreeSet<&'static str>,
 }
 
 pub fn sub(a: P3, b: P3) -> P3 {

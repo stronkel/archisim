@@ -77,6 +77,11 @@ pub struct PropMesh {
     /// upholstery): drawn soft, outlined only where they end against
     /// something behind, never at their own folds and seams.
     pub soft: Vec<&'static str>,
+    /// The roles that are many small leaves, stalks and flowers (the
+    /// terrace's olive, grasses, lavender and climber): drawn without
+    /// contour lines, which would turn every leaf into a dark stroke;
+    /// they are also in `soft`.
+    pub fine: Vec<&'static str>,
 }
 
 impl PropMesh {
@@ -878,6 +883,7 @@ pub fn make(kind: &str, p: &Params) -> Option<PropMesh> {
         positions: b.positions,
         parts: b.parts.into_iter().collect(),
         soft: b.soft.into_iter().collect(),
+        fine: b.fine.into_iter().collect(),
     })
 }
 

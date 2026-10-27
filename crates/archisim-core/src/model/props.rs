@@ -225,6 +225,26 @@ impl Model {
         out
     }
 
+    /// The materials of an object's model that are many small leaves
+    /// (`PropMesh::fine`): the 3D view draws them without contour lines.
+    pub fn object_fine_materials(&self, id: ObjectId) -> Vec<MaterialId> {
+        let Some(o) = self.objects.get(&id) else {
+            return Vec::new();
+        };
+        let Some((mesh, roles)) = self.prop_roles(o.object_type) else {
+            return Vec::new();
+        };
+        let (fine, other): (Vec<_>, Vec<_>) =
+            roles.iter().partition(|(r, _)| mesh.fine.contains(r));
+        let mut out: Vec<MaterialId> = fine
+            .into_iter()
+            .map(|(_, m)| m)
+            .filter(|m| !other.iter().any(|(_, h)| h == m))
+            .collect();
+        out.dedup();
+        out
+    }
+
     #[allow(clippy::type_complexity)]
     pub fn object_prop(
         &self,

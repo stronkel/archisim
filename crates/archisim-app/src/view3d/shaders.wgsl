@@ -157,8 +157,8 @@ fn vs_model(input: VertexIn) -> VertexOut {
     // but it settles which element wins where two touch on an edge.
     vp.z = vp.z * (1.0 + min(v.bias, 1.0) * 0.0002);
     // 1: foliage; 2: what glows at night (lampshades, bulbs, flames); 3:
-    // grass and flowers on the ground.
-    out.soft = select(select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5), 3.0, v.bias > 3.5);
+    // grass and flowers on the ground; 4: many small leaves (no contours).
+    out.soft = select(select(select(select(0.0, 1.0, v.bias > 1.5), 2.0, v.bias > 2.5), 3.0, v.bias > 3.5), 4.0, v.bias > 4.5);
     out.clip = g.proj * vp;
     out.view_normal = (g.view * vec4<f32>(v.normal, 0.0)).xyz;
     out.view_dist = -vp.z;
@@ -633,6 +633,11 @@ fn fs_model(i: VertexOut, @builtin(front_facing) front: bool) -> ModelOut {
         // from the outline of the masses.
         out.normal_dist = vec4<f32>(0.0, 0.0, 1.0, i.view_dist * mark);
     }
+    if (i.soft > 3.5) {
+        // Many small leaves: marked (a normal straight back), and the
+        // contour pass draws no line next to them.
+        out.normal_dist = vec4<f32>(0.0, 0.0, -1.0, i.view_dist * mark);
+    }
     return out;
 }
 
@@ -710,8 +715,16 @@ fn picked_at(a: vec4<f32>) -> bool {
     return a.w < 0.0 && !empty(a);
 }
 
+// A sample of many small leaves (no contour lines next to them).
+fn fine(a: vec4<f32>) -> bool {
+    return !empty(a) && a.z < -0.99;
+}
+
 // Whether two neighbouring samples belong to different surfaces.
 fn crease(a: vec4<f32>, b: vec4<f32>) -> f32 {
+    if (fine(a) || fine(b)) {
+        return 0.0;
+    }
     let a_empty = empty(a);
     let b_empty = empty(b);
     if (a_empty && b_empty) {
@@ -728,6 +741,9 @@ fn crease(a: vec4<f32>, b: vec4<f32>) -> f32 {
 // step from one surface to another behind it.
 fn depth_step(a: vec4<f32>, c: vec4<f32>, b: vec4<f32>) -> f32 {
     if (empty(a) || empty(b) || empty(c)) {
+        return 0.0;
+    }
+    if (fine(a) || fine(b) || fine(c)) {
         return 0.0;
     }
     let ia = 1.0 / abs(a.w);

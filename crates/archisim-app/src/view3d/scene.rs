@@ -955,6 +955,9 @@ fn add_solids(
     // The stuffed fabric of each object.
     let mut fabric_of: HashMap<archisim_core::ObjectId, Vec<archisim_core::MaterialId>> =
         Default::default();
+    // The many small leaves of each object (drawn without contours).
+    let mut fine_of: HashMap<archisim_core::ObjectId, Vec<archisim_core::MaterialId>> =
+        Default::default();
     for solid in solids {
         let id = solid.owner.id();
         if !look.shared && model.hidden_by_discipline(&look.disciplines.hidden, id) {
@@ -1007,6 +1010,15 @@ fn add_solids(
             SolidOwner::Object(o) if !soft => fabric_of
                 .entry(o)
                 .or_insert_with(|| model.object_soft_materials(o))
+                .contains(&solid.material),
+            _ => false,
+        };
+        // Many small leaves (the terrace's plants): no contour lines at
+        // all, or every leaf would be drawn as a dark stroke (bias 5).
+        let fine = match solid.owner {
+            SolidOwner::Object(o) if fabric => fine_of
+                .entry(o)
+                .or_insert_with(|| model.object_fine_materials(o))
                 .contains(&solid.material),
             _ => false,
         };
@@ -1103,6 +1115,8 @@ fn add_solids(
             // roof slab.
             let bias = if grass {
                 4.0
+            } else if fine {
+                5.0
             } else if glows {
                 3.0
             } else if soft || fabric {
