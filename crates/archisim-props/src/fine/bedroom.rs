@@ -28,7 +28,7 @@ pub use super::kitchen::COLLECTIONS;
 
 /// The collection of a model chosen among the collections, listed after
 /// the family's `first` own models (0 to 7).
-fn look(p: &Params, first: i32) -> Option<usize> {
+pub(super) fn look(p: &Params, first: i32) -> Option<usize> {
     let s = p.style() - first;
     (1..=8).contains(&s).then(|| (s - 1) as usize)
 }
@@ -36,7 +36,7 @@ fn look(p: &Params, first: i32) -> Option<usize> {
 // ---------------------------------------------------------- helpers
 
 /// A quadrilateral facing `out` (its corners in either order).
-fn oquad(b: &mut Builder, role: &'static str, q: [P3; 4], out: P3) {
+pub(super) fn oquad(b: &mut Builder, role: &'static str, q: [P3; 4], out: P3) {
     let n = cross(sub(q[1], q[0]), sub(q[3], q[0]));
     let ids: Vec<u32> = q.iter().map(|p| b.point(*p)).collect();
     if n[0] * out[0] + n[1] * out[1] + n[2] * out[2] >= 0.0 {
@@ -48,7 +48,7 @@ fn oquad(b: &mut Builder, role: &'static str, q: [P3; 4], out: P3) {
 
 /// The top of an arch from `x0` to `x1`: half an ellipse springing at
 /// `zs`, its crown at `zt`.
-fn arch_z(x: f64, x0: f64, x1: f64, zs: f64, zt: f64) -> f64 {
+pub(super) fn arch_z(x: f64, x0: f64, x1: f64, zs: f64, zt: f64) -> f64 {
     let u = ((x - x0) / (x1 - x0) * 2.0 - 1.0).clamp(-1.0, 1.0);
     zs + (zt - zs) * (1.0 - u * u).max(0.0).sqrt()
 }
@@ -56,7 +56,7 @@ fn arch_z(x: f64, x0: f64, x1: f64, zs: f64, zt: f64) -> f64 {
 /// A board from `z0` up to an arched top (see [`arch_z`]), from `y0` to
 /// `y1` thick.
 #[allow(clippy::too_many_arguments)]
-fn arched_board(
+pub(super) fn arched_board(
     b: &mut Builder,
     role: &'static str,
     x0: f64,
@@ -115,7 +115,7 @@ fn arched_board(
 /// A band round an arch (see [`arch_z`]) `depth` deep, from `y0` to `y1`:
 /// the frame of an arched headboard or mirror.
 #[allow(clippy::too_many_arguments)]
-fn arch_band(
+pub(super) fn arch_band(
     b: &mut Builder,
     role: &'static str,
     x0: f64,
@@ -181,7 +181,14 @@ fn arch_band(
 }
 
 /// A turned post from `z0` to `z1` at `at`: a pine bed's or a table's.
-fn turned_post(b: &mut Builder, role: &'static str, at: [f64; 2], z0: f64, z1: f64, r: f64) {
+pub(super) fn turned_post(
+    b: &mut Builder,
+    role: &'static str,
+    at: [f64; 2],
+    z0: f64,
+    z1: f64,
+    r: f64,
+) {
     let h = z1 - z0;
     let prof = [
         (0.0, 0.0),
@@ -202,7 +209,7 @@ fn turned_post(b: &mut Builder, role: &'static str, at: [f64; 2], z0: f64, z1: f
 
 /// A fluted, tapering leg of the classic pieces, standing on a toupie
 /// foot, its top at `top`.
-fn louis_leg(b: &mut Builder, role: &'static str, at: [f64; 2], top: f64, r: f64) {
+pub(super) fn louis_leg(b: &mut Builder, role: &'static str, at: [f64; 2], top: f64, r: f64) {
     let foot = (top * 0.18).min(0.07);
     turned(
         b,
@@ -225,7 +232,15 @@ fn louis_leg(b: &mut Builder, role: &'static str, at: [f64; 2], top: f64, r: f64
 }
 
 /// Four square legs under the corners of `x0`…`x1` by `0`…`d`, `s` wide.
-fn square_legs(b: &mut Builder, role: &'static str, x0: f64, x1: f64, d: f64, top: f64, s: f64) {
+pub(super) fn square_legs(
+    b: &mut Builder,
+    role: &'static str,
+    x0: f64,
+    x1: f64,
+    d: f64,
+    top: f64,
+    s: f64,
+) {
     for q in corners(x0, x1, d, s / 2.0) {
         b.rbox(
             role,
@@ -325,25 +340,28 @@ fn gola_stack(b: &mut Builder, x0: f64, x1: f64, z0: f64, z1: f64, y: f64, n: us
 // ---------------------------------------------------------- the bed
 
 /// How the bed is made up.
-struct Making {
+pub(super) struct Making {
     /// The mattress: from `x0` to `x1`, `y0` to `y1`, its foot at
     /// `base` and its top at `top`.
-    x0: f64,
-    x1: f64,
-    y0: f64,
-    y1: f64,
-    base: f64,
-    top: f64,
+    pub(super) x0: f64,
+    pub(super) x1: f64,
+    pub(super) y0: f64,
+    pub(super) y1: f64,
+    pub(super) base: f64,
+    pub(super) top: f64,
     /// The lowest the bed clothes may hang.
-    floor: f64,
+    pub(super) floor: f64,
     /// The duvet's foot hangs (false: tucked against a footboard).
-    foot: bool,
+    pub(super) foot: bool,
+    /// Its sides hang (false: tucked inside the rails of a bunk or a
+    /// cot).
+    pub(super) sides: bool,
 }
 
 /// The bed clothes of collection `ix`: the mattress in its sheet, the
 /// duvet with the sheet turned down over it, the pillows, a throw across
 /// the foot (`spread`) and scatter cushions (`cushions`).
-fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
+pub(super) fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
     let w = m.x1 - m.x0;
     let mut mattress = Soft::new([m.x0, m.y0, m.base], [m.x1, m.y1, m.top], 0.05);
     mattress.crown = 0.006;
@@ -361,7 +379,11 @@ fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
         _ => (0.026, 0.018, 0.05),
     };
     let ys = m.y0 + 0.55;
-    let side = (m.top - m.floor) * 0.9 + 0.08;
+    let side = if m.sides {
+        (m.top - m.floor) * 0.9 + 0.08
+    } else {
+        0.1
+    };
     let mut duvet = Cover::new([m.x0, m.x1], [ys, m.y1], m.top + thick, thick);
     duvet.round = 0.06;
     duvet.falls = [side, side, 0.07, if m.foot { side } else { 0.1 }];
@@ -398,7 +420,7 @@ fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
     let pw = ((w - 0.1) / n as f64 - 0.04).min(0.74);
     for i in 0..n {
         let x = m.x0 + w * (i as f64 + 0.5) / n as f64;
-        if ix == 7 {
+        if ix == 7 && w > 1.2 {
             // Shams standing behind the pillows, as a classic bed has.
             standing_cushion(
                 b,
@@ -420,7 +442,7 @@ fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
             80 + i as u32,
         );
     }
-    if ix == 7 {
+    if ix == 7 && w > 1.2 {
         bolster(b, "pillow", [0.0, m.y0 + 0.62, m.top + 0.1], w - 0.3, 0.085);
     }
 
@@ -477,8 +499,24 @@ pub fn bed(b: &mut Builder, p: &Params) -> bool {
     let l = p.get("depth", 2.0).clamp(1.8, 2.4);
     let top = p.get("height", 0.5).clamp(0.3, 0.8);
     let head = p.get("head", 1.0).clamp(0.5, 1.6).max(top + 0.15);
+    let m = bed_frame(b, ix, w, l, top, head, 0.22);
+    make_bed(b, p, ix, &m);
+    true
+}
+
+/// The frame and headboard of collection `ix`'s bed for a mattress `w`
+/// by about `l`, its top at `top` (`mattress` thick), the headboard
+/// `head` high; how the bed is then made up.
+pub(super) fn bed_frame(
+    b: &mut Builder,
+    ix: usize,
+    w: f64,
+    l: f64,
+    top: f64,
+    head: f64,
+    mattress: f64,
+) -> Making {
     let (x0, x1) = (-w / 2.0, w / 2.0);
-    let mattress = 0.22;
     let base = top - mattress;
     let mut m = Making {
         x0,
@@ -489,6 +527,7 @@ pub fn bed(b: &mut Builder, p: &Params) -> bool {
         top,
         floor: 0.05,
         foot: true,
+        sides: true,
     };
     match ix {
         // Nordic: an upholstered headboard with soft edges and piping,
@@ -874,8 +913,7 @@ pub fn bed(b: &mut Builder, p: &Params) -> bool {
             m.floor = 0.06;
         }
     }
-    make_bed(b, p, ix, &m);
-    true
+    m
 }
 
 // ---------------------------------------------------------- lamps
@@ -2339,7 +2377,7 @@ fn wall_mirror(b: &mut Builder, ix: usize, w: f64, h: f64, z: f64) {
 
 /// Turns a piece made by swapping `y` and `z` (a reflection) back to
 /// facing outwards: its triangles reversed.
-fn mirror_fix(b: &mut Builder, start: usize) {
+pub(super) fn mirror_fix(b: &mut Builder, start: usize) {
     let start = start as u32;
     for tris in b.parts.values_mut() {
         for t in tris.iter_mut() {
@@ -2352,7 +2390,7 @@ fn mirror_fix(b: &mut Builder, start: usize) {
 
 /// A disc of radius `r` standing on the wall (its face to `+y`), `t`
 /// thick, centred at `c`.
-fn turned_disc_y(b: &mut Builder, role: &'static str, c: P3, r: f64, t: f64) {
+pub(super) fn turned_disc_y(b: &mut Builder, role: &'static str, c: P3, r: f64, t: f64) {
     let start = b.mark();
     turned(
         b,

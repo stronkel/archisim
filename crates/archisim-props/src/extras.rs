@@ -742,6 +742,10 @@ pub fn piano(b: &mut Builder, p: &Params) {
 /// Children's beds: 1 a cabin bed under a frame like a little house, 2
 /// bunk beds with their ladder. `width` and `depth` are the mattress's.
 pub fn kids_bed(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 3).
+    if crate::fine::nursery::kids_bed(b, p) {
+        return;
+    }
     let w = p.get("width", 0.9).clamp(0.7, 1.4);
     let l = p.get("depth", 1.9).clamp(1.4, 2.1);
     let x0 = -w / 2.0;

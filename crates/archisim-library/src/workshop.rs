@@ -32,6 +32,11 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/dormitorio_comoda.asfam"),
     include_str!("../taller/dormitorio_banco.asfam"),
     include_str!("../taller/dormitorio_tocador.asfam"),
+    include_str!("../taller/dormitorio_cama_infantil.asfam"),
+    include_str!("../taller/dormitorio_cuna.asfam"),
+    include_str!("../taller/dormitorio_litera.asfam"),
+    include_str!("../taller/dormitorio_galan.asfam"),
+    include_str!("../taller/dormitorio_espejo_pie.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -388,6 +393,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Terciopelo salvia"),
             ("shade", "Pantalla de lino"),
             ("ceramic", "Cerámica blanca"),
+            ("toy_mat", "Lana cruda"),
+            ("clothes_mat", "Vaquero"),
         ],
     },
     Kitchen {
@@ -406,6 +413,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Lana teja"),
             ("shade", "Pantalla de lino"),
             ("ceramic", "Terracota"),
+            ("toy_mat", "Lino arena"),
+            ("clothes_mat", "Lino añil"),
         ],
     },
     Kitchen {
@@ -423,6 +432,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Pana azul petróleo"),
             ("shade", "Pantalla de lino"),
             ("ceramic", "Cerámica turquesa"),
+            ("toy_mat", "Terciopelo mostaza"),
+            ("clothes_mat", "Lana oliva"),
         ],
     },
     Kitchen {
@@ -442,6 +453,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("ceramic", "Gres"),
             ("books", "Lomo crema"),
             ("books2", "Lomo verde"),
+            ("toy_mat", "Lino piedra"),
+            ("clothes_mat", "Lana carbón"),
         ],
     },
     Kitchen {
@@ -459,6 +472,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Terciopelo rosa"),
             ("shade", "Cristal esmerilado"),
             ("ceramic", "Cerámica blanca"),
+            ("toy_mat", "Terciopelo rosa"),
+            ("clothes_mat", "Tela gris"),
         ],
     },
     Kitchen {
@@ -476,6 +491,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Lino arena"),
             ("shade", "Pantalla de lino"),
             ("ceramic", "Terracota"),
+            ("toy_mat", "Lana teja"),
+            ("clothes_mat", "Vaquero"),
         ],
     },
     Kitchen {
@@ -493,6 +510,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Pana azul petróleo"),
             ("bulb", "Cristal esmerilado"),
             ("ceramic", "Gres"),
+            ("toy_mat", "Lana cruda"),
+            ("clothes_mat", "Vaquero"),
         ],
     },
     Kitchen {
@@ -510,6 +529,8 @@ pub const BEDROOMS: &[Kitchen] = &[
             ("pillow", "Terciopelo mostaza"),
             ("shade", "Pantalla de lino"),
             ("ceramic", "Cerámica blanca"),
+            ("toy_mat", "Terciopelo rosa"),
+            ("clothes_mat", "Lana carbón"),
         ],
     },
 ];
@@ -534,6 +555,12 @@ const ROOM: &[(&str, &str, f64, Values)] = &[
     ("Cama (taller)", "Cama", 0.08, &[("width", N(1.6))]),
     ("Mesita de noche (taller)", "Mesita", 0.08, &[]),
     ("Tocador (taller)", "Tocador", 0.6, &[]),
+    ("Galán de noche (taller)", "Galán", 0.4, &[]),
+    ("Espejo de pie (taller)", "Espejo de pie", 0.3, &[]),
+    // The children's room, further along the same wall.
+    ("Cama infantil (taller)", "Cama infantil", 1.0, &[]),
+    ("Cuna (taller)", "Cuna", 0.5, &[]),
+    ("Litera (taller)", "Litera", 0.7, &[]),
 ];
 
 /// Places a bedroom with its back on a wall along `y = wall` from `x`
@@ -1099,6 +1126,7 @@ mod tests {
                     t.name.contains(k.collection)
                         && !t.name.contains(" 60")
                         && !t.name.contains(" 80")
+                        && !t.name.starts_with("Espejo de pie")
                 })
                 .filter(|t| {
                     [
@@ -1131,13 +1159,24 @@ mod tests {
                 .object_types()
                 .filter(|t| t.name.contains(k.collection))
                 .filter(|t| {
-                    ["Armario", "Cómoda", "Mesita", "Cama", "Tocador", "Banco"]
-                        .iter()
-                        .any(|n| t.name.starts_with(n))
+                    [
+                        "Armario",
+                        "Cómoda",
+                        "Mesita",
+                        "Cama",
+                        "Tocador",
+                        "Banco",
+                        "Galán",
+                        "Espejo de pie",
+                        "Cuna",
+                        "Litera",
+                    ]
+                    .iter()
+                    .any(|n| t.name.starts_with(n))
                 })
                 .map(|t| t.id)
                 .collect();
-            assert_eq!(mine.len(), 6, "{}", k.collection);
+            assert_eq!(mine.len(), 11, "{}", k.collection);
             for t in mine {
                 assert!(m.type_has_prop(t), "{}", k.collection);
                 let tris = m.type_prop(t).unwrap().0.triangle_count();

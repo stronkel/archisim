@@ -1,0 +1,32 @@
+family "Galán de noche (taller)"
+  category furniture
+  host none
+  version 1
+  description "Galán de noche como lo hace cada colección, con un pantalón doblado en la barra (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    height length = 1.10 range 0.90..1.30 label "Altura"
+  section "Ropa"
+    clothes bool = yes label "Pantalón en la barra"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    metal material = "Latón" label "Metal"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    cushion material = "Bouclé crudo" label "Tapizado"
+    clothes_mat material = "Lana carbón" label "Ropa"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-0.25, 0.0, 0) to (0.25, 0.4, height) material frame
+
+plan 1:50
+  polygon (-0.25, 0.0) (0.25, 0.0) (0.25, 0.4) (-0.25, 0.4) pen view
+
+outputs
+  generator = "props:valet"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -64,6 +64,10 @@ fn candidates(role: &str) -> &'static [&'static str] {
         "sink" => &["sink", "metal"],
         "spadix" => &["spadix", "flowers"],
         "leaves2" => &["leaves2", "leaves"],
+        // The bedrooms' children's pieces and valet stands (paquete 3):
+        // `toy` and `clothes` are also whether there is one.
+        "toy" => &["toy_mat", "pillow", "cushion"],
+        "clothes" => &["clothes_mat"],
         _ => &[],
     }
 }

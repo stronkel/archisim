@@ -1,0 +1,36 @@
+family "Litera (taller)"
+  category furniture
+  host none
+  version 1
+  description "Litera como la hace cada colección: dos camas en cuatro postes, barrera arriba y escalera (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.90 range 0.70..1.20 label "Ancho del colchón"
+    depth  length = 1.90 range 1.60..2.10 label "Largo del colchón"
+    height length = 1.75 range 1.50..2.00 label "Altura"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    metal material = "Latón" label "Metal"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    cushion material = "Bouclé crudo" label "Tapizado"
+    linen material = "Lino blanco" label "Sábanas y almohadas"
+    duvet material = "Lino arena" label "Edredón"
+    pillow material = "Terciopelo salvia" label "Cojines"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2 - 0.05, 0, 0) to (width / 2 + 0.1, depth + 0.07, height) material frame
+
+plan 1:50
+  polygon (-width / 2 - 0.05, 0) (width / 2 + 0.05, 0) (width / 2 + 0.05, depth + 0.07) (-width / 2 - 0.05, depth + 0.07) pen view
+  line (-width / 2 - 0.05, 0) to (width / 2 + 0.05, depth + 0.07) pen thin dashed
+  polygon (width / 2 + 0.05, depth - 0.45) (width / 2 + 0.1, depth - 0.45) (width / 2 + 0.1, depth) (width / 2 + 0.05, depth) pen thin
+
+outputs
+  generator = "props:bunk_bed"
+  ifc_class = "IfcFurniture"
+  ifc_type = "BED"

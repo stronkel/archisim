@@ -592,6 +592,7 @@ fn bathroom_pictures() {
                 t.name.contains(k.collection)
                     && t.name.ends_with("(taller)")
                     && names.iter().any(|n| t.name.starts_with(n))
+                    && !t.name.starts_with("Espejo de pie")
             })
             .map(|t| t.id)
             .collect();
@@ -674,7 +675,18 @@ fn bedroom_pictures() {
     let m = archisim_library::workshop::project().unwrap();
     let size = [1200u32, 800u32];
     let aspect = size[0] as f32 / size[1] as f32;
-    let names = ["Armario", "Cómoda", "Mesita", "Cama", "Tocador", "Banco"];
+    let names = [
+        "Armario",
+        "Cómoda",
+        "Mesita",
+        "Cama",
+        "Tocador",
+        "Banco",
+        "Galán",
+        "Espejo de pie",
+        "Cuna",
+        "Litera",
+    ];
     for (i, k) in archisim_library::workshop::BEDROOMS.iter().enumerate() {
         let mine: Vec<_> = m
             .object_types()
@@ -743,6 +755,10 @@ fn bedroom_pictures() {
                 2.6,
                 Some((at("Tocador"), 0.95, 0.35)),
             ),
+            ("galan", -78.0, 10.0, 2.6, Some((at("Galán"), 0.9, 0.4))),
+            ("infantil", -70.0, 20.0, 1.9, Some((at("Cuna"), 0.8, 0.6))),
+            ("cuna", -75.0, 22.0, 4.5, Some((at("Cuna"), 0.6, 0.4))),
+            ("litera", -112.0, 12.0, 2.4, Some((at("Litera"), 0.9, 1.0))),
         ] {
             let pic = picture(
                 &mut r,

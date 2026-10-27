@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (8) · Paquete 3, segunda vuelta: el dormitorio completo
+
+Rama `bloque/paquete-3` (la misma del pull request #86). Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, tras ver los dormitorios: «Completar el dormitorio».
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 3, segunda vuelta»)
+- Cama infantil en las ocho colecciones: la cama de la colección, más baja y estrecha, con una barrera en la mitad de la cabecera, su ropa de cama y un muñeco.
+- Piezas nuevas en el taller, una por colección: **cuna** (barrotes, rejilla, lamas, panel o tubo alrededor del colchón; la de los años 50 y la clásica sobre patas), **litera** (dos camas sobre cuatro postes, barrera arriba y escalera), **galán de noche** (con un pantalón doblado en la barra; el mediterráneo y el clásico son silla galán) y **espejo de pie** (apoyado en la pared; el de los años 50 en caballete y el clásico basculante entre dos postes).
+- Cada dormitorio del taller suma el galán y el espejo, y sigue la pared con el cuarto infantil: cama, cuna y litera.
+
+**Pendiente**
+- Lo mismo que en la entrada anterior: la revisión de Antonio de cocina, baño y dormitorio, y después los paquetes 2 y 3 a la biblioteca.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request #86 (pestaña Checks) y abre `taller.archisim` (te lo mando de nuevo).
+2. En cada dormitorio, a la derecha del tocador: el galán, el espejo de pie, la cama infantil, la cuna y la litera.
+3. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-27 (7) · Paquete 3: el dormitorio de las ocho colecciones
 
 Rama `bloque/paquete-3` (sobre `bloque/paquete-2b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

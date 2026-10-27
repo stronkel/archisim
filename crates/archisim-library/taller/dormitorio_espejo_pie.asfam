@@ -1,0 +1,30 @@
+family "Espejo de pie (taller)"
+  category furniture
+  host none
+  version 1
+  description "Espejo de pie como lo hace cada colección: apoyado en la pared, en caballete o basculante (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.35..1.20 label "Ancho"
+    height length = 1.70 range 1.00..2.20 label "Altura"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    metal material = "Latón" label "Metal"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    mirror_glass material = "Espejo" label "Espejo"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, 0.16, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.16) (-width / 2, 0.16) pen view
+
+outputs
+  generator = "props:floor_mirror"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

@@ -348,6 +348,18 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### Paquete 3, segunda vuelta: el dormitorio completo (27/10/2026)
+
+En el taller (`archisim_props::fine::nursery`), lo que faltaba del dormitorio, uno por colección:
+
+- **Cama infantil** («Cama infantil» gana ocho modelos después de «Cabaña» y «Litera»): la cama de cada colección (`bedroom::bed_frame`) a 90×190, con el colchón a 44 cm y el cabecero a 85; una barrera en la mitad de la cabecera, separada de la cama sobre dos soportes, para que el edredón caiga por dentro; su ropa de cama y un muñeco (`toy`).
+- **Cuna** (`props:crib`, 60×120, el lado largo en la pared): barandillas en los cuatro lados, la de delante más baja; colchón, edredón pequeño y muñeco. Las barandillas son las de cada colección (`fence`): barrotes redondos, rejilla, lamas verticales de teca, lamas tumbadas, panel lacado, husillos torneados (rústica y clásica) o tubo de acero; la de los años 50 sobre patas de compás y la clásica sobre patas Luis XVI.
+- **Litera** (`props:bunk_bed`): dos camas sobre cuatro postes de la colección, cabecero y piecero de barandilla, barrera alrededor de la de arriba con el hueco de la escalera, y la escalera en el lado derecho, cerca de los pies. Las dos camas hechas, con el edredón remetido (`Making::sides`).
+- **Galán de noche** (`props:valet`): de pie sobre tres patas abiertas (nórdico, años 50 con regatones de latón), silla galán de enea (mediterráneo) o capitoné sobre patas Luis XVI (clásica), bastidor de listones (japandi), varilla de acero sobre un disco (contemporáneo), poste torneado sobre cruceta con colgadores de forja (rústica) y tubo sobre bridas con balda (industrial). Lleva un pantalón doblado en la barra (`clothes`, la misma tela que cae del edredón).
+- **Espejo de pie** (`props:floor_mirror`): apoyado en la pared con su inclinación (roble con correa de cuero, arco encalado, listón de roble, marco negro fino con las esquinas de arriba redondeadas, pino ancho, acero con remaches); el de los años 50, ovalado en un caballete de teca, y el clásico, basculante entre dos postes torneados con su copete.
+- Partes de material nuevas: `toy` (parámetro `toy_mat`) y `clothes` (`clothes_mat`).
+- Los dormitorios del taller suman el galán y el espejo, y el cuarto infantil sigue en la misma pared; fotos con `ARCHISIM_DORMITORIOS_OUT` (vistas «galan», «infantil», «cuna» y «litera»).
+
 ### Paquete 3: el dormitorio de las ocho colecciones (27/10/2026)
 
 En el taller (rama `bloque/paquete-3`), las piezas del dormitorio hechas como las hace cada colección (`archisim_props::fine::bedroom`, con la ropa de cama en `fine::bedding`). Como en la cocina y el baño, «Cama», «Mesita de noche», «Armario» y «Cómoda» ganan ocho modelos más, uno por colección, después de los suyos; los proyectos de antes no cambian. Dos piezas nuevas, con un modelo por colección: **banco a los pies de la cama** (`props:bed_bench`) y **tocador** (`props:dressing_table`: la mesa con su cajón, el espejo en la pared con «Espejo encima» y «Altura del espejo», y el taburete con «Taburete»).

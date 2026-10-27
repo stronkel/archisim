@@ -16,6 +16,7 @@ pub mod chairs;
 pub mod hearth;
 pub mod kitchen;
 pub mod lamp;
+pub mod nursery;
 pub mod plant;
 pub mod shape;
 pub mod sink;
