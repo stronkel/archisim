@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-27 (5) · Paquete 2, tanda 2a: la cocina de las ocho colecciones
+
+Rama `bloque/paquete-2a` (sobre `bloque/diseno`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio eligió el paquete 2 (cocina y baño) antes que los clásicos de dominio público.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Tanda 2a»)
+- La cocina por módulos de la biblioteca hecha en las ocho colecciones: módulos bajos (cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero, esquina), columnas (despensa, horno y microondas, frigorífico), muebles altos o baldas, y campanas. Cada colección con sus frentes, tiradores, zócalo o patas, fregadero, grifo, placa, horno, campana y pared.
+- Son modelos nuevos de las familias de siempre: los proyectos antiguos no cambian, y se siguen pegando con la encimera continua.
+- Ocho cocinas montadas en el taller, cada una con su pared; fotos por colección.
+- Arreglado del paquete 1: pomos, anillas y remates de barra de cortina, que estaban del revés.
+
+**Pendiente**
+- Que Antonio revise las ocho cocinas; con su visto bueno, a la biblioteca (familias con los modelos por colección y las colecciones que los eligen).
+- Tanda 2b: el baño.
+- Isla, frigorífico de pie y electrodomésticos sueltos en las colecciones (quedan los de la biblioteca).
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks) y abre el taller: `archisim taller salida` y abre `salida\taller.archisim` (o el fichero que te mando).
+2. En la Maqueta, mira las ocho cocinas: frentes, tiradores, fregadero y grifo, placa, campana y baldas o armarios.
+3. Selecciona un módulo y cambia «Colección» en la barra del objeto: el módulo cambia y sigue pegado a los de al lado con la encimera continua.
+4. Dime, cocina por cocina, qué cambiarías.
+
+---
+
 ## 2026-10-27 (4) · Diseño: los modelos de los fabricantes
 
 Rama `bloque/diseno` (sobre `bloque/biblioteca-paquete-1`), con pull request. Sin cambios de formato; el IFC gana `Pset_ManufacturerTypeInformation` en las piezas de diseño (validado).

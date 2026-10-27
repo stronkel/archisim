@@ -549,7 +549,9 @@ fn rod(b: &mut Builder, role: &'static str, x0: f64, x1: f64, y: f64, z: f64, r:
         };
         let start = b.mark();
         turned(b, role, [0.0; 3], &prof, 14, 0.0);
-        b.transform_from(start, |q| [x + s * q[2], y + q[1], z + q[0]]);
+        // Laid along the rod at either end (a rotation, never a mirror:
+        // it stays closed outwards).
+        b.transform_from(start, |q| [x + s * q[2], y - s * q[1], z + q[0]]);
         // The bracket a little in from the end.
         let xb = x - s * 0.1;
         b.cyl(role, [xb, 0.0, z], [xb, y, z], r * 0.6);

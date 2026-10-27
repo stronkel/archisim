@@ -18,7 +18,7 @@ use crate::Params;
 use std::f64::consts::PI;
 
 /// How thick a door or a drawer front is.
-const T: f64 = 0.02;
+pub(super) const T: f64 = 0.02;
 
 /// A small repeatable random sequence, for books and their gaps.
 struct Rng(u32);
@@ -44,11 +44,10 @@ fn dims(p: &Params, w: f64, d: f64, h: f64) -> (f64, f64, f64) {
 
 /// How a door or a drawer front is made.
 #[derive(Clone, Copy, PartialEq)]
-enum Panel {
+pub(super) enum Panel {
     /// A plain board.
     Flat,
-    /// A frame round a sunk panel (for the kitchens to come).
-    #[allow(dead_code)]
+    /// A frame round a sunk panel.
     Shaker,
     /// A frame round a raised and bevelled panel, with a moulding.
     Raised,
@@ -71,7 +70,7 @@ enum Panel {
 /// A door or drawer front from `x0` to `x1` and `z0` to `z1` on a face at
 /// `y`, `role` its wood.
 #[allow(clippy::too_many_arguments)]
-fn front(
+pub(super) fn front(
     b: &mut Builder,
     panel: Panel,
     role: &'static str,
@@ -251,7 +250,7 @@ fn front(
 
 /// The pulls a front can have.
 #[derive(Clone, Copy, PartialEq)]
-enum Pull {
+pub(super) enum Pull {
     None,
     /// A turned wooden knob.
     Knob,
@@ -270,12 +269,14 @@ enum Pull {
 }
 
 /// A pull centred at `(x, z)` on a front whose face is at `y`.
-fn pull(b: &mut Builder, kind: Pull, x: f64, z: f64, y: f64) {
+pub(super) fn pull(b: &mut Builder, kind: Pull, x: f64, z: f64, y: f64) {
     // Something turned round an axis looking out of the front.
     let out = |b: &mut Builder, role: &'static str, prof: &[(f64, f64)]| {
         let start = b.mark();
         turned(b, role, [0.0; 3], prof, 14, 0.0);
-        b.transform_from(start, |q| [x + q[0], y + q[2], z + q[1]]);
+        // Turned on its side (a rotation, not a mirror: it stays closed
+        // outwards).
+        b.transform_from(start, |q| [x + q[0], y + q[2], z - q[1]]);
     };
     match kind {
         Pull::None => {}
@@ -456,7 +457,7 @@ fn drawers(
 
 /// A round leg tapering to its foot, splayed out along `dir`; `at` is
 /// its top, `top` high.
-fn tapered_leg(
+pub(super) fn tapered_leg(
     b: &mut Builder,
     role: &'static str,
     at: [f64; 2],
@@ -744,7 +745,15 @@ fn basket(b: &mut Builder, x0: f64, x1: f64, y0: f64, y1: f64, z0: f64, z1: f64)
 
 /// A moulded cornice along the front and the sides of a top at `z`,
 /// standing out `out`.
-fn cornice(b: &mut Builder, role: &'static str, x0: f64, x1: f64, d: f64, z: f64, out: f64) {
+pub(super) fn cornice(
+    b: &mut Builder,
+    role: &'static str,
+    x0: f64,
+    x1: f64,
+    d: f64,
+    z: f64,
+    out: f64,
+) {
     for (k, (dz, o)) in [(0.0, out), (0.018, out * 0.6), (0.032, out * 0.25)]
         .into_iter()
         .enumerate()
@@ -755,7 +764,15 @@ fn cornice(b: &mut Builder, role: &'static str, x0: f64, x1: f64, d: f64, z: f64
 }
 
 /// A plinth moulding round the foot of a carcass at `z`.
-fn base_moulding(b: &mut Builder, role: &'static str, x0: f64, x1: f64, d: f64, z: f64, out: f64) {
+pub(super) fn base_moulding(
+    b: &mut Builder,
+    role: &'static str,
+    x0: f64,
+    x1: f64,
+    d: f64,
+    z: f64,
+    out: f64,
+) {
     b.rbox(
         role,
         [x0 - out, 0.0, z],
@@ -801,7 +818,7 @@ fn rivets(b: &mut Builder, a: P3, c: P3, n: usize) {
 /// A steel frame of square tube round a box: four posts from the floor
 /// and rails at the given heights.
 #[allow(clippy::too_many_arguments)]
-fn steel_frame(
+pub(super) fn steel_frame(
     b: &mut Builder,
     x0: f64,
     x1: f64,

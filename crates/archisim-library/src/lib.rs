@@ -2214,6 +2214,13 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Llama clara", "other", [255, 214, 120]),
     ("Lino crudo", "fabric", [222, 208, 184]),
     ("Cuero coñac", "other", [146, 84, 48]),
+    // The kitchens (paquete 2a).
+    ("Vitrocerámica", "other", [30, 30, 33]),
+    ("Granito negro", "stone", [44, 44, 46]),
+    ("Hormigón pulido", "stone", [150, 147, 140]),
+    ("Lacado azul celeste", "wood", [150, 194, 204]),
+    ("Lacado azul añil", "wood", [64, 94, 140]),
+    ("Lacado marfil", "wood", [232, 223, 202]),
     ("Terciopelo verde botella", "fabric", [44, 82, 64]),
 ];
 

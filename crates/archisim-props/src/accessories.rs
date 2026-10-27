@@ -115,6 +115,10 @@ pub fn grab_bar(b: &mut Builder, p: &Params) {
 
 /// Cooker hoods: 1 a chimney hood, 2 built into the wall units.
 pub fn hood(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2a).
+    if crate::fine::kitchen::hood(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6);
     let d = p.get("depth", 0.5);
     let z0 = p.get("elevation", 1.6);

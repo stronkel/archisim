@@ -476,3 +476,90 @@ fn collection_pictures() {
             .unwrap();
     }
 }
+
+/// The workshop's kitchens (paquete 2a), one by one with their wall
+/// (`ARCHISIM_COCINAS_OUT=carpeta`): from three quarters, from the front,
+/// and close to the sink and to the hob.
+#[test]
+fn kitchen_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_COCINAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: kitchen pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::workshop::project().unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    for (i, k) in archisim_library::workshop::KITCHENS.iter().enumerate() {
+        let mine: Vec<_> = m
+            .object_types()
+            .filter(|t| t.name.contains(k.collection) && t.name.ends_with("(taller)"))
+            .map(|t| t.id)
+            .collect();
+        let mut one = m.clone();
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| !mine.contains(&o.object_type))
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let (x0, x1) = one
+            .objects()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |a, o| {
+                (a.0.min(o.position.x), a.1.max(o.position.x))
+            });
+        let walls: Vec<_> = one
+            .walls()
+            .filter(|w| w.start.x.max(w.end.x) < x0 - 1.0 || w.start.x.min(w.end.x) > x1 + 1.0)
+            .map(|w| w.id)
+            .collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        // The sink's and the hob's places.
+        let at = |unit: &str| {
+            one.objects()
+                .find(|o| {
+                    one.object_type(o.object_type)
+                        .is_some_and(|t| t.name.starts_with(unit))
+                })
+                .map(|o| (o.position.x as f32, o.position.y as f32))
+        };
+        let sink = at("Fregadero").unwrap();
+        let hob = at("Placa").unwrap();
+        let n = i + 1;
+        for (name, yaw, pitch, zoom, focus) in [
+            ("tres-cuartos", -58.0, 18.0, 1.15, None),
+            ("frente", -90.0, 8.0, 1.2, None),
+            ("fregadero", -72.0, 32.0, 3.6, Some((sink, 0.95))),
+            ("placa-campana", -78.0, 14.0, 2.2, Some((hob, 1.35))),
+        ] {
+            let pic = picture(
+                &mut r,
+                &gpu,
+                &one,
+                |lo, hi| {
+                    // The kitchen's box, not its whole wall.
+                    let lo = glam::Vec3::new(x0 as f32 - 0.4, lo.y.max(-0.2), 0.0);
+                    let hi = glam::Vec3::new(x1 as f32 + 0.4, hi.y, 2.3);
+                    let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
+                    if let Some(((x, y), z)) = focus {
+                        c.target = glam::Vec3::new(x, y - 0.35, z);
+                    }
+                    c
+                },
+                size,
+            );
+            let slug = k.collection.to_lowercase().replace(' ', "-");
+            pic.save_png(dir.join(format!("{n}-{slug}-{name}.png")))
+                .unwrap();
+        }
+    }
+}

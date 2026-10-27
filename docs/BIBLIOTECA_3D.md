@@ -348,6 +348,27 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### Tanda 2a: la cocina de las ocho colecciones (27/10/2026)
+
+En el taller (rama `bloque/paquete-2a`), la cocina por módulos de la biblioteca hecha como la hace cada colección (`archisim_props::fine::kitchen`). No son familias nuevas: «Módulo bajo de cocina», «Columna de cocina», «Mueble alto de cocina» y «Campana extractora» ganan ocho modelos más, uno por colección, después de los suyos («Módulo», «Columna», «Puertas»; «Decorativa» e «Integrada» en la campana), así que los proyectos de antes no cambian y todo lo de la cocina por módulos sigue igual: se pegan, la encimera es continua (`worktop_runs`) y el plano es el de siempre.
+
+Cada colección tiene sus frentes (`storage::Panel` del paquete 1), tiradores (`storage::Pull`), lo que pisa (zócalo, rodapié con moldura, patas cónicas con regatón de latón o bastidor de tubo), fregadero (de acero encastrado, bajo encimera o cerámico de delantal), grifo (de caño alto, cuello de cisne, de puente con crucetas, dos llaves de los 50, cuadrado, de tubo fino, de muelle), placa (inducción o gas con parrillas de fundición), horno, campana (de chimenea, de obra, de obra con viga, de obra con cornisa, curva, integrada, plana o de tubo) y lo de la pared (armarios, vitrinas con cuarterones y cornisa, baldas en ménsulas de yeso, flotantes, en escuadras de hierro con barra de ganchos o en tubos), con tarros y jarras en las baldas:
+
+| Colección | Frentes | Tiradores | Pisa | Fregadero y grifo | Placa | Campana | Pared |
+|---|---|---|---|---|---|---|---|
+| Nórdico cálido | lisos lacados | lengüeta de cuero | zócalo de roble | acero encastrado, caño alto | inducción | chimenea | armarios |
+| Mediterráneo | de lamas añil | anilla de latón | rodapié | cerámico, cuello de cisne | gas | de obra encalada | baldas en ménsulas |
+| Años 50 | cantos redondeados celeste | barra cromada larga | patas cónicas | acero, dos llaves | gas, crema | curva | armarios |
+| Japandi | roble | uñero en el canto | zócalo oscuro | granito negro bajo encimera, tubo fino | inducción | integrada en roble | baldas flotantes |
+| Contemporáneo | lisos sin tirador | gola | zócalo negro | acero bajo encimera, cuadrado | inducción | plana | armarios |
+| Rústica | cuarterones salvia | concha de hierro | rodapié | cerámico, puente | gas | de obra con viga | escuadras de hierro |
+| Industrial | madera ahumada con marco de acero | barra negra | bastidor de tubo | acero bajo encimera, muelle | gas | de tubo con remaches | baldas en tubos |
+| Clásica | plafón con moldura marfil | pomo de latón | rodapié | cerámico, puente | gas | de obra con cornisa | vitrinas con cornisa |
+
+Partes de material nuevas: `plinth`, `sink`, `black` (placa, horno y microondas), `ring`, `wood`, `ceramic` y `hood`. Materiales nuevos en la paleta: Vitrocerámica, Granito negro, Hormigón pulido, Lacado azul celeste, Lacado azul añil y Lacado marfil. Ocho cocinas montadas en el taller (`workshop::KITCHENS`, `place_kitchen`): columna con frigorífico, cajonera, fregadero, lavavajillas, placa y horno, muebles altos o baldas y campana; fotos con `ARCHISIM_COCINAS_OUT=carpeta cargo test --release -p archisim-app -- kitchen_pictures`. El fregadero del taller anterior («Fregadero de acero 80») queda dentro de la cocina nórdica.
+
+De paso, arreglado del paquete 1: los pomos de madera y de latón, las anillas y los remates de las barras de cortina estaban hechos en espejo (se veían por dentro, más oscuros).
+
 ### Diseño: los modelos oficiales de los fabricantes (27/10/2026)
 
 Lo acordado el 26/10/2026 (punto 6 del plan): las piezas de autor protegidas no se modelan; se usan los modelos 3D que dan sus fabricantes, que cada usuario descarga y guarda en su biblioteca. Rama `bloque/diseno`. Sin cambios de formato.

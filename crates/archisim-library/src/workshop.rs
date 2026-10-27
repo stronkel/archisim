@@ -14,8 +14,11 @@ use archisim_core::{
 /// a plant of the library grown with the workshop's values instead).
 pub const RECIPES: &[&str] = &[
     include_str!("../taller/planta.asfam"),
-    include_str!("../taller/fregadero.asfam"),
     include_str!("../taller/farola.asfam"),
+    include_str!("../taller/cocina_bajo.asfam"),
+    include_str!("../taller/cocina_columna.asfam"),
+    include_str!("../taller/cocina_alto.asfam"),
+    include_str!("../taller/cocina_campana.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -75,18 +78,6 @@ pub const PIECES: &[Piece] = &[
         most: 17_000,
     },
     Piece {
-        name: "Fregadero de acero 80 (taller)",
-        family: "Módulo fregadero (taller)",
-        values: &[
-            ("width", N(0.8)),
-            ("doors", N(2.0)),
-            ("mat", M("Roble claro")),
-            ("sink", M("Acero inoxidable")),
-        ],
-        replaces: Some("Bajo fregadero 80"),
-        most: 14_000,
-    },
-    Piece {
         name: "Farola de fundición 3,5 m (taller)",
         family: "Farola de fundición (taller)",
         values: &[
@@ -98,6 +89,321 @@ pub const PIECES: &[Piece] = &[
         most: 12_000,
     },
 ];
+
+/// A kitchen of the workshop (paquete 2a): one collection's materials
+/// for every module of its run.
+pub struct Kitchen {
+    pub collection: &'static str,
+    /// Materials by parameter, names of the cozy palette.
+    pub materials: &'static [(&'static str, &'static str)],
+}
+
+/// The eight kitchens, one per collection.
+pub const KITCHENS: &[Kitchen] = &[
+    Kitchen {
+        collection: "Nórdico cálido",
+        materials: &[
+            ("mat", "Lacado blanco"),
+            ("plinth", "Roble claro"),
+            ("top", "Roble claro"),
+            ("metal", "Acero inoxidable"),
+            ("sink", "Acero inoxidable"),
+            ("dark", "Cuero coñac"),
+            ("black", "Vitrocerámica"),
+            ("ring", "Cal blanca"),
+            ("wood", "Roble claro"),
+            ("ceramic", "Cerámica blanca"),
+            ("hood", "Lacado blanco"),
+        ],
+    },
+    Kitchen {
+        collection: "Mediterráneo",
+        materials: &[
+            ("mat", "Lacado azul añil"),
+            ("plinth", "Lacado azul añil"),
+            ("top", "Microcemento"),
+            ("metal", "Latón"),
+            ("sink", "Cerámica blanca"),
+            ("dark", "Fresno oscuro"),
+            ("black", "Metal negro"),
+            ("ring", "Latón"),
+            ("wood", "Pino viejo"),
+            ("ceramic", "Cerámica turquesa"),
+            ("hood", "Cal blanca"),
+        ],
+    },
+    Kitchen {
+        collection: "Años 50",
+        materials: &[
+            ("mat", "Lacado azul celeste"),
+            ("plinth", "Nogal"),
+            ("top", "Terrazo"),
+            ("metal", "Acero inoxidable"),
+            ("sink", "Acero inoxidable"),
+            ("dark", "Metal negro"),
+            ("black", "Chapa crema"),
+            ("ring", "Acero inoxidable"),
+            ("wood", "Nogal"),
+            ("ceramic", "Cerámica esmaltada"),
+            ("hood", "Chapa crema"),
+        ],
+    },
+    Kitchen {
+        collection: "Japandi",
+        materials: &[
+            ("mat", "Roble claro"),
+            ("plinth", "Fresno oscuro"),
+            ("top", "Piedra gris"),
+            ("metal", "Metal negro"),
+            ("sink", "Granito negro"),
+            ("dark", "Fresno oscuro"),
+            ("black", "Vitrocerámica"),
+            ("ring", "Piedra gris"),
+            ("wood", "Roble claro"),
+            ("ceramic", "Gres"),
+            ("hood", "Roble claro"),
+        ],
+    },
+    Kitchen {
+        collection: "Contemporáneo",
+        materials: &[
+            ("mat", "Lacado arena"),
+            ("plinth", "Metal negro"),
+            ("top", "Piedra caliza"),
+            ("metal", "Acero inoxidable"),
+            ("sink", "Acero inoxidable"),
+            ("dark", "Metal negro"),
+            ("black", "Vitrocerámica"),
+            ("ring", "Piedra gris"),
+            ("wood", "Roble claro"),
+            ("ceramic", "Cerámica blanca"),
+            ("hood", "Acero inoxidable"),
+        ],
+    },
+    Kitchen {
+        collection: "Rústica",
+        materials: &[
+            ("mat", "Lacado salvia"),
+            ("plinth", "Lacado salvia"),
+            ("top", "Roble claro"),
+            ("metal", "Hierro forjado"),
+            ("sink", "Cerámica blanca"),
+            ("dark", "Fresno oscuro"),
+            ("black", "Metal negro"),
+            ("ring", "Hierro forjado"),
+            ("wood", "Pino viejo"),
+            ("ceramic", "Terracota"),
+            ("hood", "Cal blanca"),
+        ],
+    },
+    Kitchen {
+        collection: "Industrial",
+        materials: &[
+            ("mat", "Roble ahumado"),
+            ("plinth", "Metal negro"),
+            ("top", "Hormigón pulido"),
+            ("metal", "Metal negro"),
+            ("sink", "Acero inoxidable"),
+            ("dark", "Metal negro"),
+            ("black", "Fundición"),
+            ("ring", "Metal negro"),
+            ("wood", "Fresno oscuro"),
+            ("ceramic", "Gres"),
+            ("hood", "Metal negro"),
+        ],
+    },
+    Kitchen {
+        collection: "Clásica",
+        materials: &[
+            ("mat", "Lacado marfil"),
+            ("plinth", "Lacado marfil"),
+            ("top", "Mármol"),
+            ("metal", "Latón"),
+            ("sink", "Cerámica blanca"),
+            ("dark", "Fresno oscuro"),
+            ("black", "Metal negro"),
+            ("ring", "Latón"),
+            ("wood", "Nogal"),
+            ("ceramic", "Cerámica esmaltada"),
+            ("hood", "Cal blanca"),
+        ],
+    },
+];
+
+/// The modules of a workshop kitchen, left to right: family, width and
+/// what it holds (values by name).
+/// A value of a type by its parameter's name.
+type Values = &'static [(&'static str, Val)];
+
+const RUN: &[(&str, f64, Values)] = &[
+    (
+        "Columna de cocina (taller)",
+        0.6,
+        &[("tall", T("Frigorífico integrado"))],
+    ),
+    (
+        "Módulo bajo de cocina (taller)",
+        0.6,
+        &[("unit", T("Cajonera")), ("drawers", N(3.0))],
+    ),
+    (
+        "Módulo bajo de cocina (taller)",
+        0.8,
+        &[("unit", T("Fregadero")), ("doors", N(2.0))],
+    ),
+    (
+        "Módulo bajo de cocina (taller)",
+        0.6,
+        &[("unit", T("Lavavajillas"))],
+    ),
+    (
+        "Módulo bajo de cocina (taller)",
+        0.8,
+        &[("unit", T("Placa")), ("drawers", N(2.0))],
+    ),
+    (
+        "Módulo bajo de cocina (taller)",
+        0.6,
+        &[("unit", T("Horno"))],
+    ),
+];
+
+/// A type of a workshop kitchen's family in its collection, with
+/// `values` over it (found if already made).
+fn kitchen_type(
+    m: &mut Model,
+    k: &Kitchen,
+    family_name: &str,
+    label: &str,
+    values: &[(&str, Val)],
+) -> Result<ObjectTypeId, ModelError> {
+    let name = format!("{label} · {} (taller)", k.collection);
+    if let Some(t) = m.object_types().find(|t| t.name == name) {
+        return Ok(t.id);
+    }
+    let f = family(m, family_name)?;
+    let mut v = m.family_defaults(f, ParamScope::Type)?;
+    v.insert("model3d".into(), Value::Text(k.collection.into()));
+    for (key, mat) in k.materials {
+        if let Some(id) = crate::palette_material(m, mat) {
+            v.insert((*key).into(), Value::Material(id.0));
+        }
+    }
+    for (key, val) in values {
+        let val = match val {
+            N(n) => Value::Number(*n),
+            M(n) => match crate::palette_material(m, n) {
+                Some(id) => Value::Material(id.0),
+                None => continue,
+            },
+            T(t) => Value::Text((*t).into()),
+            B(b) => Value::Bool(*b),
+        };
+        v.insert((*key).into(), val);
+    }
+    m.add_object_type(&name, f, v)
+}
+
+/// Places a kitchen with its back on a wall along `y = wall` from `x`
+/// (looking south): its run of modules, its wall units and its hood.
+/// Returns where it ends.
+fn place_kitchen(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let mut at = x;
+    let mut hob_at = None;
+    for (family_name, w, values) in RUN {
+        let label = values
+            .iter()
+            .find_map(|(key, v)| match v {
+                T(t) if *key == "unit" || *key == "tall" => Some(*t),
+                _ => None,
+            })
+            .unwrap_or("Módulo");
+        let mut vals: Vec<(&str, Val)> = vec![("width", N(*w))];
+        for (key, v) in values.iter() {
+            vals.push((
+                key,
+                match v {
+                    N(n) => N(*n),
+                    M(n) => M(n),
+                    T(t) => T(t),
+                    B(b) => B(*b),
+                },
+            ));
+        }
+        let t = kitchen_type(
+            m,
+            k,
+            family_name,
+            &format!("{label} {:.0}", w * 100.0),
+            &vals,
+        )?;
+        let cx = at + w / 2.0;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(cx, wall),
+            rotation: std::f64::consts::PI,
+            base_offset: 0.0,
+        })?;
+        if label == "Placa" {
+            hob_at = Some((cx, *w));
+        }
+        at += w;
+    }
+    // Wall units over the modules from the column to the hob, and over
+    // the oven; the hood over the hob.
+    let (hx, hw) = hob_at.unwrap_or((at - 0.5, 0.8));
+    let left = (x + 0.6, hx - hw / 2.0);
+    let right = (hx + hw / 2.0, at);
+    for (a, e) in [left, right] {
+        let w = e - a;
+        if w < 0.3 {
+            continue;
+        }
+        let doors = (w / 0.5).round().max(1.0);
+        let t = kitchen_type(
+            m,
+            k,
+            "Mueble alto de cocina (taller)",
+            &format!("Altos {:.0}", w * 100.0),
+            &[
+                ("width", N(w)),
+                ("doors", N(doors)),
+                ("elevation", N(1.45)),
+                ("height", N(0.7)),
+            ],
+        )?;
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new((a + e) / 2.0, wall),
+            rotation: std::f64::consts::PI,
+            base_offset: 0.0,
+        })?;
+    }
+    let built = k.collection == "Japandi";
+    let t = kitchen_type(
+        m,
+        k,
+        "Campana de cocina (taller)",
+        "Campana",
+        &[
+            ("width", N(if built { hw } else { 0.9 })),
+            ("depth", N(if built { 0.35 } else { 0.5 })),
+            ("elevation", N(if built { 1.45 } else { 1.55 })),
+            ("height", N(if built { 0.7 } else { 1.05 })),
+        ],
+    )?;
+    m.add_object(NewObject {
+        object_type: t,
+        level,
+        position: Point2::new(hx, wall),
+        rotation: std::f64::consts::PI,
+        base_offset: 0.0,
+    })?;
+    Ok(at)
+}
 
 /// The project's copy of a workshop family, loading it if needed.
 pub fn family(m: &mut Model, name: &str) -> Result<archisim_core::FamilyId, ModelError> {
@@ -205,6 +511,24 @@ pub fn project() -> Result<Model, ModelError> {
         bulge: 0.0,
         top: WallTop::Unconnected,
     })?;
+    // The kitchens, east of the pieces, each on its own wall.
+    let mut x = wall_end + 2.0;
+    let wall = 1.2;
+    for k in KITCHENS {
+        let end = place_kitchen(&mut m, k, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     Ok(m)
 }
 
@@ -214,6 +538,15 @@ mod tests {
 
     #[test]
     fn every_material_of_a_piece_is_in_the_palette() {
+        for k in KITCHENS {
+            for (key, name) in k.materials {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{}: {key} = {name}",
+                    k.collection
+                );
+            }
+        }
         for piece in PIECES {
             for (k, v) in piece.values {
                 if let M(name) = v {
@@ -237,6 +570,36 @@ mod tests {
         }
         assert!(m.type_has_prop(t));
         m.type_prop(t).unwrap().0.triangle_count()
+    }
+
+    /// Every kitchen of the workshop is made in its collection: each
+    /// module with its own model, its worktop one run.
+    #[test]
+    fn the_workshop_kitchens_are_made() {
+        let m = project().unwrap();
+        for k in KITCHENS {
+            let mine: Vec<_> = m
+                .objects()
+                .filter(|o| {
+                    m.object_type(o.object_type)
+                        .is_some_and(|t| t.name.contains(k.collection))
+                })
+                .collect();
+            assert_eq!(mine.len(), RUN.len() + 3, "{}", k.collection);
+            for o in &mine {
+                let t = o.object_type;
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (100..=30_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+            let first = mine.iter().find(|o| m.worktop_run_of(o.id).is_some());
+            let run = m.worktop_run_of(first.expect("a worktop run").id).unwrap();
+            assert_eq!(run.members.len(), RUN.len() - 1, "{}", k.collection);
+        }
     }
 
     /// Every piece of the workshop is made with its own 3D and stays within

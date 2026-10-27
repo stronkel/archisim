@@ -103,13 +103,18 @@ pub fn basin(b: &mut Builder, c: [f64; 2], a: f64, bb: f64, h: f64) {
 /// A gooseneck mixer standing at `at` (on the worktop), its spout
 /// `reach` in front (towards `+y`).
 pub fn tap(b: &mut Builder, at: P3, reach: f64) {
+    tap_in(b, "sink", at, reach);
+}
+
+/// [`tap`] made of `role`.
+pub fn tap_in(b: &mut Builder, role: &'static str, at: P3, reach: f64) {
     let [x, y, z] = at;
     let rb = 0.0215;
     // The body, turned: a foot on the worktop and a slim column, its top
     // rounded into the neck.
     turned(
         b,
-        "sink",
+        role,
         at,
         &[
             (0.0, 0.0),
@@ -136,12 +141,12 @@ pub fn tap(b: &mut Builder, at: P3, reach: f64) {
     }
     path.push([x, y + reach, z + top - 0.02]);
     let rn = 0.0108;
-    sweep(b, "sink", &path, |_| rn, 20, Cap::Flat, Cap::Flat);
+    sweep(b, role, &path, |_| rn, 20, Cap::Flat, Cap::Flat);
     // The spray head, a little wider, its nozzle dark underneath.
     let head = [x, y + reach, z + top - 0.085];
     turned(
         b,
-        "sink",
+        role,
         head,
         &[
             (0.0, 0.0),
@@ -170,7 +175,7 @@ pub fn tap(b: &mut Builder, at: P3, reach: f64) {
     // The lever on the right of the body: its boss grows out of the
     // column, and the handle rises from it towards the back.
     let lz = z + 0.105;
-    turned_x(b, [x, y, lz], rb - 0.006, rb + 0.016, 0.0125);
+    turned_x(b, role, [x, y, lz], rb - 0.006, rb + 0.016, 0.0125);
     let handle = vec![
         [x + rb + 0.012, y, lz],
         [x + rb + 0.024, y - 0.004, lz + 0.012],
@@ -180,7 +185,7 @@ pub fn tap(b: &mut Builder, at: P3, reach: f64) {
     let handle = super::shape::curve(&handle, 4);
     sweep(
         b,
-        "sink",
+        role,
         &handle,
         |t| 0.0068 - 0.0012 * t,
         14,
@@ -191,10 +196,10 @@ pub fn tap(b: &mut Builder, at: P3, reach: f64) {
 
 /// A short round boss across the vertical, along `+x` from `x0` to `x1`
 /// off the axis at `c`.
-fn turned_x(b: &mut Builder, c: P3, x0: f64, x1: f64, r: f64) {
+fn turned_x(b: &mut Builder, role: &'static str, c: P3, x0: f64, x1: f64, r: f64) {
     let a = add(c, [x0, 0.0, 0.0]);
     let e = add(c, [x1, 0.0, 0.0]);
-    sweep(b, "sink", &[a, e], |_| r, 22, Cap::Flat, Cap::Round(0.35));
+    sweep(b, role, &[a, e], |_| r, 22, Cap::Flat, Cap::Round(0.35));
 }
 
 #[cfg(test)]

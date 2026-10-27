@@ -1,0 +1,71 @@
+family "Módulo bajo de cocina (taller)"
+  category kitchen
+  host none
+  version 1
+  description "Módulo bajo de cocina hecho en una de las ocho colecciones: frentes, tiradores, zócalo o patas, fregadero, grifo y placa de cada una (modelo del taller, en revisión). Junto a otro, las encimeras se juntan."
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.60 range 0.15..1.20 label "Ancho"
+    depth  length = 0.60 range 0.45..0.70 label "Fondo"
+    height length = 0.90 range 0.80..0.95 label "Altura"
+  section "Encimera"
+    overhang length = 0.00 range 0.00..0.45 label "Vuelo delante"
+    overhang_back length = 0.00 range 0.00..0.45 label "Vuelo detrás"
+    upstand length = 0.00 range 0.00..0.20 label "Copete"
+  section "Módulo"
+    unit choice("Cajonera", "Puertas", "Fregadero", "Horno", "Lavavajillas", "Placa", "Botellero", "Esquina") = "Cajonera" label "Qué lleva"
+    drawers integer = 3 range 0..4 visible_if unit == "Cajonera" or unit == "Placa" label "Cajones"
+    doors integer = 1 range 1..2 visible_if unit == "Puertas" or unit == "Fregadero" label "Puertas"
+  section "Materiales"
+    mat material = "Lacado blanco" label "Frentes"
+    plinth material = "Roble claro" label "Zócalo"
+    top material = "Roble claro" label "Encimera"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+    metal material = "Acero inoxidable" label "Tiradores y grifería"
+    sink material = "Acero inoxidable" label "Fregadero"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    black material = "Vitrocerámica" label "Placa y horno"
+    ring material = "Cal blanca" label "Marcas de la placa"
+    glass material = "Vidrio claro" label "Vidrio"
+    wood material = "Roble claro" label "Madera (patas, baldas)"
+    ceramic material = "Cerámica blanca" label "Tarros y jarras"
+    hood material = "Lacado blanco" label "Campana"
+
+body
+  box (-width / 2, 0, 0.1) to (width / 2, depth - 0.04, height - 0.03) material mat
+  box (-width / 2, -overhang_back, height - 0.03) to (width / 2, depth + overhang, height) material top
+  if upstand > 0
+    box (-width / 2, -overhang_back, height) to (width / 2, -overhang_back + 0.02, height + upstand) material top
+
+plan 1:50
+  polygon (-width / 2, -overhang_back) (width / 2, -overhang_back) (width / 2, depth + overhang) (-width / 2, depth + overhang) pen view
+  if overhang > 0
+    line (-width / 2, depth) to (width / 2, depth) pen thin dashed
+  if overhang_back > 0
+    line (-width / 2, 0) to (width / 2, 0) pen thin dashed
+  if unit == "Fregadero" and width >= 0.45
+    polygon (-width / 2 + 0.06, 0.1) (width / 2 - 0.06, 0.1) (width / 2 - 0.06, depth - 0.12) (-width / 2 + 0.06, depth - 0.12) pen thin
+  if unit == "Placa"
+    let yc = depth / 2
+    repeat i in 0..4
+      let dx = if i == 0 or i == 2 then -0.12 else 0.12
+      let dy = if i < 2 then -0.12 else 0.12
+      arc center (dx, yc + dy) from (dx + 0.08, yc + dy) to (dx, yc + dy + 0.08) pen thin
+      arc center (dx, yc + dy) from (dx, yc + dy + 0.08) to (dx - 0.08, yc + dy) pen thin
+      arc center (dx, yc + dy) from (dx - 0.08, yc + dy) to (dx, yc + dy - 0.08) pen thin
+      arc center (dx, yc + dy) from (dx, yc + dy - 0.08) to (dx + 0.08, yc + dy) pen thin
+  if unit == "Horno" or unit == "Lavavajillas"
+    line (-width / 2, depth) to (width / 2, depth - 0.05) pen thin
+  if unit == "Esquina"
+    line (-width / 2, 0) to (-width / 2 + width * 0.45, depth) pen thin dashed
+
+outputs
+  # Placed beside another module, in line: flush, so their worktops meet
+  # (each keeps its own drawers, doors and front).
+  joins = "row"
+  generator = "props:base_unit"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

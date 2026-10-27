@@ -148,6 +148,10 @@ pub const UNITS: &[&str] = &[
 /// a basin and tap), an oven under a drawer, a dishwasher, a hob over
 /// drawers, a bottle rack or a blind corner.
 pub fn base_unit(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2a).
+    if crate::fine::kitchen::base_unit(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6);
     let d = p.get("depth", 0.6);
     let h = p.get("height", 0.9);
@@ -371,6 +375,10 @@ pub const TALLS: &[&str] = &["Despensa", "Horno y microondas", "Frigorífico int
 /// A tall unit of a modular kitchen: a larder with two doors, an oven and
 /// a microwave between doors, or an integrated fridge.
 pub fn tall_unit(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2a).
+    if crate::fine::kitchen::tall_unit(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6);
     let d = p.get("depth", 0.6);
     let h = p.get("height", 2.1);
@@ -511,6 +519,10 @@ pub fn tall_unit(b: &mut Builder, p: &Params) {
 
 /// Wall units, at their height over the floor.
 pub fn wall_cabinet(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 2a).
+    if crate::fine::kitchen::wall_cabinet(b, p) {
+        return;
+    }
     let w = p.get("width", 1.2);
     let d = p.get("depth", 0.35);
     let h = p.get("height", 0.7);
