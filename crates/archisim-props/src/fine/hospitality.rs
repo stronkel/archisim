@@ -851,8 +851,10 @@ pub fn back_bar(b: &mut Builder, p: &Params) {
                 );
             }
         }
-        // Industrial: shelves of planks on posts of black pipe.
+        // Industrial: shelves of planks on posts of black pipe against
+        // bare brick.
         6 => {
+            b.rbox("masonry", [x0, 0.0, zw], [x1, 0.02, h], 0.0);
             let k = ((w / 1.0).ceil() as usize + 1).max(2);
             for i in 0..k {
                 let x = x0 + 0.06 + (w - 0.12) * i as f64 / (k - 1) as f64;
@@ -1762,9 +1764,9 @@ pub fn banquette(b: &mut Builder, p: &Params) {
                 knife_pillow(
                     b,
                     role,
-                    [x, 0.22, seat + 0.2],
+                    [x, 0.26, seat + 0.19],
                     [cy, sy, 0.0],
-                    [-sy * cl, cy * cl, sl],
+                    [sy * cl, -cy * cl, sl],
                     0.42,
                     0.42,
                     0.2,

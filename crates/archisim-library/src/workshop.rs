@@ -1329,6 +1329,7 @@ pub const BAR_EXTRAS: [&[(&str, &str)]; 8] = [
         ("frame", "Pino viejo"),
         ("front", "Metal negro"),
         ("top", "Roble ahumado"),
+        ("masonry", "Ladrillo visto"),
         ("carcass", "Lacado arena"),
         ("dark", "Metal negro"),
         ("metal", "Acero inoxidable"),
@@ -1388,7 +1389,7 @@ fn place_bar(
     put(m, back, x + 1.2, wall, pi)?;
     put(m, counter, x + 1.2, wall - 1.4, pi)?;
     let stool = kitchen_type(m, k, "Taburete", "Taburete", &[("height", N(0.75))])?;
-    for sx in [x + 0.5, x + 1.2, x + 1.9] {
+    for sx in [x + 0.42, x + 1.2, x + 1.98] {
         put(m, stool, sx, wall - 2.25 - 0.19, 0.0)?;
     }
     put(m, bench, x + 4.0, wall, pi)?;

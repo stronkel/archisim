@@ -1371,9 +1371,9 @@ fn bar_pictures() {
             (
                 "servicio",
                 Light::Day,
-                -125.0,
-                24.0,
-                2.4,
+                100.0,
+                58.0,
+                1.8,
                 Some((at("Barra de bar"), 0.9, -0.3)),
             ),
             (
