@@ -3,7 +3,8 @@
 //!
 //! Padel court (20 × 10 m inside its glass and mesh), tennis court
 //! (36,57 × 18,29 m with its run-off), basketball court (32 × 19 m with its
-//! hoops) and a grandstand of concrete steps with seats.
+//! hoops), futsal court (40 × 20 m), football field of grass (eleven or
+//! seven a side) and a grandstand of concrete steps with seats.
 //!
 //! Each is centred on `x = 0` (the length of a court along `x`) with its
 //! near edge at `y = 0`. Roles: `ground` (the run-off), `court` (the
@@ -12,7 +13,7 @@
 //! night); the basketball hoops' `board` and `accent` (rims and pads); the
 //! grandstand's `mass`, `seat` and `metal`.
 
-use super::sport::{basketball_hoop, cord, net};
+use super::sport::{basketball_hoop, cord, goal, net};
 use crate::build::Builder;
 use crate::Params;
 use std::f64::consts::{FRAC_PI_2, PI};
@@ -31,10 +32,10 @@ fn line_path(b: &mut Builder, role: &'static str, path: &[[f64; 2]], w: f64, z: 
         let half = l / 2.0 + w * 0.2;
         b.obox(
             role,
-            [(a[0] + c[0]) / 2.0, (a[1] + c[1]) / 2.0, z + 0.0004],
+            [(a[0] + c[0]) / 2.0, (a[1] + c[1]) / 2.0, z + 0.0015],
             [ux * half, uy * half, 0.0],
             [-uy * w / 2.0, ux * w / 2.0, 0.0],
-            [0.0, 0.0, 0.0004],
+            [0.0, 0.0, 0.0015],
         );
     }
 }
@@ -325,7 +326,7 @@ pub fn basketball_court(b: &mut Builder, _p: &Params) {
         let ft = s * (hl - 5.8);
         // The key, painted, and its lines.
         let (k0, k1) = (base.min(ft), base.max(ft));
-        b.rbox("key", [k0, yc - 2.45, z], [k1, yc + 2.45, z + 0.0003], 0.0);
+        b.rbox("key", [k0, yc - 2.45, z], [k1, yc + 2.45, z + 0.003], 0.0);
         line_path(
             b,
             "line",
@@ -336,7 +337,7 @@ pub fn basketball_court(b: &mut Builder, _p: &Params) {
                 [base, yc + 2.45],
             ],
             w,
-            z + 0.0003,
+            z + 0.003,
         );
         // The free-throw circle, toward the middle.
         let (a0, a1) = if s > 0.0 {
@@ -344,7 +345,7 @@ pub fn basketball_court(b: &mut Builder, _p: &Params) {
         } else {
             (-FRAC_PI_2, FRAC_PI_2)
         };
-        line_path(b, "line", &arc([ft, yc], 1.8, a0, a1, 24), w, z + 0.0003);
+        line_path(b, "line", &arc([ft, yc], 1.8, a0, a1, 24), w, z + 0.003);
         // The three-point line: straight from the baseline, then the arc.
         let a: f64 = (6.6_f64 / 6.75).asin();
         let (b0, b1) = if s > 0.0 { (PI + a, PI - a) } else { (-a, a) };
@@ -361,6 +362,194 @@ pub fn basketball_court(b: &mut Builder, _p: &Params) {
         // In the hoop's own plan the rim is 2,7 m in front of its back.
         let x0 = rim + s * 2.7;
         b.transform_from(st, |q| [x0 - s * q[1], yc + s * q[0], q[2]]);
+    }
+}
+
+/// Places a goal of `width` × `height` on the goal line at `x = ±hl`
+/// (`side` −1 west, +1 east), its mouth toward the middle.
+fn goal_at(b: &mut Builder, side: f64, hl: f64, yc: f64, width: f64, height: f64, depth: f64) {
+    let st = b.mark();
+    let mut gp = Params::default();
+    gp.set("width", width);
+    gp.set("height", height);
+    gp.set("depth", depth);
+    goal(b, &gp);
+    // In the goal's own plan its posts are at `y = depth`.
+    let x0 = side * (hl + depth);
+    b.transform_from(st, |q| [x0 - side * q[1], yc + side * q[0], q[2]]);
+}
+
+/// A corner flag at `(x, y)`.
+fn corner_flag(b: &mut Builder, x: f64, y: f64) {
+    super::hospitality::rod(b, "frame", [x, y, 0.0], [x, y, 1.5], 0.012);
+    b.rbox(
+        "accent",
+        [x + 0.012, y - 0.002, 1.2],
+        [x + 0.36, y + 0.002, 1.48],
+        0.0,
+    );
+}
+
+/// A futsal court: 40 × 20 m with its lines (the penalty areas drawn by
+/// quarter circles of 6 m from the posts), its 3 × 2 m goals, on its
+/// run-off (44 × 24 m).
+pub fn futsal_court(b: &mut Builder, _p: &Params) {
+    let (gl, gw) = (22.0, 24.0);
+    let yc = gw / 2.0;
+    let (hl, hw) = (20.0, 10.0);
+    let z = 0.015;
+    let w = 0.08;
+    b.rbox("ground", [-gl, 0.0, 0.0], [gl, gw, 0.01], 0.0);
+    b.rbox(
+        "court",
+        [-hl - 0.05, yc - hw - 0.05, 0.0],
+        [hl + 0.05, yc + hw + 0.05, z],
+        0.0,
+    );
+    line_path(
+        b,
+        "line",
+        &[
+            [-hl, yc - hw],
+            [hl, yc - hw],
+            [hl, yc + hw],
+            [-hl, yc + hw],
+            [-hl, yc - hw],
+        ],
+        w,
+        z,
+    );
+    line(b, [0.0, yc - hw], [0.0, yc + hw], w, z);
+    line_path(b, "line", &arc([0.0, yc], 3.0, 0.0, 2.0 * PI, 40), w, z);
+    for s in [-1.0, 1.0] {
+        let base = s * hl;
+        // The area: quarter circles round each post, joined in front.
+        let (p0, p1) = (yc - 1.58, yc + 1.58);
+        let mut path = Vec::new();
+        if s < 0.0 {
+            path.extend(arc([base, p0], 6.0, -FRAC_PI_2, 0.0, 16));
+            path.extend(arc([base, p1], 6.0, 0.0, FRAC_PI_2, 16));
+        } else {
+            path.extend(arc([base, p0], 6.0, 3.0 * FRAC_PI_2, PI, 16));
+            path.extend(arc([base, p1], 6.0, PI, FRAC_PI_2, 16));
+        }
+        line_path(b, "line", &path, w, z);
+        // The penalty marks at 6 and 10 m.
+        for d in [6.0, 10.0] {
+            let x = base - s * d;
+            b.rbox(
+                "line",
+                [x - 0.06, yc - 0.06, z],
+                [x + 0.06, yc + 0.06, z + 0.003],
+                0.0,
+            );
+        }
+        goal_at(b, s, hl, yc, 3.0, 2.0, 0.8);
+    }
+}
+
+/// A football field of grass, mown in stripes, with its lines, goals and
+/// corner flags on its run-off: `game` 1 eleven-a-side (105 × 68 m, goals
+/// 7,32 × 2,44 m), 2 seven-a-side (65 × 45 m, goals 6 × 2 m).
+pub fn football_field(b: &mut Builder, p: &Params) {
+    let seven = p.get("game", 1.0).round() as i32 == 2;
+    // Field, areas, goal and circle by game.
+    let (hl, hw, run) = if seven {
+        (32.5, 22.5, 3.0)
+    } else {
+        (52.5, 34.0, 4.0)
+    };
+    let (area_d, area_w, small_d, small_w, spot, circle, gw_, gh) = if seven {
+        (13.0, 30.0, 5.0, 12.0, 9.0, 6.0, 6.0, 2.0)
+    } else {
+        (16.5, 40.32, 5.5, 18.32, 11.0, 9.15, 7.32, 2.44)
+    };
+    let gwid = 2.0 * (hw + run);
+    let yc = gwid / 2.0;
+    let z = 0.015;
+    let w = 0.12;
+    b.rbox("ground", [-hl - run, 0.0, 0.0], [hl + run, gwid, 0.01], 0.0);
+    // The pitch over the run-off, mown in stripes that share their edges
+    // (one surface, two colours: no seam between them).
+    let n = if seven { 10 } else { 18 };
+    let (y0, y1) = (yc - hw, yc + hw);
+    let row: Vec<(u32, u32)> = (0..=n)
+        .map(|k| {
+            let x = -hl + 2.0 * hl * k as f64 / n as f64;
+            (b.point([x, y0, z]), b.point([x, y1, z]))
+        })
+        .collect();
+    for k in 0..n {
+        let role = if k % 2 == 0 { "court" } else { "court2" };
+        let ((a0, a1), (c0, c1)) = (row[k], row[k + 1]);
+        b.quad(role, a0, c0, c1, a1);
+    }
+    line_path(
+        b,
+        "line",
+        &[
+            [-hl, yc - hw],
+            [hl, yc - hw],
+            [hl, yc + hw],
+            [-hl, yc + hw],
+            [-hl, yc - hw],
+        ],
+        w,
+        z,
+    );
+    line(b, [0.0, yc - hw], [0.0, yc + hw], w, z);
+    line_path(b, "line", &arc([0.0, yc], circle, 0.0, 2.0 * PI, 64), w, z);
+    let mark = |b: &mut Builder, x: f64, y: f64| {
+        b.rbox(
+            "line",
+            [x - 0.11, y - 0.11, z],
+            [x + 0.11, y + 0.11, z + 0.003],
+            0.0,
+        );
+    };
+    mark(b, 0.0, yc);
+    for s in [-1.0, 1.0] {
+        let base = s * hl;
+        for (d, half) in [(area_d, area_w / 2.0), (small_d, small_w / 2.0)] {
+            let x = base - s * d;
+            line_path(
+                b,
+                "line",
+                &[
+                    [base, yc - half],
+                    [x, yc - half],
+                    [x, yc + half],
+                    [base, yc + half],
+                ],
+                w,
+                z,
+            );
+        }
+        let sx = base - s * spot;
+        mark(b, sx, yc);
+        // The arc of the area: the circle round the spot outside it.
+        let dx = area_d - spot;
+        let a = (dx / circle).acos();
+        let (a0, a1) = if s < 0.0 { (-a, a) } else { (PI - a, PI + a) };
+        line_path(b, "line", &arc([sx, yc], circle, a0, a1, 16), w, z);
+        // The corner arcs and flags.
+        for t in [-1.0, 1.0] {
+            let (cx, cy) = (base, yc + t * hw);
+            // A quarter round into the field, the short way.
+            let toward = if s < 0.0 { 0.0 } else { PI };
+            let inward = if t < 0.0 { FRAC_PI_2 } else { -FRAC_PI_2 };
+            let mut d = inward - toward;
+            while d > PI {
+                d -= 2.0 * PI;
+            }
+            while d < -PI {
+                d += 2.0 * PI;
+            }
+            let (c0, c1) = (toward, toward + d);
+            line_path(b, "line", &arc([cx, cy], 1.0, c0, c1, 8), w, z);
+            corner_flag(b, cx, cy);
+        }
+        goal_at(b, s, hl, yc, gw_, gh, 2.0);
     }
 }
 
@@ -433,8 +622,15 @@ mod tests {
 
     #[test]
     fn the_courts_are_made() {
-        let pieces: [(&str, Make); 4] = [
+        let pieces: [(&str, Make); 7] = [
             ("pádel", padel_court),
+            ("fútbol sala", futsal_court),
+            ("fútbol", football_field),
+            ("fútbol 7", |b, _| {
+                let mut p = Params::default();
+                p.set("game", 2.0);
+                football_field(b, &p)
+            }),
             ("tenis", tennis_court),
             ("baloncesto", basketball_court),
             ("grada", grandstand),

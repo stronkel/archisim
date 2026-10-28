@@ -46,6 +46,8 @@ use soft::{knife_pillow, Soft};
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
     ("fine_padel_court", &["Único"]),
+    ("fine_futsal_court", &["Único"]),
+    ("fine_football_field", &["Único"]),
     ("fine_tennis_court", &["Único"]),
     ("fine_basketball_court", &["Único"]),
     ("fine_grandstand", &["Único"]),
@@ -645,6 +647,8 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_wall_bars" => sport::wall_bars(b, p),
         "fine_yoga_mat" => sport::yoga_mat(b, p),
         "fine_padel_court" => courts::padel_court(b, p),
+        "fine_futsal_court" => courts::futsal_court(b, p),
+        "fine_football_field" => courts::football_field(b, p),
         "fine_tennis_court" => courts::tennis_court(b, p),
         "fine_basketball_court" => courts::basketball_court(b, p),
         "fine_grandstand" => courts::grandstand(b, p),

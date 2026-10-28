@@ -2266,6 +2266,8 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Pintura verde", "other", [55, 115, 70]),
     ("Pintura amarilla", "other", [230, 180, 40]),
     ("Luz de foco", "other", [250, 248, 235]),
+    ("Césped natural", "vegetation", [72, 136, 64]),
+    ("Césped natural claro", "vegetation", [94, 158, 80]),
     ("Vidrio claro", "glass", [206, 224, 228]),
     ("Lacado blanco", "wood", [234, 230, 222]),
     ("Lacado arena", "wood", [214, 200, 178]),

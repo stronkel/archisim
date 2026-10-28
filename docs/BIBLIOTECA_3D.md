@@ -377,6 +377,8 @@ En el taller (rama `bloque/paquete-8c`, `archisim_props::fine::courts` y `fine::
 | Pista de pádel | `fine_padel_court` | 20 × 10 m, cristal a 3 m en fondos y 2 + 2 m escalonados en laterales | `court`, `ground`, `line`, `glass`, `net`, `frame`, `dark`, `light` |
 | Pista de tenis | `fine_tennis_court` | 23,77 × 10,97 m en 36,57 × 18,29 m | `court`, `ground`, `line`, `net`, `dark`, `frame` |
 | Pista de baloncesto | `fine_basketball_court` | 28 × 15 m en 32 × 19 m, aros a 3,05 m | `court`, `ground`, `line`, `key`, `accent`, `frame`, `dark`, `board`, `net` |
+| Pista de fútbol sala | `fine_futsal_court` | 40 × 20 m en 44 × 24 m, porterías de 3 × 2 m | `court`, `ground`, `line`, `frame`, `net` |
+| Campo de fútbol | `fine_football_field` | `game` Fútbol 11 (105 × 68 m, porterías de 7,32 × 2,44 m) o Fútbol 7 (65 × 45 m, porterías de 6 × 2 m) | `court`, `court2` (franjas), `ground`, `line`, `frame`, `net`, `accent` (banderines) |
 | Grada | `fine_grandstand` | `length` 2–30 m, `rows` 1–10 (huella 0,80, tabica 0,42) | `mass`, `seat`, `metal` |
 | Columpio | `fine_swing` | 3,7 × 1,6 m, viga a 2,4 m | `frame`, `seat`, `accent` (cuna), `metal`, `dark` |
 | Tobogán | `fine_slide` | 1,5 × 5,4 m, plataforma a 1,2 m | `frame`, `accent`, `slide`, `metal` |
@@ -385,9 +387,10 @@ En el taller (rama `bloque/paquete-8c`, `archisim_props::fine::courts` y `fine::
 | Estación de calistenia | `fine_calisthenics` | 7,2 × 2,4 m | `frame`, `metal`, `accent`, `ground` |
 | Elíptica de parque | `fine_park_elliptical` | 0,8 × 1,0 m | `frame`, `accent`, `dark` |
 
-- Recetas `taller/pista_*.asfam`, `taller/grada.asfam` y `taller/parque_*.asfam`; tipos «<pieza> (taller)» (`workshop::PARK_PIECES`, `place_park`).
+- Recetas `taller/pista_*.asfam`, `taller/campo_futbol.asfam`, `taller/grada.asfam` y `taller/parque_*.asfam`; tipos «<pieza> (taller)» (`workshop::PARK_PIECES`, `place_park`).
 - Las canastas de la pista de baloncesto son la canasta de la tanda 8b con más vuelo (`reach` 2,30 m), para que el mástil quede detrás de la línea de fondo.
 - Los focos del pádel se encienden de noche (`glow_materials`).
+- Las franjas del campo de fútbol son una sola superficie con dos colores (sin costura entre ellas); el campo es un parámetro de elección (`game`, en `props::CHOICES`).
 - Fotos con `ARCHISIM_PARQUE_OUT=carpeta cargo test --release -p archisim-app -- park_pictures`.
 
 ### Paquete 8, tanda 8b: deporte en casa y gimnasio (28/10/2026)

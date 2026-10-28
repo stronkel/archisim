@@ -888,6 +888,7 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ),
     ("side", &["Derecha", "Izquierda"]),
     ("form", fine::pool::FORMS),
+    ("game", &["Fútbol 11", "Fútbol 7"]),
 ];
 
 /// The number of a value chosen by name (see [`CHOICES`]).

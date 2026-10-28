@@ -1746,10 +1746,9 @@ fn pool_pictures() {
     }
 }
 
-/// Pictures of pieces without collections (paquete 8): the whole, from
-/// above, and each piece close (`look`: its target's height, the zoom and
-/// how far south of its origin to look), into `dir`.
-fn piece_pictures(dir: &Path, labels: &[String], look: &dyn Fn(usize) -> (f32, f32, f32)) {
+/// Pictures of pieces without collections (paquete 8): all of them, from
+/// above, and each on its own, into `dir`.
+fn piece_pictures(dir: &Path, labels: &[String]) {
     std::fs::create_dir_all(dir).unwrap();
     let Some(gpu) = super::gpu_tests::gpu() else {
         eprintln!("No graphics adapter: pictures skipped.");
@@ -1759,61 +1758,48 @@ fn piece_pictures(dir: &Path, labels: &[String], look: &dyn Fn(usize) -> (f32, f
     let m = archisim_library::workshop::project().unwrap();
     let size = [1200u32, 800u32];
     let aspect = size[0] as f32 / size[1] as f32;
-    let mine: Vec<_> = m
-        .object_types()
-        .filter(|t| labels.contains(&t.name))
-        .map(|t| t.id)
-        .collect();
-    let mut one = m.clone();
-    let others: Vec<_> = one
-        .objects()
-        .filter(|o| !mine.contains(&o.object_type))
-        .map(|o| o.id)
-        .collect();
-    for o in others {
-        one.remove_object(o).unwrap();
-    }
-    let walls: Vec<_> = one.walls().map(|w| w.id).collect();
-    for w in walls {
-        one.remove_wall(w).unwrap();
-    }
-    let at = |name: &str| {
-        one.objects()
-            .find(|o| {
-                one.object_type(o.object_type)
-                    .is_some_and(|t| t.name == name)
-            })
-            .map(|o| (o.position.x as f32, o.position.y as f32))
-            .unwrap()
+    // The workshop with only the objects of these types (and no walls).
+    let only = |types: &[String]| {
+        let mine: Vec<_> = m
+            .object_types()
+            .filter(|t| types.contains(&t.name))
+            .map(|t| t.id)
+            .collect();
+        let mut one = m.clone();
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| !mine.contains(&o.object_type))
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let walls: Vec<_> = one.walls().map(|w| w.id).collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        one
     };
-    type View = (String, f32, f32, f32, Option<((f32, f32), f32, f32)>);
-    let mut views: Vec<View> = vec![
-        ("conjunto".into(), -60.0, 35.0, 1.05, None),
-        ("cenital".into(), -90.0, 75.0, 1.1, None),
+    let all = only(labels);
+    let mut views = vec![
+        ("conjunto".to_string(), all.clone(), -60.0, 35.0, 1.05),
+        ("cenital".to_string(), all, -90.0, 75.0, 1.1),
     ];
     for (i, l) in labels.iter().enumerate() {
-        let (x, y) = at(l);
-        let (z, zoom, back) = look(i);
         views.push((
             format!("{:02}", i + 1),
-            -60.0,
-            22.0,
-            zoom,
-            Some(((x, y), z, back)),
+            only(std::slice::from_ref(l)),
+            -55.0,
+            26.0,
+            1.15,
         ));
     }
-    for (name, yaw, pitch, zoom, focus) in views {
+    for (name, one, yaw, pitch, zoom) in views {
         let pic = picture_in(
             &mut r,
             &gpu,
             &one,
-            |lo, hi| {
-                let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
-                if let Some(((x, y), z, back)) = focus {
-                    c.target = glam::Vec3::new(x, y - back, z);
-                }
-                c
-            },
+            |lo, hi| camera(lo, hi, aspect, yaw, pitch, zoom),
             size,
             Light::Day,
         );
@@ -1833,12 +1819,7 @@ fn sport_pictures() {
         .iter()
         .map(|(_, l, _)| format!("{l} (taller)"))
         .collect();
-    piece_pictures(Path::new(&dir), &labels, &|i| match i {
-        0 => (1.8, 3.0, 0.0),
-        1 | 4 => (0.9, 3.4, 0.0),
-        2 | 3 => (0.6, 4.2, 0.0),
-        _ => (0.6, 6.5, 1.0),
-    });
+    piece_pictures(Path::new(&dir), &labels);
 }
 
 /// The courts, the grandstand, the playground and calisthenics of the
@@ -1853,13 +1834,5 @@ fn park_pictures() {
         .iter()
         .map(|(_, l, _)| format!("{l} (taller)"))
         .collect();
-    piece_pictures(Path::new(&dir), &labels, &|i| match i {
-        0 => (1.0, 2.6, -5.0),
-        1 => (1.0, 1.9, -9.0),
-        2 => (1.0, 2.0, -9.5),
-        3 => (1.0, 9.0, -1.5),
-        5 => (1.2, 22.0, -2.5),
-        8 => (1.0, 16.0, -1.2),
-        _ => (0.6, 30.0, -0.4),
-    });
+    piece_pictures(Path::new(&dir), &labels);
 }

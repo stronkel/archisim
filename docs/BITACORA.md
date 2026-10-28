@@ -10,15 +10,15 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 Rama `bloque/paquete-8c` (sobre `bloque/paquete-8b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
 
-Antonio: «Con qué seguimos ahora?» → tanda 8c.
+Antonio: «Con qué seguimos ahora?» → tanda 8c. Después: «No hay de fútbol, no? Tanto sala como hierba» → pista de fútbol sala y campo de fútbol 11 y 7.
 
 **Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 8, tanda 8c»)
-- Diez familias nuevas, un modelo de cada una con sus colores por materiales: **pista de pádel** (20 × 10 m, césped, cristal escalonado y malla, red, puertas junto a la red y cuatro focos que se encienden de noche), **pista de tenis** (reglamentaria, con líneas de dobles e individuales, red con su caída al centro y silla de árbitro, sobre su zona de seguridad), **pista de baloncesto** (28 × 15 m con líneas, zonas pintadas, línea de triple y una canasta en cada fondo, con el mástil detrás de la línea de fondo), **grada** (de hormigón, de 1 a 10 filas, un asiento cada medio metro y barandilla), **columpio** (asiento plano y asiento cuna), **tobogán** (torre con escalera, plataforma a 1,2 m y tejadillo), **balancín**, **balancín de muelle**, **estación de calistenia** (dominadas a tres alturas, escalera horizontal, paralelas y barras de flexiones sobre caucho) y **elíptica de parque** (biosaludable).
-- En el taller, después del gimnasio: las tres pistas en fila (la grada delante de la de tenis) y el parque infantil con la calistenia.
+- Diez familias nuevas, un modelo de cada una con sus colores por materiales: **pista de pádel** (20 × 10 m, césped, cristal escalonado y malla, red, puertas junto a la red y cuatro focos que se encienden de noche), **pista de tenis** (reglamentaria, con líneas de dobles e individuales, red con su caída al centro y silla de árbitro, sobre su zona de seguridad), **pista de baloncesto** (28 × 15 m con líneas, zonas pintadas, línea de triple y una canasta en cada fondo, con el mástil detrás de la línea de fondo), **pista de fútbol sala** (40 × 20 m, áreas de 6 m, puntos de 6 y 10 m, porterías de 3 × 2 m), **campo de fútbol** de hierba segada a franjas (fútbol 11, 105 × 68 m, o fútbol 7, 65 × 45 m, con áreas, puntos, arcos, banderines de córner y porterías), **grada** (de hormigón, de 1 a 10 filas, un asiento cada medio metro y barandilla), **columpio** (asiento plano y asiento cuna), **tobogán** (torre con escalera, plataforma a 1,2 m y tejadillo), **balancín**, **balancín de muelle**, **estación de calistenia** (dominadas a tres alturas, escalera horizontal, paralelas y barras de flexiones sobre caucho) y **elíptica de parque** (biosaludable).
+- En el taller, después del gimnasio: las tres pistas en fila (la grada delante de la de tenis) la pista de fútbol sala y los dos campos de fútbol, y el parque infantil con la calistenia.
 
 **Qué debe probar Antonio**
 1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a las pistas, después del gimnasio.
-2. Comprueba las medidas y líneas de las tres pistas en planta y en 3D; cambia el largo y las filas de la grada.
+2. Comprueba las medidas y líneas de las pistas y los campos en planta y en 3D; cambia el campo de fútbol 11 a 7 y el largo y las filas de la grada. Las medidas de fútbol 7 (área de 13 × 30 m, área pequeña de 5 × 12 m, punto a 9 m, círculo de 6 m, porterías de 6 × 2 m) son las habituales; dime si tu federación usa otras.
 3. Mira los focos del pádel de noche, y dime qué falta en el parque (arenero, tirolina, mesa de ajedrez, más aparatos biosaludables…).
 
 ---

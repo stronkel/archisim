@@ -98,6 +98,8 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/parque_muelle.asfam"),
     include_str!("../taller/parque_calistenia.asfam"),
     include_str!("../taller/parque_eliptica.asfam"),
+    include_str!("../taller/pista_futbol_sala.asfam"),
+    include_str!("../taller/campo_futbol.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1934,7 +1936,7 @@ fn place_sport(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
 
 /// The courts, the grandstand, the playground and calisthenics (paquete 8,
 /// tanda 8c): one model each, no collections.
-pub const PARK_PIECES: [SportPiece; 10] = [
+pub const PARK_PIECES: [SportPiece; 13] = [
     ("Pista de pádel (taller)", "Pista de pádel", &[]),
     ("Pista de tenis (taller)", "Pista de tenis", &[]),
     ("Pista de baloncesto (taller)", "Pista de baloncesto", &[]),
@@ -1949,6 +1951,9 @@ pub const PARK_PIECES: [SportPiece; 10] = [
         &[],
     ),
     ("Elíptica de parque (taller)", "Elíptica de parque", &[]),
+    ("Pista de fútbol sala (taller)", "Pista de fútbol sala", &[]),
+    ("Campo de fútbol (taller)", "Campo de fútbol 11", &[]),
+    ("Campo de fútbol (taller)", "Campo de fútbol 7", &[]),
 ];
 
 /// The courts in a row south of the line of the walls (`wall`), east of
@@ -1969,6 +1974,10 @@ fn place_park(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
     let mut t = Vec::new();
     for (family, label, extras) in PARK_PIECES {
         let values: Vec<(&str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+        let mut values = values;
+        if label.ends_with(" 7") {
+            values.push(("game", T("Fútbol 7")));
+        }
         t.push(sport_type(m, family, label, &values)?);
     }
     // Each court's far side 2 m short of the line of the walls.
@@ -1980,8 +1989,14 @@ fn place_park(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
     put(m, t[3], tennis, edge - 18.29 - 1.0 - 3.2)?;
     let basket = tennis + 18.29 + 2.0 + 16.0;
     put(m, t[2], basket, edge - 19.0)?;
+    let futsal = basket + 16.0 + 2.0 + 22.0;
+    put(m, t[10], futsal, edge - 24.0)?;
+    let eleven = futsal + 22.0 + 2.0 + 56.5;
+    put(m, t[11], eleven, edge - 76.0)?;
+    let seven = eleven + 56.5 + 2.0 + 35.5;
+    put(m, t[12], seven, edge - 51.0)?;
     // The playground, its far sides 1 m short of the line.
-    let p = basket + 16.0 + 2.0;
+    let p = seven + 35.5 + 2.0;
     let far = wall - 1.0;
     for (i, (dx, depth)) in [
         (1.9, 1.6),
