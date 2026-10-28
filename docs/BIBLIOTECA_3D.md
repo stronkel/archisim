@@ -368,6 +368,24 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 6, tanda 6b: el estudio de las ocho colecciones (28/10/2026)
+
+En el taller (rama `bloque/paquete-6b`, `archisim_props::fine::study`): ocho modelos más, uno por colección, en las familias de siempre «Escritorio» (`desk`) y «Silla de oficina» (`office_chair`), después de los suyos; recetas del taller `taller/estudio_escritorio.asfam` y `estudio_silla.asfam`. Las estanterías son las de la colección (`fine_bookcase`, familia «Estantería»).
+
+| Colección | Escritorio | Silla de trabajo |
+|---|---|---|
+| Nórdico cálido | roble sobre patas abiertas, cajón de uñero, cajonera colgada | carcasa de roble con cojín, base giratoria de cuatro brazos |
+| Mediterráneo | pintado, patas torneadas, cajones con argollas | su silla de enea |
+| Años 50 | teca sobre patas de compás, cajonera flotante con pomos de latón | cubeta de color giratoria sobre base cromada |
+| Japandi | tablón sobre costados macizos, balda baja | su silla |
+| Contemporáneo | tablero fino sobre patines de acero negro, canal de cables, cajonera con ruedas | silla de oficina de malla |
+| Rústica | tablón grueso sobre caballetes | su silla |
+| Industrial | madera sobre bastidor de acero, cajonera de cajones metálicos | taburete-silla de acero con aro y respaldo curvo |
+| Clásica | tapete de piel con canto de latón, patas acanaladas con zapatas, cajones moldurados | su silla de medallón |
+
+- Partes de material: en el escritorio `top`, `frame`, `front`, `metal`, `accent` (tapete) y `dark`; en la silla `frame`, `cushion`, `metal`, `dark`, `accent`, `weave` y `mesh`.
+- Estudios del taller (`workshop::place_study`, `STUDY_EXTRAS`), con la lámpara de mesa de la colección; fotos con `ARCHISIM_ESTUDIO_OUT=carpeta cargo test --release -p archisim-app -- study_pictures`.
+
 ### Paquete 6, tanda 6a: plantas de interior, decoración y cuadros de las ocho colecciones (28/10/2026)
 
 En el taller (rama `bloque/paquete-6a`, `archisim_props::fine::indoor`): ocho modelos más, uno por colección, en las familias de siempre «Planta de interior» (`potted_plant`), «Decoración» (`decor`) y «Cuadro o espejo» (`wall_decor`), después de los suyos; recetas del taller `taller/interior_planta.asfam`, `interior_decoracion.asfam` e `interior_cuadro.asfam`.

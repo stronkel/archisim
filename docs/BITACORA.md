@@ -6,6 +6,22 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (14) · Paquete 6, tanda 6b: el estudio de las ocho colecciones
+
+Rama `bloque/paquete-6b` (sobre `bloque/paquete-6a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 6, tanda 6b»)
+- **Escritorio** por colección, con o sin cajonera a un lado: de roble sobre patas abiertas con cajón de uñero (nórdico), pintado con patas torneadas y argollas (mediterráneo), de teca sobre patas de compás con cajonera flotante (años 50), tablón sobre costados macizos con balda (japandi), tablero fino sobre patines de acero y cajonera con ruedas (contemporáneo), tablón sobre caballetes (rústica), madera sobre bastidor de acero con cajonera metálica (industrial) y escritorio de tapete de piel con canto de latón, patas acanaladas y cajones moldurados (clásica).
+- **Silla de trabajo** por colección: giratoria de carcasa de roble (nórdico), cubeta de color giratoria (años 50), silla de oficina de malla (contemporáneo), taburete-silla de acero con aro reposapiés (industrial); el mediterráneo, japandi, rústico y clásico usan su silla de comedor.
+- En el taller, un estudio por colección a continuación de los rincones de salón: el escritorio con su lámpara de mesa, la silla delante y la estantería de la colección.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a los estudios, después de los rincones de salón.
+2. Cambia la cajonera de un escritorio (a la izquierda, a la derecha, sin ella) y su ancho.
+3. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-28 (13) · Paquete 6, tanda 6a: plantas de interior, decoración y cuadros de las ocho colecciones
 
 Rama `bloque/paquete-6a` (sobre `bloque/paquete-5b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

@@ -1240,7 +1240,7 @@ fn place_study(
         "Silla de trabajo",
         &values(&[]),
     )?;
-    put(m, chair, x + 0.7, wall - 1.3, 0.0, 0.0)?;
+    put(m, chair, x + 0.7, wall - 0.68, pi, 0.0)?;
     let shelves = kitchen_type(
         m,
         k,
