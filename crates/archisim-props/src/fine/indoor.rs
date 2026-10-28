@@ -1193,8 +1193,9 @@ pub fn decor(b: &mut Builder, p: &Params) -> bool {
 fn on_wall(b: &mut Builder, c: P3, make: impl FnOnce(&mut Builder)) {
     let start = b.mark();
     make(b);
-    // (x, y, z) → (x, z, −y): a quarter turn about x.
-    b.transform_from(start, |q| [c[0] + q[0], c[1] + q[2], c[2] - q[1]]);
+    // (x, y, z) → (−x, z, y): its up stays up, its front comes out of
+    // the wall (a half turn about the diagonal of y and z, not a mirror).
+    b.transform_from(start, |q| [c[0] - q[0], c[1] + q[2], c[2] + q[1]]);
 }
 
 /// A frame of four bars round the rectangle `w` by `h` (outside), `bar`

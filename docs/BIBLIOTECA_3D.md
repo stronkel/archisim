@@ -368,6 +368,25 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 6, tanda 6a: plantas de interior, decoración y cuadros de las ocho colecciones (28/10/2026)
+
+En el taller (rama `bloque/paquete-6a`, `archisim_props::fine::indoor`): ocho modelos más, uno por colección, en las familias de siempre «Planta de interior» (`potted_plant`), «Decoración» (`decor`) y «Cuadro o espejo» (`wall_decor`), después de los suyos; recetas del taller `taller/interior_planta.asfam`, `interior_decoracion.asfam` e `interior_cuadro.asfam`.
+
+| Colección | Planta y maceta | Decoración | Pared |
+|---|---|---|---|
+| Nórdico cálido | ficus lira, maceta blanca sobre trípode de roble | libros, jarrón blanco con ramas, vela | lámina con marco fino de roble y paspartú |
+| Mediterráneo | limonero con limones, terracota con plato | jarra de barro y cuenco esmaltado con limones | tres platos de cerámica |
+| Años 50 | costilla de Adán, maceta cónica sobre patas | frutero de teca y dos botellas de color | espejo sol de varillas doradas |
+| Japandi | sansevieria, maceta de piedra | bandeja con tetera de hierro y dos cuencos | kakemono con su trazo de tinta |
+| Contemporáneo | ave del paraíso, cilindro de hormigón | libros con esfera y aro de cerámica | lienzo de bloques de color con marco negro |
+| Rústica | helecho, cesta de mimbre con asas | tabla con farol de hierro y jarra | espejo con marco de madera y cantoneras, colgado de una cuerda |
+| Industrial | potos colgante, cubo de acero sobre soporte | bandeja de acero con velas en tarro y libros | reloj de estación |
+| Clásica | kentia, jardinera esmaltada | candelabros dorados y jarrón de porcelana con flores | óleo con marco dorado moldurado |
+
+- Partes de material: en la planta `pot` (`pot_mat`), `frame`, `metal`, `weave`, `soil`, `stem`, `leaves`, `leaves2`, `flowers` y `fruit`; en la decoración `mat`, `glaze2`, `frame`, `metal`, `glass`, `books`…`books3`, `candle`, `flame` (se enciende de noche), `fruit`, `fruit2`, `leaves`, `stem`, `flowers` y `dark`; en la pared `frame`, `mount`, `art`, `art2`, `art3`, `glass`, `mat`, `metal`, `dark` y `weave`.
+- Las plantas de hoja menuda (limonero, helecho, kentia) y las ramas de la decoración van en `PropMesh::fine` (sin líneas de contorno en 3D).
+- Rincones de salón en el taller (`workshop::place_living`, `INDOOR_EXTRAS`; el aparador es el de la colección de la biblioteca); fotos con `ARCHISIM_SALON_OUT=carpeta cargo test --release -p archisim-app -- living_pictures`.
+
 ### Paquete 5, tanda 5b: mobiliario urbano de las ocho colecciones (28/10/2026)
 
 En el taller (rama `bloque/paquete-5b`, `archisim_props::fine::urban`): ocho modelos más, uno por colección, en las familias de siempre «Banco» (`bench`), «Farola» (`streetlight`), «Papelera» (`litter_bin`), «Bolardo» (`bollard`), «Jardinera» (`planter`), «Aparcabicis» (`bike_rack`) y «Fuente de beber» (`fountain`), después de los suyos; sus recetas del taller son `taller/urbano_*.asfam`.

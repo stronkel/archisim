@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (13) · Paquete 6, tanda 6a: plantas de interior, decoración y cuadros de las ocho colecciones
+
+Rama `bloque/paquete-6a` (sobre `bloque/paquete-5b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, con el paquete 5 terminado: «qué toca ahora?» → paquete 6 (plantas, decoración y estudio); esta tanda son las plantas y la decoración, el estudio va en la 6b.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 6, tanda 6a»)
+- **Planta de interior** por colección, cada una en su maceta y hoja a hoja: ficus lira (nórdico, maceta blanca sobre trípode de roble), limonero con sus limones (mediterráneo, terracota), costilla de Adán con las hojas partidas (años 50, maceta cónica sobre patas), sansevieria (japandi, piedra), ave del paraíso (contemporáneo, hormigón), helecho (rústica, cesta de mimbre), potos colgante (industrial, cubo de acero sobre soporte) y kentia (clásica, jardinera esmaltada).
+- **Decoración** de mesa y balda por colección (libros, jarrones, fruteros, tetera, farol, velas encendidas de noche, candelabros) y **cuadro o espejo** de pared (lámina, platos, espejo sol, kakemono, lienzo, espejo de madera, reloj de estación, óleo con marco dorado).
+- En el taller, un rincón de salón por colección a continuación de las calles: su aparador con la decoración encima, el cuadro sobre él y la planta al lado.
+- El limonero comparte el árbol del olivo (`small_tree`), con hojas anchas y fruta.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a los rincones de salón, después de las calles.
+2. Mira las plantas de cerca, la decoración sobre cada aparador y el cuadro; de noche, las velas encendidas.
+3. Cambia la altura de una planta y el ancho de un cuadro.
+4. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-28 (12) · Paquete 5, tanda 5b: mobiliario urbano de las ocho colecciones
 
 Rama `bloque/paquete-5b` (sobre `bloque/paquete-5a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
