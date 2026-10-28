@@ -114,7 +114,10 @@ def main(path: str) -> int:
     def roof_part(el):
         return "ArchiSim_RoofPart" in eu.get_psets(el)
 
-    walls = [w for w in f.by_type("IfcWall") if not roof_part(w)]
+    def pool_part(el):
+        return "ArchiSim_PoolPart" in eu.get_psets(el)
+
+    walls = [w for w in f.by_type("IfcWall") if not roof_part(w) and not pool_part(w)]
     if not walls:
         errors.append("no IfcWall found")
     for w in walls:
@@ -123,7 +126,10 @@ def main(path: str) -> int:
     def in_stair(el):
         return any(rel.RelatingObject.is_a("IfcStair") for rel in el.Decomposes)
 
-    slabs = [s for s in f.by_type("IfcSlab") if not in_stair(s) and not roof_part(s)]
+    slabs = [
+        s for s in f.by_type("IfcSlab")
+        if not in_stair(s) and not roof_part(s) and not pool_part(s)
+    ]
     for s in slabs:
         mat = check_element(s, "Pset_SlabCommon", "Qto_SlabBaseQuantities")
         if mat is None:
@@ -216,6 +222,39 @@ def main(path: str) -> int:
                     errors.append(f"{name}: empty geometry")
             except Exception as exc:
                 errors.append(f"{name}: geometry failed: {exc}")
+
+    # 14. Pools built in the ground (ArchiSim_Pool on an IfcElementAssembly):
+    # contained in a storey, made of their floor, walls, lining and coping,
+    # each with its material and 3D geometry; their water an IfcSpace that
+    # names its pool (checked as a room below).
+    pool_guids = set()
+    for a in f.by_type("IfcElementAssembly"):
+        if "ArchiSim_Pool" not in eu.get_psets(a):
+            continue
+        pool_guids.add(a.GlobalId)
+        name = a.Name
+        if not a.ContainedInStructure:
+            errors.append(f"{name}: not contained in a storey")
+        parts = [p for rel in a.IsDecomposedBy for p in rel.RelatedObjects]
+        kinds = sorted(eu.get_psets(p).get("ArchiSim_PoolPart", {}).get("Part", "") for p in parts)
+        if kinds != sorted(["floor", "walls", "lining", "coping"]) and kinds != sorted(
+            ["floor", "walls", "lining"]
+        ):
+            errors.append(f"{name}: parts {kinds}")
+        for p in parts:
+            if eu.get_material(p) is None:
+                errors.append(f"{name} {p.Name}: no material")
+            if geom_ok:
+                try:
+                    shp = geom.create_shape(settings, p)
+                    if shape.get_volume(shp.geometry) <= 0:
+                        errors.append(f"{name} {p.Name}: empty geometry")
+                except Exception as exc:
+                    errors.append(f"{name} {p.Name}: geometry failed: {exc}")
+    for sp in f.by_type("IfcSpace"):
+        part = eu.get_psets(sp).get("ArchiSim_PoolPart")
+        if part is not None and part.get("Pool") not in pool_guids:
+            errors.append(f"{sp.Name}: the water of a pool not in the file")
 
     members = f.by_type("IfcColumn") + f.by_type("IfcBeam")
     for el in members:

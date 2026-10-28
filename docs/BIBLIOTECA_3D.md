@@ -368,6 +368,10 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 8, tanda 8d: la piscina construida (28/10/2026)
+
+No es una pieza de la biblioteca sino un elemento constructivo (`archisim-core::model::pools`, herramienta Piscina; ver `docs/BITACORA.md`, entrada 21). Las piscinas-objeto de la tanda 8a recortan también el terreno: `archisim_props::fine::pool::excavation` da el contorno exterior de su vaso y su fondo, y `Model::excavations` los junta con los de las piscinas construidas.
+
 ### Paquete 8, tanda 8c: pistas, gradas, parque infantil y calistenia (28/10/2026)
 
 En el taller (rama `bloque/paquete-8c`, `archisim_props::fine::courts` y `fine::playground`): un modelo por pieza, sin colecciones.

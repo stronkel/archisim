@@ -138,13 +138,9 @@ impl Model {
         Some((mesh, parts))
     }
 
-    /// The model of a type and the material of each of its roles (in the
-    /// order of its parts).
-    #[allow(clippy::type_complexity)]
-    fn prop_roles(
-        &self,
-        t: ObjectTypeId,
-    ) -> Option<(Arc<props::PropMesh>, Vec<(&'static str, MaterialId)>)> {
+    /// The generator of a type made by ArchiSim and the measurements it is
+    /// made with (its values, choices by number, the model by number).
+    pub fn prop_params(&self, t: ObjectTypeId) -> Option<(String, props::Params)> {
         let ty = self.object_types.get(&t)?;
         if ty.mesh.is_some() {
             return None;
@@ -172,6 +168,26 @@ impl Model {
                 params.set("style", (i + 1) as f64);
             }
         }
+        Some((kind, params))
+    }
+
+    /// The model of a type and the material of each of its roles (in the
+    /// order of its parts).
+    #[allow(clippy::type_complexity)]
+    fn prop_roles(
+        &self,
+        t: ObjectTypeId,
+    ) -> Option<(Arc<props::PropMesh>, Vec<(&'static str, MaterialId)>)> {
+        let ty = self.object_types.get(&t)?;
+        if ty.mesh.is_some() {
+            return None;
+        }
+        let (kind, params) = self.prop_params(t)?;
+        let values = {
+            let mut v = self.family_defaults(ty.family, ParamScope::Type).ok()?;
+            v.extend(ty.values.clone());
+            v
+        };
         let mesh = props::mesh_of(&kind, &params)?;
         let material_of = |name: &str| match values.get(name) {
             Some(Value::Material(m)) if self.materials.contains_key(&MaterialId(*m)) => {

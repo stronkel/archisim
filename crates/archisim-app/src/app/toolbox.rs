@@ -518,6 +518,13 @@ const SITE: &[Tile] = &[
         "Lindes, superficie y retranqueos",
     ),
     tile(
+        Pick::Tool(Tool::Pool),
+        Glyph::Pool,
+        "Piscina",
+        "",
+        "Piscina construida por el borde del agua: vaso con pendiente, coronación y lámina de agua; recorta el terreno",
+    ),
+    tile(
         Pick::Tool(Tool::Road),
         Glyph::Road,
         "Vial",

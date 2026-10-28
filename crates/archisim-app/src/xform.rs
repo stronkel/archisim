@@ -218,6 +218,32 @@ pub fn transform(
                     out.insert(*e);
                 }
             }
+            Element::Pool(id) => {
+                let x = model
+                    .pool(id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let outline: Vec<_> = x.outline.iter().map(|p| t.apply(*p)).collect();
+                // The slope turns (or mirrors) with it.
+                let o = x.outline[0];
+                let dir = archisim_core::Point2::new(x.slope.cos(), x.slope.sin());
+                let turned = t.apply(o + dir) - t.apply(o);
+                let slope = turned.y.atan2(turned.x);
+                if copy {
+                    let mut spec = x.spec();
+                    spec.name = model.next_pool_name();
+                    spec.outline = outline;
+                    spec.slope = slope;
+                    let new = model.add_pool(spec)?;
+                    out.insert(Element::Pool(new));
+                } else {
+                    model.edit_pool(id, |p| {
+                        p.outline = outline;
+                        p.slope = slope;
+                    })?;
+                    out.insert(*e);
+                }
+            }
             Element::Edge(id) => {
                 let x = model
                     .edge(id)

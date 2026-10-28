@@ -152,6 +152,9 @@ pub(crate) struct ProjectFile {
     /// Plantings: plants along a line or over an area (version 25).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plantings: Vec<PlantingOf>,
+    /// Pools built in the ground (version 40).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pools: Vec<PoolOf>,
     /// Pipes and ducts (version 20).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<Run>,
@@ -1000,6 +1003,31 @@ pub(crate) struct Plot {
     pub setback: f64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
+}
+
+/// A pool built in the ground (version 40): its outline is the inside
+/// face of its shell.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PoolOf {
+    pub id: u64,
+    pub guid: String,
+    pub name: String,
+    pub level: u64,
+    pub outline: Vec<Xy>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub top_offset: f64,
+    pub shallow: f64,
+    pub deep: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub slope: f64,
+    pub freeboard: f64,
+    pub wall: f64,
+    pub coping: f64,
+    pub lining: u64,
+    pub shell: u64,
+    pub coping_material: u64,
+    pub water: u64,
 }
 
 /// A road (version 19): its axis and cross-section.
@@ -3022,6 +3050,28 @@ impl ProjectFile {
                     reference: x.reference.clone(),
                 })
                 .collect(),
+            pools: p
+                .pools
+                .iter()
+                .map(|x| PoolOf {
+                    id: x.id.0,
+                    guid: x.guid.to_string(),
+                    name: x.name.clone(),
+                    level: x.level.0,
+                    outline: x.outline.iter().copied().map(xy).collect(),
+                    top_offset: x.top_offset,
+                    shallow: x.shallow,
+                    deep: x.deep,
+                    slope: x.slope,
+                    freeboard: x.freeboard,
+                    wall: x.wall,
+                    coping: x.coping,
+                    lining: x.lining.0,
+                    shell: x.shell.0,
+                    coping_material: x.coping_material.0,
+                    water: x.water.0,
+                })
+                .collect(),
             plantings: p
                 .plantings
                 .iter()
@@ -3591,6 +3641,7 @@ impl ProjectFile {
             plots: Vec::new(),
             roads: Vec::new(),
             plantings: Vec::new(),
+            pools: Vec::new(),
             runs: Vec::new(),
             devices: Vec::new(),
             railings: self
@@ -4050,6 +4101,27 @@ impl ProjectFile {
                 outline: x.outline.into_iter().map(pt).collect(),
                 setback: x.setback,
                 reference: x.reference,
+            });
+        }
+        for x in self.pools {
+            let element = format!("pool {} «{}»", x.id, x.name);
+            parts.pools.push(core::Pool {
+                id: core::PoolId(x.id),
+                guid: guid(&element, &x.guid)?,
+                name: x.name,
+                level: core::LevelId(x.level),
+                outline: x.outline.into_iter().map(pt).collect(),
+                top_offset: x.top_offset,
+                shallow: x.shallow,
+                deep: x.deep,
+                slope: x.slope,
+                freeboard: x.freeboard,
+                wall: x.wall,
+                coping: x.coping,
+                lining: core::MaterialId(x.lining),
+                shell: core::MaterialId(x.shell),
+                coping_material: core::MaterialId(x.coping_material),
+                water: core::MaterialId(x.water),
             });
         }
         for r in self.runs {

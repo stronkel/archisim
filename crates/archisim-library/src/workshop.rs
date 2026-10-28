@@ -2928,6 +2928,13 @@ mod tests {
                 );
             }
         }
+        // Each pool object takes its room out of the ground.
+        let dug = m.excavations();
+        assert_eq!(dug.len(), 8);
+        for e in &dug {
+            assert!(e.bottom < -1.4, "{}", e.bottom);
+            assert!(archisim_core::signed_area(&e.outline) > 20.0);
+        }
     }
 
     /// Every collection's shop is made, and its materials are in the

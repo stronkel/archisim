@@ -188,6 +188,7 @@ pub(super) fn element_name(e: &Element) -> &'static str {
         Element::Module(_) => "Módulo",
         Element::Mass(_) => "Volumen",
         Element::Plot(_) => "Parcela",
+        Element::Pool(_) => "Piscina",
         Element::Road(_) => "Vial",
         Element::Planting(_) => "Plantación",
         Element::Run(_) => "Instalación",
@@ -314,6 +315,12 @@ impl ArchiSimApp {
                     "Varita",
                     "",
                 ),
+                Tool::Pool => (
+                    "Piscina",
+                    Some(outline(false, self.pool_tool.mode)),
+                    "Varita",
+                    "",
+                ),
                 Tool::Road => ("Vial", None, "Varita", ""),
                 Tool::Planting => ("Plantación", None, "Varita", ""),
                 Tool::Pipe => ("Tubería", None, "Varita", ""),
@@ -351,7 +358,9 @@ impl ArchiSimApp {
             Some(_) if o == Outline::Wand && self.tool == Tool::Slab && self.slab_settings.hole => {
                 MethodAct::None
             }
-            Some(_) if o == Outline::Wand && self.tool == Tool::Plot => MethodAct::None,
+            Some(_) if o == Outline::Wand && matches!(self.tool, Tool::Plot | Tool::Pool) => {
+                MethodAct::None
+            }
             Some(_) => MethodAct::Outline(o),
             None => MethodAct::None,
         };
@@ -768,6 +777,10 @@ impl ArchiSimApp {
                 Tool::Plot => {
                     let mut wand = false;
                     set_outline(&mut wand, &mut self.plot_tool, o)
+                }
+                Tool::Pool => {
+                    let mut wand = false;
+                    set_outline(&mut wand, &mut self.pool_tool, o)
                 }
                 _ => {}
             },

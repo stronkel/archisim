@@ -1836,3 +1836,91 @@ fn park_pictures() {
         .collect();
     piece_pictures(Path::new(&dir), &labels);
 }
+
+/// A pool built in the ground and a pool object of the workshop on a
+/// sloping terrain, which both dig (paquete 8, tanda 8d):
+/// `ARCHISIM_PISCINA_OBRA_OUT=folder cargo test --release -p archisim-app
+/// -- dug_pool_pictures`.
+#[test]
+fn dug_pool_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_PISCINA_OBRA_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let mut m = archisim_library::workshop::project().unwrap();
+    let keep = |name: &str| name.starts_with("Piscina · Mediterráneo");
+    let others: Vec<_> = m
+        .objects()
+        .filter(|o| !m.object_type(o.object_type).is_some_and(|t| keep(&t.name)))
+        .map(|o| o.id)
+        .collect();
+    for o in others {
+        m.remove_object(o).unwrap();
+    }
+    let walls: Vec<_> = m.walls().map(|w| w.id).collect();
+    for w in walls {
+        m.remove_wall(w).unwrap();
+    }
+    let o = m.objects().next().unwrap().position;
+    let level = m.levels()[0].id;
+    let earth = archisim_library::palette_material(&mut m, "Tierra").unwrap();
+    let mut points = Vec::new();
+    for i in 0..=8 {
+        for j in 0..=6 {
+            let (x, y) = (o.x - 8.0 + 4.0 * i as f64, o.y - 6.0 + 3.0 * j as f64);
+            points.push(archisim_core::SurveyPoint {
+                at: archisim_core::Point2::new(x, y),
+                z: 0.04 * (i as f64 - 2.0) - 0.03 * (j as f64 - 2.0),
+            });
+        }
+    }
+    m.add_terrain(archisim_core::NewTerrain {
+        level,
+        points,
+        material: earth,
+        depth: 1.0,
+        contour: 0.25,
+        lines: Vec::new(),
+    })
+    .unwrap();
+    let lining = archisim_library::palette_material(&mut m, "Gresite blanco").unwrap();
+    let mut spec = archisim_core::NewPool::new(
+        level,
+        vec![
+            archisim_core::Point2::new(o.x + 9.0, o.y + 1.0),
+            archisim_core::Point2::new(o.x + 17.0, o.y + 1.0),
+            archisim_core::Point2::new(o.x + 17.0, o.y + 4.5),
+            archisim_core::Point2::new(o.x + 13.0, o.y + 6.5),
+            archisim_core::Point2::new(o.x + 9.0, o.y + 4.5),
+        ],
+        lining,
+    );
+    spec.shell = archisim_library::palette_material(&mut m, "Hormigón pulido").unwrap();
+    spec.coping_material = archisim_library::palette_material(&mut m, "Piedra caliza").unwrap();
+    spec.water = archisim_library::palette_material(&mut m, "Agua de fuente").unwrap();
+    m.add_pool(spec).unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    for (name, yaw, pitch, zoom) in [
+        ("tres-cuartos", -55.0, 32.0, 1.1),
+        ("cenital", -90.0, 75.0, 1.1),
+        ("rasante", -100.0, 8.0, 1.6),
+        ("desde-abajo", -60.0, -25.0, 1.2),
+    ] {
+        let pic = picture_in(
+            &mut r,
+            &gpu,
+            &m,
+            |lo, hi| camera(lo, hi, aspect, yaw, pitch, zoom),
+            size,
+            Light::Day,
+        );
+        pic.save_png(dir.join(format!("{name}.png"))).unwrap();
+    }
+}

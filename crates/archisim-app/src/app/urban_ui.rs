@@ -78,7 +78,13 @@ impl RoadSettings {
     }
 }
 
-fn material_combo(ui: &mut Ui, id: Id, model: &Model, value: MaterialId, width: f32) -> MaterialId {
+pub(super) fn material_combo(
+    ui: &mut Ui,
+    id: Id,
+    model: &Model,
+    value: MaterialId,
+    width: f32,
+) -> MaterialId {
     let mut v = value;
     let mut mats: Vec<(MaterialId, String)> =
         model.materials().map(|m| (m.id, m.name.clone())).collect();

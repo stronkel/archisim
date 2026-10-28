@@ -210,6 +210,8 @@ pub enum CatalogAct {
     Object(ObjectPick),
     Planting,
     Road,
+    /// A pool built in the ground.
+    Pool,
     Terrain,
     /// An Exterior brush (MQ3).
     /// The Exterior brush.
@@ -683,6 +685,7 @@ impl ArchiSimApp {
                 card(CatalogAct::Brush, "Pincel", Glyph::Brush),
                 card(CatalogAct::Terrain, "Terreno", Glyph::Terrain),
                 card(CatalogAct::Road, "Camino o calle", Glyph::Road),
+                card(CatalogAct::Pool, "Piscina", Glyph::Pool),
                 card(CatalogAct::Planting, "Plantación", Glyph::Planting),
             ],
             (CatalogGroup::Outside, "Formas") => vec![
@@ -805,6 +808,7 @@ impl ArchiSimApp {
             }
             CatalogAct::Planting => self.tool == Tool::Planting,
             CatalogAct::Road => self.tool == Tool::Road,
+            CatalogAct::Pool => self.tool == Tool::Pool,
             CatalogAct::Terrain => self.tool == Tool::Terrain,
             CatalogAct::Brush => self.tool == Tool::Brush,
             CatalogAct::Volume => {
@@ -900,6 +904,7 @@ impl ArchiSimApp {
             CatalogAct::Collected(name) => self.take_collected(name),
             CatalogAct::Planting => self.pick(Pick::Tool(Tool::Planting)),
             CatalogAct::Road => self.pick(Pick::Tool(Tool::Road)),
+            CatalogAct::Pool => self.pick(Pick::Tool(Tool::Pool)),
             CatalogAct::Terrain => self.pick(Pick::Tool(Tool::Terrain)),
             CatalogAct::Brush => {
                 let mode = self.brush.mode;

@@ -68,6 +68,11 @@ pub enum Grip {
         road: archisim_core::RoadId,
         index: usize,
     },
+    /// A corner of a pool's outline (the edge of its water).
+    PoolCorner {
+        pool: archisim_core::PoolId,
+        index: usize,
+    },
     /// A size handle of an object (an arrow on its right, left or front
     /// side): the object grows only towards the handle, the opposite side
     /// staying put (with Alt, both sides about its middle).
@@ -347,6 +352,16 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
                     }
                 }
             }
+            Element::Pool(id) => {
+                if let Some(p) = model.pool(*id) {
+                    for (index, point) in p.outline.iter().enumerate() {
+                        v.push(Hotspot {
+                            grip: Grip::PoolCorner { pool: *id, index },
+                            point: *point,
+                        });
+                    }
+                }
+            }
             Element::CurtainWall(id) => {
                 if let Some(c) = model.curtain_wall(*id) {
                     for (start, point) in [(true, c.start), (false, c.end)] {
@@ -518,6 +533,7 @@ pub fn moving(model: &Model, selection: &BTreeSet<Element>, grip: Grip) -> BTree
         Grip::CurtainEnd { curtain, .. } => [Element::CurtainWall(curtain)].into_iter().collect(),
         Grip::RailingPoint { railing, .. } => [Element::Railing(railing)].into_iter().collect(),
         Grip::RoadPoint { road, .. } => [Element::Road(road)].into_iter().collect(),
+        Grip::PoolCorner { pool, .. } => [Element::Pool(pool)].into_iter().collect(),
         Grip::RefPlaneEnd { plane, .. } => [Element::RefPlane(plane)].into_iter().collect(),
         Grip::DimPoint { dimension, .. } => [Element::Dimension(dimension)].into_iter().collect(),
         Grip::ObjectSize { object, .. } | Grip::ObjectTurn { object } => {
@@ -909,6 +925,7 @@ pub fn label(model: &Model, drag: &Drag) -> &'static str {
         Grip::CurtainEnd { .. } => "Estirar muro cortina",
         Grip::RailingPoint { .. } => "Mover punto de la barandilla",
         Grip::RoadPoint { .. } => "Mover punto del eje del vial",
+        Grip::PoolCorner { .. } => "Mover esquina de piscina",
         Grip::RefPlaneEnd { .. } => "Estirar plano de referencia",
         Grip::DimPoint { .. } => "Cambiar punto de cota",
         Grip::ObjectSize { .. } => "Estirar objeto",
@@ -1045,6 +1062,13 @@ pub fn apply(
         Grip::RoadPoint { road, index } => model
             .edit_road(road, |r| {
                 if let Some(p) = r.axis.get_mut(index) {
+                    *p = drag.to;
+                }
+            })
+            .map(|_| None),
+        Grip::PoolCorner { pool, index } => model
+            .edit_pool(pool, |x| {
+                if let Some(p) = x.outline.get_mut(index) {
                     *p = drag.to;
                 }
             })
@@ -1282,6 +1306,9 @@ pub(crate) fn move_selection(
             }
             Element::Plot(id) => {
                 model.edit_plot(*id, |x| x.outline.iter_mut().for_each(|p| *p = *p + d))?;
+            }
+            Element::Pool(id) => {
+                model.edit_pool(*id, |x| x.outline.iter_mut().for_each(|p| *p = *p + d))?;
             }
             Element::Road(id) => {
                 model.edit_road(*id, |x| x.axis.iter_mut().for_each(|p| *p = *p + d))?;
@@ -1751,6 +1778,17 @@ pub(crate) fn copy(
                 })?;
                 copies.insert(Element::Plot(new));
             }
+            Element::Pool(id) => {
+                let x = model
+                    .pool(*id)
+                    .ok_or(ModelError::UnknownElement(id.0))?
+                    .clone();
+                let mut spec = x.spec();
+                spec.name = model.next_pool_name();
+                spec.outline = x.outline.iter().map(|p| *p + d).collect();
+                let new = model.add_pool(spec)?;
+                copies.insert(Element::Pool(new));
+            }
             Element::Road(id) => {
                 let x = model
                     .road(*id)
@@ -2051,6 +2089,7 @@ pub(crate) fn exists(model: &Model, e: Element) -> bool {
         Element::Module(id) => model.module(id).is_some(),
         Element::Mass(id) => model.mass(id).is_some(),
         Element::Plot(id) => model.plot(id).is_some(),
+        Element::Pool(id) => model.pool(id).is_some(),
         Element::Road(id) => model.road(id).is_some(),
         Element::Planting(id) => model.planting(id).is_some(),
         Element::Run(id) => model.run(id).is_some(),
@@ -2095,6 +2134,7 @@ fn level_of(
         Grip::CurtainEnd { curtain, .. } => model.curtain_wall(curtain).map(|c| c.level),
         Grip::RailingPoint { railing, .. } => model.railing(railing).map(|r| r.level),
         Grip::RoadPoint { road, .. } => model.road(road).map(|r| r.level),
+        Grip::PoolCorner { pool, .. } => model.pool(pool).map(|p| p.level),
         Grip::RefPlaneEnd { .. } => None,
         Grip::DimPoint { dimension, .. } => model.dimension(dimension).map(|d| d.level),
         Grip::ObjectSize { object, .. } | Grip::ObjectTurn { object } => {
@@ -2127,6 +2167,7 @@ fn level_of(
             Element::Module(id) => model.module(*id).map(|m| m.level),
             Element::Mass(id) => model.mass(*id).map(|m| m.level),
             Element::Plot(id) => model.plot(*id).map(|p| p.level),
+            Element::Pool(id) => model.pool(*id).map(|p| p.level),
             Element::Road(id) => model.road(*id).map(|r| r.level),
             Element::Planting(id) => model.planting(*id).map(|r| r.level),
             Element::Run(id) => model.run(*id).map(|r| r.level),

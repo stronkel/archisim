@@ -48,6 +48,7 @@ mod foundations;
 pub mod import;
 mod members;
 mod objects;
+mod pools;
 mod railings;
 mod roof_parts;
 mod roofs;
@@ -1866,6 +1867,7 @@ impl<'a> Exporter<'a> {
         self.write_objects(&materials, &storeys, &mut contained);
         self.write_worktops(&materials, &storeys, &mut contained);
         self.write_footings(&materials, &storeys, &mut contained);
+        self.write_pools(&materials, &storeys, &mut contained);
         self.write_grids(&storeys, &mut contained);
         self.write_urban(&materials, site, site_pl);
         self.write_services(&storeys, &mut contained, building);

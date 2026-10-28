@@ -728,6 +728,7 @@ impl ArchiSimApp {
             Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_hint(),
             Tool::Mass | Tool::PushPull | Tool::DivideFace | Tool::Deform | Tool::MassOffset | Tool::Tape | Tool::Paint => self.concept_hint(),
             Tool::Plot | Tool::Road => self.urban_hint(),
+            Tool::Pool => self.pool_hint(),
             Tool::Planting => self.planting_hint(),
             Tool::Brush => self.brush_hint(),
             Tool::TeamZone if self.team_ui.zone_start.is_some() => "Clic: esquina opuesta de la zona · Esc o botón derecho: anular",

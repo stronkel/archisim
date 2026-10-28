@@ -81,6 +81,7 @@ impl ArchiSimApp {
             [Element::Module(id)] => self.module_properties(ui, *id),
             [Element::Mass(id)] => self.mass_properties(ui, *id),
             [Element::Plot(id)] => self.plot_properties(ui, *id),
+            [Element::Pool(id)] => self.pool_properties(ui, *id),
             [Element::Road(id)] => self.road_properties(ui, *id),
             [Element::Planting(id)] => self.planting_properties(ui, *id),
             [Element::Run(id)] => self.run_properties(ui, *id),
@@ -312,6 +313,7 @@ impl ArchiSimApp {
             | Tool::Tape
             | Tool::Paint => self.mass_tool_properties(ui),
             Tool::Plot => self.plot_tool_properties(ui),
+            Tool::Pool => self.pool_tool_properties(ui),
             Tool::Road => self.road_tool_properties(ui),
             Tool::Planting => self.planting_tool_properties(ui),
             Tool::Brush => self.brush_tool_properties(ui),

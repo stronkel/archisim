@@ -51,6 +51,8 @@ pub enum SolidOwner {
     Device(archisim_core::DeviceId),
     /// The grass and flowers on a terrain's painted areas.
     Growth(archisim_core::TerrainId),
+    /// A pool built in the ground.
+    Pool(archisim_core::PoolId),
 }
 
 impl SolidOwner {
@@ -71,6 +73,7 @@ impl SolidOwner {
             SolidOwner::Railing(x) => x.0,
             SolidOwner::Object(x) => x.0,
             SolidOwner::Footing(x) => x.0,
+            SolidOwner::Pool(x) => x.0,
             SolidOwner::Mass(x) => x.0,
             SolidOwner::Road(x) => x.0,
             SolidOwner::Run(x) => x.0,
@@ -1465,12 +1468,17 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
     let p3 = |i: usize| [t.points[i].at.x, t.points[i].at.y, t.points[i].z];
     let floor = t.range().0 - t.depth;
     let low = |i: usize| [t.points[i].at.x, t.points[i].at.y, floor];
-    let mut out: Vec<[P3; 3]> = tris
+    let ring = t.boundary();
+    let poly: Vec<Point2> = ring.iter().map(|i| t.points[*i].at).collect();
+    // The ground's top, less the room the pools take out of it.
+    let whole: Vec<[P3; 3]> = tris
         .iter()
         .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
         .collect();
-    let ring = t.boundary();
-    let poly: Vec<Point2> = ring.iter().map(|i| t.points[*i].at).collect();
+    let holes = terrain_holes(model, &poly);
+    let surface = crate::pools::cut_surface(&whole, &holes);
+    let mut out = surface.clone();
+    out.extend(crate::pools::hole_faces(&surface, &holes, &poly));
     for [a, b, c] in triangulate(&poly) {
         out.push([low(ring[a]), low(ring[c]), low(ring[b])]);
     }
@@ -1486,12 +1494,17 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
         triangles: out,
     }];
     // The areas painted over it: a thin closed layer each, on the ground.
-    let surface: Vec<[P3; 3]> = tris
-        .iter()
-        .map(|[a, b, c]| [p3(*a), p3(*b), p3(*c)])
-        .collect();
     for patch in &t.patches {
-        let layer = patch_layer(&surface, &patch.regions, PATCH_THICKNESS);
+        let regions = if holes.is_empty() {
+            patch.regions.clone()
+        } else {
+            let cut: Vec<crate::junctions::Shape> = holes
+                .iter()
+                .map(|h| (h.outline.clone(), Vec::new()))
+                .collect();
+            crate::junctions::difference(&patch.regions, &cut)
+        };
+        let layer = patch_layer(&surface, &regions, PATCH_THICKNESS);
         if !layer.is_empty() {
             solids.push(Solid {
                 owner: SolidOwner::Terrain(id),
@@ -1501,6 +1514,32 @@ pub fn terrain_solids(model: &Model, id: archisim_core::TerrainId) -> Vec<Solid>
         }
     }
     solids
+}
+
+/// The excavations of the model's pools that reach into a terrain's
+/// outline.
+pub fn terrain_holes(model: &Model, outline: &[Point2]) -> Vec<archisim_core::Excavation> {
+    let (lo, hi) = outline.iter().fold(
+        (
+            Point2::new(f64::MAX, f64::MAX),
+            Point2::new(f64::MIN, f64::MIN),
+        ),
+        |(lo, hi), p| {
+            (
+                Point2::new(lo.x.min(p.x), lo.y.min(p.y)),
+                Point2::new(hi.x.max(p.x), hi.y.max(p.y)),
+            )
+        },
+    );
+    model
+        .excavations()
+        .into_iter()
+        .filter(|e| {
+            e.outline
+                .iter()
+                .any(|p| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y)
+        })
+        .collect()
 }
 
 /// How thick the layer of a painted area of a terrain is (m): enough not
@@ -2420,6 +2459,9 @@ pub fn model_solids_except(
     for f in model.footings() {
         out.extend(footing_solids(model, f.id));
     }
+    for p in model.pools() {
+        out.extend(crate::pools::pool_solids(model, p.id));
+    }
     for m in model.masses() {
         out.extend(mass_solids(model, m.id));
     }
@@ -2921,6 +2963,7 @@ pub fn level_solids(model: &Model, level: LevelId) -> Vec<Solid> {
         SolidOwner::Railing(r) => model.railing(r).is_some_and(|r| r.level == level),
         SolidOwner::Object(o) => model.object(o).is_some_and(|o| o.level == level),
         SolidOwner::Footing(f) => model.footing(f).is_some_and(|f| f.level == level),
+        SolidOwner::Pool(p) => model.pool(p).is_some_and(|p| p.level == level),
         SolidOwner::Mass(m) => model.mass(m).is_some_and(|m| m.level == level),
         SolidOwner::Road(r) => model.road(r).is_some_and(|r| r.level == level),
         SolidOwner::Run(r) => model.run(r).is_some_and(|r| r.level == level),
@@ -3486,6 +3529,23 @@ mod tests {
         // Its volume: area (30 − 1) by its thickness, sloping a little.
         let v = solids[1].volume();
         assert!((v - 29.0 * PATCH_THICKNESS).abs() < 0.05, "{v}");
+        // A pool dug in it: the ground loses the pool's room, closed round
+        // the hole, and so does the lawn.
+        let before = terrain_solids(&m, id)[0].volume();
+        let pool = m
+            .add_pool(archisim_core::NewPool::new(
+                l,
+                vec![p(3.0, 3.5), p(7.0, 3.5), p(7.0, 5.5), p(3.0, 5.5)],
+                mat,
+            ))
+            .unwrap();
+        let solids = terrain_solids(&m, id);
+        let after = solids[0].volume();
+        let hole = m.excavations()[0].clone();
+        let footprint = archisim_core::signed_area(&hole.outline);
+        assert!(after < before - footprint, "{before} {after}");
+        assert!(solids[1].volume() < 29.0 * PATCH_THICKNESS - 0.1);
+        assert!(!crate::pools::pool_solids(&m, pool).is_empty());
     }
 
     /// A gable wall under a two-slope roof: built up to the ridge and

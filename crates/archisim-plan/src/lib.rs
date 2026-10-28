@@ -35,6 +35,7 @@ pub mod lettering;
 pub mod members;
 pub mod overrides;
 pub mod phases;
+pub mod pools;
 pub mod presentation;
 pub mod railings;
 pub mod roofs;
@@ -541,6 +542,11 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
             marker_points.extend(r.outline());
         }
     }
+    if show(archisim_core::Category::Pools) {
+        for p in model.pools_on_level(level) {
+            marker_points.extend(pools::pool_points(p));
+        }
+    }
     if show(archisim_core::Category::Services) {
         for r in model.runs_on_level(level) {
             marker_points.extend(r.path.iter().copied());
@@ -625,6 +631,15 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
         };
         overrides::group(&mut s, archisim_core::Category::Roads, |s| {
             urban::draw_roads(s, model, level, k, &vis)
+        });
+    }
+    if show(archisim_core::Category::Pools) {
+        let vis = |poly: &[Point2]| {
+            let (lo, hi) = bounds(poly);
+            visible(lo, hi)
+        };
+        overrides::group(&mut s, archisim_core::Category::Pools, |s| {
+            pools::draw_pools(s, model, level, k, &vis)
         });
     }
     overrides::open(&mut s, archisim_core::Category::Slabs);

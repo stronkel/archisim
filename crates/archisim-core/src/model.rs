@@ -30,6 +30,7 @@ mod paint;
 mod parameters;
 mod phases;
 mod plantings;
+mod pools;
 mod presentation;
 mod prices;
 mod props;
@@ -62,6 +63,7 @@ pub use paint::*;
 pub use parameters::*;
 pub use phases::*;
 pub use plantings::*;
+pub use pools::*;
 pub use prices::*;
 pub use railings::*;
 pub use roofs::*;
@@ -1316,6 +1318,8 @@ pub struct ModelParts {
     /// Plants spread along lines or over areas (after the objects they
     /// made).
     pub plantings: Vec<Planting>,
+    /// Pools built in the ground.
+    pub pools: Vec<Pool>,
     /// Pipes, ducts and devices.
     pub runs: Vec<ServiceRun>,
     pub devices: Vec<ServiceDevice>,
@@ -1428,6 +1432,7 @@ pub struct Model {
     plots: BTreeMap<PlotId, Plot>,
     roads: BTreeMap<RoadId, Road>,
     plantings: BTreeMap<PlantingId, Planting>,
+    pools: BTreeMap<PoolId, Pool>,
     runs: BTreeMap<RunId, ServiceRun>,
     devices: BTreeMap<DeviceId, ServiceDevice>,
     /// True north: radians, clockwise from the plan's up (+Y).
@@ -1508,6 +1513,7 @@ impl Model {
             plots: BTreeMap::new(),
             roads: BTreeMap::new(),
             plantings: BTreeMap::new(),
+            pools: BTreeMap::new(),
             runs: BTreeMap::new(),
             devices: BTreeMap::new(),
             true_north: 0.0,
@@ -1649,6 +1655,7 @@ impl Model {
         self.plots.retain(|_, p| p.level != id);
         self.roads.retain(|_, r| r.level != id);
         self.plantings.retain(|_, p| p.level != id);
+        self.pools.retain(|_, p| p.level != id);
         self.runs.retain(|_, r| r.level != id);
         self.devices.retain(|_, d| d.level != id);
         self.plan_views.retain(|_, v| v.level != id);
@@ -3975,6 +3982,7 @@ impl Model {
             plots: self.plots.values().cloned().collect(),
             roads: self.roads.values().cloned().collect(),
             plantings: self.plantings.values().cloned().collect(),
+            pools: self.pools.values().cloned().collect(),
             runs: self.runs.values().cloned().collect(),
             devices: self.devices.values().cloned().collect(),
             true_north: self.true_north,
@@ -4312,6 +4320,7 @@ impl Model {
             })?;
         model.restore_urban(parts.plots, parts.roads, &mut claim)?;
         model.restore_plantings(parts.plantings, &mut claim)?;
+        model.restore_pools(parts.pools, &mut claim)?;
         model.restore_services(parts.runs, parts.devices, &mut claim)?;
         model
             .set_plot_area(parts.plot_area)

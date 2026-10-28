@@ -4285,6 +4285,68 @@ fn plots_and_roads_are_drawn() {
     h.frame();
 }
 
+/// A pool by the edge of its water (paquete 8d): built with the usual
+/// measurements and the palette's materials, its slope along the first
+/// side; selected, its corner is dragged and it is moved; a terrain under
+/// it is cut.
+#[test]
+fn pools_are_drawn_and_dig_the_ground() {
+    use super::toolbox::{Discipline, Pick};
+    let mut h = Harness::new(Editor::new_project());
+    let canvas = h.app.canvas;
+    h.app
+        .view
+        .fit_exact(canvas, p(-10.0, -10.0), p(20.0, 15.0), 0.0);
+    h.app.set_discipline(Discipline::Site);
+    h.app.pick(Pick::Tool(Tool::Pool));
+    assert_eq!(h.app.tool, Tool::Pool);
+    for c in [
+        p(0.0, 0.0),
+        p(8.0, 0.0),
+        p(8.0, 4.0),
+        p(0.0, 4.0),
+        p(0.0, 0.0),
+    ] {
+        h.click_at(c);
+    }
+    let pool = h.model().pools().next().unwrap().clone();
+    assert!((pool.area() - 32.0).abs() < 1e-6);
+    assert!(pool.slope.abs() < 1e-9);
+    assert!((pool.water_volume() - 48.0).abs() < 1e-6);
+    let lining = h.model().material(pool.lining).unwrap().name.clone();
+    assert_eq!(lining, "Gresite azul");
+    assert_eq!(
+        h.app.ed.selection.iter().next(),
+        Some(&Element::Pool(pool.id))
+    );
+    h.frame();
+    // Its properties show; its corner is dragged out.
+    let hs = crate::drag::hotspots(h.model(), &h.app.ed.selection);
+    assert_eq!(hs.len(), 4);
+    let sel = h.app.ed.selection.clone();
+    let r = h.app.ed.transact("Esquina", |m| {
+        crate::drag::apply(
+            m,
+            &sel,
+            &crate::drag::Drag {
+                grip: crate::drag::Grip::PoolCorner {
+                    pool: pool.id,
+                    index: 2,
+                },
+                from: p(8.0, 4.0),
+                to: p(9.0, 4.0),
+                variant: false,
+            },
+        )
+        .map(drop)
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let area = h.model().pool(pool.id).unwrap().area();
+    assert!((area - 34.0).abs() < 1e-6, "{area}");
+    // The plan draws it.
+    h.frame();
+}
+
 fn road_id(h: &Harness) -> archisim_core::RoadId {
     h.model().roads().next().unwrap().id
 }

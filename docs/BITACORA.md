@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (21) · Paquete 8, tanda 8d: la piscina construida, que excava el terreno
+
+Rama `bloque/paquete-8d` (sobre `bloque/paquete-8c`), con pull request. **Formato `.archisim` versión 40** (piscinas, `pools`; los ficheros anteriores se abren sin cambios). Cambia el IFC (piezas nuevas) y la aplicación (herramienta nueva).
+
+Antonio: «con qué seguimos ahora?» → tanda 8d. Decisiones: contorno libre como un forjado; fondo con pendiente; IFC por piezas (solera `IfcSlab`, paredes `IfcWall`, revestimiento `IfcCovering`, coronación `IfcSlab`, en un `IfcElementAssembly` «Piscina», y el agua como `IfcSpace`); las piscinas-objeto de la 8a también recortan el terreno.
+
+**Hecho**
+- Elemento nuevo **Piscina** (`archisim-core::model::pools`): el borde del agua, profundidad menor y mayor con la dirección de la pendiente, resguardo, grueso del vaso, ancho de coronación, coronación sobre la planta y cuatro materiales. Superficie, perímetro y volumen de agua.
+- 3D (`archisim-geom::pools`): solera y paredes de hormigón, revestimiento interior, coronación y agua; el fondo sigue la pendiente.
+- **Recorte del terreno**: el terreno pierde el hueco del vaso (su contorno exterior), con sus paredes y su fondo, y también las áreas pintadas y la hierba que caían dentro. Lo hacen las piscinas construidas y las piscinas-objeto de la biblioteca.
+- Planta: coronación, agua en azul claro, vaso oculto en discontinua, flecha de la pendiente con las dos profundidades, nombre y superficie. Categoría de visibilidad nueva «Piscinas».
+- IFC: el conjunto «Piscina» con sus piezas y `ArchiSim_Pool` para leerla de vuelta; el agua como `IfcSpace` «Lámina de agua» con superficie y volumen. La importación la recupera entera (ida y vuelta sin diferencias). `scripts/validate_ifc.py` comprueba las piscinas (apartado 14).
+- Aplicación: herramienta **Piscina** en Urbanismo y en la Maqueta (Exterior → Terreno y caminos), con polígono y rectángulo; la pendiente sale a lo largo del primer lado dibujado. Propiedades con medidas, pendiente (en grados, «Girar 90°» e «Invertir»), materiales y mediciones (lámina de agua, volumen de agua, excavación aproximada). Esquinas arrastrables; mover, copiar, girar y simetría.
+- La demo lleva la piscina del jardín como piscina construida (antes era un dibujo 2D).
+
+**Pendiente**
+- Escaleras romanas y escalerillas en la piscina construida; formas hechas (riñón, ovalada) como atajos del contorno.
+- Las piscinas dentro de módulos no se copian al juntar el modelo (como las plantaciones).
+
+**Qué debe probar Antonio**
+1. Abre la demo (`archisim demo out/`) y mira la piscina del jardín en planta y en 3D: el terreno debe tener el hueco.
+2. En Urbanismo, herramienta Piscina: dibuja una en forma de L sobre un terreno; cambia las profundidades, gira la pendiente y arrastra una esquina.
+3. Exporta a IFC y ábrelo en tu visor: comprueba el conjunto «Piscina», sus piezas y el agua como espacio con su volumen.
+
+---
+
 ## 2026-10-28 (20) · Paquete 8, tanda 8c: pistas, gradas, parque infantil y calistenia
 
 Rama `bloque/paquete-8c` (sobre `bloque/paquete-8b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

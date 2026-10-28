@@ -23,6 +23,13 @@ impl<'a> Importer<'a> {
 
     fn import_space(&mut self, id: u64) -> Result<(), String> {
         let e = self.ent(id).ok_or("no existe")?;
+        // The water of a pool comes back with its pool.
+        if e.arg(0)
+            .as_str()
+            .is_some_and(|g| self.pool_waters.contains(g))
+        {
+            return Ok(());
+        }
         let xf = self.geo.placement(e.arg(5));
         let (_, body) = self.shape(e, &xf);
         if body.is_empty() {

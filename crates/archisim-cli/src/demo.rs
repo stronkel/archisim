@@ -709,6 +709,34 @@ pub fn build() -> Result<Document, ModelError> {
             seed: 5,
             base_offset: 0.0,
         })?;
+        // The pool of the garden built in the ground (paquete 8d): a
+        // plunge pool, its coping at the ground, from 1,00 to 1,40 m deep
+        // towards the north; it takes its room out of the terrain.
+        {
+            let mat = |m: &mut archisim_core::Model, name: &str| {
+                archisim_library::palette_material(m, name)
+                    .ok_or_else(|| ModelError::NotAnObject(name.to_string()))
+            };
+            let lining = mat(m, "Gresite azul")?;
+            let mut spec = archisim_core::NewPool::new(
+                pb,
+                vec![
+                    Point2::new(-5.6, 5.0),
+                    Point2::new(-4.2, 5.0),
+                    Point2::new(-4.2, 10.0),
+                    Point2::new(-5.6, 10.0),
+                ],
+                lining,
+            );
+            spec.name = "Piscina".into();
+            spec.top_offset = ground(m, Point2::new(-4.9, 7.5));
+            spec.deep = 1.4;
+            spec.slope = FRAC_PI_2;
+            spec.shell = mat(m, "Hormigón pulido")?;
+            spec.coping_material = mat(m, "Piedra caliza")?;
+            spec.water = mat(m, "Agua de fuente")?;
+            m.add_pool(spec)?;
+        }
         // A tree brought from SketchUp (a COLLADA file, v0.36), by the
         // gate.
         let dae = archisim_mesh::read(
@@ -853,7 +881,8 @@ pub fn build() -> Result<Document, ModelError> {
         ))?;
         m.add_draft(NewDraft::new(view, urb, Shape::Polyline(terrace)))?;
         // The garden to the west, for the presentation plan: lawn in mown
-        // stripes round a pool, and a gravel path along the south façade.
+        // stripes round the pool (built in the ground, in the garden's
+        // transaction), and a gravel path along the south façade.
         let jardin = m.add_draw_layer(DrawLayer::new(
             "Jardín",
             [90, 140, 70],
@@ -871,7 +900,8 @@ pub fn build() -> Result<Document, ModelError> {
                 true,
             )
         };
-        let pool = rect(-5.6, 5.0, -4.2, 10.0);
+        // The lawn stops at the pool's coping (30 cm round its water).
+        let pool = rect(-5.9, 4.7, -3.9, 10.3);
         for (loops, pattern, color, background, angle) in [
             (
                 vec![rect(-6.0, -2.4, -0.2, 12.0), pool.clone()],
@@ -879,13 +909,6 @@ pub fn build() -> Result<Document, ModelError> {
                 [150, 190, 110],
                 [172, 206, 134],
                 std::f64::consts::FRAC_PI_2,
-            ),
-            (
-                vec![pool.clone()],
-                HatchPattern::Water,
-                [40, 150, 190],
-                [182, 226, 236],
-                0.0,
             ),
             (
                 vec![rect(0.0, -2.4, 12.0, -0.4)],
@@ -910,7 +933,6 @@ pub fn build() -> Result<Document, ModelError> {
             d.color = Some(color);
             m.add_draft(d)?;
         }
-        m.add_draft(NewDraft::new(view, jardin, Shape::Polyline(pool)))?;
         m.add_draft(NewDraft::new(
             view,
             textos,

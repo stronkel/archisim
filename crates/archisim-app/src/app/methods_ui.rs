@@ -36,7 +36,7 @@ impl ArchiSimApp {
             // on its first point.
             Tool::Mass => Some(false),
             Tool::Slab if !self.slab_settings.wand => Some(true),
-            Tool::Zone | Tool::Plot => Some(true),
+            Tool::Zone | Tool::Plot | Tool::Pool => Some(true),
             Tool::Planting => {
                 Some(self.planting_settings.arrangement == archisim_core::Arrangement::Area)
             }
@@ -162,7 +162,7 @@ impl ArchiSimApp {
     /// slab, room, plot, roof, face or volume), not a path that goes round.
     fn closed_line_is_outline(&self) -> bool {
         match self.tool {
-            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Roof => true,
+            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Pool | Tool::Roof => true,
             Tool::Planting => true,
             Tool::Mass => self.mass_settings.mode != crate::editor::MassMode::Path,
             _ => false,
@@ -185,12 +185,15 @@ impl ArchiSimApp {
                     .collect();
                 self.build_walls(pieces);
             }
-            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Roof | Tool::Mass if l.closed => {
+            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Pool | Tool::Roof | Tool::Mass
+                if l.closed =>
+            {
                 let outline = l.points;
                 match tool {
                     Tool::Slab => self.build_slab(outline),
                     Tool::Zone => self.build_space(outline),
                     Tool::Plot => self.build_plot(outline),
+                    Tool::Pool => self.build_pool(outline),
                     Tool::Roof => self.build_roof(outline),
                     _ if self.mass_settings.mode == crate::editor::MassMode::Path => {
                         self.concept.path = outline;
@@ -204,7 +207,7 @@ impl ArchiSimApp {
                 self.concept.path = l.points;
                 self.finish_path();
             }
-            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Roof => self.complain(
+            Tool::Slab | Tool::Zone | Tool::Plot | Tool::Pool | Tool::Roof => self.complain(
                 "Para un contorno hace falta una línea cerrada (polilínea cerrada o círculo).",
             ),
             Tool::Railing => {
@@ -373,6 +376,7 @@ impl ArchiSimApp {
             Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_click(p),
             Tool::Mass | Tool::Tape => self.concept_click(p),
             Tool::Plot => self.plot_click(p),
+            Tool::Pool => self.pool_click(p),
             Tool::Road => self.road_click(p),
             Tool::Planting => self.planting_click(p),
             Tool::Pipe | Tool::Duct => self.run_click(p),

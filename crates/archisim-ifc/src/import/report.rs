@@ -34,6 +34,8 @@ pub struct ImportReport {
     pub grids: usize,
     pub plots: usize,
     pub roads: usize,
+    /// Pools written by ArchiSim (`IfcElementAssembly` «Piscina»).
+    pub pools: usize,
     pub services: usize,
     /// Curtain walls written by ArchiSim (`IfcCurtainWall`).
     pub curtain_walls: usize,
@@ -188,6 +190,9 @@ impl ImportReport {
         }
         if self.roads > 0 {
             members.push_str(&format!(", {} viales", self.roads));
+        }
+        if self.pools > 0 {
+            members.push_str(&format!(", {} piscinas", self.pools));
         }
         if self.services > 0 {
             members.push_str(&format!(", {} instalaciones", self.services));

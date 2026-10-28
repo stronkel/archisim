@@ -76,6 +76,7 @@ impl ArchiSimApp {
         self.draw_module_preview(&painter, rect);
         self.draw_concept_preview(&painter, rect);
         self.draw_urban_preview(&painter, rect);
+        self.draw_pool_preview(&painter, rect);
         self.draw_planting_preview(&painter, rect);
         self.draw_services_preview(&painter, rect);
         self.draw_method_preview(&painter, rect);
@@ -138,6 +139,7 @@ impl ArchiSimApp {
             | Tool::MassOffset
             | Tool::Tape
             | Tool::Plot
+            | Tool::Pool
             | Tool::Brush
             | Tool::Road
             | Tool::Planting
@@ -463,6 +465,7 @@ impl ArchiSimApp {
             | Tool::Tape
             | Tool::Paint
             | Tool::Plot
+            | Tool::Pool
             | Tool::Road
             | Tool::Planting
             | Tool::Pipe
@@ -471,6 +474,7 @@ impl ArchiSimApp {
             | Tool::TeamZone => {
                 let points = match self.tool {
                     Tool::Plot => self.plot_tool.corners().to_vec(),
+                    Tool::Pool => self.pool_tool.corners().to_vec(),
                     Tool::Road => self.road_points.clone(),
                     Tool::Planting => self.planting_points.clone(),
                     Tool::Pipe | Tool::Duct => self.run_points.clone(),
@@ -483,6 +487,7 @@ impl ArchiSimApp {
                     Tool::Beam => self.beam_tool.anchor,
                     Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_anchor(),
                     Tool::Plot => self.plot_tool.anchor(),
+                    Tool::Pool => self.pool_tool.anchor(),
                     Tool::Road => self.road_points.last().copied(),
                     Tool::Planting => self.planting_points.last().copied(),
                     Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
@@ -623,6 +628,7 @@ impl ArchiSimApp {
                         }
                         Tool::PushPull | Tool::Deform | Tool::MassOffset => self.concept_type(c),
                         Tool::Plot => self.plot_tool.type_char(c),
+                        Tool::Pool => self.pool_tool.type_char(c),
                         Tool::Wall => self.wall_tool.type_char(c),
                         Tool::Slab => self.slab_tool.type_char(c),
                         Tool::Zone => self.zone_tool.type_char(c),
@@ -652,6 +658,7 @@ impl ArchiSimApp {
                 Tool::Mass => self.mass_tool.backspace(),
                 Tool::PushPull | Tool::Deform | Tool::MassOffset => self.concept_backspace(),
                 Tool::Plot => self.plot_tool.backspace(),
+                Tool::Pool => self.pool_tool.backspace(),
                 Tool::Road => self.road_points.pop().is_some(),
                 Tool::Planting => self.planting_points.pop().is_some(),
                 Tool::Pipe | Tool::Duct => self.run_points.pop().is_some(),
@@ -740,6 +747,13 @@ impl ArchiSimApp {
                 Tool::Mass | Tool::PushPull | Tool::Deform | Tool::MassOffset => {
                     self.concept_enter()
                 }
+                Tool::Pool => match self.pool_tool.enter(towards) {
+                    SlabOutcome::Build(outline) => self.build_pool(outline),
+                    SlabOutcome::Invalid => self.complain(
+                        "El contorno de la piscina necesita al menos tres esquinas y no puede cruzarse.",
+                    ),
+                    SlabOutcome::Nothing => {}
+                },
                 Tool::Plot => match self.plot_tool.enter(towards) {
                     SlabOutcome::Build(outline) => self.build_plot(outline),
                     SlabOutcome::Invalid => self
@@ -816,6 +830,11 @@ impl ArchiSimApp {
                 | Tool::Paint => self.concept_escape(),
                 Tool::Plot => {
                     if !self.plot_tool.escape() {
+                        self.set_tool(Tool::Arrow);
+                    }
+                }
+                Tool::Pool => {
+                    if !self.pool_tool.escape() {
                         self.set_tool(Tool::Arrow);
                     }
                 }
@@ -1101,6 +1120,16 @@ impl ArchiSimApp {
                     if let Some(c) = self.cursor {
                         self.module_click(c.point);
                     }
+                }
+            }
+            Tool::Pool => {
+                if response.clicked_by(PointerButton::Primary) {
+                    if let Some(c) = self.cursor {
+                        self.pool_click(c.point);
+                    }
+                }
+                if response.clicked_by(PointerButton::Secondary) {
+                    self.pool_tool.finish();
                 }
             }
             Tool::Plot => {
@@ -1690,6 +1719,7 @@ impl ArchiSimApp {
             (Grip::CurtainEnd { .. }, _) => "Estirar muro cortina",
             (Grip::RailingPoint { .. }, _) => "Barandilla",
             (Grip::RoadPoint { .. }, _) => "Eje del vial",
+            (Grip::PoolCorner { .. }, _) => "Esquina de la piscina",
             (Grip::RefPlaneEnd { .. }, _) => "Plano de referencia",
             (Grip::DimPoint { .. }, _) => "Punto de cota",
             (Grip::ObjectSize { side, .. }, _) => side.label(),
@@ -2083,6 +2113,7 @@ impl ArchiSimApp {
             Tool::Grid | Tool::RefPlane | Tool::Footing => self.foundation_anchor(),
             Tool::Mass | Tool::Tape => self.concept_anchor(),
             Tool::Plot => self.plot_tool.anchor(),
+            Tool::Pool => self.pool_tool.anchor(),
             Tool::Road => self.road_points.last().copied(),
             Tool::Planting => self.planting_points.last().copied(),
             Tool::Pipe | Tool::Duct => self.run_points.last().copied(),
@@ -2120,6 +2151,7 @@ impl ArchiSimApp {
             }
             Tool::Mass | Tool::Tape => self.concept_points(),
             Tool::Plot => self.plot_tool.corners().to_vec(),
+            Tool::Pool => self.pool_tool.corners().to_vec(),
             Tool::Road => self.road_points.clone(),
             Tool::Planting => self.planting_points.clone(),
             Tool::Pipe | Tool::Duct => self.run_points.clone(),

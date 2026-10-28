@@ -107,6 +107,8 @@ pub enum Tool {
     Paint,
     /// Plots, by their boundary.
     Plot,
+    /// Pools built in the ground, by the edge of their water.
+    Pool,
     /// Roads, by their axis.
     Road,
     /// Plants along a line or over an area.
@@ -156,6 +158,7 @@ impl Tool {
                 | Tool::Tape
                 | Tool::Paint
                 | Tool::Plot
+                | Tool::Pool
                 | Tool::Road
                 | Tool::Planting
                 | Tool::Pipe
@@ -331,6 +334,8 @@ pub struct ArchiSimApp {
     /// The boundary of the plot being drawn and the setback of the next.
     pub plot_tool: SlabTool,
     pub plot_setback: f64,
+    pub pool_tool: SlabTool,
+    pub pool_settings: pool_ui::PoolSettings,
     /// The axis of the road being drawn and what the road tool draws.
     pub road_points: Vec<Point2>,
     pub road_settings: urban_ui::RoadSettings,
@@ -716,6 +721,8 @@ impl ArchiSimApp {
             concept: Default::default(),
             plot_tool: SlabTool::default(),
             plot_setback: 3.0,
+            pool_tool: SlabTool::default(),
+            pool_settings: Default::default(),
             road_points: Vec::new(),
             road_settings,
             planting_points: Vec::new(),
@@ -939,6 +946,8 @@ impl ArchiSimApp {
             self.mass_tool.finish();
             self.concept.finish();
             self.plot_tool.finish();
+            self.pool_tool.finish();
+            self.pool_tool.finish();
             self.road_points.clear();
             self.planting_points.clear();
             self.draw_method = Default::default();
@@ -2574,6 +2583,7 @@ mod phases_ui;
 mod placing;
 mod plan_ui;
 mod planting_ui;
+mod pool_ui;
 mod presentation_ui;
 mod priorities_ui;
 mod properties;

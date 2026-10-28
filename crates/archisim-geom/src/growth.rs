@@ -77,7 +77,20 @@ pub fn growth_mesh(model: &Model, id: TerrainId, index: usize) -> Option<Arc<Gro
         p.at.y.to_bits().hash(&mut h);
         p.z.to_bits().hash(&mut h);
     }
-    for (o, holes) in &patch.regions {
+    // The painted area less the room the pools take out of the ground.
+    let boundary: Vec<archisim_core::Point2> =
+        t.boundary().iter().map(|i| t.points[*i].at).collect();
+    let dug = crate::solid::terrain_holes(model, &boundary);
+    let regions = if dug.is_empty() {
+        patch.regions.clone()
+    } else {
+        let cut: Vec<crate::junctions::Shape> = dug
+            .iter()
+            .map(|e| (e.outline.clone(), Vec::new()))
+            .collect();
+        crate::junctions::difference(&patch.regions, &cut)
+    };
+    for (o, holes) in &regions {
         for q in o.iter().chain(holes.iter().flatten()) {
             q.x.to_bits().hash(&mut h);
             q.y.to_bits().hash(&mut h);
@@ -121,7 +134,7 @@ pub fn growth_mesh(model: &Model, id: TerrainId, index: usize) -> Option<Arc<Gro
     };
     let mesh = Arc::new(grow(
         &ground,
-        &patch.regions,
+        &regions,
         &growth,
         colour,
         thin,

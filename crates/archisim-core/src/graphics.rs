@@ -173,6 +173,8 @@ pub enum Category {
     /// Plots: boundaries and setbacks.
     Plots,
     Roads,
+    /// Pools built in the ground.
+    Pools,
     /// Pipes, ducts and devices.
     Services,
     /// Trees, shrubs, hedges and plantings (objects of the garden).
@@ -182,7 +184,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 24] = [
+    pub const ALL: [Category; 25] = [
         Category::Walls,
         Category::Slabs,
         Category::Openings,
@@ -198,6 +200,7 @@ impl Category {
         Category::Masses,
         Category::Plots,
         Category::Roads,
+        Category::Pools,
         Category::Services,
         Category::Dimensions,
         Category::LevelMarks,
@@ -232,6 +235,7 @@ impl Category {
             Category::Masses => "masses",
             Category::Plots => "plots",
             Category::Roads => "roads",
+            Category::Pools => "pools",
             Category::Services => "services",
             Category::Vegetation => "vegetation",
             Category::RefPlanes => "reference_planes",
@@ -265,6 +269,7 @@ impl Category {
             Category::Masses => "Volúmenes (concepto)",
             Category::Plots => "Parcelas",
             Category::Roads => "Viales",
+            Category::Pools => "Piscinas",
             Category::Services => "Instalaciones",
             Category::Vegetation => "Vegetación",
             Category::RefPlanes => "Planos de referencia",
@@ -470,6 +475,7 @@ impl ViewStyle {
         s.set_graphics(Category::Terrain, pastel([226, 236, 212]));
         s.set_graphics(Category::Plots, pastel([238, 240, 222]));
         s.set_graphics(Category::Roads, pastel([230, 228, 222]));
+        s.set_graphics(Category::Pools, pastel([200, 228, 240]));
         s
     }
 

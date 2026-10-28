@@ -398,6 +398,42 @@ pub fn differences(a: &Model, b: &Model) -> Vec<String> {
             diff(format!("parcela {}: {:?} / {:?}", s.guid, s, t));
         }
     }
+    if a.pools().count() != b.pools().count() {
+        diff(format!(
+            "número de piscinas: {} / {}",
+            a.pools().count(),
+            b.pools().count()
+        ));
+    }
+    for s in a.pools() {
+        let Some(t) = b.pools().find(|t| t.guid == s.guid) else {
+            diff(format!("piscina {} falta", s.guid));
+            continue;
+        };
+        let same = s.outline.len() == t.outline.len()
+            && s.outline
+                .iter()
+                .zip(&t.outline)
+                .all(|(p, q)| p.distance(*q) <= TOL)
+            && [
+                (s.top_offset, t.top_offset),
+                (s.shallow, t.shallow),
+                (s.deep, t.deep),
+                (s.slope, t.slope),
+                (s.freeboard, t.freeboard),
+                (s.wall, t.wall),
+                (s.coping, t.coping),
+            ]
+            .iter()
+            .all(|(x, y)| close(*x, *y))
+            && s.name == t.name
+            && material_name(a, s.lining) == material_name(b, t.lining)
+            && material_name(a, s.water) == material_name(b, t.water)
+            && level_guid(a, s.level) == level_guid(b, t.level);
+        if !same {
+            diff(format!("piscina {}: {:?} / {:?}", s.guid, s, t));
+        }
+    }
     let runs = |m: &Model| {
         let mut v: Vec<RunKey> = m
             .runs()

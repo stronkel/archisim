@@ -35,6 +35,7 @@ mod foundations;
 pub mod geometry;
 mod members;
 mod objects;
+mod pools;
 mod railings;
 pub mod report;
 mod roofs;
@@ -287,6 +288,9 @@ struct Importer<'a> {
     road_ids: HashSet<u64>,
     /// The stretches of pipes and ducts and the devices read back.
     service_ids: HashSet<u64>,
+    /// The parts of the pools read back, and the GlobalIds of their water.
+    pool_parts: HashSet<u64>,
+    pool_waters: HashSet<String>,
     object_types: objects::ObjectTypes,
 }
 
@@ -314,6 +318,7 @@ struct GuidPlan {
     rooms: Vec<(archisim_core::RoomId, String)>,
     plots: Vec<(archisim_core::PlotId, String)>,
     roads: Vec<(archisim_core::RoadId, String)>,
+    pools: Vec<(archisim_core::PoolId, String)>,
     runs: Vec<(archisim_core::RunId, String)>,
     devices: Vec<(archisim_core::DeviceId, String)>,
     project: Option<String>,
@@ -532,6 +537,8 @@ impl<'a> Importer<'a> {
             roof_ids: HashSet::new(),
             stair_ids: HashSet::new(),
             terrain_ids: HashSet::new(),
+            pool_parts: HashSet::new(),
+            pool_waters: HashSet::new(),
             curtain_ids: HashSet::new(),
             curtain_types: HashMap::new(),
             railing_ids: HashSet::new(),
@@ -1259,6 +1266,9 @@ impl<'a> Importer<'a> {
     /// The walls of an IFC wall: one per piece of its axis (a straight
     /// line or a circular arc; a closed circle is two halves).
     fn read_wall(&mut self, id: u64) -> Result<Vec<WallCandidate>, &'static str> {
+        if self.pool_parts.contains(&id) {
+            return Ok(Vec::new());
+        }
         let e = self.ent(id).ok_or("no existe")?;
         let xf = self.geo.placement(e.arg(5));
         let (axis, body) = self.shape(e, &xf);
@@ -1681,6 +1691,9 @@ impl<'a> Importer<'a> {
     }
 
     fn import_slab(&mut self, id: u64) -> Result<(), String> {
+        if self.pool_parts.contains(&id) {
+            return Ok(());
+        }
         // The landings of an ArchiSim stair come back with their stair.
         if self.own_file {
             if let Some(&p) = self.ix.parent.get(&id) {
@@ -2821,6 +2834,7 @@ impl<'a> Importer<'a> {
                         && !self.object_ids.contains(id)
                         && !self.road_ids.contains(id)
                         && !self.service_ids.contains(id)
+                        && !self.pool_parts.contains(id)
                         && !self
                             .ix
                             .parent
@@ -2880,6 +2894,8 @@ impl<'a> Importer<'a> {
         for id in self.file.of_kind("IFCMATERIAL") {
             self.material(id);
         }
+        // Pools first: their parts are left out of what follows.
+        self.import_pools();
         self.import_walls();
         self.import_slabs();
         self.restore_type_accessories();
@@ -2952,6 +2968,7 @@ impl<'a> Importer<'a> {
         restore!(rooms, rooms);
         restore!(plots, plots);
         restore!(roads, roads);
+        restore!(pools, pools);
         restore!(runs, runs);
         restore!(devices, devices);
         if duplicates > 0 {

@@ -223,6 +223,30 @@ fn dedup(p: Loop) -> Loop {
     out
 }
 
+/// What a pool takes out of the ground: the outside of its shell in plan
+/// (counter-clockwise, the pool's own axes) and the level of its bottom
+/// (negative, metres under its coping).
+pub fn excavation(p: &Params) -> (Vec<[f64; 2]>, f64) {
+    let ix = look(p);
+    let l = p.get("length", 8.0).clamp(2.0, 25.0);
+    let w = p.get("width", 4.0).clamp(1.5, 12.0);
+    let depth = p.get("water_depth", 1.4).clamp(0.4, 2.5);
+    let deck = p.get("deck_width", 1.0).clamp(0.0, 4.0);
+    let form = p.get("form", 1.0).round() as i32;
+    let infinity = form == 3 && !matches!(ix, 2 | 7);
+    let coping = if infinity { 0.5 } else { 0.32 };
+    let cy = coping + deck + w / 2.0;
+    let edge = outline(ix, l, w, cy);
+    let edge: Loop = if area2(&edge) < 0.0 {
+        edge.into_iter().rev().collect()
+    } else {
+        edge
+    };
+    let zw = if infinity { -0.015 } else { -0.12 };
+    let wall = 0.2;
+    (offset(&edge, wall), zw - depth - wall)
+}
+
 /// Pools of the collections.
 pub fn pool(b: &mut Builder, p: &Params) {
     let ix = look(p);
@@ -711,6 +735,36 @@ mod tests {
             let low = b.positions.iter().map(|q| q[2]).fold(f32::MAX, f32::min);
             assert!(low > -0.001, "{c} ducha: {low}");
         }
+    }
+
+    #[test]
+    fn the_excavation_holds_the_shell() {
+        for c in 0..8 {
+            for form in [1.0, 2.0, 3.0] {
+                let mut p = Params::default();
+                p.set("style", (1 + c) as f64);
+                p.set("form", form);
+                let (hole, bottom) = excavation(&p);
+                assert!(hole.len() >= 4 && area2(&hole) > 0.0, "{c}");
+                let mut b = Builder::default();
+                pool(&mut b, &p);
+                let low = b
+                    .positions
+                    .iter()
+                    .map(|q| q[2] as f64)
+                    .fold(f64::MAX, f64::min);
+                assert!((low - bottom).abs() < 0.01, "{c} {form}: {low} {bottom}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_forms_are_chosen_by_name() {
+        assert_eq!(crate::choice_number("form", "Desbordante"), Some(3.0));
+        assert_eq!(
+            crate::choice_number("form", "Con escalera romana"),
+            Some(2.0)
+        );
     }
 
     #[test]
