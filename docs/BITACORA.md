@@ -27,7 +27,7 @@ Antonio: «con qué seguimos ahora?» → tanda 8d. Decisiones: contorno libre c
 
 **Qué debe probar Antonio**
 1. Abre la demo (`archisim demo out/`) y mira la piscina del jardín en planta y en 3D: el terreno debe tener el hueco.
-2. En Urbanismo, herramienta Piscina: dibuja una en forma de L sobre un terreno; cambia las profundidades, gira la pendiente y arrastra una esquina.
+2. En Urbanismo, herramienta Piscina (teclas P S): dibuja una en forma de L sobre un terreno; cambia las profundidades, gira la pendiente y arrastra una esquina.
 3. Exporta a IFC y ábrelo en tu visor: comprueba el conjunto «Piscina», sus piezas y el agua como espacio con su volumen.
 
 ---
