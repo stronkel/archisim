@@ -420,7 +420,7 @@ pub fn shop_shelving(b: &mut Builder, p: &Params) {
             d - 0.06,
             z,
             room,
-            if seed % 3 == 0 { 1 } else { 0 },
+            if seed.is_multiple_of(3) { 1 } else { 0 },
             seed,
         );
     };

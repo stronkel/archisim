@@ -368,6 +368,24 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 7, tanda 7c: las tiendas de las ocho colecciones (28/10/2026)
+
+En el taller (rama `bloque/paquete-7c`, `archisim_props::fine::shop`): cinco familias nuevas de taller con un modelo por colección: «Mostrador de tienda» (`fine_shop_counter`), «Estantería de tienda» (`fine_shop_shelving`), «Mesa expositora» (`fine_display_table`), «Burro de ropa» (`fine_clothes_rail`) y «Probador» (`fine_fitting_room`); recetas `taller/tienda_*.asfam`.
+
+| Colección | Mostrador | Estantería | Mesa | Burro | Probador |
+|---|---|---|---|---|---|
+| Nórdico cálido | frente acanalado de roble | costados y baldas de roble, fondo claro | roble sobre patas abiertas con balda | caballetes de roble | marco de roble, cortina de lino |
+| Mediterráneo | encalado con azulejos | hornacinas de medio punto encaladas | pintada sobre patas torneadas | forja con volutas | paredes encaladas con zócalo de azulejo |
+| Años 50 | laminado de color con bandas cromadas | baldas de teca sobre postes de latón, fondo de color | teca sobre patas de compás | latón con balda de teca para zapatos | teca con panel de color y cortina de terciopelo |
+| Japandi | lamas de roble ahumado | cuadrícula de nichos | losa de roble sobre costados | pórtico de roble ahumado | paredes de lamas |
+| Contemporáneo | blanco con tira de luz | blanco con luz bajo cada balda | bloque blanco con otra mesa baja encajada | acero negro fino | blanco con luz sobre el espejo |
+| Rústica | piedra en hiladas | tablones sobre escuadras de forja | tablón sobre caballetes | troncos y vara de madera | tablas de pino |
+| Industrial | tablas entre perfiles de acero | tablones sobre tubo negro | madera sobre bastidor negro | tubo negro con ruedas | bastidor negro con paneles de fieltro |
+| Clásica | cuarterones con zócalo y moldura | nogal con pilastras, espejo y cornisa | nogal con tapete de piel y patas acanaladas | latón con remates sobre base de nogal | paredes de cuarterones, cortina de terciopelo y barra de latón |
+
+- Partes de material: `frame`, `top`, `front`, `masonry`, `accent`, `metal`, `dark`, `glass`, `mirror`, `light`, `display`; el género `goods`, `goods2`, `goods3`; la ropa `cloth`, `cloth2`, `cloth3`; `curtain` en el probador.
+- Tiendas del taller (`workshop::place_shop`, `SHOP_EXTRAS`, `SHOP_PIECES`); fotos con `ARCHISIM_TIENDAS_OUT=carpeta cargo test --release -p archisim-app -- shop_pictures`.
+
 ### Paquete 7, tanda 7b: las oficinas de las ocho colecciones (28/10/2026)
 
 En el taller (rama `bloque/paquete-7b`, `archisim_props::fine::office`): cinco familias nuevas de taller con un modelo por colección: «Puestos de trabajo» (`fine_bench_desk`), «Mesa de reuniones» (`fine_meeting_table`), «Mostrador de recepción» (`fine_reception`), «Armario de oficina» (`fine_office_storage`) y «Mampara acústica» (`fine_acoustic_screen`); recetas `taller/oficina_*.asfam`. Las sillas son las de la colección (silla de trabajo de la tanda 6b y silla de comedor).

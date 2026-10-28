@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (17) · Paquete 7, tanda 7c: las tiendas de las ocho colecciones
+
+Rama `bloque/paquete-7c` (sobre `bloque/paquete-7b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca. Con esta tanda queda modelado el paquete 7 y, con él, el plan entero de la biblioteca nueva (paquetes 1 a 7), a falta de la revisión de Antonio.
+
+Antonio: «Con qué seguimos ahora?» → tanda 7c, tiendas.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 7, tanda 7c»)
+- Cinco familias nuevas, cada una con un modelo por colección: **mostrador de tienda** (con caja registradora y lector de tarjetas hacia el dependiente, baldas por detrás), **estantería de tienda** (de pared, con género: cajas, tarros y ropa doblada), **mesa expositora** (para el centro, con ropa doblada encima y cajas en la balda de abajo), **burro de ropa** (con perchas y prendas) y **probador** (espejo, perchas, taburete y cortina medio corrida).
+- En el taller, una tienda por colección a continuación de las oficinas: dos estanterías y el probador en la pared, el mostrador, la mesa expositora y el burro delante.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a las tiendas, después de las oficinas.
+2. Alarga una estantería y sube su altura (las baldas se reparten de nuevo); alarga el burro (salen más perchas); ensancha el probador.
+3. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-28 (16) · Paquete 7, tanda 7b: las oficinas de las ocho colecciones
 
 Rama `bloque/paquete-7b` (sobre `bloque/paquete-7a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
