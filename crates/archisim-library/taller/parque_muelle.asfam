@@ -1,0 +1,25 @@
+family "Balancín de muelle (taller)"
+  category furniture
+  host none
+  version 1
+  description "Figura sobre muelle con asiento, asideros y reposapiés (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Materiales"
+    accent  material = "Plástico amarillo" label "Cuerpo"
+    seat    material = "Plástico rojo" label "Asiento"
+    metal   material = "Acero inoxidable" label "Muelle y asideros"
+    dark    material = "Goma negra" label "Base y puños"
+
+body
+  box (-0.25, 0, 0) to (0.25, 0.8, 1.0) material accent
+
+plan 1:50
+  polygon (-0.2, 0.2) (0.2, 0.2) (0.2, 0.6) (-0.2, 0.6) pen view
+  polygon (-0.17, 0.02) (0.17, 0.02) (0.17, 0.78) (-0.17, 0.78) pen thin
+
+outputs
+  generator = "props:fine_spring_rider"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

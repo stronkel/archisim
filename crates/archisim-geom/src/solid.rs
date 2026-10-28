@@ -2697,6 +2697,7 @@ pub fn glow_materials(
         "fine_bar_counter" | "fine_back_bar" => (&["light"], LAMP_REACH),
         // The lights under water of the pools (paquete 8).
         "fine_pool" => (&["light"], LAMP_REACH),
+        "fine_padel_court" => (&["light"], LAMP_REACH),
         _ => return none,
     };
     let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {

@@ -13,6 +13,7 @@ pub mod bath;
 pub mod bedding;
 pub mod bedroom;
 pub mod chairs;
+pub mod courts;
 pub mod garden_plants;
 pub mod hearth;
 pub mod hospitality;
@@ -23,6 +24,7 @@ pub mod lighting;
 pub mod nursery;
 pub mod office;
 pub mod plant;
+pub mod playground;
 pub mod pool;
 pub mod shape;
 pub mod shop;
@@ -43,6 +45,16 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    ("fine_padel_court", &["Único"]),
+    ("fine_tennis_court", &["Único"]),
+    ("fine_basketball_court", &["Único"]),
+    ("fine_grandstand", &["Único"]),
+    ("fine_swing", &["Único"]),
+    ("fine_slide", &["Único"]),
+    ("fine_seesaw", &["Único"]),
+    ("fine_spring_rider", &["Único"]),
+    ("fine_calisthenics", &["Único"]),
+    ("fine_park_elliptical", &["Único"]),
     ("fine_basketball_hoop", &["Único"]),
     ("fine_goal", &["Único"]),
     ("fine_ping_pong", &["Único"]),
@@ -632,6 +644,16 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_dumbbell_rack" => sport::dumbbell_rack(b, p),
         "fine_wall_bars" => sport::wall_bars(b, p),
         "fine_yoga_mat" => sport::yoga_mat(b, p),
+        "fine_padel_court" => courts::padel_court(b, p),
+        "fine_tennis_court" => courts::tennis_court(b, p),
+        "fine_basketball_court" => courts::basketball_court(b, p),
+        "fine_grandstand" => courts::grandstand(b, p),
+        "fine_swing" => playground::swing(b, p),
+        "fine_slide" => playground::slide(b, p),
+        "fine_seesaw" => playground::seesaw(b, p),
+        "fine_spring_rider" => playground::spring_rider(b, p),
+        "fine_calisthenics" => playground::calisthenics(b, p),
+        "fine_park_elliptical" => playground::park_elliptical(b, p),
         _ => return false,
     }
     true

@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (20) · Paquete 8, tanda 8c: pistas, gradas, parque infantil y calistenia
+
+Rama `bloque/paquete-8c` (sobre `bloque/paquete-8b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio: «Con qué seguimos ahora?» → tanda 8c.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 8, tanda 8c»)
+- Diez familias nuevas, un modelo de cada una con sus colores por materiales: **pista de pádel** (20 × 10 m, césped, cristal escalonado y malla, red, puertas junto a la red y cuatro focos que se encienden de noche), **pista de tenis** (reglamentaria, con líneas de dobles e individuales, red con su caída al centro y silla de árbitro, sobre su zona de seguridad), **pista de baloncesto** (28 × 15 m con líneas, zonas pintadas, línea de triple y una canasta en cada fondo, con el mástil detrás de la línea de fondo), **grada** (de hormigón, de 1 a 10 filas, un asiento cada medio metro y barandilla), **columpio** (asiento plano y asiento cuna), **tobogán** (torre con escalera, plataforma a 1,2 m y tejadillo), **balancín**, **balancín de muelle**, **estación de calistenia** (dominadas a tres alturas, escalera horizontal, paralelas y barras de flexiones sobre caucho) y **elíptica de parque** (biosaludable).
+- En el taller, después del gimnasio: las tres pistas en fila (la grada delante de la de tenis) y el parque infantil con la calistenia.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a las pistas, después del gimnasio.
+2. Comprueba las medidas y líneas de las tres pistas en planta y en 3D; cambia el largo y las filas de la grada.
+3. Mira los focos del pádel de noche, y dime qué falta en el parque (arenero, tirolina, mesa de ajedrez, más aparatos biosaludables…).
+
+---
+
 ## 2026-10-28 (19) · Paquete 8, tanda 8b: deporte en casa y gimnasio
 
 Rama `bloque/paquete-8b` (sobre `bloque/paquete-8a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

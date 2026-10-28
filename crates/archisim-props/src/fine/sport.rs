@@ -21,11 +21,11 @@ use crate::Params;
 use std::f64::consts::{PI, TAU};
 
 /// A thin strand of four sides from `a` to `c` (a net's cord).
-fn cord(b: &mut Builder, role: &'static str, a: P3, c: P3, r: f64) {
+pub(super) fn cord(b: &mut Builder, role: &'static str, a: P3, c: P3, r: f64) {
     sweep(b, role, &[a, c], |_| r, 4, Cap::Flat, Cap::Flat);
 }
 
-fn lerp(a: P3, c: P3, t: f64) -> P3 {
+pub(super) fn lerp(a: P3, c: P3, t: f64) -> P3 {
     [
         a[0] + (c[0] - a[0]) * t,
         a[1] + (c[1] - a[1]) * t,
@@ -35,7 +35,7 @@ fn lerp(a: P3, c: P3, t: f64) -> P3 {
 
 /// A net over the four-sided patch `p00 p10 p11 p01`: cords from side to
 /// side both ways, `mesh` apart (at most).
-fn net(b: &mut Builder, role: &'static str, q: [P3; 4], mesh: f64) {
+pub(super) fn net(b: &mut Builder, role: &'static str, q: [P3; 4], mesh: f64) {
     let len = |a: P3, c: P3| {
         ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2) + (a[2] - c[2]).powi(2)).sqrt()
     };
@@ -53,7 +53,8 @@ fn net(b: &mut Builder, role: &'static str, q: [P3; 4], mesh: f64) {
 }
 
 /// A basketball hoop on a weighted stand: `rim_height` (3.05 m, lower
-/// for children).
+/// for children) and `reach`, from the pole to the board (1,15 m; a
+/// court's stand reaches further, behind its baseline).
 pub fn basketball_hoop(b: &mut Builder, p: &Params) {
     let h = p.get("rim_height", 3.05).clamp(2.0, 3.05);
     // The base, filled with water or sand, and its wheels at the back.
@@ -84,7 +85,7 @@ pub fn basketball_hoop(b: &mut Builder, p: &Params) {
         0.03,
     );
     // Two arms out to the board, and a brace.
-    let by = 1.15;
+    let by = p.get("reach", 1.15).clamp(0.9, 2.5);
     for x in [-0.22, 0.22] {
         rod(b, "frame", [x, py, top - 0.05], [x, by, top - 0.05], 0.018);
         rod(b, "frame", [x, py, top - 0.45], [x, by, top - 0.15], 0.018);

@@ -88,6 +88,16 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/gimnasio_mancuernero.asfam"),
     include_str!("../taller/gimnasio_espaldera.asfam"),
     include_str!("../taller/gimnasio_esterilla.asfam"),
+    include_str!("../taller/pista_padel.asfam"),
+    include_str!("../taller/pista_tenis.asfam"),
+    include_str!("../taller/pista_baloncesto.asfam"),
+    include_str!("../taller/grada.asfam"),
+    include_str!("../taller/parque_columpio.asfam"),
+    include_str!("../taller/parque_tobogan.asfam"),
+    include_str!("../taller/parque_balancin.asfam"),
+    include_str!("../taller/parque_muelle.asfam"),
+    include_str!("../taller/parque_calistenia.asfam"),
+    include_str!("../taller/parque_eliptica.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1922,6 +1932,74 @@ fn place_sport(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
     Ok(g + 7.8)
 }
 
+/// The courts, the grandstand, the playground and calisthenics (paquete 8,
+/// tanda 8c): one model each, no collections.
+pub const PARK_PIECES: [SportPiece; 10] = [
+    ("Pista de pádel (taller)", "Pista de pádel", &[]),
+    ("Pista de tenis (taller)", "Pista de tenis", &[]),
+    ("Pista de baloncesto (taller)", "Pista de baloncesto", &[]),
+    ("Grada (taller)", "Grada", &[]),
+    ("Columpio (taller)", "Columpio", &[]),
+    ("Tobogán (taller)", "Tobogán", &[]),
+    ("Balancín (taller)", "Balancín", &[]),
+    ("Balancín de muelle (taller)", "Balancín de muelle", &[]),
+    (
+        "Estación de calistenia (taller)",
+        "Estación de calistenia",
+        &[],
+    ),
+    ("Elíptica de parque (taller)", "Elíptica de parque", &[]),
+];
+
+/// The courts in a row south of the line of the walls (`wall`), east of
+/// `x`, the grandstand before the tennis court; then the playground and
+/// the calisthenics station. Returns where it ends.
+fn place_park(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: 0.0,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let mut t = Vec::new();
+    for (family, label, extras) in PARK_PIECES {
+        let values: Vec<(&str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+        t.push(sport_type(m, family, label, &values)?);
+    }
+    // Each court's far side 2 m short of the line of the walls.
+    let edge = wall - 2.0;
+    let padel = x + 10.5;
+    put(m, t[0], padel, edge - 10.5)?;
+    let tennis = padel + 10.5 + 2.0 + 18.29;
+    put(m, t[1], tennis, edge - 18.29)?;
+    put(m, t[3], tennis, edge - 18.29 - 1.0 - 3.2)?;
+    let basket = tennis + 18.29 + 2.0 + 16.0;
+    put(m, t[2], basket, edge - 19.0)?;
+    // The playground, its far sides 1 m short of the line.
+    let p = basket + 16.0 + 2.0;
+    let far = wall - 1.0;
+    for (i, (dx, depth)) in [
+        (1.9, 1.6),
+        (5.0, 5.4),
+        (7.6, 0.6),
+        (9.6, 0.8),
+        (15.2, 2.4),
+        (11.0, 1.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let k = [4, 5, 6, 7, 8, 9][i];
+        put(m, t[k], p + dx, far - depth)?;
+    }
+    Ok(p + 19.0)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -2452,6 +2530,8 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The courts, the playground and calisthenics, further east.
+    x = place_park(&mut m, x, wall)? + 1.8;
     // The street furniture, further east.
     for (k, extras) in TERRACES.iter().zip(STREET_EXTRAS) {
         x = place_street(&mut m, k, extras, x, wall)? + 1.8;
@@ -2787,7 +2867,7 @@ mod tests {
             }
         }
         let m = project().unwrap();
-        for (_, label, _) in SPORT_PIECES {
+        for (_, label, _) in SPORT_PIECES.iter().chain(&PARK_PIECES) {
             let name = format!("{label} (taller)");
             let t = m
                 .object_types()

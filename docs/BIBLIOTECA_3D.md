@@ -368,6 +368,28 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 8, tanda 8c: pistas, gradas, parque infantil y calistenia (28/10/2026)
+
+En el taller (rama `bloque/paquete-8c`, `archisim_props::fine::courts` y `fine::playground`): un modelo por pieza, sin colecciones.
+
+| Familia | Generador | Medidas | Partes de material |
+|---|---|---|---|
+| Pista de pádel | `fine_padel_court` | 20 × 10 m, cristal a 3 m en fondos y 2 + 2 m escalonados en laterales | `court`, `ground`, `line`, `glass`, `net`, `frame`, `dark`, `light` |
+| Pista de tenis | `fine_tennis_court` | 23,77 × 10,97 m en 36,57 × 18,29 m | `court`, `ground`, `line`, `net`, `dark`, `frame` |
+| Pista de baloncesto | `fine_basketball_court` | 28 × 15 m en 32 × 19 m, aros a 3,05 m | `court`, `ground`, `line`, `key`, `accent`, `frame`, `dark`, `board`, `net` |
+| Grada | `fine_grandstand` | `length` 2–30 m, `rows` 1–10 (huella 0,80, tabica 0,42) | `mass`, `seat`, `metal` |
+| Columpio | `fine_swing` | 3,7 × 1,6 m, viga a 2,4 m | `frame`, `seat`, `accent` (cuna), `metal`, `dark` |
+| Tobogán | `fine_slide` | 1,5 × 5,4 m, plataforma a 1,2 m | `frame`, `accent`, `slide`, `metal` |
+| Balancín | `fine_seesaw` | 3,3 m | `frame`, `seat`, `metal`, `dark` |
+| Balancín de muelle | `fine_spring_rider` | 0,5 × 0,8 m | `accent`, `seat`, `metal`, `dark` |
+| Estación de calistenia | `fine_calisthenics` | 7,2 × 2,4 m | `frame`, `metal`, `accent`, `ground` |
+| Elíptica de parque | `fine_park_elliptical` | 0,8 × 1,0 m | `frame`, `accent`, `dark` |
+
+- Recetas `taller/pista_*.asfam`, `taller/grada.asfam` y `taller/parque_*.asfam`; tipos «<pieza> (taller)» (`workshop::PARK_PIECES`, `place_park`).
+- Las canastas de la pista de baloncesto son la canasta de la tanda 8b con más vuelo (`reach` 2,30 m), para que el mástil quede detrás de la línea de fondo.
+- Los focos del pádel se encienden de noche (`glow_materials`).
+- Fotos con `ARCHISIM_PARQUE_OUT=carpeta cargo test --release -p archisim-app -- park_pictures`.
+
 ### Paquete 8, tanda 8b: deporte en casa y gimnasio (28/10/2026)
 
 En el taller (rama `bloque/paquete-8b`, `archisim_props::fine::sport`): un modelo por pieza, sin colecciones; los colores, por sus materiales.

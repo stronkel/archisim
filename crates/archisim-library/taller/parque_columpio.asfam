@@ -1,0 +1,26 @@
+family "Columpio (taller)"
+  category furniture
+  host none
+  version 1
+  description "Columpio de dos plazas: asiento plano y asiento cuna para los pequeños (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Materiales"
+    frame   material = "Roble claro" label "Estructura"
+    seat    material = "Goma negra" label "Asiento plano"
+    accent  material = "Plástico rojo" label "Asiento cuna"
+    metal   material = "Acero inoxidable" label "Cadenas"
+    dark    material = "Metal negro" label "Anclajes"
+
+body
+  box (-1.85, 0, 0) to (1.85, 1.7, 2.55) material frame
+
+plan 1:50
+  polygon (-1.8, 0) (1.8, 0) (1.8, 1.6) (-1.8, 1.6) pen view
+  line (-1.8, 0.8) to (1.8, 0.8) pen view
+
+outputs
+  generator = "props:fine_swing"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

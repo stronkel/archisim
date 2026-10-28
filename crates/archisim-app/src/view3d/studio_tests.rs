@@ -1746,28 +1746,19 @@ fn pool_pictures() {
     }
 }
 
-/// The sport at home and the gym of the workshop (paquete 8, tanda 8b):
-/// `ARCHISIM_DEPORTE_OUT=folder cargo test --release -p archisim-app --
-/// sport_pictures`.
-#[test]
-fn sport_pictures() {
-    let Some(dir) = std::env::var_os("ARCHISIM_DEPORTE_OUT") else {
-        return;
-    };
-    let dir = Path::new(&dir);
+/// Pictures of pieces without collections (paquete 8): the whole, from
+/// above, and each piece close (`look`: its target's height, the zoom and
+/// how far south of its origin to look), into `dir`.
+fn piece_pictures(dir: &Path, labels: &[String], look: &dyn Fn(usize) -> (f32, f32, f32)) {
     std::fs::create_dir_all(dir).unwrap();
     let Some(gpu) = super::gpu_tests::gpu() else {
-        eprintln!("No graphics adapter: sport pictures skipped.");
+        eprintln!("No graphics adapter: pictures skipped.");
         return;
     };
     let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
     let m = archisim_library::workshop::project().unwrap();
     let size = [1200u32, 800u32];
     let aspect = size[0] as f32 / size[1] as f32;
-    let labels: Vec<String> = archisim_library::workshop::SPORT_PIECES
-        .iter()
-        .map(|(_, l, _)| format!("{l} (taller)"))
-        .collect();
     let mine: Vec<_> = m
         .object_types()
         .filter(|t| labels.contains(&t.name))
@@ -1802,13 +1793,7 @@ fn sport_pictures() {
     ];
     for (i, l) in labels.iter().enumerate() {
         let (x, y) = at(l);
-        // Looking from the south-west at each piece, closer for the small.
-        let (z, zoom, back) = match i {
-            0 => (1.8, 3.0, 0.0),
-            1 | 4 => (0.9, 3.4, 0.0),
-            2 | 3 => (0.6, 4.2, 0.0),
-            _ => (0.6, 6.5, 1.0),
-        };
+        let (z, zoom, back) = look(i);
         views.push((
             format!("{:02}", i + 1),
             -60.0,
@@ -1834,4 +1819,47 @@ fn sport_pictures() {
         );
         pic.save_png(dir.join(format!("{name}.png"))).unwrap();
     }
+}
+
+/// The sport at home and the gym of the workshop (paquete 8, tanda 8b):
+/// `ARCHISIM_DEPORTE_OUT=folder cargo test --release -p archisim-app --
+/// sport_pictures`.
+#[test]
+fn sport_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_DEPORTE_OUT") else {
+        return;
+    };
+    let labels: Vec<String> = archisim_library::workshop::SPORT_PIECES
+        .iter()
+        .map(|(_, l, _)| format!("{l} (taller)"))
+        .collect();
+    piece_pictures(Path::new(&dir), &labels, &|i| match i {
+        0 => (1.8, 3.0, 0.0),
+        1 | 4 => (0.9, 3.4, 0.0),
+        2 | 3 => (0.6, 4.2, 0.0),
+        _ => (0.6, 6.5, 1.0),
+    });
+}
+
+/// The courts, the grandstand, the playground and calisthenics of the
+/// workshop (paquete 8, tanda 8c): `ARCHISIM_PARQUE_OUT=folder cargo test
+/// --release -p archisim-app -- park_pictures`.
+#[test]
+fn park_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_PARQUE_OUT") else {
+        return;
+    };
+    let labels: Vec<String> = archisim_library::workshop::PARK_PIECES
+        .iter()
+        .map(|(_, l, _)| format!("{l} (taller)"))
+        .collect();
+    piece_pictures(Path::new(&dir), &labels, &|i| match i {
+        0 => (1.0, 2.6, -5.0),
+        1 => (1.0, 1.9, -9.0),
+        2 => (1.0, 2.0, -9.5),
+        3 => (1.0, 9.0, -1.5),
+        5 => (1.2, 22.0, -2.5),
+        8 => (1.0, 16.0, -1.2),
+        _ => (0.6, 30.0, -0.4),
+    });
 }
