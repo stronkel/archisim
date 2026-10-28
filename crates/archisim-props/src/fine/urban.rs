@@ -98,6 +98,7 @@ fn supports(w: f64, inset: f64, span: f64) -> Vec<f64> {
 
 /// A scroll of forged or cast iron in the plane through `c` across
 /// `u` (in the plane) and up: `turns` of a spiral from radius `r` in.
+#[allow(clippy::too_many_arguments)]
 fn curl(b: &mut Builder, role: &'static str, c: P3, u: P3, r: f64, turns: f64, a0: f64, t: f64) {
     let n = (turns * 18.0).ceil() as usize + 2;
     let pts: Vec<P3> = (0..=n)
@@ -2282,7 +2283,8 @@ mod tests {
 
     #[test]
     fn the_street_furniture_of_the_eight_collections() {
-        let pieces: [(&str, fn(&mut Builder, &Params) -> bool, i32); 7] = [
+        type Make = fn(&mut Builder, &Params) -> bool;
+        let pieces: [(&str, Make, i32); 7] = [
             ("banco", bench, 3),
             ("farola", streetlight, 4),
             ("papelera", litter_bin, 3),
@@ -2309,4 +2311,3 @@ mod tests {
         }
     }
 }
-

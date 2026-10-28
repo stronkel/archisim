@@ -1042,7 +1042,9 @@ fn place_street(
     let mut values: Vec<(&str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
     values.push(("light", M("Luz de farola")));
     values.push(("water", M("Agua de fuente")));
-    let at = [1.0, 2.6, 3.4, 4.0, 5.6, 6.8, 9.0];
+    // Turned to face the street, a bike rack runs west from its first
+    // stand: that is at its east end.
+    let at = [1.0, 2.6, 3.4, 4.0, 5.6, 8.6, 9.6];
     for (i, (family_name, label)) in STREET_PIECES.iter().enumerate() {
         let mut v: Vec<(&str, Val)> = values.iter().map(|(k, v)| (*k, v.copy())).collect();
         if *label == "Aparcabicis" {
@@ -1054,7 +1056,7 @@ fn place_street(
             put(m, t, x + at[i] + 0.5, front)?;
         }
     }
-    Ok(x + 9.6)
+    Ok(x + 10.2)
 }
 
 /// The pieces of a workshop bathroom, left to right along its wall:
@@ -1787,4 +1789,3 @@ mod tests {
         }
     }
 }
-

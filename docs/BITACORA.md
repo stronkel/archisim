@@ -6,6 +6,29 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (12) · Paquete 5, tanda 5b: mobiliario urbano de las ocho colecciones
+
+Rama `bloque/paquete-5b` (sobre `bloque/paquete-5a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, con la terraza resuelta: «qué toca ahora?» → tanda 5b, lo urbano.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 5, tanda 5b»)
+- Siete piezas de calle con un modelo por colección, añadidos después de los de siempre (los proyectos de antes no cambian): **banco**, **farola**, **papelera**, **bolardo**, **jardinera** (con las plantas de la terraza: olivo, gramíneas o lavanda, como el macetón de la colección), **aparcabicis** y **fuente de beber**.
+- Las farolas se encienden de noche y se exportan como `IfcLightFixture`; la clásica es la farola de fundición del taller.
+- Ocho calles en el taller, a continuación de las terrazas: banco, farola, papelera, dos bolardos, jardinera, aparcabicis de tres arcos y fuente.
+- El banco de calle se llama «Banco de calle» en el taller, para no confundirse con el banco de dormitorio de cada colección.
+
+**Pendiente**
+- La revisión de Antonio de los paquetes 2 a 5.
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de este bloque (pestaña Checks) y abre `taller.archisim` (te lo mando).
+2. En la Maqueta, las calles están a continuación de las terrazas: mira las siete piezas de cada colección, de día y de noche (las farolas encendidas).
+3. Selecciona un banco de calle y quita el respaldo o alárgalo; selecciona una jardinera y alárgala: las plantas se reparten de nuevo.
+4. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-27 (11) · Tanda 5a, segunda vuelta: sombrillas y plantas de las terrazas
 
 Rama `bloque/paquete-5a` (el mismo pull request). Sin cambios de formato; en el taller.
