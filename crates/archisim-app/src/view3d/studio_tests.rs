@@ -1218,12 +1218,7 @@ fn study_pictures() {
     let m = archisim_library::workshop::project().unwrap();
     let size = [1200u32, 800u32];
     let aspect = size[0] as f32 / size[1] as f32;
-    let names = [
-        "Planta en maceta",
-        "Decoración",
-        "Cuadro o espejo",
-        "Aparador",
-    ];
+    let names = ["Escritorio", "Silla de trabajo", "Estantería"];
     for (i, k) in archisim_library::workshop::TERRACES.iter().enumerate() {
         let mine: Vec<_> = m
             .object_types()
