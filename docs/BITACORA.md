@@ -14,7 +14,7 @@ Antonio: «Antes de eso, creo que sería interesante meter equipamiento deportiv
 
 **Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 8, tanda 8a»)
 - Familia **Piscina** con un modelo por colección: vaso de hormigón bajo el suelo revestido de gresite, pizarra o hormigón, lámina de agua, coronación, playa alrededor, escalerilla y focos. Largo, ancho, profundidad del agua y ancho de playa son parámetros; la forma puede ser rectangular, con escalera romana o desbordante (rebosadero con rejilla). La de los años 50 es un riñón y la clásica acaba en medio punto con escalones semicirculares.
-- Familia **Ducha de exterior** con un modelo por colección (poste de roble, pilar encalado con azulejo, columna cromada curvada, caño de bambú, columna de acero, poste con regadera, tubo negro con llave de volante, columna de latón acanalada).
+- Familia **Ducha de piscina** con un modelo por colección (poste de roble, pilar encalado con azulejo, columna cromada curvada, caño de bambú, columna de acero, poste con regadera, tubo negro con llave de volante, columna de latón acanalada).
 - En el taller, una piscina por colección con su ducha y dos tumbonas, después de las tiendas.
 
 **Pendiente**

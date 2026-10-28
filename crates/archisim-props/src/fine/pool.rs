@@ -23,6 +23,9 @@ use crate::build::{Builder, P3};
 use crate::Params;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
+/// The forms of a pool (`form`, from 1).
+pub const FORMS: &[&str] = &["Rectangular", "Con escalera romana", "Desbordante"];
+
 type Loop = Vec<[f64; 2]>;
 
 /// Twice the signed area of a loop (positive: counter-clockwise).

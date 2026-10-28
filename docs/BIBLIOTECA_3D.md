@@ -372,7 +372,7 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 
 Plan del paquete 8 (deporte y piscinas, pedido por Antonio el 28/10/2026): 8a piscinas como objeto y ducha de exterior, por colección; 8b deporte en jardín y casa y gimnasio; 8c pistas, gradas, parque infantil y calistenia; 8d piscina constructiva que excava el terreno. El equipamiento deportivo lleva un buen modelo con colores, no uno por colección.
 
-En el taller (rama `bloque/paquete-8a`, `archisim_props::fine::pool`): «Piscina» (`fine_pool`, receta `taller/piscina.asfam`) y «Ducha de exterior» (`fine_pool_shower`, `taller/piscina_ducha.asfam`). La piscina tiene su origen en el borde delantero de la playa; el vaso baja bajo el suelo (no excava el terreno hasta 8d).
+En el taller (rama `bloque/paquete-8a`, `archisim_props::fine::pool`): «Piscina» (`fine_pool`, receta `taller/piscina.asfam`) y «Ducha de piscina» (`fine_pool_shower`, `taller/piscina_ducha.asfam`). La piscina tiene su origen en el borde delantero de la playa; el vaso baja bajo el suelo (no excava el terreno hasta 8d).
 
 | Colección | Forma en el taller | Vaso | Coronación y playa | Ducha |
 |---|---|---|---|---|
