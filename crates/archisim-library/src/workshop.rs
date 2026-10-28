@@ -66,6 +66,11 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/hosteleria_mesa.asfam"),
     include_str!("../taller/hosteleria_silla.asfam"),
     include_str!("../taller/hosteleria_banco.asfam"),
+    include_str!("../taller/oficina_puestos.asfam"),
+    include_str!("../taller/oficina_reuniones.asfam"),
+    include_str!("../taller/oficina_recepcion.asfam"),
+    include_str!("../taller/oficina_armario.asfam"),
+    include_str!("../taller/oficina_mampara.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1400,6 +1405,152 @@ fn place_bar(
     Ok(x + 4.9)
 }
 
+/// What the office of each collection (paquete 7, tanda 7b) has besides
+/// its terrace's materials, in the order of [`TERRACES`].
+pub const OFFICE_EXTRAS: [&[(&str, &str)]; 8] = [
+    &[
+        ("frame", "Roble claro"),
+        ("top", "Roble claro"),
+        ("front", "Roble claro"),
+        ("carcass", "Lacado blanco"),
+        ("screen", "Fieltro salvia"),
+        ("cushion", "Lino arena"),
+    ],
+    &[
+        ("frame", "Madera encalada"),
+        ("front", "Madera encalada"),
+        ("top", "Madera encalada"),
+        ("masonry", "Cal blanca"),
+        ("accent", "Cerámica esmaltada"),
+        ("carcass", "Lacado blanco"),
+        ("weave", "Enea"),
+        ("screen", "Lino blanco"),
+        ("metal", "Hierro forjado"),
+    ],
+    &[
+        ("frame", "Teca"),
+        ("front", "Teca"),
+        ("top", "Teca"),
+        ("accent", "Terciopelo mostaza"),
+        ("carcass", "Lacado marfil"),
+        ("metal", "Latón"),
+        ("screen", "Fieltro teja"),
+    ],
+    &[
+        ("frame", "Roble ahumado"),
+        ("front", "Roble ahumado"),
+        ("top", "Roble ahumado"),
+        ("carcass", "Lacado arena"),
+        ("dark", "Fresno oscuro"),
+        ("screen", "Papel de arroz"),
+        ("weave", "Lino piedra"),
+    ],
+    &[
+        ("top", "Lacado blanco"),
+        ("front", "Lacado blanco"),
+        ("frame", "Lacado blanco"),
+        ("mat", "Microcemento"),
+        ("carcass", "Lacado blanco"),
+        ("dark", "Metal negro"),
+        ("screen", "Fieltro gris"),
+        ("accent", "Lacado salvia"),
+        ("light", "Luz cálida"),
+    ],
+    &[
+        ("frame", "Pino viejo"),
+        ("front", "Pino viejo"),
+        ("top", "Pino viejo"),
+        ("masonry", "Piedra caliza"),
+        ("carcass", "Pino viejo"),
+        ("weave", "Lino crudo"),
+        ("metal", "Hierro forjado"),
+    ],
+    &[
+        ("frame", "Pino viejo"),
+        ("front", "Metal negro"),
+        ("top", "Roble ahumado"),
+        ("carcass", "Lacado arena"),
+        ("dark", "Metal negro"),
+        ("metal", "Acero inoxidable"),
+        ("screen", "Fieltro teja"),
+    ],
+    &[
+        ("frame", "Nogal"),
+        ("front", "Nogal"),
+        ("top", "Nogal"),
+        ("carcass", "Lacado marfil"),
+        ("metal", "Latón"),
+        ("accent", "Terciopelo verde botella"),
+        ("screen", "Terciopelo verde botella"),
+    ],
+];
+
+/// The office pieces of the workshop: family and the start of their
+/// types' names.
+pub const OFFICE_PIECES: [(&str, &str); 5] = [
+    ("Puestos de trabajo (taller)", "Puestos de trabajo"),
+    ("Mesa de reuniones (taller)", "Mesa de reuniones"),
+    ("Mostrador de recepción (taller)", "Mostrador de recepción"),
+    ("Armario de oficina (taller)", "Armario de oficina"),
+    ("Mampara acústica (taller)", "Mampara acústica"),
+];
+
+/// Places a collection's office from `x` along the wall at `y = wall`
+/// (looking south): the cabinet on the wall, the reception before it with
+/// a screen, the bench of four places with the collection's work chairs,
+/// and the meeting table with six of its chairs. Returns where it ends.
+fn place_office(
+    m: &mut Model,
+    k: &Kitchen,
+    extras: &[(&'static str, &'static str)],
+    x: f64,
+    wall: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64, turn: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: turn,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let pi = std::f64::consts::PI;
+    let values: Vec<(&'static str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+    let mut types = Vec::new();
+    for (family, label) in OFFICE_PIECES {
+        types.push(kitchen_type(m, k, family, label, &values)?);
+    }
+    let [bench, meeting, desk, cabinet, screen] =
+        [types[0], types[1], types[2], types[3], types[4]];
+    put(m, cabinet, x + 0.9, wall, pi)?;
+    put(m, desk, x + 3.0, wall - 1.0, pi)?;
+    put(m, screen, x + 4.6, wall - 1.0, pi / 2.0)?;
+    let task = kitchen_type(
+        m,
+        k,
+        "Silla de trabajo (taller)",
+        "Silla de trabajo",
+        &values,
+    )?;
+    let y0 = wall - 4.6;
+    put(m, bench, x + 1.6, y0, 0.0)?;
+    for cx in [x + 0.9, x + 2.3] {
+        put(m, task, cx, y0 - 0.66, 0.0)?;
+        put(m, task, cx, y0 + 1.6 + 0.66, pi)?;
+    }
+    let chair = kitchen_type(m, k, "Silla", "Silla", &values)?;
+    let t0 = wall - 4.35;
+    put(m, meeting, x + 5.8, t0, 0.0)?;
+    for cx in [x + 5.05, x + 5.8, x + 6.55] {
+        put(m, chair, cx, t0 - 0.47, 0.0)?;
+        put(m, chair, cx, t0 + 1.1 + 0.47, pi)?;
+    }
+    Ok(x + 7.2)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -1945,6 +2096,22 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The offices, further east, each on its wall.
+    for (k, extras) in TERRACES.iter().zip(OFFICE_EXTRAS) {
+        let end = place_office(&mut m, k, extras, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     // The living room corners, further east, each on its wall.
     for (k, extras) in TERRACES.iter().zip(INDOOR_EXTRAS) {
         let end = place_living(&mut m, k, extras, x, wall)?;
@@ -2191,6 +2358,43 @@ mod tests {
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
                 assert!(
                     (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every collection's office is made, and its materials are in the
+    /// palette.
+    #[test]
+    fn the_workshop_offices_are_made() {
+        for extras in OFFICE_EXTRAS {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    OFFICE_PIECES
+                        .iter()
+                        .any(|(_, n)| t.name.starts_with(&format!("{n} ·")))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 5, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (100..=40_000).contains(&tris),
                     "{}: {tris}",
                     m.object_type(t).unwrap().name
                 );

@@ -2223,6 +2223,13 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Vidrio verde botella", "glass", [64, 104, 70]),
     ("Vidrio ámbar", "glass", [164, 98, 38]),
     ("Luz cálida", "other", [255, 220, 160]),
+    // The offices' (paquete 7, tanda 7b).
+    ("Fieltro gris", "fabric", [150, 152, 150]),
+    ("Fieltro salvia", "fabric", [148, 164, 140]),
+    ("Fieltro teja", "fabric", [176, 112, 86]),
+    ("Archivador azul", "other", [56, 86, 140]),
+    ("Archivador rojo", "other", [160, 56, 50]),
+    ("Archivador blanco", "other", [236, 234, 226]),
     ("Vidrio claro", "glass", [206, 224, 228]),
     ("Lacado blanco", "wood", [234, 230, 222]),
     ("Lacado arena", "wood", [214, 200, 178]),

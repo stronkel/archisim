@@ -29,30 +29,30 @@ use crate::Params;
 use std::f64::consts::{FRAC_PI_4, PI, TAU};
 
 /// The collection of a workshop model (its style, 1 to 8).
-fn look(p: &Params) -> usize {
+pub(super) fn look(p: &Params) -> usize {
     (p.style() - 1).clamp(0, 7) as usize
 }
 
 /// A small repeatable random sequence.
-struct Rng(u32);
+pub(super) struct Rng(pub(super) u32);
 
 impl Rng {
-    fn next(&mut self) -> f64 {
+    pub(super) fn next(&mut self) -> f64 {
         self.0 = self.0.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         (self.0 >> 8) as f64 / (1u32 << 24) as f64
     }
-    fn range(&mut self, a: f64, b: f64) -> f64 {
+    pub(super) fn range(&mut self, a: f64, b: f64) -> f64 {
         a + (b - a) * self.next()
     }
 }
 
 /// A round rod from `a` to `c`.
-fn rod(b: &mut Builder, role: &'static str, a: P3, c: P3, r: f64) {
+pub(super) fn rod(b: &mut Builder, role: &'static str, a: P3, c: P3, r: f64) {
     sweep(b, role, &[a, c], |_| r, 12, Cap::Flat, Cap::Flat);
 }
 
 /// A closed ring of `n` points round `(cx, cy)` at `z`.
-fn ring(c: [f64; 2], r: f64, z: f64, n: usize) -> Vec<P3> {
+pub(super) fn ring(c: [f64; 2], r: f64, z: f64, n: usize) -> Vec<P3> {
     (0..n)
         .map(|k| {
             let a = TAU * k as f64 / n as f64;
@@ -63,7 +63,7 @@ fn ring(c: [f64; 2], r: f64, z: f64, n: usize) -> Vec<P3> {
 
 /// A round disc, `r` across and `t` thick, its underside at `z`, its edge
 /// eased.
-fn disc(b: &mut Builder, role: &'static str, c: [f64; 2], r: f64, z: f64, t: f64) {
+pub(super) fn disc(b: &mut Builder, role: &'static str, c: [f64; 2], r: f64, z: f64, t: f64) {
     turned(
         b,
         role,
@@ -84,7 +84,7 @@ fn disc(b: &mut Builder, role: &'static str, c: [f64; 2], r: f64, z: f64, t: f64
 /// Turns what was made since `start` half round about the upright line
 /// through `(0, y)`: built facing `+y`, it faces `-y` (a rotation, not a
 /// mirror, so it stays closed outwards).
-fn turn_back(b: &mut Builder, start: usize, y: f64) {
+pub(super) fn turn_back(b: &mut Builder, start: usize, y: f64) {
     b.transform_from(start, |q| [-q[0], 2.0 * y - q[1], q[2]]);
 }
 
@@ -157,7 +157,7 @@ fn foot_rail(
 
 /// A block from `lo` to `hi` whose front (`+y`) is bevelled all round
 /// `k` of its size: a dressed stone, light on triangles.
-fn stone(b: &mut Builder, role: &'static str, lo: P3, hi: P3, k: f64) {
+pub(super) fn stone(b: &mut Builder, role: &'static str, lo: P3, hi: P3, k: f64) {
     let start = b.mark();
     let r = std::f64::consts::SQRT_2 / 2.0;
     turned(

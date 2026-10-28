@@ -21,6 +21,7 @@ pub mod kitchen;
 pub mod lamp;
 pub mod lighting;
 pub mod nursery;
+pub mod office;
 pub mod plant;
 pub mod shape;
 pub mod sink;
@@ -39,6 +40,71 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    (
+        "fine_bench_desk",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_meeting_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_reception",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_office_storage",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_acoustic_screen",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     (
         "fine_bar_counter",
         &[
@@ -440,6 +506,11 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_bar_table" => hospitality::bar_table(b, p),
         "fine_cafe_chair" => hospitality::cafe_chair(b, p),
         "fine_banquette" => hospitality::banquette(b, p),
+        "fine_bench_desk" => office::bench_desk(b, p),
+        "fine_meeting_table" => office::meeting_table(b, p),
+        "fine_reception" => office::reception(b, p),
+        "fine_office_storage" => office::office_storage(b, p),
+        "fine_acoustic_screen" => office::acoustic_screen(b, p),
         _ => return false,
     }
     true

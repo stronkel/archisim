@@ -1,0 +1,31 @@
+family "Mampara acústica (taller)"
+  category furniture
+  host none
+  version 1
+  description "Mampara exenta o biombo como lo hace cada colección (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.60..2.40 label "Ancho"
+    height length = 1.50 range 1.00..2.00 label "Altura"
+  section "Materiales"
+    frame  material = "Roble claro" label "Bastidor"
+    screen material = "Fieltro gris" label "Fieltro o tela"
+    weave  material = "Enea" label "Rejilla o lino"
+    metal  material = "Latón" label "Metal"
+    dark   material = "Metal negro" label "Acero negro"
+    accent material = "Lacado salvia" label "Panel de color"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, -0.03, 0) to (width / 2, 0.03, height) material screen
+
+plan 1:50
+  polygon (-width / 2, -0.03) (width / 2, -0.03) (width / 2, 0.03) (-width / 2, 0.03) pen view
+
+outputs
+  generator = "props:fine_acoustic_screen"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

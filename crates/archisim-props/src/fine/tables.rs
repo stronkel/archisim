@@ -35,7 +35,15 @@ fn leg(b: &mut Builder, role: &'static str, foot: P3, top: P3, r0: f64, r1: f64)
 
 /// A round or oval top: radius `rx` × `ry` about `c`, `t` thick, its top
 /// at `z`, its edge eased.
-fn round_top(b: &mut Builder, role: &'static str, c: [f64; 2], rx: f64, ry: f64, z: f64, t: f64) {
+pub(super) fn round_top(
+    b: &mut Builder,
+    role: &'static str,
+    c: [f64; 2],
+    rx: f64,
+    ry: f64,
+    z: f64,
+    t: f64,
+) {
     b.lathe(
         role,
         [c[0], c[1], z - t],
