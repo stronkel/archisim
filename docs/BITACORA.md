@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (18) · Paquete 8, tanda 8a: piscinas como objeto y duchas de exterior
+
+Rama `bloque/paquete-8a` (sobre `bloque/paquete-7c`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio: «Antes de eso, creo que sería interesante meter equipamiento deportivo y piscinas». Eligió los cuatro grupos de deporte (jardín y casa, gimnasio, pistas y equipamiento público, parque infantil y calistenia), las piscinas de las dos maneras (primero un objeto, después una herramienta constructiva que excava el terreno) y colecciones solo donde tenga sentido. Plan del paquete 8: 8a piscinas como objeto y ducha; 8b deporte en casa y gimnasio; 8c pistas, gradas, parque infantil y calistenia; 8d piscina constructiva.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 8, tanda 8a»)
+- Familia **Piscina** con un modelo por colección: vaso de hormigón bajo el suelo revestido de gresite, pizarra o hormigón, lámina de agua, coronación, playa alrededor, escalerilla y focos. Largo, ancho, profundidad del agua y ancho de playa son parámetros; la forma puede ser rectangular, con escalera romana o desbordante (rebosadero con rejilla). La de los años 50 es un riñón y la clásica acaba en medio punto con escalones semicirculares.
+- Familia **Ducha de exterior** con un modelo por colección (poste de roble, pilar encalado con azulejo, columna cromada curvada, caño de bambú, columna de acero, poste con regadera, tubo negro con llave de volante, columna de latón acanalada).
+- En el taller, una piscina por colección con su ducha y dos tumbonas, después de las tiendas.
+
+**Pendiente**
+- La piscina como objeto no excava el terreno: el vaso queda por debajo del suelo y, si hay terreno, lo atraviesa. Eso lo resuelve la tanda 8d (herramienta constructiva).
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a las piscinas, después de las tiendas.
+2. Cambia largo, ancho, profundidad y ancho de playa; prueba las tres formas en una misma colección.
+3. Mira la vista de noche (los focos se encienden) y dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-28 (17) · Paquete 7, tanda 7c: las tiendas de las ocho colecciones
 
 Rama `bloque/paquete-7c` (sobre `bloque/paquete-7b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca. Con esta tanda queda modelado el paquete 7 y, con él, el plan entero de la biblioteca nueva (paquetes 1 a 7), a falta de la revisión de Antonio.

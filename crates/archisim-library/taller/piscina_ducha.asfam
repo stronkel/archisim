@@ -1,0 +1,31 @@
+family "Ducha de piscina (taller)"
+  category furniture
+  host none
+  version 1
+  description "Ducha exterior junto a la piscina como la hace cada colección, con su plato o rejilla (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    height length = 2.20 range 1.80..2.60 label "Altura"
+  section "Materiales"
+    frame   material = "Roble claro" label "Madera"
+    metal   material = "Acero inoxidable" label "Metal"
+    dark    material = "Metal negro" label "Hierro o acero negro"
+    masonry material = "Cal blanca" label "Fábrica o guijarros"
+    accent  material = "Cerámica esmaltada" label "Azulejo o caña"
+    deck    material = "Piedra caliza" label "Plato"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-0.45, -0.25, 0) to (0.45, 0.65, height) material metal
+
+plan 1:50
+  polygon (-0.45, -0.25) (0.45, -0.25) (0.45, 0.65) (-0.45, 0.65) pen view
+  line (-0.05, 0) to (0.05, 0.1) pen thin
+
+outputs
+  generator = "props:fine_pool_shower"
+  ifc_class = "IfcSanitaryTerminal"
+  ifc_type = "SHOWER"

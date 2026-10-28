@@ -603,7 +603,7 @@ fn bathroom_pictures() {
             .filter(|t| {
                 t.name.contains(k.collection)
                     && t.name.ends_with("(taller)")
-                    && names.iter().any(|n| t.name.starts_with(n))
+                    && names.iter().any(|n| t.name.starts_with(&format!("{n} ·")))
                     && !t.name.starts_with("Espejo de pie")
             })
             .map(|t| t.id)
@@ -692,6 +692,7 @@ fn bedroom_pictures() {
         "Cómoda",
         "Mesita",
         "Cama",
+        "Cama infantil",
         "Tocador",
         "Banco",
         "Galán",
@@ -705,7 +706,7 @@ fn bedroom_pictures() {
             .filter(|t| {
                 t.name.contains(k.collection)
                     && t.name.ends_with("(taller)")
-                    && names.iter().any(|n| t.name.starts_with(n))
+                    && names.iter().any(|n| t.name.starts_with(&format!("{n} ·")))
             })
             .map(|t| t.id)
             .collect();
@@ -905,7 +906,7 @@ fn terrace_pictures() {
             .filter(|t| {
                 t.name.contains(k.collection)
                     && t.name.ends_with("(taller)")
-                    && names.iter().any(|n| t.name.starts_with(n))
+                    && names.iter().any(|n| t.name.starts_with(&format!("{n} ·")))
             })
             .map(|t| t.id)
             .collect();
@@ -1632,6 +1633,97 @@ fn shop_pictures() {
                 2.0,
                 Some((at("Probador"), 1.1, 0.4)),
             ),
+        ] {
+            let pic = picture_in(
+                &mut r,
+                &gpu,
+                &one,
+                |lo, hi| {
+                    let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
+                    if let Some(((x, y), z, back)) = focus {
+                        c.target = glam::Vec3::new(x, y - back, z);
+                    }
+                    c
+                },
+                size,
+                light,
+            );
+            let slug = k.collection.to_lowercase().replace(' ', "-");
+            pic.save_png(dir.join(format!("{n}-{slug}-{name}.png")))
+                .unwrap();
+        }
+    }
+}
+
+#[test]
+fn pool_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_PISCINAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pool pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::workshop::project().unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let names = ["Piscina", "Ducha de piscina", "Tumbona de piscina"];
+    for (i, k) in archisim_library::workshop::TERRACES.iter().enumerate() {
+        let mine: Vec<_> = m
+            .object_types()
+            .filter(|t| {
+                t.name.contains(k.collection)
+                    && t.name.ends_with("(taller)")
+                    && names.iter().any(|n| t.name.starts_with(&format!("{n} ·")))
+            })
+            .map(|t| t.id)
+            .collect();
+        let mut one = m.clone();
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| !mine.contains(&o.object_type))
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let walls: Vec<_> = one.walls().map(|w| w.id).collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        let at = |name: &str| {
+            one.objects()
+                .find(|o| {
+                    one.object_type(o.object_type)
+                        .is_some_and(|t| t.name.starts_with(name))
+                })
+                .map(|o| (o.position.x as f32, o.position.y as f32))
+                .unwrap()
+        };
+        let n = i + 1;
+        for (name, light, yaw, pitch, zoom, focus) in [
+            ("tres-cuartos", Light::Day, -55.0, 32.0, 1.05, None),
+            ("cenital", Light::Day, -90.0, 70.0, 1.1, None),
+            (
+                "borde",
+                Light::Day,
+                -100.0,
+                14.0,
+                2.4,
+                Some((at("Piscina"), 0.0, -1.6)),
+            ),
+            (
+                "ducha",
+                Light::Day,
+                -150.0,
+                10.0,
+                2.6,
+                Some((at("Ducha de piscina"), 1.1, 0.0)),
+            ),
+            ("noche", Light::Night, -60.0, 34.0, 1.05, None),
         ] {
             let pic = picture_in(
                 &mut r,

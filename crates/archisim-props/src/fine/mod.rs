@@ -23,6 +23,7 @@ pub mod lighting;
 pub mod nursery;
 pub mod office;
 pub mod plant;
+pub mod pool;
 pub mod shape;
 pub mod shop;
 pub mod sink;
@@ -41,6 +42,32 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    (
+        "fine_pool",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_pool_shower",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     (
         "fine_shop_counter",
         &[
@@ -582,6 +609,8 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_display_table" => shop::display_table(b, p),
         "fine_clothes_rail" => shop::clothes_rail(b, p),
         "fine_fitting_room" => shop::fitting_room(b, p),
+        "fine_pool" => pool::pool(b, p),
+        "fine_pool_shower" => pool::pool_shower(b, p),
         _ => return false,
     }
     true

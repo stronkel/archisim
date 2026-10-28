@@ -368,6 +368,27 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 8, tanda 8a: piscinas como objeto y duchas de exterior (28/10/2026)
+
+Plan del paquete 8 (deporte y piscinas, pedido por Antonio el 28/10/2026): 8a piscinas como objeto y ducha de exterior, por colección; 8b deporte en jardín y casa y gimnasio; 8c pistas, gradas, parque infantil y calistenia; 8d piscina constructiva que excava el terreno. El equipamiento deportivo lleva un buen modelo con colores, no uno por colección.
+
+En el taller (rama `bloque/paquete-8a`, `archisim_props::fine::pool`): «Piscina» (`fine_pool`, receta `taller/piscina.asfam`) y «Ducha de exterior» (`fine_pool_shower`, `taller/piscina_ducha.asfam`). La piscina tiene su origen en el borde delantero de la playa; el vaso baja bajo el suelo (no excava el terreno hasta 8d).
+
+| Colección | Forma en el taller | Vaso | Coronación y playa | Ducha |
+|---|---|---|---|---|
+| Nórdico cálido | rectangular | gresite blanco | hormigón pulido, tarima de roble | poste de roble con brazo de acero |
+| Mediterráneo | con escalera romana | gresite azul | terracota, cenefa de cerámica | pilar encalado con banda de azulejo |
+| Años 50 | riñón | gresite azul con cenefa blanca | terrazo | columna cromada curvada |
+| Japandi | rectangular | pizarra | piedra gris, tarima de roble ahumado | poste de madera con caño de bambú |
+| Contemporáneo | desbordante | gresite blanco | microcemento, rejilla negra | columna fina de acero con rociador plano |
+| Rústica | rectangular | gresite verde | piedra caliza con cantos rodados | poste de pino, tubo de hierro y regadera |
+| Industrial | rectangular | hormigón | acero corten, tarima de pino | tubo negro con codos y llave de volante |
+| Clásica | medio punto con escalera romana | gresite azul | mármol y piedra caliza | columna acanalada de latón con rosa grande |
+
+- Parámetros: `length`, `width`, `water_depth`, `deck_width`, `form` (Rectangular, Con escalera romana, Desbordante).
+- Partes de material: `lining`, `shell`, `water`, `coping`, `deck`, `accent`, `metal`, `dark`, `light` (los focos se encienden de noche), y en la ducha `frame`, `masonry`, `accent`, `metal`.
+- Piscinas del taller (`workshop::place_pool`, `POOLS`); fotos con `ARCHISIM_PISCINAS_OUT=carpeta cargo test --release -p archisim-app -- pool_pictures`.
+
 ### Paquete 7, tanda 7c: las tiendas de las ocho colecciones (28/10/2026)
 
 En el taller (rama `bloque/paquete-7c`, `archisim_props::fine::shop`): cinco familias nuevas de taller con un modelo por colección: «Mostrador de tienda» (`fine_shop_counter`), «Estantería de tienda» (`fine_shop_shelving`), «Mesa expositora» (`fine_display_table`), «Burro de ropa» (`fine_clothes_rail`) y «Probador» (`fine_fitting_room`); recetas `taller/tienda_*.asfam`.

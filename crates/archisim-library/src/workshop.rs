@@ -76,6 +76,8 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/tienda_mesa.asfam"),
     include_str!("../taller/tienda_burro.asfam"),
     include_str!("../taller/tienda_probador.asfam"),
+    include_str!("../taller/piscina.asfam"),
+    include_str!("../taller/piscina_ducha.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1667,6 +1669,148 @@ fn place_shop(
     Ok(x + 5.4)
 }
 
+/// What the pool of each collection (paquete 8, tanda 8a) is made of and
+/// its form (1 rectangular, 2 with Roman steps, 3 infinity edge), in the
+/// order of [`TERRACES`].
+pub const POOLS: [(&[(&str, &str)], &str); 8] = [
+    (
+        &[
+            ("lining", "Gresite blanco"),
+            ("coping", "Hormigón pulido"),
+            ("deck", "Roble claro"),
+            ("frame", "Roble claro"),
+            ("metal", "Acero inoxidable"),
+        ],
+        "Rectangular",
+    ),
+    (
+        &[
+            ("lining", "Gresite azul"),
+            ("coping", "Terracota"),
+            ("deck", "Terracota"),
+            ("accent", "Cerámica esmaltada"),
+            ("masonry", "Cal blanca"),
+            ("metal", "Acero inoxidable"),
+        ],
+        "Con escalera romana",
+    ),
+    (
+        &[
+            ("lining", "Gresite azul"),
+            ("coping", "Terrazo"),
+            ("deck", "Terrazo"),
+            ("accent", "Gresite blanco"),
+            ("metal", "Acero inoxidable"),
+            ("deck", "Terrazo"),
+        ],
+        "Rectangular",
+    ),
+    (
+        &[
+            ("lining", "Pizarra"),
+            ("coping", "Piedra gris"),
+            ("deck", "Roble ahumado"),
+            ("frame", "Roble ahumado"),
+            ("accent", "Bambú"),
+            ("metal", "Metal negro"),
+        ],
+        "Rectangular",
+    ),
+    (
+        &[
+            ("lining", "Gresite blanco"),
+            ("coping", "Microcemento"),
+            ("deck", "Microcemento"),
+            ("metal", "Acero inoxidable"),
+        ],
+        "Desbordante",
+    ),
+    (
+        &[
+            ("lining", "Gresite verde"),
+            ("coping", "Piedra caliza"),
+            ("deck", "Piedra caliza"),
+            ("frame", "Pino viejo"),
+            ("masonry", "Piedra gris"),
+            ("dark", "Hierro forjado"),
+            ("metal", "Hierro forjado"),
+        ],
+        "Rectangular",
+    ),
+    (
+        &[
+            ("lining", "Hormigón pulido"),
+            ("coping", "Acero corten"),
+            ("deck", "Pino viejo"),
+            ("dark", "Metal negro"),
+            ("accent", "Latón"),
+            ("metal", "Metal negro"),
+        ],
+        "Rectangular",
+    ),
+    (
+        &[
+            ("lining", "Gresite azul"),
+            ("coping", "Mármol"),
+            ("deck", "Piedra caliza"),
+            ("accent", "Cerámica esmaltada"),
+            ("metal", "Latón"),
+        ],
+        "Con escalera romana",
+    ),
+];
+
+/// Places a collection's pool from `x`, south of the walls (`y` from
+/// `front`): the pool with its deck, the shower at its east end and two
+/// of the collection's loungers beyond its north edge. Returns where it
+/// ends.
+fn place_pool(
+    m: &mut Model,
+    k: &Kitchen,
+    (extras, form): (&[(&'static str, &'static str)], &'static str),
+    x: f64,
+    front: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64, turn: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: turn,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let pi = std::f64::consts::PI;
+    let (l, w, deck) = (7.0, 3.5, 1.0);
+    let mut values: Vec<(&'static str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+    values.extend([
+        ("length", N(l)),
+        ("width", N(w)),
+        ("deck_width", N(deck)),
+        ("form", T(form)),
+    ]);
+    let pool = kitchen_type(m, k, "Piscina (taller)", "Piscina", &values)?;
+    let shower = kitchen_type(
+        m,
+        k,
+        "Ducha de piscina (taller)",
+        "Ducha de piscina",
+        &values,
+    )?;
+    let lounger = kitchen_type(m, k, "Tumbona (taller)", "Tumbona de piscina", &[])?;
+    let half = l / 2.0 + 0.32 + deck;
+    let cx = x + half;
+    let depth = w + 2.0 * (0.32 + deck);
+    put(m, pool, cx, front - depth, 0.0)?;
+    put(m, shower, cx + half + 0.8, front - depth / 2.0, pi / 2.0)?;
+    for dx in [-1.0, 1.0] {
+        put(m, lounger, cx + dx, front + 0.3, 0.0)?;
+    }
+    Ok(cx + half + 1.6)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -2176,6 +2320,11 @@ pub fn project() -> Result<Model, ModelError> {
     for k in TERRACES {
         x = place_terrace(&mut m, k, x, wall)? + 1.8;
     }
+    // The pools, further east, without walls (south of the line of the
+    // walls).
+    for (k, pool) in TERRACES.iter().zip(POOLS) {
+        x = place_pool(&mut m, k, pool, x, wall - 1.0)? + 1.8;
+    }
     // The street furniture, further east.
     for (k, extras) in TERRACES.iter().zip(STREET_EXTRAS) {
         x = place_street(&mut m, k, extras, x, wall)? + 1.8;
@@ -2370,6 +2519,7 @@ mod tests {
                         && !t.name.contains(" 60")
                         && !t.name.contains(" 80")
                         && !t.name.starts_with("Espejo de pie")
+                        && !t.name.starts_with("Ducha de piscina")
                 })
                 .filter(|t| {
                     [
@@ -2485,6 +2635,43 @@ mod tests {
                 .map(|t| t.id)
                 .collect();
             assert_eq!(mine.len(), 7, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every collection's pool and shower are made, and their materials
+    /// are in the palette.
+    #[test]
+    fn the_workshop_pools_are_made() {
+        for (extras, _) in POOLS {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    ["Piscina ·", "Ducha de piscina ·"]
+                        .iter()
+                        .any(|n| t.name.starts_with(n))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 2, "{}", k.collection);
             for t in mine {
                 assert!(m.type_has_prop(t), "{}", k.collection);
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
