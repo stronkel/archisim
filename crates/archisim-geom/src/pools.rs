@@ -242,10 +242,10 @@ pub fn cut_surface(surface: &[[P3; 3]], holes: &[Excavation]) -> Vec<[P3; 3]> {
 /// from its open edges to each hole's bottom, and the hole's floor (the
 /// part of it inside `boundary`, the ground's outline).
 pub fn hole_faces(cut: &[[P3; 3]], holes: &[Excavation], boundary: &[Point2]) -> Vec<[P3; 3]> {
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     let key = |p: P3| ((p[0] * 1e5).round() as i64, (p[1] * 1e5).round() as i64);
     type Key = (i64, i64);
-    let mut edges: HashMap<(Key, Key), (P3, P3)> = HashMap::new();
+    let mut edges: BTreeMap<(Key, Key), (P3, P3)> = BTreeMap::new();
     for t in cut {
         for k in 0..3 {
             let (a, b) = (t[k], t[(k + 1) % 3]);
