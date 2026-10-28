@@ -983,6 +983,10 @@ pub fn chest(b: &mut Builder, p: &Params) {
 /// Desks: a top on legs (1, a drawer pedestal at one side, `pedestal`:
 /// 1 none, 2 left, 3 right) or on metal frames (2).
 pub fn desk(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 6, tanda 6b).
+    if crate::fine::study::desk(b, p) {
+        return;
+    }
     let w = p.get("width", 1.4);
     let d = p.get("depth", 0.7);
     let h = p.get("height", 0.75);

@@ -59,6 +59,8 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/interior_planta.asfam"),
     include_str!("../taller/interior_decoracion.asfam"),
     include_str!("../taller/interior_cuadro.asfam"),
+    include_str!("../taller/estudio_escritorio.asfam"),
+    include_str!("../taller/estudio_silla.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1148,6 +1150,108 @@ fn place_living(
     Ok(x + 2.8)
 }
 
+/// What the study of each collection (paquete 6, tanda 6b) has besides
+/// its terrace's materials, in the order of [`TERRACES`].
+pub const STUDY_EXTRAS: [&[(&str, &str)]; 8] = [
+    &[
+        ("top", "Roble claro"),
+        ("front", "Roble claro"),
+        ("cushion", "Lino arena"),
+    ],
+    &[
+        ("top", "Madera encalada"),
+        ("front", "Madera encalada"),
+        ("frame", "Madera encalada"),
+        ("weave", "Enea"),
+    ],
+    &[
+        ("top", "Teca"),
+        ("front", "Teca"),
+        ("accent", "Terciopelo mostaza"),
+        ("cushion", "Lana oliva"),
+    ],
+    &[
+        ("top", "Roble ahumado"),
+        ("frame", "Roble ahumado"),
+        ("weave", "Lino piedra"),
+    ],
+    &[
+        ("top", "Cerámica blanca"),
+        ("front", "Cerámica blanca"),
+        ("dark", "Metal negro"),
+        ("mesh", "Lana carbón"),
+    ],
+    &[
+        ("top", "Pino viejo"),
+        ("frame", "Pino viejo"),
+        ("weave", "Enea"),
+    ],
+    &[
+        ("top", "Roble ahumado"),
+        ("metal", "Acero inoxidable"),
+        ("dark", "Metal negro"),
+    ],
+    &[
+        ("top", "Teca"),
+        ("frame", "Teca"),
+        ("front", "Teca"),
+        ("metal", "Oro viejo"),
+        ("accent", "Terciopelo verde botella"),
+        ("cushion", "Terciopelo verde botella"),
+    ],
+];
+
+/// Places a collection's study from `x` along the wall at `y = wall`
+/// (looking south): the desk against the wall with its lamp on it, the
+/// chair before it, and a bookcase beside. Returns where it ends.
+fn place_study(
+    m: &mut Model,
+    k: &Kitchen,
+    extras: &[(&'static str, &'static str)],
+    x: f64,
+    wall: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64, turn: f64, base: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: turn,
+            base_offset: base,
+        })
+        .map(|_| ())
+    };
+    let pi = std::f64::consts::PI;
+    let values = |more: &[(&'static str, Val)]| -> Vec<(&'static str, Val)> {
+        let mut v: Vec<(&'static str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+        v.extend(more.iter().map(|(k, v)| (*k, v.copy())));
+        v
+    };
+    let desk = kitchen_type(m, k, "Escritorio (taller)", "Escritorio", &values(&[]))?;
+    put(m, desk, x + 0.8, wall, pi, 0.0)?;
+    let lamp = kitchen_type(m, k, "Lámpara de mesa (taller)", "Lámpara de mesa", &[])?;
+    put(m, lamp, x + 1.25, wall - 0.15, pi, 0.75)?;
+    // The chair before the desk, facing it.
+    let chair = kitchen_type(
+        m,
+        k,
+        "Silla de trabajo (taller)",
+        "Silla de trabajo",
+        &values(&[]),
+    )?;
+    put(m, chair, x + 0.7, wall - 1.3, 0.0, 0.0)?;
+    let shelves = kitchen_type(
+        m,
+        k,
+        "Estantería",
+        "Estantería",
+        &values(&[("width", N(0.9))]),
+    )?;
+    put(m, shelves, x + 2.2, wall, pi, 0.0)?;
+    Ok(x + 2.8)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -1661,6 +1765,22 @@ pub fn project() -> Result<Model, ModelError> {
     for (k, extras) in TERRACES.iter().zip(STREET_EXTRAS) {
         x = place_street(&mut m, k, extras, x, wall)? + 1.8;
     }
+    // The studies, further east, each on its wall.
+    for (k, extras) in TERRACES.iter().zip(STUDY_EXTRAS) {
+        let end = place_study(&mut m, k, extras, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     // The living room corners, further east, each on its wall.
     for (k, extras) in TERRACES.iter().zip(INDOOR_EXTRAS) {
         let end = place_living(&mut m, k, extras, x, wall)?;
@@ -1902,6 +2022,43 @@ mod tests {
                 .map(|t| t.id)
                 .collect();
             assert_eq!(mine.len(), 7, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every collection's desk and chair are made, and their materials
+    /// are in the palette.
+    #[test]
+    fn the_workshop_studies_are_made() {
+        for extras in STUDY_EXTRAS {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    ["Escritorio ·", "Silla de trabajo ·", "Estantería ·"]
+                        .iter()
+                        .any(|n| t.name.starts_with(n))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 3, "{}", k.collection);
             for t in mine {
                 assert!(m.type_has_prop(t), "{}", k.collection);
                 let tris = m.type_prop(t).unwrap().0.triangle_count();

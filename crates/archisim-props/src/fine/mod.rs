@@ -26,6 +26,7 @@ pub mod sink;
 pub mod sofas;
 pub mod soft;
 pub mod storage;
+pub mod study;
 pub mod tables;
 pub mod terrace;
 pub mod textiles;

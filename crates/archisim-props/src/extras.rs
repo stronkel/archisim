@@ -241,6 +241,10 @@ fn coat(b: &mut Builder, top: P3, role: &'static str) {
 /// Office chairs: 1 a task chair on five castors, 2 one with a mesh back
 /// and a headrest. The seat's middle at `(0, width / 2)`.
 pub fn office_chair(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 6, tanda 6b).
+    if crate::fine::study::office_chair(b, p) {
+        return;
+    }
     let w = p.get("width", 0.62).clamp(0.45, 0.8);
     let seat = p.get("seat", 0.47).clamp(0.38, 0.56);
     let c = [0.0, w / 2.0];
