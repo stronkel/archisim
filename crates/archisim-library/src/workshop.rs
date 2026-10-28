@@ -1642,6 +1642,7 @@ mod tests {
                         "Cómoda",
                         "Mesita",
                         "Cama",
+                        "Cama infantil",
                         "Tocador",
                         "Banco",
                         "Galán",
@@ -1650,7 +1651,7 @@ mod tests {
                         "Litera",
                     ]
                     .iter()
-                    .any(|n| t.name.starts_with(n))
+                    .any(|n| t.name.starts_with(&format!("{n} ·")))
                 })
                 .map(|t| t.id)
                 .collect();
