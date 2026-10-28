@@ -521,7 +521,7 @@ const SITE: &[Tile] = &[
         Pick::Tool(Tool::Pool),
         Glyph::Pool,
         "Piscina",
-        "",
+        "PS",
         "Piscina construida por el borde del agua: vaso con pendiente, coronación y lámina de agua; recorta el terreno",
     ),
     tile(
