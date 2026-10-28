@@ -368,6 +368,27 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 8, tanda 8b: deporte en casa y gimnasio (28/10/2026)
+
+En el taller (rama `bloque/paquete-8b`, `archisim_props::fine::sport`): un modelo por pieza, sin colecciones; los colores, por sus materiales.
+
+| Familia | Generador | Medidas | Partes de material |
+|---|---|---|---|
+| Canasta de baloncesto | `fine_basketball_hoop` | `rim_height` 2,00–3,05 | `frame`, `dark`, `board`, `line`, `accent` (aro y protector), `net` |
+| Portería | `fine_goal` | `width` 1,20–7,32, `height` 0,80–2,44, `depth` | `frame`, `net` |
+| Mesa de ping-pong | `fine_ping_pong` | 274 × 152,5 × 76 | `board`, `line`, `net`, `frame`, `dark` |
+| Cama elástica | `fine_trampoline` | `diameter` 1,50–4,30 | `frame`, `mat`, `metal` (muelles), `accent`, `net`, `dark` |
+| Cinta de correr | `fine_treadmill` | 86 × 190 | `frame`, `dark`, `mat` (banda), `display` |
+| Bicicleta estática | `fine_exercise_bike` | 56 × 107 | `frame`, `metal`, `mat`, `dark`, `display` |
+| Banco de pesas | `fine_weight_bench` | soporte de 1,55 m, barra de 2,10 m | `frame`, `dark`, `metal`, `plate`, `mat` |
+| Mancuernero | `fine_dumbbell_rack` | `width` 0,60–2,40 | `frame`, `dark`, `plate`, `metal` |
+| Espaldera | `fine_wall_bars` | `sections` 1–4 de 90 cm, `height` 2,00–2,80 | `frame`, `dark` |
+| Esterilla de yoga | `fine_yoga_mat` | 61 × 183 | `mat`, `accent`, `plate` (bloques), `dark` (pesa rusa) |
+
+- Recetas `taller/deporte_*.asfam` y `taller/gimnasio_*.asfam`; tipos «<pieza> (taller)» (`workshop::SPORT_PIECES`, `place_sport`), con una segunda mesa de ping-pong en verde.
+- La canasta, la portería y la cama elástica salen como `IfcBuildingElementProxy`; lo del gimnasio, como `IfcFurniture`.
+- Fotos con `ARCHISIM_DEPORTE_OUT=carpeta cargo test --release -p archisim-app -- sport_pictures`.
+
 ### Paquete 8, tanda 8a: piscinas como objeto y duchas de exterior (28/10/2026)
 
 Plan del paquete 8 (deporte y piscinas, pedido por Antonio el 28/10/2026): 8a piscinas como objeto y ducha de exterior, por colección; 8b deporte en jardín y casa y gimnasio; 8c pistas, gradas, parque infantil y calistenia; 8d piscina constructiva que excava el terreno. El equipamiento deportivo lleva un buen modelo con colores, no uno por colección.

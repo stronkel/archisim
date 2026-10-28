@@ -29,6 +29,7 @@ pub mod shop;
 pub mod sink;
 pub mod sofas;
 pub mod soft;
+pub mod sport;
 pub mod storage;
 pub mod study;
 pub mod tables;
@@ -42,6 +43,16 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    ("fine_basketball_hoop", &["Único"]),
+    ("fine_goal", &["Único"]),
+    ("fine_ping_pong", &["Único"]),
+    ("fine_trampoline", &["Único"]),
+    ("fine_treadmill", &["Único"]),
+    ("fine_exercise_bike", &["Único"]),
+    ("fine_weight_bench", &["Único"]),
+    ("fine_dumbbell_rack", &["Único"]),
+    ("fine_wall_bars", &["Único"]),
+    ("fine_yoga_mat", &["Único"]),
     (
         "fine_pool",
         &[
@@ -611,6 +622,16 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_fitting_room" => shop::fitting_room(b, p),
         "fine_pool" => pool::pool(b, p),
         "fine_pool_shower" => pool::pool_shower(b, p),
+        "fine_basketball_hoop" => sport::basketball_hoop(b, p),
+        "fine_goal" => sport::goal(b, p),
+        "fine_ping_pong" => sport::ping_pong(b, p),
+        "fine_trampoline" => sport::trampoline(b, p),
+        "fine_treadmill" => sport::treadmill(b, p),
+        "fine_exercise_bike" => sport::exercise_bike(b, p),
+        "fine_weight_bench" => sport::weight_bench(b, p),
+        "fine_dumbbell_rack" => sport::dumbbell_rack(b, p),
+        "fine_wall_bars" => sport::wall_bars(b, p),
+        "fine_yoga_mat" => sport::yoga_mat(b, p),
         _ => return false,
     }
     true

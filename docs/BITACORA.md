@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (19) · Paquete 8, tanda 8b: deporte en casa y gimnasio
+
+Rama `bloque/paquete-8b` (sobre `bloque/paquete-8a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio: «Sigue con el trabajo» → tanda 8b.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 8, tanda 8b»)
+- Diez familias nuevas, un buen modelo de cada una y sus colores por materiales (sin colecciones, como se decidió): **canasta de baloncesto** (portátil, con base lastrada y altura del aro regulable de 2 a 3,05 m), **portería** (de 1,2 m a reglamentaria de 7,32 × 2,44, con red), **mesa de ping-pong** (plegable sobre ruedas, con red y líneas), **cama elástica** (redonda, con muelles, protector y red de seguridad; diámetro regulable), **cinta de correr**, **bicicleta estática**, **banco de pesas** con su soporte y la barra con discos, **mancuernero** de dos baldas, **espaldera** de madera por cuerpos de 90 cm y **esterilla de yoga** con bloques y pesa rusa.
+- En el taller, después de las piscinas: el jardín (canasta, portería, dos mesas de ping-pong —azul y verde— y cama elástica) y el gimnasio con su pared.
+- Arreglo de la tanda 8a: la forma de la piscina (rectangular, escalera romana, desbordante) no se aplicaba al elegirla; ahora sí. La escalera romana queda bajo el agua y solo se ve en sección.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve al deporte, después de las piscinas.
+2. Cambia la altura del aro, el tamaño de la portería (prueba 7,32 × 2,44), el diámetro de la cama elástica y los cuerpos de la espaldera.
+3. Cambia colores: tablero de la mesa, protector de la cama elástica, tapizado del banco. Dime qué falta en casa o en el gimnasio.
+
+---
+
 ## 2026-10-28 (18) · Paquete 8, tanda 8a: piscinas como objeto y duchas de exterior
 
 Rama `bloque/paquete-8a` (sobre `bloque/paquete-7c`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

@@ -1,0 +1,35 @@
+family "Cama elástica (taller)"
+  category furniture
+  host none
+  version 1
+  description "Cama elástica redonda de jardín con muelles, protector y red de seguridad (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    diameter length = 3.05 range 1.50..4.30 label "Diámetro"
+  section "Materiales"
+    frame   material = "Acero galvanizado" label "Bastidor y patas"
+    mat     material = "Lona negra" label "Lona"
+    metal   material = "Acero inoxidable" label "Muelles"
+    accent  material = "Plástico azul" label "Protector y postes"
+    net     material = "Red negra" label "Red"
+    dark    material = "Goma negra" label "Aro superior"
+
+body
+  box (-diameter / 2, 0, 0) to (diameter / 2, diameter, diameter / 2 * 0.1 + 2.3) material mat
+
+plan 1:50
+  arc center (0, diameter / 2) from (0 + (diameter / 2), diameter / 2) to (0, diameter / 2 + (diameter / 2)) pen view
+  arc center (0, diameter / 2) from (0, diameter / 2 + (diameter / 2)) to (0 - (diameter / 2), diameter / 2) pen view
+  arc center (0, diameter / 2) from (0 - (diameter / 2), diameter / 2) to (0, diameter / 2 - (diameter / 2)) pen view
+  arc center (0, diameter / 2) from (0, diameter / 2 - (diameter / 2)) to (0 + (diameter / 2), diameter / 2) pen view
+  arc center (0, diameter / 2) from (0 + (diameter / 2 - 0.2), diameter / 2) to (0, diameter / 2 + (diameter / 2 - 0.2)) pen thin
+  arc center (0, diameter / 2) from (0, diameter / 2 + (diameter / 2 - 0.2)) to (0 - (diameter / 2 - 0.2), diameter / 2) pen thin
+  arc center (0, diameter / 2) from (0 - (diameter / 2 - 0.2), diameter / 2) to (0, diameter / 2 - (diameter / 2 - 0.2)) pen thin
+  arc center (0, diameter / 2) from (0, diameter / 2 - (diameter / 2 - 0.2)) to (0 + (diameter / 2 - 0.2), diameter / 2) pen thin
+
+outputs
+  generator = "props:fine_trampoline"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

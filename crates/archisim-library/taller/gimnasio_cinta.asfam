@@ -1,0 +1,25 @@
+family "Cinta de correr (taller)"
+  category furniture
+  host none
+  version 1
+  description "Cinta de correr con barandillas y consola; la consola delante (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Materiales"
+    frame   material = "Plástico gris oscuro" label "Carcasa y montantes"
+    dark    material = "Goma negra" label "Bastidor y agarres"
+    mat     material = "Lona negra" label "Banda"
+    display material = "Pantalla de televisor" label "Pantalla"
+
+body
+  box (-0.43, 0, 0) to (0.43, 1.9, 1.45) material frame
+
+plan 1:50
+  polygon (-0.43, 0) (0.43, 0) (0.43, 1.9) (-0.43, 1.9) pen view
+  polygon (-0.33, 0.01) (0.33, 0.01) (0.33, 1.6) (-0.33, 1.6) pen thin
+
+outputs
+  generator = "props:fine_treadmill"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

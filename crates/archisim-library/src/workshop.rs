@@ -78,6 +78,16 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/tienda_probador.asfam"),
     include_str!("../taller/piscina.asfam"),
     include_str!("../taller/piscina_ducha.asfam"),
+    include_str!("../taller/deporte_canasta.asfam"),
+    include_str!("../taller/deporte_porteria.asfam"),
+    include_str!("../taller/deporte_pingpong.asfam"),
+    include_str!("../taller/deporte_cama_elastica.asfam"),
+    include_str!("../taller/gimnasio_cinta.asfam"),
+    include_str!("../taller/gimnasio_bicicleta.asfam"),
+    include_str!("../taller/gimnasio_banco.asfam"),
+    include_str!("../taller/gimnasio_mancuernero.asfam"),
+    include_str!("../taller/gimnasio_espaldera.asfam"),
+    include_str!("../taller/gimnasio_esterilla.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1811,6 +1821,107 @@ fn place_pool(
     Ok(cx + half + 1.6)
 }
 
+/// A sport piece: its family, its label and its materials besides the
+/// recipe's.
+pub type SportPiece = (
+    &'static str,
+    &'static str,
+    &'static [(&'static str, &'static str)],
+);
+
+/// The sport pieces (paquete 8, tanda 8b): one model each, no
+/// collections; by family, label and their values besides the recipe's.
+pub const SPORT_PIECES: [SportPiece; 11] = [
+    (
+        "Canasta de baloncesto (taller)",
+        "Canasta de baloncesto",
+        &[],
+    ),
+    ("Portería (taller)", "Portería", &[]),
+    ("Mesa de ping-pong (taller)", "Mesa de ping-pong", &[]),
+    (
+        "Mesa de ping-pong (taller)",
+        "Mesa de ping-pong verde",
+        &[("board", "Tablero verde")],
+    ),
+    ("Cama elástica (taller)", "Cama elástica", &[]),
+    ("Espaldera (taller)", "Espaldera", &[]),
+    ("Mancuernero (taller)", "Mancuernero", &[]),
+    ("Banco de pesas (taller)", "Banco de pesas", &[]),
+    ("Cinta de correr (taller)", "Cinta de correr", &[]),
+    ("Bicicleta estática (taller)", "Bicicleta estática", &[]),
+    ("Esterilla de yoga (taller)", "Esterilla de yoga", &[]),
+];
+
+/// A type of a piece without collection: «<label> (taller)».
+fn sport_type(
+    m: &mut Model,
+    family_name: &str,
+    label: &str,
+    values: &[(&str, Val)],
+) -> Result<ObjectTypeId, ModelError> {
+    let name = format!("{label} (taller)");
+    if let Some(t) = m.object_types().find(|t| t.name == name) {
+        return Ok(t.id);
+    }
+    let f = family(m, family_name)?;
+    let mut v = m.family_defaults(f, ParamScope::Type)?;
+    for (key, val) in values {
+        let val = match val {
+            N(n) => Value::Number(*n),
+            M(n) => match crate::palette_material(m, n) {
+                Some(id) => Value::Material(id.0),
+                None => continue,
+            },
+            T(t) => Value::Text((*t).into()),
+            B(b) => Value::Bool(*b),
+        };
+        v.insert((*key).into(), val);
+    }
+    m.add_object_type(&name, f, v)
+}
+
+/// The sport at home and the gym (paquete 8, tanda 8b), east of `x`
+/// (looking south): in the garden, the hoop and the goal on the line of
+/// the walls, two table tennis tables and the trampoline; then the gym
+/// on its wall: wall bars, dumbbells, the bench under its rack, the
+/// treadmill and the bike facing the wall, and the yoga mat. Returns
+/// where it ends (the gym's wall is put by the caller).
+fn place_sport(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64, turn: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: turn,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let pi = std::f64::consts::PI;
+    let mut t = Vec::new();
+    for (family, label, extras) in SPORT_PIECES {
+        let values: Vec<(&str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+        t.push(sport_type(m, family, label, &values)?);
+    }
+    // The garden.
+    put(m, t[0], x + 0.6, wall, pi)?;
+    put(m, t[1], x + 3.2, wall, pi)?;
+    put(m, t[2], x + 3.2, wall - 4.0, 0.0)?;
+    put(m, t[3], x + 3.2, wall - 6.2, 0.0)?;
+    put(m, t[4], x + 7.0, wall - 3.6, 0.0)?;
+    // The gym.
+    let g = x + 10.0;
+    put(m, t[5], g + 0.9, wall, pi)?;
+    put(m, t[6], g + 2.6, wall, pi)?;
+    put(m, t[7], g + 4.4, wall, pi)?;
+    put(m, t[8], g + 6.2, wall - 1.9, 0.0)?;
+    put(m, t[9], g + 7.3, wall - 1.07, 0.0)?;
+    put(m, t[10], g + 2.6, wall - 2.8, 0.0)?;
+    Ok(g + 7.8)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -2325,6 +2436,22 @@ pub fn project() -> Result<Model, ModelError> {
     for (k, pool) in TERRACES.iter().zip(POOLS) {
         x = place_pool(&mut m, k, pool, x, wall - 1.0)? + 1.8;
     }
+    // The sport at home and the gym, further east, the gym on its wall.
+    {
+        let end = place_sport(&mut m, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x + 9.7, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     // The street furniture, further east.
     for (k, extras) in TERRACES.iter().zip(STREET_EXTRAS) {
         x = place_street(&mut m, k, extras, x, wall)? + 1.8;
@@ -2649,6 +2776,30 @@ mod tests {
 
     /// Every collection's pool and shower are made, and their materials
     /// are in the palette.
+    #[test]
+    fn the_workshop_sport_is_made() {
+        for (_, _, extras) in SPORT_PIECES {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for (_, label, _) in SPORT_PIECES {
+            let name = format!("{label} (taller)");
+            let t = m
+                .object_types()
+                .find(|t| t.name == name)
+                .unwrap_or_else(|| panic!("{name}"));
+            assert!(m.type_has_prop(t.id), "{name}");
+            let tris = m.type_prop(t.id).unwrap().0.triangle_count();
+            assert!((50..=40_000).contains(&tris), "{name}: {tris}");
+            assert!(m.objects().any(|o| o.object_type == t.id), "{name}");
+        }
+    }
+
     #[test]
     fn the_workshop_pools_are_made() {
         for (extras, _) in POOLS {

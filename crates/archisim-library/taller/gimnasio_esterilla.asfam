@@ -1,0 +1,24 @@
+family "Esterilla de yoga (taller)"
+  category furniture
+  host none
+  version 1
+  description "Esterilla extendida, otra enrollada, dos bloques y una pesa rusa (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Materiales"
+    mat     material = "Caucho salvia" label "Esterilla"
+    accent  material = "Caucho teja" label "Esterilla enrollada"
+    plate   material = "Corcho" label "Bloques"
+    dark    material = "Fundición" label "Pesa rusa"
+
+body
+  box (-0.31, 0, 0) to (0.66, 1.95, 0.3) material mat
+
+plan 1:50
+  polygon (-0.305, 0) (0.305, 0) (0.305, 1.95) (-0.305, 1.95) pen view
+
+outputs
+  generator = "props:fine_yoga_mat"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

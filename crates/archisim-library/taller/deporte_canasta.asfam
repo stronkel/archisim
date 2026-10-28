@@ -1,0 +1,33 @@
+family "Canasta de baloncesto (taller)"
+  category furniture
+  host none
+  version 1
+  description "Canasta portátil de jardín: base lastrada, mástil, tablero con sus líneas, aro y red; altura del aro regulable (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    rim_height length = 3.05 range 2.00..3.05 label "Altura del aro"
+  section "Materiales"
+    frame   material = "Metal negro" label "Mástil y brazos"
+    dark    material = "Goma negra" label "Base"
+    board   material = "Lacado blanco" label "Tablero"
+    line    material = "Pintura roja" label "Líneas del tablero"
+    accent  material = "Naranja" label "Aro y protector"
+    net     material = "Red blanca" label "Red"
+
+body
+  box (-0.62, 0, 0) to (0.62, 2.0, rim_height + 0.6) material board
+
+plan 1:50
+  polygon (-0.42, 0) (0.42, 0) (0.42, 1.05) (-0.42, 1.05) pen view
+  polygon (-0.6, 1.15) (0.6, 1.15) (0.6, 1.17) (-0.6, 1.17) pen view
+  arc center (0, 1.6) from (0 + (0.23), 1.6) to (0, 1.6 + (0.23)) pen view
+  arc center (0, 1.6) from (0, 1.6 + (0.23)) to (0 - (0.23), 1.6) pen view
+  arc center (0, 1.6) from (0 - (0.23), 1.6) to (0, 1.6 - (0.23)) pen view
+  arc center (0, 1.6) from (0, 1.6 - (0.23)) to (0 + (0.23), 1.6) pen view
+
+outputs
+  generator = "props:fine_basketball_hoop"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

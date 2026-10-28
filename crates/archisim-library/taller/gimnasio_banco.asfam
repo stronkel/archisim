@@ -1,0 +1,27 @@
+family "Banco de pesas (taller)"
+  category furniture
+  host none
+  version 1
+  description "Banco plano bajo un soporte con la barra y sus discos (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Materiales"
+    frame   material = "Metal negro" label "Soporte y banco"
+    dark    material = "Goma negra" label "Pies"
+    metal   material = "Acero inoxidable" label "Barra y ganchos"
+    plate   material = "Goma negra" label "Discos"
+    mat     material = "Polipiel negra" label "Tapizado"
+
+body
+  box (-1.05, 0, 0) to (1.05, 1.3, 1.55) material frame
+
+plan 1:50
+  polygon (-0.6, 0) (0.6, 0) (0.6, 1.3) (-0.6, 1.3) pen view dashed
+  polygon (-0.14, 0.12) (0.14, 0.12) (0.14, 1.3) (-0.14, 1.3) pen view
+  line (-1.05, 0.39) to (1.05, 0.39) pen view
+
+outputs
+  generator = "props:fine_weight_bench"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

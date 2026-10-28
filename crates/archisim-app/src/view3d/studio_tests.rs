@@ -1745,3 +1745,93 @@ fn pool_pictures() {
         }
     }
 }
+
+/// The sport at home and the gym of the workshop (paquete 8, tanda 8b):
+/// `ARCHISIM_DEPORTE_OUT=folder cargo test --release -p archisim-app --
+/// sport_pictures`.
+#[test]
+fn sport_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_DEPORTE_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: sport pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::workshop::project().unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let labels: Vec<String> = archisim_library::workshop::SPORT_PIECES
+        .iter()
+        .map(|(_, l, _)| format!("{l} (taller)"))
+        .collect();
+    let mine: Vec<_> = m
+        .object_types()
+        .filter(|t| labels.contains(&t.name))
+        .map(|t| t.id)
+        .collect();
+    let mut one = m.clone();
+    let others: Vec<_> = one
+        .objects()
+        .filter(|o| !mine.contains(&o.object_type))
+        .map(|o| o.id)
+        .collect();
+    for o in others {
+        one.remove_object(o).unwrap();
+    }
+    let walls: Vec<_> = one.walls().map(|w| w.id).collect();
+    for w in walls {
+        one.remove_wall(w).unwrap();
+    }
+    let at = |name: &str| {
+        one.objects()
+            .find(|o| {
+                one.object_type(o.object_type)
+                    .is_some_and(|t| t.name == name)
+            })
+            .map(|o| (o.position.x as f32, o.position.y as f32))
+            .unwrap()
+    };
+    type View = (String, f32, f32, f32, Option<((f32, f32), f32, f32)>);
+    let mut views: Vec<View> = vec![
+        ("conjunto".into(), -60.0, 35.0, 1.05, None),
+        ("cenital".into(), -90.0, 75.0, 1.1, None),
+    ];
+    for (i, l) in labels.iter().enumerate() {
+        let (x, y) = at(l);
+        // Looking from the south-west at each piece, closer for the small.
+        let (z, zoom, back) = match i {
+            0 => (1.8, 3.0, 0.0),
+            1 | 4 => (0.9, 3.4, 0.0),
+            2 | 3 => (0.6, 4.2, 0.0),
+            _ => (0.6, 6.5, 1.0),
+        };
+        views.push((
+            format!("{:02}", i + 1),
+            -60.0,
+            22.0,
+            zoom,
+            Some(((x, y), z, back)),
+        ));
+    }
+    for (name, yaw, pitch, zoom, focus) in views {
+        let pic = picture_in(
+            &mut r,
+            &gpu,
+            &one,
+            |lo, hi| {
+                let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
+                if let Some(((x, y), z, back)) = focus {
+                    c.target = glam::Vec3::new(x, y - back, z);
+                }
+                c
+            },
+            size,
+            Light::Day,
+        );
+        pic.save_png(dir.join(format!("{name}.png"))).unwrap();
+    }
+}
