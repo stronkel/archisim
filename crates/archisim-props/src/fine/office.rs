@@ -63,6 +63,7 @@ fn monitor(b: &mut Builder, x: f64, y: f64, z: f64, w: f64, back: bool) {
 
 /// Box files standing in a row from `x0` to `x1` on a shelf at `z`, their
 /// backs against `yb`, `room` high; a ring hole and a label on their spines.
+#[allow(clippy::too_many_arguments)]
 fn binders(b: &mut Builder, x0: f64, x1: f64, yb: f64, depth: f64, z: f64, room: f64, seed: u32) {
     let mut rnd = Rng(0x68e3_1da4 ^ seed);
     let roles = ["binder", "binder2", "binder3"];
@@ -1329,13 +1330,13 @@ fn three_leaves(b: &mut Builder, role: &'static str, x0: f64, x1: f64, h: f64, i
             }
         }
         // Turn the outer leaves about their inner edge.
-        let (pivot, turn) = match k {
+        let (pivot, turn): (f64, f64) = match k {
             0 => (x0 + lw, 0.35),
             2 => (x1 - lw, -0.35),
             _ => (0.0, 0.0),
         };
         let cx = x0 + lw * (k as f64 + 0.5);
-        let (s, c) = (turn as f64).sin_cos();
+        let (s, c) = turn.sin_cos();
         b.transform_from(start, |q| {
             let (x, y) = (q[0] + cx - pivot, q[1]);
             [pivot + x * c - y * s, x * s + y * c, q[2]]
