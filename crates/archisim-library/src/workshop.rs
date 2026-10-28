@@ -1008,7 +1008,7 @@ pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
 /// The street furniture's types of a collection, by the label of each
 /// (paquete 5, tanda 5b).
 pub const STREET_PIECES: [(&str, &str); 7] = [
-    ("Banco (taller)", "Banco"),
+    ("Banco (taller)", "Banco de calle"),
     ("Farola (taller)", "Farola"),
     ("Papelera (taller)", "Papelera"),
     ("Bolardo (taller)", "Bolardo"),
@@ -1786,3 +1786,4 @@ mod tests {
         }
     }
 }
+

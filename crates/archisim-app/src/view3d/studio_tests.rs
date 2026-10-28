@@ -1036,7 +1036,7 @@ fn street_pictures() {
                 -65.0,
                 16.0,
                 2.6,
-                Some((at("Banco"), 0.5, 0.4)),
+                Some((at("Banco de calle"), 0.5, 0.4)),
             ),
             (
                 "farola",
