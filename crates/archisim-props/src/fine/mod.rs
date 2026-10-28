@@ -24,6 +24,7 @@ pub mod nursery;
 pub mod office;
 pub mod plant;
 pub mod shape;
+pub mod shop;
 pub mod sink;
 pub mod sofas;
 pub mod soft;
@@ -40,6 +41,71 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    (
+        "fine_shop_counter",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_shop_shelving",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_display_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_clothes_rail",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_fitting_room",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     (
         "fine_bench_desk",
         &[
@@ -511,6 +577,11 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_reception" => office::reception(b, p),
         "fine_office_storage" => office::office_storage(b, p),
         "fine_acoustic_screen" => office::acoustic_screen(b, p),
+        "fine_shop_counter" => shop::shop_counter(b, p),
+        "fine_shop_shelving" => shop::shop_shelving(b, p),
+        "fine_display_table" => shop::display_table(b, p),
+        "fine_clothes_rail" => shop::clothes_rail(b, p),
+        "fine_fitting_room" => shop::fitting_room(b, p),
         _ => return false,
     }
     true

@@ -90,7 +90,7 @@ pub(super) fn turn_back(b: &mut Builder, start: usize, y: f64) {
 
 /// Bottles standing in a row from `x0` to `x1` on a shelf at `z`, their
 /// middles at `y`, none taller than `tall`.
-fn bottles(b: &mut Builder, x0: f64, x1: f64, y: f64, z: f64, tall: f64, seed: u32) {
+pub(super) fn bottles(b: &mut Builder, x0: f64, x1: f64, y: f64, z: f64, tall: f64, seed: u32) {
     let mut rnd = Rng(0x2545_f491 ^ seed);
     let roles = ["bottle", "bottle2", "bottle3"];
     let mut x = x0 + 0.05;
@@ -184,7 +184,7 @@ pub(super) fn stone(b: &mut Builder, role: &'static str, lo: P3, hi: P3, k: f64)
 
 /// A barrel standing at `c`, `r` round at its belly and `h` high: staves
 /// with their joints and four iron hoops.
-fn barrel(b: &mut Builder, c: [f64; 2], r: f64, h: f64) {
+pub(super) fn barrel(b: &mut Builder, c: [f64; 2], r: f64, h: f64) {
     let at = |z: f64| r * (0.84 + 0.16 * (PI * z / h).sin());
     let prof: Vec<(f64, f64)> = (0..=8)
         .map(|k| {
@@ -572,7 +572,7 @@ pub fn bar_counter(b: &mut Builder, p: &Params) {
 /// at `zs` (where the arch springs) and `zt`, from `xa` to `xe`, `y0` to
 /// `y1` deep. Made of thin convex slices.
 #[allow(clippy::too_many_arguments)]
-fn arch_head(
+pub(super) fn arch_head(
     b: &mut Builder,
     role: &'static str,
     xa: f64,

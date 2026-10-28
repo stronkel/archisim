@@ -2230,6 +2230,9 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Archivador azul", "other", [56, 86, 140]),
     ("Archivador rojo", "other", [160, 56, 50]),
     ("Archivador blanco", "other", [236, 234, 226]),
+    // The shops' (paquete 7, tanda 7c).
+    ("Caja kraft", "other", [196, 160, 112]),
+    ("Caja salvia", "other", [130, 152, 124]),
     ("Vidrio claro", "glass", [206, 224, 228]),
     ("Lacado blanco", "wood", [234, 230, 222]),
     ("Lacado arena", "wood", [214, 200, 178]),

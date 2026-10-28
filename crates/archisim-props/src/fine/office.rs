@@ -36,7 +36,7 @@ use std::f64::consts::{FRAC_PI_4, PI};
 
 /// A monitor on its foot standing at `(x, y)` on a top at `z`, facing
 /// `+y` (or `-y` with `back`), `w` wide.
-fn monitor(b: &mut Builder, x: f64, y: f64, z: f64, w: f64, back: bool) {
+pub(super) fn monitor(b: &mut Builder, x: f64, y: f64, z: f64, w: f64, back: bool) {
     let start = b.mark();
     let h = w * 0.58;
     b.rbox("dark", [-0.1, -0.08, 0.0], [0.1, 0.08, 0.012], 0.006);
@@ -97,7 +97,7 @@ fn binders(b: &mut Builder, x0: f64, x1: f64, yb: f64, depth: f64, z: f64, room:
 }
 
 /// A turned leg from the floor to `top` at `(x, y)`, `r` thick.
-fn turned_leg(b: &mut Builder, x: f64, y: f64, top: f64, r: f64) {
+pub(super) fn turned_leg(b: &mut Builder, x: f64, y: f64, top: f64, r: f64) {
     turned(
         b,
         "frame",
@@ -119,7 +119,7 @@ fn turned_leg(b: &mut Builder, x: f64, y: f64, top: f64, r: f64) {
 }
 
 /// A felt panel with soft rounded edges, from `lo` to `hi`.
-fn felt(b: &mut Builder, role: &'static str, lo: P3, hi: P3) {
+pub(super) fn felt(b: &mut Builder, role: &'static str, lo: P3, hi: P3) {
     let t = (hi[1] - lo[1]).min(hi[0] - lo[0]).min(hi[2] - lo[2]);
     let mut s = Soft::new(lo, hi, (t * 0.45).min(0.03));
     s.crown = t * 0.15;

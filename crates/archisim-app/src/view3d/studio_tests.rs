@@ -1534,3 +1534,122 @@ fn office_pictures() {
         }
     }
 }
+
+#[test]
+fn shop_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_TIENDAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: shop pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::workshop::project().unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let names = [
+        "Mostrador de tienda",
+        "Estantería de tienda",
+        "Mesa expositora",
+        "Burro de ropa",
+        "Probador",
+    ];
+    for (i, k) in archisim_library::workshop::TERRACES.iter().enumerate() {
+        let mine: Vec<_> = m
+            .object_types()
+            .filter(|t| {
+                t.name.contains(k.collection)
+                    && t.name.ends_with("(taller)")
+                    && names.iter().any(|n| t.name.starts_with(&format!("{n} ·")))
+            })
+            .map(|t| t.id)
+            .collect();
+        let mut one = m.clone();
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| !mine.contains(&o.object_type))
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let walls: Vec<_> = one.walls().map(|w| w.id).collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        let at = |name: &str| {
+            one.objects()
+                .find(|o| {
+                    one.object_type(o.object_type)
+                        .is_some_and(|t| t.name.starts_with(name))
+                })
+                .map(|o| (o.position.x as f32, o.position.y as f32))
+                .unwrap()
+        };
+        let n = i + 1;
+        for (name, light, yaw, pitch, zoom, focus) in [
+            ("tres-cuartos", Light::Day, -55.0, 28.0, 1.1, None),
+            (
+                "mostrador",
+                Light::Day,
+                -70.0,
+                18.0,
+                2.4,
+                Some((at("Mostrador de tienda"), 0.8, 0.3)),
+            ),
+            (
+                "estanteria",
+                Light::Day,
+                -90.0,
+                6.0,
+                2.0,
+                Some((at("Estantería de tienda"), 1.2, 0.0)),
+            ),
+            (
+                "mesa",
+                Light::Day,
+                -50.0,
+                28.0,
+                2.6,
+                Some((at("Mesa expositora"), 0.7, 0.4)),
+            ),
+            (
+                "burro",
+                Light::Day,
+                -35.0,
+                12.0,
+                2.4,
+                Some((at("Burro de ropa"), 1.0, 0.25)),
+            ),
+            (
+                "probador",
+                Light::Day,
+                -100.0,
+                8.0,
+                2.0,
+                Some((at("Probador"), 1.1, 0.4)),
+            ),
+        ] {
+            let pic = picture_in(
+                &mut r,
+                &gpu,
+                &one,
+                |lo, hi| {
+                    let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
+                    if let Some(((x, y), z, back)) = focus {
+                        c.target = glam::Vec3::new(x, y - back, z);
+                    }
+                    c
+                },
+                size,
+                light,
+            );
+            let slug = k.collection.to_lowercase().replace(' ', "-");
+            pic.save_png(dir.join(format!("{n}-{slug}-{name}.png")))
+                .unwrap();
+        }
+    }
+}

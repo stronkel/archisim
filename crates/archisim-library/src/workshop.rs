@@ -71,6 +71,11 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/oficina_recepcion.asfam"),
     include_str!("../taller/oficina_armario.asfam"),
     include_str!("../taller/oficina_mampara.asfam"),
+    include_str!("../taller/tienda_mostrador.asfam"),
+    include_str!("../taller/tienda_estanteria.asfam"),
+    include_str!("../taller/tienda_mesa.asfam"),
+    include_str!("../taller/tienda_burro.asfam"),
+    include_str!("../taller/tienda_probador.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -1552,6 +1557,116 @@ fn place_office(
     Ok(x + 7.2)
 }
 
+/// What the shop of each collection (paquete 7, tanda 7c) has besides
+/// its terrace's materials, in the order of [`TERRACES`].
+pub const SHOP_EXTRAS: [&[(&str, &str)]; 8] = [
+    &[
+        ("frame", "Roble claro"),
+        ("top", "Roble claro"),
+        ("front", "Lacado blanco"),
+        ("curtain", "Lino arena"),
+    ],
+    &[
+        ("frame", "Madera encalada"),
+        ("top", "Madera encalada"),
+        ("masonry", "Cal blanca"),
+        ("accent", "Cerámica esmaltada"),
+        ("metal", "Hierro forjado"),
+        ("curtain", "Lino añil"),
+    ],
+    &[
+        ("frame", "Teca"),
+        ("top", "Teca"),
+        ("accent", "Lacado azul celeste"),
+        ("metal", "Latón"),
+        ("curtain", "Terciopelo mostaza"),
+    ],
+    &[
+        ("frame", "Roble ahumado"),
+        ("top", "Roble ahumado"),
+        ("dark", "Fresno oscuro"),
+        ("curtain", "Lino piedra"),
+    ],
+    &[
+        ("front", "Lacado blanco"),
+        ("top", "Microcemento"),
+        ("dark", "Metal negro"),
+        ("light", "Luz cálida"),
+        ("curtain", "Tela gris"),
+    ],
+    &[
+        ("frame", "Pino viejo"),
+        ("top", "Pino viejo"),
+        ("masonry", "Piedra caliza"),
+        ("metal", "Hierro forjado"),
+        ("curtain", "Lino crudo"),
+    ],
+    &[
+        ("frame", "Pino viejo"),
+        ("top", "Roble ahumado"),
+        ("dark", "Metal negro"),
+        ("front", "Fieltro teja"),
+        ("metal", "Acero inoxidable"),
+        ("curtain", "Lana carbón"),
+    ],
+    &[
+        ("frame", "Nogal"),
+        ("top", "Nogal"),
+        ("accent", "Cuero coñac"),
+        ("metal", "Latón"),
+        ("curtain", "Terciopelo verde botella"),
+    ],
+];
+
+/// The shop pieces of the workshop: family and the start of their types'
+/// names.
+pub const SHOP_PIECES: [(&str, &str); 5] = [
+    ("Mostrador de tienda (taller)", "Mostrador de tienda"),
+    ("Estantería de tienda (taller)", "Estantería de tienda"),
+    ("Mesa expositora (taller)", "Mesa expositora"),
+    ("Burro de ropa (taller)", "Burro de ropa"),
+    ("Probador (taller)", "Probador"),
+];
+
+/// Places a collection's shop from `x` along the wall at `y = wall`
+/// (looking south): two shelvings and the fitting room on the wall, the
+/// counter, the display table and the clothes rail before them. Returns
+/// where it ends.
+fn place_shop(
+    m: &mut Model,
+    k: &Kitchen,
+    extras: &[(&'static str, &'static str)],
+    x: f64,
+    wall: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64, turn: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: turn,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let pi = std::f64::consts::PI;
+    let values: Vec<(&'static str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+    let mut types = Vec::new();
+    for (family, label) in SHOP_PIECES {
+        types.push(kitchen_type(m, k, family, label, &values)?);
+    }
+    let [counter, shelving, table, rail, fitting] =
+        [types[0], types[1], types[2], types[3], types[4]];
+    put(m, shelving, x + 0.6, wall, pi)?;
+    put(m, shelving, x + 1.8, wall, pi)?;
+    put(m, fitting, x + 3.0, wall, pi)?;
+    put(m, counter, x + 1.2, wall - 2.2, pi)?;
+    put(m, table, x + 3.0, wall - 2.9, 0.0)?;
+    put(m, rail, x + 4.7, wall - 2.9, 0.0)?;
+    Ok(x + 5.4)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -2113,6 +2228,22 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The shops, further east, each on its wall.
+    for (k, extras) in TERRACES.iter().zip(SHOP_EXTRAS) {
+        let end = place_shop(&mut m, k, extras, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     // The living room corners, further east, each on its wall.
     for (k, extras) in TERRACES.iter().zip(INDOOR_EXTRAS) {
         let end = place_living(&mut m, k, extras, x, wall)?;
@@ -2359,6 +2490,43 @@ mod tests {
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
                 assert!(
                     (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every collection's shop is made, and its materials are in the
+    /// palette.
+    #[test]
+    fn the_workshop_shops_are_made() {
+        for extras in SHOP_EXTRAS {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    SHOP_PIECES
+                        .iter()
+                        .any(|(_, n)| t.name.starts_with(&format!("{n} ·")))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 5, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (100..=40_000).contains(&tris),
                     "{}: {tris}",
                     m.object_type(t).unwrap().name
                 );
