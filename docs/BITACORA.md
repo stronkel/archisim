@@ -6,6 +6,24 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (16) · Paquete 7, tanda 7b: las oficinas de las ocho colecciones
+
+Rama `bloque/paquete-7b` (sobre `bloque/paquete-7a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio: «qué toca ahora?» → tanda 7b, oficinas.
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 7, tanda 7b»)
+- Cinco familias nuevas, cada una con un modelo por colección: **puestos de trabajo** (mesa bench de puestos enfrentados con mampara, monitor y teclado en cada puesto), **mesa de reuniones** (con caja de conexiones en el tablero), **mostrador de recepción** (repisa alta para visitantes, un tramo a 80 cm para silla de ruedas y, detrás, la mesa de trabajo a 74 cm con cajonera y monitor), **armario de oficina** (puertas abajo y archivadores en baldas encima) y **mampara acústica** (panel de fieltro, de lamas, de malla o biombo de tres hojas).
+- Las sillas son las de cada colección: la silla de trabajo de la tanda 6b en los puestos y la silla de comedor en la mesa de reuniones.
+- En el taller, una oficina por colección a continuación de los bares: armario en la pared, recepción con su mampara, puestos para cuatro y mesa de reuniones para seis.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a las oficinas, después de los bares.
+2. Cambia el número de puestos por lado y el largo de la mesa bench; alarga el mostrador y comprueba que el tramo bajo queda a 80 cm.
+3. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-28 (15) · Paquete 7, tanda 7a: la hostelería de las ocho colecciones
 
 Rama `bloque/paquete-7a` (sobre `bloque/paquete-6b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.

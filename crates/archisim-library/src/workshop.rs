@@ -1480,7 +1480,7 @@ pub const OFFICE_EXTRAS: [&[(&str, &str)]; 8] = [
         ("top", "Nogal"),
         ("carcass", "Lacado marfil"),
         ("metal", "Latón"),
-        ("accent", "Terciopelo verde botella"),
+        ("accent", "Cuero coñac"),
         ("screen", "Terciopelo verde botella"),
     ],
 ];
@@ -1532,16 +1532,17 @@ fn place_office(
         m,
         k,
         "Silla de trabajo (taller)",
-        "Silla de trabajo",
+        "Silla de puesto",
         &values,
     )?;
     let y0 = wall - 4.6;
     put(m, bench, x + 1.6, y0, 0.0)?;
     for cx in [x + 0.9, x + 2.3] {
-        put(m, task, cx, y0 - 0.66, 0.0)?;
-        put(m, task, cx, y0 + 1.6 + 0.66, pi)?;
+        // The work chair faces `-y` as made: turned, it faces the desk.
+        put(m, task, cx, y0 - 0.09, pi)?;
+        put(m, task, cx, y0 + 1.69, 0.0)?;
     }
-    let chair = kitchen_type(m, k, "Silla", "Silla", &values)?;
+    let chair = kitchen_type(m, k, "Silla", "Silla de reuniones", &values)?;
     let t0 = wall - 4.35;
     put(m, meeting, x + 5.8, t0, 0.0)?;
     for cx in [x + 5.05, x + 5.8, x + 6.55] {

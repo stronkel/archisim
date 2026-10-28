@@ -368,6 +368,25 @@ En el taller (rama `bloque/paquete-5a`, `archisim_props::fine::terrace`): tres p
 - Ocho terrazas en el taller (`workshop::TERRACES`, `place_terrace`); fotos con `ARCHISIM_TERRAZAS_OUT=carpeta cargo test --release -p archisim-app -- terrace_pictures`.
 - Segunda vuelta (27/10/2026, a petición de Antonio): las plantas de los macetones y la trepadora, hoja a hoja como las del taller, en `fine::garden_plants` (`olive`, `grasses`, `lavender`, `climber` a lo largo de un camino). El olivo usa `stem`, `leaves` y `leaves2` (envés); la trepadora (una buganvilla) tiene papeles propios, `vine_stem`, `vine`, `vine2` y `bracts`, para no compartir material con la planta del macetón. Las sombrillas del taller van junto al cabecero de la tumbona (las de brazo, con el pie al lado y el toldo encima), no sobre su centro. Las fotos añaden `maceton` y `pergola`. Estas hojas son `blade` (una hoja cerrada de pocas filas, 16 a 56 triángulos, para poder poner cientos) y sus papeles van en `PropMesh::fine`: `Model::object_fine_materials` y `view3d::scene` los dibujan con `bias` 5, que el sombreador marca con la normal (0, 0, −1) en el destino de normales para que la pasada de contornos no trace líneas junto a ellos (`fine` en `shaders.wgsl`).
 
+### Paquete 7, tanda 7b: las oficinas de las ocho colecciones (28/10/2026)
+
+En el taller (rama `bloque/paquete-7b`, `archisim_props::fine::office`): cinco familias nuevas de taller con un modelo por colección: «Puestos de trabajo» (`fine_bench_desk`), «Mesa de reuniones» (`fine_meeting_table`), «Mostrador de recepción» (`fine_reception`), «Armario de oficina» (`fine_office_storage`) y «Mampara acústica» (`fine_acoustic_screen`); recetas `taller/oficina_*.asfam`. Las sillas son las de la colección (silla de trabajo de la tanda 6b y silla de comedor).
+
+| Colección | Puestos | Reuniones | Recepción | Armario | Mampara |
+|---|---|---|---|---|---|
+| Nórdico cálido | roble sobre patas abiertas, mampara de fieltro en marco de roble | roble con esquinas redondeadas sobre cuatro patas abiertas | frente acanalado de roble | puertas lisas con uñero, patas de roble | fieltro en marco de roble |
+| Mediterráneo | madera encalada sobre patas torneadas, mampara de rejilla | tablones encalados sobre caballetes torneados | fábrica encalada con azulejos | puertas de cuarterón con pomo | biombo de rejilla |
+| Años 50 | teca sobre patas de compás, mampara de color con canto de latón | tablero de barco de teca sobre dos pies | laminado de color con bandas cromadas | sobre patas de compás, pomos de latón | panel de color sobre pies de latón |
+| Japandi | roble ahumado sobre costados macizos, mampara de lamas | losa de roble sobre dos bloques | lamas de roble ahumado | puertas de listones, tirador de cuero | lamas entre dos largueros |
+| Contemporáneo | blanco sobre caballetes de acero, bandeja de cables, mampara de fieltro | tablero fino sobre espina de acero | microcemento con tiras de luz | blanco sin tiradores | fieltro grueso con esquinas redondas |
+| Rústica | tablones sobre caballetes, mampara de lino | tablones sobre patas cuadradas con travesaños | piedra en hiladas | tablas con argollas | biombo de lino en pino |
+| Industrial | madera sobre bastidor de tubo negro, mampara de malla | madera sobre bastidor con aspa | tablas entre postes de acero | puertas de malla, bastidor negro | bastidor negro con malla y fieltro |
+| Clásica | mesa de socios con tapete de piel, cajones moldurados, patas acanaladas, galería de latón | tablero oval con incrustación sobre dos pies de urna con volutas | cuarterones con zócalo y moldura | cuarterones, zócalo moldurado y pies torneados | biombo de tres hojas de nogal y terciopelo |
+
+- Partes de material: puestos `top`, `frame`, `metal`, `dark`, `screen`, `weave`, `accent`, `display`; reuniones `top`, `frame`, `metal`, `dark`, `accent`; recepción `frame`, `masonry`, `accent`, `mat`, `top`, `carcass`, `metal`, `dark`, `light`, `display`; armario `frame`, `front`, `metal`, `dark`, `binder`, `binder2`, `binder3`; mampara `frame`, `screen`, `weave`, `metal`, `dark`, `accent`.
+- El mostrador lleva siempre un tramo a 80 cm de 90 cm de largo en su extremo derecho (visto desde los visitantes), para la atención en silla de ruedas.
+- Oficinas del taller (`workshop::place_office`, `OFFICE_EXTRAS`, `OFFICE_PIECES`); fotos con `ARCHISIM_OFICINAS_OUT=carpeta cargo test --release -p archisim-app -- office_pictures`.
+
 ### Paquete 7, tanda 7a: la hostelería de las ocho colecciones (28/10/2026)
 
 En el taller (rama `bloque/paquete-7a`, `archisim_props::fine::hospitality`): cinco familias nuevas de taller, con un modelo por colección: «Barra de bar» (`fine_bar_counter`), «Contrabarra» (`fine_back_bar`), «Mesa de bar» (`fine_bar_table`), «Silla de bar» (`fine_cafe_chair`) y «Banco corrido» (`fine_banquette`); recetas `taller/hosteleria_*.asfam`. Los taburetes son los de cada colección (familia «Taburete», a 75 cm).

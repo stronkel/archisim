@@ -1435,8 +1435,8 @@ fn office_pictures() {
         "Mostrador de recepción",
         "Armario de oficina",
         "Mampara acústica",
-        "Silla de trabajo",
-        "Silla",
+        "Silla de puesto",
+        "Silla de reuniones",
     ];
     for (i, k) in archisim_library::workshop::TERRACES.iter().enumerate() {
         let mine: Vec<_> = m
@@ -1493,15 +1493,15 @@ fn office_pictures() {
                 "recepcion",
                 Light::Day,
                 -75.0,
-                12.0,
+                34.0,
                 2.3,
                 Some((at("Mostrador de recepción"), 0.8, 0.3)),
             ),
             (
                 "armario",
                 Light::Day,
-                -90.0,
-                8.0,
+                -130.0,
+                36.0,
                 2.6,
                 Some((at("Armario de oficina"), 0.7, 0.4)),
             ),
