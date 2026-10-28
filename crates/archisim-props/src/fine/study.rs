@@ -674,9 +674,9 @@ pub fn office_chair(b: &mut Builder, p: &Params) -> bool {
                 0.0,
             );
             upholstered(
-                [c[0] - r * 0.8, c[1] - r * 0.8, seat - 0.015],
-                [c[0] + r * 0.8, c[1] + r * 0.75, seat + 0.03],
-                0.03,
+                [c[0] - r * 0.62, c[1] - r * 0.62, seat - 0.015],
+                [c[0] + r * 0.62, c[1] + r * 0.62, seat + 0.03],
+                0.05,
                 22,
             )
             .add(b, "cushion");
