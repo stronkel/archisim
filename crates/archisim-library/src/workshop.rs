@@ -2630,7 +2630,7 @@ mod tests {
                         "Silla de exterior",
                     ]
                     .iter()
-                    .any(|n| t.name.starts_with(n))
+                    .any(|n| t.name.starts_with(&format!("{n} ·")))
                 })
                 .map(|t| t.id)
                 .collect();
