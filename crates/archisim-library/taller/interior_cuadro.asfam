@@ -1,0 +1,36 @@
+family "Cuadro o espejo (taller)"
+  category furniture
+  host none
+  version 1
+  description "En la pared, como lo cuelga cada colección: lámina, platos, espejo sol, kakemono, lienzo, espejo de madera, reloj o óleo con marco dorado (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width     length = 0.60 range 0.15..2.40 label "Ancho"
+    height    length = 0.80 range 0.15..2.00 label "Altura"
+    elevation length = 1.20 range 0.00..2.40 label "Altura desde el suelo"
+  section "Materiales"
+    frame material = "Roble claro" label "Marco"
+    mount material = "Papel" label "Paspartú o fondo"
+    art   material = "Lino arena" label "Fondo de la lámina"
+    art2  material = "Lana teja" label "Figura"
+    art3  material = "Pana azul petróleo" label "Otra figura"
+    glass material = "Espejo" label "Espejo"
+    mat   material = "Cerámica blanca" label "Esfera"
+    metal material = "Latón" label "Metal o dorado"
+    dark  material = "Metal negro" label "Agujas y herrajes"
+    weave material = "Ratán" label "Cuerda"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, 0, elevation) to (width / 2, 0.03, elevation + height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, 0.03) (-width / 2, 0.03) pen view dashed
+
+outputs
+  generator = "props:wall_decor"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

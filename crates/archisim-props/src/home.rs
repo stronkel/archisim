@@ -577,6 +577,10 @@ fn weave(b: &mut Builder, c: [f64; 2], r: f64, foot: f64, h: f64) {
 /// a frame with a pale mount, 2 three pictures, 3 an arched mirror with a
 /// frame, 4 a round mirror with a woven sun frame, 5 a clock.
 pub fn wall_decor(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 6, tanda 6a).
+    if crate::fine::indoor::wall_decor(b, p) {
+        return;
+    }
     let w = p.get("width", 0.6).clamp(0.15, 2.4);
     let h = p.get("height", 0.8).clamp(0.15, 2.0);
     let z = p.get("elevation", 1.2).clamp(0.0, 2.4);

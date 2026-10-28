@@ -15,6 +15,7 @@ pub mod bedroom;
 pub mod chairs;
 pub mod garden_plants;
 pub mod hearth;
+pub mod indoor;
 pub mod kitchen;
 pub mod lamp;
 pub mod lighting;

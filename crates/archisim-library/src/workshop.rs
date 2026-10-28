@@ -56,6 +56,9 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/urbano_jardinera.asfam"),
     include_str!("../taller/urbano_aparcabicis.asfam"),
     include_str!("../taller/urbano_fuente.asfam"),
+    include_str!("../taller/interior_planta.asfam"),
+    include_str!("../taller/interior_decoracion.asfam"),
+    include_str!("../taller/interior_cuadro.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -988,6 +991,163 @@ fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, 
     Ok(x + 9.2)
 }
 
+/// What the house plants, the decoration and the pictures of each
+/// collection (paquete 6, tanda 6a) have besides its terrace's
+/// materials, in the order of [`TERRACES`].
+pub const INDOOR_EXTRAS: [&[(&str, &str)]; 8] = [
+    &[
+        ("pot_mat", "Cerámica blanca"),
+        ("stem", "Corteza de pino"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("mat", "Cerámica blanca"),
+        ("books", "Libro crema"),
+        ("books2", "Libro azul"),
+        ("books3", "Libro teja"),
+        ("art", "Lino arena"),
+        ("art2", "Lana teja"),
+        ("art3", "Terciopelo salvia"),
+        ("mount", "Papel"),
+    ],
+    &[
+        ("pot_mat", "Terracota"),
+        ("stem", "Corteza de pino"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("fruit", "Limón"),
+        ("mat", "Terracota"),
+        ("glaze2", "Cerámica esmaltada"),
+        ("mount", "Cerámica blanca"),
+        ("art2", "Lino añil"),
+        ("art3", "Cerámica esmaltada"),
+    ],
+    &[
+        ("pot_mat", "Cerámica turquesa"),
+        ("stem", "Tallo verde"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("fruit", "Naranja"),
+        ("fruit2", "Manzana verde"),
+        ("mat", "Cerámica turquesa"),
+        ("glaze2", "Terciopelo mostaza"),
+        ("glass", "Espejo"),
+        ("metal", "Latón"),
+    ],
+    &[
+        ("pot_mat", "Gres"),
+        ("stem", "Tallo verde"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("mat", "Fundición"),
+        ("glaze2", "Cerámica blanca"),
+        ("art", "Papel de arroz"),
+        ("mount", "Lino piedra"),
+        ("art3", "Metal negro"),
+        ("dark", "Metal negro"),
+    ],
+    &[
+        ("pot_mat", "Hormigón pulido"),
+        ("stem", "Tallo verde"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("mat", "Cerámica blanca"),
+        ("glaze2", "Latón"),
+        ("books", "Libro crema"),
+        ("books2", "Lana carbón"),
+        ("books3", "Libro teja"),
+        ("art", "Lino blanco"),
+        ("art2", "Terciopelo rosa"),
+        ("art3", "Pana azul petróleo"),
+        ("dark", "Metal negro"),
+    ],
+    &[
+        ("weave", "Ratán"),
+        ("stem", "Tallo verde"),
+        ("leaves", "Hoja verde tierna"),
+        ("leaves2", "Hoja verde"),
+        ("mat", "Terracota"),
+        ("glass", "Vidrio claro"),
+        ("dark", "Hierro forjado"),
+    ],
+    &[
+        ("pot_mat", "Acero inoxidable"),
+        ("stem", "Tallo verde"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("mat", "Cerámica blanca"),
+        ("glass", "Vidrio claro"),
+        ("books", "Libro crema"),
+        ("books2", "Libro teja"),
+        ("dark", "Metal negro"),
+    ],
+    &[
+        ("pot_mat", "Cerámica esmaltada"),
+        ("stem", "Tallo verde"),
+        ("leaves", "Hoja verde"),
+        ("leaves2", "Hoja verde tierna"),
+        ("mat", "Cerámica blanca"),
+        ("metal", "Oro viejo"),
+        ("flowers", "Pétalo blanco"),
+        ("art", "Lino añil"),
+        ("art2", "Lana oliva"),
+        ("art3", "Corteza de pino"),
+    ],
+];
+
+/// Places a collection's corner of the living room from `x` along the
+/// wall at `y = wall` (looking south): a sideboard with its decoration on
+/// top and a picture over it, and a house plant beside. Returns where it
+/// ends.
+fn place_living(
+    m: &mut Model,
+    k: &Kitchen,
+    extras: &[(&'static str, &'static str)],
+    x: f64,
+    wall: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, base: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, wall),
+            rotation: std::f64::consts::PI,
+            base_offset: base,
+        })
+        .map(|_| ())
+    };
+    let values = |more: &[(&'static str, Val)]| -> Vec<(&'static str, Val)> {
+        let mut v: Vec<(&'static str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+        v.extend(more.iter().map(|(k, v)| (*k, v.copy())));
+        v
+    };
+    let board = kitchen_type(m, k, "Aparador", "Aparador", &values(&[("width", N(1.6))]))?;
+    put(m, board, x + 0.9, 0.0)?;
+    let decor = kitchen_type(m, k, "Decoración (taller)", "Decoración", &values(&[]))?;
+    put(m, decor, x + 0.55, 0.75)?;
+    let picture = kitchen_type(
+        m,
+        k,
+        "Cuadro o espejo (taller)",
+        "Cuadro o espejo",
+        &values(&[
+            ("width", N(0.7)),
+            ("height", N(0.85)),
+            ("elevation", N(1.2)),
+        ]),
+    )?;
+    put(m, picture, x + 1.1, 0.0)?;
+    let plant = kitchen_type(
+        m,
+        k,
+        "Planta en maceta (taller)",
+        "Planta en maceta",
+        &values(&[]),
+    )?;
+    put(m, plant, x + 2.25, 0.0)?;
+    Ok(x + 2.8)
+}
+
 /// What the street furniture of each collection (paquete 5, tanda 5b)
 /// has besides its terrace's materials, in the order of [`TERRACES`].
 pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
@@ -1218,6 +1378,10 @@ fn kitchen_type(
         }
     }
     for (key, val) in values {
+        // Shared lists of values: only what this family has.
+        if !v.contains_key(*key) {
+            continue;
+        }
         let val = match val {
             N(n) => Value::Number(*n),
             M(n) => match crate::palette_material(m, n) {
@@ -1497,6 +1661,22 @@ pub fn project() -> Result<Model, ModelError> {
     for (k, extras) in TERRACES.iter().zip(STREET_EXTRAS) {
         x = place_street(&mut m, k, extras, x, wall)? + 1.8;
     }
+    // The living room corners, further east, each on its wall.
+    for (k, extras) in TERRACES.iter().zip(INDOOR_EXTRAS) {
+        let end = place_living(&mut m, k, extras, x, wall)?;
+        m.add_wall(NewWall {
+            wall_type: partition,
+            level,
+            start: Point2::new(x - 0.3, wall),
+            end: Point2::new(end + 0.3, wall),
+            reference: ReferenceLine::InteriorFace,
+            height: 2.6,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })?;
+        x = end + 1.8;
+    }
     // The bathrooms, further east.
     for k in BATHROOMS {
         let end = place_bathroom(&mut m, k, x, wall)?;
@@ -1727,6 +1907,48 @@ mod tests {
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
                 assert!(
                     (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every collection's house plant, decoration and picture is made, and
+    /// its materials are in the palette.
+    #[test]
+    fn the_workshop_living_rooms_are_made() {
+        for extras in INDOOR_EXTRAS {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    [
+                        "Planta en maceta ·",
+                        "Decoración ·",
+                        "Cuadro o espejo ·",
+                        "Aparador ·",
+                    ]
+                    .iter()
+                    .any(|n| t.name.starts_with(n))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 4, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (20..=40_000).contains(&tris),
                     "{}: {tris}",
                     m.object_type(t).unwrap().name
                 );

@@ -66,7 +66,7 @@ pub fn potted_plant(b: &mut Builder, p: &Params) {
 
 /// A glazed pot with a round belly on a small foot, its rim rolled over
 /// and its inside down to the soil.
-fn bellied(b: &mut Builder, c: P3, r: f64, h: f64) {
+pub(super) fn bellied(b: &mut Builder, c: P3, r: f64, h: f64) {
     let profile = [
         (r * 0.52, 0.0),
         (r * 0.57, 0.003),
@@ -91,7 +91,7 @@ fn bellied(b: &mut Builder, c: P3, r: f64, h: f64) {
 
 /// A terracotta flower pot: tapered, with its thick band at the top, on a
 /// saucer.
-fn terracotta(b: &mut Builder, c: P3, r: f64, h: f64, saucer: f64) {
+pub(super) fn terracotta(b: &mut Builder, c: P3, r: f64, h: f64, saucer: f64) {
     // The saucer, a shallow dish a little wider than the pot's foot.
     turned(
         b,

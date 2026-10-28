@@ -23,7 +23,7 @@ use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 /// The roles of the plants are smooth all over and drawn without
 /// contour lines (`fine`).
-fn soft(b: &mut Builder) {
+pub(super) fn soft(b: &mut Builder) {
     for role in [
         "leaves",
         "leaves2",
@@ -48,7 +48,7 @@ fn length(a: P3) -> f64 {
 }
 
 /// A unit vector across `d` (any), for a leaf's upper face to start from.
-fn across(d: P3) -> P3 {
+pub(super) fn across(d: P3) -> P3 {
     let h = if d[2].abs() < 0.9 {
         [0.0, 0.0, 1.0]
     } else {
@@ -59,7 +59,7 @@ fn across(d: P3) -> P3 {
 
 /// The width of a leaf along it (0 at its base, 1 at its tip), at most 1.
 #[derive(Clone, Copy)]
-enum Form {
+pub(super) enum Form {
     /// Narrow, widest in the middle (olive, lavender).
     Lance,
     /// Widest near the base, rounded there (bougainvillea).
@@ -80,22 +80,22 @@ impl Form {
 
 /// A leaf as it grows on a garden plant: its shape.
 #[derive(Clone, Copy)]
-struct Blade {
-    length: f64,
-    width: f64,
-    form: Form,
+pub(super) struct Blade {
+    pub(super) length: f64,
+    pub(super) width: f64,
+    pub(super) form: Form,
     /// How much it bends down towards its tip, radians.
-    droop: f64,
+    pub(super) droop: f64,
     /// How much it turns about its midrib by its tip, radians.
-    twist: f64,
+    pub(super) twist: f64,
     /// How much it folds up along the midrib (of its half width).
-    fold: f64,
+    pub(super) fold: f64,
     /// Rows from its base to its tip (at least 2).
-    rows: usize,
+    pub(super) rows: usize,
 }
 
 impl Blade {
-    fn new(length: f64, width: f64, form: Form) -> Self {
+    pub(super) fn new(length: f64, width: f64, form: Form) -> Self {
         Blade {
             length,
             width,
@@ -113,7 +113,7 @@ impl Blade {
 /// meeting at the margin and a little apart along the midrib. Its
 /// triangles: 8 per row between its two ends and 8 for the ends
 /// (24 for 4 rows).
-fn blade(b: &mut Builder, role: &'static str, base: P3, dir: P3, up: P3, l: &Blade) {
+pub(super) fn blade(b: &mut Builder, role: &'static str, base: P3, dir: P3, up: P3, l: &Blade) {
     let rows = l.rows.max(2);
     let dir = norm(dir);
     let up = {
@@ -174,7 +174,15 @@ fn blade(b: &mut Builder, role: &'static str, base: P3, dir: P3, up: P3, l: &Bla
 
 /// A wandering path from `a` heading along `dir` for `length`, bending
 /// towards `towards` as it goes: its points.
-fn wander(a: P3, dir: P3, towards: P3, length: f64, bend: f64, n: usize, seed: u32) -> Vec<P3> {
+pub(super) fn wander(
+    a: P3,
+    dir: P3,
+    towards: P3,
+    length: f64,
+    bend: f64,
+    n: usize,
+    seed: u32,
+) -> Vec<P3> {
     let mut pts = vec![a];
     let mut q = a;
     for i in 1..=n {
@@ -192,7 +200,7 @@ fn wander(a: P3, dir: P3, towards: P3, length: f64, bend: f64, n: usize, seed: u
 
 /// The point at `t` (0 to 1) of the way along a path, and the way it
 /// goes there.
-fn at_along(path: &[P3], t: f64) -> (P3, P3) {
+pub(super) fn at_along(path: &[P3], t: f64) -> (P3, P3) {
     let total: f64 = path.windows(2).map(|w| length(sub(w[1], w[0]))).sum();
     let mut left = t.clamp(0.0, 1.0) * total;
     for w in path.windows(2) {
@@ -211,7 +219,7 @@ fn at_along(path: &[P3], t: f64) -> (P3, P3) {
 /// `pairs` of them, leaning forward and out, with one at the tip; a
 /// share `second` of them in the second role.
 #[allow(clippy::too_many_arguments)]
-fn leafy(
+pub(super) fn leafy(
     b: &mut Builder,
     rnd: &mut Rand,
     path: &[P3],
@@ -257,6 +265,27 @@ fn leafy(
 /// round crown, twigs dense with narrow grey-green leaves in opposite
 /// pairs (their silver undersides, `leaves2`, showing here and there).
 pub fn olive(b: &mut Builder, base: P3, tall: f64, spread: f64) {
+    let mut leaf = Blade::new(0.065, 0.013, Form::Lance);
+    leaf.droop = 0.25;
+    leaf.fold = 0.2;
+    leaf.rows = 3;
+    small_tree(b, base, tall, spread, leaf, 0);
+}
+
+/// A lemon tree in its pot, as the olive (`small_tree`) but with broad
+/// glossy leaves and `fruit` lemons hanging among them (role `fruit`).
+pub fn lemon_tree(b: &mut Builder, base: P3, tall: f64, spread: f64, fruit: usize) {
+    let mut leaf = Blade::new(0.085, 0.036, Form::Lance);
+    leaf.droop = 0.35;
+    leaf.fold = 0.25;
+    leaf.rows = 4;
+    small_tree(b, base, tall, spread, leaf, fruit);
+}
+
+/// A small tree: a trunk of two twisting stems, five branches and twigs
+/// out to a round crown, dense with `leaf` in opposite pairs, and `fruit`
+/// fruits hanging from the twigs.
+fn small_tree(b: &mut Builder, base: P3, tall: f64, spread: f64, leaf: Blade, fruit: usize) {
     let mut rnd = Rand(0x3c6e_f372);
     let top = base[2] + tall;
     let fork = base[2] + tall * 0.4;
@@ -327,13 +356,6 @@ pub fn olive(b: &mut Builder, base: P3, tall: f64, spread: f64) {
     // Twigs out to the crown's surface, from the branch nearest each.
     let twigs = 40;
     let golden = PI * (3.0 - 5f64.sqrt());
-    let leaf = {
-        let mut l = Blade::new(0.065, 0.013, Form::Lance);
-        l.droop = 0.25;
-        l.fold = 0.2;
-        l.rows = 3;
-        l
-    };
     for k in 0..twigs {
         // Over the crown but its very bottom, evenly.
         let zz = 1.0 - 1.75 * (k as f64 + 0.5) / twigs as f64;
@@ -408,7 +430,19 @@ pub fn olive(b: &mut Builder, base: P3, tall: f64, spread: f64) {
                 0.35,
             );
         }
+        // A fruit hanging from the twig's tip now and then.
+        if fruit > 0 && k * fruit / twigs != (k + 1) * fruit / twigs {
+            let (q, _) = at_along(&twig, rnd.range(0.6, 0.9));
+            let r = (leaf.width * 0.9).max(0.025);
+            b.cone("stem", q, add(q, [0.0, 0.0, -0.02]), 0.002, 0.002, 4);
+            b.ellipsoid(
+                "fruit",
+                add(q, [0.0, 0.0, -0.02 - r]),
+                [r * 0.85, r * 0.85, r * 1.15],
+            );
+        }
     }
+    b.soft.insert("fruit");
     soft(b);
 }
 

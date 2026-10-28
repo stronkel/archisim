@@ -176,6 +176,10 @@ fn drum(b: &mut Builder, c: P3, r: f64, h: f64) {
 /// 3 a cactus, 4 a hanging fern, 5 a snake plant (Sansevieria). Leaves
 /// set by a fixed seed, so the same plant comes out every time.
 pub fn potted_plant(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 6, tanda 6a).
+    if crate::fine::indoor::potted_plant(b, p) {
+        return;
+    }
     let h = p.get("height", 1.0).clamp(0.15, 3.0);
     let pot = p.get("pot", 0.32).clamp(0.08, 1.0);
     let r = pot / 2.0;
@@ -801,6 +805,10 @@ pub fn curtain(b: &mut Builder, p: &Params) {
 /// fruit, 3 a stack of books with a candle, 4 ceramics (jugs and cups),
 /// 5 a basket with a throw.
 pub fn decor(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 6, tanda 6a).
+    if crate::fine::indoor::decor(b, p) {
+        return;
+    }
     let w = p.get("width", 0.3);
     let c = [0.0, w / 2.0];
     match p.style() {
