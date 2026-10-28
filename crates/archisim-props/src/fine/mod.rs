@@ -28,6 +28,7 @@ pub mod storage;
 pub mod tables;
 pub mod terrace;
 pub mod textiles;
+pub mod urban;
 
 use crate::build::{Builder, P3};
 use crate::Params;

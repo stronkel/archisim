@@ -497,7 +497,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
     let r = spread / 2.0;
     let mound = tall * 0.45;
     // The mound: leaves all over a dome, pointing out of it.
-    let n = 700;
+    let n = 560;
     let golden = PI * (3.0 - 5f64.sqrt());
     let leaf = {
         let mut l = Blade::new(0.055, 0.008, Form::Lance);
@@ -567,7 +567,7 @@ pub fn lavender(b: &mut Builder, base: P3, tall: f64, spread: f64) {
             &spike,
             |t| 0.0095 * (1.0 - 0.45 * t) * (0.75 + 0.25 * (t * 8.0 * PI).cos().abs()),
             6,
-            Cap::Round(1.0),
+            Cap::Flat,
             Cap::Round(1.0),
         );
     }

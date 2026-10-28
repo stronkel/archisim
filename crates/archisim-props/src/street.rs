@@ -33,6 +33,10 @@ fn hoop(b: &mut Builder, role: &'static str, c: P3, u: P3, v: P3, r: f64, rod: f
 /// slats on cast iron legs, 2 a block of concrete with a wooden seat, 3
 /// of slats on a steel frame, without back if it has none.
 pub fn bench(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::bench(b, p) {
+        return;
+    }
     let w = p.get("width", 1.8).clamp(0.6, 6.0);
     let d = p.get("depth", 0.5).clamp(0.3, 0.8);
     let seat = p.get("seat", 0.45).clamp(0.3, 0.6);
@@ -200,6 +204,10 @@ fn back_slats(b: &mut Builder, x0: f64, x1: f64, z0: f64, z1: f64, n: usize) {
 /// fluted column (the Fernandina of Spanish squares), 3 a column with a
 /// globe, 4 a low bollard light. The light glows at night (role `light`).
 pub fn streetlight(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::streetlight(b, p) {
+        return;
+    }
     let h = p.get("height", 4.5).clamp(0.4, 16.0);
     let arm = p.get("arm", 0.8).clamp(0.0, 3.0);
     let pole = p.get("pole", 0.12).clamp(0.05, 0.4) / 2.0;
@@ -376,6 +384,10 @@ pub fn streetlight(b: &mut Builder, p: &Params) {
 /// Litter bins, centred on the origin: 1 of perforated sheet on a post, 2
 /// of wooden slats round a drum, 3 a pair for sorting with a lid each.
 pub fn litter_bin(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::litter_bin(b, p) {
+        return;
+    }
     let r = p.get("width", 0.4).clamp(0.2, 1.0) / 2.0;
     let h = p.get("height", 0.9).clamp(0.4, 1.4);
     match p.style() {
@@ -463,6 +475,10 @@ pub fn litter_bin(b: &mut Builder, p: &Params) {
 /// Bollards, centred on the origin: 1 of cast iron with a ball on top, 2
 /// a steel tube with a reflective band, 3 a cone of concrete.
 pub fn bollard(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::bollard(b, p) {
+        return;
+    }
     let r = p.get("width", 0.15).clamp(0.06, 0.6) / 2.0;
     let h = p.get("height", 0.8).clamp(0.3, 1.5);
     match p.style() {
@@ -712,6 +728,10 @@ pub fn container(b: &mut Builder, p: &Params) {
 /// basin and grate, 2 a stone block with a spout, 3 a round pool with a
 /// jet (an ornamental fountain; its width is the pool's).
 pub fn fountain(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::fountain(b, p) {
+        return;
+    }
     let w = p.get("width", 0.35).clamp(0.2, 6.0);
     let d = p.get("depth", 0.35).clamp(0.2, 6.0);
     let h = p.get("height", 1.0).clamp(0.4, 2.0);
@@ -816,6 +836,10 @@ pub fn fountain(b: &mut Builder, p: &Params) {
 /// Planters, the back at `y` 0: 1 of concrete with shrubs, 2 of wooden
 /// boards with flowers, 3 of weathering steel with tall grasses.
 pub fn planter(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::planter(b, p) {
+        return;
+    }
     let w = p.get("width", 1.2).clamp(0.4, 6.0);
     let d = p.get("depth", 0.5).clamp(0.3, 2.0);
     let h = p.get("height", 0.5).clamp(0.2, 1.2);
@@ -993,6 +1017,10 @@ pub fn tree_grate(b: &mut Builder, p: &Params) {
 /// `width` across `y` centred on it. 1 an inverted U, 2 a wave of tube, 3
 /// a stand with a slot for the wheel.
 pub fn bike_rack(b: &mut Builder, p: &Params) {
+    // A collection's (paquete 5, tanda 5b).
+    if crate::fine::urban::bike_rack(b, p) {
+        return;
+    }
     let n = p.get("count", 5.0).round().clamp(1.0, 20.0) as usize;
     let step = p.get("step", 0.8).clamp(0.5, 1.5);
     let w = p.get("width", 0.7).clamp(0.4, 1.2);

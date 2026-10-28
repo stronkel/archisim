@@ -1,0 +1,44 @@
+family "Bolardo (taller)"
+  category street
+  host none
+  version 1
+  description "Bolardo como lo hace cada colección; el punto de inserción es su centro (modelo del taller, en revisión)"
+  folder "Taller"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.15 range 0.06..0.60 label "Diámetro"
+    height length = 0.80 range 0.30..1.50 label "Altura"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Metal negro" label "Metal"
+    mat material = "Hormigón pulido" label "Cuerpo (hormigón, piedra, acero)"
+    masonry material = "Cal blanca" label "Obra"
+    top material = "Piedra caliza" label "Piedra de remate"
+    accent material = "Cerámica esmaltada" label "Azulejo o color"
+    pot_mat material = "Hormigón pulido" label "Jardinera"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Espiga" label "Tronco y tallos"
+    leaves material = "Gramínea" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas claras"
+    flowers material = "Espiga" label "Flores y espigas"
+    light material = "Luz de farola" label "Luz"
+    water material = "Agua de fuente" label "Agua"
+    dark material = "Metal negro" label "Huecos y rejillas"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Colección"
+
+body
+  box (-width / 2, -width / 2, 0) to (width / 2, width / 2, height) material mat
+
+plan 1:50
+  let r = width / 2
+  repeat i in 0..12
+    let t0 = 6.283185307 * i / 12
+    let t1 = 6.283185307 * (i + 1) / 12
+    line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
+
+outputs
+  generator = "props:bollard"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

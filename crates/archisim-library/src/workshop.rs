@@ -49,6 +49,13 @@ pub const RECIPES: &[&str] = &[
     include_str!("../taller/exterior_sombrilla.asfam"),
     include_str!("../taller/exterior_maceton.asfam"),
     include_str!("../taller/exterior_pergola.asfam"),
+    include_str!("../taller/urbano_banco.asfam"),
+    include_str!("../taller/urbano_farola.asfam"),
+    include_str!("../taller/urbano_papelera.asfam"),
+    include_str!("../taller/urbano_bolardo.asfam"),
+    include_str!("../taller/urbano_jardinera.asfam"),
+    include_str!("../taller/urbano_aparcabicis.asfam"),
+    include_str!("../taller/urbano_fuente.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -981,6 +988,75 @@ fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, 
     Ok(x + 9.2)
 }
 
+/// What the street furniture of each collection (paquete 5, tanda 5b)
+/// has besides its terrace's materials, in the order of [`TERRACES`].
+pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
+    &[("mat", "Microcemento"), ("top", "Piedra gris")],
+    &[
+        ("mat", "Piedra caliza"),
+        ("accent", "Cerámica esmaltada"),
+        ("top", "Piedra caliza"),
+    ],
+    &[("mat", "Terrazo"), ("accent", "Cerámica turquesa")],
+    &[("mat", "Piedra gris"), ("top", "Piedra gris")],
+    &[("mat", "Hormigón pulido"), ("top", "Piedra gris")],
+    &[("mat", "Piedra gris"), ("top", "Piedra gris")],
+    &[("mat", "Acero corten"), ("dark", "Metal negro")],
+    &[("mat", "Piedra caliza"), ("top", "Piedra caliza")],
+];
+
+/// The street furniture's types of a collection, by the label of each
+/// (paquete 5, tanda 5b).
+pub const STREET_PIECES: [(&str, &str); 7] = [
+    ("Banco (taller)", "Banco"),
+    ("Farola (taller)", "Farola"),
+    ("Papelera (taller)", "Papelera"),
+    ("Bolardo (taller)", "Bolardo"),
+    ("Jardinera (taller)", "Jardinera"),
+    ("Aparcabicis (taller)", "Aparcabicis"),
+    ("Fuente de beber (taller)", "Fuente de beber"),
+];
+
+/// Places a collection's street furniture from `x` along `y = front`
+/// (looking south, the street before it): a bench, a streetlight, a
+/// litter bin, two bollards, a planter, a bike rack and a drinking
+/// fountain. Returns where it ends.
+fn place_street(
+    m: &mut Model,
+    k: &Kitchen,
+    extras: &[(&'static str, &'static str)],
+    x: f64,
+    front: f64,
+) -> Result<f64, ModelError> {
+    let level = m.levels()[0].id;
+    let put = |m: &mut Model, t: ObjectTypeId, px: f64, py: f64| {
+        m.add_object(NewObject {
+            object_type: t,
+            level,
+            position: Point2::new(px, py),
+            rotation: std::f64::consts::PI,
+            base_offset: 0.0,
+        })
+        .map(|_| ())
+    };
+    let mut values: Vec<(&str, Val)> = extras.iter().map(|(k, v)| (*k, M(v))).collect();
+    values.push(("light", M("Luz de farola")));
+    values.push(("water", M("Agua de fuente")));
+    let at = [1.0, 2.6, 3.4, 4.0, 5.6, 6.8, 9.0];
+    for (i, (family_name, label)) in STREET_PIECES.iter().enumerate() {
+        let mut v: Vec<(&str, Val)> = values.iter().map(|(k, v)| (*k, v.copy())).collect();
+        if *label == "Aparcabicis" {
+            v.push(("count", N(3.0)));
+        }
+        let t = kitchen_type(m, k, family_name, label, &v)?;
+        put(m, t, x + at[i], front)?;
+        if *label == "Bolardo" {
+            put(m, t, x + at[i] + 0.5, front)?;
+        }
+    }
+    Ok(x + 9.6)
+}
+
 /// The pieces of a workshop bathroom, left to right along its wall:
 /// family, label, how far it stands from the one before (m) and its
 /// values. Mirror and towel rail hang over the washbasin's place.
@@ -1415,6 +1491,10 @@ pub fn project() -> Result<Model, ModelError> {
     for k in TERRACES {
         x = place_terrace(&mut m, k, x, wall)? + 1.8;
     }
+    // The street furniture, further east.
+    for (k, extras) in TERRACES.iter().zip(STREET_EXTRAS) {
+        x = place_street(&mut m, k, extras, x, wall)? + 1.8;
+    }
     // The bathrooms, further east.
     for k in BATHROOMS {
         let end = place_bathroom(&mut m, k, x, wall)?;
@@ -1445,6 +1525,7 @@ mod tests {
             .chain(BATHROOMS)
             .chain(BEDROOMS)
             .chain(LIGHTS)
+            .chain(TERRACES)
         {
             for (key, name) in k.materials {
                 assert!(
@@ -1643,6 +1724,43 @@ mod tests {
                 let tris = m.type_prop(t).unwrap().0.triangle_count();
                 assert!(
                     (50..=40_000).contains(&tris),
+                    "{}: {tris}",
+                    m.object_type(t).unwrap().name
+                );
+            }
+        }
+    }
+
+    /// Every collection's street furniture is made, and its materials are
+    /// in the palette.
+    #[test]
+    fn the_workshop_street_is_made() {
+        for extras in STREET_EXTRAS {
+            for (key, name) in extras {
+                assert!(
+                    crate::COZY_PALETTE.iter().any(|e| e.0 == *name),
+                    "{key} = {name}"
+                );
+            }
+        }
+        let m = project().unwrap();
+        for k in TERRACES {
+            let mine: Vec<_> = m
+                .object_types()
+                .filter(|t| t.name.contains(k.collection))
+                .filter(|t| {
+                    STREET_PIECES
+                        .iter()
+                        .any(|(_, n)| t.name.starts_with(&format!("{n} ·")))
+                })
+                .map(|t| t.id)
+                .collect();
+            assert_eq!(mine.len(), 7, "{}", k.collection);
+            for t in mine {
+                assert!(m.type_has_prop(t), "{}", k.collection);
+                let tris = m.type_prop(t).unwrap().0.triangle_count();
+                assert!(
+                    (20..=40_000).contains(&tris),
                     "{}: {tris}",
                     m.object_type(t).unwrap().name
                 );

@@ -2207,6 +2207,10 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Corteza de buganvilla", "wood", [96, 80, 62]),
     ("Hoja de buganvilla", "vegetation", [64, 118, 58]),
     ("Buganvilla", "vegetation", [200, 44, 128]),
+    // The street furniture's (paquete 5, tanda 5b).
+    ("Acero corten", "metal", [150, 84, 52]),
+    ("Luz de farola", "other", [255, 226, 150]),
+    ("Agua de fuente", "water", [128, 192, 222]),
     ("Vidrio claro", "glass", [206, 224, 228]),
     ("Lacado blanco", "wood", [234, 230, 222]),
     ("Lacado arena", "wood", [214, 200, 178]),
