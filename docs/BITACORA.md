@@ -6,6 +6,26 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-28 (15) · Paquete 7, tanda 7a: la hostelería de las ocho colecciones
+
+Rama `bloque/paquete-7a` (sobre `bloque/paquete-6b`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
+
+Antonio, con el paquete 6 terminado: «con qué seguimos ahora?» → paquete 7 (comercio, hostelería y oficinas) en tres tandas; empieza por la hostelería (7a).
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquete 7, tanda 7a»)
+- Cinco familias nuevas, cada una con un modelo por colección: **barra de bar** (frente hacia los clientes con encimera volada y reposapiés; detrás, el lado de servicio con armarios, bandeja de acero y balda de vidrio), **contrabarra** (armarios bajos con encimera y, encima, baldas con botellas), **mesa de bar** (baja o alta), **silla de bar** y **banco corrido**.
+- Lo que cambia de una colección a otra: el frente de la barra (listones de roble, fábrica encalada con azulejos, laminado de color con bandas cromadas, listones de roble ahumado, microcemento con tira de luz, piedra en hiladas, tablas en bastidor de acero con remaches, cuarterones entre pilastras), la contrabarra (baldas flotantes, hornacinas de medio punto, espejo con postes de latón, cuadrícula de nichos, panel iluminado con baldas de vidrio, baldas gruesas con escuadras de forja y barricas, tubo negro, espejo enmarcado con cornisa), la mesa (tres patas, azulejo con pie de forja, laminado con borde cromado, aspa de roble, disco de acero, barrica, pie de fundición en X, mármol con trípode de volutas), la silla y el banco.
+- Las tiras de luz de la barra contemporánea y el panel de su contrabarra se encienden de noche.
+- En el taller, un bar por colección a continuación de los estudios: la contrabarra en la pared, la barra delante con tres taburetes de la colección y un banco corrido con dos mesas y sus sillas.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` (te lo mando) en la versión del pull request y ve a los bares, después de los estudios.
+2. Mira cada barra por los dos lados (el de los clientes y el de servicio), la contrabarra de frente y el rincón del banco; de noche, la luz del bar contemporáneo.
+3. Alarga una barra y un banco corrido; sube una mesa a 1,05 m (mesa alta).
+4. Dime qué cambiarías, colección por colección.
+
+---
+
 ## 2026-10-28 (14) · Paquete 6, tanda 6b: el estudio de las ocho colecciones
 
 Rama `bloque/paquete-6b` (sobre `bloque/paquete-6a`), con pull request. Sin cambios de formato; en el taller, no en la biblioteca.
