@@ -2693,6 +2693,8 @@ pub fn glow_materials(
         "fireplace" => (&["flame"], LAMP_REACH),
         "fine_fireplace" => (&["flame", "flame2"], LAMP_REACH),
         "streetlight" | "fine_streetlight" => (&["light"], STREET_REACH),
+        // The lit strips of the bars (paquete 7).
+        "fine_bar_counter" | "fine_back_bar" => (&["light"], LAMP_REACH),
         _ => return none,
     };
     let Ok(defaults) = model.family_defaults(t.family, archisim_core::ParamScope::Type) else {

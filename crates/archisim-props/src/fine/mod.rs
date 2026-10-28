@@ -15,6 +15,7 @@ pub mod bedroom;
 pub mod chairs;
 pub mod garden_plants;
 pub mod hearth;
+pub mod hospitality;
 pub mod indoor;
 pub mod kitchen;
 pub mod lamp;
@@ -38,6 +39,71 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    (
+        "fine_bar_counter",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_back_bar",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_bar_table",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_cafe_chair",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
+    (
+        "fine_banquette",
+        &[
+            "Nórdico cálido",
+            "Mediterráneo",
+            "Años 50",
+            "Japandi",
+            "Contemporáneo",
+            "Rústica",
+            "Industrial",
+            "Clásica",
+        ],
+    ),
     (
         "fine_sofa",
         &[
@@ -369,6 +435,11 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
         "fine_plant" => plant::potted_plant(b, p),
         "fine_sink_unit" => sink::sink_unit(b, p),
         "fine_streetlight" => lamp::streetlight(b, p),
+        "fine_bar_counter" => hospitality::bar_counter(b, p),
+        "fine_back_bar" => hospitality::back_bar(b, p),
+        "fine_bar_table" => hospitality::bar_table(b, p),
+        "fine_cafe_chair" => hospitality::cafe_chair(b, p),
+        "fine_banquette" => hospitality::banquette(b, p),
         _ => return false,
     }
     true

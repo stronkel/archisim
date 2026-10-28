@@ -1292,3 +1292,124 @@ fn study_pictures() {
         }
     }
 }
+
+#[test]
+fn bar_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_BARES_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: bar pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let m = archisim_library::workshop::project().unwrap();
+    let size = [1200u32, 800u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    let names = [
+        "Barra de bar",
+        "Contrabarra",
+        "Mesa de bar",
+        "Silla de bar",
+        "Banco corrido",
+        "Taburete",
+    ];
+    for (i, k) in archisim_library::workshop::TERRACES.iter().enumerate() {
+        let mine: Vec<_> = m
+            .object_types()
+            .filter(|t| {
+                t.name.contains(k.collection)
+                    && t.name.ends_with("(taller)")
+                    && names.iter().any(|n| t.name.starts_with(&format!("{n} ·")))
+            })
+            .map(|t| t.id)
+            .collect();
+        let mut one = m.clone();
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| !mine.contains(&o.object_type))
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let walls: Vec<_> = one.walls().map(|w| w.id).collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        let at = |name: &str| {
+            one.objects()
+                .find(|o| {
+                    one.object_type(o.object_type)
+                        .is_some_and(|t| t.name.starts_with(name))
+                })
+                .map(|o| (o.position.x as f32, o.position.y as f32))
+                .unwrap()
+        };
+        let n = i + 1;
+        for (name, light, yaw, pitch, zoom, focus) in [
+            ("tres-cuartos", Light::Day, -55.0, 22.0, 1.1, None),
+            ("noche", Light::Night, -70.0, 16.0, 1.1, None),
+            (
+                "barra",
+                Light::Day,
+                -60.0,
+                14.0,
+                2.2,
+                Some((at("Barra de bar"), 0.7, 0.3)),
+            ),
+            (
+                "contrabarra",
+                Light::Day,
+                -90.0,
+                6.0,
+                2.0,
+                Some((at("Contrabarra"), 1.5, 0.6)),
+            ),
+            (
+                "servicio",
+                Light::Day,
+                -125.0,
+                24.0,
+                2.4,
+                Some((at("Barra de bar"), 0.9, -0.3)),
+            ),
+            (
+                "banco",
+                Light::Day,
+                -75.0,
+                14.0,
+                2.0,
+                Some((at("Banco corrido"), 0.6, 0.7)),
+            ),
+            (
+                "silla",
+                Light::Day,
+                -40.0,
+                12.0,
+                3.2,
+                Some((at("Silla de bar"), 0.55, 0.2)),
+            ),
+        ] {
+            let pic = picture_in(
+                &mut r,
+                &gpu,
+                &one,
+                |lo, hi| {
+                    let mut c = camera(lo, hi, aspect, yaw, pitch, zoom);
+                    if let Some(((x, y), z, back)) = focus {
+                        c.target = glam::Vec3::new(x, y - back, z);
+                    }
+                    c
+                },
+                size,
+                light,
+            );
+            let slug = k.collection.to_lowercase().replace(' ', "-");
+            pic.save_png(dir.join(format!("{n}-{slug}-{name}.png")))
+                .unwrap();
+        }
+    }
+}

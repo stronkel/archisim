@@ -2219,6 +2219,10 @@ pub const COZY_PALETTE: &[(&str, &str, [u8; 3])] = &[
     ("Llama", "other", [255, 214, 140]),
     ("Papel", "other", [242, 238, 228]),
     ("Oro viejo", "metal", [186, 152, 82]),
+    // The bars' (paquete 7, tanda 7a).
+    ("Vidrio verde botella", "glass", [64, 104, 70]),
+    ("Vidrio ámbar", "glass", [164, 98, 38]),
+    ("Luz cálida", "other", [255, 220, 160]),
     ("Vidrio claro", "glass", [206, 224, 228]),
     ("Lacado blanco", "wood", [234, 230, 222]),
     ("Lacado arena", "wood", [214, 200, 178]),

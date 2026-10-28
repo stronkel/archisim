@@ -491,7 +491,7 @@ pub fn desk(b: &mut Builder, p: &Params) -> bool {
 /// angle `a0` to `a1`, from `z0` to `z1`, `t` thick (outwards), in `n`
 /// pieces; a closed solid.
 #[allow(clippy::too_many_arguments)]
-fn band(
+pub(super) fn band(
     b: &mut Builder,
     role: &'static str,
     c: [f64; 2],
