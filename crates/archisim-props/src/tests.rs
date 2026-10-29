@@ -370,6 +370,10 @@ fn doors_stand_whole() {
                     p.set("face_pos", 0.06);
                     p.set("face_neg", -0.06);
                     p.set("peephole", 1.0);
+                    // Every other one as seen from far away.
+                    if i % 2 == 0 {
+                        p.set("lod", 1.0);
+                    }
                     let m = make("door", &p).unwrap();
                     most = most.max(m.triangle_count());
                     let loose = check::loose_pieces(&m, check::anchors_for("door"), 0.004);
@@ -402,4 +406,135 @@ fn door_weights() {
             println!("style {style} design {d}: {}", m.triangle_count());
         }
     }
+}
+
+/// Every window of every collection, with every profile, glazing bars,
+/// handle and kind of sash, stands whole; and what goes outside it (the
+/// roller blind, the shutters, the grilles flat or boxed) holds together.
+#[test]
+fn windows_stand_whole() {
+    use fine::window::*;
+    let base = |style: usize, leaves: f64| {
+        let mut p = Params::default();
+        p.set("style", style as f64);
+        p.set("leaves", leaves);
+        p.set("frame_depth", 0.07);
+        p.set("w_fw", 0.06);
+        p.set("w_gc0", -0.54);
+        p.set("w_gc1", 0.54);
+        p.set("w_w", 1.2);
+        p.set("w_z0", 0.0);
+        p.set("w_z1", 1.2);
+        p.set("w_zl", 1.2);
+        p.set("w_outside", -1.0);
+        p.set("w_width", 1.2);
+        p.set("w_height", 1.2);
+        p.set("w_top", 1.2);
+        p.set("face_ext", -0.14);
+        p
+    };
+    let mut bad = Vec::new();
+    let mut most = 0;
+    let mut check = |p: &Params, what: String, only: Option<&str>| {
+        let m = make("window", p).unwrap();
+        if m.triangle_count() > most {
+            println!("{what}: {} triangles", m.triangle_count());
+        }
+        most = most.max(m.triangle_count());
+        let loose = check::loose_pieces(&m, check::anchors_for("window"), 0.004);
+        if let Some(l) = loose.iter().find(|l| only.is_none_or(|r| l.role == r)) {
+            bad.push(format!(
+                "{what}: {} a {:.3} ({:?}..{:?})",
+                l.role, l.gap, l.lo, l.hi
+            ));
+        }
+    };
+    for style in 1..=8 {
+        for (key, n) in [
+            ("window_profile", PROFILES.len()),
+            ("glazing_bars", BARS.len()),
+            ("window_handle", HANDLES.len()),
+        ] {
+            for i in 1..=n {
+                for leaves in [1.0, 2.0] {
+                    let mut p = base(style, leaves);
+                    p.set(key, i as f64);
+                    check(
+                        &p,
+                        format!("colección {style} {key}={i} hojas {leaves}"),
+                        None,
+                    );
+                }
+            }
+        }
+        for op in 1..=OPERATIONS.len() {
+            let mut p = base(style, 2.0);
+            p.set("leaf_1", op as f64);
+            p.set("leaf_2", op as f64);
+            check(&p, format!("colección {style} hoja {op}"), None);
+        }
+    }
+    // What goes outside, each on its own (the wall that holds them is not
+    // in the model).
+    for down in [0.0, 50.0, 100.0] {
+        let mut p = base(5, 2.0);
+        p.set("shutter", 1.0);
+        p.set("shutter_down", down);
+        p.set("w_z1", 0.95);
+        p.set("w_zl", 0.95);
+        p.set("w_top", 0.95);
+        check(&p, format!("persiana {down}%"), None);
+    }
+    for kind in 2..=SHUTTERS_KINDS.len() {
+        for open in [0.0, 1.0] {
+            let mut p = base(2, 2.0);
+            p.set("outside_shutters", kind as f64);
+            p.set("shutters_open", open);
+            check(
+                &p,
+                format!("contraventanas {kind} abiertas {open}"),
+                Some("shutters_material"),
+            );
+        }
+    }
+    for kind in 2..=GRILLES.len() {
+        for boxed in [0.0, 1.0] {
+            let mut p = base(6, 2.0);
+            p.set("grille", kind as f64);
+            p.set("grille_box", boxed);
+            check(
+                &p,
+                format!("reja {kind} de cajón {boxed}"),
+                Some("grille_material"),
+            );
+        }
+    }
+    // And their plain versions for far away.
+    for style in 1..=8 {
+        let mut p = base(style, 2.0);
+        p.set("lod", 1.0);
+        check(&p, format!("colección {style} de lejos"), None);
+    }
+    for (key, n) in [
+        ("outside_shutters", SHUTTERS_KINDS.len()),
+        ("grille", GRILLES.len()),
+    ] {
+        for kind in 2..=n {
+            let mut p = base(6, 2.0);
+            p.set(key, kind as f64);
+            p.set("grille_box", 1.0);
+            p.set("lod", 1.0);
+            let role = if key == "grille" {
+                "grille_material"
+            } else {
+                "shutters_material"
+            };
+            check(&p, format!("{key} {kind} de lejos"), Some(role));
+        }
+    }
+    for b in &bad {
+        println!("{b}");
+    }
+    println!("most triangles: {most}");
+    assert!(bad.is_empty(), "{} loose", bad.len());
 }

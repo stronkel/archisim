@@ -2049,3 +2049,62 @@ fn door_pictures() {
         }
     }
 }
+
+/// The workshop's windows (paquete 9, segunda parte), one by one
+/// (`ARCHISIM_VENTANAS_OUT=carpeta`): from outside, from inside, close to
+/// the handle, and from far away.
+#[test]
+fn window_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_VENTANAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: window pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let mut m = archisim_library::new_project("Ventanas");
+    archisim_library::workshop::place_windows(&mut m, 0.0, 0.0).unwrap();
+    // The project too, to open it or draw its plan.
+    std::fs::write(dir.join("ventanas.archisim"), archisim_file::to_string(&m)).unwrap();
+    let size = [1000u32, 1000u32];
+    let windows: Vec<_> = m.openings().map(|o| o.id).collect();
+    for (n, id) in windows.iter().enumerate() {
+        let o = m.opening(*id).unwrap().clone();
+        let name = m.opening_type(o.opening_type).unwrap().name.clone();
+        let og = archisim_geom::opening_geometry(&m, *id).unwrap();
+        let c = og.point((og.t0 + og.t1) / 2.0, 0.0);
+        let w = (og.t1 - og.t0) as f32;
+        let (cx, cy) = (c.x as f32, c.y as f32);
+        let mid = (og.sill + 0.7) as f32;
+        for (view, yaw, pitch, zoom, z) in [
+            ("fuera", 90.0, 4.0, 0.85, mid),
+            ("dentro", -90.0, 4.0, 1.0, mid),
+            ("manilla", -70.0, 6.0, 3.0, mid),
+            ("lado", 135.0, 8.0, 1.1, mid),
+            ("lejos", 110.0, 8.0, 0.12, mid),
+        ] {
+            let pic = picture(
+                &mut r,
+                &gpu,
+                &m,
+                |_, _| {
+                    let lo = glam::Vec3::new(cx - w / 2.0 - 0.4, cy - 0.3, 0.5);
+                    let hi = glam::Vec3::new(cx + w / 2.0 + 0.4, cy + 0.3, 2.6);
+                    let mut cam = camera(lo, hi, 1.0, yaw, pitch, zoom);
+                    cam.target.z = z;
+                    cam
+                },
+                size,
+            );
+            let slug = name
+                .to_lowercase()
+                .replace(" (taller)", "")
+                .replace(' ', "-");
+            pic.save_png(dir.join(format!("{:02}-{slug}-{view}.png", n + 1)))
+                .unwrap();
+        }
+    }
+}

@@ -98,7 +98,11 @@ impl Vertex {
     /// Its cut colour, linear RGB.
     pub fn cap(&self) -> [f32; 3] {
         let [r, g] = self.normal[3].to_le_bytes();
-        [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(self.misc[3])]
+        [
+            srgb_to_linear(r),
+            srgb_to_linear(g),
+            srgb_to_linear(self.misc[3]),
+        ]
     }
 
     /// Which face wins where two elements touch, as given to [`Vertex::new`].
@@ -412,6 +416,10 @@ impl Sink for Loose {
 struct Shared {
     opaque: MeshBuilder,
     glass: MeshBuilder,
+    /// Its own plain version for far away, instead of a coarser one
+    /// worked out from it (doors and windows: clustering would close up
+    /// their glass).
+    simple: Option<Mesh>,
     /// Middle of what glows and its reach.
     glow: Option<(Vec3, f32, f32)>,
 }
@@ -696,6 +704,26 @@ impl Scene {
                         between: false,
                     };
                     add_solids(model, solids, &look, &mut shared);
+                    if let Some(far) = archisim_geom::solid::opening_detail_with(model, o.id, true)
+                    {
+                        let solids = far
+                            .parts
+                            .iter()
+                            .map(|(material, tris)| archisim_geom::solid::Solid {
+                                owner: SolidOwner::Opening(o.id),
+                                material: *material,
+                                triangles: tris
+                                    .iter()
+                                    .map(|t| {
+                                        t.map(|i| far.mesh.positions[i as usize].map(|c| c as f64))
+                                    })
+                                    .collect(),
+                            })
+                            .collect();
+                        let mut plain = Shared::default();
+                        add_solids(model, solids, &look, &mut plain);
+                        shared.simple = Some(plain.opaque.mesh);
+                    }
                     groups.push((shared, Group::default()));
                     groups.len() - 1
                 });
@@ -761,7 +789,20 @@ impl Scene {
             }
             (group.lo, group.hi) = (lo, hi);
             let size = (hi - lo).length().max(0.05);
-            group.levels = levels_of(&mut group.opaque, size);
+            group.levels = match shared.simple {
+                Some(plain) if !plain.is_empty() => {
+                    // Its plain version after the whole of it.
+                    let full = group.opaque.indices.len() as u32;
+                    let base = group.opaque.vertices.len() as u32;
+                    group.opaque.vertices.extend(plain.vertices);
+                    group
+                        .opaque
+                        .indices
+                        .extend(plain.indices.iter().map(|i| i + base));
+                    vec![(0, full), (full, plain.indices.len() as u32)]
+                }
+                _ => levels_of(&mut group.opaque, size),
+            };
             if !group.instances.is_empty() {
                 s.groups.push(group);
             }

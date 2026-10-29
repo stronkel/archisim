@@ -2509,6 +2509,7 @@ pub fn project() -> Result<Model, ModelError> {
     }
     // The doors (paquete 9), south of everything.
     place_doors(&mut m, 0.0, -9.0)?;
+    place_windows(&mut m, 0.0, -16.0)?;
     Ok(m)
 }
 
@@ -2654,6 +2655,165 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
             hand: Hand::Right,
             setback: None,
         })?;
+    }
+    Ok(end)
+}
+
+/// Places the workshop's windows (paquete 9, segunda parte) from `x`
+/// along a façade at `y`: one of each collection, two sashes, at a sill
+/// of 0,90; and 8 m north another façade with what goes outside — the
+/// roller blind half down, louvred shutters open, boarded ones closed,
+/// a flat grille of bars, a boxed wrought grille with scrolls, a boxed
+/// grid. The end of the façades.
+pub fn place_windows(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
+    use archisim_core::{Hand, NewFamilyType, NewOpening, WallSide};
+    let level = m.levels()[0].id;
+    let family = m.system_family("Ventana practicable")?;
+    let facade = m
+        .wall_types()
+        .find(|t| t.name.contains("Fachada"))
+        .or_else(|| m.wall_types().next())
+        .map(|t| t.id)
+        .ok_or_else(|| ModelError::NotAnObject("Fachada".into()))?;
+    let step = 1.9;
+    let end = x + step * DOOR_COLLECTIONS.len() as f64 + 0.4;
+    let wall = |m: &mut Model, y: f64| {
+        m.add_wall(NewWall {
+            wall_type: facade,
+            level,
+            start: Point2::new(x, y),
+            end: Point2::new(end, y),
+            reference: ReferenceLine::Center,
+            height: 2.9,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })
+    };
+    let window_type = |m: &mut Model, name: String, set: &[(&str, Value)]| {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        for (k, v) in set {
+            values.insert((*k).to_string(), v.clone());
+        }
+        m.add_family_type(NewFamilyType {
+            family,
+            name,
+            mark: None,
+            description: String::new(),
+            values,
+        })
+    };
+    // Each collection's frame and hardware.
+    let looks: [(&str, &str); 8] = [
+        ("Roble claro", "Metal negro"),
+        ("Lacado blanco", "Hierro forjado"),
+        ("Metal negro", "Latón"),
+        ("Roble claro", "Metal negro"),
+        ("Metal lacado", "Acero inoxidable"),
+        ("Pino viejo", "Hierro forjado"),
+        ("Metal negro", "Metal negro"),
+        ("Lacado blanco", "Latón"),
+    ];
+    let palette = |m: &mut Model, key: &'static str, name: &str| {
+        crate::palette_material(m, name).map(|id| (key, Value::Material(id.0)))
+    };
+    let front = wall(m, y)?;
+    let place = |m: &mut Model, t, wall, i: usize, sill: f64| {
+        m.add_opening(NewOpening {
+            opening_type: t,
+            wall,
+            along: 1.1 + step * i as f64,
+            sill,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })
+    };
+    for (i, c) in DOOR_COLLECTIONS.iter().enumerate() {
+        let mut set = vec![
+            ("model3d", Value::Text((*c).to_string())),
+            ("width", Value::Number(1.2)),
+            ("height", Value::Number(1.3)),
+        ];
+        let (frame, metal) = looks[i];
+        set.extend(palette(m, "frame_material", frame));
+        set.extend(palette(m, "hardware_material", metal));
+        let t = window_type(m, format!("Ventana {c} (taller)"), &set)?;
+        place(m, t, front, i, 0.9)?;
+    }
+    // What goes outside, in another façade.
+    let back = wall(m, y + 8.0)?;
+    let t = |s: &str| Value::Text(s.to_string());
+    type Outside<'a> = (&'a str, &'a str, Vec<(&'a str, Value)>);
+    let outside: [Outside; 6] = [
+        (
+            "persiana",
+            "Contemporáneo",
+            vec![
+                ("shutter", Value::Bool(true)),
+                ("shutter_down", Value::Number(55.0)),
+                ("height", Value::Number(1.55)),
+            ],
+        ),
+        (
+            "mallorquinas",
+            "Mediterráneo",
+            vec![
+                ("outside_shutters", t("Mallorquinas")),
+                ("shutters_open", Value::Bool(true)),
+            ],
+        ),
+        (
+            "contraventanas cerradas",
+            "Rústica",
+            vec![
+                ("outside_shutters", t("De tablas")),
+                ("shutters_open", Value::Bool(false)),
+            ],
+        ),
+        (
+            "reja de barrotes",
+            "Clásica",
+            vec![("grille", t("Barrotes y pletinas"))],
+        ),
+        (
+            "reja de cajón con volutas",
+            "Mediterráneo",
+            vec![
+                ("grille", t("Forja con volutas")),
+                ("grille_box", Value::Bool(true)),
+                ("grille_depth", Value::Number(0.2)),
+            ],
+        ),
+        (
+            "reja de cajón en cuadrícula",
+            "Rústica",
+            vec![
+                ("grille", t("Cuadrícula")),
+                ("grille_box", Value::Bool(true)),
+            ],
+        ),
+    ];
+    for (i, (name, c, extra)) in outside.into_iter().enumerate() {
+        let k = DOOR_COLLECTIONS.iter().position(|x| *x == c).unwrap_or(0);
+        let mut set = vec![
+            ("model3d", t(c)),
+            ("width", Value::Number(1.2)),
+            ("height", Value::Number(1.3)),
+        ];
+        let (frame, metal) = looks[k];
+        set.extend(palette(m, "frame_material", frame));
+        set.extend(palette(m, "hardware_material", metal));
+        let shutters = if name == "mallorquinas" {
+            "Lacado salvia"
+        } else {
+            "Pino viejo"
+        };
+        set.extend(palette(m, "shutters_material", shutters));
+        set.extend(palette(m, "grille_material", "Hierro forjado"));
+        set.extend(extra);
+        let ty = window_type(m, format!("Ventana con {name} (taller)"), &set)?;
+        place(m, ty, back, i, 0.9)?;
     }
     Ok(end)
 }

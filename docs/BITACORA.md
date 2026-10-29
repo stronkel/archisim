@@ -6,6 +6,31 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (28) · Carpintería con detalle: las ventanas (paquete 9, segunda parte)
+
+Rama `bloque/ventanas` (sobre `main` v0.74), con pull request. Sin cambios de formato ni de IFC (la familia «Ventana practicable» sube a la versión 9). Diseño en `docs/CARPINTERIA.md` §5.
+
+**Hecho**
+- **Ventana practicable con detalle en 3D**: la receta sigue siendo la ventana (planta, alzados, IFC y mediciones). En 3D, ArchiSim hace el marco con su galce, los montantes, las hojas solapando el marco, el vidrio con sus junquillos, los cuarterones, la manilla de cada hoja donde cierra según abra (practicable, oscilobatiente, abatible, proyectante, basculante, pivotante) y las bisagras del lado del giro. Las hojas fijas llevan el vidrio en el marco.
+- **Ocho colecciones y «A tu gusto»**: Perfil (aluminio recto o redondeado, PVC, madera, madera con moldura, acero fino), Cuarterones (cuadrícula, cuadrícula fina, horizontales, verticales, solo arriba) y Manilla (moderna, de latón, cremona vista, falleba de forja).
+- **Por fuera**: la persiana con sus guías y lamas bajadas al porcentaje que se diga; contraventanas (mallorquinas, de tablas o de cuarterones), abiertas contra la fachada o cerradas; y rejas (barrotes, barrotes y pletinas, cuadrícula, forja con volutas), planas sobre la fachada o de cajón con su vuelo. Las rejas y las contraventanas se dibujan también en planta.
+- **Tarjetas en 3D** en Editar tipo: la reja y las contraventanas se ven desde la calle.
+- **De lejos**: las puertas y ventanas ya no se simplifican juntando puntos (eso cerraba el vidrio y las ventanas lejanas se veían como bloques oscuros). Ahora su versión de lejos es una ventana sencilla del propio generador: marco, hojas y vidrio, sin herrajes, junquillos ni volutas.
+- **Arreglo de las puertas de la v0.74**: en un proyecto nuevo, los herrajes salían con el primer material del proyecto (el mortero), porque «Acero inoxidable» no estaba en la plantilla. Ahora la plantilla añade de la paleta los materiales que piden las familias de puertas y ventanas.
+- **Taller**: una fachada con las ocho ventanas y otra con persiana, mallorquinas, contraventanas cerradas y tres rejas. Fotos con `ARCHISIM_VENTANAS_OUT=carpeta cargo test --release -p archisim-app window_pictures`, que guarda también `ventanas.archisim`.
+
+**Pendiente**
+- La reja y las contraventanas aún no van en el IFC, en los alzados ni en las mediciones (solo en 3D y en planta).
+- Corredera y guillotina, y las demás puertas, con el mismo sistema.
+- Los proyectos de antes tienen su copia de la familia: para ver las opciones, Biblioteca → actualizar familias.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo, una fachada con una ventana practicable. Mírala en 3D por dentro y por fuera.
+2. Selecciónala → Editar tipo: cambia la colección («Modelo 3D») y, en «A tu gusto», el Perfil, los Cuarterones y la Manilla mirando las tarjetas.
+3. En «Por fuera»: pon una Reja de forja con volutas, márcala «de cajón» y cambia el vuelo; luego prueba Mallorquinas abiertas y cerradas. Mira la planta: la reja de cajón sale delante de la fachada.
+4. Activa la persiana y pon «Persiana: bajada» al 50 %.
+5. Exporta el IFC: la ventana es la de siempre (la reja todavía no va).
+
 ## 2026-10-29 (27) · v0.74: la cadena del taller y la carpintería, unida a `main`
 
 Antonio pidió unir a `main` todo lo pendiente (pull requests #76 a #102, encadenados) antes de seguir con las ventanas. `main` había avanzado por su lado con las versiones 0.71 a 0.73 (E1, E14–E16), así que la unión no fue directa:

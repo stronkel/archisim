@@ -362,6 +362,12 @@ pub fn add_library(m: &mut Model) -> Result<Library, ModelError> {
         ],
     )?;
 
+    // The materials the system families ask for by name that the
+    // template does not have (the hardware's steel, a grille's iron): from
+    // the palette, before any type is made, so that their parameters do
+    // not fall back on the first material.
+    family_materials(m);
+
     #[allow(clippy::too_many_arguments)]
     fn opening(
         m: &mut Model,
@@ -2294,6 +2300,26 @@ pub fn palette_material(m: &mut Model, name: &str) -> Option<MaterialId> {
         }
     }
     Some(id)
+}
+
+/// Adds from the palette each material the doors' and windows' system
+/// families name as a default (`material = "…"`) that the project does not have yet.
+pub fn family_materials(m: &mut Model) {
+    for (_, source) in archisim_core::family::system_families() {
+        for line in source.lines() {
+            let Some(at) = line.find(" material = \"") else {
+                continue;
+            };
+            let rest = &line[at + " material = \"".len()..];
+            let Some(end) = rest.find('"') else {
+                continue;
+            };
+            let name = &rest[..end];
+            if !m.materials().any(|x| x.name == name) {
+                palette_material(m, name);
+            }
+        }
+    }
 }
 
 /// A material like `base` in any colour (the free colour wheel of the

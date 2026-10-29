@@ -366,7 +366,14 @@ pub fn door(b: &mut Builder, p: &Params) {
         leaves_at.push((x0 + gap, x1 - gap, hinge_left, true));
     }
     let design = design(l.design);
-    for &(a, c, hinge_at_a, active) in &leaves_at {
+    // Far away (`lod`): the leaves plain, no hardware, the casings flat.
+    let far = p.flag("lod", false);
+    if far {
+        for &(a, c, _, _) in &leaves_at {
+            leaf_plain(b, &design, a, c, floor, top - gap, t);
+        }
+    }
+    for &(a, c, hinge_at_a, active) in leaves_at.iter().filter(|_| !far) {
         leaf(b, &design, a, c, floor, top - gap, t);
         hinges(
             b,
@@ -411,7 +418,11 @@ pub fn door(b: &mut Builder, p: &Params) {
     }
     // The lining across the reveal to each face that takes a casing, and
     // the casing on it.
-    let profile = casing(l.casing);
+    let profile = if far && l.casing != 2 {
+        casing(3)
+    } else {
+        casing(l.casing)
+    };
     for (face, takes, dir) in [
         (p.get("face_pos", fd / 2.0), p.flag("casing_pos", true), 1.0),
         (
@@ -463,6 +474,59 @@ fn mirror_x(b: &mut Builder) {
         for t in tris.iter_mut() {
             t.swap(1, 2);
         }
+    }
+}
+
+/// A leaf as seen from far away: a board, or for a framed one its frame
+/// with each field flat (glass where it has glass).
+pub fn leaf_plain(b: &mut Builder, d: &LeafDesign, a: f64, c: f64, z0: f64, z1: f64, t: f64) {
+    let h2 = t / 2.0;
+    let LeafDesign::Framed {
+        stile,
+        rail,
+        bottom,
+        rows,
+    } = d
+    else {
+        b.rbox(LEAF, [a, -h2, z0], [c, h2, z1], 0.0);
+        return;
+    };
+    let (stile, rail, bottom) = (
+        stile.min((c - a) / 3.0),
+        rail.min((z1 - z0) / 8.0),
+        bottom.min((z1 - z0) / 6.0),
+    );
+    b.rbox(LEAF, [a, -h2, z0], [a + stile, h2, z1], 0.0);
+    b.rbox(LEAF, [c - stile, -h2, z0], [c, h2, z1], 0.0);
+    b.rbox(
+        LEAF,
+        [a + stile, -h2, z0],
+        [c - stile, h2, z0 + bottom],
+        0.0,
+    );
+    b.rbox(LEAF, [a + stile, -h2, z1 - rail], [c - stile, h2, z1], 0.0);
+    let total: f64 = rows.iter().map(|r| r.weight).sum::<f64>().max(1e-9);
+    let (za, zc) = (z0 + bottom, z1 - rail);
+    let mut zt = zc;
+    for (k, row) in rows.iter().enumerate() {
+        let zb = zt - (zc - za - rail * (rows.len() as f64 - 1.0)) * row.weight / total;
+        if k + 1 < rows.len() {
+            b.rbox(LEAF, [a + stile, -h2, zb - rail], [c - stile, h2, zb], 0.0);
+        }
+        let n = row.fields.len().max(1);
+        let w = (c - a - 2.0 * stile - stile * (n as f64 - 1.0)) / n as f64;
+        for (i, f) in row.fields.iter().enumerate() {
+            let x0 = a + stile + i as f64 * (w + stile);
+            if i > 0 {
+                b.rbox(LEAF, [x0 - stile, -h2, zb], [x0, h2, zt], 0.0);
+            }
+            let (role, k) = match f {
+                Field::Glass | Field::Bars(..) => (GLASS, 0.004),
+                _ => (LEAF, h2 * 0.35),
+            };
+            b.rbox(role, [x0, -k, zb], [x0 + w, k, zt], 0.0);
+        }
+        zt = zb - rail;
     }
 }
 

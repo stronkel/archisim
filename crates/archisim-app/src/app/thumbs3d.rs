@@ -116,6 +116,10 @@ pub const SIDE: [f32; 2] = [62.0, 24.0];
 /// Nearly from the front, at eye level: how doors and windows are seen.
 pub const FRONT: [f32; 2] = [-102.0, 6.0];
 
+/// The same from the other side, the street's: how what goes outside a
+/// window (its grille, its shutters) is seen.
+pub const OUTSIDE: [f32; 2] = [78.0, 6.0];
+
 /// The camera a piece is seen with in its picture, from `seen` (yaw and
 /// pitch, in degrees), close enough to fill it.
 pub fn camera_seen(lo: glam::Vec3, hi: glam::Vec3, aspect: f32, seen: [f32; 2]) -> Camera {
@@ -375,6 +379,51 @@ mod tests {
                 .unwrap();
             }
             assert!(!seen.contains(&px), "{design} looks like another design");
+            seen.push(px);
+        }
+    }
+
+    /// The grilles of a window, each drawn in 3D from the street as the
+    /// option cards show them, all different
+    /// (`ARCHISIM_HOJAS_OUT=carpeta` keeps them).
+    #[test]
+    fn window_grilles_in_3d() {
+        let Some((device, queue, view_formats)) = crate::view3d::gpu_tests::gpu() else {
+            eprintln!("No graphics adapter: 3D drawing test skipped.");
+            return;
+        };
+        let lib = archisim_library::new_project("Biblioteca");
+        let t = lib
+            .opening_types()
+            .find(|t| lib.family_prop(t.family).as_deref() == Some("window"))
+            .expect("a window modelled by ArchiSim");
+        let mut r = Renderer::new(
+            &device,
+            view_formats,
+            crate::view3d::render::TextureMode::Full,
+        );
+        let out = std::env::var_os("ARCHISIM_HOJAS_OUT").map(std::path::PathBuf::from);
+        let mut seen = Vec::new();
+        for grille in archisim_core::props::fine::window::GRILLES {
+            let mut ty = t.clone();
+            ty.values.insert(
+                "grille".into(),
+                archisim_core::Value::Text(grille.to_string()),
+            );
+            let (model, _) = crate::type_preview::opening_model_3d(&lib, &ty).unwrap();
+            let (w, h, px) =
+                draw_seen(&mut r, &device, &queue, &model, [240, 174], OUTSIDE).unwrap();
+            if let Some(dir) = &out {
+                std::fs::create_dir_all(dir).unwrap();
+                resvg::tiny_skia::Pixmap::from_vec(
+                    px.clone(),
+                    resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+                )
+                .unwrap()
+                .save_png(dir.join(format!("reja {grille}.png")))
+                .unwrap();
+            }
+            assert!(!seen.contains(&px), "{grille} looks like another grille");
             seen.push(px);
         }
     }
