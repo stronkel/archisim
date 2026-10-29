@@ -6,6 +6,23 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (23) · Revisión automática de los modelos: nada en el aire
+
+Misma rama `bloque/remates-modelos` y mismo pull request que la (22). Sin cambios de formato ni de IFC.
+
+Antonio eligió, de las propuestas, la **revisión de modelos**: que una prueba busque lo que flota en todos los modelos, como las trece piezas de su lista, antes de que entren en la biblioteca.
+
+**Hecho**
+- `archisim_props::check`: parte cada modelo en sus piezas (triángulos que comparten esquinas), mira cuáles se tocan (a menos de 4 mm, se cruzan o una está dentro de otra) y busca las que ninguna cadena de piezas une al suelo (o a la pared, o al techo, en lo que va colgado: `anchors_for`). De cada pieza suelta da su papel, su caja, a cuánto está y de qué pieza. Las hojas y flores no se miran.
+- Dos pruebas que ya no dejan pasar nada suelto: `nothing_floats` (archisim-props: todos los modelos de todas las familias, con sus medidas por defecto) y `nothing_in_the_air` (biblioteca: todas las piezas del taller, con sus medidas del taller). Con `--nocapture` dicen qué está suelto y dónde.
+- La primera pasada encontró **164 tipos del taller y 37 modelos de la biblioteca** con algo en el aire. Arreglados todos. Lo más visible: la mesa de ping-pong (el tablero no apoyaba en las patas: 4 cm), los cuatro **tocadores** (el espejo, en la pared), las **cunas** (barandillas a 2 cm de los postes), la **litera clásica**, las **sillas de exterior** nórdica, industrial y años 50 (listones sin travesaños, patas a 5 mm del aro), las **mesas de exterior** industrial y rústica, las **tumbonas** de teca, las **duchas de piscina** (columnas a 3 cm de la bandeja, alcachofa y volante sueltos), la **farola fernandina** y las mediterránea y rústica (farol a 5 cm), la **canasta** y el **tobogán** (escalera hasta la plataforma), la **cinta de correr** (consola), el **columpio** (travesaño), los **bancos** de calle nórdico, años 50 e industrial, la **cesta de la papelera**, las **sillas de bar** japandi, industrial y clásica, la **mesa de bar** clásica, el **banco corrido** industrial (respaldo sin tablero), la **mampara** nórdica, los **puestos de trabajo** contemporáneo (bandeja de cables) y rústico, las **mesas expositoras** (balda y género), los **probadores** (cortina bajo la barra), los **grifos** (manetas), el **frigorífico clásico** y los **altos rústicos** (cornisa y barra de ganchos), los **apliques** años 50 e industrial, las **camas** (almohadas sobre el colchón), el **espejo industrial** del baño, la **lámpara de arco**, las **butacas** redonda y de ratán, las **cortinas** (barra en la pared), el **radiador** (secciones unidas), el **recibidor**, la **hamaca**, las **señales**, las **bicicletas**, la **fuente de fundición**, las **jardineras** y la **costilla de Adán**. Los tiradores con muesca de las cómodas y mesitas estaban 8 mm delante del frente.
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` en la versión del pull request y mira, en 3D y de cerca, las piezas que te suenen de esta lista.
+2. Si algo sigue mal, dime el tipo: esta prueba ve lo que está en el aire, pero no lo que **atraviesa** otra pieza (como la tela del galán), ni lo que sobresale o está a una altura rara; eso sigue necesitando tus ojos.
+
+---
+
 ## 2026-10-29 (22) · Remates de modelos: lo que Antonio vio flotando o atravesado
 
 Rama `bloque/remates-modelos` (sobre `bloque/paquete-8d`), con pull request. Sin cambios de formato ni de IFC; solo los modelos 3D del taller.

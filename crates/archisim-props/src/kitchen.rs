@@ -37,9 +37,10 @@ pub fn tap(b: &mut Builder, x: f64, y: f64, z: f64, reach: f64) {
         [x, y + reach, z + 0.24],
         0.011,
     );
+    // The lever, out of the column's side.
     b.cyl(
         "metal",
-        [x + 0.035, y, z + 0.12],
+        [x + 0.008, y, z + 0.12],
         [x + 0.07, y, z + 0.14],
         0.007,
     );

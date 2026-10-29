@@ -300,8 +300,9 @@ pub fn ping_pong(b: &mut Builder, _p: &Params) {
             0.0,
         );
         for y in [0.25, y1 - 0.25] {
-            rod(b, "frame", [xout, y, 0.1], [xout, y, h - t - 0.04], 0.022);
-            rod(b, "frame", [xin, y, 0.1], [xin, y, h - t - 0.04], 0.022);
+            // Up to the underside of the top.
+            rod(b, "frame", [xout, y, 0.1], [xout, y, h - t], 0.022);
+            rod(b, "frame", [xin, y, 0.1], [xin, y, h - t], 0.022);
             // The wheel under each leg.
             for xl in [xout, xin] {
                 let st = b.mark();
@@ -465,7 +466,8 @@ pub fn treadmill(b: &mut Builder, _p: &Params) {
     // The console: a tilted panel with its screen and a bar in front.
     let tilt: f64 = 0.55;
     let (co, si) = (tilt.cos(), tilt.sin());
-    let cc = [0.0, 1.66, 1.3];
+    // On the uprights' tops.
+    let cc = [0.0, 1.66, 1.24];
     b.obox(
         "frame",
         cc,

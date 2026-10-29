@@ -149,7 +149,9 @@ pub fn lamp(b: &mut Builder, p: &Params) {
                 1.0,
                 1.0,
             );
-            b.ellipsoid("bulb", [reach, 0.2, h - 0.35], [0.05, 0.05, 0.04]);
+            // The bowl and its bulb hang from the arm's end on a drop.
+            b.cyl("metal", [reach, 0.2, h], [reach, 0.2, h - 0.25], 0.01);
+            b.ellipsoid("bulb", [reach, 0.2, h - 0.28], [0.05, 0.05, 0.04]);
         }
         _ => {
             b.cone(
@@ -348,10 +350,11 @@ pub fn potted_plant(b: &mut Builder, p: &Params) {
                 let tip = [base[0] + ca * out, base[1] + sa * out, base[2] + up];
                 b.cone("stem", base, tip, 0.008, 0.005, 6);
                 let leaf = grow * (0.16 + 0.06 * rnd());
+                // The leaf's base on the stem's tip.
                 let centre = [
-                    tip[0] + ca * leaf * 0.6,
-                    tip[1] + sa * leaf * 0.6,
-                    tip[2] + leaf * 0.1,
+                    tip[0] + ca * leaf * 0.85,
+                    tip[1] + sa * leaf * 0.85,
+                    tip[2] - leaf * 0.3,
                 ];
                 b.blob(
                     "leaves",
@@ -396,7 +399,8 @@ pub fn armchair(b: &mut Builder, p: &Params) {
         2 => {
             // A round tub: a ring of back and arms, a cushion in it.
             let c = [0.0, d / 2.0, 0.0];
-            legs(b, 0.12, 0.12);
+            // The legs under the cup's round base.
+            legs(b, 0.12, 0.15);
             // A round cup up to the arms, the seat cushion in it and a
             // rounded back rising behind.
             let arms = seat + 0.2 - 0.12;
@@ -432,7 +436,8 @@ pub fn armchair(b: &mut Builder, p: &Params) {
         }
         3 => {
             // A rattan frame: a woven shell of rings, a seat cushion.
-            legs(b, 0.1, 0.07);
+            // The legs under the ring of cane.
+            legs(b, 0.1, 0.13);
             // Rattan canes round the back and the arms, and a ring under
             // the seat.
             let (rx, ry) = (w * 0.48, d * 0.48);
@@ -465,7 +470,7 @@ pub fn armchair(b: &mut Builder, p: &Params) {
             for i in 0..7 {
                 let a = -PI + 0.35 + (PI - 0.7) * i as f64 / 6.0;
                 let q = [rx * a.cos(), d / 2.0 + ry * a.sin()];
-                b.cyl("frame", [q[0], q[1], 0.1], [q[0], q[1], h - 0.06], 0.009);
+                b.cyl("frame", [q[0], q[1], 0.1], [q[0], q[1], h - 0.02], 0.009);
             }
             b.pillow(
                 "cushion",
@@ -777,6 +782,10 @@ pub fn curtain(b: &mut Builder, p: &Params) {
     for x in [x0 - 0.08, -x0 + 0.08] {
         b.ellipsoid("metal", [x, 0.08, rod], [0.02, 0.02, 0.02]);
     }
+    // Its brackets from the wall.
+    for x in [x0 - 0.04, -x0 + 0.04] {
+        b.cyl("metal", [x, 0.0, rod], [x, 0.08, rod], 0.008);
+    }
     // Each half gathered towards its side as it opens.
     let half = w / 2.0;
     let gathered = half * (1.0 - 0.75 * open);
@@ -794,7 +803,8 @@ pub fn curtain(b: &mut Builder, p: &Params) {
             b.rbox(
                 role,
                 [a - step * 0.55, 0.06, rod - drop],
-                [a + step * 0.55, 0.06 + deep, rod - 0.03],
+                // Up round the rod, as if on its rings.
+                [a + step * 0.55, 0.06 + deep, rod - 0.005],
                 deep / 2.0 - 0.001,
             );
         }

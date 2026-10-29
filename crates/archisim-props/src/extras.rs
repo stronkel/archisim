@@ -18,13 +18,15 @@ fn fire(b: &mut Builder, x0: f64, x1: f64, y: f64, z: f64) {
         let e = [x0 + w * (0.85 - k * 0.3), y - dy, z + 0.045 + k * 0.08];
         b.cyl("wood", a, e, 0.045);
     }
+    // Over the logs, not beyond their ends.
     let n = ((w / 0.12).round() as usize).max(3);
     for i in 0..n {
-        let x = x0 + w * (i as f64 + 0.5) / n as f64;
+        let x = x0 + w * (0.2 + 0.6 * (i as f64 + 0.5) / n as f64);
         let tall = 0.12 + 0.12 * (((i * 7) % 5) as f64 / 5.0);
         b.blob(
             "flame",
-            [x, y, z + 0.12 + tall * 0.5],
+            // Rising out of the logs.
+            [x, y, z + 0.06 + tall * 0.5],
             [0.035, 0.0, 0.0],
             [0.0, 0.03, 0.0],
             [0.0, 0.0, tall * 0.5],
@@ -81,12 +83,17 @@ pub fn fireplace(b: &mut Builder, p: &Params) {
                 [r * 0.5, gy + 0.008, foot + 0.48],
                 0.0,
             );
+            // The door's handle on two posts.
+            let hx = r * 0.5;
             b.cyl(
                 "metal",
-                [r * 0.6, gy + 0.03, foot + 0.3],
-                [r * 0.6, gy + 0.03, foot + 0.4],
+                [hx, gy + 0.03, foot + 0.3],
+                [hx, gy + 0.03, foot + 0.4],
                 0.01,
             );
+            for z in [foot + 0.31, foot + 0.39] {
+                b.cyl("metal", [hx, gy - 0.015, z], [hx, gy + 0.03, z], 0.006);
+            }
             b.cyl(
                 "frame",
                 [c[0], c[1], foot + 0.75],
@@ -189,6 +196,10 @@ pub fn coat_stand(b: &mut Builder, p: &Params) {
                 );
             }
             b.rbox("mat", [x0, 0.0, 1.2], [-x0, 0.02, h], 0.004);
+            // The board on two uprights from the bench.
+            for x in [x0 + 0.03, -x0 - 0.06] {
+                b.rbox("mat", [x, 0.0, 0.46], [x + 0.03, 0.03, 1.21], 0.004);
+            }
             let hooks = ((w / 0.25).round() as usize).max(2);
             for i in 0..hooks {
                 let x = x0 + w * (i as f64 + 0.5) / hooks as f64;
@@ -196,7 +207,7 @@ pub fn coat_stand(b: &mut Builder, p: &Params) {
                 if i % 2 == 0 {
                     coat(
                         b,
-                        [x, 0.09, h - 0.14],
+                        [x, 0.09, h - 0.125],
                         if i % 4 == 0 { "cushion" } else { "cushion2" },
                     );
                 }
@@ -220,18 +231,25 @@ pub fn coat_stand(b: &mut Builder, p: &Params) {
                 let tip = [c[0] + a.cos() * 0.13, c[1] + a.sin() * 0.13, h - 0.05];
                 b.cyl("mat", [c[0], c[1], h - 0.15], tip, 0.01);
             }
-            coat(b, [c[0] + 0.12, c[1] + 0.03, h - 0.07], "cushion");
-            coat(b, [c[0] - 0.1, c[1] - 0.06, h - 0.07], "cushion2");
+            // Two coats on two of the hooks' tips.
+            for (k, role) in [(0, "cushion"), (2, "cushion2")] {
+                let a = TAU * k as f64 / 4.0 + 0.4;
+                coat(
+                    b,
+                    [c[0] + a.cos() * 0.13, c[1] + a.sin() * 0.13, h - 0.055],
+                    role,
+                );
+            }
         }
     }
 }
 
-/// A coat hanging from a hook at `top`.
+/// A coat hanging from a hook at `top` (its collar there).
 fn coat(b: &mut Builder, top: P3, role: &'static str) {
     let l = 0.85;
     b.blob(
         role,
-        [top[0], top[1] + 0.06, top[2] - l * 0.5],
+        [top[0], top[1], top[2] - l * 0.5 + 0.005],
         [0.2, 0.0, 0.0],
         [0.0, 0.08, 0.0],
         [0.0, 0.0, l * 0.5],
@@ -268,6 +286,13 @@ pub fn office_chair(b: &mut Builder, p: &Params) {
         0.012,
     );
     for x in [-w * 0.45, w * 0.45] {
+        // The arm's post on a bracket from under the seat.
+        b.cyl(
+            "dark",
+            [x * 0.6, c[1] - 0.12, seat - 0.05],
+            [x, c[1] - 0.12, seat - 0.05],
+            0.012,
+        );
         b.cyl(
             "dark",
             [x, c[1] - 0.12, seat - 0.05],
@@ -489,8 +514,9 @@ pub fn hanging_chair(b: &mut Builder, p: &Params) {
             // The cloth sagging between the two ends.
             let n = 12;
             let at = |t: f64| {
-                let x = -(l / 2.0 - 0.42) + (l - 0.84) * t;
-                let z = 1.15 - 0.6 * (PI * t).sin();
+                // Tied to the posts' tops.
+                let x = -(l / 2.0 - 0.36) + (l - 0.72) * t;
+                let z = 1.19 - 0.64 * (PI * t).sin();
                 [x, y, z]
             };
             for i in 0..n {
@@ -600,6 +626,10 @@ pub fn radiator(b: &mut Builder, p: &Params) {
                     0.012,
                 );
             }
+            // The sections joined at their hubs, top and bottom.
+            for zz in [z + 0.05, z + h - 0.05] {
+                b.cyl("mat", [x0 + 0.02, 0.07, zz], [-x0 - 0.02, 0.07, zz], 0.016);
+            }
         }
     }
     // The pipe from the floor.
@@ -627,8 +657,8 @@ pub fn ac_unit(b: &mut Builder, p: &Params) {
     );
     b.rbox(
         "light",
-        [-x0 - 0.12, 0.2, z + 0.12],
-        [-x0 - 0.08, 0.205, z + 0.14],
+        [-x0 - 0.16, 0.196, z + 0.12],
+        [-x0 - 0.12, 0.203, z + 0.14],
         0.0,
     );
 }
@@ -842,14 +872,18 @@ pub fn kids_bed(b: &mut Builder, p: &Params) {
                 b.cyl("mat", [x, 0.0, top], [x, l, top], 0.022);
             }
             // A garland of little lights along the ridge.
+            let mut wire = vec![[0.0, 0.0, ridge]];
             for k in 0..12 {
                 let y = l * (k as f64 + 0.5) / 12.0;
                 let sag = 0.06 * (PI * (k as f64 + 0.5) / 12.0).sin();
-                b.ellipsoid(
-                    "bulb",
-                    [w * 0.15, y, ridge - 0.12 - sag],
-                    [0.015, 0.015, 0.02],
-                );
+                let q = [w * 0.15, y, ridge - 0.12 - sag];
+                b.ellipsoid("bulb", q, [0.015, 0.015, 0.02]);
+                wire.push([q[0], q[1], q[2] + 0.018]);
+            }
+            // On their wire, hung from the ridge at both ends.
+            wire.push([0.0, l, ridge]);
+            for s in wire.windows(2) {
+                b.cyl("mat", s[0], s[1], 0.003);
             }
         }
     }

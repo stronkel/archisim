@@ -665,10 +665,11 @@ pub fn display_table(b: &mut Builder, p: &Params) {
             ] {
                 tapered_leg(b, "frame", [x, y], zt, [dx, dy], 0.04, 0.022);
             }
+            // The shelf into the splayed legs.
             b.rbox(
                 "frame",
-                [x0 + 0.1, 0.1, shelf],
-                [x1 - 0.1, d - 0.1, shelf + 0.02],
+                [x0 + 0.07, 0.07, shelf],
+                [x1 - 0.07, d - 0.07, shelf + 0.02],
                 0.004,
             );
         }
@@ -701,8 +702,8 @@ pub fn display_table(b: &mut Builder, p: &Params) {
             }
             b.rbox(
                 "frame",
-                [x0 + 0.12, 0.12, shelf],
-                [x1 - 0.12, d - 0.12, shelf + 0.02],
+                [x0 + 0.095, 0.075, shelf],
+                [x1 - 0.095, d - 0.075, shelf + 0.02],
                 0.006,
             );
         }
@@ -771,10 +772,11 @@ pub fn display_table(b: &mut Builder, p: &Params) {
                     0.006,
                 );
             }
+            // The stretcher on the trestles' feet.
             b.rbox(
                 "frame",
-                [x0 + 0.1, d / 2.0 - 0.03, 0.2],
-                [x1 - 0.1, d / 2.0 + 0.03, 0.27],
+                [x0 + 0.1, d / 2.0 - 0.03, 0.05],
+                [x1 - 0.1, d / 2.0 + 0.03, 0.12],
                 0.006,
             );
         }
@@ -866,7 +868,8 @@ pub fn display_table(b: &mut Builder, p: &Params) {
             x1 - 0.15,
             0.1,
             d - 0.2,
-            shelf + 0.025,
+            // On the shelf.
+            shelf + if matches!(ix, 1 | 3) { 0.025 } else { 0.02 },
             0.3,
             0,
             31 + ix as u32,
@@ -1154,7 +1157,8 @@ pub fn fitting_room(b: &mut Builder, p: &Params) {
         x0 + wall + (w - 2.0 * wall) * 0.45,
         d - 0.05,
         0.04,
-        rod_z - 0.02,
+        // Up round the rod: each pleat crosses it.
+        rod_z + 0.005,
     );
     // The collection's way with its walls.
     match ix {

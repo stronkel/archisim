@@ -156,6 +156,15 @@ pub fn lounger(b: &mut Builder, p: &Params) {
                     0.004,
                 );
             }
+            // Two bearers along the back from the rails, under its slats.
+            for x in [x0 + 0.06, -x0 - 0.06] {
+                b.cyl(
+                    "frame",
+                    [x, back_foot[1] + 0.03, seat - 0.01],
+                    [x, back_top[1], back_top[2] - 0.022],
+                    0.015,
+                );
+            }
             let rows = 6;
             for i in 0..rows {
                 let t0 = i as f64 / rows as f64;

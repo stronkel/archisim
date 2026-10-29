@@ -187,10 +187,13 @@ fn lantern(b: &mut Builder, frame: &'static str, hook: P3, w: f64, hb: f64) {
         frame,
         &yz(
             x,
+            // A loop from the stem's top, round over the hook.
             &[
-                (y - 0.03, top - 0.03),
+                (y - 0.01, top - 0.04),
+                (y - 0.03, top - 0.015),
                 (y, top + 0.005),
-                (y + 0.03, top - 0.03),
+                (y + 0.03, top - 0.015),
+                (y + 0.01, top - 0.04),
             ],
         ),
         false,
@@ -219,9 +222,10 @@ pub fn bench(b: &mut Builder, p: &Params) -> bool {
         // uprights.
         0 => {
             for x in supports(w, 0.2, 1.4) {
+                // Under the slats from the second to the last.
                 let loop_ = rounded_rect(
-                    [(0.12 + d - 0.04) / 2.0, (0.016 + seat - 0.045) / 2.0],
-                    (d - 0.16) / 2.0,
+                    [(0.12 + d - 0.01) / 2.0, (0.016 + seat - 0.045) / 2.0],
+                    (d - 0.13) / 2.0,
                     (seat - 0.061) / 2.0,
                     0.06,
                     0.0,
@@ -306,7 +310,8 @@ pub fn bench(b: &mut Builder, p: &Params) -> bool {
         // Fifties: teak slats on a frame of tube, splayed compass legs,
         // the back of two wide slats on curved uprights.
         2 => {
-            let z = seat - 0.05;
+            // The frame right under the slats.
+            let z = seat - 0.037;
             let frame = rounded_rect(
                 [0.0, (0.1 + d) / 2.0],
                 w / 2.0 - 0.06,
@@ -326,7 +331,8 @@ pub fn bench(b: &mut Builder, p: &Params) -> bool {
                 } else {
                     0.6
                 };
-                for (y, sy) in [(0.16, -0.8), (d - 0.08, 0.8)] {
+                // On the frame's long sides.
+                for (y, sy) in [(0.11, -0.8), (d - 0.01, 0.8)] {
                     compass_leg(b, [*x, y], z, [sx, sy], 0.06);
                 }
                 if back && end {
@@ -473,8 +479,8 @@ pub fn bench(b: &mut Builder, p: &Params) -> bool {
                     &[
                         [0.1, 0.0],
                         [d - 0.02, 0.0],
-                        [d - 0.02, seat - 0.06],
-                        [0.1, seat - 0.06],
+                        [d - 0.02, seat - 0.04],
+                        [0.1, seat - 0.04],
                     ],
                     x - 0.006,
                     x + 0.006,
@@ -770,10 +776,11 @@ pub fn streetlight(b: &mut Builder, p: &Params) -> bool {
                 PI,
                 0.01,
             );
+            // A curl out of the arm's end.
             curl(
                 b,
                 "metal",
-                [0.0, arm + 0.04, z + 0.04],
+                [0.0, arm, z + 0.04],
                 [0.0, 1.0, 0.0],
                 0.04,
                 1.2,
@@ -1017,12 +1024,13 @@ pub fn litter_bin(b: &mut Builder, p: &Params) -> bool {
         // Nordic: a ring of oak slats bound by two black hoops, the
         // liner showing at its mouth.
         0 => {
+            // The liner inside the slats, on the ground.
             b.cone(
                 "dark",
-                [0.0, 0.0, 0.02],
+                [0.0, 0.0, 0.0],
                 [0.0, 0.0, h - 0.03],
-                r * 0.86,
-                r * 0.86,
+                r * 0.9,
+                r * 0.9,
                 20,
             );
             let n = 16;

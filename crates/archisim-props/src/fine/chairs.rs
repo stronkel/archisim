@@ -518,11 +518,14 @@ pub fn chair(b: &mut Builder, p: &Params) {
                     Cap::Round(1.0),
                 );
             }
+            // The top rail bowed through the back posts' tops.
+            let xp = -x0 - 0.035;
+            let cy = (xp * xp + 0.000816) / 0.048;
             bent_board(
                 b,
                 "frame",
-                [0.0, 0.62],
-                0.6,
+                [0.0, cy],
+                cy - 0.005,
                 w + 0.02,
                 0.018,
                 h - 0.1,

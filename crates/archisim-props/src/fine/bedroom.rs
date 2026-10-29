@@ -442,6 +442,7 @@ pub(super) fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
                 90 + i as u32,
             );
         }
+        let start = b.mark();
         bed_pillow(
             b,
             "linen",
@@ -451,6 +452,8 @@ pub(super) fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
             0.42,
             80 + i as u32,
         );
+        // Resting on the mattress, a little sunk in it.
+        b.settle(start, m.top - 0.004);
     }
     if ix == 7 && w > 1.2 {
         bolster(b, "pillow", [0.0, m.y0 + 0.62, m.top + 0.1], w - 0.3, 0.085);
@@ -486,6 +489,7 @@ pub(super) fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
         for i in 0..k {
             let x = m.x0 + w * (i as f64 + 0.5) / k as f64;
             let yaw = [0.08, -0.05, 0.06, -0.09][i];
+            let start = b.mark();
             standing_cushion(
                 b,
                 "pillow",
@@ -495,6 +499,7 @@ pub(super) fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
                 yaw,
                 60 + i as u32,
             );
+            b.settle(start, m.top - 0.004);
         }
     }
 }
@@ -1866,11 +1871,12 @@ pub fn bed_bench(b: &mut Builder, p: &Params) {
             for (q, o) in corners(x0, x1, d, 0.08).iter().zip(OUT) {
                 compass_leg(b, *q, z0 + 0.005, o, 0.03);
             }
-            for y in [0.08, d - 0.08] {
+            // Two bearers across, on the legs, under the slats.
+            for x in [x0 + 0.08, x1 - 0.08] {
                 b.rbox(
                     "frame",
-                    [x0 + 0.04, y - 0.02, z0 - 0.04],
-                    [x1 - 0.04, y + 0.02, z0],
+                    [x - 0.02, 0.03, z0 - 0.04],
+                    [x + 0.02, d - 0.03, z0],
                     0.0,
                 );
             }
@@ -1955,7 +1961,8 @@ pub fn bed_bench(b: &mut Builder, p: &Params) {
                     .map(|k| {
                         let a = PI * k as f64 / 8.0;
                         [
-                            x + s * (0.006 + 0.035 * a.sin()),
+                            // Its ends set into the chest's side.
+                            x + s * (-0.004 + 0.04 * a.sin()),
                             d / 2.0 + 0.06 * a.cos(),
                             h - 0.12,
                         ]
@@ -2103,7 +2110,8 @@ pub fn dressing_table(b: &mut Builder, p: &Params) {
                 h - 0.035,
                 fy,
             );
-            pull(b, Pull::Knob, 0.0, za + apron / 2.0, fy + T);
+            // On the cane, which is set back from the frame.
+            pull(b, Pull::Knob, 0.0, za + apron / 2.0, fy + T - 0.01);
         }
         2 => {
             for (q, o) in corners(x0, x1, d, 0.07).iter().zip(OUT) {

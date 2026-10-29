@@ -158,3 +158,41 @@ fn kitchen_modules_and_front_styles() {
         assert!(make("tall_unit", &p).is_some());
     }
 }
+
+/// Nothing in the air: every piece of every model, with its default
+/// measurements, is joined through the pieces it touches to the floor (or
+/// to the wall or ceiling it hangs from). `cargo test -p archisim-props --
+/// nothing_floats --nocapture` lists what is loose.
+#[test]
+fn nothing_floats() {
+    let mut bad = Vec::new();
+    for (kind, styles) in KINDS {
+        for s in 1..=styles.len() {
+            let mut p = Params::default();
+            p.set("style", s as f64);
+            let m = make(kind, &p).unwrap();
+            let loose = check::loose_pieces(&m, check::anchors_for(kind), 0.004);
+            if loose.is_empty() {
+                continue;
+            }
+            let worst = loose.iter().map(|l| l.gap).fold(0.0, f64::max);
+            let roles: std::collections::BTreeSet<_> = loose.iter().map(|l| l.role).collect();
+            println!(
+                "{kind} {s} «{}»: {} loose, up to {worst:.3} m off, {roles:?}",
+                styles[s - 1],
+                loose.len()
+            );
+            for l in loose.iter().take(3) {
+                let (role, lo, hi) = l.near;
+                println!(
+                    "    {} {:.3} off: x {:.3}..{:.3} y {:.3}..{:.3} z {:.3}..{:.3}  near {role} x {:.3}..{:.3} y {:.3}..{:.3} z {:.3}..{:.3}",
+                    l.role, l.gap, l.lo[0], l.hi[0], l.lo[1], l.hi[1], l.lo[2], l.hi[2],
+                    lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]
+                );
+            }
+            bad.push(format!("{kind} {s}"));
+        }
+    }
+    println!("{} models with pieces in the air", bad.len());
+    assert!(bad.is_empty(), "{bad:?}");
+}

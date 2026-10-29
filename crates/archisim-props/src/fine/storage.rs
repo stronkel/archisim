@@ -359,8 +359,10 @@ pub(super) fn pull(b: &mut Builder, kind: Pull, x: f64, z: f64, y: f64) {
                 [x + len / 2.0, y + 0.028, z],
                 0.006,
             );
+            // Its posts set into the front (a mesh or cane is a little
+            // behind the frame's face).
             for px in [x - len / 2.0 + 0.012, x + len / 2.0 - 0.012] {
-                b.cyl("metal", [px, y, z], [px, y + 0.028, z], 0.0045);
+                b.cyl("metal", [px, y - 0.008, z], [px, y + 0.028, z], 0.0045);
             }
         }
         Pull::Tab => {
@@ -380,8 +382,8 @@ pub(super) fn pull(b: &mut Builder, kind: Pull, x: f64, z: f64, y: f64) {
         Pull::Slot => {
             b.rbox(
                 "dark",
-                [x - 0.05, y + T * 0.4, z - 0.012],
-                [x + 0.05, y + T + 0.001, z + 0.001],
+                [x - 0.05, y - T * 0.6, z - 0.012],
+                [x + 0.05, y + 0.001, z + 0.001],
                 0.006,
             );
         }
@@ -768,7 +770,8 @@ pub(super) fn cornice(
     z: f64,
     out: f64,
 ) {
-    for (k, (dz, o)) in [(0.0, out), (0.018, out * 0.6), (0.032, out * 0.25)]
+    // Three steps, each on the one below.
+    for (k, (dz, o)) in [(0.0, out), (0.016, out * 0.6), (0.03, out * 0.25)]
         .into_iter()
         .enumerate()
     {
@@ -1775,10 +1778,11 @@ pub fn bookcase(b: &mut Builder, p: &Params) {
                     d - 0.03,
                 );
             }
+            // The top board, the cornice's steps on it.
             b.rbox(
                 "frame",
                 [x0 + 0.02, 0.0, h - 0.08],
-                [x1 - 0.02, d - 0.03, h - 0.05],
+                [x1 - 0.02, d - 0.03, h - 0.044],
                 0.0,
             );
             cornice(b, "frame", x0 + 0.02, x1 - 0.02, d - 0.03, h, 0.025);

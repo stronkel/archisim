@@ -379,7 +379,9 @@ fn front(b: &mut Builder, look: &Look, x0: f64, x1: f64, z0: f64, z1: f64, y: f6
 
 /// The pull of a front at `(x, z)`, its face at `y`; `upright` on a door.
 fn pull(b: &mut Builder, look: &Look, x: f64, z: f64, y: f64, upright: bool) {
-    let face = y + T + if look.base == Base::Steel { 0.004 } else { 0.0 };
+    // On the panel's face (a steel front's edging stands proud of it,
+    // but the pull is fixed to the panel).
+    let face = y + T;
     match look.pull {
         Pull::Bar(l) if upright => {
             let start = b.mark();
@@ -838,7 +840,8 @@ fn tap_kind(b: &mut Builder, kind: Tap, at: P3, reach: f64) {
                     [
                         x + 0.022 * a.cos(),
                         y + 0.022 * a.sin(),
-                        h0 + (h1 - 0.08 - h0) * t,
+                        // From round the top of the column.
+                        h0 - 0.012 + (h1 - 0.08 - h0 + 0.012) * t,
                     ]
                 })
                 .collect();
@@ -1230,7 +1233,8 @@ pub fn tall_unit(b: &mut Builder, p: &Params) -> bool {
     let yc = d - 0.04;
     stand(b, look, x0, x1, yc);
     let zf = foot(look);
-    let top = if look.cornice { h - 0.06 } else { h };
+    // The cornice's lowest step sits on the carcass.
+    let top = if look.cornice { h - 0.044 } else { h };
     b.rbox("mat", [x0, 0.0, zf], [x1, yc, top], 0.002);
     if look.cornice {
         storage::cornice(b, "mat", x0, x1, yc + T, h, 0.025);
@@ -1307,7 +1311,7 @@ pub fn wall_cabinet(b: &mut Builder, p: &Params) -> bool {
     match look.upper {
         Upper::Cupboards | Upper::Vitrine => {
             let yc = d - T;
-            let top = if look.cornice { z0 + h - 0.05 } else { z0 + h };
+            let top = if look.cornice { z0 + h - 0.044 } else { z0 + h };
             let r = if look.rounded { 0.02 } else { 0.002 };
             b.rbox("mat", [x0, 0.0, z0], [x1, yc, top], r);
             if look.cornice {
@@ -1383,6 +1387,19 @@ pub fn wall_cabinet(b: &mut Builder, p: &Params) -> bool {
                         Cap::Round(1.0),
                         Cap::Round(1.0),
                     );
+                    // Held off the wall at its ends.
+                    for xe in [x0 + 0.17, x1 - 0.17] {
+                        turned_y(b, "metal", [xe, 0.0, z - 0.08], 0.014, 0.004);
+                        sweep(
+                            b,
+                            "metal",
+                            &[[xe, 0.0, z - 0.08], [xe, 0.04, z - 0.08]],
+                            |_| 0.004,
+                            8,
+                            Cap::Flat,
+                            Cap::Flat,
+                        );
+                    }
                     let n = ((w - 0.3) / 0.12).floor().max(1.0) as usize;
                     for i in 0..n {
                         let x = x0 + 0.2 + i as f64 * 0.12;

@@ -466,7 +466,8 @@ pub fn pool_shower(b: &mut Builder, p: &Params) {
         }
         _ => b.rbox("deck", [-0.45, -0.25, 0.0], [0.45, 0.65, 0.04], 0.015),
     }
-    let base = 0.04;
+    // Set into the tray (whatever its height), not standing on air.
+    let base = 0.01;
     // The column and its head, in the collection's way.
     let arm = 0.45;
     let head_at = [c[0], c[1] + arm, h - 0.05];
@@ -570,10 +571,10 @@ pub fn pool_shower(b: &mut Builder, p: &Params) {
                 "dark",
                 &curve(
                     &[
-                        [0.08, 0.13, 0.9],
-                        [0.08, 0.13, h - 0.1],
-                        [0.08, 0.3, h - 0.02],
-                        [0.08, head_at[1], h - 0.1],
+                        [0.07, 0.13, 0.9],
+                        [0.07, 0.13, h - 0.1],
+                        [0.07, 0.3, h - 0.02],
+                        [0.07, head_at[1], h - 0.1],
                     ],
                     5,
                 ),
@@ -585,12 +586,12 @@ pub fn pool_shower(b: &mut Builder, p: &Params) {
             turned(
                 b,
                 "dark",
-                [0.08, head_at[1], h - 0.24],
+                [0.07, head_at[1], h - 0.24],
                 &[(0.0, 0.0), (0.1, 0.0), (0.05, 0.12), (0.0, 0.14)],
                 16,
                 0.0,
             );
-            b.cyl("dark", [0.08, 0.13, 1.0], [0.08, 0.2, 1.0], 0.02);
+            b.cyl("dark", [0.07, 0.13, 1.0], [0.07, 0.2, 1.0], 0.02);
         }
         // Industrial: black pipe with its elbows and a valve wheel.
         6 => {
@@ -612,6 +613,16 @@ pub fn pool_shower(b: &mut Builder, p: &Params) {
                 16,
                 0.0,
             );
+            // The valve on the pipe: its stem and the wheel's spokes.
+            b.cyl("dark", [0.0, c[1], 1.1], [0.0, c[1] + 0.075, 1.1], 0.012);
+            for (dx, dz) in [(0.06, 0.0), (0.0, 0.06)] {
+                b.cyl(
+                    "accent",
+                    [-dx, c[1] + 0.07, 1.1 - dz],
+                    [dx, c[1] + 0.07, 1.1 + dz],
+                    0.006,
+                );
+            }
             tube(
                 b,
                 "accent",

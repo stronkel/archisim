@@ -723,8 +723,9 @@ pub fn washbasin(b: &mut Builder, p: &Params) -> bool {
                     0.012,
                 );
             }
-            // The concrete trough, square-sided.
-            let (tw, td) = (w - 0.06, d - 0.06);
+            // The concrete trough, square-sided, resting on the frame's
+            // top rails.
+            let (tw, td) = (w - 0.02, d - 0.02);
             let start = b.mark();
             turned(
                 b,
@@ -974,8 +975,9 @@ pub fn wc(b: &mut Builder, p: &Params) -> bool {
                     b,
                     "metal",
                     &[
-                        [-w * 0.4, back + 0.03, 0.74],
-                        [-w * 0.4 + 0.07, back + 0.05, 0.74],
+                        // Out of the cistern's front.
+                        [-w * 0.4, back + 0.012, 0.74],
+                        [-w * 0.4 + 0.07, back + 0.045, 0.74],
                     ],
                     |_| 0.006,
                     10,
@@ -1078,7 +1080,8 @@ pub fn bidet(b: &mut Builder, p: &Params) -> bool {
         _ => Tap::Slim,
     });
     let k = if tap == Tap::Spring { 0.35 } else { 0.45 };
-    tap_scaled(b, tap, [0.0, 0.06, rim], 0.18, k);
+    // On the deck, clear of the bowl's back edge.
+    tap_scaled(b, tap, [0.0, 0.1, rim], 0.18, k);
     true
 }
 
@@ -1303,7 +1306,7 @@ pub fn shower(b: &mut Builder, p: &Params) -> bool {
                     [x, y]
                 })
                 .collect();
-            curtain(b, &pts, 0.08, zr - 0.02);
+            curtain(b, &pts, 0.08, zr);
         }
     }
     // The head and the taps on the back wall.
@@ -1339,10 +1342,11 @@ pub fn shower(b: &mut Builder, p: &Params) -> bool {
                     0.0,
                 );
             } else {
+                // Hanging from the arm's end.
                 turned(
                     b,
                     "metal",
-                    [xc, 0.36, 2.04],
+                    [xc, 0.36, 2.055],
                     &[(0.0, 0.0), (0.12, 0.0), (0.12, 0.012), (0.0, 0.02)],
                     32,
                     0.0,
@@ -1446,7 +1450,16 @@ pub fn shower(b: &mut Builder, p: &Params) -> bool {
                 28,
                 0.0,
             );
-            // A hand shower on its hook.
+            // A hand shower on its holder.
+            sweep(
+                b,
+                "metal",
+                &[[xc + 0.06, 0.0, 1.58], [xc + 0.06, 0.05, 1.58]],
+                |_| 0.008,
+                8,
+                Cap::Flat,
+                Cap::Flat,
+            );
             sweep(
                 b,
                 "metal",
@@ -1572,8 +1585,10 @@ pub fn bath(b: &mut Builder, p: &Params) -> bool {
                     );
                 }
                 // The tap on the rim at the wall end: a bridge, or a pipe.
+                // (the pipe on the rim itself).
                 let tap = if ix == 6 { Tap::Spring } else { Tap::Bridge };
-                tap_scaled(b, tap, [x0 + 0.12, wd / 2.0, base + hh + 0.02], 0.2, 0.6);
+                let tx = if ix == 6 { x0 + 0.028 } else { x0 + 0.12 };
+                tap_scaled(b, tap, [tx, wd / 2.0, base + hh + 0.02], 0.2, 0.6);
             } else {
                 // A tall filler on the floor at its end.
                 floor_filler(b, x0 - 0.1, wd / 2.0, ix == 4);
@@ -1735,8 +1750,8 @@ fn floor_filler(b: &mut Builder, x: f64, y: f64, square: bool) {
         b,
         "metal",
         &[
-            [x - 0.03, y - 0.02, top - 0.55],
-            [x - 0.03, y - 0.02, top - 0.32],
+            [x - 0.025, y - 0.015, top - 0.55],
+            [x - 0.025, y - 0.015, top - 0.32],
         ],
         |_| 0.016,
         12,
@@ -1930,19 +1945,31 @@ pub fn mirror(b: &mut Builder, p: &Params) -> bool {
                     b,
                     "metal",
                     &[
-                        [x0 - 0.05, 0.05, z0 + hh + 0.3],
-                        [x1 + 0.05, 0.05, z0 + hh + 0.3],
+                        [x0 - 0.05, 0.03, z0 + hh + 0.3],
+                        [x1 + 0.05, 0.03, z0 + hh + 0.3],
                     ],
                     |_| 0.01,
                     10,
                     Cap::Round(1.0),
                     Cap::Round(1.0),
                 );
+                // The rod on two brackets from the wall.
+                for x in [x0 - 0.03, x1 + 0.03] {
+                    sweep(
+                        b,
+                        "metal",
+                        &[[x, 0.0, z0 + hh + 0.3], [x, 0.03, z0 + hh + 0.3]],
+                        |_| 0.007,
+                        8,
+                        Cap::Flat,
+                        Cap::Flat,
+                    );
+                }
                 for x in [x0 + 0.1, x1 - 0.1] {
                     b.rbox(
                         "dark",
-                        [x - 0.01, 0.03, z0 + hh],
-                        [x + 0.01, 0.04, z0 + hh + 0.3],
+                        [x - 0.01, 0.014, z0 + hh - 0.02],
+                        [x + 0.01, 0.024, z0 + hh + 0.3],
                         0.0,
                     );
                 }

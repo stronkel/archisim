@@ -204,7 +204,8 @@ pub fn potted_plant(b: &mut Builder, p: &Params) -> bool {
                 6,
             );
             for s in [-1.0, 1.0] {
-                let x = s * (r + 0.005);
+                // Its ends in the basket's wall.
+                let x = s * (r * 0.95 - 0.004);
                 let loop_: Vec<P3> = (0..=10)
                     .map(|k| {
                         let a = PI * k as f64 / 10.0;
@@ -1049,7 +1050,7 @@ pub fn decor(b: &mut Builder, p: &Params) -> bool {
                 &(0..=10)
                     .map(|k| {
                         let a = PI * k as f64 / 10.0;
-                        add(lc, [0.03 * a.cos(), 0.0, lh * 0.95 + 0.03 * a.sin()])
+                        add(lc, [0.018 * a.cos(), 0.0, lh * 0.95 + 0.03 * a.sin()])
                     })
                     .collect::<Vec<_>>(),
                 false,

@@ -13,6 +13,7 @@
 
 mod accessories;
 pub mod build;
+pub mod check;
 mod cozy;
 mod extras;
 pub mod fine;

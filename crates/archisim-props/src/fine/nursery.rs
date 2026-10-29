@@ -108,8 +108,11 @@ pub(super) fn fence(
                     );
                 }
             }
-            // Slats across, with gaps.
+            // Slats across, with gaps, between two stiles.
             3 => {
+                for (a, e) in [(0.0, 0.03), (len - 0.03, len)] {
+                    b.rbox("frame", [a, -h, fz0], [e, h, fz1], 0.0);
+                }
                 let n = (((fz1 - fz0) / 0.09).round() as usize).max(1);
                 for k in 1..n {
                     let z = fz0 + (fz1 - fz0) * k as f64 / n as f64;
@@ -345,21 +348,13 @@ pub fn crib(b: &mut Builder, p: &Params) {
     fence(
         b,
         ix,
-        [x0 + s / 2.0, py0],
-        [x1 - s / 2.0, py0],
+        [x0, py0],
+        [x1, py0],
         base - 0.04,
         height - 0.02,
         0.022,
     );
-    fence(
-        b,
-        ix,
-        [x0 + s / 2.0, py1],
-        [x1 - s / 2.0, py1],
-        base - 0.04,
-        low,
-        0.022,
-    );
+    fence(b, ix, [x0, py1], [x1, py1], base - 0.04, low, 0.022);
     fence(
         b,
         ix,
@@ -431,23 +426,17 @@ pub fn bunk_bed(b: &mut Builder, p: &Params) {
         for x in [px0, px1] {
             b.rbox(
                 role,
-                [x - 0.018, py0 + s / 2.0, z - 0.1],
-                [x + 0.018, py1 - s / 2.0, z],
+                // Into the posts, whatever their turning.
+                [x - 0.018, py0, z - 0.1],
+                [x + 0.018, py1, z],
                 0.0,
             );
         }
-        b.rbox(role, [x0, py0, z - 0.03], [x1, py1, z], 0.0);
+        // The base board on the side rails.
+        b.rbox(role, [px0, py0, z - 0.03], [px1, py1, z], 0.0);
         // Head and foot.
         for y in [py0, py1] {
-            fence(
-                b,
-                ix,
-                [px0 + s / 2.0, y],
-                [px1 - s / 2.0, y],
-                z - 0.1,
-                z + 0.32,
-                0.025,
-            );
+            fence(b, ix, [px0, y], [px1, y], z - 0.1, z + 0.32, 0.025);
         }
     }
     // The guard round the top: all along the left, the right but for
@@ -729,7 +718,7 @@ pub fn valet(b: &mut Builder, p: &Params) {
                     .map(|k| {
                         let t = PI * k as f64 / 6.0;
                         [
-                            s * 0.035,
+                            s * 0.026,
                             y + 0.03 - 0.03 * t.cos(),
                             h - 0.25 + 0.03 * t.sin(),
                         ]
@@ -763,6 +752,8 @@ pub fn valet(b: &mut Builder, p: &Params) {
         let (by, bz) = match ix {
             1 | 7 => (y - 0.19 + 0.02, bar_z + 0.1),
             0 | 2 | 4 | 5 => (y + BAR_AHEAD, bar_z),
+            // Japandi's rail is flat on top, at its height.
+            3 => (y, bar_z - 0.012),
             _ => (y, bar_z),
         };
         let mut t = Cover::new([-0.17, 0.17], [by - 0.012, by + 0.012], bz + 0.024, 0.012);

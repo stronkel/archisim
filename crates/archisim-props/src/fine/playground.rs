@@ -29,8 +29,8 @@ pub fn swing(b: &mut Builder, _p: &Params) {
         // A brace across each frame, its feet anchored.
         b.rbox(
             "frame",
-            [x - 0.04, 0.35, 0.75],
-            [x + 0.04, 1.25, 0.83],
+            [x - 0.04, 0.24, 0.75],
+            [x + 0.04, 1.36, 0.83],
             0.01,
         );
         for y in [0.0, 1.6] {
@@ -144,19 +144,29 @@ pub fn slide(b: &mut Builder, _p: &Params) {
     for x in [-hx, hx] {
         b.rbox(
             "accent",
-            [x - 0.012, 0.05, zp + 0.1],
-            [x + 0.012, d - 0.05, zp + 0.75],
+            [x - 0.012, 0.04, zp + 0.1],
+            [x + 0.012, d - 0.04, zp + 0.75],
             0.01,
         );
     }
     // The ladder at the back.
-    let (ly, lz) = (-1.0, 0.02);
+    // The ladder at the back: its rails up to the platform's edge, grab
+    // bars on up from there.
+    let (ly, lz) = (-0.8, 0.0);
     for x in [-0.25, 0.25] {
-        rod(b, "frame", [x, ly, lz], [x, 0.0, zp + 0.8], 0.03);
+        rod(b, "frame", [x, ly, lz], [x, 0.02, zp], 0.03);
+        rod(b, "frame", [x, 0.02, zp - 0.05], [x, 0.02, zp + 0.6], 0.025);
     }
+    rod(
+        b,
+        "frame",
+        [-0.25, 0.02, zp + 0.6],
+        [0.25, 0.02, zp + 0.6],
+        0.025,
+    );
     for k in 1..5 {
-        let t = k as f64 / 5.0 * (zp / (zp + 0.8));
-        let (y, z) = (ly + (0.0 - ly) * t, (zp + 0.8) * t);
+        let t = k as f64 / 5.0;
+        let (y, z) = (ly + (0.02 - ly) * t, lz + (zp - lz) * t);
         rod(b, "metal", [-0.25, y, z], [0.25, y, z], 0.016);
     }
     // The chute: down from the platform's front edge to its run-out.
@@ -198,7 +208,8 @@ pub fn slide(b: &mut Builder, _p: &Params) {
         }
     }
     // The feet under the run-out.
-    for y in [d + 2.4, d + 3.0] {
+    // Under the flat run-out, where the chute is at 0,3 m.
+    for y in [d + 2.75, d + 3.05] {
         for x in [-0.22, 0.22] {
             rod(b, "metal", [x, y, 0.0], [x, y, 0.29], 0.02);
         }
@@ -246,10 +257,10 @@ pub fn seesaw(b: &mut Builder, _p: &Params) {
             b,
             "metal",
             &[
-                [hx, yc - 0.12, zp + 0.04],
+                [hx, yc - 0.12, zp + 0.02],
                 [hx, yc - 0.12, zp + 0.3],
                 [hx, yc + 0.12, zp + 0.3],
-                [hx, yc + 0.12, zp + 0.04],
+                [hx, yc + 0.12, zp + 0.02],
             ],
             |_| 0.014,
             8,

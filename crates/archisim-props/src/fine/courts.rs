@@ -137,7 +137,8 @@ pub fn padel_court(b: &mut Builder, _p: &Params) {
             0.25,
         );
         for k in 0..=5 {
-            post(b, x + s * 0.05, w * k as f64 / 5.0, 4.0);
+            // Behind the glass, holding it.
+            post(b, x + s * 0.045, w * k as f64 / 5.0, 4.0);
         }
         cord(b, "frame", [xm, 0.0, 4.0], [xm, w, 4.0], 0.02);
     }
@@ -259,7 +260,7 @@ pub fn tennis_court(b: &mut Builder, _p: &Params) {
         super::hospitality::rod(
             b,
             "frame",
-            [cx + dx, cy + dy, 0.02],
+            [cx + dx, cy + dy, 0.005],
             [cx + dx * 0.6, cy + dy * 0.6, 1.8],
             0.025,
         );

@@ -341,10 +341,16 @@ pub fn bench_desk(b: &mut Builder, p: &Params) {
                 [x1 - 0.1, mid + 0.12, zt - 0.12],
                 0.0,
             );
+            // The tray hangs from the tops on flat straps.
+            for x in [x0 + 0.15, x1 - 0.16] {
+                for y in [mid - 0.12, mid + 0.11] {
+                    b.rbox("dark", [x, y, zt - 0.14], [x + 0.01, y + 0.01, zt], 0.0);
+                }
+            }
             felt(
                 b,
                 "screen",
-                [x0 + 0.06, mid - 0.02, h + 0.01],
+                [x0 + 0.06, mid - 0.02, h - 0.004],
                 [x1 - 0.06, mid + 0.02, h + screen_h],
             );
         }
@@ -375,10 +381,11 @@ pub fn bench_desk(b: &mut Builder, p: &Params) {
                     0.006,
                 );
             }
+            // The stretcher on the trestles' feet.
             b.rbox(
                 "frame",
-                [ends[0] + 0.08, mid - 0.04, 0.25],
-                [ends[ends.len() - 1] - 0.08, mid + 0.04, 0.32],
+                [ends[0] + 0.08, mid - 0.04, 0.05],
+                [ends[ends.len() - 1] - 0.08, mid + 0.04, 0.12],
                 0.006,
             );
             for x in [x0 + 0.08, x1 - 0.12] {
@@ -1188,7 +1195,8 @@ pub fn acoustic_screen(b: &mut Builder, p: &Params) {
     match ix {
         // Nordic: felt in a thin oak frame on oak feet.
         0 => {
-            feet(b, "frame", &[x0 + 0.1, x1 - 0.1], 0.4, 0.03);
+            // The feet under the frame's uprights.
+            feet(b, "frame", &[x0 + 0.015, x1 - 0.015], 0.4, 0.03);
             for x in [x0, x1 - 0.03] {
                 b.rbox("frame", [x, -0.02, 0.03], [x + 0.03, 0.02, h], 0.004);
             }

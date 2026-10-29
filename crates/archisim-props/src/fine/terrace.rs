@@ -97,6 +97,15 @@ fn chair_of(b: &mut Builder, ix: usize, h: f64) {
                     0.0,
                 );
             }
+            // The rails the slats lie on, from leg to leg.
+            for x in [x0 + 0.004, x1 - 0.036] {
+                b.rbox(
+                    "frame",
+                    [x, 0.02, h - 0.07],
+                    [x + 0.032, d - 0.02, h - 0.02],
+                    0.0,
+                );
+            }
             for k in 0..5 {
                 let y = 0.05 + (d - 0.08) * k as f64 / 5.0;
                 b.rbox(
@@ -167,9 +176,10 @@ fn chair_of(b: &mut Builder, ix: usize, h: f64) {
         // Fifties: a steel tube frame on splayed legs, a seat and back of
         // coloured cords.
         2 => {
-            for (q, o) in corners(x0, x1, d, 0.04).iter().zip(OUT) {
-                let foot = [q[0] + o[0] * 0.04, q[1] + o[1] * 0.04, 0.01];
-                b.cyl("metal", foot, [q[0], q[1], h - 0.02], 0.009);
+            // Splayed legs up to the corners of the seat's ring.
+            for (q, o) in corners(x0, x1, d, 0.0).iter().zip(OUT) {
+                let foot = [q[0] + o[0] * 0.04, q[1] + o[1] * 0.04, 0.001];
+                b.cyl("metal", foot, [q[0], q[1], h], 0.009);
             }
             let ring = [[x0, 0.0, h], [x1, 0.0, h], [x1, d, h], [x0, d, h]];
             tube(b, "metal", &ring, true, 0.01, 6);
@@ -288,6 +298,20 @@ fn chair_of(b: &mut Builder, ix: usize, h: f64) {
                     t,
                     [1.0, 0.0, 0.0],
                 );
+            }
+            // Side rails under the slats and stretchers low down, leg to
+            // leg; the cross stretcher between them.
+            for x in [x0 + t / 2.0, x1 - t / 2.0] {
+                for z in [h - 0.02 - t / 2.0, 0.12] {
+                    bar(
+                        b,
+                        "metal",
+                        [x, t / 2.0, z],
+                        [x, d - t / 2.0, z],
+                        t * 0.8,
+                        [0.0, 0.0, 1.0],
+                    );
+                }
             }
             for k in 0..5 {
                 let y = 0.02 + (d - 0.04) * k as f64 / 5.0;
@@ -465,7 +489,7 @@ pub fn garden_table(b: &mut Builder, p: &Params) {
                         [0.0, r, h - 0.03],
                         [c * r * 0.4, r + s * r * 0.4, h * 0.55],
                         [c * r * 0.55, r + s * r * 0.55, 0.08],
-                        [c * r * 0.72, r + s * r * 0.72, 0.013],
+                        [c * r * 0.72, r + s * r * 0.72, 0.01],
                     ],
                     6,
                 );
@@ -573,7 +597,7 @@ pub fn garden_table(b: &mut Builder, p: &Params) {
                     bar(
                         b,
                         "frame",
-                        [x, ya, 0.04],
+                        [x, ya, 0.026],
                         [x, yb, h - 0.09],
                         0.07,
                         [1.0, 0.0, 0.0],
@@ -621,6 +645,17 @@ pub fn garden_table(b: &mut Builder, p: &Params) {
                     [x0 + 0.03, y, 0.12],
                     [x1 - 0.03, y, 0.12],
                     t * 0.7,
+                    [0.0, 0.0, 1.0],
+                );
+            }
+            // Bearers across at the ends, under all the planks.
+            for x in [x0 + 0.03, x1 - 0.03] {
+                bar(
+                    b,
+                    "metal",
+                    [x, 0.05, h - 0.06],
+                    [x, d - 0.05, h - 0.06],
+                    t,
                     [0.0, 0.0, 1.0],
                 );
             }

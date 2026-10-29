@@ -62,7 +62,7 @@ pub fn stool(b: &mut Builder, p: &Params) {
                 let p1 = [c[0] + r * 0.92 * a1.cos(), c[1] - r * 0.92 * a1.sin()];
                 b.pillow(
                     "cushion",
-                    [p0[0].min(p1[0]), p0[1].min(p1[1]) - 0.025, h + 0.04],
+                    [p0[0].min(p1[0]), p0[1].min(p1[1]) - 0.025, h + 0.005],
                     [p0[0].max(p1[0]), p0[1].max(p1[1]) + 0.025, h + 0.2],
                     0.02,
                     0.01,
@@ -461,7 +461,7 @@ pub fn towels(b: &mut Builder, p: &Params) {
             for i in 0..n {
                 let x = x0 + (i as f64 + 0.5) * w / n as f64;
                 let role = if i % 2 == 0 { "mat" } else { "mat2" };
-                b.cyl(role, [x, 0.04, 0.085], [x, 0.28, 0.085], 0.05);
+                b.cyl(role, [x, 0.04, 0.079], [x, 0.28, 0.079], 0.05);
             }
         }
         _ => {
@@ -813,7 +813,8 @@ pub fn floor_cushion(b: &mut Builder, p: &Params) {
             ] {
                 b.cone(
                     "mat2",
-                    [dx * w, w / 2.0 + dy * w, t * 1.05],
+                    // Buttons sunk in the top.
+                    [dx * w, w / 2.0 + dy * w, t * 0.8],
                     [dx * w, w / 2.0 + dy * w, t * 1.2],
                     0.012,
                     0.012,

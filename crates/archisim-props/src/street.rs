@@ -145,7 +145,8 @@ pub fn bench(b: &mut Builder, p: &Params) {
                     0.01,
                 );
                 if back {
-                    b.cyl("frame", [x, 0.08, seat - 0.05], [x, 0.03, top], 0.022);
+                    // Leaning back as the slats do.
+                    b.cyl("frame", [x, 0.08, seat - 0.05], [x, -0.01, top], 0.022);
                 }
                 if x == legs[0] || x == *legs.last().expect("two legs") {
                     b.rbox(
@@ -235,7 +236,7 @@ pub fn streetlight(b: &mut Builder, p: &Params) {
             b.cone(
                 "frame",
                 [0.0, 0.0, 0.5],
-                [0.0, 0.0, h - 0.7],
+                [0.0, 0.0, h - 0.65],
                 pole * 1.15,
                 pole * 0.85,
                 12,
@@ -268,8 +269,10 @@ pub fn streetlight(b: &mut Builder, p: &Params) {
                 s,
                 4,
             );
+            // The posts at the lantern's corners (a four-sided cone has
+            // its corners on the axes).
             for k in 0..4 {
-                let a = PI / 4.0 + k as f64 * PI / 2.0;
+                let a = k as f64 * PI / 2.0;
                 let (x, y) = (a.cos() * s * 0.98, a.sin() * s * 0.98);
                 b.cyl(
                     "frame",
@@ -458,14 +461,19 @@ pub fn litter_bin(b: &mut Builder, p: &Params) {
                 1.0,
                 1.0,
             );
+            // Two arms from the post hold the drum.
+            for z in [0.32, h - 0.25] {
+                b.cyl("frame", [0.0, -r - 0.05, z], [0.0, -r * 0.8, z], 0.015);
+            }
             // Its holes: rings of dark dots round the drum.
             for row in 0..5 {
                 let z = 0.3 + (h - 0.5) * row as f64 / 5.0;
                 for k in 0..12 {
                     let a = TAU * (k as f64 + 0.5 * (row % 2) as f64) / 12.0;
-                    let rr = r * 0.84 + (r - r * 0.82) * (z - 0.18) / (h - 0.22);
+                    // From inside the drum's wall to just out of it.
+                    let rr = r * 0.79 + (r - r * 0.82) * (z - 0.18) / (h - 0.22);
                     let q = [a.cos() * rr, a.sin() * rr, z];
-                    b.cyl("dark", q, [q[0] * 1.03, q[1] * 1.03, z], 0.012);
+                    b.cyl("dark", q, [q[0] * 1.06, q[1] * 1.06, z], 0.012);
                 }
             }
         }
@@ -816,6 +824,13 @@ pub fn fountain(b: &mut Builder, p: &Params) {
                 [c[0], c[1] + r * 0.9, h * 0.78],
                 0.02,
             );
+            // The basin on a bracket out of the column.
+            b.cyl(
+                "mat",
+                [c[0], c[1], h * 0.45 + 0.02],
+                [c[0], c[1] + r * 0.95, h * 0.45 + 0.02],
+                0.02,
+            );
             b.lathe(
                 "mat",
                 [c[0], c[1] + r * 0.95, h * 0.45],
@@ -900,10 +915,16 @@ pub fn planter(b: &mut Builder, p: &Params) {
             b.rbox("mat", [x0, 0.0, 0.0], [-x0, d, h], 0.025);
         }
     }
+    // The soil up to the walls.
+    let k = match style {
+        2 => 0.02,
+        3 => 0.0,
+        _ => 0.04,
+    };
     b.rbox(
         "soil",
-        [x0 + 0.04, 0.04, h - 0.06],
-        [-x0 - 0.04, d - 0.04, h - 0.02],
+        [x0 + k, k, h - 0.06],
+        [-x0 - k, d - k, h - 0.02],
         0.0,
     );
     // What grows in it, by a fixed seed.
@@ -930,7 +951,11 @@ pub fn planter(b: &mut Builder, p: &Params) {
                     let tall = 0.35 + 0.15 * ((k + i) % 3) as f64;
                     b.blob(
                         "leaves",
-                        [x + a.cos() * 0.05, y + a.sin() * 0.05, h + tall * 0.5],
+                        [
+                            x + a.cos() * 0.05,
+                            y + a.sin() * 0.05,
+                            h - 0.03 + tall * 0.5,
+                        ],
                         [-a.sin() * 0.012, a.cos() * 0.012, 0.0],
                         [a.cos() * 0.006, a.sin() * 0.006, 0.0],
                         [a.cos() * 0.08, a.sin() * 0.08, tall * 0.5],
@@ -1133,6 +1158,20 @@ pub fn sign(b: &mut Builder, p: &Params) {
     );
     let y = 0.045;
     let c = h - s / 2.0 - 0.05;
+    // Two clamps from the post to the back of the plate.
+    let mid = if p.style() == 3 {
+        h - s * 0.375 - 0.05
+    } else {
+        c
+    };
+    for z in [mid - s * 0.2, mid + s * 0.2] {
+        b.rbox(
+            "mat",
+            [-0.025, 0.0, z - 0.015],
+            [0.025, y + 0.001, z + 0.015],
+            0.004,
+        );
+    }
     match p.style() {
         2 => {
             let tri = |r: f64, z: f64| -> Vec<[f64; 2]> {
@@ -1286,6 +1325,13 @@ pub fn bicycle(b: &mut Builder, p: &Params) {
             );
         }
     } else {
+        // The bar swept back on a short stem.
+        b.cyl(
+            "metal",
+            [0.0, head[1], bar],
+            [0.0, head[1] - 0.06, bar],
+            0.013,
+        );
         b.cyl(
             "metal",
             [-0.28, head[1] - 0.06, bar],
@@ -1319,7 +1365,7 @@ pub fn bicycle(b: &mut Builder, p: &Params) {
         1 => {
             b.rbox(
                 "frame",
-                [-0.16, head[1] + 0.02, bar - 0.25],
+                [-0.16, head[1] + 0.008, bar - 0.25],
                 [0.16, head[1] + 0.32, bar - 0.04],
                 0.03,
             );
@@ -1334,7 +1380,7 @@ pub fn bicycle(b: &mut Builder, p: &Params) {
             // The box over the front wheel, ahead of the handlebar.
             b.rbox(
                 "frame",
-                [-0.28, head[1] + 0.1, 2.0 * r + 0.02],
+                [-0.28, head[1] + 0.005, 2.0 * r - 0.01],
                 [0.28, front[1] + r * 0.9, 2.0 * r + 0.38],
                 0.02,
             );

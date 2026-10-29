@@ -478,6 +478,19 @@ impl Builder {
         self.positions.len()
     }
 
+    /// Moves what was made since `start` straight down (or up) so that
+    /// its lowest point is at `z`: a pillow set down on its mattress.
+    pub fn settle(&mut self, start: usize, z: f64) {
+        let low = self.positions[start..]
+            .iter()
+            .map(|p| p[2] as f64)
+            .fold(f64::MAX, f64::min);
+        if low.is_finite() {
+            let dz = z - low;
+            self.transform_from(start, |q| [q[0], q[1], q[2] + dz]);
+        }
+    }
+
     /// Moves every point made since `start` (a piece made upright, then
     /// leant or turned).
     pub fn transform_from(&mut self, start: usize, f: impl Fn(P3) -> P3) {

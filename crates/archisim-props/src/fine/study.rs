@@ -364,10 +364,11 @@ pub fn desk(b: &mut Builder, p: &Params) -> bool {
                     0.0,
                 );
             }
+            // The stretcher high up, where the braces meet.
             b.rbox(
                 "frame",
-                [x0 + 0.15, d * 0.5 - 0.03, 0.22],
-                [x1 - 0.15, d * 0.5 + 0.03, 0.29],
+                [x0 + 0.15, d * 0.5 - 0.03, h - t - 0.15],
+                [x1 - 0.15, d * 0.5 + 0.03, h - t - 0.08],
                 0.0,
             );
         }
@@ -402,7 +403,8 @@ pub fn desk(b: &mut Builder, p: &Params) -> bool {
             if let Some((xa, xb)) = ped {
                 let (xa, xb) = (xa.max(x0 + 0.08), xb.min(x1 - 0.08));
                 let top = h - t - 0.05;
-                b.rbox("metal", [xa, 0.06, 0.02], [xb, d - 0.06, top], 0.0);
+                // On the floor.
+                b.rbox("metal", [xa, 0.06, 0.0], [xb, d - 0.06, top], 0.0);
                 for i in 0..n.min(4) {
                     let a = 0.02 + (top - 0.02) * i as f64 / n.min(4) as f64;
                     let e = 0.02 + (top - 0.02) * (i + 1) as f64 / n.min(4) as f64;
@@ -635,12 +637,13 @@ pub fn office_chair(b: &mut Builder, p: &Params) -> bool {
                 0.014,
                 14,
             );
+            // Two stays from the seat up into the shell.
             for x in [c[0] - sw * 0.8, c[0] + sw * 0.8] {
                 bar(
                     b,
                     "frame",
                     [x, c[1] - sw * 0.6, seat - 0.035],
-                    [x, c[1] - sw * 0.75, seat + 0.1],
+                    [x, c[1] + 0.05 - sw * 0.68, seat + 0.15],
                     0.025,
                     [1.0, 0.0, 0.0],
                 );
@@ -712,7 +715,7 @@ pub fn office_chair(b: &mut Builder, p: &Params) -> bool {
                     b,
                     "dark",
                     [c[0] + ca * w * 0.38, c[1] + sa * w * 0.38, 0.012],
-                    [c[0] + ca * 0.08, c[1] + sa * 0.08, top],
+                    [c[0] + ca * 0.02, c[1] + sa * 0.02, top],
                     0.025,
                     [0.0, 0.0, 1.0],
                 );
@@ -726,7 +729,9 @@ pub fn office_chair(b: &mut Builder, p: &Params) -> bool {
                     10,
                 );
             }
-            let rr = w * 0.29;
+            // The foot ring where the legs pass 0,2 m.
+            let f = (0.2 - 0.012) / (top - 0.012);
+            let rr = w * 0.38 + (0.02 - w * 0.38) * f;
             let ring: Vec<P3> = (0..32)
                 .map(|k| {
                     let a = TAU * k as f64 / 32.0;

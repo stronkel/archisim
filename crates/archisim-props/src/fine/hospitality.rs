@@ -1173,7 +1173,8 @@ pub fn bar_table(b: &mut Builder, p: &Params) {
                 t * 0.45,
                 8,
             );
-            let neck = h - t - 0.05;
+            // The column up to the top's underside.
+            let neck = h - t;
             turned(
                 b,
                 "dark",
@@ -1430,14 +1431,18 @@ pub fn cafe_chair(b: &mut Builder, p: &Params) {
                 0.008,
                 0.006,
             );
-            let cy = d * 0.75;
+            // A shallow curve through the two back legs, bowed 2 cm back
+            // between them.
+            let cy = (x * x + 0.0016) / 0.04;
+            let r = cy - 0.03;
+            let span = ((x + 0.015) / r).asin();
             band(
                 b,
                 "frame",
                 [0.0, cy],
-                cy - 0.05,
-                -PI * 0.82,
-                -PI * 0.18,
+                r,
+                -PI / 2.0 - span,
+                -PI / 2.0 + span,
                 rail - 0.05,
                 rail + 0.02,
                 0.025,
@@ -1593,7 +1598,7 @@ pub fn cafe_chair(b: &mut Builder, p: &Params) {
                 let z = h - 0.22 + 0.08 * k as f64;
                 b.rbox(
                     "dark",
-                    [-hx * 0.5, 0.045 - 0.12 * 0.15 * (z - (h - 0.25)) / 0.25, z],
+                    [-hx * 0.5, 0.039 - 0.12 * 0.15 * (z - (h - 0.25)) / 0.25, z],
                     [hx * 0.5, 0.046, z + 0.012],
                     0.002,
                 );
@@ -1668,7 +1673,7 @@ pub fn cafe_chair(b: &mut Builder, p: &Params) {
                 b,
                 "weave",
                 [0.0, cy],
-                cy - 0.03,
+                cy - 0.022,
                 -PI * 0.78,
                 -PI * 0.22,
                 top + 0.12,
@@ -1961,6 +1966,8 @@ pub fn banquette(b: &mut Builder, p: &Params) {
                 0.0,
             );
             seat_pad(b, 0.04, seat - 0.08, 0.08, 0.004, 49);
+            // A board in the frame, the back cushion against it.
+            b.rbox("frame", [x0 + s, 0.0, seat - 0.1], [x1 - s, s, h - s], 0.0);
             let mut back = Soft::new([x0 + s, s, seat + 0.04], [x1 - s, s + 0.08, h - 0.06], 0.03);
             back.crown = 0.012;
             back.tufts = 0.22;

@@ -2650,8 +2650,75 @@ pub fn project() -> Result<Model, ModelError> {
     Ok(m)
 }
 
+/// How near two pieces must be to count as touching: closer than this a
+/// gap does not show.
+pub const TOUCH: f64 = 0.004;
+
+/// The pieces in the air of every model of the workshop: for each type,
+/// its loose pieces (role and box). See [`archisim_core::props::check`].
+pub fn loose_report(m: &Model) -> Vec<(String, Vec<archisim_core::props::check::Loose>)> {
+    let mut out = Vec::new();
+    for t in m.object_types() {
+        if !m.objects().any(|o| o.object_type == t.id) {
+            continue;
+        }
+        let (Some((kind, _)), Some((mesh, _))) = (m.prop_params(t.id), m.type_prop(t.id)) else {
+            continue;
+        };
+        let loose = archisim_core::props::check::loose_pieces(
+            &mesh,
+            archisim_core::props::check::anchors_for(&kind),
+            TOUCH,
+        );
+        if !loose.is_empty() {
+            out.push((format!("{} [{kind}]", t.name), loose));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    /// Nothing of the workshop in the air:
+    /// `cargo test --release -p archisim-library -- nothing_in_the_air --nocapture`
+    /// lists what is.
+    #[test]
+    fn nothing_in_the_air() {
+        let m = project().unwrap();
+        let report = loose_report(&m);
+        for (name, loose) in &report {
+            println!("{name}");
+            // Each group by its piece nearest to what holds.
+            let groups = loose.iter().map(|l| l.group).max().unwrap_or(0) + 1;
+            for g in 0..groups {
+                let mine: Vec<_> = loose.iter().filter(|l| l.group == g).collect();
+                let Some(l) = mine.iter().min_by(|a, b| a.gap.total_cmp(&b.gap)) else {
+                    continue;
+                };
+                println!(
+                    "    {} pieces, {} ({} tri, {:.3} m off): x {:.3}..{:.3}  y {:.3}..{:.3}  z {:.3}..{:.3}",
+                    mine.len(),
+                    l.role,
+                    l.triangles,
+                    l.gap,
+                    l.lo[0],
+                    l.hi[0],
+                    l.lo[1],
+                    l.hi[1],
+                    l.lo[2],
+                    l.hi[2]
+                );
+                let (role, lo, hi) = l.near;
+                println!(
+                    "        near {role}: x {:.3}..{:.3}  y {:.3}..{:.3}  z {:.3}..{:.3}",
+                    lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]
+                );
+            }
+        }
+        println!("{} types with pieces in the air", report.len());
+        assert!(report.is_empty(), "pieces in the air (see above)");
+    }
+
     use super::*;
 
     #[test]

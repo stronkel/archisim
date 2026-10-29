@@ -688,7 +688,8 @@ pub fn wall_light(b: &mut Builder, p: &Params) {
             plate(b, "metal", 0.04);
             b.cyl("metal", [0.0, 0.0, z], [0.0, 0.12, z], 0.008);
             for up in [1.0, -1.0] {
-                aimed(b, [0.0, 0.12, z + up * 0.02], [0.0, 0.0, up], |b| {
+                // The two cones meet round the arm's end.
+                aimed(b, [0.0, 0.12, z + up * 0.004], [0.0, 0.0, up], |b| {
                     solid(b, "metal", [0.0; 3], &[(0.02, 0.0), (0.08, 0.13)], 32);
                     solid(
                         b,
@@ -785,6 +786,13 @@ pub fn wall_light(b: &mut Builder, p: &Params) {
             b.cyl("metal", [0.0, 0.0, z], [0.0, 0.18, z], 0.012);
             b.cyl("metal", [0.0, 0.18, z], [0.0, 0.18, z - 0.06], 0.012);
             let c = [0.0, 0.18, z - 0.14];
+            // The socket the bulb screws into.
+            b.cyl(
+                "metal",
+                [0.0, 0.18, z - 0.055],
+                [0.0, 0.18, z - 0.095],
+                0.017,
+            );
             b.ellipsoid("bulb", c, [0.04, 0.04, 0.055]);
             for k in 0..6 {
                 let a = TAU * k as f64 / 6.0;
