@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 7
+  version 8
   description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
@@ -33,6 +33,15 @@ type_params
     panel_material material = "Madera de pino" label "Hoja"
     glass_material material = "Vidrio doble" visible_if transom or side_left or side_right label "Vidrio de la tarja y los fijos"
     subframe_material material = "Madera de pino" visible_if subframe label "Premarco"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas") = "Como la colección" label "Hoja"
+    casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
+    handle_style choice("Como la colección", "Palanca con roseta", "Palanca con placa", "Palanca recta", "Pomo", "Tirador de barra", "Sin manilla") = "Como la colección" label "Manilla"
+    hinges choice("Como la colección", "Ocultas", "De pala", "De pernio") = "Como la colección" label "Bisagras"
+    peephole bool = no label "Mirilla"
   section "Datos"
     fire_rating choice("—", "EI2 30-C5", "EI2 60-C5", "EI2 90-C5") = "—" label "Resistencia al fuego" ifc "Pset_DoorCommon.FireRating"
   section "Representación"
@@ -76,13 +85,16 @@ body
     use block(c1, c1 + frame_width, frame_depth, 0, h - frame_width, frame_material)
   if transom
     use transom(c0, c1, door_height, h - frame_width, frame_width, frame_depth, frame_material, glass_material)
-  # La hoja activa va del lado de la mano.
+  # La hoja activa va del lado de la mano. En el 3D con detalle
+  # («detailed»), las hojas, los tapajuntas y los herrajes los hace el
+  # generador de la familia (salidas «leaf_*»).
   let split = if hand == "left" then c0 + active else c1 - active
-  if leaves == 2
-    use door_leaf(c0, split, door_height, frame_width, frame_depth, panel_material)
-    use door_leaf(split, c1, door_height, frame_width, frame_depth, panel_material)
-  else
-    use door_leaf(c0, c1, door_height, frame_width, frame_depth, panel_material)
+  if not detailed
+    if leaves == 2
+      use door_leaf(c0, split, door_height, frame_width, frame_depth, panel_material)
+      use door_leaf(split, c1, door_height, frame_width, frame_depth, panel_material)
+    else
+      use door_leaf(c0, c1, door_height, frame_width, frame_depth, panel_material)
 
 # Cerco cortado y hoja abierta a 90° con su giro; con una hoja, las
 # bisagras van donde dice la mano (UNE-EN 12519); con dos desiguales, la
@@ -167,3 +179,12 @@ outputs
   panel_material = panel_material
   clear_width = c1 - c0
   operation = if leaves == 2 then "double_swing" else "single_swing"
+  generator = "props:door"
+  leaf_x0 = c0
+  leaf_x1 = c1
+  leaf_split = if hand == "left" then c0 + active else c1 - active
+  leaf_top = door_height - frame_width
+  leaf_t = min(0.04, frame_depth)
+  lining_w = w
+  lining_h = h
+  hinge_left = if hand == "left" then 1 else 0

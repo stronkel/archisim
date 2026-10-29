@@ -898,6 +898,10 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ("hob", fine::kitchen::HOBS),
     ("canopy", fine::kitchen::CANOPIES),
     ("shelving", fine::kitchen::SHELVINGS),
+    ("leaf_design", fine::door::DESIGNS),
+    ("casing", fine::door::CASINGS),
+    ("handle_style", fine::door::HANDLES),
+    ("hinges", fine::door::HINGES),
 ];
 
 /// The number of a value chosen by name (see [`CHOICES`]).

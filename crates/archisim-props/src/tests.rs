@@ -340,3 +340,66 @@ fn a_kitchen_to_ones_taste_stands() {
     }
     assert!(bad.is_empty(), "{} loose", bad.len());
 }
+
+/// Every door of every collection, and every leaf, casing, handle and
+/// hinge over them, stands whole: nothing in the air.
+#[test]
+fn doors_stand_whole() {
+    use fine::door::*;
+    let mut bad = Vec::new();
+    let mut most = 0;
+    for style in 1..=8 {
+        for (key, n) in [
+            ("leaf_design", DESIGNS.len()),
+            ("casing", CASINGS.len()),
+            ("handle_style", HANDLES.len()),
+            ("hinges", HINGES.len()),
+        ] {
+            for i in 1..=n {
+                for leaves in [1.0, 2.0] {
+                    let mut p = Params::default();
+                    p.set("style", style as f64);
+                    p.set(key, i as f64);
+                    p.set("leaves", leaves);
+                    p.set("leaf_x0", -0.4);
+                    p.set("leaf_x1", 0.4);
+                    p.set("leaf_split", 0.0);
+                    p.set("lining_w", 0.9);
+                    p.set("lining_h", 2.08);
+                    p.set("leaf_top", 2.03);
+                    p.set("face_pos", 0.06);
+                    p.set("face_neg", -0.06);
+                    p.set("peephole", 1.0);
+                    let m = make("door", &p).unwrap();
+                    most = most.max(m.triangle_count());
+                    let loose = check::loose_pieces(&m, check::anchors_for("door"), 0.004);
+                    if let Some(l) = loose.first() {
+                        bad.push(format!(
+                            "colección {style} {key}={i} hojas {leaves}: {} a {:.3} ({:?}..{:?})",
+                            l.role, l.gap, l.lo, l.hi
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    for b in &bad {
+        println!("{b}");
+    }
+    println!("most triangles: {most}");
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}
+
+#[test]
+#[ignore]
+fn door_weights() {
+    for style in 1..=8 {
+        for d in 1..=fine::door::DESIGNS.len() {
+            let mut p = Params::default();
+            p.set("style", style as f64);
+            p.set("leaf_design", d as f64);
+            let m = make("door", &p).unwrap();
+            println!("style {style} design {d}: {}", m.triangle_count());
+        }
+    }
+}

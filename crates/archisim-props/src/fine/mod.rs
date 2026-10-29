@@ -14,6 +14,7 @@ pub mod bedding;
 pub mod bedroom;
 pub mod chairs;
 pub mod courts;
+pub mod door;
 pub mod garden_plants;
 pub mod hearth;
 pub mod hospitality;
@@ -45,6 +46,7 @@ use soft::{knife_pillow, Soft};
 
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
+    ("door", &door::COLLECTIONS),
     ("fine_padel_court", &["Único"]),
     ("fine_futsal_court", &["Único"]),
     ("fine_football_field", &["Único"]),
@@ -565,6 +567,7 @@ fn chairs_around(b: &mut Builder, p: &Params) {
 /// Makes a workshop model, if `kind` is one.
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
+        "door" => door::door(b, p),
         "fine_sofa" => {
             match p.style() {
                 2 => sofas::mediterranean(b, p),

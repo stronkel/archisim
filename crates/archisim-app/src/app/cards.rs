@@ -677,8 +677,9 @@ impl super::ArchiSimApp {
         })
     }
 
-    /// The picture of a door or window type with `key` set to `option`,
-    /// in elevation.
+    /// The picture of a door or window type with `key` set to `option`:
+    /// in 3D when ArchiSim models its leaves (the door's design, its
+    /// casings and handle only show there), in elevation otherwise.
     pub(super) fn opening_option_thumb(
         &mut self,
         ctx: &egui::Context,
@@ -691,8 +692,19 @@ impl super::ArchiSimApp {
             key.to_string(),
             archisim_core::Value::Text(option.to_string()),
         );
-        let k = format!("opt-elev:{}:{:?}", ty.family.0, ty.values);
         let model = self.ed.model();
+        if model.family_prop(ty.family).is_some() {
+            let sig = self.picture_signature(false);
+            let k = format!("opt3d:{}:{:?}:{sig}", ty.family.0, ty.values);
+            let model = self.ed.model();
+            let front = super::thumbs3d::FRONT;
+            return self
+                .thumbs3d
+                .get_seen(ctx, self.gpu.as_ref(), k, front, || {
+                    crate::type_preview::opening_model_3d(model, &ty)
+                });
+        }
+        let k = format!("opt-elev:{}:{:?}", ty.family.0, ty.values);
         self.thumbs.get_drawing(ctx, k, PICTURE, || {
             crate::type_drawing::opening_elevation(model, &ty)
         })

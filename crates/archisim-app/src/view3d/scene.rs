@@ -12,7 +12,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use archisim_core::Model;
-use archisim_geom::solid::{model_solids_except, SolidOwner};
+use archisim_geom::solid::SolidOwner;
 use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 
@@ -220,6 +220,9 @@ pub struct Group {
     /// The model's box in its own axes.
     pub lo: Vec3,
     pub hi: Vec3,
+    /// Casts its shadow with its finest version, not a coarser one: a door
+    /// sits so close to its wall that a coarser version would shade it.
+    pub exact_shadow: bool,
 }
 
 impl Group {
@@ -606,6 +609,106 @@ impl Scene {
                 group.bounds.push((lo, hi));
             }
         }
+        // The doors and windows whose family makes a detailed model
+        // (paquete 9): the model by type and hand, drawn in each, nearer
+        // or farther with fewer triangles; the rest of their body (frame,
+        // transom, sidelights) as before. Their cut is their wall's, set
+        // once the walls are known.
+        let mut detailed = std::collections::HashSet::new();
+        let mut opening_walls: HashMap<archisim_core::OpeningId, archisim_core::WallId> =
+            HashMap::new();
+        if !isolate {
+            for o in model.openings() {
+                if model.hidden_by_discipline(&disciplines.hidden, o.id.0) {
+                    continue;
+                }
+                let Some(inst) = archisim_geom::solid::opening_detail(model, o.id) else {
+                    continue;
+                };
+                detailed.insert(o.id);
+                opening_walls.insert(o.id, inst.wall);
+                let key = (
+                    std::sync::Arc::as_ptr(&inst.mesh) as usize,
+                    inst.parts.iter().map(|p| p.0).collect::<Vec<_>>(),
+                );
+                let g = *keys.entry(key).or_insert_with(|| {
+                    let mut shared = Shared::default();
+                    let solids: Vec<archisim_geom::solid::Solid> = inst
+                        .parts
+                        .iter()
+                        .map(|(material, tris)| archisim_geom::solid::Solid {
+                            owner: SolidOwner::Opening(o.id),
+                            material: *material,
+                            triangles: tris
+                                .iter()
+                                .map(|t| {
+                                    t.map(|i| inst.mesh.positions[i as usize].map(|c| c as f64))
+                                })
+                                .collect(),
+                        })
+                        .collect();
+                    let look = Look {
+                        selection,
+                        isolate: false,
+                        disciplines,
+                        anchors: &HashMap::new(),
+                        shared: true,
+                    };
+                    add_solids(model, solids, &look, &mut shared);
+                    groups.push((shared, Group::default()));
+                    groups.len() - 1
+                });
+                let (shared, group) = &mut groups[g];
+                group.exact_shadow = true;
+                let (sn, cs) = (inst.rotation as f32).sin_cos();
+                let mut instance = Instance {
+                    place: [cs, sn, inst.origin[0] as f32, inst.origin[1] as f32],
+                    lift: [inst.origin[2] as f32, 1.0, 1.0, 1.0],
+                    cut: [
+                        cutaway::WALL,
+                        inst.origin[0] as f32,
+                        inst.origin[1] as f32,
+                        inst.origin[2] as f32,
+                    ],
+                    flags: [
+                        if selection.contains(&Element::Opening(o.id)) {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                        if model.dimmed(disciplines.focus, o.id.0) {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                        0.0,
+                        0.0,
+                    ],
+                };
+                let mut lo = Vec3::splat(f32::INFINITY);
+                let mut hi = Vec3::splat(f32::NEG_INFINITY);
+                for v in shared
+                    .opaque
+                    .mesh
+                    .vertices
+                    .iter()
+                    .chain(&shared.glass.mesh.vertices)
+                {
+                    let p = instance.place(Vec3::from_array(v.pos));
+                    lo = lo.min(p);
+                    hi = hi.max(p);
+                }
+                if lo.x > hi.x {
+                    continue;
+                }
+                instance.cut[3] = lo.z;
+                s.lo = s.lo.min(lo);
+                s.hi = s.hi.max(hi);
+                group.instances.push(instance);
+                group.owners.push(Element::Opening(o.id));
+                group.bounds.push((lo, hi));
+            }
+        }
         for (shared, mut group) in groups {
             group.opaque = shared.opaque.mesh;
             group.glass = shared.glass.mesh;
@@ -623,8 +726,18 @@ impl Scene {
             }
         }
         let mut loose = Loose::default();
-        let solids = model_solids_except(model, &skip);
+        let solids = archisim_geom::solid::model_solids_except_detailed(model, &skip, &detailed);
         let anchors = anchors(&solids);
+        // The detailed doors and windows are cut as their walls.
+        for g in &mut s.groups {
+            for (inst, owner) in g.instances.iter_mut().zip(&g.owners) {
+                if let Element::Opening(id) = owner {
+                    if let Some(a) = opening_walls.get(id).and_then(|w| anchors.get(w)) {
+                        inst.cut = a.cut();
+                    }
+                }
+            }
+        }
         let look = Look {
             selection,
             isolate,

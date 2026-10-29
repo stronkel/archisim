@@ -1993,3 +1993,59 @@ fn named_pictures() {
         }
     }
 }
+
+/// The workshop's doors (paquete 9), one by one
+/// (`ARCHISIM_PUERTAS_OUT=carpeta`): from the side they open to, from
+/// the other, close to the handle, and from far away (the lighter
+/// version the 3D draws there).
+#[test]
+fn door_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_PUERTAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: door pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let mut m = archisim_library::new_project("Puertas");
+    archisim_library::workshop::place_doors(&mut m, 0.0, 0.0).unwrap();
+    let size = [1000u32, 1000u32];
+    let doors: Vec<_> = m.openings().map(|o| o.id).collect();
+    for (n, id) in doors.iter().enumerate() {
+        let o = m.opening(*id).unwrap().clone();
+        let name = m.opening_type(o.opening_type).unwrap().name.clone();
+        let og = archisim_geom::opening_geometry(&m, *id).unwrap();
+        let c = og.point((og.t0 + og.t1) / 2.0, 0.0);
+        let w = (og.t1 - og.t0) as f32;
+        let (cx, cy) = (c.x as f32, c.y as f32);
+        for (view, yaw, pitch, zoom, z) in [
+            ("abre", -90.0, 4.0, 1.0, 1.1),
+            ("cierra", 90.0, 4.0, 1.4, 1.1),
+            ("manilla", -70.0, 6.0, 3.5, 1.05),
+            ("lejos", -75.0, 10.0, 0.15, 1.1),
+        ] {
+            let pic = picture(
+                &mut r,
+                &gpu,
+                &m,
+                |_, _| {
+                    let lo = glam::Vec3::new(cx - w / 2.0 - 0.3, cy - 0.3, 0.0);
+                    let hi = glam::Vec3::new(cx + w / 2.0 + 0.3, cy + 0.3, 2.4);
+                    let mut cam = camera(lo, hi, 1.0, yaw, pitch, zoom);
+                    cam.target.z = z;
+                    cam
+                },
+                size,
+            );
+            let slug = name
+                .to_lowercase()
+                .replace(" (taller)", "")
+                .replace(' ', "-");
+            pic.save_png(dir.join(format!("{:02}-{slug}-{view}.png", n + 1)))
+                .unwrap();
+        }
+    }
+}

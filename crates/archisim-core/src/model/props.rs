@@ -274,3 +274,83 @@ impl Model {
         self.type_prop(o.object_type)
     }
 }
+
+impl Model {
+    /// A door or window whose family makes its detailed 3D
+    /// (`generator = "props:door"`, paquete 9): the generator and the
+    /// measurements it is made with — the outputs of the family evaluated
+    /// for the detailed 3D (where its leaves go), its type's and the
+    /// opening's own values (choices by number, the model by number), and
+    /// what the caller adds (`extra`: where the wall's faces are, the
+    /// mirror…). `None` for a family without one.
+    pub fn opening_prop_params(
+        &self,
+        id: OpeningId,
+        extra: &[(&str, f64)],
+    ) -> Option<(String, props::Params)> {
+        let o = self.openings.get(&id)?;
+        let t = self.opening_types.get(&o.opening_type)?;
+        let kind = self.family_prop(t.family)?;
+        let ev = self.evaluate_opening_detailed(id).ok()?;
+        let mut values = self.family_defaults(t.family, ParamScope::Type).ok()?;
+        values.extend(t.values.clone());
+        values.extend(o.values.clone());
+        let mut params = props::Params::default();
+        for (k, v) in values.iter().chain(ev.outputs.iter()) {
+            match v {
+                Value::Number(n) => params.set(k, *n),
+                Value::Bool(b) => params.set(k, if *b { 1.0 } else { 0.0 }),
+                Value::Text(s) => {
+                    if let Some(n) = props::choice_number(k, s) {
+                        params.set(k, n);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(Value::Text(name)) = values.get("model3d") {
+            if let Some(i) = props::styles(&kind).iter().position(|s| s == name) {
+                params.set("style", (i + 1) as f64);
+            }
+        }
+        for (k, v) in extra {
+            params.set(k, *v);
+        }
+        Some((kind, params))
+    }
+
+    /// The detailed model of a door or window (see
+    /// [`Model::opening_prop_params`]) and its triangles by material: each
+    /// role is the family's material parameter of its name (the frame's
+    /// for one the family does not have).
+    #[allow(clippy::type_complexity)]
+    pub fn opening_prop(
+        &self,
+        id: OpeningId,
+        extra: &[(&str, f64)],
+    ) -> Option<(Arc<props::PropMesh>, Vec<(MaterialId, Vec<[u32; 3]>)>)> {
+        let (kind, params) = self.opening_prop_params(id, extra)?;
+        let o = self.openings.get(&id)?;
+        let t = self.opening_types.get(&o.opening_type)?;
+        let mut values = self.family_defaults(t.family, ParamScope::Type).ok()?;
+        values.extend(t.values.clone());
+        let mesh = props::mesh_of(&kind, &params)?;
+        let material_of = |name: &str| match values.get(name) {
+            Some(Value::Material(m)) if self.materials.contains_key(&MaterialId(*m)) => {
+                Some(MaterialId(*m))
+            }
+            _ => None,
+        };
+        let main =
+            material_of("frame_material").or_else(|| self.materials.keys().next().copied())?;
+        let mut parts: Vec<(MaterialId, Vec<[u32; 3]>)> = Vec::new();
+        for (role, tris) in &mesh.parts {
+            let m = material_of(role).unwrap_or(main);
+            match parts.iter_mut().find(|(x, _)| *x == m) {
+                Some((_, v)) => v.extend(tris.iter().copied()),
+                None => parts.push((m, tris.clone())),
+            }
+        }
+        Some((mesh, parts))
+    }
+}

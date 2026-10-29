@@ -2507,6 +2507,8 @@ pub fn project() -> Result<Model, ModelError> {
         })?;
         x = end + 1.8;
     }
+    // The doors (paquete 9), south of everything.
+    place_doors(&mut m, 0.0, -9.0)?;
     Ok(m)
 }
 
@@ -2535,6 +2537,125 @@ pub fn loose_report(m: &Model) -> Vec<(String, Vec<archisim_core::props::check::
         }
     }
     out
+}
+
+/// The doors of the workshop (paquete 9): one of each collection in a
+/// partition, the hands alternating, and the entrance doors in a façade.
+pub const DOOR_COLLECTIONS: [&str; 8] = archisim_core::props::fine::door::COLLECTIONS;
+
+/// Places the workshop's doors from `x` along a partition at `y`, and
+/// three entrance doors in a façade 4 m south; the end of the partition.
+pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
+    use archisim_core::{Hand, NewFamilyType, NewOpening, WallSide};
+    let level = m.levels()[0].id;
+    let family = m.system_family("Puerta abatible")?;
+    let wall_type = |m: &Model, name: &str| {
+        m.wall_types()
+            .find(|t| t.name.contains(name))
+            .or_else(|| m.wall_types().next())
+            .map(|t| t.id)
+            .ok_or_else(|| ModelError::NotAnObject(name.into()))
+    };
+    let partition = wall_type(m, "Tabique")?;
+    let facade = wall_type(m, "Fachada")?;
+    let step = 1.6;
+    let end = x + step * DOOR_COLLECTIONS.len() as f64 + 0.4;
+    let wall = |m: &mut Model, t, y: f64, end: f64| {
+        m.add_wall(NewWall {
+            wall_type: t,
+            level,
+            start: Point2::new(x, y),
+            end: Point2::new(end, y),
+            reference: ReferenceLine::Center,
+            height: 2.7,
+            base_offset: 0.0,
+            bulge: 0.0,
+            top: WallTop::Unconnected,
+        })
+    };
+    let inner = wall(m, partition, y, end)?;
+    let door_type = |m: &mut Model, name: String, set: &[(&str, Value)]| {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        for (k, v) in set {
+            values.insert((*k).to_string(), v.clone());
+        }
+        m.add_family_type(NewFamilyType {
+            family,
+            name,
+            mark: None,
+            description: String::new(),
+            values,
+        })
+    };
+    // Each collection's woods and metal: leaf, frame and hardware.
+    let looks: [(&str, &str, &str); 8] = [
+        ("Lacado blanco", "Lacado blanco", "Metal negro"),
+        ("Madera encalada", "Madera encalada", "Hierro forjado"),
+        ("Teca", "Teca", "Latón"),
+        ("Roble claro", "Roble claro", "Metal negro"),
+        ("Lacado blanco", "Lacado blanco", "Acero inoxidable"),
+        ("Pino viejo", "Pino viejo", "Hierro forjado"),
+        ("Roble ahumado", "Metal negro", "Metal negro"),
+        ("Lacado marfil", "Lacado marfil", "Latón"),
+    ];
+    let mats = |m: &mut Model, i: usize| -> Vec<(&'static str, Value)> {
+        let (leaf, frame, metal) = looks[i % 8];
+        [
+            ("panel_material", leaf),
+            ("frame_material", frame),
+            ("hardware_material", metal),
+        ]
+        .into_iter()
+        .filter_map(|(k, n)| crate::palette_material(m, n).map(|id| (k, Value::Material(id.0))))
+        .collect()
+    };
+    for (i, c) in DOOR_COLLECTIONS.iter().enumerate() {
+        let mut set = vec![
+            ("model3d", Value::Text((*c).to_string())),
+            ("width", Value::Number(0.825)),
+        ];
+        set.extend(mats(m, i));
+        let t = door_type(m, format!("Puerta {c} (taller)"), &set)?;
+        m.add_opening(NewOpening {
+            opening_type: t,
+            wall: inner,
+            along: 1.0 + step * i as f64,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: if i % 2 == 0 { Hand::Left } else { Hand::Right },
+            setback: None,
+        })?;
+    }
+    // The entrance doors, in a façade.
+    let outer = wall(m, facade, y - 4.0, x + 6.0)?;
+    let entrances: [(&str, &str, f64, f64, bool); 3] = [
+        ("Clásica", "Seis cuarterones", 1.45, 2.0, true),
+        ("Mediterráneo", "Media vidriera", 1.0, 1.0, true),
+        ("Rústica", "Tablas", 1.0, 1.0, false),
+    ];
+    for (i, (c, design, width, leaves, peephole)) in entrances.iter().enumerate() {
+        let mut set = vec![
+            ("model3d", Value::Text((*c).to_string())),
+            ("leaf_design", Value::Text((*design).to_string())),
+            ("width", Value::Number(*width)),
+            ("height", Value::Number(2.2)),
+            ("leaves", Value::Number(*leaves)),
+            ("peephole", Value::Bool(*peephole)),
+        ];
+        let k = DOOR_COLLECTIONS.iter().position(|x| x == c).unwrap_or(0);
+        set.extend(mats(m, k));
+        let t = door_type(m, format!("Puerta de entrada {c} (taller)"), &set)?;
+        m.add_opening(NewOpening {
+            opening_type: t,
+            wall: outer,
+            along: 1.2 + 2.0 * i as f64,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Right,
+            setback: None,
+        })?;
+    }
+    Ok(end)
 }
 
 #[cfg(test)]

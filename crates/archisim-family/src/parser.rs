@@ -8,9 +8,12 @@ use crate::lexer::{lines, Line, Tok};
 use crate::Value;
 
 /// Names the program provides to every wall-hosted family: the side the
-/// leaves open to (`"interior"` or `"exterior"`) and the handing
-/// (`"left"` or `"right"`, UNE-EN 12519). A recipe cannot declare them.
-pub const BUILTINS: [&str; 2] = ["opens_to", "hand"];
+/// leaves open to (`"interior"` or `"exterior"`), the handing (`"left"`
+/// or `"right"`, UNE-EN 12519), and whether the body is for the detailed
+/// 3D (`detailed`: the family's generator makes the leaves, their
+/// mouldings and hardware, so the body leaves them out). A recipe cannot
+/// declare them.
+pub const BUILTINS: [&str; 3] = ["opens_to", "hand", "detailed"];
 
 /// Names the program also provides to plan symbols of wall-hosted
 /// families, in the family's axes: where the wall's exterior and interior

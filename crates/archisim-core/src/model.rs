@@ -1214,6 +1214,7 @@ pub fn opening_builtins(opens_to: WallSide, hand: Hand) -> Values {
     };
     v.insert("opens_to".into(), Value::Text(side.into()));
     v.insert("hand".into(), Value::Text(hand.into()));
+    v.insert("detailed".into(), Value::Bool(false));
     v
 }
 
@@ -3266,6 +3267,30 @@ impl Model {
             .map_err(ModelError::Family)
     }
 
+    /// The family of a placed door or window evaluated for the detailed
+    /// 3D: its body without what the family's generator makes (the
+    /// leaves, with `detailed` on), and its outputs, which tell the
+    /// generator where the leaves go.
+    pub fn evaluate_opening_detailed(&self, id: OpeningId) -> Result<Evaluation, ModelError> {
+        let o = self
+            .openings
+            .get(&id)
+            .ok_or(ModelError::UnknownOpening(id))?;
+        let t = self
+            .opening_types
+            .get(&o.opening_type)
+            .ok_or(ModelError::UnknownOpeningType(o.opening_type))?;
+        let fam = self
+            .families
+            .get(&t.family)
+            .ok_or(ModelError::UnknownFamily(t.family))?;
+        let mut builtins = opening_builtins(o.opens_to, o.hand);
+        builtins.insert("detailed".into(), Value::Bool(true));
+        fam.def()
+            .evaluate(&t.values, &o.values, &builtins)
+            .map_err(ModelError::Family)
+    }
+
     /// The plan symbol of a placed door or window for a drawing scale
     /// (denominator), in the family's own axes. `wall_ext` and `wall_int`
     /// are where the wall's faces are in those axes (see
@@ -4972,7 +4997,9 @@ mod tests {
             (mat.name.as_str(), mat.cut_pattern),
             ("Ladrillo macizo", CutPattern::Cross)
         );
-        assert_eq!(m.material_users(brick), vec!["Tabique".to_string()]);
+        // (The door takes the first material for its hardware too: the
+        // model has no metal.)
+        assert!(m.material_users(brick).contains(&"Tabique".to_string()));
         assert!(matches!(
             m.remove_material(brick),
             Err(ModelError::InUse(_))

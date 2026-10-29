@@ -2146,10 +2146,101 @@ fn layered_regions(
 /// across the wall from the middle of the frame, towards that side; `z` up
 /// from the sill.
 pub fn opening_solids(model: &Model, id: OpeningId) -> Vec<Solid> {
-    let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
-        return Vec::new();
+    match model.evaluate_opening(id) {
+        Ok(ev) => opening_body_solids(model, id, &ev),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// The solids of a door or window drawn with its detailed model (see
+/// [`opening_detail`]): its body without what the model makes (the
+/// leaves), or the whole body when it has no detailed model.
+pub fn opening_solids_detailed(model: &Model, id: OpeningId) -> Vec<Solid> {
+    if opening_detail(model, id).is_none() {
+        return opening_solids(model, id);
+    }
+    match model.evaluate_opening_detailed(id) {
+        Ok(ev) => opening_body_solids(model, id, &ev),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// A door or window's detailed model (paquete 9: leaves with their
+/// panels, casings, hardware), made once per type and hand and drawn
+/// where it stands: the model in the family's axes, mirrored when the
+/// door is, its material by part, turned about the vertical and moved to
+/// the middle of the frame at the sill.
+pub struct OpeningDetail {
+    pub mesh: std::sync::Arc<archisim_core::props::PropMesh>,
+    pub parts: Vec<(MaterialId, Vec<[u32; 3]>)>,
+    pub rotation: f64,
+    pub origin: P3,
+    /// The wall it stands in.
+    pub wall: archisim_core::WallId,
+}
+
+/// See [`OpeningDetail`]; `None` for a family that makes none.
+pub fn opening_detail(model: &Model, id: OpeningId) -> Option<OpeningDetail> {
+    let o = model.opening(id)?;
+    let t = model.opening_type(o.opening_type)?;
+    model.family_prop(t.family)?;
+    let og = opening_geometry(model, id)?;
+    let wall = model.wall(o.wall)?;
+    let level = model.level(wall.level).map_or(0.0, |l| l.elevation);
+    let mid = (og.t0 + og.t1) / 2.0;
+    let y_mid = (og.frame_exterior + og.frame_interior) / 2.0;
+    let (sx, sy) = match og.opens_to {
+        WallSide::Exterior => (-1.0, 1.0),
+        WallSide::Interior => (1.0, -1.0),
     };
-    let Ok(ev) = model.evaluate_opening(id) else {
+    // The wall's faces in the family's axes (`y` = sy · (offset − y_mid)).
+    let ext = sy * (og.exterior_offset - y_mid);
+    let int = sy * (og.interior_offset - y_mid);
+    let (face_pos, face_neg) = (ext.max(int), ext.min(int));
+    // A façade takes casings on its inside only; a partition, on both.
+    let exterior = model
+        .wall_type(wall.wall_type)
+        .is_some_and(|wt| wt.function == archisim_core::WallFunction::Exterior);
+    let ext_is_pos = ext > int;
+    let (casing_pos, casing_neg) = if exterior {
+        (!ext_is_pos, ext_is_pos)
+    } else {
+        (true, true)
+    };
+    // The family's x and y in the model: x along `sx · u`, y along
+    // `sy · n`; when that turns the model over, it is made mirrored.
+    let ax = [sx * og.u.x, sx * og.u.y];
+    let ay = [sy * og.n.x, sy * og.n.y];
+    let mirror = ax[0] * ay[1] - ax[1] * ay[0] < 0.0;
+    let b = |v: bool| if v { 1.0 } else { 0.0 };
+    let (mesh, parts) = model.opening_prop(
+        id,
+        &[
+            ("face_pos", face_pos),
+            ("face_neg", face_neg),
+            ("casing_pos", b(casing_pos)),
+            ("casing_neg", b(casing_neg)),
+            ("mirror", b(mirror)),
+        ],
+    )?;
+    let x_axis = if mirror { [-ax[0], -ax[1]] } else { ax };
+    let origin = og.point(mid, y_mid);
+    Some(OpeningDetail {
+        mesh,
+        parts,
+        rotation: x_axis[1].atan2(x_axis[0]),
+        origin: [origin.x, origin.y, level + og.sill],
+        wall: o.wall,
+    })
+}
+
+/// The solids of the recipe's body evaluated as `ev`.
+fn opening_body_solids(
+    model: &Model,
+    id: OpeningId,
+    ev: &archisim_core::family::Evaluation,
+) -> Vec<Solid> {
+    let (Some(o), Some(og)) = (model.opening(id), opening_geometry(model, id)) else {
         return Vec::new();
     };
     let Some(wall) = model.wall(o.wall) else {
@@ -2386,6 +2477,16 @@ pub fn model_solids_except(
     model: &Model,
     skip: &std::collections::HashSet<archisim_core::ObjectId>,
 ) -> Vec<Solid> {
+    model_solids_except_detailed(model, skip, &Default::default())
+}
+
+/// [`model_solids_except`], the doors and windows in `detailed` without
+/// what their detailed model makes (drawn as instances too).
+pub fn model_solids_except_detailed(
+    model: &Model,
+    skip: &std::collections::HashSet<archisim_core::ObjectId>,
+    detailed: &std::collections::HashSet<OpeningId>,
+) -> Vec<Solid> {
     let mut out = Vec::new();
     let idx = WallIndex::new(model);
     for w in model.walls() {
@@ -2415,7 +2516,11 @@ pub fn model_solids_except(
         }
     }
     for o in model.openings() {
-        out.extend(opening_solids(model, o.id));
+        if detailed.contains(&o.id) {
+            out.extend(opening_solids_detailed(model, o.id));
+        } else {
+            out.extend(opening_solids(model, o.id));
+        }
     }
     for c in model.columns() {
         out.extend(column_solids(model, c.id));

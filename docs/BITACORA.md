@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (26) · Carpintería con detalle: las puertas (paquete 9)
+
+Rama `bloque/carpinteria` (sobre `bloque/personalizar`), con pull request. Sin cambios de formato ni de IFC (la familia «Puerta abatible» sube de versión). Diseño y taller futuro en `docs/CARPINTERIA.md`.
+
+Antonio preguntó si las puertas y ventanas tenían el mismo mimo que los muebles del taller (tiradores, pomos, molduras) y pidió hacerlo, empezando por las puertas, con detalle según la distancia y dejando planteado un taller para dibujar hojas, molduras y rejas a medida.
+
+**Hecho**
+- **Puerta abatible con detalle en 3D**: la receta sigue siendo la puerta (planta, alzados, IFC y mediciones no cambian) y pide a ArchiSim que fabrique en 3D la hoja, el forro, los tapajuntas por las dos caras (en un muro de fachada, solo por dentro), las bisagras, la manilla con su roseta y su bocallave, el tope, el pasador de la hoja pasiva en las de dos hojas y la mirilla.
+- **Ocho colecciones** («Modelo 3D»): cada una con su hoja, tapajuntas, manilla y bisagras. Y **A tu gusto**: Hoja (lisa, ranurada, ranurada vertical, dos, cuatro o seis cuarterones, plafonada, moldura aplicada, vidriera, media vidriera, vidriera con junquillos, lamas, tablas con travesaños y cruz por detrás), Tapajuntas (sin, plano, redondeado, moldurado, con junquillo), Manilla (palanca con roseta, con placa o recta, pomo, tirador de barra, sin manilla), Bisagras (ocultas, de pala, de pernio) y Mirilla, además del material de los herrajes.
+- **Tarjetas en 3D**: en Editar tipo, las opciones de las puertas que fabrica ArchiSim se ven en tarjetas con la puerta en su muro, casi de frente.
+- **Detalle según la distancia**: cada tipo de puerta es un solo modelo colocado en cada puerta, con versiones más sencillas al alejarse (como los muebles); la sombra, siempre con la versión fina.
+- **Taller**: una tabiquería con las ocho puertas y una fachada con tres puertas de entrada (clásica de dos hojas y seis cuarterones, mediterránea de media vidriera y rústica de tablas). Fotos con `ARCHISIM_PUERTAS_OUT=carpeta cargo test --release -p archisim-app door_pictures`.
+- Las hojas y las molduras son **datos** (`LeafDesign`, `Profile`), no programa: el taller de carpintería futuro podrá guardar hojas, molduras y rejas con nombre que aparezcan como una tarjeta más (`docs/CARPINTERIA.md` §4).
+
+**Pendiente**
+- Las demás puertas (corredera, pivotante, plegable, de garaje) siguen con el 3D de su receta; después, las ventanas (hojas, junquillos, cremonas, contraventanas, persianas y rejas).
+- Los proyectos de antes tienen su copia de la familia: para ver las opciones, Biblioteca → actualizar familias.
+- El taller de carpintería (hojas, molduras y rejas a medida) está planteado, no hecho.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo → Maqueta, dibuja una habitación y pon una puerta abatible. Acércate y aléjate: de cerca se ven la manilla, las bisagras y los tapajuntas.
+2. Selecciona la puerta → Editar tipo: en «Modelo 3D» cambia la colección y en «A tu gusto» la Hoja, el Tapajuntas, la Manilla y las Bisagras mirando las tarjetas. Prueba también la Mirilla.
+3. En Editar tipo, pon «Nº de hojas» a 2 y el ancho a 1,45 m, y mira la hoja pasiva con su pasador. Prueba también la tarja y un fijo lateral: siguen saliendo de la receta, junto a las hojas nuevas.
+4. Exporta el IFC: la puerta es la de siempre (la receta), con sus hojas.
+5. Lee `docs/CARPINTERIA.md` §4 (taller de hojas, molduras y rejas) y dime si es el camino.
+
 ## 2026-10-29 (25) · Cocina a tu gusto, opciones en tarjetas y Maqueta siempre en color
 
 Rama `bloque/personalizar` (sobre `bloque/biblioteca-taller`), con pull request. Sin cambios de formato ni de IFC (las familias de cocina suben de versión).

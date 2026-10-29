@@ -49,6 +49,18 @@ impl Thumbs3d {
         key: String,
         build: impl FnOnce() -> Option<(Model, LevelId)>,
     ) -> Option<Thumb> {
+        self.get_seen(ctx, gpu, key, SIDE, build)
+    }
+
+    /// [`Self::get`] seen from `seen` (yaw and pitch, in degrees).
+    pub fn get_seen(
+        &mut self,
+        ctx: &egui::Context,
+        gpu: Option<&eframe::egui_wgpu::RenderState>,
+        key: String,
+        seen: [f32; 2],
+        build: impl FnOnce() -> Option<(Model, LevelId)>,
+    ) -> Option<Thumb> {
         if let Some((tex, size)) = self.cache.get(&key) {
             self.used.insert(key);
             return Some(Thumb {
@@ -81,7 +93,7 @@ impl Thumbs3d {
                 super::view3d_ui::default_textures(),
             )
         });
-        let (w, h, rgba) = draw(renderer, &gpu.device, &gpu.queue, &model, px)?;
+        let (w, h, rgba) = draw_seen(renderer, &gpu.device, &gpu.queue, &model, px, seen)?;
         let img = ColorImage::from_rgba_premultiplied([w as usize, h as usize], &rgba);
         let tex = ctx.load_texture(format!("thumb3d:{key}"), img, TextureOptions::LINEAR);
         let size = SIZE;
@@ -97,14 +109,20 @@ impl Thumbs3d {
     }
 }
 
-/// The camera a piece is seen with in its picture: from the front and to
-/// its right, a little from above, close enough to fill it.
-pub fn camera_for(lo: glam::Vec3, hi: glam::Vec3, aspect: f32) -> Camera {
+/// In front of the piece (it looks to +y) and to its right, a little from
+/// above: how pieces are seen in their pictures.
+pub const SIDE: [f32; 2] = [62.0, 24.0];
+
+/// Nearly from the front, at eye level: how doors and windows are seen.
+pub const FRONT: [f32; 2] = [-102.0, 6.0];
+
+/// The camera a piece is seen with in its picture, from `seen` (yaw and
+/// pitch, in degrees), close enough to fill it.
+pub fn camera_seen(lo: glam::Vec3, hi: glam::Vec3, aspect: f32, seen: [f32; 2]) -> Camera {
     let mut c = Camera {
         target: (lo + hi) / 2.0,
-        // In front of the piece (it looks to +y) and to its right.
-        yaw: 62f32.to_radians(),
-        pitch: 24f32.to_radians(),
+        yaw: seen[0].to_radians(),
+        pitch: seen[1].to_radians(),
         distance: 1.0,
         perspective: true,
     };
@@ -115,19 +133,20 @@ pub fn camera_for(lo: glam::Vec3, hi: glam::Vec3, aspect: f32) -> Camera {
 }
 
 /// Draws a model alone, with a transparent background, as RGBA bytes
-/// (premultiplied).
-pub fn draw(
+/// (premultiplied), seen from `seen` (yaw and pitch, in degrees).
+pub fn draw_seen(
     r: &mut Renderer,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     model: &Model,
     px: [u32; 2],
+    seen: [f32; 2],
 ) -> Option<(u32, u32, Vec<u8>)> {
     let scene = Scene::build(model, &Default::default());
     if scene.is_empty() {
         return None;
     }
-    let camera = camera_for(scene.lo, scene.hi, px[0] as f32 / px[1] as f32);
+    let camera = camera_seen(scene.lo, scene.hi, px[0] as f32 / px[1] as f32, seen);
     r.set_scene(device, &scene);
     r.set_clip(None);
     r.set_cut(None);
@@ -135,7 +154,11 @@ pub fn draw(
     r.set_transparent(true);
     r.set_look(
         Quality::Normal,
-        Some(glam::Vec3::new(0.35, 0.75, 0.55).normalize()),
+        // The light turns with the camera: the face seen is lit.
+        Some(
+            glam::Quat::from_rotation_z((seen[0] - SIDE[0]).to_radians())
+                * glam::Vec3::new(0.35, 0.75, 0.55).normalize(),
+        ),
     );
     r.set_shadow_focus(None);
     r.render(device, queue, &camera, px, 1);
@@ -297,7 +320,7 @@ mod tests {
             view_formats,
             crate::view3d::render::TextureMode::Full,
         );
-        let (w, h, px) = draw(&mut r, &device, &queue, &model, [160, 116]).unwrap();
+        let (w, h, px) = draw_seen(&mut r, &device, &queue, &model, [160, 116], SIDE).unwrap();
         assert_eq!([w, h], [160, 116]);
         let px = px.as_chunks::<4>().0;
         let opaque = px.iter().filter(|p| p[3] > 200).count();
@@ -306,5 +329,53 @@ mod tests {
         assert!(clear > 2000, "the background is left clear: {clear}");
         // Its corners are background.
         assert_eq!(px[0][3], 0);
+    }
+
+    /// The leaf designs of a hinged door, each drawn in 3D in its wall as
+    /// the option cards show them, all different
+    /// (`ARCHISIM_HOJAS_OUT=carpeta` keeps them).
+    #[test]
+    fn door_options_in_3d() {
+        let Some((device, queue, view_formats)) = crate::view3d::gpu_tests::gpu() else {
+            eprintln!("No graphics adapter: 3D drawing test skipped.");
+            return;
+        };
+        let lib = archisim_library::new_project("Biblioteca");
+        let t = lib
+            .opening_types()
+            .find(|t| lib.family_prop(t.family).as_deref() == Some("door"))
+            .expect("a door modelled by ArchiSim");
+        let mut r = Renderer::new(
+            &device,
+            view_formats,
+            crate::view3d::render::TextureMode::Full,
+        );
+        let out = std::env::var_os("ARCHISIM_HOJAS_OUT").map(std::path::PathBuf::from);
+        let mut seen = Vec::new();
+        for design in archisim_core::props::fine::door::DESIGNS
+            .iter()
+            .skip(1)
+            .take(6)
+        {
+            let mut ty = t.clone();
+            ty.values.insert(
+                "leaf_design".into(),
+                archisim_core::Value::Text(design.to_string()),
+            );
+            let (model, _) = crate::type_preview::opening_model_3d(&lib, &ty).unwrap();
+            let (w, h, px) = draw_seen(&mut r, &device, &queue, &model, [240, 174], FRONT).unwrap();
+            if let Some(dir) = &out {
+                std::fs::create_dir_all(dir).unwrap();
+                resvg::tiny_skia::Pixmap::from_vec(
+                    px.clone(),
+                    resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+                )
+                .unwrap()
+                .save_png(dir.join(format!("{design}.png")))
+                .unwrap();
+            }
+            assert!(!seen.contains(&px), "{design} looks like another design");
+            seen.push(px);
+        }
     }
 }

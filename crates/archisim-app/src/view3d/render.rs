@@ -125,6 +125,7 @@ struct GpuGroup {
     instances: Vec<Instance>,
     bounds: Vec<(glam::Vec3, glam::Vec3)>,
     radius: f32,
+    exact_shadow: bool,
 }
 
 /// Which objects of each group are drawn this picture, as ranges of the
@@ -976,7 +977,7 @@ impl Renderer {
             let a = list.len() as u32;
             list.extend(&g.instances);
             d.shadow = a..list.len() as u32;
-            d.shadow_level = 1.min(n - 1);
+            d.shadow_level = if g.exact_shadow { 0 } else { 1.min(n - 1) };
             draws.push(d);
         }
         if list.len() as u64 > self.instance_room {
@@ -1324,6 +1325,7 @@ fn upload_group(device: &wgpu::Device, g: &Group) -> GpuGroup {
         instances: g.instances.clone(),
         bounds: g.bounds.clone(),
         radius: g.radius(),
+        exact_shadow: g.exact_shadow,
     }
 }
 

@@ -183,6 +183,16 @@ pub fn opening_model(source: &Model, t: &OpeningType) -> Option<(Model, LevelId)
     Some((m, level))
 }
 
+/// [`opening_model`] for a picture in 3D: the wall only a little higher
+/// than the door or window, so that it fills the picture.
+pub fn opening_model_3d(source: &Model, t: &OpeningType) -> Option<(Model, LevelId)> {
+    let (mut m, level) = opening_model(source, t)?;
+    let wall = m.walls().next()?.id;
+    let sill = m.openings().next()?.sill;
+    m.set_wall_height(wall, sill + t.height + 0.12, 0.0).ok()?;
+    Some((m, level))
+}
+
 /// A model with one object of type `t` at the origin, unturned: its plan
 /// symbol as the plan draws it.
 pub fn object_model(source: &Model, t: &archisim_core::ObjectType) -> Option<(Model, LevelId)> {
