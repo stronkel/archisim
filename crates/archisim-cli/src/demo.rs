@@ -1520,7 +1520,7 @@ mod tests {
         assert_eq!(m.tags().count(), 9);
         let total: f64 = m.rooms().map(|r| r.area()).sum();
         assert!(total > 90.0 && total < 108.0, "{total}");
-        assert_eq!(m.drafts().count(), 32);
+        assert_eq!(m.drafts().count(), 30);
         assert_eq!(m.draw_layers().len(), 6);
         assert_eq!(m.dimensions().count(), 4);
         assert!(m

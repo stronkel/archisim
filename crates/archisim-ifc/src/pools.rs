@@ -1,7 +1,8 @@
 //! Pools built in the ground: an `IfcElementAssembly` «Piscina» in the
 //! storey of its level, made of its floor (`IfcSlab` FLOOR), its walls
-//! (`IfcWall`), the lining on their inside faces (`IfcCovering` CLADDING)
-//! and its coping (`IfcSlab` USERDEFINED «Coronación»), each a
+//! (`IfcWall`, with `Pset_WallCommon` and its quantities), the lining on
+//! their inside faces (`IfcCovering` CLADDING) and its coping (`IfcCovering`
+//! COPING; user-defined «Coronación» in IFC4), each a
 //! triangulated body; the water is an `IfcSpace` «Lámina de agua» in the
 //! storey with its area and volume. `ArchiSim_Pool` on the assembly reads
 //! it back; `ArchiSim_PoolPart` on each part (the water too) names its pool.
@@ -13,7 +14,7 @@ use archisim_geom::pools::{pool_parts, PoolPartKind};
 use archisim_geom::solid::P3;
 
 use crate::step::{list, real, string, Ref};
-use crate::{derived_guid, Exporter};
+use crate::{derived_guid, Exporter, Schema};
 
 impl Exporter<'_> {
     /// A triangulated body as a product's shape, its heights from `z0`.
@@ -115,13 +116,21 @@ impl Exporter<'_> {
                             string(derived_guid(&p.guid, "lining").as_str())
                         ),
                     ),
-                    PoolPartKind::Coping => (
-                        "coping",
-                        format!(
-                            "IFCSLAB({},$,'Coronación',$,'Coronación',{part_pl},{shape},$,.USERDEFINED.)",
-                            string(derived_guid(&p.guid, "coping").as_str())
-                        ),
-                    ),
+                    // The coping is a covering on the top of the walls:
+                    // COPING in IFC 4.3, user-defined in IFC4.
+                    PoolPartKind::Coping => {
+                        let (object_type, predefined) = match self.schema {
+                            Schema::Ifc4x3 => ("$".to_string(), "COPING"),
+                            Schema::Ifc4 => (string("Coronación"), "USERDEFINED"),
+                        };
+                        (
+                            "coping",
+                            format!(
+                                "IFCCOVERING({},$,'Coronación',$,{object_type},{part_pl},{shape},$,.{predefined}.)",
+                                string(derived_guid(&p.guid, "coping").as_str())
+                            ),
+                        )
+                    }
                     PoolPartKind::Water => {
                         let space = self.w.add(format!(
                             "IFCSPACE({},$,'Agua',$,'Lámina de agua',{part_pl},{shape},{},.ELEMENT.,.USERDEFINED.,$)",
@@ -152,7 +161,26 @@ impl Exporter<'_> {
                     }
                 };
                 let el = self.w.add(entity);
-                self.part_of(el, &derived_guid(&p.guid, key), p.guid.as_str(), key);
+                let guid = derived_guid(&p.guid, key);
+                self.part_of(el, &guid, p.guid.as_str(), key);
+                if part.kind == PoolPartKind::Walls {
+                    // Outside walls that hold the ground and the water.
+                    self.common_pset(el, p.id.0, &guid, "Pset_WallCommon", &p.name, true, true);
+                    let height = (p.shallow + p.deep) / 2.0 + p.freeboard;
+                    let side = p.perimeter() * height;
+                    self.quantities(
+                        el,
+                        &guid,
+                        "Qto_WallBaseQuantities",
+                        &[
+                            ("Length", "IFCQUANTITYLENGTH", p.perimeter()),
+                            ("Width", "IFCQUANTITYLENGTH", p.wall),
+                            ("Height", "IFCQUANTITYLENGTH", height),
+                            ("NetSideArea", "IFCQUANTITYAREA", side),
+                            ("NetVolume", "IFCQUANTITYVOLUME", side * p.wall),
+                        ],
+                    );
+                }
                 if let Some(m) = materials.get(&part.material) {
                     self.w.add(format!(
                         "IFCRELASSOCIATESMATERIAL({},$,$,$,({el}),{m})",
