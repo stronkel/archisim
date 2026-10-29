@@ -306,6 +306,25 @@ fn op(n: f64) -> Op {
 /// A window with its frame, sashes, glass and hardware, and what goes
 /// outside it.
 pub fn window(b: &mut Builder, p: &Params) {
+    // Only what goes outside (`only`: 1 the grille, 2 the shutters), as
+    // elements of their own (the IFC, the elevations).
+    let only = p.get("only", 0.0).round() as i32;
+    if only > 0 {
+        let outside = if p.get("w_outside", -1.0) > 0.0 {
+            1.0
+        } else {
+            -1.0
+        };
+        if only == 1 {
+            grille_outside(b, p, outside);
+        } else {
+            outside_shutters(b, p, outside);
+        }
+        if p.flag("mirror", false) {
+            mirror_x(b);
+        }
+        return;
+    }
     let l = look(p);
     // Far away (`lod`): frame, sashes and glass, square, with nothing on
     // them; what goes outside plain.

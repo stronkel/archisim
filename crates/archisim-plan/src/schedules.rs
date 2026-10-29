@@ -368,6 +368,7 @@ pub fn measurements(model: &Model) -> Vec<(&'static str, &'static str, Vec<Item>
         ("08", "Muros cortina", curtain_walls(model)),
         ("09", "Instalaciones", services(model)),
         ("10", "Mobiliario de cocina", kitchen(model)),
+        ("11", "Cerrajería y protecciones", outsides(model)),
     ];
     chapters.retain(|(_, _, items)| !items.is_empty());
     chapters
@@ -1689,6 +1690,70 @@ pub fn draw_table(s: &mut String, t: &Table, at: Point2) {
             crate::lettering::paint(tx.height * k, ink)
         );
     }
+}
+
+/// What goes outside the windows: grilles by their weight (kg) and
+/// shutters by the opening they close (m²), one item per type.
+fn outsides(model: &Model) -> Vec<Item> {
+    use archisim_geom::solid::{grille_weight, opening_outside_solids, Outside};
+    let level_name = |l: LevelId| model.level(l).map_or(String::new(), |l| l.name.clone());
+    let mut grilles: BTreeMap<archisim_core::OpeningTypeId, Vec<Measured>> = BTreeMap::new();
+    let mut shutters: BTreeMap<archisim_core::OpeningTypeId, Vec<Measured>> = BTreeMap::new();
+    for o in model.openings() {
+        if model.phase(o.id.0) != Phase::New {
+            continue;
+        }
+        let Some(t) = model.opening_type(o.opening_type) else {
+            continue;
+        };
+        let level = model
+            .wall(o.wall)
+            .map_or(String::new(), |w| level_name(w.level));
+        let comment = format!("{} · {}", t.mark, level);
+        let kg = grille_weight(model, o.id);
+        if kg > 0.0 {
+            grilles.entry(t.id).or_default().push(Measured {
+                comment: comment.clone(),
+                units: 1.0,
+                length: 0.0,
+                width: 0.0,
+                height: 0.0,
+                quantity: kg,
+            });
+        }
+        if !opening_outside_solids(model, o.id, Outside::Shutters).is_empty() {
+            shutters.entry(t.id).or_default().push(Measured {
+                comment,
+                units: 1.0,
+                length: t.width,
+                width: 0.0,
+                height: t.height,
+                quantity: t.width * t.height,
+            });
+        }
+    }
+    let item =
+        |what: &str, unit: &'static str, key: &str, id: archisim_core::OpeningTypeId, lines| {
+            let t = model.opening_type(id);
+            Item {
+                code: t.map_or(String::new(), |t| {
+                    format!("{}-{}", t.mark, key[..1].to_uppercase())
+                }),
+                key: format!("{key}:{}", id.0),
+                unit,
+                summary: format!("{what} · {}", t.map_or("", |t| t.name.as_str())),
+                lines,
+            }
+        };
+    grilles
+        .into_iter()
+        .map(|(id, lines)| item("Reja", "kg", "reja", id, lines))
+        .chain(
+            shutters
+                .into_iter()
+                .map(|(id, lines)| item("Contraventanas", "m2", "contraventana", id, lines)),
+        )
+        .collect()
 }
 
 #[cfg(test)]
