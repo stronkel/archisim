@@ -2458,7 +2458,10 @@ pub fn opening_outside_solids(model: &Model, id: OpeningId, which: Outside) -> V
     else {
         return Vec::new();
     };
-    if model.family_prop(t.family).as_deref() != Some("window") {
+    if !matches!(
+        model.family_prop(t.family).as_deref(),
+        Some("window" | "slider" | "sash_window")
+    ) {
         return Vec::new();
     }
     let only = match which {

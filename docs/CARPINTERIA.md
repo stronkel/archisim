@@ -76,7 +76,16 @@ La reja es un dato (`Grille`), como los cuarterones (`Bars`) y las hojas de puer
 
 **Lo que falta**: la reja y las contraventanas todavía no van en el IFC ni en los alzados (solo en 3D y en planta). Habría que exportarlas como elemento propio (reja como `IfcRailing` o `IfcElementAssembly`, contraventanas como parte de la ventana) para medirlas y presupuestarlas.
 
-## 6. Siguiente
+## 6. Correderas, guillotina, y lo de fuera en el IFC (29/10/2026, noche)
 
-- La reja y las contraventanas en el IFC, en los alzados y en las mediciones.
-- Las demás ventanas (corredera y guillotina) y las demás puertas (corredera, pivotante, plegable y de garaje) con el mismo sistema.
+- **Ventana y balconera corredera** (`props:slider`): marco con sus carriles, hojas en carriles alternos solapadas donde se encuentran, vidrio con junquillos y cuarterones, y el cierre de cada hoja en el montante junto a la jamba. **Perfil**: aluminio estándar, con rotura de puente térmico, PVC, madera, acero fino o minimalista de perfil oculto. **Cierre**: uñero, manilla embutida, maneta de cierre o tirador de barra. **Mosquitera** en un carril propio por fuera, **persiana** con capialzado y bajada al porcentaje que se diga, y las contraventanas y rejas de la practicable.
+- **Puerta corredera sobre el muro** (`props:sliding_door`): la hoja colgada por la cara del muro del lado al que abre, de un **carril visto** (de granero, con ruedas y tacos), un **carril con galería** (el cajón de madera que lo tapa) o un **carril oculto**, sobre un listón; cerco en todo el grueso del muro y tapajuntas solo por la cara que no tapa la hoja. Las hojas y tapajuntas de la abatible y su **tirador**: uñero embutido, tirador de barra o asa de granero.
+- **Puerta corredera empotrada**: la hoja en el plano del cerco, que entra en el muro; uñeros por las dos caras y tirador en el canto; tapajuntas por las dos caras.
+- **Ventana de guillotina** (`props:sash_window`): las dos hojas en sus planos, separadas por el junquillo de las jambas; cierre de media luna, asas en la de abajo y, en madera, los cuernos de la de arriba; el perfil y los cuarterones de la practicable.
+- **Abierta en 3D** (parámetro de cada puerta o ventana colocada): cuánto está corrida la puerta corredera o subida la guillotina, solo para el 3D (la planta sigue con su dibujo de siempre).
+- **Lo de fuera como elemento propio**: la reja es un `IfcRailing` con su peso estimado (hierro, 7.850 kg/m³, por el volumen de las barras) en `ArchiSim_OpeningPart` y `Pset_RailingCommon`; las contraventanas, un `IfcShadingDevice` .SHUTTER.; los dos salen en los alzados, las secciones y el render (en su versión sencilla) y en las mediciones, capítulo **11 Cerrajería y protecciones** (reja en kg, contraventanas en m²). Al importar el IFC se reconocen y no se convierten en barandillas sueltas.
+
+## 7. Siguiente
+
+- Las puertas pivotante, plegable y de garaje con el mismo sistema.
+- El taller de carpintería (§4).

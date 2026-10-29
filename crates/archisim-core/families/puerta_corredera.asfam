@@ -1,7 +1,7 @@
 family "Puerta corredera"
   category door
   host wall
-  version 3
+  version 4
   description "Puerta corredera de una hoja que desliza por la cara del muro, con cerco"
 
 include "piezas"
@@ -16,12 +16,27 @@ type_params
   section "Materiales"
     frame_material material = "Madera de pino" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
+    hardware_material material = "Acero inoxidable" label "Herrajes"
+  section "A tu gusto"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada") = "Como la colección" label "Hoja"
+    casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
+    slide_guide choice("Como la colección", "Carril visto", "Carril con galería", "Carril oculto") = "Como la colección" label "Guía"
+    slide_pull choice("Como la colección", "Uñero embutido", "Tirador de barra", "Asa de granero", "Sin tirador") = "Como la colección" label "Tirador"
+
+instance_params
+  section "Posición"
+    slide_open integer = 0 range 0..100 label "Abierta en 3D (%)"
 
 require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para la hoja"
 
 body
-  use door_lining(width, height, frame_width, frame_depth, frame_material)
-  use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
+  # En 3D, el cerco, los tapajuntas, la hoja y su guía los hace ArchiSim
+  # (generator props:sliding_door).
+  if not detailed
+    use door_lining(width, height, frame_width, frame_depth, frame_material)
+    use door_leaf(-width / 2 + frame_width, width / 2 - frame_width, height, frame_width, frame_depth, panel_material)
 
 # Cerco cortado; la hoja, sobre la cara del muro del lado al que abre, a
 # medio abrir hacia el lado de la mano, con una flecha.
@@ -55,6 +70,15 @@ plan 1:100
   line (c0 + shift, face + 0.03) to (c1 + shift, face + 0.03) pen frame
 
 outputs
+  generator = "props:sliding_door"
+  leaf_x0 = -width / 2 + frame_width
+  leaf_x1 = width / 2 - frame_width
+  leaf_top = height - frame_width
+  leaf_t = min(0.04, frame_depth)
+  lining_w = width
+  lining_h = height
+  pocket = 0
+  slide_dir = if hand == "left" then -1 else 1
   opening_width = width
   opening_height = height
   frame_width = frame_width

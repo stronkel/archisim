@@ -48,7 +48,10 @@ use soft::{knife_pillow, Soft};
 /// The kinds of the workshop and the names of their models.
 pub const KINDS: &[(&str, &[&str])] = &[
     ("door", &door::COLLECTIONS),
+    ("sliding_door", &door::COLLECTIONS),
     ("window", &window::COLLECTIONS),
+    ("slider", &window::COLLECTIONS),
+    ("sash_window", &window::COLLECTIONS),
     ("fine_padel_court", &["Único"]),
     ("fine_futsal_court", &["Único"]),
     ("fine_football_field", &["Único"]),
@@ -570,7 +573,10 @@ fn chairs_around(b: &mut Builder, p: &Params) {
 pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
         "door" => door::door(b, p),
+        "sliding_door" => door::sliding_door(b, p),
         "window" => window::window(b, p),
+        "slider" => window::slider(b, p),
+        "sash_window" => window::sash_window(b, p),
         "fine_sofa" => {
             match p.style() {
                 2 => sofas::mediterranean(b, p),

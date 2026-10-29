@@ -2772,6 +2772,69 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
         })?;
         along += width / 2.0 + 0.6;
     }
+    // Sliding doors, 4 m further north: one over the wall of each
+    // collection, and two into it.
+    let sliding = m.system_family("Puerta corredera")?;
+    let pocket = m.system_family("Puerta corredera empotrada")?;
+    let row = wall(m, partition, y + 8.0, end + 8.0)?;
+    let mut along = 1.2;
+    let kinds: Vec<(archisim_core::FamilyId, String, usize, f64)> = DOOR_COLLECTIONS
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (sliding, format!("Puerta corredera {c} (taller)"), i, 0.0))
+        .chain([
+            (
+                pocket,
+                "Puerta empotrada Japandi (taller)".to_string(),
+                3,
+                0.0,
+            ),
+            (
+                pocket,
+                "Puerta empotrada Clásica a medio abrir (taller)".to_string(),
+                7,
+                50.0,
+            ),
+        ])
+        .collect();
+    for (family, name, k, open) in kinds {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        values.insert("model3d".into(), t(DOOR_COLLECTIONS[k]));
+        values.insert("width".into(), Value::Number(0.825));
+        let (leaf, frame, metal) = looks[k];
+        for (key, n) in [
+            ("panel_material", leaf),
+            ("frame_material", frame),
+            ("hardware_material", metal),
+        ] {
+            if let Some(id) = palette_or_project(m, n) {
+                values.insert(key.into(), Value::Material(id.0));
+            }
+        }
+        let ty = m.add_family_type(NewFamilyType {
+            family,
+            name,
+            mark: None,
+            description: String::new(),
+            values,
+        })?;
+        let o = m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: row,
+            along,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Right,
+            setback: None,
+        })?;
+        if open > 0.0 {
+            let mut values = m.opening(o).map(|x| x.values.clone()).unwrap_or_default();
+            values.insert("slide_open".into(), Value::Number(open));
+            m.set_opening_values(o, values)?;
+        }
+        // Room for the leaf to slide beside the opening.
+        along += 2.1;
+    }
     Ok(end)
 }
 
@@ -2780,7 +2843,8 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
 /// of 0,90; and 8 m north another façade with what goes outside — the
 /// roller blind half down, louvred shutters open, boarded ones closed,
 /// a flat grille of bars, a boxed wrought grille with scrolls, a boxed
-/// grid. The end of the façades.
+/// grid; and the sliding windows (correderas) 6 m south, with balcony
+/// doors and their extras 6 m further. The end of the façades.
 pub fn place_windows(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
     use archisim_core::{Hand, NewFamilyType, NewOpening, WallSide};
     let level = m.levels()[0].id;
@@ -2930,6 +2994,160 @@ pub fn place_windows(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
         set.extend(extra);
         let ty = window_type(m, format!("Ventana con {name} (taller)"), &set)?;
         place(m, ty, back, i, 0.9)?;
+    }
+    // The sliding windows (correderas), 6 m south: one of each
+    // collection, and balcony doors and their extras 6 m further.
+    let sliders = m.system_family("Ventana corredera")?;
+    let slider_type = |m: &mut Model, name: String, set: &[(&str, Value)]| {
+        let mut values = m.family_defaults(sliders, ParamScope::Type)?;
+        for (k, v) in set {
+            values.insert((*k).to_string(), v.clone());
+        }
+        m.add_family_type(NewFamilyType {
+            family: sliders,
+            name,
+            mark: None,
+            description: String::new(),
+            values,
+        })
+    };
+    let row = wall(m, y - 6.0)?;
+    for (i, c) in DOOR_COLLECTIONS.iter().enumerate() {
+        let mut set = vec![
+            ("model3d", t(c)),
+            ("width", Value::Number(1.6)),
+            ("height", Value::Number(1.3)),
+        ];
+        let (frame, metal) = looks[i];
+        set.extend(palette(m, "frame_material", frame));
+        set.extend(palette(m, "hardware_material", metal));
+        let ty = slider_type(m, format!("Corredera {c} (taller)"), &set)?;
+        place(m, ty, row, i, 0.9)?;
+    }
+    let balconies = wall(m, y - 12.0)?;
+    let doors: [Outside; 5] = [
+        (
+            "balconera de cuatro hojas",
+            "Clásica",
+            vec![
+                ("leaves", Value::Number(4.0)),
+                ("width", Value::Number(1.85)),
+                ("height", Value::Number(2.2)),
+            ],
+        ),
+        (
+            "balconera minimalista",
+            "Contemporáneo",
+            vec![
+                ("width", Value::Number(1.85)),
+                ("height", Value::Number(2.3)),
+                ("slider_handle", t("Tirador de barra")),
+            ],
+        ),
+        (
+            "mosquitera",
+            "Mediterráneo",
+            vec![("width", Value::Number(1.6)), ("screen", Value::Bool(true))],
+        ),
+        (
+            "persiana",
+            "Contemporáneo",
+            vec![
+                ("width", Value::Number(1.6)),
+                ("height", Value::Number(1.55)),
+                ("shutter", Value::Bool(true)),
+                ("shutter_down", Value::Number(35.0)),
+                ("slider_profile", t("Aluminio con rotura de puente térmico")),
+            ],
+        ),
+        (
+            "reja",
+            "Rústica",
+            vec![
+                ("width", Value::Number(1.6)),
+                ("grille", t("Barrotes y pletinas")),
+            ],
+        ),
+    ];
+    for (i, (name, c, extra)) in doors.into_iter().enumerate() {
+        let k = DOOR_COLLECTIONS.iter().position(|x| *x == c).unwrap_or(0);
+        let mut set = vec![("model3d", t(c)), ("height", Value::Number(1.3))];
+        let (frame, metal) = looks[k];
+        set.extend(palette(m, "frame_material", frame));
+        set.extend(palette(m, "hardware_material", metal));
+        set.extend(palette(m, "grille_material", "Hierro forjado"));
+        set.extend(extra);
+        let tall = set
+            .iter()
+            .any(|(k, v)| *k == "height" && matches!(v, Value::Number(h) if *h > 2.0));
+        let ty = slider_type(m, format!("Corredera {name} (taller)"), &set)?;
+        // Wider than the others: further apart.
+        m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: balconies,
+            along: 1.4 + 2.6 * i as f64,
+            sill: if tall { 0.0 } else { 0.9 },
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+    }
+    // Sash windows (guillotina), 6 m further.
+    let sash = m.system_family("Ventana de guillotina")?;
+    let sashes = wall(m, y - 18.0)?;
+    type Sash<'a> = (&'a str, &'a str, f64, Vec<(&'a str, Value)>);
+    let kinds: [Sash; 3] = [
+        (
+            "clásica subida",
+            "Clásica",
+            40.0,
+            vec![("glazing_bars", t("Cuadrícula"))],
+        ),
+        ("industrial", "Industrial", 0.0, vec![]),
+        (
+            "mediterránea con mallorquinas",
+            "Mediterráneo",
+            0.0,
+            vec![
+                ("outside_shutters", t("Mallorquinas")),
+                ("shutters_open", Value::Bool(true)),
+            ],
+        ),
+    ];
+    for (i, (name, c, open, extra)) in kinds.into_iter().enumerate() {
+        let k = DOOR_COLLECTIONS.iter().position(|x| *x == c).unwrap_or(0);
+        let mut values = m.family_defaults(sash, ParamScope::Type)?;
+        values.insert("model3d".into(), t(c));
+        let (frame, metal) = looks[k];
+        for (key, v) in palette(m, "frame_material", frame)
+            .into_iter()
+            .chain(palette(m, "hardware_material", metal))
+            .chain(palette(m, "shutters_material", "Lacado salvia"))
+            .chain(extra)
+        {
+            values.insert(key.into(), v);
+        }
+        let ty = m.add_family_type(NewFamilyType {
+            family: sash,
+            name: format!("Guillotina {name} (taller)"),
+            mark: None,
+            description: String::new(),
+            values,
+        })?;
+        let o = m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: sashes,
+            along: 1.5 + 2.6 * i as f64,
+            sill: 0.8,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+        if open > 0.0 {
+            let mut values = m.opening(o).map(|x| x.values.clone()).unwrap_or_default();
+            values.insert("sash_open".into(), Value::Number(open));
+            m.set_opening_values(o, values)?;
+        }
     }
     Ok(end)
 }
