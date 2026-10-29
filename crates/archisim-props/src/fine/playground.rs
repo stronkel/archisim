@@ -152,7 +152,7 @@ pub fn slide(b: &mut Builder, _p: &Params) {
     // The ladder at the back.
     // The ladder at the back: its rails up to the platform's edge, grab
     // bars on up from there.
-    let (ly, lz) = (-0.8, 0.0);
+    let (ly, lz) = (-0.8, 0.02);
     for x in [-0.25, 0.25] {
         rod(b, "frame", [x, ly, lz], [x, 0.02, zp], 0.03);
         rod(b, "frame", [x, 0.02, zp - 0.05], [x, 0.02, zp + 0.6], 0.025);
