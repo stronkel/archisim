@@ -1,31 +1,39 @@
 family "Tumbona"
   category street
   host none
-  version 1
-  description "Tumbona de teca con ruedas, de aluminio y textil o cama de exterior con colchón y cojines"
+  version 2
+  description "Tumbona como la hace cada colección"
   folder "Jardín y terraza"
 
 type_params
   section "Dimensiones"
     width length = 0.70 range 0.50..2.00 label "Ancho"
     depth length = 2.00 range 1.60..2.40 label "Largo"
-    pad   bool = no label "Colchoneta"
+    pad   bool = yes label "Colchoneta"
   section "Materiales"
-    frame material = "Teca" label "Madera"
+    frame material = "Teca" label "Madera o estructura"
+    metal material = "Metal negro" label "Metal"
+    weave material = "Ratán" label "Cuerda o fibra"
+    cushion material = "Tela de exterior" label "Cojines"
+    pillow material = "Lino añil" label "Cojines sueltos"
+    mat material = "Tela de exterior" label "Lona"
+    accent material = "Lino añil" label "Rayas"
+    top material = "Mármol" label "Tablero"
+    masonry material = "Cal blanca" label "Obra"
+    pot_mat material = "Terracota" label "Maceta"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Corteza de pino" label "Tronco y tallos"
+    leaves material = "Hoja verde" label "Hojas"
+    flowers material = "Lavanda" label "Flores"
+    dark material = "Metal negro" label "Base y sombras"
   section "Modelo 3D"
-    model3d choice("De teca", "De aluminio", "Cama de exterior") = "De teca" label "Modelo 3D"
-    mat     material = "Tela de exterior" label "Lona y colchón"
-    cushion material = "Lino blanco" label "Colchoneta y cojines"
-    accent  material = "Lino añil" label "Cojín"
-    metal   material = "Metal lacado" label "Aluminio"
-    dark    material = "Negro mate" label "Ruedas"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, depth, 0.35) material frame
+  box (-width / 2, 0, 0) to (width / 2, depth, 0.4) material frame
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, 0.55) to (width / 2, 0.55) pen thin
 
 outputs
   generator = "props:lounger"

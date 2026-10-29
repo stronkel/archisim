@@ -1,8 +1,8 @@
 family "Armario"
   category furniture
   host none
-  version 3
-  description "Armario de puertas abatibles con barra de colgar"
+  version 4
+  description "Armario como lo hace cada colección: puertas, cajones abajo y lo que pisa"
   folder "Armarios"
 
 type_params
@@ -10,20 +10,25 @@ type_params
     width  length = 1.20 range 0.40..6.00 label "Ancho"
     depth  length = 0.60 range 0.30..1.00 label "Fondo"
     height length = 2.40 range 0.80..3.00 label "Altura"
-    doors  integer = 2 range 1..8 label "Puertas"
+    doors  integer = 2 range 1..12 label "Puertas"
   section "Frentes"
     drawers integer = 0 range 0..4 label "Filas de cajones abajo"
-    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
-    mat material = "Madera de pino" label "Madera"
+    frame material = "Roble claro" label "Madera o estructura"
+    front material = "Lacado blanco" label "Frentes"
+    top material = "Roble claro" label "Encimera"
+    stone material = "Mármol" label "Piedra"
+    plinth material = "Roble claro" label "Zócalo"
+    metal material = "Latón" label "Tiradores y metal"
+    glass material = "Vidrio claro" label "Vidrio"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
   section "Modelo 3D"
-    model3d choice("Puertas batientes") = "Puertas batientes" label "Modelo 3D"
-    frame material = "Cromado" label "Tiradores"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
-# Contorno, frente de puertas y la barra de colgar en discontinua.
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
   line (-width / 2, depth - 0.02) to (width / 2, depth - 0.02) pen thin

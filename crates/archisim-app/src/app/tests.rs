@@ -7205,27 +7205,27 @@ fn kitchen_modules_in_a_row() {
     let row = h.app.row_of(ids[1]);
     assert_eq!(row.len(), 3, "{row:?}");
     assert!(!row.contains(&alone));
-    // The front «Marco» to the whole row; the one apart keeps «Liso».
+    // The rustic model to the whole row; the one apart keeps the nordic.
     h.app.ed.selection = [Element::Object(ids[0])].into_iter().collect();
     h.app.bar_set_value_pub(
-        "front_style",
-        archisim_core::Value::Text("Marco".into()),
+        "model3d",
+        archisim_core::Value::Text("Rústica".into()),
         true,
     );
     let style = |h: &Harness, id| {
         let m = h.model();
         let t = m.object_type(m.object(id).unwrap().object_type).unwrap();
-        t.values.get("front_style").cloned()
+        t.values.get("model3d").cloned()
     };
     for id in &ids {
         assert_eq!(
             style(&h, *id),
-            Some(archisim_core::Value::Text("Marco".into()))
+            Some(archisim_core::Value::Text("Rústica".into()))
         );
     }
     assert_eq!(
         style(&h, alone),
-        Some(archisim_core::Value::Text("Liso".into()))
+        Some(archisim_core::Value::Text("Nórdico cálido".into()))
     );
     // And the drawers of only one.
     h.app

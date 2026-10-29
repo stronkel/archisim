@@ -1,0 +1,37 @@
+family "Barra de bar"
+  category furniture
+  host none
+  version 1
+  description "Barra de bar como la hace cada colección: el frente hacia los clientes, encimera volada, reposapiés y, detrás, el lado de servicio con armarios y bandeja de acero"
+  folder "Hostelería"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.40 range 1.00..8.00 label "Largo"
+    depth  length = 0.80 range 0.60..1.10 label "Fondo"
+    height length = 1.10 range 1.00..1.20 label "Altura"
+  section "Materiales"
+    frame   material = "Roble claro" label "Frente"
+    masonry material = "Cal blanca" label "Fábrica o piedra"
+    accent  material = "Cerámica esmaltada" label "Azulejo o laminado"
+    mat     material = "Microcemento" label "Microcemento"
+    top     material = "Roble claro" label "Encimera"
+    carcass material = "Lacado blanco" label "Armarios de servicio"
+    metal   material = "Acero inoxidable" label "Reposapiés y bandeja"
+    dark    material = "Metal negro" label "Zócalo y acero negro"
+    glass   material = "Vidrio claro" label "Balda de vidrio"
+    light   material = "Luz cálida" label "Tira de luz"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material top
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, depth - 0.25) to (width / 2, depth - 0.25) pen thin
+
+outputs
+  generator = "props:fine_bar_counter"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

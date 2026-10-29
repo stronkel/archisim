@@ -1,30 +1,41 @@
 family "Cama infantil"
   category furniture
   host none
-  version 1
-  description "Cama cabaña con forma de casita y guirnalda de luces, o litera con su escalera"
+  version 2
+  description "Cama infantil como la hace cada colección: la cama de la colección más baja, con barrera, ropa de cama y un muñeco"
   folder "Camas"
 
 type_params
   section "Dimensiones"
     width length = 0.90 range 0.70..1.40 label "Ancho del colchón"
     depth length = 1.90 range 1.40..2.10 label "Largo del colchón"
+  section "Ropa de cama"
+    spread   bool = yes label "Manta a los pies"
+    cushions integer = 1 range 0..4 label "Cojines"
+    toy      bool = yes label "Muñeco"
   section "Materiales"
-    mat material = "Roble claro" label "Madera"
+    frame material = "Roble claro" label "Madera o estructura"
+    metal material = "Latón" label "Metal"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    cushion material = "Bouclé crudo" label "Tapizado"
+    linen material = "Lino blanco" label "Sábanas y almohadas"
+    duvet material = "Lino arena" label "Edredón"
+    spread_mat material = "Lana teja" label "Manta"
+    pillow material = "Terciopelo salvia" label "Cojines"
+    toy_mat material = "Lana cruda" label "Muñeco"
   section "Modelo 3D"
-    model3d choice("Cabaña", "Litera") = "Cabaña" label "Modelo 3D"
-    linen material = "Tela clara" label "Sábanas y almohada"
-    duvet material = "Terciopelo salvia" label "Edredón"
-    bulb  material = "Luz" label "Guirnalda"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2 - 0.04, 0, 0) to (width / 2 + 0.04, depth, 1.7) material mat
+  box (-width / 2, 0, 0) to (width / 2, depth + 0.12, 0.45) material linen
 
 plan 1:50
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  line (-width / 2, 0.42) to (width / 2, 0.42) pen thin
+  polygon (-width / 2 - 0.05, 0) (width / 2 + 0.12, 0) (width / 2 + 0.12, depth + 0.12) (-width / 2 - 0.05, depth + 0.12) pen view
+  polygon (-width / 2 + 0.1, 0.15) (width / 2 - 0.1, 0.15) (width / 2 - 0.1, 0.45) (-width / 2 + 0.1, 0.45) pen thin
+  line (-width / 2, 0.65) to (width / 2, 0.65) pen thin
 
 outputs
   generator = "props:kids_bed"
   ifc_class = "IfcFurniture"
-  ifc_type = "USERDEFINED"
+  ifc_type = "BED"

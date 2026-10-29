@@ -1,8 +1,8 @@
 family "Inodoro"
   category sanitary
   host none
-  version 1
-  description "Inodoro de tanque bajo, contra la pared"
+  version 2
+  description "Inodoro como lo hace cada colección: suspendido, de pie, adosado o con cisterna alta"
   folder "Inodoros y bidés"
 
 type_params
@@ -11,9 +11,18 @@ type_params
     depth  length = 0.68 range 0.50..0.90 label "Fondo"
   section "Materiales"
     mat material = "Porcelana" label "Porcelana"
+    unit material = "Roble claro" label "Mueble u obra"
+    top material = "Piedra caliza" label "Encimera o piedra"
   section "Modelo 3D"
-    model3d choice("De pie con cisterna", "Suspendido") = "De pie con cisterna" label "Modelo 3D"
-    metal material = "Cromado" label "Pulsador"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    metal material = "Acero inoxidable" label "Grifería y metal"
+    seat material = "Lacado blanco" label "Asiento"
+    glass material = "Vidrio claro" label "Vidrio y espejo"
+    frame material = "Roble claro" label "Marco"
+    wood material = "Roble claro" label "Madera"
+    towel material = "Toalla blanca" label "Toallas y cortina"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    light material = "Cristal esmerilado" label "Luz"
 
 body
   box (-width / 2, 0, 0.40) to (width / 2, 0.18, 0.80) material mat

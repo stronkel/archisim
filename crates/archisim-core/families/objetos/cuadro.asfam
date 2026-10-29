@@ -1,8 +1,8 @@
 family "Cuadro o espejo"
   category furniture
   host none
-  version 1
-  description "En la pared: cuadro con marco y paspartú, tríptico, espejo de arco, espejo sol o reloj"
+  version 2
+  description "En la pared, como lo cuelga cada colección: lámina, platos, espejo sol, kakemono, lienzo, espejo de madera, reloj o óleo con marco dorado"
   folder "Cuadros y espejos"
 
 type_params
@@ -12,15 +12,17 @@ type_params
     elevation length = 1.20 range 0.00..2.40 label "Altura desde el suelo"
   section "Materiales"
     frame material = "Roble claro" label "Marco"
-  section "Modelo 3D"
-    model3d choice("Cuadro", "Tríptico", "Espejo de arco", "Espejo sol", "Reloj") = "Cuadro" label "Modelo 3D"
-    mount material = "Tela clara" label "Paspartú"
+    mount material = "Papel" label "Paspartú o fondo"
     art   material = "Lino arena" label "Fondo de la lámina"
     art2  material = "Lana teja" label "Figura"
-    art3  material = "Pana azul petróleo" label "Franja"
+    art3  material = "Pana azul petróleo" label "Otra figura"
     glass material = "Espejo" label "Espejo"
-    mat   material = "Cerámica blanca" label "Esfera del reloj"
-    dark  material = "Negro mate" label "Agujas"
+    mat   material = "Cerámica blanca" label "Esfera"
+    metal material = "Latón" label "Metal o dorado"
+    dark  material = "Metal negro" label "Agujas y herrajes"
+    weave material = "Ratán" label "Cuerda"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
   box (-width / 2, 0, elevation) to (width / 2, 0.03, elevation + height) material frame

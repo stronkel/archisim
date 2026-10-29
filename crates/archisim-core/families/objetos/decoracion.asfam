@@ -1,37 +1,39 @@
 family "Decoración"
   category furniture
   host none
-  version 1
-  description "Pequeñas cosas para mesas y baldas: jarrón con ramas, frutero, libros y vela, cerámicas o cesta con manta; súbelas con el desfase de la base"
+  version 2
+  description "Cosas para mesas y baldas como las pone cada colección; súbelas con el desfase de la base"
   folder "Decoración"
 
 type_params
   section "Dimensiones"
-    width  length = 0.30 range 0.08..1.00 label "Ancho"
-    height length = 0.50 range 0.10..1.50 label "Altura (jarrón)"
+    width  length = 0.40 range 0.08..1.00 label "Ancho"
+    height length = 0.45 range 0.10..1.50 label "Altura de la pieza más alta"
   section "Materiales"
-    mat    material = "Cerámica esmaltada" label "Pieza principal"
-    glaze2 material = "Cerámica blanca" label "Piezas pequeñas"
-    leaves material = "Hoja verde" label "Ramas"
-    stem   material = "Corteza" label "Tallos"
-    fruit  material = "Naranja" label "Fruta"
-    fruit2 material = "Manzana verde" label "Otra fruta"
-    books2 material = "Libros claros" label "Libros"
-    candle material = "Cera" label "Vela"
-    flame  material = "Luz" label "Llama"
-    frame  material = "Ratán" label "Cesta"
+    mat     material = "Cerámica blanca" label "Pieza principal"
+    glaze2  material = "Cerámica esmaltada" label "Piezas pequeñas"
+    frame   material = "Roble claro" label "Madera"
+    metal   material = "Latón" label "Metal"
+    glass   material = "Vidrio claro" label "Vidrio"
+    books   material = "Libro crema" label "Páginas y libros"
+    books2  material = "Libro azul" label "Libro"
+    books3  material = "Libro teja" label "Otro libro"
+    candle  material = "Cera" label "Vela"
+    flame   material = "Llama" label "Llama"
+    fruit   material = "Limón" label "Fruta"
+    fruit2  material = "Manzana verde" label "Otra fruta"
+    leaves  material = "Hoja verde" label "Hojas"
+    stem    material = "Corteza de pino" label "Ramas"
+    flowers material = "Pétalo blanco" label "Flores"
+    dark    material = "Metal negro" label "Mecha y detalles"
   section "Modelo 3D"
-    model3d choice("Jarrón con ramas", "Frutero", "Libros y vela", "Cerámicas", "Cesta con manta") = "Jarrón con ramas" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, width, height * 0.6) material mat
+  box (-width / 2, 0, 0) to (width / 2, width * 0.55, height * 0.6) material mat
 
 plan 1:50
-  let r = width / 2
-  repeat i in 0..12
-    let t0 = 6.283185307 * i / 12
-    let t1 = 6.283185307 * (i + 1) / 12
-    line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen thin
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, width * 0.55) (-width / 2, width * 0.55) pen thin
 
 outputs
   generator = "props:decor"

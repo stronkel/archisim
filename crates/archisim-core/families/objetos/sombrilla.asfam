@@ -1,8 +1,8 @@
 family "Sombrilla"
   category street
   host none
-  version 1
-  description "Sombrilla redonda de mástil central, cuadrada descentrada o de paja con flecos"
+  version 2
+  description "Sombrilla como la hace cada colección"
   folder "Jardín y terraza"
 
 type_params
@@ -10,26 +10,32 @@ type_params
     width  length = 2.50 range 1.20..4.00 label "Diámetro o lado"
     height length = 2.40 range 1.80..2.90 label "Altura"
   section "Materiales"
+    frame material = "Teca" label "Madera o estructura"
+    metal material = "Metal negro" label "Metal"
+    weave material = "Ratán" label "Cuerda o fibra"
+    cushion material = "Tela de exterior" label "Cojines"
+    pillow material = "Lino añil" label "Cojines sueltos"
     mat material = "Tela de exterior" label "Lona"
+    accent material = "Lino añil" label "Rayas"
+    top material = "Mármol" label "Tablero"
+    masonry material = "Cal blanca" label "Obra"
+    pot_mat material = "Terracota" label "Maceta"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Corteza de pino" label "Tronco y tallos"
+    leaves material = "Hoja verde" label "Hojas"
+    flowers material = "Lavanda" label "Flores"
+    dark material = "Metal negro" label "Base y sombras"
   section "Modelo 3D"
-    model3d choice("Redonda", "Descentrada", "De paja") = "Redonda" label "Modelo 3D"
-    frame material = "Teca" label "Mástil y varillas"
-    metal material = "Metal lacado" label "Brazo"
-    dark  material = "Negro mate" label "Base"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-0.1, width / 2 - 0.1, 0) to (0.1, width / 2 + 0.1, height - 0.45) material frame
-  box (-width / 2, 0, height - 0.45) to (width / 2, width, height) material mat
+  box (-width / 2, 0, height - 0.4) to (width / 2, width, height) material mat
 
 plan 1:50
-  let r = width / 2
-  if model3d == "Descentrada"
-    polygon (-r, 0) (r, 0) (r, width) (-r, width) pen thin dashed
-  else
-    repeat i in 0..24
-      let t0 = 6.283185307 * i / 24
-      let t1 = 6.283185307 * (i + 1) / 24
-      line (r * cos(t0), r + r * sin(t0)) to (r * cos(t1), r + r * sin(t1)) pen thin dashed
+  repeat i in 0..24
+    let t0 = 6.283185307 * i / 24
+    let t1 = 6.283185307 * (i + 1) / 24
+    line (width / 2 * cos(t0), width / 2 + width / 2 * sin(t0)) to (width / 2 * cos(t1), width / 2 + width / 2 * sin(t1)) pen thin dashed
 
 outputs
   generator = "props:parasol"

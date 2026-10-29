@@ -59,6 +59,8 @@ impl CatalogGroup {
                 "Dormitorio",
                 "Despacho",
                 "Decoración",
+                "Deporte",
+                "Hostelería y comercio",
                 "Diseño",
                 "Otros",
             ],
@@ -66,6 +68,7 @@ impl CatalogGroup {
                 "Jardín y terraza",
                 "Vegetación",
                 "Mobiliario urbano",
+                "Piscinas y deporte",
                 "Rocas y troncos",
                 "Gente y coches",
                 "Terreno y caminos",
@@ -83,7 +86,9 @@ fn room_of(folder: &str) -> &'static str {
         "Cocina" | "Electrodomésticos" | "Taburetes" => "Cocina",
         "Accesorios de baño" | "Duchas y bañeras" | "Inodoros y bidés" | "Lavabos" => "Baño",
         "Camas" | "Dormitorio" | "Armarios" => "Dormitorio",
-        "Despacho" => "Despacho",
+        "Despacho" | "Oficina" => "Despacho",
+        "Deporte en casa" | "Gimnasio" => "Deporte",
+        "Hostelería" | "Comercio" => "Hostelería y comercio",
         // What makes a house lived in, for any room.
         "Alfombras"
         | "Iluminación"
@@ -96,6 +101,7 @@ fn room_of(folder: &str) -> &'static str {
         "Diseño" => "Diseño",
         // In «Exterior».
         "Jardín y terraza" => "Jardín y terraza",
+        "Piscinas" | "Pistas deportivas" | "Parque infantil" => "Piscinas y deporte",
         _ => "Otros",
     }
 }
@@ -741,8 +747,13 @@ impl ArchiSimApp {
                             "Jardín y terraza" => i.folder == "Jardín y terraza",
                             "Vegetación" => i.category == "Entorno",
                             "Mobiliario urbano" => {
-                                i.category == "Mobiliario urbano" && i.folder != "Jardín y terraza"
+                                i.category == "Mobiliario urbano"
+                                    && !matches!(
+                                        room_of(&i.folder),
+                                        "Jardín y terraza" | "Piscinas y deporte"
+                                    )
                             }
+                            "Piscinas y deporte" => room_of(&i.folder) == "Piscinas y deporte",
                             "Gente y coches" => matches!(i.category, "Gente" | "Vehículos"),
                             "Rocas y troncos" => i.category == "Elementos naturales",
                             _ => false,

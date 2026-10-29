@@ -1,0 +1,37 @@
+family "Mostrador de recepción"
+  category furniture
+  host none
+  version 1
+  description "Mostrador de recepción como lo hace cada colección: repisa alta para los visitantes, un tramo bajo a 80 cm para silla de ruedas y, detrás, la mesa de trabajo a 74 cm con cajonera"
+  folder "Oficina"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.40 range 1.60..6.00 label "Largo"
+    depth  length = 0.85 range 0.70..1.10 label "Fondo"
+    height length = 1.10 range 1.00..1.20 label "Altura de la repisa"
+  section "Materiales"
+    frame   material = "Roble claro" label "Frente"
+    masonry material = "Cal blanca" label "Fábrica o piedra"
+    accent  material = "Cerámica esmaltada" label "Azulejo o laminado"
+    mat     material = "Microcemento" label "Microcemento"
+    top     material = "Roble claro" label "Repisas y mesa"
+    carcass material = "Lacado blanco" label "Muebles de trabajo"
+    metal   material = "Acero inoxidable" label "Metal"
+    dark    material = "Metal negro" label "Zócalo, acero y monitor"
+    light   material = "Luz cálida" label "Tira de luz"
+    display material = "Pantalla de televisor" label "Pantalla"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material top
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (width / 2 - 0.90, 0) to (width / 2 - 0.90, depth) pen thin
+
+outputs
+  generator = "props:fine_reception"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

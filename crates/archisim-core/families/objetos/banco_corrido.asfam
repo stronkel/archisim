@@ -1,0 +1,35 @@
+family "Banco corrido"
+  category furniture
+  host none
+  version 1
+  description "Banco corrido tapizado contra la pared como lo hace cada colección"
+  folder "Hostelería"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.80 range 0.90..6.00 label "Largo"
+    depth  length = 0.60 range 0.45..0.80 label "Fondo"
+    seat   length = 0.46 range 0.40..0.50 label "Altura del asiento"
+    height length = 1.00 range 0.75..1.40 label "Altura del respaldo"
+  section "Materiales"
+    frame   material = "Roble claro" label "Madera"
+    cushion material = "Lino arena" label "Tapizado"
+    pillow  material = "Terciopelo salvia" label "Cojines"
+    accent  material = "Lino añil" label "Otros cojines"
+    masonry material = "Cal blanca" label "Fábrica"
+    metal   material = "Latón" label "Metal"
+    dark    material = "Metal negro" label "Acero negro o zócalo"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material cushion
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0.14) to (width / 2, 0.14) pen thin
+
+outputs
+  generator = "props:fine_banquette"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

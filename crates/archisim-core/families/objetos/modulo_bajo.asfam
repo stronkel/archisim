@@ -1,8 +1,8 @@
 family "Módulo bajo de cocina"
   category kitchen
   host none
-  version 1
-  description "Un módulo bajo con su encimera: cajonera, puertas, fregadero, horno, lavavajillas, placa, botellero o esquina. Junto a otro, las encimeras se juntan."
+  version 2
+  description "Módulo bajo de cocina hecho en una de las ocho colecciones: frentes, tiradores, zócalo o patas, fregadero, grifo y placa de cada una. Junto a otro, las encimeras se juntan."
   folder "Cocina"
 
 type_params
@@ -18,16 +18,21 @@ type_params
     unit choice("Cajonera", "Puertas", "Fregadero", "Horno", "Lavavajillas", "Placa", "Botellero", "Esquina") = "Cajonera" label "Qué lleva"
     drawers integer = 3 range 0..4 visible_if unit == "Cajonera" or unit == "Placa" label "Cajones"
     doors integer = 1 range 1..2 visible_if unit == "Puertas" or unit == "Fregadero" label "Puertas"
-  section "Frentes"
-    front_style choice("Liso", "Marco", "Ranurado", "Cristal") = "Liso" label "Frente"
-    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
-    mat material = "Madera de pino" label "Frentes"
-    top material = "Encimera" label "Encimera"
+    mat material = "Lacado blanco" label "Frentes"
+    plinth material = "Roble claro" label "Zócalo"
+    top material = "Roble claro" label "Encimera"
   section "Modelo 3D"
-    model3d choice("Módulo") = "Módulo" label "Modelo 3D"
-    metal material = "Cromado" label "Tiradores y grifería"
-    dark material = "Negro mate" label "Placa y horno"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    metal material = "Acero inoxidable" label "Tiradores y grifería"
+    sink material = "Acero inoxidable" label "Fregadero"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    black material = "Vitrocerámica" label "Placa y horno"
+    ring material = "Cal blanca" label "Marcas de la placa"
+    glass material = "Vidrio claro" label "Vidrio"
+    wood material = "Roble claro" label "Madera (patas, baldas)"
+    ceramic material = "Cerámica blanca" label "Tarros y jarras"
+    hood material = "Lacado blanco" label "Campana"
 
 body
   box (-width / 2, 0, 0.1) to (width / 2, depth - 0.04, height - 0.03) material mat

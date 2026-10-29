@@ -4447,10 +4447,12 @@ mod worktop_tests {
         let got = top_area(&first);
         assert!((got - want).abs() < 1e-6, "{got} m² against {want}");
         // The others carry no worktop.
-        // (A sink keeps the rim of its basin, a few cm², level with it.)
+        // (A sink keeps the rim of its basin level with it: a few cm², or
+        // the flange of the nordic inset sink, some 450 cm².)
         for o in [b, c, e, d] {
             let left = top_area(&object_solids(&m, o));
-            assert!(left < 0.01, "{o:?}: {left}");
+            let rim = if o == b { 0.05 } else { 0.01 };
+            assert!(left < rim, "{o:?}: {left}");
         }
         let run = m.worktop_run_of(island[0]).expect("an island");
         assert_eq!(run.members.len(), 6);

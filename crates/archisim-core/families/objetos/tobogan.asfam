@@ -1,0 +1,26 @@
+family "Tobogán"
+  category street
+  host none
+  version 1
+  description "Torre con escalera, plataforma a 1,2 m bajo tejadillo y tobogán"
+  folder "Parque infantil"
+
+type_params
+  section "Materiales"
+    frame   material = "Roble claro" label "Postes y escalera"
+    accent  material = "Plástico verde" label "Paneles y tejadillo"
+    slide   material = "Plástico amarillo" label "Tobogán"
+    metal   material = "Acero inoxidable" label "Peldaños y pies"
+
+body
+  box (-0.75, 0, 0) to (0.75, 5.4, 2.9) material frame
+
+plan 1:50
+  polygon (-0.6, 1.05) (0.6, 1.05) (0.6, 2.25) (-0.6, 2.25) pen view
+  polygon (-0.28, 0.05) (0.28, 0.05) (0.28, 1.05) (-0.28, 1.05) pen thin
+  polygon (-0.28, 2.25) (0.28, 2.25) (0.28, 5.4) (-0.28, 5.4) pen thin
+
+outputs
+  generator = "props:fine_slide"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

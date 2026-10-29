@@ -1,8 +1,8 @@
 family "Cómoda"
   category furniture
   host none
-  version 2
-  description "Cómoda de cajones en una o varias columnas"
+  version 3
+  description "Cómoda como la hace cada colección: cajones en una o varias columnas"
   folder "Dormitorio"
 
 type_params
@@ -13,15 +13,21 @@ type_params
   section "Frentes"
     drawers integer = 4 range 1..10 label "Cajones por columna"
     columns integer = 1 range 1..4 label "Columnas"
-    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
-    mat material = "Madera de pino" label "Madera"
+    frame material = "Roble claro" label "Madera o estructura"
+    front material = "Lacado blanco" label "Frentes"
+    top material = "Roble claro" label "Encimera"
+    stone material = "Mármol" label "Piedra"
+    plinth material = "Roble claro" label "Zócalo"
+    metal material = "Latón" label "Tiradores y metal"
+    glass material = "Vidrio claro" label "Vidrio"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
   section "Modelo 3D"
-    model3d choice("Zócalo", "Con patas") = "Zócalo" label "Modelo 3D"
-    frame material = "Metal lacado" label "Tiradores y patas"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view

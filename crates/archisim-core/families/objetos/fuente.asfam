@@ -1,26 +1,36 @@
 family "Fuente de beber"
   category street
   host none
-  version 2
-  description "Fuente de agua potable de pie; el punto de inserción es el centro de la trasera y el caño mira hacia delante"
+  version 3
+  description "Fuente de agua potable como la hace cada colección; el punto de inserción es el centro de la trasera y el caño mira hacia delante"
   folder "Mobiliario urbano"
 
 type_params
   section "Dimensiones"
     width  length = 0.35 range 0.20..6.00 label "Ancho"
     depth  length = 0.35 range 0.20..6.00 label "Fondo"
-    height length = 1.00 range 0.40..2.00 label "Altura"
+    height length = 1.00 range 0.40..2.00 label "Altura del pilón"
   section "Materiales"
-    mat   material = "Metal lacado" label "Cuerpo"
-    water material = "Agua" label "Agua"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Metal negro" label "Metal"
+    mat material = "Hormigón pulido" label "Cuerpo (hormigón, piedra, acero)"
+    masonry material = "Cal blanca" label "Obra"
+    top material = "Piedra caliza" label "Piedra de remate"
+    accent material = "Cerámica esmaltada" label "Azulejo o color"
+    pot_mat material = "Hormigón pulido" label "Jardinera"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Espiga" label "Tronco y tallos"
+    leaves material = "Gramínea" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas claras"
+    flowers material = "Espiga" label "Flores y espigas"
+    light material = "Luz de farola" label "Luz"
+    water material = "Agua de fuente" label "Agua"
+    dark material = "Metal negro" label "Huecos y rejillas"
   section "Modelo 3D"
-    model3d choice("Fuente de fundición", "Bloque de piedra", "Estanque con surtidor") = "Fuente de fundición" label "Modelo 3D"
-    frame    material = "Metal lacado" label "Rejilla y caño"
-    concrete material = "Piedra gris" label "Piedra"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, depth, height - 0.1) material mat
-  box (-width / 2, 0, height - 0.1) to (width / 2, depth, height) material water
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view

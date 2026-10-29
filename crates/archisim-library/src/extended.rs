@@ -545,7 +545,7 @@ pub const OTHERS: &[Other] = &[
         "Farola clásica 3,5 m",
         "Farola",
         &[
-            V::T("model3d", "Fernandina"),
+            V::T("model3d", "Clásica"),
             V::N("height", 3.5),
             V::N("arm", 0.0),
             V::N("pole", 0.14),
@@ -558,6 +558,7 @@ pub const OTHERS: &[Other] = &[
         "Farola de vial 12 m",
         "Farola",
         &[
+            V::T("model3d", "Industrial"),
             V::N("height", 12.0),
             V::N("arm", 2.0),
             V::N("pole", 0.22),
@@ -574,7 +575,7 @@ pub const OTHERS: &[Other] = &[
         "Baliza de suelo",
         "Farola",
         &[
-            V::T("model3d", "Baliza"),
+            V::T("model3d", "Contemporáneo"),
             V::N("height", 0.6),
             V::N("arm", 0.0),
             V::N("pole", 0.18),
@@ -594,7 +595,7 @@ pub const OTHERS: &[Other] = &[
         "Banco de hormigón 2,4 m",
         "Banco",
         &[
-            V::T("model3d", "Hormigón y madera"),
+            V::T("model3d", "Contemporáneo"),
             V::N("width", 2.4),
             V::N("depth", 0.6),
             V::M("mat", "Hormigón prefabricado", [196, 192, 184]),
@@ -609,7 +610,7 @@ pub const OTHERS: &[Other] = &[
         "Papelera de madera",
         "Papelera",
         &[
-            V::T("model3d", "Listones de madera"),
+            V::T("model3d", "Japandi"),
             V::M("mat", "Madera tratada", [150, 110, 72]),
         ],
     ),
@@ -617,7 +618,7 @@ pub const OTHERS: &[Other] = &[
         "Bolardo de hormigón",
         "Bolardo",
         &[
-            V::T("model3d", "Hormigón"),
+            V::T("model3d", "Contemporáneo"),
             V::N("width", 0.35),
             V::N("height", 0.5),
             V::M("mat", "Hormigón prefabricado", [196, 192, 184]),

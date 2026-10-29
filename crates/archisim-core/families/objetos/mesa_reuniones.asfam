@@ -1,0 +1,31 @@
+family "Mesa de reuniones"
+  category furniture
+  host none
+  version 1
+  description "Mesa de reuniones con caja de conexiones como la hace cada colección"
+  folder "Oficina"
+
+type_params
+  section "Dimensiones"
+    width  length = 2.40 range 1.20..6.00 label "Largo"
+    depth  length = 1.10 range 0.80..1.60 label "Ancho"
+    height length = 0.74 range 0.68..0.80 label "Altura"
+  section "Materiales"
+    top    material = "Roble claro" label "Tablero"
+    frame  material = "Roble claro" label "Patas y pies"
+    metal  material = "Latón" label "Metal"
+    dark   material = "Metal negro" label "Acero negro y conexiones"
+    accent material = "Cuero coñac" label "Tapete o incrustación"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material top
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:fine_meeting_table"
+  ifc_class = "IfcFurniture"
+  ifc_type = "TABLE"

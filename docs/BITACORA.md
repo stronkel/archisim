@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (24) · El taller pasa a la biblioteca: paquetes 2 a 8
+
+Rama `bloque/biblioteca-taller` (sobre `bloque/remates-modelos`), con pull request. Sin cambios de formato. Cambia el IFC de las piezas que se pasan (lámparas como `IfcLightFixture`, piezas nuevas).
+
+Antonio aprobó los cuatro grupos: cocina y baño (2a, 2b), dormitorio y luces (3, 4), exterior, urbano y estudio (5, 6), y hostelería, oficinas, tiendas, deporte y piscinas (7, 8).
+
+**Hecho** (detalle en `docs/BIBLIOTECA_3D.md`, «Paquetes 2 a 8 en la biblioteca»)
+- 32 familias de siempre suben de versión con el modelo de cada una de las ocho colecciones (cocina, baño, dormitorio, estudio, terraza, calle, plantas, decoración y cuadros); 53 familias nuevas (tocador, cuna, litera, lámparas, mesa, silla y sofá de terraza, bares, oficinas, tiendas, piscinas, gimnasio, pistas, gradas, parque infantil…).
+- Como en el paquete 1, los modelos antiguos ya no se ofrecen; las piezas de la biblioteca van al más parecido de cada colección y tres cambian de nombre (Kentia, Tetera y cuencos, Cama infantil 90×190). La nueva mesa de jardín se llama **Mesa de terraza** porque «Mesa de exterior» ya era la del bistró.
+- Una pieza nueva de la biblioteca por cada familia nueva; en la Maqueta, temas nuevos «Deporte», «Hostelería y comercio» y, en Exterior, «Piscinas y deporte».
+- El taller sigue montando todo con las familias de la biblioteca; solo guarda la planta y la farola de la segunda entrega.
+
+**Pendiente**
+- La planta y la farola del taller, cuando Antonio las mire.
+- Las fotos de todas las colecciones con las familias ya de sistema (las pruebas `*_pictures` siguen funcionando igual).
+
+**Qué debe probar Antonio**
+1. Abre un proyecto nuevo con la versión del pull request. En la Maqueta, Amueblar → Cocina, Baño, Dormitorio, Deporte y Hostelería y comercio; Exterior → Jardín y terraza, Mobiliario urbano y Piscinas y deporte. Coloca alguna pieza de cada uno y mírala en 3D.
+2. Elige una colección (por ejemplo, Rústica) y coloca un inodoro, una cama y una farola: deben salir los modelos de esa colección.
+3. Abre un proyecto tuyo de antes con inodoros o camas: debe abrirse igual. Si en la Biblioteca actualizas sus familias, los modelos antiguos pasan al nórdico cálido y las medidas se conservan.
+4. Exporta el IFC y comprueba que las lámparas salen como luminarias (`IfcLightFixture`).
+
+---
+
 ## 2026-10-29 (23) · Revisión automática de los modelos: nada en el aire
 
 Misma rama `bloque/remates-modelos` y mismo pull request que la (22). Sin cambios de formato ni de IFC.

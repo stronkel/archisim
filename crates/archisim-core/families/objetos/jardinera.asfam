@@ -1,8 +1,8 @@
 family "Jardinera"
   category street
   host none
-  version 2
-  description "Jardinera con plantas; el punto de inserción es el centro de la trasera"
+  version 3
+  description "Jardinera de calle como la hace cada colección, con sus plantas; el punto de inserción es el centro de la trasera"
   folder "Mobiliario urbano"
 
 type_params
@@ -11,21 +11,30 @@ type_params
     depth  length = 0.50 range 0.30..2.00 label "Ancho"
     height length = 0.50 range 0.20..1.20 label "Altura"
   section "Materiales"
-    mat    material = "Hormigón prefabricado" label "Jardinera"
-    leaves material = "Vegetación" label "Plantas"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Metal negro" label "Metal"
+    mat material = "Hormigón pulido" label "Cuerpo (hormigón, piedra, acero)"
+    masonry material = "Cal blanca" label "Obra"
+    top material = "Piedra caliza" label "Piedra de remate"
+    accent material = "Cerámica esmaltada" label "Azulejo o color"
+    pot_mat material = "Hormigón pulido" label "Jardinera"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Espiga" label "Tronco y tallos"
+    leaves material = "Gramínea" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas claras"
+    flowers material = "Espiga" label "Flores y espigas"
+    light material = "Luz de farola" label "Luz"
+    water material = "Agua de fuente" label "Agua"
+    dark material = "Metal negro" label "Huecos y rejillas"
   section "Modelo 3D"
-    model3d choice("Hormigón con arbustos", "Madera con flores", "Acero corten con gramíneas") = "Hormigón con arbustos" label "Modelo 3D"
-    frame   material = "Madera de pino" label "Postes"
-    soil    material = "Tierra" label "Tierra"
-    flowers material = "Copa en flor" label "Flores"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, depth, height) material mat
-  box (-width / 2 + 0.06, 0.06, height) to (width / 2 - 0.06, depth - 0.06, height + 0.3) material leaves
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material pot_mat
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
-  polygon (-width / 2 + 0.06, 0.06) (width / 2 - 0.06, 0.06) (width / 2 - 0.06, depth - 0.06) (-width / 2 + 0.06, depth - 0.06) pen thin
+  polygon (-width / 2 + 0.05, 0.05) (width / 2 - 0.05, 0.05) (width / 2 - 0.05, depth - 0.05) (-width / 2 + 0.05, depth - 0.05) pen thin
 
 plan presentation
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin tint mat

@@ -35,9 +35,6 @@ pub struct Collection {
     pub stone: &'static str,
     /// Rattan, rush, bamboo: what is woven.
     pub weave: &'static str,
-    /// The model of the 3D of some families (family, model), when the
-    /// piece does not choose its own.
-    pub models: &'static [(&'static str, &'static str)],
 }
 
 impl Collection {
@@ -67,10 +64,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Cerámica blanca",
         stone: "Mármol",
         weave: "Ratán",
-        models: &[
-            ("Cama", "Cabecero tapizado"),
-            ("Mesita de noche", "Con patas"),
-        ],
     },
     Collection {
         name: "Mediterráneo",
@@ -83,7 +76,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Terracota",
         stone: "Microcemento",
         weave: "Enea",
-        models: &[("Cama", "Madera"), ("Mesita de noche", "Cajonera")],
     },
     Collection {
         name: "Años 50",
@@ -96,7 +88,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Cerámica turquesa",
         stone: "Terrazo",
         weave: "Ratán",
-        models: &[("Cama", "Madera"), ("Mesita de noche", "Patas cónicas")],
     },
     Collection {
         name: "Japandi",
@@ -109,10 +100,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Gres",
         stone: "Piedra gris",
         weave: "Bambú",
-        models: &[
-            ("Cama", "Cabecero de lamas"),
-            ("Mesita de noche", "Flotante"),
-        ],
     },
     Collection {
         name: "Contemporáneo",
@@ -125,7 +112,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Cerámica blanca",
         stone: "Terrazo",
         weave: "Ratán",
-        models: &[],
     },
     Collection {
         name: "Rústica",
@@ -138,7 +124,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Terracota",
         stone: "Piedra gris",
         weave: "Enea",
-        models: &[],
     },
     Collection {
         name: "Industrial",
@@ -151,7 +136,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Gres",
         stone: "Microcemento",
         weave: "Enea",
-        models: &[],
     },
     Collection {
         name: "Clásica",
@@ -164,7 +148,6 @@ pub const COLLECTIONS: &[Collection] = &[
         ceramic: "Cerámica blanca",
         stone: "Mármol",
         weave: "Ratán",
-        models: &[],
     },
 ];
 
@@ -242,19 +225,11 @@ pub fn restyle(
                 if own_model || !is_default {
                     continue;
                 }
-                // Its model named as the collection (the families of the
-                // paquete 1), or the one the collection says.
+                // Its model named as the collection.
                 let model = options
                     .iter()
                     .find(|o| o.as_str() == c.name)
-                    .map(String::as_str)
-                    .or_else(|| {
-                        c.models
-                            .iter()
-                            .find(|(fam, _)| *fam == def.name)
-                            .map(|x| x.1)
-                            .filter(|m| options.iter().any(|o| o == m))
-                    });
+                    .map(String::as_str);
                 if let Some(model) = model {
                     out.insert("model3d".into(), Value::Text(model.into()));
                 }
@@ -458,13 +433,13 @@ mod tests {
         let bed = add_collection_entry(&mut m, "Cama doble 150×200", j).unwrap();
         assert_eq!(
             m.object_type(bed).unwrap().values.get("model3d"),
-            Some(&Value::Text("Cabecero de lamas".into()))
+            Some(&Value::Text("Japandi".into()))
         );
         // …but a piece that chose its model keeps it.
         let own = add_collection_entry(&mut m, "Cama con cabecero tapizado 160", j).unwrap();
         assert_eq!(
             m.object_type(own).unwrap().values.get("model3d"),
-            Some(&Value::Text("Cabecero tapizado".into()))
+            Some(&Value::Text("Clásica".into()))
         );
         let wc = add_collection_entry(&mut m, "Inodoro", j).unwrap();
         let ty = m.object_type(wc).unwrap();

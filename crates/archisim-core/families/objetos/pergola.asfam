@@ -1,8 +1,8 @@
 family "Pérgola"
   category street
   host none
-  version 1
-  description "Pérgola de madera con vigas y viguetas, de aluminio con lamas o de madera con cañizo y una trepadora"
+  version 2
+  description "Pérgola como la hace cada colección"
   folder "Jardín y terraza"
 
 type_params
@@ -11,27 +11,37 @@ type_params
     depth  length = 3.00 range 1.50..8.00 label "Fondo"
     height length = 2.50 range 2.10..2.95 label "Altura"
   section "Materiales"
-    frame material = "Madera de pino" label "Madera"
+    frame material = "Teca" label "Madera o estructura"
+    metal material = "Metal negro" label "Metal"
+    weave material = "Ratán" label "Cuerda o fibra"
+    cushion material = "Tela de exterior" label "Cojines"
+    pillow material = "Lino añil" label "Cojines sueltos"
+    mat material = "Tela de exterior" label "Lona"
+    accent material = "Lino añil" label "Rayas"
+    top material = "Mármol" label "Tablero"
+    masonry material = "Cal blanca" label "Obra"
+    pot_mat material = "Terracota" label "Maceta"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Corteza de pino" label "Tronco y tallos"
+    leaves material = "Hoja verde" label "Hojas"
+    flowers material = "Lavanda" label "Flores"
+    vine_stem material = "Corteza de buganvilla" label "Tallo de la trepadora"
+    vine material = "Hoja de buganvilla" label "Hojas de la trepadora"
+    vine2 material = "Hoja verde tierna" label "Hojas nuevas de la trepadora"
+    bracts material = "Buganvilla" label "Flores de la trepadora"
+    dark material = "Metal negro" label "Base y sombras"
   section "Modelo 3D"
-    model3d choice("De madera", "De lamas", "Con cañizo") = "De madera" label "Modelo 3D"
-    metal  material = "Metal lacado" label "Aluminio"
-    mat    material = "Cañizo" label "Cañizo"
-    leaves material = "Hoja verde" label "Trepadora"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (-width / 2 + 0.12, 0.12, height) material frame
-  box (width / 2 - 0.12, 0, 0) to (width / 2, 0.12, height) material frame
-  box (-width / 2, depth - 0.12, 0) to (-width / 2 + 0.12, depth, height) material frame
-  box (width / 2 - 0.12, depth - 0.12, 0) to (width / 2, depth, height) material frame
+  box (-width / 2, 0, height - 0.2) to (width / 2, depth, height) material frame
 
 plan 1:50
-  polygon (-width / 2, 0) (-width / 2 + 0.12, 0) (-width / 2 + 0.12, 0.12) (-width / 2, 0.12) pen cut
-  polygon (width / 2 - 0.12, 0) (width / 2, 0) (width / 2, 0.12) (width / 2 - 0.12, 0.12) pen cut
-  polygon (-width / 2, depth - 0.12) (-width / 2 + 0.12, depth - 0.12) (-width / 2 + 0.12, depth) (-width / 2, depth) pen cut
-  polygon (width / 2 - 0.12, depth - 0.12) (width / 2, depth - 0.12) (width / 2, depth) (width / 2 - 0.12, depth) pen cut
-  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen thin dashed
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0) to (width / 2, depth) pen thin dashed
+  line (-width / 2, depth) to (width / 2, 0) pen thin dashed
 
 outputs
   generator = "props:pergola"
   ifc_class = "IfcBuildingElementProxy"
-  ifc_type = "USERDEFINED"
+  ifc_type = "ELEMENT"

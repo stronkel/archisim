@@ -1,0 +1,32 @@
+family "Pista de pádel"
+  category street
+  host none
+  version 1
+  description "Pista de pádel de 20 × 10 m con césped artificial, cristal y malla, red, puertas junto a la red y cuatro focos"
+  folder "Pistas deportivas"
+
+type_params
+  section "Materiales"
+    court   material = "Pista azul" label "Césped de la pista"
+    ground  material = "Hormigón pulido" label "Solera alrededor"
+    line    material = "Línea blanca" label "Líneas"
+    glass   material = "Vidrio claro" label "Cristal"
+    net     material = "Red negra" label "Malla y red"
+    frame   material = "Metal negro" label "Postes"
+    dark    material = "Goma negra" label "Postes de la red"
+    light   material = "Luz de foco" label "Focos"
+
+body
+  box (-10.5, 0, 0) to (10.5, 10.5, 6.2) material court
+
+plan 1:50
+  polygon (-10, 0) (10, 0) (10, 10) (-10, 10) pen view
+  polygon (-10.5, -0.5) (10.5, -0.5) (10.5, 10.5) (-10.5, 10.5) pen thin
+  line (0, 0) to (0, 10) pen view
+  line (-6.95, 0) to (-6.95, 10) pen thin
+  line (6.95, 0) to (6.95, 10) pen thin
+
+outputs
+  generator = "props:fine_padel_court"
+  ifc_class = "IfcBuildingElementProxy"
+  ifc_type = "USERDEFINED"

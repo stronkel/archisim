@@ -2,8 +2,11 @@
 //! project of their own, each one next to the library's piece it is to
 //! replace, to be looked at and judged before anything enters the library.
 //!
-//! Their families (`taller/*.asfam`) are not system families: a project
-//! that uses one keeps its copy, as with any family.
+//! The packages Antonio approved (the kitchen, the bathroom, the
+//! bedroom, the lamps, the terrace, the street, the study, bars, offices,
+//! shops, sport and pools) are system families now; the workshop places
+//! them all the same. What is still being judged (`taller/*.asfam`) is
+//! not a system family: a project that uses one keeps its copy.
 
 use archisim_core::{
     Model, ModelError, NewObject, NewWall, ObjectTypeId, ParamScope, Point2, ReferenceLine, Value,
@@ -15,91 +18,6 @@ use archisim_core::{
 pub const RECIPES: &[&str] = &[
     include_str!("../taller/planta.asfam"),
     include_str!("../taller/farola.asfam"),
-    include_str!("../taller/cocina_bajo.asfam"),
-    include_str!("../taller/cocina_columna.asfam"),
-    include_str!("../taller/cocina_alto.asfam"),
-    include_str!("../taller/cocina_campana.asfam"),
-    include_str!("../taller/bano_lavabo.asfam"),
-    include_str!("../taller/bano_inodoro.asfam"),
-    include_str!("../taller/bano_bide.asfam"),
-    include_str!("../taller/bano_ducha.asfam"),
-    include_str!("../taller/bano_banera.asfam"),
-    include_str!("../taller/bano_espejo.asfam"),
-    include_str!("../taller/bano_toallero.asfam"),
-    include_str!("../taller/dormitorio_cama.asfam"),
-    include_str!("../taller/dormitorio_mesita.asfam"),
-    include_str!("../taller/dormitorio_armario.asfam"),
-    include_str!("../taller/dormitorio_comoda.asfam"),
-    include_str!("../taller/dormitorio_banco.asfam"),
-    include_str!("../taller/dormitorio_tocador.asfam"),
-    include_str!("../taller/dormitorio_cama_infantil.asfam"),
-    include_str!("../taller/dormitorio_cuna.asfam"),
-    include_str!("../taller/dormitorio_litera.asfam"),
-    include_str!("../taller/dormitorio_galan.asfam"),
-    include_str!("../taller/dormitorio_espejo_pie.asfam"),
-    include_str!("../taller/luz_colgante.asfam"),
-    include_str!("../taller/luz_plafon.asfam"),
-    include_str!("../taller/luz_aplique.asfam"),
-    include_str!("../taller/luz_pie.asfam"),
-    include_str!("../taller/luz_mesa.asfam"),
-    include_str!("../taller/exterior_mesa.asfam"),
-    include_str!("../taller/exterior_silla.asfam"),
-    include_str!("../taller/exterior_sofa.asfam"),
-    include_str!("../taller/exterior_tumbona.asfam"),
-    include_str!("../taller/exterior_sombrilla.asfam"),
-    include_str!("../taller/exterior_maceton.asfam"),
-    include_str!("../taller/exterior_pergola.asfam"),
-    include_str!("../taller/urbano_banco.asfam"),
-    include_str!("../taller/urbano_farola.asfam"),
-    include_str!("../taller/urbano_papelera.asfam"),
-    include_str!("../taller/urbano_bolardo.asfam"),
-    include_str!("../taller/urbano_jardinera.asfam"),
-    include_str!("../taller/urbano_aparcabicis.asfam"),
-    include_str!("../taller/urbano_fuente.asfam"),
-    include_str!("../taller/interior_planta.asfam"),
-    include_str!("../taller/interior_decoracion.asfam"),
-    include_str!("../taller/interior_cuadro.asfam"),
-    include_str!("../taller/estudio_escritorio.asfam"),
-    include_str!("../taller/estudio_silla.asfam"),
-    include_str!("../taller/hosteleria_barra.asfam"),
-    include_str!("../taller/hosteleria_contrabarra.asfam"),
-    include_str!("../taller/hosteleria_mesa.asfam"),
-    include_str!("../taller/hosteleria_silla.asfam"),
-    include_str!("../taller/hosteleria_banco.asfam"),
-    include_str!("../taller/oficina_puestos.asfam"),
-    include_str!("../taller/oficina_reuniones.asfam"),
-    include_str!("../taller/oficina_recepcion.asfam"),
-    include_str!("../taller/oficina_armario.asfam"),
-    include_str!("../taller/oficina_mampara.asfam"),
-    include_str!("../taller/tienda_mostrador.asfam"),
-    include_str!("../taller/tienda_estanteria.asfam"),
-    include_str!("../taller/tienda_mesa.asfam"),
-    include_str!("../taller/tienda_burro.asfam"),
-    include_str!("../taller/tienda_probador.asfam"),
-    include_str!("../taller/piscina.asfam"),
-    include_str!("../taller/piscina_ducha.asfam"),
-    include_str!("../taller/deporte_canasta.asfam"),
-    include_str!("../taller/deporte_porteria.asfam"),
-    include_str!("../taller/deporte_pingpong.asfam"),
-    include_str!("../taller/deporte_cama_elastica.asfam"),
-    include_str!("../taller/gimnasio_cinta.asfam"),
-    include_str!("../taller/gimnasio_bicicleta.asfam"),
-    include_str!("../taller/gimnasio_banco.asfam"),
-    include_str!("../taller/gimnasio_mancuernero.asfam"),
-    include_str!("../taller/gimnasio_espaldera.asfam"),
-    include_str!("../taller/gimnasio_esterilla.asfam"),
-    include_str!("../taller/pista_padel.asfam"),
-    include_str!("../taller/pista_tenis.asfam"),
-    include_str!("../taller/pista_baloncesto.asfam"),
-    include_str!("../taller/grada.asfam"),
-    include_str!("../taller/parque_columpio.asfam"),
-    include_str!("../taller/parque_tobogan.asfam"),
-    include_str!("../taller/parque_balancin.asfam"),
-    include_str!("../taller/parque_muelle.asfam"),
-    include_str!("../taller/parque_calistenia.asfam"),
-    include_str!("../taller/parque_eliptica.asfam"),
-    include_str!("../taller/pista_futbol_sala.asfam"),
-    include_str!("../taller/campo_futbol.asfam"),
 ];
 
 /// A piece of the workshop: its type name, its family, its values (sizes
@@ -603,27 +521,27 @@ pub const BEDROOMS: &[Kitchen] = &[
 /// values. The bench goes at the foot of the bed.
 const ROOM: &[(&str, &str, f64, Values)] = &[
     (
-        "Armario (taller)",
+        "Armario",
         "Armario",
         0.0,
         &[("width", N(1.5)), ("doors", N(3.0)), ("drawers", N(1.0))],
     ),
     (
-        "Cómoda (taller)",
+        "Cómoda",
         "Cómoda",
         0.35,
         &[("columns", N(2.0)), ("width", N(1.1))],
     ),
-    ("Mesita de noche (taller)", "Mesita", 0.45, &[]),
-    ("Cama (taller)", "Cama", 0.08, &[("width", N(1.6))]),
-    ("Mesita de noche (taller)", "Mesita", 0.08, &[]),
-    ("Tocador (taller)", "Tocador", 0.6, &[]),
-    ("Galán de noche (taller)", "Galán", 0.4, &[]),
-    ("Espejo de pie (taller)", "Espejo de pie", 0.3, &[]),
+    ("Mesita de noche", "Mesita", 0.45, &[]),
+    ("Cama", "Cama", 0.08, &[("width", N(1.6))]),
+    ("Mesita de noche", "Mesita", 0.08, &[]),
+    ("Tocador", "Tocador", 0.6, &[]),
+    ("Galán de noche", "Galán", 0.4, &[]),
+    ("Espejo de pie", "Espejo de pie", 0.3, &[]),
     // The children's room, further along the same wall.
-    ("Cama infantil (taller)", "Cama infantil", 1.0, &[]),
-    ("Cuna (taller)", "Cuna", 0.5, &[]),
-    ("Litera (taller)", "Litera", 0.7, &[]),
+    ("Cama infantil", "Cama infantil", 1.0, &[]),
+    ("Cuna", "Cuna", 0.5, &[]),
+    ("Litera", "Litera", 0.7, &[]),
 ];
 
 /// Places a bedroom with its back on a wall along `y = wall` from `x`
@@ -654,13 +572,7 @@ fn place_bedroom(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, M
     }
     // The bench at the foot of the bed.
     if let Some((cx, depth)) = bed {
-        let t = kitchen_type(
-            m,
-            k,
-            "Banco de pie de cama (taller)",
-            "Banco",
-            &[("width", N(1.3))],
-        )?;
+        let t = kitchen_type(m, k, "Banco de pie de cama", "Banco", &[("width", N(1.3))])?;
         m.add_object(NewObject {
             object_type: t,
             level,
@@ -801,32 +713,26 @@ fn place_lights(
     let chest = kitchen_type(
         m,
         room,
-        "Cómoda (taller)",
+        "Cómoda",
         "Cómoda",
         &[("columns", N(2.0)), ("width", N(1.1))],
     )?;
     put(m, chest, x + 0.55, wall, 0.0)?;
-    let lamp = kitchen_type(m, k, "Lámpara de mesa (taller)", "Lámpara de mesa", &[])?;
+    let lamp = kitchen_type(m, k, "Lámpara de mesa", "Lámpara de mesa", &[])?;
     put(m, lamp, x + 0.8, wall, 0.85)?;
-    let sconce = kitchen_type(
-        m,
-        k,
-        "Aplique (taller)",
-        "Aplique",
-        &[("elevation", N(1.8))],
-    )?;
+    let sconce = kitchen_type(m, k, "Aplique", "Aplique", &[("elevation", N(1.8))])?;
     put(m, sconce, x + 1.6, wall, 0.0)?;
-    let floor = kitchen_type(m, k, "Lámpara de pie (taller)", "Lámpara de pie", &[])?;
+    let floor = kitchen_type(m, k, "Lámpara de pie", "Lámpara de pie", &[])?;
     put(m, floor, x + 2.3, wall, 0.0)?;
     let pendant = kitchen_type(
         m,
         k,
-        "Lámpara colgante (taller)",
+        "Lámpara colgante",
         "Lámpara colgante",
         &[("diameter", N(0.5))],
     )?;
     put(m, pendant, x + 1.2, wall - 1.4, 0.0)?;
-    let ceiling = kitchen_type(m, k, "Plafón (taller)", "Plafón", &[])?;
+    let ceiling = kitchen_type(m, k, "Plafón", "Plafón", &[])?;
     put(m, ceiling, x + 2.6, wall - 1.4, 0.0)?;
     Ok(x + 3.2)
 }
@@ -993,7 +899,7 @@ fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, 
     let pergola = kitchen_type(
         m,
         k,
-        "Pérgola (taller)",
+        "Pérgola",
         "Pérgola",
         &[("width", N(3.2)), ("depth", N(3.0))],
     )?;
@@ -1001,22 +907,16 @@ fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, 
     let table = kitchen_type(
         m,
         k,
-        "Mesa de exterior (taller)",
+        "Mesa de terraza",
         "Mesa de exterior",
         &[("width", N(1.6)), ("depth", N(0.9)), ("chairs", N(4.0))],
     )?;
     put(m, table, x + 1.6, front - 1.05)?;
-    let sofa = kitchen_type(m, k, "Sofá de exterior (taller)", "Sofá de exterior", &[])?;
+    let sofa = kitchen_type(m, k, "Sofá de exterior", "Sofá de exterior", &[])?;
     put(m, sofa, x + 4.3, front)?;
-    let lounger = kitchen_type(m, k, "Tumbona (taller)", "Tumbona", &[])?;
+    let lounger = kitchen_type(m, k, "Tumbona", "Tumbona", &[])?;
     put(m, lounger, x + 6.1, front)?;
-    let parasol = kitchen_type(
-        m,
-        k,
-        "Sombrilla (taller)",
-        "Sombrilla",
-        &[("width", N(2.2))],
-    )?;
+    let parasol = kitchen_type(m, k, "Sombrilla", "Sombrilla", &[("width", N(2.2))])?;
     // Beside the lounger's head, not through it: a parasol on its pole
     // stands at its side and shades the head; a cantilever one hangs
     // its canopy over the head from its arm beside it.
@@ -1025,9 +925,9 @@ fn place_terrace(m: &mut Model, k: &Kitchen, x: f64, front: f64) -> Result<f64, 
     } else {
         put(m, parasol, x + 6.85, front + 0.75)?;
     }
-    let pot = kitchen_type(m, k, "Macetón (taller)", "Macetón", &[])?;
+    let pot = kitchen_type(m, k, "Macetón", "Macetón", &[])?;
     put(m, pot, x + 8.6, front)?;
-    let chair = kitchen_type(m, k, "Silla de exterior (taller)", "Silla de exterior", &[])?;
+    let chair = kitchen_type(m, k, "Silla de exterior", "Silla de exterior", &[])?;
     put(m, chair, x + 8.6, front - 1.2)?;
     Ok(x + 9.2)
 }
@@ -1164,12 +1064,12 @@ fn place_living(
     };
     let board = kitchen_type(m, k, "Aparador", "Aparador", &values(&[("width", N(1.6))]))?;
     put(m, board, x + 0.9, 0.0)?;
-    let decor = kitchen_type(m, k, "Decoración (taller)", "Decoración", &values(&[]))?;
+    let decor = kitchen_type(m, k, "Decoración", "Decoración", &values(&[]))?;
     put(m, decor, x + 0.55, 0.75)?;
     let picture = kitchen_type(
         m,
         k,
-        "Cuadro o espejo (taller)",
+        "Cuadro o espejo",
         "Cuadro o espejo",
         &values(&[
             ("width", N(0.7)),
@@ -1178,13 +1078,7 @@ fn place_living(
         ]),
     )?;
     put(m, picture, x + 1.1, 0.0)?;
-    let plant = kitchen_type(
-        m,
-        k,
-        "Planta en maceta (taller)",
-        "Planta en maceta",
-        &values(&[]),
-    )?;
+    let plant = kitchen_type(m, k, "Planta de interior", "Planta en maceta", &values(&[]))?;
     put(m, plant, x + 2.25, 0.0)?;
     Ok(x + 2.8)
 }
@@ -1267,18 +1161,12 @@ fn place_study(
         v.extend(more.iter().map(|(k, v)| (*k, v.copy())));
         v
     };
-    let desk = kitchen_type(m, k, "Escritorio (taller)", "Escritorio", &values(&[]))?;
+    let desk = kitchen_type(m, k, "Escritorio", "Escritorio", &values(&[]))?;
     put(m, desk, x + 0.8, wall, pi, 0.0)?;
-    let lamp = kitchen_type(m, k, "Lámpara de mesa (taller)", "Lámpara de mesa", &[])?;
+    let lamp = kitchen_type(m, k, "Lámpara de mesa", "Lámpara de mesa", &[])?;
     put(m, lamp, x + 1.25, wall - 0.15, pi, 0.75)?;
     // The chair before the desk, facing it.
-    let chair = kitchen_type(
-        m,
-        k,
-        "Silla de trabajo (taller)",
-        "Silla de trabajo",
-        &values(&[]),
-    )?;
+    let chair = kitchen_type(m, k, "Silla de oficina", "Silla de trabajo", &values(&[]))?;
     put(m, chair, x + 0.7, wall - 0.68, pi, 0.0)?;
     let shelves = kitchen_type(
         m,
@@ -1384,11 +1272,11 @@ pub const BAR_EXTRAS: [&[(&str, &str)]; 8] = [
 /// The bar pieces of the workshop: family and the start of their types'
 /// names.
 pub const BAR_PIECES: [(&str, &str); 5] = [
-    ("Barra de bar (taller)", "Barra de bar"),
-    ("Contrabarra (taller)", "Contrabarra"),
-    ("Mesa de bar (taller)", "Mesa de bar"),
-    ("Silla de bar (taller)", "Silla de bar"),
-    ("Banco corrido (taller)", "Banco corrido"),
+    ("Barra de bar", "Barra de bar"),
+    ("Contrabarra", "Contrabarra"),
+    ("Mesa de bar", "Mesa de bar"),
+    ("Silla de bar", "Silla de bar"),
+    ("Banco corrido", "Banco corrido"),
 ];
 
 /// Places a collection's bar from `x` along the wall at `y = wall`
@@ -1517,11 +1405,11 @@ pub const OFFICE_EXTRAS: [&[(&str, &str)]; 8] = [
 /// The office pieces of the workshop: family and the start of their
 /// types' names.
 pub const OFFICE_PIECES: [(&str, &str); 5] = [
-    ("Puestos de trabajo (taller)", "Puestos de trabajo"),
-    ("Mesa de reuniones (taller)", "Mesa de reuniones"),
-    ("Mostrador de recepción (taller)", "Mostrador de recepción"),
-    ("Armario de oficina (taller)", "Armario de oficina"),
-    ("Mampara acústica (taller)", "Mampara acústica"),
+    ("Puestos de trabajo", "Puestos de trabajo"),
+    ("Mesa de reuniones", "Mesa de reuniones"),
+    ("Mostrador de recepción", "Mostrador de recepción"),
+    ("Armario de oficina", "Armario de oficina"),
+    ("Mampara acústica", "Mampara acústica"),
 ];
 
 /// Places a collection's office from `x` along the wall at `y = wall`
@@ -1557,13 +1445,7 @@ fn place_office(
     put(m, cabinet, x + 0.9, wall, pi)?;
     put(m, desk, x + 3.0, wall - 1.0, pi)?;
     put(m, screen, x + 4.6, wall - 1.0, pi / 2.0)?;
-    let task = kitchen_type(
-        m,
-        k,
-        "Silla de trabajo (taller)",
-        "Silla de puesto",
-        &values,
-    )?;
+    let task = kitchen_type(m, k, "Silla de oficina", "Silla de puesto", &values)?;
     let y0 = wall - 4.6;
     put(m, bench, x + 1.6, y0, 0.0)?;
     for cx in [x + 0.9, x + 2.3] {
@@ -1645,11 +1527,11 @@ pub const SHOP_EXTRAS: [&[(&str, &str)]; 8] = [
 /// The shop pieces of the workshop: family and the start of their types'
 /// names.
 pub const SHOP_PIECES: [(&str, &str); 5] = [
-    ("Mostrador de tienda (taller)", "Mostrador de tienda"),
-    ("Estantería de tienda (taller)", "Estantería de tienda"),
-    ("Mesa expositora (taller)", "Mesa expositora"),
-    ("Burro de ropa (taller)", "Burro de ropa"),
-    ("Probador (taller)", "Probador"),
+    ("Mostrador de tienda", "Mostrador de tienda"),
+    ("Estantería de tienda", "Estantería de tienda"),
+    ("Mesa expositora", "Mesa expositora"),
+    ("Burro de ropa", "Burro de ropa"),
+    ("Probador", "Probador"),
 ];
 
 /// Places a collection's shop from `x` along the wall at `y = wall`
@@ -1813,15 +1695,9 @@ fn place_pool(
         ("deck_width", N(deck)),
         ("form", T(form)),
     ]);
-    let pool = kitchen_type(m, k, "Piscina (taller)", "Piscina", &values)?;
-    let shower = kitchen_type(
-        m,
-        k,
-        "Ducha de piscina (taller)",
-        "Ducha de piscina",
-        &values,
-    )?;
-    let lounger = kitchen_type(m, k, "Tumbona (taller)", "Tumbona de piscina", &[])?;
+    let pool = kitchen_type(m, k, "Piscina", "Piscina", &values)?;
+    let shower = kitchen_type(m, k, "Ducha de piscina", "Ducha de piscina", &values)?;
+    let lounger = kitchen_type(m, k, "Tumbona", "Tumbona de piscina", &[])?;
     let half = l / 2.0 + 0.32 + deck;
     let cx = x + half;
     let depth = w + 2.0 * (0.32 + deck);
@@ -1844,25 +1720,21 @@ pub type SportPiece = (
 /// The sport pieces (paquete 8, tanda 8b): one model each, no
 /// collections; by family, label and their values besides the recipe's.
 pub const SPORT_PIECES: [SportPiece; 11] = [
+    ("Canasta de baloncesto", "Canasta de baloncesto", &[]),
+    ("Portería", "Portería", &[]),
+    ("Mesa de ping-pong", "Mesa de ping-pong", &[]),
     (
-        "Canasta de baloncesto (taller)",
-        "Canasta de baloncesto",
-        &[],
-    ),
-    ("Portería (taller)", "Portería", &[]),
-    ("Mesa de ping-pong (taller)", "Mesa de ping-pong", &[]),
-    (
-        "Mesa de ping-pong (taller)",
+        "Mesa de ping-pong",
         "Mesa de ping-pong verde",
         &[("board", "Tablero verde")],
     ),
-    ("Cama elástica (taller)", "Cama elástica", &[]),
-    ("Espaldera (taller)", "Espaldera", &[]),
-    ("Mancuernero (taller)", "Mancuernero", &[]),
-    ("Banco de pesas (taller)", "Banco de pesas", &[]),
-    ("Cinta de correr (taller)", "Cinta de correr", &[]),
-    ("Bicicleta estática (taller)", "Bicicleta estática", &[]),
-    ("Esterilla de yoga (taller)", "Esterilla de yoga", &[]),
+    ("Cama elástica", "Cama elástica", &[]),
+    ("Espaldera", "Espaldera", &[]),
+    ("Mancuernero", "Mancuernero", &[]),
+    ("Banco de pesas", "Banco de pesas", &[]),
+    ("Cinta de correr", "Cinta de correr", &[]),
+    ("Bicicleta estática", "Bicicleta estática", &[]),
+    ("Esterilla de yoga", "Esterilla de yoga", &[]),
 ];
 
 /// A type of a piece without collection: «<label> (taller)».
@@ -1937,23 +1809,19 @@ fn place_sport(m: &mut Model, x: f64, wall: f64) -> Result<f64, ModelError> {
 /// The courts, the grandstand, the playground and calisthenics (paquete 8,
 /// tanda 8c): one model each, no collections.
 pub const PARK_PIECES: [SportPiece; 13] = [
-    ("Pista de pádel (taller)", "Pista de pádel", &[]),
-    ("Pista de tenis (taller)", "Pista de tenis", &[]),
-    ("Pista de baloncesto (taller)", "Pista de baloncesto", &[]),
-    ("Grada (taller)", "Grada", &[]),
-    ("Columpio (taller)", "Columpio", &[]),
-    ("Tobogán (taller)", "Tobogán", &[]),
-    ("Balancín (taller)", "Balancín", &[]),
-    ("Balancín de muelle (taller)", "Balancín de muelle", &[]),
-    (
-        "Estación de calistenia (taller)",
-        "Estación de calistenia",
-        &[],
-    ),
-    ("Elíptica de parque (taller)", "Elíptica de parque", &[]),
-    ("Pista de fútbol sala (taller)", "Pista de fútbol sala", &[]),
-    ("Campo de fútbol (taller)", "Campo de fútbol 11", &[]),
-    ("Campo de fútbol (taller)", "Campo de fútbol 7", &[]),
+    ("Pista de pádel", "Pista de pádel", &[]),
+    ("Pista de tenis", "Pista de tenis", &[]),
+    ("Pista de baloncesto", "Pista de baloncesto", &[]),
+    ("Grada", "Grada", &[]),
+    ("Columpio", "Columpio", &[]),
+    ("Tobogán", "Tobogán", &[]),
+    ("Balancín", "Balancín", &[]),
+    ("Balancín de muelle", "Balancín de muelle", &[]),
+    ("Estación de calistenia", "Estación de calistenia", &[]),
+    ("Elíptica de parque", "Elíptica de parque", &[]),
+    ("Pista de fútbol sala", "Pista de fútbol sala", &[]),
+    ("Campo de fútbol", "Campo de fútbol 11", &[]),
+    ("Campo de fútbol", "Campo de fútbol 7", &[]),
 ];
 
 /// The courts in a row south of the line of the walls (`wall`), east of
@@ -2035,13 +1903,13 @@ pub const STREET_EXTRAS: [&[(&str, &str)]; 8] = [
 /// The street furniture's types of a collection, by the label of each
 /// (paquete 5, tanda 5b).
 pub const STREET_PIECES: [(&str, &str); 7] = [
-    ("Banco (taller)", "Banco de calle"),
-    ("Farola (taller)", "Farola"),
-    ("Papelera (taller)", "Papelera"),
-    ("Bolardo (taller)", "Bolardo"),
-    ("Jardinera (taller)", "Jardinera"),
-    ("Aparcabicis (taller)", "Aparcabicis"),
-    ("Fuente de beber (taller)", "Fuente de beber"),
+    ("Banco", "Banco de calle"),
+    ("Farola", "Farola"),
+    ("Papelera", "Papelera"),
+    ("Bolardo", "Bolardo"),
+    ("Jardinera", "Jardinera"),
+    ("Aparcabicis", "Aparcabicis"),
+    ("Fuente de beber", "Fuente de beber"),
 ];
 
 /// Places a collection's street furniture from `x` along `y = front`
@@ -2091,21 +1959,21 @@ fn place_street(
 /// values. Mirror and towel rail hang over the washbasin's place.
 const SUITE: &[(&str, &str, f64, Values)] = &[
     (
-        "Bañera (taller)",
+        "Bañera",
         "Bañera",
         0.0,
         &[("width", N(1.7)), ("depth", N(0.75)), ("height", N(0.55))],
     ),
-    ("Inodoro (taller)", "Inodoro", 0.3, &[]),
-    ("Bidé (taller)", "Bidé", 0.3, &[]),
+    ("Inodoro", "Inodoro", 0.3, &[]),
+    ("Bidé", "Bidé", 0.3, &[]),
     (
-        "Lavabo (taller)",
+        "Lavabo",
         "Lavabo",
         0.35,
         &[("width", N(0.8)), ("depth", N(0.48))],
     ),
     (
-        "Toallero (taller)",
+        "Toallero",
         "Toallero",
         0.25,
         &[
@@ -2115,7 +1983,7 @@ const SUITE: &[(&str, &str, f64, Values)] = &[
         ],
     ),
     (
-        "Ducha (taller)",
+        "Plato de ducha",
         "Ducha",
         0.3,
         &[("width", N(0.9)), ("depth", N(0.9))],
@@ -2162,7 +2030,7 @@ fn place_bathroom(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, 
         let t = kitchen_type(
             m,
             k,
-            "Espejo (taller)",
+            "Espejo",
             "Espejo",
             &[
                 ("width", N(0.6)),
@@ -2188,35 +2056,27 @@ type Values = &'static [(&'static str, Val)];
 
 const RUN: &[(&str, f64, Values)] = &[
     (
-        "Columna de cocina (taller)",
+        "Columna de cocina",
         0.6,
         &[("tall", T("Frigorífico integrado"))],
     ),
     (
-        "Módulo bajo de cocina (taller)",
+        "Módulo bajo de cocina",
         0.6,
         &[("unit", T("Cajonera")), ("drawers", N(3.0))],
     ),
     (
-        "Módulo bajo de cocina (taller)",
+        "Módulo bajo de cocina",
         0.8,
         &[("unit", T("Fregadero")), ("doors", N(2.0))],
     ),
+    ("Módulo bajo de cocina", 0.6, &[("unit", T("Lavavajillas"))]),
     (
-        "Módulo bajo de cocina (taller)",
-        0.6,
-        &[("unit", T("Lavavajillas"))],
-    ),
-    (
-        "Módulo bajo de cocina (taller)",
+        "Módulo bajo de cocina",
         0.8,
         &[("unit", T("Placa")), ("drawers", N(2.0))],
     ),
-    (
-        "Módulo bajo de cocina (taller)",
-        0.6,
-        &[("unit", T("Horno"))],
-    ),
+    ("Módulo bajo de cocina", 0.6, &[("unit", T("Horno"))]),
 ];
 
 /// A type of a workshop kitchen's family in its collection, with
@@ -2324,7 +2184,7 @@ fn place_kitchen(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, M
         let t = kitchen_type(
             m,
             k,
-            "Mueble alto de cocina (taller)",
+            "Mueble alto de cocina",
             &format!("Altos {:.0}", w * 100.0),
             &[
                 ("width", N(w)),
@@ -2345,7 +2205,7 @@ fn place_kitchen(m: &mut Model, k: &Kitchen, x: f64, wall: f64) -> Result<f64, M
     let t = kitchen_type(
         m,
         k,
-        "Campana de cocina (taller)",
+        "Campana extractora",
         "Campana",
         &[
             ("width", N(if built { hw } else { 0.9 })),
@@ -2369,14 +2229,14 @@ pub fn family(m: &mut Model, name: &str) -> Result<archisim_core::FamilyId, Mode
     if let Some(f) = m.family_by_name(name) {
         return Ok(f.id);
     }
-    let source = RECIPES
-        .iter()
-        .find(|r| {
-            r.lines()
-                .next()
-                .is_some_and(|l| l.trim() == format!("family \"{name}\""))
-        })
-        .ok_or_else(|| ModelError::NotAnObject(name.to_string()))?;
+    // The packages Antonio approved are system families now.
+    let Some(source) = RECIPES.iter().find(|r| {
+        r.lines()
+            .next()
+            .is_some_and(|l| l.trim() == format!("family \"{name}\""))
+    }) else {
+        return m.system_family(name);
+    };
     m.add_family(source)
 }
 

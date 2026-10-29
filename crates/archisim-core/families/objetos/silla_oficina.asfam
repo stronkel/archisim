@@ -1,8 +1,8 @@
 family "Silla de oficina"
   category furniture
   host none
-  version 1
-  description "Silla giratoria de oficina sobre cinco ruedas, tapizada o de malla"
+  version 2
+  description "Silla para el escritorio como la hace cada colección"
   folder "Despacho"
 
 type_params
@@ -10,16 +10,18 @@ type_params
     width length = 0.62 range 0.45..0.80 label "Ancho"
     seat  length = 0.47 range 0.38..0.56 label "Altura del asiento"
   section "Materiales"
-    cushion material = "Lino gris" label "Tapizado"
+    frame   material = "Roble claro" label "Madera o estructura"
+    cushion material = "Lino arena" label "Tapizado"
+    metal   material = "Metal negro" label "Metal"
+    dark    material = "Metal negro" label "Base y patas"
+    accent  material = "Terciopelo mostaza" label "Carcasa de color"
+    weave   material = "Enea" label "Asiento de enea o cuerda"
+    mesh    material = "Lana carbón" label "Malla"
   section "Modelo 3D"
-    model3d choice("Giratoria", "De malla") = "Giratoria" label "Modelo 3D"
-    dark  material = "Negro mate" label "Base y brazos"
-    metal material = "Cromado" label "Columna"
-    frame material = "Negro mate" label "Marco del respaldo"
-    mesh  material = "Lana carbón" label "Malla"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  box (-width / 2, 0, 0) to (width / 2, width, seat + 0.6) material cushion
+  box (-width / 2, 0, 0) to (width / 2, width, seat + 0.4) material cushion
 
 plan 1:50
   let r = width / 2

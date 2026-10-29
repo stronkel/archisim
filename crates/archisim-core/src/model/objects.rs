@@ -1027,6 +1027,8 @@ mod tests {
                             | "Alcorque"
                             | "Aparcabicis"
                             | "Señal de tráfico"
+                            | "Ducha de piscina"
+                            | "Mampara acústica"
                     )
             };
             for p in &ev.parts {
@@ -1047,6 +1049,7 @@ mod tests {
                 "IfcSanitaryTerminal",
                 "IfcGeographicElement",
                 "IfcBuildingElementProxy",
+                "IfcLightFixture",
                 "IfcVehicle"
             ]
             .contains(&ev.outputs["ifc_class"].as_text().unwrap()));

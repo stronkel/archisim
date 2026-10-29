@@ -1,8 +1,8 @@
 family "Papelera"
   category street
   host none
-  version 2
-  description "Papelera de calle; el punto de inserción es su centro"
+  version 3
+  description "Papelera como la hace cada colección; el punto de inserción es su centro"
   folder "Mobiliario urbano"
 
 type_params
@@ -10,17 +10,26 @@ type_params
     width  length = 0.40 range 0.20..1.00 label "Diámetro"
     height length = 0.90 range 0.40..1.40 label "Altura"
   section "Materiales"
-    mat material = "Metal lacado" label "Papelera"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Metal negro" label "Metal"
+    mat material = "Hormigón pulido" label "Cuerpo (hormigón, piedra, acero)"
+    masonry material = "Cal blanca" label "Obra"
+    top material = "Piedra caliza" label "Piedra de remate"
+    accent material = "Cerámica esmaltada" label "Azulejo o color"
+    pot_mat material = "Hormigón pulido" label "Jardinera"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Espiga" label "Tronco y tallos"
+    leaves material = "Gramínea" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas claras"
+    flowers material = "Espiga" label "Flores y espigas"
+    light material = "Luz de farola" label "Luz"
+    water material = "Agua de fuente" label "Agua"
+    dark material = "Metal negro" label "Huecos y rejillas"
   section "Modelo 3D"
-    model3d choice("Chapa perforada", "Listones de madera", "Doble para reciclar") = "Chapa perforada" label "Modelo 3D"
-    frame material = "Metal lacado" label "Poste y aros"
-    dark  material = "Negro mate" label "Interior"
-    mat2  material = "Plástico verde" label "Segunda papelera"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
-  let r = width / 2
-  box (-r * 0.85, -r * 0.85, 0.12) to (r * 0.85, r * 0.85, height) material mat
-  box (-0.03, -0.03, 0) to (0.03, 0.03, 0.12) material mat
+  box (-width / 2, -width / 2, 0) to (width / 2, width / 2, height) material mat
 
 plan 1:50
   let r = width / 2
@@ -28,10 +37,6 @@ plan 1:50
     let t0 = 6.283185307 * i / 16
     let t1 = 6.283185307 * (i + 1) / 16
     line (r * cos(t0), r * sin(t0)) to (r * cos(t1), r * sin(t1)) pen view
-  repeat i in 0..16
-    let t0 = 6.283185307 * i / 16
-    let t1 = 6.283185307 * (i + 1) / 16
-    line (r * 0.75 * cos(t0), r * 0.75 * sin(t0)) to (r * 0.75 * cos(t1), r * 0.75 * sin(t1)) pen thin
 
 plan presentation
   cloud center (0, 0) radius width / 2 lobes 16 jitter 0 pen thin tint mat

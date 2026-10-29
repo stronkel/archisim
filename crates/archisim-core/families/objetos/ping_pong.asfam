@@ -1,0 +1,27 @@
+family "Mesa de ping-pong"
+  category furniture
+  host none
+  version 1
+  description "Mesa de tenis de mesa plegable sobre ruedas, 274 × 152,5 cm, con su red"
+  folder "Deporte en casa"
+
+type_params
+  section "Materiales"
+    board   material = "Tablero azul" label "Tablero"
+    line    material = "Línea blanca" label "Líneas y cinta de la red"
+    net     material = "Red negra" label "Red"
+    frame   material = "Acero gris" label "Bastidor y patas"
+    dark    material = "Goma negra" label "Ruedas y soportes"
+
+body
+  box (-1.37, 0, 0) to (1.37, 1.525, 0.9125) material board
+
+plan 1:50
+  polygon (-1.37, 0) (1.37, 0) (1.37, 1.525) (-1.37, 1.525) pen view
+  line (0, -0.16) to (0, 1.685) pen view
+  line (-1.37, 0.7625) to (1.37, 0.7625) pen thin
+
+outputs
+  generator = "props:fine_ping_pong"
+  ifc_class = "IfcFurniture"
+  ifc_type = "USERDEFINED"

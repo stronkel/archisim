@@ -1,8 +1,8 @@
 family "Columna de cocina"
   category kitchen
   host none
-  version 1
-  description "Un módulo alto hasta el techo de los muebles: despensa, horno y microondas o frigorífico integrado"
+  version 2
+  description "Columna de cocina hecha en una de las ocho colecciones"
   folder "Cocina"
 
 type_params
@@ -12,15 +12,21 @@ type_params
     height length = 2.15 range 1.80..2.60 label "Altura"
   section "Módulo"
     tall choice("Despensa", "Horno y microondas", "Frigorífico integrado") = "Despensa" label "Qué lleva"
-  section "Frentes"
-    front_style choice("Liso", "Marco", "Ranurado", "Cristal") = "Liso" label "Frente"
-    handle choice("Barra", "Pomo", "Uñero", "Asa", "Sin tirador") = "Barra" label "Tirador"
   section "Materiales"
-    mat material = "Madera de pino" label "Frentes"
+    mat material = "Lacado blanco" label "Frentes"
+    plinth material = "Roble claro" label "Zócalo"
+    top material = "Roble claro" label "Encimera"
   section "Modelo 3D"
-    model3d choice("Columna") = "Columna" label "Modelo 3D"
-    metal material = "Cromado" label "Tiradores"
-    dark material = "Negro mate" label "Horno"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+    metal material = "Acero inoxidable" label "Tiradores y grifería"
+    sink material = "Acero inoxidable" label "Fregadero"
+    dark material = "Cuero coñac" label "Sombras y cuero"
+    black material = "Vitrocerámica" label "Placa y horno"
+    ring material = "Cal blanca" label "Marcas de la placa"
+    glass material = "Vidrio claro" label "Vidrio"
+    wood material = "Roble claro" label "Madera (patas, baldas)"
+    ceramic material = "Cerámica blanca" label "Tarros y jarras"
+    hood material = "Lacado blanco" label "Campana"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat

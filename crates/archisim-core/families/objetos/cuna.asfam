@@ -1,0 +1,36 @@
+family "Cuna"
+  category furniture
+  host none
+  version 1
+  description "Cuna como la hace cada colección: barrotes, lamas, rejilla o tubo alrededor del colchón, edredón y muñeco"
+  folder "Camas"
+
+type_params
+  section "Dimensiones"
+    width length = 0.60 range 0.50..0.80 label "Ancho del colchón"
+    depth length = 1.20 range 0.90..1.50 label "Largo del colchón"
+  section "Ropa de cama"
+    toy bool = yes label "Muñeco"
+  section "Materiales"
+    frame material = "Roble claro" label "Madera o estructura"
+    metal material = "Latón" label "Metal"
+    weave material = "Enea" label "Rejilla o enea"
+    dark material = "Fresno oscuro" label "Sombras y cuero"
+    cushion material = "Bouclé crudo" label "Tapizado"
+    linen material = "Lino blanco" label "Sábanas y almohadas"
+    duvet material = "Lino arena" label "Edredón"
+    toy_mat material = "Lana cruda" label "Muñeco"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-depth / 2 - 0.03, 0, 0) to (depth / 2 + 0.03, width + 0.08, 0.92) material frame
+
+plan 1:50
+  polygon (-depth / 2 - 0.03, 0) (depth / 2 + 0.03, 0) (depth / 2 + 0.03, width + 0.08) (-depth / 2 - 0.03, width + 0.08) pen view
+  polygon (-depth / 2, 0.04) (depth / 2, 0.04) (depth / 2, width + 0.04) (-depth / 2, width + 0.04) pen thin
+
+outputs
+  generator = "props:crib"
+  ifc_class = "IfcFurniture"
+  ifc_type = "BED"

@@ -1,0 +1,34 @@
+family "Silla de bar"
+  category furniture
+  host none
+  version 1
+  description "Silla de cafetería como la hace cada colección"
+  folder "Hostelería"
+
+type_params
+  section "Dimensiones"
+    width  length = 0.44 range 0.38..0.60 label "Ancho"
+    depth  length = 0.48 range 0.40..0.60 label "Fondo"
+    seat   length = 0.46 range 0.42..0.50 label "Altura del asiento"
+    height length = 0.82 range 0.70..1.10 label "Altura del respaldo"
+  section "Materiales"
+    frame   material = "Roble claro" label "Madera"
+    metal   material = "Acero inoxidable" label "Metal"
+    dark    material = "Metal negro" label "Acero negro"
+    weave   material = "Enea" label "Asiento tejido"
+    accent  material = "Lacado salvia" label "Carcasa de color"
+    cushion material = "Lino arena" label "Cojín"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0.03) (width / 2, 0.03) (width / 2, depth) (-width / 2, depth) pen view
+  line (-width / 2, 0.06) to (width / 2, 0.06) pen thin
+
+outputs
+  generator = "props:fine_cafe_chair"
+  ifc_class = "IfcFurniture"
+  ifc_type = "CHAIR"

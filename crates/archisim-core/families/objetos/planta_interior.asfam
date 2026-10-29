@@ -1,28 +1,34 @@
 family "Planta de interior"
   category furniture
   host none
-  version 1
-  description "Planta en su maceta: costilla de Adán, ficus, cactus, helecho o sansevieria"
+  version 2
+  description "Planta de interior en la maceta de cada colección, hoja a hoja: ficus lira, limonero, costilla de Adán, sansevieria, ave del paraíso, helecho, potos o kentia"
   folder "Plantas de interior"
 
 type_params
   section "Dimensiones"
-    height length = 1.00 range 0.15..3.00 label "Altura"
-    pot    length = 0.32 range 0.08..1.00 label "Diámetro de la maceta"
+    height length = 1.20 range 0.15..3.00 label "Altura con la maceta"
+    pot    length = 0.36 range 0.08..1.00 label "Diámetro de la maceta"
   section "Materiales"
-    pot_mat material = "Terracota" label "Maceta"
-    leaves  material = "Hoja verde" label "Hojas"
-    stem    material = "Corteza" label "Tallos"
+    pot_mat material = "Cerámica blanca" label "Maceta"
+    frame   material = "Roble claro" label "Soporte de madera"
+    metal   material = "Metal negro" label "Soporte de metal"
+    weave   material = "Ratán" label "Cesta"
     soil    material = "Tierra" label "Tierra"
+    stem    material = "Tallo verde" label "Tronco y tallos"
+    leaves  material = "Hoja verde" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas nuevas"
+    flowers material = "Pétalo blanco" label "Flores"
+    fruit   material = "Limón" label "Fruta"
   section "Modelo 3D"
-    model3d choice("Costilla de Adán", "Ficus", "Cactus", "Helecho", "Sansevieria") = "Costilla de Adán" label "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 body
   box (-pot / 2, 0, 0) to (pot / 2, pot, height) material leaves
 
 plan 1:50
   let r = pot / 2
-  let c = max(height * 0.35, r)
+  let c = max(height * 0.3, r)
   repeat i in 0..16
     let t0 = 6.283185307 * i / 16
     let t1 = 6.283185307 * (i + 1) / 16

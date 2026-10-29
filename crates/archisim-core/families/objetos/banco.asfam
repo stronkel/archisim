@@ -1,8 +1,8 @@
 family "Banco"
   category street
   host none
-  version 3
-  description "Banco de exterior con respaldo o sin él"
+  version 4
+  description "Banco de calle como lo hace cada colección; el punto de inserción es el centro de la trasera"
   folder "Mobiliario urbano"
 
 type_params
@@ -13,28 +13,33 @@ type_params
     back   bool = yes label "Respaldo"
     height length = 0.85 visible_if back range 0.60..1.20 label "Altura del respaldo"
   section "Materiales"
-    mat material = "Madera de pino" label "Asiento"
+    frame material = "Roble claro" label "Madera"
+    metal material = "Metal negro" label "Metal"
+    mat material = "Hormigón pulido" label "Cuerpo (hormigón, piedra, acero)"
+    masonry material = "Cal blanca" label "Obra"
+    top material = "Piedra caliza" label "Piedra de remate"
+    accent material = "Cerámica esmaltada" label "Azulejo o color"
+    pot_mat material = "Hormigón pulido" label "Jardinera"
+    soil material = "Tierra" label "Tierra"
+    stem material = "Espiga" label "Tronco y tallos"
+    leaves material = "Gramínea" label "Hojas"
+    leaves2 material = "Hoja verde tierna" label "Hojas claras"
+    flowers material = "Espiga" label "Flores y espigas"
+    light material = "Luz de farola" label "Luz"
+    water material = "Agua de fuente" label "Agua"
+    dark material = "Metal negro" label "Huecos y rejillas"
   section "Modelo 3D"
-    model3d choice("De listones", "Hormigón y madera", "Marco de acero") = "De listones" label "Modelo 3D"
-    frame    material = "Hierro forjado" label "Patas y estructura"
-    concrete material = "Hormigón prefabricado" label "Hormigón"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
 
 require not back or height > seat + 0.1 else "El respaldo tiene que subir por encima del asiento"
 
 body
-  box (-width / 2 + 0.1, 0.05, 0) to (-width / 2 + 0.16, depth - 0.05, seat - 0.05) material mat
-  box (width / 2 - 0.16, 0.05, 0) to (width / 2 - 0.1, depth - 0.05, seat - 0.05) material mat
-  box (-width / 2, 0, seat - 0.05) to (width / 2, depth, seat) material mat
-  if back
-    box (-width / 2, 0, seat) to (width / 2, 0.05, height) material mat
+  box (-width / 2, 0, 0) to (width / 2, depth, seat) material frame
 
 plan 1:50
   polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
   if back
-    line (-width / 2, 0.05) to (width / 2, 0.05) pen thin
-  let n = max(2, round(width / 0.2))
-  repeat i in 1..n
-    line (-width / 2 + i * width / n, 0.08) to (-width / 2 + i * width / n, depth) pen thin
+    line (-width / 2, 0.12) to (width / 2, 0.12) pen thin
 
 outputs
   generator = "props:bench"

@@ -1,0 +1,42 @@
+family "Estantería de tienda"
+  category furniture
+  host none
+  version 1
+  description "Estantería de pared con género como la hace cada colección"
+  folder "Comercio"
+
+type_params
+  section "Dimensiones"
+    width  length = 1.20 range 0.60..4.00 label "Ancho"
+    depth  length = 0.40 range 0.30..0.60 label "Fondo"
+    height length = 2.20 range 1.40..3.00 label "Altura"
+  section "Materiales"
+    frame   material = "Roble claro" label "Madera"
+    top     material = "Roble claro" label "Tablero"
+    front   material = "Lacado blanco" label "Paneles"
+    masonry material = "Cal blanca" label "Fábrica o piedra"
+    accent  material = "Cerámica esmaltada" label "Azulejo o color"
+    metal   material = "Latón" label "Metal"
+    dark    material = "Metal negro" label "Acero negro"
+    mirror  material = "Espejo" label "Espejo"
+    light   material = "Luz cálida" label "Luz bajo las baldas"
+    goods   material = "Caja kraft" label "Género"
+    goods2  material = "Caja salvia" label "Más género"
+    goods3  material = "Archivador blanco" label "Etiquetas y otro género"
+    cloth   material = "Lino crudo" label "Ropa"
+    cloth2  material = "Lana teja" label "Más ropa"
+    cloth3  material = "Lino añil" label "Otra ropa"
+    glass   material = "Vidrio claro" label "Tarros"
+  section "Modelo 3D"
+    model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Nórdico cálido" label "Modelo 3D"
+
+body
+  box (-width / 2, 0, 0) to (width / 2, depth, height) material frame
+
+plan 1:50
+  polygon (-width / 2, 0) (width / 2, 0) (width / 2, depth) (-width / 2, depth) pen view
+
+outputs
+  generator = "props:fine_shop_shelving"
+  ifc_class = "IfcFurniture"
+  ifc_type = "SHELF"
