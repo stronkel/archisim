@@ -254,33 +254,34 @@ pub fn ping_pong(b: &mut Builder, _p: &Params) {
     ] {
         b.rbox("line", [lo[0], lo[1], h - 0.001], [hi[0], hi[1], z], 0.0);
     }
-    // The net on its two posts, its top a white band.
+    // The net on its two posts, its top a white band; each post stands
+    // just outside a long edge on a clamp that grips the top.
     let nh = 0.1525;
+    let py = 0.03;
     b.rbox(
         "net",
-        [-0.002, -0.14, h + 0.01],
-        [0.002, y1 + 0.14, h + nh - 0.012],
+        [-0.002, -py, h + 0.01],
+        [0.002, y1 + py, h + nh - 0.012],
         0.0,
     );
     b.rbox(
         "line",
-        [-0.004, -0.14, h + nh - 0.014],
-        [0.004, y1 + 0.14, h + nh],
+        [-0.004, -py, h + nh - 0.014],
+        [0.004, y1 + py, h + nh],
         0.0,
     );
-    for y in [-0.16, y1 + 0.16] {
+    for (y, s) in [(-py, 1.0), (y1 + py, -1.0)] {
         b.rbox(
             "dark",
-            [-0.012, y - 0.012, h - 0.04],
+            [-0.012, y - 0.012, h - t - 0.03],
             [0.012, y + 0.012, h + nh],
             0.004,
         );
-        b.rbox(
-            "dark",
-            [-0.03, y - 0.03, h - 0.06],
-            [0.03, y + 0.03, h - 0.02],
-            0.004,
-        );
+        // The clamp: a pad on the top, the jaw under the board.
+        let (a, c) = (y - s * 0.015, y + s * 0.07);
+        for (z0, z1) in [(h, h + 0.012), (h - t - 0.03, h - t)] {
+            b.rbox("dark", [-0.025, a.min(c), z0], [0.025, a.max(c), z1], 0.003);
+        }
     }
     // Under each half: an apron, two leg frames, a bar between, wheels.
     for s in [-1.0, 1.0] {
@@ -559,7 +560,7 @@ pub fn exercise_bike(b: &mut Builder, _p: &Params) {
         b,
         "frame",
         [0.0, 0.72, 0.38],
-        [0.0, hb[1] - 0.04, hb[2] - 0.06],
+        [0.0, hb[1] - 0.02, hb[2] + 0.04],
         0.03,
     );
     sweep(

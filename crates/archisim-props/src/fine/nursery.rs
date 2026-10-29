@@ -523,6 +523,10 @@ pub fn bunk_bed(b: &mut Builder, p: &Params) {
 
 // ---------------------------------------------------------- the valet stand
 
+/// How far in front of its post the trouser bar of a valet on one post
+/// is, so the trousers hang clear of the post.
+const BAR_AHEAD: f64 = 0.07;
+
 /// The valet stand of each collection (styles 1 to 8): a shoulder hanger,
 /// a bar for the trousers and something to stand or sit on; trousers
 /// over its bar (`clothes`).
@@ -575,29 +579,20 @@ pub fn valet(b: &mut Builder, p: &Params) {
                     (0.0, 0.0),
                     (0.03, 0.0),
                     (0.02, 0.03),
-                    (0.018, h - foot),
-                    (0.0, h - foot + 0.01),
+                    (0.018, h - foot + 0.03),
+                    (0.0, h - foot + 0.04),
                 ],
                 16,
                 0.0,
             );
             hanger(b, "frame", y);
-            b.cyl("frame", [-hw * 0.9, y, bar_z], [hw * 0.9, y, bar_z], 0.012);
-            // A little round tray for the watch and the keys.
-            turned(
-                b,
+            let yb = y + BAR_AHEAD;
+            b.cyl("frame", [0.0, y, bar_z], [0.0, yb, bar_z], 0.012);
+            b.cyl(
                 "frame",
-                [0.0, y, foot + 0.08],
-                &[
-                    (0.0, 0.0),
-                    (0.12, 0.0),
-                    (0.12, 0.02),
-                    (0.11, 0.022),
-                    (0.11, 0.008),
-                    (0.0, 0.008),
-                ],
-                24,
-                0.0,
+                [-hw * 0.9, yb, bar_z],
+                [hw * 0.9, yb, bar_z],
+                0.012,
             );
         }
         // A chair to sit on and leave the clothes: whitewashed with rush
@@ -691,9 +686,18 @@ pub fn valet(b: &mut Builder, p: &Params) {
                 32,
                 0.0,
             );
-            b.cyl("metal", [0.0, y, 0.0], [0.0, y, h - 0.04], 0.012);
+            b.cyl("metal", [0.0, y, 0.0], [0.0, y, h], 0.012);
             hanger(b, "metal", y);
-            b.cyl("metal", [-hw * 0.8, y, bar_z], [hw * 0.8, y, bar_z], 0.009);
+            // The trousers' bar in front of the post, on a short arm, so
+            // they hang clear of it.
+            let yb = y + BAR_AHEAD;
+            b.cyl("metal", [0.0, y, bar_z], [0.0, yb, bar_z], 0.009);
+            b.cyl(
+                "metal",
+                [-hw * 0.8, yb, bar_z],
+                [hw * 0.8, yb, bar_z],
+                0.009,
+            );
         }
         // Rustic: a turned pine post on a cross of feet, iron hooks.
         5 => {
@@ -712,7 +716,14 @@ pub fn valet(b: &mut Builder, p: &Params) {
                 [hw * 0.9, y, h - 0.08],
                 0.018,
             );
-            b.cyl("frame", [-hw * 0.9, y, bar_z], [hw * 0.9, y, bar_z], 0.015);
+            let yb = y + BAR_AHEAD;
+            b.cyl("frame", [0.0, y, bar_z], [0.0, yb, bar_z], 0.015);
+            b.cyl(
+                "frame",
+                [-hw * 0.9, yb, bar_z],
+                [hw * 0.9, yb, bar_z],
+                0.015,
+            );
             for s in [-1.0, 1.0] {
                 let pts: Vec<P3> = (0..=6)
                     .map(|k| {
@@ -751,6 +762,7 @@ pub fn valet(b: &mut Builder, p: &Params) {
     if p.flag("clothes", true) {
         let (by, bz) = match ix {
             1 | 7 => (y - 0.19 + 0.02, bar_z + 0.1),
+            0 | 2 | 4 | 5 => (y + BAR_AHEAD, bar_z),
             _ => (y, bar_z),
         };
         let mut t = Cover::new([-0.17, 0.17], [by - 0.012, by + 0.012], bz + 0.024, 0.012);
@@ -821,8 +833,9 @@ pub fn floor_mirror(b: &mut Builder, p: &Params) {
             b.transform_from(start, |q| {
                 [q[0] * (a - 0.01), 0.342 + q[2], zc - q[1] * (c - 0.01)]
             });
-            for x in [x0 + 0.08, x1 - 0.08] {
-                compass_leg(b, [x * 0.6, 0.36], zc - c * 0.3, [x.signum(), 0.4], 0.12);
+            // The front legs meet the ring low on its sides.
+            for sx in [-1.0, 1.0] {
+                compass_leg(b, [sx * 0.6 * a, 0.36], zc - c * 0.8, [sx, 0.4], 0.12);
             }
             b.cyl(
                 "frame",

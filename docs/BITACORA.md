@@ -6,6 +6,30 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (22) · Remates de modelos: lo que Antonio vio flotando o atravesado
+
+Rama `bloque/remates-modelos` (sobre `bloque/paquete-8d`), con pull request. Sin cambios de formato ni de IFC; solo los modelos 3D del taller.
+
+Antonio, mirando el taller, señaló trece modelos. Arreglados uno a uno y mirados desde cuatro lados y desde abajo:
+- **Mesa de ping-pong**: los postes de la red ya no sobresalen; están junto al canto del tablero, sujetos con su pinza (una placa encima y la mordaza debajo).
+- **Bicicleta estática**: la barra del manillar llega al manillar y a la consola.
+- **Aparcabicis mediterráneo**: las volutas cuelgan de la barra de arriba, sin aire. **Rústico**: un poste en cada extremo del tronco (y más entre medias si es largo).
+- **Silla de trabajo contemporánea** (y la de la biblioteca de siempre): el respaldo va delante de la barra; la barra sale de debajo del asiento, sube por detrás y sostiene el respaldo y el reposacabezas, que ya no flota.
+- **Tumbona de piscina clásica**: el cuerpo de mimbre sigue bajo el respaldo, así que las patas de atrás apoyan en él. **Industrial y años 50**: las patas de atrás llegan al bastidor del asiento y un tirante sostiene el respaldo.
+- **Piscina rústica**: quitadas las cinco piedras de adorno que parecían bultos.
+- **Silla de exterior clásica**: bastidor del asiento sobre las patas; el arco del respaldo baja hasta él y las volutas se apoyan en una barra. **Mediterránea**: quitadas las volutas de debajo del asiento; en su lugar, un travesaño bajo entre las patas.
+- **Literas** (y todas las camas con barandillas o piecero): el edredón queda dentro de los barrotes, sin pasar al otro lado.
+- **Espejo de pie años 50**: las patas delanteras se unen al aro por abajo, no a media altura del espejo.
+- **Galanes** contemporáneo, nórdico, años 50 y rústico: el palo llega a la percha, y la barra del pantalón está delante del palo con un brazo corto, así que la tela ya no lo atraviesa (el de nórdico y años 50 pierde la bandeja, que chocaba con el pantalón).
+
+Para mirar cualquier pieza sola desde cinco puntos de vista: `ARCHISIM_PIEZAS_OUT=carpeta ARCHISIM_PIEZAS="Litera|Galán" cargo test --release -p archisim-app -- named_pictures` (sin `ARCHISIM_PIEZAS`, lista los tipos del taller).
+
+**Qué debe probar Antonio**
+1. Abre `taller.archisim` en la versión del pull request y mira las trece piezas de tu lista en 3D, girando alrededor.
+2. Dime si ves más piezas con partes en el aire o que se atraviesan; con el nombre del tipo (como en tu lista) las encuentro enseguida.
+
+---
+
 ## 2026-10-28 (21) · Paquete 8, tanda 8d: la piscina construida, que excava el terreno
 
 Rama `bloque/paquete-8d` (sobre `bloque/paquete-8c`), con pull request. **Formato `.archisim` versión 40** (piscinas, `pools`; los ficheros anteriores se abren sin cambios). Cambia el IFC (piezas nuevas) y la aplicación (herramienta nueva).

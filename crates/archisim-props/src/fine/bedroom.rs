@@ -384,8 +384,18 @@ pub(super) fn make_bed(b: &mut Builder, p: &Params, ix: usize, m: &Making) {
     } else {
         0.1
     };
-    let mut duvet = Cover::new([m.x0, m.x1], [ys, m.y1], m.top + thick, thick);
-    duvet.round = 0.06;
+    // Where it is tucked (inside rails or against a footboard) its turn
+    // stays over the mattress, so nothing goes through the bars.
+    let round = 0.06;
+    let tx = if m.sides { 0.0 } else { round + 0.01 };
+    let ty = if m.foot { 0.0 } else { round + 0.01 };
+    let mut duvet = Cover::new(
+        [m.x0 + tx, m.x1 - tx],
+        [ys, m.y1 - ty],
+        m.top + thick,
+        thick,
+    );
+    duvet.round = round;
     duvet.falls = [side, side, 0.07, if m.foot { side } else { 0.1 }];
     duvet.puff = puff;
     duvet.folds = folds;

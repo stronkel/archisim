@@ -1924,3 +1924,72 @@ fn dug_pool_pictures() {
         pic.save_png(dir.join(format!("{name}.png"))).unwrap();
     }
 }
+
+/// Any pieces of the workshop by name, each alone from four sides and from
+/// low down, to look at how its parts meet:
+/// `ARCHISIM_PIEZAS_OUT=folder ARCHISIM_PIEZAS="Litera|Galán" cargo test
+/// --release -p archisim-app -- named_pictures --nocapture` (each name is
+/// part of a type's name; without `ARCHISIM_PIEZAS`, it lists the types).
+#[test]
+fn named_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_PIEZAS_OUT") else {
+        return;
+    };
+    let dir = Path::new(&dir);
+    std::fs::create_dir_all(dir).unwrap();
+    let m = archisim_library::workshop::project().unwrap();
+    let Ok(wanted) = std::env::var("ARCHISIM_PIEZAS") else {
+        for t in m.object_types() {
+            if m.objects().any(|o| o.object_type == t.id) {
+                println!("{}", t.name);
+            }
+        }
+        return;
+    };
+    let Some(gpu) = super::gpu_tests::gpu() else {
+        eprintln!("No graphics adapter: pictures skipped.");
+        return;
+    };
+    let mut r = Renderer::new(&gpu.0, gpu.2, TextureMode::Full);
+    let size = [900u32, 700u32];
+    let aspect = size[0] as f32 / size[1] as f32;
+    for (n, part) in wanted.split('|').enumerate() {
+        let Some(t) = m.object_types().find(|t| t.name.contains(part)) else {
+            eprintln!("No type with «{part}».");
+            continue;
+        };
+        let mut one = m.clone();
+        let first = one.objects().find(|o| o.object_type == t.id).map(|o| o.id);
+        let others: Vec<_> = one
+            .objects()
+            .filter(|o| Some(o.id) != first)
+            .map(|o| o.id)
+            .collect();
+        for o in others {
+            one.remove_object(o).unwrap();
+        }
+        let walls: Vec<_> = one.walls().map(|w| w.id).collect();
+        for w in walls {
+            one.remove_wall(w).unwrap();
+        }
+        println!("{:02}: {}", n + 1, t.name);
+        for (side, yaw, pitch) in [
+            ("a", -55.0, 22.0),
+            ("b", 35.0, 22.0),
+            ("c", 125.0, 22.0),
+            ("d", -145.0, 22.0),
+            ("e", -70.0, 3.0),
+        ] {
+            let pic = picture_in(
+                &mut r,
+                &gpu,
+                &one,
+                |lo, hi| camera(lo, hi, aspect, yaw, pitch, 0.95),
+                size,
+                Light::Day,
+            );
+            pic.save_png(dir.join(format!("{:02}{side}.png", n + 1)))
+                .unwrap();
+        }
+    }
+}

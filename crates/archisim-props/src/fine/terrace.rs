@@ -152,14 +152,15 @@ fn chair_of(b: &mut Builder, ix: usize, h: f64) {
                 0.009,
                 6,
             );
-            for s in [-1.0, 1.0] {
-                curl(
+            // A stretcher between each pair of legs, low down.
+            for y in [0.02, d - 0.02] {
+                tube(
                     b,
                     "metal",
-                    [s * 0.1, 0.035, h - 0.1],
-                    0.05,
-                    1.3,
-                    if s < 0.0 { 0.0 } else { PI },
+                    &[[x0 + 0.02, y, 0.15], [x1 - 0.02, y, 0.15]],
+                    false,
+                    0.007,
+                    6,
                 );
             }
         }
@@ -338,21 +339,49 @@ fn chair_of(b: &mut Builder, ix: usize, h: f64) {
                 32,
                 0.0,
             );
-            let back: Vec<P3> = (0..=12)
-                .map(|k| {
-                    let a = PI * k as f64 / 12.0;
-                    [-0.22 * a.cos(), 0.02, h + 0.05 + 0.35 * a.sin()]
-                })
-                .collect();
+            // The seat's frame on the legs' tops.
+            let (fx, fy) = (x1 - 0.04, [0.04, d - 0.04]);
+            tube(
+                b,
+                "metal",
+                &[
+                    [-fx, fy[0], h - 0.012],
+                    [fx, fy[0], h - 0.012],
+                    [fx, fy[1], h - 0.012],
+                    [-fx, fy[1], h - 0.012],
+                ],
+                true,
+                0.009,
+                6,
+            );
+            // The back: an arch standing on the back of the frame, a bar
+            // across it and three scrolls standing on the bar.
+            let mut back = vec![[fx, fy[0], h - 0.012]];
+            back.extend((0..=12).map(|k| {
+                let a = PI * k as f64 / 12.0;
+                [fx * a.cos(), fy[0], h + 0.05 + 0.35 * a.sin()]
+            }));
+            back.push([-fx, fy[0], h - 0.012]);
             tube(b, "metal", &back, false, 0.01, 6);
+            let bar_z = h + 0.12;
+            tube(
+                b,
+                "metal",
+                &[[-fx, fy[0], bar_z], [fx, fy[0], bar_z]],
+                false,
+                0.008,
+                6,
+            );
             for k in 0..3 {
+                // Each ends at its bottom, on the bar.
+                let (r, turns) = (0.06, 1.2);
                 curl(
                     b,
                     "metal",
-                    [-0.1 + 0.1 * k as f64, 0.02, h + 0.2],
-                    0.06,
-                    1.2,
-                    k as f64,
+                    [-0.1 + 0.1 * k as f64, fy[0], bar_z + r],
+                    r,
+                    turns,
+                    -FRAC_PI_2 - TAU * turns,
                 );
             }
             let mut c = Soft::new(
@@ -1104,7 +1133,7 @@ pub fn lounger(b: &mut Builder, p: &Params) -> bool {
             for x in [x0, x1] {
                 let pts = [[x, l, seat], [x, hinge, seat], [x, top[0], top[1]]];
                 tube(b, "metal", &pts, false, 0.013, 8);
-                for (y, s) in [(l - 0.12, 1.0), (hinge - 0.1, -1.0)] {
+                for (y, s) in [(l - 0.12, 1.0), (hinge + 0.06, -1.0)] {
                     b.cyl(
                         "metal",
                         [x + x.signum() * 0.03, y + s * 0.04, 0.011],
@@ -1112,6 +1141,16 @@ pub fn lounger(b: &mut Builder, p: &Params) -> bool {
                         0.011,
                     );
                 }
+            }
+            // A prop from each rear leg up under the back.
+            for x in [x0, x1] {
+                let t = 0.5;
+                b.cyl(
+                    "metal",
+                    [x, hinge + 0.06 - 0.02, seat * 0.55],
+                    [x, hinge - t * back_len * cl, seat + t * back_len * sl],
+                    0.009,
+                );
             }
             tube(b, "metal", &[[x0, l, seat], [x1, l, seat]], false, 0.013, 8);
             tube(
@@ -1226,34 +1265,37 @@ pub fn lounger(b: &mut Builder, p: &Params) -> bool {
                 b.cyl("metal", [x, hinge, seat], [x, top[0], top[1]], 0.015);
             }
         }
-        // Classic: a wicker chaise with a rolled head.
+        // Classic: a wicker chaise, its body under the seat and the back,
+        // on four turned feet.
         _ => {
-            b.rbox("weave", [x0, hinge, 0.06], [x1, l, seat], 0.03);
-            let n = 8;
-            for k in 0..n {
-                let t0 = k as f64 / n as f64;
-                let t1 = (k + 1) as f64 / n as f64;
-                let a = [hinge - back_len * cl * t0, seat + back_len * sl * t0];
-                let c = [hinge - back_len * cl * t1, seat + back_len * sl * t1];
-                b.obox(
-                    "weave",
-                    [0.0, (a[0] + c[0]) / 2.0, (a[1] + c[1]) / 2.0 - 0.1],
-                    [w / 2.0, 0.0, 0.0],
-                    [0.0, (c[0] - a[0]) / 2.0, (c[1] - a[1]) / 2.0],
-                    [0.0, -sl * 0.1, cl * 0.1],
-                );
-            }
-            for q in corners(x0, x1, l, 0.06) {
+            let y0 = top[0] - 0.06;
+            b.rbox("weave", [x0, y0, 0.06], [x1, l, seat], 0.03);
+            // The back: a wedge across the width, from the seat up to the
+            // line the back cushion lies on.
+            let start = b.mark();
+            b.slab(
+                "weave",
+                &[
+                    [y0, seat - 0.02],
+                    [hinge, seat - 0.02],
+                    [top[0], top[1]],
+                    [y0, top[1] - 0.03],
+                ],
+                x0,
+                x1,
+            );
+            b.transform_from(start, |q| [q[2], q[0], q[1]]);
+            for q in corners(x0, x1, l - y0, 0.06) {
                 turned(
                     b,
                     "frame",
-                    [q[0], q[1], 0.0],
+                    [q[0], y0 + q[1], 0.0],
                     &[
                         (0.0, 0.0),
                         (0.03, 0.0),
                         (0.035, 0.03),
-                        (0.028, 0.06),
-                        (0.0, 0.06),
+                        (0.028, 0.065),
+                        (0.0, 0.065),
                     ],
                     12,
                     0.0,

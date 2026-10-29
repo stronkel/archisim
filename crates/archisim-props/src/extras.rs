@@ -281,31 +281,43 @@ pub fn office_chair(b: &mut Builder, p: &Params) {
             0.012,
         );
     }
+    // The back in front of its spine: the spine comes from under the
+    // seat, turns up behind the back and carries it (and the headrest).
     let back_y = c[1] - w * 0.38;
+    let (front, spine_top) = match p.style() {
+        2 => (back_y - 0.035, seat + 0.7),
+        _ => (back_y - 0.08, seat + 0.3),
+    };
     b.rbox(
         "dark",
-        [-0.02, back_y - 0.04, seat - 0.06],
-        [0.02, back_y, seat + 0.25],
+        [-0.02, front - 0.04, seat - 0.1],
+        [0.02, c[1], seat - 0.07],
+        0.008,
+    );
+    b.rbox(
+        "dark",
+        [-0.02, front - 0.04, seat - 0.1],
+        [0.02, front, spine_top],
         0.008,
     );
     match p.style() {
         2 => {
             b.rbox(
                 "frame",
-                [-w * 0.36, back_y - 0.06, seat + 0.12],
-                [w * 0.36, back_y - 0.03, seat + 0.62],
+                [-w * 0.36, back_y - 0.035, seat + 0.12],
+                [w * 0.36, back_y - 0.005, seat + 0.62],
                 0.04,
             );
             b.rbox(
                 "mesh",
-                [-w * 0.33, back_y - 0.065, seat + 0.15],
-                [w * 0.33, back_y - 0.025, seat + 0.59],
+                [-w * 0.33, back_y - 0.04, seat + 0.15],
+                [w * 0.33, back_y, seat + 0.59],
                 0.02,
             );
             b.rbox(
                 "cushion",
-                [-w * 0.2, back_y - 0.1, seat + 0.66],
-                [w * 0.2, back_y - 0.04, seat + 0.78],
+                [-w * 0.2, back_y - 0.035, seat + 0.64],
+                [w * 0.2, back_y + 0.025, seat + 0.76],
                 0.03,
             );
         }

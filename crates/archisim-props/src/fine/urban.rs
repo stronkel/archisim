@@ -1716,10 +1716,13 @@ pub fn bike_rack(b: &mut Builder, p: &Params) -> bool {
             0.07,
             14,
         );
-        let mut x = -0.25;
-        while x <= end + 0.26 {
+        // A post near each end and more between, never wider apart than
+        // a rail can span.
+        let (x0, x1) = (-0.25, end + 0.25);
+        let gaps = ((x1 - x0) / (step * 3.0).max(1.2)).ceil().max(1.0) as usize;
+        for k in 0..=gaps {
+            let x = x0 + (x1 - x0) * k as f64 / gaps as f64;
             b.cone("frame", [x, 0.0, 0.0], [x, 0.0, z + 0.05], 0.08, 0.075, 12);
-            x += (step * 3.0).max(1.2);
         }
         for i in 0..n {
             let x = step * i as f64;
@@ -1747,14 +1750,15 @@ pub fn bike_rack(b: &mut Builder, p: &Params) -> bool {
                     14,
                 );
             }
-            // Mediterranean: forged iron with scrolls under its top.
+            // Mediterranean: forged iron with scrolls hanging from its
+            // top (each starts inside the bar).
             1 => {
                 tube(b, "metal", &hoop(x, 0.35, h), false, 0.016, 8);
                 for s in [-1.0, 1.0] {
                     curl(
                         b,
                         "metal",
-                        [x, s * hw * 0.45, h - 0.09],
+                        [x, s * hw * 0.45, h - 0.068],
                         [0.0, -s, 0.0],
                         0.06,
                         1.1,

@@ -417,25 +417,6 @@ pub fn pool(b: &mut Builder, p: &Params) {
             0.004,
         );
     }
-    // Rustic: a few boulders round the deck.
-    if ix == 5 {
-        let mut rnd = Rng(17);
-        for k in 0..5 {
-            let t = TAU * k as f64 / 5.0 + 0.4;
-            let q = [
-                (l / 2.0 + coping + deck * 0.6) * t.cos(),
-                cy + (w / 2.0 + coping + deck * 0.6) * t.sin(),
-            ];
-            let s = rnd.range(0.25, 0.45);
-            b.blob(
-                "deck",
-                [q[0], q[1], s * 0.3],
-                [s, 0.0, 0.0],
-                [0.0, s * 0.8, 0.0],
-                [0.0, 0.0, s * 0.45],
-            );
-        }
-    }
 }
 
 // ------------------------------------------------------------------ shower
