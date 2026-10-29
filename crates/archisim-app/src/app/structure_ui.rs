@@ -137,6 +137,7 @@ impl ArchiSimApp {
                     note: format!("{} · {mat}", profile_text(t.profile)),
                     thumb,
                     caption: "Sección 1:20",
+                    folder: String::new(),
                 }
             })
             .collect()

@@ -822,6 +822,7 @@ impl ArchiSimApp {
                                                 note: item.note.clone(),
                                                 thumb,
                                                 caption: "",
+                                                folder: String::new(),
                                             };
                                             let selected = current.is_some_and(|c| {
                                                 item.pick == ObjectPick::Project(c)

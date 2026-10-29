@@ -303,6 +303,20 @@ pub fn wall_solids(model: &Model, id: WallId) -> Vec<Solid> {
 
 /// [`wall_solids`] with the walls around found through an index.
 pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
+    wall_parts_in(idx, id, false)
+}
+
+/// The faces where the layers of a wall touch each other, one solid per
+/// layer, each face looking out of its own layer. They are not part of the
+/// wall's skin (which is one closed solid): the 3D view adds them so that
+/// a cut through the wall shows each layer in its own cut colour instead
+/// of the far side of the wall (it draws them only seen from inside, as
+/// the cut).
+pub fn wall_inner_faces(idx: &WallIndex, id: WallId) -> Vec<Solid> {
+    wall_parts_in(idx, id, true)
+}
+
+fn wall_parts_in(idx: &WallIndex, id: WallId, between: bool) -> Vec<Solid> {
     let model = idx.model;
     let (Some(wall), Some(g)) = (model.wall(id), wall_geometry_in(idx, id)) else {
         return Vec::new();
@@ -372,6 +386,33 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
         .collect();
     for notch in &g.notches {
         inner.extend(notch.boundaries.iter().copied());
+    }
+    // Wrapping (Revit's «Envolver»): the finish that turns round a free
+    // end or into a reveal takes a strip as wide as itself; a line across
+    // the wall where that strip ends.
+    let (ends_ext, ends_int) = wtype.wrapping_layers(wtype.wrap_ends);
+    let (ins_ext, ins_int) = wtype.wrapping_layers(wtype.wrap_inserts);
+    let width_of = |l: Option<usize>| l.map_or(0.0, |l| wtype.layers[l].thickness);
+    let end_strip = width_of(ends_ext.or(ends_int));
+    if end_strip > 0.0 {
+        if g.start_cut == EndCut::Square {
+            inner.push(Line::new(a + u * end_strip, n));
+        }
+        if g.end_cut == EndCut::Square {
+            inner.push(Line::new(a + u * (len - end_strip), n));
+        }
+    }
+    let reveal_strips: Vec<f64> = [ins_ext, ins_int]
+        .into_iter()
+        .flatten()
+        .map(|l| wtype.layers[l].thickness)
+        .collect();
+    for o in &openings {
+        let (t0, t1) = o.cut_span();
+        for f in &reveal_strips {
+            inner.push(Line::new(a + u * (t0 - f), n));
+            inner.push(Line::new(a + u * (t1 + f), n));
+        }
     }
     // Slabs met (see `junctions`): a line across the wall where an edge of
     // the slab crosses it (square to the wall: slabs are drawn square to
@@ -458,6 +499,11 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     for z in g.notch_heights() {
         heights.push((z, z));
     }
+    for o in &openings {
+        for f in &reveal_strips {
+            heights.push((o.sill - f, o.head + f));
+        }
+    }
     for cut in &slab_cuts {
         for z in [cut.z.0, cut.z.1] {
             heights.push((z - level, z - level));
@@ -512,6 +558,53 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
             .any(|cut| z > cut.z.0 && z < cut.z.1 && cut.taken.contains(&k) && cut.contains(p));
         !in_opening && !in_notch && !in_slab
     };
+    // The layer whose material a cell takes: its own, or the finish that
+    // wraps over it at a free end or in the reveal of a door or window.
+    let wrap_into = |k: usize, ext: Option<usize>, int: Option<usize>| -> Option<usize> {
+        match (ext, int) {
+            (Some(e), Some(i)) => (k != e && k != i).then_some(e),
+            (Some(e), None) => (k != e).then_some(e),
+            (None, Some(i)) => (k != i).then_some(i),
+            (None, None) => None,
+        }
+    };
+    let owner = |c: usize, r: usize, k: usize| -> usize {
+        let off = (offsets[k] + offsets[k + 1]) / 2.0;
+        let t = (col_t(c, off, k) + col_t(c + 1, off, k)) / 2.0;
+        let z = (zs[r] + zs[r + 1]) / 2.0;
+        let at_start = g.start_cut == EndCut::Square && t < end_strip;
+        let at_end = g.end_cut == EndCut::Square && t > len - end_strip;
+        if end_strip > 0.0 && (at_start || at_end) {
+            if let Some(o) = wrap_into(k, ends_ext, ends_int) {
+                return o;
+            }
+        }
+        for o in &openings {
+            let (t0, t1) = o.cut_span();
+            let (sill, head) = (level + o.sill, level + o.head);
+            // Exterior finish: the layers outside the frame; interior
+            // finish: those inside it.
+            for (l, outside) in [
+                (ins_ext, off > o.frame_exterior + EPSILON),
+                (ins_int, off < o.frame_interior - EPSILON),
+            ] {
+                let Some(l) = l else { continue };
+                if !outside || k == l {
+                    continue;
+                }
+                let f = wtype.layers[l].thickness;
+                let beside = (t > t0 - f && t < t0) || (t > t1 && t < t1 + f);
+                let within = t > t0 - f && t < t1 + f;
+                let jamb = beside && z > sill - f && z < head + f;
+                let above = within && z > head && z < head + f;
+                let below = o.sill > EPSILON && within && z > sill - f && z < sill;
+                if jamb || above || below {
+                    return l;
+                }
+            }
+        }
+        k
+    };
     let pt = |t: f64, off: f64, z: f64| -> P3 {
         let p = a + u * t + n * off;
         [p.x, p.y, z]
@@ -540,12 +633,15 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
     let joined_end = g.end_cut.is_mitre();
 
     let mut tris: Vec<Vec<[P3; 3]>> = vec![Vec::new(); layers];
+    let mut inner_tris: Vec<Vec<[P3; 3]>> = vec![Vec::new(); layers];
     for c in 0..ncols - 1 {
         for r in 0..rows {
-            for (k, out) in tris.iter_mut().enumerate() {
+            for k in 0..layers {
                 if !solid(c, r, k) {
                     continue;
                 }
+                let mine = owner(c, r, k);
+                let out = &mut tris[mine];
                 let inside = centre(c, r, k);
                 // Towards the neighbouring layers (or the faces): the part
                 // of this cell's side the neighbour does not cover.
@@ -558,6 +654,26 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
                         }
                         _ => None,
                     };
+                    // The part the neighbour covers: a face between two
+                    // layers (only for the cut in the 3D view).
+                    let same = nb.is_some_and(|j| j < layers && owner(c, r, j) == mine);
+                    if between && !same {
+                        if let Some((t0, t1)) = theirs {
+                            let (a0, a1) = (own.0.max(t0), own.1.min(t1));
+                            if a1 > a0 + EPSILON {
+                                quad(
+                                    &mut inner_tris[mine],
+                                    [
+                                        pt(a0, off, zs[r]),
+                                        pt(a1, off, zs[r]),
+                                        pt(a1, off, zs[r + 1]),
+                                        pt(a0, off, zs[r + 1]),
+                                    ],
+                                    inside,
+                                );
+                            }
+                        }
+                    }
                     let exposed: Vec<(f64, f64)> = match theirs {
                         None => vec![own],
                         Some((t0, t1)) => {
@@ -588,6 +704,25 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
                 let open_before = c == 0 && !joined_start || c > 0 && !solid(c - 1, r, k);
                 let open_after =
                     c + 2 == ncols && !joined_end || c + 2 < ncols && !solid(c + 1, r, k);
+                if between {
+                    // Where a wrapping finish meets the layer it covers.
+                    let before = c > 0 && solid(c - 1, r, k) && owner(c - 1, r, k) != mine;
+                    let after = c + 2 < ncols && solid(c + 1, r, k) && owner(c + 1, r, k) != mine;
+                    for (cc, differs) in [(c, before), (c + 1, after)] {
+                        if differs {
+                            quad(
+                                &mut inner_tris[mine],
+                                [
+                                    v(cc, r, k, k),
+                                    v(cc, r, k + 1, k),
+                                    v(cc, r + 1, k + 1, k),
+                                    v(cc, r + 1, k, k),
+                                ],
+                                inside,
+                            );
+                        }
+                    }
+                }
                 for (cc, open) in [(c, open_before), (c + 1, open_after)] {
                     if open {
                         quad(
@@ -621,6 +756,19 @@ pub fn wall_solids_in(idx: &WallIndex, id: WallId) -> Vec<Solid> {
                 }
             }
         }
+    }
+    if between {
+        return wtype
+            .layers
+            .iter()
+            .zip(inner_tris)
+            .filter(|(_, t)| !t.is_empty())
+            .map(|(layer, triangles)| Solid {
+                owner: SolidOwner::Wall(id),
+                material: layer.material,
+                triangles,
+            })
+            .collect();
     }
     let mut solids: Vec<Solid> = wtype
         .layers
@@ -967,6 +1115,106 @@ pub fn slab_solids_in(idx: &WallIndex, id: SlabId) -> Vec<Solid> {
         &|t| slab.vertical(t),
         &stype.layers,
     )
+}
+
+/// The faces between the layers of a slab, seen only through a cut (as
+/// [`wall_inner_faces`]): each boundary twice, facing up in the colour of
+/// the layer under it and down in the colour of the layer over it, so a
+/// cut slab shows each of its layers solid.
+pub fn slab_inner_faces(idx: &WallIndex, id: SlabId) -> Vec<Solid> {
+    let model = idx.model;
+    let (Some(slab), Some(stype)) = (
+        model.slab(id),
+        model.slab(id).and_then(|s| model.slab_type(s.slab_type)),
+    ) else {
+        return Vec::new();
+    };
+    let level = model.level(slab.level).map_or(0.0, |l| l.elevation);
+    let cuts = crate::junctions::slab_wall_cuts(idx, id);
+    let whole: Vec<crate::junctions::Shape> = vec![(slab.outline.clone(), slab.holes.clone())];
+    let regions = if cuts.iter().any(|c| !c.is_empty()) {
+        crate::junctions::slab_layer_regions(&slab.outline, &slab.holes, &cuts)
+    } else {
+        vec![whole; stype.layers.len()]
+    };
+    plate_between(
+        SolidOwner::Slab(id),
+        &regions,
+        &|p| level + slab.top_at(p),
+        &|t| slab.vertical(t),
+        &stype.layers,
+    )
+}
+
+/// The faces between the layers of a roof's planes, as
+/// [`slab_inner_faces`].
+pub fn roof_inner_faces(model: &Model, id: archisim_core::RoofId) -> Vec<Solid> {
+    let Some(roof) = model.roof(id) else {
+        return Vec::new();
+    };
+    let Some(stype) = model.slab_type(roof.roof_type) else {
+        return Vec::new();
+    };
+    let level = model.level(roof.level).map_or(0.0, |l| l.elevation);
+    let mut out = Vec::new();
+    for plane in roof.planes() {
+        let slope = plane.slope;
+        for (outline, holes) in crate::roof_parts::roof_plane_shapes(roof, &plane) {
+            let regions = vec![vec![(outline, holes)]; stype.layers.len()];
+            out.extend(plate_between(
+                SolidOwner::Roof(id),
+                &regions,
+                &|p| level + roof.base_offset + slope.rise_at(p),
+                &|t| slope.vertical(t),
+                &stype.layers,
+            ));
+        }
+    }
+    out
+}
+
+/// The faces between the layers of a plate whose layers have the shapes
+/// `regions` (top layer first): where two layers meet, a face down in the
+/// upper one's material and a face up in the lower one's.
+fn plate_between(
+    owner: SolidOwner,
+    regions: &[Vec<crate::junctions::Shape>],
+    top: &dyn Fn(Point2) -> f64,
+    vertical: &dyn Fn(f64) -> f64,
+    layers: &[archisim_core::Layer],
+) -> Vec<Solid> {
+    let at = |p: Point2, depth: f64| [p.x, p.y, top(p) - vertical(depth)];
+    let count = layers.len().min(regions.len());
+    let mut out = Vec::new();
+    let mut depth = 0.0;
+    for i in 0..count.saturating_sub(1) {
+        depth += layers[i].thickness;
+        let (upper, lower) = (&layers[i], &layers[i + 1]);
+        if upper.material == lower.material {
+            continue;
+        }
+        let shared = crate::junctions::intersection(&regions[i], &regions[i + 1]);
+        let (mut down, mut up) = (Vec::new(), Vec::new());
+        for (outer, holes) in &shared {
+            let poly = with_holes(outer, holes);
+            for [x, y, z] in triangulate(&poly) {
+                let (a, b, c) = (at(poly[x], depth), at(poly[y], depth), at(poly[z], depth));
+                up.push([a, b, c]);
+                down.push([a, c, b]);
+            }
+        }
+        out.push(Solid {
+            owner,
+            material: upper.material,
+            triangles: down,
+        });
+        out.push(Solid {
+            owner,
+            material: lower.material,
+            triangles: up,
+        });
+    }
+    out
 }
 
 /// Solids of a roof: each plane as an inclined slab over the part of the
@@ -2286,7 +2534,8 @@ fn opening_body_solids(
 }
 
 /// The opening lines a door or window's recipe draws in elevation, in the
-/// model: each segment twice, on the face of the element its leaves open
+/// model (none when its type hides them there,
+/// [`Model::opening_lines_in_views`]): each segment twice, on the face of the element its leaves open
 /// to and on the other, and whether its line style is not continuous. The
 /// last value is the horizontal direction the leaves open to (a viewer on
 /// that side sees the lines as drawn; from the other side, they open away).
@@ -2317,6 +2566,12 @@ pub fn opening_elevation_lines(model: &Model, id: OpeningId) -> (Vec<ElevationLi
     let at = |x: f64, y: f64, z: f64| {
         let p = og.point(mid + sx * x, y_mid + sy * y);
         [p.x, p.y, z_sill + z]
+    };
+    // Windows draw them only when asked (`Model::opening_lines_in_views`).
+    let marks = if model.opening_lines_in_views(id) {
+        marks
+    } else {
+        Vec::new()
     };
     let mut out = Vec::new();
     let mut push = |a: [f64; 2], b: [f64; 2], dashed: bool| {
@@ -3958,6 +4213,153 @@ mod tests {
         // The whole model: 2 wall layers, 2 slab layers, 2 × 2 opening parts.
         assert_eq!(model_solids(&m).len(), 8);
         assert_eq!(level_solids(&m, m.levels()[0].id).len(), 8);
+    }
+
+    /// Doors draw their opening lines in the model's sections and
+    /// elevations, dashed; windows only when their type asks for them.
+    #[test]
+    fn windows_draw_opening_lines_only_when_asked() {
+        let (mut m, w) = model();
+        let ops: Vec<_> = m
+            .openings_in_wall(w)
+            .map(|o| (o.id, o.opening_type))
+            .collect();
+        let mut window = None;
+        for (id, t) in &ops {
+            let ty = m.opening_type(*t).unwrap();
+            let (lines, _) = opening_elevation_lines(&m, *id);
+            if ty.is_door() {
+                assert!(!lines.is_empty());
+                assert!(lines.iter().all(|l| l.dashed), "doors: dashed");
+            } else {
+                assert!(lines.is_empty(), "windows: none by default");
+                window = Some((*id, *t));
+            }
+        }
+        let (id, t) = window.unwrap();
+        let ty = m.opening_type(t).unwrap();
+        let mut values = ty.values.clone();
+        values.insert(
+            archisim_core::OPENING_LINES_IN_VIEWS.into(),
+            archisim_core::Value::Bool(true),
+        );
+        let family = ty.family;
+        m.edit_family_type(t, family, values).unwrap();
+        let (lines, _) = opening_elevation_lines(&m, id);
+        assert!(!lines.is_empty() && lines.iter().all(|l| l.dashed));
+    }
+
+    /// Revit's «Envolver en extremos»: the exterior finish turns round the
+    /// free ends and covers the other layers' ends, a strip as wide as
+    /// itself; the wall keeps its volume. «Envolver en huecos»: it turns
+    /// into the reveals of a window up to the frame.
+    #[test]
+    fn finishes_wrap_at_ends_and_inserts() {
+        let mut m = Model::new("Envolver");
+        let lvl = m.add_level("P1", 0.0);
+        let render = m.add_material("Mortero", "plaster", [230, 230, 220], CutPattern::Solid);
+        let brick = m.add_material("Ladrillo", "brick", [200, 100, 80], CutPattern::Diagonal);
+        let plaster = m.add_material("Yeso", "plaster", [245, 245, 245], CutPattern::Solid);
+        let layer = |material, thickness, function| Layer {
+            material,
+            thickness,
+            function,
+        };
+        let wt = m
+            .add_wall_type(
+                "Fachada",
+                WallFunction::Exterior,
+                vec![
+                    layer(render, 0.02, LayerFunction::Finish),
+                    layer(brick, 0.2, LayerFunction::Structure),
+                    layer(plaster, 0.015, LayerFunction::Finish),
+                ],
+            )
+            .unwrap();
+        // The reveals of a façade wrap by default, as they were drawn.
+        assert_eq!(
+            m.wall_type(wt).unwrap().wrap_inserts,
+            archisim_core::Wrap::Exterior
+        );
+        m.set_wall_type_wrap(wt, archisim_core::Wrap::Exterior, archisim_core::Wrap::None)
+            .unwrap();
+        let w = m
+            .add_wall(NewWall {
+                wall_type: wt,
+                level: lvl,
+                start: Point2::new(0.0, 0.0),
+                end: Point2::new(4.0, 0.0),
+                reference: ReferenceLine::Center,
+                height: 3.0,
+                base_offset: 0.0,
+                bulge: 0.0,
+                top: archisim_core::WallTop::Unconnected,
+            })
+            .unwrap();
+        // The area of the faces of one material lying on the plane x = at.
+        let area_at = |m: &Model, mat, at: f64| -> f64 {
+            wall_solids(m, w)
+                .iter()
+                .filter(|s| s.material == mat)
+                .flat_map(|s| s.triangles.iter())
+                .filter(|t| t.iter().all(|p| (p[0] - at).abs() < 1e-9))
+                .map(|[p, q, r]| {
+                    let c = cross(
+                        [q[0] - p[0], q[1] - p[1], q[2] - p[2]],
+                        [r[0] - p[0], r[1] - p[1], r[2] - p[2]],
+                    );
+                    dot(c, c).sqrt() / 2.0
+                })
+                .sum()
+        };
+        let total = |m: &Model| -> f64 { wall_solids(m, w).iter().map(|s| s.volume()).sum() };
+        // The whole end face (0.235 × 3 m) is render; the brick shows none.
+        assert!((area_at(&m, render, 0.0) - 0.235 * 3.0).abs() < 1e-9);
+        assert!(area_at(&m, brick, 0.0) < 1e-12);
+        assert!((area_at(&m, render, 4.0) - 0.235 * 3.0).abs() < 1e-9);
+        assert!((total(&m) - 0.235 * 4.0 * 3.0).abs() < 1e-9);
+        // Each layer's cut shows its own colour: faces between the render
+        // strip and the brick it covers.
+        let idx = crate::WallIndex::new(&m);
+        assert!(!wall_inner_faces(&idx, w).is_empty());
+        // Without wrapping, the brick shows at the end.
+        m.set_wall_type_wrap(wt, archisim_core::Wrap::None, archisim_core::Wrap::None)
+            .unwrap();
+        assert!((area_at(&m, brick, 0.0) - 0.2 * 3.0).abs() < 1e-9);
+        // Into the reveals of a window: the jamb face outside the frame is
+        // render, inside it the brick and plaster as before.
+        m.set_wall_type_wrap(wt, archisim_core::Wrap::None, archisim_core::Wrap::Exterior)
+            .unwrap();
+        let glass = m.add_material("Vidrio", "glass", [190, 220, 240], CutPattern::Solid);
+        let t = m
+            .add_opening_type(archisim_core::NewOpeningType {
+                name: "V".into(),
+                kind: archisim_core::OpeningKind::Window(archisim_core::WindowOperation::Fixed),
+                width: 1.0,
+                height: 1.0,
+                frame_width: 0.05,
+                frame_depth: 0.07,
+                frame_material: brick,
+                panel_material: glass,
+            })
+            .unwrap();
+        m.add_opening(archisim_core::NewOpening {
+            opening_type: t,
+            wall: w,
+            along: 2.0,
+            sill: 1.0,
+            opens_to: archisim_core::WallSide::Interior,
+            hand: archisim_core::Hand::Left,
+            // The frame 15 cm in, past the middle of the brick.
+            setback: Some(0.15),
+        })
+        .unwrap();
+        let jamb = 1.5;
+        let render_jamb = area_at(&m, render, jamb);
+        let brick_jamb = area_at(&m, brick, jamb);
+        assert!(render_jamb > 0.02 * 1.0 + 1e-6, "{render_jamb}");
+        assert!(brick_jamb < 0.2 * 1.0 - 1e-6, "{brick_jamb}");
+        assert!((total(&m) - (0.235 * 4.0 * 3.0 - 0.235 * 1.0 * 1.0)).abs() < 1e-6);
     }
 
     /// The system families build the same doors and windows ArchiSim built

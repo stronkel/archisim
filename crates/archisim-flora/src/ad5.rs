@@ -38,7 +38,7 @@ fn points(words: &[&str]) -> Vec<P2> {
         .as_chunks::<2>()
         .0
         .iter()
-        .filter_map(|w| Some([w[0].parse().ok()?, w[1].parse().ok()?]))
+        .filter_map(|[x, y]| Some([x.parse().ok()?, y.parse().ok()?]))
         .collect()
 }
 

@@ -130,6 +130,7 @@ impl ArchiSimApp {
     pub(super) fn sync_prefs(&mut self, ctx: &egui::Context) {
         self.prefs.dark = self.dark;
         self.prefs.keys_autocad = self.keys_autocad;
+        self.prefs.keys_revit = self.keys_revit;
         crate::units::set_unit(self.prefs.units);
         let zoom = self.prefs.text_size.zoom();
         if (zoom - self.applied_zoom).abs() > 1e-3 {

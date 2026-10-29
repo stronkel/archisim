@@ -8,6 +8,9 @@ use glam::{Mat4, Vec2, Vec3};
 /// axonometry, in radians.
 pub const FOV_Y: f32 = 0.70;
 
+/// The nearest the target may be to the eye, in metres.
+const MIN_DISTANCE: f32 = 0.05;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     /// The point the camera orbits around and looks at.
@@ -185,13 +188,42 @@ impl Camera {
     }
 
     /// Zooms by `factor` (< 1 closer) keeping the point under the cursor,
-    /// on the plane through the target, where it was.
+    /// on the plane through the target, where it was. In perspective, once
+    /// the target is as near as it may be, the camera walks on through it
+    /// along the cursor's ray instead of stopping there.
     pub fn zoom_at(&mut self, factor: f32, pos: Vec2, size: Vec2) {
+        let wanted = self.distance * factor;
+        if self.perspective && factor < 1.0 && wanted < MIN_DISTANCE {
+            let dir = self.ray(pos, size).dir;
+            let step = self.distance.max(1.0) * (1.0 - factor);
+            self.distance = self.distance.max(MIN_DISTANCE);
+            self.target += dir * step;
+            return;
+        }
         let before = self.on_target_plane(pos, size);
-        self.distance = (self.distance * factor).clamp(0.5, 5000.0);
+        self.distance = wanted.clamp(MIN_DISTANCE, 5000.0);
         let after = self.on_target_plane(pos, size);
         if let (Some(b), Some(a)) = (before, after) {
             self.target += b - a;
+        }
+    }
+
+    /// Puts the target at the depth of `p` without changing what is seen:
+    /// zooming then goes towards what is under the cursor and dragging
+    /// moves it with the cursor, however far the old target was.
+    pub fn retarget(&mut self, p: Vec3) {
+        let f = self.forward();
+        if self.perspective {
+            let eye = self.eye();
+            let d = (p - eye).dot(f);
+            if d > MIN_DISTANCE * 0.5 {
+                self.target = eye + f * d;
+                self.distance = d;
+            }
+        } else {
+            // In parallel projection the distance is the scale: only slide
+            // the target along the line of sight.
+            self.target += f * (p - self.target).dot(f);
         }
     }
 
@@ -266,6 +298,44 @@ mod tests {
             let after = c.on_target_plane(pos, size).unwrap();
             assert!((after - before).length() < 1e-3, "{before:?} {after:?}");
         }
+    }
+
+    /// Zooming in never gets stuck: past the nearest distance the camera
+    /// walks on; and retargeting changes nothing on screen.
+    #[test]
+    fn zoom_goes_on_and_retarget_keeps_the_view() {
+        let size = Vec2::new(800.0, 600.0);
+        let mut c = Camera::default();
+        let pos = Vec2::new(400.0, 300.0);
+        let eye0 = c.eye();
+        for _ in 0..200 {
+            c.zoom_at(0.8, pos, size);
+        }
+        assert!((c.eye() - eye0).length() > 31.0, "walked past the target");
+        let mut c = Camera::default();
+        let p = Vec3::new(1.0, 2.0, 0.0);
+        let before = c.project_to_screen(p, size).unwrap();
+        c.retarget(Vec3::new(4.0, 3.0, 1.0));
+        let after = c.project_to_screen(p, size).unwrap();
+        assert!((after - before).length() < 0.05, "{before:?} {after:?}");
+    }
+
+    /// Dragging with the wheel pressed carries what was grabbed with the
+    /// cursor, however far from the target it is.
+    #[test]
+    fn panning_moves_the_grabbed_point_with_the_cursor() {
+        let size = Vec2::new(800.0, 600.0);
+        let mut c = Camera::default();
+        let p = Vec3::new(-2.0, -1.0, 0.0);
+        let before = c.project_to_screen(p, size).unwrap();
+        c.retarget(p);
+        c.pan(Vec2::new(120.0, -40.0), size.y);
+        let after = c.project_to_screen(p, size).unwrap();
+        let moved = after - before;
+        assert!(
+            (moved - Vec2::new(120.0, -40.0)).length() < 0.5,
+            "{moved:?}"
+        );
     }
 
     #[test]

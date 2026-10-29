@@ -26,15 +26,18 @@ use crate::pick::Element;
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Vertex {
     pub pos: [f32; 3],
-    /// The normal, each part times 32767; the fourth is unused.
+    /// The normal, each part times 32767; the fourth holds the red and
+    /// green of the cut colour (see [`Vertex::with_cap`]).
     pub normal: [i16; 4],
     /// sRGB colour and opacity, 0…255.
     pub color: [u8; 4],
     /// Which face wins where two elements touch on a visible edge, plus
-    /// one (faces looking up give way, 2; doors and windows win against
-    /// the reveals they sit in, 0; foliage 3, what glows 4, grass 5); 1 if
-    /// its element is selected (2 drawn stretched over the scene); the
-    /// texture (0 none); unused.
+    /// three (faces looking up give way, 4; doors and windows win against
+    /// the reveals they sit in, 2; foliage 5, what glows 6, grass 7, many
+    /// small leaves 8; a face between two layers, seen only as a cut, 1;
+    /// the filled section of a cut object, 0); 1 if its element is
+    /// selected (2 drawn stretched over the scene); the texture (0 none);
+    /// the blue of the cut colour.
     pub misc: [u8; 4],
     /// The size of the texture's piece, metres.
     pub tex_size: f32,
@@ -42,6 +45,9 @@ pub struct Vertex {
     /// a point of it in plan and its base.
     pub cut: [f32; 4],
 }
+
+/// What the bias of a corner is stored above (it may be as low as -3).
+const BIAS_ZERO: f32 = 3.0;
 
 impl Vertex {
     #[allow(clippy::too_many_arguments)]
@@ -66,7 +72,7 @@ impl Vertex {
                 (color[3].clamp(0.0, 1.0) * 255.0).round() as u8,
             ],
             misc: [
-                (bias + 1.0).round().clamp(0.0, 255.0) as u8,
+                (bias + BIAS_ZERO).round().clamp(0.0, 255.0) as u8,
                 select.round().clamp(0.0, 255.0) as u8,
                 tex[0].round().clamp(0.0, 255.0) as u8,
                 0,
@@ -74,11 +80,40 @@ impl Vertex {
             tex_size: tex[1],
             cut,
         }
+        .with_cap([color[0], color[1], color[2]])
+    }
+
+    /// With `cap` (linear RGB) as what its cut shows when a section box or
+    /// the cut away walls cut it: its material's cut colour, the plan's
+    /// poché (each layer of a wall its own). Kept in the corner's spare
+    /// bytes, sRGB: red and green in the normal's fourth part, blue in the
+    /// last of `misc`.
+    pub fn with_cap(mut self, cap: [f32; 3]) -> Self {
+        let c = |c: f32| (linear_to_srgb(c) * 255.0).round() as u8;
+        self.normal[3] = i16::from_le_bytes([c(cap[0]), c(cap[1])]);
+        self.misc[3] = c(cap[2]);
+        self
+    }
+
+    /// Its cut colour, linear RGB.
+    pub fn cap(&self) -> [f32; 3] {
+        let [r, g] = self.normal[3].to_le_bytes();
+        [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(self.misc[3])]
+    }
+
+    /// Which face wins where two elements touch, as given to [`Vertex::new`].
+    pub fn bias(&self) -> f32 {
+        self.misc[0] as f32 - BIAS_ZERO
     }
 
     /// 1 if its element is selected, 2 if drawn stretched over the scene.
     #[cfg(test)]
     pub fn select(&self) -> f32 {
+        self.misc[1] as f32
+    }
+
+    /// 1 if its element is selected, 2 if drawn stretched over the scene.
+    fn select_value(&self) -> f32 {
         self.misc[1] as f32
     }
 
@@ -401,7 +436,7 @@ fn vertex_key(v: &[f64; 3]) -> [i64; 3] {
     v.map(|c| (c * 10_000.0).round() as i64)
 }
 
-fn srgb_to_linear(c: u8) -> f32 {
+pub(crate) fn srgb_to_linear(c: u8) -> f32 {
     let c = c as f32 / 255.0;
     if c <= 0.04045 {
         c / 12.92
@@ -489,6 +524,10 @@ struct Look<'a> {
     /// For a group's model: no selection, no greying, no cut of its own
     /// (the instance has them).
     shared: bool,
+    /// Faces between two layers of a wall, a slab or a roof: drawn only
+    /// as a cut, so that a cut wall shows each layer solid in its cut
+    /// colour.
+    between: bool,
 }
 
 impl Scene {
@@ -551,6 +590,7 @@ impl Scene {
                         disciplines,
                         anchors: &HashMap::new(),
                         shared: true,
+                        between: false,
                     };
                     add_solids(model, solids, &look, &mut shared);
                     groups.push((shared, Group::default()));
@@ -653,6 +693,7 @@ impl Scene {
                         disciplines,
                         anchors: &HashMap::new(),
                         shared: true,
+                        between: false,
                     };
                     add_solids(model, solids, &look, &mut shared);
                     groups.push((shared, Group::default()));
@@ -744,8 +785,35 @@ impl Scene {
             disciplines,
             anchors: &anchors,
             shared: false,
+            between: false,
         };
         add_solids(model, solids, &look, &mut loose);
+        // Where the layers of a wall, a slab or a roof touch: seen only
+        // through a cut.
+        let idx = archisim_geom::WallIndex::new(model);
+        let between: Vec<_> = model
+            .walls()
+            .flat_map(|w| archisim_geom::solid::wall_inner_faces(&idx, w.id))
+            .chain(
+                model
+                    .slabs()
+                    .flat_map(|sl| archisim_geom::solid::slab_inner_faces(&idx, sl.id)),
+            )
+            .chain(
+                model
+                    .roofs()
+                    .flat_map(|r| archisim_geom::solid::roof_inner_faces(model, r.id)),
+            )
+            .collect();
+        add_solids(
+            model,
+            between,
+            &Look {
+                between: true,
+                ..look
+            },
+            &mut loose,
+        );
         // Painted zones of walls' faces, just off them.
         for (wall, tri, [r, g, b]) in archisim_geom::solid::paint_zone_triangles(model) {
             if model.hidden_by_discipline(&disciplines.hidden, wall.0) {
@@ -832,6 +900,7 @@ impl Scene {
             disciplines: &Default::default(),
             anchors: &HashMap::new(),
             shared: false,
+            between: false,
         };
         let mut loose = Loose::default();
         add_solids(model, solids, &look, &mut loose);
@@ -907,6 +976,136 @@ impl Scene {
                 }
             }
         }
+    }
+
+    /// The cut faces of the objects a section box from `lo` to `hi` cuts
+    /// (furniture, appliances, people, cars): on each face of the box that
+    /// goes through one, its section filled whole, in the cut colour of
+    /// the parts it was cut from, so that a kitchen unit reads as a solid
+    /// block and not as the empty box of its panels. Leaves are left as
+    /// they are (their back faces show the cut).
+    pub fn object_cut_fill(&self, lo: Vec3, hi: Vec3) -> Vec<Chunk> {
+        use archisim_geom::slice::{filled_section, Plane};
+        struct Part {
+            tris: Vec<([[f64; 3]; 3], [u32; 3])>,
+            lo: Vec3,
+            hi: Vec3,
+            cut: [f32; 4],
+            select: f32,
+        }
+        let mut parts: Vec<(Element, Part)> = Vec::new();
+        let mut add = |e: Element, t: [Vec3; 3], cap: [f32; 3], cut: [f32; 4], select: f32| {
+            let i = match parts.iter().position(|(o, _)| *o == e) {
+                Some(i) => i,
+                None => {
+                    parts.push((
+                        e,
+                        Part {
+                            tris: Vec::new(),
+                            lo: Vec3::splat(f32::MAX),
+                            hi: Vec3::splat(f32::MIN),
+                            cut,
+                            select,
+                        },
+                    ));
+                    parts.len() - 1
+                }
+            };
+            let part = &mut parts[i].1;
+            for v in t {
+                part.lo = part.lo.min(v);
+                part.hi = part.hi.max(v);
+            }
+            part.tris.push((
+                t.map(|v| v.to_array().map(f64::from)),
+                cap.map(f32::to_bits),
+            ));
+        };
+        // Leaves, what glows and the grass keep their own look.
+        let plain = |v: &Vertex| v.bias() <= 0.5;
+        for c in &self.opaque {
+            for (t, o) in c.mesh.indices.as_chunks::<3>().0.iter().zip(&c.owners) {
+                let Owner::Model(e @ Element::Object(_)) = *o else {
+                    continue;
+                };
+                let v = t.map(|i| c.mesh.vertices[i as usize]);
+                if plain(&v[0]) {
+                    let p = v.map(|v| Vec3::from_array(v.pos));
+                    add(e, p, v[0].cap(), v[0].cut, v[0].select_value());
+                }
+            }
+        }
+        for g in &self.groups {
+            let count = g.levels.first().map_or(0, |l| l.1) as usize;
+            for (inst, e) in g.instances.iter().zip(&g.owners) {
+                if !matches!(e, Element::Object(_)) {
+                    continue;
+                }
+                for t in g.opaque.indices[..count].as_chunks::<3>().0 {
+                    let v = t.map(|i| g.opaque.vertices[i as usize]);
+                    if plain(&v[0]) {
+                        let p = v.map(|v| inst.place(Vec3::from_array(v.pos)));
+                        add(*e, p, v[0].cap(), inst.cut, inst.flags[0].max(0.0));
+                    }
+                }
+            }
+        }
+        // The box's faces, each with its directions along it so that
+        // u × v points out of the box, towards what was cut away.
+        let faces: [(usize, f32, Vec3, Vec3); 6] = [
+            (0, lo.x, Vec3::Z, Vec3::Y),
+            (0, hi.x, Vec3::Y, Vec3::Z),
+            (1, lo.y, Vec3::X, Vec3::Z),
+            (1, hi.y, Vec3::Z, Vec3::X),
+            (2, lo.z, Vec3::Y, Vec3::X),
+            (2, hi.z, Vec3::X, Vec3::Y),
+        ];
+        let mut out = Loose::default();
+        for (e, part) in &parts {
+            // Only what is partly inside the box.
+            if (0..3).any(|a| part.hi[a] < lo[a] || part.lo[a] > hi[a]) {
+                continue;
+            }
+            for (axis, at, u, v) in faces {
+                if !(part.lo[axis] < at && at < part.hi[axis]) {
+                    continue;
+                }
+                let mut origin = Vec3::ZERO;
+                origin[axis] = at;
+                let plane = Plane {
+                    origin: origin.as_dvec3().to_array(),
+                    u: u.as_dvec3().to_array(),
+                    v: v.as_dvec3().to_array(),
+                };
+                let normal = u.cross(v);
+                for region in filled_section(&part.tris, plane) {
+                    let cap = region.tag.map(f32::from_bits);
+                    let at3 = |p: archisim_core::Point2| origin + u * p.x as f32 + v * p.y as f32;
+                    for [a, b, c] in archisim_geom::solid::triangulate(&region.outline) {
+                        let corner = |k: usize| {
+                            Vertex::new(
+                                at3(region.outline[k]),
+                                normal,
+                                [cap[0], cap[1], cap[2], 1.0],
+                                // A cut face: shaded as the caps are.
+                                -3.0,
+                                [0.0, 0.0],
+                                part.cut,
+                                part.select,
+                            )
+                            .with_cap(cap)
+                        };
+                        out.push(
+                            Pass::Opaque,
+                            [corner(a), corner(b), corner(c)],
+                            Owner::Model(*e),
+                        );
+                    }
+                }
+            }
+        }
+        let ([opaque, _, _], _) = out.finish();
+        opaque
     }
 
     /// The box around the triangles of each element of the project.
@@ -1187,6 +1386,12 @@ fn add_solids(
         } else {
             cut_of(model, look.anchors, &solid)
         };
+        // The cut of a solid shows its material's cut colour, as the
+        // plan's poché (each layer of a wall its own).
+        let cap = {
+            let t = tone(mat.map_or([200, 200, 200], |m| m.cut_color), dimmed);
+            [t[0], t[1], t[2]]
+        };
         let select = if selected { 1.0 } else { 0.0 };
         let is_object = matches!(solid.owner, SolidOwner::Object(_));
         let texture_of = |m: archisim_core::MaterialId| {
@@ -1226,7 +1431,10 @@ fn add_solids(
             // Faces looking up give way where another element rests on
             // them: the floor under a wall, the top of a wall under the
             // roof slab.
-            let bias = if grass {
+            let bias = if look.between {
+                // A face between two layers, drawn only as the cut.
+                -2.0
+            } else if grass {
                 4.0
             } else if fine {
                 5.0
@@ -1257,7 +1465,7 @@ fn add_solids(
                         Some(sum.normalize_or_zero()).filter(|s| s.length_squared() > 0.5)
                     })
                     .unwrap_or(n);
-                Vertex::new(p[k], normal, colors[k], bias, tex, cut, select)
+                Vertex::new(p[k], normal, colors[k], bias, tex, cut, select).with_cap(cap)
             };
             let v = [corner(0), corner(1), corner(2)];
             out.push(pass, v, owner);

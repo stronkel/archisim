@@ -273,7 +273,7 @@ impl ArchiSimApp {
             (
                 true,
                 "Maqueta",
-                "El 3D a pantalla con un catálogo, como Los Sims (Tab con el dibujo activo)",
+                "El 3D a pantalla con un catálogo, como Los Sims (F4)",
             ),
             (
                 false,
@@ -517,6 +517,11 @@ impl ArchiSimApp {
             {
                 self.v3d.cutaway = c;
             }
+        }
+        // What the cut walls show (the same choice as the section box's).
+        if self.v3d.cutaway != Cutaway::Up {
+            ui.separator();
+            super::view3d_ui::caps_choice(ui, &mut self.v3d.caps);
         }
     }
 

@@ -132,8 +132,10 @@ impl ArchiSimApp {
         let sig = self.picture_signature(false);
         let model = self.ed.model();
         let thumbs = &mut self.thumbs;
-        model
-            .wall_types()
+        // Exterior walls first, as in the types dialog.
+        let mut list: Vec<_> = model.wall_types().collect();
+        list.sort_by_key(|t| t.function != WallFunction::Exterior);
+        list.into_iter()
             .map(|t| {
                 let f = match t.function {
                     WallFunction::Exterior => "exterior",
@@ -152,6 +154,7 @@ impl ArchiSimApp {
                     ),
                     thumb,
                     caption: "Corte en planta 1:20 · exterior arriba",
+                    folder: types_ui::wall_folder_name(t.function).to_string(),
                 }
             })
             .collect()
@@ -161,8 +164,13 @@ impl ArchiSimApp {
         let sig = self.picture_signature(false);
         let model = self.ed.model();
         let thumbs = &mut self.thumbs;
-        model
-            .slab_types()
+        let mut list: Vec<_> = model.slab_types().collect();
+        list.sort_by_key(|t| match t.function {
+            SlabFunction::Floor => 0,
+            SlabFunction::BaseSlab => 1,
+            SlabFunction::Roof => 2,
+        });
+        list.into_iter()
             .map(|t| {
                 let f = match t.function {
                     SlabFunction::Floor => "forjado de planta",
@@ -180,6 +188,7 @@ impl ArchiSimApp {
                     note: format!("canto {} · {f}", crate::units::fmt_len(t.thickness())),
                     thumb,
                     caption: "Capas 1:20 · cara superior arriba",
+                    folder: types_ui::slab_folder_name(t.function).to_string(),
                 }
             })
             .collect()
@@ -253,6 +262,9 @@ impl ArchiSimApp {
                 ),
                 thumb,
                 caption,
+                folder: model
+                    .family(t.family)
+                    .map_or("Otras".to_string(), |f| f.name().to_string()),
             });
         }
         if view == CardView::ThreeD && self.thumbs3d.pending {
@@ -1306,6 +1318,32 @@ impl ArchiSimApp {
                     }
                 },
             );
+            // Revit's «Permitir unión» at each end (also with the right
+            // click on an end).
+            for (i, label) in [(0, "Unión al inicio"), (1, "Unión al final")] {
+                row(
+                    ui,
+                    label,
+                    "Apagada: ese extremo queda libre, cuadrado, aunque toque otro muro (No permitir unión)",
+                    |ui, _| {
+                        let mut on = w.allow_join[i];
+                        ui.switch(&mut on, "");
+                        if on != w.allow_join[i] {
+                            let r = self
+                                .ed
+                                .transact("Unión de muros", |m| m.set_wall_join(id, i == 0, on));
+                            self.report(
+                                r,
+                                if on {
+                                    "Unión permitida."
+                                } else {
+                                    "Unión no permitida: el extremo queda libre."
+                                },
+                            );
+                        }
+                    },
+                );
+            }
         });
         group(ui, "wall-dimensions", "Dimensiones", |ui| {
             row(

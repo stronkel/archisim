@@ -1,7 +1,7 @@
 family "Ventana de guillotina"
   category window
   host wall
-  version 1
+  version 2
   description "Ventana de dos hojas que deslizan en vertical, una delante de la otra: se mueve la de abajo o las dos"
 
 include "piezas"
@@ -23,6 +23,8 @@ type_params
     frame_material material = "Aluminio lacado" label "Marco y hojas"
     panel_material material = "Vidrio doble" label "Vidrio"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
+  section "Representación"
+    opening_lines_in_views bool = no label "Flechas de apertura en alzados y secciones del modelo"
 
 let f = frame_width
 let c0 = -width / 2 + f

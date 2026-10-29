@@ -103,6 +103,16 @@ impl ArchiSimApp {
         }
     }
 
+    /// The next way of using the keys: Revit → AutoCAD → ArchiCAD.
+    pub(super) fn cycle_keys(&mut self) {
+        (self.keys_revit, self.keys_autocad) = match (self.keys_revit, self.keys_autocad) {
+            (true, _) => (false, true),
+            (false, true) => (false, false),
+            (false, false) => (true, true),
+        };
+        self.cmdline.buffer.clear();
+    }
+
     pub(super) fn toggle_ortho(&mut self) {
         self.cad_settings.ortho = !self.cad_settings.ortho;
         let text = if self.cad_settings.ortho {
@@ -217,6 +227,22 @@ impl ArchiSimApp {
             self.cmdline.log(format!("{} {text}", prompt.line()), false);
             let base = self.cad.as_ref().and_then(|c| c.base());
             let input = cad::typed_input(&prompt, &text, base, cursor);
+            // U (DESHACER) or REHACER typed while a command runs (between
+            // the corners of Esquina, say): the last step is undone and the
+            // command goes on.
+            if let Input::Value(v) = &input {
+                match cad::launch(v) {
+                    Some(cad::Launch::Undo) => {
+                        self.undo();
+                        return;
+                    }
+                    Some(cad::Launch::Redo) => {
+                        self.redo();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
             // Another command typed while one runs: it replaces it.
             if let Input::Value(v) = &input {
                 if prompt.want == Want::Point {
@@ -368,7 +394,7 @@ impl ArchiSimApp {
                 } else if drawing_bim {
                     // Lengths typed while drawing go to the tool, as always.
                     false
-                } else if self.keys_autocad {
+                } else if self.keys_autocad || self.keys_revit {
                     true
                 } else {
                     // ArchiCAD keys: the tool letters act at once.
@@ -379,6 +405,20 @@ impl ArchiSimApp {
                 if to_buffer {
                     self.cmdline.buffer.push(c);
                     used = true;
+                    // Revit keys: two letters start their tool at once (also
+                    // in the middle of an order that waits for a pick).
+                    if self.keys_revit
+                        && self.cmdline.buffer.chars().count() == 2
+                        && (!cad
+                            || self
+                                .cad_prompt()
+                                .is_some_and(|p| matches!(p.want, Want::Pick | Want::Select)))
+                    {
+                        let code = self.cmdline.buffer.clone();
+                        if self.revit_key(&code) {
+                            self.cmdline.buffer.clear();
+                        }
+                    }
                 }
             }
         }
@@ -676,18 +716,16 @@ impl ArchiSimApp {
             );
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let label = if self.keys_autocad {
-                    "Teclas: AutoCAD"
+                // Revit → AutoCAD → ArchiCAD → Revit.
+                let (label, hint) = if self.keys_revit {
+                    ("Teclas: Revit", "Dos letras y la herramienta empieza (WA muro, MV mover, MM reflejar…; KS: la lista). Clic: teclas de AutoCAD")
+                } else if self.keys_autocad {
+                    ("Teclas: AutoCAD", "Escribe la orden y pulsa Intro o Espacio (L, PL, M de muro…). Clic: teclas de ArchiCAD")
                 } else {
-                    "Teclas: ArchiCAD"
-                };
-                let hint = if self.keys_autocad {
-                    "Escribe la orden y pulsa Intro o Espacio (L, PL, M de muro…). Clic: teclas de ArchiCAD (M, F, P, V, C y N al momento)"
-                } else {
-                    "M, F, P, V, C y N cambian de herramienta al momento. Clic: escribir órdenes como en AutoCAD (orden + Intro)"
+                    ("Teclas: ArchiCAD", "M, F, P, V, C y N cambian de herramienta al momento. Clic: teclas de Revit")
                 };
                 if ui.small_button(label).on_hover_text(hint).clicked() {
-                    self.keys_autocad = !self.keys_autocad;
+                    self.cycle_keys();
                 }
                 let ortho = if self.cad_settings.ortho { "ORTO ●" } else { "ORTO" };
                 if ui

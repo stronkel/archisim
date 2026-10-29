@@ -1446,8 +1446,31 @@ impl<'a> Exporter<'a> {
         let mut type_refs: BTreeMap<WallTypeId, Ref> = BTreeMap::new();
         for t in model.wall_types() {
             let set = self.layer_set(&materials, t.layers.iter().rev(), &t.name);
+            // Revit's «Envolver» (IFC cannot say it): ArchiSim's own set on
+            // the type, when it is not what ArchiSim does anyway.
+            let wraps = t.wrap_ends != archisim_core::Wrap::None
+                || t.wrap_inserts != archisim_core::Wrap::inserts_by_default(t.function, &t.layers);
+            let sets = if wraps {
+                let props: Vec<Ref> = [("WrapEnds", t.wrap_ends), ("WrapInserts", t.wrap_inserts)]
+                    .into_iter()
+                    .map(|(name, w)| {
+                        self.w.add(format!(
+                            "IFCPROPERTYSINGLEVALUE('{name}',$,IFCLABEL({}),$)",
+                            string(wrap_name(w))
+                        ))
+                    })
+                    .collect();
+                let pset = self.w.add(format!(
+                    "IFCPROPERTYSET({},$,'ArchiSim_WallType',$,{})",
+                    string(derived_guid(&t.guid, "ArchiSim_WallType").as_str()),
+                    list(&props)
+                ));
+                format!("({pset})")
+            } else {
+                "$".to_string()
+            };
             let ty = self.w.add(format!(
-                "IFCWALLTYPE({},$,{},$,$,$,$,$,$,.STANDARD.)",
+                "IFCWALLTYPE({},$,{},$,$,{sets},$,$,$,.STANDARD.)",
                 string(t.guid.as_str()),
                 string(&t.name)
             ));
@@ -2012,6 +2035,16 @@ pub fn utc_now() -> String {
         rem % 3600 / 60,
         rem % 60
     )
+}
+
+/// The name of a wall type's wrapping in its `ArchiSim_WallType` set.
+pub(crate) fn wrap_name(w: archisim_core::Wrap) -> &'static str {
+    match w {
+        archisim_core::Wrap::None => "none",
+        archisim_core::Wrap::Exterior => "exterior",
+        archisim_core::Wrap::Interior => "interior",
+        archisim_core::Wrap::Both => "both",
+    }
 }
 
 #[cfg(test)]

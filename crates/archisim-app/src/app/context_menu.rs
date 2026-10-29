@@ -49,6 +49,12 @@ pub enum MenuAct {
     SelectAll,
     ToLevel(LevelId),
     Delete,
+    /// Revit's «Permitir unión» / «No permitir unión» at one end of a wall.
+    WallJoin {
+        wall: archisim_core::WallId,
+        start: bool,
+        allow: bool,
+    },
 }
 
 impl ContextMenu {
@@ -171,6 +177,23 @@ impl ArchiSimApp {
                 }
                 if !self.ed.hidden().is_empty() && item(ui, "Mostrar todo", "", true) {
                     act = Some(MenuAct::ShowAll);
+                }
+                // Near an end of a wall: allow or disallow its join there.
+                if let (Element::Wall(id), Some(at)) = (e, menu.at) {
+                    if let Some((start, allowed)) = wall_end_near(model, id, at) {
+                        let text = if allowed {
+                            "No permitir unión en este extremo"
+                        } else {
+                            "Permitir unión en este extremo"
+                        };
+                        if item(ui, text, "", true) {
+                            act = Some(MenuAct::WallJoin {
+                                wall: id,
+                                start,
+                                allow: !allowed,
+                            });
+                        }
+                    }
                 }
                 let typed = crate::pick::type_of(model, e).is_some();
                 if item(ui, "Seleccionar todos los de este tipo", "", typed) {
@@ -367,8 +390,40 @@ impl ArchiSimApp {
                 }
             }
             MenuAct::Delete => self.delete_pub(),
+            MenuAct::WallJoin { wall, start, allow } => {
+                let label = if allow {
+                    "Permitir unión"
+                } else {
+                    "No permitir unión"
+                };
+                match self
+                    .ed
+                    .transact(label, |m| m.set_wall_join(wall, start, allow))
+                {
+                    Ok(()) => self.say(if allow {
+                        "Unión permitida: el extremo vuelve a unirse con los muros que toca."
+                    } else {
+                        "Unión no permitida: el extremo queda libre aunque toque otro muro."
+                    }),
+                    Err(e) => self.complain(format!("No se puede: {e}.")),
+                }
+            }
         }
     }
+}
+
+/// The end of a wall within a metre of `at` (the nearer one), and whether
+/// it may join now.
+pub(super) fn wall_end_near(
+    model: &archisim_core::Model,
+    wall: archisim_core::WallId,
+    at: Point2,
+) -> Option<(bool, bool)> {
+    let w = model.wall(wall)?;
+    let (ds, de) = (w.start.distance(at), w.end.distance(at));
+    let start = ds <= de;
+    let reach = 1.0_f64.min(w.length() / 3.0);
+    (ds.min(de) <= reach).then(|| (start, w.allow_join[if start { 0 } else { 1 }]))
 }
 
 /// «Muro» → «muros», «Pilar» → «pilares».

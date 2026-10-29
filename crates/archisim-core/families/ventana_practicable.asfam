@@ -1,7 +1,7 @@
 family "Ventana practicable"
   category window
   host wall
-  version 6
+  version 8
   description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante, basculante o pivotante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -36,7 +36,10 @@ type_params
     subframe_material material = "Acero galvanizado" visible_if subframe label "Premarco"
     sill_material material = "Piedra natural" visible_if sill label "Vierteaguas"
   section "Representación"
-    swing_line linestyle = "continuous" label "Línea del giro"
+    swing_in_plan bool = no label "Giro de las hojas en planta"
+    swing_line linestyle = "dashed" visible_if swing_in_plan label "Giro en planta: tipo de línea"
+    opening_lines_in_views bool = no label "Líneas de apertura en alzados y secciones del modelo"
+    opening_lines linestyle = "dashed" label "Líneas de apertura: tipo de línea"
 
 instance_params
   section "Esquina"
@@ -123,7 +126,7 @@ plan 1:50
     line (m, -frame_depth / 2) to (m, frame_depth / 2) pen frame
   repeat i in 0..leaves
     let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
-    if op == "practicable" or op == "oscilobatiente"
+    if swing_in_plan and (op == "practicable" or op == "oscilobatiente")
       let a = if i == 0 then c0 else c0 + i * (clear + f) - f / 2
       let b = if i == leaves - 1 then c1 else c0 + (i + 1) * (clear + f) - f / 2
       let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
@@ -131,7 +134,7 @@ plan 1:50
         use window_leaf_plan(a, 1, b - a, frame_depth, swing_line)
       else
         use window_leaf_plan(b, -1, b - a, frame_depth, swing_line)
-    if op == "pivotante"
+    if swing_in_plan and op == "pivotante"
       let a = if i == 0 then c0 else c0 + i * (clear + f) - f / 2
       let b = if i == leaves - 1 then c1 else c0 + (i + 1) * (clear + f) - f / 2
       use pivot_leaf_plan(a, b, frame_depth, swing_line)
@@ -165,13 +168,13 @@ plan 1:20
     let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
     let a = if i == 0 then c0 else c0 + i * (clear + f) - f / 2
     let b = if i == leaves - 1 then c1 else c0 + (i + 1) * (clear + f) - f / 2
-    if op == "practicable" or op == "oscilobatiente"
+    if swing_in_plan and (op == "practicable" or op == "oscilobatiente")
       let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
       if left
         use window_leaf_plan(a, 1, b - a, frame_depth, swing_line)
       else
         use window_leaf_plan(b, -1, b - a, frame_depth, swing_line)
-    if op == "pivotante"
+    if swing_in_plan and op == "pivotante"
       use pivot_leaf_plan(a, b, frame_depth, swing_line)
 
 # En alzado, las líneas de apertura de cada hoja, con el lado de sus
@@ -184,7 +187,7 @@ elevation
     let op = if i == 0 then leaf_1 else if i == 1 then leaf_2 else if i == 2 then leaf_3 else leaf_4
     let a = c0 + i * (clear + f)
     let left = if 2 * i + 1 == leaves then hand == "left" else 2 * i + 1 < leaves
-    use leaf_elevation(op, a, a + clear, z0 + f, zl - f, left, swing_line)
+    use leaf_elevation(op, a, a + clear, z0 + f, zl - f, left, opening_lines)
 
 # A 1:100, el marco y el vidrio.
 plan 1:100

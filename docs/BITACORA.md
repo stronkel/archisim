@@ -700,6 +700,120 @@ Pedido por Antonio el 26/10/2026 con ocho capturas, cuatro nuestras y sus contra
 
 ---
 
+## 2026-10-27 · v0.73, segunda vuelta: cortes macizos en todo, galería del modelo 3D, navegación 3D
+
+Misma rama `bloque/e16-envolver` (PR #80), con lo que Antonio vio al probarla: los muros se cortan bien, pero faltaban forjados y objetos; la galería de tipos crecía sola; faltaba elegir el estilo 3D viendo la imagen; el zoom 3D se paraba y el desplazamiento con la rueda iba duro. Sin cambios de formato ni de IFC.
+
+**Hecho**
+- **Forjados y cubiertas cortados, macizos y por capas**: igual que los muros, cada capa con su color de corte y una línea entre capas (antes se veía el interior: la cara inferior del forjado).
+- **Objetos cortados, macizos**: un mueble, un electrodoméstico, una persona o un coche cortado por la caja de sección enseña su sección rellena en el plano del corte, con el color de corte de sus piezas. Un módulo de cocina cortado a 60 cm se ve como un bloque, no como la caja vacía de sus tableros; un sofá cortado por el respaldo y los brazos sigue enseñando el asiento entre ellos. Las hojas de los árboles se quedan como están.
+- **La galería de tipos ya no crece sola** hacia la derecha (pasaba al elegir tipo de muro, forjado… desde que tiene carpetas).
+- **Estilo 3D en imagen**: en Propiedades de un objeto, «Tipo», las opciones que cambian su modelo 3D (Modelo 3D de muebles y sanitarios, tirador y frentes de la cocina; porte, forma de la copa y follaje de la vegetación) se eligen en una galería con el 3D de cada opción, como las tarjetas de la Maqueta.
+- **Zoom en 3D**: la rueda acerca hacia lo que hay bajo el cursor (no hacia un punto fijo que podía quedar lejos) y nunca se queda parada: cerca de una superficie va despacio, y si se sigue, la atraviesa.
+- **Desplazar con la rueda pulsada**: lo que se agarra va pegado al cursor, esté cerca o lejos.
+
+**Pendiente**
+- La galería con imagen para el dibujo en planta de los árboles (estilo técnico, de presentación, color) y para los demás desplegables: es el bloque E2.
+- Los objetos solo se rellenan con la caja de sección (con «Muros recortados» de la Maqueta los objetos no se cortan, como antes).
+
+**Qué debe probar Antonio**
+1. Vista 3D → caja de sección por un lado del edificio: el forjado y la cubierta deben verse con sus capas, sin huecos. Baja la tapa de la caja a 0,60 m sobre la cocina y el salón: los muebles cortados deben verse macizos.
+2. Selecciona un muro y abre el selector de tipo: la galería debe quedarse quieta.
+3. Selecciona un sofá y, en Propiedades → Tipo, haz clic en «Modelo 3D»: debe salir una imagen por modelo. Lo mismo con un árbol en «Porte» y «Forma de la copa».
+4. En 3D, acércate con la rueda a una ventana o a un mueble: debe acercarse a lo que señalas sin pararse. Desplaza con la rueda pulsada: lo que agarras debe seguir al ratón.
+
+---
+
+## 2026-10-26 (6) · v0.73: envolver capas y cortes macizos en 3D (E16)
+
+Rama `bloque/e16-envolver`, montada sobre `bloque/e14-modificar` (#78), con pull request para Antonio. **Formato `.archisim` versión 41** (el envolvente de los tipos de muro; abre todas las anteriores). Pedido por Antonio el 26/10/2026: «Envolver en extremos» como Revit, también en las jambas de puertas y ventanas y en 3D; y que lo cortado en 3D se vea macizo.
+
+**Hecho**
+- **Envolver** en el tipo de muro (Tipos y materiales → muro → grupo «Envolver»), con dos opciones de cuatro valores (Ninguno, Exterior, Interior, Ambos):
+  - **En extremos**: en un extremo libre (cuadrado, también los de «No permitir unión»), el acabado da la vuelta y tapa los cantos de las demás capas, en una franja tan ancha como él. Con Ambos, el exterior tapa hasta el acabado interior.
+  - **En huecos**: el acabado entra en las jambas, el dintel y el alféizar de puertas y ventanas hasta la carpintería (el exterior, desde la fachada hasta el marco; el interior, desde la habitación hasta el marco).
+  - En **planta**, **3D** (y por tanto secciones, alzados, render y `.glb`) e **IFC** (en un grupo de propiedades propio del tipo, `ArchiSim_WallType`, que vuelve al importar; la forma del muro en IFC no cambia, como en Revit). En 3D se decide por capas enteras: una capa entra en el remate si su mitad queda por fuera del marco.
+  - Las fachadas que ya había siguen como se dibujaban: el revoco exterior envuelve los huecos y los extremos no.
+- **Lo cortado en 3D se ve macizo** (caja de sección y muros recortados de la Maqueta). Antes se veía la cara interior del otro lado del muro, y parecía hueco. Ahora:
+  - **Capas** (por defecto): cada capa con su color de corte, el mismo del poché de la planta, y una línea fina entre capas.
+  - **Blanco, Negro o Gris**: todo lo cortado de un color liso.
+  - Se elige en Propiedades de la vista 3D → Caja de sección → «Lo cortado», y en la Maqueta junto a los botones de muros recortados.
+
+**Pendiente**
+- Los tipos de muro guardados en la biblioteca (`.astipos`) no llevan todavía el envolvente (tampoco llevan los accesorios).
+- En 3D, una capa partida por el marco entra entera o no entra (en planta el remate llega justo al marco).
+- Los forjados cortados en 3D se ven macizos pero sin línea entre sus capas.
+
+**Qué debe probar Antonio**
+1. Descarga la versión del pull request. Abre la demo y pon la vista 3D con la caja de sección activa (Propiedades → Caja de sección → «Planta en 3D»): los muros cortados deben verse macizos, con el ladrillo y los enlucidos de su color. Cambia «Lo cortado» a Negro y a Blanco.
+2. En la Maqueta, muros «Recortados»: lo mismo, con el selector junto a los botones.
+3. Tipos y materiales → un muro de fachada → «Envolver»: pon «En extremos: Exterior». Dibuja un muro suelto de ese tipo: en planta y en 3D el revoco debe dar la vuelta en las puntas.
+4. «En huecos: Interior» en un tipo con ventana: el enlucido debe entrar en las jambas hasta el marco. Prueba Ambos.
+5. Exporta el IFC y vuelve a importarlo: el tipo debe conservar sus opciones.
+
+---
+
+## 2026-10-26 (5) · v0.72: Modificar como Revit, uniones, atajos de Revit y anclajes de los objetos (E14, E15)
+
+Rama `bloque/e14-modificar`, pull request #78. **Formato `.archisim` versión 40** (los extremos de muro que no se unen; abre todas las anteriores); sin cambios de IFC; la familia Ventana practicable sube a la versión 8. Segunda vuelta el mismo día, tras probar Antonio la primera: Reflejar como Revit, deshacer, permitir unión, atajos de Revit y Tab. Antonio dio el visto bueno a E1 (unido a `main` como v0.71, #77) y respondió D25–D28.
+
+**Hecho**
+- **Cuatro órdenes nuevas en Modificar**, en un grupo propio al final de la barra (no hace falta seleccionar antes, como en Revit):
+  - **Alinear caras** (`ALC`): la línea de referencia (cara o eje de un muro, un eje, un plano de referencia, una línea 2D, el canto de cualquier cosa) y después la cara del elemento que se lleva a ella. Se mueve en perpendicular, como al arrastrarlo: los muros unidos se alargan para seguirlo.
+  - **Esquina** (`ESQ`, la TR de Revit): dos muros, cada uno por la parte que se queda; se alargan o se recortan hasta cerrar la esquina. Sigue activa para la siguiente esquina.
+  - **Hasta límite** (`LIM1`) y **Varios al límite** (`LIM`): el límite (eje de un muro, eje, plano de referencia o línea) y después el muro o los muros, por la parte que se queda.
+- **Reflejar como Revit** (sustituye a Simetría en la barra): con lo seleccionado, un clic en una línea (cara o eje de muro, eje, línea 2D) la toma como eje y sale la copia reflejada (MM); con la opción D, el eje se dibuja con dos puntos (DM); C cambia entre copiar y mover. La Simetría de AutoCAD (SI, con sus tres pasos) sigue en el buscador.
+- **Deshacer**: Ctrl+Z no funcionaba mientras un botón de la barra (Esquina, por ejemplo) tenía el foco del teclado; ahora sí. Y U (DESHACER) escrito dentro de una orden deshace el último paso sin salir de ella.
+- **Permitir / No permitir unión** en cada extremo de muro, como Revit: clic derecho cerca del extremo, o en Propiedades → Construcción → «Unión al inicio» / «Unión al final». Un extremo sin unión queda libre y cuadrado aunque toque otro muro (ninguno de los dos se ingletea ni hace T ahí), y al mover un muro el otro no lo sigue.
+- **Atajos de teclado como Revit**, por defecto: dos letras y la herramienta empieza sin Intro (WA muro, DR puerta, WN ventana, CM componente, SB suelo, CL pilar, BM viga, GR rejilla, RP plano de referencia, DI cota, EL cota de nivel, TX texto, RM habitación, TG etiquetar, MV mover, CO copiar, RO rotar, RE escala, MM y DM reflejar, AR matriz, AL alinear, TR esquina, OF desfase, MA igualar propiedades, DE borrar, ZA/ZE/ZF zoom, TL líneas finas, HH/EH ocultar, HR mostrar, PT pintar, SF dividir cara; y algunos propios: RF cubierta, ST escalera, RA barandilla, CW muro cortina, FT cimentación, SE sección). **KS** abre la lista (también en el menú, «Atajos de teclado y ratón»). En Vista → Teclas se elige Revit, AutoCAD (orden + Intro) o ArchiCAD (una letra).
+- **Tab ya no cambia a la Maqueta**: solo recorre los elementos que se pisan bajo el cursor, como en Revit. La Maqueta es **F4** (o el interruptor de arriba).
+- **Simetría** ya vale para objetos, pilares, vigas, barandillas, ejes y planos de referencia. Un mueble va a su sitio simétrico, girado para mirar al lado simétrico (no se construye «al revés»). **Escala** se apaga cuando lo seleccionado no se puede escalar, en lugar de fallar.
+- **Puntos de anclaje de los objetos en planta**: las esquinas, los puntos medios de los lados, las aristas y el centro de la caja de cada objeto, y su punto de inserción, son puntos de forzado. Valen para arrastrar, Mover, Copiar, Girar, Simetría y Matriz desde una esquina exacta. Los árboles solo dan su tronco.
+- **D28**: el giro de las hojas de las ventanas no se dibuja en planta salvo que el tipo lo pida («Giro de las hojas en planta»), y entonces va con guiones.
+- Lo de los cubos en el taller: la planta, el fregadero y la farola nuevos están en la rama `bloque/taller-2` de la otra conversación; una versión sin esa rama no tiene esos modelos y los dibuja como cajas. No se ha perdido nada.
+
+**Pendiente**
+- E15 en alzado, sección y 3D: hoy en esas vistas no se mueve con puntos de forzado (en 3D se arrastra sobre el suelo; en alzado y sección no se edita). Va con E7 (vistas de dibujo) o en un bloque propio, como diga Antonio.
+- Recortar y extender muros curvos.
+- «Envolver en extremos» (Revit): que la capa de acabado dé la vuelta en un extremo libre. Hoy un extremo sin unión queda cuadrado con todas las capas cortadas; hace falta que Antonio diga si va por tipo de muro (Ninguno / Exterior / Interior, como Revit) y si también en las jambas en 3D.
+
+**Qué debe probar Antonio**
+1. Descarga la versión del pull request y abre la demo. En proyectos tuyos, **Biblioteca → Actualizar familias**.
+2. Dibuja dos muros que no se toquen, en ángulo. Barra de arriba → **Esquina**: pincha el primero y el segundo; la esquina se cierra. Haz lo mismo con dos muros que se cruzan, pinchando la parte que quieres conservar.
+3. Un muro largo como límite y tres tabiques que no llegan o que se pasan: **Varios al límite** → pincha el muro largo y después cada tabique; Intro.
+4. **Alinear caras**: pincha la cara de un muro y después la cara paralela de otro muro: se coloca a haces. Prueba también con un mueble contra la cara de un muro.
+5. Coloca un mueble y empieza un Mover: al acercarte a sus esquinas deben salir los forzados. Haz una **Simetría** de un mueble: debe quedar en el lado simétrico mirando hacia el otro lado.
+6. Ventanas: en planta, sin giro.
+7. **Reflejar**: selecciona un muro o un mueble, MM y pincha la cara de otro muro: sale la copia reflejada en un solo clic. DM y dos clics: eje dibujado.
+8. **Deshacer**: haz una Esquina con el botón de la barra y pulsa Ctrl+Z: se deshace. Dentro de la orden, U + Intro también.
+9. **Permitir unión**: dos muros en L; clic derecho cerca de la esquina sobre uno → «No permitir unión en este extremo»: los dos quedan cuadrados, solapados. Mueve uno: el otro no lo sigue. Vuelve a permitirla desde el mismo menú o en Propiedades.
+10. **Atajos**: escribe WA, DR, MV, MM, AL, TR… sin Intro. KS para la lista. Comprueba que Tab sobre dos elementos que se pisan ya no te lleva a la Maqueta (F4 sí). Editar tipo → Representación → «Giro de las hojas en planta»: aparece a guiones.
+
+---
+
+## 2026-10-26 (4) · v0.71: arreglos rápidos de la lista del 26/10/2026 (E1)
+
+Rama `bloque/d1-arreglos`, con pull request para Antonio. Sin cambios de formato `.archisim` ni de IFC; cinco familias de puertas y ventanas suben de versión. Antonio entregó el 26/10/2026 una lista larga de mejoras; está contrastada con lo que ya hay y ordenada en bloques E1–E13 en `docs/HOJA_DE_RUTA.md` §10, con cuatro decisiones nuevas (D25–D28). Este bloque hace lo rápido.
+
+**Hecho**
+- **La Maqueta ya no se queda en blanco**: entrar en ella con Estructuras o Instalaciones activas, o coger dentro una herramienta de otra disciplina (pilar, tubería, terreno, volumen), ya no apaga el resto del edificio. La Maqueta enseña siempre todo en color; al volver a Técnica, la atenuación por disciplina sigue como estaba.
+- **Líneas de apertura**: en las puertas (abatible, pivotante, plegable) salen **con guiones** por defecto en alzados y secciones, con su propio parámetro «Líneas de apertura (alzado y sección)»; el giro en planta sigue aparte («Línea del giro (planta)»). En las **ventanas** (practicable, corredera, guillotina) **no salen** en los alzados y secciones del modelo salvo que el tipo lo pida («Líneas de apertura en alzados y secciones del modelo»), y cuando salen van con guiones. En el plano y la memoria de carpinterías y en el diálogo del tipo salen siempre, porque ahí explican el funcionamiento.
+- **Mover un muro unido mueve solo ese muro**, como en Revit: los muros que llegan a él (en esquina o en T) no se desplazan, solo se alargan o acortan sobre su propio eje para seguir tocándolo. Antes, en una esquina el vecino se torcía o se desplazaba con él. Arreglado también que un tabique dibujado hasta el eje del muro (dentro de su grueso) no lo siguiera.
+- **Carpetas al elegir tipo** en Propiedades: muros en «Muros exteriores (fachada)» y «Muros interiores»; forjados por función; puertas y ventanas por familia, como en el diálogo de tipos.
+
+**Pendiente**
+- De E1, nada. Siguiente según el orden propuesto: E2 (galerías visuales en todas las opciones), si Antonio lo confirma.
+- Decisiones D25–D28 (armarios empotrados, hormigón armado, fachadas al detalle, giro de las ventanas en planta).
+
+**Qué debe probar Antonio**
+1. Descarga ArchiSim-Windows del pull request de esta rama (GitHub → Actions) y abre la demo o un proyecto tuyo. En proyectos tuyos: **Biblioteca → Actualizar familias**, para que puertas y ventanas tomen las líneas nuevas.
+2. Maqueta: en Técnica elige la disciplina Estructuras, pasa a la Maqueta (Tab): todo debe verse en color. Dentro, coge Terreno o un Volumen del catálogo: sigue en color.
+3. Haz una sección por una puerta y una ventana: la puerta con el triángulo a guiones; la ventana sin triángulo. Selecciona la ventana → Editar tipo → Representación → activa «Líneas de apertura en alzados y secciones del modelo»: aparece a guiones. Archivo → Plano de carpinterías: las ventanas siguen con su triángulo.
+4. Dibuja un rectángulo de muros y un tabique hasta el eje de uno de ellos. Selecciona el muro de arriba y muévelo en diagonal: él se mueve entero, los laterales solo se alargan (no se tuercen) y el tabique lo sigue.
+5. Selecciona un muro → Propiedades → pincha en el nombre del tipo: la galería debe salir en dos carpetas, exteriores e interiores. Igual con una puerta (por familias).
+
+---
+
 ## 2026-10-26 (3) · v0.70: árboles de AD5 en planta (T3)
 
 Pedido por Antonio el 26/10/2026, con el DXF «Árboles AD5 Planta» (cuatro árboles dibujados en el estudio): tenerlos en planta como una visualización más bonita. Directamente en `main`: es pequeño y no cambia el formato `.archisim` ni el IFC. La familia Vegetación pasa a la versión 3.

@@ -1,7 +1,7 @@
 family "Puerta plegable"
   category door
   host wall
-  version 2
+  version 3
   description "Puerta plegable (de librillo) de 2 a 8 hojas que se recogen a un lado, con cerco"
 
 include "piezas"
@@ -18,6 +18,8 @@ type_params
   section "Materiales"
     frame_material material = "Madera de pino" label "Cerco"
     panel_material material = "Madera de pino" label "Hoja"
+  section "Representación"
+    opening_lines linestyle = "dashed" label "Líneas de apertura (alzado y sección)"
 
 require 2 * frame_width < width and 2 * frame_width < height else "El cerco no deja hueco para las hojas"
 require (width - 2 * frame_width) / leaves >= 0.10 else "Las hojas quedan de menos de 10 cm"
@@ -66,9 +68,9 @@ elevation
     let a = c0 + i * lw
     let odd = i - 2 * floor(i / 2)
     if odd == 0
-      use side_hung_lines(a, a + lw, 0, h, "continuous")
+      use side_hung_lines(a, a + lw, 0, h, opening_lines)
     else
-      use side_hung_lines(a + lw, a, 0, h, "continuous")
+      use side_hung_lines(a + lw, a, 0, h, opening_lines)
 
 plan 1:100
   let c0 = -width / 2 + frame_width

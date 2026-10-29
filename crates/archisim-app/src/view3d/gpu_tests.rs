@@ -160,6 +160,23 @@ fn section_box_cuts_and_caps() {
         })
         .count();
     assert!(reddish > 300, "{reddish} brick pixels in the caps");
+    // With the cuts in flat black, the caps are black and the brick
+    // colour goes from them.
+    r.set_caps(super::render::CapStyle::Flat([0, 0, 0]));
+    r.render(&device, &queue, &camera, size, 1);
+    let (_, _, black) = r.read_pixels(&device, &queue).unwrap();
+    let dark = |px: &[u8]| {
+        (0..(w * h) as usize)
+            .filter(|i| px[i * 4..i * 4 + 3].iter().all(|c| *c < 40))
+            .count()
+    };
+    assert!(
+        dark(&black) > dark(&px) + 300,
+        "{} {}",
+        dark(&black),
+        dark(&px)
+    );
+    r.set_caps(super::render::CapStyle::Layers);
     // Without the box, from above, the tops of the walls are drawn too:
     // the picture changes.
     r.set_clip(None);
@@ -663,4 +680,138 @@ fn a_meadow_in_flower() {
     assert!(green > 8_000, "green {green}");
     assert!(flowers > 150, "flowers {flowers}");
     assert!(ink < pixels.len() / 25, "ink {ink}");
+}
+
+/// Pictures of the demo house cut by a section box, for looking (not a
+/// check): `ARCHISIM_CUT_OUT=folder`.
+#[test]
+fn demo_cut_pictures() {
+    let Some(dir) = std::env::var_os("ARCHISIM_CUT_OUT") else {
+        return;
+    };
+    let Some((device, queue, view_formats)) = gpu() else {
+        return;
+    };
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../out/demo.archisim");
+    let Ok(m) = archisim_file::open(&path) else {
+        eprintln!("Run `archisim demo out/` first.");
+        return;
+    };
+    let scene = Scene::build(&m, &BTreeSet::new());
+    let size = [900u32, 650u32];
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, pitch, yaw, cut, caps) in [
+        (
+            "corte-alto",
+            0.75f32,
+            0.6f32,
+            0,
+            super::render::CapStyle::Layers,
+        ),
+        ("corte-lado", 0.35, 0.3, 1, super::render::CapStyle::Layers),
+        (
+            "corte-alto-negro",
+            0.75,
+            0.6,
+            0,
+            super::render::CapStyle::Flat([30, 30, 30]),
+        ),
+        ("corte-cerca", 0.9, 0.6, 2, super::render::CapStyle::Layers),
+        (
+            "corte-ventana",
+            1.0,
+            0.9,
+            3,
+            super::render::CapStyle::Layers,
+        ),
+        (
+            "corte-forjado",
+            0.25,
+            0.25,
+            4,
+            super::render::CapStyle::Layers,
+        ),
+        (
+            "corte-muebles",
+            0.6,
+            0.5,
+            5,
+            super::render::CapStyle::Layers,
+        ),
+    ] {
+        let mut camera = Camera {
+            pitch,
+            yaw,
+            perspective: true,
+            ..Camera::default()
+        };
+        // The house: the walls' extent.
+        let (mut lo, mut hi) = (glam::Vec3::splat(f32::MAX), glam::Vec3::splat(f32::MIN));
+        for w in m.walls() {
+            for p in [w.start, w.end] {
+                lo = lo.min(glam::Vec3::new(p.x as f32, p.y as f32, -0.5));
+                hi = hi.max(glam::Vec3::new(p.x as f32, p.y as f32, 4.0));
+            }
+        }
+        camera.fit(lo, hi, size[0] as f32 / size[1] as f32);
+        camera.distance *= if cut == 2 { 0.12 } else { 0.6 };
+        if cut == 3 {
+            // At the first window, cut halfway up it.
+            let o = m
+                .openings()
+                .find(|o| !m.opening_type(o.opening_type).is_some_and(|t| t.is_door()))
+                .unwrap();
+            let g = archisim_geom::opening_geometry(&m, o.id).unwrap();
+            let c = g.point((g.t0 + g.t1) / 2.0, 0.0);
+            camera.target = glam::Vec3::new(c.x as f32, c.y as f32, (o.sill + 0.6) as f32);
+            camera.distance = 3.5;
+        }
+        if cut == 4 {
+            // Across the house, close to the ground floor's slab.
+            let z = std::env::var("ARCHISIM_CUT_SLAB_Z")
+                .ok()
+                .and_then(|z| z.parse().ok())
+                .unwrap_or(0.0);
+            camera.target = glam::Vec3::new((lo.x + hi.x) / 2.0, (lo.y + hi.y) / 2.0, z);
+            camera.distance = 6.0;
+        }
+        if cut == 5 {
+            // Down on the furniture, cut at 0.6 m.
+            let o = m
+                .objects()
+                .find(|o| {
+                    let want = std::env::var("ARCHISIM_CUT_OBJ").unwrap_or("Sof".into());
+                    m.object_type(o.object_type)
+                        .is_some_and(|t| t.name.contains(&want))
+                })
+                .unwrap_or_else(|| m.objects().next().unwrap());
+            camera.target = glam::Vec3::new(o.position.x as f32, o.position.y as f32, 0.4);
+            camera.distance = 4.0;
+        }
+        let mut r = Renderer::new(&device, view_formats, super::render::TextureMode::Full);
+        r.set_scene(&device, &scene);
+        let mut b = super::section_box::SectionBox::around(scene.lo, scene.hi);
+        if cut == 5 {
+            b.hi.z = std::env::var("ARCHISIM_CUT_Z")
+                .ok()
+                .and_then(|z| z.parse().ok())
+                .unwrap_or(0.6);
+        } else if cut == 0 || cut == 2 || cut == 3 {
+            b.hi.z = 1.5;
+        } else {
+            b.hi.x = (lo.x + hi.x) / 2.0;
+        }
+        r.set_clip(Some((b.lo, b.hi)));
+        r.set_fill(&device, &scene.object_cut_fill(b.lo, b.hi));
+        r.set_caps(caps);
+        r.render(&device, &queue, &camera, size, 1);
+        let (w, h, px) = r.read_pixels(&device, &queue).unwrap();
+        let pixmap = resvg::tiny_skia::Pixmap::from_vec(
+            px,
+            resvg::tiny_skia::IntSize::from_wh(w, h).unwrap(),
+        )
+        .unwrap();
+        pixmap.save_png(dir.join(format!("{name}.png"))).unwrap();
+    }
 }

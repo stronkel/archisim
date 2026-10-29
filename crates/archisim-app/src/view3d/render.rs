@@ -83,6 +83,19 @@ struct Globals {
     /// Lamps lit: position and reach; `lamp_count.x` of them.
     lamps: [[f32; 4]; MAX_LAMPS],
     lamp_count: [f32; 4],
+    /// What a cut shows: xyz a flat colour (linear), w = 1 to use it;
+    /// otherwise each material its own cut colour (`CapStyle`).
+    caps: [f32; 4],
+}
+
+/// What a cut shows in 3D (pedido por Antonio el 26/10/2026: lo cortado se
+/// veía hueco): each material its cut colour, as the plan's poché (a wall
+/// with its layers), or one flat colour for everything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CapStyle {
+    #[default]
+    Layers,
+    Flat([u8; 3]),
 }
 
 /// Lamps that light the scene at night (the nearest to what is looked at).
@@ -205,11 +218,15 @@ pub struct Renderer {
     /// What is being stretched, drawn over the scene (whose own copy of
     /// it is hidden): its opaque and glass triangles.
     overlay: Option<(Vec<GpuMesh>, Vec<GpuMesh>)>,
+    /// The filled sections of the objects the section box cuts
+    /// (`Scene::object_cut_fill`).
+    fill: Vec<GpuMesh>,
     /// The device can view a texture in another format of the same bytes
     /// (wgpu's `VIEW_FORMATS`); otherwise the picture is copied for display.
     view_formats: bool,
     /// The section box, if on: everything outside it is cut away.
     clip: Option<(glam::Vec3, glam::Vec3)>,
+    caps: CapStyle,
     /// The cut away walls, if on.
     cut: Option<super::cutaway::CutRule>,
     /// Something of the scene is selected: the contour pass outlines it.
@@ -440,7 +457,7 @@ impl Renderer {
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Snorm16x4, 2 => Unorm8x4, 3 => Uint8x4, 4 => Float32, 5 => Float32x4],
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Sint16x4, 2 => Unorm8x4, 3 => Uint8x4, 4 => Float32, 5 => Float32x4],
         };
         let instance_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Instance>() as u64,
@@ -646,8 +663,10 @@ impl Renderer {
             instance_buffer: instance_buffer(device, 1024),
             instance_room: 1024,
             overlay: None,
+            fill: Vec::new(),
             view_formats,
             clip: None,
+            caps: CapStyle::Layers,
             cut: None,
             selected: false,
             thin_lines: false,
@@ -701,6 +720,17 @@ impl Renderer {
             }
             None => (lo, hi),
         }
+    }
+
+    /// What the cuts of the section box and the cut away walls show.
+    pub fn set_caps(&mut self, caps: CapStyle) {
+        self.caps = caps;
+    }
+
+    /// Uploads (or clears) the filled sections of the objects the section
+    /// box cuts.
+    pub fn set_fill(&mut self, device: &wgpu::Device, fill: &[Chunk]) {
+        self.fill = upload(device, fill);
     }
 
     /// Sets (or clears) the cut away walls of the next pictures.
@@ -948,6 +978,15 @@ impl Renderer {
             atmos: [sky_on, colours.night, haze_from, haze_from * 5.0 + 60.0],
             lamps,
             lamp_count: [lamp_n as f32, 0.0, 0.0, 0.0],
+            caps: match self.caps {
+                CapStyle::Layers => [0.0, 0.0, 0.0, 0.0],
+                CapStyle::Flat([r, g, b]) => [
+                    super::scene::srgb_to_linear(r),
+                    super::scene::srgb_to_linear(g),
+                    super::scene::srgb_to_linear(b),
+                    1.0,
+                ],
+            },
         };
         queue.write_buffer(&self.globals, 0, bytemuck::bytes_of(&globals));
         self.targets(device, size);
@@ -1110,6 +1149,11 @@ impl Renderer {
             }
             for m in self.overlay.iter().flat_map(|o| o.0.iter()) {
                 draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+            }
+            if self.clip.is_some() {
+                for m in &self.fill {
+                    draw_mesh(&mut pass, m, same, 0..m.count, 0..1);
+                }
             }
             for (g, d) in self.groups.iter().zip(&draws) {
                 let Some(m) = &g.opaque else {

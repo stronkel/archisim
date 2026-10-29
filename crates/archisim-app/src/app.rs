@@ -429,6 +429,8 @@ pub struct ArchiSimApp {
     /// Keys as in AutoCAD (type the command and Enter) or as in ArchiCAD
     /// (M, F, P, V, C, N change tool at once).
     pub keys_autocad: bool,
+    /// Revit's two-letter shortcuts (`revit_keys`).
+    pub keys_revit: bool,
     /// The text being written for the text command.
     text_draft: Option<String>,
     /// The drawing layers dialog is open.
@@ -775,6 +777,7 @@ impl ArchiSimApp {
             cad_settings: Default::default(),
             cmdline: Default::default(),
             keys_autocad: prefs.keys_autocad,
+            keys_revit: prefs.keys_revit,
             text_draft: None,
             show_layers: false,
             show_levels: false,
@@ -1950,6 +1953,7 @@ impl ArchiSimApp {
             sheet_drop::paint_carried(&ctx, false);
         }
         self.layers_dialog(&ctx);
+        self.shortcuts_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
         self.render_window(&ctx);
@@ -1991,7 +1995,11 @@ impl ArchiSimApp {
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let cmd = Modifiers::COMMAND;
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-        let typing = ctx.memory(|m| m.focused().is_some()) || self.temp_edit.is_some();
+        // Only a text field takes the keys: a button keeps the keyboard
+        // focus after its click (the Esquina of the bar, say), and Ctrl+Z
+        // must still undo then.
+        let in_text = typing_in_text(ctx);
+        let typing = in_text || self.temp_edit.is_some();
         let consume = |m: Modifiers, k: Key| {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
@@ -2009,11 +2017,6 @@ impl ArchiSimApp {
         if consume(Modifiers::CTRL, Key::Space) {
             self.open_command_search();
         }
-        // Tab: Técnica ↔ Maqueta (not while typing in a text field; a
-        // button that has the keyboard focus lets go of it).
-        // (egui moves the focus between buttons with Tab: only a text
-        // field keeps it.)
-        let in_text = typing_in_text(ctx);
         // Tab over several elements in plan, with the arrow: the next of
         // them (Shift+Tab, the one before); a click takes it.
         let overlapping = !self.maquette
@@ -2041,12 +2044,10 @@ impl ArchiSimApp {
                 ctx.request_repaint();
             }
         }
-        if self.temp_edit.is_none() && !in_text && consume(Modifiers::NONE, Key::Tab) {
-            ctx.memory_mut(|m| {
-                if let Some(id) = m.focused() {
-                    m.surrender_focus(id);
-                }
-            });
+        // F4: Técnica ↔ Maqueta. It used to be Tab, which Antonio found
+        // confusing next to Tab for the elements under the cursor (Revit's
+        // Tab): Tab now only does that.
+        if !in_text && consume(Modifiers::NONE, Key::F4) {
             let on = !self.maquette;
             self.set_maquette(on);
         }
@@ -2253,23 +2254,6 @@ impl ArchiSimApp {
                 None => {}
             }
         }
-        if self.show_shortcuts {
-            widgets::dialog("Ratón y teclado")
-                .open(&mut self.show_shortcuts)
-                .resizable(false)
-                .show(ctx, |ui| {
-                    egui::Grid::new("keys")
-                        .num_columns(2)
-                        .spacing([16.0, 4.0])
-                        .show(ui, |ui| {
-                            for (k, v) in SHORTCUTS {
-                                ui.strong(*k);
-                                ui.label(*v);
-                                ui.end_row();
-                            }
-                        });
-                });
-        }
         if let Some(text) = &self.import_report {
             let mut open = true;
             let mut close = false;
@@ -2331,7 +2315,9 @@ impl eframe::App for ArchiSimApp {
     }
 }
 
-const SHORTCUTS: &[(&str, &str)] = &[
+/// The mouse and drawing keys, at the end of the list of shortcuts
+/// (`revit_keys::shortcuts_dialog`).
+const MOUSE_KEYS: &[(&str, &str)] = &[
     ("F2 · F3", "Planta · 3D"),
     (
         "3D: arrastrar (o Mayús + rueda)",
@@ -2342,7 +2328,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("Arrastrar rueda / botón derecho", "Encuadre"),
     ("Doble clic rueda · Inicio", "Ajustar a la ventana"),
     (
-        "M · F · P · V · C · N",
+        "M · F · P · V · C · N (teclas de ArchiCAD)",
         "Muro · Forjado · Puerta · Ventana · Cota · Cota de nivel",
     ),
     ("Ctrl+Tab", "Siguiente pestaña de vista"),
@@ -2595,6 +2581,7 @@ mod properties;
 mod props;
 mod railing_ui;
 mod render_ui;
+mod revit_keys;
 mod roof_ui;
 mod room_tool_ui;
 mod room_ui;

@@ -183,6 +183,9 @@ pub struct TypeItem<T> {
     pub thumb: Option<Thumb>,
     /// What the picture shows ("Corte en planta 1:20 · exterior arriba").
     pub caption: &'static str,
+    /// The folder of the gallery it goes in ("Muros exteriores (fachada)",
+    /// the family of a door…); empty for a gallery without folders.
+    pub folder: String,
 }
 
 /// Revit's type selector, with a picture: the type's plan cut (walls,
@@ -243,6 +246,9 @@ pub fn type_card<T: PartialEq + Copy>(
         let (rect, resp) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), Sense::click());
         let resp = resp.on_hover_text("Elegir otro tipo");
+        #[cfg(test)]
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("test-type-button"), rect));
         ui.painter().rect(
             rect,
             CornerRadius::same(7),
@@ -335,7 +341,7 @@ fn gallery<T: PartialEq + Copy>(
     let p = Palette::current(ui.ctx());
     let search_id = ui.make_persistent_id(("type-search", salt));
     let mut picked = None;
-    egui::Popup::menu(button)
+    let shown = egui::Popup::menu(button)
         .width(button.rect.width().max(320.0))
         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show(|ui| {
@@ -367,20 +373,50 @@ fn gallery<T: PartialEq + Copy>(
                         .color(p.muted),
                 );
             }
+            // The folders, in the order the items bring them (as in the
+            // types dialog: exterior walls, interior walls; one per family).
+            let mut folders: Vec<&str> = Vec::new();
+            for i in &shown {
+                if !folders.contains(&i.folder.as_str()) {
+                    folders.push(&i.folder);
+                }
+            }
             egui::ScrollArea::vertical()
                 .max_height(420.0)
                 .show(ui, |ui| {
-                    let w = (ui.available_width() - 8.0) / 2.0;
-                    for pair in shown.chunks(2) {
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = 8.0;
-                            for item in pair {
-                                if tile(ui, w, item, current == Some(item.id)).clicked() {
-                                    picked = Some(item.id);
+                    // The tiles' width is taken where they go: inside a
+                    // folder the indent leaves less room, and tiles as wide
+                    // as outside it would widen the gallery at every frame.
+                    let mut grid = |ui: &mut Ui, list: &[&TypeItem<T>]| {
+                        let w = ((ui.available_width() - 8.0) / 2.0).max(60.0);
+                        for pair in list.chunks(2) {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                for item in pair {
+                                    if tile(ui, w, item, current == Some(item.id)).clicked() {
+                                        picked = Some(item.id);
+                                    }
                                 }
-                            }
-                        });
-                        ui.add_space(2.0);
+                            });
+                            ui.add_space(2.0);
+                        }
+                    };
+                    if folders.len() <= 1 && folders.first().is_none_or(|f| f.is_empty()) {
+                        grid(ui, &shown);
+                    } else {
+                        for f in folders {
+                            let list: Vec<&TypeItem<T>> =
+                                shown.iter().copied().filter(|i| i.folder == f).collect();
+                            let name = if f.is_empty() { "Otros" } else { f };
+                            egui::CollapsingHeader::new(
+                                egui::RichText::new(format!("{name}  ({})", list.len()))
+                                    .font(strong_font(12.5))
+                                    .color(p.text),
+                            )
+                            .id_salt(("type-folder", salt, f))
+                            .default_open(true)
+                            .show(ui, |ui| grid(ui, &list));
+                        }
                     }
                 });
             if picked.is_some() {
@@ -388,6 +424,13 @@ fn gallery<T: PartialEq + Copy>(
                 ui.close();
             }
         });
+    #[cfg(test)]
+    if let Some(r) = shown {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("test-type-gallery"), r.response.rect));
+    }
+    #[cfg(not(test))]
+    let _ = shown;
     picked
 }
 

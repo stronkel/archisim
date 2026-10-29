@@ -763,6 +763,14 @@ impl Editor {
                         | Element::Edge(_)
                         | Element::Device(_)) => remove_element(m, e)?,
                     },
+                    Change::WallEnds(id, a, b) => {
+                        m.stretch_wall(id, a, b)?;
+                        out.insert(Element::Wall(id));
+                    }
+                    Change::MoveBy(items, d) => {
+                        crate::drag::move_selection(m, &items, d)?;
+                        out.extend(items);
+                    }
                     Change::Transform { items, t, copy } => {
                         out.extend(crate::xform::transform(m, &items, &t, copy)?);
                     }
