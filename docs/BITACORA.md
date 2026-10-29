@@ -6,6 +6,21 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (27) · v0.74: la cadena del taller y la carpintería, unida a `main`
+
+Antonio pidió unir a `main` todo lo pendiente (pull requests #76 a #102, encadenados) antes de seguir con las ventanas. `main` había avanzado por su lado con las versiones 0.71 a 0.73 (E1, E14–E16), así que la unión no fue directa:
+
+- **Formato**: la versión 40 de `main` (extremos de muro que no se unen) y la 41 (envolver capas) se quedan como están; las piscinas construidas, que en la rama también eran la 40, pasan a ser la **42**. Un fichero guardado con la rama de piscinas (versión 40) se abre igual y exporta el mismo IFC (comprobado con la demo).
+- **Vista 3D**: los cortes macizos de la v0.73 (cada capa en su color de corte, el relleno de los muebles cortados por la caja de sección, el corte en color liso) funcionan sobre la vista 3D de la cadena, que dibuja los muebles y las puertas como un modelo por tipo repetido. El relleno de los muebles cortados recorre también esos modelos.
+- **Opciones de los objetos**: siguen en tarjetas (las de la cocina a tu gusto), que sustituyen al selector en imágenes de la v0.73.
+
+Validado: formato, clippy, 847 pruebas, demo, IFC 4.3 e IFC4, sesión y tipos de la app, muestrario, ida y vuelta, DXF y fotos de la demo cortada.
+
+**Qué debe probar Antonio**
+1. Abre un proyecto tuyo de antes: debe abrir sin avisos.
+2. Vista 3D → caja de sección sobre la cocina o el salón: los muros cortados por capas y los muebles cortados macizos; cambia el corte a Negro o Gris.
+3. Maqueta: selecciona un sofá y cambia su modelo en las tarjetas.
+
 ## 2026-10-29 (26) · Carpintería con detalle: las puertas (paquete 9)
 
 Rama `bloque/carpinteria` (sobre `bloque/personalizar`), con pull request. Sin cambios de formato ni de IFC (la familia «Puerta abatible» sube de versión). Diseño y taller futuro en `docs/CARPINTERIA.md`.
