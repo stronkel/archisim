@@ -98,7 +98,11 @@ impl Vertex {
     /// Its cut colour, linear RGB.
     pub fn cap(&self) -> [f32; 3] {
         let [r, g] = self.normal[3].to_le_bytes();
-        [srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(self.misc[3])]
+        [
+            srgb_to_linear(r),
+            srgb_to_linear(g),
+            srgb_to_linear(self.misc[3]),
+        ]
     }
 
     /// Which face wins where two elements touch, as given to [`Vertex::new`].
