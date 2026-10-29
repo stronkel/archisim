@@ -904,6 +904,7 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ("hinges", fine::door::HINGES),
     ("slide_guide", fine::door::SLIDE_GUIDES),
     ("slide_pull", fine::door::SLIDE_PULLS),
+    ("garage_look", fine::door::GARAGE_LOOKS),
     ("leaf_1", fine::window::OPERATIONS),
     ("leaf_2", fine::window::OPERATIONS),
     ("leaf_3", fine::window::OPERATIONS),

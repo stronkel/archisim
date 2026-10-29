@@ -1,7 +1,7 @@
 family "Puerta de garaje"
   category door
   host wall
-  version 1
+  version 2
   description "Puerta de garaje seccional, basculante o enrollable, con su cerco y, si se quiere, puerta peatonal"
 
 include "piezas"
@@ -22,8 +22,16 @@ type_params
   section "Materiales"
     frame_material material = "Acero galvanizado" label "Cerco y guías"
     panel_material material = "Acero galvanizado" label "Hoja"
+  section "Modelo 3D"
+    garage_look choice("Según el funcionamiento", "Acanalada", "Lisa", "Cuarterones", "Lamas de madera", "Con ventanas", "Nervada vertical") = "Según el funcionamiento" label "Acabado de la hoja"
+    glass_material material = "Vidrio doble" visible_if garage_look == "Con ventanas" label "Vidrio de las ventanas"
+    hardware_material material = "Acero inoxidable" label "Herrajes y guías"
   section "Representación"
     swing_line linestyle = "dashed" label "Recorrido de la hoja"
+
+instance_params
+  section "Posición"
+    garage_open integer = 0 range 0..100 label "Abierta en 3D (%)"
 
 let f = frame_width
 let c0 = -width / 2 + f
@@ -40,19 +48,23 @@ require not wicket or kind == "enrollable" or wicket_width < c1 - c0 - 0.40 else
 body
   use block(-width / 2, c0, frame_depth, 0, height, frame_material)
   use block(c1, width / 2, frame_depth, 0, height, frame_material)
-  if kind == "enrollable"
-    use block(c0, c1, frame_depth, top, height, frame_material)
-    use block(c0, c1, 0.02, 0, top, panel_material)
-  else
-    use block(c0, c1, frame_depth, top, height, frame_material)
-    if kind == "seccional"
-      let gap = 0.01
-      let ph = (top - gap * (panels - 1)) / panels
-      repeat i in 0..panels
-        let z = i * (ph + gap)
-        use block(c0, c1, min(0.04, frame_depth), z, z + ph, panel_material)
+  # En 3D con detalle, la hoja, las guías, los muelles y el tambor los
+  # hace el generador (salidas «leaf_*» y «garage_kind»).
+  if not detailed
+    if kind == "enrollable"
+      use block(c0, c1, frame_depth, top, height, frame_material)
+      use block(c0, c1, 0.02, 0, top, panel_material)
     else
-      use block(c0, c1, min(0.04, frame_depth), 0, top, panel_material)
+      if kind == "seccional"
+        let gap = 0.01
+        let ph = (top - gap * (panels - 1)) / panels
+        repeat i in 0..panels
+          let z = i * (ph + gap)
+          use block(c0, c1, min(0.04, frame_depth), z, z + ph, panel_material)
+      else
+        use block(c0, c1, min(0.04, frame_depth), 0, top, panel_material)
+  if kind != "enrollable"
+    use block(c0, c1, frame_depth, top, height, frame_material)
 
 # El cerco cortado, la hoja cerrada y, en discontinua, por dónde va al
 # abrir: guías bajo el techo (seccional), el giro hacia fuera y hacia
@@ -109,3 +121,10 @@ outputs
   panel_material = panel_material
   clear_width = c1 - c0
   operation = if kind == "enrollable" then "rolling" else "overhead"
+  generator = "props:garage_door"
+  garage_kind = if kind == "seccional" then 1 else if kind == "basculante" then 2 else 3
+  leaf_x0 = c0
+  leaf_x1 = c1
+  leaf_top = top
+  lining_h = height
+  wicket_left = if hand == "left" then 1 else 0

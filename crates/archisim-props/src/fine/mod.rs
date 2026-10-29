@@ -49,6 +49,8 @@ use soft::{knife_pillow, Soft};
 pub const KINDS: &[(&str, &[&str])] = &[
     ("door", &door::COLLECTIONS),
     ("sliding_door", &door::COLLECTIONS),
+    ("folding_door", &door::COLLECTIONS),
+    ("garage_door", &["Único"]),
     ("window", &window::COLLECTIONS),
     ("slider", &window::COLLECTIONS),
     ("sash_window", &window::COLLECTIONS),
@@ -574,6 +576,8 @@ pub fn make(kind: &str, b: &mut Builder, p: &Params) -> bool {
     match kind {
         "door" => door::door(b, p),
         "sliding_door" => door::sliding_door(b, p),
+        "folding_door" => door::folding_door(b, p),
+        "garage_door" => door::garage_door(b, p),
         "window" => window::window(b, p),
         "slider" => window::slider(b, p),
         "sash_window" => window::sash_window(b, p),

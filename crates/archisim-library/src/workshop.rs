@@ -2835,6 +2835,119 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
         // Room for the leaf to slide beside the opening.
         along += 2.1;
     }
+    // Pivot, folding and garage doors, 4 m further north.
+    let row = wall(m, facade, y + 12.0, x + 26.0)?;
+    let pivot = m.system_family("Puerta pivotante")?;
+    let folding = m.system_family("Puerta plegable")?;
+    let garage = m.system_family("Puerta de garaje")?;
+    type Other<'a> = (
+        archisim_core::FamilyId,
+        &'a str,
+        f64,
+        Vec<(&'a str, Value)>,
+        &'a str,
+        f64,
+    );
+    let others: Vec<Other> = vec![
+        (
+            pivot,
+            "pivotante Contemporáneo",
+            1.2,
+            vec![("model3d", t("Contemporáneo"))],
+            "",
+            0.0,
+        ),
+        (
+            pivot,
+            "pivotante Nórdico de tablas",
+            1.4,
+            vec![
+                ("model3d", t("Nórdico cálido")),
+                ("leaf_design", t("Tablas")),
+            ],
+            "",
+            0.0,
+        ),
+        (
+            folding,
+            "plegable Mediterráneo a medio abrir",
+            1.6,
+            vec![
+                ("model3d", t("Mediterráneo")),
+                ("leaves", Value::Number(4.0)),
+            ],
+            "fold_open",
+            45.0,
+        ),
+        (
+            folding,
+            "plegable Japandi de seis hojas",
+            2.4,
+            vec![("model3d", t("Japandi")), ("leaves", Value::Number(6.0))],
+            "",
+            0.0,
+        ),
+        (garage, "de garaje seccional", 2.5, vec![], "", 0.0),
+        (
+            garage,
+            "de garaje seccional con ventanas y puerta peatonal",
+            3.0,
+            vec![
+                ("garage_look", t("Con ventanas")),
+                ("wicket", Value::Bool(true)),
+                ("panels", Value::Number(5.0)),
+            ],
+            "",
+            0.0,
+        ),
+        (
+            garage,
+            "de garaje basculante a medio abrir",
+            2.5,
+            vec![("kind", t("basculante"))],
+            "garage_open",
+            40.0,
+        ),
+        (
+            garage,
+            "de garaje enrollable",
+            2.5,
+            vec![("kind", t("enrollable"))],
+            "garage_open",
+            30.0,
+        ),
+    ];
+    let mut along = 1.0;
+    for (family, name, width, extra, open_key, open) in others {
+        let mut values = m.family_defaults(family, ParamScope::Type)?;
+        values.insert("width".into(), Value::Number(width));
+        for (k, v) in extra {
+            values.insert(k.into(), v);
+        }
+        let ty = m.add_family_type(NewFamilyType {
+            family,
+            name: format!("Puerta {name} (taller)"),
+            mark: None,
+            description: String::new(),
+            values,
+        })?;
+        along += width / 2.0;
+        let o = m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: row,
+            along,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+        if open > 0.0 {
+            let mut values = m.opening(o).map(|x| x.values.clone()).unwrap_or_default();
+            values.insert(open_key.into(), Value::Number(open));
+            m.set_opening_values(o, values)?;
+        }
+        along += width / 2.0 + 0.8;
+    }
     Ok(end)
 }
 
