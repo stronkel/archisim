@@ -140,6 +140,8 @@ struct Look {
     upper: Upper,
     /// A cornice on the tall and wall units.
     cornice: bool,
+    /// Fronts in a frame of flat steel (industrial).
+    framed: bool,
 }
 
 /// The eight looks, in the order of [`COLLECTIONS`].
@@ -157,6 +159,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Chimney,
         upper: Upper::Cupboards,
         cornice: false,
+        framed: false,
     },
     // Mediterráneo.
     Look {
@@ -171,6 +174,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Mantel,
         upper: Upper::Corbels,
         cornice: false,
+        framed: false,
     },
     // Años 50.
     Look {
@@ -185,6 +189,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Curved,
         upper: Upper::Cupboards,
         cornice: false,
+        framed: false,
     },
     // Japandi.
     Look {
@@ -199,6 +204,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Built,
         upper: Upper::Floating,
         cornice: false,
+        framed: false,
     },
     // Contemporáneo.
     Look {
@@ -213,6 +219,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Slim,
         upper: Upper::Cupboards,
         cornice: false,
+        framed: false,
     },
     // Rústica.
     Look {
@@ -227,6 +234,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Beam,
         upper: Upper::Brackets,
         cornice: false,
+        framed: false,
     },
     // Industrial.
     Look {
@@ -241,6 +249,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Tube,
         upper: Upper::Pipes,
         cornice: false,
+        framed: true,
     },
     // Clásica.
     Look {
@@ -255,6 +264,7 @@ const LOOKS: [Look; 8] = [
         hood: Hood::Cornice,
         upper: Upper::Vitrine,
         cornice: true,
+        framed: false,
     },
 ];
 
@@ -263,7 +273,177 @@ const LOOKS: [Look; 8] = [
 /// models.
 fn look(p: &Params, first: i32) -> Option<Look> {
     let s = p.style() - first;
-    (1..=8).contains(&s).then(|| LOOKS[(s - 1) as usize])
+    let mut look = (1..=8).contains(&s).then(|| LOOKS[(s - 1) as usize])?;
+    personalize(&mut look, p);
+    Some(look)
+}
+
+/// What the family's choices of a kitchen say over its collection's look
+/// (Antonio, 29/10/2026: the collections are ready-made, and each can be
+/// taken to one's taste): the first of each is «as the collection».
+pub const FRONTS: &[&str] = &[
+    "Como la colección",
+    "Liso",
+    "Liso de cantos redondeados",
+    "Liso con marco de acero",
+    "Cuarterón",
+    "Cuarterón con moldura",
+    "Moldura",
+    "Tablas",
+    "Listones",
+    "Acanalado",
+    "Rejilla",
+    "Vidrio",
+    "Vidrio con junquillos",
+    "Malla",
+];
+pub const PULLS: &[&str] = &[
+    "Como la colección",
+    "Sin tirador",
+    "Gola",
+    "Pomo de madera",
+    "Pomo de latón",
+    "Argolla",
+    "Concha",
+    "Barra corta",
+    "Barra larga",
+    "Lengüeta de cuero",
+    "Uñero",
+];
+pub const STANDS: &[&str] = &[
+    "Como la colección",
+    "Zócalo",
+    "Rodapié con moldura",
+    "Patas",
+    "Bastidor de acero",
+];
+pub const BASINS: &[&str] = &[
+    "Como la colección",
+    "De acero encastrado",
+    "Bajo encimera",
+    "Cerámico",
+];
+pub const TAPS: &[&str] = &[
+    "Como la colección",
+    "Caño alto",
+    "Cuello de cisne",
+    "De puente con crucetas",
+    "Dos llaves",
+    "Cuadrado",
+    "De tubo fino",
+    "De muelle",
+];
+pub const HOBS: &[&str] = &["Como la colección", "Inducción", "Gas"];
+pub const CANOPIES: &[&str] = &[
+    "Como la colección",
+    "De chimenea",
+    "De obra",
+    "De obra con viga",
+    "De obra con cornisa",
+    "Curva",
+    "Integrada",
+    "Plana",
+    "De tubo",
+];
+pub const SHELVINGS: &[&str] = &[
+    "Como la colección",
+    "Armarios",
+    "Vitrinas",
+    "Baldas en ménsulas",
+    "Baldas flotantes",
+    "Baldas en escuadras",
+    "Baldas en tubos",
+];
+
+/// The choices of a kitchen family over its collection's `look`.
+fn personalize(look: &mut Look, p: &Params) {
+    // The option chosen (1: as the collection), as an index from 0 of
+    // what follows it.
+    let pick = |key: &str| {
+        let n = p.get(key, 1.0).round() as i64;
+        (n >= 2).then(|| (n - 2) as usize)
+    };
+    if let Some(i) = pick("fronts") {
+        look.rounded = false;
+        look.framed = false;
+        look.panel = match i {
+            0 => Panel::Flat,
+            1 => {
+                look.rounded = true;
+                Panel::Flat
+            }
+            2 => {
+                look.framed = true;
+                Panel::Flat
+            }
+            3 => Panel::Shaker,
+            4 => Panel::Raised,
+            5 => Panel::Moulded,
+            6 => Panel::Planks,
+            7 => Panel::Ribs,
+            8 => Panel::Flutes,
+            9 => Panel::Cane,
+            10 => Panel::Glass,
+            11 => Panel::Grid(2, 3),
+            _ => Panel::Mesh,
+        };
+    }
+    if let Some(i) = pick("pulls") {
+        look.gola = i == 1;
+        look.pull = match i {
+            0 | 1 => Pull::None,
+            2 => Pull::Knob,
+            3 => Pull::Brass,
+            4 => Pull::Ring,
+            5 => Pull::Cup,
+            6 => Pull::Bar(0.16),
+            7 => Pull::Bar(0.3),
+            8 => Pull::Tab,
+            _ => Pull::Slot,
+        };
+    }
+    if let Some(i) = pick("stand") {
+        look.base = [Base::Plinth, Base::Skirting, Base::Legs, Base::Steel][i.min(3)];
+    }
+    if let Some(i) = pick("basin") {
+        look.sink = [Sink::Inset, Sink::Under, Sink::Ceramic][i.min(2)];
+    }
+    if let Some(i) = pick("tap") {
+        look.tap = [
+            Tap::Gooseneck,
+            Tap::Swan,
+            Tap::Bridge,
+            Tap::Twin,
+            Tap::Square,
+            Tap::Slim,
+            Tap::Spring,
+        ][i.min(6)];
+    }
+    if let Some(i) = pick("hob") {
+        look.hob = [Hob::Induction, Hob::Gas][i.min(1)];
+    }
+    if let Some(i) = pick("canopy") {
+        look.hood = [
+            Hood::Chimney,
+            Hood::Mantel,
+            Hood::Beam,
+            Hood::Cornice,
+            Hood::Curved,
+            Hood::Built,
+            Hood::Slim,
+            Hood::Tube,
+        ][i.min(7)];
+    }
+    if let Some(i) = pick("shelving") {
+        look.upper = [
+            Upper::Cupboards,
+            Upper::Vitrine,
+            Upper::Corbels,
+            Upper::Floating,
+            Upper::Brackets,
+            Upper::Pipes,
+        ][i.min(5)];
+    }
 }
 
 /// The worktop's thickness (the library's).
@@ -360,7 +540,7 @@ fn front(b: &mut Builder, look: &Look, x0: f64, x1: f64, z0: f64, z1: f64, y: f6
         // The fifties' chrome edging: a thin band round the face.
         return;
     }
-    if look.base == Base::Steel {
+    if look.framed {
         // Industrial: a board in a frame of flat steel.
         b.rbox("mat", [x0, y, z0], [x1, y + T, z1], 0.002);
         let k = 0.012;
@@ -377,11 +557,27 @@ fn front(b: &mut Builder, look: &Look, x0: f64, x1: f64, z0: f64, z1: f64, y: f6
     storage::front(b, look.panel, "mat", x0, x1, z0, z1, y);
 }
 
+/// Whether the fronts are glass, cane or mesh in a frame (a drawer's pull
+/// goes on the frame).
+fn see_through(look: &Look) -> bool {
+    !look.rounded
+        && !look.framed
+        && matches!(
+            look.panel,
+            Panel::Cane | Panel::Glass | Panel::Grid(..) | Panel::Mesh
+        )
+}
+
 /// The pull of a front at `(x, z)`, its face at `y`; `upright` on a door.
 fn pull(b: &mut Builder, look: &Look, x: f64, z: f64, y: f64, upright: bool) {
     // On the panel's face (a steel front's edging stands proud of it,
-    // but the pull is fixed to the panel).
-    let face = y + T;
+    // but the pull is fixed to the panel; a mesh door's frame is
+    // thinner).
+    let face = y + if look.panel == Panel::Mesh && !look.framed {
+        T * 0.8
+    } else {
+        T
+    };
     match look.pull {
         Pull::Bar(l) if upright => {
             let start = b.mark();
@@ -432,10 +628,24 @@ fn drawers(b: &mut Builder, look: &Look, x0: f64, x1: f64, z0: f64, z1: f64, y: 
         let pz = match look.pull {
             Pull::Slot => e - 0.001,
             Pull::Bar(_) if look.rounded => e - 0.035,
+            // On a front of glass, cane or mesh in a frame, on its top
+            // rail.
+            _ if see_through(look) => {
+                let rail = 0.06_f64.min((x1 - x0) * 0.18).min(h * 0.18).max(0.018);
+                e - rail / 2.0
+            }
             _ => e - (h * 0.5).min(0.06),
         };
         if !look.gola {
-            pull(b, look, (x0 + x1) / 2.0, pz, y, false);
+            // A drawer's pull on the sunk panel of a framed front is on
+            // the panel's face.
+            let sunk = match look.panel {
+                _ if look.rounded || look.framed || see_through(look) => 0.0,
+                Panel::Shaker => T * 0.55,
+                Panel::Raised => T * 0.05,
+                _ => 0.0,
+            };
+            pull(b, look, (x0 + x1) / 2.0, pz, y - sunk, false);
         }
         top = a - gap;
     }

@@ -1,7 +1,7 @@
 family "Mueble alto de cocina"
   category kitchen
   host none
-  version 6
+  version 7
   description "Muebles altos o baldas abiertas sobre la encimera, como los hace cada colección"
   folder "Cocina"
 
@@ -27,6 +27,10 @@ type_params
     wood material = "Roble claro" label "Madera (patas, baldas)"
     ceramic material = "Cerámica blanca" label "Tarros y jarras"
     hood material = "Lacado blanco" label "Campana"
+  section "A tu gusto"
+    fronts choice("Como la colección", "Liso", "Liso de cantos redondeados", "Liso con marco de acero", "Cuarterón", "Cuarterón con moldura", "Moldura", "Tablas", "Listones", "Acanalado", "Rejilla", "Vidrio", "Vidrio con junquillos", "Malla") = "Como la colección" label "Frente"
+    pulls choice("Como la colección", "Sin tirador", "Gola", "Pomo de madera", "Pomo de latón", "Argolla", "Concha", "Barra corta", "Barra larga", "Lengüeta de cuero", "Uñero") = "Como la colección" label "Tirador"
+    shelving choice("Como la colección", "Armarios", "Vitrinas", "Baldas en ménsulas", "Baldas flotantes", "Baldas en escuadras", "Baldas en tubos") = "Como la colección" label "En la pared"
 
 body
   box (-width / 2, 0, elevation) to (width / 2, depth, elevation + height) material mat

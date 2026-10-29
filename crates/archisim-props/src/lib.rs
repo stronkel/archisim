@@ -890,6 +890,14 @@ pub const CHOICES: &[(&str, &[&str])] = &[
     ("side", &["Derecha", "Izquierda"]),
     ("form", fine::pool::FORMS),
     ("game", &["Fútbol 11", "Fútbol 7"]),
+    ("fronts", fine::kitchen::FRONTS),
+    ("pulls", fine::kitchen::PULLS),
+    ("stand", fine::kitchen::STANDS),
+    ("basin", fine::kitchen::BASINS),
+    ("tap", fine::kitchen::TAPS),
+    ("hob", fine::kitchen::HOBS),
+    ("canopy", fine::kitchen::CANOPIES),
+    ("shelving", fine::kitchen::SHELVINGS),
 ];
 
 /// The number of a value chosen by name (see [`CHOICES`]).

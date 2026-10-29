@@ -1,7 +1,7 @@
 family "Módulo bajo de cocina"
   category kitchen
   host none
-  version 2
+  version 3
   description "Módulo bajo de cocina hecho en una de las ocho colecciones: frentes, tiradores, zócalo o patas, fregadero, grifo y placa de cada una. Junto a otro, las encimeras se juntan."
   folder "Cocina"
 
@@ -33,6 +33,13 @@ type_params
     wood material = "Roble claro" label "Madera (patas, baldas)"
     ceramic material = "Cerámica blanca" label "Tarros y jarras"
     hood material = "Lacado blanco" label "Campana"
+  section "A tu gusto"
+    fronts choice("Como la colección", "Liso", "Liso de cantos redondeados", "Liso con marco de acero", "Cuarterón", "Cuarterón con moldura", "Moldura", "Tablas", "Listones", "Acanalado", "Rejilla", "Vidrio", "Vidrio con junquillos", "Malla") = "Como la colección" label "Frente"
+    pulls choice("Como la colección", "Sin tirador", "Gola", "Pomo de madera", "Pomo de latón", "Argolla", "Concha", "Barra corta", "Barra larga", "Lengüeta de cuero", "Uñero") = "Como la colección" label "Tirador"
+    stand choice("Como la colección", "Zócalo", "Rodapié con moldura", "Patas", "Bastidor de acero") = "Como la colección" label "Apoyo"
+    basin choice("Como la colección", "De acero encastrado", "Bajo encimera", "Cerámico") = "Como la colección" visible_if unit == "Fregadero" label "Fregadero"
+    tap choice("Como la colección", "Caño alto", "Cuello de cisne", "De puente con crucetas", "Dos llaves", "Cuadrado", "De tubo fino", "De muelle") = "Como la colección" visible_if unit == "Fregadero" label "Grifo"
+    hob choice("Como la colección", "Inducción", "Gas") = "Como la colección" visible_if unit == "Placa" label "Placa"
 
 body
   box (-width / 2, 0, 0.1) to (width / 2, depth - 0.04, height - 0.03) material mat

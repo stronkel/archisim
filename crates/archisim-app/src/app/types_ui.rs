@@ -269,28 +269,9 @@ fn swatch(ui: &mut Ui, rgb: [u8; 3]) {
     );
 }
 
-/// A combo of the project's materials, by name.
+/// The project's materials, chosen by their swatches.
 fn material_combo(ui: &mut Ui, id: Id, model: &Model, value: &mut MaterialId, width: f32) {
-    let mut mats: Vec<(MaterialId, String, [u8; 3])> = model
-        .materials()
-        .map(|m| (m.id, m.name.clone(), m.cut_color))
-        .collect();
-    mats.sort_by_key(|a| a.1.to_lowercase());
-    let shown = model
-        .material(*value)
-        .map_or("—".to_string(), |m| m.name.clone());
-    ComboBox::from_id_salt(id)
-        .width(width)
-        .truncate()
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            for (mid, name, rgb) in &mats {
-                ui.horizontal(|ui| {
-                    swatch(ui, *rgb);
-                    ui.selectable_value(value, *mid, name);
-                });
-            }
-        });
+    super::cards::material_button(ui, id, model, value, width);
 }
 
 impl ArchiSimApp {
@@ -1626,7 +1607,50 @@ impl ArchiSimApp {
             let title = title.unwrap_or("Parámetros");
             props::group(ui, &format!("types-opening-{title}"), title, |ui| {
                 for p in rows {
-                    param_row(ui, m, id, &t, p, actions);
+                    use archisim_core::{ParamKind, Value};
+                    match (&p.kind, t.values.get(&p.name)) {
+                        // Choices as cards, each drawn in elevation.
+                        (ParamKind::Choice(options), Some(Value::Text(now))) => {
+                            let ctx = ui.ctx().clone();
+                            let mut out = None;
+                            super::cards::card_row(ui, &p.label, |ui, w| {
+                                let mut thumb =
+                                    |o: &str| self.opening_option_thumb(&ctx, &t, &p.name, o);
+                                out = super::cards::option_cards(
+                                    ui,
+                                    w - 8.0,
+                                    options,
+                                    now,
+                                    &mut thumb,
+                                );
+                            });
+                            if let Some(o) = out.filter(|o| o != now) {
+                                actions.push(Action::EditOpeningValue(
+                                    id,
+                                    p.name.clone(),
+                                    Value::Text(o),
+                                ));
+                            }
+                        }
+                        // Materials as their swatches.
+                        (ParamKind::Material, Some(Value::Material(mid))) => {
+                            let salt = format!("ot-mat-{}-{}", id.0, p.name);
+                            if let Some(new) = self.material_param_row(
+                                ui,
+                                &salt,
+                                &p.label,
+                                &p.name,
+                                MaterialId(*mid),
+                            ) {
+                                actions.push(Action::EditOpeningValue(
+                                    id,
+                                    p.name.clone(),
+                                    Value::Material(new),
+                                ));
+                            }
+                        }
+                        _ => param_row(ui, self.ed.model(), id, &t, p, actions),
+                    }
                 }
             });
         }

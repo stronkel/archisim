@@ -201,6 +201,35 @@ const KEEP_NAMES: &[&str] = &[
 /// What is woven.
 const WOVEN: &[&str] = &["Ratán", "Enea", "Bambú", "Paja", "Cañizo"];
 
+/// The material of the palette a collection gives to a material parameter
+/// `param` now of material `name` (of `category`); `None` when the
+/// collection leaves it alone.
+pub fn collection_material(
+    param: &str,
+    name: &str,
+    category: &str,
+    c: &Collection,
+) -> Option<&'static str> {
+    if KEEP.contains(&param) || KEEP_NAMES.contains(&name) {
+        return None;
+    }
+    Some(if ACCENT.contains(&param) {
+        c.accent
+    } else if SOFT.contains(&param) && category == "fabric" {
+        c.soft
+    } else {
+        match category {
+            "fabric" => c.fabric,
+            "wood" if WOVEN.contains(&name) => c.weave,
+            "wood" => c.wood,
+            "metal" => c.metal,
+            "ceramic" => c.ceramic,
+            "stone" => c.stone,
+            _ => return None,
+        }
+    })
+}
+
 /// The values of a type of `family` in a collection: its materials and,
 /// unless `own_model`, its model of the 3D.
 pub fn restyle(
@@ -250,21 +279,8 @@ pub fn restyle(
         if KEEP_NAMES.contains(&mat.name.as_str()) {
             continue;
         }
-        let name = param.name.as_str();
-        let to = if ACCENT.contains(&name) {
-            c.accent
-        } else if SOFT.contains(&name) && mat.category == "fabric" {
-            c.soft
-        } else {
-            match mat.category.as_str() {
-                "fabric" => c.fabric,
-                "wood" if WOVEN.contains(&mat.name.as_str()) => c.weave,
-                "wood" => c.wood,
-                "metal" => c.metal,
-                "ceramic" => c.ceramic,
-                "stone" => c.stone,
-                _ => continue,
-            }
+        let Some(to) = collection_material(&param.name, &mat.name, &mat.category, c) else {
+            continue;
         };
         if let Some(new) = crate::palette_material(m, to) {
             out.insert(param.name.clone(), Value::Material(new.0));

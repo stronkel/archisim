@@ -88,7 +88,7 @@ impl ConceptState {
     }
 }
 
-/// A combo of the project's materials.
+/// The project's materials, chosen by their swatches.
 fn material_combo(
     ui: &mut Ui,
     id: Id,
@@ -97,21 +97,7 @@ fn material_combo(
     width: f32,
 ) -> MaterialId {
     let mut v = value;
-    let mut mats: Vec<(MaterialId, String)> =
-        model.materials().map(|m| (m.id, m.name.clone())).collect();
-    mats.sort_by_key(|a| a.1.to_lowercase());
-    let shown = model
-        .material(value)
-        .map_or("—".to_string(), |m| m.name.clone());
-    ComboBox::from_id_salt(id)
-        .width(width - 8.0)
-        .truncate()
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            for (mid, name) in &mats {
-                ui.selectable_value(&mut v, *mid, name);
-            }
-        });
+    super::cards::material_button(ui, id, model, &mut v, width - 8.0);
     v
 }
 

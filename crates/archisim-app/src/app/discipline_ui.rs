@@ -59,9 +59,13 @@ impl ArchiSimApp {
         }
     }
 
-    /// The focus the 3D view and the sections use now.
+    /// The focus the 3D view and the sections use now. The Maqueta is
+    /// always in colour, as Arquitectura: it has no bar of disciplines to
+    /// say why something would be grey.
     pub(super) fn screen_focus(&self) -> DisciplineFocus {
-        if self.attenuate {
+        if self.maquette {
+            DisciplineFocus::None
+        } else if self.attenuate {
             focus_for(self.discipline)
         } else {
             self.view_style.focus

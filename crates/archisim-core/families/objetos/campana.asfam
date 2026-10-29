@@ -1,7 +1,7 @@
 family "Campana extractora"
   category kitchen
   host none
-  version 2
+  version 3
   description "Campana extractora como la hace cada colección: de chimenea, de obra, curva, integrada, plana o de tubo"
   folder "Cocina"
 
@@ -26,6 +26,10 @@ type_params
     wood material = "Roble claro" label "Madera (patas, baldas)"
     ceramic material = "Cerámica blanca" label "Tarros y jarras"
     hood material = "Lacado blanco" label "Campana"
+  section "A tu gusto"
+    canopy choice("Como la colección", "De chimenea", "De obra", "De obra con viga", "De obra con cornisa", "Curva", "Integrada", "Plana", "De tubo") = "Como la colección" label "Forma de la campana"
+    fronts choice("Como la colección", "Liso", "Liso de cantos redondeados", "Liso con marco de acero", "Cuarterón", "Cuarterón con moldura", "Moldura", "Tablas", "Listones", "Acanalado", "Rejilla", "Vidrio", "Vidrio con junquillos", "Malla") = "Como la colección" label "Frente"
+    pulls choice("Como la colección", "Sin tirador", "Gola", "Pomo de madera", "Pomo de latón", "Argolla", "Concha", "Barra corta", "Barra larga", "Lengüeta de cuero", "Uñero") = "Como la colección" label "Tirador"
 
 body
   box (-width / 2, 0, elevation) to (width / 2, depth, elevation + 0.12) material metal

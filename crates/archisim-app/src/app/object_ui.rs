@@ -241,10 +241,26 @@ impl ArchiSimApp {
                             continue;
                         };
                         let salt = format!("object-iv-{}-{}", id.0, p.name);
-                        if let Some(v) = param_row(ui, &salt, p, cur, &materials) {
+                        let mark = self.ed.undo_mark();
+                        let v = match (&p.kind, cur) {
+                            (ParamKind::Material, Value::Material(mid)) => {
+                                let label = p.label.clone();
+                                self.material_param_row(
+                                    ui,
+                                    &salt,
+                                    &label,
+                                    &p.name,
+                                    archisim_core::MaterialId(*mid),
+                                )
+                                .map(Value::Material)
+                            }
+                            _ => param_row(ui, &salt, p, cur, &materials),
+                        };
+                        if let Some(v) = v {
                             let mut values = o.values.clone();
                             values.insert(p.name.clone(), v);
                             let r = self.ed.set_object_values(id, values);
+                            self.ed.join_since(mark, "Objeto cambiado");
                             self.report(r, "Objeto cambiado.");
                         }
                     }
@@ -268,8 +284,10 @@ impl ArchiSimApp {
                         continue;
                     };
                     let salt = format!("object-tv-{}-{}", t.id.0, p.name);
-                    if let Some(v) = param_row(ui, &salt, p, cur, &materials) {
+                    let mark = self.ed.undo_mark();
+                    if let Some(v) = self.object_type_param_row(ui, &salt, p, cur, &t, &materials) {
                         let r = self.ed.set_object_type_value(t.id, &p.name, v);
+                        self.ed.join_since(mark, "Tipo de objeto cambiado");
                         self.report(r, "Tipo de objeto cambiado.");
                     }
                 }

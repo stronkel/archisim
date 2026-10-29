@@ -1,7 +1,7 @@
 family "Columna de cocina"
   category kitchen
   host none
-  version 2
+  version 3
   description "Columna de cocina hecha en una de las ocho colecciones"
   folder "Cocina"
 
@@ -27,6 +27,10 @@ type_params
     wood material = "Roble claro" label "Madera (patas, baldas)"
     ceramic material = "Cerámica blanca" label "Tarros y jarras"
     hood material = "Lacado blanco" label "Campana"
+  section "A tu gusto"
+    fronts choice("Como la colección", "Liso", "Liso de cantos redondeados", "Liso con marco de acero", "Cuarterón", "Cuarterón con moldura", "Moldura", "Tablas", "Listones", "Acanalado", "Rejilla", "Vidrio", "Vidrio con junquillos", "Malla") = "Como la colección" label "Frente"
+    pulls choice("Como la colección", "Sin tirador", "Gola", "Pomo de madera", "Pomo de latón", "Argolla", "Concha", "Barra corta", "Barra larga", "Lengüeta de cuero", "Uñero") = "Como la colección" label "Tirador"
+    stand choice("Como la colección", "Zócalo", "Rodapié con moldura", "Patas", "Bastidor de acero") = "Como la colección" label "Apoyo"
 
 body
   box (-width / 2, 0, 0) to (width / 2, depth, height) material mat

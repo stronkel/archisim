@@ -70,28 +70,9 @@ const LIST: f32 = 220.0;
 const EDITOR: f32 = 400.0;
 const FIELD: f32 = 74.0;
 
-/// A combo of the project's materials, by name, with its colour.
+/// The project's materials, chosen by their swatches.
 fn material_combo(ui: &mut Ui, id: Id, model: &Model, value: &mut MaterialId, width: f32) {
-    let mut mats: Vec<(MaterialId, String, [u8; 3])> = model
-        .materials()
-        .map(|m| (m.id, m.name.clone(), m.cut_color))
-        .collect();
-    mats.sort_by_key(|a| a.1.to_lowercase());
-    let shown = model
-        .material(*value)
-        .map_or("—".to_string(), |m| m.name.clone());
-    egui::ComboBox::from_id_salt(id)
-        .width(width)
-        .truncate()
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            for (mid, name, rgb) in &mats {
-                ui.horizontal(|ui| {
-                    super::props::swatch(ui, *rgb, 12.0);
-                    ui.selectable_value(value, *mid, name);
-                });
-            }
-        });
+    super::cards::material_button(ui, id, model, value, width);
 }
 
 /// A section heading of the editor column.

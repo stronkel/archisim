@@ -175,15 +175,6 @@ fn kind_order(k: &str) -> usize {
     .unwrap_or(99)
 }
 
-/// A piece of a piece of furniture that takes a colour in the card.
-pub(super) struct Piece {
-    /// Its material parameter.
-    pub key: String,
-    /// The name of its material now.
-    pub current: Option<String>,
-    pub swatches: Vec<(&'static str, [u8; 3])>,
-}
-
 /// A kind of stair on the catalog: its shape, its turns and what carries
 /// it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1134,61 +1125,6 @@ impl ArchiSimApp {
         if let Some(act) = take {
             self.catalog_take(act);
         }
-    }
-
-    /// The pieces of an object that take a colour (its type's materials,
-    /// but light and glass) with the swatches of the cosy palette that suit
-    /// each: fabrics for upholstery, woods and metals for legs…
-    pub(super) fn object_pieces(&self, id: archisim_core::ObjectId) -> Vec<Piece> {
-        let m = self.ed.model();
-        let Some(o) = m.object(id) else {
-            return Vec::new();
-        };
-        let Some(t) = m.object_type(o.object_type) else {
-            return Vec::new();
-        };
-        let Some(f) = m.family(t.family) else {
-            return Vec::new();
-        };
-        let Ok(defaults) = m.family_defaults(t.family, archisim_core::ParamScope::Type) else {
-            return Vec::new();
-        };
-        let mut out = Vec::new();
-        for param in f.def().params_of(archisim_core::ParamScope::Type) {
-            if param.kind != archisim_family::ParamKind::Material {
-                continue;
-            }
-            let value = t.values.get(&param.name).or(defaults.get(&param.name));
-            let Some(archisim_core::Value::Material(mid)) = value else {
-                continue;
-            };
-            let Some(mat) = m.material(archisim_core::MaterialId(*mid)) else {
-                continue;
-            };
-            let kinds: &[&str] = match mat.category.as_str() {
-                "fabric" => &["fabric"],
-                "wood" | "metal" => &["wood", "metal"],
-                "ceramic" | "stone" => &["ceramic", "stone"],
-                _ => continue,
-            };
-            let swatches: Vec<(&'static str, [u8; 3])> = archisim_library::COZY_PALETTE
-                .iter()
-                .filter(|(n, c, _)| kinds.contains(c) && !n.starts_with("Pantalla"))
-                .map(|(n, _, rgb)| (*n, *rgb))
-                .collect();
-            if swatches.is_empty() {
-                continue;
-            }
-            out.push(Piece {
-                key: param.name.clone(),
-                current: Some(mat.name.clone()),
-                swatches,
-            });
-            if out.len() == 4 {
-                break;
-            }
-        }
-        out
     }
 
     /// A short name of what an element is (its type).

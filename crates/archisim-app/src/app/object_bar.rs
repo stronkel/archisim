@@ -233,6 +233,8 @@ impl ArchiSimApp {
             .unwrap_or_default();
         let thumb = single.and_then(|e| self.bar_thumb(ctx, e));
         let mut act = None;
+        // The materials that do not fit in the bar.
+        let mut hidden: Vec<(String, String, u64, [u8; 3])> = Vec::new();
         let origin = Pos2::new(16.0, bottom - 16.0);
         let area = egui::Area::new(Id::unique("object-bar"))
             .order(egui::Order::Foreground)
@@ -324,7 +326,23 @@ impl ArchiSimApp {
                                 }
                                 if !materials.is_empty() {
                                     bar_gap(ui, p);
-                                    for (key, name, _, rgb) in &materials {
+                                    // As many as fit in the window; the
+                                    // rest behind «+N».
+                                    let used = 16.0
+                                        + CARD
+                                        + 4.0 * 60.0
+                                        + controls
+                                            .iter()
+                                            .map(|c| match c {
+                                                Control::Count { lo, hi, .. } => (hi - lo + 1) as f32 * 23.0 + 12.0,
+                                                Control::Choice { .. } => 80.0,
+                                            })
+                                            .sum::<f32>()
+                                        + 3.0 * 17.0
+                                        + 140.0;
+                                    let fit = (((ctx.content_rect().width() - used) / 64.0).floor() as usize).max(3);
+                                    let shown = if materials.len() > fit { fit - 1 } else { materials.len() };
+                                    for (key, name, _, rgb) in &materials[..shown] {
                                         let open = self.bar_swatches.as_deref() == Some(key.as_str());
                                         let r = swatch_button(ui, *rgb, short(name), open, p)
                                             .on_hover_text(format!("{name}: cambiar el material (solo este objeto)"));
@@ -334,6 +352,19 @@ impl ArchiSimApp {
                                         if open {
                                             self.bar_swatch_at = Some(r.rect);
                                         }
+                                    }
+                                    if shown < materials.len() {
+                                        let k = "more-materials".to_string();
+                                        let open = self.bar_swatches.as_deref() == Some(k.as_str());
+                                        let r = more_button(ui, materials.len() - shown, open, p)
+                                            .on_hover_text("Los demás materiales de este objeto");
+                                        if r.clicked() {
+                                            act = Some(BarAct::Swatches(k));
+                                        }
+                                        if open {
+                                            self.bar_swatch_at = Some(r.rect);
+                                        }
+                                        hidden = materials[shown..].to_vec();
                                     }
                                 }
                                 bar_gap(ui, p);
@@ -388,19 +419,23 @@ impl ArchiSimApp {
         if let (Some(key), Some(at), Some(id)) =
             (self.bar_swatches.clone(), self.bar_swatch_at, object)
         {
-            let found = match key.strip_prefix("choice:") {
-                Some(name) => controls.iter().find_map(|c| match c {
-                    Control::Choice {
-                        key,
-                        label,
-                        options,
-                        now,
-                    } if key == name => {
-                        Some(self.choice_options(ctx, key, label, options, now, at, id))
-                    }
-                    _ => None,
-                }),
-                None => Some(self.material_swatches(ctx, &key, at, id)),
+            let found = if key == "more-materials" {
+                Some(self.more_materials(ctx, &hidden, at))
+            } else {
+                match key.strip_prefix("choice:") {
+                    Some(name) => controls.iter().find_map(|c| match c {
+                        Control::Choice {
+                            key,
+                            label,
+                            options,
+                            now,
+                        } if key == name => {
+                            Some(self.choice_options(ctx, key, label, options, now, at, id))
+                        }
+                        _ => None,
+                    }),
+                    None => Some(self.material_swatches(ctx, &key, at, id)),
+                }
             };
             if let Some(Some(a)) = found {
                 act = Some(a);
@@ -549,6 +584,12 @@ impl ArchiSimApp {
     ) -> Option<BarAct> {
         let p = Palette::current(ctx);
         let row = self.row_of(id).len();
+        let ty = {
+            let m = self.ed.model();
+            m.object(id)
+                .and_then(|o| m.object_type(o.object_type))
+                .cloned()
+        };
         let mut act = None;
         let area = egui::Area::new(Id::unique("object-bar-choice"))
             .order(egui::Order::Foreground)
@@ -559,24 +600,22 @@ impl ArchiSimApp {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_min_width(200.0);
                     ui.label(egui::RichText::new(label).strong().color(p.text));
-                    for o in options {
-                        let on = o == now;
-                        let text = egui::RichText::new(o).color(if on { p.accent } else { p.text });
-                        if ui
-                            .add(
-                                egui::Button::new(text)
-                                    .frame(on)
-                                    .min_size(Vec2::new(190.0, 24.0)),
-                            )
-                            .clicked()
-                        {
-                            act = Some(BarAct::SetValue(
-                                key.to_string(),
-                                Value::Text(o.clone()),
-                                false,
-                            ));
-                        }
-                    }
+                    // Each option as a card, drawn as it would be.
+                    let mut thumb = |o: &str| match &ty {
+                        Some(t) => self.object_option_thumb(ctx, t, key, o),
+                        None => None,
+                    };
+                    let per_row = if options.len() > 6 { 4 } else { 3 };
+                    egui::ScrollArea::vertical()
+                        .max_height(420.0)
+                        .show(ui, |ui| {
+                            if let Some(o) =
+                                super::cards::option_grid(ui, options, now, per_row, &mut thumb)
+                            {
+                                act =
+                                    Some(BarAct::SetValue(key.to_string(), Value::Text(o), false));
+                            }
+                        });
                     if row > 1 {
                         ui.separator();
                         if ui
@@ -591,6 +630,51 @@ impl ArchiSimApp {
                             ));
                         }
                     }
+                })
+            });
+        let outside = ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|q| !area.response.rect.contains(q) && !at.contains(q))
+        });
+        if outside && act.is_none() {
+            self.bar_swatches = None;
+        }
+        act
+    }
+
+    /// The materials of the object that did not fit in the bar, above
+    /// its «+N» at `at`: a click opens that material's.
+    fn more_materials(
+        &mut self,
+        ctx: &egui::Context,
+        hidden: &[(String, String, u64, [u8; 3])],
+        at: Rect,
+    ) -> Option<BarAct> {
+        let p = Palette::current(ctx);
+        let mut act = None;
+        let area = egui::Area::new(Id::unique("object-bar-more"))
+            .order(egui::Order::Foreground)
+            .pivot(egui::Align2::RIGHT_BOTTOM)
+            .fixed_pos(Pos2::new(at.right() + 8.0, at.top() - 10.0))
+            .constrain(true)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_max_width(330.0);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::splat(2.0);
+                        for (key, name, _, rgb) in hidden {
+                            if swatch_button(ui, *rgb, short(name), false, p)
+                                .on_hover_text(format!(
+                                    "{name}: cambiar el material (solo este objeto)"
+                                ))
+                                .clicked()
+                            {
+                                act = Some(BarAct::Swatches(key.clone()));
+                            }
+                        }
+                    });
                 })
             });
         let outside = ctx.input(|i| {
@@ -621,13 +705,6 @@ impl ArchiSimApp {
             .into_iter()
             .find(|m| m.0 == key)
             .map(|m| m.2);
-        let mats: Vec<(u64, String, [u8; 3])> = model
-            .materials()
-            .map(|m| (m.id.0, m.name.clone(), model.surface_color(m.id)))
-            .collect();
-        // The colours that suit this piece (fabrics for upholstery, woods
-        // and metals for legs…), then every material of the project.
-        let piece = self.object_pieces(id).into_iter().find(|x| x.key == key);
         let mut act = None;
         let area = egui::Area::new(Id::unique("object-bar-swatches"))
             .order(egui::Order::Foreground)
@@ -637,77 +714,31 @@ impl ArchiSimApp {
             .show(ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(320.0);
-                    if let Some(piece) = &piece {
-                        ui.label(
-                            egui::RichText::new("Colores que le van")
-                                .small()
-                                .color(p.muted),
-                        );
-                        ui.horizontal_wrapped(|ui| {
-                            ui.spacing_mut().item_spacing = Vec2::splat(6.0);
-                            for (swatch, rgb) in &piece.swatches {
-                                let on = piece.current.as_deref() == Some(*swatch);
-                                let (r, resp) =
-                                    ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
-                                let painter = ui.painter();
-                                if on {
-                                    painter.circle_stroke(
-                                        r.center(),
-                                        15.0,
-                                        Stroke::new(2.0, p.accent),
-                                    );
-                                }
-                                painter.circle(
-                                    r.center(),
-                                    12.0,
-                                    Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
-                                    Stroke::new(1.0, Color32::from_black_alpha(40)),
-                                );
-                                if resp.on_hover_text(*swatch).clicked() {
-                                    act = Some(BarAct::PaintPiece(key.to_string(), swatch));
-                                }
+                    // The materials that suit this piece (fabrics for
+                    // upholstery, woods and metals for legs…) as cards
+                    // with their texture, then every other material.
+                    if let Some(now) = now {
+                        let rec =
+                            super::cards::recommended(model, key, archisim_core::MaterialId(now));
+                        let oth = super::cards::others(model, &rec);
+                        let current = super::cards::MatPick::Project(now);
+                        match super::cards::material_panel(
+                            ui,
+                            &format!("bar-{key}"),
+                            &mut self.swatches,
+                            &rec,
+                            &oth,
+                            &current,
+                        ) {
+                            Some(super::cards::MatPick::Palette(name)) => {
+                                act = Some(BarAct::PaintPiece(key.to_string(), name));
                             }
-                        });
-                        ui.add_space(4.0);
-                        ui.label(
-                            egui::RichText::new("Todos los materiales")
-                                .small()
-                                .color(p.muted),
-                        );
+                            Some(super::cards::MatPick::Project(m)) => {
+                                act = Some(BarAct::SetMaterial(key.to_string(), m));
+                            }
+                            None => {}
+                        }
                     }
-                    egui::ScrollArea::vertical()
-                        .max_height(220.0)
-                        .show(ui, |ui| {
-                            egui::Grid::new("object-bar-swatch-grid")
-                                .spacing(Vec2::splat(6.0))
-                                .show(ui, |ui| {
-                                    for (i, (m, name, rgb)) in mats.iter().enumerate() {
-                                        let on = now == Some(*m);
-                                        let (r, resp) = ui
-                                            .allocate_exact_size(Vec2::splat(30.0), Sense::click());
-                                        let painter = ui.painter();
-                                        if on {
-                                            painter.circle_stroke(
-                                                r.center(),
-                                                15.0,
-                                                Stroke::new(2.0, p.accent),
-                                            );
-                                        }
-                                        painter.circle(
-                                            r.center(),
-                                            12.0,
-                                            Color32::from_rgb(rgb[0], rgb[1], rgb[2]),
-                                            Stroke::new(1.0, Color32::from_black_alpha(40)),
-                                        );
-                                        if resp.on_hover_text(name).clicked() {
-                                            act = Some(BarAct::SetMaterial(key.to_string(), *m));
-                                        }
-                                        if i % 8 == 7 {
-                                            ui.end_row();
-                                        }
-                                    }
-                                });
-                        });
                     // Any colour: a wheel, applied with its button (one
                     // step to undo, not one per movement of the wheel).
                     ui.add_space(4.0);
@@ -870,6 +901,25 @@ fn count_buttons(ui: &mut Ui, label: &str, lo: i64, hi: i64, now: i64, p: Palett
 }
 
 /// A choice of the bar: its name over what it is now.
+/// «+N»: the materials that did not fit.
+fn more_button(ui: &mut Ui, n: usize, open: bool, p: Palette) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(Vec2::new(44.0, 52.0), Sense::click());
+    let painter = ui.painter();
+    if open {
+        painter.rect_filled(r, CornerRadius::same(10), p.accent_soft);
+    } else if resp.hovered() {
+        painter.rect_filled(r, CornerRadius::same(10), p.line.gamma_multiply(0.5));
+    }
+    painter.text(
+        r.center(),
+        egui::Align2::CENTER_CENTER,
+        format!("+{n}"),
+        egui::FontId::proportional(14.0),
+        p.accent,
+    );
+    resp
+}
+
 fn choice_button(ui: &mut Ui, label: &str, now: &str, open: bool, p: Palette) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(Vec2::new(78.0, 52.0), Sense::click());
     let painter = ui.painter();

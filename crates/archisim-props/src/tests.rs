@@ -196,3 +196,147 @@ fn nothing_floats() {
     println!("{} models with pieces in the air", bad.len());
     assert!(bad.is_empty(), "{bad:?}");
 }
+
+/// A collection's kitchen taken to one's taste: each choice over the
+/// collection changes the model, and «as the collection» leaves it as it
+/// was.
+#[test]
+fn a_kitchen_to_ones_taste() {
+    let size = |kind: &str, unit: f64, set: &[(&str, f64)]| {
+        let mut p = Params::default();
+        // The nordic collection (after the family's own first model).
+        p.set("style", 2.0);
+        p.set("unit", unit);
+        for (k, v) in set {
+            p.set(k, *v);
+        }
+        let m = make(kind, &p).unwrap();
+        // Its shape, roughly: where its points are, part by part.
+        let shape: f64 = m
+            .parts
+            .iter()
+            .enumerate()
+            .flat_map(|(i, (_, tris))| tris.iter().map(move |t| (i, t)))
+            .flat_map(|(i, t)| t.iter().map(move |v| (i, *v)))
+            .map(|(i, v)| {
+                let q = m.positions[v as usize];
+                (i + 1) as f64
+                    * ((q[0] as f64).powi(2) * 1.3 + q[1] as f64 * 1.7 + q[2] as f64 * 1.9)
+            })
+            .sum();
+        (m.triangle_count(), (shape * 1000.0).round() as i64)
+    };
+    let sink = 3.0;
+    let hob = 6.0;
+    for (kind, key, n, unit) in [
+        ("base_unit", "fronts", fine::kitchen::FRONTS.len(), 2.0),
+        ("base_unit", "pulls", fine::kitchen::PULLS.len(), 1.0),
+        ("base_unit", "stand", fine::kitchen::STANDS.len(), 1.0),
+        ("base_unit", "basin", fine::kitchen::BASINS.len(), sink),
+        ("base_unit", "tap", fine::kitchen::TAPS.len(), sink),
+        ("base_unit", "hob", fine::kitchen::HOBS.len(), hob),
+        (
+            "wall_cabinet",
+            "shelving",
+            fine::kitchen::SHELVINGS.len(),
+            1.0,
+        ),
+        ("hood", "canopy", fine::kitchen::CANOPIES.len(), 1.0),
+    ] {
+        let style = if kind == "hood" { 3.0 } else { 2.0 };
+        let mut seen = std::collections::BTreeSet::new();
+        let mut all = Vec::new();
+        for i in 1..=n {
+            let s = size(kind, unit, &[("style", style), (key, i as f64)]);
+            seen.insert(s);
+            all.push(s);
+        }
+        // The collection's own is one of the others (the nordic's), so
+        // n − 1 different models at least.
+        assert!(
+            seen.len() >= n - 1,
+            "{kind} {key}: {} of {n} {all:?}",
+            seen.len()
+        );
+    }
+    // «As the collection» is the collection.
+    assert_eq!(
+        size("base_unit", 1.0, &[("pulls", 1.0)]),
+        size("base_unit", 1.0, &[])
+    );
+}
+
+/// Whatever is chosen over a collection, nothing of the kitchen is left
+/// in the air.
+#[test]
+fn a_kitchen_to_ones_taste_stands() {
+    use fine::kitchen::*;
+    let mut bad = Vec::new();
+    // A kind, the units tried and its choices with how many options.
+    type Case<'a> = (&'a str, &'a [f64], &'a [(&'a str, usize)]);
+    let cases: &[Case] = &[
+        (
+            "base_unit",
+            &[1.0, 2.0, 3.0, 6.0],
+            &[
+                ("fronts", FRONTS.len()),
+                ("pulls", PULLS.len()),
+                ("stand", STANDS.len()),
+                ("basin", BASINS.len()),
+                ("tap", TAPS.len()),
+                ("hob", HOBS.len()),
+            ],
+        ),
+        (
+            "tall_unit",
+            &[1.0, 2.0],
+            &[
+                ("fronts", FRONTS.len()),
+                ("pulls", PULLS.len()),
+                ("stand", STANDS.len()),
+            ],
+        ),
+        (
+            "wall_cabinet",
+            &[1.0],
+            &[
+                ("fronts", FRONTS.len()),
+                ("pulls", PULLS.len()),
+                ("shelving", SHELVINGS.len()),
+            ],
+        ),
+        (
+            "hood",
+            &[1.0],
+            &[("canopy", CANOPIES.len()), ("fronts", FRONTS.len())],
+        ),
+    ];
+    for (kind, units, keys) in cases {
+        let first = if *kind == "hood" { 2.0 } else { 1.0 };
+        for c in 1..=8 {
+            for unit in *units {
+                for (key, n) in *keys {
+                    for i in 2..=*n {
+                        let mut p = Params::default();
+                        p.set("style", first + c as f64);
+                        p.set("unit", *unit);
+                        p.set("tall", *unit);
+                        p.set(key, i as f64);
+                        let m = make(kind, &p).unwrap();
+                        let loose = check::loose_pieces(&m, check::anchors_for(kind), 0.004);
+                        if let Some(l) = loose.first() {
+                            bad.push(format!(
+                                "{kind} colección {c} unidad {unit} {key}={i}: {} a {:.3}",
+                                l.role, l.gap
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for b in &bad {
+        println!("{b}");
+    }
+    assert!(bad.is_empty(), "{} loose", bad.len());
+}

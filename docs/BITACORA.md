@@ -6,6 +6,33 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-29 (25) · Cocina a tu gusto, opciones en tarjetas y Maqueta siempre en color
+
+Rama `bloque/personalizar` (sobre `bloque/biblioteca-taller`), con pull request. Sin cambios de formato ni de IFC (las familias de cocina suben de versión).
+
+Antonio, al ver el PR #100: le gusta que cada pieza tenga un modelo y se elija dentro, pero la cocina tiene que poder personalizarse además de las ocho colecciones; en Propiedades y en Editar tipo, las opciones tienen que verse en tarjetas, sean lo que sean; los materiales, con unos recomendados en tarjetas y los demás después; y la Maqueta, siempre en color como en Arquitectura y con líneas finas.
+
+**Hecho**
+- **Cocina a tu gusto**: el módulo bajo, la columna, el mueble alto y la campana tienen una sección «A tu gusto» con **Frente** (liso, de cantos redondeados, con marco de acero, cuarterón, cuarterón con moldura, moldura, tablas, listones, acanalado, rejilla, vidrio, vidrio con junquillos, malla), **Tirador** (sin tirador, gola, pomo de madera o de latón, argolla, concha, barra corta o larga, lengüeta de cuero, uñero), **Apoyo** (zócalo, rodapié con moldura, patas, bastidor de acero), y, según la pieza, **Fregadero**, **Grifo**, **Placa**, **En la pared** (armarios, vitrinas o cuatro clases de baldas) y **Forma de la campana**. Cada una empieza en «Como la colección». Una prueba coloca todas las opciones en las ocho colecciones y comprueba que nada queda en el aire (`a_kitchen_to_ones_taste_stands`); por ella, los tiradores de los cajones con cuarterón van sobre el panel hundido y los de vidrio, rejilla o malla, sobre el marco.
+- **Opciones en tarjetas** (`app/cards`): en Propiedades (tipo de un objeto), en Editar tipo (puertas y ventanas) y en la barra de la Maqueta, cada opción de una lista se ve como tarjeta con su miniatura: los objetos en 3D, las puertas y ventanas en alzado (las hojas fija, practicable, oscilobatiente…). Se ve la elegida; un clic abre todas.
+- **Materiales en tarjetas**: la muestra con su textura; un clic abre «Recomendados para esta pieza» (lo que le darían las ocho colecciones, los de la paleta de su clase y los del proyecto de su clase) y «Otros materiales del proyecto», con buscador. En Propiedades, Editar tipo, la barra de la Maqueta, las capas y accesorios de los tipos de muro y forjado, los muros cortina y Concepto.
+- **Maqueta**: siempre en color (sin atenuación por disciplina) y siempre con líneas finas.
+- La barra de la Maqueta ya no se sale de la ventana: los materiales que no caben van a «+N».
+
+**Pendiente**
+- Las miniaturas enseñan la pieza entera: en el grifo o la placa, el cambio es pequeño en la tarjeta (se ve bien al elegirlo).
+- Las opciones de cada objeto concreto («Este objeto»: el dibujo de un árbol) y la ventana en esquina siguen en lista.
+- Los proyectos de antes tienen su copia de las familias de cocina: para ver «A tu gusto», Biblioteca → actualizar familias.
+
+**Qué debe probar Antonio**
+1. Proyecto nuevo → Maqueta → Amueblar → Cocina. Coloca un «Bajo cajonera 60», selecciónalo y, en la barra de abajo, cambia **Frente**, **Tirador** y **Apoyo** mirando las tarjetas. Con varios módulos en fila, «a toda la fila» los cambia todos.
+2. Cambia «Qué lleva» a Fregadero y mira **Fregadero** y **Grifo** (también en Técnica → Propiedades, al final del tipo).
+3. En la barra, pulsa un material (por ejemplo, Frentes): arriba los recomendados con su textura, abajo los demás.
+4. Vista → Tipos y materiales → Ventanas: en «Hoja 1», las tarjetas en alzado. En Muros, el material de un rodapié.
+5. Con Técnica en la disciplina Estructura o Instalaciones, pasa a la Maqueta: todo debe verse en color, con líneas finas.
+
+---
+
 ## 2026-10-29 (24) · El taller pasa a la biblioteca: paquetes 2 a 8
 
 Rama `bloque/biblioteca-taller` (sobre `bloque/remates-modelos`), con pull request. Sin cambios de formato. Cambia el IFC de las piezas que se pasan (lámparas como `IfcLightFixture`, piezas nuevas).

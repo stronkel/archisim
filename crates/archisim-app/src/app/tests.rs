@@ -6045,13 +6045,15 @@ fn swatches_paint_one_piece_of_one_object() {
                 .unwrap(),
         );
     }
-    let pieces = h.app.object_pieces(ids[0]);
-    let upholstery = pieces.iter().find(|p| p.key == "mat").expect("upholstery");
-    assert!(upholstery
-        .swatches
-        .iter()
-        .any(|s| s.0 == "Terciopelo mostaza"));
-    assert!(pieces.iter().any(|p| p.key == "frame"));
+    // The upholstery is offered the palette's fabrics.
+    let upholstery = h
+        .app
+        .object_materials(ids[0])
+        .into_iter()
+        .find(|m| m.0 == "mat")
+        .expect("upholstery");
+    let rec = super::cards::recommended(h.model(), "mat", archisim_core::MaterialId(upholstery.2));
+    assert!(rec.iter().any(|c| c.name == "Terciopelo mostaza"));
     h.app
         .ed
         .paint_object_piece(ids[0], "mat", "Terciopelo mostaza")

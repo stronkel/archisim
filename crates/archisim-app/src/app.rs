@@ -605,6 +605,8 @@ pub struct ArchiSimApp {
     pub symbol_picker: Option<symbol_pick::SymbolPicker>,
     /// The 3D pictures of the Maqueta's catalog.
     thumbs3d: thumbs3d::Thumbs3d,
+    /// The pictures of the materials' swatches.
+    swatches: cards::Swatches,
     /// The command line stays shown (Vista); otherwise it shows only while
     /// an order is typed or running.
     pub pin_command_line: bool,
@@ -859,6 +861,7 @@ impl ArchiSimApp {
             thumbs: thumbs::Thumbs::default(),
             symbol_picker: None,
             thumbs3d: Default::default(),
+            swatches: Default::default(),
             pin_command_line: false,
             attenuate: true,
             hidden_disciplines: Default::default(),
@@ -2547,6 +2550,7 @@ mod bottom_segments;
 mod brush_ui;
 mod budget_ui;
 mod cad_ui;
+mod cards;
 mod chrome;
 mod collection_ui;
 mod concept_ui;

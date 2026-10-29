@@ -348,6 +348,10 @@ Antonio lo dio por bueno tras mirarlo en 3D y pidió seguir. El paquete sale del
 - **Los modelos antiguos** ya no se ofrecen. Su código sigue para que los proyectos de antes se abran igual (cada proyecto guarda sus familias); al actualizar sus familias desde la biblioteca, un modelo que ya no existe pasa al de por defecto (`reapply_family`) y lo demás se conserva.
 - El taller se queda con la planta, el fregadero y la farola, que son de otros paquetes.
 
+### La cocina a tu gusto (29/10/2026)
+
+A petición de Antonio, las colecciones son el punto de partida y cada pieza de la cocina se puede llevar a tu gusto. Las familias «Módulo bajo de cocina», «Columna de cocina», «Mueble alto de cocina» y «Campana extractora» tienen la sección **A tu gusto**: Frente, Tirador, Apoyo, Fregadero, Grifo, Placa, En la pared y Forma de la campana, cada una con «Como la colección» primero. En el código, `archisim_props::fine::kitchen::personalize` cambia el `Look` de la colección con lo elegido (`FRONTS`, `PULLS`, `STANDS`, `BASINS`, `TAPS`, `HOBS`, `CANOPIES`, `SHELVINGS`, por nombre en `CHOICES`). El frente con marco de acero ya no va unido al bastidor de acero (`Look::framed`). Ninguna combinación deja piezas en el aire (`a_kitchen_to_ones_taste_stands`).
+
 ### Paquetes 2 a 8 en la biblioteca (29/10/2026)
 
 Antonio dio por buenos los paquetes 2a, 2b, 3, 4, 5, 6, 7 y 8 y pidió pasarlos del taller a la biblioteca (rama `bloque/biblioteca-taller`), como el paquete 1:
