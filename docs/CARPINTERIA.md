@@ -45,6 +45,17 @@ La idea, para cuando Antonio lo pida:
 
 Nada de esto pide cambiar el formato del proyecto ni el IFC: lo nuevo serían datos con nombre que la familia elige como una opción más.
 
+## 4 bis. Puertas especiales: cortafuegos, metálicas, de seguridad y con ventanilla (29/10/2026)
+
+Pedidas por Antonio para hospitales, industria y edificios públicos. Son opciones de la misma «Puerta abatible», así que se combinan con todo lo demás:
+
+- **Hoja**: chapa lisa, chapa embutida (dos cuarterones estampados), chapa con ventanilla cuadrada, con ojo de buey o con mirilla alargada; lisa (madera) con ventanilla cuadrada o con ojo de buey; y **acorazada** (chapa con el canto ancho y los cuarterones estampados). Las ventanillas son un dato (`Vision`: cuadrada o redonda, con su tamaño y su altura), así que el taller futuro podrá añadir otras.
+- **Manilla**: barra antipánico (en la cara desde la que se empuja, en las dos hojas si es doble; manilla por la otra cara de la activa), placa de empuje con tirador (hospitales) y escudo de seguridad con protector del bombín.
+- **Cierrapuertas** (cuerpo en la hoja y brazo al cerco, en la cara hacia la que abre) y **zócalo de acero** en las dos caras.
+- La **resistencia al fuego** (EI2 30, 60 o 90) ya estaba en la receta y va al IFC (`Pset_DoorCommon.FireRating`).
+
+El ojo de buey lleva su aro de acero en cada cara; la ventanilla cuadrada, junquillos. En el IFC la hoja sigue siendo la de la receta (sin el hueco de la ventanilla).
+
 ## 5. Las ventanas (segunda parte, 29/10/2026)
 
 La ventana practicable funciona igual que la puerta: su receta sigue dando planta, alzados, IFC y mediciones. En 3D, `archisim_props::fine::window` (`generator = "props:window"`) hace el marco, los montantes y las hojas. El premarco, la tarja, el capialzado y el vierteaguas siguen saliendo de la receta.

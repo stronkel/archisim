@@ -1753,7 +1753,7 @@ fn sport_type(
     for (key, val) in values {
         let val = match val {
             N(n) => Value::Number(*n),
-            M(n) => match crate::palette_material(m, n) {
+            M(n) => match palette_or_project(m, n) {
                 Some(id) => Value::Material(id.0),
                 None => continue,
             },
@@ -2111,7 +2111,7 @@ fn kitchen_type(
         }
         let val = match val {
             N(n) => Value::Number(*n),
-            M(n) => match crate::palette_material(m, n) {
+            M(n) => match palette_or_project(m, n) {
                 Some(id) => Value::Material(id.0),
                 None => continue,
             },
@@ -2263,7 +2263,7 @@ pub fn add_piece(m: &mut Model, piece: &Piece) -> Result<ObjectTypeId, ModelErro
     for (k, v) in piece.values {
         let v = match v {
             N(n) => Value::Number(*n),
-            M(name) => match crate::palette_material(m, name) {
+            M(name) => match palette_or_project(m, name) {
                 Some(id) => Value::Material(id.0),
                 None => continue,
             },
@@ -2509,7 +2509,7 @@ pub fn project() -> Result<Model, ModelError> {
     }
     // The doors (paquete 9), south of everything.
     place_doors(&mut m, 0.0, -9.0)?;
-    place_windows(&mut m, 0.0, -16.0)?;
+    place_windows(&mut m, 0.0, -26.0)?;
     Ok(m)
 }
 
@@ -2540,12 +2540,21 @@ pub fn loose_report(m: &Model) -> Vec<(String, Vec<archisim_core::props::check::
     out
 }
 
+/// A material of the palette by name or, if the palette has none of that
+/// name, the project's (the template's «Metal lacado»).
+fn palette_or_project(m: &mut Model, name: &str) -> Option<archisim_core::MaterialId> {
+    crate::palette_material(m, name)
+        .or_else(|| m.materials().find(|x| x.name == name).map(|x| x.id))
+}
+
 /// The doors of the workshop (paquete 9): one of each collection in a
 /// partition, the hands alternating, and the entrance doors in a façade.
 pub const DOOR_COLLECTIONS: [&str; 8] = archisim_core::props::fine::door::COLLECTIONS;
 
-/// Places the workshop's doors from `x` along a partition at `y`, and
-/// three entrance doors in a façade 4 m south; the end of the partition.
+/// Places the workshop's doors from `x` along a partition at `y`, three
+/// entrance doors in a façade 4 m south, and doors for hospitals, industry
+/// and security (fire doors, vision panels, a security door) in another
+/// partition 4 m north; the end of the partition.
 pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
     use archisim_core::{Hand, NewFamilyType, NewOpening, WallSide};
     let level = m.levels()[0].id;
@@ -2607,7 +2616,7 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
             ("hardware_material", metal),
         ]
         .into_iter()
-        .filter_map(|(k, n)| crate::palette_material(m, n).map(|id| (k, Value::Material(id.0))))
+        .filter_map(|(k, n)| palette_or_project(m, n).map(|id| (k, Value::Material(id.0))))
         .collect()
     };
     for (i, c) in DOOR_COLLECTIONS.iter().enumerate() {
@@ -2655,6 +2664,113 @@ pub fn place_doors(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
             hand: Hand::Right,
             setback: None,
         })?;
+    }
+    // Doors for hospitals, industry and security, in a partition 4 m
+    // north: what each is, its leaf, handle and extras.
+    let special = wall(m, partition, y + 4.0, end)?;
+    let t = |s: &str| Value::Text(s.to_string());
+    let b = Value::Bool;
+    type Special<'a> = (&'a str, f64, f64, Vec<(&'a str, Value)>, [&'a str; 3]);
+    let specials: [Special; 6] = [
+        (
+            "cortafuegos EI2 60 con ojo de buey",
+            0.9,
+            1.0,
+            vec![
+                ("leaf_design", t("Chapa con ojo de buey")),
+                ("handle_style", t("Barra antipánico")),
+                ("closer", b(true)),
+                ("fire_rating", t("EI2 60-C5")),
+            ],
+            ["Metal lacado", "Metal lacado", "Acero inoxidable"],
+        ),
+        (
+            "de hospital con ventanilla",
+            1.05,
+            1.0,
+            vec![
+                ("leaf_design", t("Lisa con ventanilla cuadrada")),
+                ("handle_style", t("Placa de empuje y tirador")),
+                ("kick_plate", b(true)),
+                ("closer", b(true)),
+            ],
+            ["Lacado blanco", "Lacado blanco", "Acero inoxidable"],
+        ),
+        (
+            "de quirófano de dos hojas",
+            1.6,
+            2.0,
+            vec![
+                ("leaf_design", t("Chapa con ojo de buey")),
+                ("handle_style", t("Placa de empuje y tirador")),
+                ("kick_plate", b(true)),
+            ],
+            ["Lacado blanco", "Acero inoxidable", "Acero inoxidable"],
+        ),
+        (
+            "metálica embutida",
+            0.9,
+            1.0,
+            vec![
+                ("leaf_design", t("Chapa embutida")),
+                ("handle_style", t("Palanca con placa")),
+            ],
+            ["Metal lacado", "Metal lacado", "Metal negro"],
+        ),
+        (
+            "cortafuegos de dos hojas",
+            1.6,
+            2.0,
+            vec![
+                ("leaf_design", t("Chapa con mirilla alargada")),
+                ("handle_style", t("Barra antipánico")),
+                ("closer", b(true)),
+                ("fire_rating", t("EI2 90-C5")),
+            ],
+            ["Chapa teja", "Metal lacado", "Metal negro"],
+        ),
+        (
+            "acorazada",
+            0.9,
+            1.0,
+            vec![
+                ("leaf_design", t("Acorazada")),
+                ("handle_style", t("Escudo de seguridad")),
+                ("peephole", b(true)),
+            ],
+            ["Roble ahumado", "Roble ahumado", "Latón"],
+        ),
+    ];
+    let mut along = 1.0;
+    for (name, width, leaves, extra, [leaf, frame, metal]) in specials {
+        let mut set = vec![
+            ("model3d", t("Contemporáneo")),
+            ("width", Value::Number(width)),
+            ("height", Value::Number(2.1)),
+            ("leaves", Value::Number(leaves)),
+        ];
+        set.extend(
+            [
+                ("panel_material", leaf),
+                ("frame_material", frame),
+                ("hardware_material", metal),
+            ]
+            .into_iter()
+            .filter_map(|(k, n)| palette_or_project(m, n).map(|id| (k, Value::Material(id.0)))),
+        );
+        set.extend(extra);
+        let ty = door_type(m, format!("Puerta {name} (taller)"), &set)?;
+        along += width / 2.0;
+        m.add_opening(NewOpening {
+            opening_type: ty,
+            wall: special,
+            along,
+            sill: 0.0,
+            opens_to: WallSide::Interior,
+            hand: Hand::Left,
+            setback: None,
+        })?;
+        along += width / 2.0 + 0.6;
     }
     Ok(end)
 }
@@ -2715,7 +2831,7 @@ pub fn place_windows(m: &mut Model, x: f64, y: f64) -> Result<f64, ModelError> {
         ("Lacado blanco", "Latón"),
     ];
     let palette = |m: &mut Model, key: &'static str, name: &str| {
-        crate::palette_material(m, name).map(|id| (key, Value::Material(id.0)))
+        palette_or_project(m, name).map(|id| (key, Value::Material(id.0)))
     };
     let front = wall(m, y)?;
     let place = |m: &mut Model, t, wall, i: usize, sill: f64| {

@@ -6,7 +6,7 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
-## 2026-10-29 (28) · Carpintería con detalle: las ventanas (paquete 9, segunda parte)
+## 2026-10-29 (28) · Carpintería con detalle: las ventanas y las puertas especiales (paquete 9, segunda parte)
 
 Rama `bloque/ventanas` (sobre `main` v0.74), con pull request. Sin cambios de formato ni de IFC (la familia «Ventana practicable» sube a la versión 9). Diseño en `docs/CARPINTERIA.md` §5.
 
@@ -15,6 +15,7 @@ Rama `bloque/ventanas` (sobre `main` v0.74), con pull request. Sin cambios de fo
 - **Ocho colecciones y «A tu gusto»**: Perfil (aluminio recto o redondeado, PVC, madera, madera con moldura, acero fino), Cuarterones (cuadrícula, cuadrícula fina, horizontales, verticales, solo arriba) y Manilla (moderna, de latón, cremona vista, falleba de forja).
 - **Por fuera**: la persiana con sus guías y lamas bajadas al porcentaje que se diga; contraventanas (mallorquinas, de tablas o de cuarterones), abiertas contra la fachada o cerradas; y rejas (barrotes, barrotes y pletinas, cuadrícula, forja con volutas), planas sobre la fachada o de cajón con su vuelo. Las rejas y las contraventanas se dibujan también en planta.
 - **Tarjetas en 3D** en Editar tipo: la reja y las contraventanas se ven desde la calle.
+- **Puertas especiales** (pedidas por Antonio en esta sesión): hojas de chapa (lisa, embutida, con ventanilla cuadrada, ojo de buey o mirilla alargada), lisas con ventanilla y acorazada; barra antipánico, placa de empuje con tirador y escudo de seguridad; cierrapuertas y zócalo de acero. Taller: cortafuegos EI2 60 con ojo de buey, de hospital con ventanilla, de quirófano de dos hojas, metálica embutida, cortafuegos de dos hojas EI2 90 y acorazada (`docs/CARPINTERIA.md` §4 bis).
 - **De lejos**: las puertas y ventanas ya no se simplifican juntando puntos (eso cerraba el vidrio y las ventanas lejanas se veían como bloques oscuros). Ahora su versión de lejos es una ventana sencilla del propio generador: marco, hojas y vidrio, sin herrajes, junquillos ni volutas.
 - **Arreglo de las puertas de la v0.74**: en un proyecto nuevo, los herrajes salían con el primer material del proyecto (el mortero), porque «Acero inoxidable» no estaba en la plantilla. Ahora la plantilla añade de la paleta los materiales que piden las familias de puertas y ventanas.
 - **Taller**: una fachada con las ocho ventanas y otra con persiana, mallorquinas, contraventanas cerradas y tres rejas. Fotos con `ARCHISIM_VENTANAS_OUT=carpeta cargo test --release -p archisim-app window_pictures`, que guarda también `ventanas.archisim`.
@@ -25,6 +26,7 @@ Rama `bloque/ventanas` (sobre `main` v0.74), con pull request. Sin cambios de fo
 - Los proyectos de antes tienen su copia de la familia: para ver las opciones, Biblioteca → actualizar familias.
 
 **Qué debe probar Antonio**
+0. Una puerta abatible → Editar tipo → «A tu gusto»: Hoja «Chapa con ojo de buey», Manilla «Barra antipánico», Cierrapuertas y, en Datos, resistencia EI2 60. Prueba también la de dos hojas (las dos llevan barra) y la Acorazada con Escudo de seguridad y Mirilla.
 1. Proyecto nuevo, una fachada con una ventana practicable. Mírala en 3D por dentro y por fuera.
 2. Selecciónala → Editar tipo: cambia la colección («Modelo 3D») y, en «A tu gusto», el Perfil, los Cuarterones y la Manilla mirando las tarjetas.
 3. En «Por fuera»: pon una Reja de forja con volutas, márcala «de cajón» y cambia el vuelo; luego prueba Mallorquinas abiertas y cerradas. Mira la planta: la reja de cajón sale delante de la fachada.

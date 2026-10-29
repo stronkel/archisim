@@ -2021,8 +2021,10 @@ fn door_pictures() {
         let c = og.point((og.t0 + og.t1) / 2.0, 0.0);
         let w = (og.t1 - og.t0) as f32;
         let (cx, cy) = (c.x as f32, c.y as f32);
+        // Wide doors closer, or the camera ends up behind the next wall.
+        let near = if w > 1.2 { 1.4 } else { 1.0 };
         for (view, yaw, pitch, zoom, z) in [
-            ("abre", -90.0, 4.0, 1.0, 1.1),
+            ("abre", -90.0, 4.0, near, 1.1),
             ("cierra", 90.0, 4.0, 1.4, 1.1),
             ("manilla", -70.0, 6.0, 3.5, 1.05),
             ("lejos", -75.0, 10.0, 0.15, 1.1),

@@ -370,6 +370,11 @@ fn doors_stand_whole() {
                     p.set("face_pos", 0.06);
                     p.set("face_neg", -0.06);
                     p.set("peephole", 1.0);
+                    // A closer and kick plates on every third.
+                    if i % 3 == 0 {
+                        p.set("closer", 1.0);
+                        p.set("kick_plate", 1.0);
+                    }
                     // Every other one as seen from far away.
                     if i % 2 == 0 {
                         p.set("lod", 1.0);
