@@ -401,6 +401,8 @@ pub struct ArchiSimApp {
     /// A survey point's height being typed where it is written (E5):
     /// the terrain, the point and the text.
     terrain_z_edit: Option<(archisim_core::TerrainId, usize, String)>,
+    /// Cut and fill of a terrain's platforms, by model revision (E8).
+    earthworks_cache: Option<(u64, archisim_core::TerrainId, (f64, f64))>,
     /// The outline of a room drawn by hand.
     pub zone_tool: SlabTool,
     /// The «Maqueta» environment is on (`docs/MAQUETA.md`).
@@ -769,6 +771,7 @@ impl ArchiSimApp {
             terrain_line: Vec::new(),
             terrain_pick: Vec::new(),
             terrain_z_edit: None,
+            earthworks_cache: None,
             roof_tool: SlabTool::default(),
             zone_tool: SlabTool::default(),
             maquette: false,

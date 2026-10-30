@@ -2702,6 +2702,62 @@ fn terrain_tool_and_north() {
     assert!(ifc.contains("IFCDIRECTION((0.34202"));
 }
 
+/// Platforms under the building (E8): with a terrain sloping across the
+/// house, «Explanar bajo el edificio» digs one under its ground slab; the
+/// Properties show the cut and fill, and Undo brings the survey back.
+#[test]
+fn terrain_platforms_under_the_house() {
+    let mut h = Harness::new(Editor::new_project());
+    draw_outline(&mut h);
+    furnish(&mut h);
+    let level = h.app.ed.level;
+    let earth = h.model().materials().next().unwrap().id;
+    let sp = |x: f64, y: f64, z: f64| archisim_core::SurveyPoint { at: p(x, y), z };
+    let r = h.app.ed.transact("Terreno", |m| {
+        m.add_terrain(archisim_core::NewTerrain {
+            level,
+            points: vec![
+                sp(-8.0, -8.0, -0.8),
+                sp(20.0, -8.0, -0.8),
+                sp(20.0, 17.0, 1.2),
+                sp(-8.0, 17.0, 1.2),
+            ],
+            material: earth,
+            depth: 2.0,
+            contour: 0.25,
+            lines: Vec::new(),
+        })
+        .map(|_| ())
+    });
+    assert!(r.is_ok(), "{r:?}");
+    let t = h.model().terrains().next().expect("terrain").clone();
+    h.app.ed.selection = [Element::Terrain(t.id)].into_iter().collect();
+    h.frame();
+    assert_eq!(h.app.terrain_earthworks(t.id), (0.0, 0.0));
+    let pads = h
+        .model()
+        .building_pads(t.id, archisim_core::PAD_MARGIN, archisim_core::PAD_SLOPE);
+    assert_eq!(pads.len(), 1, "the ground slab");
+    let r = h
+        .app
+        .ed
+        .edit_terrain("Explanaciones", t.id, |t| t.set_pads(pads));
+    assert!(r.is_ok(), "{r:?}");
+    h.frame();
+    let (cut, fill) = h.app.terrain_earthworks(t.id);
+    // The whole house sits below the ground: all dug.
+    assert!(cut > 50.0 && fill < 0.01, "{cut} {fill}");
+    let graded = h.model().terrain(t.id).unwrap();
+    let z = graded.height_at(p(6.0, 4.5)).unwrap();
+    assert!((z - graded.pads[0].z).abs() < 1e-6, "{z}");
+    let chapters = archisim_plan::schedules::measurements(h.model());
+    assert!(chapters.iter().any(|c| c.1 == "Movimiento de tierras"));
+    h.app.ed.undo();
+    let back = h.model().terrain(t.id).unwrap();
+    assert!(back.pads.is_empty());
+    assert_eq!(back.points.len(), t.points.len());
+}
+
 /// The terrain in plan (R4): contour lines drawn at a height make the
 /// terrain; clicks on its points give them the height written; with the
 /// arrow, a point or a whole line is picked and given a height at once,

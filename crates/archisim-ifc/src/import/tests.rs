@@ -1372,3 +1372,66 @@ fn wall_type_wrapping_round_trip() {
         (Wrap::Both, Wrap::Interior)
     );
 }
+
+/// A terrain with its edge drawn by hand and a platform dug under the
+/// house (E5, E8): the graded ground, the survey and the platform come
+/// back, and the earthworks are written.
+#[test]
+fn terrain_platforms_round_trip() {
+    use archisim_core::{NewTerrain, SurveyPoint, TerrainPad};
+    let mut m = model();
+    let pb = m.levels()[0].id;
+    let earth = m.materials().next().unwrap().id;
+    let mut points = Vec::new();
+    for i in 0..=6 {
+        for j in 0..=6 {
+            let (x, y) = (-10.0 + 5.0 * i as f64, -10.0 + 5.0 * j as f64);
+            points.push(SurveyPoint {
+                at: Point2::new(x, y),
+                z: y / 20.0,
+            });
+        }
+    }
+    let t = m
+        .add_terrain(NewTerrain {
+            level: pb,
+            points,
+            material: earth,
+            depth: 2.0,
+            contour: 0.25,
+            lines: Vec::new(),
+        })
+        .unwrap();
+    m.edit_terrain(t, |t| {
+        t.show_heights = true;
+        t.set_pads(vec![TerrainPad {
+            outline: vec![
+                Point2::new(-0.5, -0.5),
+                Point2::new(10.5, -0.5),
+                Point2::new(10.5, 8.5),
+                Point2::new(-0.5, 8.5),
+            ],
+            z: -0.4,
+            slope: 1.0,
+        }]);
+    })
+    .unwrap();
+    let before = m.terrain(t).unwrap().clone();
+    let ifc = export(&m);
+    assert!(ifc.contains("'CutVolume',$,IFCVOLUMEMEASURE("));
+    let Imported { model, .. } = import_ifc(&ifc).unwrap();
+    let back = model.terrains().find(|x| x.guid == before.guid).unwrap();
+    assert_eq!(back.pads, before.pads);
+    assert_eq!(back.points.len(), before.points.len());
+    assert_eq!(
+        back.ground.as_ref().map(Vec::len),
+        before.ground.as_ref().map(Vec::len)
+    );
+    assert!(back.show_heights);
+    let (a, b) = (before.earthworks(), back.earthworks());
+    assert!(
+        (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3,
+        "{a:?} {b:?}"
+    );
+    assert!(a.0 > 30.0, "{a:?}");
+}

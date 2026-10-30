@@ -657,6 +657,22 @@ pub(crate) struct Terrain {
     /// Slope arrows in plan (version 45).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub slope_arrows: bool,
+    /// Platforms (version 46, optional): `points` is the ground graded.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pads: Vec<TerrainPad>,
+    /// The ground as surveyed while there are platforms (version 46).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground: Option<Vec<[f64; 3]>>,
+}
+
+/// A platform in a terrain (version 46): outline `[x, y]`, height and the
+/// rise over run of its bank.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TerrainPad {
+    pub outline: Vec<[f64; 2]>,
+    pub z: f64,
+    pub slope: f64,
 }
 
 /// An area of a terrain painted with another material (version 37): its
@@ -2953,6 +2969,19 @@ impl ProjectFile {
                         .map(|o| o.iter().map(|q| [q.x, q.y]).collect()),
                     show_heights: t.show_heights,
                     slope_arrows: t.slope_arrows,
+                    pads: t
+                        .pads
+                        .iter()
+                        .map(|p| TerrainPad {
+                            outline: p.outline.iter().map(|q| [q.x, q.y]).collect(),
+                            z: p.z,
+                            slope: p.slope,
+                        })
+                        .collect(),
+                    ground: t
+                        .ground
+                        .as_ref()
+                        .map(|g| g.iter().map(|q| [q.at.x, q.at.y, q.z]).collect()),
                     patches: t
                         .patches
                         .into_iter()
@@ -3654,6 +3683,27 @@ impl ProjectFile {
                             .map(|o| o.iter().map(|q| core::Point2::new(q[0], q[1])).collect()),
                         show_heights: t.show_heights,
                         slope_arrows: t.slope_arrows,
+                        pads: t
+                            .pads
+                            .iter()
+                            .map(|p| core::TerrainPad {
+                                outline: p
+                                    .outline
+                                    .iter()
+                                    .map(|q| core::Point2::new(q[0], q[1]))
+                                    .collect(),
+                                z: p.z,
+                                slope: p.slope,
+                            })
+                            .collect(),
+                        ground: t.ground.as_ref().map(|g| {
+                            g.iter()
+                                .map(|q| core::SurveyPoint {
+                                    at: core::Point2::new(q[0], q[1]),
+                                    z: q[2],
+                                })
+                                .collect()
+                        }),
                         patches: t
                             .patches
                             .iter()

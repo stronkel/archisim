@@ -6,6 +6,32 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (40) · Terreno que se adapta al edificio (E8)
+
+Rama `bloque/e8-explanaciones` (sobre `bloque/e5-terreno`), con pull request. Formato `.archisim` versión 46 (el terreno guarda sus explanaciones y el levantamiento original; los ficheros anteriores se abren igual, sin explanaciones).
+
+**Hecho**
+- **Explanaciones**: plataformas horizontales dentro del terreno, cada una con su contorno, su cota y su talud (por defecto 1:1). Dentro, el terreno queda a la cota de la plataforma; alrededor, el talud baja o sube hasta encontrar el terreno. Donde dos se tocan, gana la más baja (el vaciado del sótano manda sobre la plataforma de la planta baja).
+- **Explanar bajo el edificio** (Propiedades del terreno → Explanaciones): hace una plataforma bajo cada forjado de la planta del terreno y de las de debajo (sótanos), a la cara inferior del forjado y con 50 cm de margen. Las cubiertas planas no cuentan.
+- En Propiedades se cambian la cota y el talud de cada plataforma (talud en H:V: 1 = 45°, 2 = 1:2), se ven el **desmonte** y el **terraplén** en m³, y «Quitar explanaciones» devuelve el terreno del levantamiento.
+- El levantamiento original se guarda aparte: al cambiar la cota de un punto, moverlo o quitarlo, el terreno se vuelve a explanar. Los puntos que añaden las plataformas no se ven como puntos del levantamiento ni se pueden arrastrar.
+- **Planta**: el borde de cada plataforma con línea de trazo y punto, y «Explanación −0,35» por fuera de su lado más largo; las curvas de nivel ya siguen el terreno explanado.
+- **Mediciones**: capítulo 12 «Movimiento de tierras» con desmonte (T01) y terraplén (T02) en m³, con clave para asignarles precio del banco.
+- **IFC**: la superficie del terreno sale ya explanada; `ArchiSim_Terrain` lleva las plataformas, el levantamiento y los volúmenes (`CutVolume`, `FillVolume`), y la importación lo recupera todo.
+
+**Pendiente**
+- Dibujar una plataforma a mano (hoy salen de los forjados) y escribir `IfcEarthworksCut`/`IfcEarthworksFill` como elementos con su sólido.
+- Las pasadas del pincel de terreno sobre un terreno explanado se pierden si después se vuelve a explanar.
+
+**Qué debe probar Antonio**
+1. `cargo run --release -p archisim-app -- out/demo.archisim` → selecciona el terreno (clic en el jardín, lejos de la casa) → Propiedades → Explanaciones → **Explanar bajo el edificio**. Mira el desmonte y el terraplén, y en planta las curvas de nivel rodeando la casa y la línea «Explanación».
+2. Cambia el talud de la plataforma 1 a 2,00 y su cota a −1,00: el desmonte crece y las curvas se separan.
+3. Vista 3D: el terreno a la cota de la plataforma bajo la casa, con su talud.
+4. Mediciones: capítulo «12 Movimiento de tierras».
+5. Exporta el IFC y ábrelo en otro programa: el terreno ya explanado y, en sus propiedades `ArchiSim_Terrain`, `CutVolume` y `FillVolume`.
+
+---
+
 ## 2026-10-30 (39) · Terreno, segunda vuelta (E5)
 
 Rama `bloque/e5-terreno` (sobre `main`, v0.75), con pull request. Formato `.archisim` versión 45 (el terreno guarda su borde dibujado y lo que enseña en planta; los ficheros anteriores se abren igual, con las cotas de los puntos ocultas).

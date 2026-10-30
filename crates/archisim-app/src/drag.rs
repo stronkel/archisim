@@ -377,7 +377,8 @@ pub fn hotspots(model: &Model, selection: &BTreeSet<Element>) -> Vec<Hotspot> {
             }
             Element::Terrain(id) => {
                 if let Some(t) = model.terrain(*id) {
-                    for (index, p) in t.points.iter().enumerate() {
+                    // The surveyed points (not those of its platforms).
+                    for (index, p) in t.points.iter().take(t.survey().len()).enumerate() {
                         v.push(Hotspot {
                             grip: Grip::TerrainPoint {
                                 terrain: *id,
@@ -1012,9 +1013,11 @@ pub fn apply(
         }
         Grip::TerrainPoint { terrain, index } => model
             .edit_terrain(terrain, |t| {
-                if let Some(p) = t.points.get_mut(index) {
-                    p.at = drag.to;
-                }
+                t.edit_survey(|points| {
+                    if let Some(p) = points.get_mut(index) {
+                        p.at = drag.to;
+                    }
+                })
             })
             .map(|_| None),
         Grip::ObjectSize { object, .. }

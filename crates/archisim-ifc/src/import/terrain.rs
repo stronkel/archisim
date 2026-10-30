@@ -150,7 +150,57 @@ impl<'a> Importer<'a> {
                 .unwrap_or(false)
         };
         let (show_heights, slope_arrows) = (flag("ShowHeights"), flag("SlopeArrows"));
+        // Its platforms and the ground as surveyed (E8): the points read
+        // are the ground already graded.
+        let text = |name: &str| {
+            self.property_own(id, "ArchiSim_Terrain", name)
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        };
+        let pads: Vec<archisim_core::TerrainPad> = text("Pads")
+            .map(|s| {
+                s.split('|')
+                    .filter_map(|p| {
+                        let (head, o) = p.split_once(':')?;
+                        let mut h = head
+                            .split_whitespace()
+                            .filter_map(|n| n.parse::<f64>().ok());
+                        let (z, slope) = (h.next()?, h.next()?);
+                        let outline: Vec<Point2> = o
+                            .split(',')
+                            .filter_map(|q| {
+                                let mut it =
+                                    q.split_whitespace().filter_map(|n| n.parse::<f64>().ok());
+                                Some(Point2::new(snap(it.next()? * len), snap(it.next()? * len)))
+                            })
+                            .collect();
+                        (outline.len() >= 3).then(|| archisim_core::TerrainPad {
+                            outline,
+                            z: snap(z * len),
+                            slope,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ground: Option<Vec<SurveyPoint>> = text("Ground").and_then(|s| {
+            s.split(';')
+                .map(|p| {
+                    let v: Vec<f64> = p
+                        .split_whitespace()
+                        .filter_map(|x| x.parse::<f64>().ok())
+                        .collect();
+                    (v.len() == 3).then(|| SurveyPoint {
+                        at: Point2::new(snap(v[0] * len), snap(v[1] * len)),
+                        z: snap(v[2] * len),
+                    })
+                })
+                .collect()
+        });
+        let ground = ground.filter(|_| !pads.is_empty());
         let _ = self.model.edit_terrain(tid, |t| {
+            t.pads = pads;
+            t.ground = ground;
             t.outline = outline;
             t.show_heights = show_heights;
             t.slope_arrows = slope_arrows;

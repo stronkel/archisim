@@ -108,6 +108,44 @@ pub fn draw_terrain(s: &mut String, model: &Model, t: &Terrain, k: f64) {
             num(1.5 * k)
         );
     }
+    // Platforms (E8): their edge, and their height inside.
+    for pad in &t.pads {
+        let pts: Vec<String> = pad.outline.iter().map(|q| pt(*q)).collect();
+        let _ = writeln!(
+            s,
+            r#"<path class="terrain-pad" d="M{} Z" fill="none" stroke="{INK}" stroke-width="{}" stroke-dasharray="{} {} {} {}"/>"#,
+            pts.join(" L"),
+            num(pens().view * k),
+            num(6.0 * k),
+            num(1.2 * k),
+            num(1.2 * k),
+            num(1.2 * k),
+        );
+        // The height outside its longest side, along it (inside, the
+        // building covers it).
+        let n = pad.outline.len();
+        let (a, b) = (0..n)
+            .map(|i| (pad.outline[i], pad.outline[(i + 1) % n]))
+            .max_by(|x, y| x.0.distance(x.1).total_cmp(&y.0.distance(y.1)))
+            .unwrap_or((pad.outline[0], pad.outline[0]));
+        let along = (b - a).normalized().unwrap_or(Point2::new(1.0, 0.0));
+        // Counter-clockwise: outside is to the right.
+        let out = along.perp_left() * -1.0;
+        let dir = if along.x < 0.0 { along * -1.0 } else { along };
+        let mid = (a + b) * 0.5 + out * (th * 1.4);
+        let _ = writeln!(
+            s,
+            r#"<path class="terrain-pad-height" d="{}" {}/>"#,
+            text_path(
+                &format!("Explanación {}", height(pad.z)),
+                mid,
+                dir,
+                th,
+                Align::Centre
+            ),
+            crate::lettering::paint(th, INK)
+        );
+    }
     // Slope arrows, downhill, with their gradient (E5).
     if t.slope_arrows {
         let step = slope_step(t);
@@ -149,7 +187,8 @@ pub fn draw_terrain(s: &mut String, model: &Model, t: &Terrain, k: f64) {
     // only when asked for (E5).
     let c = 0.8 * k;
     let edge_by_hand = t.outline.as_deref().filter(|o| o.len() >= 3);
-    for p in &t.points {
+    // (Those of the platforms, added to grade the ground, are not.)
+    for p in t.points.iter().take(t.survey().len()) {
         let q = p.at;
         // (Points on the edge itself are kept.)
         if edge_by_hand.is_some_and(|o| !archisim_core::point_in_polygon(q, o) && !on_edge(q, o)) {
@@ -477,5 +516,30 @@ mod tests {
         let both = draw(&m);
         assert_eq!(both.matches("terrain-height").count(), 4);
         assert!(both.contains("terrain-slope"));
+        // E8: a platform draws its edge and height; its points are not
+        // survey points.
+        m.edit_terrain(id, |t| {
+            t.set_pads(vec![archisim_core::TerrainPad {
+                outline: vec![
+                    Point2::new(5.0, 5.0),
+                    Point2::new(12.0, 5.0),
+                    Point2::new(12.0, 12.0),
+                    Point2::new(5.0, 12.0),
+                ],
+                z: 0.5,
+                slope: 1.0,
+            }])
+        })
+        .unwrap();
+        let graded = draw(&m);
+        assert_eq!(graded.matches("class=\"terrain-pad\"").count(), 1);
+        assert!(graded.contains("terrain-pad-height"));
+        assert_eq!(graded.matches("terrain-point").count(), 4);
+        // And its cut goes to the measurements.
+        let chapters = crate::schedules::measurements(&m);
+        let (_, title, items) = chapters.iter().find(|c| c.0 == "12").unwrap();
+        assert_eq!(*title, "Movimiento de tierras");
+        assert_eq!(items[0].key, "tierras:desmonte");
+        assert!(items[0].total() > 49.0 * 0.35, "{}", items[0].total());
     }
 }
