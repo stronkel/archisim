@@ -1208,6 +1208,7 @@ impl ArchiSimApp {
             self.select_instances(same_type, "muros");
         }
         self.wall_tools_group(ui, id, &w);
+        self.wall_profile_group(ui, id, &w);
         let above = self.levels_above(w.level);
         group(ui, "wall-constraints", "Restricciones", |ui| {
             self.level_row(

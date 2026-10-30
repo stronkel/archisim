@@ -417,6 +417,66 @@ pub fn slab_layer_regions(
         .collect()
 }
 
+/// What an elevation profile (E3) takes out of its wall, in the wall's
+/// elevation (`x` along it, `y` above its base): the wall's rectangle,
+/// overshooting it by `margin` (and past its ends by `reach`, what its
+/// joins add), less the profile's outline with its holes.
+pub fn wall_profile_cuts(
+    profile: &archisim_core::WallProfile,
+    length: f64,
+    height: f64,
+    margin: f64,
+    reach: f64,
+) -> Vec<Shape> {
+    let top = height.max(profile.top()) + margin;
+    let side = reach + margin;
+    let rect = vec![
+        Point2::new(-side, -margin),
+        Point2::new(length + side, -margin),
+        Point2::new(length + side, top),
+        Point2::new(-side, top),
+    ];
+    difference(
+        &[(rect, Vec::new())],
+        &[(
+            profile_with_ends(profile, length, reach),
+            profile.holes.clone(),
+        )],
+    )
+}
+
+/// A wall profile's outline with what lies past the wall's ends (a mitred
+/// corner, `reach` long) added as its ends are: as high as the outline
+/// just inside each end.
+pub fn profile_with_ends(
+    profile: &archisim_core::WallProfile,
+    length: f64,
+    reach: f64,
+) -> Vec<Point2> {
+    let e = 1e-4;
+    let mut shapes: Vec<Shape> = vec![(profile.outline.clone(), Vec::new())];
+    for (x, x0, x1) in [(e, -reach, e), (length - e, length - e, length + reach)] {
+        for (z0, z1) in profile.spans_up(x) {
+            shapes = union(
+                &shapes,
+                &[(
+                    vec![
+                        Point2::new(x0, z0),
+                        Point2::new(x1, z0),
+                        Point2::new(x1, z1),
+                        Point2::new(x0, z1),
+                    ],
+                    Vec::new(),
+                )],
+            );
+        }
+    }
+    shapes
+        .into_iter()
+        .max_by(|a, b| signed_area(&a.0).abs().total_cmp(&signed_area(&b.0).abs()))
+        .map_or_else(|| profile.outline.clone(), |s| s.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

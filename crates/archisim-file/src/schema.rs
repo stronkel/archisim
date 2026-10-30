@@ -2407,6 +2407,19 @@ pub(crate) struct Wall {
     /// Revit's «Permitir unión»). Absent: both may.
     #[serde(default = "both_join", skip_serializing_if = "joins_both")]
     pub allow_join: [bool; 2],
+    /// Its outline in elevation and holes, `[along, up]` (version 47).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<WallProfile>,
+}
+
+/// A wall's elevation profile (version 47): outline and holes as
+/// `[x, z]`, `x` along the wall from its start and `z` above its base.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WallProfile {
+    pub outline: Vec<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<[f64; 2]>>,
 }
 
 fn both_join() -> [bool; 2] {
@@ -2658,6 +2671,14 @@ impl ProjectFile {
                     height: w.height,
                     base_offset: w.base_offset,
                     allow_join: w.allow_join,
+                    profile: w.profile.as_ref().map(|p| WallProfile {
+                        outline: p.outline.iter().map(|q| [q.x, q.y]).collect(),
+                        holes: p
+                            .holes
+                            .iter()
+                            .map(|h| h.iter().map(|q| [q.x, q.y]).collect())
+                            .collect(),
+                    }),
                     top: match w.top {
                         core::WallTop::Unconnected => None,
                         core::WallTop::Level { level, offset } => Some(WallTop {
@@ -3952,6 +3973,18 @@ impl ProjectFile {
                 height: w.height,
                 base_offset: w.base_offset,
                 allow_join: w.allow_join,
+                profile: w.profile.as_ref().map(|p| core::WallProfile {
+                    outline: p
+                        .outline
+                        .iter()
+                        .map(|q| core::Point2::new(q[0], q[1]))
+                        .collect(),
+                    holes: p
+                        .holes
+                        .iter()
+                        .map(|h| h.iter().map(|q| core::Point2::new(q[0], q[1])).collect())
+                        .collect(),
+                }),
                 top: match w.top {
                     None => core::WallTop::Unconnected,
                     Some(t) => core::WallTop::Level {

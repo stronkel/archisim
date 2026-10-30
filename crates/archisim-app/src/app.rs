@@ -508,6 +508,8 @@ pub struct ArchiSimApp {
     sketch: Option<sketch_ui::SketchState>,
     /// The band and the split being prepared in a wall's properties (E3).
     wall_band: wall_tools_ui::WallBand,
+    /// A wall's elevation profile being drawn in its window (E3).
+    profile_edit: Option<wall_profile_ui::ProfileEdit>,
     /// A 3D model being brought in (its dialog): `mesh_ui`.
     pub mesh_import: Option<mesh_ui::MeshImport>,
     /// Moving, copying or stretching the selection with the mouse.
@@ -825,6 +827,7 @@ impl ArchiSimApp {
             vertex: None,
             sketch: None,
             wall_band: Default::default(),
+            profile_edit: None,
             mesh_import: None,
             drag: None,
             drag_preview: None,
@@ -1967,6 +1970,7 @@ impl ArchiSimApp {
         }
         self.layers_dialog(&ctx);
         self.shortcuts_dialog(&ctx);
+        self.wall_profile_dialog(&ctx);
         self.graphics_dialog(&ctx);
         self.presentation_dialog(&ctx);
         self.render_window(&ctx);
@@ -2627,6 +2631,7 @@ mod vertex_ui;
 mod view3d_ui;
 mod views_ui;
 mod vivero_ui;
+mod wall_profile_ui;
 mod wall_tools_ui;
 mod widgets;
 pub use tabs::{TabKind, ViewTab};

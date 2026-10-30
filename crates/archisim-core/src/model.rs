@@ -46,6 +46,7 @@ mod sun;
 mod sweeps;
 mod urban;
 mod views;
+mod wall_profile;
 mod worktops;
 pub use appearance::*;
 pub use concept::*;
@@ -77,6 +78,7 @@ pub use sun::*;
 pub use sweeps::*;
 pub use urban::*;
 pub use views::*;
+pub use wall_profile::*;
 pub use worktops::*;
 
 /// A floor of the building. IFC: `IfcBuildingStorey`.
@@ -305,6 +307,9 @@ pub struct Wall {
     /// free end, square, even touching another wall, and neither wall
     /// mitres nor tees into the other there.
     pub allow_join: [bool; 2],
+    /// Its outline in elevation, with holes (E3: «Editar perfil»); `None`:
+    /// its rectangle. Straight walls only.
+    pub profile: Option<WallProfile>,
 }
 
 /// The top constraint of a wall (Revit's "Restricción superior",
@@ -1058,6 +1063,9 @@ pub enum ModelError {
     InvalidCurtainType,
     /// A terrain with fewer than three points out of line, or no depth.
     InvalidTerrain,
+    /// A wall profile on a curved wall, or with an outline or hole
+    /// without area.
+    InvalidWallProfile(WallId),
     /// A stair with no flight, nothing to climb, or too narrow or shallow.
     InvalidStair,
     /// Another room on the level already has that number.
@@ -1200,6 +1208,11 @@ impl fmt::Display for ModelError {
             ModelError::InvalidCurtainWall => write!(
                 f,
                 "a curtain wall needs some height and room between the frames of its type in every bay and row"
+            ),
+            ModelError::InvalidWallProfile(id) => write!(
+                f,
+                "wall {} cannot take that profile (straight walls only, outlines with area)",
+                id.0
             ),
             ModelError::InvalidTerrain => write!(
                 f,
@@ -2106,6 +2119,7 @@ impl Model {
             base_offset: spec.base_offset,
             top: spec.top,
             allow_join: [true, true],
+            profile: None,
         };
         self.walls.insert(id, wall);
         self.stamp_phase(id.0);
@@ -2164,6 +2178,7 @@ impl Model {
                 base_offset: spec.base_offset,
                 top: spec.top,
                 allow_join: [true, true],
+                profile: None,
             };
             let (ext, int) = probe.face_offsets(t);
             let tight = arc.radius_at(ext).min(arc.radius_at(int)) < MIN_INNER_RADIUS;
@@ -2336,6 +2351,24 @@ impl Model {
             .ok_or(ModelError::UnknownWall(id))?;
         let mut wall = previous.clone();
         edit(&mut wall);
+        // A profile follows the wall: stretched with its length, turned
+        // round with it, gone if it curves.
+        if let Some(p) = wall.profile.take() {
+            if !wall.is_curved() {
+                let (l0, l1) = (previous.length(), wall.length());
+                let turned =
+                    wall.start.approx_eq(previous.end) && wall.end.approx_eq(previous.start);
+                let p = if turned { p.reversed(l0) } else { p };
+                wall.profile = Some(if l0 > EPSILON && (l1 - l0).abs() > 1e-9 {
+                    p.stretched(l1 / l0)
+                } else {
+                    p
+                });
+            }
+        }
+        if let Some(p) = &wall.profile {
+            wall_profile::check_profile(id, p)?;
+        }
         wall.height = self
             .validate_wall(&NewWall {
                 wall_type: wall.wall_type,
@@ -4356,6 +4389,11 @@ impl Model {
             // The levels decide the height of a wall tied to one.
             wall.height = claim(wall.id.0, Some(&wall.guid))
                 .and_then(|_| model.validate_wall(&spec))
+                .and_then(|h| match &wall.profile {
+                    Some(_) if wall.is_curved() => Err(ModelError::InvalidWallProfile(wall.id)),
+                    Some(p) => wall_profile::check_profile(wall.id, p).map(|_| h),
+                    None => Ok(h),
+                })
                 .map_err(|e| match e {
                     ModelError::WallTopBelowBase(_) => ModelError::WallTopBelowBase(wall.id),
                     e => e,

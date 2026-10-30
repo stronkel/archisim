@@ -1435,3 +1435,44 @@ fn terrain_platforms_round_trip() {
     );
     assert!(a.0 > 30.0, "{a:?}");
 }
+
+/// A gable wall with a round window hole (E3): its cuts go out as
+/// openings with their shape, and the profile comes back.
+#[test]
+fn wall_profile_round_trip() {
+    let mut m = model();
+    let w = m
+        .walls()
+        .find(|w| !w.is_curved())
+        .map(|w| (w.id, w.length(), w.height))
+        .expect("a straight wall");
+    let mut p = archisim_core::WallProfile::gable(w.1, w.2, w.2 + 1.5);
+    p.holes.push(
+        (0..16)
+            .map(|i| {
+                let a = i as f64 * std::f64::consts::TAU / 16.0;
+                Point2::new(w.1 / 2.0 + 0.4 * a.cos(), w.2 + 0.4 * a.sin())
+            })
+            .collect(),
+    );
+    m.set_wall_profile(w.0, Some(p)).unwrap();
+    let before = m.wall(w.0).unwrap().clone();
+    assert!(
+        (before.height - (w.2 + 1.5)).abs() < 1e-9,
+        "raised to the ridge"
+    );
+    let ifc = export(&m);
+    assert!(ifc.contains("'Perfil del muro'"));
+    let Imported { model, report } = import_ifc(&ifc).unwrap();
+    assert!(report.skipped.is_empty(), "{:?}", report.skipped);
+    let back = model.walls().find(|x| x.guid == before.guid).unwrap();
+    let (a, b) = (
+        before.profile.unwrap(),
+        back.profile.clone().expect("profile"),
+    );
+    assert_eq!(a.outline.len(), b.outline.len());
+    assert_eq!(b.holes.len(), 1);
+    assert!((a.area() - b.area()).abs() < 1e-6);
+    let diffs = differences(&m, &model);
+    assert!(diffs.is_empty(), "{}", diffs.join("\n"));
+}

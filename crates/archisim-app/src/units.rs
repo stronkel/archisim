@@ -297,6 +297,9 @@ pub fn explain(e: &ModelError) -> String {
         ModelError::InvalidCurtainWall => "el muro cortina necesita altura y sitio entre los marcos de su tipo en cada paño y cada fila".into(),
         ModelError::UnknownCurtainType(_) => "el tipo de muro cortina ya no existe".into(),
         ModelError::InvalidCurtainType => "el tipo de muro cortina necesita paños fijos de al menos 10 cm (20 cm si se reparten iguales), marcos de 5 mm a 1 m, al menos un panel no más grueso que el marco y filas que usen sus paneles".into(),
+        ModelError::InvalidWallProfile(_) => {
+            "el perfil necesita un muro recto y un contorno (y huecos) con superficie".into()
+        }
         ModelError::InvalidTerrain => {
             "el terreno necesita tres puntos que no estén en línea y algo de profundidad".into()
         }

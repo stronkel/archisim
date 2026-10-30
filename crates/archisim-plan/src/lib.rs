@@ -779,13 +779,28 @@ fn render_plan_inner(model: &Model, level: LevelId, options: &PlanOptions) -> St
     let pieces: Vec<Vec<WallPiece>> = openings
         .iter()
         .zip(cuts.iter().copied())
-        .map(|ops| {
-            let spans: Vec<(f64, f64)> = ops
+        .zip(&geos)
+        .map(|(ops, g)| {
+            let mut spans: Vec<(f64, f64)> = ops
                 .0
                 .iter()
                 .filter(|o| opening_view(o, ops.1) == OpeningView::Cut)
                 .map(|o| o.cut_span())
                 .collect();
+            // Where its elevation profile (E3) leaves the cut plane out of
+            // the wall: open, as over a door.
+            if let Some(w) = model.wall(g.wall).filter(|w| !w.is_curved()) {
+                if let Some(p) = &w.profile {
+                    let len = w.length();
+                    for (a, b) in p.gaps_at(ops.1 - w.base_offset, len) {
+                        // A gap at an end takes in what the join adds.
+                        let a = if a < 1e-6 { -1e3 } else { a };
+                        let b = if b > len - 1e-6 { len + 1e3 } else { b };
+                        spans.push((a, b));
+                    }
+                    spans.sort_by(|x, y| x.0.total_cmp(&y.0));
+                }
+            }
             wall_pieces(&spans)
         })
         .collect();
