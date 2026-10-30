@@ -1,7 +1,7 @@
 family "Puerta abatible"
   category door
   host wall
-  version 10
+  version 11
   description "Puerta abatible de una o dos hojas (iguales o con hoja activa), con cerco, tarja acristalada, fijos laterales y premarco si se quieren"
 
 include "piezas"
@@ -37,9 +37,13 @@ type_params
     model3d choice("Nórdico cálido", "Mediterráneo", "Años 50", "Japandi", "Contemporáneo", "Rústica", "Industrial", "Clásica") = "Contemporáneo" label "Modelo 3D"
     hardware_material material = "Acero inoxidable" label "Herrajes"
   section "A tu gusto"
-    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada") = "Como la colección" label "Hoja"
+    leaf_design choice("Como la colección", "Lisa", "Ranurada", "Ranurada vertical", "Dos cuarterones", "Cuatro cuarterones", "Seis cuarterones", "Plafonada", "Moldura aplicada", "Vidriera", "Media vidriera", "Vidriera con junquillos", "Lamas", "Tablas", "Chapa lisa", "Chapa embutida", "Chapa con ventanilla cuadrada", "Chapa con ojo de buey", "Chapa con mirilla alargada", "Lisa con ventanilla cuadrada", "Lisa con ojo de buey", "Acorazada", "Retícula a medida") = "Como la colección" label "Hoja"
+    grid_cols integer = 2 range 1..8 visible_if leaf_design == "Retícula a medida" label "Retícula: vidrios a lo ancho"
+    grid_rows integer = 4 range 1..12 visible_if leaf_design == "Retícula a medida" label "Retícula: vidrios a lo alto"
     casing choice("Como la colección", "Sin tapajuntas", "Plano", "Redondeado", "Moldurado", "Con junquillo") = "Como la colección" label "Tapajuntas"
     handle_style choice("Como la colección", "Palanca con roseta", "Palanca con placa", "Palanca recta", "Pomo", "Tirador de barra", "Sin manilla", "Barra antipánico", "Placa de empuje y tirador", "Escudo de seguridad", "Tirador largo") = "Como la colección" label "Manilla"
+    handle_height length = 1.02 range 0.60..1.80 visible_if handle_style != "Sin manilla" label "Manilla: altura"
+    handle_sides choice("A las dos caras", "Solo del lado al que abre", "Solo del otro lado") = "A las dos caras" visible_if handle_style != "Sin manilla" label "Manilla: caras"
     hinges choice("Como la colección", "Ocultas", "De pala", "De pernio") = "Como la colección" label "Bisagras"
     peephole bool = no label "Mirilla"
     closer bool = no label "Cierrapuertas"

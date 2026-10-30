@@ -6,6 +6,27 @@ Formato de cada entrada: fecha · bloque · qué se hizo · qué quedó pendient
 
 ---
 
+## 2026-10-30 (33) · Puertas y ventanas al estilo ArchiCAD, primera entrega (E6)
+
+Rama `bloque/e6-hojas` (sobre `bloque/barandillas-escalera`), con pull request. Sin cambios de formato; suben de versión las familias de puertas y ventanas. Detalle en `docs/CARPINTERIA.md` §9.
+
+**Hecho**
+- En «Tipos y materiales», puertas y ventanas con **seis pestañas** bajo la vista previa: Hojas, Hueco de muro, Accesorios, Representación, Clasificación y Propiedades. La vista (alzado, planta, sección, 3D) queda siempre arriba y cambia con cada valor.
+- Pestaña **Hojas**: dimensiones, hojas y su funcionamiento, y los grupos «Estilo de hoja» y «Manilla y herrajes».
+- **Retícula a medida** en las hojas de puerta y **cuarterones a medida** en las ventanas (vidrios a lo ancho y a lo alto).
+- **Altura de la manilla** en puertas y ventanas y **caras de la manilla** en puertas.
+
+**Pendiente**
+- Segunda entrega: telar, mocheta, dintel y arcos de albañilería; persiana con cajón, albardilla y parasol de lamas.
+- Tercera: tramas y líneas en planta y sección, clasificación y propiedades completas.
+
+**Qué debe probar Antonio**
+1. Vista → Tipos y materiales → Puertas: elige P-01 y recorre las seis pestañas; la vista de arriba no se mueve.
+2. En Hojas → Estilo de hoja, elige «Retícula a medida» y cambia los vidrios a lo ancho y a lo alto; míralo en 3D.
+3. En Manilla y herrajes, sube la altura a 1,40 y pon «Solo del lado al que abre»: en 3D la manilla sube y sale en una sola cara.
+4. Ventanas: «Cuarterones» → «A medida» con 3 × 4, y «Manilla: altura» a 0,40.
+5. Abre un proyecto anterior: sus tipos siguen igual (la manilla a 1,02, centrada en las ventanas).
+
 ## 2026-10-30 (32) · Barandillas de escalera con tipo (E12, remate)
 
 Rama `bloque/barandillas-escalera` (sobre `bloque/barandillas`), con pull request. Formato `.archisim` versión 44 (las escaleras guardan el tipo de sus barandillas; las de antes se abren igual). Detalle en `docs/BARANDILLAS.md`, «Barandillas de escalera».

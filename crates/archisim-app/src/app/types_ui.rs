@@ -57,6 +57,84 @@ pub enum PreviewView {
     ThreeD,
 }
 
+/// The tabs of a door or window type, as ArchiCAD lays them out (E6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum OpeningTab {
+    /// How it opens, its leaves, their style and their handle.
+    #[default]
+    Leaves,
+    /// The hole in the wall: its shape, reveals and head.
+    WallHole,
+    /// What it carries: blind, sill, subframe, shutters, grille.
+    Accessories,
+    /// How it is drawn in plan, elevation and section.
+    Representation,
+    /// Its class and the data it is listed by.
+    Classification,
+    /// Its data: users, identity, the project's parameters.
+    Properties,
+}
+
+/// The tabs of a door or window type, with their names and tips.
+pub const OPENING_TABS: &[(OpeningTab, &str, &str)] = &[
+    (
+        OpeningTab::Leaves,
+        "Hojas",
+        "Funcionamiento, hojas, estilo de hoja y manilla",
+    ),
+    (
+        OpeningTab::WallHole,
+        "Hueco de muro",
+        "Forma del hueco, recercado y posición en el muro",
+    ),
+    (
+        OpeningTab::Accessories,
+        "Accesorios",
+        "Persiana, vierteaguas, premarco, contraventanas y rejas",
+    ),
+    (
+        OpeningTab::Representation,
+        "Representación",
+        "Líneas de giro y de apertura en planta, alzado y sección",
+    ),
+    (
+        OpeningTab::Classification,
+        "Clasificación",
+        "Clase IFC, marca y datos para las tablas",
+    ),
+    (
+        OpeningTab::Properties,
+        "Propiedades",
+        "Ejemplares, identidad y parámetros del proyecto",
+    ),
+];
+
+/// The tab a section of a door or window recipe goes in.
+pub fn opening_tab_of(section: &str) -> OpeningTab {
+    match section {
+        "Forma" | "Arco" | "Recercado" | "Esquina" => OpeningTab::WallHole,
+        "Persiana" | "Premarco" | "Premarco y vierteaguas" | "Vierteaguas" | "Por fuera" => {
+            OpeningTab::Accessories
+        }
+        "Representación" => OpeningTab::Representation,
+        "Datos" => OpeningTab::Classification,
+        _ => OpeningTab::Leaves,
+    }
+}
+
+/// In the Leaves tab, the group a parameter goes in when it is not the
+/// recipe's own: the leaf's style and its handle, together whatever
+/// section of the recipe they come from.
+pub fn leaves_group_of(param: &str) -> Option<&'static str> {
+    match param {
+        "leaf_design" | "grid_cols" | "grid_rows" | "glazing_bars" | "bar_cols" | "bar_rows"
+        | "window_profile" | "casing" | "hinges" => Some("Estilo de hoja"),
+        "handle_style" | "handle_height" | "handle_sides" | "window_handle" | "slider_handle"
+        | "peephole" | "closer" | "kick_plate" => Some("Manilla y herrajes"),
+        _ => None,
+    }
+}
+
 /// The previews each list offers, the first one by default.
 pub fn views(tab: TypesTab) -> &'static [(PreviewView, &'static str, &'static str)] {
     const PLAN: (PreviewView, &str, &str) = (PreviewView::Plan, "Planta", "Corte en planta, 1:20");
@@ -87,6 +165,8 @@ pub struct TypesDialog {
     pub window: Option<OpeningTypeId>,
     /// The preview chosen (kept while it applies to the list shown).
     pub view: PreviewView,
+    /// The tab of a door or window type shown.
+    pub opening_tab: OpeningTab,
     /// Search in the list, by name or mark.
     pub filter: String,
     /// Colour being picked, applied when the colour picker closes so that
@@ -810,6 +890,14 @@ impl ArchiSimApp {
             ui.colored_label(ui.visuals().error_fg_color, format!("⚠ {}", msg.text));
         }
         ui.add_space(4.0);
+        // A door's or window's tabs, under the preview and out of the
+        // scroll, as ArchiCAD's settings (E6).
+        if matches!(tab, TypesTab::Doors | TypesTab::Windows) {
+            let mut t = self.types.opening_tab;
+            segmented(ui, "opening-tabs", &mut t, OPENING_TABS);
+            self.types.opening_tab = t;
+            ui.add_space(4.0);
+        }
         egui::ScrollArea::vertical()
             .id_salt(("type-editor", tab as u8))
             .auto_shrink([false, false])
@@ -823,7 +911,8 @@ impl ArchiSimApp {
                         self.opening_type_editor(ui, OpeningTypeId(id), actions)
                     }
                 }
-                if tab != TypesTab::Materials {
+                // (Doors and windows show them in their Properties tab.)
+                if matches!(tab, TypesTab::Walls | TypesTab::Slabs) {
                     self.type_params_group(ui, id);
                 }
             });
@@ -1584,127 +1673,178 @@ impl ArchiSimApp {
         let users = m.opening_type_users(id);
         let door = t.is_door();
         let mut info: Option<(String, String, String)> = None;
-        props::group(ui, "types-opening-id", "Identidad", |ui| {
-            props::row(ui, "Nombre", "", |ui, w| {
-                if let Some(new) =
-                    text_edit_committed(ui, Id::unique(("ot-name", id.0)), &t.name, w - 8.0)
-                {
-                    info = Some((new, t.mark.clone(), t.description.clone()));
-                }
-            });
-            props::row(
-                ui,
-                "Marca de tipo",
-                "Para etiquetas, tablas y mediciones (P-01, V-03…); única en el proyecto",
-                |ui, _| {
+        let tab = self.types.opening_tab;
+        // Its name and mark with its class.
+        if tab == OpeningTab::Classification {
+            props::group(ui, "types-opening-id", "Identidad", |ui| {
+                props::row(ui, "Nombre", "", |ui, w| {
                     if let Some(new) =
-                        text_edit_committed(ui, Id::unique(("ot-mark", id.0)), &t.mark, 90.0)
+                        text_edit_committed(ui, Id::unique(("ot-name", id.0)), &t.name, w - 8.0)
                     {
-                        info = Some((t.name.clone(), new, t.description.clone()));
+                        info = Some((new, t.mark.clone(), t.description.clone()));
                     }
-                },
-            );
-            props::row(ui, "Descripción", "", |ui, w| {
-                if let Some(new) =
-                    text_edit_committed(ui, Id::unique(("ot-desc", id.0)), &t.description, w - 8.0)
-                {
-                    info = Some((t.name.clone(), t.mark.clone(), new));
-                }
-            });
-            props::text_row(
+                });
+                props::row(
+                    ui,
+                    "Marca de tipo",
+                    "Para etiquetas, tablas y mediciones (P-01, V-03…); única en el proyecto",
+                    |ui, _| {
+                        if let Some(new) =
+                            text_edit_committed(ui, Id::unique(("ot-mark", id.0)), &t.mark, 90.0)
+                        {
+                            info = Some((t.name.clone(), new, t.description.clone()));
+                        }
+                    },
+                );
+                props::row(ui, "Descripción", "", |ui, w| {
+                    if let Some(new) = text_edit_committed(
+                        ui,
+                        Id::unique(("ot-desc", id.0)),
+                        &t.description,
+                        w - 8.0,
+                    ) {
+                        info = Some((t.name.clone(), t.mark.clone(), new));
+                    }
+                });
+                props::text_row(
                 ui,
                 "Familia",
                 "La receta de la que sale este tipo; abajo, sus parámetros. Una familia no se convierte en otra: para otro funcionamiento, crea un tipo nuevo en su carpeta",
                 &family_label(m, t.family),
             );
-        });
+            });
+        }
         if let Some((name, mark, description)) = info {
             actions.push(Action::EditOpeningInfo(id, name, mark, description));
         }
 
-        // The family's type parameters, a group per section of the recipe;
-        // those that do not apply (a fourth leaf of a window with two) are
-        // hidden.
+        // The family's type parameters, a group per section of the recipe,
+        // in ArchiCAD's tabs (E6): the dimensions above them, always in
+        // view; those that do not apply (a fourth leaf of a window with
+        // two) are hidden.
         let def = family.def();
-        let mut sections: Vec<(Option<&str>, Vec<&archisim_core::family::Param>)> = Vec::new();
+        let mut above: Vec<&archisim_core::family::Param> = Vec::new();
+        let mut groups: Vec<(OpeningTab, String, Vec<&archisim_core::family::Param>)> = Vec::new();
         for p in def.params_of(archisim_core::ParamScope::Type) {
             if !def.is_visible(&p.name, &t.values) {
                 continue;
             }
-            match sections.last_mut() {
-                Some((s, rows)) if *s == p.section.as_deref() => rows.push(p),
-                _ => sections.push((p.section.as_deref(), vec![p])),
+            let section = p.section.as_deref().unwrap_or("Parámetros");
+            if section == "Dimensiones" {
+                above.push(p);
+                continue;
+            }
+            let tab = opening_tab_of(section);
+            let title = match (tab, leaves_group_of(&p.name)) {
+                (OpeningTab::Leaves, Some(g)) => g.to_string(),
+                _ => section.to_string(),
+            };
+            match groups.iter_mut().find(|(k, s, _)| *k == tab && *s == title) {
+                Some((_, _, rows)) => rows.push(p),
+                None => groups.push((tab, title, vec![p])),
             }
         }
-        for (title, rows) in sections {
-            let title = title.unwrap_or("Parámetros");
-            props::group(ui, &format!("types-opening-{title}"), title, |ui| {
-                for p in rows {
-                    use archisim_core::{ParamKind, Value};
-                    match (&p.kind, t.values.get(&p.name)) {
-                        // Choices as cards, each drawn in elevation.
-                        (ParamKind::Choice(options), Some(Value::Text(now))) => {
-                            let ctx = ui.ctx().clone();
-                            let mut out = None;
-                            super::cards::card_row(ui, &p.label, |ui, w| {
-                                let mut thumb =
-                                    |o: &str| self.opening_option_thumb(&ctx, &t, &p.name, o);
-                                out = super::cards::option_cards(
-                                    ui,
-                                    w - 8.0,
-                                    options,
-                                    now,
-                                    &mut thumb,
-                                );
-                            });
-                            if let Some(o) = out.filter(|o| o != now) {
-                                actions.push(Action::EditOpeningValue(
-                                    id,
-                                    p.name.clone(),
-                                    Value::Text(o),
-                                ));
-                            }
-                        }
-                        // Materials as their swatches.
-                        (ParamKind::Material, Some(Value::Material(mid))) => {
-                            let salt = format!("ot-mat-{}-{}", id.0, p.name);
-                            if let Some(new) = self.material_param_row(
-                                ui,
-                                &salt,
-                                &p.label,
-                                &p.name,
-                                MaterialId(*mid),
-                            ) {
-                                actions.push(Action::EditOpeningValue(
-                                    id,
-                                    p.name.clone(),
-                                    Value::Material(new),
-                                ));
-                            }
-                        }
-                        _ => param_row(ui, self.ed.model(), id, &t, p, actions),
-                    }
-                }
-            });
+        let mut shown = false;
+        if tab == OpeningTab::Leaves && !above.is_empty() {
+            self.opening_param_group(ui, id, &t, "Dimensiones", &above, actions);
         }
-
-        props::group(ui, "types-opening-data", "Datos", |ui| {
-            props::text_row(
-                ui,
-                if door {
-                    "Puertas de este tipo"
+        for (k, title, rows) in &groups {
+            if *k != tab {
+                continue;
+            }
+            shown = true;
+            self.opening_param_group(ui, id, &t, title, rows, actions);
+        }
+        match tab {
+            OpeningTab::Classification => {
+                let class = if t.is_door() {
+                    "IfcDoor · IfcDoorType"
+                } else if t.is_void() {
+                    "IfcOpeningElement"
                 } else {
-                    "Colocadas de este tipo"
-                },
-                "",
-                &users.to_string(),
-            );
-            props::id_row(ui, "GlobalId", t.guid.as_str());
-        });
+                    "IfcWindow · IfcWindowType"
+                };
+                props::group(ui, "types-opening-class", "Clase", |ui| {
+                    props::text_row(ui, "Clase IFC", "Con la que se exporta", class);
+                });
+            }
+            OpeningTab::Properties => {
+                shown = true;
+                props::group(ui, "types-opening-data", "Datos", |ui| {
+                    props::text_row(
+                        ui,
+                        if door {
+                            "Puertas de este tipo"
+                        } else {
+                            "Colocadas de este tipo"
+                        },
+                        "",
+                        &users.to_string(),
+                    );
+                    props::id_row(ui, "GlobalId", t.guid.as_str());
+                });
+                self.type_params_group(ui, id.0);
+            }
+            _ => {}
+        }
+        if !shown && tab != OpeningTab::Classification {
+            props::note(ui, "Este tipo no tiene nada que ajustar en esta pestaña.");
+        }
         props::note(
             ui,
             "Al cambiar las medidas, cada hueco colocado conserva su centro y su antepecho; si alguno dejara de caber en su muro, el cambio no se hace.",
         );
+    }
+
+    /// A group of a door or window type's parameters: choices as cards
+    /// drawn in elevation, materials as swatches, the rest as rows.
+    fn opening_param_group(
+        &mut self,
+        ui: &mut Ui,
+        id: OpeningTypeId,
+        t: &archisim_core::OpeningType,
+        title: &str,
+        rows: &[&archisim_core::family::Param],
+        actions: &mut Vec<Action>,
+    ) {
+        props::group(ui, &format!("types-opening-{title}"), title, |ui| {
+            for p in rows {
+                use archisim_core::{ParamKind, Value};
+                match (&p.kind, t.values.get(&p.name)) {
+                    // Choices as cards, each drawn in elevation.
+                    (ParamKind::Choice(options), Some(Value::Text(now))) => {
+                        let ctx = ui.ctx().clone();
+                        let mut out = None;
+                        super::cards::card_row(ui, &p.label, |ui, w| {
+                            let mut thumb =
+                                |o: &str| self.opening_option_thumb(&ctx, t, &p.name, o);
+                            out = super::cards::option_cards(ui, w - 8.0, options, now, &mut thumb);
+                        });
+                        if let Some(o) = out.filter(|o| o != now) {
+                            actions.push(Action::EditOpeningValue(
+                                id,
+                                p.name.clone(),
+                                Value::Text(o),
+                            ));
+                        }
+                    }
+                    // Materials as their swatches.
+                    (ParamKind::Material, Some(Value::Material(mid))) => {
+                        let salt = format!("ot-mat-{}-{}", id.0, p.name);
+                        if let Some(new) =
+                            self.material_param_row(ui, &salt, &p.label, &p.name, MaterialId(*mid))
+                        {
+                            actions.push(Action::EditOpeningValue(
+                                id,
+                                p.name.clone(),
+                                Value::Material(new),
+                            ));
+                        }
+                    }
+                    _ => param_row(ui, self.ed.model(), id, t, p, actions),
+                }
+            }
+        });
     }
 
     // ---- Applying -----------------------------------------------------------------

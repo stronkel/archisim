@@ -1,7 +1,7 @@
 family "Ventana de guillotina"
   category window
   host wall
-  version 3
+  version 4
   description "Ventana de dos hojas que deslizan en vertical, una delante de la otra: se mueve la de abajo o las dos"
 
 include "piezas"
@@ -28,7 +28,9 @@ type_params
     hardware_material material = "Latón" label "Herrajes"
   section "A tu gusto"
     window_profile choice("Como la colección", "Aluminio recto", "Aluminio redondeado", "PVC", "Madera", "Madera con moldura", "Acero fino") = "Como la colección" label "Perfil"
-    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba") = "Como la colección" label "Cuarterones"
+    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba", "A medida") = "Como la colección" label "Cuarterones"
+    bar_cols integer = 2 range 1..12 visible_if glazing_bars == "A medida" label "Cuarterones: vidrios a lo ancho"
+    bar_rows integer = 3 range 1..12 visible_if glazing_bars == "A medida" label "Cuarterones: vidrios a lo alto"
   section "Por fuera"
     outside_shutters choice("Sin contraventanas", "Mallorquinas", "De tablas", "De cuarterones") = "Sin contraventanas" label "Contraventanas"
     shutters_open bool = yes visible_if outside_shutters != "Sin contraventanas" label "Contraventanas abiertas"

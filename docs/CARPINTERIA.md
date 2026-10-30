@@ -102,7 +102,27 @@ Las piezas que siguen la forma las hace la instrucción `outline` de las recetas
 - **Recercado por fuera** en las dos: plano, moldurado (tres escalones) o con clave e impostas, del material que se elija (piedra caliza por defecto).
 - **Hueco** (sin carpintería): ahora también de medio punto, rebajado, apuntado, carpanel u óculo.
 
-## 9. Siguiente
+## 9. El diálogo de tipos al estilo ArchiCAD (E6, primera entrega, 30/10/2026)
+
+En «Tipos y materiales», una puerta o una ventana tiene ahora, debajo de la vista previa (alzado, planta, sección y 3D, que cambian al momento con cada valor), seis pestañas como las de ArchiCAD:
+
+- **Hojas**: las dimensiones del hueco, el número de hojas y el funcionamiento de cada una (en tarjetas con su alzado), cerco o marco, tarja y fijos, el modelo de la colección, y dos grupos que juntan lo que antes estaba repartido: **Estilo de hoja** (hoja, retícula, cuarterones, perfil, tapajuntas, bisagras) y **Manilla y herrajes** (manilla, altura, caras, mirilla, cierrapuertas, zócalo).
+- **Hueco de muro**: forma del hueco, arco y recercado.
+- **Accesorios**: persiana, premarco, vierteaguas, contraventanas y rejas.
+- **Representación**: líneas de giro y de apertura.
+- **Clasificación**: nombre, marca, descripción, clase IFC y resistencia al fuego.
+- **Propiedades**: cuántos hay colocados, GlobalId y los parámetros del proyecto.
+
+Nuevo en las recetas:
+
+- **Retícula a medida** en las hojas de puerta (abatible, pivotante, plegable y correderas): vidrios a lo ancho y a lo alto (`grid_cols`, `grid_rows`).
+- **Cuarterones «A medida»** en las ventanas (practicable, corredera y guillotina): vidrios a lo ancho y a lo alto de cada hoja (`bar_cols`, `bar_rows`).
+- **Manilla: altura** (puertas, 1,02 m desde el suelo; ventanas, desde el pie de la hoja, 0 = centrada) y **Manilla: caras** de las puertas (las dos, solo del lado al que abre o solo del otro).
+
+## 10. Siguiente
+
+- E6, segunda entrega: hueco de muro (telar, mocheta, dintel, arcos de albañilería) y accesorios (persiana con cajón, vierteaguas, albardilla, parasol de lamas, premarco) en sus pestañas.
+- E6, tercera: representación (tramas y líneas en planta y sección), clasificación y propiedades.
 
 - Los recercados de los huecos sin carpintería, y la herradura y el arco lobulado (no son convexos).
 - Los arcos en muros curvos (hoy se quedan rectos en ellos).

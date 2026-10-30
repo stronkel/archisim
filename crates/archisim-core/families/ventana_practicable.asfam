@@ -1,7 +1,7 @@
 family "Ventana practicable"
   category window
   host wall
-  version 9
+  version 10
   description "Ventana de 1 a 4 hojas con montantes; cada hoja fija, practicable, oscilobatiente, abatible, proyectante, basculante o pivotante; con persiana enrollable y capialzado, tarja fija, premarco y vierteaguas si se quieren"
 
 include "piezas"
@@ -41,8 +41,11 @@ type_params
     hardware_material material = "Acero inoxidable" label "Herrajes"
   section "A tu gusto"
     window_profile choice("Como la colección", "Aluminio recto", "Aluminio redondeado", "PVC", "Madera", "Madera con moldura", "Acero fino") = "Como la colección" label "Perfil"
-    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba") = "Como la colección" label "Cuarterones"
+    glazing_bars choice("Como la colección", "Sin cuarterones", "Cuadrícula", "Cuadrícula fina", "Horizontales", "Verticales", "Solo arriba", "A medida") = "Como la colección" label "Cuarterones"
+    bar_cols integer = 2 range 1..12 visible_if glazing_bars == "A medida" label "Cuarterones: vidrios a lo ancho"
+    bar_rows integer = 3 range 1..12 visible_if glazing_bars == "A medida" label "Cuarterones: vidrios a lo alto"
     window_handle choice("Como la colección", "Manilla moderna", "Manilla de latón", "Cremona vista", "Falleba de forja", "Sin manilla") = "Como la colección" label "Manilla"
+    handle_height length = 0.00 range 0.00..2.00 label "Manilla: altura (0, centrada)"
   section "Por fuera"
     outside_shutters choice("Sin contraventanas", "Mallorquinas", "De tablas", "De cuarterones") = "Sin contraventanas" label "Contraventanas"
     shutters_open bool = yes visible_if outside_shutters != "Sin contraventanas" label "Contraventanas abiertas"
